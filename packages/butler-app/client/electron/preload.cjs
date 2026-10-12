@@ -654,9 +654,13 @@ const butlerApp = Object.freeze({
   // #230 first-run routes served by the agent (#279). Envelopes keep the
   // public error code (invalid_key, no_access, network, ...) across contextBridge.
   getSetupReadiness: () => requestBridgeResult("/setup/readiness"),
-  retrySetupReadiness: () => requestBridgeResult("/setup/readiness/retry", {
+  retrySetupReadiness: (input) => requestBridgeResult("/setup/readiness/retry", {
     method: "POST",
-    body: JSON.stringify({}),
+    body: JSON.stringify(input ?? {}),
+  }),
+  chooseMemoryModel: (input) => requestBridgeResult("/setup/memory-model", {
+    method: "POST",
+    body: JSON.stringify(input ?? {}),
   }),
   startSetupOAuth: (request) => requestBridgeResult("/setup/oauth/start", {
     method: "POST",

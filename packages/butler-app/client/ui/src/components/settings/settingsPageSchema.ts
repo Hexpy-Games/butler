@@ -24,6 +24,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   memory: [
     { id: "instructions", kind: "list", fields: [] },
     { id: "chat-memory", kind: "status", fields: [] },
+    { id: "memory-model", kind: "form", fields: ["memory-model"] },
     { id: "profile-memory", kind: "status", fields: [] },
     { id: "project-memory", kind: "status", fields: ["memory-project"] },
   ],

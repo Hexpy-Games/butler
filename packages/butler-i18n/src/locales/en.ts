@@ -68,7 +68,7 @@ const firstRun = {
     welcomeTitle: "Welcome to Butler",
     welcomeLede: "Butler works for you on this computer. It organizes files, runs commands and keeps your schedules.",
     start: "Get started",
-    steps: { welcome: "Welcome", consent: "Consent", connect: "Connect AI", ready: "Finish" },
+    steps: { welcome: "Welcome", consent: "Consent", memory: "Memory", connect: "Connect AI", ready: "Finish" },
     consentTitle: "Before you start",
     consentItems: [
       { body: "Butler is free, open-source software." },
@@ -118,8 +118,19 @@ const firstRun = {
     reportUnavailable: "Couldn't copy.",
     quit: "Quit",
     interfaceLanguage: "Interface language",
+    memoryChoice: {
+      title: "How should Butler remember?",
+      lede: "You can change this later in Settings → Memory.",
+      on: "Use memory model",
+      off: "Don't use it",
+      offDescription: "Basic memory only",
+      size: (sizeMB: number) => `${sizeMB} MB`,
+      continue: "Continue",
+      saveFailed: "Couldn't save the choice",
+    },
     memoryModel: {
       label: "Memory model",
+      description: (sizeMB?: number) => sizeMB ? `Finds chats better · About ${sizeMB} MB download` : "Finds chats better",
       downloading: "Downloading memory model",
       verifying: "Verifying memory model",
       failed: "Couldn't download the memory model",

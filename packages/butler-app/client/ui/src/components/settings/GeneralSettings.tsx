@@ -11,7 +11,6 @@ import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import type { SettingsView as SettingsData } from "@/app/types.ts";
 import { SettingsPage, SettingsSection, SettingsSwitch } from "./SettingsFormComponents";
 import { languageRegionSection, notificationSections } from "./generalPreferenceSections";
-import { MemoryModelPreparation } from "./MemoryModelPreparation";
 import { RerunSetupField } from "./RerunSetupField";
 import { SearchBehaviorFields, SearchProviderFields } from "./SearchSettings";
 
@@ -64,9 +63,6 @@ export const GeneralSettings = memo(function GeneralSettings() {
         <DefaultPermissionFields />
       </SettingsSection>
       {notificationSections(draft.desktop_notifications, updateNotifications)}
-      <SettingsSection id="memory-model" kind="status" title={appCopy.firstRun.memoryModel.label}>
-        <MemoryModelPreparation />
-      </SettingsSection>
       <SettingsSection id="app-behavior" kind="form" title={sections.appBehavior}>
         <SettingsSwitch
           settingId="desktop-tray"

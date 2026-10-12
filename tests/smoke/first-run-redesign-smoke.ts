@@ -76,27 +76,41 @@ async function capture(page: Page, name: string) {
     assert.equal(await page.locator('[data-slot="setup-step-body"]').getAttribute("data-motion"), "enter", "DS content-key transition");
     assert.equal(await page.locator('[data-slot="setup-step-body"] > :first-child [data-slot="icon-tile"]').count(), 0, "no title icon tile");
     const step = await page.locator("[data-first-run-screen]").getAttribute("data-first-run-screen");
-    const ids = await page.locator("ol li").count() === 5 ? ["welcome", "consent", "connect", "import", "ready"] : ["welcome", "consent", "connect", "ready"];
+    const ids = await page.locator("ol li").count() === 6 ? ["welcome", "consent", "memory", "connect", "import", "ready"] : ["welcome", "consent", "connect", "ready"];
     const lang = await page.locator("html").getAttribute("lang") === "ko-KR" ? "ko" : "en";
-    const label = step === "import" ? getAppCopy(lang === "ko" ? "ko-KR" : "en-US").settings.pageSections.browserImport : firstRunCopy[lang].steps[step as "consent" | "ready" | "connect"];
+    const label = step === "import" ? getAppCopy(lang === "ko" ? "ko-KR" : "en-US").settings.pageSections.browserImport : firstRunCopy[lang].steps[step as "consent" | "memory" | "ready" | "connect"];
     assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${ids.indexOf(step ?? "") + 1}\n${label}`);
   }
 }
 
 async function reset(page: Page, language: "ko" | "en", theme: "light" | "dark") {
   stub.state.oauthStatus = "pending"; stub.state.holdCommit = false; stub.state.failCommit = false; stub.state.local = false;
-  stub.state.readiness = "ready"; stub.state.label = "yeonwoo@example.com";
+  stub.state.readiness = "ready"; stub.state.label = "yeonwoo@example.com"; stub.state.memoryModel = "unset";
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language, appearance_theme: theme, onboarding: fresh }) });
   await page.reload();
   await page.locator("#first-run-language").selectOption(language);
 }
 
-async function reachProviders(page: Page, language: "ko" | "en") {
+async function reachProviders(page: Page, language: "ko" | "en", memoryCapture?: string) {
   const copy = firstRunCopy[language];
   await page.getByRole("button", { name: copy.start, exact: true }).click();
   await page.getByRole("button", { name: copy.agree, exact: true }).click();
+  await passMemory(page, language, memoryCapture);
   await page.locator("#first-run-connect-title").waitFor();
   assert.equal(await page.locator('[data-first-run-screen="import"]').count(), 0, "import follows the AI choice");
+}
+
+/** First run asks for the memory model right after consent; renewal goes straight to the AI list. */
+async function passMemory(page: Page, language: "ko" | "en", name?: string) {
+  const copy = firstRunCopy[language];
+  const memory = page.locator('[data-first-run-screen="memory"]');
+  await Promise.race([memory.waitFor(), page.locator("#first-run-connect-title").waitFor()]);
+  if (!await memory.count()) return;
+  const next = page.getByRole("button", { name: copy.memoryChoice.continue, exact: true });
+  assert.equal(await next.isDisabled(), true, "a memory choice is required");
+  if (name) await capture(page, name);
+  await page.locator('[data-memory-choice="off"]').click();
+  await next.click();
 }
 
 /** First run: the optional import step sits between the AI choice and the finish. */
@@ -182,7 +196,7 @@ async function matrixCase(page: Page, language: "ko" | "en", theme: "light" | "d
   await page.getByRole("button", { name: copy.back, exact: true }).click();
   await page.locator("#first-run-start").waitFor();
   assert.equal(await page.evaluate(() => document.activeElement?.id), "first-run-start");
-  await reachProviders(page, language);
+  await reachProviders(page, language, `${prefix}-memory`);
   await capture(page, `${prefix}-providers`);
   await signInStates(page, language, prefix);
   await capture(page, `${prefix}-ready`);
@@ -249,6 +263,25 @@ async function preparationStates(page: Page) {
   await finish(page, "ko");
 }
 
+/** Settings → Memory carries the first-run switch; the smoke chose off. Light and dark captures. */
+async function memorySettings(page: Page) {
+  const original = (await server.api<{ appearance_theme: string }>("/settings")).appearance_theme;
+  for (const [index, theme] of ["light", "dark", original].entries()) {
+    await server.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme }) });
+    await page.reload();
+    await page.locator('[data-test-class="workspace"]').waitFor();
+    await page.getByRole("button", { name: "설정", exact: true }).click();
+    if (index === 2) return;
+    await page.getByRole("button", { name: "기억", exact: true }).click();
+    const section = page.locator('[data-settings-section-id="memory-model"]');
+    const toggle = section.getByRole("switch", { name: firstRunCopy.ko.memoryChoice.on, exact: true });
+    await toggle.waitFor();
+    assert.equal(await toggle.getAttribute("aria-checked"), "false", "off after the first-run choice");
+    await section.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(output, `after-settings-memory-model-ko-${theme}.png`) });
+  }
+}
+
 async function renewalAndRerun(page: Page) {
   const copy = firstRunCopy.ko, old = "2026-06-01T00:00:00Z";
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", onboarding: { consent_version: 1, accepted_at: old, completed_at: old } }) });
@@ -261,7 +294,7 @@ async function renewalAndRerun(page: Page) {
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ onboarding: { completed_at: old } }) });
   await page.reload();
   await page.locator('[data-test-class="workspace"]').waitFor();
-  await page.getByRole("button", { name: "설정", exact: true }).click();
+  await memorySettings(page);
   await page.locator("#rerun-setup").click();
   await page.locator("#first-run-start").waitFor();
   await capture(page, "after-rerun");
@@ -292,6 +325,9 @@ try {
     await page.getByRole("button", { name: firstRunCopy.en.start, exact: true }).click();
     await capture(page, `after-mobile-${width}-consent`);
     await page.getByRole("button", { name: firstRunCopy.en.agree, exact: true }).click();
+    await page.locator('[data-first-run-screen="memory"]').waitFor();
+    await capture(page, `after-mobile-${width}-memory`);
+    await passMemory(page, "en");
     await page.locator("#first-run-connect-title").waitFor();
     await capture(page, `after-mobile-${width}-providers`);
   }

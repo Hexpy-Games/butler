@@ -2,11 +2,11 @@ import { AlertCircle, Button, IconSlot, Inline, Spinner, Stack, Typo } from "@/b
 import { appLocaleFromLanguage, getAppCopy } from "@/app/copy.ts";
 import type { MemoryModelProgress } from "@/app/setupReadiness.ts";
 
-/** Optional memory preparation; never changes setup eligibility. */
+/** Optional memory preparation; never changes setup eligibility. Shown only for a chosen download. */
 export function MemoryModelStatus({ model, language, retry }: {
   model?: MemoryModelProgress; language: string; retry: () => void;
 }) {
-  if (!model || model.state === "ready") return null;
+  if (!model || ["ready", "unset", "off"].includes(model.state)) return null;
   const copy = getAppCopy(appLocaleFromLanguage(language)).firstRun.memoryModel;
   const failed = model.state === "failed";
   const label = failed ? copy.failed : model.state === "verifying" ? copy.verifying : copy.downloading;

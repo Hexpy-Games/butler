@@ -82,18 +82,23 @@ async function connectStub() {
 /** Step order, back targets and the import step between the AI choice and the finish. */
 async function wizardFlow(copy: AppCopy) {
   const steps = copy.firstRun.steps;
+  await page.locator("[data-first-run-screen=\"memory\"]").waitFor();
+  await page.locator("[data-memory-choice=\"off\"]").click();
+  await page.getByRole("button", { name: copy.firstRun.memoryChoice.continue, exact: true }).click();
   await page.locator("#first-run-connect-title").waitFor();
+  // The step morph briefly keeps the previous card; read the settled one.
+  await page.waitForFunction(() => document.querySelectorAll("ol").length === 1);
   const labels = (await page.locator("ol li").allInnerTexts()).map(text => text.split("\n").at(-1)?.trim());
-  assert.deepEqual(labels, [steps.welcome, steps.consent, steps.connect, copy.settings.pageSections.browserImport, steps.ready]);
+  assert.deepEqual(labels, [steps.welcome, steps.consent, steps.memory, steps.connect, copy.settings.pageSections.browserImport, steps.ready]);
   await wizardCapture("connect");
   await page.getByRole("button", { name: copy.firstRun.back, exact: true }).click();
-  await page.locator("#first-run-consent-title").waitFor();
-  await page.getByRole("button", { name: copy.firstRun.agree, exact: true }).click();
+  await page.locator("[data-first-run-screen=\"memory\"]").waitFor();
+  await page.getByRole("button", { name: copy.firstRun.memoryChoice.continue, exact: true }).click();
   await page.locator("#first-run-connect-title").waitFor();
   await connectStub();
   const wizard = page.locator("[data-first-run-screen=\"import\"] [data-settings-section-id=\"browser-import\"]");
   await wizard.locator("[data-import-source]").nth(3).waitFor();
-  assert.equal(await page.locator("ol [aria-current=\"step\"]").innerText(), `4\n${copy.settings.pageSections.browserImport}`);
+  assert.equal(await page.locator("ol [aria-current=\"step\"]").innerText(), `5\n${copy.settings.pageSections.browserImport}`);
   await wizardCapture("wizard-import");
   await page.getByRole("button", { name: copy.firstRun.back, exact: true }).click();
   await page.locator("#first-run-connect-title").waitFor();
