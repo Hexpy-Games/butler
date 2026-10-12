@@ -1,7 +1,7 @@
-// The engine side of the first-run ink intro (intro spec Concept A rev 5). While a timeline is attached the intro
-// owns the canvas and the drift and the module loop yield. Frame 0 links its programs before the clock starts; the
-// reveal runs at up to 60 fps; the dried print then holds on the drift base layer with no work, waking only for the
-// print beat and the pointer stir; at the hand-off the drift takes the canvas, its first segment dissolving from it.
+// The engine side of the first-run ink intro (spec Concept A rev 5). While a timeline is attached the intro owns the
+// canvas (drift and module loop yield). Frame 0 links its programs; the reveal runs at up to 60 fps; the dried print
+// holds on the drift base layer with no work, waking for the print beat and the pointer stir; at the hand-off the
+// drift takes the canvas, its first segment dissolving from it, and later print beats go to it.
 import { drawIntroFrame, introBoxMoved, introLocalRect } from "./intro/introFrame";
 import { IntroFrameLoop } from "./intro/introLoop";
 import { RISO_INTRO_TIMELINE_S, type WallpaperIntroEvent, type WallpaperIntroTimeline } from "./intro/introTimeline";
@@ -135,23 +135,22 @@ class EngineIntroController implements EngineIntro {
   private readonly onEvent = (event: WallpaperIntroEvent) => {
     const layout = this.timeline?.layout();
     if (event.type === "layout" && layout) this.o.onCard(layout.card);
-    if (this.phase === "off") return;
+    // After the hand-off a print beat (a step change) goes to the drift that holds the canvas now.
+    if (this.phase === "off") return event.type === "beat" ? this.o.onBeat(event.from, event.to) : undefined;
     if (event.type === "skip" || (event.type === "layout" && this.phase === "hold")) this.loop.run();
     if (event.type === "beat" && this.phase === "hold" && !this.still()) {
       const box = this.o.box();
       this.wake.beat(introLocalRect(event.from, box), introLocalRect(event.to, box));
       this.loop.run();
     }
-    if (event.type === "handoff") {
-      if (this.loop.running() || this.phase === "play") this.leaving = true;
-      else this.handoff();
-    }
+    if (event.type === "handoff" && (this.loop.running() || this.phase === "play")) this.leaving = true;
+    else if (event.type === "handoff") this.handoff();
   };
 
   private readonly onPointer = (event: PointerEvent) => {
-    if (event.pointerType === "touch" || this.phase !== "hold" || this.still()) return;
-    const box = this.o.box();
-    if (this.wake.pointer(event.clientX - box.left, event.clientY - box.top)) this.loop.run();
+    if (event.pointerType === "touch" || this.phase !== "hold" || this.leaving || this.still()) return; // Leaving: no new stir.
+    const { left, top } = this.o.box();
+    if (this.wake.pointer(event.clientX - left, event.clientY - top)) this.loop.run();
   };
 }
 

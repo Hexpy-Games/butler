@@ -13,14 +13,16 @@ import introStyles from "./SetupWizardIntro.module.css";
  * backdrop writes the mark, which lands in the SetupWizardMark slot of the
  * card, then the card and its lines arrive). `rerun`: the short re-run
  * variant, the dried print still and the card fading in with a 4px rise over
- * --motion-slow (at once under reduced motion).
+ * --motion-slow (at once under reduced motion). `none`: no ink at all (a
+ * resumed setup): the backdrop drifts from the first frame around the card
+ * and the card has the re-run entrance.
  */
 export type SetupWizardIntro = "none" | "rerun" | "full";
 
 interface SetupWizardStageProps {
   stepKey: string;
   intro?: SetupWizardIntro;
-  /** The ink intro clock the backdrop shares (intro `full` or `rerun`). */
+  /** The ink intro clock the backdrop shares (intro `full`, `rerun`, or `none` already handed off). */
   timeline?: WallpaperIntroTimeline | null;
   /** The card waits unseen until the host can show the intro; it arrives when the hold ends. */
   held?: boolean;
@@ -56,7 +58,7 @@ export class SetupWizardStage extends Component<SetupWizardStageProps, SetupWiza
   private exitTimer: ReturnType<typeof setTimeout> | undefined;
   private morph: SetupWizardMorph | null = null;
   /** The first card's key while the re-run entrance applies; cleared by the first step change. */
-  private rerunKey = this.props.intro === "rerun" && !this.props.held && !prefersReducedMotion() ? this.props.stepKey : null;
+  private rerunKey = (this.props.intro === "rerun" || this.props.intro === "none") && !this.props.held && !prefersReducedMotion() ? this.props.stepKey : null;
 
   getSnapshotBeforeUpdate(previous: SetupWizardStageProps): HTMLElement | null {
     if (previous.stepKey === this.props.stepKey) return null;
@@ -124,13 +126,13 @@ export class SetupWizardStage extends Component<SetupWizardStageProps, SetupWiza
   private startIntro() {
     const { timeline, intro } = this.props, stage = this.root.current, surface = this.surface.current;
     if (!timeline || !stage || !surface) return;
-    this.intro = runSetupIntro({ stage, surface, timeline, frame: () => this.frame.current, rerun: intro === "rerun", onPhase: (introPhase) => this.setState({ introPhase }) });
+    this.intro = runSetupIntro({ stage, surface, timeline, frame: () => this.frame.current, rerun: intro !== "full", onPhase: (introPhase) => this.setState({ introPhase }) });
   }
 
   /** The hold ended: the card arrives as it would have at mount (the re-run entrance, or with the reveal). */
   private release() {
     const { intro, stepKey, timeline } = this.props;
-    if (intro === "rerun" && !prefersReducedMotion()) this.rerunKey = stepKey;
+    if ((intro === "rerun" || intro === "none") && !prefersReducedMotion()) this.rerunKey = stepKey;
     this.startIntro();
     if (intro !== "full" || !timeline) this.setState({ introPhase: null });
   }

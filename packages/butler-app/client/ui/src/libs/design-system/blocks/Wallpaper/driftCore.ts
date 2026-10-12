@@ -40,6 +40,9 @@ export interface DriftCore {
   /** Last live frame time; 0 = none yet. */
   last: number;
   fadeTop: { from: number; t0: number } | null;
+  /** Keyframes rendered so far and when the last one was (debug state only). */
+  keyframes: number;
+  keyframeAt: number;
   drawTo(layer: 0 | 1, flow: number): void;
   clearTimers(): void;
   segAlpha(now: number): number;
@@ -54,7 +57,7 @@ export interface DriftCore {
 export function createDriftCore(deps: DriftDeps): DriftCore {
   const core: DriftCore = {
     deps, mode: "off", host: "full", hidden: false, dirty: false, flow: 0, layerFlow: [0, 0], seg: null, boosts: [],
-    timer: 0, raf: 0, last: 0, fadeTop: null,
+    timer: 0, raf: 0, last: 0, fadeTop: null, keyframes: 0, keyframeAt: 0,
     drawTo(layer, flow) {
       // A lost context draws nothing: never copy an empty (black) frame onto a layer.
       if (!deps.render({ flow, looks: deps.looks.state })) return;
@@ -121,6 +124,8 @@ export function createDriftCore(deps: DriftDeps): DriftCore {
     core.mode = "xfade";
     deps.layers.opacity(1, 0);
     if (deps.timeKeyframe(() => core.drawTo(1, f1))) return; // Degraded: the host turns still.
+    core.keyframes += 1;
+    core.keyframeAt = now;
     core.seg = { f0, f1, a0: 0, t0: now, dur: driftSegmentMs(driftFactor(core.host)) };
     runSegment();
   }
