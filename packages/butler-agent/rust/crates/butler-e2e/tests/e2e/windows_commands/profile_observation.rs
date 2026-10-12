@@ -99,7 +99,10 @@ async fn replay(
         .env("APPDATA", roaming.display().to_string())
         // Match the installed App, which does not inherit a console module path.
         .env("PSModulePath", "")
-        .env("BUTLER_DEBUG_COMMAND_TIMINGS", "1")
+        .env(
+            "BUTLER_DEBUG_COMMAND_TIMINGS",
+            std::env::var("BUTLER_DEBUG_COMMAND_TIMINGS").unwrap_or_default(),
+        )
         .env("BUTLER_SECRET_STORE", "file")
         .env("BUTLER_PLATFORM_SYSTEM_SECRETS", "0")
         .env("BUTLER_APP_DISABLE_SHELL_REGISTRATION", "1");
@@ -305,7 +308,10 @@ async fn literal_current_directory_uses_normal_approval_after_member_access()
         .env("BUTLER_CODEX_BASE_URL", url)
         // Match replay() and the installed App's module environment.
         .env("PSModulePath", "")
-        .env("BUTLER_DEBUG_COMMAND_TIMINGS", "1")
+        .env(
+            "BUTLER_DEBUG_COMMAND_TIMINGS",
+            std::env::var("BUTLER_DEBUG_COMMAND_TIMINGS").unwrap_or_default(),
+        )
         .env("BUTLER_SECRET_STORE", "file")
         .env("BUTLER_PLATFORM_SYSTEM_SECRETS", "0")
         .env("BUTLER_APP_DISABLE_SHELL_REGISTRATION", "1")

@@ -5,7 +5,9 @@ use super::*;
 async fn lexical_refusals_keep_complete_results_without_shell_work() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     for access in [Access::AskAlways, Access::FullAccess] {
-        let (s, chat, script, server) = setup(access).await?;
+        // This diagnostic test needs phase markers to prove no shell work;
+        // ordinary command regressions use the dispatched/default setting.
+        let (s, chat, script, server) = setup_with_diagnostics(access, "1".into()).await?;
         let initial_logs = s.agent.logs().lines().count();
         // POSIX read observations use the OS sandbox; mutation admission exercises
         // the same lexical guard that Windows uses for registered read commands.

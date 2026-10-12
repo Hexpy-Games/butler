@@ -231,17 +231,25 @@ fn verify(s: &Scenario, index: usize, output: &Value) -> Result<(), HarnessError
     Ok(())
 }
 
-async fn setup(
+async fn setup(access: Access) -> Result<CommandSetup, HarnessError> {
+    setup_with_diagnostics(
+        access,
+        std::env::var("BUTLER_DEBUG_COMMAND_TIMINGS").unwrap_or_default(),
+    )
+    .await
+}
+
+type CommandSetup = (
+    Scenario,
+    String,
+    std::sync::Arc<provider::Script>,
+    tokio::task::JoinHandle<()>,
+);
+
+async fn setup_with_diagnostics(
     access: Access,
-) -> Result<
-    (
-        Scenario,
-        String,
-        std::sync::Arc<provider::Script>,
-        tokio::task::JoinHandle<()>,
-    ),
-    HarnessError,
-> {
+    diagnostics: String,
+) -> Result<CommandSetup, HarnessError> {
     let mut setup = Setup::new("WINDOWS-BASIC")?;
     setup.sandbox.data = setup.sandbox.home.join(".butler");
     for folder in [
@@ -266,7 +274,7 @@ async fn setup(
         // Match the installed App, not the runner's PowerShell console and
         // its potentially large third-party module discovery path.
         .env("PSModulePath", "")
-        .env("BUTLER_DEBUG_COMMAND_TIMINGS", "1")
+        .env("BUTLER_DEBUG_COMMAND_TIMINGS", diagnostics)
         .env("USERPROFILE", home.display().to_string())
         .env(
             "LOCALAPPDATA",

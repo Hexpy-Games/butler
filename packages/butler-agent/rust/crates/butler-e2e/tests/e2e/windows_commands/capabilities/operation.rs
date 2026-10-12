@@ -92,15 +92,14 @@ pub(super) async fn operation(
             }
         );
         if case.tool == "list_files" {
-            assert_eq!(operation["targets"], examples);
+            assert_eq!(operation["targets"], json!([case.args["root"]]));
         } else if case.tool == "run_command" {
             assert_eq!(operation["command"], case.args["command"]);
             let cwd = case.args["cwd"].as_str().filter(|path| *path != ".");
+            let label = s.sandbox.root.file_name().unwrap().to_string_lossy();
             assert_eq!(
                 operation["targets"],
-                json!([
-                    cwd.map_or_else(|| s.sandbox.root.clone(), |path| s.sandbox.root.join(path))
-                ])
+                json!([cwd.map_or_else(|| label.to_string(), |path| format!("{label}/{path}"))])
             );
         }
         if case.tool == "write_file" {
