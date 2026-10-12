@@ -1,10 +1,11 @@
 //! Platform-owned profile locations.
 use super::ProfileRoots;
+use crate::account_dirs::AccountDirs;
 use std::path::Path;
-/// This operating system's browser locations under `home`.
+/// This operating system's browser locations in the account folders.
 #[cfg(target_os = "macos")]
-pub fn profile_roots(home: &Path) -> ProfileRoots {
-    let base = home.join("Library").join("Application Support");
+pub fn roots_in(dirs: &AccountDirs) -> ProfileRoots {
+    let (home, base) = (&dirs.home, &dirs.app_data);
     ProfileRoots {
         chromium: vec![
             ("chrome", base.join("Google/Chrome")),
@@ -19,10 +20,10 @@ pub fn profile_roots(home: &Path) -> ProfileRoots {
     }
 }
 
-/// This operating system's browser locations under `home`.
+/// This operating system's browser locations in the account folders.
 #[cfg(windows)]
-pub fn profile_roots(home: &Path) -> ProfileRoots {
-    let local = home.join("AppData").join("Local");
+pub fn roots_in(dirs: &AccountDirs) -> ProfileRoots {
+    let local = &dirs.local_app_data;
     ProfileRoots {
         chromium: vec![
             ("chrome", local.join("Google\\Chrome\\User Data")),
@@ -35,15 +36,15 @@ pub fn profile_roots(home: &Path) -> ProfileRoots {
             ("chromium", local.join("Chromium\\User Data")),
             ("arc", local.join("Packages\\TheBrowserCompany.Arc_ttt1ap7aakyb4\\LocalCache\\Local\\Arc\\User Data")),
         ],
-        firefox: home.join("AppData\\Roaming\\Mozilla\\Firefox\\Profiles"),
+        firefox: dirs.app_data.join("Mozilla\\Firefox\\Profiles"),
         safari: None,
     }
 }
 
-/// This operating system's browser locations under `home`.
+/// This operating system's browser locations in the account folders.
 #[cfg(all(unix, not(target_os = "macos")))]
-pub fn profile_roots(home: &Path) -> ProfileRoots {
-    let config = home.join(".config");
+pub fn roots_in(dirs: &AccountDirs) -> ProfileRoots {
+    let (home, config) = (&dirs.home, &dirs.app_data);
     ProfileRoots {
         chromium: vec![
             ("chrome", config.join("google-chrome")),
@@ -55,4 +56,9 @@ pub fn profile_roots(home: &Path) -> ProfileRoots {
         firefox: home.join(".mozilla/firefox"),
         safari: None,
     }
+}
+
+/// [`roots_in`] for the default layout under `home`, for fixtures.
+pub fn profile_roots(home: &Path) -> ProfileRoots {
+    roots_in(&AccountDirs::under(home))
 }

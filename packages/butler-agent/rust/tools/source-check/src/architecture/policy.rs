@@ -64,7 +64,7 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // SQLite owns host VFS selection and file synchronization; DB state and schema stay in callers.
         "command_sandbox" | "cpu" | "desktop" | "launcher" | "network" | "process_table"
         | "secure_fs" | "storage_size" | "stdio" | "time_zone" | "user_auth" | "user_dirs"
-        | "diagnostics" => &[],
+        | "diagnostics" | "account_dirs" => &[],
         // SQLite synchronization, the credential fallback file and install pointers
         // consume the durable filesystem facade.
         "sqlite" | "fs_space" | "secrets" | "install_link" => &["secure_fs"],
@@ -82,8 +82,9 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "process_names" => &["launcher", "secure_fs"],
         // Package activation waits for its parent and restores verified ZIP role links.
         "app_update" => &["process_control", "process_names", "secure_fs"],
-        // Other browsers' profile folders are found under the user's home.
-        "browser_profiles" => &["user_dirs"],
+        // Other browsers' profile folders are found in the account folders the OS
+        // records (never a redirected HOME); user_dirs only scopes test fixtures.
+        "browser_profiles" => &["account_dirs", "user_dirs"],
         // The `butler` command launcher is a runnable file under the user's
         // command directory; the Agent home's pointers are replaced atomically
         // with secure_fs; login-start definitions live under the user's home.
