@@ -129,6 +129,9 @@ test("opaque canvases keep alpha off; a transparent one is premultiplied, cleare
   createWallpaperRenderer(opaque.canvas, { onError: () => undefined })!.setScene(sceneOf({ kind: "live", module: "butler.bloom" }));
   expect(opaque.attributes[0]).toMatchObject({ alpha: false });
   expect(opaque.attributes[0]).not.toHaveProperty("premultipliedAlpha");
+  // The drift layers copy this canvas: one buffer path on every platform (no Windows-only low-latency swap chain).
+  expect(opaque.attributes[0]).not.toHaveProperty("desynchronized");
+  expect(opaque.attributes[0]).toMatchObject({ preserveDrawingBuffer: false });
 
   const broken = defineWallpaperModule({
     manifest: { id: "me.petal", name: { en: "Petal", ko: "꽃잎" }, version: "0.1.0", engine: 1, motion: "animated", image: "none", transparent: true, params: [] },
