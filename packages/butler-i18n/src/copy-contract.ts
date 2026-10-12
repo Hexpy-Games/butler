@@ -241,6 +241,25 @@ interface ConversationCopy {
     copied: string;
     copyFailed: string;
   };
+  answerBlocks: {
+    previousValue: string;
+    showMore: string;
+    showLess: string;
+    showMoreItems: (count: number) => string;
+    saveToLibrary: string;
+    copy: string;
+    copied: string;
+    savedToLibrary: string;
+    actionFailed: string;
+    openImage: string;
+    image: string;
+    chart: string;
+    source: {
+      checkedAt: (time: string, site: string) => string;
+      checkedOn: (date: string, site: string) => string;
+      open: (site: string) => string;
+    };
+  };
   work: ConversationWorkCopy;
   stoppedStatus: string;
   fileChanges: {

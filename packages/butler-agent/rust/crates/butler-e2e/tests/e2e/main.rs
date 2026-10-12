@@ -6,6 +6,7 @@ mod agent_context;
 mod agent_exit;
 mod agent_import;
 mod alias_index_drop;
+mod answer_blocks;
 mod anthropic_cache;
 mod anthropic_requests;
 mod app_admission_history;

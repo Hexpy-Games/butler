@@ -43,6 +43,11 @@ title or domain, full URL in the tooltip, opened in the system browser).
 mailto, fragment and relative links stay plain anchors as before. Without
 `faviconSrc` every external link shows the globe.
 
+Tables scroll inside their own frame with edge fades. A comparison table
+built for `MarkdownTable` with row header cells (`<th scope="row">` in
+`tbody`; GFM tables never have them) keeps the row labels quiet (secondary
+text, no fill) and every cell on one line.
+
 Images keep their natural size and never upscale; a larger one fills the
 column width, capped at 60% of the window height (640px at most), aspect
 ratio kept. Reply captures (`MessageInlineImage`) put the image in an

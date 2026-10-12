@@ -25,6 +25,7 @@ const FILE_ROUTE_PREFIX: &str = "/message-files/";
 const SIGNED_URL_FIELD: &str = "signed_url";
 /// Bodies without this byte string have nothing to sign.
 const JSON_MARKER: &[u8] = b"\"/message-files/";
+const ASSET_MARKER: &[u8] = b"\"/assets/";
 /// Larger JSON bodies are passed through unsigned.
 const MAX_DECORATED_BODY_BYTES: u64 = 32 * 1024 * 1024;
 
@@ -114,9 +115,9 @@ impl ResourceSigner {
 
     /// The re-serialized JSON when it names a message file, otherwise `None`.
     fn decorate_bytes(&self, json: &[u8], now: u64) -> Option<Vec<u8>> {
-        if !json
-            .windows(JSON_MARKER.len())
-            .any(|window| window == JSON_MARKER)
+        if ![JSON_MARKER, ASSET_MARKER, b"\"img_".as_slice()]
+            .iter()
+            .any(|marker| json.windows(marker.len()).any(|window| window == *marker))
         {
             return None;
         }
@@ -136,6 +137,16 @@ impl ResourceSigner {
                 for child in object.values_mut() {
                     self.decorate_value(child, now);
                 }
+                if let Some(id) = object
+                    .get("img")
+                    .and_then(Value::as_str)
+                    .filter(|id| super::super::assets::valid_id(id))
+                {
+                    object.insert(
+                        "image_url".to_owned(),
+                        Value::String(self.sign(&format!("/assets/{id}"), now)),
+                    );
+                }
                 let signed = object
                     .get("url")
                     .and_then(Value::as_str)
@@ -152,6 +163,12 @@ impl ResourceSigner {
 
 /// Whether `path` is exactly `/message-files/file-<uuid>`.
 pub(in crate::gateway::http) fn is_file_path(path: &str) -> bool {
+    if path
+        .strip_prefix("/assets/")
+        .is_some_and(super::super::assets::valid_id)
+    {
+        return true;
+    }
     path.strip_prefix(FILE_ROUTE_PREFIX)
         .and_then(|id| id.strip_prefix("file-"))
         .is_some_and(|uuid| {

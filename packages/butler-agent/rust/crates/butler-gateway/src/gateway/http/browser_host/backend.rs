@@ -113,6 +113,7 @@ fn deadline(op: &str, args: &Value) -> u64 {
         "tab.act" => 30000,
         "tab.observe" if args["settle"] == true => 8000,
         "tab.read" => 8000,
+        "tab.image_collect" => 15000,
         _ => 5000,
     }
 }
@@ -146,6 +147,7 @@ pub(super) async fn headless_call(
                 | "tab.read"
                 | "tab.zoom"
                 | "tab.screenshot"
+                | "tab.image_collect"
                 | "tab.prepare"
                 | "tab.act"
                 | "tab.dialog"
@@ -182,6 +184,7 @@ pub(super) async fn headless_call(
         }
     };
     enforce_result_policy(&state, session, op, &mut result);
+    super::assets::finish(&state, session, op, &mut result).await?;
     super::shots::keep(&state, session, &mut result).await?;
     response(count, result)
 }

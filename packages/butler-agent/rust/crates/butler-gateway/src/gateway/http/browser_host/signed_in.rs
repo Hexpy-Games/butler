@@ -12,7 +12,12 @@ use std::sync::Arc;
 /// Ops that need no site grant: waits, cancels and the user's own picks.
 const UNGATED: &[&str] = &["tab.wait", "tab.waiting", "tab.cancel", "tab.selection"];
 /// Ops that only read the page; allowed on an identity page on the way back.
-const READS: &[&str] = &["tab.observe", "tab.zoom", "tab.screenshot"];
+const READS: &[&str] = &[
+    "tab.observe",
+    "tab.zoom",
+    "tab.screenshot",
+    "tab.image_collect",
+];
 
 /// The signed-in sites a conversation's turn may use.
 pub(super) async fn granted_sites(

@@ -266,6 +266,8 @@ CREATE TABLE IF NOT EXISTS btcc_guided_tool_calls (
   result_json TEXT,
   result_sha256 TEXT,
   changed_files_json TEXT,
+  read_source TEXT,
+  read_source_session TEXT,
   error_code TEXT,
   delivery_state TEXT CHECK (
     delivery_state IS NULL OR delivery_state IN (

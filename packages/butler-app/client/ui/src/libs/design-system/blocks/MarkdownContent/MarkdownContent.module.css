@@ -148,6 +148,18 @@
   font-weight: var(--font-weight-medium);
 }
 
+/* A comparison table (rows with their own header cell; GFM tables have none):
+   the row labels stay quiet and every cell keeps one line, so the table
+   scrolls inside its frame instead of breaking short values ("면 100%"). */
+.markdown tbody th {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.markdown table:has(tbody th) :where(th, td) {
+  white-space: nowrap;
+}
+
 /* Streaming reveal: recently appended chunks fade in; opacity only, so the
    inline span never shifts layout. */
 .streamChunk {

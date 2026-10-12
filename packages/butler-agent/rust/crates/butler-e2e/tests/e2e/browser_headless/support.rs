@@ -168,10 +168,17 @@ pub(crate) async fn publish_as(
     s: &Scenario,
     prompt: &str,
 ) -> Result<(String, String), HarnessError> {
+    publish_in(s, "general", prompt).await
+}
+pub(crate) async fn publish_in(
+    s: &Scenario,
+    session: &str,
+    prompt: &str,
+) -> Result<(String, String), HarnessError> {
     let port = reqwest::Url::parse(&s.gw.base).unwrap().port().unwrap();
     s.provider()?
         .add_placeholder("GATEWAY_PORT", port.to_string());
-    let (turn, _) = s.turn("general", prompt).await?;
+    let (turn, _) = s.turn(session, prompt).await?;
     let db = butler_platform::sqlite::open_with_flags(
         s.sandbox.data.join("agent-runtime/btcc.sqlite"),
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
@@ -239,6 +246,20 @@ fn turn_calls(prompt: &str) -> Vec<(&'static str, Value)> {
         )
     };
     match prompt {
+        "Publish images" => vec![
+            (
+                "write_file",
+                json!({"path":"image-assets/index.html","content":super::assets::page(),"create_parents":true}),
+            ),
+            (
+                "write_file",
+                json!({"path":"image-assets/not-image.txt","content":"This is text, not image pixels.","create_parents":true}),
+            ),
+            (
+                "output_publish",
+                json!({"path":"image-assets","entry":"index.html","title":"Image fixture"}),
+            ),
+        ],
         "Publish identity" => vec![
             (
                 "write_file",
@@ -309,6 +330,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
     cassette.exchanges.clear();
     for history in 0..=6 {
         for prompt in [
+            "Publish images",
             "Publish identity",
             "Publish broken",
             "Publish fixture",

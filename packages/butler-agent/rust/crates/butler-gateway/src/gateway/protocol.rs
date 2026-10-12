@@ -273,6 +273,8 @@ pub struct MessageRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_document: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub answer_blocks: Option<Vec<Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub work_blocks: Option<Vec<Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub turn_activity_rows: Option<Vec<Value>>,

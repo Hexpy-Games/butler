@@ -57,6 +57,7 @@ pub(super) fn guided_final(
         runtime_failure: result.runtime_failure,
         artifacts: result.artifacts,
         changed_files: result.changed_files,
+        answer_blocks: result.answer_blocks,
         plan: None,
         model_identity: result.model_identity,
         execution_outcome: (result.terminal_outcome
@@ -124,6 +125,9 @@ fn payload_body(
             "executionOutcome".into(),
             json_value(&crate::btcc::ExecutionOutcome::Failed)?,
         );
+    }
+    if !result.answer_blocks.is_empty() {
+        body.insert("answerBlocks".into(), json_value(&result.answer_blocks)?);
     }
     if !result.artifacts.is_empty() {
         body.insert("artifacts".into(), json_value(&result.artifacts)?);

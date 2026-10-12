@@ -1434,6 +1434,7 @@ function messageRecordEqual(
     left.cursor === right.cursor &&
     left.created_at === right.created_at &&
     left.updated_at === right.updated_at &&
+    JSON.stringify(left.answer_blocks ?? []) === JSON.stringify(right.answer_blocks ?? []) &&
     workBlockArrayEqual(left.work_blocks ?? [], right.work_blocks ?? []) &&
     progressRowArrayEqual(
       left.turn_activity_rows ?? [],

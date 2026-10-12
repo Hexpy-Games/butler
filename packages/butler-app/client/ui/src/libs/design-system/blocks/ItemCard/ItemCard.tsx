@@ -85,7 +85,7 @@ function Footer({ source, actions }: Pick<ItemCardProps, "source" | "actions">) 
           </Typo.Caption>
         </Clickable>
       ) : <span className={styles.source} />}
-      {actions ? <ButtonContainer size="icon-sm">{actions}</ButtonContainer> : null}
+      {actions ? <ButtonContainer className={dsClass(styles.actions)} size="icon-sm">{actions}</ButtonContainer> : null}
     </span>
   );
 }
@@ -93,7 +93,8 @@ function Footer({ source, actions }: Pick<ItemCardProps, "source" | "actions">) 
 /**
  * One found item (a paper, a place, a recipe, a product, a library) on a Card: picture, eyebrow, subtitle,
  * title, a value, facts, text and a footer with its source and actions. Below 340px of its own width it
- * stacks; at 340px and up it is a row with a 112px picture on the start side.
+ * stacks and the footer keeps only the read time; at 340px and up it is a row with a 112px picture on the
+ * start side and the footer adds the site icon and name.
  */
 export function ItemCard({
   title, eyebrow, subtitle, media, value, facts = [], text, showMoreLabel, showLessLabel, source, actions, onOpen, className,
