@@ -55,6 +55,11 @@ interface SetupWizardShellProps
   stepKey?: string;
   /** Focus only: how the first card appears (`full`: the ink intro, `rerun`: the short re-run variant). */
   intro?: SetupWizardIntro;
+  /**
+   * Focus only: the first card waits unseen and the backdrop draws nothing until the host can show the intro (the App:
+   * bundled fonts and a visible window). The card DOM is laid out from the start; `intro` is read when the hold ends.
+   */
+  introHeld?: boolean;
 }
 
 export function SetupWizardShell({
@@ -70,10 +75,12 @@ export function SetupWizardShell({
   anchor = "center",
   stepKey,
   intro,
+  introHeld = false,
   ...props
 }: SetupWizardShellProps) {
   const regionLabel = typeof title === "string" ? title : undefined;
-  const { timeline, wash } = useSetupIntro(variant === "focus" ? intro : undefined);
+  const held = variant === "focus" && introHeld;
+  const { timeline, wash } = useSetupIntro(variant === "focus" ? intro : undefined, held);
 
   return (
     <main
@@ -84,7 +91,7 @@ export function SetupWizardShell({
       data-variant={variant}
       {...props}
     >
-      <Wallpaper intro={timeline} source={SETUP_WALLPAPER} tone={tone} />
+      {held ? null : <Wallpaper intro={timeline} source={SETUP_WALLPAPER} tone={tone} />}
       {wash ? <div aria-hidden="true" className={introStyles.wash} data-test-class="setup-intro-wash" /> : null}
       <div
         aria-hidden="true"
@@ -110,7 +117,7 @@ export function SetupWizardShell({
             aria-label={regionLabel}
           >
             {stepKey === undefined && intro === undefined ? children
-              : <SetupWizardStage intro={intro} stepKey={stepKey ?? "card"} timeline={timeline}>{children}</SetupWizardStage>}
+              : <SetupWizardStage held={held} intro={intro} stepKey={stepKey ?? "card"} timeline={timeline}>{children}</SetupWizardStage>}
           </PageContainer>
         </ScrollArea>
       ) : (
