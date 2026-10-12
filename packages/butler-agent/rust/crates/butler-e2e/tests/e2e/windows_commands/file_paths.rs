@@ -115,7 +115,16 @@ pub(super) async fn approve(
     } else if matches!(case.tool, "list_files" | "grep_files") {
         json!([case.args["root"]])
     } else {
-        json!([case.args["path"].as_str().unwrap().replace('\\', "/")])
+        let path = case.args["path"].as_str().unwrap().replace('\\', "/");
+        json!([if path.starts_with("../") {
+            s.sandbox
+                .data
+                .join(path)
+                .to_string_lossy()
+                .replace('\\', "/")
+        } else {
+            path
+        }])
     };
     assert_eq!(
         card["approval"]["examples"], paths,
