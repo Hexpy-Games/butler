@@ -3,6 +3,8 @@
 //! macOS uses Seatbelt; Linux uses a single-threaded Landlock/seccomp
 //! trampoline. Unsupported hosts keep exact-action approval behavior.
 
+mod credentials;
+pub use credentials::{command_reads_data_credentials, data_credential_roots};
 mod denial;
 pub use denial::{isolation_failure, isolation_failure_exit, sandbox_denial};
 mod environment;
@@ -79,6 +81,10 @@ pub struct Invocation {
     pub program: String,
     /// Its arguments, in order.
     pub arguments: Vec<String>,
+    /// Restore the generated PowerShell provider location from the process CWD.
+    pub restore_cwd: bool,
+    /// Pass the final cmd script argument verbatim, in a single quote envelope.
+    pub raw_cmd_script: bool,
 }
 
 /// What a shell command may do.
@@ -155,8 +161,8 @@ pub fn login_shell_contained(
 /// one pair of quotes: `cmd` does not undo the `\"` escaping that
 /// `Command::arg` applies, so a command containing quotes would reach it
 /// mangled.
-/// Configure the environment and working directory first; PowerShell also
-/// restores its provider location to that same admitted directory.
+/// Generated PowerShell invocations restore their provider location from the
+/// child process CWD, independent of when the caller configures current_dir.
 pub fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
     shell::add_arguments(command, invocation);
 }
@@ -187,7 +193,7 @@ pub fn protect_writes(invocation: Invocation, root: &Path) -> Result<Protection,
 /// Whether an unquoted shell operator could detach work. Interpreter script
 /// arguments remain quoted data; shell escape syntax is host-specific.
 pub fn has_background_operator(command: &str) -> bool {
-    operators::has_background(command, shell::ESCAPE)
+    operators::has_background(command, shell::command_escape(command))
 }
 
 /// Whether a shell path names the registry instead of the filesystem.

@@ -9,6 +9,14 @@ mod cmd;
 mod cwd;
 pub(super) use cwd::working_directory;
 
+pub(super) fn command_escape(command: &str) -> char {
+    if cmd::script(command).is_some() {
+        '^'
+    } else {
+        ESCAPE
+    }
+}
+
 pub(super) const ESCAPE: char = '`';
 
 pub(super) const POSIX: bool = false;
@@ -18,7 +26,9 @@ pub(super) fn member_access_dot(ch: char, previous: Option<char>, quoted: bool) 
 }
 
 pub(super) fn path_script(command: &str) -> &str {
-    explicit_script(command).unwrap_or(command)
+    cmd::script(command)
+        .or_else(|| explicit_script(command))
+        .unwrap_or(command)
 }
 
 /// `cmd.exe /d /s /c <command>` takes the command verbatim: with `/s`, `cmd`
@@ -26,30 +36,14 @@ pub(super) fn path_script(command: &str) -> &str {
 pub(super) fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
     use std::os::windows::process::CommandExt;
     if let Some(text) = cmd::raw_argument(invocation) {
-        command.args(["/d", "/s", "/c"]).raw_arg(text);
+        command
+            .args(&invocation.arguments[..invocation.arguments.len() - 1])
+            .raw_arg(text);
     } else {
         command.args(&invocation.arguments);
-        let powershell = std::path::Path::new(&invocation.program)
-            .file_stem()
-            .is_some_and(|name| {
-                name.eq_ignore_ascii_case("powershell") || name.eq_ignore_ascii_case("pwsh")
-            });
-        if powershell
-            && invocation.arguments.len() == 9
-            && invocation.arguments.iter().take(8).map(String::as_str).eq([
-                "-NoLogo",
-                "-NoProfile",
-                "-NonInteractive",
-                "-OutputFormat",
-                "Text",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-EncodedCommand",
-            ])
-            && let Some(directory) = command.get_current_dir().map(std::path::Path::to_path_buf)
-        {
-            command.env("BUTLER_COMMAND_CWD", directory);
-        }
+    }
+    if invocation.restore_cwd {
+        command.env("BUTLER_COMMAND_RESTORE_CWD", "1");
     }
 }
 
@@ -66,8 +60,8 @@ pub(super) fn legacy_shell(
     _pipefail: bool,
     environment: &HashMap<String, Option<String>>,
 ) -> Invocation {
-    if cmd::script(command).is_some() {
-        return cmd::shell(command, environment);
+    if let Some(invocation) = cmd::shell(command, environment) {
+        return invocation;
     }
     let program = environment
         .get("BUTLER_POWERSHELL")
@@ -96,6 +90,8 @@ pub(super) fn legacy_shell(
             .collect::<Vec<_>>(),
     );
     Invocation {
+        restore_cwd: true,
+        raw_cmd_script: false,
         program,
         arguments: [
             "-NoLogo",

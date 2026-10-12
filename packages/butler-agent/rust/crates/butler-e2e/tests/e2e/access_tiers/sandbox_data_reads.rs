@@ -4,6 +4,58 @@ use butler_turn::workspace::{Commands, GuidedAccess, GuidedCommandInput};
 use std::{collections::HashMap, path::Path};
 use tokio_util::sync::CancellationToken;
 
+#[tokio::test]
+async fn data_credentials_are_screened_by_path_alias_and_shell_variables()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut setup = Setup::new("DATA-CREDENTIAL-GUARD")?;
+    let data = setup.sandbox.workspace.join("data directory");
+    let auth = data.join("auth");
+    std::fs::create_dir_all(&auth)?;
+    std::fs::write(auth.join("provider profile.json"), "private fixture")?;
+    std::fs::write(data.join("token"), "private fixture")?;
+    let alias = setup.sandbox.workspace.join("data-alias");
+    butler_platform::secure_fs::symlink(&data, &alias)?;
+    let environment = HashMap::from([
+        ("HOME".into(), setup.sandbox.home.display().to_string()),
+        ("DATA_ROOT".into(), data.display().to_string()),
+    ]);
+    let screened = |command: &str| {
+        butler_platform::command_sandbox::command_reads_data_credentials(
+            command,
+            &setup.sandbox.workspace,
+            &data,
+            &environment,
+        )
+    };
+    for path in [
+        data.join("auth/provider profile.json"),
+        alias.join("auth/provider profile.json"),
+        data.join("token"),
+    ] {
+        assert!(screened(&format!("read '{}'", path.display())));
+    }
+    for path in [
+        "data-alias/token",
+        "$BUTLER_DATA/token",
+        "${BUTLER_DATA}/token",
+        "$DATA_ROOT/token",
+        "$env:DATA_ROOT/token",
+        "%DATA_ROOT%/token",
+    ] {
+        assert!(screened(&format!("read '{path}'")), "{path}");
+    }
+    for path in [
+        "data-alias/ordinary.txt",
+        "$BUTLER_DATA/ordinary.txt",
+        "data-alias/token-copy",
+    ] {
+        assert!(!screened(&format!("read '{path}'")), "{path}");
+    }
+    setup.sandbox.mark_success();
+    Ok(())
+}
+
 async fn command(
     owner: &Commands,
     setup: &Setup,
@@ -51,7 +103,9 @@ async fn contained_commands_allow_data_reads_and_keep_writes_and_credentials_den
     std::fs::create_dir_all(credential.parent().unwrap())?;
     std::fs::write(&credential, "fixture-credential")?;
     let owner = Commands::new();
-    for data in [&setup.sandbox.data, &default_data] {
+    let workspace_data = setup.sandbox.workspace.join("data directory");
+    std::fs::create_dir_all(&workspace_data)?;
+    for data in [&setup.sandbox.data, &default_data, &workspace_data] {
         let file = data.join("ordinary.txt");
         std::fs::write(&file, "complete-data-fixture")?;
         let alias = setup.sandbox.workspace.join("data-alias");
@@ -61,6 +115,21 @@ async fn contained_commands_allow_data_reads_and_keep_writes_and_credentials_den
                 command(&owner, &setup, data, format!("cat '{}'", path.display())).await?;
             assert_eq!(status, Some(0));
             assert_eq!(stdout, b"complete-data-fixture");
+        }
+        for root in butler_platform::command_sandbox::data_credential_roots(data) {
+            let path = if root.extension().is_none() && root.file_name().unwrap() == "auth" {
+                root.join("openai-codex.json")
+            } else {
+                root
+            };
+            std::fs::create_dir_all(path.parent().unwrap())?;
+            std::fs::write(&path, "private fixture")?;
+            for path in [&path, &alias.join(path.strip_prefix(data).unwrap())] {
+                let (status, stdout) =
+                    command(&owner, &setup, data, format!("cat '{}'", path.display())).await?;
+                assert_ne!(status, Some(0));
+                assert!(stdout.is_empty(), "credential contents escaped");
+            }
         }
         let target = data.join("denied-write.txt");
         let (status, _) = command(

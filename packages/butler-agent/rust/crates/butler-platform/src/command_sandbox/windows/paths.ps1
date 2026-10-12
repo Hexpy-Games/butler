@@ -3,19 +3,23 @@
 # See microsoft/referencesource mscorlib/system/AppContext/AppContextSwitches.cs.
 & {
     try {
+        $directory = [System.Environment]::CurrentDirectory.Replace('/', '\')
+        $longPath = $directory.Length -ge 248
         if ($PSVersionTable.PSEdition -eq 'Desktop') {
-            $context = [System.AppContext].Assembly.GetType('System.AppContextSwitches', $true)
+            $context = [System.AppContext].Assembly.GetType('System.AppContextSwitches', $false)
             foreach ($name in @('UseLegacyPathHandling', 'BlockLongPaths')) {
                 $cacheName = '_' + $name.Substring(0, 1).ToLowerInvariant() + $name.Substring(1)
-                $cache = $context.GetField($cacheName, [System.Reflection.BindingFlags]'Static,NonPublic')
-                if (!$cache) { throw "Windows PowerShell path compatibility is unavailable: $name" }
+                $cache = if ($context) { $context.GetField($cacheName, [System.Reflection.BindingFlags]'Static,NonPublic') } else { $null }
+                if (!$cache) {
+                    if ($longPath) { throw "Windows PowerShell path compatibility is unavailable: $name" }
+                    continue
+                }
                 [System.AppContext]::SetSwitch("Switch.System.IO.$name", $false)
                 $cache.SetValue($null, 0)
             }
         }
-        if ($env:BUTLER_COMMAND_CWD) {
-            $directory = $env:BUTLER_COMMAND_CWD.Replace('/', '\')
-            if ($PSVersionTable.PSEdition -eq 'Desktop' -and [System.IO.Path]::GetFullPath($directory).Length -ge 248) {
+        if ($env:BUTLER_COMMAND_RESTORE_CWD) {
+            if ($PSVersionTable.PSEdition -eq 'Desktop' -and $longPath) {
                 # The provider treats \\?\C:\ as an incomplete UNC root and
                 # drops its first child. DosDevices retains the logon's drive
                 # lookup while giving the provider a complete extended root.
@@ -31,7 +35,7 @@
             } else {
                 Set-Location -LiteralPath $directory -ErrorAction Stop
             }
-            Remove-Item Env:BUTLER_COMMAND_CWD -ErrorAction Stop
+            Remove-Item Env:BUTLER_COMMAND_RESTORE_CWD -ErrorAction Stop
         }
     } catch {
         [Console]::Error.WriteLine($_.Exception.Message)

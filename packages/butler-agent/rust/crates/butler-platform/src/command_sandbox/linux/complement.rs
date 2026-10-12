@@ -62,24 +62,7 @@ pub(super) fn apply(
         Vec::new()
     };
     grant_complement(rules, Path::new("/"), &blocked, &deny_execute, read)?;
-    for root in allowed {
-        let real = resolved_path(root)?;
-        // Disjoint workspaces already received exactly these grants above.
-        // Only private-root overlap needs Seatbelt's workspace exception.
-        if !private
-            .iter()
-            .any(|path| real.starts_with(path) || path.starts_with(&real))
-        {
-            continue;
-        }
-        let mut excluded: Vec<_> = private
-            .iter()
-            .filter(|path| !real.starts_with(path) && !path.starts_with(&real))
-            .cloned()
-            .collect();
-        excluded.extend(project_secrets(root)?);
-        grant_complement(rules, &real, &excluded, &deny_execute, read)?;
-    }
+    // Private exclusions remain denied even when a workspace overlaps them.
     grant(rules, Path::new("/dev/null"), AccessFs::WriteFile.into())
 }
 

@@ -56,8 +56,10 @@ async fn kernel_boundaries_secrets_network_and_unicode() -> Result<(), HarnessEr
     butler_platform::secure_fs::symlink(&home.join(".ssh/id_test"), &cwd.join("credential-alias"))?;
     butler_platform::secure_fs::symlink(&cwd.join("visible.txt"), &cwd.join("public-alias"))?;
     let environment = HashMap::from([("HOME".into(), home.display().to_string())]);
+    let credentials = command_sandbox::data_credential_roots(&setup.sandbox.data);
+    let denied: Vec<_> = credentials.iter().map(PathBuf::as_path).collect();
     let invoke = |command: &str| {
-        command_sandbox::login_shell_contained(command, &environment, &[], &[&cwd]).unwrap()
+        command_sandbox::login_shell_contained(command, &environment, &denied, &[&cwd]).unwrap()
     };
     let output = run(invoke("ls -1; cat visible.txt; pwd"), &cwd, home);
     assert!(output.status.success(), "{output:?}");
@@ -93,8 +95,8 @@ async fn kernel_boundaries_secrets_network_and_unicode() -> Result<(), HarnessEr
         &cwd,
         home,
     );
-    assert!(output.status.success(), "{output:?}");
-    assert_eq!(output.stdout, b"fixture-butler-token");
+    assert!(!output.status.success(), "credential read was allowed");
+    assert!(output.stdout.is_empty(), "credential contents escaped");
     let tcp = std::net::TcpListener::bind("127.0.0.1:0")?;
     tcp.set_nonblocking(true)?;
     // sockaddr_un's fixed length needs a short fixture path even when TMPDIR

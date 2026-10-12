@@ -22,6 +22,8 @@ mod private_metadata;
 mod profile_files;
 #[path = "windows_commands/profile_observation.rs"]
 mod profile_observation;
+#[path = "windows_commands/shell_contracts.rs"]
+mod shell_contracts;
 #[path = "windows_commands/startup.rs"]
 mod startup;
 #[path = "windows_commands/stub.rs"]
@@ -203,6 +205,8 @@ async fn windows_command_tool_native_matrix() -> Result<(), HarnessError> {
             r#"reg.exe query "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders""#,
             "HKEY_CURRENT_USER",
         ),
+        ("WIN-CMD-CARET-AND", "cmd /c echo a^&b", "a&b"),
+        ("WIN-CMD-CARET-PIPE", "cmd /c echo a^|b", "a|b"),
         (
             "WIN-CMD",
             r#"cmd /c dir "%USERPROFILE%\Downloads""#,

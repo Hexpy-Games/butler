@@ -47,6 +47,7 @@ pub(super) fn read_only_contained(
             .map(|name| Path::new(home).join(name)),
         );
     }
+    let credentials = denied;
     let denied = private
         .iter()
         .map(std::path::PathBuf::as_path)
@@ -64,6 +65,13 @@ pub(super) fn read_only_contained(
         let real = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
         for path in [*root, real.as_path()] {
             deny_project_secrets(&mut profile, path)?;
+        }
+    }
+    for root in credentials {
+        let real = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+        for path in [*root, real.as_path()] {
+            let quoted = serde_json::to_string(&path.to_string_lossy())?;
+            profile.push_str(&format!("\n(deny file-read* (subpath {quoted}))"));
         }
     }
     Ok(sandboxed(profile, invocation))
@@ -126,6 +134,8 @@ fn sandboxed(profile: String, invocation: Invocation) -> Invocation {
     let mut arguments = vec!["-p".into(), profile, invocation.program];
     arguments.extend(invocation.arguments);
     Invocation {
+        restore_cwd: false,
+        raw_cmd_script: false,
         program: SANDBOX_EXEC.into(),
         arguments,
     }

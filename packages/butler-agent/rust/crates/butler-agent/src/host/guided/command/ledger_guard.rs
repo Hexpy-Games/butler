@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 
 static WRITE_HINT: LazyLock<Regex> = LazyLock::new(|| {
     fixed_regex(
-        r#"(?s)(?:^|[\s;&|])(?:cat|printf|echo)\b.*>{1,2}\s*|(?:^|[\s;&|])tee(?:\s+-a)?\s+|(?:^|[\s;&|])(?:touch|mkdir|rm|mv|cp|truncate|install|rsync)\b|(?:^|[\s;&|])dd\b[^;&|]*\bof=|(?:^|[\s;&|])(?:sed|perl)\s+-i\b|(?:^|[\s;&|])find\b.*\s-delete(?:\s|$)|\b(?:writeFileSync|writeFile|appendFileSync|appendFile|createWriteStream|write_text|rmSync|unlinkSync|rmdirSync|renameSync|copyFileSync|cpSync|mkdirSync)\b|\bopen\s*\([^)]*,\s*['"][wax]"#,
+        r#"(?is)(?:^|[\s;&|])(?:cat|printf|echo)\b.*>{1,2}\s*|(?:^|[\s;&|])tee(?:\s+-a)?\s+|(?:^|[\s;&|])(?:touch|mkdir|rm|mv|cp|truncate|install|rsync|(?:Set|Add|Remove|Copy|Move|New|Rename|Clear)-[\w-]+|sc|ac|ri|del|erase|copy|move|ren|rd|rmdir)\b|(?:^|[\s;&|])dd\b[^;&|]*\bof=|(?:^|[\s;&|])(?:sed|perl)\s+-i\b|(?:^|[\s;&|])find\b.*\s-delete(?:\s|$)|\b(?:writeFileSync|writeFile|appendFileSync|appendFile|createWriteStream|write_text|rmSync|unlinkSync|rmdirSync|renameSync|copyFileSync|cpSync|mkdirSync)\b|\bopen\s*\([^)]*,\s*['"][wax]"#,
     )
 });
 static REDIRECT: LazyLock<Regex> =
@@ -64,6 +64,7 @@ pub(super) fn guard(
     data: &Path,
     installation_root: Option<&Path>,
     home: Option<&Path>,
+    read_only: bool,
 ) -> Option<Value> {
     let trusted = trust::is_trusted(command, cwd, installation_root);
     let fallback = [
@@ -83,7 +84,10 @@ pub(super) fn guard(
     {
         return Some(value);
     }
-    if !trusted && let Some(value) = native_paths(command, cwd, workspace, data, home) {
+    if !trusted
+        && (!read_only || WRITE_HINT.is_match(command))
+        && let Some(value) = native_paths(command, cwd, workspace, data, home)
+    {
         return Some(value);
     }
     let write = write_candidates(command);
@@ -99,7 +103,7 @@ pub(super) fn guard(
     {
         return Some(value);
     }
-    if !trusted {
+    if !trusted && WRITE_HINT.is_match(command) {
         let mut mentions = write;
         mentions.extend(
             MENTION

@@ -4,6 +4,10 @@ use std::collections::HashMap;
 
 use super::Invocation;
 
+pub(super) fn command_escape(_command: &str) -> char {
+    ESCAPE
+}
+
 pub(super) const ESCAPE: char = '\\';
 
 pub(super) const POSIX: bool = true;
@@ -26,6 +30,8 @@ pub(super) fn add_arguments(command: &mut std::process::Command, invocation: &In
 
 pub(super) fn login_shell(command: &str, _environment: &HashMap<String, String>) -> Invocation {
     Invocation {
+        restore_cwd: false,
+        raw_cmd_script: false,
         program: "/bin/sh".into(),
         arguments: vec!["-lc".into(), command.to_owned()],
     }
@@ -43,6 +49,8 @@ pub(super) fn legacy_shell(
     };
     arguments.extend(["-lc".into(), command.into()]);
     Invocation {
+        restore_cwd: false,
+        raw_cmd_script: false,
         program: "/bin/bash".into(),
         arguments,
     }

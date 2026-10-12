@@ -394,15 +394,20 @@ fn invocation(input: &GuidedCommandInput) -> Result<command_sandbox::Invocation,
     };
     // Data-folder reads follow ordinary file access; only credential roots
     // and project secrets belong in the private-read exclusions.
-    let shell = if input.access == GuidedAccess::ContainedObservation {
+    let credentials = command_sandbox::data_credential_roots(&input.butler_data);
+    let denied: Vec<_> = credentials
+        .iter()
+        .map(std::path::PathBuf::as_path)
+        .collect();
+    let shell = if input.access == GuidedAccess::FullAccessContained {
+        command_sandbox::login_shell(&input.command, access, &input.host_environment)
+    } else {
         command_sandbox::login_shell_contained(
             &input.command,
             &input.host_environment,
-            &[],
+            &denied,
             &[input.workspace_root.as_path()],
         )
-    } else {
-        command_sandbox::login_shell(&input.command, access, &input.host_environment)
     };
     let invocation = shell.map_err(|error| {
         CommandError::new(
