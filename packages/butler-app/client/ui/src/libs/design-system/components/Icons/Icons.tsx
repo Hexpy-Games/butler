@@ -10,7 +10,7 @@ import type { HugeiconsIconProps } from "@hugeicons/react";
 import { createIcon } from "./iconBase";
 // Named imports keep the bundle to the glyphs mapped below.
 import {
-  Activity01Icon, Add01Icon, AiChipIcon, AlertCircleIcon, ArchiveIcon, ArrowDown01Icon,
+  Activity01Icon, Add01Icon, ArrowTurnBackwardIcon, AiChipIcon, AlertCircleIcon, ArchiveIcon, ArrowDown01Icon,
   ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, ArrowUpDownIcon, AttachmentIcon,
   BookOpen01Icon, BotIcon, Briefcase01Icon, BubbleChatIcon, Cancel01Icon, CancelCircleIcon,
   CheckListIcon, CheckmarkCircle02Icon, CircleIcon, Clock03Icon, CollapseIcon, CommandIcon, ComputerIcon,
@@ -98,6 +98,8 @@ export const Pin = createIcon(PinIcon);
 export const Play = createIcon(PlayIcon);
 export const Plus = createIcon(Add01Icon);
 export const RefreshCcw = createIcon(ReloadIcon);
+/** A follow-up the user sends back (a suggested reply chip). */
+export const Reply = createIcon(ArrowTurnBackwardIcon);
 export const Rocket = createIcon(Rocket01Icon);
 export const RotateCcw = RefreshCcw;
 export const Save = createIcon(FloppyDiskIcon);

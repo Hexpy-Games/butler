@@ -9,6 +9,9 @@ use url::Url;
 
 #[path = "answer_blocks_schema.rs"]
 mod schema;
+#[path = "answer_blocks_sets.rs"]
+mod sets;
+pub use sets::{accept, normalize, shown, sources};
 
 pub const ANSWER_BLOCKS_SCHEMA: &str = include_str!("answer-blocks.schema.json");
 pub const MAX_SPEC_BYTES: usize = 24 * 1024;
@@ -78,19 +81,23 @@ pub(super) fn pointer(path: &str, key: &str) -> String {
     format!("{path}/{}", key.replace('~', "~0").replace('/', "~1"))
 }
 
-fn source_identity(source: &str) -> Option<(String, String)> {
+pub fn source_identity(source: &str) -> Option<String> {
     let url = Url::parse(source).ok()?;
     if !matches!(url.scheme(), "http" | "https") {
         return None;
     }
-    Some((url.host_str()?.to_lowercase(), url.path().into()))
+    Some(format!(
+        "https://{}{}",
+        url.host_str()?.to_lowercase(),
+        url.path()
+    ))
 }
 
 fn semantic(
     value: &Value,
     path: &str,
     context: &AnswerBlocksContext<'_>,
-    read: &HashSet<(String, String)>,
+    read: &HashSet<String>,
     problems: &mut Vec<AnswerBlocksProblem>,
 ) {
     if problems.len() >= MAX_PROBLEMS {
@@ -138,7 +145,7 @@ fn provenance(
     value: &Value,
     path: &str,
     context: &AnswerBlocksContext<'_>,
-    read: &HashSet<(String, String)>,
+    read: &HashSet<String>,
     problems: &mut Vec<AnswerBlocksProblem>,
 ) {
     let measured = value.get("value").is_some_and(Value::is_object);

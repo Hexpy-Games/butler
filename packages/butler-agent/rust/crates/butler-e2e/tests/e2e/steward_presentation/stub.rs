@@ -16,6 +16,8 @@ pub(super) const DIRECTION: &str = "Use approach B and read b.txt next.";
 
 #[derive(Default)]
 pub(crate) struct Script {
+    pub(crate) answer_blocks: AtomicBool,
+    answer_step: Mutex<usize>,
     pub(crate) browser: AtomicBool,
     pub open_disposition: AtomicBool,
     pub blocked_disposition: AtomicBool,
@@ -83,6 +85,13 @@ async fn reply(
         && script.open_disposition.load(Ordering::SeqCst)
     {
         message("Delegated work could not complete; progress remains saved.")
+    } else if key.user_request.contains("Delegated result")
+        && script.answer_blocks.load(Ordering::SeqCst)
+    {
+        super::super::browser_delegation::answer::parent_item(
+            &body,
+            &mut script.answer_step.lock().unwrap(),
+        )
     } else if key.user_request.contains("Delegated result") {
         message("Approach B verified.")
     } else {
@@ -106,6 +115,23 @@ fn parent_item(step: usize) -> Value {
 }
 
 fn child_item(step: usize, body: &Value, script: &Script) -> Value {
+    let collecting = if script.answer_blocks.load(Ordering::SeqCst) {
+        2
+    } else {
+        1
+    };
+    if script.browser.load(Ordering::SeqCst) && (7..7 + collecting).contains(&step) {
+        return call(
+            &format!("collect-browser-{step}"),
+            "tool_call",
+            &json!({"id":"native:image_collect","arguments":{"tab":"parent-tab","ref":format!("image-ref-{step}"),"observation":"parent-observation"}}),
+        );
+    }
+    let step = if script.browser.load(Ordering::SeqCst) && step >= 7 + collecting {
+        step - collecting
+    } else {
+        step
+    };
     if script.browser.load(Ordering::SeqCst) {
         return match step {
             0 => call("browser-plan", "replace_work_plan", &plan(false, "direct")),
@@ -113,7 +139,7 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
             2 => call(
                 "describe-browser",
                 "tool_describe",
-                &json!({"ids":["native:browser_open","native:browser_tabs","native:browser_observe","native:browser_screenshot"]}),
+                &json!({"ids":["native:browser_open","native:browser_tabs","native:browser_observe","native:browser_screenshot","native:image_collect"]}),
             ),
             3 => call(
                 "open-browser",

@@ -1,5 +1,6 @@
 //! Existing App schema migration in its source-defined order.
 
+mod assets;
 mod core;
 mod library;
 mod message_ownership;
@@ -47,6 +48,7 @@ pub(super) fn migrate(
     // database, the connected provider's routine preset for a new one.
     record_default_model_policy(connection, !turns_new)?;
     migration::add_current_columns(connection)?;
+    assets::create(connection)?;
     connection.execute_batch(
         "CREATE INDEX IF NOT EXISTS chats_archived_idx ON chats(archived);
          CREATE INDEX IF NOT EXISTS projects_archived_idx ON projects(archived);

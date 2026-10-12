@@ -23,6 +23,7 @@ pub(super) struct FinalCandidate {
     pub no_visible_reply: bool,
     pub changed_files: Vec<Value>,
     pub plan: Option<Value>,
+    pub answer_blocks: Option<Value>,
     pub activates_plan: bool,
     pub delivery_metadata: Option<Map<String, Value>>,
     pub materialization: ArtifactMaterializationRequest,
@@ -73,18 +74,7 @@ pub(super) fn candidate(
     }
     allowed_roots.push(butler_data.join("artifacts/public-data"));
     let candidates = file_candidates(&message, &mut allowed_roots);
-    let changed_files = message
-        .get("changedFiles")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter(|value| {
-            value.get("path").and_then(Value::as_str).is_some()
-                && value.get("lines").and_then(Value::as_array).is_some()
-        })
-        .take(40)
-        .cloned()
-        .collect();
+    let changed_files = changed_files(&message);
     let plan = message
         .get("plan")
         .or_else(|| metadata.get("plan"))
@@ -106,6 +96,10 @@ pub(super) fn candidate(
         no_visible_reply: metadata.get("noVisibleReply") == Some(&Value::Bool(true)),
         changed_files,
         plan,
+        answer_blocks: message
+            .get("answerBlocks")
+            .filter(|v| v.is_array())
+            .cloned(),
         activates_plan,
         delivery_metadata,
         materialization: ArtifactMaterializationRequest {
@@ -341,4 +335,19 @@ fn text(value: Option<&Value>) -> Option<String> {
         .map(str::trim)
         .filter(|v| !v.is_empty())
         .map(str::to_owned)
+}
+
+fn changed_files(message: &Map<String, Value>) -> Vec<Value> {
+    message
+        .get("changedFiles")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|value| {
+            value.get("path").and_then(Value::as_str).is_some()
+                && value.get("lines").and_then(Value::as_array).is_some()
+        })
+        .take(40)
+        .cloned()
+        .collect()
 }
