@@ -25,7 +25,7 @@ export function FirstRunStepCard({ flow, children, contentKey = flow.step, title
       backLabel={flow.copy.back}
       contentKey={bodyKey}
       titleId={titleId}
-      steps={flow.mode === "consent" ? undefined : firstRunSteps(flow.copy, flow.mode)}
+      steps={flow.mode === "consent" ? undefined : firstRunSteps(flow.copy, flow.mode, flow.step, flow.substep)}
       activeIndex={firstRunStepIds(flow.mode).indexOf(flow.step)}
     >
       {children}
