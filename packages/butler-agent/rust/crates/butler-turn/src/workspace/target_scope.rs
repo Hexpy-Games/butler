@@ -43,6 +43,9 @@ fn classify(
     project: &Path,
     data: &Path,
 ) -> TargetScope {
+    let Ok(target) = butler_platform::tool_paths::parse(base, target) else {
+        return TargetScope::Outside;
+    };
     let Ok(absolute) = lexical_absolute(&base.join(target)) else {
         return TargetScope::Outside;
     };

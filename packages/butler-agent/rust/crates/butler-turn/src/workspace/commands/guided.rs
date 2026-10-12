@@ -372,7 +372,17 @@ pub(super) fn guarded_directory(
     if let Some(reason) = result.reason {
         return Err(CommandError::CwdRejected {
             reason,
-            workspace_root: result.root.to_string_lossy().into_owned(),
+            message: super::super::path_messages::explanation(reason).0.into(),
+        });
+    }
+    if let Some(path) = result.real.as_deref()
+        && !std::fs::metadata(path).map_err(CommandError::io)?.is_dir()
+    {
+        return Err(CommandError::CwdRejected {
+            reason: "not_a_directory",
+            message: super::super::path_messages::explanation("not_a_directory")
+                .0
+                .into(),
         });
     }
     result.absolute.ok_or_else(|| {

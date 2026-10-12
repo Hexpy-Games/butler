@@ -77,7 +77,12 @@ async fn target_scope(
             if command_scope_unresolved(command) {
                 return TargetScope::Outside;
             }
-            let cwd = root.join(args["cwd"].as_str().unwrap_or("."));
+            let Ok(cwd) =
+                butler_platform::tool_paths::parse(&root, args["cwd"].as_str().unwrap_or("."))
+            else {
+                return TargetScope::Outside;
+            };
+            let cwd = root.join(cwd);
             let mut targets = vec![cwd.to_string_lossy().into_owned()];
             targets.extend(
                 butler_platform::command_sandbox::path_tokens(command)

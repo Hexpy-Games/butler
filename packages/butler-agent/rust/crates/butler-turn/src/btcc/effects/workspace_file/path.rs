@@ -18,16 +18,6 @@ fn required(value: &str, field: &str) -> EffectResult<String> {
         Ok(trimmed.to_owned())
     }
 }
-fn absolute_windows(value: &str) -> bool {
-    value.starts_with('\\')
-        || value.starts_with("//")
-        || value
-            .as_bytes()
-            .first()
-            .is_some_and(u8::is_ascii_alphabetic)
-            && value.as_bytes().get(1) == Some(&b':')
-            && matches!(value.as_bytes().get(2), Some(b'/' | b'\\'))
-}
 pub(super) fn relative(value: &str) -> EffectResult<String> {
     let trimmed = required(value, "path")?;
     if trimmed.contains('\0') {
@@ -38,7 +28,7 @@ pub(super) fn relative(value: &str) -> EffectResult<String> {
             .to_string_lossy()
             .replace('\\', "/"));
     }
-    if absolute_windows(&trimmed) {
+    if butler_platform::tool_paths::has_windows_root(&trimmed) {
         return Err(invalid("Path is not absolute on this OS"));
     }
     let slash = trimmed.replace('\\', "/");
@@ -63,7 +53,13 @@ pub(super) fn relative(value: &str) -> EffectResult<String> {
 }
 pub(super) fn contained(workspace: &Path, value: &str) -> EffectResult<String> {
     let trimmed = required(value, "path")?;
-    if !Path::new(&trimmed).is_absolute() && !absolute_windows(&trimmed) {
+    let trimmed = butler_platform::tool_paths::parse(workspace, &trimmed)
+        .map_err(|error| invalid(error.to_string()).with_source(error))?
+        .to_string_lossy()
+        .into_owned();
+    if !Path::new(&trimmed).is_absolute()
+        && !butler_platform::tool_paths::has_windows_root(&trimmed)
+    {
         return relative(&trimmed);
     }
     let workspace = lexical_absolute(workspace)?;

@@ -10,6 +10,7 @@ mod files;
 mod grep;
 mod mutations;
 mod path_guard;
+mod path_messages;
 mod target_scope;
 pub use target_scope::{ScopeRoots, TargetScope, classify_targets};
 mod reference;

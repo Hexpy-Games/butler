@@ -16,6 +16,10 @@ mod file_paths;
 mod observation;
 #[path = "windows_commands/observation_stub.rs"]
 mod observation_stub;
+#[path = "windows_commands/path_contract.rs"]
+mod path_contract;
+#[path = "windows_commands/path_messages.rs"]
+mod path_messages;
 #[path = "windows_commands/private_metadata.rs"]
 mod private_metadata;
 #[path = "windows_commands/profile_files.rs"]

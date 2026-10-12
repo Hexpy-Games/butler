@@ -82,8 +82,8 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "process_names" => &["launcher", "secure_fs"],
         // Package activation waits for its parent and restores verified ZIP role links.
         "app_update" => &["process_control", "process_names", "secure_fs"],
-        // Other browsers' profile folders are found under the user's home.
-        "browser_profiles" => &["user_dirs"],
+        // User-entered paths and browser profiles resolve the user's home.
+        "tool_paths" | "browser_profiles" => &["user_dirs"],
         // The `butler` command launcher is a runnable file under the user's
         // command directory; the Agent home's pointers are replaced atomically
         // with secure_fs; login-start definitions live under the user's home.

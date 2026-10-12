@@ -111,7 +111,7 @@ pub(super) async fn execute(
             };
             let mut result = json!({
                 "ok":false, "error":error, "guard":rejection.guard,
-                "message":"The discovery root is not an admitted workspace directory.",
+                "message":rejection.guard["message"],
                 "recovery_hint":"Choose a directory the OS account can access.",
                 "evidence_capability_receipts":evidence::list_limitation(error)
             });
@@ -190,14 +190,7 @@ pub(super) fn normalize_root(value: Option<&Value>) -> String {
     if text.is_empty() {
         return ".".into();
     }
-    let normalized = text.replace('\\', "/");
-    let normalized = normalized.strip_prefix("./").unwrap_or(&normalized);
-    let normalized = normalized.trim_end_matches('/');
-    if normalized.is_empty() {
-        ".".into()
-    } else {
-        normalized.into()
-    }
+    butler_platform::tool_paths::discovery_root(text)
 }
 
 pub(super) fn globs(

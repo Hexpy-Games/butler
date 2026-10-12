@@ -76,6 +76,7 @@ pub mod sqlite;
 pub mod stdio;
 pub mod storage_size;
 pub mod time_zone;
+pub mod tool_paths;
 pub mod user_auth;
 pub mod user_dirs;
 

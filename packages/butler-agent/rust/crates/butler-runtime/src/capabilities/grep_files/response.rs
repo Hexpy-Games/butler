@@ -30,8 +30,8 @@ pub(super) fn guard_rejection(root: &str, rejection: &WorkspaceListRejection) ->
         || root.split(['/', '\\']).any(|segment| segment == "..");
     json!({"ok":false,"error":error,"searched_root":if unsafe_root { "." } else { root },
         "guard":rejection.guard,
-        "message":"The search root is not an admitted workspace directory.",
-        "recovery_hint":"Choose a contained, non-sensitive workspace directory.",
+        "message":rejection.guard["message"],
+        "recovery_hint":"Choose an existing, non-sensitive directory the OS account can access.",
         "evidence_capability_receipts":evidence::grep_limitation(error)})
 }
 

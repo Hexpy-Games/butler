@@ -6,7 +6,6 @@ use butler_turn::btcc::{
     AuthorityOutcomeInput, BtccError, ModelRoundToolCall, RequestDecision, ToolExecutionError,
 };
 use serde_json::{Value, json};
-use std::path::Path;
 
 pub(super) async fn execute(
     owner: &GuidedTools,
@@ -150,27 +149,23 @@ fn normalized(owner: &GuidedTools, call: &ModelRoundToolCall) -> Result<Value, T
             ToolExecutionError::Integrity(BtccError::relayed(e.code(), "Workspace unavailable"))
         })?
         .unwrap_or_else(|| owner.binding.workspace_path.clone());
-    let absolute = |path: &str| {
-        let path = Path::new(path);
-        if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            workspace.join(path)
-        }
-        .to_string_lossy()
-        .into_owned()
+    let absolute = |path: &str| -> Result<String, ToolExecutionError> {
+        let path = butler_platform::tool_paths::parse(&workspace, path).map_err(|error| {
+            ToolExecutionError::Integrity(BtccError::relayed("invalid_path", error.to_string()))
+        })?;
+        Ok(workspace.join(path).to_string_lossy().into_owned())
     };
     let mut args = Value::Object(call.arguments.clone());
     if call.name == "read_file" {
         if let Some(requests) = args["requests"].as_array_mut() {
             for request in requests {
                 if let Some(path) = request["path"].as_str() {
-                    request["path"] = json!(absolute(path));
+                    request["path"] = json!(absolute(path)?);
                 }
             }
         }
     } else {
-        args["root"] = json!(absolute(args["root"].as_str().unwrap_or(".")));
+        args["root"] = json!(absolute(args["root"].as_str().unwrap_or("."))?);
     }
     Ok(args)
 }
