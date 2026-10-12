@@ -1,8 +1,8 @@
-//! Browser approval scope: on ask-first, browsing a public site (a consent
-//! banner, search, filters, tabs, links) never asks; a POST submit in a
-//! signed-in tab or a step the model declares as committing asks once; payment
-//! steps keep their exact card. Ask-always still asks for every batch; full
-//! access asks only at payment.
+//! Browser approval scope: on ask-first and Auto, browsing a public site (a
+//! consent banner, search, filters, tabs, links) never asks; a POST submit in
+//! a signed-in tab or a step the model declares as committing asks once;
+//! payment steps keep their exact card. Ask-always still asks for every batch;
+//! full access asks only at payment.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -27,8 +27,21 @@ const PAY: &str = "Pay for the order";
 #[tokio::test]
 async fn ask_first_browses_freely_and_asks_only_to_commit() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let s = Setup::new("BROWSER-APPROVAL-SCOPE")?
-        .access(Access::AskExceptReads)
+    browses_freely_and_asks_only_to_commit("BROWSER-APPROVAL-SCOPE", Access::AskExceptReads).await
+}
+
+#[tokio::test]
+async fn auto_browses_freely_and_asks_only_to_commit() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    browses_freely_and_asks_only_to_commit("BROWSER-APPROVAL-AUTO", Access::Auto).await
+}
+
+async fn browses_freely_and_asks_only_to_commit(
+    scenario: &str,
+    access: Access,
+) -> Result<(), HarnessError> {
+    let s = Setup::new(scenario)?
+        .access(access)
         .stub_cassette(host::cassette(&[browse(), post(), send(), pay()])?)
         .start()
         .await?;

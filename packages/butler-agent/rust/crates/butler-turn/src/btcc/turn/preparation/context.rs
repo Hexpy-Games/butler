@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::{ContextAssembly, ContextSection, js_truthy, object};
 use crate::btcc::BtccCode;
@@ -75,7 +75,7 @@ pub(super) async fn snapshot(
     );
     insert_request_refs(&mut context, binding, request);
     insert_rule_snapshot(&mut context, assembly);
-    insert_result_ref(&mut context, controls)?;
+    insert_result_ref(&mut context, controls, &request.transport)?;
     if !request.message.attachments.is_empty() {
         context.insert(
             "attachments".into(),
@@ -451,13 +451,25 @@ fn insert_rule_snapshot(context: &mut Map<String, Value>, assembly: &ContextAsse
 fn insert_result_ref(
     context: &mut Map<String, Value>,
     controls: Option<&VerifiedExecutionControls>,
+    transport: &str,
 ) -> Result<(), BtccError> {
+    // A schedule the agent itself dispatches has nobody to ask either.
+    if transport == "automation" {
+        context.insert("scheduleRun".into(), json!({"unattended": true}));
+    }
     if let Some(result) = controls.and_then(|value| value.subsession_result.as_ref()) {
         context.insert(
             "subsessionResult".into(),
             serde_json::to_value(result).map_err(|error| {
                 BtccError::relayed("subsession_result_invalid", error.to_string())
             })?,
+        );
+    }
+    if let Some(run) = controls.and_then(|value| value.schedule_run.as_ref()) {
+        context.insert(
+            "scheduleRun".into(),
+            serde_json::to_value(run)
+                .map_err(|error| BtccError::relayed("schedule_run_invalid", error.to_string()))?,
         );
     }
     Ok(())

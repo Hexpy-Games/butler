@@ -99,6 +99,7 @@ async fn observed_write_precedes_registered_rejection_and_reconcile_is_conservat
             butler_data: root.join("data"),
             protected_roots: vec![],
             installation_root: None,
+            contained: false,
         },
         Arc::new(WritesThenReject(root.clone())),
     );

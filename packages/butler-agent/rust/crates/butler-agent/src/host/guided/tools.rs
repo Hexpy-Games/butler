@@ -23,8 +23,10 @@ mod profile;
 mod project_artifacts;
 mod project_source;
 mod resume;
+mod turn_guard;
 mod wallpaper;
 pub(in crate::host) use message::structured_raw as structured_tool_preview;
+pub(crate) use turn_guard::TurnGuard;
 
 use butler_core::tool_protocol::ToolName;
 use parking_lot::Mutex;
@@ -77,6 +79,8 @@ pub(crate) struct GuidedToolBinding {
     pub reasoning_effort: String,
     pub authority_request_ref: Option<String>,
     pub authority_source_call_id: Option<String>,
+    /// Whether anyone can answer an approval (D8) and the starting taint (D5).
+    pub turn_guard: TurnGuard,
 }
 
 impl GuidedToolBinding {
@@ -157,6 +161,8 @@ pub(crate) struct GuidedTools {
     state: Mutex<State>,
     resume: OnceCell<Mutex<ResumePool>>,
     authority_consumed: Mutex<bool>,
+    turn_taint: Mutex<butler_turn::btcc::TurnTaint>,
+    attention_sent: Mutex<bool>,
 }
 
 /// A guided tool invocation that violated its contract; becomes a BTCC error.
@@ -262,6 +268,8 @@ impl GuidedTools {
             web_session,
             app_endpoint,
             browser_http: OnceCell::new(),
+            turn_taint: Mutex::new(binding.turn_guard.initial_taint),
+            attention_sent: Mutex::new(false),
             binding,
             state: Mutex::new(State {
                 described_ids,
@@ -435,6 +443,10 @@ impl ToolPort for GuidedTools {
             .journal_by_provider
             .get(provider_call_id)
             .cloned()
+    }
+
+    fn continuation_extensions(&self) -> serde_json::Map<String, Value> {
+        self.taint_extensions()
     }
 
     fn result_message<'a>(

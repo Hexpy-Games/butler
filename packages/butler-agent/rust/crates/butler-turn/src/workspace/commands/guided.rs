@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
 
@@ -164,7 +165,10 @@ async fn prepare_command(
     let cwd = resolve_guided_cwd(
         &input.workspace_root,
         input.cwd.as_deref(),
-        if input.access == GuidedAccess::ContainedObservation {
+        if matches!(
+            input.access,
+            GuidedAccess::ContainedObservation | GuidedAccess::ProjectWrite
+        ) {
             crate::workspace::PathForm::Contained
         } else {
             crate::workspace::PathForm::RelativeOrAbsolute
@@ -416,6 +420,37 @@ pub(super) fn guarded_directory(
     })
 }
 
+/// A mutating command auto-allowed inside the project: it may write only the
+/// project and the command scratch folders its environment names (temp,
+/// tool cache, generated artifacts), never the rest of the Butler data folder.
+fn project_write_shell(
+    input: &GuidedCommandInput,
+    environment: &HashMap<String, String>,
+) -> Result<command_sandbox::Invocation, command_sandbox::SandboxError> {
+    let data = &input.butler_data;
+    let scratch = [
+        data.join("tmp"),
+        data.join("cache/tools"),
+        data.join("artifacts/generated"),
+    ];
+    let writable: Vec<&Path> = scratch.iter().map(PathBuf::as_path).collect();
+    // App project folders live under the data folder; the default deny already
+    // covers it otherwise, so deny it explicitly only when it is not an ancestor.
+    let denied: Vec<&Path> =
+        if butler_platform::secure_fs::path_is_within(&input.workspace_root, data) {
+            Vec::new()
+        } else {
+            vec![data.as_path()]
+        };
+    command_sandbox::project_write_shell(
+        &input.command,
+        environment,
+        &input.workspace_root,
+        &writable,
+        &denied,
+    )
+}
+
 /// The login-shell invocation of a guided command. Read-only commands run in
 /// the host sandbox; a host without one refuses them.
 fn invocation(input: &GuidedCommandInput) -> Result<command_sandbox::Invocation, CommandError> {
@@ -425,14 +460,16 @@ fn invocation(input: &GuidedCommandInput) -> Result<command_sandbox::Invocation,
         input.butler_data.to_string_lossy().into_owned(),
     );
     let access = match input.access {
-        GuidedAccess::FullAccessContained => ShellAccess::Full,
+        GuidedAccess::FullAccessContained | GuidedAccess::ProjectWrite => ShellAccess::Full,
         GuidedAccess::ReadOnlyObservation | GuidedAccess::ContainedObservation => {
             ShellAccess::ReadOnly
         }
     };
     // Data-folder reads follow ordinary file access; only credential roots
     // and project secrets belong in the private-read exclusions.
-    let shell = if input.access == GuidedAccess::ContainedObservation {
+    let shell = if input.access == GuidedAccess::ProjectWrite {
+        project_write_shell(input, &environment)
+    } else if input.access == GuidedAccess::ContainedObservation {
         command_sandbox::login_shell_contained(
             &input.command,
             &environment,

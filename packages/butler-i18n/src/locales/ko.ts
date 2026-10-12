@@ -1172,7 +1172,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       title: "예약 작업 제목",
       prompt: "프롬프트 내용",
     },
-    accessHint: "먼저 확인이면 자리를 비운 동안 승인을 기다립니다.",
+    accessHint: "예약 실행 중 확인이 필요한 단계는 건너뛰고 알려 드립니다.",
+    needsPermissionNotify: "예약 작업이 권한이 필요한 단계를 건너뛰었습니다.",
     saveFailed: "예약 작업 저장 실패",
     errors: {
       title: "제목을 입력해 주세요.",
@@ -1188,6 +1189,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       failed: "실패",
       running: "실행 중",
       skippedTargetUnavailable: "대상을 사용할 수 없음",
+      needsPermission: "권한 필요",
       cancelled: "취소됨",
       notRun: "실행 전",
     },

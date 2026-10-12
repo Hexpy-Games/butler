@@ -26,6 +26,8 @@ pub enum AccessMode {
     AskAlways,
     #[serde(rename = "ask_except_reads")]
     AskExceptReads,
+    /// Asks only for risky actions (알아서 진행 / Auto).
+    Auto,
     ReadOnly,
 }
 

@@ -246,6 +246,10 @@ impl GuidedPolicyPort for GuidedPolicy {
         self.dependencies.authority.presentation(invocation)
     }
 
+    fn continuation_extensions(&self) -> serde_json::Map<String, serde_json::Value> {
+        self.dependencies.tools.continuation_extensions()
+    }
+
     fn closeout<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,

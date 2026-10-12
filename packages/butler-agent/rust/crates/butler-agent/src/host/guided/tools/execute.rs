@@ -87,7 +87,7 @@ pub(super) async fn execute(
         match record.status.as_str() {
             "completed" => {
                 let output = record_output(record)?;
-                super::discovery::remember_described(owner, call, &output)?;
+                observe(owner, call, &effective_name, &output)?;
                 if GuidedWorkTools::repairs_completed_relation(&call.name)
                     && output.field("ok").ok().flatten() == Some("true")
                 {
@@ -125,7 +125,7 @@ pub(super) async fn execute(
     if let Some(timing) = &timing {
         timing.mark("result_returned");
     }
-    super::discovery::remember_described(owner, call, &result)?;
+    observe(owner, call, &effective_name, &result)?;
     if result.field("authority_pending").ok().flatten() == Some("true") {
         // Authority admission atomically moved this call to awaiting_authority.
         // The loop persists the pending result in its continuation, not as a
@@ -133,6 +133,18 @@ pub(super) async fn execute(
         return Ok(result);
     }
     complete(owner, invocation, call, call_id, result).await
+}
+
+/// What a result (fresh or replayed) tells the turn: described catalog ids,
+/// and whether it brought in external content (D5).
+fn observe(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    effective_name: &str,
+    output: &JsonDocument,
+) -> Result<(), ToolExecutionError> {
+    owner.observe_result(effective_name);
+    super::discovery::remember_described(owner, call, output)
 }
 
 async fn complete(

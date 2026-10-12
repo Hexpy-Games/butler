@@ -125,7 +125,9 @@ async fn ordinary_chat_creates_schedule_only_after_approval() -> Result<(), Harn
     assert_eq!(schedule["prompt_body"], PROMPT);
     assert_eq!(schedule["interval_seconds"], 86400);
     assert_eq!(schedule["next_run_at"], "2098-12-31T22:00:00.000Z");
-    assert_eq!(schedule["access_mode"], "ask_first");
+    // D7: an omitted mode takes the schedule default (here derived from the
+    // global full access), not the creating conversation's mode.
+    assert_eq!(schedule["access_mode"], "full_access");
     assert_eq!(s.provider()?.misses(), [] as [std::string::String; 0]);
     assert_authority(&s, &turn_id, "create_automation")?;
     let requests = s.provider()?.requests();

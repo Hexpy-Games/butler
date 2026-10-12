@@ -51,6 +51,21 @@ pub(super) async fn route(
         );
     }
     let suffix = path.strip_prefix("/automations/").ok_or_else(not_found)?;
+    // An unattended run reports a step it skipped for want of permission (D8).
+    if method == Method::POST
+        && let Some((id, run_id)) = suffix
+            .strip_suffix("/attention")
+            .and_then(|rest| rest.split_once("/runs/"))
+    {
+        let input: AttentionRequest = body(request).await?;
+        return json(
+            StatusCode::OK,
+            state
+                .application
+                .automation_run_attention(decode(id)?, decode(run_id)?, input.code)
+                .await?,
+        );
+    }
     if let Some(response) = route_action(&state, &method, suffix).await? {
         return Ok(response);
     }
@@ -164,6 +179,11 @@ fn list_query(uri: &Uri) -> (Option<String>, bool) {
         query_value(uri, "target_session_id"),
         query_value(uri, "include_deleted").as_deref() == Some("true"),
     )
+}
+/// The body of a run attention report.
+#[derive(serde::Deserialize)]
+struct AttentionRequest {
+    code: String,
 }
 fn not_found() -> HttpError {
     HttpError::public(404, "not_found", "Route not found.")

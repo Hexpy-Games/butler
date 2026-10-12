@@ -66,6 +66,7 @@ pub(super) async fn post(
                     result_id,
                     safe_title,
                 }),
+                schedule_run: None,
             },
         })
         .await?;

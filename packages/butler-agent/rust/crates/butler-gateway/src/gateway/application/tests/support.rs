@@ -463,6 +463,7 @@ pub(super) fn command(client: &str, text: &str) -> SendMessageCommand {
             access_mode: None,
             plan_mode: None,
             subsession_result: None,
+            schedule_run: None,
         },
     }
 }

@@ -106,7 +106,7 @@ impl AppApplication {
                 )
                 .await;
         }
-        let result = self.send_automation(&row, &run_id).await;
+        let result = self.send_automation(&row, &run_id, trigger).await;
         self.complete_fresh_run(row, run_id, trigger, result).await
     }
 
@@ -170,7 +170,9 @@ impl AppApplication {
     ) -> Result<AutomationRunSummary, GatewayApplicationError> {
         let mut dispatch = queued.automation.clone();
         dispatch.target_id = queued.run_target_id.clone();
-        let mut result = self.send_automation(&dispatch, &queued.run_id).await;
+        let mut result = self
+            .send_automation(&dispatch, &queued.run_id, &queued.trigger)
+            .await;
         if result.state == "failed" && result.safe_error.as_deref() == Some("session_not_found") {
             result.state = "skipped_target_unavailable";
         }
@@ -207,7 +209,12 @@ impl AppApplication {
         }).await.map_err(app_error)
     }
 
-    async fn send_automation(&self, row: &AutomationRow, run_id: &str) -> DispatchResult {
+    async fn send_automation(
+        &self,
+        row: &AutomationRow,
+        run_id: &str,
+        trigger: &str,
+    ) -> DispatchResult {
         let request = MessageSendRequest {
             expected_project_id: None,
             content_parts: None,
@@ -221,6 +228,13 @@ impl AppApplication {
             access_mode: Some(json!(settings::access_mode_name(&row.access))),
             plan_mode: None,
             subsession_result: None,
+            // A scheduler-started run has nobody to answer an approval (D8);
+            // "run now" is attended and asks as usual.
+            schedule_run: Some(butler_turn::btcc::ScheduleRunContext {
+                automation_id: row.id.clone(),
+                run_id: run_id.to_owned(),
+                unattended: trigger == "scheduled",
+            }),
         };
         match self
             .send(SendMessageCommand {
@@ -336,7 +350,7 @@ fn session_has_active_turn(
     }))
 }
 
-fn run_event(
+pub(super) fn run_event(
     automation_id: &str,
     target_session_id: &str,
     state: &str,
@@ -412,7 +426,8 @@ fn record_run(
     } else {
         result.turn_id.as_deref()
     };
-    db.execute("UPDATE app_automation_runs SET state=?1,completed_at=?2,safe_error_code=?3,queued_message_id=?4,turn_id=?5 WHERE id=?6",params![result.state,completed,result.safe_error,placeholder,turn,run_id]).map_err(AppStorageError::sqlite)?;
+    // An unattended run may report attention (D8) before its dispatch is recorded.
+    db.execute("UPDATE app_automation_runs SET state=?1,completed_at=?2,safe_error_code=COALESCE(?3,safe_error_code),queued_message_id=?4,turn_id=?5 WHERE id=?6",params![result.state,completed,result.safe_error,placeholder,turn,run_id]).map_err(AppStorageError::sqlite)?;
     if let Some(message_id) = placeholder {
         let (text, status, retryable) = if result.state == "queued" {
             ("Scheduled prompt queued.", "pending", 0)

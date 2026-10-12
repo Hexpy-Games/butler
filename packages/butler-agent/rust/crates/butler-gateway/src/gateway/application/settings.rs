@@ -95,6 +95,7 @@ pub(super) struct ResolvedControls {
 }
 pub(super) use access::{
     access_mode_name, conversation_access_mode, default_access_mode, record_default_access_mode,
+    schedule_access_mode,
 };
 pub(super) use default_model::record_default_model_policy;
 pub(super) use plan_continuation::{
@@ -179,6 +180,9 @@ pub(super) fn resolve_for_message_send(
     if let Some(result) = &request.subsession_result {
         persisted["subsession_result"] = json!(result);
     }
+    if let Some(run) = &request.schedule_run {
+        persisted["schedule_run"] = json!(run);
+    }
     Ok(ResolvedControls {
         resolution: ControlResolution {
             model: controls.model,
@@ -190,6 +194,7 @@ pub(super) fn resolve_for_message_send(
             catalog_generation: facts.catalog_generation.clone(),
             model_fallback: Some(fallback),
             subsession_result: request.subsession_result.clone(),
+            schedule_run: request.schedule_run.clone(),
         },
         persisted,
     })
@@ -244,12 +249,19 @@ pub(super) fn resolution_from_persisted(value: &str) -> Result<ControlResolution
         .map(serde_json::from_value)
         .transpose()
         .map_err(|source| invalid_resolution().with_source(source))?;
-    let subsession_result = object
-        .get("subsession_result")
-        .cloned()
-        .map(serde_json::from_value)
-        .transpose()
-        .map_err(|source| invalid_resolution().with_source(source))?;
+    fn optional<T: serde::de::DeserializeOwned>(
+        object: &serde_json::Map<String, Value>,
+        key: &str,
+    ) -> Result<Option<T>, AppStorageError> {
+        object
+            .get(key)
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|source| invalid_resolution().with_source(source))
+    }
+    let subsession_result = optional(object, "subsession_result")?;
+    let schedule_run = optional(object, "schedule_run")?;
     Ok(ControlResolution {
         model,
         reasoning_effort,
@@ -260,6 +272,7 @@ pub(super) fn resolution_from_persisted(value: &str) -> Result<ControlResolution
         catalog_generation,
         model_fallback,
         subsession_result,
+        schedule_run,
     })
 }
 
@@ -355,15 +368,21 @@ impl super::AppApplication {
         );
         let root = (workspace_root != self.project_creation.workspace_root())
             .then(|| workspace_root.clone());
-        self.persist_settings_update(stored_projection, event_payload, wallpaper_event, root)
-            .await?;
+        let schedule_mode_chosen = prepared.patch.get("schedule_access_mode").is_some();
+        self.persist_settings_update(
+            (stored_projection, schedule_mode_chosen),
+            event_payload,
+            wallpaper_event,
+            root,
+        )
+        .await?;
         self.project_creation.set_workspace_root(workspace_root);
         Ok((previous, projection))
     }
 
     async fn persist_settings_update(
         &self,
-        stored_projection: Value,
+        (mut stored_projection, schedule_mode_chosen): (Value, bool),
         event_payload: serde_json::Map<String, Value>,
         wallpaper_event: Option<serde_json::Map<String, Value>>,
         root: Option<std::path::PathBuf>,
@@ -372,6 +391,17 @@ impl super::AppApplication {
         let subscribers = self.subscribers.clone();
         self.storage
             .execute(move |db| {
+                // The view resolves the schedule default (D7); store it only once
+                // the user chose one, so an unsaved default keeps following the
+                // conversation default.
+                let saved = read_json(db, SETTINGS_KEY)?
+                    .is_some_and(|stored| stored.get("schedule_access_mode").is_some());
+                if !schedule_mode_chosen
+                    && !saved
+                    && let Some(fields) = stored_projection.as_object_mut()
+                {
+                    fields.remove("schedule_access_mode");
+                }
                 write_json(db, SETTINGS_KEY, &stored_projection, &now)?;
                 events::append(
                     db,
