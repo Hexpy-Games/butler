@@ -42,7 +42,6 @@ try {
   await page.locator("#first-run-language").selectOption("ko");
   await page.getByRole("button", { name: copy.firstRun.start, exact: true }).click();
   await page.getByRole("button", { name: copy.firstRun.agree, exact: true }).click();
-  await page.getByRole("button", { name: copy.settings.browserImport.skip, exact: true }).click();
   await page.locator('[data-card-id="chatgpt"]').click();
   await page.getByRole("button", { name: copy.firstRun.signInReopen, exact: true }).waitFor();
   await assertExternal("first-run automatic sign-in", [firstRunUrl]);
