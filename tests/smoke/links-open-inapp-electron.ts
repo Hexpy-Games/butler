@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { tmpdir } from "node:os";
-import { captureLinkMenu, compileMenuInspector, nativeMenuBounds } from "../../packages/butler-app/client/electron/butler-platform/link-menu-smoke-capture.mjs";
+import { captureLinkMenu, compileMenuInspector, nativeMenuBounds } from "../support/butler-platform/link-menu-smoke-capture.mjs";
 import { shellReady } from "../support/browser-shell-acceptance";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE!;
@@ -122,7 +122,7 @@ try {
     await menu(context, "light", 1.25);
     await menu(context, "dark", 1.25, true);
   }
-  const modifier = await a.main<string>(`${module}(${JSON.stringify(resolve("packages/butler-app/client/electron/butler-platform/browser-shortcuts.mjs"))}).newTabModifier()`);
+  const modifier = process.platform === "darwin" ? "meta" : "control";
   for (const [selector, button, modifiers] of [["#blank", "left", []], ["#plain", "middle", []], ["#plain", "left", [modifier]]] as const) {
     await a.call("activate", { id: tab });
     const before = (await state()).tabs.length;

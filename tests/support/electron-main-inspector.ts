@@ -36,6 +36,15 @@ export async function mainInspector(port: number, running: () => boolean = () =>
       const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
       return result.result.value as T;
     },
+    async evaluateInstances<T>(prototype: string, functionDeclaration: string): Promise<T> {
+      const objectGroup = `smoke-instances-${id}`;
+      try {
+        const result = await send("Runtime.evaluate", { expression: prototype, objectGroup });
+        const objects = await send("Runtime.queryObjects", { prototypeObjectId: result.result.objectId, objectGroup });
+        const value = await send("Runtime.callFunctionOn", { objectId: objects.objects.objectId, functionDeclaration, awaitPromise: true, returnByValue: true, objectGroup });
+        return value.result.value as T;
+      } finally { await send("Runtime.releaseObjectGroup", { objectGroup }); }
+    },
     async snapshot(path: string) {
       if (snapshotFile !== undefined) throw new Error("Snapshot already active");
       snapshotFile = openSync(path, "w", 0o600);

@@ -71,7 +71,7 @@ export async function launchP0App({ harness = true } = {}) {
   try {
     main = await mainInspector(inspector, () => child.exitCode === null && child.signalCode === null);
     page = await electronPage(debug);
-    if (harness) await waitFor(() => main!.evaluate("Boolean(globalThis.browserP0)"), "P0 harness");
+    if (harness) await installP0Harness(main, dir);
     await waitFor(() => page!.expression("window.butlerApp.health().then(r=>r.ok)"), "Agent health");
     await page.expression(`window.butlerApp.updateSettings(${JSON.stringify({ language: "ko", onboarding: { consent_version: FIRST_RUN_CONSENT_VERSION, accepted_at: at, completed_at: at }, wallpaper: { source: { kind: "live", module: "butler.silk", params: {}, paramsDark: {} }, motion: "auto", pauseOnBattery: false } })})`);
     await page.reload();
@@ -81,6 +81,19 @@ export async function launchP0App({ harness = true } = {}) {
     // Logs can include bearer-bearing URLs: do not print raw App logs.
     await stop(); throw new Error(`App launch failed (${child.exitCode ?? child.signalCode ?? "running"}): ${String(error)}; ${logBytes} log bytes withheld; Mach rendezvous=${machRendezvous}`, { cause: error });
   }
+}
+
+async function installP0Harness(main: Awaited<ReturnType<typeof mainInspector>>, dir: string) {
+  const requireModule = `process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve("packages/butler-app/client/electron/package.json"))})`;
+  const prototype = `Object.getPrototypeOf(${requireModule}(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/tabs.mjs"))}).createUserBrowser({getPath:()=>${JSON.stringify(dir)},on:()=>{}},()=>null))`;
+  const installed = await main.evaluateInstances<number>(prototype, `function(){
+    const {installBrowserP0Harness}=${requireModule}(${JSON.stringify(resolve("tests/smoke/browser-p0-harness.mjs"))});
+    const browsers=this.filter(browser=>browser.getWindow());
+    for(const browser of browsers)installBrowserP0Harness(browser.getWindow(),browser);
+    return browsers.length;
+  }`);
+  assert.equal(installed, 1, "P0 harness attaches to the real App browser");
+  await waitFor(() => main.evaluate("Boolean(globalThis.browserP0)"), "P0 harness");
 }
 
 function createStreamingStub() {

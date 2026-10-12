@@ -2,7 +2,7 @@ import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
 import { additionalToolLabels } from "./tool-labels-en.ts";
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
-import { nativeContextMenuCopy } from "../native-context-menu.mjs";
+import { nativeContextMenuCopy } from "../../../butler-app/client/electron/i18n/native-context-menu.mjs";
 
 /** Where an approval request acts: the quoted workspace label, or this workspace. */
 const inWorkspace = (workspace: string | null) => workspace ? `in '${workspace}'` : "in this folder";

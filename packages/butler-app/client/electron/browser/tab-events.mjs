@@ -1,7 +1,7 @@
 import { session } from "electron";
 import { menuPoint, popupMenu } from "../butler-platform/menu-placement.mjs";
 import { webUrl } from "./policy.mjs";
-import { nativeContextMenuCopy } from "../../../../butler-i18n/src/native-context-menu.mjs";
+import { nativeContextMenuCopy } from "../i18n/native-context-menu.mjs";
 
 export function protectPartition(partition, browser) {
   const profile = session.fromPartition(partition);
