@@ -12,14 +12,14 @@ use std::path::Path;
 
 const ASK: &str = "Recall my lock word.";
 
-fn count(path: &Path, sql: &str) -> i64 {
+pub(super) fn count(path: &Path, sql: &str) -> i64 {
     butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .unwrap()
         .query_row(sql, [], |r| r.get(0))
         .unwrap()
 }
 
-async fn settled(s: &Scenario, turns: u64) -> Result<std::path::PathBuf, HarnessError> {
+pub(super) async fn settled(s: &Scenario, turns: u64) -> Result<std::path::PathBuf, HarnessError> {
     memory_stubs::text_complete(&s.sandbox.data, turns).await?;
     let graph = memory_stubs::graph_path(&s.sandbox.data)?;
     tokio::time::timeout(std::time::Duration::from_secs(90),async {
@@ -33,7 +33,7 @@ async fn settled(s: &Scenario, turns: u64) -> Result<std::path::PathBuf, Harness
     Ok(graph)
 }
 
-async fn recall(s: &Scenario) -> Result<Value, HarnessError> {
+pub(super) async fn recall(s: &Scenario) -> Result<Value, HarnessError> {
     let chat =
         s.gw.post(
             "/sessions",
@@ -63,6 +63,27 @@ async fn recall(s: &Scenario) -> Result<Value, HarnessError> {
 }
 
 async fn start(word: &str, cue: &str) -> Result<(Scenario, String), HarnessError> {
+    let unavailable = "http://127.0.0.1:1/unavailable";
+    start_with(
+        word,
+        cue,
+        json!(false),
+        ("BUTLER_E2E_EMBED_MANIFEST", unavailable),
+    )
+    .await
+}
+
+/// The remember/recall cassette; `include_vector` null leaves the tool default.
+pub(super) async fn start_with(
+    word: &str,
+    cue: &str,
+    include_vector: Value,
+    model_source: (&str, &str),
+) -> Result<(Scenario, String), HarnessError> {
+    let mut arguments = json!({"cue":cue,"session_ids":["{{SOURCE_SESSION}}"]});
+    if !include_vector.is_null() {
+        arguments["include_vector"] = include_vector;
+    }
     let mut cassette = Cassette::load("MEM-01")?;
     let remember = cassette.exchanges[0].request.key.user_request.clone();
     // Chat learning is the reset subject; do not create a durable explicit record.
@@ -70,7 +91,7 @@ async fn start(word: &str, cue: &str) -> Result<(Scenario, String), HarnessError
     let mut call = cassette.exchanges[0].clone();
     call.request.key.user_request = ASK.into();
     call.response = memory_response(
-        &json!({"type":"function_call","id":"fc_fts","call_id":"call_fts","name":"recall_memory","status":"completed","arguments":json!({"cue":cue,"include_vector":false,"session_ids":["{{SOURCE_SESSION}}"]}).to_string()}),
+        &json!({"type":"function_call","id":"fc_fts","call_id":"call_fts","name":"recall_memory","status":"completed","arguments":arguments.to_string()}),
     );
     let mut answer = cassette.exchanges[1].clone();
     answer.request.key.user_request = ASK.into();
@@ -97,10 +118,7 @@ async fn start(word: &str, cue: &str) -> Result<(Scenario, String), HarnessError
         .env("BUTLER_METRICS_ENABLED", "1")
         .placeholder("NONCE", word)
         .env("BUTLER_E2E_APP_NOW", "2026-10-02T04:01:00.000Z")
-        .env(
-            "BUTLER_E2E_EMBED_MANIFEST",
-            "http://127.0.0.1:1/unavailable",
-        );
+        .env(model_source.0, model_source.1);
     fixtures::onboarding_complete(&setup.sandbox.data)?;
     fixtures::scheduler_ran_today(&setup.sandbox.data, "2026-10-02T04:01:00.000Z")?;
     Ok((setup.start().await?, remember))

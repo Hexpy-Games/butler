@@ -59,7 +59,8 @@ pub(super) async fn process(
     generation: Option<&MemoryGenerationHandle>,
     text_advanced: bool,
 ) -> CognitionResult<bool> {
-    if let Some(embedding) = &input.embedding
+    // Without the memory model, pending units are the later backfill queue; no probes.
+    if let Some(embedding) = input.embedding.as_ref().filter(|owner| owner.enabled())
         && admit(input, generation, text_advanced).await?
     {
         super::process::vector::process(input, embedding.as_ref()).await
@@ -71,7 +72,11 @@ pub(super) async fn process(
 /// Daily work waits on the actual cancellable write lease, rather than polling
 /// a busy gate. Queue/semantic errors cannot prevent a vector-only drain.
 pub(super) async fn daily(input: &Input) -> CognitionResult<MemorySyncPoll> {
-    if input.embedding.is_none() {
+    if !input
+        .embedding
+        .as_ref()
+        .is_some_and(|owner| owner.enabled())
+    {
         return Ok(MemorySyncPoll::Idle);
     }
     let owned = input.clone();
