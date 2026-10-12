@@ -8,7 +8,6 @@ import {
   ChoiceTileGrid,
   Inline,
   Notice,
-  RefreshCcw,
   Sparkles,
   Spinner,
   Stack,
@@ -35,7 +34,7 @@ export function FirstRunProviderList({ flow }: { flow: FirstRunFlow }) {
       footerStart={<Button
         aria-controls="first-run-more-providers" aria-expanded={expanded}
         iconEnd={expanded ? <ChevronUpIcon size="sm" /> : <ChevronDown size="sm" />}
-        size="sm" text={expanded ? copy.showLess : copy.moreProviders(layout.more.length - (layout.localPlaceholder ? 1 : 0))}
+        size="sm" text={expanded ? copy.showLess : copy.moreProviders(layout.more.length)}
         type="button" variant="link" onClick={() => setExpanded((value) => !value)}
       />}
     >
@@ -64,8 +63,7 @@ function TopCard({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: First
   const view = providerCardView(cardId, flow, "card");
   const current = flow.currentCardId === cardId;
   const tag = current ? <Tag tone="accent">{flow.copy.tagCurrent}</Tag>
-    : view.tag === "noKey" ? <Tag tone="accent">{flow.copy.tagNoKey}</Tag>
-      : view.tag === "local" ? <Tag tone="success">{flow.copy.tagLocal}</Tag> : null;
+    : view.tag === "noKey" ? <Tag tone="accent">{flow.copy.tagNoKey}</Tag> : null;
   return (
     <ChoiceCard
       aria-current={current ? true : undefined}
@@ -83,21 +81,17 @@ function TopCard({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: First
 
 function MoreTile({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: FirstRunFlow }) {
   const view = providerCardView(cardId, flow, "tile");
-  const placeholder = cardId === "local";
   const current = flow.currentCardId === cardId;
   return (
     <ChoiceTile
       aria-current={current ? true : undefined}
       selected={current}
-      aria-label={placeholder ? `${flow.copy.providerNames.local}. ${flow.copy.localMissing}. ${flow.copy.rescan}` : undefined}
-      cornerIcon={placeholder && view.state !== "loading" ? <RefreshCcw size="xs" /> : undefined}
       data-card-id={cardId}
       description={view.description}
       icon={<CardGlyph cardId={cardId} size="md" />}
-      placeholder={placeholder}
       state={view.state}
       title={flow.copy.providerNames[cardId]}
-      onClick={() => (placeholder ? flow.local.rescan() : flow.pick(cardId))}
+      onClick={() => flow.pick(cardId)}
     />
   );
 }

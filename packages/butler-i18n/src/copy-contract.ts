@@ -3,7 +3,7 @@ import type { TaskGraphCopy } from "./task-graph-copy.ts";
 import type { LifecycleCopy } from "./lifecycle.ts";
 /** Provider cards on the first-run "Pick an AI" screen. */
 export type FirstRunProviderCardId =
-  | "chatgpt" | "claude" | "gemini" | "local" | "openai" | "grok" | "qwen"
+  | "chatgpt" | "claude" | "gemini" | "openai" | "grok" | "qwen"
   | "kimi" | "zaiCoding" | "zaiApi" | "opencodeGo" | "other";
 
 interface FirstRunCopy {
@@ -67,13 +67,11 @@ interface FirstRunCopy {
   providerNames: Record<FirstRunProviderCardId, string>;
   providerDescriptions: Record<FirstRunProviderCardId, string>;
   tagNoKey: string;
-  tagLocal: string;
   /** Tag on the connected AI when setup runs again. */
   tagCurrent: string;
   localModelCount: (count: number) => string;
   moreProviders: (count: number) => string;
   showLess: string;
-  localOff: string;
   localMissing: string;
   rescan: string;
   checking: string;
@@ -128,8 +126,11 @@ interface FirstRunCopy {
   replyLanguage: string;
   finish: string;
   finishFailed: string;
-  localTitle: string;
-  localBody: string;
+  /** Other ②: models on this computer and a typed server, on one screen. */
+  otherTitle: string;
+  otherBody: string;
+  /** Other ②: the choice that opens the server address form. */
+  otherServer: string;
   localNote: string;
   customTitle: string;
   customBody: string;

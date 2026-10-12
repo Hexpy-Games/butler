@@ -59,6 +59,6 @@ export function FirstRunModelPicker({ cardId, flow, options, apiKey, title, body
   );
 }
 
-function ModelLogo({ logo }: { logo?: ProviderCardLogo }) {
+export function ModelLogo({ logo }: { logo?: ProviderCardLogo }) {
   return logo ? <ProviderLogo name={logo} /> : <Server size="md" />;
 }

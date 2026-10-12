@@ -246,14 +246,24 @@ async function otherConnection(page: Page, language: "ko" | "en", theme: "light"
     await page.locator("#first-run-api-key").fill("stub-api-key-for-smoke");
     await nextFromAuth(page, language);
   } else if (kind === "local") {
-    await page.locator('[data-card-id="local"]').click();
+    // Other holds the local models; with a local server it is a top card and This computer is gone.
+    assert.equal(await page.locator('[data-card-id="local"]').count(), 0, "no separate This computer card");
+    await page.locator('[data-test-class="first-run-top-cards"] [data-card-id="other"]').click();
     await page.locator('[data-model-key]').first().waitFor();
-    assert.equal(await page.locator('[data-model-key]').count(), stub.state.localModels, "all detected local models are listed");
+    assert.equal(await page.locator('[data-model-key]').count(), stub.state.localModels + 1, "every local model plus the server choice");
+    assert.equal(await page.locator("#first-run-server-url").count(), 0, "server form waits for the server choice");
     await capture(page, `${prefix}-local`);
     await page.getByRole("button", { name: copy.next, exact: true }).click();
+    await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
+    await page.getByRole("button", { name: copy.back, exact: true }).click();
+    await page.getByText(copy.keyValid, { exact: true }).waitFor();
+    await capture(page, `${prefix}-local-connected`);
+    await nextFromAuth(page, language);
   } else {
     await page.locator('[aria-controls="first-run-more-providers"]').click();
     await page.locator('[data-card-id="other"]').click();
+    await page.getByText(copy.localMissing, { exact: true }).waitFor();
+    assert.equal(await page.locator('[data-model-key]').count(), 0, "no local models: the server form only");
     await capture(page, `${prefix}-custom`);
     const catalog = await server.api<ModelCatalog>("/model-catalog");
     const address = catalog.registered_models.find(model => model.model_ref === "local/stub")!.server_url;
@@ -263,7 +273,7 @@ async function otherConnection(page: Page, language: "ko" | "en", theme: "light"
     await capture(page, `${prefix}-custom-models`);
     await page.getByRole("button", { name: copy.next, exact: true }).click();
   }
-  await confirmReady(page, language, copy.providerNames[kind === "key" ? "claude" : kind === "local" ? "local" : "other"]);
+  await confirmReady(page, language, kind === "key" ? copy.providerNames.claude : `${copy.providerNames.other}-${kind}`);
   await capture(page, `${prefix}-ready-${kind}`);
   await finish(page, language);
 }
@@ -301,11 +311,12 @@ async function resumeImport(page: Page) {
   await reset(page, "ko", "light");
   stub.state.local = true; stub.state.localModels = 1;
   await reachProviders(page, "ko");
-  await page.locator('[data-card-id="local"]').click();
+  await page.locator('[data-card-id="other"]').click();
+  await page.locator('[data-model-key][aria-checked="true"]').waitFor();
+  await page.getByRole("button", { name: firstRunCopy.ko.next, exact: true }).click();
   await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
   await page.getByRole("button", { name: firstRunCopy.ko.next, exact: true }).click();
   await page.locator('[data-first-run-screen="import"]').waitFor();
-  assert.equal(await page.locator("#first-run-models-title").count(), 0, "single model skips auth picker");
   await capture(page, "before-resume-import");
   await app!.stop();
   stub.state.readiness = "preparing";

@@ -3,8 +3,8 @@ import type { AppModelSummary } from "./types.ts";
 
 export type { FirstRunProviderCardId };
 
-/** How a card connects: browser sign-in, one API key, a detected local model, or a server address. */
-export type ProviderCardKind = "signin" | "key" | "local" | "custom";
+/** How a card connects: browser sign-in, one API key, or Other (a model on this computer or a server address). */
+export type ProviderCardKind = "signin" | "key" | "custom";
 /** ProviderLogo names used by the cards (a subset of the DS logo set). */
 export type ProviderCardLogo = "openai" | "claude" | "gemini" | "grok" | "qwen" | "kimi" | "zai" | "opencode" | "ollama" | "lmstudio";
 
@@ -15,17 +15,16 @@ export interface ProviderCardSpec {
   providerId?: string;
   logo?: ProviderCardLogo;
   /** Neutral icon when the card has no brand logo. */
-  icon?: "computer" | "server";
+  icon?: "server";
   /** The service's own API key page. */
   keyUrl?: string;
-  tag?: "noKey" | "local";
+  tag?: "noKey";
 }
 
 export const PROVIDER_CARDS: Record<FirstRunProviderCardId, ProviderCardSpec> = {
   chatgpt: { id: "chatgpt", kind: "signin", providerId: "openai", logo: "openai", tag: "noKey" },
   claude: { id: "claude", kind: "key", providerId: "anthropic", logo: "claude", keyUrl: "https://console.anthropic.com/settings/keys" },
   gemini: { id: "gemini", kind: "key", providerId: "google", logo: "gemini", keyUrl: "https://aistudio.google.com/apikey" },
-  local: { id: "local", kind: "local", providerId: "local", icon: "computer", tag: "local" },
   openai: { id: "openai", kind: "key", providerId: "openai", logo: "openai", keyUrl: "https://platform.openai.com/api-keys" },
   grok: { id: "grok", kind: "key", providerId: "xai", logo: "grok", keyUrl: "https://console.x.ai" },
   qwen: { id: "qwen", kind: "key", providerId: "qwen", logo: "qwen" },
@@ -49,11 +48,12 @@ export function providerLogoName(providerId: string, platform?: string): Provide
 
 /** The first-run card a connected model came from ("Run setup again" marks it as current). */
 export function connectionCardId(
-  model: Pick<AppModelSummary, "provider_id" | "auth_type" | "platform"> | null | undefined,
+  model: Pick<AppModelSummary, "provider_id" | "auth_type"> | null | undefined,
 ): FirstRunProviderCardId | null {
   if (!model) return null;
-  const { provider_id: providerId, platform, auth_type: authType } = model;
-  if (providerId === "local") return platform === "ollama" || platform === "lm_studio" ? "local" : "other";
+  const { provider_id: providerId, auth_type: authType } = model;
+  // Models on this computer and typed servers both come from Other.
+  if (providerId === "local") return "other";
   // ChatGPT sign-in and an OpenAI API key are separate cards for one provider.
   if (authType === "codex_oauth") return "chatgpt";
   const card = Object.values(PROVIDER_CARDS).find((spec) => spec.kind === "key" && spec.providerId === providerId);
@@ -65,14 +65,11 @@ export const MORE_CARD_IDS: readonly FirstRunProviderCardId[] = [
   "openai", "grok", "qwen", "kimi", "zaiCoding", "zaiApi", "opencodeGo", "other",
 ];
 
-/**
- * Card order. "This computer" is a top card only when a local server answers;
- * otherwise it leads the "more" grid as a dimmed tile with "Check again".
- */
+/** Card order. Other joins the top cards when a local server answers, so its models stay one click away. */
 export function providerCardLayout({ localReachable }: { localReachable: boolean }) {
   return localReachable
-    ? { top: [...TOP_CARD_IDS, "local" as const], more: [...MORE_CARD_IDS], localPlaceholder: false }
-    : { top: [...TOP_CARD_IDS], more: ["local" as const, ...MORE_CARD_IDS], localPlaceholder: true };
+    ? { top: [...TOP_CARD_IDS, "other" as const], more: MORE_CARD_IDS.filter((id) => id !== "other") }
+    : { top: [...TOP_CARD_IDS], more: [...MORE_CARD_IDS] };
 }
 
 /**

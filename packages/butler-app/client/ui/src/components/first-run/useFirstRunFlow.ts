@@ -26,7 +26,6 @@ export type ConnectView =
   | { kind: "list" }
   | { kind: "signin" }
   | { kind: "key"; cardId: FirstRunProviderCardId }
-  | { kind: "local" }
   | { kind: "custom" }
   | { kind: "customModels"; options: LocalModelOption[]; apiKey?: string };
 
@@ -129,7 +128,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     repairPreparation: setup.repair,
     agree,
     start: navigation.start,
-    ...connectionActions({ stages, commit, signIn, local, current, onCancel }),
+    ...connectionActions({ stages, commit, signIn, current, onCancel }),
     aiStage, importStage, stageKey, substep, ...imports,
     backToWelcome: navigation.backToWelcome,
     decline: () => navigation.decline(clearAcceptance),
