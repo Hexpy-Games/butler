@@ -113,28 +113,53 @@ fn response(item: &Value) -> ResponseRecord {
     }
 }
 
-pub(super) async fn default_folder_model(
-    default_folder: std::path::PathBuf,
-) -> Result<(String, tokio::task::JoinHandle<()>), HarnessError> {
+pub(super) type DefaultFolderRequests = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
+
+pub(super) fn assert_default_folder(requests: &DefaultFolderRequests, folder: &Path, count: usize) {
+    let expected = serde_json::to_string(&format!(
+        "User's default project folder: {}. Projects live there;",
+        folder.display()
+    ))
+    .unwrap();
+    let requests = requests.lock().unwrap();
+    assert_eq!(
+        requests.len(),
+        count,
+        "every first turn must reach the stub"
+    );
+    for request in requests.iter() {
+        assert!(
+            request.contains(&expected[1..expected.len() - 1]),
+            "unset setting must emit the effective home folder"
+        );
+    }
+}
+
+pub(super) async fn default_folder_model()
+-> Result<(String, tokio::task::JoinHandle<()>, DefaultFolderRequests), HarnessError> {
     use axum::{Router, routing::post};
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let url = format!("http://{}/codex", listener.local_addr()?);
+    let requests = DefaultFolderRequests::default();
     let app = Router::new()
         .route("/codex/responses", post(default_folder_reply))
-        .with_state(default_folder);
+        .with_state(requests.clone());
     let server = tokio::spawn(async move {
         let _ = axum::serve(listener, app).await;
     });
-    Ok((url, server))
+    Ok((url, server, requests))
 }
 
 async fn default_folder_reply(
-    axum::extract::State(default_folder): axum::extract::State<std::path::PathBuf>,
+    axum::extract::State(requests): axum::extract::State<DefaultFolderRequests>,
     axum::Json(body): axum::Json<Value>,
 ) -> axum::response::Response {
     use axum::response::IntoResponse;
     use butler_e2e::e2e::{matching, sanitize::Placeholders};
     let key = matching::key("/codex/responses", &body, &Placeholders::default());
+    if key.user_request == "Check the unset default folder." {
+        requests.lock().unwrap().push(body.to_string());
+    }
     let item = if key
         .user_request
         .starts_with("List my default project folder")
@@ -168,15 +193,6 @@ async fn default_folder_reply(
             json!({"type":"message","id":"msg_default","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Folder checked.","annotations":[]}]})
         }
     } else {
-        let expected = serde_json::to_string(&format!(
-            "User's default project folder: {}. Projects live there;",
-            default_folder.display()
-        ))
-        .unwrap();
-        assert!(
-            body.to_string().contains(&expected[1..expected.len() - 1]),
-            "unset setting must emit the effective home folder"
-        );
         json!({"type":"message","id":"msg_unset","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Ready.","annotations":[]}]})
     };
     (

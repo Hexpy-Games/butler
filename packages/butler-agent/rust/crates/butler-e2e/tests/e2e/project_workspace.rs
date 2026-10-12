@@ -318,7 +318,7 @@ async fn normal_chat_default_project_folder_refreshes_next_turn() -> Result<(), 
         .access(Access::AskAlways)
         .stub_cassette(butler_e2e::e2e::cassette::Cassette::load("TOOL-01")?);
     let default_folder = setup.sandbox.home.join("butler-workspace");
-    let (url, server) = stub::default_folder_model(default_folder.clone()).await?;
+    let (url, server, requests) = stub::default_folder_model().await?;
     let setup = setup.env("BUTLER_CODEX_BASE_URL", url);
     let folders = [
         setup.sandbox.workspace.join("first"),
@@ -340,6 +340,7 @@ async fn normal_chat_default_project_folder_refreshes_next_turn() -> Result<(), 
     );
     let (_, unset) = s.turn("general", "Check the unset default folder.").await?;
     assert_eq!(turn_state(&unset), "delivered", "{unset}");
+    stub::assert_default_folder(&requests, &default_folder, 1);
     assert!(
         !default_folder.exists(),
         "prompt and Settings reads must not create it"
@@ -385,6 +386,7 @@ async fn normal_chat_default_project_folder_refreshes_next_turn() -> Result<(), 
     let chat = session.data()["session"]["id"].as_str().unwrap().to_owned();
     let (_, first) = s.turn(&chat, "Check the unset default folder.").await?;
     assert_eq!(turn_state(&first), "delivered", "{first}");
+    stub::assert_default_folder(&requests, &default_folder, 2);
     assert_unset_folder(&s);
     s.restart().await?;
     assert_unset_folder(&s);
