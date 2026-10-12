@@ -1,5 +1,5 @@
 import schema from "../../../butler-agent/rust/crates/butler-runtime/src/capabilities/catalog/answer-blocks.schema.json";
-import type { AnswerBlock, AnswerBlocks } from "./app-contracts";
+import type { AnswerBlockView, AnswerBlocksView } from "./answer-blocks-view";
 
 type Rule = { $ref?: string; const?: unknown; enum?: unknown[]; type?: string | string[];
   oneOf?: Rule[]; required?: string[]; properties?: Record<string, Rule>; items?: Rule;
@@ -56,15 +56,21 @@ function parse(value: unknown, rule: Rule): unknown {
       const parsed = parse(value[key], child);
       if (parsed !== invalid) result[key] = parsed;
     }
+    // HTTP decoration is transport metadata, outside the model-facing spec.
+    if (typeof result.img === "string" && typeof value.image_url === "string"
+      && value.image_url.startsWith(`/assets/${encodeURIComponent(result.img)}?`)
+      && /^\/assets\/img_[a-z0-9]{10,12}\?expires=\d+&signature=[a-zA-Z0-9_-]+$/u.test(value.image_url)) {
+      result.image_url = value.image_url;
+    }
     return rule.required?.some(key => !(key in result)) ? invalid : result;
   }
   return scalar(value, rule);
 }
 
-function block(value: unknown): AnswerBlock | null {
+function block(value: unknown): AnswerBlockView | null {
   const parsed = parse(value, definitions.block);
   if (parsed === invalid) return null;
-  const result = parsed as AnswerBlock;
+  const result = parsed as AnswerBlockView;
   if (result.type === "table") result.rows = result.rows.filter(row => row.length === result.columns.length);
   if (result.type === "chart") result.series = result.series.filter(series => series.values.length === result.x.length);
   if (result.type === "table" && !result.rows.length || result.type === "chart" && !result.series.length) return null;
@@ -72,8 +78,8 @@ function block(value: unknown): AnswerBlock | null {
 }
 
 /** Accept old/partial records without exposing validation errors in the conversation. */
-export function parseAnswerBlocks(value: unknown): AnswerBlocks | null {
+export function parseAnswerBlocks(value: unknown): AnswerBlocksView | null {
   if (!object(value) || value.v !== 1 || !Array.isArray(value.blocks)) return null;
-  const blocks = value.blocks.map(block).filter((item): item is AnswerBlock => item !== null);
+  const blocks = value.blocks.map(block).filter((item): item is AnswerBlockView => item !== null);
   return blocks.length ? { v: 1, blocks } : null;
 }

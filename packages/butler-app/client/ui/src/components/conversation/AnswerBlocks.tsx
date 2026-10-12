@@ -1,5 +1,6 @@
 import { memo, useMemo } from "react";
-import type { AnswerBlock, AnswerBlockSet } from "../../../../shared/app-contracts";
+import type { AnswerBlockSet } from "../../../../shared/app-contracts";
+import type { AnswerBlockView } from "../../../../shared/answer-blocks-view";
 import { parseAnswerBlocks } from "../../../../shared/answer-blocks-parse";
 import { Button, Popup, Inline, KeyValueRow, MetricCard, MetricGrid, Notice, PillButton, Presence, Reply, Stack, Typo } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
@@ -8,7 +9,7 @@ import { AnswerCards } from "./AnswerCards";
 import { AnswerChart, AnswerGallery, AnswerSourceLine, AnswerTable } from "./AnswerDataBlocks";
 import { runAnswerAction } from "./answerBlockActions";
 
-function Block({ block }: { block: AnswerBlock }) {
+function Block({ block }: { block: AnswerBlockView }) {
   const sendMessage = useButlerStore(state => state.sendMessage);
   switch (block.type) {
     case "cards": return <AnswerCards block={block} />;

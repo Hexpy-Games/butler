@@ -3,10 +3,6 @@ use super::super::GuidedTools;
 use serde_json::{Value, json};
 use std::collections::HashSet;
 use tokio_util::sync::CancellationToken;
-#[allow(
-    dead_code,
-    reason = "Consumed by the parallel answer_blocks tool integration"
-)]
 pub(in crate::host::guided::tools) async fn lookup_assets(
     owner: &GuidedTools,
     ids: Vec<String>,

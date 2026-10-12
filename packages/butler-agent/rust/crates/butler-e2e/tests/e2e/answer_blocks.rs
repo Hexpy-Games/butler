@@ -122,13 +122,13 @@ fn cassette() -> Result<Cassette, HarnessError> {
                 json!({"type":"message","id":"msg_final","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Two methods are ready.","annotations":[]}]})
             }
         };
-        exchange.response = response(item);
+        exchange.response = response(&item);
         c.exchanges.push(exchange);
     }
     Ok(c)
 }
 
-fn response(item: Value) -> ResponseRecord {
+fn response(item: &Value) -> ResponseRecord {
     let mut events = vec![
         json!({"type":"response.created","response":{"id":"resp_blocks","status":"in_progress","output":[]}}),
         json!({"type":"response.output_item.added","output_index":0,"item":item}),

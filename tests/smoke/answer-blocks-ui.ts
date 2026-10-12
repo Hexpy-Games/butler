@@ -175,6 +175,7 @@ async function checkLeniencyAndExpand(page: Page) {
 try {
   const page = await browser.newPage({ timezoneId: "Asia/Seoul", locale: locale === "en" ? "en-US" : "ko-KR", reducedMotion: "reduce" });
   await initialize(page);
+  await page.clock.setFixedTime(new Date("2026-10-12T09:00:00Z"));
   page.on("pageerror", error => errors.push(error.message));
   await page.route("**/*", async route => {
     const request = route.request(), url = new URL(request.url());

@@ -45,7 +45,7 @@
       "definition": {
         "type": "function",
         "name": "answer_blocks",
-        "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use cards, table, gallery, facts, metrics, chart, callout or actions; for example, compare two methods. Images use ids from image_collect. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
+        "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use cards, table, gallery, facts, metrics, chart, callout or actions. Images use ids from image_collect. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
         "parameters": {
           "$ref": "answer-blocks.schema.json"
         },
@@ -6390,7 +6390,7 @@
       "definition": {
         "type": "function",
         "name": "browser_screenshot",
-        "description": "Attach visuals when the answer is about visual things. Capture a JPEG by ref or region in observation screenshot coordinates; omit both for the whole viewport. Review the returned pixels, then show the exact artifact path inline and pass it to a delegated parent.",
+        "description": "Attach visuals when the answer is about visual things; capture the visible result and attach its JPEG to the reply. Crop to the requested content: pass ref, or region [x,y,width,height] in the observation's screenshot coordinates (capture_regions lists measured candidates; DOM rects are CSS pixels, scale them by image_geometry). A whole-viewport region is refused as region_is_viewport; omit region only when the user asked for the whole view. Review the returned pixels and untrusted_content.fields before replying; recapture if anything is cut off or wrong. Show it inline with ![caption](exact returned artifact path) and pass that exact path to a delegated parent.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -6765,7 +6765,7 @@
     "answer_blocks": {
       "type": "function",
       "name": "answer_blocks",
-      "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use cards, table, gallery, facts, metrics, chart, callout or actions; for example, compare two methods. Images use ids from image_collect. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
+      "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use cards, table, gallery, facts, metrics, chart, callout or actions. Images use ids from image_collect. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
       "parameters": {
         "$ref": "answer-blocks.schema.json"
       },
@@ -11728,7 +11728,7 @@
     "browser_screenshot": {
       "type": "function",
       "name": "browser_screenshot",
-      "description": "Attach visuals when the answer is about visual things. Capture a JPEG by ref or region in observation screenshot coordinates; omit both for the whole viewport. Review the returned pixels, then show the exact artifact path inline and pass it to a delegated parent.",
+      "description": "Attach visuals when the answer is about visual things; capture the visible result and attach its JPEG to the reply. Crop to the requested content: pass ref, or region [x,y,width,height] in the observation's screenshot coordinates (capture_regions lists measured candidates; DOM rects are CSS pixels, scale them by image_geometry). A whole-viewport region is refused as region_is_viewport; omit region only when the user asked for the whole view. Review the returned pixels and untrusted_content.fields before replying; recapture if anything is cut off or wrong. Show it inline with ![caption](exact returned artifact path) and pass that exact path to a delegated parent.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

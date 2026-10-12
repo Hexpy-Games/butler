@@ -17,10 +17,18 @@ pub(super) async fn execute(
         .read_sources(owner.binding.source_session_id.clone(), candidates)
         .await
         .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
+    let image_ids = spec["blocks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|block| block["items"].as_array().into_iter().flatten())
+        .filter_map(|item| item["img"].as_str().map(str::to_owned))
+        .collect();
+    let images = super::browser::lookup_assets(owner, image_ids).await;
     let context = AnswerBlocksContext {
         now: chrono::Utc::now(),
         // Asset acceptance is owned by image_collect's store (T4).
-        image_exists: &|_| false,
+        image_exists: &|id| images.contains(id),
         read_sources: &sources,
     };
     if let Err(problems) = answer_blocks::validate_answer_blocks(&spec, &context) {

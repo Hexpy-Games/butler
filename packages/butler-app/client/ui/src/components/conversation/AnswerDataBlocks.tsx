@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
-import type { ChartBlock, GalleryBlock, TableBlock } from "../../../../shared/app-contracts";
+import type { ChartBlock, TableBlock } from "../../../../shared/app-contracts";
+import type { AnswerGalleryView } from "../../../../shared/answer-blocks-view";
 import { Button, ButtonContainer, ChartContainer, ChartLegend, ChartTooltip, ChartTooltipContent, CHART_COLORS, chartColor,
   Clickable, Collapsible, CopyButton, IconButton, Library, MarkdownContent, MarkdownTable, MediaFrame, ScrollArea, Stack, Typo } from "@/butler-ds";
 import { openLink } from "../browser/browserBridge";
@@ -32,14 +33,14 @@ export function AnswerTable({ block }: { block: TableBlock }) {
   </Stack>;
 }
 
-export function AnswerGallery({ block }: { block: GalleryBlock }) {
+export function AnswerGallery({ block }: { block: AnswerGalleryView }) {
   useAppLocale();
   const copy = appCopy.conversation.answerBlocks;
   return <ScrollArea orientation="x"><Stack align="row" gap="sm">
     {block.items.map((item, index) => <Stack key={index} basis="sm" shrink={false} gap="xs">
-      <Clickable variant="text" disabled={!item.source} aria-label={item.caption ?? copy.openImage}
+      <Clickable stretch variant="text" disabled={!item.source} aria-label={item.caption ?? copy.openImage}
         onClick={() => runAnswerAction(() => openLink(item.source!))}>
-        <MediaFrame src={`/assets/${encodeURIComponent(item.img)}`} aspect={block.media ?? "4:5"} alt={item.caption} />
+        <Stack grow gap="none"><MediaFrame src={item.image_url} aspect={block.media ?? "4:5"} alt={item.caption} /></Stack>
       </Clickable>
       {item.caption ? <Typo.Caption>{item.caption}</Typo.Caption> : null}
       <ButtonContainer size="icon-sm">

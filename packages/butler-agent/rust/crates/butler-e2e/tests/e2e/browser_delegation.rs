@@ -5,6 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
+pub(super) mod answer;
 use super::steward_presentation::stub;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup, security::AdminClient};
@@ -30,7 +31,7 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
         .send()
         .await?;
     assert_eq!(stream.status(), 200);
-    let host = tokio::spawn(serve_host(stream, admin));
+    let host = tokio::spawn(serve_host(stream, admin, false));
     s.turn("general", stub::OWNER).await?;
     tokio::time::timeout(Duration::from_secs(30), host)
         .await
@@ -106,7 +107,7 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
     assert_eq!(session, child, "tool really ran in the internal child");
     let raw: String = db
         .query_row(
-            "SELECT result_json FROM btcc_guided_tool_calls WHERE tool_name='image_collect'",
+            "SELECT result_json FROM btcc_guided_tool_calls WHERE tool_name='image_collect' ORDER BY rowid LIMIT 1",
             [],
             |r| r.get(0),
         )
@@ -123,15 +124,23 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
     Ok(())
 }
 
-async fn serve_host(mut stream: Response, admin: AdminClient) -> Result<(), HarnessError> {
+async fn serve_host(
+    mut stream: Response,
+    admin: AdminClient,
+    answer: bool,
+) -> Result<(), HarnessError> {
     let mut buffer = String::new();
-    for op in [
+    let mut ops = vec![
         "tab.open",
         "tabs.list",
         "tab.observe",
         "tab.screenshot",
         "tab.image_collect",
-    ] {
+    ];
+    if answer {
+        ops.push("tab.image_collect");
+    }
+    for op in ops {
         let frame = next_call(&mut stream, &mut buffer, op).await?;
         assert_eq!(
             frame["session"], "general",
@@ -155,7 +164,7 @@ async fn serve_host(mut stream: Response, admin: AdminClient) -> Result<(), Harn
                 json!({"status":"ok","tab":"parent-tab","obs":"parent-observation","url":"https://example.com/","text":"Parent page","image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})
             }
             "tab.image_collect" => {
-                json!({"status":"ok","source_url":"https://example.com/image.jpg","alt":"Collected raster","nearby_text":"Context","image":{"data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})
+                json!({"status":"ok","source_url":"https://example.com/image.jpg","alt":"Collected raster","nearby_text":"Context","image":{"data":STANDARD.encode(if answer && frame["args"]["ref"] == "image-ref-8" { include_bytes!("browser_outputs/second.jpg").as_slice() } else { include_bytes!("browser_outputs/pixel.jpg").as_slice() })}})
             }
             "tab.screenshot" => {
                 json!({"status":"ok","tab":"parent-tab","url":"https://example.com/","image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})
@@ -193,6 +202,25 @@ async fn serve_host(mut stream: Response, admin: AdminClient) -> Result<(), Harn
             .unwrap()
             .starts_with("steward-turn-")
     );
+    if answer {
+        let frame = next_call(&mut stream, &mut buffer, "tab.open").await?;
+        assert_eq!(frame["session"], "general");
+        admin
+            .send(
+                Method::POST,
+                &format!(
+                    "/internal/browser-host/results/{}",
+                    frame["id"].as_str().unwrap()
+                ),
+                Some(json!({"status":"ok","tab":"parent-tab","url":"https://example.com/"})),
+                &[],
+            )
+            .await?;
+        assert_eq!(
+            next_frame(&mut stream, &mut buffer).await?["op"],
+            "use.ended"
+        );
+    }
     Ok(())
 }
 
