@@ -1,6 +1,5 @@
 import type { ShowcaseGuidance } from "../../showcase";
 import { Button } from "../../components/Button";
-import { IconTile } from "../../components/IconTile";
 import { ShieldCheck } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
@@ -13,7 +12,7 @@ const STEPS = [{ id: "welcome", label: "Welcome" }, { id: "consent", label: "Con
 function ConsentStep() {
   return (
     <SetupWizardShell anchor="top" embedded stepKey="steps" title="Butler" variant="focus">
-      <SetupWizardStepCard activeIndex={1} backLabel="Back" icon={<ShieldCheck size="lg" />} onBack={() => undefined}
+      <SetupWizardStepCard activeIndex={1} backLabel="Back" onBack={() => undefined}
         progressLabel="Setup steps" steps={STEPS} title="Before you start" titleId="setup-step-title"
         actions={<><SetupWizardStepAction text="Decline" /><SetupWizardStepAction forward text="Agree and continue" /></>}>
         <Typo.Body>Butler can create, change and delete files and run commands on this computer.</Typo.Body>
@@ -24,7 +23,7 @@ function ConsentStep() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "One step of a focus-variant setup flow: header (back · steps), a title with a bare 20px glyph, the step's content and a footer with right-aligned large actions.",
+  purpose: "One step of a focus-variant setup flow: header (back · steps), a title on the content's left edge, the step's content and a footer with right-aligned large actions.",
   whenToUse: ["Every step after the intro in a first-run or setup flow", "A sub-step (sign-in, API key, model pick) that keeps the flow's header and footer"],
   whenNotToUse: [
     { when: "The intro or welcome screen of a flow", use: "SetupWizardContent" },
@@ -40,8 +39,8 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A full-width black bar outweighs the card's content.", render: () => <Button size="lg" stretch text="Continue" /> },
     },
     {
-      do: { caption: "The title glyph stands on its own on the title's first line.", render: () => <Stack align="row" gap="sm" cross="center"><ShieldCheck size="lg" /><Typo.H4 as="span">Before you start</Typo.H4></Stack> },
-      dont: { caption: "A grey tile behind a step glyph reads as a button.", render: () => <Stack align="row" gap="md" cross="center"><IconTile size="md"><ShieldCheck size="lg" /></IconTile><Typo.H4 as="span">Before you start</Typo.H4></Stack> },
+      do: { caption: "The title starts on the same left edge as the content.", render: () => <Stack gap="xs"><Typo.H4 as="span">Before you start</Typo.H4><Typo.Body tone="secondary">Butler runs on this computer.</Typo.Body></Stack> },
+      dont: { caption: "A glyph before the title indents it off the content edge.", render: () => <Stack align="row" gap="sm" cross="start"><ShieldCheck size="lg" /><Stack gap="xs"><Typo.H4 as="span">Before you start</Typo.H4><Typo.Body tone="secondary">Butler runs on this computer.</Typo.Body></Stack></Stack> },
     },
   ],
   content: [
@@ -52,7 +51,6 @@ export const guidance: ShowcaseGuidance = {
   accessibility: [
     "The title is focusable (tabIndex -1): move focus to titleId when the step changes.",
     "The step indicator is an ordered list with aria-current=\"step\" and a progressLabel.",
-    "The glyph is decorative; the title carries the meaning.",
   ],
-  tokens: ["--typo-h4-size", "--typo-h4-line-height", "--icon-size-lg", "--control-height-lg", "--space-lg", "--motion-base", "--motion-ease-decelerate"],
+  tokens: ["--typo-h4-size", "--typo-h4-line-height", "--control-height-lg", "--space-lg", "--motion-base", "--motion-ease-decelerate"],
 };

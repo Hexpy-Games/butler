@@ -13,8 +13,6 @@ export function FirstRunConnect({ flow }: { flow: FirstRunFlow }) {
   return view.kind === "list" ? <FirstRunProviderList flow={flow} />
     : view.kind === "signin" ? <FirstRunSignIn flow={flow} />
       : view.kind === "key" ? <FirstRunKeyForm cardId={view.cardId} flow={flow} key={view.cardId} />
-        : view.kind === "local" ? (
-          <FirstRunModelPicker body={copy.localBody} cardId="local" flow={flow} options={flow.local.options} title={copy.localTitle} />
-        ) : view.kind === "custom" ? <FirstRunCustomServer flow={flow} />
+        : view.kind === "custom" ? <FirstRunCustomServer flow={flow} />
           : <FirstRunModelPicker apiKey={view.apiKey} cardId="other" flow={flow} options={view.options} title={copy.customTitle} />;
 }

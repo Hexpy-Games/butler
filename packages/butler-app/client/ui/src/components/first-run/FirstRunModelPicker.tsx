@@ -10,7 +10,6 @@ import {
   Typo,
 } from "@/butler-ds";
 import type { FirstRunProviderCardId, LocalModelOption, ProviderCardLogo } from "@/app/setupProviders.ts";
-import { CardGlyph } from "./CardGlyph";
 import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
@@ -28,7 +27,7 @@ export function FirstRunModelPicker({ cardId, flow, options, apiKey, title, body
   const selected = options.find((option) => option.key === selectedKey) ?? options[0];
   const busy = Boolean(flow.commit.pending) && !flow.commit.connected;
   return (
-    <FirstRunStepCard flow={flow} contentKey={`models:${cardId}`} icon={<CardGlyph cardId={cardId} />} title={title}
+    <FirstRunStepCard flow={flow} contentKey={`models:${cardId}`} title={title}
       titleId="first-run-models-title" description={body} onBack={flow.backToList}
       footerStart={<Typo.Caption tone="tertiary">{copy.localNote}</Typo.Caption>}
       actions={<SetupWizardStepAction forward disabled={(!selected && !flow.commit.connected) || busy} onClick={() => flow.commit.connected ? flow.toReply() : selected && flow.connectAndAdvance(cardId, selected, apiKey)}>
@@ -59,6 +58,6 @@ export function FirstRunModelPicker({ cardId, flow, options, apiKey, title, body
   );
 }
 
-function ModelLogo({ logo }: { logo?: ProviderCardLogo }) {
+export function ModelLogo({ logo }: { logo?: ProviderCardLogo }) {
   return logo ? <ProviderLogo name={logo} /> : <Server size="md" />;
 }
