@@ -224,6 +224,15 @@ fn pay_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
                 targets.push(origin.to_owned());
             }
         }
+        if let Some(fields) = pay["fields"].as_array() {
+            targets.push(
+                fields
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
+        }
         (facts.capability, "change", targets, None)
     } else if input.get("wait").is_some() {
         let site = text(input.pointer("/wait/site").unwrap_or(&Value::Null));
