@@ -41,9 +41,10 @@ export function connectionActions({ stages, commit, signIn, local, current, onCa
     ...stageActions(stages, commit),
     pick: (cardId: FirstRunProviderCardId) => {
       setAuthDone(false); setReplyDone(false); setAdvanceOnConnect(false);
-      if (cardId === "local" && local.options.length === 1) {
-        setView({ kind: "local" }); setAdvanceOnConnect(true);
-        commit.submit({ kind: "local", cardId, option: local.options[0]! });
+      const only = onlyModel(cardId, local.options);
+      if (only) {
+        setView(connectionView(cardId)); setAdvanceOnConnect(true);
+        commit.submit({ kind: "local", cardId, option: only });
       } else pickProvider(cardId, commit, signIn, setView);
     },
     cancel: () => {
@@ -63,6 +64,22 @@ export function connectionActions({ stages, commit, signIn, local, current, onCa
   };
 }
 
+/**
+ * Skip rule (pending owner confirmation): "This computer" with exactly one detected model connects it
+ * right from ① and opens ③ once connected; Back from ③ still shows ② with that connection.
+ */
+function onlyModel(cardId: FirstRunProviderCardId, options: LocalModelOption[]): LocalModelOption | null {
+  return PROVIDER_CARDS[cardId].kind === "local" && options.length === 1 ? options[0]! : null;
+}
+
+/** ② for a card; a custom server that is already connected shows its connection, not the address form. */
+function connectionView(cardId: FirstRunProviderCardId, connected = false): ConnectView {
+  const kind = PROVIDER_CARDS[cardId].kind;
+  if (kind === "signin" || kind === "local") return { kind };
+  if (kind === "key") return { kind: "key", cardId };
+  return connected ? { kind: "customModels", options: [] } : { kind: "custom" };
+}
+
 /** Preserve the existing option kinds and start sign-in only after an explicit pick. */
 function pickProvider(
   cardId: FirstRunProviderCardId,
@@ -70,13 +87,9 @@ function pickProvider(
   signIn: ReturnType<typeof useSignIn>,
   setView: (view: ConnectView) => void,
 ): void {
-  const kind = PROVIDER_CARDS[cardId].kind;
   commit.clear();
-  if (kind === "signin") {
-    setView({ kind: "signin" });
-    void signIn.start();
-  } else if (kind === "key") setView({ kind: "key", cardId });
-  else setView({ kind: kind === "local" ? "local" : "custom" });
+  setView(connectionView(cardId));
+  if (PROVIDER_CARDS[cardId].kind === "signin") void signIn.start();
 }
 
 function stageActions(stages: ReturnType<typeof useFirstRunStages>, commit: ReturnType<typeof useConnectionCommit>) {
@@ -89,13 +102,10 @@ function stageActions(stages: ReturnType<typeof useFirstRunStages>, commit: Retu
       setAdvanceOnConnect(true);
       commit.submit({ kind: "local", cardId, option, apiKey });
     },
-    /** ③ back to ② (the live connection stays), or to ① after a resume. */
+    /** ③ back to ②; the live connection stays, also after a resume (which starts on ③ with no ② view yet). */
     backFromReply: () => {
-      if (view.kind === "list" && (commit.connected || commit.savedCardId)) {
-        const cardId = commit.connected?.cardId ?? commit.savedCardId!;
-        setView(cardId === "chatgpt" ? { kind: "signin" } : cardId === "local" ? { kind: "local" }
-          : cardId === "other" ? { kind: "customModels", options: [] } : { kind: "key", cardId });
-      }
+      const cardId = commit.connected?.cardId ?? commit.savedCardId;
+      if (view.kind === "list" && cardId) setView(connectionView(cardId, true));
       setAuthDone(false);
     },
     toBrowsers: () => setImportStage("browsers"),

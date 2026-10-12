@@ -18,8 +18,6 @@ import type { FirstRunStep } from "./FirstRunSteps";
 
 export type AiStage = "pick" | "auth" | "reply";
 export type ImportStage = "agents" | "browsers";
-/** Counts for the finish summary; never names or secrets. */
-export type ImportTally = { agents?: { instructions: number; servers: number }; browsers?: { bookmarks: number; passwords: number; history: number } };
 
 /** `first-run`: welcome, consent, memory, pick an AI, optional import, then finish. `consent`: a newer consent only. `rerun`: from Settings, cancellable. */
 export type FirstRunMode = "first-run" | "consent" | "rerun";
@@ -76,7 +74,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   const navigation = useConsentScreen(mode);
   const { screen, setScreen, focusStart } = navigation;
   const stages = useFirstRunStages(mode);
-  const { view, setView, importDone, authDone, replyDone, advanceOnConnect, importStage, setAuthDone, setReplyDone, setAdvanceOnConnect } = stages;
+  const { view, importDone, authDone, replyDone, advanceOnConnect, importStage, setAuthDone, setReplyDone, setAdvanceOnConnect } = stages;
   const copy = firstRunCopy[language];
   const { acceptedAt, savingConsent, agree, clearAcceptance } = useWelcomeConsent({
     language, onAgree: () => setScreen(mode === "first-run" ? "memory" : "connect"),
@@ -92,7 +90,9 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     resume: mode === "first-run",
   });
   const reply = useReplyLanguage({ connected: commit.connected, language, onComplete, onSaved: () => setReplyDone(true) });
-  const step: FirstRunStep = !replyDone ? commit.waitingForReady && view.kind === "list" ? "connect" : screen : mode === "first-run" && !importDone ? "import" : "ready";
+  // A live or saved connection is always on the AI step, also for the render before the effect below moves `screen`.
+  const settled = Boolean(commit.connected) || commit.waitingForReady;
+  const step: FirstRunStep = !replyDone ? settled ? "connect" : screen : mode === "first-run" && !importDone ? "import" : "ready";
   // A saved connection (resume) or a confirmed ② opens ③.
   const aiStage: AiStage = authDone || ((commit.connected || commit.savedCardId) && view.kind === "list") ? "reply" : view.kind === "list" ? "pick" : "auth";
   useEffect(() => {
@@ -134,7 +134,6 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     decline: () => navigation.decline(clearAcceptance),
     backToConsent: navigation.backToConsent,
     backFromConnect: navigation.backFromConnect,
-
   };
 }
 
