@@ -16,7 +16,6 @@ import {
 } from "@/butler-ds";
 import { SUPPORTED_UI_LANGUAGES, type FirstRunLanguage } from "@/app/firstRunSetup.ts";
 import { FirstRunPrepStatus, PreparationLine } from "./FirstRunPrepStatus";
-import { MemoryModelStatus } from "./MemoryModelStatus";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
 /** Opens the Butler user manual's first-run page in the system browser. */
@@ -71,7 +70,6 @@ export function FirstRunWelcome({ flow }: { flow: FirstRunFlow }) {
               <Typo.Caption tone="tertiary" aria-hidden="true">·</Typo.Caption>
               <Typo.Caption as="span"><InlineReference kind="external" href={FIRST_RUN_GUIDE_URL} iconSrc={faviconSrc(FIRST_RUN_GUIDE_URL)}>{copy.learnMore}</InlineReference></Typo.Caption>
             </Inline>
-            <MemoryModelStatus model={readiness.memory_model} language={flow.language} retry={flow.retryPreparation} />
           </>}
         </Stack>
       </Stack>

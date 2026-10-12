@@ -8,12 +8,13 @@ import { useWelcomeConsent } from "./useWelcomeConsent";
 import { useReplyLanguage } from "./useReplyLanguage";
 import { useConnectionCommit } from "./useConnectionCommit";
 import { useLocalModelServers } from "./useLocalModelServers";
+import { useMemoryChoice } from "./useMemoryChoice";
 import { useOnlineStatus } from "./useOnlineStatus";
 import { useSetupReadiness } from "./useSetupReadiness";
 import { useSignIn } from "./useSignIn";
 import type { FirstRunStep } from "./FirstRunSteps";
 
-/** `first-run`: welcome, consent, pick an AI, optional import, then finish. `consent`: a newer consent only. `rerun`: from Settings, cancellable. */
+/** `first-run`: welcome, consent, memory, pick an AI, optional import, then finish. `consent`: a newer consent only. `rerun`: from Settings, cancellable. */
 export type FirstRunMode = "first-run" | "consent" | "rerun";
 
 export type ConnectView =
@@ -41,13 +42,15 @@ function initialLanguage(mode: FirstRunMode): FirstRunLanguage {
 
 /** Navigation stays local; declining never changes durable onboarding. */
 function useConsentScreen(mode: FirstRunMode) {
-  const [screen, setScreen] = useState<"welcome" | "consent" | "connect">(mode === "consent" ? "consent" : "welcome");
+  const [screen, setScreen] = useState<"welcome" | "consent" | "memory" | "connect">(mode === "consent" ? "consent" : "welcome");
   const [focusStart, setFocusStart] = useState(false);
   return {
     screen, setScreen, focusStart,
     start: () => setScreen("consent"),
     backToWelcome: () => { setFocusStart(true); setScreen("welcome"); },
     backToConsent: () => setScreen("consent"),
+    /** First run returns to the memory step; renewal and rerun to consent. */
+    backFromConnect: () => setScreen(mode === "first-run" ? "memory" : "consent"),
     decline: (clearAcceptance: () => void) => {
       clearAcceptance();
       setFocusStart(true);
@@ -69,8 +72,11 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   // First run only: the optional import step sits between the connection and the finish.
   const [importDone, setImportDone] = useState(false);
   const copy = firstRunCopy[language];
-  const { acceptedAt, savingConsent, agree, clearAcceptance } = useWelcomeConsent({ language, onAgree: () => setScreen("connect") });
+  const { acceptedAt, savingConsent, agree, clearAcceptance } = useWelcomeConsent({
+    language, onAgree: () => setScreen(mode === "first-run" ? "memory" : "connect"),
+  });
   const setup = useSetupReadiness();
+  const memory = useMemoryChoice({ setup, saveFailed: copy.memoryChoice.saveFailed, onSaved: () => setScreen("connect") });
   const online = useOnlineStatus();
   const current = useButlerStore((state) => currentCardId(mode, state.settings.model, state.modelCatalog));
   const commit = useConnectionCommit({
@@ -107,7 +113,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   };
 
   return {
-    mode, copy, language, setLanguage, online, screen, step, focusStart, view, savingConsent, local, signIn, commit, reply,
+    mode, copy, language, setLanguage, online, screen, step, focusStart, view, savingConsent, local, signIn, commit, reply, memory,
     currentCardId: commit.connected?.cardId ?? current,
     readiness: setup.readiness,
     retryPreparation: setup.retry,
@@ -126,6 +132,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     },
     backToList,
     backToConsent: navigation.backToConsent,
+    backFromConnect: navigation.backFromConnect,
     showCustomModels: (options: LocalModelOption[], apiKey?: string) => setView({ kind: "customModels", options, apiKey }),
     connectKey: (cardId: FirstRunProviderCardId, credentialId: string) =>
       commit.submit({

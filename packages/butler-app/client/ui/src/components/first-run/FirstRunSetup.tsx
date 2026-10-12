@@ -8,6 +8,7 @@ import { FirstRunBrowserImport } from "./FirstRunBrowserImport";
 import { useSetupScene } from "./useSetupSceneReady";
 import { FirstRunConsent } from "./FirstRunConsent";
 import { FirstRunConnect } from "./FirstRunConnect";
+import { FirstRunMemory } from "./FirstRunMemory";
 import { FirstRunWelcome } from "./FirstRunWelcome";
 import { FirstRunReady } from "./FirstRunReady";
 import { useFirstRunFlow, type FirstRunMode, type FirstRunResult } from "./useFirstRunFlow";
@@ -22,7 +23,7 @@ interface FirstRunSetupProps {
 }
 
 /**
- * First run: welcome, consent, then "Pick an AI". The agent prepares in
+ * First run: welcome, consent, memory, then "Pick an AI". The agent prepares in
  * the background; a newer consent version opens the consent step.
  */
 export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps) {
@@ -49,6 +50,7 @@ export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps
     >
       {flow.step === "welcome" ? <FirstRunWelcome flow={flow} />
         : flow.step === "consent" ? <FirstRunConsent flow={flow} />
+          : flow.step === "memory" ? <FirstRunMemory flow={flow} />
           : flow.step === "import" ? <FirstRunBrowserImport flow={flow} />
           : flow.step === "ready" ? <FirstRunReady flow={flow} /> : <FirstRunConnect flow={flow} />}
     </SetupWizardShell>

@@ -15,6 +15,7 @@ import { ChatMemoryActions } from "./ChatMemoryActions";
 import { RecallSettings } from "./RecallSettings";
 import { ChatMemoryBody } from "./ChatMemoryBody";
 import { ProjectMemoryBody } from "./ProjectMemoryBody";
+import { MemoryModelPreparation } from "./MemoryModelPreparation";
 
 export function MemorySettings() {
   useAppLocale();
@@ -53,6 +54,7 @@ export function MemorySettings() {
       <RecallSettings />
       <ChatMemoryBody card={chat} receipt={operation.receipt} cancel={() => { void operation.cancel(); }} />
     </SettingsSection>
+    <MemoryModelPreparation />
     <SettingsSection id="profile-memory" kind="status" title={copy.pageSections.profileMemory} description={copy.pageSectionDescriptions.profileMemory}
       state={cardState(summary.state, profile)} emptyMessage={copy.memory.unavailable} onRetry={() => { void summary.reload(true); }}
       actions={<MemoryResetButton running={reset.kind === "profile"} locked={Boolean(reset.kind)}

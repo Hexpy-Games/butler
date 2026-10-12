@@ -141,7 +141,8 @@ async function runCase(width: number, language: "ko" | "en", theme: "light" | "d
   assert(before.onboarding.consent_version === (renewal ? 1 : null), "Decline saves no agreement");
   await page.getByRole("button", { name: copy.start, exact: true }).click();
   await page.getByRole("button", { name: copy.agree, exact: true }).click();
-  await screen(page, "connect");
+  // A first run asks for the memory model next; a consent renewal goes to the AI list.
+  await screen(page, renewal ? "connect" : "memory");
   const saved = await server.api<{ onboarding: { consent_version: number; accepted_at: string; completed_at: string | null } }>("/settings");
   assert(saved.onboarding.consent_version === 2 && Boolean(Date.parse(saved.onboarding.accepted_at)), "agreement durable before connection");
   assert(saved.onboarding.completed_at === (renewal ? completed : null), "agreement preserves completion");

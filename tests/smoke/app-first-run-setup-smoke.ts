@@ -354,6 +354,7 @@ async function verifyFirstRun(cdp: CdpClient): Promise<void> {
   assert(await evaluateBoolean(cdp, "document.activeElement?.id === 'first-run-start'"), "Decline focuses Start");
   await clickButton(cdp, "시작하기");
   await clickButton(cdp, "동의하고 계속");
+  await verifyMemoryStep(cdp);
   await waitForHeading(cdp, "어떤 AI와 일할까요?");
   await expectNoForbiddenCopy(cdp);
   const topCards = await evaluateString(
@@ -366,6 +367,46 @@ async function verifyFirstRun(cdp: CdpClient): Promise<void> {
   }
 
   await verifyConnection(cdp);
+}
+
+const captureDir = resolve(root, ".tmp", "memory-model-opt-in");
+
+/** One capture per theme; the first run and the workspace follow the system theme. */
+async function captureThemes(client: CdpClient, name: string): Promise<void> {
+  mkdirSync(captureDir, { recursive: true });
+  for (const theme of ["light", "dark"] as const) {
+    await client.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: theme }] });
+    await waitForExpression(client, `document.body.classList.contains('theme-dark') === ${theme === "dark"}`, `${name} ${theme} theme`);
+    await new Promise((done) => setTimeout(done, 900));
+    const shot = await client.send<{ data: string }>("Page.captureScreenshot", { format: "png" });
+    writeFileSync(join(captureDir, `${name}-ko-${theme}.png`), Buffer.from(shot.data, "base64"));
+  }
+  await client.send("Emulation.setEmulatedMedia", { features: [] });
+}
+
+/** The memory step needs a choice; off never downloads and is saved for Settings → Memory. */
+async function verifyMemoryStep(client: CdpClient): Promise<void> {
+  await waitForHeading(client, "대화를 어떻게 기억할까요?");
+  const continueDisabled = `Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.trim() === '계속')?.disabled === true`;
+  assert(await evaluateBoolean(client, continueDisabled), "Continue waits for a memory choice");
+  await waitForExpression(client, "Boolean(document.querySelector('[data-memory-choice=on]')?.textContent?.includes('MB'))", "download size on the choice");
+  await captureThemes(client, "first-run-memory-step");
+  await evaluateBoolean(client, "(() => { document.querySelector('[data-memory-choice=off]')?.click(); return true; })()");
+  await waitForExpression(client, continueDisabled.replace("=== true", "=== false"), "Continue after a choice");
+  await clickButton(client, "계속");
+  await waitForHeading(client, "어떤 AI와 일할까요?");
+  const config = JSON.parse(readFileSync(join(dataDir, "butler.config.json"), "utf8")) as { memory?: { embeddings?: string } };
+  assert(config.memory?.embeddings === "off", "memory choice saved as off");
+  assert(!existsSync(join(dataDir, "cache", "models")), "no memory model download without the choice");
+}
+
+/** Settings → Memory carries the same switch, off after the first-run choice. */
+async function verifyMemorySettings(client: CdpClient): Promise<void> {
+  await clickButton(client, "설정");
+  await clickButton(client, "기억");
+  await waitForExpression(client, "document.querySelector('[data-settings-section-id=memory-model] [role=switch]')?.getAttribute('aria-checked') === 'false'", "memory model switch off");
+  await evaluateBoolean(client, "(() => { document.querySelector('[data-settings-section-id=memory-model]')?.scrollIntoView({ block: 'center' }); return true; })()");
+  await captureThemes(client, "settings-memory-model-switch");
 }
 
 async function verifyConnection(cdp: CdpClient): Promise<void> {
@@ -392,6 +433,7 @@ async function verifyConnection(cdp: CdpClient): Promise<void> {
     `document.querySelector(${JSON.stringify(firstRunSelector)}) === null && document.querySelector('[data-test-class="workspace"]') !== null`,
     "workspace after first-run completion",
   );
+  await verifyMemorySettings(cdp);
 
 }
 

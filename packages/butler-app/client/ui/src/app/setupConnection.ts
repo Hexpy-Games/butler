@@ -30,6 +30,12 @@ export async function retrySetupReadiness(memoryModelOnly = false): Promise<Setu
   return view ?? { status: "preparing", steps: [] };
 }
 
+/** Saves the memory-model choice: on starts the download in the background, off never downloads. */
+export async function chooseMemoryModel(enabled: boolean): Promise<SetupReadinessView> {
+  const view = normalizeReadiness(await api<unknown>("/setup/memory-model", { method: "POST", body: JSON.stringify({ enabled }) }));
+  return view ?? { status: "preparing", steps: [] };
+}
+
 /** Probes Ollama (:11434) and LM Studio (:1234) with a short timeout. */
 export async function fetchLocalModelServers(): Promise<LocalModelServerView[]> {
   const result = await api<{ servers?: LocalModelServerView[] }>("/setup/local-model-servers");

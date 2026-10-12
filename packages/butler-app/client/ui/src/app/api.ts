@@ -313,7 +313,10 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getSetupReadiness"));
   }
   if (method === "POST" && url.pathname === "/setup/readiness/retry") {
-    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "retrySetupReadiness"));
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "retrySetupReadiness", parseBody(options.body)));
+  }
+  if (method === "POST" && url.pathname === "/setup/memory-model") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "chooseMemoryModel", parseBody(options.body)));
   }
   if (method === "POST" && url.pathname === "/setup/oauth/start") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "startSetupOAuth", parseBody(options.body)));
