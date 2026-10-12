@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnElectron, stopElectronChild } from "../support/electron-child";
+import { smokeBrowserArgs } from "../support/smoke-browser-args";
 
 const executable = process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE;
 assert.ok(executable, "explicit Electron 44 executable required");
@@ -22,6 +23,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, idleTimeout: 0, fetch
       <script async src=/__o/stream/></script>`);
     case "/__o/stream/": case "/__o/poll/": return new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode("// pending\n")); } }), { headers: { "content-type": "application/javascript" } });
     case "/__o/page/": return html("<main id=root>Loading</main><script>fetch('/private-data').catch(()=>{});setTimeout(()=>{document.querySelector('#root').textContent='Rendered by script'},200)</script>");
+    case "/__o/script-redirect/": return html("<script>location.replace('/__o/page/')</script><p>Superseded document</p><script src=/__o/stream/></script>");
     case "/__o/redirect/": return new Response(null, { status: 302, headers: { location: "/private" } });
     case "/__o/framed/": return html("<p>Framed</p><iframe src=/private></iframe>");
     default: return html("<p>Not here</p>", 404);
@@ -33,6 +35,7 @@ const results = join(dir, "results.json");
 const module = pathToFileURL(resolve("packages/butler-app/client/electron/browser/reader-render.mjs")).href;
 const cases = {
   slow: `${origin}/__o/slow/`, page: `${origin}/__o/page/`, missing: `${origin}/__o/missing/`, redirect: `${origin}/__o/redirect/`,
+  scriptRedirect: `${origin}/__o/script-redirect/`,
   framed: `${origin}/__o/framed/`, loopback: `${origin}/private`, private: "http://10.0.0.1/", // privacy-hygiene: allow-private-ip (LAN-denial fixture)
 };
 writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "reader-render-smoke", main: "main.mjs", type: "module" }));
@@ -60,10 +63,14 @@ let child: ReturnType<typeof spawnElectron> | undefined;
 try {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
-  child = spawnElectron(executable, [...(process.env.BUTLER_SMOKE_BROWSER_ARGS ? JSON.parse(process.env.BUTLER_SMOKE_BROWSER_ARGS) as string[] : []), dir], { onOutput: bytes => logs.push(String(bytes)), env });
+  child = spawnElectron(executable, [...smokeBrowserArgs(), dir], { onOutput: bytes => logs.push(String(bytes)), env });
   await new Promise<void>((done, fail) => {
     const timer = setTimeout(() => { child!.kill("SIGKILL"); fail(new Error("render smoke timed out")); }, 90_000);
-    child!.once("exit", () => { clearTimeout(timer); done(); });
+    child!.once("exit", (code, signal) => {
+      clearTimeout(timer);
+      if (code === 0) done();
+      else fail(new Error(`Electron exited: code=${code}, signal=${signal}`));
+    });
   });
   type Render = { duration_ms: number; status: string; reason?: string; final_url?: string; http_status?: number; html_base64?: string };
   const out = JSON.parse(readFileSync(results, "utf8")) as Record<string, Render>;
@@ -78,6 +85,11 @@ try {
   assert.ok(html(out.page).includes("Rendered by script"), "the settled, script-rendered page");
   assert.equal(out.page.final_url, cases.page);
   assert.equal(out.page.http_status, 200);
+  assert.equal(out.scriptRedirect.status, "ok", JSON.stringify(out.scriptRedirect));
+  assert.equal(out.scriptRedirect.final_url, cases.page);
+  assert.equal(out.scriptRedirect.http_status, 200);
+  assert.ok(html(out.scriptRedirect).includes("Rendered by script"));
+  assert.ok(!html(out.scriptRedirect).includes("Superseded document"));
   assert.equal(out.missing.status, "ok");
   assert.equal(out.missing.http_status, 404);
   for (const name of ["redirect", "framed", "loopback", "private", "unpoliced"]) {

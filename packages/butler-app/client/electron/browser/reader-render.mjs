@@ -57,12 +57,7 @@ export async function renderReader(args) {
     await configureWebIdentity(contents);
     // Register before navigation: loadURL waits for all load-blocking resources,
     // while DOM readiness proves the complete document was parsed.
-    await new Promise((resolve, reject) => {
-      const ready = () => { contents.removeListener("dom-ready", ready); contents.removeListener("destroyed", ready); resolve(); };
-      contents.once("dom-ready", ready);
-      contents.once("destroyed", ready);
-      void contents.loadURL(args.url).catch(reject);
-    });
+    await waitForDocument(contents, args.url);
     if (denied) return { status: "navigation_denied" };
     await contents.executeJavaScript(SETTLE).catch(() => {});
     const page = await contents.executeJavaScript("({url:location.href,html:document.documentElement.outerHTML})");
@@ -78,4 +73,29 @@ export async function renderReader(args) {
     if (!host.isDestroyed()) host.destroy();
     void profile.clearStorageData().catch(() => {});
   }
+}
+
+// A script redirect aborts loadURL's first navigation, but the replacement
+// document still emits dom-ready. Subframe failures do not fail the reader.
+function waitForDocument(contents, url) {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      contents.removeListener("dom-ready", ready);
+      contents.removeListener("destroyed", destroyed);
+      contents.removeListener("did-fail-load", failed);
+    };
+    const ready = () => { cleanup(); resolve(); };
+    const destroyed = () => { cleanup(); reject(new Error("Reader destroyed")); };
+    const failed = (_event, code, description, _url, mainFrame) => {
+      if (!mainFrame || code === -3) return;
+      cleanup(); reject(new Error(description));
+    };
+    contents.once("dom-ready", ready);
+    contents.once("destroyed", destroyed);
+    contents.on("did-fail-load", failed);
+    void contents.loadURL(url).catch(error => {
+      if (error.code === "ERR_ABORTED" || error.errno === -3) return;
+      cleanup(); reject(error);
+    });
+  });
 }
