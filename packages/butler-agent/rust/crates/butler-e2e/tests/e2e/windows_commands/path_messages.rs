@@ -16,6 +16,11 @@ async fn general_chat_home_paths_and_rejections() -> Result<(), HarnessError> {
     let setup = Setup::new("GENERAL-PATH-MESSAGES")?;
     let home = setup.sandbox.home.clone();
     std::fs::create_dir_all(home.join("Documents"))?;
+    std::fs::create_dir_all(home.join(".ssh"))?;
+    std::fs::write(
+        home.join(".ssh/authorized_keys"),
+        "protected directory marker",
+    )?;
     std::fs::write(home.join("Documents/marker.txt"), "outside data marker\n")?;
     let cases = [
         Case {
@@ -53,6 +58,11 @@ async fn general_chat_home_paths_and_rejections() -> Result<(), HarnessError> {
             tool: "run_command",
             refused: true,
             args: json!({"command":"echo marker","cwd":"~/Documents/marker.txt","state_effect":"mutation","summary":"Check file directory"}),
+        },
+        Case {
+            tool: "run_command",
+            refused: true,
+            args: json!({"command":"echo changed > authorized_keys","cwd":"~/.ssh","state_effect":"mutation","summary":"Check protected directory"}),
         },
     ];
     let (url, script, server) = provider::start(cases[0].clone()).await?;
@@ -120,6 +130,13 @@ async fn general_chat_home_paths_and_rejections() -> Result<(), HarnessError> {
                 assert!(
                     !output.to_string().contains("inside the session workspace"),
                     "{output}"
+                );
+            }
+            6 => {
+                assert_eq!(output["error"], "protected_path", "{output}");
+                assert_eq!(
+                    std::fs::read_to_string(home.join(".ssh/authorized_keys"))?,
+                    "protected directory marker"
                 );
             }
             _ => panic!("Unknown path case {index}"),

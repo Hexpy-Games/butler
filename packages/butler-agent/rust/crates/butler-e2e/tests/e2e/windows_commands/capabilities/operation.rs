@@ -61,12 +61,15 @@ pub(super) async fn operation(
         let examples = if case.tool == "run_command" {
             json!([case.args["command"]])
         } else if case.tool == "list_files" {
-            json!([s.sandbox.root.join(case.args["root"].as_str().unwrap())])
+            json!([s.sandbox.root.join(butler_platform::tool_paths::parse(
+                &s.sandbox.root,
+                case.args["root"].as_str().unwrap()
+            )?)])
         } else if case.tool == "read_file" {
-            json!([s
-                .sandbox
-                .root
-                .join(case.args["requests"][0]["path"].as_str().unwrap())])
+            json!([s.sandbox.root.join(butler_platform::tool_paths::parse(
+                &s.sandbox.root,
+                case.args["requests"][0]["path"].as_str().unwrap()
+            )?)])
         } else {
             json!([if case.args["path"] == "home/.butler/../escape.txt" {
                 "home/escape.txt"
