@@ -53,6 +53,7 @@
 // Every public item says what it is for.
 #![deny(missing_docs)]
 
+pub mod account_dirs;
 pub mod app_browser;
 pub mod app_update;
 pub mod browser_process;

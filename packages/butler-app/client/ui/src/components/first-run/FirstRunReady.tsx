@@ -7,7 +7,7 @@ import { FirstRunPrepStatus } from "./FirstRunPrepStatus";
 import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
-/** The fourth step owns preparation waiting and the final reply-language choice. */
+/** The last step owns preparation waiting and the final reply-language choice. */
 export function FirstRunReady({ flow }: { flow: FirstRunFlow }) {
   const { copy, commit, reply } = flow;
   if (!commit.connected) return (
@@ -17,7 +17,7 @@ export function FirstRunReady({ flow }: { flow: FirstRunFlow }) {
   const cardId = commit.connected.cardId;
   return (
     <FirstRunStepCard flow={flow} contentKey={`ready:${cardId}`} icon={<CardGlyph cardId={cardId} />}
-      title={copy.readyTitle(copy.providerNames[cardId])} description={copy.readyBody} onBack={flow.backToList}
+      title={copy.readyTitle(copy.providerNames[cardId])} description={copy.readyBody} onBack={flow.backFromReady}
       actions={<>
         {reply.failed && !reply.value ? <SetupWizardStepAction onClick={reply.retry}>{copy.retry}</SetupWizardStepAction> : null}
         <SetupWizardStepAction forward disabled={!reply.value || reply.saving} onClick={reply.complete}>{copy.finish}</SetupWizardStepAction>

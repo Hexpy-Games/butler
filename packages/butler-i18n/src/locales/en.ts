@@ -2163,7 +2163,9 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       email: "Email",
     },
     browserImport: {
-      chooseItems: "Choose items",
+      chooseItems: "Include",
+      purpose: "Bring bookmarks, passwords and history into Butler",
+      fromFile: "Import from a file",
       importing: "Importing…",
       history: "History",
       result: (bookmarks, passwords, updated, history = 0) => `${bookmarks} bookmarks · ${history} visits · ${passwords} passwords added${updated ? `, ${updated} updated` : ""}`,

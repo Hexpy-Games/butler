@@ -1867,6 +1867,10 @@ export interface AppCopy {
     /** Settings → Security → import from another browser (counts only). */
     browserImport: {
       chooseItems: string;
+      /** One-line purpose under the import title. */
+      purpose: string;
+      /** Secondary action: import exported bookmark or password files. */
+      fromFile: string;
       importing: string;
       history: string;
       result: (bookmarks: number, passwords: number, updated: number, history?: number) => string;

@@ -13,7 +13,7 @@ import { useSetupReadiness } from "./useSetupReadiness";
 import { useSignIn } from "./useSignIn";
 import type { FirstRunStep } from "./FirstRunSteps";
 
-/** `first-run`: welcome, consent, then pick an AI. `consent`: a newer consent only. `rerun`: from Settings, cancellable. */
+/** `first-run`: welcome, consent, pick an AI, optional import, then finish. `consent`: a newer consent only. `rerun`: from Settings, cancellable. */
 export type FirstRunMode = "first-run" | "consent" | "rerun";
 
 export type ConnectView =
@@ -41,7 +41,7 @@ function initialLanguage(mode: FirstRunMode): FirstRunLanguage {
 
 /** Navigation stays local; declining never changes durable onboarding. */
 function useConsentScreen(mode: FirstRunMode) {
-  const [screen, setScreen] = useState<"welcome" | "consent" | "import" | "connect">(mode === "consent" ? "consent" : "welcome");
+  const [screen, setScreen] = useState<"welcome" | "consent" | "connect">(mode === "consent" ? "consent" : "welcome");
   const [focusStart, setFocusStart] = useState(false);
   return {
     screen, setScreen, focusStart,
@@ -66,12 +66,13 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   const navigation = useConsentScreen(mode);
   const { screen, setScreen, focusStart } = navigation;
   const [view, setView] = useState<ConnectView>({ kind: "list" });
+  // First run only: the optional import step sits between the connection and the finish.
+  const [importDone, setImportDone] = useState(false);
   const copy = firstRunCopy[language];
-  const { acceptedAt, savingConsent, agree, clearAcceptance } = useWelcomeConsent({ language, onAgree: () => setScreen(mode === "first-run" ? "import" : "connect") });
+  const { acceptedAt, savingConsent, agree, clearAcceptance } = useWelcomeConsent({ language, onAgree: () => setScreen("connect") });
   const setup = useSetupReadiness();
   const online = useOnlineStatus();
   const current = useButlerStore((state) => currentCardId(mode, state.settings.model, state.modelCatalog));
-  const local = useLocalModelServers({ enabled: screen === "connect", agentReady: setup.readiness.status === "ready" });
   const commit = useConnectionCommit({
     readinessStatus: setup.readiness.status,
     acceptedAt,
@@ -79,7 +80,9 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     resume: mode === "first-run",
   });
   const reply = useReplyLanguage({ connected: commit.connected, language, onComplete });
-  const step: FirstRunStep = commit.connected || commit.waitingForReady ? "ready" : screen;
+  const settled = Boolean(commit.connected) || commit.waitingForReady;
+  const step: FirstRunStep = !settled ? screen : mode === "first-run" && !importDone ? "import" : "ready";
+  const local = useLocalModelServers({ enabled: step === "connect", agentReady: setup.readiness.status === "ready" });
   useEffect(() => {
     if (commit.connected) {
       setLanguage(commit.connected.settings.language);
@@ -96,6 +99,13 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     setAppCopyLanguage(language);
   }, [language]);
 
+  const backToList = () => {
+    signIn.leave();
+    commit.clear();
+    setImportDone(false);
+    setView({ kind: "list" });
+  };
+
   return {
     mode, copy, language, setLanguage, online, screen, step, focusStart, view, savingConsent, local, signIn, commit, reply,
     currentCardId: commit.connected?.cardId ?? current,
@@ -104,7 +114,9 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     repairPreparation: setup.repair,
     agree,
     start: navigation.start,
-    skipImport: () => setScreen("connect"),
+    finishImport: () => setImportDone(true),
+    /** Ready goes back to the import step on first run, else to the AI list. */
+    backFromReady: () => { if (mode === "first-run") setImportDone(false); else backToList(); },
     backToWelcome: navigation.backToWelcome,
     decline: () => navigation.decline(clearAcceptance),
     pick: (cardId: FirstRunProviderCardId) => pickProvider(cardId, commit, signIn, setView),
@@ -112,11 +124,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
       signIn.leave();
       onCancel?.();
     },
-    backToList: () => {
-      signIn.leave();
-      commit.clear();
-      setView({ kind: "list" });
-    },
+    backToList,
     backToConsent: navigation.backToConsent,
     showCustomModels: (options: LocalModelOption[], apiKey?: string) => setView({ kind: "customModels", options, apiKey }),
     connectKey: (cardId: FirstRunProviderCardId, credentialId: string) =>

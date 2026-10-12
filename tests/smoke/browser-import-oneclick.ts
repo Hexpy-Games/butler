@@ -7,6 +7,7 @@ import { getAppCopy } from "../../packages/butler-i18n/src";
 import { createNativeAppServer } from "../support/native-app-server";
 import { firstRunElectron } from "../support/first-run-electron";
 import { nativeSmokeRuntime } from "../support/native-smoke-runtime";
+import { settleFirstRun } from "../support/first-run-visual";
 
 const runtime = await nativeSmokeRuntime(import.meta.url);
 if (runtime !== null) process.exit(runtime);
@@ -37,7 +38,7 @@ async function handle(request: import("node:http").IncomingMessage, response: im
   const reply = (data: unknown) => { response.writeHead(200, { "content-type": "application/json" }); response.end(JSON.stringify({ protocol_version: "butler.app.v1", data })); };
   const error = (code: string) => { response.writeHead(422, { "content-type": "application/json" }); response.end(JSON.stringify({ protocol_version: "butler.app.v1", error: { code } })); };
   if (path === "/security/signins") return reply({ available: true, sites: [] });
-  if (path === "/security/browser-import/sources") return reply({ sources });
+  if (path === "/security/browser-import/sources") return reply({ sources: fixtureSources });
   if (path === "/security/browser-import/start") {
     const input = JSON.parse(raw.toString()); runs.push({ source: input.source, bookmarks: input.bookmarks, passwords: input.passwords, history: input.history });
     if (mode === "permission") return error("full_disk_access_required");
@@ -70,6 +71,47 @@ async function capture(state: string) {
   const name = `${cell}-${state}.png`; captures.push(name);
   await page.screenshot({ path: join(output!, stage, name) });
 }
+type AppCopy = ReturnType<typeof getAppCopy>;
+let fixtureSources = sources;
+async function wizardCapture(state: string) { await settleFirstRun(page); await capture(state); }
+/** Consent is saved and the default model is the registered stub, so the wizard resumes with that AI connected. */
+async function connectStub() {
+  await page.reload();
+  await page.locator("[data-first-run-screen=\"import\"]").waitFor();
+}
+/** Step order, back targets and the import step between the AI choice and the finish. */
+async function wizardFlow(copy: AppCopy) {
+  const steps = copy.firstRun.steps;
+  await page.locator("#first-run-connect-title").waitFor();
+  const labels = (await page.locator("ol li").allInnerTexts()).map(text => text.split("\n").at(-1)?.trim());
+  assert.deepEqual(labels, [steps.welcome, steps.consent, steps.connect, copy.settings.pageSections.browserImport, steps.ready]);
+  await wizardCapture("connect");
+  await page.getByRole("button", { name: copy.firstRun.back, exact: true }).click();
+  await page.locator("#first-run-consent-title").waitFor();
+  await page.getByRole("button", { name: copy.firstRun.agree, exact: true }).click();
+  await page.locator("#first-run-connect-title").waitFor();
+  await connectStub();
+  const wizard = page.locator("[data-first-run-screen=\"import\"] [data-settings-section-id=\"browser-import\"]");
+  await wizard.locator("[data-import-source]").nth(3).waitFor();
+  assert.equal(await page.locator("ol [aria-current=\"step\"]").innerText(), `4\n${copy.settings.pageSections.browserImport}`);
+  await wizardCapture("wizard-import");
+  await page.getByRole("button", { name: copy.firstRun.back, exact: true }).click();
+  await page.locator("#first-run-connect-title").waitFor();
+  fixtureSources = [];
+  await connectStub();
+  await wizard.getByText(copy.settings.browserImport.noSources, { exact: true }).waitFor();
+  await wizardCapture("wizard-import-empty");
+  fixtureSources = sources;
+  await page.getByRole("button", { name: copy.settings.browserImport.continue, exact: true }).click();
+  await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
+  await wizardCapture("ready");
+  await page.getByRole("button", { name: copy.firstRun.back, exact: true }).click();
+  await page.locator("[data-first-run-screen=\"import\"]").waitFor();
+  await page.getByRole("button", { name: copy.settings.browserImport.continue, exact: true }).click();
+  await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
+  await page.getByRole("button", { name: copy.firstRun.finish, exact: true }).click();
+  await page.locator("[data-test-class=\"first-run-setup\"]").waitFor({ state: "detached" });
+}
 // Pin the existing renderer override: baseline captures must never swap shared build assets.
 process.env.BUTLER_APP_RENDERER_DIST = resolve(before ?? "packages/butler-app/client/ui/dist");
 try {
@@ -86,17 +128,18 @@ try {
     await page.locator("#first-run-language").selectOption(locale);
     await capture("welcome");
     await page.getByRole("button", { name: copy.firstRun.start, exact: true }).click();
+    await page.locator("#first-run-consent-title").waitFor();
+    await wizardCapture("consent");
     await page.getByRole("button", { name: copy.firstRun.agree, exact: true }).click();
-    {
-      await page.locator('[data-first-run-screen="import"]').waitFor();
-      assert.equal(await page.getByRole("heading", { name: copy.settings.pageSections.browserImport, exact: true }).count(), 1);
-      await capture("wizard-import");
+    if (before) {
+      await page.locator("[data-first-run-screen=\"import\"]").waitFor();
+      await wizardCapture("wizard-import");
       await page.getByRole("button", { name: copy.settings.browserImport.skip, exact: true }).click();
-    }
-    await page.locator("#first-run-connect-title").waitFor();
-    await capture("connect");
-    const current = await server.api<{ onboarding: Record<string, unknown> }>("/settings");
-    await server.api("/settings", { method: "PATCH", body: JSON.stringify({ onboarding: { ...current.onboarding, completed_at: new Date().toISOString() } }) });
+      await page.locator("#first-run-connect-title").waitFor();
+      await wizardCapture("connect");
+      const current = await server.api<{ onboarding: Record<string, unknown> }>("/settings");
+      await server.api("/settings", { method: "PATCH", body: JSON.stringify({ onboarding: { ...current.onboarding, completed_at: new Date().toISOString() } }) });
+    } else await wizardFlow(copy);
     await page.goto("app://butler/");
     if (await page.locator('[data-test-class="mac-window"]').getAttribute("data-left-open") === "false") {
       await page.getByRole("button", { name: copy.titlebar.showLeftPanel, exact: true }).click();
@@ -115,14 +158,14 @@ try {
     await section.locator("[data-import-source]").nth(3).waitFor();
     const history = page.locator('[data-settings-section-id="browser-history"]');
     await history.scrollIntoViewIfNeeded();
-    assert.equal(await history.getByText(copy.settings.browserImport.history, { exact: true }).count(), before ? 2 : 1);
+    if (!before) assert.equal(await history.getByText(copy.settings.browserImport.history, { exact: true }).count(), 1);
     await capture("history");
     await section.scrollIntoViewIfNeeded();
     const safari = section.locator('[data-import-source="safari:default"]');
-    assert.equal(await safari.getByText("Safari", { exact: true }).count(), before ? 2 : 1);
+    if (!before) assert.equal(await safari.getByText("Safari", { exact: true }).count(), 1);
     await capture("sources");
     if (before) {
-      await section.getByRole("button", { name: copy.settings.browserImport.chooseItems, exact: true }).click();
+      await section.locator("[aria-expanded]").first().click(); // The baseline UI hides item choice in a disclosure.
       await capture("picker");
       await section.locator('[data-import-source="chrome:work"]').click();
       await section.locator('[data-test-class="import-result"]').waitFor();
@@ -130,22 +173,28 @@ try {
       continue;
     }
     assert.equal(await section.locator("[data-import-source]").count(), 4);
-    await section.getByRole("button", { name: copy.settings.browserImport.chooseItems, exact: true }).click();
+    await section.getByText(copy.settings.browserImport.chooseItems, { exact: true }).waitFor();
     for (const label of [copy.settings.browserImport.bookmarks, copy.settings.browserImport.passwords, copy.settings.browserImport.history]) assert.equal(await section.getByRole("checkbox", { name: label, exact: true }).getAttribute("aria-checked"), "true");
-    await capture("picker");
-    await section.locator('[data-import-source="chrome:work"]').click();
+    fixtureSources = [];
+    await page.reload();
+    await section.getByText(copy.settings.browserImport.noSources, { exact: true }).waitFor();
+    await section.scrollIntoViewIfNeeded(); await capture("sources-empty");
+    fixtureSources = sources;
+    await page.reload();
+    await section.locator("[data-import-source]").nth(3).waitFor();
+    await section.locator('[data-import-source="chrome:work"] button').click();
     await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240), { exact: true }).waitFor();
     await capture("result");
     await section.getByRole("button", { name: copy.settings.browserImport.undo, exact: true }).click();
     await section.getByText(copy.settings.browserImport.undone).waitFor();
     await section.getByRole("button", { name: copy.settings.browserImport.more, exact: true }).click();
-    mode = "permission"; await section.locator('[data-import-source="chrome:work"]').click();
+    mode = "permission"; await section.locator('[data-import-source="chrome:work"] button').click();
     await section.locator('[data-test-class="import-permission"]').waitFor();
     await section.locator('[data-test-class="import-permission"]').scrollIntoViewIfNeeded(); await capture("permission");
     await section.getByRole("button", { name: copy.settings.browserImport.pickFolder, exact: true }).click();
     await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240), { exact: true }).waitFor();
     await section.getByRole("button", { name: copy.settings.browserImport.more, exact: true }).click();
-    mode = "primary"; await section.locator('[data-import-source="firefox:default"]').click();
+    mode = "primary"; await section.locator('[data-import-source="firefox:default"] button').click();
     await section.getByLabel(copy.settings.browserImport.primaryPassword, { exact: true }).fill("fixture-primary");
     await section.getByRole("button", { name: copy.settings.browserImport.run, exact: true }).click();
     await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240), { exact: true }).waitFor();
@@ -153,7 +202,7 @@ try {
     mode = "success";
     await section.getByRole("button", { name: copy.settings.browserImport.more, exact: true }).click();
     csvReady = false; csvDeleted = false;
-    await section.locator('[data-import-source="safari:default"]').click();
+    await section.locator('[data-import-source="safari:default"] button').click();
     await section.getByText(copy.settings.browserImport.waitingCsv, { exact: true }).waitFor();
     await capture("csv-waiting");
     csvReady = true;
@@ -164,7 +213,7 @@ try {
     await section.getByRole("button", { name: copy.settings.browserImport.deleteCsv, exact: true }).waitFor({ state: "detached" });
     assert.equal(csvDeleted, true, "CSV deletion needs the owner's click");
     await section.getByRole("button", { name: copy.settings.browserImport.more, exact: true }).click();
-    await section.locator('[data-import-source="chrome:work"]').click();
+    await section.locator('[data-import-source="chrome:work"] button').click();
     await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240), { exact: true }).waitFor();
     for (const width of [320, 390, 430]) { await page.setViewportSize({ width, height: 1000 }); await capture(`result-${width}`); }
   }
