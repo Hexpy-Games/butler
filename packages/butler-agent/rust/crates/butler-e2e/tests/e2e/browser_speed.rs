@@ -118,12 +118,12 @@ fn prefix_reuse(requests: &[Value]) -> Vec<usize> {
         .collect()
 }
 
-fn input(request: &Value) -> &[Value] {
+pub(super) fn input(request: &Value) -> &[Value] {
     request["input"].as_array().unwrap()
 }
 
 /// The function outputs this request answers for the latest batch.
-fn outputs(request: &Value) -> Vec<Value> {
+pub(super) fn outputs(request: &Value) -> Vec<Value> {
     let items = input(request);
     let start = items
         .iter()
@@ -319,7 +319,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
 }
 
 /// A streamed response with one or more output items.
-fn response(items: &[Value]) -> ResponseRecord {
+pub(super) fn response(items: &[Value]) -> ResponseRecord {
     let mut record = super::browser_usage::stub::response(&items[0]);
     if items.len() == 1 {
         return record;

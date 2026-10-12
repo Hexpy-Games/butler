@@ -8,6 +8,9 @@ use std::{
 };
 use tokio::sync::{Notify, oneshot, watch};
 
+/// An event's routing key while a running turn drives its tab; never sent out.
+const TURN: &str = "turn";
+
 /// One frame of an observation: its CDP session and Butler's isolated world.
 #[derive(Clone, Debug)]
 pub(crate) struct Frame {
@@ -125,6 +128,10 @@ pub(crate) struct Tab {
     /// The registered preview this tab shows (its own context and proxy).
     pub preview: Option<String>,
     pub history_transition: Option<String>,
+    /// The turn that last drove this tab: its page events go to that turn's
+    /// calls, so parallel turns of one conversation (delegated work) never
+    /// take each other's events.
+    pub turn: Option<String>,
 }
 
 impl Tab {
@@ -167,6 +174,7 @@ impl Tab {
             diagnostics: None,
             preview: None,
             history_transition: Some("generated".into()),
+            turn: None,
         }
     }
 
@@ -238,10 +246,58 @@ impl State {
         if let (Some(target), Some(data)) = (event.as_object_mut(), data.as_object()) {
             target.extend(data.clone());
         }
+        if let Some(turn) = &tab.turn {
+            event[TURN] = json!(turn);
+        }
         self.events
             .entry(tab.owner.clone())
             .or_default()
             .push(event);
+    }
+
+    /// The owner's events for a call of `turn`: its own, and those no other
+    /// running turn still drives a tab for. Others stay for their turn.
+    pub(crate) fn drain(&mut self, owner: &str, turn: Option<&str>) -> Vec<Value> {
+        let Some(events) = self.events.remove(owner) else {
+            return Vec::new();
+        };
+        let driving = |other: &str| {
+            self.tabs
+                .values()
+                .any(|t| t.owner == owner && t.turn.as_deref() == Some(other))
+        };
+        let (mut taken, kept): (Vec<Value>, Vec<Value>) = events.into_iter().partition(|event| {
+            event[TURN]
+                .as_str()
+                .is_none_or(|other| Some(other) == turn || !driving(other))
+        });
+        if !kept.is_empty() {
+            self.events.insert(owner.to_owned(), kept);
+        }
+        for event in &mut taken {
+            if let Some(event) = event.as_object_mut() {
+                event.remove(TURN);
+            }
+        }
+        taken
+    }
+
+    /// Conversation tabs open now (Butler's own hidden pages excluded).
+    pub(crate) fn agent_tabs(&self) -> usize {
+        self.tabs.values().filter(|t| t.hidden.is_none()).count()
+    }
+
+    /// The least recently used conversation tab no call or wait holds, outside
+    /// `keep` and the tabs `turn` drives: the one to close when every tab
+    /// memory allows is open, as its idle expiry would.
+    pub(crate) fn reclaimable(&self, keep: &[&str], turn: Option<&str>) -> Option<String> {
+        self.tabs
+            .values()
+            .filter(|t| t.hidden.is_none() && t.admitted && !t.busy && !t.waiting && !t.closing)
+            .filter(|t| t.dialog.is_none() && !keep.contains(&t.id.as_str()))
+            .filter(|t| turn.is_none() || t.turn.as_deref() != turn)
+            .min_by_key(|t| t.last_call)
+            .map(|t| t.id.clone())
     }
 
     pub(crate) fn tab_of_session(&self, session: &str) -> Option<String> {
