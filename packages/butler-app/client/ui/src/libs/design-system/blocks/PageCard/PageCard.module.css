@@ -1,9 +1,16 @@
 /* The page card: an elevated surface the native view is laid into. The
    inner box clips (and keeps a 1px border, so the content area, and with it
-   the native view, never moves); holder edges are drawn by ::after over the
-   border and 1px outside it. One edge, one hairline: the card sits inside
-   the pane sheet, whose hairlines (and the window frame) already bound it,
-   so its own border stays transparent and its shadow sets it apart. */
+   the native view, never moves); the surface (fill and shadow) is ::before
+   and holder edges are ::after, drawn over the border and 1px outside it.
+   One edge, one hairline: the card sits inside the pane sheet, whose
+   hairlines (and the window frame) already bound it, so its own border
+   stays transparent and its shadow sets it apart.
+
+   With an empty reserved band row the surface, shadow and edge start under
+   the row (--page-card-top), so the row reads as the pane around the
+   toolbar and the page carries the card corners; a band arriving extends
+   the surface up over the row as one card with the page. Only paint moves,
+   never the content area. */
 @property --page-card-edge-angle {
   inherits: false;
   initial-value: 135deg;
@@ -11,6 +18,8 @@
 }
 
 .card {
+  --page-card-top: 0px;
+
   position: relative;
   display: flex;
   min-width: 0;
@@ -18,7 +27,20 @@
   flex: 1 1 auto;
   flex-direction: column;
   border-radius: var(--radius-popover);
+}
+
+.card:has(> .inner > .bandRow:empty) {
+  --page-card-top: var(--browser-band-height);
+}
+
+.card::before {
+  position: absolute;
+  inset: var(--page-card-top) 0 0;
+  border-radius: inherit;
+  background: var(--surface-raised);
   box-shadow: var(--browser-card-shadow);
+  content: "";
+  pointer-events: none;
 }
 
 .inner {
@@ -31,13 +53,13 @@
   overflow: hidden;
   border: var(--border-hairline) solid transparent;
   border-radius: inherit;
-  background: var(--surface-raised);
 }
 
 .card::after {
   position: absolute;
   z-index: 3;
-  inset: calc(var(--border-hairline) * -1);
+  inset: calc(var(--page-card-top) - var(--border-hairline))
+    calc(var(--border-hairline) * -1) calc(var(--border-hairline) * -1);
   border-radius: calc(var(--radius-popover) + var(--border-hairline));
   content: "";
   pointer-events: none;
@@ -46,7 +68,7 @@
 /* Butler holds the tab: a slowly turning riso edge and a soft glow. The
    loop runs on --motion-agent-edge and --motion-loop-count, both 0 under
    reduced motion, which leaves a static edge at 135deg. */
-.card[data-holder="butler"] {
+.card[data-holder="butler"]::before {
   box-shadow:
     0 0 0 4px color-mix(in srgb, var(--butler-ink-purple) 10%, transparent),
     0 8px 32px color-mix(in srgb, var(--butler-ink-blue) 22%, transparent);
@@ -85,7 +107,7 @@
 }
 
 /* An approval waits: the edge stops and turns amber. */
-.card[data-holder="waiting"] {
+.card[data-holder="waiting"]::before {
   box-shadow:
     0 0 0 4px var(--color-warning-bg),
     var(--browser-card-shadow);
@@ -102,25 +124,45 @@
   inset: 0 0 auto;
 }
 
-/* A reserved band row: one band's height, kept when no band shows, so the
+/* No band: the line runs along the top of the surface, just above the
+   native view, between the card corners. */
+.card:has(> .inner > .bandRow:empty) .loadLine {
+  inset-inline: var(--radius-popover);
+  top: var(--page-card-top);
+  transform: translateY(-100%);
+}
+
+/* A reserved band row: one band height, kept when no band shows, so the
    content area below it (and the native view) never moves. One band at a
-   time; anything taller is clipped, never pushed into the page. */
+   time; anything taller is clipped, never pushed into the page, except the
+   band fill that runs one corner radius under the page (below). */
 .bandRow {
   display: flex;
   height: var(--browser-band-height);
   flex: none;
   flex-direction: column;
-  overflow: hidden;
+  clip-path: inset(0 0 calc(var(--radius-popover) * -1));
 }
 
-/* An empty reserved row is a quiet strip of the card's surface with the
-   band's hairline, so a band arriving only adds content, never a line. */
-.bandRow:empty {
-  border-bottom: var(--border-hairline) solid var(--line);
+/* Band and page are one surface: no line between them. The band fill runs
+   one corner radius under the page, so a page that keeps rounded corners
+   (it reaches the card bottom corners) meets the band without a notch. */
+.bandRow > [data-slot="page-band"] {
+  position: relative;
+  border-bottom-color: transparent;
 }
 
-/* The page area: the native view's rect, and the container overlays and
-   anchored dialogs position in. */
+.bandRow > [data-slot="page-band"]::after {
+  position: absolute;
+  inset: 100% 0 auto;
+  height: var(--radius-popover);
+  background: inherit;
+  content: "";
+  pointer-events: none;
+}
+
+/* The page area: the native view rect, and the container overlays and
+   anchored dialogs position in. With no band it takes the card top corners. */
 .content {
   container-name: page-card;
   container-type: size;
@@ -130,6 +172,12 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
+}
+
+.card:has(> .inner > .bandRow:empty) .content {
+  overflow: hidden;
+  border-radius: calc(var(--radius-popover) - var(--border-hairline))
+    calc(var(--radius-popover) - var(--border-hairline)) 0 0;
 }
 
 /* A fixed-size page (Butler's tabs) letterboxes on the muted fill. */

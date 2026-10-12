@@ -16,12 +16,12 @@ export const stories: ShowcaseStory[] = [
     render: ({ locale }) => <PageCardDemo locale={locale} holder="butler" band="agent" agent height={420} readout reserveBand />,
   },
   {
-    // The band row is reserved: idle, agent and pick leave the native view's bounds (the readout) unchanged.
+    // The band row is reserved: no band, agent and pick leave the native view's bounds (the readout) unchanged.
     name: "Reserved band row: the page never moves",
     widths: ["app", "wide"],
     render: ({ locale }) => (
       <Grid columns="3" gap="md">
-        <PageCardDemo locale={locale} holder="none" band="idle" agent height={240} readout reserveBand />
+        <PageCardDemo locale={locale} holder="none" agent height={240} readout reserveBand />
         <PageCardDemo locale={locale} holder="butler" band="agent" agent height={240} readout reserveBand />
         <PageCardDemo locale={locale} holder="none" band="pick" agent height={240} readout reserveBand />
       </Grid>

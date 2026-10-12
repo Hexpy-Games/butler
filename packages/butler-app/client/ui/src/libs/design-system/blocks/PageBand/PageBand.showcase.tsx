@@ -9,7 +9,7 @@ import fixtures from "../BrowserPane/fixtures/fixtures.module.css";
 export const meta: ShowcaseMeta = {
   title: "PageBand",
   category: "Browser",
-  tags: ["browser", "band", "page state", "agent", "approval", "picking", "pop-up", "take over", "idle", "no shift"],
+  tags: ["browser", "band", "page state", "agent", "approval", "picking", "pop-up", "take over", "no shift"],
   status: "beta",
 };
 
@@ -21,7 +21,7 @@ function OnCard({ children, width }: { children: ReactNode; width?: number }) {
 }
 
 const TONES: Array<[DemoBandKind, string]> = [
-  ["idle", "idle"], ["agent", "agent"], ["user", "user"], ["waiting", "waiting"], ["need-you", "warning"], ["pick", "pick"], ["popup", "info"],
+  ["agent", "agent"], ["user", "user"], ["waiting", "waiting"], ["need-you", "warning"], ["pick", "pick"], ["popup", "info"],
 ];
 
 export const stories: ShowcaseStory[] = [

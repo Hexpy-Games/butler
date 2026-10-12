@@ -31,6 +31,12 @@ function settlePointer(browser, tab) {
 export function releaseHold(browser, tab) {
   browser.holds.delete(tab.id);
 }
+/** The turns holding the tab when you take it over: Butler stays paused on it until they finish. */
+export function pauseHold(browser, tab) {
+  const turns = new Set(browser.holds.get(tab.id)?.keys() ?? []);
+  for (const use of browser.uses.values()) if (use.tab === tab.id && typeof use.turn === "string" && tab.owner === `conversation:${use.session}`) turns.add(use.turn);
+  tab.pausedTurns = turns.size ? turns : null;
+}
 export function endUse(browser, id, abort = false) {
   const use = browser.uses.get(id);
   if (!use) return;
@@ -56,6 +62,7 @@ export function finishUse(browser, session, turn) {
   for (const tab of browser.tabs.values()) if (tab.owner === `conversation:${session}`) {
     // The finished turn no longer waits on a sign-in step; the user keeps the tab.
     if (tab.waitingTurn === turn) { tab.waiting = Boolean(tab.dialog); tab.waitingTurn = null; tab.signinStep = null; affected.add(tab.id); }
+    if (tab.pausedTurns?.delete(turn) && !tab.pausedTurns.size) tab.pausedTurns = null;
     if (affected.has(tab.id) && !tabInUse(browser, tab)) tab.pointer = null;
   }
   browser.publish();
@@ -63,7 +70,7 @@ export function finishUse(browser, session, turn) {
 export function resetUse(browser) {
   browser.holds.clear();
   for (const use of [...browser.uses.values()]) endUse(browser, use.id, true);
-  for (const tab of browser.tabs.values()) { tab.waiting = Boolean(tab.dialog); tab.waitingTurn = null; tab.pointer = null; }
+  for (const tab of browser.tabs.values()) { tab.waiting = Boolean(tab.dialog); tab.waitingTurn = null; tab.pausedTurns = null; tab.pointer = null; }
   browser.publish();
 }
 export function closeUse(browser, tab) {
