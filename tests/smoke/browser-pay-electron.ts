@@ -218,12 +218,19 @@ async function maskedPixels(observed: Record<string, any>, name: string, count =
   assert.ok(dark.every(Boolean), `masked: ${JSON.stringify(dark)}`);
 }
 
+async function browserSettings(locale: string) {
+  await app.click(locale === "ko" ? "설정" : "Settings");
+  const label = locale === "ko" ? "브라우저" : "Browser";
+  const scope = '[data-test-class="settings-navigation-scroll"] button';
+  await waitBrowser(() => app.page.expression(`Array.from(document.querySelectorAll(${JSON.stringify(scope)})).some(node=>node.textContent?.trim()===${JSON.stringify(label)})`), "settings browser navigation");
+  await app.page.clickText(label, scope);
+}
+
 async function settingsShots() {
   for (const [locale, theme] of [["ko", "light"], ["ko", "dark"], ["en", "light"], ["en", "dark"]]) {
     await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: locale, appearance_theme: theme }) });
     await app.page.reload();
-    await app.click(locale === "ko" ? "설정" : "Settings");
-    await app.click(locale === "ko" ? "브라우저" : "Browser");
+    await browserSettings(locale!);
     await waitBrowser(() => app.page.expression("Boolean(document.querySelector('#payment-methods,[data-test-class=vault-card-add]'))"), "payment methods");
     await app.page.expression("(document.querySelector('[data-test-class=vault-card-row]') ?? document.querySelector('[data-test-class=vault-card-add]')).scrollIntoView({block:'center'})");
     writeFileSync(join(evidence!, `settings-payment-${locale}-${theme}.png`), await app.page.screenshot());
@@ -288,7 +295,7 @@ async function profileShots() {
   await app.main(`${winExpression()}.setContentSize(1440,1440)`);
   for (const theme of ["light", "dark"]) {
     await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme }) });
-    await app.page.reload(); await app.click("설정"); await app.click("브라우저");
+    await app.page.reload(); await browserSettings("ko");
     await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=vault-profile-row]'))"), "profile section");
     const summary = await app.page.expression<string>("document.querySelector('[data-test-class=vault-profile-row]').textContent");
     assert.ok(summary.includes("Sample Person · 입력할 때마다 확인") && summary.includes("여권 ••••") && !summary.includes("저장됨:"), "separate profile name, policy and masked passport");
