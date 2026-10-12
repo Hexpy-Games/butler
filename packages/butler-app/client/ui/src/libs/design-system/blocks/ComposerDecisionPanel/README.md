@@ -15,6 +15,7 @@ shape.
 | `icon` | Decision-kind icon, sized to `sm` by the shared header, drawn in the secondary tone |
 | `eyebrow` | Localized decision category (Plan / Permission) |
 | `title` | What is being decided; wraps in full, opens the source |
+| `renderText` | Optional display formatter for title and details; original strings remain available in titles and accessible labels |
 | `onOpen` | Opens the plan or the request's source |
 | `details` | Lines under the title (examples, a "+N more" line) in the secondary caption style, aligned to the title text. Every line wraps in full: what is being decided is never cut |
 | `detailsShowMoreLabel`, `detailsShowLessLabel` | With both, details longer than four lines clamp behind an inline Show more / Show less button (the QueuedMessage pattern); without them details always show in full |

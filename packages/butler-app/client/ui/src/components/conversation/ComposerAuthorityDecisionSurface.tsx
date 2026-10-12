@@ -1,5 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
+import { isAbsolutePath } from "@/app/approvalTargets.ts";
 import type { ApprovalActionKind } from "@/app/approvalRequest.ts";
 import type { ApprovalRisk } from "@/app/types.ts";
 import {
@@ -17,6 +18,15 @@ const KIND_ICONS: Record<ApprovalActionKind, typeof ShieldCheck> = {
 };
 const RISK_TONES: Record<ApprovalRisk, TagTone> = { low: "neutral", medium: "warning", high: "danger" };
 
+/** Display only: retain the original path in the DS title and accessible label. */
+function approvalPathText(text: string, decision: ComposerAuthorityDecision) {
+  const shorten = (path: string) => isAbsolutePath(path) && path.length > 64
+    ? `${path.slice(0, 30)}…${path.slice(-25)}` : path;
+  const display = decision.pathDetails?.includes(text) ? shorten(text)
+    : text === decision.title ? text.replace(/'([^']+)'/gu, (_, path: string) => `'${shorten(path)}'`) : text;
+  return <Typo.Text title={text} aria-label={text}>{display}</Typo.Text>;
+}
+
 export function ComposerAuthorityDecisionSurface({ decision }: { decision: ComposerAuthorityDecision }) {
   useAppLocale();
   const { handoff } = decision;
@@ -27,6 +37,7 @@ export function ComposerAuthorityDecisionSurface({ decision }: { decision: Compo
     eyebrow={appCopy.composer.permission}
     title={decision.title}
     details={decision.details}
+    renderText={(text) => approvalPathText(text, decision)}
     detailsShowMoreLabel={appCopy.conversation.messageActions.showMore}
     detailsShowLessLabel={appCopy.conversation.messageActions.showLess}
     onOpen={decision.onOpenSource}

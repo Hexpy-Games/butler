@@ -50,7 +50,7 @@ pub(in crate::btcc::authority) fn assert_approval_summaries() {
                 &json!({"command": "rm -rf build", "cwd": "../..", "state_effect": "mutation"}),
             ),
             json!({"action_kind": "run_command", "count": 1, "examples": ["rm -rf build"], "risk": "high",
-                "targets": [{"kind": "outside", "path": ""}]}),
+                "targets": [{"kind": "outside", "path": "/Users/someone/work/garden/../.."}]}),
         ),
         (
             summary(
@@ -102,6 +102,8 @@ pub(in crate::btcc::authority) fn assert_approval_summaries() {
             "{tool}"
         );
     }
+    assert_eq!(workspace_label("/home/mina/.butler"), "/home/mina/.butler");
+    assert_eq!(workspace_label("/home/mina/projects/garden"), "garden");
     assert_path_and_example_bounds();
     super::command_risk::pinned::assert_command_risks();
 }
@@ -117,12 +119,23 @@ fn assert_path_and_example_bounds() {
         assert_eq!(actual["risk"], "high");
         assert_eq!(
             actual["targets"][1],
-            json!({"kind": "outside", "path": path})
+            json!({"kind": "outside", "path": absolute_target(path, WORKSPACE)})
         );
-        assert_eq!(actual["examples"][0], path);
+        assert_eq!(actual["examples"][0], absolute_target(path, WORKSPACE));
         let command = summary("run_command", "x", &json!({"command": "ls", "cwd": path}));
         assert_eq!(command["risk"], "high");
         assert_eq!(command["targets"][0]["kind"], "outside");
+        assert_eq!(
+            command["targets"][0]["path"],
+            absolute_target(path, WORKSPACE)
+        );
+        let operation = super::operation::exact_operation(ApprovalFacts {
+            capability: "write_file",
+            target: path,
+            input: &json!({"path": path}),
+            workspace: WORKSPACE,
+        });
+        assert_eq!(operation.targets, [absolute_target(path, WORKSPACE)]);
     }
     for line in [
         "x".repeat(200),

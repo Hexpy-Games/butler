@@ -18,6 +18,8 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   /** What is being decided; wraps in full and opens the source. */
   title: string;
   onOpen: () => void;
+  /** Optional display formatting; the full title and detail text remain available. */
+  renderText?: (text: string) => ReactNode;
   /** Lines under the title (examples, a "+N more" line). Each wraps in full: what is decided is never cut. */
   details?: readonly string[];
   /** With `detailsShowLessLabel`, clamps long details to four lines behind an inline "Show more". */
@@ -32,7 +34,7 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
 }
 
 /** A pending decision shown in place of the composer input: subject row, optional details and error, actions. */
-export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, detailsShowMoreLabel, detailsShowLessLabel, aside, error, actions, className, onKeyDown, ...props }: ComposerDecisionPanelProps) {
+export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, detailsShowMoreLabel, detailsShowLessLabel, aside, error, actions, renderText, className, onKeyDown, ...props }: ComposerDecisionPanelProps) {
   const panel = useRef<HTMLDivElement>(null);
   const { defer, deferring } = useComposerPanelTransition(panel);
   const hasDetails = Boolean(details?.length);
@@ -40,10 +42,10 @@ export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, d
     onKeyDown={(event) => { if (deferring) { event.preventDefault(); event.stopPropagation(); return; } composerDecisionKeyboard(event); onKeyDown?.(event); }} {...props}>
     <ComposerPanelHeader icon={icon} eyebrow={eyebrow} dataSlot="composer-decision-subject" hasDetails={hasDetails}
       title={<Clickable variant="text" onClick={onOpen} title={title}>
-        <Typo.Label weight="medium" tone="primary" wrap="anywhere">{title}</Typo.Label>
+        <Typo.Label weight="medium" tone="primary" wrap="anywhere">{renderText ? renderText(title) : title}</Typo.Label>
       </Clickable>} aside={aside} />
     {hasDetails && <ComposerPanelBody dataSlot="decision-details-scroll" single>
-      <ComposerDecisionDetails lines={details!} showMoreLabel={detailsShowMoreLabel} showLessLabel={detailsShowLessLabel} />
+      <ComposerDecisionDetails lines={details!} renderText={renderText} showMoreLabel={detailsShowMoreLabel} showLessLabel={detailsShowLessLabel} />
     </ComposerPanelBody>}
     {error && <FieldError className={dsClass(styles.error)}><Typo.Caption as="p" tone="inherit">{error}</Typo.Caption></FieldError>}
     <ComposerPanelActions dataSlot="composer-decision-actions">{typeof actions === "function" ? actions(defer) : actions}</ComposerPanelActions>
