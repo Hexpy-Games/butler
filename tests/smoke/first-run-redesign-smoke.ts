@@ -57,6 +57,7 @@ async function capture(page: Page, name: string) {
         x: element.getBoundingClientRect().x, width: element.getBoundingClientRect().width, clientWidth: element.clientWidth });
     }
     return { viewport: [innerWidth, innerHeight], card: { x: box.x, y: box.y, width: box.width }, titleX: title.x, intro,
+      bodyX: card.querySelector('[data-slot="setup-step-body"]')?.getBoundingClientRect().x,
       ancestors,
       selectWidth: document.querySelector("#first-run-language")?.getBoundingClientRect().width,
       buttonWidth: document.querySelector("#first-run-start")?.getBoundingClientRect().width,
@@ -82,7 +83,8 @@ async function capture(page: Page, name: string) {
     // Top edge: clamp(titlebar + 16px, 20% of the window, 240px) = 142px at 710px.
     assert(Math.abs(geometry.card.y - 142) < 1, `${name}: top anchor`);
     if (geometry.intro) { assert.equal(geometry.selectWidth, 386); assert.equal(geometry.buttonWidth, 386); }
-    else assert.equal(geometry.titleX, 260, name);
+    // No title glyph: the title starts on the content edge (card x + 17).
+    else { assert.equal(geometry.titleX, 232, name); assert(Math.abs(geometry.titleX - geometry.bodyX!) < 1, `${name}: title on the content edge`); }
   }
   if (!geometry.intro) {
     assert.equal(await page.locator('[data-slot="setup-step-body"]').getAttribute("data-motion"), "enter", "DS content-key transition");

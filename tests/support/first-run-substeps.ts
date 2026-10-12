@@ -73,11 +73,14 @@ async function agentImport(page: Page, copy: FirstRunCopy, state: ImportState, c
   assert.equal(await toggle("codex").getAttribute("aria-checked"), "true");
   assert.equal(await toggle("opencode").getAttribute("aria-checked"), "false");
   assert.equal(await toggle("opencode").getAttribute("aria-disabled"), "true", "nothing to import: blocked with its reason");
+  // The step moves focus to its title once the card settles; take focus after that.
+  await settleFirstRun(page);
   await toggle("codex").focus();
+  assert.equal(await toggle("codex").evaluate((node) => node === document.activeElement), true, "the switch has focus");
   await page.keyboard.press("Space");
-  assert.equal(await toggle("codex").getAttribute("aria-checked"), "false", "Space turns a tool off");
+  await toggle("codex").and(page.locator('[aria-checked="false"]')).waitFor({ timeout: 2000 });
   await page.keyboard.press("Space");
-  assert.equal(await toggle("codex").getAttribute("aria-checked"), "true", "Space turns it back on");
+  await toggle("codex").and(page.locator('[aria-checked="true"]')).waitFor({ timeout: 2000 });
   await capture(page, `${prefix}-agents-pick`);
   await page.getByRole("button", { name: copy.back, exact: true }).click();
   await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
