@@ -87,6 +87,7 @@ impl DeviceRegistry {
         &self,
         name: &str,
         ip: &str,
+        secure: bool,
     ) -> Result<(HeaderValue, String), HttpError> {
         let _change = self.changes.lock().await;
         let now = self.now();
@@ -111,8 +112,9 @@ impl DeviceRegistry {
         });
         let mut entries = self.entries.write();
         Arc::make_mut(&mut entries).insert(id.clone(), entry);
+        let transport = if secure { "; Secure" } else { "" };
         let cookie = HeaderValue::from_str(&format!(
-            "{}=v2.{id}.{secret}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_TTL}",
+            "{}=v2.{id}.{secret}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_TTL}{transport}",
             self.cookie_name
         ))
         .map_err(|_| HttpError::public(500, "session_unavailable", "Session unavailable."))?;

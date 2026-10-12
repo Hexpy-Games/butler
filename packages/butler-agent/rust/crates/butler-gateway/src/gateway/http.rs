@@ -169,7 +169,7 @@ async fn authorized_route(
     if matches!(*request.method(), Method::GET | Method::POST)
         && request.uri().path() == security::CONNECT_PATH
     {
-        return security::connect_request(&state, request).await;
+        return security::connect_request(&state, request, origin).await;
     }
     let grant = match state.security.authorize(
         &request,
