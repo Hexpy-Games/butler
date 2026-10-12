@@ -1,5 +1,6 @@
 import { startApp } from "@/app/startApp";
 import { installUiCrashReporting } from "@/app/uiCrashReporting.ts";
+import { installWallpaperDiagnostics } from "@/app/wallpaperDiagnostics.ts";
 import React, { Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
@@ -16,6 +17,7 @@ const visualMode = typeof window !== "undefined"
 const DesignSystemViewer = lazy(() => import("@/butler-ds/viewer/DesignSystemViewer.tsx")
   .then((module) => ({ default: module.DesignSystemViewer })));
 installUiCrashReporting();
+installWallpaperDiagnostics();
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Butler UI root element is missing.");
