@@ -80,7 +80,7 @@ export { wallpaperLabelText, type WallpaperLocale } from "./labels";
 export { wallpaperImageDefaultDim } from "./imageMath";
 export { bundledWallpaperImage } from "./imageCache";
 export { setWallpaperHostConstrained } from "./hostSignals";
-export { setWallpaperDiagnostics, type WallpaperDiagnosticEvent } from "./engineDiagnostics";
+export { setWallpaperDiagnostics, wallpaperDebugState, type WallpaperDiagnosticEvent } from "./engineDiagnostics";
 export type { WallpaperEvent, WallpaperEventKind } from "./drift";
 export { renderWallpaperStill, wallpaperStillKey, type WallpaperStillSize, type WallpaperStillTarget } from "./still";
 export {

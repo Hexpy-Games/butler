@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { SetupWizardShell } from "@/butler-ds";
 import { useAppLocale } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -34,6 +35,11 @@ export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps
   const completedAt = useButlerStore((state) => state.settings.onboarding?.completed_at);
   // The card renders at once; the intro waits for a visible window, or settles still when the window stays unseen.
   const scene = useSetupScene();
+  // Ink intro, from the setup state at mount: the full intro only on a fresh first run that starts at welcome (still
+  // print when the window stays unseen); Settings re-run keeps the still print; a resumed setup (consent saved, or a
+  // later first step) starts on the drift with no ink (none), also when it goes back to welcome.
+  const [fresh] = useState(() => mode === "first-run" && flow.step === "welcome" && !useButlerStore.getState().settings.onboarding?.accepted_at);
+  const intro = fresh && !completedAt ? (scene !== "still" ? "full" : "rerun") : mode === "rerun" ? "rerun" : "none";
   return (
     <SetupWizardShell
       data-first-run-screen={flow.step}
@@ -42,7 +48,7 @@ export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps
       tone={tone}
       variant="focus"
       anchor="top"
-      intro={mode === "first-run" && !completedAt && scene !== "still" ? "full" : "rerun"}
+      intro={intro}
       introHeld={scene === "hold"}
       stepKey={flow.step}
       onScroll={(event) => { event.currentTarget.scrollLeft = 0; }}

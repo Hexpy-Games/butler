@@ -73,6 +73,14 @@ uses it. `title` still names the region for assistive tech.
   is drawn once (no reveal) and the first card appears with opacity and a 4px
   rise over `--motion-slow`, decelerating; under reduced motion it is there at
   once.
+- `intro="none"` is a resumed setup: no ink intro and no print-in; the backdrop
+  drifts from the first frame around the card and the first card has the
+  re-run entrance. Going back to the welcome card replays nothing.
+- After the intro hands off, the backdrop keeps answering the card: every step
+  change wakes the drifting print (the focus look) and eases its keep-out to
+  the new card over the print beat, and any other card move during setup (a
+  resize, content that loads in) eases the keep-out at once instead of waiting
+  for the next keyframe.
 - `SetupWizardMark` is the plain Butler logo for the 64px slot of the welcome
   card: it stays still while Butler prepares (the preparation row shows the
   progress; no working mark on the intro).
