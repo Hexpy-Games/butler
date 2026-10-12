@@ -78,12 +78,21 @@ impl WebAccess {
                 "page-read-denied",
             ));
         }
-        let mut page =
-            match lightweight(self, url.clone(), requested_url, backend, cancellation).await {
-                Ok(page) => page,
-                Err(error) if error.code() == "cancelled" => return Err(error),
-                Err(_) => failed_page(requested_url),
-            };
+        // Butler's browser first; the fetch serves when it renders nothing.
+        let browser = match backend {
+            "browser" => Box::pin(super::headless::browser(&url, requested_url)).await?,
+            _ => None,
+        };
+        let mut page = match browser {
+            Some(page) => page,
+            None => {
+                match lightweight(self, url.clone(), requested_url, backend, cancellation).await {
+                    Ok(page) => page,
+                    Err(error) if error.code() == "cancelled" => return Err(error),
+                    Err(_) => failed_page(requested_url),
+                }
+            }
+        };
         match backend {
             "jina-hosted" => add_warning(&mut page, "jina-hosted-reader-not-yet-enabled"),
             "auto" | "lightpanda" if page.render_recommended => {

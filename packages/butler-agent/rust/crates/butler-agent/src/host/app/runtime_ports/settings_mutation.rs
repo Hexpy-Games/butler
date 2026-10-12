@@ -98,7 +98,7 @@ impl AppSettingsMutation {
             let web_search = projection.get("web_search").unwrap_or(&Value::Null);
             let config_patch = json!({
                 "provider": web_search.get("provider"),
-                "readerBackend": web_search.get("reader_backend"),
+                "readerBackend": chosen_reader(&patch, web_search),
                 "planning": {
                     "enabled": web_search.get("planning_enabled"),
                     "defaultDepth": web_search.get("planning_default_depth"),
@@ -212,4 +212,13 @@ fn unsafe_path() -> GatewayApplicationError {
         message: "Settings destination is not safe.".into(),
         source: None,
     }
+}
+
+/// The page reader is written only when the patch chooses one, so a stored
+/// old value never turns the migrated default into an explicit choice.
+fn chosen_reader<'a>(patch: &Map<String, Value>, web_search: &'a Value) -> Option<&'a Value> {
+    patch
+        .get("web_search")
+        .and_then(|value| value.get("reader_backend"))
+        .and(web_search.get("reader_backend"))
 }

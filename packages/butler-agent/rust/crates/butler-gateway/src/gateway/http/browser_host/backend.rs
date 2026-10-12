@@ -5,7 +5,7 @@
 //! task never switches browsers midway.
 use super::{
     HttpError, HttpState, Inner,
-    agent_calls::{enforce_result_policy, permitted_url, response, store_still},
+    agent_calls::{enforce_result_policy, permitted_url, response},
 };
 use axum::response::Response;
 use serde_json::{Value, json};
@@ -112,6 +112,7 @@ fn deadline(op: &str, args: &Value) -> u64 {
         "tab.open" => 20000,
         "tab.act" => 30000,
         "tab.observe" if args["settle"] == true => 8000,
+        "tab.read" => 8000,
         _ => 5000,
     }
 }
@@ -142,6 +143,7 @@ pub(super) async fn headless_call(
         if matches!(
             op,
             "tab.observe"
+                | "tab.read"
                 | "tab.zoom"
                 | "tab.screenshot"
                 | "tab.prepare"
@@ -180,7 +182,7 @@ pub(super) async fn headless_call(
         }
     };
     enforce_result_policy(&state, session, op, &mut result);
-    store_still(&state, session, &mut result).await?;
+    super::shots::keep(&state, session, &mut result).await?;
     response(count, result)
 }
 

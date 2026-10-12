@@ -5,7 +5,11 @@ mod dialog;
 mod effect;
 mod grant;
 pub(super) mod images;
+mod live;
+pub(super) use live::page as live_page;
+mod look;
 mod observe_after;
+mod open;
 mod pay;
 mod preview;
 mod signin;
@@ -72,23 +76,19 @@ pub(super) async fn execute(
     if call.name == "browser_sign_in" || call.name.ends_with("_fill") {
         return pay::execute(owner, invocation, call, occurrence, client, args).await;
     }
-    // look "never" asks for a text-only observation: no screenshot, no vision.
-    let text_only =
-        call.name == "browser_observe" && args["look"] == "never" && args.get("region").is_none();
-    if matches!(call.name.as_str(), "browser_observe" | "browser_screenshot") {
-        if !text_only
-            && !client
-                .vision(&invocation.model_execution.active_model_ref())
-                .await
-        {
-            return encoded(&json!({"status":"unavailable","reason":"vision_required"}));
-        }
-        if call.name == "browser_observe" {
-            args["include_image"] = json!(!text_only);
-        }
+    if call.name == "browser_open" && args.get("results").is_some() {
+        return open::execute(owner, invocation, call, occurrence, client).await;
     }
     // A region makes the observation a close-up of the newest observation.
     let zoom = call.name == "browser_observe" && args.get("region").is_some();
+    let model = invocation.model_execution.active_model_ref();
+    let requested = look::requested(&call.name, &args, zoom);
+    let Some(pixels) = look::admitted(&client, &model, requested).await else {
+        return encoded(&json!({"status":"unavailable","reason":"vision_required"}));
+    };
+    if call.name == "browser_observe" {
+        args["include_image"] = pixels.include();
+    }
     let request = (host_op(&call.name, zoom), &args["tab"], &args);
     let mut result = grant::call(
         owner,
@@ -99,8 +99,11 @@ pub(super) async fn execute(
         invocation.cancellation,
     )
     .await?;
+    if call.name == "browser_open" {
+        open::remember(owner, &args, &result);
+    }
     let image_class = if zoom { "browser_zoom" } else { &call.name };
-    if !text_only {
+    if pixels == look::Pixels::Always || result.get("image").is_some() {
         images::finish(owner, image_class, &mut result).await?;
     }
     if result["status"] == "dialog_pending" {

@@ -1632,6 +1632,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       searchProviderOpenAi: "OpenAI Web Search",
       searchProviderCodex: "Codex 구독 검색",
       searchProviderDisabled: "비활성화",
+      searchReaderBrowser: "버틀러 브라우저",
       searchReaderLightweight: "경량 리더",
       searchReaderAuto: "자동",
       searchReaderLightpanda: "Lightpanda",

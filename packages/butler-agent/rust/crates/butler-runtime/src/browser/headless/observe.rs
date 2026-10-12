@@ -108,6 +108,8 @@ struct Gathered {
     below: u64,
     interactive: u64,
     payment: bool,
+    /// Some frame says more in pixels than in text (`visualPage`).
+    visual: bool,
     addons: Vec<Value>,
 }
 
@@ -173,6 +175,7 @@ async fn gather(
         out.below += result["totals"]["below_fold"].as_u64().unwrap_or(0);
         out.interactive += result["totals"]["interactive"].as_u64().unwrap_or(0);
         out.payment |= result["payment"] == true;
+        out.visual |= result["visual"] == true;
         out.addons
             .extend(result["addons"].as_array().cloned().unwrap_or_default());
     }
@@ -286,7 +289,7 @@ async fn observe_once(page: &Page, args: &Value) -> Result<Value, String> {
         capture_regions: json!([]),
         thumb: None,
     };
-    let image = match image_step(page, args, &mut observation).await {
+    let image = match image_step(page, args, g.visual, &mut observation).await {
         Ok(image) => image,
         Err(refusal) => {
             store(page, observation);
@@ -455,9 +458,11 @@ fn assemble(
 async fn image_step(
     page: &Page,
     args: &Value,
+    visual: bool,
     observation: &mut Observation,
 ) -> Result<Map<String, Value>, Value> {
-    if args["include_image"] != true {
+    // "auto" attaches pixels only to a page that is mostly visual.
+    if args["include_image"] != true && !(args["include_image"] == "auto" && visual) {
         return Ok(Map::new());
     }
     let image = capture::observation_image(page, observation).await;

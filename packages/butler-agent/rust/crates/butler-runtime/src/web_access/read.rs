@@ -1,7 +1,7 @@
 use super::{
     evidence,
-    page::PageRead,
-    service::{WebAccessError, WebSession},
+    page::{PageRead, extract_page},
+    service::{LivePage, WebAccessError, WebSession, page_key, tab_key},
 };
 use crate::web_access::WebAccessCode;
 use serde_json::{Value, json};
@@ -94,28 +94,26 @@ impl WebSession {
         args: &Value,
         cancellation: &CancellationToken,
     ) -> Result<Value, WebAccessError> {
+        self.web_read_from(args, None, cancellation).await
+    }
+
+    /// `web_read`, from `live` (the agent tab showing the page) when given:
+    /// its document goes through the same extraction as a fetched page.
+    pub async fn web_read_from(
+        &self,
+        args: &Value,
+        live: Option<LivePage>,
+        cancellation: &CancellationToken,
+    ) -> Result<Value, WebAccessError> {
         let requested_url = args
             .get("url")
             .and_then(Value::as_str)
             .map(butler_core::public_text::trim_js_whitespace)
-            .unwrap_or_default();
-        let parsed = Url::parse(requested_url).map_err(|source| {
-            WebAccessError::new(
-                WebAccessCode::InvalidArguments,
-                "web_read requires a valid URL.",
-            )
-            .with_source(source)
-        })?;
-        if !matches!(parsed.scheme(), "http" | "https")
-            || parsed.host_str().is_none()
-            || !parsed.username().is_empty()
-            || parsed.password().is_some()
-        {
-            return Err(WebAccessError::new(
-                WebAccessCode::InvalidArguments,
-                "web_read only supports public http(s) URLs without embedded credentials.",
-            ));
-        }
+            .filter(|url| !url.is_empty())
+            .or(live.as_ref().map(|page| page.final_url.as_str()))
+            .unwrap_or_default()
+            .to_owned();
+        let parsed = public_url(&requested_url)?;
         let max_chars = bounded_number(args.get("max_chars"), 1_500, 8_000, DEFAULT_MAX_CHARS);
         let max_chunks = bounded_number(args.get("max_chunks"), 1, 8, DEFAULT_MAX_CHUNKS);
         let start_chunk = bounded_number(args.get("start_chunk"), 0, 9_007_199_254_740_991, 0);
@@ -123,96 +121,159 @@ impl WebSession {
             .get("backend")
             .and_then(Value::as_str)
             .map(str::trim)
-            .filter(|value| {
-                matches!(
-                    *value,
-                    "auto" | "lightpanda" | "lightweight" | "jina-hosted" | "disabled"
-                )
-            });
+            .filter(|value| super::service::READER_BACKENDS.contains(value));
         let backend = self.access.configured_reader(explicit_backend)?;
-        let cache_key = format!("{backend}:{}", parsed.as_str());
+        // One read per page per turn; a tab's page is keyed by what it shows now.
+        let cache_key = match &live {
+            Some(page) => tab_key(&page.tab, page.epoch, &page.final_url),
+            // An explicit reader override (internal and tests) is its own read.
+            None => match explicit_backend {
+                Some(_) => format!("{backend}:{}", page_key(parsed.as_str())),
+                None => page_key(parsed.as_str()),
+            },
+        };
         let observation_key = format!("{cache_key}:{start_chunk}:{max_chars}:{max_chunks}");
         if let Some(mut cached) = self.cached_observation(&observation_key) {
             cached["cache_hit"] = Value::Bool(true);
             cached["duplicate_observation"] = Value::Bool(true);
             return Ok(cached);
         }
-        let cached_page = self.cached_page(&cache_key).await?;
-        let (page, cache_hit) = match cached_page {
-            Some(page) => (page, true),
-            None => {
-                let page = self
-                    .access
-                    .read_page(parsed.clone(), requested_url, &backend, cancellation)
-                    .await?;
+        // A parallel read of the same page waits for this one and reuses it.
+        let gate = self.read_gate(&cache_key);
+        let _reading = gate.lock().await;
+        let (page, cache_hit) = match (self.cached_page(&cache_key).await?, live) {
+            (Some(page), _) => (page, true),
+            (None, live) => {
+                let page = match live {
+                    Some(live) => live_page(live, &requested_url).await?,
+                    None => {
+                        self.access
+                            .read_page(parsed.clone(), &requested_url, &backend, cancellation)
+                            .await?
+                    }
+                };
                 self.remember_page(cache_key.clone(), &page).await?;
                 (page, false)
             }
         };
-        let observation = bounded_result(&page, max_chars, max_chunks, start_chunk);
-        let source_url = observation["source_url"]
-            .as_str()
-            .filter(|value| !value.is_empty())
-            .map(str::to_owned)
-            .unwrap_or_else(|| parsed.as_str().to_owned());
-        let warnings = page.warnings.clone();
-        let quality = observation["evidence_quality"]
-            .as_str()
-            .unwrap_or("unavailable")
-            .to_owned();
-        let markdown = observation["markdown"].as_str().unwrap_or("").to_owned();
-        let chunk_values = observation["chunks"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
-        let truncated = observation["truncated"] == Value::Bool(true);
-        let ok = observation["ok"] == Value::Bool(true)
-            && quality != "unavailable"
-            && (!markdown.trim().is_empty() || !chunk_values.is_empty());
-        let observed_at = evidence::now_iso();
-        let mut result = observation;
-        result["public_web_evidence_items"] = Value::Array(evidence::read_items(
-            &source_url,
-            &markdown,
-            &chunk_values,
-            &observed_at,
-            &quality,
-            truncated,
-            &warnings,
-        ));
-        result["evidence_capability_receipts"] =
-            Value::Array(vec![evidence::read_capability_receipt(
-                ok,
-                &source_url,
-                &quality,
-                truncated,
-                result["error"].as_str(),
-                &observed_at,
-            )]);
-        result["evidence_receipts"] = Value::Array(vec![evidence::tool_receipt(
-            &evidence::ToolReceiptInput {
-                tool: "web_read",
-                receipt_type: "source",
-                summary: if ok {
-                    "A public source page was read and bounded page evidence was returned."
-                } else {
-                    "A public source read did not produce readable evidence; its limitation was returned."
-                },
-                verified: ok,
-                covers: &["source_verified"],
-                satisfies: if ok { &["source_verified"] } else { &[] },
-                urls: &[source_url],
-                metrics: json!({
-                    "returned_chunks":result["returned_chunks"].as_u64().unwrap_or(0),
-                    "total_chunks":result["total_chunks"].as_u64().unwrap_or(0),
-                }),
-            },
-        )]);
+        let mut result = observed(
+            &page,
+            &parsed,
+            bounded_result(&page, max_chars, max_chunks, start_chunk),
+        );
         result["cache_hit"] = Value::Bool(cache_hit);
         result["duplicate_observation"] = Value::Bool(false);
         self.remember_observation(observation_key, result.clone());
         Ok(result)
     }
+}
+
+/// The bounded page window with its evidence items and receipts.
+fn observed(page: &PageRead, parsed: &Url, observation: Value) -> Value {
+    let source_url = observation["source_url"]
+        .as_str()
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| parsed.as_str().to_owned());
+    let quality = observation["evidence_quality"]
+        .as_str()
+        .unwrap_or("unavailable")
+        .to_owned();
+    let markdown = observation["markdown"].as_str().unwrap_or("").to_owned();
+    let chunk_values = observation["chunks"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let truncated = observation["truncated"] == Value::Bool(true);
+    let ok = observation["ok"] == Value::Bool(true)
+        && quality != "unavailable"
+        && (!markdown.trim().is_empty() || !chunk_values.is_empty());
+    let observed_at = evidence::now_iso();
+    let mut result = observation;
+    result["public_web_evidence_items"] = Value::Array(evidence::read_items(
+        &source_url,
+        &markdown,
+        &chunk_values,
+        &observed_at,
+        &quality,
+        truncated,
+        &page.warnings,
+    ));
+    result["evidence_capability_receipts"] = Value::Array(vec![evidence::read_capability_receipt(
+        ok,
+        &source_url,
+        &quality,
+        truncated,
+        result["error"].as_str(),
+        &observed_at,
+    )]);
+    result["evidence_receipts"] = Value::Array(vec![evidence::tool_receipt(
+        &evidence::ToolReceiptInput {
+            tool: "web_read",
+            receipt_type: "source",
+            summary: if ok {
+                "A public source page was read and bounded page evidence was returned."
+            } else {
+                "A public source read did not produce readable evidence; its limitation was returned."
+            },
+            verified: ok,
+            covers: &["source_verified"],
+            satisfies: if ok { &["source_verified"] } else { &[] },
+            urls: &[source_url],
+            metrics: json!({
+                "returned_chunks":result["returned_chunks"].as_u64().unwrap_or(0),
+                "total_chunks":result["total_chunks"].as_u64().unwrap_or(0),
+            }),
+        },
+    )]);
+    result
+}
+
+fn public_url(requested_url: &str) -> Result<Url, WebAccessError> {
+    let parsed = Url::parse(requested_url).map_err(|source| {
+        WebAccessError::new(
+            WebAccessCode::InvalidArguments,
+            "web_read requires a valid URL or an open tab.",
+        )
+        .with_source(source)
+    })?;
+    if !matches!(parsed.scheme(), "http" | "https")
+        || parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+    {
+        return Err(WebAccessError::new(
+            WebAccessCode::InvalidArguments,
+            "web_read only supports public http(s) URLs without embedded credentials.",
+        ));
+    }
+    Ok(parsed)
+}
+
+/// A tab's document through the reader's own extraction.
+async fn live_page(live: LivePage, requested_url: &str) -> Result<PageRead, WebAccessError> {
+    let requested = requested_url.to_owned();
+    tokio::task::spawn_blocking(move || {
+        let mut page = extract_page(
+            &requested,
+            &live.final_url,
+            200,
+            true,
+            Some("text/html; charset=utf-8"),
+            live.html.as_bytes(),
+            "butler-browser",
+        )?;
+        page.reader = "butler-browser-tab".into();
+        Ok(page)
+    })
+    .await
+    .map_err(|source| {
+        WebAccessError::new(
+            WebAccessCode::WebReadParseFailed,
+            "Open tab could not be parsed.",
+        )
+        .with_source(source)
+    })?
 }
 
 fn bounded_result(page: &PageRead, max_chars: usize, max_chunks: usize, start: usize) -> Value {

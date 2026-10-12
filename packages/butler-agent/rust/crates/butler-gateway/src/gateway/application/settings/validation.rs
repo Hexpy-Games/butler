@@ -176,7 +176,7 @@ fn is_web_search(value: &Value) -> bool {
         ),
         "reader_backend" => matches!(
             value.as_str(),
-            Some("lightweight" | "auto" | "lightpanda" | "jina-hosted" | "disabled")
+            Some("browser" | "lightweight" | "auto" | "lightpanda" | "jina-hosted" | "disabled")
         ),
         "api_key" => value.is_string(),
         "planning_enabled" => value.is_boolean(),

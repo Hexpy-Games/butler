@@ -12,10 +12,17 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 const SEARCH_ENDPOINT: &str = "https://html.duckduckgo.com/html/";
 
 mod fetch;
+mod registry;
 mod session;
 
 use crate::web_access::WebAccessCode;
 pub(crate) use fetch::{DirectPageRoute, PageRoute};
+pub use registry::{LivePage, SearchResultRef};
+pub(crate) use registry::{page_key, tab_key};
+
+/// Page reader modes. `browser` (the default) reads in Butler's browser: the
+/// App, its hidden host, else the headless browser; `lightweight` fetches.
+pub(crate) const READER_BACKENDS: [&str; 6] = butler_core::configuration::WEB_READER_BACKENDS;
 
 #[derive(Clone)]
 pub struct WebAccess {
@@ -50,6 +57,7 @@ struct WebSessionState {
     original_request: String,
     page_cache: HashMap<String, TemporarySpool>,
     observation_cache: HashMap<String, Value>,
+    registry: registry::Registry,
 }
 
 impl WebAccess {
@@ -269,20 +277,15 @@ impl WebAccess {
         &self,
         explicit: Option<&str>,
     ) -> Result<String, WebAccessError> {
+        use butler_core::configuration::{normalize_web_reader, web_reader_backend};
         if let Some(value) = explicit {
-            return Ok(normalize_reader_backend(value));
+            return Ok(normalize_web_reader(value).into());
         }
         if let Some(value) = self.environment_value("BUTLER_WEB_READER_BACKEND")? {
-            return Ok(normalize_reader_backend(&value));
+            return Ok(normalize_web_reader(&value).into());
         }
         let config = self.config()?;
-        Ok(normalize_reader_backend(
-            config["webSearch"]["readerBackend"]
-                .as_str()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .unwrap_or("lightweight"),
-        ))
+        Ok(web_reader_backend(&config["webSearch"]).into())
     }
 
     pub fn search_status(&self) -> Result<Value, WebAccessError> {
@@ -309,12 +312,4 @@ fn nonempty_env(name: &str) -> Option<String> {
         .ok()
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
-}
-
-fn normalize_reader_backend(value: &str) -> String {
-    let normalized = value.trim().to_ascii_lowercase();
-    match normalized.as_str() {
-        "auto" | "lightpanda" | "lightweight" | "jina-hosted" | "disabled" => normalized,
-        _ => "lightweight".into(),
-    }
 }
