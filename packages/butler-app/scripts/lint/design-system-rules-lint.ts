@@ -146,6 +146,8 @@ export const OFF_SCALE_ALLOWLIST: Record<string, readonly string[]> = {
   // The queued bubble must match the MessageRow user bubble box so a delivered message resolves in place.
   "libs/design-system/blocks/QueuedMessage/QueuedMessage.module.css": ["radius:14", "spacing:10", "spacing:6"],
   "libs/design-system/blocks/WorkActivityBlock/WorkActivityBlock.module.css": ["spacing:5"],
+  // The 36px is the IconTile md logo tile: the description pulls up by half of (tile - title line) so the tile centers on the title line.
+  "libs/design-system/blocks/ChoiceCard/ChoiceCard.module.css": ["spacing:36"],
   // Visual harness layout, not product UI.
   "pages/ThinkingMarkHarness.module.css": ["radius:6", "spacing:10", "spacing:14", "spacing:18", "spacing:28", "spacing:44", "spacing:48"],
 };
