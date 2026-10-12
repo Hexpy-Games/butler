@@ -81,6 +81,16 @@ impl Host {
         Ok(Self { frames, task })
     }
 
+    /// Every dispatched host op, in order.
+    pub(super) fn ops(&self) -> Vec<String> {
+        self.frames
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|frame| frame["op"].as_str().map(str::to_owned))
+            .collect()
+    }
+
     /// The args of every dispatched `tab.act`, in order.
     pub(super) fn acts(&self) -> Vec<Value> {
         self.frames
@@ -157,7 +167,8 @@ pub(super) fn cassette(turns: &[(String, Vec<Value>)]) -> Result<Cassette, Harne
     cassette.exchanges.clear();
     let stub = super::super::browser_usage::stub::response;
     for (turn, (request, calls)) in turns.iter().enumerate() {
-        let describe = json!({"ids":["native:browser_observe","native:browser_act"]});
+        let describe =
+            json!({"ids":["native:browser_observe","native:browser_act","native:image_collect"]});
         let mut round = Vec::new();
         let mut items = vec![("tool_describe", describe)];
         items.extend(calls.iter().map(|call| ("tool_call", call.clone())));
