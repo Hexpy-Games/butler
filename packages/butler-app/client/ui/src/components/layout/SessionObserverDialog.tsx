@@ -1,19 +1,10 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { useEffect } from "react";
-import {
-  Dialog,
-  DialogContent,
-  MessageRow,
-  ScrollArea,
-  Stack,
-  Typo,
-} from "@/butler-ds";
+import { Dialog, DialogContent, ScrollArea } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
-import type { SessionViewStatus } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { TurnActivityPending } from "@/components/conversation/TurnActivityPending.tsx";
 import { SessionObserverControls } from "./SessionObserverControls";
-import { SessionObserverTimeline } from "./SessionObserverTimeline.tsx";
+import { SessionObserverBody } from "./SessionObserverBody.tsx";
 import { SessionObserverHeader } from "./SessionObserverHeader.tsx";
 import { useSessionViewSubscription } from "./hooks/useSessionViewSubscription.ts";
 
@@ -55,43 +46,10 @@ export function SessionObserverDialog() {
       >
         <SessionObserverHeader />
         <ScrollArea fill dataTestClass="steward-observer-transcript">
-          <Stack as="section" aria-label={appCopy.inspector.tabs.activity} gap="lg">
-            <SessionObserverTimeline
-              delegatedGoal={view?.relation?.safe_title}
-              messages={view?.messages ?? []}
-              activityHistory={view?.activity_history}
-              activeTurn={view?.active_turn}
-              latestTurn={view?.latest_turn}
-            />
-            {view?.waiting_for_children && !view.active_turn ? (
-              <MessageRow
-                role="assistant"
-                activity
-                dataTestClass="steward-observer-worker-wait"
-              >
-                <TurnActivityPending
-                  readModels={[]}
-                  state="waiting_for_children"
-                />
-              </MessageRow>
-            ) : null}
-            {!view?.messages.length && !view?.active_turn &&
-                !view?.waiting_for_children ? (
-              <Typo.Caption>{emptyObserverLabel(view?.status)}</Typo.Caption>
-            ) : null}
-          </Stack>
+          <SessionObserverBody view={view} />
         </ScrollArea>
         <SessionObserverControls view={view} />
       </DialogContent>
     </Dialog>
   );
-}
-
-function emptyObserverLabel(status?: SessionViewStatus): string {
-  switch (status) {
-    case "delivered": return appCopy.interfaceStatus.delivered;
-    case "failed": return appCopy.interfaceStatus.failedPast;
-    case "cancelled": return appCopy.interfaceStatus.cancelled;
-    default: return appCopy.conversation.work.pendingLabel;
-  }
 }
