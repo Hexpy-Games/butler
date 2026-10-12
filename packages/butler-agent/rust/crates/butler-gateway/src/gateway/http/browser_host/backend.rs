@@ -5,7 +5,7 @@
 //! task never switches browsers midway.
 use super::{
     HttpError, HttpState, Inner,
-    agent_calls::{enforce_result_policy, permitted_url, response, store_still},
+    agent_calls::{enforce_result_policy, permitted_url, response},
 };
 use axum::response::Response;
 use serde_json::{Value, json};
@@ -182,8 +182,7 @@ pub(super) async fn headless_call(
         }
     };
     enforce_result_policy(&state, session, op, &mut result);
-    store_still(&state, session, &mut result).await?;
-    super::shots::store(&state, session, &mut result).await?;
+    super::shots::keep(&state, session, &mut result).await?;
     response(count, result)
 }
 

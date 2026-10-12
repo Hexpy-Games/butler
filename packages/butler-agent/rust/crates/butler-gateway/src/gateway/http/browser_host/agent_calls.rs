@@ -82,8 +82,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
         result["site"] = json!(super::hand_back::tab_site(&state, &sent["tab"]));
     }
     super::pay::finish_call(&state, &op, &sent, &session, &mut result).await?;
-    store_still(&state, &session, &mut result).await?;
-    super::shots::store(&state, &session, &mut result).await?;
+    super::shots::keep(&state, &session, &mut result).await?;
     response(count, result)
 }
 

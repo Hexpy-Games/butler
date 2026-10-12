@@ -7,11 +7,17 @@ use serde_json::Value;
 /// Screenshots larger than this were never admitted as model images.
 const MAX_SHOT: usize = 150 * 1024;
 
-pub(super) async fn store(
+/// A result's step stills, then its screenshot, kept as message files.
+pub(super) async fn keep(
     state: &HttpState,
     session: &str,
     result: &mut Value,
 ) -> Result<(), HttpError> {
+    super::agent_calls::store_still(state, session, result).await?;
+    store(state, session, result).await
+}
+
+async fn store(state: &HttpState, session: &str, result: &mut Value) -> Result<(), HttpError> {
     use base64::Engine;
     let Some(image) = result.get_mut("image").and_then(Value::as_object_mut) else {
         return Ok(());
