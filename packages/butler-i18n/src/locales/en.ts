@@ -1569,7 +1569,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       responseLanguage: "Response language",
       profilingMode: "Level",
       profilingExtractorModel: "Profile-building model",
-      profileMigrationImport: "Import external AI memory",
+      profileMigrationImport: "Import memory",
       profileMigrationPrompt: "Import prompt",
       profileMigrationDump: "Imported profile content",
       personaPreset: "Persona preset",
@@ -1669,9 +1669,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
         "The model used to extract information needed for personalization.",
       profilingExtractorDefault:
         "Use the current Butler default model setting.",
-      profileMigration: "Import memories from another AI service.",
-      profileMigrationImmediate:
-        "Import runs on this screen immediately and shows the result when it finishes.",
+      profileMigration: "Bring memory from another AI service",
       profileMigrationImporting:
         "Reading imported memories and applying them to the profile.",
       profileMigrationApplied: (count) =>

@@ -1432,7 +1432,6 @@ export interface AppCopy {
       profilingExtractorModel: string;
       profilingExtractorDefault: string;
       profileMigration: string;
-      profileMigrationImmediate: string;
       profileMigrationImporting: string;
       profileMigrationApplied: CountFormatter;
       profileMigrationStored: string;

@@ -1576,7 +1576,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       responseLanguage: "답변 언어",
       profilingMode: "범위",
       profilingExtractorModel: "알아가기 모델",
-      profileMigrationImport: "외부 AI 기억 가져오기",
+      profileMigrationImport: "기억 가져오기",
       profileMigrationPrompt: "가져오기 프롬프트",
       profileMigrationDump: "가져온 프로필 내용",
       personaPreset: "페르소나 프리셋",
@@ -1676,9 +1676,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
         "개인화에 필요한 정보를 읽어낼 때 사용할 모델입니다.",
       profilingExtractorDefault:
         "현재 버틀러 기본 모델 설정을 그대로 따릅니다.",
-      profileMigration: "외부 AI 서비스에서 기억을 가져올 수 있습니다.",
-      profileMigrationImmediate:
-        "가져오기를 누르면 이 화면에서 바로 처리되며, 완료되면 결과가 표시됩니다.",
+      profileMigration: "다른 AI 서비스의 기억을 옮겨요",
       profileMigrationImporting:
         "가져온 기억을 읽고 프로필에 반영하는 중입니다.",
       profileMigrationApplied: (count) =>

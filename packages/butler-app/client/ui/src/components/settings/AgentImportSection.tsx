@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { apiErrorCode } from "@/app/api";
 import { appCopy } from "@/app/copy";
 import { Bot, Button, ButtonContainer, EmptyLine, ListRow, SettingsSection, Spinner, Stack, Typo } from "@/butler-ds";
@@ -62,8 +62,11 @@ function resultText(result: AgentImportCounts): string {
     : copy.result(result.instructions, result.servers, result.needs_secret);
 }
 
-/** Other AI tools first, then browsers: Settings and the first-run import step. */
-export function AgentImportSection() {
+/**
+ * Other AI tools first, then browsers: Settings and the first-run import step.
+ * Settings adds the memory import as one more row after the detected tools.
+ */
+export function AgentImportSection({ children }: { children?: ReactNode }) {
   const copy = appCopy.settings.agentImport;
   const flow = useAgentImport();
   const added = flow.result ? flow.result.instructions + flow.result.servers > 0 : false;
@@ -73,6 +76,7 @@ export function AgentImportSection() {
       {!flow.result ? (flow.sources?.length
         ? flow.sources.map(source => <AgentRow key={source.key} source={source} flow={flow} />)
         : <EmptyLine message={copy.noSources} />) : null}
+      {children}
       {flow.busy ? <Stack align="row" gap="sm" cross="center" role="status"><Spinner /><Typo.Text>{copy.importing}</Typo.Text></Stack> : null}
       {flow.result ? <Stack gap="sm" role="status" data-test-class="agent-import-result">
         <Typo.Text>{flow.undone ? copy.undone : resultText(flow.result)}</Typo.Text>

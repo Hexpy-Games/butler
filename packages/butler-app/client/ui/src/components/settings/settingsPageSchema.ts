@@ -49,8 +49,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "profile", kind: "form", fields: ["butler-nickname", "principal-name", "preferred-address"] },
     { id: "response-style", kind: "form", fields: ["response-language", "persona-preset", "persona", "eol"] },
     { id: "learning", kind: "form", fields: ["profiling-mode", "profiling-model", "profiling-reasoning", "memory-link"] },
-    { id: "agent-import", kind: "list", fields: [] },
-    { id: "import", kind: "form", fields: ["profile-migration", "profile-migration-prompt", "profile-migration-dump"] },
+    { id: "agent-import", kind: "list", fields: ["profile-migration", "profile-migration-prompt", "profile-migration-dump"] },
   ],
   // Memory cleanup and worker profiles show when the Advanced disclosure is open.
   models: [

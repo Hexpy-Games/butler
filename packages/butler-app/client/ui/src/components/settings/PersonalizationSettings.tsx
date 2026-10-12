@@ -133,10 +133,9 @@ export function PersonalizationSettings() {
           setPersonalizationDraft={setPersonalizationDraft}
         />
       </SettingsSection>
-      <AgentImportSection />
-      <SettingsSection id="import" kind="form" title={sections.import}>
+      <AgentImportSection>
         <PersonalizationProfileMigration />
-      </SettingsSection>
+      </AgentImportSection>
     </SettingsPage>
   );
 }

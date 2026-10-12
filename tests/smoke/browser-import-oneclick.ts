@@ -96,6 +96,8 @@ async function connectStub() {
 async function wizardFlow(copy: AppCopy) {
   const steps = copy.firstRun.steps;
   await page.locator("#first-run-connect-title").waitFor();
+  // The previous step's card may still be leaving; read the step list once it is alone.
+  await page.waitForFunction(() => document.querySelectorAll("ol").length === 1);
   const labels = (await page.locator("ol li").allInnerTexts()).map(text => text.split("\n").at(-1)?.trim());
   assert.deepEqual(labels, [steps.welcome, steps.consent, steps.connect, copy.settings.pageSections.import, steps.ready]);
   await wizardCapture("connect");
@@ -134,6 +136,9 @@ async function agentSettings(copy: AppCopy) {
   await page.goto("app://butler/?settings=personalization");
   const section = page.locator("[data-settings-section-id=\"agent-import\"]");
   await section.locator("[data-agent-import-source]").nth(3).waitFor();
+  // The memory import is the last row of the same section; no second import heading.
+  await section.locator("[data-setting-id=\"profile-migration\"]").getByText(copy.settings.fields.profileMigrationImport, { exact: true }).waitFor();
+  assert.equal(await page.locator("[data-settings-section-id=\"import\"]").count(), 0);
   await section.scrollIntoViewIfNeeded(); await capture("agent-import");
   await section.locator("[data-agent-import-source=\"codex\"] button").click();
   await section.getByText(copy.settings.agentImport.result(1, 3, 1), { exact: true }).waitFor();
