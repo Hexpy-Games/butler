@@ -214,14 +214,8 @@ pub struct AppApplication {
     quota_events: Arc<quota_events::QuotaEventForwarder>,
 }
 
-async fn initial_project_root(
-    storage: &AppStorage,
-    fallback: PathBuf,
-) -> Result<PathBuf, GatewayApplicationError> {
-    match storage
-        .execute(move |db| projects::initial_root(db, &fallback))
-        .await
-    {
+async fn initial_project_root(storage: &AppStorage) -> Result<PathBuf, GatewayApplicationError> {
+    match storage.read(projects::effective_root).await {
         Ok(root) => Ok(root),
         Err(error) => {
             let _ = storage.close().await;
@@ -250,8 +244,7 @@ impl AppApplication {
     ) -> Result<Self, GatewayApplicationError> {
         let storage = open_storage(&config, &dependencies).await?;
         let queue_owner = queue_owner_id(dependencies.identity_clock.as_ref());
-        let project_root =
-            initial_project_root(&storage, config.project_workspace_root.clone()).await?;
+        let project_root = initial_project_root(&storage).await?;
         let dependencies = Arc::new(dependencies);
         let subscribers = EventSubscribers::default();
         let retention_cursor = latest_event_cursor(&storage).await?;
