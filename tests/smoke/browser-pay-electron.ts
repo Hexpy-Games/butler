@@ -219,10 +219,22 @@ async function maskedPixels(observed: Record<string, any>, name: string, count =
 }
 
 async function browserSettings(locale: string) {
-  await app.click(locale === "ko" ? "설정" : "Settings");
+  const settings = locale === "ko" ? "설정" : "Settings";
+  const visible = () => app.page.expression<boolean>(`(()=>{const button=document.querySelector('[aria-label=${JSON.stringify(settings)}]');const rect=button?.getBoundingClientRect();return Boolean(rect && rect.x>=0 && rect.right<=innerWidth && rect.width>0)})()`);
+  if (!await visible()) {
+    await app.page.clickText(locale === "ko" ? "사이드바 보기" : "Show sidebar", 'button,[role="button"]');
+    await waitBrowser(visible, "settings button visible");
+  }
+  await app.click(settings);
   const label = locale === "ko" ? "브라우저" : "Browser";
-  const scope = '[data-test-class="settings-navigation-scroll"] button';
-  await waitBrowser(() => app.page.expression(`Array.from(document.querySelectorAll(${JSON.stringify(scope)})).some(node=>node.textContent?.trim()===${JSON.stringify(label)})`), "settings browser navigation");
+  const scope = '[data-test-class="settings-navigation-scroll"] :is(button,[role="button"])';
+  try {
+    await waitBrowser(() => app.page.expression(`Array.from(document.querySelectorAll(${JSON.stringify(scope)})).some(node=>(node.getAttribute('aria-label') || node.textContent)?.trim()===${JSON.stringify(label)})`), "settings browser navigation");
+  } catch (error) {
+    writeFileSync(join(evidence!, "settings-navigation-failure.png"), await app.page.screenshot());
+    writeFileSync(join(evidence!, "settings-navigation-failure.json"), JSON.stringify(await app.page.expression("({width:innerWidth,height:innerHeight,tests:Array.from(document.querySelectorAll('[data-test-class]')).map(node=>node.getAttribute('data-test-class')),buttons:Array.from(document.querySelectorAll('button,[role=button]')).map(node=>node.getAttribute('aria-label') || node.textContent)})")));
+    throw error;
+  }
   await app.page.clickText(label, scope);
 }
 
