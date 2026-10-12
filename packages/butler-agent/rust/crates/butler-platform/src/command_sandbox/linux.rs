@@ -1,6 +1,6 @@
 //! Safe Landlock trampoline; never restrict the multithreaded agent itself.
 mod complement;
-mod network;
+mod seccomp;
 
 use std::collections::HashMap;
 use std::os::unix::process::CommandExt;
@@ -9,7 +9,7 @@ use std::process::{Command, Stdio};
 
 use landlock::{
     ABI, Access, AccessFs, AccessNet, CompatLevel, Compatible, Ruleset, RulesetAttr,
-    RulesetCreated, RulesetStatus,
+    RulesetCreated, RulesetStatus, Scope,
 };
 use serde::{Deserialize, Serialize};
 
@@ -21,8 +21,8 @@ type Error = Box<dyn std::error::Error>;
 #[derive(Serialize, Deserialize)]
 struct Policy {
     denied: Vec<PathBuf>,
+    credentials: Vec<PathBuf>,
     allowed: Vec<PathBuf>,
-    network: bool,
     tcp: bool,
 }
 
@@ -42,19 +42,28 @@ fn locate_helper() -> std::io::Result<PathBuf> {
         return Ok(PathBuf::from(path));
     }
     let executable = std::env::current_exe()?;
-    let mut parent = executable
+    let parent = executable
         .parent()
         .ok_or_else(|| std::io::Error::other("no executable parent"))?;
-    if parent.file_name().is_some_and(|name| name == "deps") {
-        parent = parent
+    #[cfg(feature = "test-support")]
+    let parent = if parent.file_name().is_some_and(|name| name == "deps") {
+        parent
             .parent()
-            .ok_or_else(|| std::io::Error::other("no profile directory"))?;
-    }
+            .ok_or_else(|| std::io::Error::other("no profile directory"))?
+    } else {
+        parent
+    };
     Ok(parent.join("butler-sandbox"))
 }
 
 pub(super) fn probe() -> SandboxCapabilities {
-    if abi_capped_below_v3() || ruleset(false).is_err() {
+    if !abi_available(3)
+        || Ruleset::default()
+            .set_compatibility(CompatLevel::HardRequirement)
+            .handle_access(AccessFs::from_all(ABI::V3))
+            .and_then(Ruleset::create)
+            .is_err()
+    {
         return unavailable("Landlock ABI v3 is required");
     }
     let Ok(helper) = helper() else {
@@ -64,16 +73,29 @@ pub(super) fn probe() -> SandboxCapabilities {
         return unavailable("butler-sandbox helper is missing");
     }
     let tcp = tcp_available();
-    let network = Command::new(helper)
-        .arg("--probe-network")
+    let seccomp = Command::new(helper)
+        .arg("--probe-seccomp")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .is_ok_and(|status| status.success());
     SandboxCapabilities {
-        read_only: Level::Enforced,
-        network_deny: if network {
+        read_only: if !seccomp {
+            Level::Partial("metadata seccomp unavailable")
+        } else if !ioctl_available() {
+            Level::Partial("Landlock device ioctl restriction requires ABI v5")
+        } else if !scopes_available() {
+            Level::Partial("Landlock signal and abstract socket scoping requires ABI v6")
+        } else {
+            Level::Enforced
+        },
+        process_scoping: if scopes_available() {
+            Level::Enforced
+        } else {
+            Level::Unavailable("Landlock signal and abstract socket scoping requires ABI v6")
+        },
+        network_deny: if seccomp {
             Level::Enforced
         } else if tcp {
             Level::Partial("TCP only")
@@ -87,35 +109,68 @@ pub(super) fn probe() -> SandboxCapabilities {
     }
 }
 
-fn abi_capped_below_v3() -> bool {
+fn abi_available(required: u32) -> bool {
     #[cfg(feature = "test-support")]
     if std::env::var("BUTLER_TEST_LANDLOCK_ABI")
         .ok()
         .and_then(|value| value.parse::<u32>().ok())
-        .is_some_and(|abi| abi < 3)
+        .is_some_and(|abi| abi < required)
     {
-        return true;
+        return false;
     }
-    false
+    let _ = required;
+    true
 }
 
 fn tcp_available() -> bool {
     static TCP: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *TCP.get_or_init(|| ruleset(true).is_ok())
+    *TCP.get_or_init(|| {
+        Ruleset::default()
+            .set_compatibility(CompatLevel::HardRequirement)
+            .handle_access(AccessNet::from_all(ABI::V4))
+            .and_then(Ruleset::create)
+            .is_ok()
+    })
+}
+
+// Probe individual optional rights with hard requirements; never silently
+// drop a boundary and report it as enforced. No probe restricts this thread.
+fn ioctl_available() -> bool {
+    static IOCTL: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *IOCTL.get_or_init(|| {
+        abi_available(5)
+            && Ruleset::default()
+                .set_compatibility(CompatLevel::HardRequirement)
+                .handle_access(AccessFs::IoctlDev)
+                .and_then(Ruleset::create)
+                .is_ok()
+    })
+}
+
+fn scopes_available() -> bool {
+    static SCOPES: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *SCOPES.get_or_init(|| {
+        abi_available(6)
+            && Ruleset::default()
+                .set_compatibility(CompatLevel::HardRequirement)
+                .handle_access(AccessFs::from_all(ABI::V3))
+                .and_then(|rules| rules.scope(Scope::Signal | Scope::AbstractUnixSocket))
+                .and_then(Ruleset::create)
+                .is_ok()
+    })
 }
 
 fn ruleset(tcp: bool) -> Result<RulesetCreated, Error> {
+    // Admission requires all these rights. The child repeats the hard
+    // requirement, never re-probes or silently degrades an admitted policy.
     let mut rules = Ruleset::default()
         .set_compatibility(CompatLevel::HardRequirement)
-        .handle_access(AccessFs::from_all(ABI::V3))?;
+        .handle_access(AccessFs::from_all(ABI::V5))?
+        .scope(Scope::Signal | Scope::AbstractUnixSocket)?;
     if tcp {
         rules = rules.handle_access(AccessNet::from_all(ABI::V4))?;
     }
     Ok(rules.create()?)
-}
-
-pub(super) fn read_only(invocation: Invocation) -> Result<Invocation, SandboxError> {
-    read_only_contained(invocation, &HashMap::new(), &[], &[])
 }
 
 pub(super) fn read_only_contained(
@@ -127,11 +182,10 @@ pub(super) fn read_only_contained(
     if !super::capabilities().read_only.is_enforced() {
         return Err(SandboxError::ReadOnlyUnavailable);
     }
-    let denied = complement::private_roots(environment, denied, allowed);
     let policy = Policy {
-        denied,
+        denied: denied.iter().map(|path| path.to_path_buf()).collect(),
+        credentials: super::credentials::roots(environment),
         allowed: allowed.iter().map(|path| path.to_path_buf()).collect(),
-        network: super::capabilities().network_deny.is_enforced(),
         tcp: tcp_available(),
     };
     let mut arguments = vec![
@@ -162,7 +216,7 @@ pub(super) fn protect_writes(
 pub(super) fn trampoline() -> Result<(), Error> {
     let mut arguments = std::env::args().skip(1);
     match arguments.next().as_deref() {
-        Some("--probe-network") => return network::apply(),
+        Some("--probe-seccomp") => return seccomp::apply(),
         Some("--policy") => {}
         _ => return Err("expected --policy".into()),
     }
@@ -172,14 +226,17 @@ pub(super) fn trampoline() -> Result<(), Error> {
     }
     let program = arguments.next().ok_or("missing program")?;
     let mut rules = ruleset(policy.tcp)?;
-    complement::apply(&mut rules, &policy.denied, &policy.allowed)?;
+    complement::apply(
+        &mut rules,
+        &policy.denied,
+        &policy.allowed,
+        &policy.credentials,
+    )?;
     let status = rules.restrict_self()?;
     if status.ruleset != RulesetStatus::FullyEnforced || !status.no_new_privs {
         return Err("Landlock was not fully enforced".into());
     }
-    if policy.network {
-        network::apply()?;
-    }
+    seccomp::apply()?;
     // Dropped already by tool_environment; also remove it for direct invocations.
     let error = Command::new(program)
         .args(arguments)

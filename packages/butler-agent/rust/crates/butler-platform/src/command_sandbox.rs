@@ -4,7 +4,7 @@
 //! trampoline. Unsupported hosts keep exact-action approval behavior.
 
 mod credentials;
-pub use credentials::{command_reads_data_credentials, data_credential_roots};
+pub use credentials::{command_reads_data_credentials, data_credential_roots, secret_name};
 mod denial;
 pub use denial::{isolation_failure, isolation_failure_exit, sandbox_denial};
 mod environment;
@@ -39,7 +39,7 @@ use windows as shell;
 #[cfg(feature = "test-support")]
 mod test_support;
 #[cfg(feature = "test-support")]
-pub use test_support::{UnixSocketProbe, linux_test_host};
+pub use test_support::{UnixSocketProbe, linux_syscall_probe, linux_test_host};
 
 mod host_capabilities;
 pub use host_capabilities::{Level, SandboxCapabilities, capabilities};
@@ -137,7 +137,7 @@ pub fn login_shell(
     let invocation = shell::login_shell(command, environment);
     match access {
         ShellAccess::Full => Ok(invocation),
-        ShellAccess::ReadOnly => sandbox::read_only(invocation),
+        ShellAccess::ReadOnly => sandbox::read_only_contained(invocation, environment, &[], &[]),
     }
 }
 

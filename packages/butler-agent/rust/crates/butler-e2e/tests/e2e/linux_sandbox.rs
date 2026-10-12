@@ -1,5 +1,6 @@
 //! Linux P1/P4: real command boundary and public-chat approval admission.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+mod boundaries;
 mod latency;
 use super::access_tiers::stub;
 
@@ -76,7 +77,7 @@ async fn kernel_boundaries_secrets_network_and_unicode() -> Result<(), HarnessEr
         command_sandbox::sandbox_denial(&String::from_utf8(output.stderr).unwrap())
             .unwrap()
             .0,
-        "write"
+        "possible"
     );
     for path in [
         home.join(".ssh/id_test"),
@@ -131,7 +132,7 @@ async fn kernel_boundaries_secrets_network_and_unicode() -> Result<(), HarnessEr
             command_sandbox::sandbox_denial(&String::from_utf8(output.stderr).unwrap())
                 .unwrap()
                 .0,
-            "network"
+            "possible"
         );
     }
     assert_eq!(
@@ -146,36 +147,10 @@ async fn kernel_boundaries_secrets_network_and_unicode() -> Result<(), HarnessEr
         udp.recv(&mut [0; 1]).unwrap_err().kind(),
         std::io::ErrorKind::WouldBlock
     );
+    // Anonymous local stream IPC remains available under P4.
     let output = run(
         invoke(
-            "python3 -c 'import ctypes; c=ctypes.CDLL(None, use_errno=True); assert c.syscall(425, 1, 0)==-1; assert ctypes.get_errno()==1'",
-        ),
-        &cwd,
-        home,
-    );
-    assert!(
-        output.status.success(),
-        "io_uring_setup must return EPERM: {output:?}"
-    );
-    let output = run(
-        invoke(
-            "python3 -c 'import ctypes, platform, socket; c=ctypes.CDLL(None, use_errno=True)
-if platform.machine()==\"x86_64\":
- for number in [0x40000000+41, 0x40000000+425]:
-  assert c.syscall(number, socket.AF_INET, socket.SOCK_STREAM, 0)==-1
-  assert ctypes.get_errno()==1'",
-        ),
-        &cwd,
-        home,
-    );
-    assert!(
-        output.status.success(),
-        "x32 network encodings must return EPERM: {output:?}"
-    );
-    // These local discovery/IPC APIs must still work under P4.
-    let output = run(
-        invoke(
-            "python3 -c 'import socket; a,b=socket.socketpair(); a.send(b\"ok\"); assert b.recv(2)==b\"ok\"; socket.socket(socket.AF_NETLINK, socket.SOCK_RAW, 0)'",
+            "python3 -c 'import socket; a,b=socket.socketpair(); a.send(b\"ok\"); assert b.recv(2)==b\"ok\"'",
         ),
         &cwd,
         home,
@@ -185,15 +160,16 @@ if platform.machine()==\"x86_64\":
     Ok(())
 }
 
-async fn admission(capped: bool) -> Result<(), HarnessError> {
+async fn admission(abi_cap: Option<u32>) -> Result<(), HarnessError> {
+    let capped = abi_cap.is_some();
     let (url, script, server) = stub::start().await?;
     let mut setup = Setup::new("LINUX-ADMISSION")?
         .access(Access::AskExceptReads)
         .data_folder_token()
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url);
-    if capped {
-        setup = setup.env("BUTLER_TEST_LANDLOCK_ABI", "2");
+    if let Some(cap) = abi_cap {
+        setup = setup.env("BUTLER_TEST_LANDLOCK_ABI", cap.to_string());
     }
     let folder = setup.sandbox.home.join("project");
     std::fs::create_dir_all(&folder)?;
@@ -203,12 +179,36 @@ async fn admission(capped: bool) -> Result<(), HarnessError> {
     std::fs::write(project.join("visible.txt"), "fixture-listing")?;
     let tcp = std::net::TcpListener::bind("127.0.0.1:0")?;
     tcp.set_nonblocking(true)?;
+    let unreadable = project.join("dac-unreadable.txt");
+    std::fs::write(&unreadable, "fixture-dac-private")?;
+    butler_platform::secure_fs::set_file_mode(
+        &unreadable,
+        butler_platform::secure_fs::FileMode::from_bits(0),
+    )
+    .unwrap()?;
+    let dac_read = "cat dac-unreadable.txt";
+    let baseline = run(
+        command_sandbox::login_shell(
+            dac_read,
+            command_sandbox::ShellAccess::Full,
+            &HashMap::new(),
+        )
+        .unwrap(),
+        &project,
+        &s.sandbox.home,
+    );
+    assert!(
+        !baseline.status.success(),
+        "fixture must yield plain DAC EACCES"
+    );
+    assert!(String::from_utf8_lossy(&baseline.stderr).contains("Permission denied"));
     let network = format!(
         "python3 -c \"import socket; socket.create_connection(('127.0.0.1', {}))\"",
         tcp.local_addr()?.port()
     );
     for (prompt, command) in [
         ("List the project.", "ls -1"),
+        ("Read a file with restrictive permissions.", dac_read),
         ("Observe a write attempt.", "echo x > denied.txt"),
         ("Observe a connection attempt.", network.as_str()),
     ] {
@@ -280,9 +280,17 @@ async fn admission(capped: bool) -> Result<(), HarnessError> {
         if command == "ls -1" {
             assert_eq!(body["ok"], true, "{body}");
             assert!(body["stdout"].as_str().unwrap().contains("visible.txt"));
+        } else if command == dac_read {
+            assert_eq!(body["ok"], false, "{body}");
+            assert!(body.get("sandbox_denied").is_none(), "{body}");
+            assert_eq!(body["sandbox_denial"], "possible", "{body}");
+            let hint = body["next_step"].as_str().unwrap();
+            assert!(hint.contains("may have been denied by the sandbox"));
+            assert!(hint.contains("ordinary filesystem permissions"));
+            assert!(!hint.contains("was denied write access"));
         } else if command == "echo x > denied.txt" {
             assert_eq!(body["ok"], false, "{body}");
-            assert_eq!(body["sandbox_denied"], "write", "{body}");
+            assert_eq!(body["sandbox_denial"], "possible", "{body}");
             assert!(
                 body["next_step"]
                     .as_str()
@@ -292,7 +300,7 @@ async fn admission(capped: bool) -> Result<(), HarnessError> {
             assert!(!project.join("denied.txt").exists());
         } else {
             assert_eq!(body["ok"], false, "{body}");
-            assert_eq!(body["sandbox_denied"], "network", "{body}");
+            assert_eq!(body["sandbox_denial"], "possible", "{body}");
             assert!(
                 body["next_step"]
                     .as_str()
@@ -342,12 +350,15 @@ async fn admission(capped: bool) -> Result<(), HarnessError> {
 async fn list_and_write_attempt_need_no_approval() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(command_sandbox::linux_test_host(), "Linux sandbox scenario");
-    admission(false).await
+    admission(None).await
 }
 
 #[tokio::test]
 async fn capped_abi_keeps_exact_approval_fallback() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(command_sandbox::linux_test_host(), "Linux sandbox scenario");
-    admission(true).await
+    for cap in [2, 3, 4, 5] {
+        admission(Some(cap)).await?;
+    }
+    Ok(())
 }
