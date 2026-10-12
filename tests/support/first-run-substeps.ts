@@ -39,6 +39,7 @@ export async function substepBackPaths(page: Page, language: string, copy: First
   await page.locator('[data-import-source="chrome:default"]').click();
   await page.getByRole("button", { name: copy.import.importAction, exact: true }).click();
   await page.getByRole("button", { name: copy.next, exact: true }).waitFor();
+  await page.getByText(languageCopy().settings.browserImport.result(128, 37, 0, 9, 3), { exact: true }).waitFor();
   await capture(page, `after-${language}-browsers-result`);
   await back();
   await page.locator("#first-run-agents-title").waitFor();

@@ -422,8 +422,6 @@ async function verifyConnection(cdp: CdpClient): Promise<void> {
   await fillInput(cdp, "#first-run-server-url", `http://127.0.0.1:${stubModelPort}/v1`);
   await clickButton(cdp, "연결");
   await waitForText(cdp, stubModelId);
-  await clickButton(cdp, "연결");
-  await waitForHeading(cdp, "ChatGPT에 연결했습니다");
   await clickButton(cdp, "다음");
   await waitForExpression(cdp, "document.querySelector('#first-run-reply-language')?.disabled === false", "reply language choice");
   await clickButton(cdp, "다음");

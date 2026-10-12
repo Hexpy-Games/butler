@@ -33,7 +33,7 @@ export async function firstRunStub(gateway: NativeAppServerHandle) {
       await requestBody(request); state.importRuns++;
       json(response, path.startsWith(agent)
         ? { run_id: `agent-${state.importRuns}`, instructions: 1, servers: 2, instructions_existing: 0, servers_existing: 0, needs_secret: 0, skipped: 0 }
-        : { run_id: `browser-${state.importRuns}`, bookmarks: 128, passwords: 37, history: 9, updated: 0, existing: 0 });
+        : { run_id: `browser-${state.importRuns}`, bookmarks: 128, passwords: 37, history: 9, updated: 0, existing: 0, invalid: 3 });
       return true;
     }
     if (path.endsWith("/undo")) { await requestBody(request); state.importUndos++; json(response, {}); return true; }
