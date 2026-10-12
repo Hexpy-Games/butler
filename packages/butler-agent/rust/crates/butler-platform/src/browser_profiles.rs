@@ -1,6 +1,7 @@
 //! Browser profile discovery and access probes. Never modifies source profiles.
 mod roots;
-pub use roots::profile_roots;
+use crate::account_dirs::AccountDirs;
+pub use roots::{profile_roots, roots_in};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -74,22 +75,38 @@ pub fn probe(path: &Path) -> ProfileAccess {
     }
 }
 
-/// Installed profiles under the current home.
+/// Names a fixture home whose default layout replaces the account folders.
+/// Honored only in test-support builds; release builds always read the
+/// folders the operating system records for this account.
+pub const PROFILES_HOME_FIXTURE: &str = "BUTLER_BROWSER_PROFILES_HOME";
+
+/// Installed profiles of the signed-in account. A redirected home variable
+/// (an isolated or demo run) does not hide them: the folders come from
+/// [`crate::account_dirs`].
 pub fn detect() -> Vec<BrowserProfile> {
-    crate::user_dirs::non_empty_home_dir()
-        .map(|home| detect_at(&home))
+    #[cfg(feature = "test-support")]
+    if let Some(fixture) = std::env::var_os(PROFILES_HOME_FIXTURE).filter(|v| !v.is_empty()) {
+        return detect_at(Path::new(&fixture));
+    }
+    crate::account_dirs::account_dirs()
+        .map(|dirs| detect_in(&dirs))
         .unwrap_or_default()
 }
 
-/// Also used by fixture callers; every path is rooted in the supplied home.
+/// Fixture callers: the default layout under the supplied home.
 pub fn detect_at(home: &Path) -> Vec<BrowserProfile> {
-    let roots = profile_roots(home);
+    detect_in(&AccountDirs::under(home))
+}
+
+/// Installed profiles in the given account folders.
+pub fn detect_in(dirs: &AccountDirs) -> Vec<BrowserProfile> {
+    let roots = roots_in(dirs);
     let mut profiles = Vec::new();
     for (browser, root) in &roots.chromium {
         profiles.extend(chromium_profiles(browser, root));
     }
     profiles.extend(firefox_profiles("firefox", &roots.firefox));
-    profiles.extend(firefox_profiles("zen", &zen_root(home)));
+    profiles.extend(firefox_profiles("zen", &zen_root(dirs)));
     if let Some(path) = roots.safari {
         let access = probe(&path);
         if access != ProfileAccess::NotFound {
@@ -221,19 +238,6 @@ fn firefox_profiles(browser: &'static str, root: &Path) -> Vec<BrowserProfile> {
     profiles
 }
 
-#[cfg(target_os = "macos")]
-fn zen_root(home: &Path) -> PathBuf {
-    home.join("Library/Application Support/zen/Profiles")
-}
-#[cfg(windows)]
-fn zen_root(home: &Path) -> PathBuf {
-    home.join("AppData/Roaming/zen/Profiles")
-}
-#[cfg(all(unix, not(target_os = "macos")))]
-fn zen_root(home: &Path) -> PathBuf {
-    home.join(".zen")
-}
-
 /// A folder explicitly chosen by the owner is used for this run only.
 pub fn from_folder(mut profile: BrowserProfile, folder: &Path) -> io::Result<BrowserProfile> {
     let file = match profile.format {
@@ -291,4 +295,24 @@ pub fn picked_profiles(profile: BrowserProfile, folder: &Path) -> io::Result<Vec
         }
     }
     from_folder(profile, folder).map(|p| vec![p])
+}
+
+/// Zen keeps its profiles in roaming app data.
+#[cfg(any(target_os = "macos", windows))]
+const ZEN_PROFILES: &str = "zen/Profiles";
+
+/// Zen keeps its profiles in roaming app data.
+#[cfg(any(target_os = "macos", windows))]
+fn zen_root(dirs: &AccountDirs) -> PathBuf {
+    dirs.app_data.join(ZEN_PROFILES)
+}
+
+/// Zen keeps its profiles in a dot folder of the home.
+#[cfg(all(unix, not(target_os = "macos")))]
+const ZEN_PROFILES: &str = ".zen";
+
+/// Zen keeps its profiles in a dot folder of the home.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn zen_root(dirs: &AccountDirs) -> PathBuf {
+    dirs.home.join(ZEN_PROFILES)
 }
