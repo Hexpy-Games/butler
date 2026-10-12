@@ -2,7 +2,6 @@
 use super::ApprovalFacts;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::Path;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApprovalOperation {
@@ -69,18 +68,15 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
     } else {
         paths
             .into_iter()
-            .map(|path| {
-                if Path::new(path).is_absolute() {
-                    path.to_owned()
-                } else if path == "." {
-                    facts.workspace.to_owned()
-                } else {
-                    Path::new(facts.workspace)
-                        .join(path)
-                        .to_string_lossy()
-                        .into_owned()
-                }
-            })
+            .map(
+                |path| match super::inside_workspace(path, facts.workspace) {
+                    Some(relative) if relative.is_empty() => {
+                        super::workspace_label(facts.workspace)
+                    }
+                    Some(relative) => relative,
+                    None => super::absolute_target(path, facts.workspace),
+                },
+            )
             .collect()
     };
     let read_only = matches!(facts.capability, "read_file" | "list_files" | "grep_files")

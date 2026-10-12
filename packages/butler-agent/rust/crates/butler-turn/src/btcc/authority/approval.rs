@@ -220,7 +220,7 @@ fn file_edits(facts: ApprovalFacts<'_>) -> AuthorityApproval {
                     } else {
                         ApprovalTargetKind::Outside
                     },
-                    path: relative.unwrap_or_else(|| path.to_owned()),
+                    path: relative.unwrap_or_else(|| absolute_target(path, facts.workspace)),
                 });
             }
         }
@@ -306,7 +306,7 @@ fn command(facts: ApprovalFacts<'_>, kind: ApprovalActionKind) -> AuthorityAppro
         }),
         None => ApprovalTarget {
             kind: ApprovalTargetKind::Outside,
-            path: file_name(Path::new(cwd)),
+            path: absolute_target(cwd, facts.workspace),
         },
     };
     let risk = if target.kind == ApprovalTargetKind::Outside {
@@ -378,6 +378,12 @@ fn folder(path: String) -> ApprovalTarget {
 /// The workspace folder's name without control characters, as project
 /// labels are shown (at most 80 characters).
 fn workspace_label(workspace: &str) -> String {
+    if Path::new(workspace)
+        .file_name()
+        .is_some_and(|name| name == ".butler")
+    {
+        return workspace.to_owned();
+    }
     let name: String = Path::new(workspace)
         .file_name()
         .map(|name| name.to_string_lossy())
@@ -419,10 +425,16 @@ fn inside_workspace(path: &str, workspace: &str) -> Option<String> {
     Some(parts.join("/"))
 }
 
-fn file_name(path: &Path) -> String {
-    path.file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default()
+fn absolute_target(path: &str, workspace: &str) -> String {
+    let path = Path::new(path);
+    if path.is_absolute() {
+        path.to_string_lossy().into_owned()
+    } else {
+        Path::new(workspace)
+            .join(path)
+            .to_string_lossy()
+            .into_owned()
+    }
 }
 
 fn saturating_count(count: usize) -> u32 {
