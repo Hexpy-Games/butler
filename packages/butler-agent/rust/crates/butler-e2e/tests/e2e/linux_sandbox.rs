@@ -57,13 +57,7 @@ async fn kernel_boundaries_secrets_network_and_unicode() -> Result<(), HarnessEr
     butler_platform::secure_fs::symlink(&cwd.join("visible.txt"), &cwd.join("public-alias"))?;
     let environment = HashMap::from([("HOME".into(), home.display().to_string())]);
     let invoke = |command: &str| {
-        command_sandbox::login_shell_contained(
-            command,
-            &environment,
-            &[&setup.sandbox.data],
-            &[&cwd],
-        )
-        .unwrap()
+        command_sandbox::login_shell_contained(command, &environment, &[], &[&cwd]).unwrap()
     };
     let output = run(invoke("ls -1; cat visible.txt; pwd"), &cwd, home);
     assert!(output.status.success(), "{output:?}");
@@ -84,7 +78,6 @@ async fn kernel_boundaries_secrets_network_and_unicode() -> Result<(), HarnessEr
     );
     for path in [
         home.join(".ssh/id_test"),
-        setup.sandbox.data.join("token"),
         cwd.join(".ENV.local"),
         cwd.join("credential-alias"),
     ] {
@@ -92,6 +85,16 @@ async fn kernel_boundaries_secrets_network_and_unicode() -> Result<(), HarnessEr
         assert!(!output.status.success(), "{output:?}");
         assert!(output.stdout.is_empty(), "secret contents escaped");
     }
+    let output = run(
+        invoke(&format!(
+            "cat '{}'",
+            setup.sandbox.data.join("token").display()
+        )),
+        &cwd,
+        home,
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"fixture-butler-token");
     let tcp = std::net::TcpListener::bind("127.0.0.1:0")?;
     tcp.set_nonblocking(true)?;
     // sockaddr_un's fixed length needs a short fixture path even when TMPDIR
@@ -317,15 +320,15 @@ async fn admission(capped: bool) -> Result<(), HarnessError> {
         let invocation = command_sandbox::login_shell_contained(
             &format!("cat '{}'", token.display()),
             &environment,
-            &[&s.sandbox.data],
+            &[],
             &[&project],
         )
         .unwrap();
         let result = run(invocation, &project, &s.sandbox.home);
-        assert!(!result.status.success(), "Butler token must be unreadable");
+        assert!(result.status.success(), "data-folder read must succeed");
         assert!(
-            result.stdout.is_empty(),
-            "Butler token must not reach tool output"
+            result.stdout == std::fs::read(&token)?,
+            "data-folder read must return the complete file"
         );
     }
     s.finish().await?;
