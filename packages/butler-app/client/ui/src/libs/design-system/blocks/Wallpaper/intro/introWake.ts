@@ -2,7 +2,7 @@
 import { introBeat } from "./introParams";
 
 /** The print beat when the card changes (intro and step): plates x4 and back, keep-out 420 to 520. */
-const RISO_INTRO_BEAT_MS = 600;
+export const RISO_INTRO_BEAT_MS = 600;
 /** The pointer stir decays with tau 320 ms and stops by itself below 0.4%. */
 const RISO_INTRO_STIR_DECAY_MS = 320;
 

@@ -38,7 +38,7 @@ function bezier(x1: number, y1: number, x2: number, y2: number): Ease {
 
 let standard: Ease | null = null;
 /** `--motion-ease-standard`, read once. */
-function standardEase(): Ease {
+export function standardEase(): Ease {
   if (standard) return standard;
   const points = /cubic-bezier\(([^)]+)\)/u.exec(motionEasing("standard"))?.[1]?.split(",").map(Number) ?? [];
   standard = points.length === 4 && !points.some(Number.isNaN) ? bezier(points[0]!, points[1]!, points[2]!, points[3]!) : bezier(0.2, 0, 0, 1);

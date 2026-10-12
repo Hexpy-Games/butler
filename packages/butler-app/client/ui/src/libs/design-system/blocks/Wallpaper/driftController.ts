@@ -2,6 +2,7 @@
 // between pre-rendered keyframes at rest, live frames only during events, host states and the column keep-out.
 import type { DriftHost, WallpaperEventKind } from "./drift";
 import { createDriftCore, type DriftDeps, type DriftFrame } from "./driftCore";
+import { driftDebugState, type DriftDebugState } from "./driftDebug";
 import { createDriftLive } from "./driftLive";
 
 export type { DriftDeps, DriftFrame } from "./driftCore";
@@ -29,6 +30,12 @@ export interface DriftController {
   column(rect: DriftColumn | null, animate: boolean): boolean;
   /** The current frame into the WebGL canvas only (a source crossfade snapshots it). */
   repaint(): void;
+  /** Something outside the looks tweens (the setup card keep-out): live frames until it settles; a still print redraws. */
+  wake(): void;
+  /** Frames move now (active, shown, not a still host): a tween outside the looks can run. */
+  animates(): boolean;
+  /** Live state for a debugger, computed only when asked. */
+  debug(): DriftDebugState;
   /** The context was lost: stop; `restore()` draws again. */
   stop(): void;
   restore(): void;
@@ -117,6 +124,13 @@ export function createDriftController(deps: DriftDeps): DriftController {
       core.enterLive(now());
       return true;
     },
+    wake() {
+      if (core.mode === "off") return;
+      if (core.hidden || core.host === "still") return refresh();
+      core.enterLive(now());
+    },
+    animates: () => core.mode !== "off" && !core.hidden && core.host !== "still",
+    debug: () => driftDebugState(core, deps.layers.opacities(), now()),
     repaint() {
       if (core.mode !== "off") deps.render({ flow: core.displayFlow(now()), looks: deps.looks.state } satisfies DriftFrame);
     },
