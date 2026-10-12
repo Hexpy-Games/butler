@@ -35,7 +35,8 @@ export function McpServerRow({
     <CardListItem
       title={server.display_name}
       description={mcpServerSubtitle(server)}
-      meta={server.enabled ? copy.mcpEnabled : copy.mcpDisabled}
+      meta={[...server.env, ...server.headers].some(slot => !slot.has_value)
+        ? copy.mcpNeedsSecret : server.enabled ? copy.mcpEnabled : copy.mcpDisabled}
       actions={
         <ButtonContainer size="xs">
           <Button

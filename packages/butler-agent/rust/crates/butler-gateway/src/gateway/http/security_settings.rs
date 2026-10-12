@@ -95,6 +95,9 @@ pub(super) async fn route(
     if path.starts_with("/security/browser-import/") {
         return super::browser_import::route(state, request).await;
     }
+    if path.starts_with("/security/agent-import/") {
+        return super::agent_import::route(state, request).await;
+    }
     match (request.method().clone(), request.uri().path()) {
         (Method::GET, "/security") => ok(view(&state)?),
         (Method::POST, "/security/pairing") => {

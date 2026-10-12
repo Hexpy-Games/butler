@@ -57,6 +57,9 @@ const SECURITY_ROUTES = Object.freeze({
   chooseBrowserPasswordExport: { method: "POST", path: "/security/browser-import/export/file", payload: true },
   deleteBrowserPasswordExport: { method: "POST", path: "/security/browser-import/export/delete", payload: true },
   cancelBrowserPasswordExport: { method: "POST", path: "/security/browser-import/export/cancel", payload: true },
+  listAgentImportSources: { method: "GET", path: "/security/agent-import/sources" },
+  startAgentImport: { method: "POST", path: "/security/agent-import/start", payload: true },
+  undoAgentImport: { method: "POST", path: "/security/agent-import/undo", payload: true },
   // Payment methods and autofill details: card and identity numbers pass through main to the Agent's keychain store only.
   listVault: { method: "GET", path: "/security/vault" },
   addCard: { method: "POST", path: "/security/vault/cards", payload: true },

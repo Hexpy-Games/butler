@@ -1,0 +1,33 @@
+import { api } from "@/app/api.ts";
+
+/** A detected AI tool: what it holds, never a path outside its label or a secret. */
+export interface AgentImportSource {
+  key: string;
+  name: string;
+  instructions: boolean;
+  instructions_file: string | null;
+  instructions_error?: string | null;
+  servers: number;
+  needs_secret: number;
+  skipped: number;
+  unreadable: boolean;
+}
+
+export interface AgentImportCounts {
+  run_id: string;
+  instructions: number;
+  instructions_existing: number;
+  servers: number;
+  servers_existing: number;
+  needs_secret: number;
+  skipped: number;
+  instructions_error?: string | null;
+  error?: string;
+}
+
+const action = <T>(op: string, body: unknown) =>
+  api<T>(`/security/agent-import/${op}`, { method: "POST", body: JSON.stringify(body) });
+
+export const listAgentImportSources = () => api<{ sources: AgentImportSource[] }>("/security/agent-import/sources");
+export const startAgentImport = (source: string) => action<AgentImportCounts>("start", { source });
+export const undoAgentImport = (run_id: string) => action<{ instructions: number; servers: number }>("undo", { run_id });

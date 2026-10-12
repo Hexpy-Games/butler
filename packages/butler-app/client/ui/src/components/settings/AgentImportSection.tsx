@@ -1,0 +1,92 @@
+import { useEffect, useRef, useState } from "react";
+import { apiErrorCode } from "@/app/api";
+import { appCopy } from "@/app/copy";
+import { Bot, Button, ButtonContainer, EmptyLine, ListRow, SettingsSection, Spinner, Stack, Typo } from "@/butler-ds";
+import { listAgentImportSources, startAgentImport, undoAgentImport, type AgentImportCounts, type AgentImportSource } from "./agentImportApi";
+
+/** Component-local state: counts and an opaque receipt only. */
+function useAgentImport() {
+  const [sources, setSources] = useState<AgentImportSource[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<AgentImportCounts | null>(null);
+  const [undone, setUndone] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    void listAgentImportSources()
+      .then(view => { if (mounted.current) setSources(view.sources); })
+      .catch(e => { if (mounted.current) { setSources([]); setError(apiErrorCode(e) ?? "import_unreadable"); } });
+    return () => { mounted.current = false; };
+  }, []);
+  async function work(task: () => Promise<void>) {
+    setBusy(true); setError(null);
+    try { await task(); } catch (e) { if (mounted.current) setError(apiErrorCode(e) ?? "import_failed"); }
+    finally { if (mounted.current) setBusy(false); }
+  }
+  const run = (key: string) => work(async () => {
+    setSelected(key); setUndone(false);
+    const counts = await startAgentImport(key);
+    if (!mounted.current) return;
+    setResult(counts); setError(counts.error ?? null);
+  });
+  const undo = () => work(async () => {
+    if (!result) return;
+    await undoAgentImport(result.run_id);
+    if (mounted.current) setUndone(true);
+  });
+  const more = () => { setResult(null); setError(null); setUndone(false); };
+  return { sources, busy, error, result, undone, selected, run, undo, more };
+}
+
+type AgentImportFlow = ReturnType<typeof useAgentImport>;
+
+/** One detected tool: name, what it holds and its own import action. */
+function AgentRow({ source, flow }: { source: AgentImportSource; flow: AgentImportFlow }) {
+  const copy = appCopy.settings.agentImport;
+  const empty = !source.instructions && source.servers === 0;
+  return (
+    <Stack align="row" cross="center" gap="sm" data-agent-import-source={source.key}>
+      <Stack grow minWidth="0"><ListRow icon={<Bot size="md" />} title={source.name} description={copy.found(source.instructions, source.servers)} /></Stack>
+      <Button size="sm" variant="outline" disabled={flow.busy || empty} aria-label={`${copy.run} · ${source.name}`}
+        onClick={() => void flow.run(source.key)}>{copy.run}</Button>
+    </Stack>
+  );
+}
+
+function resultText(result: AgentImportCounts): string {
+  const copy = appCopy.settings.agentImport;
+  return result.instructions + result.servers === 0
+    ? copy.nothingNew
+    : copy.result(result.instructions, result.servers, result.needs_secret);
+}
+
+/** Other AI tools first, then browsers: Settings and the first-run import step. */
+export function AgentImportSection() {
+  const copy = appCopy.settings.agentImport;
+  const flow = useAgentImport();
+  const added = flow.result ? flow.result.instructions + flow.result.servers > 0 : false;
+  return (
+    <SettingsSection id="agent-import" kind="list" title={appCopy.settings.pageSections.agentImport}
+      description={copy.purpose} state={flow.sources === null ? "loading" : "ready"}>
+      {!flow.result ? (flow.sources?.length
+        ? flow.sources.map(source => <AgentRow key={source.key} source={source} flow={flow} />)
+        : <EmptyLine message={copy.noSources} />) : null}
+      {flow.busy ? <Stack align="row" gap="sm" cross="center" role="status"><Spinner /><Typo.Text>{copy.importing}</Typo.Text></Stack> : null}
+      {flow.result ? <Stack gap="sm" role="status" data-test-class="agent-import-result">
+        <Typo.Text>{flow.undone ? copy.undone : resultText(flow.result)}</Typo.Text>
+        <ButtonContainer size="sm">
+          {added ? <Button size="sm" variant="outline" disabled={flow.busy || flow.undone} onClick={() => void flow.undo()}>{copy.undo}</Button> : null}
+          <Button size="sm" variant="ghost" disabled={flow.busy} onClick={flow.more}>{copy.more}</Button>
+        </ButtonContainer>
+      </Stack> : null}
+      {flow.error ? <Stack gap="sm" role="alert">
+        <Typo.Caption>{copy.failed}</Typo.Caption>
+        {flow.selected && !flow.result ? <ButtonContainer size="sm">
+          <Button size="sm" variant="outline" disabled={flow.busy} onClick={() => void flow.run(flow.selected!)}>{copy.retry}</Button>
+        </ButtonContainer> : null}
+      </Stack> : null}
+    </SettingsSection>
+  );
+}

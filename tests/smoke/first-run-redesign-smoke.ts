@@ -78,7 +78,7 @@ async function capture(page: Page, name: string) {
     const step = await page.locator("[data-first-run-screen]").getAttribute("data-first-run-screen");
     const ids = await page.locator("ol li").count() === 5 ? ["welcome", "consent", "connect", "import", "ready"] : ["welcome", "consent", "connect", "ready"];
     const lang = await page.locator("html").getAttribute("lang") === "ko-KR" ? "ko" : "en";
-    const label = step === "import" ? getAppCopy(lang === "ko" ? "ko-KR" : "en-US").settings.pageSections.browserImport : firstRunCopy[lang].steps[step as "consent" | "ready" | "connect"];
+    const label = step === "import" ? getAppCopy(lang === "ko" ? "ko-KR" : "en-US").settings.pageSections.import : firstRunCopy[lang].steps[step as "consent" | "ready" | "connect"];
     assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${ids.indexOf(step ?? "") + 1}\n${label}`);
   }
 }
