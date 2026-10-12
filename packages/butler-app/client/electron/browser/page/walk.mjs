@@ -115,7 +115,8 @@ export function snapshot(options) {
   const text = nodes.map(node => `${node.role} ${JSON.stringify(node.name)} [${node.ref}]${node.value === undefined ? "" : ` value=${JSON.stringify(node.value)}`}${node.coveredBy ? ` covered_by ${node.coveredBy}` : ""}${node.vault ? " filled from saved item (hidden)" : node.keypad ? " secure keypad (takeover only)" : node.secure ? " secure (takeover only)" : ""}${node.ad ? " ad?" : ""}${node.checked ? " checked" : ""}${node.preselected ? " preselected" : ""}${node.state?.length ? ` state=${node.state.join(",")}` : ""} frame=${hostname}`).join("\n");
   const proseStart=performance.now();
   const prose = readingText(options.scope,elements);
-  return { nodes, layout_regions: layoutRegions(elements), text: [text, prose].filter(Boolean).join("\n"), hidden, totals: { interactive: nodes.filter(node=>node.interactive).length, below_fold: below }, scriptMs: performance.now() - start, gridSampleMs, walkerMs:gridStart-start, proseMs:performance.now()-proseStart,
+  const visual = visualPage(elements, prose.length + nodes.reduce((sum, node) => sum + (node.name?.length ?? 0), 0));
+  return { nodes, visual, layout_regions: layoutRegions(elements), text: [text, prose].filter(Boolean).join("\n"), hidden, totals: { interactive: nodes.filter(node=>node.interactive).length, below_fold: below }, scriptMs: performance.now() - start, gridSampleMs, walkerMs:gridStart-start, proseMs:performance.now()-proseStart,
     collectMs, emitMs, payment: elements.some(e => e.localName === "input" && ["number", "cvc"].includes(vaultKind(e))),
     addons: nodes.filter(n => n.checked || n.preselected).map(n => n.name) };
 }

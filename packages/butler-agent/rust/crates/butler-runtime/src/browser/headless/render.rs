@@ -111,3 +111,23 @@ async fn read(
         html,
     })
 }
+
+/// `tab.read`: an agent tab's document as it shows now, for `web_read`.
+pub(super) async fn read_tab(page: &super::page::Page) -> Result<serde_json::Value, String> {
+    let context = page.world(&page.session, &page.target).await?;
+    let value = page
+        .evaluate_in(
+            &page.session,
+            context,
+            "({url:location.href,html:document.documentElement.outerHTML})",
+        )
+        .await?;
+    let html = value["html"].as_str().unwrap_or("");
+    if html.len() > MAX_HTML {
+        return Ok(serde_json::json!({"status":"unknown","reason":"render_too_large"}));
+    }
+    Ok(
+        serde_json::json!({"status":"ok","tab":page.tab,"url":value["url"],
+        "epoch":page.epoch(),"html":html}),
+    )
+}

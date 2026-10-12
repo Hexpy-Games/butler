@@ -1,6 +1,7 @@
 import { configureWebIdentity } from "./identity.mjs";
 import { BrowserWindow, session } from "electron";
 import { guardUrl } from "./guard.mjs";
+import { settle } from "./observe.mjs";
 
 // The reader's render step (web_read) in a hidden page: a fresh in-memory
 // profile, no dialogs, permissions, popups or downloads, and every request
@@ -73,6 +74,16 @@ export async function renderReader(args) {
     if (!host.isDestroyed()) host.destroy();
     void profile.clearStorageData().catch(() => {});
   }
+}
+
+/** web_read of an open agent tab: its document as the page shows it now, the
+ * same extraction input as a render. A loading page settles first. */
+export async function readTab(tab) {
+  if (tab.view.webContents.isLoading()) await settle(tab);
+  const page = await tab.view.webContents.executeJavaScriptInIsolatedWorld(9001, [{ code: "({url:location.href,html:document.documentElement.outerHTML})" }]);
+  const html = String(page?.html ?? "");
+  if (Buffer.byteLength(html) > MAX_HTML) return { status: "unknown", reason: "render_too_large" };
+  return { status: "ok", tab: tab.id, url: page.url, epoch: tab.epoch, html };
 }
 
 // A script redirect aborts loadURL's first navigation, but the replacement

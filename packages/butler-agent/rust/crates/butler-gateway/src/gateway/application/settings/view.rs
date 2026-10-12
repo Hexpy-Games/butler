@@ -97,9 +97,9 @@ pub(super) fn read(
     let web_search = json!({
         "provider":provider,
         "reader_backend":enum_value(
-            stored_web.and_then(|value| value.get("reader_backend")).or_else(|| configured_web.get("reader_backend")),
-            &["lightweight", "auto", "lightpanda", "jina-hosted", "disabled"],
-            "lightweight",
+            configured_web.get("reader_backend").or_else(|| stored_web.and_then(|value| value.get("reader_backend"))),
+            &["browser", "lightweight", "auto", "lightpanda", "jina-hosted", "disabled"],
+            "browser",
         ),
         "api_key_configured":api_key_configured,
         "api_key_env_var":api_key_env_var,

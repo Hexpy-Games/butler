@@ -144,8 +144,12 @@ impl ModelConfiguration {
         if let Some(value) = patch.get("provider") {
             web_search.insert("provider".into(), value.clone());
         }
-        if let Some(value) = patch.get("readerBackend") {
+        if let Some(value) = patch.get("readerBackend").filter(|value| !value.is_null()) {
             web_search.insert("readerBackend".into(), value.clone());
+            web_search.insert(
+                "readerBackendRevision".into(),
+                configuration::WEB_READER_REVISION.into(),
+            );
         }
         if let Some(planning_patch) = patch.get("planning").and_then(Value::as_object) {
             let planning = butler_core::json::object_field_mut(web_search, "planning");

@@ -1421,6 +1421,7 @@ export interface AppCopy {
       searchProviderOpenAi: string;
       searchProviderCodex: string;
       searchProviderDisabled: string;
+      searchReaderBrowser: string;
       searchReaderLightweight: string;
       searchReaderAuto: string;
       searchReaderLightpanda: string;

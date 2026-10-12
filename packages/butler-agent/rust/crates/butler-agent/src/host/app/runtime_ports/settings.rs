@@ -147,7 +147,7 @@ async fn load(
         "local_timezone": local_timezone(),
         "web_search": {
             "provider": web_search.get("provider"),
-            "reader_backend": web_search.get("readerBackend"),
+            "reader_backend": butler_core::configuration::web_reader_backend(web_search),
             "planning_enabled": planning.get("enabled"),
             "planning_mode": planning.get("mode"),
             "planning_default_depth": planning.get("defaultDepth"),

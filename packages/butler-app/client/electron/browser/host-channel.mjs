@@ -38,7 +38,7 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
     }
     await flushState();
     // Rendered pages exceed the result size; they have their own route.
-    const results = frame.op === "reader.render" ? "renders" : "results";
+    const results = ["reader.render", "tab.read"].includes(frame.op) ? "renders" : "results";
     await request(`/internal/browser-host/${results}/${encodeURIComponent(frame.id)}`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(result),
     });
