@@ -57,6 +57,16 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
     .await
     .unwrap();
     assert!(
+        script
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|request| request.to_string().contains("image_assets:")
+                && request.to_string().contains("img_")),
+        "parent must receive collected ids"
+    );
+    assert!(
         script.requests.lock().unwrap().iter().any(|request| request
             .to_string()
             .contains("attached to your reply automatically")),
@@ -94,6 +104,19 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
         "SELECT t.session_id FROM btcc_guided_tool_calls c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE c.tool_name='browser_open'",
         [], |row| row.get(0)).unwrap();
     assert_eq!(session, child, "tool really ran in the internal child");
+    let raw: String = db
+        .query_row(
+            "SELECT result_json FROM btcc_guided_tool_calls WHERE tool_name='image_collect'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let asset: Value = serde_json::from_str(&raw).unwrap();
+    assert!(asset["id"].as_str().unwrap().starts_with("img_"));
+    assert!(
+        asset.get("signed_url").is_none(),
+        "HTTP signatures stay out of model results"
+    );
     drop(db);
     s.finish().await?;
     server.abort();
@@ -102,7 +125,13 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
 
 async fn serve_host(mut stream: Response, admin: AdminClient) -> Result<(), HarnessError> {
     let mut buffer = String::new();
-    for op in ["tab.open", "tabs.list", "tab.observe", "tab.screenshot"] {
+    for op in [
+        "tab.open",
+        "tabs.list",
+        "tab.observe",
+        "tab.screenshot",
+        "tab.image_collect",
+    ] {
         let frame = next_call(&mut stream, &mut buffer, op).await?;
         assert_eq!(
             frame["session"], "general",
@@ -124,6 +153,9 @@ async fn serve_host(mut stream: Response, admin: AdminClient) -> Result<(), Harn
             "tabs.list" => json!({"tabs":[tab]}),
             "tab.observe" => {
                 json!({"status":"ok","tab":"parent-tab","obs":"parent-observation","url":"https://example.com/","text":"Parent page","image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})
+            }
+            "tab.image_collect" => {
+                json!({"status":"ok","source_url":"https://example.com/image.jpg","alt":"Collected raster","nearby_text":"Context","image":{"data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})
             }
             "tab.screenshot" => {
                 json!({"status":"ok","tab":"parent-tab","url":"https://example.com/","image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})

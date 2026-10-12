@@ -106,6 +106,18 @@ fn parent_item(step: usize) -> Value {
 }
 
 fn child_item(step: usize, body: &Value, script: &Script) -> Value {
+    if script.browser.load(Ordering::SeqCst) && step == 7 {
+        return call(
+            "collect-browser",
+            "tool_call",
+            &json!({"id":"native:image_collect","arguments":{"tab":"parent-tab","ref":"image-ref","observation":"parent-observation"}}),
+        );
+    }
+    let step = if script.browser.load(Ordering::SeqCst) && step > 7 {
+        step - 1
+    } else {
+        step
+    };
     if script.browser.load(Ordering::SeqCst) {
         return match step {
             0 => call("browser-plan", "replace_work_plan", &plan(false, "direct")),
@@ -113,7 +125,7 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
             2 => call(
                 "describe-browser",
                 "tool_describe",
-                &json!({"ids":["native:browser_open","native:browser_tabs","native:browser_observe","native:browser_screenshot"]}),
+                &json!({"ids":["native:browser_open","native:browser_tabs","native:browser_observe","native:browser_screenshot","native:image_collect"]}),
             ),
             3 => call(
                 "open-browser",

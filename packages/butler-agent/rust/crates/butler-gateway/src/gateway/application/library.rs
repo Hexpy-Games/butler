@@ -5,7 +5,7 @@ mod organize;
 mod query;
 mod records;
 mod tags;
-use super::{AppApplication, AppStorageError, app_error};
+use super::{AppApplication, AppAssetCommand, AppStorageError, app_error};
 use crate::gateway::ApplicationFuture;
 pub use organize::AppLibraryChange;
 pub use query::AppLibraryQuery;
@@ -101,7 +101,8 @@ impl AppApplication {
     {
         let this = self.clone_handle();
         Box::pin(async move {
-            this.storage
+            let value = this
+                .storage
                 .execute(move |db| {
                     let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
                     let value = operation(&tx)?;
@@ -109,7 +110,9 @@ impl AppApplication {
                     Ok(value)
                 })
                 .await
-                .map_err(app_error)
+                .map_err(app_error)?;
+            this.assets_owned(AppAssetCommand::Sweep).await?;
+            Ok(value)
         })
     }
 }
