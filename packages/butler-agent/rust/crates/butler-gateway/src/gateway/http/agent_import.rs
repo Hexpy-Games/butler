@@ -21,6 +21,8 @@ pub(super) struct AgentImports {
 
 /// Receipts kept for undo; older runs can no longer be undone from here.
 const KEPT_RUNS: usize = 8;
+/// Largest request body: room for an explicit list of every server name.
+const MAX_BODY_BYTES: usize = 64 * 1024;
 
 #[derive(Default)]
 struct Added {
@@ -43,7 +45,7 @@ pub(super) async fn route(
     let method = request.method().clone();
     let path = request.uri().path().to_owned();
     let body = if method == Method::POST {
-        let bytes = read_body_with_limit(request.into_body(), 4096).await?;
+        let bytes = read_body_with_limit(request.into_body(), MAX_BODY_BYTES).await?;
         serde_json::from_slice::<Value>(&bytes).map_err(|_| HttpError::invalid_json())?
     } else {
         Value::Null
@@ -129,8 +131,10 @@ async fn sources() -> Result<Value, HttpError> {
                 "needs_secret": servers.iter().filter(|server| server.needs_secret()).count(),
                 "skipped": found.servers.skipped,
                 "unreadable": found.unreadable,
+                // What a start request can select: only an importable file.
                 "items": {
                     "instructions": found.setup.instructions.iter()
+                        .filter(|_| matches!(found.instructions, Ok(Some(_))))
                         .map(|file| &file.label).collect::<Vec<_>>(),
                     "servers": servers.iter().map(|server| json!({
                         "name": server.name, "needs_secret": server.needs_secret(),

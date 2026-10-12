@@ -140,5 +140,17 @@ async fn agent_import_rejects_invalid_selection_before_writing() -> Result<(), H
         assert_eq!(instructions(&s).await?, Vec::<String>::new());
         assert_eq!(servers(&s).await?, Vec::<Value>::new());
     }
+    // An explicit list larger than a few KiB is accepted; repeats import once.
+    let many = json!({"source":"codex", "instructions":false, "servers":vec!["github"; 600]});
+    let selected = call(&admin, "start", Some(many)).await?;
+    assert_eq!(selected["servers"], 1);
+    assert_eq!(servers(&s).await?.len(), 1);
+    // A blank instruction file is not offered as a selectable item.
+    write(&s.sandbox.home, ".codex/AGENTS.override.md", " \n");
+    let rows = call(&admin, "sources", None).await?;
+    let rows = rows["sources"].as_array().unwrap();
+    let codex = rows.iter().find(|row| row["key"] == "codex").unwrap();
+    assert_eq!(codex["instructions"], false);
+    assert_eq!(codex["items"]["instructions"], json!([]));
     s.finish().await
 }
