@@ -3,7 +3,7 @@ import { clipboard, ipcMain, shell } from "electron";
 import { defaultBrowserName } from "../butler-platform/default-browser.mjs";
 import { menuPoint, popupMenu } from "../butler-platform/menu-placement.mjs";
 import { webUrl } from "./policy.mjs";
-import { nativeContextMenuCopy } from "../../../../butler-i18n/src/native-context-menu.mjs";
+import { nativeContextMenuCopy } from "../i18n/native-context-menu.mjs";
 
 /** All App web links open a focused user-owned tab, including window.open. */
 export async function openLink(browser, value, source) {

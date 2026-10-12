@@ -2,7 +2,7 @@ import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
 import { additionalToolLabels } from "./tool-labels-ko.ts";
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
-import { nativeContextMenuCopy } from "../native-context-menu.mjs";
+import { nativeContextMenuCopy } from "../../../butler-app/client/electron/i18n/native-context-menu.mjs";
 
 /** 허용 요청이 작업할 곳: 따옴표로 감싼 작업 폴더 이름, 없으면 이 작업 폴더. */
 const workspaceName = (workspace: string | null) => workspace ? `'${workspace}'` : "이 작업 폴더";

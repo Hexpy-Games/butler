@@ -1,6 +1,26 @@
-import { cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { preProcessFile } from "typescript";
 import { readAppComponentVersions } from "./manifest.ts";
-import { join, relative } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+
+/** Relative module paths must stay inside the staged shell, including nested scripts. */
+function checkElectronImports(root: string, directory = root): void {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) { checkElectronImports(root, path); continue; }
+    if (!entry.name.endsWith(".mjs")) continue;
+    const imports = preProcessFile(readFileSync(path, "utf8"), true, true).importedFiles;
+    for (const { fileName: specifier } of imports) {
+      if (specifier.startsWith("node:")) continue;
+      // Bare package names in build scripts are not filesystem references.
+      if (!specifier.startsWith(".") && !isAbsolute(specifier) && !specifier.includes(":")) continue;
+      const target = relative(root, resolve(dirname(path), specifier));
+      if (!specifier.startsWith(".") || isAbsolute(target) || target === ".." || target.startsWith("../") || target.startsWith("..\\")) {
+        throw new Error(`Electron import outside package: ${relative(root, path)} -> ${specifier}`);
+      }
+    }
+  }
+}
 
 /** Stage the Electron shell without development-only package-manager trees. */
 export function stageElectronPackageSource(root: string, destination: string): string {
@@ -17,6 +37,7 @@ export function stageElectronPackageSource(root: string, destination: string): s
     recursive: true,
     filter: (path) => !excluded.has(relative(source, path).split(/[\\/]/u)[0]),
   });
+  checkElectronImports(destination);
   manifest.version = readAppComponentVersions(root).app;
   writeFileSync(join(destination, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   return destination;
