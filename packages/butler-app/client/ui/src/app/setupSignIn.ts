@@ -1,4 +1,3 @@
-import { openLink } from "@/components/browser/browserBridge";
 import { api } from "./api.ts";
 import { isMissingRoute } from "./setupConnection.ts";
 import {
@@ -46,9 +45,4 @@ export async function cancelSignIn(session: SignInSession): Promise<OpenAIOAuthL
   if (session.backend === "desktop") return await cancelOpenAIOAuthLogin(flowId);
   if (!flowId) return undefined;
   return await api<OpenAIOAuthLoginResult>(`/setup/oauth/${encodeURIComponent(flowId)}/cancel`, { method: "POST", body: JSON.stringify({}) });
-}
-
-/** Opens the sign-in page through the App link handler. */
-export function openSignInPage(url: string): void {
-  void openLink(url);
 }

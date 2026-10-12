@@ -18,7 +18,7 @@ import {
   protocol,
   shell,
 } from "electron";
-import { openLink, installAppLinks } from "./browser/links.mjs";
+import { openExternalSignIn, openLink, installAppLinks } from "./browser/links.mjs";
 import { installUserBrowser } from "./browser/ipc.mjs";
 import { prepareAppPackageUpdate } from "./app-package-update.mjs";
 import { unsupportedLegacyData } from "./app-legacy-data.mjs";
@@ -1033,7 +1033,7 @@ function beginOAuthLoginProcess(command, args, env) {
       session.authUrl = authUrl.trim();
       session.redirectUri = redirectUriFromAuthUrl(session.authUrl);
       session.state = stateFromAuthUrl(session.authUrl);
-      void openLink(userBrowser, session.authUrl).catch(() => {});
+      void openExternalSignIn(session.authUrl)?.catch(() => {});
       resolveOnce();
     });
     child.stderr?.on("data", (chunk) => {

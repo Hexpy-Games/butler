@@ -22,6 +22,11 @@ export function openExternalLink(value) {
   return shell.openExternal(url);
 }
 
+/** Explicit provider/account authentication ingress, separate from content links. */
+export function openExternalSignIn(value) {
+  return openExternalLink(value);
+}
+
 export async function linkMenuItems(browser, value, source) {
   const url = webUrl(value);
   if (!url) return [];

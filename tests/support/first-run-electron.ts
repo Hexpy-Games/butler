@@ -50,7 +50,7 @@ export async function firstRunElectron(server: NativeAppServerHandle, serverUrl 
         if (await page.evaluate(selector => Boolean(window.butlerApp) && Boolean(document.querySelector(selector)), readySelector).catch(() => false)) {
           const startupPages = context.pages().filter(candidate => candidate !== page && candidate.url().includes("/lifecycle/"));
           await Promise.all(startupPages.filter(candidate => !candidate.isClosed()).map(candidate => candidate.waitForEvent("close")));
-          return { page, context: page.context(), async stop() { try { inspector?.close(); await connected.close(); } finally { await stopElectronChild(child); rmSync(scratch, { recursive: true, force: true }); } } };
+          return { page, context: page.context(), main: inspector.evaluate.bind(inspector), async stop() { try { inspector?.close(); await connected.close(); } finally { await stopElectronChild(child); rmSync(scratch, { recursive: true, force: true }); } } };
         }
       }
       await new Promise(done => setTimeout(done, 100));

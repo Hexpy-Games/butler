@@ -1,5 +1,6 @@
+import { openExternalSignIn } from "@/app/openExternalSignIn";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { cancelSignIn, openSignInPage, signInStatus, startSignIn, type SignInSession } from "@/app/setupSignIn.ts";
+import { cancelSignIn, signInStatus, startSignIn, type SignInSession } from "@/app/setupSignIn.ts";
 import type { OpenAIOAuthLoginResult } from "@/components/settings/modelManagementApi";
 
 export const SIGN_IN_POLL_MS = 1000;
@@ -33,7 +34,7 @@ export function useSignIn({ onSignedIn }: { onSignedIn: () => void }) {
     setSession(next);
     if (next.backend === "agent" && next.view.auth_url && opened.current !== next.view.auth_url) {
       opened.current = next.view.auth_url;
-      openSignInPage(next.view.auth_url);
+      openExternalSignIn(next.view.auth_url);
     }
     if (SIGNED_IN.has(result.status)) {
       run.current += 1;
@@ -85,7 +86,7 @@ export function useSignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const label = session?.view.label;
   const account = label?.includes("@") ? label : undefined;
   function reopen(): void {
-    if (session?.view.auth_url) openSignInPage(session.view.auth_url);
+    if (session?.view.auth_url) openExternalSignIn(session.view.auth_url);
   }
   return { phase, account, copied, canCopyLink: Boolean(session?.view.auth_url), start, cancel: () => cancel(), copyLink: () => copySignInLink(session?.view.auth_url, setCopied), reopen, leave };
 }
