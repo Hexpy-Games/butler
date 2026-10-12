@@ -46,6 +46,7 @@ pub use memory_management::{AppMemoryCommand, AppMemoryPort, MemoryEventSink};
 mod outputs;
 mod plan_decisions;
 mod progress_view;
+pub mod project_folder;
 mod project_sources;
 mod projection;
 mod projects;

@@ -7,7 +7,7 @@
 )]
 
 #[path = "project_workspace/stub.rs"]
-mod stub;
+pub(super) mod stub;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use butler_e2e::e2e::{
     HarnessError,

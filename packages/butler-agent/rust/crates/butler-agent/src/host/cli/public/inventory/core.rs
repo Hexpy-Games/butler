@@ -255,6 +255,18 @@ pub(super) const ROUTES: &[Entry] = &[
         "core"
     ),
     route!(
+        "folder.show",
+        "butler folder show",
+        "Show the project folder.",
+        "core"
+    ),
+    route!(
+        "folder.set",
+        "butler folder set PATH",
+        "Select the project folder (consent).",
+        "core"
+    ),
+    route!(
         "config.get",
         "butler config get KEY",
         "설정을 봅니다. / Read a setting.",

@@ -6,7 +6,7 @@ use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::task::TaskTracker;
 
-use super::{AppCreateProjectRequest, AppCreateProjectResult, folder, token};
+use super::{AppCreateProjectRequest, AppCreateProjectResult, token};
 use crate::gateway::{GatewayApplicationError, application::AppApplication};
 
 #[derive(Clone)]
@@ -48,9 +48,10 @@ impl ProjectCreationOwner {
     pub(in crate::gateway::application) fn resolve_workspace_selection(
         &self,
         selection: &str,
+        data: &std::path::Path,
     ) -> Result<PathBuf, GatewayApplicationError> {
         let selected = token::selected_path(selection, self.0.secret.as_deref())?;
-        folder::validate_existing(std::path::Path::new(&selected))
+        super::super::project_folder::validate(std::path::Path::new(&selected), data)
     }
 
     pub(in crate::gateway::application) async fn create(

@@ -251,3 +251,13 @@ An update installs the new version in a separate folder and restarts the running
 
 - [MCP server](/en/help/advanced/mcp-server/)
 - [Remote access](/en/help/advanced/remote-access/)
+
+
+## Project folder
+
+```sh
+butler folder show
+butler folder set /srv/projects
+```
+
+Select the folder Butler works in, separately from `--data` / `BUTLER_DATA`. Explicit selection grants the same consent as the App folder picker. The folder must exist, be a readable directory, and be outside DATA and protected home/system folders. Symlinks are resolved. A running gateway applies it to the next turn; a stopped service saves the same App database preference. Existing spaces keep their selected folders. `--data PATH` and `--json` are supported.

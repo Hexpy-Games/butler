@@ -202,10 +202,7 @@ pub(super) fn project(
         web_search.insert("api_key_env_var".into(), config_var.unwrap_or(Value::Null));
         output.insert("web_search".into(), Value::Object(web_search));
     }
-    output.insert(
-        "default_project_workspace_label".into(),
-        json!(workspace_label(workspace_root)),
-    );
+    super::super::super::super::project_folder::project(&mut output, workspace_root);
     Value::Object(output)
 }
 
@@ -221,14 +218,6 @@ fn model_max(model_ref: &str, facts: &AppSettingsFacts) -> u64 {
         .find(|model| model.model_ref == model_ref)
         .and_then(|model| model.context_window_tokens)
         .unwrap_or(258_000)
-}
-
-fn workspace_label(path: &Path) -> String {
-    path.file_name()
-        .and_then(|value| value.to_str())
-        .filter(|value| !value.is_empty())
-        .unwrap_or("Project")
-        .to_owned()
 }
 
 fn project_simple_fields(
