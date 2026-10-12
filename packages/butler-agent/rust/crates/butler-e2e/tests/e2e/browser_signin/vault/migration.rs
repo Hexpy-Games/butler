@@ -152,3 +152,71 @@ async fn verify_copy(
     assert!(host.ops().contains(&"autofill.fill".to_owned()));
     Ok(())
 }
+
+#[tokio::test]
+async fn autofill_migration_merges_both_creation_orders() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    for legacy_first in [true, false] {
+        let mut s = butler_e2e::e2e::scenario::Setup::new("AUTOFILL-MERGE")?
+            .start()
+            .await?;
+        s.agent.terminate().await?;
+        let db =
+            rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+        db.execute_batch("DROP TABLE browser_autofill_profiles;")?;
+        let names = if legacy_first {
+            ["browser_traveler_profiles", "browser_autofill_profiles"]
+        } else {
+            ["browser_autofill_profiles", "browser_traveler_profiles"]
+        };
+        for name in names {
+            db.execute_batch(&format!(
+                "CREATE TABLE {name} (
+                id TEXT PRIMARY KEY,nickname TEXT NOT NULL,details_json TEXT NOT NULL,
+                extras_json TEXT NOT NULL,created_at TEXT NOT NULL,last_used_at TEXT);
+                INSERT INTO {name} VALUES('shared','{name}','{{}}','[]','2026-10-01',NULL);
+                INSERT INTO {name} VALUES('{name}','unique','{{}}','[]','2026-10-01',NULL);"
+            ))?;
+        }
+        db.execute_batch(
+            "DROP TABLE browser_vault_sites;
+            CREATE TABLE browser_vault_sites(kind TEXT,item_id TEXT,site TEXT,created_at TEXT,
+                PRIMARY KEY(kind,item_id,site));
+            INSERT INTO browser_vault_sites VALUES('profile','shared','example.test','new');
+            INSERT INTO browser_vault_sites VALUES('traveler','shared','example.test','old');",
+        )?;
+        drop(db);
+        s.gw = s.agent.start_again().await?;
+        for _ in 0..2 {
+            let db =
+                rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+            let count: i64 =
+                db.query_row("SELECT COUNT(*) FROM browser_autofill_profiles", [], |r| {
+                    r.get(0)
+                })?;
+            assert_eq!(count, 3);
+            let nickname: String = db.query_row(
+                "SELECT nickname FROM browser_autofill_profiles WHERE id='shared'",
+                [],
+                |r| r.get(0),
+            )?;
+            assert_eq!(nickname, "browser_autofill_profiles");
+            let sites: i64 = db.query_row(
+                "SELECT COUNT(*) FROM browser_vault_sites WHERE kind='profile'",
+                [],
+                |r| r.get(0),
+            )?;
+            assert_eq!(sites, 1);
+            let old: bool = db.query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='browser_traveler_profiles')",
+                [],
+                |r| r.get(0),
+            )?;
+            assert!(!old);
+            drop(db);
+            s.restart().await?;
+        }
+        s.finish().await?;
+    }
+    Ok(())
+}

@@ -50,7 +50,10 @@ async fn autofill_tool_asks_by_profile_id_and_keeps_values_out_of_the_model()
     let operation = &card["approval"]["operation"];
     assert_eq!(operation["tool"], "browser_autofill_fill");
     assert_eq!(operation["allow_conversation"], false);
-    assert_eq!(operation["targets"], json!([ORIGIN, "Self"]));
+    assert_eq!(
+        operation["targets"],
+        json!([ORIGIN, "Self", "full_name, email, country"])
+    );
     let answered = admin
         .send(
             Method::POST,

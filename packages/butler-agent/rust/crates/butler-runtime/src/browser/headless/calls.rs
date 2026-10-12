@@ -11,29 +11,20 @@ pub(super) fn failed(browser: &Browser, error: &str) -> Value {
 }
 
 pub(super) async fn act_call(page: &page::Page, args: &Value, frame: &Value) -> Value {
-    let owner = page
-        .shared
-        .with_tab(&page.tab, |t| t.owner.clone())
-        .unwrap_or_default();
-    let busy = {
-        let state = page.shared.lock();
-        let owners: std::collections::HashSet<&String> = state
-            .tabs
-            .values()
-            .filter(|t| t.busy)
-            .map(|t| &t.owner)
-            .collect();
-        (owners.len() >= 2 && !owners.contains(&owner))
-            || state.tabs.get(&page.tab).is_some_and(|t| t.busy)
-    };
-    if busy {
+    // Tabs act independently; only a second batch on a tab whose batch still
+    // runs is refused.
+    let claimed = page.shared.with_tab(&page.tab, |t| {
+        let free = !t.busy;
+        if free {
+            t.busy = true;
+            t.cancelled = false;
+            t.call_id = frame["call_id"].as_str().map(str::to_owned);
+        }
+        free
+    });
+    if claimed == Some(false) {
         return json!({"status":"not_dispatched","reason":"browser_busy"});
     }
-    page.shared.with_tab(&page.tab, |t| {
-        t.busy = true;
-        t.cancelled = false;
-        t.call_id = frame["call_id"].as_str().map(str::to_owned);
-    });
     let deadline = frame["deadline_ms"].as_u64().unwrap_or(30_000);
     let result = act::act(page, args, deadline).await;
     page.shared.with_tab(&page.tab, |t| t.busy = false);

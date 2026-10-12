@@ -19,13 +19,24 @@ export function vaultScan({ sectionRef, markers, targets: requested }) {
     root = anchor;
     while (root.parentElement && [...root.querySelectorAll("input,select")].filter(element => vaultKind(element)).length < 2) root = root.parentElement;
   }
-  const mapped = new Map();
+  const mapped = new Map(), incompatible = [];
   if (Array.isArray(requested)) for (const target of requested) {
     const element = globalThis.__butlerObservation?.refs?.get(target.ref)?.deref();
+    if (!element?.isConnected) continue;
+    const sensitive = ["passport_number", "birth_date", "rrn"].includes(target.field);
+    const detected = vaultKind(element, sensitive);
+    if (sensitive && (detected !== (target.field === "birth_date" ? "birth" : target.field)
+      || !["text", "password", "number", "date", "select-one"].includes(element.type)
+      || ["email", "tel", "url", "search"].includes(element.inputMode)
+      || element.type === "date" && target.field !== "birth_date")) {
+      incompatible.push({ ref: target.ref, field: target.field, detected });
+      continue;
+    }
     if (element?.isConnected && ["input", "select", "textarea"].includes(element.localName)
       && !["number", "cvc", "name", "expiry", "exp_month", "exp_year", "pin_short"].includes(vaultKind(element))
       && (element.type !== "password" || ["passport_number", "birth_date", "rrn"].includes(target.field))) mapped.set(element, target.field);
   }
+  if (incompatible.length) return { origin: location.origin, targets: [], incompatible };
   const controls = (Array.isArray(requested) ? [...mapped.keys()] : [...root.querySelectorAll("input,select")]).filter(element => !element.disabled && shown(element));
   const keyImages = [...document.querySelectorAll('img,input[type="image"],[style*="background"]')]
     .filter(node => /key|pad|kbd/u.test(`${labelOf(node)} ${labelOf(node.parentElement)}`)).length;
