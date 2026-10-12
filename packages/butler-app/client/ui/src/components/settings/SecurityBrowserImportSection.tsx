@@ -29,7 +29,7 @@ export function SecurityBrowserImportSection({ keychain, onImported, showTitle =
       </> : null}
       {flow.busy ? <Stack align="row" gap="sm" cross="center" role="status" data-test-class="import-progress"><Spinner /><Typo.Text>{copy.importing}</Typo.Text></Stack> : null}
       {flow.result ? <Stack gap="sm" role="status" data-test-class="import-result">
-        <Typo.Text>{flow.undone ? copy.undone : copy.result(flow.result.bookmarks, flow.result.passwords, flow.result.updated, flow.result.history ?? 0)}</Typo.Text>
+        <Typo.Text>{flow.undone ? copy.undone : copy.result(flow.result.bookmarks, flow.result.passwords, flow.result.updated, flow.result.history ?? 0, flow.result.invalid ?? 0)}</Typo.Text>
         <ButtonContainer size="sm">
           <Button size="sm" variant="outline" disabled={flow.busy || flow.undone} onClick={() => void flow.undo()}>{copy.undo}</Button>
           <Button size="sm" variant="ghost" disabled={flow.busy} onClick={() => void flow.more()}>{copy.more}</Button>

@@ -73,6 +73,8 @@ pub(super) fn link_keychains(home: &std::path::Path) -> Result<(), HarnessError>
             std::path::Path::new(&keychains),
             &home.join("Library/Keychains"),
         )?;
+    } else {
+        butler_platform::secrets::prepare_system_keychain_for_test(home)?;
     }
     Ok(())
 }

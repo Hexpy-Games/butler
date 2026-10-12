@@ -3728,12 +3728,6 @@ License: https://github.com/soc/dirs-rs/blob/00511bdc252f491a72ac89f6d6a24634062
 Copyright (c) 2018-2019 dirs-rs contributors
 
 ===== COMPONENT =====
-dispatch2 0.3.1
-Zlib OR Apache-2.0 OR MIT
-License: https://crates.io/crates/dispatch2/0.3.1
-
-
-===== COMPONENT =====
 displaydoc 0.2.7
 MIT OR Apache-2.0
 License: https://github.com/yaahc/displaydoc/blob/20016487354a96b22a7b97974483ae4f51a1bddc/LICENSE-APACHE
@@ -5262,12 +5256,6 @@ License: https://github.com/seanmonstar/num_cpus/blob/342af76b486335e5a955c7314f
 Copyright (c) 2015-2025 Sean McArthur
 
 ===== COMPONENT =====
-objc2-app-kit 0.3.2
-Zlib OR Apache-2.0 OR MIT
-License: https://crates.io/crates/objc2-app-kit/0.3.2
-
-
-===== COMPONENT =====
 objc2-core-foundation 0.3.2
 Zlib OR Apache-2.0 OR MIT
 License: https://crates.io/crates/objc2-core-foundation/0.3.2
@@ -5765,15 +5753,6 @@ Copyright 2019-2022 Jeff Parsons, and [contributors](https://github.com/jeffpars
 Copyright 2019 Jeffrey Parsons
 
 ===== COMPONENT =====
-raw-window-handle 0.6.2
-MIT OR Apache-2.0 OR Zlib
-License: https://github.com/rust-windowing/raw-window-handle/blob/5fda8e8420b069368e9450e70c2869e32dcdffc1/LICENSE-APACHE.md
-License: https://github.com/rust-windowing/raw-window-handle/blob/5fda8e8420b069368e9450e70c2869e32dcdffc1/LICENSE-MIT.md
-License: https://github.com/rust-windowing/raw-window-handle/blob/5fda8e8420b069368e9450e70c2869e32dcdffc1/LICENSE-ZLIB.md
-Copyright (c) 2019 Osspial
-Copyright (c) 2020 Osspial
-
-===== COMPONENT =====
 rawpointer 0.2.1
 MIT OR Apache-2.0
 License: https://github.com/bluss/rawpointer/blob/e4f5800e86acc8cb610430a3f361977480e2b0a6/LICENSE-APACHE
@@ -5867,12 +5846,6 @@ retry 2.2.0
 MIT
 License: https://github.com/jimmycuadra/retry/blob/f3c92f309a4155b71b5b2a4b8be159911deeb265/LICENSE
 Copyright (c) 2015-2020 Jimmy Cuadra and Sam Rijs
-
-===== COMPONENT =====
-rfd 0.15.4
-MIT
-License: https://github.com/PolyMeilex/rfd/blob/bac4bd3364f2befaabafa9f58ac77fd8925b2abf/LICENSE
-Copyright (c) 2022 Bartłomiej Maryńczak
 
 ===== COMPONENT =====
 ring 0.17.14
@@ -7065,13 +7038,6 @@ windows-sys 0.52.0
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/3a605cba064b26f2a198ac58085f8c8836f47c38/crates/libs/sys/license-apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/3a605cba064b26f2a198ac58085f8c8836f47c38/crates/libs/sys/license-mit
-Copyright (c) Microsoft Corporation.
-
-===== COMPONENT =====
-windows-sys 0.59.0
-MIT OR Apache-2.0
-License: https://github.com/microsoft/windows-rs/blob/308e08ec259027ebbef11b8ef838923626bf821e/crates/libs/sys/license-apache-2.0
-License: https://github.com/microsoft/windows-rs/blob/308e08ec259027ebbef11b8ef838923626bf821e/crates/libs/sys/license-mit
 Copyright (c) Microsoft Corporation.
 
 ===== COMPONENT =====

@@ -1270,6 +1270,7 @@ const butlerApp = Object.freeze({
   revealCard: ({ id, payload } = {}) => requestSecurity("revealCard", { id, payload }),
   setPurchaseSite: (payload) => requestSecurity("setPurchaseSite", { payload }),
   // The file path is chosen in a native dialog and stays in main and the Agent.
+  pickBrowserFolder: () => ipcRenderer.invoke("butler:pick-browser-folder"),
   pickImportFile: (kind) => ipcRenderer.invoke("butler:pick-import-file", kind === "bookmarks" ? "bookmarks" : "passwords"),
   // Main re-reads the token after a rotation.
   rotateConnectionCode: () => requestSecurity("rotateConnectionCode"),

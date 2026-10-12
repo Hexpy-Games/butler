@@ -5,10 +5,10 @@
     "deploy/licenses/generate.mjs": "714ebe25f13c4ba3cb5666febaa8b048f1b1f848b34f65907d787dfc1a8093e1",
     "deploy/licenses/inputs.mjs": "8b8f71b92ff873d77dade2f90fbea05395cfdc3151c900607774de31796a7657",
     "deploy/licenses/refresh.py": "27180cf428992f1976388063f42faae7113255f6630f15e48c6012b4ee9268bc",
-    "packages/butler-agent/rust/Cargo.lock": "cc73a06013be473872816f293e5102cf7f51ef220f3826223518b01e70c02bbb",
+    "packages/butler-agent/rust/Cargo.lock": "bdbf777c90b9597a4ec693628b992d6ff34bb596242205f97a074eb39c963c6a",
     "packages/butler-agent/rust/Cargo.toml": "84e021c080b775ab00c9967a4ec8c75c8c46fced4a9eab1b8d30d4fab2d4ef61",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
-    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "ba2918e2519ba5f268c39525cac8ff244864d03a28fd78ef173e9b26c7da245a",
+    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "21b121cd6d50f5abc67405bba11d956714d409920c8f0243f5fa94fdf79a56eb",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs": "f11dc3b1952a178092fbf7da589b8c39e28021c4975f884e236cd71c78c8d7a9",
     "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "b8a781872e8e48a1b1e02c6ab77f37ee31bf1237b6f68b03faa68b10b1e4270e",
@@ -19,9 +19,9 @@
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "6823161ebcffd1ab5c100a48c5891a4a754273fce5b7f13b78a10fab1dc9a3d9",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "ef8fa3152af037a84774021e55aec8a31772475be9c75d7a9826338d7bca04a0",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "64af563849807fa6afa8db120d3b332cd747dcf7a40195acc1daf2d18aa90b86",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "edcd24be489ab9312af7f7f14a39438409a08ced7c5a053e4969ab0399c76351",
-    "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "fd97e7279fef8e91a95c908d368c5eb4548c40cf5d9d3fa277a8d49f71901b53",
+    "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "15317b3544cdbcfacc5d46ab5b1cbddb1faa34c50ceca49221fdea0fa35a4592",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "2aef74f12eec60a86d3c8e5047cd56c4bda1efd6ba402d5f456ffec89b46b798",
     "packages/butler-agent/rust/rust-toolchain.toml": "2ad6f15416572b4836585087f1d4abc53b8fa2dbd616f8dacfaa587ed6714228",
     "packages/butler-agent/rust/scripts/static-ort.lock.json": "a1aee730fc0773ca02d23bad8da95c0efe56a07ded67dc36d251f475a90369b2",
@@ -15756,28 +15756,6 @@
       ]
     },
     {
-      "id": "rust:dispatch2@0.3.1",
-      "name": "dispatch2",
-      "version": "0.3.1",
-      "license": "Zlib OR Apache-2.0 OR MIT",
-      "source": "https://github.com/madsmtm/objc2/tree/8852b424193ca41602281b3d7540d7c8ed51e49a",
-      "artifacts": [
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "259b22f571b54fed25f68ec5abd8eda223e7b0547a806f13ba797a0eabecd64f",
-        "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
-      ],
-      "files": [
-        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
-        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
-      ],
-      "links": [
-        "https://crates.io/crates/dispatch2/0.3.1"
-      ],
-      "copyright": []
-    },
-    {
       "id": "rust:displaydoc@0.2.7",
       "name": "displaydoc",
       "version": "0.2.7",
@@ -21523,28 +21501,6 @@
       ]
     },
     {
-      "id": "rust:objc2-app-kit@0.3.2",
-      "name": "objc2-app-kit",
-      "version": "0.3.2",
-      "license": "Zlib OR Apache-2.0 OR MIT",
-      "source": "https://github.com/madsmtm/objc2/tree/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
-      "artifacts": [
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "259b22f571b54fed25f68ec5abd8eda223e7b0547a806f13ba797a0eabecd64f",
-        "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
-      ],
-      "files": [
-        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
-        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
-      ],
-      "links": [
-        "https://crates.io/crates/objc2-app-kit/0.3.2"
-      ],
-      "copyright": []
-    },
-    {
       "id": "rust:objc2-core-foundation@0.3.2",
       "name": "objc2-core-foundation",
       "version": "0.3.2",
@@ -23430,36 +23386,6 @@
       ]
     },
     {
-      "id": "rust:raw-window-handle@0.6.2",
-      "name": "raw-window-handle",
-      "version": "0.6.2",
-      "license": "MIT OR Apache-2.0 OR Zlib",
-      "source": "https://github.com/rust-windowing/raw-window-handle/tree/5fda8e8420b069368e9450e70c2869e32dcdffc1",
-      "artifacts": [
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "bb28c48e3e078166e91cfc2b6db7ffebb8a0973b9e23b3df060561292d8d69ec",
-        "9c5a80639a57c1c945570e7ebbca0706305849ce3c098021325cca9db2f7acc4",
-        "ae895c8576e682f310fb70d93d9f99b1dd82872094c54a8f6cdfe2ca5c2d6ecb"
-      ],
-      "files": [
-        "LICENSE-APACHE.md",
-        "LICENSE-MIT.md",
-        "LICENSE-ZLIB.md"
-      ],
-      "links": [
-        "https://github.com/rust-windowing/raw-window-handle/blob/5fda8e8420b069368e9450e70c2869e32dcdffc1/LICENSE-APACHE.md",
-        "https://github.com/rust-windowing/raw-window-handle/blob/5fda8e8420b069368e9450e70c2869e32dcdffc1/LICENSE-MIT.md",
-        "https://github.com/rust-windowing/raw-window-handle/blob/5fda8e8420b069368e9450e70c2869e32dcdffc1/LICENSE-ZLIB.md"
-      ],
-      "copyright": [
-        "Copyright (c) 2019 Osspial",
-        "Copyright (c) 2020 Osspial"
-      ]
-    },
-    {
       "id": "rust:rawpointer@0.2.1",
       "name": "rawpointer",
       "version": "0.2.1",
@@ -23818,29 +23744,6 @@
       ],
       "copyright": [
         "Copyright (c) 2015-2020 Jimmy Cuadra and Sam Rijs"
-      ]
-    },
-    {
-      "id": "rust:rfd@0.15.4",
-      "name": "rfd",
-      "version": "0.15.4",
-      "license": "MIT",
-      "source": "https://github.com/PolyMeilex/rfd/tree/bac4bd3364f2befaabafa9f58ac77fd8925b2abf",
-      "artifacts": [
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "65fc947f4bac882a2cd104ef73c246b1b037059df9f2b3a58b7f77f0b9e56071"
-      ],
-      "files": [
-        "LICENSE"
-      ],
-      "links": [
-        "https://github.com/PolyMeilex/rfd/blob/bac4bd3364f2befaabafa9f58ac77fd8925b2abf/LICENSE"
-      ],
-      "copyright": [
-        "Copyright (c) 2022 Bartłomiej Maryńczak"
       ]
     },
     {
@@ -28363,31 +28266,6 @@
       "links": [
         "https://github.com/microsoft/windows-rs/blob/3a605cba064b26f2a198ac58085f8c8836f47c38/crates/libs/sys/license-apache-2.0",
         "https://github.com/microsoft/windows-rs/blob/3a605cba064b26f2a198ac58085f8c8836f47c38/crates/libs/sys/license-mit"
-      ],
-      "copyright": [
-        "Copyright (c) Microsoft Corporation."
-      ]
-    },
-    {
-      "id": "rust:windows-sys@0.59.0",
-      "name": "windows-sys",
-      "version": "0.59.0",
-      "license": "MIT OR Apache-2.0",
-      "source": "https://github.com/microsoft/windows-rs/tree/308e08ec259027ebbef11b8ef838923626bf821e",
-      "artifacts": [
-        "Unsigned Windows x64 Agent preview"
-      ],
-      "evidenceSha256": [
-        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
-        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
-      ],
-      "files": [
-        "license-apache-2.0",
-        "license-mit"
-      ],
-      "links": [
-        "https://github.com/microsoft/windows-rs/blob/308e08ec259027ebbef11b8ef838923626bf821e/crates/libs/sys/license-apache-2.0",
-        "https://github.com/microsoft/windows-rs/blob/308e08ec259027ebbef11b8ef838923626bf821e/crates/libs/sys/license-mit"
       ],
       "copyright": [
         "Copyright (c) Microsoft Corporation."

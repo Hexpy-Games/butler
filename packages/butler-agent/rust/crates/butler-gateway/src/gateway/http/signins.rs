@@ -50,6 +50,7 @@ pub(super) async fn route(
                 .await?
         }
         (&Method::DELETE, p) if p.starts_with("/security/signins/") => {
+            let _mutation = state.signin_secrets.mutation.lock().await;
             let id = entry_id(p)?;
             if signin_secrets::available(&state).await {
                 signin_secrets::delete(&state, &id).await?;
@@ -138,6 +139,7 @@ async fn add(state: &Arc<HttpState>, mut body: Value) -> Result<Value, HttpError
             username,
             source: source.into(),
             import_run: None,
+            modified_ms: None,
         },
         password,
     )
@@ -150,6 +152,9 @@ pub(super) async fn store(
     input: AppSignInUpsert,
     password: SecretText,
 ) -> Result<Value, HttpError> {
+    let _mutation = state.signin_secrets.mutation.lock().await;
+    let run = input.import_run.clone();
+    let time = input.modified_ms;
     let saved = state
         .application
         .signins(AppSignInCommand::Upsert(input))
@@ -158,6 +163,12 @@ pub(super) async fn store(
         return Ok(json!({"id": saved["id"], "action": "skipped"}));
     }
     let id = saved["id"].as_str().unwrap_or("").to_owned();
+    if saved["action"] == "updated"
+        && let (Some(run), Some(time)) = (run, time)
+    {
+        return super::browser_import::password_undo::replace(state, &id, &run, time, password)
+            .await;
+    }
     if let Err(error) = signin_secrets::set(state, &id, password).await {
         if saved["action"] == "inserted" {
             state

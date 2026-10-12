@@ -13,9 +13,11 @@ pub(super) struct SelectedData {
     pub(super) bookmarks: Vec<import::Bookmark>,
     pub(super) passwords: Vec<import::PasswordRow>,
     pub(super) history: Vec<Value>,
+    pub(super) invalid: usize,
 }
 pub(super) struct Selection {
     pub(super) profile: Option<BrowserProfile>,
+    pub(super) keys: std::sync::Arc<dyn butler_platform::browser_transfer::SafeStorageKeySource>,
     pub(super) items: Items,
     pub(super) csv: bool,
     pub(super) request: Value,
@@ -29,9 +31,11 @@ impl Drop for Selection {
 }
 impl Selection {
     pub(super) fn read(&self) -> Result<SelectedData, HttpError> {
+        let (passwords, invalid) = self.read_passwords()?;
         Ok(SelectedData {
             bookmarks: self.read_bookmarks()?,
-            passwords: self.read_passwords()?,
+            passwords,
+            invalid,
             history: self.read_history()?,
         })
     }
@@ -63,17 +67,23 @@ impl Selection {
             .and_then(import::finish)
             .map_err(|e| super::import_error(&e))
     }
-    fn read_passwords(&self) -> Result<Vec<import::PasswordRow>, HttpError> {
+    fn read_passwords(&self) -> Result<(Vec<import::PasswordRow>, usize), HttpError> {
         if !self.items.passwords || self.csv {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), 0));
         }
         if let Some(profile) = &self.profile {
             return butler_platform::browser_transfer::passwords(
                 profile,
                 &self.primary,
                 &self.scratch.join("passwords"),
+                self.keys.as_ref(),
             )
-            .map(import::native_passwords)
+            .map(|batch| {
+                let count = batch.logins.len();
+                let rows = import::native_passwords(batch.logins);
+                let invalid = batch.invalid + count - rows.len();
+                (rows, invalid)
+            })
             .map_err(native_error);
         }
         let file = export_file(
@@ -82,8 +92,6 @@ impl Selection {
         )?;
         let bytes = butler_platform::browser_transfer::read(&file, import::MAX_CSV_BYTES)
             .map_err(native_error)?;
-        import::parse_password_csv(&bytes)
-            .map(|(rows, _)| rows)
-            .map_err(|e| super::import_error(&e))
+        import::parse_password_csv(&bytes).map_err(|e| super::import_error(&e))
     }
 }

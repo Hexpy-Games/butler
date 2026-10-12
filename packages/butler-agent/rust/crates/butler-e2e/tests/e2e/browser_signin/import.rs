@@ -287,7 +287,7 @@ async fn password_csv_exports_import_into_the_keychain_store() -> Result<(), Har
         .await?;
         assert_eq!(
             (again["imported"].as_u64(), again["updated"].as_u64()),
-            (Some(0), Some(1)),
+            (Some(0), Some(0)),
             "{name}: {again}"
         );
         assert!(!run.to_string().contains(CANARY) && !preview.to_string().contains(CANARY));

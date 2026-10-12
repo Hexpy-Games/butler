@@ -15,6 +15,7 @@ mod import;
 mod import_export;
 mod native_import;
 mod oneclick;
+mod password_undo;
 mod schedule;
 mod tool;
 mod vault;

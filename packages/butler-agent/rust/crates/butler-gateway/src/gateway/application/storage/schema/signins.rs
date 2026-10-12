@@ -70,6 +70,14 @@ CREATE TABLE IF NOT EXISTS browser_import_additions(
   run_id TEXT NOT NULL, kind TEXT NOT NULL, entry_id TEXT NOT NULL,
   PRIMARY KEY(run_id,kind,entry_id)
 );
+CREATE TABLE IF NOT EXISTS browser_signin_versions (
+  entry_id TEXT PRIMARY KEY, modified_ms INTEGER NOT NULL, revision TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS browser_import_updates (
+  run_id TEXT NOT NULL, entry_id TEXT NOT NULL, previous_ms INTEGER NOT NULL,
+  previous_revision TEXT NOT NULL, revision TEXT NOT NULL,
+  PRIMARY KEY(run_id,entry_id)
+);
 CREATE TABLE IF NOT EXISTS browser_import_audit (
   id INTEGER PRIMARY KEY,
   source TEXT NOT NULL,

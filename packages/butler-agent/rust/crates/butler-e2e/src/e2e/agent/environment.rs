@@ -12,10 +12,7 @@ pub(super) fn isolated_command(program: &Path, home: &Path) -> Command {
         .env("HOME", home)
         // Browser import reads the account folders from the OS, not HOME;
         // test-support agents read fixture profiles here instead.
-        .env(
-            butler_platform::browser_profiles::PROFILES_HOME_FIXTURE,
-            home,
-        )
+        .env("BUTLER_BROWSER_PROFILES_HOME", home)
         // Other AI agents' setup files come from the same fixture home.
         .env(butler_platform::agent_homes::HOME_FIXTURE, home)
         .env("XDG_CONFIG_HOME", home.join(".config"))

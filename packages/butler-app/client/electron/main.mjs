@@ -2598,6 +2598,12 @@ ipcMain.handle("butler:security-request", async (event, input) => {
 
 // Browser import: the native dialog picks the export file; its contents are
 // read only by the Agent and never reach the renderer.
+ipcMain.handle("butler:pick-browser-folder", async (event) => {
+  if (!isSecuritySenderOrigin(event.senderFrame?.origin, { appOrigin: APP_RENDERER_ORIGIN, devOrigin: explicitUiUrl ? rendererOrigin : null })) return null;
+  const result = await dialog.showOpenDialog(mainWindow ?? undefined, { properties: ["openDirectory"] });
+  return result.canceled ? null : result.filePaths[0] ?? null;
+});
+
 ipcMain.handle("butler:pick-import-file", async (event, kind) => {
   if (!isSecuritySenderOrigin(event.senderFrame?.origin, { appOrigin: APP_RENDERER_ORIGIN, devOrigin: explicitUiUrl ? rendererOrigin : null })) return null;
   const filters = kind === "bookmarks" ? [{ name: "HTML", extensions: ["html", "htm"] }] : [{ name: "CSV", extensions: ["csv"] }];

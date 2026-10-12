@@ -5,7 +5,8 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 
 pub(super) async fn list(state: &Arc<HttpState>) -> Result<Value, HttpError> {
-    let mut profiles = blocking(browser_profiles::detect).await?;
+    let dependencies = state.import_dependencies.clone();
+    let mut profiles = blocking(move || dependencies.profiles.detect()).await?;
     let folders = state.browser_import.folders.lock().await;
     profiles.retain(|p| {
         !(p.id == "blocked" && folders.values().any(|picked| picked.browser == p.browser))
@@ -43,8 +44,11 @@ pub(super) async fn resolve(
         return Ok(profile);
     }
     let key = source.to_owned();
+    let dependencies = state.import_dependencies.clone();
     blocking(move || {
-        browser_profiles::detect()
+        dependencies
+            .profiles
+            .detect()
             .into_iter()
             .find(|p| source_key(p) == key)
     })
@@ -57,10 +61,12 @@ pub(super) async fn pick(state: &Arc<HttpState>, body: &Value) -> Result<Value, 
         .as_str()
         .ok_or_else(|| failure("import_not_found"))?;
     let profile = resolve(state, source).await?;
+    let folder = body["path"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .map(std::path::PathBuf::from)
+        .ok_or_else(|| failure("invalid_import_request"))?;
     let picked = blocking(move || {
-        let Some(folder) = butler_platform::browser_transfer::pick_folder() else {
-            return Ok(None);
-        };
         browser_profiles::picked_profiles(profile, &folder)
             .map(Some)
             .map_err(|e| butler_platform::browser_transfer::io_error(&e))
