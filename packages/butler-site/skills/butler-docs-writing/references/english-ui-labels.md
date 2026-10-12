@@ -448,6 +448,7 @@ regenerate after the app copy or the Korean pages change.
 | 코딩 | **Coding** | settings |
 | 코어 기본 스킬 | **Core skills** | extensions/skills |
 | 키 발급받기 | **Get a key** | getting-started/first-run |
+| 키 입력 필요 | **Needs a key** | getting-started/first-run |
 | 키 입력 필요 1개 — 설정 › MCP | **1 needs a key — Settings › MCP** | getting-started/first-run |
 | 키체인에 저장 | **Stored in Keychain** | models/cloud |
 | 터널·프록시용 허용 호스트 | **Allowed hosts for tunnels and proxies** | advanced/remote-access, settings |
@@ -595,6 +596,8 @@ same key from `en.ts`.
 | ChatGPT에 로그인하세요 | getting-started/first-run |
 | ChatGPT에 연결했습니다 | getting-started/first-run |
 | Claude 연결 | getting-started/first-run |
+| Codex · 1/2 | getting-started/first-run |
+| Codex에서 가져올 내용 | getting-started/first-run |
 | English | getting-started/first-run |
 | Google | models/cloud |
 | Medium | getting-started/first-run |

@@ -93,7 +93,7 @@ async function capture(page: Page, name: string) {
     const ids = await page.locator("ol li").count() === 6 ? ["welcome", "consent", "memory", "connect", "import", "ready"] : ["welcome", "consent", "connect", "ready"];
     const lang = await page.locator("html").getAttribute("lang") === "ko-KR" ? "ko" : "en";
     const label = step === "import" ? getAppCopy(lang === "ko" ? "ko-KR" : "en-US").settings.pageSections.import : firstRunCopy[lang].steps[step as "consent" | "memory" | "ready" | "connect"];
-    assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${ids.indexOf(step ?? "") + 1}\n${label}${step === "connect" ? await page.locator("#first-run-reply-language").count() ? " 3/3" : await page.locator("#first-run-connect-title").count() ? " 1/3" : " 2/3" : step === "import" ? await page.locator("#first-run-agents-title, #first-run-agents-done-title").count() ? " 1/2" : " 2/2" : ""}`);
+    assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${ids.indexOf(step ?? "") + 1}\n${label}${step === "connect" ? await page.locator("#first-run-reply-language").count() ? " 3/3" : await page.locator("#first-run-connect-title").count() ? " 1/3" : " 2/3" : step === "import" ? await page.locator("#first-run-agents-title, #first-run-agent-items-title, #first-run-agents-done-title").count() ? " 1/2" : " 2/2" : ""}`);
   }
 }
 
