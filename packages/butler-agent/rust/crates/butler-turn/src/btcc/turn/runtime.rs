@@ -354,6 +354,7 @@ fn project_terminal(turn: &TurnRecord) -> Result<TurnOutcome, BtccError> {
             execution_outcome: payload.execution_outcome,
             artifacts: payload.artifacts.clone(),
             changed_files: payload.changed_files.clone(),
+            answer_blocks: payload.answer_blocks.clone(),
             plan: payload.plan.clone(),
             model_identity: payload.model_identity.clone(),
         }))
@@ -443,6 +444,7 @@ fn runtime_failure_result(
         runtime_failure: Some(failure),
         artifacts: Vec::new(),
         changed_files: Vec::new(),
+        answer_blocks: Vec::new(),
         model_identity: None,
     }
 }

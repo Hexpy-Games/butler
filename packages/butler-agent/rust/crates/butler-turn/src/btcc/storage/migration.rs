@@ -175,9 +175,12 @@ fn ensure_guided_tool_result_delivery_columns(db: &Connection) -> rusqlite::Resu
         ("delivery_round_id", "TEXT"),
         ("delivery_response_sha256", "TEXT"),
         ("changed_files_json", "TEXT"),
+        ("read_source", "TEXT"),
+        ("read_source_session", "TEXT"),
     ] {
         ensure_column(db, "btcc_guided_tool_calls", name, declaration)?;
     }
+    db.execute_batch("CREATE INDEX IF NOT EXISTS idx_btcc_read_sources ON btcc_guided_tool_calls(read_source_session,read_source) WHERE status='completed' AND read_source IS NOT NULL")?;
     Ok(())
 }
 

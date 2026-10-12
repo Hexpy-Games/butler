@@ -132,6 +132,7 @@ fn delivered(
             execution_outcome: payload.execution_outcome,
             artifacts: payload.artifacts,
             changed_files: payload.changed_files,
+            answer_blocks: payload.answer_blocks,
         },
     )))
 }
