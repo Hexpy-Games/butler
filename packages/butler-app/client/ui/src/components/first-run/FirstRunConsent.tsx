@@ -1,8 +1,18 @@
 import { faviconSrc } from "@/app/favicons.ts";
 import { Fragment } from "react";
 import {
-  AlertCircle, GitBranch, IconSlot, Monitor, Notice, ShieldCheck, SetupWizardStepAction,
-  SendHorizontal, Separator, Stack, Terminal, InlineReference, Typo,
+  AlertCircle,
+  GitBranch,
+  IconSlot,
+  Monitor,
+  Notice,
+  SetupWizardStepAction,
+  SendHorizontal,
+  Separator,
+  Stack,
+  Terminal,
+  InlineReference,
+  Typo,
 } from "@/butler-ds";
 import { FIRST_RUN_GUIDE_URL } from "./FirstRunWelcome";
 import { FirstRunPrepStatus } from "./FirstRunPrepStatus";
@@ -16,7 +26,7 @@ export function FirstRunConsent({ flow }: { flow: FirstRunFlow }) {
   const { copy, savingConsent } = flow;
   const blocked = flow.readiness.status === "failed";
   return (
-    <FirstRunStepCard flow={flow} icon={<ShieldCheck size="lg" />} title={copy.consentTitle} titleId="first-run-consent-title"
+    <FirstRunStepCard flow={flow} title={copy.consentTitle} titleId="first-run-consent-title"
       onBack={flow.mode === "consent" ? undefined : flow.backToWelcome}
       footerStart={<FirstRunPrepStatus flow={flow} />}
       actions={<>

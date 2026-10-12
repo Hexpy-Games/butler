@@ -1,4 +1,4 @@
-import { ChoiceCard, ChoiceCardList, FileText, Notebook, SetupWizardStepAction, Sparkles } from "@/butler-ds";
+import { ChoiceCard, ChoiceCardList, FileText, SetupWizardStepAction, Sparkles } from "@/butler-ds";
 import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
@@ -12,7 +12,7 @@ export function FirstRunMemory({ flow }: { flow: FirstRunFlow }) {
   ];
   const waiting = !memory.available;
   return (
-    <FirstRunStepCard flow={flow} icon={<Notebook size="lg" />} title={copy.memoryChoice.title} titleId="first-run-memory-title"
+    <FirstRunStepCard flow={flow} title={copy.memoryChoice.title} titleId="first-run-memory-title"
       description={copy.memoryChoice.lede} onBack={flow.backToConsent}
       actions={<SetupWizardStepAction forward disabled={!memory.value || memory.saving || waiting}
         title={waiting ? copy.prepWorking : undefined} onClick={memory.save}>{copy.memoryChoice.continue}</SetupWizardStepAction>}

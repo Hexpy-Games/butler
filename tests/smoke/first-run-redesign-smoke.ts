@@ -57,6 +57,7 @@ async function capture(page: Page, name: string) {
         x: element.getBoundingClientRect().x, width: element.getBoundingClientRect().width, clientWidth: element.clientWidth });
     }
     return { viewport: [innerWidth, innerHeight], card: { x: box.x, y: box.y, width: box.width }, titleX: title.x, intro,
+      bodyX: card.querySelector('[data-slot="setup-step-body"]')?.getBoundingClientRect().x,
       ancestors,
       selectWidth: document.querySelector("#first-run-language")?.getBoundingClientRect().width,
       buttonWidth: document.querySelector("#first-run-start")?.getBoundingClientRect().width,
@@ -82,7 +83,8 @@ async function capture(page: Page, name: string) {
     // Top edge: clamp(titlebar + 16px, 20% of the window, 240px) = 142px at 710px.
     assert(Math.abs(geometry.card.y - 142) < 1, `${name}: top anchor`);
     if (geometry.intro) { assert.equal(geometry.selectWidth, 386); assert.equal(geometry.buttonWidth, 386); }
-    else assert.equal(geometry.titleX, 260, name);
+    // No title glyph: the title starts on the content edge (card x + 17).
+    else { assert.equal(geometry.titleX, 232, name); assert(Math.abs(geometry.titleX - geometry.bodyX!) < 1, `${name}: title on the content edge`); }
   }
   if (!geometry.intro) {
     assert.equal(await page.locator('[data-slot="setup-step-body"]').getAttribute("data-motion"), "enter", "DS content-key transition");
@@ -91,7 +93,7 @@ async function capture(page: Page, name: string) {
     const ids = await page.locator("ol li").count() === 6 ? ["welcome", "consent", "memory", "connect", "import", "ready"] : ["welcome", "consent", "connect", "ready"];
     const lang = await page.locator("html").getAttribute("lang") === "ko-KR" ? "ko" : "en";
     const label = step === "import" ? getAppCopy(lang === "ko" ? "ko-KR" : "en-US").settings.pageSections.import : firstRunCopy[lang].steps[step as "consent" | "memory" | "ready" | "connect"];
-    assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${ids.indexOf(step ?? "") + 1}\n${label}${step === "connect" ? await page.locator("#first-run-reply-language").count() ? " 3/3" : await page.locator("#first-run-connect-title").count() ? " 1/3" : " 2/3" : step === "import" ? await page.locator("#first-run-agents-title").count() ? " 1/2" : " 2/2" : ""}`);
+    assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${ids.indexOf(step ?? "") + 1}\n${label}${step === "connect" ? await page.locator("#first-run-reply-language").count() ? " 3/3" : await page.locator("#first-run-connect-title").count() ? " 1/3" : " 2/3" : step === "import" ? await page.locator("#first-run-agents-title, #first-run-agents-done-title").count() ? " 1/2" : " 2/2" : ""}`);
   }
 }
 
@@ -128,13 +130,14 @@ async function passMemory(page: Page, language: "ko" | "en", name?: string) {
 /** First run: the optional import step sits between the AI choice and the finish. */
 async function passImport(page: Page, language: "ko" | "en") {
   const copy = firstRunCopy[language];
-  for (const [id, title] of [["agents", copy.import.agentsTitle], ["browsers", copy.import.browsersTitle]]) {
-    await page.getByRole("heading", { name: title, exact: true }).waitFor();
+  // Agents show their picker, or their result when this run already imported; Skip leaves both substeps untouched.
+  for (const [id, title] of [["agents", "#first-run-agents-title, #first-run-agents-done-title"], ["browsers", "#first-run-browsers-title"]]) {
+    await page.locator(title).first().waitFor();
     await capture(page, `after-${language}-import-${id}`);
     const skip = page.getByRole("button", { name: copy.import.skip, exact: true });
     const next = page.getByRole("button", { name: copy.next, exact: true });
     await Promise.race([skip.waitFor(), next.waitFor()]);
-    await (await next.count() ? next : skip).click();
+    await (await skip.count() ? skip : next).click();
   }
 }
 
@@ -246,14 +249,24 @@ async function otherConnection(page: Page, language: "ko" | "en", theme: "light"
     await page.locator("#first-run-api-key").fill("stub-api-key-for-smoke");
     await nextFromAuth(page, language);
   } else if (kind === "local") {
-    await page.locator('[data-card-id="local"]').click();
+    // Other holds the local models; with a local server it is a top card and This computer is gone.
+    assert.equal(await page.locator('[data-card-id="local"]').count(), 0, "no separate This computer card");
+    await page.locator('[data-test-class="first-run-top-cards"] [data-card-id="other"]').click();
     await page.locator('[data-model-key]').first().waitFor();
-    assert.equal(await page.locator('[data-model-key]').count(), stub.state.localModels, "all detected local models are listed");
+    assert.equal(await page.locator('[data-model-key]').count(), stub.state.localModels + 1, "every local model plus the server choice");
+    assert.equal(await page.locator("#first-run-server-url").count(), 0, "server form waits for the server choice");
     await capture(page, `${prefix}-local`);
     await page.getByRole("button", { name: copy.next, exact: true }).click();
+    await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
+    await page.getByRole("button", { name: copy.back, exact: true }).click();
+    await page.getByText(copy.keyValid, { exact: true }).waitFor();
+    await capture(page, `${prefix}-local-connected`);
+    await nextFromAuth(page, language);
   } else {
     await page.locator('[aria-controls="first-run-more-providers"]').click();
     await page.locator('[data-card-id="other"]').click();
+    await page.getByText(copy.localMissing, { exact: true }).waitFor();
+    assert.equal(await page.locator('[data-model-key]').count(), 0, "no local models: the server form only");
     await capture(page, `${prefix}-custom`);
     const catalog = await server.api<ModelCatalog>("/model-catalog");
     const address = catalog.registered_models.find(model => model.model_ref === "local/stub")!.server_url;
@@ -263,7 +276,7 @@ async function otherConnection(page: Page, language: "ko" | "en", theme: "light"
     await capture(page, `${prefix}-custom-models`);
     await page.getByRole("button", { name: copy.next, exact: true }).click();
   }
-  await confirmReady(page, language, copy.providerNames[kind === "key" ? "claude" : kind === "local" ? "local" : "other"]);
+  await confirmReady(page, language, kind === "key" ? copy.providerNames.claude : `${copy.providerNames.other}-${kind}`);
   await capture(page, `${prefix}-ready-${kind}`);
   await finish(page, language);
 }
@@ -301,11 +314,12 @@ async function resumeImport(page: Page) {
   await reset(page, "ko", "light");
   stub.state.local = true; stub.state.localModels = 1;
   await reachProviders(page, "ko");
-  await page.locator('[data-card-id="local"]').click();
+  await page.locator('[data-card-id="other"]').click();
+  await page.locator('[data-model-key][aria-checked="true"]').waitFor();
+  await page.getByRole("button", { name: firstRunCopy.ko.next, exact: true }).click();
   await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
   await page.getByRole("button", { name: firstRunCopy.ko.next, exact: true }).click();
   await page.locator('[data-first-run-screen="import"]').waitFor();
-  assert.equal(await page.locator("#first-run-models-title").count(), 0, "single model skips auth picker");
   await capture(page, "before-resume-import");
   await app!.stop();
   stub.state.readiness = "preparing";

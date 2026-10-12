@@ -1,10 +1,12 @@
-/* The glyph's line box is the H4 line, so `IconSlot minHeight="line"`
-   centers it on the title's first line. */
-.glyph {
+/* One step-strip line tall (the strip is Caption text): Back centers on the
+   strip's first line, also when a narrow card wraps the strip. */
+.back {
   display: inline-flex;
   flex: none;
-  font-size: var(--typo-h4-size);
-  line-height: var(--typo-h4-line-height);
+  min-height: 1lh;
+  align-items: center;
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
 }
 
 /* contentKey: the next step's content fades in; the frame and header stay. */

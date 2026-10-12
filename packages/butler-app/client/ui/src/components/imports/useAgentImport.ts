@@ -10,6 +10,8 @@ export function useAgentImport(enabled = true) {
   const [result, setResult] = useState<AgentImportCounts | null>(null);
   const [undone, setUndone] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  /** The latest counts of each imported source, for a per-tool result. */
+  const [bySource, setBySource] = useState<Record<string, AgentImportCounts>>({});
   const mounted = useRef(true);
   const receipts = useRef<AgentImportCounts[]>([]);
   useEffect(() => {
@@ -34,6 +36,7 @@ export function useAgentImport(enabled = true) {
     for (const key of sources) {
       const counts = await startAgentImport(key);
       receipts.current.push(counts);
+      if (mounted.current) setBySource(prior => ({ ...prior, [key]: counts }));
       total.run_id = counts.run_id;
       total.instructions += counts.instructions; total.servers += counts.servers; total.needs_secret += counts.needs_secret;
       total.instructions_existing += counts.instructions_existing; total.servers_existing += counts.servers_existing; total.skipped += counts.skipped;
@@ -55,6 +58,6 @@ export function useAgentImport(enabled = true) {
     }
     if (mounted.current) { setResult(result); setUndone(true); }
   });
-  const more = () => { receipts.current = []; setResult(null); setError(null); setUndone(false); };
-  return { sources, busy, error, result, undone, selected, run, undo, more };
+  const more = () => { receipts.current = []; setResult(null); setBySource({}); setError(null); setUndone(false); };
+  return { sources, busy, error, result, bySource, undone, selected, run, undo, more };
 }

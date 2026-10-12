@@ -1,7 +1,6 @@
 import { useRef, type ComponentProps, type ReactNode } from "react";
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
-import { IconSlot } from "../../components/IconSlot";
 import { ArrowLeft, ArrowRight } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
@@ -11,8 +10,7 @@ import { SetupWizardContent, SetupWizardProgress, type SetupWizardStep } from ".
 import styles from "./SetupWizardStepCard.module.css";
 
 export interface SetupWizardStepCardProps {
-  /** One 20px glyph (an `lg` icon, ProviderLogo or ButlerThinkingMark); it stands on its own, with no tile. */
-  icon: ReactNode;
+  /** No title glyph: the title starts on the content's left edge. */
   title: ReactNode;
   /** Id of the title heading, for focus after a step change and for `aria-labelledby`. */
   titleId?: string;
@@ -37,32 +35,34 @@ export interface SetupWizardStepCardProps {
 
 /**
  * One step of a focus-variant setup flow: header row (back · steps), a title
- * with its glyph on the first line, the step's content and a footer row
+ * on the content's left edge, the step's content and a footer row
  * (status · right-aligned large actions). Always the wide (520px) solid card.
  */
 export function SetupWizardStepCard({
-  icon, title, titleId, titleAs = "h1", description, steps, activeIndex = 0, progressLabel,
+  title, titleId, titleAs = "h1", description, steps, activeIndex = 0, progressLabel,
   onBack, backLabel, contentKey, footerStart, actions, children,
 }: SetupWizardStepCardProps) {
   const firstKey = useRef(contentKey);
   const fade = useRef(false);
   if (contentKey !== firstKey.current && !fade.current) fade.current = !prefersReducedMotion();
   const header = onBack || steps;
+  // The header row aligns to its top: Back sits on the step strip's first line, also when a narrow card wraps the strip.
   return (
     <SetupWizardContent width="wide" surface="solid">
       {header ? (
-        <Stack align="row" justify={onBack ? "between" : "end"} cross="center" gap="md" data-slot="setup-step-header">
-          {onBack ? <Button iconStart={<ArrowLeft size="md" />} size="sm" text={backLabel} type="button" variant="inline" onClick={onBack} /> : null}
+        <Stack align="row" justify={onBack ? "between" : "end"} cross="start" gap="md" data-slot="setup-step-header">
+          {onBack ? (
+            <span className={styles.back}>
+              <Button iconStart={<ArrowLeft size="md" />} size="sm" text={backLabel} type="button" variant="inline" onClick={onBack} />
+            </span>
+          ) : null}
           {steps ? <SetupWizardProgress activeIndex={activeIndex} ariaLabel={progressLabel} steps={steps} /> : null}
         </Stack>
       ) : null}
       <Stack className={dsClass(fade.current ? styles.bodyEnter : undefined)} gap="lg" key={contentKey} data-motion={fade.current ? "enter" : undefined} data-slot="setup-step-body" data-setup-rows="">
-        <Stack align="row" cross="start" gap="sm">
-          <span aria-hidden="true" className={styles.glyph}><IconSlot size="lg" minHeight="line">{icon}</IconSlot></span>
-          <Stack gap="xs" minWidth="0">
-            <Typo.H4 as={titleAs} id={titleId} tabIndex={-1}>{title}</Typo.H4>
-            {description ? <Typo.Body tone="secondary">{description}</Typo.Body> : null}
-          </Stack>
+        <Stack gap="xs" minWidth="0">
+          <Typo.H4 as={titleAs} id={titleId} tabIndex={-1}>{title}</Typo.H4>
+          {description ? <Typo.Body tone="secondary">{description}</Typo.Body> : null}
         </Stack>
         {children}
         {footerStart || actions ? (

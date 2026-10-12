@@ -3,7 +3,6 @@ import { PROVIDER_CARDS, type FirstRunProviderCardId, type LocalModelOption } fr
 import type { ConnectView, FirstRunMode, ImportStage } from "./useFirstRunFlow";
 import type { useConnectionCommit } from "./useConnectionCommit";
 import type { useSignIn } from "./useSignIn";
-import type { useLocalModelServers } from "./useLocalModelServers";
 
 export function useFirstRunStages(mode: FirstRunMode) {
   const [view, setView] = useState<ConnectView>({ kind: "list" });
@@ -19,11 +18,10 @@ export function useFirstRunStages(mode: FirstRunMode) {
     advanceOnConnect, setAdvanceOnConnect, importStage, setImportStage };
 }
 
-export function connectionActions({ stages, commit, signIn, local, current, onCancel }: {
+export function connectionActions({ stages, commit, signIn, current, onCancel }: {
   stages: ReturnType<typeof useFirstRunStages>;
   commit: ReturnType<typeof useConnectionCommit>;
   signIn: ReturnType<typeof useSignIn>;
-  local: ReturnType<typeof useLocalModelServers>;
   current: FirstRunProviderCardId | null;
   onCancel?: () => void;
 }) {
@@ -41,11 +39,7 @@ export function connectionActions({ stages, commit, signIn, local, current, onCa
     ...stageActions(stages, commit),
     pick: (cardId: FirstRunProviderCardId) => {
       setAuthDone(false); setReplyDone(false); setAdvanceOnConnect(false);
-      const only = onlyModel(cardId, local.options);
-      if (only) {
-        setView(connectionView(cardId)); setAdvanceOnConnect(true);
-        commit.submit({ kind: "local", cardId, option: only });
-      } else pickProvider(cardId, commit, signIn, setView);
+      pickProvider(cardId, commit, signIn, setView);
     },
     cancel: () => {
       signIn.leave();
@@ -59,25 +53,13 @@ export function connectionActions({ stages, commit, signIn, local, current, onCa
         // Routine presets are for a new AI; the AI already in use keeps its model and effort.
         keepDefaults: current === cardId,
       }),
-    connectLocal: (cardId: FirstRunProviderCardId, option: LocalModelOption, apiKey?: string) =>
-      commit.submit({ kind: "local", cardId, option, apiKey }),
   };
 }
 
-/**
- * Skip rule (pending owner confirmation): "This computer" with exactly one detected model connects it
- * right from ① and opens ③ once connected; Back from ③ still shows ② with that connection.
- */
-function onlyModel(cardId: FirstRunProviderCardId, options: LocalModelOption[]): LocalModelOption | null {
-  return PROVIDER_CARDS[cardId].kind === "local" && options.length === 1 ? options[0]! : null;
-}
-
-/** ② for a card; a custom server that is already connected shows its connection, not the address form. */
-function connectionView(cardId: FirstRunProviderCardId, connected = false): ConnectView {
+/** ② for a card: sign-in, its key form, or Other (models on this computer plus a server address). */
+function connectionView(cardId: FirstRunProviderCardId): ConnectView {
   const kind = PROVIDER_CARDS[cardId].kind;
-  if (kind === "signin" || kind === "local") return { kind };
-  if (kind === "key") return { kind: "key", cardId };
-  return connected ? { kind: "customModels", options: [] } : { kind: "custom" };
+  return kind === "key" ? { kind: "key", cardId } : { kind };
 }
 
 /** Preserve the existing option kinds and start sign-in only after an explicit pick. */
@@ -105,7 +87,7 @@ function stageActions(stages: ReturnType<typeof useFirstRunStages>, commit: Retu
     /** ③ back to ②; the live connection stays, also after a resume (which starts on ③ with no ② view yet). */
     backFromReply: () => {
       const cardId = commit.connected?.cardId ?? commit.savedCardId;
-      if (view.kind === "list" && cardId) setView(connectionView(cardId, true));
+      if (view.kind === "list" && cardId) setView(connectionView(cardId));
       setAuthDone(false);
     },
     toBrowsers: () => setImportStage("browsers"),

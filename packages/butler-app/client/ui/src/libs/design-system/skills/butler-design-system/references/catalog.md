@@ -1478,14 +1478,14 @@ The first-run setup frame: step progress, a large title and centered content, or
 
 `import { SetupWizardStepCard } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/SetupWizardStepCard`
 
-One step of a focus-variant setup flow: header (back · steps), a title with a bare 20px glyph, the step's content and a footer with right-aligned large actions.
+One step of a focus-variant setup flow: header (back · steps), a title on the content's left edge, the step's content and a footer with right-aligned large actions.
 
 - Use for: Every step after the intro in a first-run or setup flow
 - Use for: A sub-step (sign-in, API key, model pick) that keeps the flow's header and footer
 - Not for: The intro or welcome screen of a flow → `SetupWizardContent`
 - Not for: A short task inside the app → `DialogForm`
 - Not for: A settings page → `SettingsShell`
-- Tokens: `--typo-h4-size`, `--typo-h4-line-height`, `--icon-size-lg`, `--control-height-lg`, `--space-lg`, `--motion-base`, `--motion-ease-decelerate`
+- Tokens: `--typo-h4-size`, `--typo-h4-line-height`, `--control-height-lg`, `--space-lg`, `--motion-base`, `--motion-ease-decelerate`
 
 ### SidebarShell
 
