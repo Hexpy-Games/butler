@@ -115,6 +115,14 @@ fn parent_item(step: usize) -> Value {
 }
 
 fn child_item(step: usize, body: &Value, script: &Script) -> Value {
+    // Only the butler answers the user; a steward reports to it.
+    let offered = body["tools"].as_array().into_iter().flatten();
+    assert!(
+        !offered
+            .into_iter()
+            .any(|tool| tool["name"] == "answer_blocks"),
+        "a steward was offered answer_blocks"
+    );
     let collecting = if script.answer_blocks.load(Ordering::SeqCst) {
         2
     } else {
