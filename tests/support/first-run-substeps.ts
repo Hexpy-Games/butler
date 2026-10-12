@@ -2,6 +2,7 @@
 import { strict as assert } from "node:assert";
 import type { Page } from "playwright";
 import { getAppCopy } from "../../packages/butler-i18n/src/index";
+import { settleFirstRun } from "./first-run-visual";
 type FirstRunCopy = ReturnType<typeof getAppCopy>["firstRun"];
 
 /** Exercise the real wizard; persisted connection and completion remain separate. */
@@ -16,6 +17,7 @@ export async function substepBackPaths(page: Page, language: string, copy: First
   assert.equal(await page.getByRole("button", { name: copy.next, exact: true }).isEnabled(), true, "3->2 keeps connection");
   await back();
   await page.locator("#first-run-connect-title").waitFor();
+  await settleFirstRun(page);
   assert.match(await page.locator('ol [aria-current="step"]').innerText(), /1\/3/u, "2->1 clears connection");
   state.oauthStatus = "completed";
   await page.locator('[data-card-id="chatgpt"]').click();

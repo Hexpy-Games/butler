@@ -242,7 +242,8 @@ async function otherConnection(page: Page, language: "ko" | "en", theme: "light"
     await page.locator("#first-run-api-key").fill("stub-api-key-for-smoke");
   } else if (kind === "local") {
     await page.locator('[data-card-id="local"]').click();
-    await page.locator('[role="radio"]').waitFor();
+    await page.locator('[data-model-key]').first().waitFor();
+    assert.equal(await page.locator('[data-model-key]').count(), stub.state.localModels, "all detected local models are listed");
     await capture(page, `${prefix}-local`);
     await page.getByRole("button", { name: copy.next, exact: true }).click();
   } else {
@@ -253,7 +254,7 @@ async function otherConnection(page: Page, language: "ko" | "en", theme: "light"
     const address = catalog.registered_models.find(model => model.model_ref === "local/stub")!.server_url;
     await page.locator("#first-run-server-url").fill(address!);
     await page.getByRole("button", { name: copy.customConnect, exact: true }).click();
-    await page.locator('[role="radio"]').waitFor();
+    await page.locator('[data-model-key]').first().waitFor();
     await capture(page, `${prefix}-custom-models`);
     await page.getByRole("button", { name: copy.next, exact: true }).click();
   }
@@ -331,6 +332,12 @@ async function resumeImport(page: Page) {
     assert.deepEqual(frames, ["connect"], "saved connection resumes at reply language, including readiness wait");
     measurements.push({ name: "resume-first-render", frames });
     assert.equal((await server.api<{ onboarding: { completed_at: string | null } }>("/settings")).onboarding.completed_at, null);
+    await page.getByRole("button", { name: firstRunCopy.ko.back, exact: true }).click();
+    await page.getByText(firstRunCopy.ko.keyValid, { exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: firstRunCopy.ko.next, exact: true }).isEnabled(), true, "resumed model connection survives 3->2");
+    await capture(page, "after-resume-model-connected");
+    await page.getByRole("button", { name: firstRunCopy.ko.next, exact: true }).click();
+    await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
   } finally {
     await app?.stop();
     rmSync(renderer, { recursive: true, force: true });

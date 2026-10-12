@@ -1,8 +1,10 @@
 import { useState } from "react";
 import {
   SetupWizardStepAction,
+  CheckCircle2,
   ChoiceCard,
   ChoiceCardList,
+  Notice,
   ProviderLogo,
   Server,
   Typo,
@@ -33,7 +35,8 @@ export function FirstRunModelPicker({ cardId, flow, options, apiKey, title, body
         {busy ? copy.connecting : flow.copy.next}
       </SetupWizardStepAction>}
     >
-      {options.length === 0 ? <Typo.Body tone="secondary">{copy.noModels}</Typo.Body> : (
+      {flow.commit.connected ? <Notice tone="neutral" icon={<CheckCircle2 size="md" />} message={copy.keyValid} />
+        : options.length === 0 ? <Typo.Body tone="secondary">{copy.noModels}</Typo.Body> : (
         <ChoiceCardList aria-labelledby="first-run-models-title" role="radiogroup">
           {options.map((option) => (
             <ChoiceCard
