@@ -3,6 +3,7 @@
 mod auth_model;
 mod config;
 mod config_commands;
+mod folder;
 mod path;
 #[cfg(test)]
 mod tests;
@@ -30,6 +31,8 @@ struct Options {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Command {
+    FolderShow,
+    FolderSet,
     ConfigGet,
     ConfigSet,
     AuthStatus,
@@ -42,6 +45,11 @@ enum Command {
 impl Command {
     fn from_positionals(values: &[String]) -> Option<Self> {
         match values {
+            [family, action, ..] if family == "folder" => match action.as_str() {
+                "show" => Some(Self::FolderShow),
+                "set" => Some(Self::FolderSet),
+                _ => None,
+            },
             [family, action, ..] if family == "config" => match action.as_str() {
                 "get" => Some(Self::ConfigGet),
                 "set" => Some(Self::ConfigSet),
@@ -64,6 +72,8 @@ impl Command {
 
     fn name(self) -> &'static str {
         match self {
+            Self::FolderShow => "butler folder show",
+            Self::FolderSet => "butler folder set",
             Self::ConfigGet => "butler config get",
             Self::ConfigSet => "butler config set",
             Self::AuthStatus => "butler auth status",
@@ -112,6 +122,9 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
     };
 
     match command {
+        Command::FolderShow | Command::FolderSet => {
+            folder::run(&options, command, &data_root, &installation).await
+        }
         Command::ConfigGet => {
             config_commands::config_get(&options, command, &data_root, &installation)
         }

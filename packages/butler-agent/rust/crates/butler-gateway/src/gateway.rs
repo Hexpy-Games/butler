@@ -459,3 +459,5 @@ mod tests;
 mod wallpaper_modules;
 mod wallpaper_store;
 mod wallpapers;
+
+pub use application::project_folder;

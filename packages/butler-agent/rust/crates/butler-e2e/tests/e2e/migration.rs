@@ -32,6 +32,14 @@ async fn mig_01_pre_btcc_data_dir_is_refused_without_writes() -> Result<(), Harn
     )?;
     let before = tree(&data);
     let launch = butler_e2e::e2e::agent::Launch::new(&setup.sandbox)?;
+    let folder = launch
+        .command()
+        .args(["folder", "set"])
+        .arg(&setup.sandbox.workspace)
+        .arg("--json")
+        .output()?;
+    assert!(!folder.status.success(), "folder CLI accepted legacy DATA");
+    assert_eq!(tree(&data), before, "folder CLI modified legacy DATA");
     let output = launch
         .command()
         .stdin(std::process::Stdio::null())

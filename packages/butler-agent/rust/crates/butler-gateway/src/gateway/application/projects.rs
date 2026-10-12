@@ -2,12 +2,12 @@
 
 mod contracts;
 mod dashboard;
-mod folder;
+pub(super) mod folder;
 mod git;
 mod mutations;
 mod owner;
 mod rows;
-mod token;
+pub(super) mod token;
 
 use crate::gateway::application::storage::AppStorageCode;
 pub(crate) use contracts::AppProjectSummary;
@@ -96,7 +96,7 @@ pub(super) fn effective_root(db: &Connection) -> Result<PathBuf, AppStorageError
 }
 
 /// Read the current setting without substituting a workspace when it is unset.
-fn configured_root(db: &Connection) -> Result<Option<PathBuf>, AppStorageError> {
+pub(super) fn configured_root(db: &Connection) -> Result<Option<PathBuf>, AppStorageError> {
     let encoded: Option<String> = db
         .query_row(
             "SELECT value_json FROM app_settings WHERE key='default-project-workspace-root'",

@@ -59,13 +59,7 @@ pub(super) fn timezone(stored: Option<&Value>, local: Option<&Value>) -> String 
         .unwrap_or("UTC")
         .to_owned()
 }
-pub(super) fn workspace_label(path: &std::path::Path) -> String {
-    path.file_name()
-        .and_then(|value| value.to_str())
-        .filter(|value| !value.is_empty())
-        .unwrap_or("Project")
-        .to_owned()
-}
+
 pub(super) fn multiline(value: Option<&Value>) -> &'static str {
     match value.and_then(Value::as_str) {
         Some("enter_send_shift_enter_newline") => "enter_send_shift_enter_newline",
