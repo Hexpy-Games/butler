@@ -273,6 +273,7 @@ export interface McpSecretView {
 }
 
 export interface McpServerView {
+  tool_filter_review_required?: boolean;
   id: string;
   display_name: string;
   enabled: boolean;

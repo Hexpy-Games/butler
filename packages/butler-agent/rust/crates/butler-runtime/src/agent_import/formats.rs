@@ -115,7 +115,7 @@ pub(super) fn codex(name: &str, entry: &Value) -> Option<Raw> {
         raw.header_keys.push("Authorization".into());
     }
     raw.disabled = entry["enabled"] == Value::Bool(false);
-    raw.restricted = has_items(&entry["enabled_tools"]) || has_items(&entry["disabled_tools"]);
+    raw.restricted = entry["enabled_tools"].is_array() || has_items(&entry["disabled_tools"]);
     Some(raw)
 }
 
@@ -123,6 +123,7 @@ pub(super) fn codex(name: &str, entry: &Value) -> Option<Raw> {
 pub(super) fn claude(name: &str, entry: &Value) -> Option<Raw> {
     let mut raw = base(name, entry)?;
     raw.sse = entry["type"] == "sse";
+    raw.disabled = entry["disabled"] == Value::Bool(true);
     Some(raw)
 }
 
@@ -133,9 +134,18 @@ pub(super) fn claude_servers(text: &str) -> Result<Value, FormatError> {
     struct Claude {
         #[serde(rename = "mcpServers", default)]
         mcp_servers: Map<String, Value>,
+        #[serde(rename = "disabledMcpServers", default)]
+        disabled_servers: Vec<String>,
     }
     serde_json::from_str::<Claude>(text)
-        .map(|claude| Value::Object(claude.mcp_servers))
+        .map(|mut claude| {
+            for name in claude.disabled_servers {
+                if let Some(Value::Object(entry)) = claude.mcp_servers.get_mut(&name) {
+                    entry.insert("disabled".into(), Value::Bool(true));
+                }
+            }
+            Value::Object(claude.mcp_servers)
+        })
         .map_err(|_| FormatError)
 }
 
@@ -161,6 +171,6 @@ pub(super) fn hermes(name: &str, entry: &Value) -> Option<Raw> {
     let mut raw = base(name, entry)?;
     raw.disabled = entry["enabled"] == Value::Bool(false);
     let tools = &entry["tools"];
-    raw.restricted = has_items(&tools["include"]) || has_items(&tools["exclude"]);
+    raw.restricted = tools["include"].is_array() || has_items(&tools["exclude"]);
     Some(raw)
 }

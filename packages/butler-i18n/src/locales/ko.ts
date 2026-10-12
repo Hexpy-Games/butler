@@ -1210,7 +1210,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     hooks: { add: "훅 추가", edit: "편집", test: "테스트", remove: "삭제", recent: "최근 실행", empty: "훅 없음", name: "이름", event: "이벤트", tools: "도구", command: "명령", args: "인수 (JSON)", timeout: "제한 시간 (ms)", failClosed: "오류 시 차단", async: "백그라운드", enabled: "사용", refresh: "새로고침", blocked: "훅이 차단함", editTitle: "훅 편집", disabled: "사용 안 함", emptyRuns: "실행 기록 없음", testSuccess: "실행 성공", testFailure: "실행 실패", exitCode: "종료 코드", commandDisabled: "인수를 사용 중입니다.", commandRequired: "명령 또는 인수를 입력합니다.", deleteConfirm: name => `훅 "${name}"을 삭제합니다.` },
     deleteSchedule: name => `예약 작업 "${name}"을 삭제합니다.`,
     deleteMcpServer: name => `MCP 서버 "${name}"과 저장된 인증 정보를 삭제합니다.`,
-    mcpEnabled: "사용 중", mcpDisabled: "사용 안 함", mcpNeedsSecret: "키 입력 필요",
+    mcpToolFilterReview: "도구 제한 확인 필요", mcpEnabled: "사용 중", mcpDisabled: "사용 안 함", mcpNeedsSecret: "키 입력 필요",
     mcpIdRequired: "서버 ID를 입력합니다.",
     mcpIdInvalid: "영문·숫자·점·밑줄·하이픈 1~80자로 입력합니다.",
     mcpIdPreview: id => `저장 ID: ${id}`,
