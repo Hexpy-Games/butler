@@ -13,7 +13,6 @@ async fn retry_reuses_the_same_turn_attempt_controls_and_user_message() {
         AppApplicationConfig {
             database_path: path.clone(),
             butler_data: path.parent().unwrap().into(),
-            project_workspace_root: path.parent().unwrap().into(),
             folder_selection_secret: None,
         },
         dependencies(native.clone(), 800),

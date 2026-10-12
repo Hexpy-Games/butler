@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "../../components/Button";
 import { Typo } from "../../components/Typo";
 import styles from "./ComposerDecisionPanel.module.css";
@@ -11,8 +11,9 @@ const CLAMP_LINES = 4;
  * cut; with `showMoreLabel` and `showLessLabel` a long block clamps and an
  * inline button reveals the rest (the QueuedMessage pattern).
  */
-export function ComposerDecisionDetails({ lines, showMoreLabel, showLessLabel }: {
+export function ComposerDecisionDetails({ lines, showMoreLabel, showLessLabel, renderText }: {
   lines: readonly string[];
+  renderText?: (text: string) => ReactNode;
   showMoreLabel?: string;
   showLessLabel?: string;
 }) {
@@ -38,7 +39,7 @@ export function ComposerDecisionDetails({ lines, showMoreLabel, showLessLabel }:
     <div className={styles.details} data-slot="composer-decision-details">
       <div id={id} ref={ref} className={styles.detailLines} data-clamped={clamp && !expanded ? "true" : undefined}>
         {lines.map((line, index) => (
-          <Typo.Caption key={`${index}:${line}`} as="p" tone="secondary" wrap="anywhere">{line}</Typo.Caption>
+          <Typo.Caption key={`${index}:${line}`} as="p" tone="secondary" wrap="anywhere" title={line}>{renderText ? renderText(line) : line}</Typo.Caption>
         ))}
       </div>
       {clamp && (overflowing || expanded) ? (

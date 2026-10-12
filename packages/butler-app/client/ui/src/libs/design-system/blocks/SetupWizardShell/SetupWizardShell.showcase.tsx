@@ -68,26 +68,31 @@ function Focus({ context, tone, anchor = "center" }: { context: ShowcaseRenderCo
 }
 
 /**
- * The first-run pair: the 420px intro and the 520px consent step. Start and
- * Back change `stepKey`, so the card morphs; focus follows the new card.
+ * The first-run flow: the 420px intro, the 520px safety step and a shorter
+ * install step. Every Start, Accept and Back changes `stepKey`, so the card
+ * morphs each time (width, height or both); focus follows the new card.
  */
 function MorphFlow({ context, tone, intro }: { context: ShowcaseRenderContext; tone: "light" | "dark"; intro?: SetupWizardIntro }) {
   const copy = text(context), welcome = focusLabels[context.locale], id = useId();
-  const [step, setStep] = useState(false);
+  const [step, setStep] = useState(0);
   const moved = useRef(false);
   useEffect(() => {
     if (moved.current) document.getElementById(step ? `${id}-title` : `${id}-start`)?.focus({ preventScroll: true });
     moved.current = true;
   }, [id, step]);
+  const steps = copy.steps.map((label) => ({ id: label, label }));
   return (
-    <SetupWizardShell anchor="top" embedded intro={intro} stepKey={step ? "step" : "intro"} title="Butler" tone={tone} variant="focus">
-      {step ? (
-        <SetupWizardStepCard activeIndex={1} backLabel={copy.back} icon={<ShieldCheck size="lg" />} onBack={() => setStep(false)}
-          steps={copy.steps.map((label) => ({ id: label, label }))} title={copy.title} titleId={`${id}-title`}
-          actions={<SetupWizardStepAction forward text={copy.accept} />}>
+    <SetupWizardShell anchor="top" embedded intro={intro} stepKey={`step-${step}`} title="Butler" tone={tone} variant="focus">
+      {step === 1 ? (
+        <SetupWizardStepCard activeIndex={1} backLabel={copy.back} icon={<ShieldCheck size="lg" />} onBack={() => setStep(0)}
+          steps={steps} title={copy.title} titleId={`${id}-title`}
+          actions={<SetupWizardStepAction forward text={copy.accept} onClick={() => setStep(2)} />}>
           <Typo.Body>{copy.body}</Typo.Body>
           <SetupWizardList>{copy.items.map((item) => <li key={item}><Typo.Body as="span">{item}</Typo.Body></li>)}</SetupWizardList>
         </SetupWizardStepCard>
+      ) : step === 2 ? (
+        <SetupWizardStepCard activeIndex={2} backLabel={copy.back} icon={<ShieldCheck size="lg" />} onBack={() => setStep(1)}
+          steps={steps} title={copy.steps[2]} titleId={`${id}-title`} />
       ) : (
         <SetupWizardContent surface="solid">
           <Stack cross="center" gap="md">
@@ -95,7 +100,7 @@ function MorphFlow({ context, tone, intro }: { context: ShowcaseRenderContext; t
             <Typo.H3 as="h1" align="center">{welcome.title}</Typo.H3>
             <Typo.Body align="center" tone="secondary">{welcome.body}</Typo.Body>
           </Stack>
-          <Button id={`${id}-start`} size="lg" stretch onClick={() => setStep(true)}>{welcome.agree}</Button>
+          <Button id={`${id}-start`} size="lg" stretch onClick={() => setStep(1)}>{welcome.agree}</Button>
         </SetupWizardContent>
       )}
     </SetupWizardShell>
@@ -109,8 +114,8 @@ export const stories: ShowcaseStory[] = [
   { name: "Focus (one column, dark)", widths: ["375", "app"], render: (context) => <Focus context={context} tone="dark" /> },
   { name: "Focus anchored to the top (light)", widths: ["app", "wide"], render: (context) => <Focus anchor="top" context={context} tone="light" /> },
   { name: "Focus anchored to the top (dark)", widths: ["app", "wide"], render: (context) => <Focus anchor="top" context={context} tone="dark" /> },
-  { name: "Card morph (intro to step)", widths: ["375", "app", "wide"], render: (context) => <MorphFlow context={context} tone="light" /> },
-  { name: "Card morph (intro to step, dark)", widths: ["375", "app"], render: (context) => <MorphFlow context={context} tone="dark" /> },
+  { name: "Card morph (every step change)", widths: ["375", "app", "wide"], render: (context) => <MorphFlow context={context} tone="light" /> },
+  { name: "Card morph (every step change, dark)", widths: ["375", "app"], render: (context) => <MorphFlow context={context} tone="dark" /> },
   { name: "Re-run entrance (intro=\"rerun\")", widths: ["375", "app"], render: (context) => <MorphFlow context={context} intro="rerun" tone="light" /> },
   { name: "Ink intro (intro=\"full\", first install)", widths: ["375", "app", "wide"], render: (context) => <MorphFlow context={context} intro="full" tone="light" /> },
   { name: "Ink intro (intro=\"full\", dark)", widths: ["375", "app"], render: (context) => <MorphFlow context={context} intro="full" tone="dark" /> },
