@@ -1,5 +1,5 @@
 //! Chromium macOS Login Data and Safe Storage. Windows uses the guided CSV flow.
-use super::{ImportError, Login};
+use super::{ImportError, Login, LoginBatch, SafeStorageKeySource};
 #[cfg(target_os = "macos")]
 use super::{Snapshot, sql_error};
 use std::path::Path;
@@ -7,83 +7,17 @@ use std::path::Path;
 use zeroize::Zeroizing;
 
 #[cfg(target_os = "macos")]
-fn storage_key(browser: &str) -> Result<Zeroizing<Vec<u8>>, ImportError> {
-    let (service, account) = match browser {
-        "chrome" => ("Chrome Safe Storage", "Chrome"),
-        "edge" => ("Microsoft Edge Safe Storage", "Microsoft Edge"),
-        "brave" => ("Brave Safe Storage", "Brave"),
-        "arc" => ("Arc Safe Storage", "Arc"),
-        "whale" => ("Whale Safe Storage", "Whale"),
-        "chromium" => ("Chromium Safe Storage", "Chromium"),
-        _ => return Err(ImportError::CsvRequired),
-    };
-    #[cfg(feature = "test-support")]
-    let fixture = std::env::var("BUTLER_BROWSER_IMPORT_TEST_SERVICE")
-        .ok()
-        .filter(|s| s.starts_with("com.hexpy.butler.e2e.import."));
-    #[cfg(feature = "test-support")]
-    let service = fixture.as_deref().unwrap_or(service);
-    // The fixture is created by the importing executable, retaining default
-    // Keychain access controls without an unattended cross-binary consent.
-    #[cfg(feature = "test-support")]
-    let seeded =
-        fixture.is_some() && std::env::var("BUTLER_BROWSER_IMPORT_TEST_SEED").as_deref() == Ok("1");
-    #[cfg(feature = "test-support")]
-    if seeded {
-        security_framework::passwords::set_generic_password(
-            service,
-            account,
-            b"fixture-safe-storage",
-        )
-        .map_err(|_| ImportError::Keychain)?;
-    }
-    let key = security_framework::passwords::get_generic_password(service, account)
-        .map(Zeroizing::new)
-        .map_err(|_| ImportError::Keychain);
-    #[cfg(feature = "test-support")]
-    if seeded {
-        security_framework::passwords::delete_generic_password(service, account)
-            .map_err(|_| ImportError::Keychain)?;
-    }
-    key
-}
-
-/// A fixture-only, metadata-only absence check; it never reads a password.
-#[cfg(feature = "test-support")]
-pub fn fixture_storage_absent(service: &str) -> Result<bool, ImportError> {
-    if !service.starts_with("com.hexpy.butler.e2e.import.") {
-        return Err(ImportError::Format);
-    }
-    #[cfg(target_os = "macos")]
-    {
-        use security_framework::item::{ItemClass, ItemSearchOptions};
-        match ItemSearchOptions::new()
-            .class(ItemClass::generic_password())
-            .service(service)
-            .account("Chrome")
-            .load_refs(true)
-            .search()
-        {
-            Ok(items) => Ok(items.is_empty()),
-            Err(error) if error.code() == -25300 => Ok(true),
-            Err(_) => Err(ImportError::Keychain),
-        }
-    }
-    #[cfg(not(target_os = "macos"))]
-    Ok(true)
-}
-
-#[cfg(target_os = "macos")]
 pub(super) fn passwords(
     browser: &str,
     dir: &Path,
     scratch: &Path,
-) -> Result<Vec<Login>, ImportError> {
+    keys: &dyn SafeStorageKeySource,
+) -> Result<LoginBatch, ImportError> {
     let source = dir.join("Login Data");
     if !source.try_exists().map_err(|e| super::io_error(&e))? {
-        return Ok(Vec::new());
+        return Ok(LoginBatch::default());
     }
-    let key = storage_key(browser)?;
+    let key = keys.key(browser)?;
     read_logins(&source, scratch, &key)
 }
 #[cfg(not(target_os = "macos"))]
@@ -91,40 +25,74 @@ pub(super) fn passwords(
     _browser: &str,
     _dir: &Path,
     _scratch: &Path,
-) -> Result<Vec<Login>, ImportError> {
+    _keys: &dyn SafeStorageKeySource,
+) -> Result<LoginBatch, ImportError> {
     Err(ImportError::CsvRequired)
 }
 
 #[cfg(target_os = "macos")]
-fn read_logins(source: &Path, scratch: &Path, password: &[u8]) -> Result<Vec<Login>, ImportError> {
-    use crate::secrets::SecretText;
-    use cbc::cipher::{BlockDecryptMut, KeyIvInit, block_padding::Pkcs7};
+fn read_logins(source: &Path, scratch: &Path, password: &[u8]) -> Result<LoginBatch, ImportError> {
     let snapshot = Snapshot::new(source, scratch)?;
     let db = rusqlite::Connection::open(&snapshot.path).map_err(|e| sql_error(&e))?;
-    let mut statement = db.prepare("SELECT origin_url, username_value, password_value FROM logins WHERE blacklisted_by_user=0 ORDER BY rowid").map_err(|e| sql_error(&e))?;
+    let columns = db
+        .prepare("PRAGMA table_info(logins)")
+        .map_err(|e| sql_error(&e))?
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| sql_error(&e))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| sql_error(&e))?;
+    let time = |name: &str| {
+        if columns.iter().any(|c| c == name) {
+            name
+        } else {
+            "0"
+        }
+        .to_owned()
+    };
+    let query = format!(
+        "SELECT origin_url,username_value,password_value,max(coalesce({},0), coalesce({},0)) FROM logins WHERE blacklisted_by_user=0 ORDER BY rowid",
+        time("date_last_used"),
+        time("date_password_modified")
+    );
+    let mut statement = db.prepare(&query).map_err(|e| sql_error(&e))?;
     let mut rows = statement.query([]).map_err(|e| sql_error(&e))?;
     let mut key = Zeroizing::new([0_u8; 16]);
     pbkdf2::pbkdf2_hmac::<sha1::Sha1>(password, b"saltysalt", 1003, &mut *key);
-    let mut logins = Vec::new();
+    let mut batch = LoginBatch::default();
     while let Some(row) = rows.next().map_err(|e| sql_error(&e))? {
-        let encrypted = Zeroizing::new(row.get::<_, Vec<u8>>(2).map_err(|e| sql_error(&e))?);
-        if encrypted.is_empty() {
-            continue;
+        match decrypt_row(row, &key) {
+            Ok(Some(login)) => batch.logins.push(login),
+            Ok(None) => {}
+            Err(_) => batch.invalid += 1,
         }
-        let cipher = encrypted
-            .strip_prefix(b"v10")
-            .ok_or(ImportError::CsvRequired)?;
-        let decrypted = Zeroizing::new(
-            cbc::Decryptor::<aes::Aes128>::new((&*key).into(), (&[b' '; 16]).into())
-                .decrypt_padded_vec_mut::<Pkcs7>(cipher)
-                .map_err(|_| ImportError::Format)?,
-        );
-        let password = std::str::from_utf8(&decrypted).map_err(|_| ImportError::Format)?;
-        logins.push(Login {
-            origin: row.get(0).map_err(|e| sql_error(&e))?,
-            username: SecretText::new(row.get(1).map_err(|e| sql_error(&e))?),
-            password: SecretText::new(password.into()),
-        });
     }
-    Ok(logins)
+    Ok(batch)
+}
+
+#[cfg(target_os = "macos")]
+fn decrypt_row(row: &rusqlite::Row<'_>, key: &[u8; 16]) -> Result<Option<Login>, ImportError> {
+    use crate::secrets::SecretText;
+    use cbc::cipher::{BlockDecryptMut, KeyIvInit, block_padding::Pkcs7};
+    let encrypted = Zeroizing::new(row.get::<_, Vec<u8>>(2).map_err(|e| sql_error(&e))?);
+    if encrypted.is_empty() {
+        return Ok(None);
+    }
+    let cipher = encrypted
+        .strip_prefix(b"v10")
+        .ok_or(ImportError::CsvRequired)?;
+    let decrypted = Zeroizing::new(
+        cbc::Decryptor::<aes::Aes128>::new(key.into(), (&[b' '; 16]).into())
+            .decrypt_padded_vec_mut::<Pkcs7>(cipher)
+            .map_err(|_| ImportError::Format)?,
+    );
+    let password = std::str::from_utf8(&decrypted).map_err(|_| ImportError::Format)?;
+    let chrome_time: Option<i64> = row.get(3).map_err(|e| sql_error(&e))?;
+    Ok(Some(Login {
+        origin: row.get(0).map_err(|e| sql_error(&e))?,
+        username: SecretText::new(row.get(1).map_err(|e| sql_error(&e))?),
+        password: SecretText::new(password.into()),
+        modified_ms: chrome_time
+            .filter(|t| *t > 0)
+            .map(|t| t / 1000 - 11_644_473_600_000),
+    }))
 }

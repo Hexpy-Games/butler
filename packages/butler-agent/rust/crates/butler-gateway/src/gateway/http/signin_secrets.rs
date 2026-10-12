@@ -14,6 +14,7 @@ const STORE_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub(super) struct SignInSecrets {
     store: tokio::sync::Mutex<Option<SecretStore>>,
+    pub(super) mutation: tokio::sync::Mutex<()>,
     calls: tokio::sync::Semaphore,
     migrated: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
 }
@@ -22,6 +23,7 @@ impl SignInSecrets {
     pub(super) fn new() -> Self {
         Self {
             store: tokio::sync::Mutex::new(None),
+            mutation: tokio::sync::Mutex::new(()),
             calls: tokio::sync::Semaphore::new(1),
             migrated: Arc::default(),
         }

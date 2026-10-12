@@ -11,6 +11,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         return Some(edges);
     }
     Some(match domain {
+        // butler-test-support: isolated source fakes consume only public platform APIs.
+        "import_sources" => &[],
         // butler-core: leaf codecs and mirrors; JSON sanitizes public text.
         "configuration" | "js_date" | "json_lines" | "locale" | "public_text" | "segmentation"
         | "tool_protocol" => &[],

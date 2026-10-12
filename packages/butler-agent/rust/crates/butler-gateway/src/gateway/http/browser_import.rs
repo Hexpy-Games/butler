@@ -4,17 +4,16 @@
 //! Answers and the audit carry counts only, never a value.
 mod exports;
 mod oneclick;
+pub(super) mod password_undo;
 mod selection;
 mod sources;
 use super::{HttpError, HttpState, json, read_body_with_limit, signin_secrets, signins};
+use crate::gateway::AppSignInCommand;
 use crate::gateway::protocol::{APP_PROTOCOL_VERSION, ApiEnvelope};
-use crate::gateway::{AppSignInCommand, AppSignInUpsert};
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
 use axum::response::Response;
-use butler_platform::browser_profiles::{
-    BookmarkFormat, BrowserProfile, detect, read_safari_bookmarks,
-};
+use butler_platform::browser_profiles::{BookmarkFormat, BrowserProfile, read_safari_bookmarks};
 use butler_runtime::browser_import::{self as import, Bookmark, ImportError, PasswordRow};
 pub(super) use exports::ImportSessions;
 use serde_json::{Value, json};
@@ -150,13 +149,14 @@ async fn bookmarks(state: &Arc<HttpState>, body: &Value, apply: bool) -> Result<
         .unwrap_or_else(std::env::temp_dir)
         .join("tmp")
         .join(format!("browser-import-{}", uuid::Uuid::new_v4()));
+    let dependencies = state.import_dependencies.clone();
     let items = blocking(move || {
         let file = if source.is_empty() {
             Some(export_file(&request, import::MAX_BOOKMARK_BYTES)?)
         } else {
             None
         };
-        read_bookmarks(&source, file, &scratch)
+        read_bookmarks(&source, file, &scratch, &dependencies)
     })
     .await??;
     let folders = items
@@ -187,6 +187,7 @@ fn read_bookmarks(
     source: &str,
     file: Option<PathBuf>,
     scratch: &std::path::Path,
+    dependencies: &butler_platform::browser_transfer::ImportDependencies,
 ) -> Result<Vec<Bookmark>, HttpError> {
     if let Some(file) = file {
         let html = std::fs::read(&file).map_err(|_| failure("import_unreadable"))?;
@@ -195,7 +196,9 @@ fn read_bookmarks(
             .and_then(import::finish)
             .map_err(|e| import_error(&e));
     }
-    let profile: BrowserProfile = detect()
+    let profile: BrowserProfile = dependencies
+        .profiles
+        .detect()
         .into_iter()
         .find(|profile| format!("{}:{}", profile.browser, profile.id) == source)
         .ok_or_else(|| failure("import_unreadable"))?;
@@ -249,32 +252,24 @@ async fn passwords(state: &Arc<HttpState>, body: &Value, apply: bool) -> Result<
     if !apply {
         return Ok(json!({"passwords": rows.len(), "sites": sites, "invalid": invalid}));
     }
-    let (mut inserted, mut updated, mut skipped) = (0_u64, 0_u64, 0_u64);
-    for row in rows {
-        let input = AppSignInUpsert {
-            site: row.site,
-            origin: row.origin,
-            username: row.username,
-            source: "import".into(),
-            import_run: None,
-        };
-        match signins::store(state, input, row.password).await?["action"].as_str() {
-            Some("inserted") => inserted += 1,
-            Some("skipped") => skipped += 1,
-            _ => updated += 1,
-        }
-    }
-    let counts =
-        json!({"imported": inserted, "updated": updated, "skipped": skipped, "invalid": invalid});
+    let run = uuid::Uuid::new_v4().to_string();
+    let saved = oneclick::save(state, &run, Vec::new(), rows).await?;
+    let counts = json!({"run_id":run,"imported":saved["passwords"],"updated":saved["updated"],"skipped":saved["existing"],"invalid":invalid});
     summary(state, body, "passwords", &counts).await?;
     Ok(counts)
 }
 
-/// One row per origin and username: the last one in the file wins.
+/// One row per identity: newest known source timestamp wins, ties use file order.
 fn unique(rows: Vec<PasswordRow>) -> Vec<PasswordRow> {
     let mut last = std::collections::HashMap::new();
     for (index, row) in rows.iter().enumerate() {
-        last.insert((row.origin.clone(), row.username.clone()), index);
+        let identity = (row.origin.clone(), row.username.clone());
+        if last
+            .get(&identity)
+            .is_none_or(|previous: &usize| rows[*previous].modified_ms <= row.modified_ms)
+        {
+            last.insert(identity, index);
+        }
     }
     rows.into_iter()
         .enumerate()

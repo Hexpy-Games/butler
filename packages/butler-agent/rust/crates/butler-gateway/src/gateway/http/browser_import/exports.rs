@@ -149,18 +149,18 @@ async fn import_file(
     export_id: &Value,
 ) -> Result<Value, HttpError> {
     let file = path.clone();
-    let (rows, digest) = blocking(move || {
+    let (rows, invalid, digest) = blocking(move || {
         let bytes = butler_platform::browser_transfer::read(&file, import::MAX_CSV_BYTES)
             .map_err(native_error)?;
         let digest = Sha256::digest(&bytes).to_vec();
-        let rows = import::parse_password_csv(&bytes)
-            .map_err(|e| super::import_error(&e))?
-            .0;
-        Ok::<_, HttpError>((rows, digest))
+        let (rows, invalid) =
+            import::parse_password_csv(&bytes).map_err(|e| super::import_error(&e))?;
+        Ok::<_, HttpError>((rows, invalid, digest))
     })
     .await??;
     let mut counts = oneclick::save(state, &export.run, Vec::new(), rows).await?;
     counts["run_id"] = json!(export.run);
+    counts["invalid"] = json!(invalid);
     counts["export_id"] = export_id.clone();
     oneclick::audit(state, &export.source, &counts).await?;
     export.path = Some(path);

@@ -13,6 +13,8 @@ pub struct PasswordRow {
     pub site: String,
     pub username: String,
     pub password: SecretText,
+    /// Latest source use or change, milliseconds since Unix epoch.
+    pub modified_ms: Option<i64>,
 }
 
 /// Decrypted native rows use the same origin validation as exports.
@@ -20,11 +22,13 @@ pub fn native_passwords(logins: Vec<butler_platform::browser_transfer::Login>) -
     logins
         .into_iter()
         .filter_map(|login| {
-            row(
+            let mut row = row(
                 &login.origin,
                 login.username.expose(),
                 login.password.expose(),
-            )
+            )?;
+            row.modified_ms = login.modified_ms;
+            Some(row)
         })
         .collect()
 }
@@ -44,12 +48,21 @@ pub fn parse_password_csv(bytes: &[u8]) -> Result<(Vec<PasswordRow>, usize), Imp
     let user =
         column(&["username", "login", "login_username", "user name"]).ok_or(ImportError::Format)?;
     let pass = column(&["password", "login_password"]).ok_or(ImportError::Format)?;
+    let times = [column(&["timelastused"]), column(&["timepasswordchanged"])];
     let mut rows = Vec::new();
     let mut skipped = 0;
     for record in records {
         let cell = |index: usize| record.get(index).map(|value| value.as_str()).unwrap_or("");
         match row(cell(url), cell(user), cell(pass)) {
-            Some(row) => rows.push(row),
+            Some(mut row) => {
+                row.modified_ms = times
+                    .iter()
+                    .flatten()
+                    .filter_map(|i| cell(*i).parse::<i64>().ok())
+                    .filter(|t| *t > 0)
+                    .max();
+                rows.push(row);
+            }
             None if record.iter().all(|value| value.is_empty()) => {}
             None => skipped += 1,
         }
@@ -69,6 +82,7 @@ pub(super) fn row(url: &str, username: &str, password: &str) -> Option<PasswordR
         site,
         username: username.trim().to_owned(),
         password: SecretText::new(password.to_owned()),
+        modified_ms: None,
     })
 }
 

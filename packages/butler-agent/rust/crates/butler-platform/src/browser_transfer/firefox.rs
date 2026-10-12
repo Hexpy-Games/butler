@@ -18,22 +18,37 @@ pub(super) fn passwords(
     let data: serde_json::Value =
         serde_json::from_slice(&bytes).map_err(|_| ImportError::Format)?;
     let snapshot = Snapshot::new(&dir.join("key4.db"), scratch)?;
-    let key = decrypt_key(&snapshot.path, primary)?;
+    let mut keys = std::collections::HashMap::new();
     let rows = data
         .get("logins")
         .and_then(serde_json::Value::as_array)
         .ok_or(ImportError::Format)?;
     let mut result = Vec::with_capacity(rows.len());
     for row in rows {
+        let encoded = STANDARD
+            .decode(
+                row["encryptedUsername"]
+                    .as_str()
+                    .ok_or(ImportError::Format)?,
+            )
+            .map_err(|_| ImportError::Format)?;
+        let id = (nss::key_id(&encoded)?, nss::key_size(&encoded)?);
+        if !keys.contains_key(&id) {
+            keys.insert(
+                id.clone(),
+                decrypt_key(&snapshot.path, primary, &id.0, id.1)?,
+            );
+        }
+        let key = keys.get(&id).ok_or(ImportError::Format)?;
         let username = decrypt_login(
             row.get("encryptedUsername")
                 .and_then(serde_json::Value::as_str),
-            &key,
+            key,
         )?;
         let password = decrypt_login(
             row.get("encryptedPassword")
                 .and_then(serde_json::Value::as_str),
-            &key,
+            key,
         )?;
         result.push(Login {
             origin: row
@@ -43,12 +58,22 @@ pub(super) fn passwords(
                 .into(),
             username,
             password,
+            modified_ms: ["timeLastUsed", "timePasswordChanged"]
+                .iter()
+                .filter_map(|field| row[*field].as_i64())
+                .max()
+                .filter(|t| *t > 0),
         });
     }
     Ok(result)
 }
 
-fn decrypt_key(path: &Path, primary: &SecretText) -> Result<Zeroizing<Vec<u8>>, ImportError> {
+fn decrypt_key(
+    path: &Path,
+    primary: &SecretText,
+    id: &[u8],
+    size: usize,
+) -> Result<Zeroizing<Vec<u8>>, ImportError> {
     let db = rusqlite::Connection::open(path).map_err(|e| sql_error(&e))?;
     let (global, check): (Vec<u8>, Vec<u8>) = db
         .query_row(
@@ -71,18 +96,23 @@ fn decrypt_key(path: &Path, primary: &SecretText) -> Result<Zeroizing<Vec<u8>>, 
             ImportError::IncorrectPassword
         });
     }
-    let encrypted: Vec<u8> = db
-        .query_row(
-            "SELECT a11 FROM nssPrivate WHERE a102=x'f8000000000000000000000000000001'",
-            [],
-            |row| row.get(0),
-        )
+    let mut statement = db
+        .prepare("SELECT a11 FROM nssPrivate WHERE a102=?1")
         .map_err(|e| sql_error(&e))?;
-    let key = nss::pbe(&encrypted, &global, primary.expose().as_bytes())?;
-    if key.len() != 24 {
-        return Err(ImportError::Format);
+    let rows = statement
+        .query_map([id], |row| row.get::<_, Vec<u8>>(0))
+        .map_err(|e| sql_error(&e))?;
+    for encrypted in rows {
+        let key = nss::pbe(
+            &encrypted.map_err(|e| sql_error(&e))?,
+            &global,
+            primary.expose().as_bytes(),
+        )?;
+        if key.len() == size {
+            return Ok(key);
+        }
     }
-    Ok(key)
+    Err(ImportError::Format)
 }
 
 fn decrypt_login(encoded: Option<&str>, key: &[u8]) -> Result<SecretText, ImportError> {

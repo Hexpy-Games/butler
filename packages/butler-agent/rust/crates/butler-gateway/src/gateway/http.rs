@@ -100,6 +100,7 @@ struct HttpState {
     output_data: Option<PathBuf>,
     signin_secrets: signin_secrets::SignInSecrets,
     browser_import: browser_import::ImportSessions,
+    import_dependencies: butler_platform::browser_transfer::ImportDependencies,
     agent_imports: agent_import::AgentImports,
 }
 

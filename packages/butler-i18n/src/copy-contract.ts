@@ -1889,7 +1889,7 @@ export interface AppCopy {
       fromFile: string;
       importing: string;
       history: string;
-      result: (bookmarks: number, passwords: number, updated: number, history?: number) => string;
+      result: (bookmarks: number, passwords: number, updated: number, history?: number, invalid?: number) => string;
       undo: string;
       more: string;
       undone: string;

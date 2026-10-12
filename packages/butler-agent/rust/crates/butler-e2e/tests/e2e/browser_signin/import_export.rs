@@ -75,6 +75,7 @@ async fn guided_csv_new_export_delete_idempotency_and_undo() -> Result<(), Harne
         "accounts are distinct by origin and username"
     );
     assert_eq!(rows.data()["sites"].as_array().unwrap().len(), 2);
+    assert_eq!(imported["invalid"], 0);
     let again = post(
         &a,
         "start",
@@ -82,7 +83,8 @@ async fn guided_csv_new_export_delete_idempotency_and_undo() -> Result<(), Harne
     )
     .await?;
     assert_eq!(again["passwords"], 0);
-    assert_eq!(again["updated"], 2);
+    assert_eq!(again["updated"], 0);
+    assert_eq!(again["existing"], 2);
     assert_eq!(
         post(&a, "undo", json!({"run_id":again["run_id"]})).await?["passwords"],
         0
