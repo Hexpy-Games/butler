@@ -10,6 +10,8 @@ pub enum AppMemoryCommand {
     EndSession { session_id: String },
     /// Complete instruction list from the instruction owner.
     Instructions,
+    /// A lasting all-chats instruction added outside a chat (an import).
+    RememberInstruction { text: String, operation_id: String },
     /// User-selected deletion, independent of a chat turn.
     DeleteInstruction {
         handle: String,

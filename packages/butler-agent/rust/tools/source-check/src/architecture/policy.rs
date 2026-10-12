@@ -28,6 +28,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "context" | "skills" | "outputs" | "browser" | "previews" => &[],
         // Imported sign-ins key on the browser policy's registrable site.
         "browser_import" => &["browser"],
+        // Other agents' MCP servers and instructions: parsing only.
+        "agent_import" => &[],
         "operations" => &["context"],
         "web_access" => &["browser", "context", "operations"],
         // butler-ledger: SQLite ownership stays behind BTCC's Project Work port.
@@ -87,6 +89,8 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // Other browsers' profile folders are found in the account folders the OS
         // records (never a redirected HOME); user_dirs only scopes test fixtures.
         "browser_profiles" => &["account_dirs", "user_dirs"],
+        // Other AI agents' setup files live in the same account folders.
+        "agent_homes" => &["account_dirs"],
         // The `butler` command launcher is a runnable file under the user's
         // command directory; the Agent home's pointers are replaced atomically
         // with secure_fs; login-start definitions live under the user's home.

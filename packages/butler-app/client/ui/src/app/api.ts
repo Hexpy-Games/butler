@@ -1040,6 +1040,9 @@ function signInBridgeCall(method: string, path: string, body: ApiOptions["body"]
   if (path === "/security/browser-import/export/file" && method === "POST") return { action: "chooseBrowserPasswordExport", input: payload() };
   if (path === "/security/browser-import/export/delete" && method === "POST") return { action: "deleteBrowserPasswordExport", input: payload() };
   if (path === "/security/browser-import/export/cancel" && method === "POST") return { action: "cancelBrowserPasswordExport", input: payload() };
+  if (path === "/security/agent-import/sources" && method === "GET") return { action: "listAgentImportSources" };
+  if (path === "/security/agent-import/start" && method === "POST") return { action: "startAgentImport", input: payload() };
+  if (path === "/security/agent-import/undo" && method === "POST") return { action: "undoAgentImport", input: payload() };
   return vaultBridgeCall(method, path, payload);
 }
 
