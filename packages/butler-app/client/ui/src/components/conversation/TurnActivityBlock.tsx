@@ -26,7 +26,7 @@ export function ActivityBlock({
       density="compact"
       connected={connected}
       data-work-stage={activity.phase}
-      title={/(?:사용자 요청|User request):/iu.test(activity.title) ? appCopy.guided.tools.start_work : activity.title}
+      title={activityDisplayTitle(activity)}
       description={
         <Stack as="span" gap="xs">
           <Typo.Caption as="span">{meta}</Typo.Caption>
@@ -44,6 +44,11 @@ export function ActivityBlock({
       tools={workActivityToolsFromRows(activity.operations, turnId)}
     />
   );
+}
+
+/** The activity's public title; the raw request echo reads as "Check request". */
+export function activityDisplayTitle(activity: Pick<PhaseActivity, "title">): string {
+  return /(?:사용자 요청|User request):/iu.test(activity.title) ? appCopy.guided.tools.start_work : activity.title;
 }
 
 function sameActivityText(left: string, right: string): boolean {

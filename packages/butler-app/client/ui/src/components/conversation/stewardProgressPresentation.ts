@@ -1,4 +1,3 @@
-import { isVisibleToolActivity } from "@/app/conversation-progress";
 import { appCopy, interfaceProgressLabel, interfaceText } from "@/app/copy.ts";
 import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import type {
@@ -139,16 +138,4 @@ function latestMatchingRow(
     if (row && matches(row)) return row;
   }
   return undefined;
-}
-
-export function stewardToolRows(rows: ProgressRow[]): ProgressRow[] {
-  const byTool = new Map<string, ProgressRow>();
-  for (const row of rows) {
-    if (!isVisibleToolActivity(row, "")) continue;
-    byTool.set(
-      row.tool_call_id ? `tool:${row.tool_call_id}` : `row:${row.id}`,
-      row,
-    );
-  }
-  return [...byTool.values()];
 }

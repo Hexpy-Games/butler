@@ -15,16 +15,16 @@ import {
   SurfacePanel,
   Typo,
 } from "@/butler-ds";
-import { workActivityToolsFromRows } from "./toolchainUtils.tsx";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection.ts";
 import {
+  effectiveStewardStatus,
   stewardProgressStatus,
   stewardCurrentActivityTitle,
-  stewardToolRows,
 } from "./stewardProgressPresentation.ts";
 import { workerActivityTitle } from "./workerActivityTitle.ts";
 import { WorkBlockDetails } from "./WorkBlockDetails.tsx";
 import { useWorkBlockExpanded } from "./workBlockExpansion.ts";
+import { workBlockLatestStatus } from "./workBlockLatestStatus.ts";
 
 export function StewardParentProgress({
   progress,
@@ -49,13 +49,12 @@ export function StewardParentProgress({
     (state) => state.resumeObservedSteward,
   );
   const turn = child.active_turn ?? child.latest_turn;
-  const toolRows = stewardToolRows(rows);
-  const tools = workActivityToolsFromRows(toolRows, turn?.id);
-  const toolSummary = summarizeTools(tools);
+  const live = Boolean(child.active_turn || child.waiting_for_children);
   const activityLabel = workerActivityTitle(
     stewardCurrentActivityTitle(child),
     child.title,
   );
+  const latestStatus = workBlockLatestStatus(rows, turn?.id, live, effectiveStewardStatus(child)) ?? activityLabel;
   return (
     <SurfacePanel
       aria-label={child.title}
@@ -98,20 +97,18 @@ export function StewardParentProgress({
           {stewardProgressStatus(child)}
           {child.active_turn ? ` · ${activityLabel}` : ""}
         </Typo.Caption>
-        <Stack align="row" cross="start" gap="sm" justify="between">
-          <Stack
-            align="row"
-            aria-label={activityLabel}
+        <Stack align="row" cross="center" gap="sm" justify="between">
+          <Typo.Caption
+            aria-label={latestStatus}
             data-test-class="steward-tool-summary"
-            gap="xs"
+            grow
             minWidth="0"
-            wrap
+            title={latestStatus}
+            tone="secondary"
+            truncate
           >
-            <Typo.Caption tone="tertiary">{activityLabel}</Typo.Caption>
-            <Typo.Caption tone="secondary">
-              {toolSummary || appCopy.interfaceDetails.noHistory}
-            </Typo.Caption>
-          </Stack>
+            {latestStatus}
+          </Typo.Caption>
           <Button
             aria-controls={detailsOpen ? detailsId : undefined}
             aria-expanded={detailsOpen}
@@ -123,22 +120,9 @@ export function StewardParentProgress({
             variant="inline"
           />
         </Stack>
-        <WorkBlockDetails id={detailsId} live={Boolean(child.active_turn || child.waiting_for_children)}
+        <WorkBlockDetails id={detailsId} live={live}
           open={detailsOpen} sessionId={child.session_id} title={child.title} view={view} />
       </Stack>
     </SurfacePanel>
   );
-}
-
-function summarizeTools(
-  tools: ReturnType<typeof workActivityToolsFromRows>,
-): string {
-  const counts = new Map<string, number>();
-  for (const tool of tools) {
-    const label = tool.summaryLabel?.trim() || appCopy.interfaceDetails.tool;
-    counts.set(label, (counts.get(label) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([label, count]) => `${count} ${label}`)
-    .join(", ");
 }
