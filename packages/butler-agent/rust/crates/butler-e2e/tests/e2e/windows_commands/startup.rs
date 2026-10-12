@@ -44,10 +44,12 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
         }
         for (shell, script) in [
             ("cmd", "echo 안녕하세요"),
-            ("powershell", "if (Test-Path Env:BUTLER_COMMAND_CWD) { throw 'Private cwd bootstrap variable leaked' }; Write-Output '안녕하세요'; [Console]::Error.WriteLine('command_shell_phase phase=command_done utc_ticks=' + [DateTime]::UtcNow.Ticks)"),
+            ("powershell", "if (Test-Path Env:BUTLER_COMMAND_RESTORE_CWD) { throw 'Private cwd bootstrap variable leaked' }; Write-Output '안녕하세요'; [Console]::Error.WriteLine('command_shell_phase phase=command_done utc_ticks=' + [DateTime]::UtcNow.Ticks)"),
         ] {
             let invocation = if shell == "cmd" {
                 Invocation {
+                    restore_cwd: false,
+                    raw_cmd_script: true,
                     program: environment.get("COMSPEC").cloned().unwrap_or("cmd.exe".into()),
                     arguments: vec!["/d".into(), "/s".into(), "/c".into(),
                         format!("chcp 65001>nul & {script}")],

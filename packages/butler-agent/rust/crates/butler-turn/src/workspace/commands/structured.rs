@@ -225,6 +225,8 @@ fn step_command(
     command_sandbox::add_arguments(
         command.as_std_mut(),
         &command_sandbox::Invocation {
+            restore_cwd: false,
+            raw_cmd_script: false,
             program: step.executable.clone(),
             arguments: step.arguments.clone(),
         },

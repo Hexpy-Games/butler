@@ -85,26 +85,58 @@ fn cmd_arguments_remain_verbatim() {
         r#"cmd /c echo 한국어 출력 & dir "C:\Directory with spaces""#,
         r#"cmd /s /c echo 한국어 출력 & dir "C:\Directory with spaces""#,
         r"cmd.exe /d /c echo 한국어 출력",
+        r"cmd /c echo a^&b",
+        r"cmd /c echo a^|b",
+        r"cmd /c echo %VAR%",
         r#"cmd /c ""C:\Program Files\tool.exe" "한국어 인수"""#,
         r#"cmd /s /c ""C:\Program Files\tool.exe" "%USERPROFILE%\Downloads"""#,
     ] {
-        assert!(cmd::script(text).is_some(), "{text}");
-        let invocation = cmd::shell(text, &environment);
+        let script = cmd::script(text).unwrap();
+        let script = script
+            .strip_prefix('"')
+            .and_then(|s| s.strip_suffix('"'))
+            .unwrap_or(script);
+        let invocation = cmd::shell(text, &environment).unwrap();
         assert_eq!(invocation.program, "cmd.exe");
         assert_eq!(
             invocation.arguments,
-            ["/d", "/s", "/c", &format!("chcp 65001>nul & {text}")]
+            ["/d", "/s", "/c", &format!("chcp 65001>nul & {script}")]
         );
         assert_eq!(
             cmd::raw_argument(&invocation).as_deref(),
-            Some(format!("\"chcp 65001>nul & {text}\"").as_str())
+            Some(format!("\"chcp 65001>nul & {script}\"").as_str())
         );
     }
-    let native = Invocation {
+    for switch in ["/v:on", "/v:off"] {
+        let text = format!("cmd {switch} /c echo %VAR% !VAR!");
+        let invocation = cmd::shell(&text, &environment).unwrap();
+        assert_eq!(
+            invocation.arguments,
+            [
+                "/d",
+                "/s",
+                switch,
+                "/c",
+                "chcp 65001>nul & echo %VAR% !VAR!"
+            ]
+        );
+        assert_eq!(
+            cmd::raw_argument(&invocation).unwrap(),
+            "\"chcp 65001>nul & echo %VAR% !VAR!\""
+        );
+    }
+    let mut native = Invocation {
+        restore_cwd: false,
+        raw_cmd_script: false,
         program: "node.exe".into(),
         arguments: vec!["/d".into(), "/s".into(), "/c".into(), "quoted text".into()],
     };
     assert_eq!(cmd::raw_argument(&native), None);
+    native.program = "cmd.exe".into();
+    assert_eq!(
+        cmd::raw_argument(&native).as_deref(),
+        Some("\"quoted text\"")
+    );
     assert_eq!(cmd::script("Write-Output '한국어 출력'"), None);
 }
 

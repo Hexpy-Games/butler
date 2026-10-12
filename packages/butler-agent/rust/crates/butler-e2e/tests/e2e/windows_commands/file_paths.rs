@@ -115,7 +115,16 @@ pub(super) async fn approve(
     } else if matches!(case.tool, "list_files" | "grep_files") {
         json!([case.args["root"]])
     } else {
-        json!([case.args["path"].as_str().unwrap().replace('\\', "/")])
+        let path = case.args["path"].as_str().unwrap().replace('\\', "/");
+        json!([if Path::new(&path).is_absolute() {
+            path
+        } else {
+            s.sandbox
+                .data
+                .join(path)
+                .to_string_lossy()
+                .replace('\\', "/")
+        }])
     };
     assert_eq!(
         card["approval"]["examples"], paths,
@@ -242,7 +251,10 @@ async fn run(access: Access) -> Result<(), HarnessError> {
         .env("BUTLER_CODEX_BASE_URL", url)
         // Use the installed App's module environment, not the CI console's.
         .env("PSModulePath", "")
-        .env("BUTLER_DEBUG_COMMAND_TIMINGS", "1")
+        .env(
+            "BUTLER_DEBUG_COMMAND_TIMINGS",
+            std::env::var("BUTLER_DEBUG_COMMAND_TIMINGS").unwrap_or_default(),
+        )
         .env("USERPROFILE", home.display().to_string())
         .env(
             "LOCALAPPDATA",

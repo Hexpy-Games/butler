@@ -103,6 +103,8 @@ fn sandboxed(profile: String, invocation: Invocation) -> Invocation {
     let mut arguments = vec!["-p".into(), profile, invocation.program];
     arguments.extend(invocation.arguments);
     Invocation {
+        restore_cwd: false,
+        raw_cmd_script: false,
         program: SANDBOX_EXEC.into(),
         arguments,
     }

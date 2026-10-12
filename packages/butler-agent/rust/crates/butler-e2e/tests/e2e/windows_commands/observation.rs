@@ -31,6 +31,18 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
         |target| {
             let path = match target {
                 "data" => setup.sandbox.data.join("canary.txt"),
+                "ledger" => setup.sandbox.workspace.join(".project-ledger/records.json"),
+                "oauth" => setup.sandbox.data.join("auth/openai-codex.json"),
+                "oauth-spaces" => setup.sandbox.data.join("auth/provider profile.json"),
+                "token" => setup.sandbox.data.join("token"),
+                "local-auth" => setup
+                    .sandbox
+                    .data
+                    .join("app/runtime/auth/local-agent-auth.json"),
+                "folder-secret" => setup
+                    .sandbox
+                    .data
+                    .join("state/app-gateway/project-folder-token-secret"),
                 _ => setup.sandbox.home.join(".ssh/id_ed25519"),
             };
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -42,7 +54,10 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
             }
         },
     );
-    let refused = protected == Some("credentials");
+    let refused = matches!(
+        protected,
+        Some("credentials" | "oauth" | "oauth-spaces" | "token" | "local-auth" | "folder-secret")
+    );
     let (url, script, server) = provider::start(&command).await?;
     let local = setup.sandbox.home.join("AppData/Local");
     let roaming = setup.sandbox.home.join("AppData/Roaming");
@@ -85,6 +100,11 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
         .find(|v| v["command"] == command)
         .expect("model gets structured command result");
     if refused {
+        assert_eq!(
+            output["stdout"].as_str().unwrap_or_default(),
+            "",
+            "credential stdout must be empty"
+        );
         assert_eq!(output["error"], "protected_path", "{output}");
         assert!(
             !requests
@@ -97,7 +117,7 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
             s.gw.approval_requests("general").await?,
             [] as [serde_json::Value; 0]
         );
-    } else if protected == Some("data") {
+    } else if matches!(protected, Some("data" | "ledger")) {
         assert_eq!(output["exit_code"], 0, "{output}");
         assert_eq!(
             output["stdout"].as_str().unwrap().trim(),
@@ -222,7 +242,16 @@ async fn observation_data_uses_normal_approval_and_credentials_stay_refused()
         "host has read-only sandbox"
     );
     for access in [Access::AskAlways, Access::FullAccess] {
-        for target in ["data", "credentials"] {
+        for target in [
+            "data",
+            "ledger",
+            "credentials",
+            "oauth",
+            "oauth-spaces",
+            "token",
+            "local-auth",
+            "folder-secret",
+        ] {
             run(access, Some(target)).await?;
         }
     }

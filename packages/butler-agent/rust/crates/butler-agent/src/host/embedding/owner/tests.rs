@@ -2,6 +2,7 @@ use super::*;
 use std::{process::Stdio, time::Duration};
 use tokio::process::Command;
 
+// test-category: race
 #[tokio::test]
 async fn active_cancellation_kills_and_reaps_child() {
     let mut child = Command::new("/bin/sleep")
@@ -22,6 +23,9 @@ async fn active_cancellation_kills_and_reaps_child() {
         executable: PathBuf::new(),
         next_id: AtomicU64::new(1),
         warm: AtomicBool::new(false),
+        enabled: AtomicBool::new(true),
+        release: AtomicBool::new(false),
+        released: watch::channel(false).0,
         state: Mutex::new(QueueState::default()),
         notify: Notify::new(),
         shutdown: CancellationToken::new(),
@@ -63,6 +67,7 @@ async fn active_cancellation_kills_and_reaps_child() {
 }
 
 #[cfg(unix)]
+// test-category: race
 #[tokio::test]
 async fn slow_initialization_outlives_first_deadline_and_keeps_ready_child() {
     let mut child = Command::new("/bin/sh")
@@ -83,6 +88,9 @@ async fn slow_initialization_outlives_first_deadline_and_keeps_ready_child() {
         executable: PathBuf::new(),
         next_id: AtomicU64::new(1),
         warm: AtomicBool::new(false),
+        enabled: AtomicBool::new(true),
+        release: AtomicBool::new(false),
+        released: watch::channel(false).0,
         state: Mutex::new(QueueState::default()),
         notify: Notify::new(),
         shutdown: CancellationToken::new(),

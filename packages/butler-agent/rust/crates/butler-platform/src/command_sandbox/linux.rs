@@ -196,6 +196,8 @@ pub(super) fn read_only_contained(
     ];
     arguments.extend(invocation.arguments);
     Ok(Invocation {
+        restore_cwd: false,
+        raw_cmd_script: false,
         program: helper()
             .map_err(|_| SandboxError::ReadOnlyUnavailable)?
             .to_string_lossy()
