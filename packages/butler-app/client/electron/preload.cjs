@@ -639,6 +639,7 @@ const butlerApp = Object.freeze({
   startupIssue: process.argv.includes("--butler-legacy-data") ? "legacy-data" : null,
   recoverLegacyData: (action) => ipcRenderer.invoke("butler:legacy-data-recovery", action),
   recordUiCrash: (input) => ipcRenderer.invoke("butler:ui-crash", input),
+  recordWallpaperState: (line) => ipcRenderer.send("butler:wallpaper-state", line),
   readUiCrashLog: () => ipcRenderer.invoke("butler:ui-crash-log"),
   getAppInfo: () => ipcRenderer.invoke("butler:get-app-info"),
   setDeveloperMode: ({ enabled } = {}) =>

@@ -65,6 +65,8 @@ interface ButlerAppBridge {
   deleteLibrary?: (id: string) => Promise<unknown>;
   setUpdateProgress?: (value: number | "indeterminate" | null) => Promise<void>;
   recordUiCrash?: (input: unknown) => Promise<unknown>;
+  /** One wallpaper run-state line (`wallpaper_state …`) for the main-process diagnostics log; fire and forget. */
+  recordWallpaperState?: (line: string) => void;
   readUiCrashLog?: () => Promise<import("../../../electron/ui-crash-log.mjs").UiCrashEntry[]>;
   getAppUpdateState?: () => Promise<AppUpdateState>;
   chooseAppUpdate?: (input: { request_id: string | null; action: "now" | "defer" }) => Promise<{ ok: boolean }>;

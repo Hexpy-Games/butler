@@ -3,6 +3,7 @@ import { isLifecycleWindow } from "./lifecycle-window.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
 import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
 import { createUiCrashStore } from "./ui-crash-store.mjs";
+import { createWallpaperStateLog } from "./wallpaper-state-log.mjs";
 import { startPowerStateMonitor } from "./butler-platform/power.mjs";
 import {
   app,
@@ -145,6 +146,7 @@ const userHome = homedir();
 let storageCorrectionWatch = null;
 const butlerDataRoot = process.env.BUTLER_DATA || join(userHome, ".butler");
 const uiCrashStore = createUiCrashStore(butlerDataRoot, () => appInfoView().version);
+const wallpaperStateLog = createWallpaperStateLog(butlerDataRoot);
 const legacyDataBlocked = unsupportedLegacyData(butlerDataRoot);
 const preloadPath = resolve(__dirname, "preload.cjs");
 const appCacheBudget = readCacheBudgetArtifact(
@@ -2439,6 +2441,9 @@ ipcMain.handle("butler:ui-crash", (event, input) => {
   return uiCrashStore.append(input);
 });
 ipcMain.handle("butler:ui-crash-log", () => uiCrashStore.read());
+ipcMain.on("butler:wallpaper-state", (event, line) => {
+  if (event.sender === mainWindow?.webContents && event.senderFrame === event.sender.mainFrame) wallpaperStateLog.record(line);
+});
 
 ipcMain.handle("butler:first-run-setup-diagnostics", async () => ({
   ...firstRunSetupBridge.diagnostics(), ui_crashes: await uiCrashStore.read(),
