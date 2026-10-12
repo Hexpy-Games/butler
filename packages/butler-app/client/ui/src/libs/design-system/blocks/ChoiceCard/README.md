@@ -18,6 +18,11 @@ one-line description). `ChoiceCardList` and `ChoiceTileGrid` lay them out.
 `state`: `default`, `loading` (spinner, `aria-busy`), `error` (danger border
 and description), `disabled` (dimmed, `aria-disabled`; clicks are ignored).
 
+## Alignment
+In a `ChoiceCard` the logo tile and the trailing chevron or meta center on the
+title's line (the first line), never on title + description; the description
+runs below the title.
+
 ## Equal size
 Tiles in a grid are always the same size: rows are `1fr`, the name sits in a
 fixed two-line box (clamped with an ellipsis after two lines) and the

@@ -231,6 +231,7 @@ const firstRun = {
       agentsAdded: (instructions: number, servers: number) => `${instructions} instruction${instructions === 1 ? "" : "s"} · ${servers} MCP server${servers === 1 ? "" : "s"} added`,
       agentsNothing: "Nothing new to add",
       agentsNeedsKey: (count: number) => `${count} need${count === 1 ? "s" : ""} a key — Settings › MCP`,
+      browsersDoneTitle: "Imported from another browser",
     },
     summary: {
       rowAi: "AI",

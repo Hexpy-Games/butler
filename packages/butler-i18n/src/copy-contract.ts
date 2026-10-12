@@ -123,6 +123,8 @@ interface FirstRunCopy {
     agentsAdded: (instructions: number, servers: number) => string;
     agentsNothing: string;
     agentsNeedsKey: (count: number) => string;
+    /** Import ② after the run: what came over from the browser. */
+    browsersDoneTitle: string;
   };
   summary: {
     rowAi: string; rowReply: string; rowAgents: string; rowBrowsers: string;
