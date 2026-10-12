@@ -220,13 +220,14 @@ async function maskedPixels(observed: Record<string, any>, name: string, count =
 
 async function browserSettings(locale: string) {
   const settings = locale === "ko" ? "설정" : "Settings";
-  await waitBrowser(() => app.page.expression(`Boolean(document.querySelector('[aria-label=${JSON.stringify(settings)}]'))`), "settings navigation loaded");
+  const navigation = () => app.page.expression<boolean>("Boolean(document.querySelector('[data-test-class=\"settings-navigation-scroll\"]'))");
+  await waitBrowser(async () => await navigation() || await app.page.expression(`Boolean(document.querySelector('[aria-label=${JSON.stringify(settings)}]'))`), "settings navigation loaded");
   const visible = () => app.page.expression<boolean>(`(()=>{const button=document.querySelector('[aria-label=${JSON.stringify(settings)}]');const rect=button?.getBoundingClientRect();return Boolean(rect && rect.x>=0 && rect.right<=innerWidth && rect.width>0)})()`);
-  if (!await visible()) {
+  if (!await navigation() && !await visible()) {
     await app.click(locale === "ko" ? "사이드바 보기" : "Show sidebar");
     await waitBrowser(visible, "settings button visible");
   }
-  await app.click(settings);
+  if (!await navigation()) await app.click(settings);
   const label = locale === "ko" ? "브라우저" : "Browser";
   const scope = '[data-test-class="settings-navigation-scroll"] :is(button,[role="button"])';
   try {
