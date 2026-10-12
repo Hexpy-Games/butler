@@ -41,6 +41,7 @@ async fn data_credentials_are_screened_by_path_alias_and_shell_variables()
         "${BUTLER_DATA}/token",
         "$DATA_ROOT/token",
         "$env:DATA_ROOT/token",
+        "${EnV:DATA_ROOT}/token",
         "%DATA_ROOT%/token",
     ] {
         assert!(screened(&format!("read '{path}'")), "{path}");
@@ -103,6 +104,18 @@ async fn contained_commands_allow_data_reads_and_keep_writes_and_credentials_den
     std::fs::create_dir_all(credential.parent().unwrap())?;
     std::fs::write(&credential, "fixture-credential")?;
     let owner = Commands::new();
+    let ledger = setup.sandbox.workspace.join(".project-ledger/records.json");
+    std::fs::create_dir_all(ledger.parent().unwrap())?;
+    std::fs::write(&ledger, "complete-ledger-record")?;
+    let (status, stdout) = command(
+        &owner,
+        &setup,
+        &setup.sandbox.data,
+        format!("cat '{}'", ledger.display()),
+    )
+    .await?;
+    assert_eq!(status, Some(0));
+    assert_eq!(stdout, b"complete-ledger-record");
     let workspace_data = setup.sandbox.workspace.join("data directory");
     std::fs::create_dir_all(&workspace_data)?;
     for data in [&setup.sandbox.data, &default_data, &workspace_data] {

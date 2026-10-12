@@ -88,20 +88,24 @@ fn variable(token: &str) -> Option<(&str, &str)> {
     let rest = token.strip_prefix('$')?;
     if let Some(rest) = rest.strip_prefix('{') {
         let (name, tail) = rest.split_once('}')?;
-        return Some((name.strip_prefix("env:").unwrap_or(name), tail));
+        return Some((variable_name(name), tail));
     }
-    let rest = if rest
-        .get(..4)
-        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("env:"))
-    {
-        &rest[4..]
-    } else {
-        rest
-    };
+    let rest = variable_name(rest);
     let end = rest
         .find(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_')
         .unwrap_or(rest.len());
     Some((&rest[..end], &rest[end..]))
+}
+
+fn variable_name(name: &str) -> &str {
+    if name
+        .get(..4)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("env:"))
+    {
+        &name[4..]
+    } else {
+        name
+    }
 }
 
 fn real_or_nearest(path: &Path) -> PathBuf {
@@ -159,7 +163,6 @@ const EXACT: &[&str] = &[
     ".git",
     ".ssh",
     ".gnupg",
-    ".project-ledger",
     "chatgpt-oauth.json",
     "credentials.json",
     "secrets.json",

@@ -60,11 +60,28 @@ pub(super) fn shell(
 
 /// The /s quote envelope is command text, never a CRT-escaped argument.
 pub(super) fn raw_argument(invocation: &Invocation) -> Option<String> {
-    if !invocation.raw_cmd_script {
+    if !invocation.raw_cmd_script && !native_script(invocation) {
         return None;
     }
     invocation
         .arguments
         .last()
         .map(|script| format!("\"{script}\""))
+}
+
+// Native argv steps invoking cmd /s /c also need cmd's quote envelope.
+fn native_script(invocation: &Invocation) -> bool {
+    let Some((_, flags)) = invocation.arguments.split_last() else {
+        return false;
+    };
+    let Some((execute, switches)) = flags.split_last() else {
+        return false;
+    };
+    std::path::Path::new(&invocation.program)
+        .file_stem()
+        .is_some_and(|name| name.eq_ignore_ascii_case("cmd"))
+        && execute.eq_ignore_ascii_case("/c")
+        && switches
+            .iter()
+            .any(|switch| switch.eq_ignore_ascii_case("/s"))
 }

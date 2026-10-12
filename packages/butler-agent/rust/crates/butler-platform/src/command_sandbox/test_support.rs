@@ -9,6 +9,8 @@ pub fn linux_syscall_probe(
 ) -> Result<super::Invocation, super::SandboxError> {
     super::sandbox::read_only_contained(
         super::Invocation {
+            restore_cwd: false,
+            raw_cmd_script: false,
             program: "python3".into(),
             arguments: vec![
                 "-c".into(),

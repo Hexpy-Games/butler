@@ -125,13 +125,18 @@ fn cmd_arguments_remain_verbatim() {
             "\"chcp 65001>nul & echo %VAR% !VAR!\""
         );
     }
-    let native = Invocation {
+    let mut native = Invocation {
         restore_cwd: false,
         raw_cmd_script: false,
         program: "node.exe".into(),
         arguments: vec!["/d".into(), "/s".into(), "/c".into(), "quoted text".into()],
     };
     assert_eq!(cmd::raw_argument(&native), None);
+    native.program = "cmd.exe".into();
+    assert_eq!(
+        cmd::raw_argument(&native).as_deref(),
+        Some("\"quoted text\"")
+    );
     assert_eq!(cmd::script("Write-Output '한국어 출력'"), None);
 }
 
