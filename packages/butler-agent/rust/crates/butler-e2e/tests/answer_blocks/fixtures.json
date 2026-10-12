@@ -1,0 +1,148 @@
+{
+  "images": ["img_0123456789"],
+  "sources": ["https://example.org/records/one"],
+  "specs": {
+    "neutral": {
+      "v": 1,
+      "blocks": [
+        {
+          "type": "cards",
+          "id": "records",
+          "title": "Records",
+          "items": [
+            {
+              "key": "one",
+              "label": "A",
+              "title": "Record One",
+              "sub": "Group A",
+              "img": "img_0123456789",
+              "value": {"amount": -12.5, "unit": "units", "was": -14, "note": "Measured"},
+              "facts": ["Observed"],
+              "text": "A neutral record.",
+              "source": "https://example.org/records/one?view=full#detail",
+              "checked": "2026-10-12T11:55:00Z"
+            }
+          ]
+        },
+        {"type": "table", "columns": ["Name", "Value"], "rows": [["One", 12.5], ["Two", null]]},
+        {
+          "type": "gallery",
+          "items": [
+            {"img": "img_0123456789", "caption": "Record image", "source": "https://example.org/records/one"}
+          ]
+        },
+        {
+          "type": "facts",
+          "items": [
+            {"label": "State", "value": "Ready", "source": "https://example.org/records/one", "checked": "2026-10-12T11:55:00Z"}
+          ]
+        },
+        {
+          "type": "metrics",
+          "items": [
+            {"label": "Count", "value": 3, "unit": "items", "delta": "+1", "source": "https://example.org/records/one", "checked": "2026-10-12T11:55:00Z"}
+          ]
+        },
+        {
+          "type": "chart",
+          "kind": "line",
+          "x": ["A", "B"],
+          "series": [
+            {"name": "Observed", "values": [1, null]}
+          ],
+          "unit": "units",
+          "source": "https://example.org/records/one",
+          "checked": "2026-10-12T11:55:00Z"
+        },
+        {"type": "callout", "tone": "info", "text": "Read the records."},
+        {
+          "type": "actions",
+          "items": [
+            {"ask": "Compare the records"},
+            {"open": "https://example.org/records/one", "label": "Open source"}
+          ]
+        }
+      ]
+    },
+    "comparison": {
+      "v": 1,
+      "blocks": [
+        {
+          "type": "cards",
+          "items": [
+            {
+              "key": "0",
+              "title": "Record 0",
+              "value": {"amount": 1, "cur": "USD"},
+              "img": "img_0123456789",
+              "source": "https://example.org/records/one",
+              "checked": "2026-10-12T11:55:00Z"
+            },
+            {
+              "key": "1",
+              "title": "Record 1",
+              "value": {"amount": 2, "cur": "USD"},
+              "img": "img_0123456789",
+              "source": "https://example.org/records/one",
+              "checked": "2026-10-12T11:55:00Z"
+            },
+            {
+              "key": "2",
+              "title": "Record 2",
+              "value": {"amount": 3, "cur": "USD"},
+              "img": "img_0123456789",
+              "source": "https://example.org/records/one",
+              "checked": "2026-10-12T11:55:00Z"
+            },
+            {
+              "key": "3",
+              "title": "Record 3",
+              "value": {"amount": 4, "cur": "USD"},
+              "img": "img_0123456789",
+              "source": "https://example.org/records/one",
+              "checked": "2026-10-12T11:55:00Z"
+            }
+          ]
+        },
+        {"type": "table", "columns": ["Record", "Value", "State", "Notes", "Source"], "rows": [["0", 1, "Ready", "Observed", "https://example.org/records/one"], ["1", 2, "Ready", "Observed", "https://example.org/records/one"], ["2", 3, "Ready", "Observed", "https://example.org/records/one"], ["3", 4, "Ready", "Observed", "https://example.org/records/one"]]},
+        {
+          "type": "actions",
+          "items": [
+            {"ask": "Show more detail"},
+            {"ask": "Compare measurements"},
+            {"ask": "Summarize sources"}
+          ]
+        }
+      ]
+    }
+  },
+  "cases": [
+    {"name": "neutral accepts", "spec": "neutral", "changes": [], "accept": true, "problems": []},
+    {"name": "four-card comparison accepts", "spec": "comparison", "changes": [], "accept": true, "problems": []},
+    {"name": "row length", "spec": "neutral", "changes": [{"path": "/blocks/1/rows/0", "value": ["One"]}], "accept": false, "problems": [{"path": "/blocks/1/rows/0", "fix": "exactly 2"}]},
+    {"name": "series length", "spec": "neutral", "changes": [{"path": "/blocks/5/series/0/values", "value": [1]}], "accept": false, "problems": [{"path": "/blocks/5/series/0/values", "fix": "exactly 2"}]},
+    {"name": "unknown image", "spec": "neutral", "changes": [{"path": "/blocks/0/items/0/img", "value": "img_abcdefghij"}], "accept": false, "problems": [{"path": "/blocks/0/items/0/img", "fix": "image_collect"}]},
+    {"name": "value provenance", "spec": "neutral", "changes": [{"path": "/blocks/0/items/0/source", "remove": true}, {"path": "/blocks/0/items/0/checked", "remove": true}], "accept": false, "problems": [{"path": "/blocks/0/items/0/source", "fix": "required with value"}, {"path": "/blocks/0/items/0/checked", "fix": "required with value"}]},
+    {"name": "future checked", "spec": "neutral", "changes": [{"path": "/blocks/3/items/0/checked", "value": "2026-10-12T12:05:01Z"}], "accept": false, "problems": [{"path": "/blocks/3/items/0/checked", "fix": "5 minutes"}]},
+    {"name": "unread source", "spec": "neutral", "changes": [{"path": "/blocks/4/items/0/source", "value": "https://example.org/unread"}], "accept": false, "problems": [{"path": "/blocks/4/items/0/source", "fix": "not opened"}]},
+    {"name": "duplicate block id", "spec": "neutral", "changes": [{"path": "/blocks/1/id", "value": "records"}], "accept": false, "problems": [{"path": "/blocks/1/id", "fix": "duplicate id"}]},
+    {"name": "duplicate item key", "spec": "neutral", "changes": [{"path": "/blocks/0/items", "value": [{"key": "one", "label": "A", "title": "Record One", "sub": "Group A", "img": "img_0123456789", "value": {"amount": 12.5, "unit": "km", "was": 14, "note": "Measured"}, "facts": ["Observed"], "text": "A neutral record.", "source": "https://example.org/records/one?view=full#detail", "checked": "2026-10-12T11:55:00Z"}, {"key": "one", "label": "A", "title": "Record One", "sub": "Group A", "img": "img_0123456789", "value": {"amount": 12.5, "unit": "km", "was": 14, "note": "Measured"}, "facts": ["Observed"], "text": "A neutral record.", "source": "https://example.org/records/one?view=full#detail", "checked": "2026-10-12T11:55:00Z"}]}], "accept": false, "problems": [{"path": "/blocks/0/items/1/key", "fix": "duplicate key"}]},
+    {"name": "size", "spec": "neutral", "changes": [{"path": "/blocks/6/text", "value": "가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가"}], "accept": false, "problems": [{"path": "", "fix": "24 KB"}]},
+    {"name": "unknown near key", "spec": "neutral", "changes": [{"path": "/blocks/0/items/0/subtitle", "value": "Detail"}], "accept": false, "problems": [{"path": "/blocks/0/items/0/subtitle", "fix": "\"sub\""}]},
+    {"name": "unknown structured key", "spec": "neutral", "changes": [{"path": "/blocks/0/items/0/pirce", "value": {"amount": 1}}], "accept": false, "problems": [{"path": "/blocks/0/items/0/pirce", "fix": "\"value\""}]},
+    {"name": "exclusive value units", "spec": "neutral", "changes": [{"path": "/blocks/0/items/0/value/cur", "value": "USD"}], "accept": false, "problems": [{"path": "/blocks/0/items/0/value", "fix": "mutually exclusive"}]},
+    {"name": "invalid amount type", "spec": "neutral", "changes": [{"path": "/blocks/0/items/0/value/amount", "value": "12"}], "accept": false, "problems": [{"path": "/blocks/0/items/0/value/amount", "fix": "number"}]},
+    {"name": "invalid timestamp", "spec": "neutral", "changes": [{"path": "/blocks/3/items/0/checked", "value": "yesterday"}], "accept": false, "problems": [{"path": "/blocks/3/items/0/checked", "fix": "RFC 3339"}]},
+    {"name": "invalid asset pattern", "spec": "neutral", "changes": [{"path": "/blocks/0/items/0/img", "value": "img_bad"}], "accept": false, "problems": [{"path": "/blocks/0/items/0/img", "fix": "match ^img_"}]},
+    {"name": "non-http source", "spec": "neutral", "changes": [{"path": "/blocks/0/items/0/source", "value": "file:///record"}], "accept": false, "problems": [{"path": "/blocks/0/items/0/source", "fix": "match ^https?"}]},
+    {"name": "missing host", "spec": "neutral", "changes": [{"path": "/blocks/2/items/0/source", "value": "https://"}], "accept": false, "problems": [{"path": "/blocks/2/items/0/source", "fix": "host"}]},
+    {"name": "unknown type", "spec": "neutral", "changes": [{"path": "/blocks/6/type", "value": "unknown"}], "accept": false, "problems": [{"path": "/blocks/6/type", "fix": "constant"}]},
+    {"name": "mixed action", "spec": "neutral", "changes": [{"path": "/blocks/7/items/0/open", "value": "https://example.org/records/one"}], "accept": false, "problems": [{"path": "/blocks/7/items/0/open", "fix": "unknown key"}]},
+    {"name": "character bound", "spec": "neutral", "changes": [{"path": "/blocks/6/text", "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}], "accept": false, "problems": [{"path": "/blocks/6/text", "fix": "280"}]},
+    {"name": "too many blocks", "spec": "neutral", "changes": [{"path": "/blocks", "value": [{"type": "cards", "id": "records", "title": "Records", "items": [{"key": "one", "label": "A", "title": "Record One", "sub": "Group A", "img": "img_0123456789", "value": {"amount": 12.5, "unit": "km", "was": 14, "note": "Measured"}, "facts": ["Observed"], "text": "A neutral record.", "source": "https://example.org/records/one?view=full#detail", "checked": "2026-10-12T11:55:00Z"}]}, {"type": "table", "columns": ["Name", "Value"], "rows": [["One", 12.5], ["Two", null]]}, {"type": "gallery", "items": [{"img": "img_0123456789", "caption": "Record image", "source": "https://example.org/records/one"}]}, {"type": "facts", "items": [{"label": "State", "value": "Ready", "source": "https://example.org/records/one", "checked": "2026-10-12T11:55:00Z"}]}, {"type": "metrics", "items": [{"label": "Count", "value": 3, "unit": "items", "delta": "+1", "source": "https://example.org/records/one", "checked": "2026-10-12T11:55:00Z"}]}, {"type": "chart", "kind": "line", "x": ["A", "B"], "series": [{"name": "Observed", "values": [1, null]}], "unit": "units", "source": "https://example.org/records/one", "checked": "2026-10-12T11:55:00Z"}, {"type": "callout", "tone": "info", "text": "Read the records."}, {"type": "actions", "items": [{"ask": "Compare the records"}, {"open": "https://example.org/records/one", "label": "Open source"}]}, {"type": "callout", "tone": "info", "text": "Read the records."}]}], "accept": false, "problems": [{"path": "/blocks", "fix": "at most 8"}]},
+    {"name": "empty cards", "spec": "neutral", "changes": [{"path": "/blocks/0/items", "value": []}], "accept": false, "problems": [{"path": "/blocks/0/items", "fix": "at least 1"}]},
+    {"name": "checked without source", "spec": "neutral", "changes": [{"path": "/blocks/3/items/0/source", "remove": true}], "accept": false, "problems": [{"path": "/blocks/3/items/0/source", "fix": "required with checked"}]},
+    {"name": "aggregate feedback", "spec": "neutral", "changes": [{"path": "/blocks/6/text", "value": ""}, {"path": "/blocks/3/items/0/checked", "value": "invalid"}, {"path": "/blocks/0/items/0/subtitle", "value": "Extra"}], "accept": false, "problems": [{"path": "/blocks/6/text", "fix": "at least 1"}, {"path": "/blocks/3/items/0/checked", "fix": "RFC 3339"}, {"path": "/blocks/0/items/0/subtitle", "fix": "\"sub\""}]}
+  ],
+  "markdown": {"neutral": "### Records\n\n- [Record One](https://example.org/records/one?view=full#detail)\n  A · Group A\n  img\\_0123456789\n  \\-12\\.5 units (~~\\-14 units~~) · Measured\n  - Observed\n  A neutral record\\.\n  [https://example\\.org/records/one?view=full\\#detail](https://example.org/records/one?view=full#detail) · 2026\\-10\\-12T11:55:00Z\n\n| Name | Value |\n| --- | --- |\n| One | 12\\.5 |\n| Two |  |\n\n- [Record image](https://example.org/records/one) · img\\_0123456789\n\n- State: Ready · [https://example\\.org/records/one](https://example.org/records/one) · 2026\\-10\\-12T11:55:00Z\n\n- Count: 3 items (\\+1) · [https://example\\.org/records/one](https://example.org/records/one) · 2026\\-10\\-12T11:55:00Z\n\n|  | Observed |\n| --- | --- |\n| A | 1 |\n| B |  |\nunits\n[https://example\\.org/records/one](https://example.org/records/one) · 2026\\-10\\-12T11:55:00Z\n\n> Read the records\\.\n\n> 질문 제안: Compare the records\n- [Open source](https://example.org/records/one)", "comparison": "- [Record 0](https://example.org/records/one)\n  img\\_0123456789\n  1 USD\n  [https://example\\.org/records/one](https://example.org/records/one) · 2026\\-10\\-12T11:55:00Z\n- [Record 1](https://example.org/records/one)\n  img\\_0123456789\n  2 USD\n  [https://example\\.org/records/one](https://example.org/records/one) · 2026\\-10\\-12T11:55:00Z\n- [Record 2](https://example.org/records/one)\n  img\\_0123456789\n  3 USD\n  [https://example\\.org/records/one](https://example.org/records/one) · 2026\\-10\\-12T11:55:00Z\n- [Record 3](https://example.org/records/one)\n  img\\_0123456789\n  4 USD\n  [https://example\\.org/records/one](https://example.org/records/one) · 2026\\-10\\-12T11:55:00Z\n\n| Record | Value | State | Notes | Source |\n| --- | --- | --- | --- | --- |\n| 0 | 1 | Ready | Observed | https://example\\.org/records/one |\n| 1 | 2 | Ready | Observed | https://example\\.org/records/one |\n| 2 | 3 | Ready | Observed | https://example\\.org/records/one |\n| 3 | 4 | Ready | Observed | https://example\\.org/records/one |\n\n> 질문 제안: Show more detail\n> 질문 제안: Compare measurements\n> 질문 제안: Summarize sources"}
+}
