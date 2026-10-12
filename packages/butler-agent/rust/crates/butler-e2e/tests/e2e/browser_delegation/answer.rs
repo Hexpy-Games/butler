@@ -159,9 +159,7 @@ fn assert_presentation_contract(requests: &[Value]) {
     assert!(
         task.contains("Presentation: cards, table")
             && task.contains("Butler's Plan presents this result as cards, table")
-            && task.contains(
-                "collect one representative image per item with image_collect while its page is open"
-            ),
+            && task.contains("collect one representative photo per item with image_collect"),
         "the planned presentation drives the delegated task: {task}"
     );
     assert!(
