@@ -35,10 +35,10 @@ pub(super) fn path_script(command: &str) -> &str {
 /// strips the first and the last quote of the line and runs what is between.
 pub(super) fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
     use std::os::windows::process::CommandExt;
-    if let Some(text) = cmd::raw_argument(invocation) {
-        command
-            .args(&invocation.arguments[..invocation.arguments.len() - 1])
-            .raw_arg(text);
+    if let Some(text) = cmd::raw_argument(invocation)
+        && let Some((_, switches)) = invocation.arguments.split_last()
+    {
+        command.args(switches).raw_arg(text);
     } else {
         command.args(&invocation.arguments);
     }
