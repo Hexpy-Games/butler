@@ -3,6 +3,7 @@
 use butler_platform::tool_paths::*;
 use std::path::Path;
 
+// test-category: pure-logic
 #[test]
 fn windows_forms_keep_their_roots() -> Result<(), butler_e2e::e2e::HarnessError> {
     butler_e2e::gate!();
@@ -31,6 +32,7 @@ fn windows_forms_keep_their_roots() -> Result<(), butler_e2e::e2e::HarnessError>
     Ok(())
 }
 
+// test-category: pure-logic
 #[test]
 fn home_and_discovery_roots_are_preserved() -> Result<(), butler_e2e::e2e::HarnessError> {
     butler_e2e::gate!();
