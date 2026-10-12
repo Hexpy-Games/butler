@@ -1,23 +1,57 @@
-//! One source-current checked vector quantum, sharing the Host embedding owner.
+//! Source-current checked vector quanta, sharing the Host embedding owner. Live
+//! work embeds a few units per quantum. Daily and backfill batches claim many
+//! units, embed them a request at a time and write them with one vector merge
+//! and one completion; the table is compacted once, when the drain ends.
 
 use crate::cognition::CognitionCode;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::ops::Range;
 
 use super::{Input, canonical_path, resolve_input_generation};
 use crate::cognition::generation_vectors::{
-    GenerationVectorRow, GenerationVectorStore, compatibility, persisted_receipt,
+    GenerationVectorRow, GenerationVectorStore, compatibility, persisted_receipt, unit_receipt,
 };
-use crate::cognition::graph::{ClaimedVectorUnit, GraphRepository};
+use crate::cognition::graph::{ClaimLimit, ClaimedVectorUnit, GraphRepository};
 use crate::cognition::sources::read_typed_record;
 use crate::cognition::{
     CognitionEmbeddingPort, CognitionError, CognitionResult, ConversationSourceNotice,
-    EmbeddingMode, EmbeddingRequest, EmbeddingRequestClass, MemoryGenerationHandle,
-    MemoryGenerationTarget, assert_conversation_source_current, assert_mutation_authority,
-    bind_native_embedding_identity, ensure_data_authority, resolve_generation,
+    EmbeddingIdentity, EmbeddingMode, EmbeddingRequest, EmbeddingRequestClass,
+    MemoryGenerationHandle, MemoryGenerationTarget, assert_conversation_source_current,
+    assert_mutation_authority, bind_native_embedding_identity, ensure_data_authority,
+    resolve_generation,
 };
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire};
 use butler_turn::conversation::ConversationSourceReader;
 use chrono::{DateTime, SecondsFormat, Utc};
+
+mod gates;
+use gates::{Admission, acquire, assert_current, assert_generation_current, epoch_ms, error, row};
+
+/// Texts one embedding request carries: the worker's background bound.
+const EMBED_TEXTS: usize = 4;
+
+/// What a claimed quantum left unfinished: the `failed` units end with
+/// `error`; the units after them were never attempted and return to pending.
+struct Unfinished {
+    error: CognitionError,
+    failed: Range<usize>,
+}
+
+impl Unfinished {
+    fn all(error: CognitionError, units: &[ClaimedVectorUnit]) -> Self {
+        Self {
+            error,
+            failed: 0..units.len(),
+        }
+    }
+}
+
+/// The vectors of a quantum's embedded prefix, their identity, and the failure
+/// that stopped embedding, if any.
+struct Embedded {
+    vectors: Vec<Vec<f32>>,
+    identity: Option<EmbeddingIdentity>,
+    failure: Option<CognitionError>,
+}
 
 pub(in crate::cognition::completion::consumer) async fn process(
     input: &Input,
@@ -50,51 +84,89 @@ async fn process_generation(
     }
     let now = (input.clock)();
     // The claim takes the write lease; look first, without it.
-    if !input
+    let units = if input
         .probe
         .vector_work(&generation.graph_path, &now)
         .await?
     {
+        claim(input, generation, &now).await?
+    } else {
         input
             .vector_batch
             .store(false, std::sync::atomic::Ordering::Release);
-        return Ok(false);
-    }
-    let (units, current) = {
-        let _lease = acquire(input, "memory-vector-claim").await?;
-        assert_generation_current(input, generation, Admission::Required)?;
-        let mut graph = GraphRepository::open(&generation.graph_path)?;
-        let units = graph.claim_vector_quantum(&now)?;
-        graph.close()?;
-        let current = if units.is_empty() {
-            Ok(())
-        } else {
-            assert_current(input, generation, &units, Admission::Required)
-        };
-        (units, current)
+        None
     };
-    if units.is_empty() {
+    let Some((units, current)) = units else {
+        if input.daily_batch {
+            finish_batch(input, generation).await;
+        }
         return Ok(false);
-    }
+    };
     let result = match current {
         Ok(()) => run_claimed(input, embedding, generation, &units).await,
-        Err(failure) => Err(failure),
+        Err(failure) => Err(Unfinished::all(failure, &units)),
     };
-    if let Err(failure) = &result {
-        // A cancelled admission leaves the durable running claim for recovery.
-        // Failure bookkeeping must never cross the generation/source write gate.
-        if let Ok(_lease) = acquire(input, "memory-vector-fail").await
-            && assert_current(input, generation, &units, Admission::Failure).is_ok()
-        {
-            let mut graph = GraphRepository::open(&generation.graph_path)?;
-            graph.fail_vector_quantum(&units, failure.code(), &(input.clock)())?;
-            graph.close()?;
+    let Err(unfinished) = result else {
+        return Ok(true);
+    };
+    record_unfinished(input, generation, &units, &unfinished).await?;
+    if unfinished.error.code() == "embed_worker_cold" {
+        Ok(false)
+    } else {
+        Err(unfinished.error)
+    }
+}
+
+/// Claims the next quantum under the write lease (a batch in the daily window),
+/// with its currency check; `None` when nothing was due.
+async fn claim(
+    input: &Input,
+    generation: &MemoryGenerationHandle,
+    now: &str,
+) -> CognitionResult<Option<(Vec<ClaimedVectorUnit>, CognitionResult<()>)>> {
+    let limit = if input.daily_batch {
+        ClaimLimit::BATCH
+    } else {
+        ClaimLimit::LIVE
+    };
+    let _lease = acquire(input, "memory-vector-claim").await?;
+    assert_generation_current(input, generation, Admission::Required)?;
+    let mut graph = GraphRepository::open(&generation.graph_path)?;
+    let units = graph.claim_vector_quantum(now, limit)?;
+    graph.close()?;
+    if units.is_empty() {
+        return Ok(None);
+    }
+    let current = assert_current(input, generation, &units, Admission::Required);
+    Ok(Some((units, current)))
+}
+
+/// Fails the units an attempt ended and returns never-attempted ones to
+/// pending. A cancelled admission leaves the durable running claim for
+/// recovery; bookkeeping never crosses the generation/source write gate.
+async fn record_unfinished(
+    input: &Input,
+    generation: &MemoryGenerationHandle,
+    units: &[ClaimedVectorUnit],
+    unfinished: &Unfinished,
+) -> CognitionResult<()> {
+    let open = units.get(unfinished.failed.start..).unwrap_or_default();
+    if let Ok(_lease) = acquire(input, "memory-vector-fail").await
+        && assert_current(input, generation, open, Admission::Failure).is_ok()
+    {
+        let now = (input.clock)();
+        let mut graph = GraphRepository::open(&generation.graph_path)?;
+        let failed = units.get(unfinished.failed.clone()).unwrap_or_default();
+        if !failed.is_empty() {
+            graph.fail_vector_quantum(failed, unfinished.error.code(), &now)?;
         }
+        let deferred = units.get(unfinished.failed.end..).unwrap_or_default();
+        if !deferred.is_empty() {
+            graph.defer_vector_quantum(deferred, &now)?;
+        }
+        graph.close()?;
     }
-    match result {
-        Err(failure) if failure.code() == "embed_worker_cold" => Ok(false),
-        other => other.map(|()| true),
-    }
+    Ok(())
 }
 
 async fn run_claimed(
@@ -102,30 +174,54 @@ async fn run_claimed(
     embedding: &dyn CognitionEmbeddingPort,
     generation: &MemoryGenerationHandle,
     units: &[ClaimedVectorUnit],
-) -> CognitionResult<()> {
-    if complete_from_receipt(input, generation, units).await? {
+) -> Result<(), Unfinished> {
+    let whole = |error| Unfinished::all(error, units);
+    if complete_from_receipt(input, generation, units)
+        .await
+        .map_err(whole)?
+    {
         return Ok(());
     }
-    {
-        let _lease = acquire(input, "memory-vector-invocation").await?;
-        assert_current(input, generation, units, Admission::Required)?;
-        let mut graph = GraphRepository::open(&generation.graph_path)?;
-        graph.mark_vector_invoked(units)?;
-        graph.close()?;
+    invoke(input, generation, units).await.map_err(whole)?;
+    let embedded = embed(input, embedding, units).await;
+    let done = embedded.vectors.len();
+    if let Some(observed) = embedded.identity.as_ref().filter(|_| done > 0) {
+        // The version is a compatibility domain, not producer provenance.
+        let version = generation
+            .embedding
+            .as_ref()
+            .map_or(observed.version.as_str(), |identity| identity.version());
+        let completed = units.get(..done).unwrap_or_default();
+        let rows = completed
+            .iter()
+            .zip(embedded.vectors)
+            .map(|(unit, vector)| row(unit, generation, version, vector))
+            .collect::<CognitionResult<Vec<_>>>()
+            .map_err(whole)?;
+        write_rows(input, generation, completed, observed, &rows)
+            .await
+            .map_err(whole)?;
     }
-    let embedded = embed(input, embedding, units).await?;
-    let observed = embedded.metadata;
-    // The version is a compatibility domain, not producer provenance.
-    let version = generation
-        .embedding
-        .as_ref()
-        .map_or(observed.version.as_str(), |identity| identity.version());
-    let rows = units
-        .iter()
-        .zip(embedded.embeddings)
-        .map(|(unit, vector)| row(unit, generation, version, vector))
-        .collect::<CognitionResult<Vec<_>>>()?;
-    write_rows(input, generation, units, &observed, &rows).await
+    match embedded.failure {
+        None => Ok(()),
+        Some(error) => Err(Unfinished {
+            error,
+            failed: done..(done + EMBED_TEXTS).min(units.len()),
+        }),
+    }
+}
+
+/// Marks the quantum invoked before the model sees it.
+async fn invoke(
+    input: &Input,
+    generation: &MemoryGenerationHandle,
+    units: &[ClaimedVectorUnit],
+) -> CognitionResult<()> {
+    let _lease = acquire(input, "memory-vector-invocation").await?;
+    assert_current(input, generation, units, Admission::Required)?;
+    let mut graph = GraphRepository::open(&generation.graph_path)?;
+    graph.mark_vector_invoked(units)?;
+    graph.close()
 }
 
 /// Completes the quantum from vectors an earlier attempt already stored;
@@ -142,20 +238,60 @@ async fn complete_from_receipt(
         .iter()
         .map(|unit| row(unit, generation, identity.version(), Vec::new()))
         .collect::<CognitionResult<Vec<_>>>()?;
-    let Some(receipt) = persisted_receipt(&input.data_root, generation, &rows).await? else {
+    if persisted_receipt(&input.data_root, generation, &rows)
+        .await?
+        .is_none()
+    {
         return Ok(false);
-    };
+    }
     let _lease = acquire(input, "memory-vector-receipt").await?;
     assert_current(input, generation, units, Admission::Required)?;
+    let receipts = rows.iter().map(unit_receipt).collect::<Vec<_>>();
     let mut graph = GraphRepository::open(&generation.graph_path)?;
-    graph.complete_vector_quantum(units, &receipt, &(input.clock)())?;
+    graph.complete_vector_quantum(units, &receipts, &(input.clock)())?;
     graph.close()?;
     Ok(true)
 }
 
-/// Embeds every unit's projection text; the result must cover each text
-/// exactly and use CLS pooling.
+/// Embeds the units a request at a time, stopping at the first failure. Every
+/// request must share one identity.
 async fn embed(
+    input: &Input,
+    embedding: &dyn CognitionEmbeddingPort,
+    units: &[ClaimedVectorUnit],
+) -> Embedded {
+    let mut embedded = Embedded {
+        vectors: Vec::with_capacity(units.len()),
+        identity: None,
+        failure: None,
+    };
+    for chunk in units.chunks(EMBED_TEXTS) {
+        match embed_request(input, embedding, chunk).await {
+            Ok(result)
+                if embedded
+                    .identity
+                    .as_ref()
+                    .is_none_or(|known| known.version == result.metadata.version) =>
+            {
+                embedded.vectors.extend(result.embeddings);
+                embedded.identity = Some(result.metadata);
+            }
+            Ok(_) => {
+                embedded.failure = Some(error(CognitionCode::MemoryEmbeddingVersionMismatch));
+                break;
+            }
+            Err(failure) => {
+                embedded.failure = Some(failure);
+                break;
+            }
+        }
+    }
+    embedded
+}
+
+/// Embeds the units' projection texts in one request; the result must cover
+/// each text exactly and use CLS pooling.
+async fn embed_request(
     input: &Input,
     embedding: &dyn CognitionEmbeddingPort,
     units: &[ClaimedVectorUnit],
@@ -180,7 +316,7 @@ async fn embed(
                     .collect(),
                 mode: EmbeddingMode::CheckedCls,
                 resplit: true,
-                max_embeddings: Some(4),
+                max_embeddings: Some(EMBED_TEXTS),
                 request_class,
                 deadline_at_epoch_ms: Some(deadline),
             },
@@ -206,20 +342,16 @@ async fn embed(
 }
 
 /// Writes the vectors under the lock, pinning the generation's embedding
-/// identity on first use, and completes the quantum.
+/// identity on first use, and completes their units. A batch leaves table
+/// maintenance to the end of its drain.
 async fn write_rows(
     input: &Input,
     generation: &MemoryGenerationHandle,
     units: &[ClaimedVectorUnit],
-    observed: &crate::cognition::EmbeddingIdentity,
+    observed: &EmbeddingIdentity,
     rows: &[GenerationVectorRow],
 ) -> CognitionResult<()> {
-    let target = input
-        .target
-        .clone()
-        .unwrap_or(MemoryGenerationTarget::Active {
-            expected_generation: generation.generation_id.clone(),
-        });
+    let target = target(input, generation);
     let store = GenerationVectorStore::new(input.data_root.clone(), input.environment.clone());
     let lease = acquire(input, "memory-vector-write").await?;
     assert_current(input, generation, units, Admission::Required)?;
@@ -244,7 +376,9 @@ async fn write_rows(
         }
     };
     let current = resolve_generation(&input.data_root, &input.environment, &target)?;
-    let receipt = store.upsert(&lease, &target, &current, rows).await?;
+    store
+        .upsert(&lease, &target, &current, rows, !input.daily_batch)
+        .await?;
     assert_current(input, &current, units, Admission::Ignored)?;
     let final_generation = resolve_generation(&input.data_root, &input.environment, &target)?;
     if final_generation.generation_id != current.generation_id
@@ -255,198 +389,37 @@ async fn write_rows(
     {
         return Err(error(CognitionCode::MemoryGenerationChanged));
     }
+    let receipts = rows.iter().map(unit_receipt).collect::<Vec<_>>();
     let mut graph = GraphRepository::open(&current.graph_path)?;
-    graph.complete_vector_quantum(units, &receipt, &(input.clock)())?;
+    graph.complete_vector_quantum(units, &receipts, &(input.clock)())?;
     graph.close()?;
     drop(lease);
     Ok(())
 }
 
-/// Whether a check also refuses once shutdown has begun.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Admission {
-    Required,
-    Ignored,
-    /// Failure bookkeeping retains authority/source gates but permits identity refusal.
-    Failure,
-}
-
-async fn acquire(
-    input: &Input,
-    purpose: &str,
-) -> CognitionResult<crate::coordination::CognitionWriteLease> {
-    let lock = input.environment.consolidation_lock(&input.data_root);
-    let cognition = input.environment.cognition_root(&input.data_root);
-    ensure_data_authority(&input.data_root, &[&cognition, &lock])?;
-    let lease = input
-        .coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: lock.clone(),
-                purpose: Some(purpose.into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(input.shutdown.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
-        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
-    lease
-        .assert_for_path(&lock)
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
-    Ok(lease)
-}
-
-fn assert_generation_current(
-    input: &Input,
-    generation: &MemoryGenerationHandle,
-    admission: Admission,
-) -> CognitionResult<()> {
-    if admission != Admission::Ignored && input.shutdown.is_cancelled() {
-        return Err(error(CognitionCode::MemoryWriteAborted));
+/// The end of a daily or backfill drain: one compaction and one version prune
+/// for everything its batches wrote. Best effort; daily optimize repeats it.
+async fn finish_batch(input: &Input, generation: &MemoryGenerationHandle) {
+    let Ok(lease) = acquire(input, "memory-vector-maintain").await else {
+        return;
+    };
+    if assert_generation_current(input, generation, Admission::Required).is_err() {
+        return;
     }
-    let target = input
+    let store = GenerationVectorStore::new(input.data_root.clone(), input.environment.clone());
+    if let Err(failure) = store
+        .maintain(&lease, &target(input, generation), generation)
+        .await
+    {
+        butler_core::diagnostic!("[memory-vector-batch] maintenance {}", failure.code());
+    }
+}
+
+fn target(input: &Input, generation: &MemoryGenerationHandle) -> MemoryGenerationTarget {
+    input
         .target
         .clone()
         .unwrap_or(MemoryGenerationTarget::Active {
             expected_generation: generation.generation_id.clone(),
-        });
-    let current = resolve_generation(&input.data_root, &input.environment, &target)?;
-    if current.generation_id != generation.generation_id {
-        return Err(error(CognitionCode::MemoryGenerationChanged));
-    }
-    if admission != Admission::Failure
-        && let Some(identity) = &current.embedding
-    {
-        compatibility::preflight(identity)?;
-    }
-    ensure_data_authority(&input.data_root, &[&current.root, &current.graph_path])?;
-    assert_mutation_authority(&input.data_root, &input.environment, &target, &current)
-}
-
-fn assert_current(
-    input: &Input,
-    generation: &MemoryGenerationHandle,
-    units: &[ClaimedVectorUnit],
-    admission: Admission,
-) -> CognitionResult<()> {
-    assert_generation_current(input, generation, admission)?;
-    let graph = GraphRepository::open(&generation.graph_path)?;
-    graph.assert_vector_quantum_current(&generation.generation_id, units)?;
-    graph.close()?;
-    let requires_conversation = units
-        .iter()
-        .any(|unit| unit.source_key.starts_with("conversation_"));
-    let canonical = if requires_conversation {
-        Some(
-            ConversationSourceReader::open(&canonical_path(generation, &input.data_root))
-                .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))?,
-        )
-    } else {
-        None
-    };
-    for unit in units {
-        if let Some((kind, record_id)) = unit.source_key.split_once(':')
-            && matches!(kind, "task_report" | "explicit_record")
-        {
-            let owner = read_typed_record(
-                &generation.source_root,
-                &generation.source_root.join("cognition/memory"),
-                kind,
-                record_id,
-            )?
-            .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
-            if owner.revision != unit.source_revision || owner.content_hash != unit.source_hash {
-                return Err(error(CognitionCode::MemorySourceChanged));
-            }
-            continue;
-        }
-        let reader = canonical
-            .as_ref()
-            .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
-        let session_id = unit
-            .session_id
-            .as_deref()
-            .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
-        let notice = if let Some(turn_id) = unit.source_key.strip_prefix("conversation_turn:") {
-            let outcome = reader
-                .read_turn_outcome(turn_id)
-                .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))?
-                .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
-            ConversationSourceNotice::Turn {
-                session_id,
-                turn_id,
-                outcome_generation: outcome.generation,
-                extraction_version: &unit.extraction_version,
-            }
-        } else if let Some(message_id) = unit.source_key.strip_prefix("conversation_message:") {
-            ConversationSourceNotice::Standalone {
-                session_id,
-                message_id,
-                source_hash: &unit.source_hash,
-                extraction_version: &unit.extraction_version,
-            }
-        } else {
-            return Err(error(CognitionCode::MemorySourceChanged));
-        };
-        assert_conversation_source_current(
-            reader,
-            notice,
-            &unit.source_revision,
-            &(input.clock)(),
-        )?;
-    }
-    if let Some(canonical) = canonical {
-        canonical
-            .close()
-            .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))?;
-    }
-    Ok(())
-}
-
-fn row(
-    unit: &ClaimedVectorUnit,
-    generation: &MemoryGenerationHandle,
-    version: &str,
-    vector: Vec<f32>,
-) -> CognitionResult<GenerationVectorRow> {
-    let (chunk, key) = GenerationVectorRow::identity(
-        &generation.generation_id,
-        &unit.record_kind,
-        &unit.owner_id,
-        &unit.owner_revision,
-        &unit.projection_text,
-        version,
-    );
-    let observed = DateTime::parse_from_rfc3339(&unit.source_observed_at)
-        .map_err(|source| error(CognitionCode::MemoryVectorRowsInvalid).with_source(source))?
-        .with_timezone(&Utc)
-        .to_rfc3339_opts(SecondsFormat::Millis, true);
-    Ok(GenerationVectorRow {
-        vector_key: key,
-        generation: generation.generation_id.clone(),
-        record_kind: unit.record_kind.clone(),
-        owner_id: unit.owner_id.clone(),
-        owner_revision: unit.owner_revision.clone(),
-        source_revision: unit.source_revision.clone(),
-        embedding_chunk_id: chunk,
-        embedding_version: version.into(),
-        project_id: unit.project_id.clone().unwrap_or_default(),
-        origin_kind: unit.origin_kind.clone(),
-        source_kind: unit.source_kind.clone(),
-        conversation_session_id: unit.conversation_session_id.clone(),
-        source_observed_at: observed,
-        source_refs_json: unit.source_refs_json.clone(),
-        vector,
-    })
-}
-
-fn epoch_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
-}
-fn error(code: CognitionCode) -> CognitionError {
-    CognitionError::new(code, code.as_str())
+        })
 }

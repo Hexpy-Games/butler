@@ -45,14 +45,9 @@ impl GraphRecallReader {
         &self,
         input: &RecallRequest,
         current: impl FnMut(&str, &str) -> CognitionResult<Option<bool>>,
+        verify: impl FnMut(&[(String, String)]) -> CognitionResult<Option<Vec<bool>>>,
     ) -> CognitionResult<(Vec<String>, bool)> {
-        super::episode_fts::select(self.connection()?, input, current)
-    }
-    pub(in crate::cognition) fn compatible_vectors(
-        &self,
-        generation: &crate::cognition::MemoryGenerationHandle,
-    ) -> CognitionResult<bool> {
-        super::episode_fts::read::compatible_vectors(self.connection()?, generation)
+        super::episode_fts::select(self.connection()?, input, current, verify)
     }
 
     pub(in crate::cognition) fn current_vector_matches(
