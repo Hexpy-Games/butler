@@ -54,6 +54,9 @@ async fn contained_commands_allow_data_reads_and_keep_writes_and_credentials_den
     for data in [&setup.sandbox.data, &default_data] {
         let file = data.join("ordinary.txt");
         std::fs::write(&file, "complete-data-fixture")?;
+        let auth = data.join("auth/provider.json");
+        std::fs::create_dir_all(auth.parent().unwrap())?;
+        std::fs::write(&auth, "private-auth-fixture")?;
         let alias = setup.sandbox.workspace.join("data-alias");
         butler_platform::secure_fs::symlink(data, &alias)?;
         for path in [&file, &alias.join("ordinary.txt")] {
@@ -72,15 +75,12 @@ async fn contained_commands_allow_data_reads_and_keep_writes_and_credentials_den
         .await?;
         assert_ne!(status, Some(0));
         assert!(!target.exists());
-        let (status, stdout) = command(
-            &owner,
-            &setup,
-            data,
-            format!("cat '{}'", credential.display()),
-        )
-        .await?;
-        assert_ne!(status, Some(0));
-        assert!(stdout.is_empty(), "credential output must remain empty");
+        for private in [&credential, &auth, &alias.join("auth/provider.json")] {
+            let (status, stdout) =
+                command(&owner, &setup, data, format!("cat '{}'", private.display())).await?;
+            assert_ne!(status, Some(0));
+            assert!(stdout.is_empty(), "credential output must remain empty");
+        }
         std::fs::remove_file(alias)?;
     }
     owner.close().await;

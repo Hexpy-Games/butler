@@ -386,6 +386,11 @@ pub(super) fn guarded_directory(
 /// The login-shell invocation of a guided command. Read-only commands run in
 /// the host sandbox; a host without one refuses them.
 fn invocation(input: &GuidedCommandInput) -> Result<command_sandbox::Invocation, CommandError> {
+    let mut environment = input.host_environment.clone();
+    environment.insert(
+        "BUTLER_DATA".into(),
+        input.butler_data.to_string_lossy().into_owned(),
+    );
     let access = match input.access {
         GuidedAccess::FullAccessContained => ShellAccess::Full,
         GuidedAccess::ReadOnlyObservation | GuidedAccess::ContainedObservation => {
@@ -397,12 +402,12 @@ fn invocation(input: &GuidedCommandInput) -> Result<command_sandbox::Invocation,
     let shell = if input.access == GuidedAccess::ContainedObservation {
         command_sandbox::login_shell_contained(
             &input.command,
-            &input.host_environment,
+            &environment,
             &[],
             &[input.workspace_root.as_path()],
         )
     } else {
-        command_sandbox::login_shell(&input.command, access, &input.host_environment)
+        command_sandbox::login_shell(&input.command, access, &environment)
     };
     let invocation = shell.map_err(|error| {
         CommandError::new(
