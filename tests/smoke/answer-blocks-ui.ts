@@ -12,6 +12,16 @@ import { toMarkdown } from "../../packages/butler-app/client/shared/answer-block
 
 const root = process.cwd();
 const stage = process.env.BUTLER_ANSWER_STAGE ?? "after";
+const locale = process.env.BUTLER_ANSWER_LOCALE === "en" ? "en" : "ko";
+const labels = locale === "en" ? {
+  copy: "Copy", copied: "Copied", save: "Save to library", saved: "Saved to library",
+  showMore: "Show more", showLess: "Show less", moreItems: (count: number) => `Show ${count} more`,
+  checkedTime: "5:41 PM", checkedLabel: "Checked at 5:41 PM · musinsa.com",
+} : {
+  copy: "복사", copied: "복사했어요", save: "서랍에 저장", saved: "서랍에 저장했어요",
+  showMore: "더 보기", showLess: "접기", moreItems: (count: number) => `${count}개 더 보기`,
+  checkedTime: "오후 5:41", checkedLabel: "오후 5:41 확인 · musinsa.com",
+};
 const evidence = process.env.BUTLER_ANSWER_EVIDENCE ?? resolve(".tmp/answer-blocks-ui");
 mkdirSync(evidence, { recursive: true });
 const mock = JSON.parse(readFileSync(join(root, "tests/smoke/answer-blocks-mock.json"), "utf8")) as AnswerBlocks;
@@ -44,7 +54,7 @@ async function initialize(page: Page) {
 async function open(page: Page, spec: unknown, width: number, theme: string, background = "plain") {
   currentFixture = { messages: [message(spec)], background };
   await page.setViewportSize({ width, height: 1000 });
-  await page.goto(`${base}?visual=components&theme=${theme}&locale=ko`);
+  await page.goto(`${base}?visual=components&theme=${theme}&locale=${locale}`);
   await page.locator('[data-test-class="turn-result-section"]').waitFor();
   await page.evaluate(() => document.fonts.ready);
   await page.locator('[data-test-class~="conversation-scroll"]').evaluate(node => { node.scrollTop = 0; });
@@ -71,10 +81,13 @@ async function checkMock(page: Page, width: number, theme: string, background: s
     await page.waitForFunction(() => [...document.querySelectorAll('[data-slot="media-frame"]')].every(node => ["empty", "failed"].includes(node.getAttribute("data-fit") ?? "")));
     assert.equal(await page.locator('[data-answer-block="table"] tbody tr').count(), 4);
     assert.equal(await page.locator('[data-answer-block="actions"] button').count(), 3);
-    assert((await cards.first().innerText()).includes("76,390원"));
-    assert((await cards.nth(3).innerText()).includes("368,000원"), "the struck-through value uses the same format");
-    assert((await cards.first().innerText()).includes("오후 5:41 확인"));
-    const sourceText = await cards.first().locator('[data-slot="item-card-footer"] [role="button"]').evaluate(node => {
+    assert((await cards.first().innerText()).includes("76,390"));
+    assert((await cards.nth(3).innerText()).includes("368,000"), "the struck-through value uses the same format");
+    assert((await cards.first().innerText()).includes(labels.checkedTime));
+    const provenance = cards.first().locator('[data-slot="item-card-footer"] [role="button"]');
+    assert.equal(await provenance.getAttribute("aria-label"), labels.checkedLabel);
+    assert.equal(await provenance.getAttribute("title"), labels.checkedLabel);
+    const sourceText = await provenance.evaluate(node => {
       const range = document.createRange(); range.selectNodeContents(node); return node.textContent;
     });
     assert(sourceText?.includes("musinsa.com"));
@@ -85,10 +98,13 @@ async function checkMock(page: Page, width: number, theme: string, background: s
     geometry.push({ width, theme, background, ...state });
   } else assert.equal(await cards.count(), 0, "baseline has no block renderer");
   assert.equal(await page.locator('[data-sonner-toast][data-type="error"]').count(), 0, "offline conversation fixtures are complete");
-  await page.screenshot({ path: join(evidence, `${stage}-${width}-${theme}-${background}.png`) });
+  await page.screenshot({ path: join(evidence, `${locale}-${stage}-${width}-${theme}-${background}.png`) });
+  if (locale === "en" && width === 1280 && theme === "light" && background === "plain") {
+    await page.screenshot({ path: join(evidence, "en-1280-light.png") });
+  }
   if (stage === "after") {
     await page.locator('[data-test-class~="conversation-scroll"]').evaluate(node => { node.scrollTop = node.scrollHeight; });
-    await page.screenshot({ path: join(evidence, `${stage}-${width}-${theme}-${background}-table-actions.png`) });
+    await page.screenshot({ path: join(evidence, `${locale}-${stage}-${width}-${theme}-${background}-table-actions.png`) });
   }
 }
 
@@ -99,14 +115,15 @@ async function checkInteractions(page: Page) {
   assert((await page.locator('[data-slot="item-card"]').innerText()).includes("-12.5 units"));
   await page.getByRole("button", { name: "Record One", exact: true }).click();
   assert.deepEqual(await page.evaluate(() => (window as Window & { openedLinks?: string[] }).openedLinks), [neutral.blocks[0].type === "cards" ? neutral.blocks[0].items[0].source : ""]);
-  await page.locator('[data-slot="item-card"]').getByRole("button", { name: "복사", exact: true }).click();
+  await page.locator('[data-slot="item-card"]').getByRole("button", { name: labels.copy, exact: true }).click();
+  await page.getByRole("button", { name: labels.copied, exact: true }).first().waitFor();
   assert((await page.evaluate(() => (window as Window & { copiedText?: string }).copiedText))?.includes("Record One · -12.5 units"));
-  await page.locator('[data-slot="item-card"]').getByRole("button", { name: "서랍에 저장", exact: true }).click();
-  await page.waitForFunction(() => document.body.textContent?.includes("서랍에 저장했어요"));
+  await page.locator('[data-slot="item-card"]').getByRole("button", { name: labels.save, exact: true }).click();
+  await page.waitForFunction(text => document.body.textContent?.includes(text), labels.saved);
   const saved = calls.find(call => call.path === "/library")!;
   assert.equal(saved.body.kind, "scrap"); assert.equal(saved.body.title, "Record One");
-  assert(String(saved.body.text).includes("Observed") && String(saved.body.text).includes("확인"));
-  await page.locator('[data-test-class="assistant-footer"]').getByRole("button", { name: /복사/ }).click();
+  assert(String(saved.body.text).includes("Observed") && String(saved.body.text).includes(locale === "en" ? "8:55 PM" : "오후 8:55"));
+  await page.locator('[data-test-class="assistant-footer"]').getByRole("button", { name: new RegExp(labels.copy) }).click();
   assert.equal(await page.evaluate(() => (window as Window & { copiedText?: string }).copiedText), `${message(neutral).text}\n\n${toMarkdown(neutral)}`);
   await page.getByRole("button", { name: "Compare the records", exact: true }).click();
   await page.waitForFunction(() => document.body.textContent?.includes("Compare the records"));
@@ -114,12 +131,25 @@ async function checkInteractions(page: Page) {
 }
 
 async function checkLeniencyAndExpand(page: Page) {
+  const dateLabel = await page.evaluate(({ timestamp, dateLocale }) => new Date(timestamp).toLocaleDateString(dateLocale, { dateStyle: "short" }), {
+    timestamp: "2026-10-11T08:41:00Z", dateLocale: locale === "en" ? "en-US" : "ko-KR",
+  });
   const dsItems = fixtureItems("ko-KR").map(item => ({ title: item.title, label: item.eyebrow, sub: item.subtitle,
     facts: item.facts, text: item.text, source: `https://${item.site}`, checked: "2026-10-11T08:41:00Z" }));
   await open(page, { v: 1, blocks: [{ type: "cards", items: dsItems }] }, 390, "light");
   await page.locator('[data-slot="item-card"]').first().waitFor();
   assert.equal(await page.locator('[data-slot="item-card"]').count(), 5);
-  assert((await page.locator('[data-slot="item-card"]').first().innerText()).includes("2026. 10. 11."));
+  const firstCardText = await page.locator('[data-slot="item-card"]').first().innerText();
+  assert(firstCardText.includes(dateLabel), `expected locale short date ${dateLabel} in ${firstCardText}`);
+  const oldSource = page.locator('[data-slot="item-card"]').first().locator('[data-slot="item-card-footer"] [role="button"]');
+  const oldSourceLabel = locale === "en" ? `Checked on ${dateLabel} · papers.example.org` : `${dateLabel} 확인 · papers.example.org`;
+  assert.equal(await oldSource.getAttribute("aria-label"), oldSourceLabel);
+  assert.equal(await oldSource.getAttribute("title"), oldSourceLabel);
+
+  const longItems = dsItems.map(item => ({ ...item, text: `${item.text} ${item.text} ${item.text} ${item.text}` }));
+  await open(page, { v: 1, blocks: [{ type: "cards", items: longItems }] }, 320, "light");
+  await page.getByRole("button", { name: labels.showMore, exact: true }).first().click();
+  await page.getByRole("button", { name: labels.showLess, exact: true }).first().waitFor();
 
   const card = neutral.blocks[0]; assert(card.type === "cards");
   for (const count of [5, 6, 11]) {
@@ -130,7 +160,7 @@ async function checkLeniencyAndExpand(page: Page) {
     await page.waitForFunction(n => document.querySelectorAll('[data-slot="item-card"]').length === n, expected);
     assert.equal(await page.locator('[data-test-class="answer-cards"]').getAttribute("data-columns"), count === 5 ? "3" : "4");
     if (count > 6) {
-      await page.getByRole("button", { name: `${count - 6}개 더 보기`, exact: true }).click();
+      await page.getByRole("button", { name: labels.moreItems(count - 6), exact: true }).click();
       await page.waitForFunction(n => document.querySelectorAll('[data-slot="item-card"]').length === n, count);
       assert.equal(await page.locator('[data-test-class="answer-cards"]').getAttribute("data-columns"), "4");
     }
@@ -138,12 +168,12 @@ async function checkLeniencyAndExpand(page: Page) {
   }
   await open(page, { v: 1, blocks: [{ type: "table", columns: ["Name", "Value"], rows: Array.from({ length: 12 }, (_, i) => [`Row ${i}`, i]) }] }, 390, "light");
   assert.equal(await page.locator("tbody tr").count(), 10);
-  await page.getByRole("button", { name: "2개 더 보기" }).click();
+  await page.getByRole("button", { name: labels.moreItems(2) }).click();
   assert.equal(await page.locator("tbody tr").count(), 12);
 }
 
 try {
-  const page = await browser.newPage({ timezoneId: "Asia/Seoul", reducedMotion: "reduce" });
+  const page = await browser.newPage({ timezoneId: "Asia/Seoul", locale: locale === "en" ? "en-US" : "ko-KR", reducedMotion: "reduce" });
   await initialize(page);
   page.on("pageerror", error => errors.push(error.message));
   await page.route("**/*", async route => {
@@ -169,6 +199,7 @@ try {
   if (stage === "after") { await checkInteractions(page); await checkLeniencyAndExpand(page); }
   assert.deepEqual(errors, [], "no uncaught renderer errors");
   const result = { stage, ok: true, screenshots: stage === "after" ? 16 : 8, geometry, interactions: calls.map(call => call.path), modelCalls: 0 };
-  writeFileSync(join(evidence, `${stage}-result.json`), JSON.stringify(result, null, 2));
-  console.log(JSON.stringify(result));
+  result.screenshots += locale === "en" && stage === "after" ? 1 : 0;
+  writeFileSync(join(evidence, `${locale}-${stage}-result.json`), JSON.stringify({ ...result, locale }, null, 2));
+  console.log(JSON.stringify({ ...result, locale }));
 } finally { await browser.close(); await vite.close(); }

@@ -1,5 +1,5 @@
 import type { CardItem } from "../../../../shared/app-contracts";
-import { getAppLocale } from "@/app/copy";
+import { getAppCopy, getAppLocale } from "@/app/copy";
 import { faviconSrc } from "@/app/favicons";
 import { notifyError, notifyStatus } from "@/app/notifications";
 import { openLink } from "../browser/browserBridge";
@@ -8,16 +8,21 @@ import { formatAnswerValue } from "./answerValueFormat";
 
 export function answerSource(item: { source?: string; checked?: string }) {
   if (!item.source) return undefined;
+  const locale = getAppLocale();
+  const copy = getAppCopy(locale).conversation.answerBlocks;
   const url = item.source;
   const site = new URL(url).hostname.replace(/^www\./u, "");
   const date = item.checked ? new Date(item.checked) : undefined;
-  const today = date?.toLocaleDateString("ko-KR") === new Date().toLocaleDateString("ko-KR");
-  const checked = date ? `${today ? "" : `${date.toLocaleDateString("ko-KR")} `}${date.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" })} 확인` : undefined;
-  return { site, checked, icon: faviconSrc(url), label: `${site}${checked ? `, ${checked}` : ""} 페이지 열기`, onOpen: () => runAnswerAction(() => openLink(url)) };
+  const today = date?.toLocaleDateString(locale) === new Date().toLocaleDateString(locale);
+  const checked = date ? today
+    ? date.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })
+    : date.toLocaleDateString(locale, { dateStyle: "short" }) : undefined;
+  const label = checked ? today ? copy.source.checkedAt(checked, site) : copy.source.checkedOn(checked, site) : copy.source.open(site);
+  return { site, checked, icon: faviconSrc(url), label, onOpen: () => runAnswerAction(() => openLink(url)) };
 }
 
 export function runAnswerAction(action: () => Promise<unknown>) {
-  void action().catch(error => notifyError(error, "실행하지 못했어요"));
+  void action().catch(error => notifyError(error, getAppCopy(getAppLocale()).conversation.answerBlocks.actionFailed));
 }
 
 export function answerCardCopy(item: CardItem): string {
@@ -38,10 +43,11 @@ async function assetCrop(img?: string): Promise<string | undefined> {
 }
 
 export async function saveAnswerItem(item: CardItem) {
+  const copy = getAppCopy(getAppLocale()).conversation.answerBlocks;
   const source = answerSource(item);
   await saveLibrary({ id: crypto.randomUUID(), kind: "scrap", title: item.title,
     url: item.source ?? "", site: source?.site, crop: await assetCrop(item.img),
     capturedAt: new Date().toISOString(), text: [item.value ? formatAnswerValue(item.value, getAppLocale()) : undefined,
       ...(item.facts ?? []), item.text, source?.checked].filter(Boolean).join(" · ") });
-  notifyStatus("서랍에 저장했어요");
+  notifyStatus(copy.savedToLibrary);
 }
