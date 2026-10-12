@@ -7,6 +7,7 @@ import type { AuthorityApprovalCard } from "@/app/types.ts";
 
 export interface ComposerAuthorityDecision {
   /** The plain-language question, also shown on the pending attachment. */
+  pathDetails?: string[];
   title: string; details: string[]; risk: ApprovalRequestView["risk"]; actionKind: ApprovalRequestView["actionKind"];
   /** What "Always allow in this conversation" covers; the grant needs the legacy `scope`. */
   conversationScope?: string; scope: AuthorityApprovalCard["scope"]; pending: boolean; error?: string;
@@ -46,6 +47,7 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
       onOpenTab: () => void openHandoffTab(sessionId),
       onStop: () => void useButlerStore.getState().cancelActiveTurn() } } : {}),
     title: handoff?.title ?? view.title, details: handoff?.details ?? view.details, risk: view.risk, actionKind: view.actionKind,
+    pathDetails: view.pathDetails,
     conversationScope: view.conversationScope, scope: request.approval?.operation?.allow_conversation === false ? undefined : request.scope, pending: pending.has(key),
     error: failed === key ? appCopy.interfaceDetails.decisionFailed : undefined,
     composingMessage: collapsed === key, pendingCount: requests.length,
