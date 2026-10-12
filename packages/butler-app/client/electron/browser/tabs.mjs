@@ -9,6 +9,7 @@ import { tabInUse, resetUse, closeUse } from "./usage.mjs";
 import { WebContentsView } from "electron";
 import { randomUUID } from "node:crypto";
 import { shortId } from "./ids.mjs";
+import { MAX_TABS, USER_TABS, agentTabFits } from "./capacity.mjs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { attachNativeWorlds } from "./native-worlds.mjs";
@@ -180,16 +181,13 @@ class UserBrowser {
     if (!this.enabled()) throw new Error("browsing_disabled");
     const owner = input.owner ?? "mine";
     if (owner !== "mine" && !/^conversation:[a-zA-Z0-9_-]{1,128}$/u.test(owner)) throw new Error("invalid_owner");
-    if(this.tabs.size>=36) throw new Error("tab_budget_exhausted");
+    if(this.tabs.size>=MAX_TABS) throw new Error("tab_budget_exhausted");
     const url = input.url ? webUrl(input.url) : "";
     if (input.url && !url) throw new Error("blocked_protocol");
-    if (owner === "mine" && [...this.tabs.values()].filter(tab => tab.owner === "mine").length >= 30) throw new Error("tab_budget_exhausted");
+    if (owner === "mine" && [...this.tabs.values()].filter(tab => tab.owner === "mine").length >= USER_TABS) throw new Error("tab_budget_exhausted");
     const output = url && new URL(url).hostname === "127.0.0.1" && ["/__o/", "/__p/"].some(prefix => new URL(url).pathname.startsWith(prefix));
     const profile = input.profile ?? (input.agent || output ? "signed_out" : "signed_in");
-    if(input.agent===true) {
-      const agents=[...this.tabs.values()].filter(tab=>tab.agent || tab.driven);
-      if(agents.length>=6 || agents.filter(tab=>tab.owner===owner).length>=3) throw new Error("tab_budget_exhausted");
-    }
+    if(input.agent===true && !agentTabFits(this)) throw new Error("tab_budget_exhausted");
     const partitionOwner = input.preview_id ? `${owner}:preview:${input.preview_id}` : owner;
     if (profile === "signed_out" && !this.conversationPartitions.has(partitionOwner)) this.conversationPartitions.set(partitionOwner, `butler-conv-${randomUUID()}`);
     const tab = { id: shortId("t", id => this.tabs.has(id)), owner, profile, popup: Boolean(popupSource), opener: popupSource?.id, popupParentUrl: popupSource?.url, stills: this.stillPreferences.get(owner) !== false, partition: input.partition ?? (profile === "signed_in" ? "persist:butler-web" : this.conversationPartitions.get(partitionOwner)),
@@ -322,7 +320,7 @@ class UserBrowser {
     if (tab.opener && this.tabs.get(tab.opener)?.owner !== toGroupId) throw new Error("invalid_popup_owner");
     if(toGroupId!==tab.owner) {
       const peers=[...this.tabs.values()].filter(item=>item.owner===toGroupId);
-      if(toGroupId==="mine" ? peers.length>=30 : (tab.agent || tab.driven) && peers.filter(item=>item.agent || item.driven).length>=3) throw new Error("tab_budget_exhausted");
+      if(toGroupId==="mine" && peers.length>=USER_TABS) throw new Error("tab_budget_exhausted");
     }
     const previousOwner = tab.owner;
     if (toGroupId !== tab.owner) this.downloads.cancelTab(tabId);

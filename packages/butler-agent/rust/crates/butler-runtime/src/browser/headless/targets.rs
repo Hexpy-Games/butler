@@ -101,6 +101,10 @@ pub(crate) async fn context(
     if let Some(id) = browser.shared.lock().contexts.get(&key).cloned() {
         return Ok(id);
     }
+    let _creating = browser.contexts_created.lock().await;
+    if let Some(id) = browser.shared.lock().contexts.get(&key).cloned() {
+        return Ok(id);
+    }
     let created = browser
         .cdp
         .send(
@@ -177,6 +181,25 @@ pub(crate) async fn utility(cdp: &Arc<Cdp>, shared: &Shared) -> Result<String, S
     }
     state.utility = Some(session.clone());
     Ok(session)
+}
+
+/// Room for one more conversation tab: when every tab memory allows is open,
+/// the least recently used idle one closes first. False only while every tab
+/// is in use.
+pub(crate) async fn make_room(browser: &Browser, keep: &[&str], turn: Option<&str>) -> bool {
+    let limit = crate::browser::capacity::agent_tabs();
+    let victim = {
+        let state = browser.shared.lock();
+        if state.agent_tabs() < limit {
+            return true;
+        }
+        state.reclaimable(keep, turn)
+    };
+    let Some(victim) = victim else {
+        return false;
+    };
+    close(browser, &victim).await;
+    browser.shared.lock().agent_tabs() < limit
 }
 
 /// Closes a tab's target and forgets it; a conversation's context goes with its last tab.
@@ -338,22 +361,17 @@ async fn page_attached(browser: Arc<Browser>, session: String, target: String, i
         return;
     };
     let url = info["url"].as_str().unwrap_or("").to_owned();
+    let turn = browser
+        .shared
+        .with_tab(&opener, |t| t.turn.clone())
+        .flatten();
+    let room = make_room(&browser, &[&opener], turn.as_deref()).await;
     let admitted = {
         let mut state = browser.shared.lock();
-        let peers = state.tabs.values().filter(|t| t.owner == owner).count();
-        if state.tabs.len() >= 6 || peers >= 3 {
-            let site = web_url(&parent_url)
-                .map(|u| u.origin().ascii_serialization())
-                .unwrap_or_default();
-            state.event(
-                &opener,
-                "popup_blocked",
-                &json!({"url":url,"site":site,"reason":"tab_budget_exhausted"}),
-            );
-            None
-        } else {
+        if room {
             let id = short_id('h', |id| state.tabs.contains_key(id));
             let mut tab = Tab::new(id.clone(), owner, target.clone(), session.clone());
+            tab.turn = turn;
             tab.opener = Some(opener.clone());
             tab.popup_parent_url = Some(parent_url);
             tab.policy = policy;
@@ -364,6 +382,16 @@ async fn page_attached(browser: Arc<Browser>, session: String, target: String, i
             state.sessions.insert(session.clone(), id.clone());
             state.event(&opener, "popup_opened", &json!({"popup":id,"url":url}));
             Some(id)
+        } else {
+            let site = web_url(&parent_url)
+                .map(|u| u.origin().ascii_serialization())
+                .unwrap_or_default();
+            state.event(
+                &opener,
+                "popup_blocked",
+                &json!({"url":url,"site":site,"reason":"tab_budget_exhausted"}),
+            );
+            None
         }
     };
     browser.changed.notify_waiters();
