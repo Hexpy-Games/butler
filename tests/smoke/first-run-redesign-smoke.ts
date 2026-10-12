@@ -1,9 +1,11 @@
+// test-category: race
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Page } from "playwright";
 import { getAppCopy } from "../../packages/butler-i18n/src/index";
 import { createNativeAppServer } from "../support/native-app-server";
+import { waitBrowser } from "../support/browser-agent-app";
 import { firstRunElectron } from "../support/first-run-electron";
 import { firstRunStub } from "../support/first-run-stub";
 import { nativeSmokeRuntime } from "../support/native-smoke-runtime";
@@ -20,6 +22,18 @@ const fresh = { consent_version: null, accepted_at: null, completed_at: null };
 const server = await createNativeAppServer({ onboardingComplete: false });
 const stub = await firstRunStub(server);
 let app: Awaited<ReturnType<typeof firstRunElectron>> | undefined;
+
+async function externalOpens(): Promise<number> {
+  return await app!.main<number>("globalThis.signInOpens.length");
+}
+
+async function signInTabs(page: Page): Promise<number> {
+  return await page.evaluate(async () => {
+    const bridge = (window as unknown as { butlerBrowser: { call(op: string): Promise<{ tabs: unknown[] }> } }).butlerBrowser;
+    const state = await bridge.call("state");
+    return state.tabs.length;
+  });
+}
 
 async function capture(page: Page, name: string) {
   await settleFirstRun(page);
@@ -106,12 +120,18 @@ async function finish(page: Page, language: "ko" | "en") {
 
 async function signInStates(page: Page, language: "ko" | "en", prefix: string) {
   const copy = firstRunCopy[language];
+  const before = await externalOpens();
   await page.locator('[data-card-id="chatgpt"]').click();
   await page.getByRole("button", { name: copy.signInCopyLink, exact: true }).waitFor();
   await capture(page, `${prefix}-signin-waiting`);
-  const opens = await page.evaluate(() => (window as unknown as { signInOpens: string[] }).signInOpens.length);
+  await waitBrowser(async () => await externalOpens() === before + 1, "initial external sign-in");
+  const opens = await externalOpens();
+  assert.equal(opens, before + 1, "initial sign-in opens externally once");
+  assert.equal(await signInTabs(page), 0, "authentication creates no hidden in-app tab");
   await page.getByRole("button", { name: copy.signInReopen, exact: true }).click();
-  assert.equal(await page.evaluate(() => (window as unknown as { signInOpens: string[] }).signInOpens.length), opens + 1);
+  await waitBrowser(async () => await externalOpens() === opens + 1, "reopen external sign-in");
+  assert.equal(await externalOpens(), opens + 1);
+  assert.equal(await signInTabs(page), 0, "reopen stays external");
   await page.getByRole("button", { name: copy.signInCopyLink, exact: true }).click();
   await page.getByRole("button", { name: copy.linkCopied, exact: true }).waitFor();
   await page.getByRole("button", { name: copy.cancel, exact: true }).click();
@@ -246,11 +266,8 @@ try {
   app = await firstRunElectron(server, stub.url);
   const page = app.page;
   await installIntroProbe(page);
-  await page.addInitScript(() => {
-    const state = window as unknown as { signInOpens: string[] };
-    state.signInOpens = [];
-    window.open = url => { state.signInOpens.push(String(url)); return null; };
-  });
+  const module = `process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve("packages/butler-app/client/electron/package.json"))})`;
+  await app.main(`(()=>{globalThis.signInOpens=[];${module}('electron').shell.openExternal=async url=>{globalThis.signInOpens.push(url)}})()`);
   await page.clock.install();
   await page.setViewportSize({ width: 960, height: 710 });
   for (const language of ["ko", "en"] as const) for (const theme of ["light", "dark"] as const) await matrixCase(page, language, theme);

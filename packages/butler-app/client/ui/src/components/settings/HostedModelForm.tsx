@@ -1,4 +1,4 @@
-import { openLink } from "@/components/browser/browserBridge";
+import { openExternalSignIn } from "@/app/openExternalSignIn";
 import { useAppLocale } from "@/app/copy.ts";
 import { Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -70,7 +70,7 @@ export function HostedModelForm({
           }}
           onOAuthOpenUrl={() => {
             if (form.oauthLogin?.auth_url) {
-              void openLink(form.oauthLogin.auth_url);
+              openExternalSignIn(form.oauthLogin.auth_url);
             }
           }}
           onOAuthRestart={() => void form.handleOAuthRestart()}
