@@ -5,7 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MessageSquarePlus, Scrap } from "../../components/Icons";
 import { DragPreview } from "../DragPreview";
 import { ElementChip } from "../ElementChip";
-import { LibraryCard, libraryImageFit } from "../LibraryCard";
+import { mediaFrameFit } from "../../components/MediaFrame";
+import { LibraryCard } from "../LibraryCard";
 import { SelectionBar, type SelectionBarAction } from "../SelectionBar";
 import { PickOutline } from "./PickOutline";
 
@@ -84,14 +85,14 @@ test("DragPreview floats at the pointer when given `at`, and renders static with
 test("Library images span the slot for typical shapes and sit inset only when extreme; chips show a glyph without a crop", () => {
   // Typical crops (the proposal's square chair cards, product cards, page views) span the 16:10 slot as on main.
   for (const [width, height] of [[120, 120], [216, 284], [320, 200], [3, 4], [12, 5]] as const) {
-    expect({ width, height, fit: libraryImageFit(width, height) }).toEqual({ width, height, fit: "fill" });
+    expect({ width, height, fit: mediaFrameFit(width, height) }).toEqual({ width, height, fit: "fill" });
   }
   // Extreme crops sit inset: the library smoke's 300×80 page-title crop (S6 evidence), a heading strip, a
   // line of text, a tall column.
   for (const [width, height] of [[600, 160], [640, 56], [640, 24], [180, 260], [5, 2], [7, 10]] as const) {
-    expect({ width, height, fit: libraryImageFit(width, height) }).toEqual({ width, height, fit: "matte" });
+    expect({ width, height, fit: mediaFrameFit(width, height) }).toEqual({ width, height, fit: "matte" });
   }
-  expect(libraryImageFit(0, 0)).toBe("matte");
+  expect(mediaFrameFit(0, 0)).toBe("matte");
   const card = renderToStaticMarkup(<LibraryCard media={{ kind: "image", src: "crop.png" }} title="Office chairs" />);
   expect(card).toContain('data-fit="pending"'); // hidden until its shape is known
   const chip = renderToStaticMarkup(<ElementChip title="Office chairs" site="shop.example.com" />);

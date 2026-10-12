@@ -10,7 +10,9 @@ pub(crate) fn empty(
     deadline_hit: bool,
 ) -> RecallResponse {
     let admitted = input.admitted_channels.clone().unwrap_or_default();
-    let vector_requested = input.include_vector && admitted.vector;
+    // A memory model switched off by choice is a disabled lane, never a failure.
+    let model_off = input.include_vector && admitted.vector && vector.disabled;
+    let vector_requested = input.include_vector && admitted.vector && !vector.disabled;
     let code = if vector.searched && vector.code.is_none() {
         Some("no_hits")
     } else {
@@ -54,6 +56,8 @@ pub(crate) fn empty(
             },
             vectors: if vector_requested {
                 empty_vector_lane(vector, code, vector_partial)
+            } else if model_off {
+                self::model_off()
             } else {
                 disabled()
             },
@@ -130,6 +134,15 @@ pub(super) fn empty_vector_lane(
             )
             .chain(std::iter::once("no_hits".into()))
             .collect(),
+    }
+}
+
+/// The vector lane while the memory model is off: switched off, with its reason.
+pub(super) fn model_off() -> RecallCoverageLane {
+    RecallCoverageLane {
+        state: RecallCoverageState::Disabled,
+        candidates: 0,
+        codes: vec!["embedding_disabled".into()],
     }
 }
 
