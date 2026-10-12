@@ -11,7 +11,7 @@ pub fn normalize(spec: &mut Value) {
             };
             match fields.get("type").and_then(Value::as_str) {
                 Some("cards" | "gallery") => {
-                    fields.entry("media").or_insert(json!("4:5"));
+                    fields.entry("media").or_insert(json!("1:1"));
                 }
                 Some("callout") => {
                     fields.entry("tone").or_insert(json!("neutral"));
