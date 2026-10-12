@@ -9,7 +9,17 @@ for `View.setBorderRadius`. It shows who holds the tab, a `PageBand`, a 2px
 load line (`ProgressMeter thin`) and, for Butler's fixed 1280×800 tabs, a
 letterbox with the scale noted under the page. With `reserveBand` the band
 row is always there, so a band appearing, changing or leaving never moves the
-native view.
+native view. With no band the row is empty and the card surface (fill, shadow,
+holder edge) starts under it: the row reads as the pane around the toolbar and
+the page carries the card corners. A band extends the surface up over the row,
+band and page one card with no line between them.
+
+The native view takes one radius for all four corners, so the reported
+`radius` is the inner corner radius only where a page corner meets a corner of
+the surface, else 0: square under a band and above a letterbox. A page that
+reaches the card bottom corners keeps the radius under a band; the band fill
+runs one corner radius under the page so those corners meet the band without a
+notch.
 
 ## When to use this block
 Use it for the page area of `BrowserPane`, one card for the visible tab.
@@ -20,10 +30,10 @@ radius) and `onOcclusion` to the main process and picks the holder:
 `none`, `butler` (rotating riso edge on `--motion-agent-edge`), `user` (strong
 neutral edge) or `waiting` (static amber). Holder edges are drawn outside the
 content area, so changing the holder never moves the native view. The App
-passes `reserveBand` for every tab. When nothing else shows, a tab Butler can
-hold (a conversation's signed-out tab) fills the row with an `idle` PageBand;
-your own tabs and signed-in tabs leave it empty: a quiet strip with the band's
-hairline, since nothing there needs you (the toolbar already says Signed in).
+passes `reserveBand` for every tab and a band only for a real state: Butler
+holds the tab (its turn is running), an approval or a hand-off waits, you took
+over while a Butler turn is paused, pick mode or a page event. When Butler does
+nothing on the tab the row stays empty; it never says whose tab it is.
 
 ## Usage
 
