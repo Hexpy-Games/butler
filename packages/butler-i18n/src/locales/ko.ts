@@ -233,6 +233,10 @@ const firstRun = {
       searching: "찾는 중…",
       skip: "건너뛰기",
       pickOne: "하나 이상 고르세요",
+      agentsDoneTitle: "다른 AI에서 가져왔습니다",
+      agentsAdded: (instructions: number, servers: number) => `지침 ${instructions}개 · MCP 서버 ${servers}개 추가`,
+      agentsNothing: "새로 추가할 항목 없음",
+      agentsNeedsKey: (count: number) => `키 입력 필요 ${count}개 — 설정 › MCP`,
     },
     summary: {
       rowAi: "AI",

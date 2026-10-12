@@ -118,6 +118,11 @@ interface FirstRunCopy {
     importAction: string; importing: string; searching: string; skip: string;
     /** Tooltip on a disabled Next or Import while nothing is picked. */
     pickOne: string;
+    /** Import ① after the run: one row per tool with what was added and any follow-up. */
+    agentsDoneTitle: string;
+    agentsAdded: (instructions: number, servers: number) => string;
+    agentsNothing: string;
+    agentsNeedsKey: (count: number) => string;
   };
   summary: {
     rowAi: string; rowReply: string; rowAgents: string; rowBrowsers: string;

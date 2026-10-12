@@ -91,7 +91,7 @@ async function capture(page: Page, name: string) {
     const ids = await page.locator("ol li").count() === 6 ? ["welcome", "consent", "memory", "connect", "import", "ready"] : ["welcome", "consent", "connect", "ready"];
     const lang = await page.locator("html").getAttribute("lang") === "ko-KR" ? "ko" : "en";
     const label = step === "import" ? getAppCopy(lang === "ko" ? "ko-KR" : "en-US").settings.pageSections.import : firstRunCopy[lang].steps[step as "consent" | "memory" | "ready" | "connect"];
-    assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${ids.indexOf(step ?? "") + 1}\n${label}${step === "connect" ? await page.locator("#first-run-reply-language").count() ? " 3/3" : await page.locator("#first-run-connect-title").count() ? " 1/3" : " 2/3" : step === "import" ? await page.locator("#first-run-agents-title").count() ? " 1/2" : " 2/2" : ""}`);
+    assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${ids.indexOf(step ?? "") + 1}\n${label}${step === "connect" ? await page.locator("#first-run-reply-language").count() ? " 3/3" : await page.locator("#first-run-connect-title").count() ? " 1/3" : " 2/3" : step === "import" ? await page.locator("#first-run-agents-title, #first-run-agents-done-title").count() ? " 1/2" : " 2/2" : ""}`);
   }
 }
 
@@ -128,13 +128,14 @@ async function passMemory(page: Page, language: "ko" | "en", name?: string) {
 /** First run: the optional import step sits between the AI choice and the finish. */
 async function passImport(page: Page, language: "ko" | "en") {
   const copy = firstRunCopy[language];
-  for (const [id, title] of [["agents", copy.import.agentsTitle], ["browsers", copy.import.browsersTitle]]) {
-    await page.getByRole("heading", { name: title, exact: true }).waitFor();
+  // Agents show their picker, or their result when this run already imported; Skip leaves both substeps untouched.
+  for (const [id, title] of [["agents", "#first-run-agents-title, #first-run-agents-done-title"], ["browsers", "#first-run-browsers-title"]]) {
+    await page.locator(title).first().waitFor();
     await capture(page, `after-${language}-import-${id}`);
     const skip = page.getByRole("button", { name: copy.import.skip, exact: true });
     const next = page.getByRole("button", { name: copy.next, exact: true });
     await Promise.race([skip.waitFor(), next.waitFor()]);
-    await (await next.count() ? next : skip).click();
+    await (await skip.count() ? skip : next).click();
   }
 }
 
