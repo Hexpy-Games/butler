@@ -1,5 +1,6 @@
 //! Existing App schema migration in its source-defined order.
 
+mod assets;
 mod core;
 mod library;
 mod message_ownership;
@@ -31,6 +32,7 @@ pub(super) fn migrate(
     let turns_new = !migration::table_exists(connection, "turns")?;
     core::create(connection)?;
     library::create(connection)?;
+    assets::create(connection)?;
     super::history::schema::create(connection)?;
     security::create(connection)?;
     // Open-turn lookups filter on the state alone; databases that predate the

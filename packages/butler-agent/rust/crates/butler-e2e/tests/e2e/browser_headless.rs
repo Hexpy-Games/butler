@@ -7,6 +7,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod assets;
 mod backend;
 mod downloads;
 mod guard;
