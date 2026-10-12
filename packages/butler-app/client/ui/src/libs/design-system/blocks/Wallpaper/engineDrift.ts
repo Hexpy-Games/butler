@@ -3,6 +3,8 @@
 import { wallpaperContentRectUniform } from "./contentRect";
 import type { WallpaperEventKind } from "./drift";
 import { createDriftController, type DriftColumn, type DriftFrame } from "./driftController";
+import type { DriftDebugState } from "./driftDebug";
+import { createDriftKeepOut } from "./driftKeepOut";
 import type { DriftLayers } from "./driftLayers";
 import { createDriftLooks } from "./driftLooks";
 import { WALLPAPER_DRIFT_SLOW_KEYFRAMES, wallpaperDriftHidden, wallpaperDriftHost } from "./driftScheduler";
@@ -41,6 +43,12 @@ export interface EngineDrift {
   setColumn(rect: WallpaperContentRect | null): void;
   setContentRect2(rect: WallpaperContentRect | null): void;
   event(kind: WallpaperEventKind): void;
+  /**
+   * A setup card moved from `from` to `to` (client px; the content rect is already `to`): the keep-out eases there on
+   * live frames now. `beat`: a step change, which also wakes the print (the focus look), as the intro print beat does.
+   */
+  setupCard(from: WallpaperContentRect | null, to: WallpaperContentRect, beat: boolean): void;
+  debug(): DriftDebugState | null;
   dispose(): void;
 }
 
@@ -50,11 +58,14 @@ export function createEngineDrift(options: EngineDriftOptions): EngineDrift {
   let contentRect2: WallpaperContentRect | null = null;
   let scene = false;
   const looks = createDriftLooks();
+  const keepOut = createDriftKeepOut(options.contentRect);
+  // A moving setup keep-out keeps live frames coming like a look tween does.
+  const tweens = { ...looks, tweening: () => looks.tweening() || keepOut.moving() };
   const watchdog = createEngineWatchdog({ onDegrade: options.onDegrade, onRetry: options.onRetry, slowFrames: WALLPAPER_DRIFT_SLOW_KEYFRAMES });
   const render = ({ flow, looks: l }: DriftFrame) => {
     if (!renderer.drawable()) return false;
     const current = box();
-    const geometry = measureWallpaperFrame(current, "drift", options.contentRect(), renderer.pixelRatio());
+    const geometry = measureWallpaperFrame(current, "drift", keepOut.current(performance.now()), renderer.pixelRatio());
     const col: DriftColumn = [l.colL, l.colR, l.colT, l.colOn];
     renderer.draw({
       ...geometry, timeMs: 0, dayPhase: wallpaperDayPhase(new Date()), seed: options.seed,
@@ -67,12 +78,12 @@ export function createEngineDrift(options: EngineDriftOptions): EngineDrift {
   };
   const controller = drawLayers && createDriftController({
     layers: { ...drawLayers, present: (layer) => { drawLayers.present(layer); if (layer === 0) options.onDrawn(); } },
-    looks,
+    looks: tweens,
     render,
     timeKeyframe: (draw) => watchdog.time(draw),
     geometry: () => {
       const current = box();
-      const keep = options.contentRect();
+      const keep = keepOut.current(performance.now());
       return { size: [current.width, current.height], keep: keep ? [keep.x - current.left, keep.y - current.top, keep.width, keep.height] : [] };
     },
   });
@@ -124,6 +135,15 @@ export function createEngineDrift(options: EngineDriftOptions): EngineDrift {
     event(kind) {
       if (owns()) controller?.event(kind);
     },
+    setupCard(from, to, beat) {
+      if (!controller || !owns()) return;
+      const moved = from !== null && keepOut.move(from, to, performance.now());
+      // A static print or a hidden window draws the card where it is now.
+      if (!controller.animates()) keepOut.clear();
+      if (beat) controller.event("focus");
+      else if (moved) controller.wake();
+    },
+    debug: () => controller?.debug() ?? null,
     dispose() {
       watchdog.dispose();
       controller?.deactivate();

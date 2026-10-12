@@ -53,7 +53,7 @@ interface SetupWizardShellProps
    * out and the new one rises in.
    */
   stepKey?: string;
-  /** Focus only: how the first card appears (`full`: the ink intro, `rerun`: the short re-run variant). */
+  /** Focus only: how the first card appears (`full`: the ink intro, `rerun`: the short re-run variant, `none`: no ink, the drift at once). */
   intro?: SetupWizardIntro;
   /**
    * Focus only: the first card waits unseen and the backdrop draws nothing until the host can show the intro (the App:

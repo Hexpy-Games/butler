@@ -6,6 +6,8 @@ export interface DriftLayers {
   present(layer: 0 | 1): void;
   /** Sets a layer's opacity (rounded to 1/1000); false when it did not change. */
   opacity(layer: 0 | 1, value: number): boolean;
+  /** The two opacities now (base, top), for the debug state. */
+  opacities(): readonly [number, number];
   /** The faded-in top becomes the base: its frame is copied down and it hides again. */
   promote(): void;
   /** Hides both layers and frees their pixels; the WebGL canvas shows again. */
@@ -60,6 +62,7 @@ export function createDriftLayers(source: HTMLCanvasElement, base: HTMLCanvasEle
       if (layer === 0) show();
     },
     opacity: setOpacity,
+    opacities: () => [opacities[0]!, opacities[1]!],
     promote() {
       const target = context(0);
       if (target) {

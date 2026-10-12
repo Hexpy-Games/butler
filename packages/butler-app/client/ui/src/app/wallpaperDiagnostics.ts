@@ -1,4 +1,4 @@
-import { setWallpaperDiagnostics } from "@/butler-ds";
+import { setWallpaperDiagnostics, wallpaperDebugState } from "@/butler-ds";
 import { wallpaperStateLine } from "./wallpaperStateLine";
 
 /** At most one line per signal per second (the latest state of a burst still lands), and a session cap. */
@@ -12,6 +12,8 @@ const SESSION_CAP = 200;
 export function installWallpaperDiagnostics(): void {
   const record = window.butlerApp?.recordWallpaperState;
   if (typeof record !== "function") return;
+  // Read-only live engine state for a debugger (CDP `__butlerWallpaperDebug.state()`); nothing runs until called.
+  Object.defineProperty(window, "__butlerWallpaperDebug", { value: Object.freeze({ state: wallpaperDebugState }) });
   const last = new Map<string, number>();
   const pending = new Map<string, string>();
   let sent = 0;

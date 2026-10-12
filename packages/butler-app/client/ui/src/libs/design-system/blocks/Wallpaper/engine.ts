@@ -35,7 +35,8 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     return null;
   }
   // Transitions of what decides whether the canvas draws, for the app diagnostics (nothing at idle).
-  const diagnostics = createEngineDiagnostics(canvas, { state: () => state, intro: () => intro.active(), drift: () => drift.owns() });
+  const diagnostics = createEngineDiagnostics(canvas, { state: () => state, intro: () => intro.active(), drift: () => drift.owns(),
+    debug: () => ({ module: renderer.drawnModule(), contentRect, box, drift: drift.debug() }) });
   const renderer = diagnostics.count(created);
   const seed = Math.random();
   let state: WallpaperScheduleState = initialWallpaperState(canvas, renderer.softwareRendering());
@@ -52,7 +53,9 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
   // The first-run intro holds the canvas until its hand-off; the drift then dissolves from its dried print.
   const intro = createEngineIntro({
     renderer, layers, box: () => box, state: () => state, scene: () => (hasScene ? scene : null),
-    onCard: (rect) => engine.setContentRect(rect), onDrawn: () => presenter.drawn(),
+    // Setup cards: after the hand-off a moved card eases the drift keep-out now, and a step change also wakes the print.
+    onCard: (rect) => { const previous = contentRect; engine.setContentRect(rect); if (!intro.active()) drift.setupCard(previous, rect, false); },
+    onBeat: (from, to) => drift.setupCard(from, to, true), onDrawn: () => presenter.drawn(),
     onHandoff: (seeded) => { if (drift.owns()) drift.handoff(state, seeded); else { layers?.hide(); loop.invalidate(); loop.schedule(); } diagnostics.check(); },
   });
   const drift = createEngineDrift({
@@ -135,10 +138,7 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
       else if (appeared) drift.refresh();
     },
     setContentRect2: (rect) => drift.setContentRect2(rect),
-    setColumnRect(rect) {
-      box = readWallpaperCanvasBox(canvas);
-      drift.setColumn(rect);
-    },
+    setColumnRect(rect) { box = readWallpaperCanvasBox(canvas); drift.setColumn(rect); },
     event: (kind) => drift.event(kind),
     setIntro: (timeline) => { intro.attach(timeline); diagnostics.check(); },
     dispose() {

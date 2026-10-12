@@ -57,6 +57,20 @@ export interface EngineDiagnosticsInputs {
   state(): WallpaperScheduleState;
   intro(): boolean;
   drift(): boolean;
+  /** Engine details for the debug state (module, content rect, canvas box, drift). */
+  debug(): Record<string, unknown>;
+}
+
+const debugReaders = new Set<() => Record<string, unknown>>();
+let engines = 0;
+
+/**
+ * The live state of every mounted wallpaper engine, for a debugger only (read-only, computed when called; nothing is
+ * kept or polled): effective mode and reason, draw count and the time since the last draw, the drift (keyframes,
+ * layer opacities, flow) and the content rect.
+ */
+export function wallpaperDebugState(): Array<Record<string, unknown>> {
+  return [...debugReaders].map((read) => read());
 }
 
 export interface EngineDiagnostics {
@@ -71,7 +85,7 @@ export interface EngineDiagnostics {
 const RESIZE_SETTLE_MS = 700;
 
 export function createEngineDiagnostics(canvas: HTMLCanvasElement, inputs: EngineDiagnosticsInputs): EngineDiagnostics {
-  let draws = 0;
+  let draws = 0, drawnAt = 0;
   let hidden: boolean | null = null, onscreen: boolean | null = null, lost: boolean | null = null;
   let mode = "", reason = "";
   let timer = 0, snapshot = 0, episode = false;
@@ -94,12 +108,18 @@ export function createEngineDiagnostics(canvas: HTMLCanvasElement, inputs: Engin
     timer = window.setTimeout(verify, RESIZE_SETTLE_MS);
   };
   window.addEventListener("resize", resized);
+  const id = ++engines; // A remounted engine has a new id.
+  const readDebug = () => ({
+    id, ...wallpaperDiagnosticMode(inputs.state(), inputs.intro(), inputs.drift()), draws,
+    lastDrawAgoMs: drawnAt ? Math.round(performance.now() - drawnAt) : null, ...inputs.debug(),
+  });
+  debugReaders.add(readDebug);
   return {
     count(renderer) {
       return {
         ...renderer,
-        draw(frame) { draws += 1; renderer.draw(frame); },
-        drawIntro(frame, uniforms) { draws += 1; return renderer.drawIntro(frame, uniforms); },
+        draw(frame) { draws += 1; drawnAt = performance.now(); renderer.draw(frame); },
+        drawIntro(frame, uniforms) { draws += 1; drawnAt = performance.now(); return renderer.drawIntro(frame, uniforms); },
       };
     },
     check() {
@@ -119,6 +139,7 @@ export function createEngineDiagnostics(canvas: HTMLCanvasElement, inputs: Engin
       lost = state.contextLost;
     },
     dispose() {
+      debugReaders.delete(readDebug);
       window.clearTimeout(timer);
       window.removeEventListener("resize", resized);
     },
