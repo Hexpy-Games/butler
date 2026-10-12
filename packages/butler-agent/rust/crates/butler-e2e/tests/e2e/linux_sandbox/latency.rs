@@ -51,13 +51,8 @@ async fn perf_trampoline_start_latency_and_process_identity() -> Result<(), Harn
     let plain =
         command_sandbox::login_shell(command, command_sandbox::ShellAccess::Full, &environment)
             .unwrap();
-    let sandbox = command_sandbox::login_shell_contained(
-        command,
-        &environment,
-        &[&setup.sandbox.data],
-        &[&cwd],
-    )
-    .unwrap();
+    let sandbox =
+        command_sandbox::login_shell_contained(command, &environment, &[], &[&cwd]).unwrap();
     let (mut baseline, mut contained, mut added) = (Vec::new(), Vec::new(), Vec::new());
     let (mut baseline_complete, mut contained_complete) = (Vec::new(), Vec::new());
     for index in 0..60 {
