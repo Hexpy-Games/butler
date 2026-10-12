@@ -1,0 +1,145 @@
+//! Socket allow-list and metadata mutations not mediated by Landlock.
+use nix::libc;
+use seccompiler::{
+    BpfProgram, SeccompAction, SeccompCmpArgLen, SeccompCmpOp, SeccompCondition, SeccompFilter,
+    SeccompRule,
+};
+
+use super::Error;
+
+fn socketpair_denials() -> Result<Vec<SeccompRule>, Error> {
+    // Only anonymous AF_UNIX streams: multiprocessing.Pipe and similar local
+    // workers need duplex IPC. Connected streams cannot reconnect/sendto an
+    // external peer. Datagram pairs can, so those are deliberately excluded.
+    let types = [
+        0,
+        libc::SOCK_CLOEXEC,
+        libc::SOCK_NONBLOCK,
+        libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
+    ]
+    .into_iter()
+    .map(|flags| -> Result<_, Error> {
+        Ok(SeccompCondition::new(
+            1,
+            SeccompCmpArgLen::Dword,
+            SeccompCmpOp::Ne,
+            u64::try_from(libc::SOCK_STREAM | flags)?,
+        )?)
+    })
+    .collect::<Result<Vec<_>, _>>()?;
+    Ok(vec![
+        SeccompRule::new(vec![SeccompCondition::new(
+            0,
+            SeccompCmpArgLen::Dword,
+            SeccompCmpOp::Ne,
+            libc::AF_UNIX as u64,
+        )?])?,
+        SeccompRule::new(types)?,
+        SeccompRule::new(vec![SeccompCondition::new(
+            2,
+            SeccompCmpArgLen::Dword,
+            SeccompCmpOp::Ne,
+            0,
+        )?])?,
+    ])
+}
+
+fn ioctl_denials() -> Result<Vec<SeccompRule>, Error> {
+    // These generic kernel requests change only the calling process's fd
+    // close-on-exec/nonblocking flags, never file metadata or device state.
+    // In particular, stream IPC needs FIONBIO to select blocking behavior.
+    let conditions = [libc::FIOCLEX, libc::FIONCLEX, libc::FIONBIO]
+        .into_iter()
+        .map(|request| -> Result<_, Error> {
+            Ok(SeccompCondition::new(
+                1,
+                SeccompCmpArgLen::Dword,
+                SeccompCmpOp::Ne,
+                u64::from(u32::try_from(request)?),
+            )?)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(vec![SeccompRule::new(conditions)?])
+}
+
+pub(super) fn filter() -> Result<BpfProgram, Error> {
+    let ioctl = ioctl_denials()?;
+    let mut rules = metadata_syscalls()
+        .into_iter()
+        .map(|number| (number, vec![]))
+        .collect::<Vec<_>>();
+    // No socket() family is required for filesystem observations. In
+    // particular, NETLINK is not read-only: it can mutate kernel state.
+    rules.extend([
+        (libc::SYS_socket, vec![]),
+        // Anonymous pairs need no connect(). Deny it even on inherited fds.
+        (libc::SYS_connect, vec![]),
+        (libc::SYS_io_uring_setup, vec![]),
+        // Landlock's device right does not cover filesystem ioctls that alter
+        // regular-file metadata. Deny driver/filesystem commands while
+        // allowing only local descriptor flags needed by ordinary IPC.
+        (libc::SYS_ioctl, ioctl.clone()),
+    ]);
+    rules.push((libc::SYS_socketpair, socketpair_denials()?));
+    #[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
+    {
+        const X32_SYSCALL_BIT: i64 = 0x4000_0000;
+        rules.extend(
+            rules
+                .clone()
+                .into_iter()
+                .map(|(number, conditions)| (number | X32_SYSCALL_BIT, conditions)),
+        );
+        // x32 ioctl has a distinct compat entry, beyond the common table.
+        const X32_IOCTL: i64 = 514;
+        rules.push((X32_IOCTL | X32_SYSCALL_BIT, ioctl));
+    }
+    Ok(SeccompFilter::new(
+        rules.into_iter().collect(),
+        SeccompAction::Allow,
+        SeccompAction::Errno(libc::EPERM as u32),
+        std::env::consts::ARCH.try_into()?,
+    )?
+    .try_into()?)
+}
+
+fn metadata_syscalls() -> Vec<i64> {
+    // Linux's generic syscall table assigns these since 6.5/6.13; libc does not
+    // yet expose them on all supported targets. Filter them on older hosts too.
+    const SETXATTRAT: i64 = 463;
+    const REMOVEXATTRAT: i64 = 466;
+    const FCHMODAT2: i64 = 452;
+    let calls = [
+        libc::SYS_fchmod,
+        libc::SYS_fchmodat,
+        FCHMODAT2,
+        libc::SYS_fchown,
+        libc::SYS_fchownat,
+        libc::SYS_utimensat,
+        libc::SYS_setxattr,
+        libc::SYS_lsetxattr,
+        libc::SYS_fsetxattr,
+        libc::SYS_removexattr,
+        libc::SYS_lremovexattr,
+        libc::SYS_fremovexattr,
+        SETXATTRAT,
+        REMOVEXATTRAT,
+    ];
+    #[cfg(target_arch = "x86_64")]
+    let legacy = [
+        libc::SYS_chmod,
+        libc::SYS_chown,
+        libc::SYS_lchown,
+        libc::SYS_utime,
+        libc::SYS_utimes,
+        libc::SYS_futimesat,
+    ];
+    #[cfg(not(target_arch = "x86_64"))]
+    let legacy = [];
+    calls.into_iter().chain(legacy).collect()
+}
+
+pub(super) fn apply() -> Result<(), Error> {
+    seccompiler::apply_filter(&filter()?)?;
+    Ok(())
+}

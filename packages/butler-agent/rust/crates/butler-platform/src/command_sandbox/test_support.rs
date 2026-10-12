@@ -1,6 +1,26 @@
 //! OS fixtures for Linux sandbox E2Es, kept inside the platform boundary.
 use std::{io, path::Path};
 
+/// Exercises native/x32 syscall encodings from inside a sandboxed child.
+/// Kept in the platform fixture boundary because syscall tables are OS-specific.
+pub fn linux_syscall_probe(
+    environment: &std::collections::HashMap<String, String>,
+    allowed: &[&Path],
+) -> Result<super::Invocation, super::SandboxError> {
+    super::sandbox::read_only_contained(
+        super::Invocation {
+            program: "python3".into(),
+            arguments: vec![
+                "-c".into(),
+                include_str!("test_support/linux_probe.py").into(),
+            ],
+        },
+        environment,
+        &[],
+        allowed,
+    )
+}
+
 /// Whether this host supports the Linux-specific E2E scenarios.
 pub fn linux_test_host() -> bool {
     cfg!(target_os = "linux")

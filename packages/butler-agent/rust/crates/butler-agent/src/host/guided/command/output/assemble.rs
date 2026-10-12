@@ -211,7 +211,7 @@ fn append_denial(
     let stderr: String = serde_json::from_str(stderr)
         .map_err(|source| error("command_result_encoding_failed").with_source(source))?;
     if let Some((kind, hint)) = butler_platform::command_sandbox::sandbox_denial(&stderr) {
-        append_field_string(out, "sandbox_denied", kind)?;
+        append_field_string(out, "sandbox_denial", kind)?;
         append_field_string(out, "next_step", hint)?;
     }
     Ok(())

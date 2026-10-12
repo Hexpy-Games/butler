@@ -8,42 +8,26 @@ use landlock::{AccessFs, BitFlags, PathBeneath, PathFd, RulesetCreated, RulesetC
 
 use super::Error;
 
-// Matches the current macOS login_shell_contained credential roots exactly.
-const PRIVATE: &[&str] = &[
-    ".ssh",
-    ".gnupg",
-    ".aws",
-    ".kube",
-    ".docker",
-    ".netrc",
-    ".git-credentials",
-    "Library/Keychains",
-    ".butler-e2e-auth",
-];
-
-pub(super) fn private_roots(
-    environment: &HashMap<String, String>,
-    denied: &[&Path],
-    allowed: &[&Path],
-) -> Vec<PathBuf> {
-    let mut roots: Vec<_> = denied.iter().map(|path| path.to_path_buf()).collect();
-    if !allowed.is_empty()
-        && let Some(home) = environment.get("HOME")
-    {
-        roots.extend(PRIVATE.iter().map(|name| Path::new(home).join(name)));
-    }
-    roots
-}
-
 pub(super) fn apply(
     rules: &mut RulesetCreated,
     denied: &[PathBuf],
     allowed: &[PathBuf],
+    credentials: &[PathBuf],
 ) -> Result<(), Error> {
     let private = aliases(denied)?;
+    let credentials = aliases(credentials)?;
+    let projects = allowed
+        .iter()
+        .map(|root| {
+            let real = resolved_path(root)?;
+            let secrets = project_secrets(&real)?;
+            Ok((real, secrets))
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
     let mut blocked = private.clone();
-    for root in allowed {
-        blocked.extend(project_secrets(root)?);
+    blocked.extend(credentials.iter().cloned());
+    for (_, secrets) in &projects {
+        blocked.extend(secrets.iter().cloned());
     }
     // READ_DIR grants recurse too: permit directory names, while withholding
     // READ_FILE/EXECUTE prevents access to denied contents. Landlock cannot
@@ -62,23 +46,23 @@ pub(super) fn apply(
         Vec::new()
     };
     grant_complement(rules, Path::new("/"), &blocked, &deny_execute, read)?;
-    for root in allowed {
-        let real = resolved_path(root)?;
+    for (real, secrets) in &projects {
         // Disjoint workspaces already received exactly these grants above.
         // Only private-root overlap needs Seatbelt's workspace exception.
         if !private
             .iter()
-            .any(|path| real.starts_with(path) || path.starts_with(&real))
+            .any(|path| real.starts_with(path) || path.starts_with(real))
         {
             continue;
         }
         let mut excluded: Vec<_> = private
             .iter()
-            .filter(|path| !real.starts_with(path) && !path.starts_with(&real))
+            .filter(|path| !real.starts_with(path) && !path.starts_with(real))
             .cloned()
             .collect();
-        excluded.extend(project_secrets(root)?);
-        grant_complement(rules, &real, &excluded, &deny_execute, read)?;
+        excluded.extend(credentials.iter().cloned());
+        excluded.extend(secrets.iter().cloned());
+        grant_complement(rules, real, &excluded, &deny_execute, read)?;
     }
     grant(rules, Path::new("/dev/null"), AccessFs::WriteFile.into())
 }
@@ -132,9 +116,9 @@ fn resolved_path(path: &Path) -> std::io::Result<PathBuf> {
 
 fn project_secrets(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let mut secrets = Vec::new();
-    for entry in std::fs::read_dir(resolved_path(root)?)? {
+    for entry in std::fs::read_dir(root)? {
         let entry = entry?;
-        if secret_name(&entry.file_name().to_string_lossy()) {
+        if super::super::credentials::secret_name(&entry.file_name().to_string_lossy()) {
             secrets.push(entry.path());
         }
     }
@@ -143,24 +127,6 @@ fn project_secrets(root: &Path) -> Result<Vec<PathBuf>, Error> {
     // lexical guard covers secret-named symlinks, which Landlock cannot carve
     // out independently of their target.
     Ok(secrets)
-}
-
-fn secret_name(name: &str) -> bool {
-    let name = name.to_ascii_lowercase();
-    matches!(
-        name.as_str(),
-        ".git"
-            | ".ssh"
-            | ".gnupg"
-            | ".project-ledger"
-            | "chatgpt-oauth.json"
-            | "credentials.json"
-            | "secrets.json"
-            | "id_rsa"
-            | "id_ed25519"
-    ) || name.starts_with(".env")
-        || name.ends_with(".pem")
-        || name.ends_with(".key")
 }
 
 fn grant_complement(
