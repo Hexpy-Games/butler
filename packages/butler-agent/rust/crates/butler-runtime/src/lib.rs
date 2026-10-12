@@ -22,6 +22,7 @@
 #[macro_use]
 extern crate butler_core;
 
+pub mod agent_import;
 pub mod browser;
 pub mod browser_import;
 pub mod capabilities;

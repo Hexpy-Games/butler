@@ -4,6 +4,7 @@ mod access;
 mod access_tiers;
 mod agent_context;
 mod agent_exit;
+mod agent_import;
 mod alias_index_drop;
 mod anthropic_cache;
 mod anthropic_requests;

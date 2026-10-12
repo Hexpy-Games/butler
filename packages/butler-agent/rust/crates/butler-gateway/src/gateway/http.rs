@@ -6,6 +6,7 @@ mod content;
 mod library;
 mod start;
 pub(super) use start::serve;
+mod agent_import;
 mod automations;
 mod browser_import;
 mod dashboard;
@@ -99,6 +100,7 @@ struct HttpState {
     output_data: Option<PathBuf>,
     signin_secrets: signin_secrets::SignInSecrets,
     browser_import: browser_import::ImportSessions,
+    agent_imports: agent_import::AgentImports,
 }
 
 /// Who sent an authorized request (a request extension for the routes).

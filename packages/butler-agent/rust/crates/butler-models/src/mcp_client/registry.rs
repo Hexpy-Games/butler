@@ -253,7 +253,8 @@ pub(super) fn redact_server(server: &McpServerConfig) -> Value {
     value
 }
 
-pub(super) fn normalize_server_id(value: &str) -> String {
+/// The registry id for a requested id or name: lower case, `[a-z0-9._-]`.
+pub fn normalize_server_id(value: &str) -> String {
     let mut normalized = String::new();
     let mut in_separator = false;
     for ch in value.trim().to_lowercase().chars() {
@@ -386,14 +387,17 @@ fn normalize_secrets(value: Option<&Value>) -> Vec<KeyValueSecret> {
                 })
                 .collect::<String>();
             let value = item.get("value").and_then(Value::as_str).unwrap_or("");
-            if key.is_empty() || value.is_empty() {
-                return None;
-            }
             let source = match item.get("source").and_then(Value::as_str) {
                 Some("env") => SecretSource::Environment,
                 Some("file") => SecretSource::File,
                 _ => SecretSource::Literal,
             };
+            // An empty literal is a slot the user still has to fill (an
+            // imported server whose secret was not copied); it resolves to
+            // nothing, so the variable or header is simply not sent.
+            if key.is_empty() || (value.is_empty() && source != SecretSource::Literal) {
+                return None;
+            }
             Some(KeyValueSecret {
                 key,
                 secret: SecretValue {

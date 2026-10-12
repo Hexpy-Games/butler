@@ -96,10 +96,10 @@ fn claimed_input(
     db: &Connection,
     queued_id: &str,
     claim_id: &str,
-) -> Result<(ClaimedNativeSnapshot, AccessMode, Option<String>), AppStorageError> {
+) -> Result<(ClaimedNativeSnapshot, AccessMode, String), AppStorageError> {
     let snapshot = claimed_snapshot(db, queued_id, claim_id)?;
     let access = settings::conversation_access_mode(db, &snapshot.chat_id)?;
-    let folder = projects::configured_root(db)?.map(|path| path.to_string_lossy().into_owned());
+    let folder = projects::effective_root(db)?.to_string_lossy().into_owned();
     Ok((snapshot, access, folder))
 }
 
@@ -184,13 +184,11 @@ fn rebuilt_turn(
     snapshot: ClaimedNativeSnapshot,
     assets: ResolvedNativeAssets,
     conversation_access: &AccessMode,
-    default_project_folder: Option<String>,
+    default_project_folder: String,
 ) -> AppTurn {
     let mut context = Map::new();
     context.insert("version".into(), Value::from(1));
-    if let Some(folder) = default_project_folder {
-        context.insert("defaultProjectFolder".into(), folder.into());
-    }
+    context.insert("defaultProjectFolder".into(), default_project_folder.into());
     if let Some(seed) = snapshot.branch_seed.clone() {
         context.insert("branchSeed".into(), seed);
     }

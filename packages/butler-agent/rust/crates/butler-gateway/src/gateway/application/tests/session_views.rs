@@ -11,7 +11,6 @@ async fn session_view_projects_progress_for_active_and_terminal_latest_turn() {
         AppApplicationConfig {
             database_path: root.join("app.sqlite"),
             butler_data: root.clone(),
-            project_workspace_root: root.clone(),
             folder_selection_secret: None,
         },
         dependencies(native, 950),

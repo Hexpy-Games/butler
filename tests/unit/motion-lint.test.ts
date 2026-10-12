@@ -161,7 +161,7 @@ describe("motion lint rules", () => {
     expect(wallpaper).toBeDefined();
     expect(CANVAS_MOTION_ENGINES.some((engine) => engine.prefix.includes("PromptSuggestionList"))).toBe(false);
     expect(Object.keys(wallpaper!.constants).sort()).toEqual([
-      "RAF_SLOT_SLACK_MS", "RISO_BLUR_FREEZE_MS", "RISO_BLUR_SLOW_MS", "RISO_DRIFT_RATE", "RISO_ENTRY_DISSOLVE_MS", "RISO_FOCUS_AWAY_MS",
+      "RAF_SLOT_SLACK_MS", "RESIZE_SETTLE_MS", "RISO_BLUR_FREEZE_MS", "RISO_BLUR_SLOW_MS", "RISO_DRIFT_RATE", "RISO_ENTRY_DISSOLVE_MS", "RISO_FOCUS_AWAY_MS",
       "RISO_INTRO_BEAT_MS", "RISO_INTRO_FRAME_MS", "RISO_INTRO_STIR_DECAY_MS", "RISO_INTRO_TIMELINE_S",
       "RISO_LIVE_CAP_FPS", "RISO_LIVE_FLOOR_FPS", "RISO_SEGMENT_MS", "RISO_ZONE_EASE_MS",
       "SECONDS_PER_DAY", "WALLPAPER_ANIMATED_FPS", "WALLPAPER_DAY_PHASE_REFRESH_MS", "WALLPAPER_MAX_CLOCK_STEP_MS",

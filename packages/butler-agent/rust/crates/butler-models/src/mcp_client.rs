@@ -20,4 +20,4 @@ pub use catalog::{
     search as search_mcp_tool_catalog,
 };
 pub use client::{McpClient, RegistryPathGuard};
-pub use registry::McpRegistryError;
+pub use registry::{McpRegistryError, normalize_server_id};

@@ -245,7 +245,6 @@ async fn open_application(
             AppApplicationConfig {
                 database_path: config.db_path.clone(),
                 butler_data: data_root.to_path_buf(),
-                project_workspace_root: data_root.join("workspaces/projects"),
                 folder_selection_secret: config.folder_selection_secret.clone(),
             },
             dependencies,

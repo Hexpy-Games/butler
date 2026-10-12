@@ -10,6 +10,8 @@ publish.workspace = true
 semver.workspace = true
 psl = "2.1"
 roxmltree = "0.20"
+# Codex config.toml for the agent import; already in the lock (no new package).
+toml_edit = { version = "0.25", default-features = false, features = ["parse"] }
 zeroize.workspace = true
 butler-core = { path = "../butler-core" }
 butler-platform = { path = "../butler-platform" }

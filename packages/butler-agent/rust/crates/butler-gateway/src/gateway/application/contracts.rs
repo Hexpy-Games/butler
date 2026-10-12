@@ -486,6 +486,5 @@ pub struct ResolvedNativeAssets {
 pub struct AppApplicationConfig {
     pub database_path: PathBuf,
     pub butler_data: PathBuf,
-    pub project_workspace_root: PathBuf,
     pub folder_selection_secret: Option<String>,
 }

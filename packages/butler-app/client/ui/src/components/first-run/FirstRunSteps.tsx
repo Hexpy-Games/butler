@@ -11,5 +11,5 @@ export function firstRunStepIds(mode: FirstRunFlow["mode"]): FirstRunStep[] {
   return mode === "first-run" ? ["welcome", "consent", "memory", "connect", "import", "ready"] : FIRST_RUN_STEPS;
 }
 export function firstRunSteps(copy: FirstRunFlow["copy"], mode: FirstRunFlow["mode"]): SetupWizardStep[] {
-  return firstRunStepIds(mode).map((id) => ({ id, label: id === "import" ? appCopy.settings.pageSections.browserImport : copy.steps[id] }));
+  return firstRunStepIds(mode).map((id) => ({ id, label: id === "import" ? appCopy.settings.pageSections.import : copy.steps[id] }));
 }

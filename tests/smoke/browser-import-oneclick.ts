@@ -27,6 +27,13 @@ const sources = [{ key: "chrome:work", browser: "chrome", name: "Work", password
   { key: "chrome:personal", browser: "chrome", name: "Personal", passwords: "direct" },
   { key: "firefox:default", browser: "firefox", name: "Personal", passwords: "direct" },
   { key: "safari:default", browser: "safari", name: "Safari", passwords: "csv" }];
+// Other AI tools: the proxy answers, so the Agent never reads this machine's real tool folders.
+const agentSources = [
+  { key: "codex", name: "Codex", instructions: true, instructions_file: "~/.codex/AGENTS.md", servers: 3, needs_secret: 1, skipped: 0, unreadable: false },
+  { key: "claude-code", name: "Claude Code", instructions: true, instructions_file: "~/.claude/CLAUDE.md", servers: 2, needs_secret: 1, skipped: 0, unreadable: false },
+  { key: "opencode", name: "OpenCode", instructions: false, instructions_file: null, servers: 1, needs_secret: 0, skipped: 0, unreadable: false },
+  { key: "hermes", name: "Hermes", instructions: true, instructions_file: "~/.hermes/SOUL.md", servers: 0, needs_secret: 0, skipped: 0, unreadable: false }];
+const agentRuns: string[] = [];
 let page: import("playwright").Page;
 const proxy = createServer((request, response) => {
   void handle(request, response).catch(() => { if (!response.headersSent) response.writeHead(500); response.end(); });
@@ -39,6 +46,12 @@ async function handle(request: import("node:http").IncomingMessage, response: im
   const error = (code: string) => { response.writeHead(422, { "content-type": "application/json" }); response.end(JSON.stringify({ protocol_version: "butler.app.v1", error: { code } })); };
   if (path === "/security/signins") return reply({ available: true, sites: [] });
   if (path === "/security/browser-import/sources") return reply({ sources: fixtureSources });
+  if (path === "/security/agent-import/sources") return reply({ sources: agentSources });
+  if (path === "/security/agent-import/start") {
+    agentRuns.push(JSON.parse(raw.toString()).source);
+    return reply({ run_id: "00000000-0000-4000-8000-000000000002", instructions: 1, instructions_existing: 0, servers: 3, servers_existing: 0, needs_secret: 1, skipped: 0 });
+  }
+  if (path === "/security/agent-import/undo") return reply({ instructions: 1, servers: 3 });
   if (path === "/security/browser-import/start") {
     const input = JSON.parse(raw.toString()); runs.push({ source: input.source, bookmarks: input.bookmarks, passwords: input.passwords, history: input.history });
     if (mode === "permission") return error("full_disk_access_required");
@@ -86,10 +99,10 @@ async function wizardFlow(copy: AppCopy) {
   await page.locator("[data-memory-choice=\"off\"]").click();
   await page.getByRole("button", { name: copy.firstRun.memoryChoice.continue, exact: true }).click();
   await page.locator("#first-run-connect-title").waitFor();
-  // The step morph briefly keeps the previous card; read the settled one.
+  // The previous step's card may still be leaving; read the step list once it is alone.
   await page.waitForFunction(() => document.querySelectorAll("ol").length === 1);
   const labels = (await page.locator("ol li").allInnerTexts()).map(text => text.split("\n").at(-1)?.trim());
-  assert.deepEqual(labels, [steps.welcome, steps.consent, steps.memory, steps.connect, copy.settings.pageSections.browserImport, steps.ready]);
+  assert.deepEqual(labels, [steps.welcome, steps.consent, steps.memory, steps.connect, copy.settings.pageSections.import, steps.ready]);
   await wizardCapture("connect");
   await page.getByRole("button", { name: copy.firstRun.back, exact: true }).click();
   await page.locator("[data-first-run-screen=\"memory\"]").waitFor();
@@ -98,7 +111,11 @@ async function wizardFlow(copy: AppCopy) {
   await connectStub();
   const wizard = page.locator("[data-first-run-screen=\"import\"] [data-settings-section-id=\"browser-import\"]");
   await wizard.locator("[data-import-source]").nth(3).waitFor();
-  assert.equal(await page.locator("ol [aria-current=\"step\"]").innerText(), `5\n${copy.settings.pageSections.browserImport}`);
+  const agents = page.locator("[data-first-run-screen=\"import\"] [data-settings-section-id=\"agent-import\"]");
+  await agents.locator("[data-agent-import-source]").nth(3).waitFor();
+  const [agentsBox, browsersBox] = [await agents.boundingBox(), await wizard.boundingBox()];
+  assert.ok(agentsBox && browsersBox && agentsBox.y < browsersBox.y, "other AI tools come before browsers");
+  assert.equal(await page.locator("ol [aria-current=\"step\"]").innerText(), `5\n${copy.settings.pageSections.import}`);
   await wizardCapture("wizard-import");
   await page.getByRole("button", { name: copy.firstRun.back, exact: true }).click();
   await page.locator("#first-run-connect-title").waitFor();
@@ -116,6 +133,22 @@ async function wizardFlow(copy: AppCopy) {
   await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
   await page.getByRole("button", { name: copy.firstRun.finish, exact: true }).click();
   await page.locator("[data-test-class=\"first-run-setup\"]").waitFor({ state: "detached" });
+}
+/** Settings → Personalization: other AI tools as rows, one import, its result and undo. */
+async function agentSettings(copy: AppCopy) {
+  await page.goto("app://butler/?settings=personalization");
+  const section = page.locator("[data-settings-section-id=\"agent-import\"]");
+  await section.locator("[data-agent-import-source]").nth(3).waitFor();
+  // The memory import is the last row of the same section; no second import heading.
+  await section.locator("[data-setting-id=\"profile-migration\"]").getByText(copy.settings.fields.profileMigrationImport, { exact: true }).waitFor();
+  assert.equal(await page.locator("[data-settings-section-id=\"import\"]").count(), 0);
+  await section.scrollIntoViewIfNeeded(); await capture("agent-import");
+  await section.locator("[data-agent-import-source=\"codex\"] button").click();
+  await section.getByText(copy.settings.agentImport.result(1, 3, 1), { exact: true }).waitFor();
+  await section.scrollIntoViewIfNeeded(); await capture("agent-import-result");
+  await section.getByRole("button", { name: copy.settings.agentImport.undo, exact: true }).click();
+  await section.getByText(copy.settings.agentImport.undone, { exact: true }).waitFor();
+  assert.equal(agentRuns.at(-1), "codex");
 }
 // Pin the existing renderer override: baseline captures must never swap shared build assets.
 process.env.BUTLER_APP_RENDERER_DIST = resolve(before ?? "packages/butler-app/client/ui/dist");
@@ -157,6 +190,7 @@ try {
       await emptyBookmarks.getByRole("button", { name: copy.settings.pageSections.browserImport, exact: true }).click();
       await page.locator('[data-settings-section-id="browser-import"]').waitFor();
     }
+    if (!before) await agentSettings(copy);
     await page.goto("app://butler/?settings=browser");
     const section = page.locator('[data-settings-section-id="browser-import"]');
     await section.waitFor();

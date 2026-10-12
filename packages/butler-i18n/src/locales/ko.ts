@@ -1221,7 +1221,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     hooks: { add: "훅 추가", edit: "편집", test: "테스트", remove: "삭제", recent: "최근 실행", empty: "훅 없음", name: "이름", event: "이벤트", tools: "도구", command: "명령", args: "인수 (JSON)", timeout: "제한 시간 (ms)", failClosed: "오류 시 차단", async: "백그라운드", enabled: "사용", refresh: "새로고침", blocked: "훅이 차단함", editTitle: "훅 편집", disabled: "사용 안 함", emptyRuns: "실행 기록 없음", testSuccess: "실행 성공", testFailure: "실행 실패", exitCode: "종료 코드", commandDisabled: "인수를 사용 중입니다.", commandRequired: "명령 또는 인수를 입력합니다.", deleteConfirm: name => `훅 "${name}"을 삭제합니다.` },
     deleteSchedule: name => `예약 작업 "${name}"을 삭제합니다.`,
     deleteMcpServer: name => `MCP 서버 "${name}"과 저장된 인증 정보를 삭제합니다.`,
-    mcpEnabled: "사용 중", mcpDisabled: "사용 안 함",
+    mcpEnabled: "사용 중", mcpDisabled: "사용 안 함", mcpNeedsSecret: "키 입력 필요",
     mcpIdRequired: "서버 ID를 입력합니다.",
     mcpIdInvalid: "영문·숫자·점·밑줄·하이픈 1~80자로 입력합니다.",
     mcpIdPreview: id => `저장 ID: ${id}`,
@@ -1362,6 +1362,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       allowedHosts: "허용 호스트",
       signIns: "로그인",
       browserImport: "다른 브라우저에서 가져오기",
+      agentImport: "다른 AI에서 가져오기",
       paymentMethods: "결제 수단",
       profiles: "내 정보",
       purchaseSites: "확인 없이 결제",
@@ -1586,7 +1587,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       responseLanguage: "답변 언어",
       profilingMode: "범위",
       profilingExtractorModel: "알아가기 모델",
-      profileMigrationImport: "외부 AI 기억 가져오기",
+      profileMigrationImport: "기억 가져오기",
       profileMigrationPrompt: "가져오기 프롬프트",
       profileMigrationDump: "가져온 프로필 내용",
       personaPreset: "페르소나 프리셋",
@@ -1686,9 +1687,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
         "개인화에 필요한 정보를 읽어낼 때 사용할 모델입니다.",
       profilingExtractorDefault:
         "현재 버틀러 기본 모델 설정을 그대로 따릅니다.",
-      profileMigration: "외부 AI 서비스에서 기억을 가져올 수 있습니다.",
-      profileMigrationImmediate:
-        "가져오기를 누르면 이 화면에서 바로 처리되며, 완료되면 결과가 표시됩니다.",
+      profileMigration: "다른 AI 서비스의 기억을 옮겨요",
       profileMigrationImporting:
         "가져온 기억을 읽고 프로필에 반영하는 중입니다.",
       profileMigrationApplied: (count) =>
@@ -2210,6 +2209,18 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       fullDiskAccess: "브라우저 폴더 접근 권한이 필요해요",
       failed: "가져오지 못했어요",
       needsKeychain: "시스템 암호 저장소가 있어야 가져올 수 있어요",
+    },
+    agentImport: {
+      purpose: "지침과 MCP 서버를 버틀러로 옮겨요",
+      stepPurpose: "쓰던 AI 도구와 브라우저 설정을 버틀러로 옮겨요",
+      found: (instructions, servers) => [instructions ? "지침" : "", servers ? `MCP 서버 ${servers}개` : ""].filter(Boolean).join(" · ") || "가져올 설정 없음",
+      run: "가져오기",
+      importing: "가져오는 중…",
+      result: (instructions, servers, needsSecret) => `지침 ${instructions}개 · MCP 서버 ${servers}개 추가${needsSecret ? ` · 키 입력 필요 ${needsSecret}개(설정 › MCP)` : ""}`,
+      nothingNew: "새로 추가할 항목이 없어요",
+      undo: "되돌리기", more: "더 가져오기", undone: "추가한 항목을 되돌렸어요",
+      noSources: "찾은 AI 도구가 없어요",
+      failed: "가져오지 못했어요", retry: "다시 시도",
     },
   },
   titlebar: {

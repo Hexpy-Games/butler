@@ -65,6 +65,8 @@ interface ButlerAppBridge {
   deleteLibrary?: (id: string) => Promise<unknown>;
   setUpdateProgress?: (value: number | "indeterminate" | null) => Promise<void>;
   recordUiCrash?: (input: unknown) => Promise<unknown>;
+  /** One wallpaper run-state line (`wallpaper_state …`) for the main-process diagnostics log; fire and forget. */
+  recordWallpaperState?: (line: string) => void;
   readUiCrashLog?: () => Promise<import("../../../electron/ui-crash-log.mjs").UiCrashEntry[]>;
   getAppUpdateState?: () => Promise<AppUpdateState>;
   chooseAppUpdate?: (input: { request_id: string | null; action: "now" | "defer" }) => Promise<{ ok: boolean }>;
@@ -1041,6 +1043,9 @@ function signInBridgeCall(method: string, path: string, body: ApiOptions["body"]
   if (path === "/security/browser-import/export/file" && method === "POST") return { action: "chooseBrowserPasswordExport", input: payload() };
   if (path === "/security/browser-import/export/delete" && method === "POST") return { action: "deleteBrowserPasswordExport", input: payload() };
   if (path === "/security/browser-import/export/cancel" && method === "POST") return { action: "cancelBrowserPasswordExport", input: payload() };
+  if (path === "/security/agent-import/sources" && method === "GET") return { action: "listAgentImportSources" };
+  if (path === "/security/agent-import/start" && method === "POST") return { action: "startAgentImport", input: payload() };
+  if (path === "/security/agent-import/undo" && method === "POST") return { action: "undoAgentImport", input: payload() };
   return vaultBridgeCall(method, path, payload);
 }
 
