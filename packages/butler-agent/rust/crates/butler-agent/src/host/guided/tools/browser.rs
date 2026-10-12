@@ -1,10 +1,6 @@
 //! Conversation-owned browser tools; web content cannot select authority or owners.
 mod assets;
 mod authority;
-#[allow(
-    unused_imports,
-    reason = "Parallel T3 integration consumes this lookup"
-)]
 pub(super) use assets::lookup_assets;
 mod client;
 mod dialog;
