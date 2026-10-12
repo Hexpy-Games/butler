@@ -76,7 +76,10 @@ async function capture(page: Page, name: string) {
     assert.equal(await page.locator('[data-slot="setup-step-body"]').getAttribute("data-motion"), "enter", "DS content-key transition");
     assert.equal(await page.locator('[data-slot="setup-step-body"] > :first-child [data-slot="icon-tile"]').count(), 0, "no title icon tile");
     const step = await page.locator("[data-first-run-screen]").getAttribute("data-first-run-screen");
-    assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${step === "consent" ? 2 : step === "ready" ? await page.locator("ol li").count() : await page.locator("ol li").count() - 1}\n${firstRunCopy[await page.locator("html").getAttribute("lang") === "ko-KR" ? "ko" : "en"].steps[step as "consent" | "ready" | "connect"]}`);
+    const ids = await page.locator("ol li").count() === 5 ? ["welcome", "consent", "connect", "import", "ready"] : ["welcome", "consent", "connect", "ready"];
+    const lang = await page.locator("html").getAttribute("lang") === "ko-KR" ? "ko" : "en";
+    const label = step === "import" ? getAppCopy(lang === "ko" ? "ko-KR" : "en-US").settings.pageSections.browserImport : firstRunCopy[lang].steps[step as "consent" | "ready" | "connect"];
+    assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${ids.indexOf(step ?? "") + 1}\n${label}`);
   }
 }
 
@@ -88,18 +91,23 @@ async function reset(page: Page, language: "ko" | "en", theme: "light" | "dark")
   await page.locator("#first-run-language").selectOption(language);
 }
 
-async function reachProviders(page: Page, language: "ko" | "en", importStep = true) {
+async function reachProviders(page: Page, language: "ko" | "en") {
   const copy = firstRunCopy[language];
   await page.getByRole("button", { name: copy.start, exact: true }).click();
   await page.getByRole("button", { name: copy.agree, exact: true }).click();
-  if (importStep) {
-    await page.locator('[data-first-run-screen="import"]').waitFor();
-    await page.getByRole("button", { name: getAppCopy(language === "ko" ? "ko-KR" : "en-US").settings.browserImport.skip, exact: true }).click();
-  } else assert.equal(await page.locator('[data-first-run-screen="import"]').count(), 0, "consent renewal adds no import step");
   await page.locator("#first-run-connect-title").waitFor();
+  assert.equal(await page.locator('[data-first-run-screen="import"]').count(), 0, "import follows the AI choice");
 }
 
-async function confirmReady(page: Page, language: "ko" | "en", name: string) {
+/** First run: the optional import step sits between the AI choice and the finish. */
+async function passImport(page: Page, language: "ko" | "en", preparing = false) {
+  await page.locator('[data-first-run-screen="import"]').waitFor();
+  if (preparing) await page.locator('[data-settings-section-id="browser-import"] [data-slot="settings-section-skeleton"]').waitFor();
+  await page.getByRole("button", { name: getAppCopy(language === "ko" ? "ko-KR" : "en-US").settings.browserImport.skip, exact: true }).click();
+}
+
+async function confirmReady(page: Page, language: "ko" | "en", name: string, viaImport = true) {
+  if (viaImport) await passImport(page, language);
   const copy = firstRunCopy[language];
   await page.getByRole("heading", { name: copy.readyTitle(name), exact: true }).waitFor();
   await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
@@ -229,11 +237,13 @@ async function preparationStates(page: Page) {
   await reachProviders(page, "ko");
   stub.state.label = "Smoke profile"; stub.state.oauthStatus = "profile_exists";
   await page.locator('[data-card-id="chatgpt"]').click();
+  // A choice made while Butler prepares moves on to the optional import; the finish step then waits.
+  await passImport(page, "ko", true);
   await page.getByRole("heading", { name: copy.finishing, exact: true }).waitFor();
   assert.equal(await page.locator("#first-run-reply-language").count(), 0, "preparation precedes reply language");
   await capture(page, "after-finishing");
   stub.state.readiness = "ready";
-  await confirmReady(page, "ko", "ChatGPT");
+  await confirmReady(page, "ko", "ChatGPT", false);
   assert.equal(await page.getByText("Smoke profile", { exact: true }).count(), 0, "non-email profile labels are not accounts");
   await capture(page, "after-ready-no-account");
   await finish(page, "ko");
@@ -247,7 +257,7 @@ async function renewalAndRerun(page: Page) {
   assert.equal(await page.locator("ol").count(), 0, "consent renewal has no step header");
   await page.getByRole("button", { name: copy.decline, exact: true }).click();
   await page.locator("#first-run-start").waitFor();
-  await reachProviders(page, "ko", false);
+  await reachProviders(page, "ko");
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ onboarding: { completed_at: old } }) });
   await page.reload();
   await page.locator('[data-test-class="workspace"]').waitFor();
@@ -282,8 +292,7 @@ try {
     await page.getByRole("button", { name: firstRunCopy.en.start, exact: true }).click();
     await capture(page, `after-mobile-${width}-consent`);
     await page.getByRole("button", { name: firstRunCopy.en.agree, exact: true }).click();
-    await page.locator('[data-first-run-screen="import"]').waitFor();
-    await page.getByRole("button", { name: getAppCopy("en-US").settings.browserImport.skip, exact: true }).click();
+    await page.locator("#first-run-connect-title").waitFor();
     await capture(page, `after-mobile-${width}-providers`);
   }
   writeFileSync(join(output, "measurements.json"), JSON.stringify(measurements, null, 2));

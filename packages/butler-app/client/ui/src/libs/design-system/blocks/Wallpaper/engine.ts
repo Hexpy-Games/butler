@@ -1,6 +1,7 @@
 import { resetWallpaperPaint } from "./paintSignal";
 import type { WallpaperEngine, WallpaperEngineOptions } from "./engineTypes";
 import { createDriftLayers } from "./driftLayers";
+import { createEngineDiagnostics } from "./engineDiagnostics";
 import { createEngineDrift } from "./engineDrift";
 import { createEngineIntro } from "./engineIntro";
 import { createEngineLoop } from "./engineLoop";
@@ -27,12 +28,15 @@ export type { WallpaperEngine, WallpaperEngineOptions } from "./engineTypes";
  */
 export function createWallpaperEngine(canvas: HTMLCanvasElement, options: WallpaperEngineOptions): WallpaperEngine | null {
   const { onError, transparent } = options;
-  const renderer = createWallpaperRenderer(canvas, { onError, transparent });
-  if (!renderer) {
+  const created = createWallpaperRenderer(canvas, { onError, transparent });
+  if (!created) {
     resetWallpaperPaint(canvas, "unsupported");
     onError({ reason: "unsupported", module: "", message: "WebGL2 is unavailable" });
     return null;
   }
+  // Transitions of what decides whether the canvas draws, for the app diagnostics (nothing at idle).
+  const diagnostics = createEngineDiagnostics(canvas, { state: () => state, intro: () => intro.active(), drift: () => drift.owns() });
+  const renderer = diagnostics.count(created);
   const seed = Math.random();
   let state: WallpaperScheduleState = initialWallpaperState(canvas, renderer.softwareRendering());
   let hasScene = false;
@@ -49,7 +53,7 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
   const intro = createEngineIntro({
     renderer, layers, box: () => box, state: () => state, scene: () => (hasScene ? scene : null),
     onCard: (rect) => engine.setContentRect(rect), onDrawn: () => presenter.drawn(),
-    onHandoff: (seeded) => { if (drift.owns()) drift.handoff(state, seeded); else { layers?.hide(); loop.invalidate(); loop.schedule(); } },
+    onHandoff: (seeded) => { if (drift.owns()) drift.handoff(state, seeded); else { layers?.hide(); loop.invalidate(); loop.schedule(); } diagnostics.check(); },
   });
   const drift = createEngineDrift({
     layers, held: intro.active, renderer, seed, box: () => box, contentRect: () => contentRect,
@@ -72,6 +76,7 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     intro.sync();
     // A drifting print schedules its own frames: no rAF from signal changes (hidden, blur, battery).
     if (!drift.owns() && !intro.active()) loop.schedule();
+    diagnostics.check();
   };
   const presenter = createWallpaperPresenter({
     ...options,
@@ -135,8 +140,9 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
       drift.setColumn(rect);
     },
     event: (kind) => drift.event(kind),
-    setIntro: (timeline) => intro.attach(timeline),
+    setIntro: (timeline) => { intro.attach(timeline); diagnostics.check(); },
     dispose() {
+      diagnostics.dispose();
       intro.dispose();
       loop.dispose();
       watchdog.dispose();

@@ -48,7 +48,7 @@ export function FirstRunWelcome({ flow }: { flow: FirstRunFlow }) {
           {SUPPORTED_UI_LANGUAGES.map(({ value, label }) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}
         </NativeSelect>
       </Field>
-      <Stack data-setup-rows gap="sm">
+      <Stack data-setup-rows gap="lg">
         <ButtonContainer size="lg" align="column" cross="stretch">
           <Button
             id="first-run-start"
@@ -63,14 +63,17 @@ export function FirstRunWelcome({ flow }: { flow: FirstRunFlow }) {
           </Button>
           {flow.mode === "rerun" ? <FirstRunCancel flow={flow} /> : null}
         </ButtonContainer>
-        {blocked ? <FirstRunPrepStatus flow={flow} /> : <>
-          <Inline gap="sm" justify="center" cross="center">
-            <PreparationLine flow={flow} />
-            <Typo.Caption tone="tertiary" aria-hidden="true">·</Typo.Caption>
-            <Typo.Caption as="span"><InlineReference kind="external" href={FIRST_RUN_GUIDE_URL} iconSrc={faviconSrc(FIRST_RUN_GUIDE_URL)}>{copy.learnMore}</InlineReference></Typo.Caption>
-          </Inline>
-          <MemoryModelStatus model={readiness.memory_model} language={flow.language} retry={flow.retryPreparation} />
-        </>}
+        {/* One status row from the first render: it enters with the other rows of the card and later updates in place. */}
+        <Stack gap="sm" data-test-class="first-run-welcome-status">
+          {blocked ? <FirstRunPrepStatus flow={flow} /> : <>
+            <Inline gap="sm" justify="center" cross="center">
+              <PreparationLine flow={flow} />
+              <Typo.Caption tone="tertiary" aria-hidden="true">·</Typo.Caption>
+              <Typo.Caption as="span"><InlineReference kind="external" href={FIRST_RUN_GUIDE_URL} iconSrc={faviconSrc(FIRST_RUN_GUIDE_URL)}>{copy.learnMore}</InlineReference></Typo.Caption>
+            </Inline>
+            <MemoryModelStatus model={readiness.memory_model} language={flow.language} retry={flow.retryPreparation} />
+          </>}
+        </Stack>
       </Stack>
     </SetupWizardContent>
   );

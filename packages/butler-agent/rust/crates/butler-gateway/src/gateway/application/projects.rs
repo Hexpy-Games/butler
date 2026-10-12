@@ -80,13 +80,23 @@ pub(super) fn branch_project_created_event(
     rows::append_created_unpublished(db, clock, project)
 }
 
-pub(super) fn initial_root(db: &Connection, fallback: &Path) -> Result<PathBuf, AppStorageError> {
-    let path = configured_root(db)?.unwrap_or_else(|| fallback.to_path_buf());
-    absolute_root(path)
+/// The effective folder for creation, Settings and turn context. Resolving it
+/// never creates a directory or persists the fallback as a user preference.
+pub(super) fn effective_root(db: &Connection) -> Result<PathBuf, AppStorageError> {
+    if let Some(path) = configured_root(db)? {
+        return Ok(path);
+    }
+    let home = butler_platform::user_dirs::non_empty_home_dir().ok_or_else(|| {
+        AppStorageError::new(
+            AppStorageCode::ProjectWorkspaceUnavailable,
+            "User home directory is unavailable.",
+        )
+    })?;
+    absolute_root(home.join("butler-workspace"))
 }
 
 /// Read the current setting without substituting a workspace when it is unset.
-pub(super) fn configured_root(db: &Connection) -> Result<Option<PathBuf>, AppStorageError> {
+fn configured_root(db: &Connection) -> Result<Option<PathBuf>, AppStorageError> {
     let encoded: Option<String> = db
         .query_row(
             "SELECT value_json FROM app_settings WHERE key='default-project-workspace-root'",

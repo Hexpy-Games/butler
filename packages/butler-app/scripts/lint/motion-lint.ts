@@ -291,6 +291,7 @@ export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
       WALLPAPER_DAY_PHASE_REFRESH_MS: "How often a still frame of a module that reads u_dayPhase re-renders (15 min) so time-of-day color follows the clock; a refresh budget, not UI timing.",
       WALLPAPER_WATCHDOG_SLOW_RENDER_MS: "Render time above which the frame-time watchdog counts an animated frame as slow (GPU overload detection); a health threshold, not a duration.",
       WALLPAPER_WATCHDOG_RETRY_MS: "Quiet period before a degraded wallpaper retries animating (doubles per retry); a recovery budget, not UI timing.",
+      RESIZE_SETTLE_MS: "Diagnostics only: how long after a window resize the engine must have drawn before one resize=no_redraw line is logged; a health threshold, not motion.",
       WALLPAPER_WATCHDOG_RETRY_MAX_MS: "Cap of the watchdog's growing retry period; a recovery budget, not UI timing.",
       WALLPAPER_MAX_CLOCK_STEP_MS: "Largest step of the shader clock per frame so a stalled or resumed loop never jumps the animation (simulation stability).",
       WALLPAPER_TIME_PERIOD_SECONDS: "Common period (5000*PI s) of the built-in shaders' time terms, used to wrap u_time for mediump precision; not a duration.",

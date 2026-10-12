@@ -10,6 +10,12 @@ pub(super) fn isolated_command(program: &Path, home: &Path) -> Command {
     command
         .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
         .env("HOME", home)
+        // Browser import reads the account folders from the OS, not HOME;
+        // test-support agents read fixture profiles here instead.
+        .env(
+            butler_platform::browser_profiles::PROFILES_HOME_FIXTURE,
+            home,
+        )
         .env("XDG_CONFIG_HOME", home.join(".config"))
         .env("XDG_DATA_HOME", home.join(".local/share"))
         .env("XDG_CACHE_HOME", home.join(".cache"))

@@ -25,7 +25,6 @@ async fn delivered_progress_is_receipted_and_returned_by_message_get() {
         AppApplicationConfig {
             database_path: root.join("app.sqlite"),
             butler_data: root.clone(),
-            project_workspace_root: root.clone(),
             folder_selection_secret: None,
         },
         dependencies(native.clone(), 600),
@@ -120,7 +119,6 @@ async fn retention_owner_snapshots_terminal_progress_and_joins_on_close() {
         AppApplicationConfig {
             database_path: root.join("app.sqlite"),
             butler_data: root.clone(),
-            project_workspace_root: root.clone(),
             folder_selection_secret: None,
         },
         dependencies(native.clone(), 700),
@@ -213,7 +211,6 @@ async fn a_skipped_delivery_retires_its_staged_outbound_for_the_resend() {
         AppApplicationConfig {
             database_path: root.join("app.sqlite"),
             butler_data: root.clone(),
-            project_workspace_root: root.clone(),
             folder_selection_secret: None,
         },
         dependencies(native.clone(), 800),
