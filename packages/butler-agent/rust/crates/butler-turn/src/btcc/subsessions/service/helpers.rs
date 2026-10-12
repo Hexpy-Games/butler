@@ -23,12 +23,50 @@ pub(super) fn render_input(packet: &SubsessionPacket, profile_prompt: Option<&st
         None => base,
     }
 }
+/// Reading what pages state is enough evidence; operating a page's controls
+/// to confirm unrequested details costs rounds without changing the answer.
+const PAGE_FACTS: &str = "Do not operate page controls to verify details the user's request did not ask for; report a detail a page does not state as unconfirmed.";
+
 pub(super) fn render_steward_input(packet: &SubsessionPacket) -> String {
     format!(
-        "role: steward\nrequest: {}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.",
+        "role: steward\nrequest: {}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.{} {PAGE_FACTS}",
         packet.objective,
         criteria(packet),
-        packet.prior_context.as_deref().unwrap_or("none")
+        packet.prior_context.as_deref().unwrap_or("none"),
+        planned_presentation(packet)
+    )
+}
+
+/// The parent Plan's presentation decision (its `Presentation:` acceptance
+/// line) tells the steward what the report must carry: blocks other than text
+/// need per-item facts and sources, and cards or a gallery need one collected
+/// image per item.
+fn planned_presentation(packet: &SubsessionPacket) -> String {
+    let Some(blocks) = packet
+        .acceptance_criteria
+        .iter()
+        .find_map(|line| line.strip_prefix("Presentation:"))
+        .map(str::trim)
+    else {
+        return String::new();
+    };
+    let planned = blocks.split(',').map(str::trim).collect::<Vec<_>>();
+    if planned
+        .iter()
+        .all(|block| *block == "text" || block.is_empty())
+    {
+        return String::new();
+    }
+    let images = if planned
+        .iter()
+        .any(|block| matches!(*block, "cards" | "gallery"))
+    {
+        " When the items have a visual appearance, collect one representative image per item with image_collect while its page is open and name its id with the item. When an item's page gives no representative photo, find one: search for images of that item or open its official or gallery pages, and collect a real photo of it. Never use a screenshot of text as an item's photo, and leave no item without an image."
+    } else {
+        ""
+    };
+    format!(
+        " Butler's Plan presents this result as {blocks}: report per item its source page and the facts that page states.{images}"
     )
 }
 pub(super) fn allowed_effects(access: &str) -> Vec<String> {

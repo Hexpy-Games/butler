@@ -81,6 +81,21 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
             .iter()
             .any(|request| request.to_string().contains("input_image"))
     );
+    assert!(
+        script.requests.lock().unwrap().iter().any(|request| request
+            .to_string()
+            .contains("Another element covers this image. Do not retry the same source.")),
+        "a refused collection names another source instead of a retry"
+    );
+    assert!(
+        !script
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|request| request.to_string().contains("Butler's Plan presents")),
+        "a Plan without a presentation decision asks the steward for no blocks"
+    );
     {
         let requests = script.requests.lock().unwrap();
         for recovery in [
@@ -130,16 +145,14 @@ async fn serve_host(
     answer: bool,
 ) -> Result<(), HarnessError> {
     let mut buffer = String::new();
-    let mut ops = vec![
+    let ops = vec![
         "tab.open",
         "tabs.list",
         "tab.observe",
         "tab.screenshot",
         "tab.image_collect",
+        "tab.image_collect",
     ];
-    if answer {
-        ops.push("tab.image_collect");
-    }
     for op in ops {
         let frame = next_call(&mut stream, &mut buffer, op).await?;
         assert_eq!(
@@ -162,6 +175,9 @@ async fn serve_host(
             "tabs.list" => json!({"tabs":[tab]}),
             "tab.observe" => {
                 json!({"status":"ok","tab":"parent-tab","obs":"parent-observation","url":"https://example.com/","text":"Parent page","image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})
+            }
+            "tab.image_collect" if !answer && frame["args"]["ref"] == "image-ref-8" => {
+                json!({"status":"refused","reason":"blocked_by"})
             }
             "tab.image_collect" => {
                 json!({"status":"ok","source_url":"https://example.com/image.jpg","alt":"Collected raster","nearby_text":"Context","image":{"data":STANDARD.encode(if answer && frame["args"]["ref"] == "image-ref-8" { include_bytes!("browser_outputs/second.jpg").as_slice() } else { include_bytes!("browser_outputs/pixel.jpg").as_slice() })}})

@@ -37,4 +37,24 @@ pub(super) fn model_result(name: &str, result: &mut Value) {
             object.remove(key);
         }
     }
+    if result["status"] != "ok" && result["recovery"].is_null() {
+        result["recovery"] = json!(collect_recovery(result["reason"].as_str().unwrap_or("")));
+    }
+}
+
+/// A refused collection names a different source to try, so the same
+/// refused source is not retried; an image is optional for the answer.
+fn collect_recovery(reason: &str) -> String {
+    let cause = match reason {
+        "stale_ref" | "control_changed" => {
+            return "The page changed; observe again and use the new observation's refs.".into();
+        }
+        "blocked_by" => "Another element covers this image.",
+        "invalid_image" | "image_fetch_failed" => "That source gave no usable image.",
+        "timeout" | "image_timeout" => "Collection timed out.",
+        _ => "This source was not collected.",
+    };
+    format!(
+        "{cause} Do not retry the same source. Try one other source once: the image element's own ref, its image URL from the page, or a region around it. If that also fails, continue without this image."
+    )
 }

@@ -14,6 +14,6 @@ pub(super) fn delivery_assets(db: &Connection, turn: &str) -> Result<String, Sto
     let ids = serde_json::to_string(&ids)
         .map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid, e.to_string()))?;
     Ok(format!(
-        "\nimage_assets: {ids}\nThese image_collect ids are available to your answer_blocks answer."
+        "\nimage_assets: {ids}\nThese image_collect ids show the reported items. Put them on those items' answer_blocks cards in your own reply; that needs no new Work or delegation."
     ))
 }
