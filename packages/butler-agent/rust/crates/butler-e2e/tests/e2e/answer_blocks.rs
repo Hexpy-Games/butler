@@ -29,7 +29,7 @@ async fn invalid_blocks_corrected_and_reopened() -> Result<(), HarnessError> {
     let sets = reply["answer_blocks"].clone();
     assert_eq!(sets.as_array().unwrap().len(), 1);
     let mut expected = corrected();
-    expected["blocks"][0]["media"] = json!("4:5");
+    expected["blocks"][0]["media"] = json!("1:1");
     expected["blocks"][0]["items"][0]["title"] = json!("Method A");
     assert_eq!(sets[0]["spec"], expected);
     assert_eq!(sets[0]["set_ids"], json!(["methods"]));
