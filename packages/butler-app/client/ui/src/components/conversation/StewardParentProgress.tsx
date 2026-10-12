@@ -95,7 +95,6 @@ export function StewardParentProgress({
         </Stack>
         <Typo.Caption data-test-class="steward-progress-status">
           {stewardProgressStatus(child)}
-          {child.active_turn ? ` · ${activityLabel}` : ""}
         </Typo.Caption>
         <Stack align="row" cross="center" gap="sm" justify="between">
           <Typo.Caption
