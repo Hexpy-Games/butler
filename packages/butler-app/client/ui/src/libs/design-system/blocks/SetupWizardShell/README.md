@@ -31,23 +31,28 @@ uses it. `title` still names the region for assistive tech.
   window: `clamp(titlebar + --space-lg, 20% of the window, 240px)` (phone floor
   header + 16px = 72px). An intro card and taller or shorter step cards share
   that edge, and the card's centre sits slightly above the window's centre.
-- `stepKey` replaces the card when the key changes. When the card width
-  changes (`SetupWizardContent` 420px and a 520px `SetupWizardStepCard`), the
-  card **morphs**: one surface with the card paint moves its real edges over
-  `--motion-deliberate` on `--motion-ease-emphasized` with the top edge fixed,
-  and nothing is scaled, so the border, corners and text stay crisp. The old
-  content leaves (`--motion-exit-base` forward, `--motion-exit-fast` back), the
-  larger card's content is clipped to the moving edge, and the new card's rows
-  rise in from `--motion-morph-rows` (150ms) every `--motion-stagger-row`
-  (30ms) over `--motion-base` and `--motion-distance-sm`; forward ends at
-  430ms, back at 370ms. While it runs the cards take no clicks (a second press
-  is ignored); a resize or new copy (language change) jumps to the end; a
-  hidden window pauses it. Focus is the new card's job: the step title going
-  forward, the start action going back. At rest no surface, clip or animation
-  remains. Cards of the same width keep the plain swap (the old copy fades out,
-  the new card rises in). Under reduced motion the card swaps at once. Keep
-  one key for all steps that share a card; the step card's `contentKey` fades
-  its body between steps.
+- `stepKey` replaces the card when the key changes; give every step its own
+  key. When both cards are solid (`SetupWizardContent surface="solid"` or a
+  `SetupWizardStepCard`), every change, forward or back, **morphs** the card:
+  420px and 520px, or two 520px steps of different heights. One surface with
+  the card paint moves its real edges over `--motion-deliberate` on
+  `--motion-ease-emphasized` with the top edge fixed, and nothing is scaled,
+  so the border, corners and text stay crisp. The old content leaves
+  (`--motion-exit-base` when the card grows, `--motion-exit-fast` when it
+  shrinks), the content of the larger card is clipped to the moving edge, and
+  the rows of the new card rise in from `--motion-morph-rows` (150ms) every
+  `--motion-stagger-row` (30ms) over `--motion-base` and
+  `--motion-distance-sm`. While it runs the cards take no clicks (a second
+  press is ignored); a window resize jumps to the end; the new card settling
+  another size (content that loads in, new copy) retargets the moving edge
+  from where it is; a hidden window pauses it. Focus is the new card's job: the
+  step title going forward, the previous control going back. At rest no
+  surface, clip or animation remains. A frame without a solid card keeps the
+  plain swap (the old copy fades out, the new card rises in). Under reduced
+  motion the card swaps at once. Rows enter in order only when they exist
+  from the first render: keep a status that appears later inside one row that
+  is always there, so it never shows before the card. Within one step the
+  step card's `contentKey` fades its body (sub-views of a step).
 - `intro="full"` is the first-install ink intro (intro spec Concept A rev 5),
   drawn on the shell wallpaper itself (one canvas): a purple drop blooms into
   the three riso plates, a pen writes the ring clockwise from 12 o'clock with

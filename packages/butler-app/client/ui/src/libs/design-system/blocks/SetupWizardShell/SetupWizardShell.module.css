@@ -188,6 +188,12 @@
   pointer-events: none;
 }
 
+/* The old card is a static copy: a CSS animation inside it (a step body that
+   entered, a spinner) would start over in the clone. */
+.stage .stageGhosts > * * {
+  animation: none;
+}
+
 .stageFrame {
   display: grid;
   width: 100%;

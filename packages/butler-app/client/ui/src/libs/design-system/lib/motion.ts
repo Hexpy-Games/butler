@@ -75,13 +75,29 @@ const EASING_FALLBACK: Record<MotionEasingName, string> = {
 
 const TRANSFORM_KEYS = new Set(["transform", "translate", "scale", "rotate", "offset", "offsetPath", "offsetDistance"]);
 
-function tokenValue(name: string): string {
+/**
+ * Token reads of the current task. Starting several animations in a row (card rows, a stagger) would otherwise read
+ * the root style after each animate() call, a style recalc per element. Motion tokens only change with the
+ * reduced-motion scope, whose override clears this.
+ */
+const taskTokens = new Map<string, string>();
+
+function readToken(name: string): string {
   if (typeof window === "undefined" || typeof document === "undefined") return "";
   try {
     return window.getComputedStyle((document.getElementById?.("root") ?? document.documentElement)).getPropertyValue(name).trim();
   } catch {
     return "";
   }
+}
+
+function tokenValue(name: string): string {
+  const cached = taskTokens.get(name);
+  if (cached !== undefined) return cached;
+  const value = readToken(name);
+  if (taskTokens.size === 0) queueMicrotask(() => taskTokens.clear());
+  taskTokens.set(name, value);
+  return value;
 }
 
 /**
@@ -93,6 +109,7 @@ export function setReducedMotionOverride(reduced: boolean): void {
   const shell = document.getElementById?.("root") ?? document.documentElement;
   if (reduced) shell.dataset.motion = "reduced";
   else delete shell.dataset.motion;
+  taskTokens.clear();
   publishReducedMotion();
 }
 
