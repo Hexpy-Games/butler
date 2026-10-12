@@ -106,7 +106,8 @@ test("Other holds local models and joins the top tier only when a local server i
   expect(Object.keys(PROVIDER_CARDS)).not.toContain("local");
   expect(MORE_CARD_IDS).toHaveLength(8);
   expect(MORE_CARD_IDS.at(-1)).toBe("other");
-  expect(PROVIDER_CARDS.chatgpt).toMatchObject({ kind: "signin", providerId: "openai", logo: "openai", tag: "noKey" });
+  expect(PROVIDER_CARDS.chatgpt).toMatchObject({ kind: "signin", providerId: "openai", logo: "openai" });
+  expect(PROVIDER_CARDS.chatgpt).not.toHaveProperty("tag");
   expect(PROVIDER_CARDS.kimi).toMatchObject({ kind: "key", providerId: "kimi", logo: "kimi" });
   expect(PROVIDER_CARDS.zaiApi).toMatchObject({ kind: "key", providerId: "zai-api", logo: "zai" });
   expect(PROVIDER_CARDS.other).toMatchObject({ kind: "custom", icon: "server" });

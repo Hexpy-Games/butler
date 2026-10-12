@@ -66,7 +66,6 @@ interface FirstRunCopy {
   prepWaitConnect: string;
   providerNames: Record<FirstRunProviderCardId, string>;
   providerDescriptions: Record<FirstRunProviderCardId, string>;
-  tagNoKey: string;
   /** Tag on the connected AI when setup runs again. */
   tagCurrent: string;
   localModelCount: (count: number) => string;

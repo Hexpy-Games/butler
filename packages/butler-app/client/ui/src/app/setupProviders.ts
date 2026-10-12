@@ -18,11 +18,10 @@ export interface ProviderCardSpec {
   icon?: "server";
   /** The service's own API key page. */
   keyUrl?: string;
-  tag?: "noKey";
 }
 
 export const PROVIDER_CARDS: Record<FirstRunProviderCardId, ProviderCardSpec> = {
-  chatgpt: { id: "chatgpt", kind: "signin", providerId: "openai", logo: "openai", tag: "noKey" },
+  chatgpt: { id: "chatgpt", kind: "signin", providerId: "openai", logo: "openai" },
   claude: { id: "claude", kind: "key", providerId: "anthropic", logo: "claude", keyUrl: "https://console.anthropic.com/settings/keys" },
   gemini: { id: "gemini", kind: "key", providerId: "google", logo: "gemini", keyUrl: "https://aistudio.google.com/apikey" },
   openai: { id: "openai", kind: "key", providerId: "openai", logo: "openai", keyUrl: "https://platform.openai.com/api-keys" },

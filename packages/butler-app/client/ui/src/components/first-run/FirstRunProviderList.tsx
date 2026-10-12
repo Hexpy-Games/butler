@@ -61,8 +61,7 @@ export function FirstRunProviderList({ flow }: { flow: FirstRunFlow }) {
 function TopCard({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: FirstRunFlow }) {
   const view = providerCardView(cardId, flow, "card");
   const current = flow.currentCardId === cardId;
-  const tag = current ? <Tag tone="accent">{flow.copy.tagCurrent}</Tag>
-    : view.tag === "noKey" ? <Tag tone="accent">{flow.copy.tagNoKey}</Tag> : null;
+  const tag = current ? <Tag tone="accent">{flow.copy.tagCurrent}</Tag> : null;
   return (
     <ChoiceCard
       aria-current={current ? true : undefined}

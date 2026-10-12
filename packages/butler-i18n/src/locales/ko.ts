@@ -170,7 +170,6 @@ const firstRun = {
       kimi: "Moonshot API 키", zaiCoding: "코딩 플랜 키", zaiApi: "Z.AI API 키", opencodeGo: "OpenCode Go 키",
       other: "Ollama·LM Studio·직접 서버",
     },
-    tagNoKey: "키 필요 없음",
     tagCurrent: "사용 중",
     localModelCount: (count: number) => `모델 ${count}개`,
     moreProviders: (count: number) => `다른 서비스 ${count}개`,

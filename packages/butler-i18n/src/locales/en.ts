@@ -164,7 +164,6 @@ const firstRun = {
       kimi: "Moonshot API key", zaiCoding: "Coding Plan key", zaiApi: "Z.AI API key", opencodeGo: "OpenCode Go key",
       other: "Ollama, LM Studio or your own server",
     },
-    tagNoKey: "No key needed",
     tagCurrent: "In use",
     localModelCount: (count: number) => (count === 1 ? "1 model" : `${count} models`),
     moreProviders: (count: number) => `${count} more services`,
