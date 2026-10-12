@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { AnswerCardsView, AnswerCardView } from "../../../../shared/answer-blocks-view";
 import { Button, Collapsible, CopyButton, Grid, IconButton, ItemCard, Library, MediaFrame, Stack } from "@/butler-ds";
+import { gatewayImageSource } from "@/app/messageFileUrls";
 import { openLink } from "../browser/browserBridge";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { answerCardCopy, answerSource, runAnswerAction, saveAnswerItem } from "./answerBlockActions";
@@ -10,7 +11,7 @@ function AnswerCard({ item, media }: { item: AnswerCardView; media: AnswerCardsV
   const locale = useAppLocale();
   const copy = appCopy.conversation.answerBlocks;
   return <ItemCard title={item.title} eyebrow={item.label} subtitle={item.sub}
-    media={<MediaFrame aspect={media ?? "4:5"} src={item.image_url} alt={item.title} />}
+    media={<MediaFrame aspect={media ?? "4:5"} src={gatewayImageSource(item.image_url)} alt={item.title} />}
     value={item.value ? { amount: formatAnswerValue(item.value, locale), was: item.value.was === undefined ? undefined : formatAnswerValue(item.value, locale, item.value.was), wasLabel: copy.previousValue, note: item.value.note } : undefined}
     facts={item.facts} text={item.text} showMoreLabel={copy.showMore} showLessLabel={copy.showLess} source={answerSource(item)}
     onOpen={item.source ? () => runAnswerAction(() => openLink(item.source!)) : undefined}
