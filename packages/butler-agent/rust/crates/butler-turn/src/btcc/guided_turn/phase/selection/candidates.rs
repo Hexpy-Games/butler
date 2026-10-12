@@ -93,7 +93,10 @@ pub(super) fn profile_candidates(
     }
     for tool in catalog.tools.iter().filter(|tool| {
         catalog.profile("startup").contains(&tool.name)
-            && matches!(tool.category.as_deref(), Some("memory" | "skill"))
+            && matches!(
+                tool.category.as_deref(),
+                Some("memory" | "skill" | "message")
+            )
             && !tool.tags.iter().any(|tag| tag == "context")
     }) {
         names.insert(tool.name.clone());

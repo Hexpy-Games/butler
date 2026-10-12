@@ -55,7 +55,8 @@ pub(super) fn actions(
     let no_visible = butler_core::public_text::trim_js_whitespace(terminal.text).is_empty()
         && artifacts.is_empty()
         && changed_files.is_empty()
-        && plan.is_none();
+        && plan.is_none()
+        && terminal.answer_blocks.is_empty();
     if no_visible && !has_valid_claim(envelope) {
         return Ok(projected);
     }

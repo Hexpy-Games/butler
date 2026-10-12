@@ -1,3 +1,4 @@
+import type { AnswerBlockSet } from "../../../shared/app-contracts.ts";
 import type { ReactElement, ReactNode } from "react";
 // Relative (not `@/butler-ds`): the root typecheck reaches this file without the UI path aliases.
 import type { WallpaperSetting, WallpaperSource } from "../libs/design-system/blocks/Wallpaper/types.ts";
@@ -920,6 +921,7 @@ export interface MessageRecord {
     | "automation";
   text: string;
   plan_document?: PlanDocumentRecord;
+  answer_blocks?: Array<AnswerBlockSet>;
   attachments?: MessageFileRef[];
   artifacts?: SessionArtifactSummary[];
   changed_files?: ChangedFileDetail[];

@@ -387,3 +387,7 @@ fn allowed_result_url(value: &Value, args: &Value) -> bool {
             reported.origin() == expected.origin() && reported.path().starts_with("/__o/")
         })
 }
+
+mod assets;
+
+mod calls_validation;

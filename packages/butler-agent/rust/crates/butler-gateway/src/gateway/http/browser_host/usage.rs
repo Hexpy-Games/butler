@@ -18,6 +18,7 @@ pub(super) fn executes(op: &str) -> bool {
             | "tab.read"
             | "tab.zoom"
             | "tab.screenshot"
+            | "tab.image_collect"
             | "tab.prepare"
             | "tab.act"
             | "tab.dialog"

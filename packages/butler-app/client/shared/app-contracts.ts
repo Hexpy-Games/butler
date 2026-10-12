@@ -184,3 +184,9 @@ export type AnswerBlocks = {
   v: 1;
   blocks: Array<AnswerBlock>;
 };
+
+export type AnswerBlockSet = {
+  call_id: string;
+  set_ids: Array<string>;
+  spec: AnswerBlocks;
+};

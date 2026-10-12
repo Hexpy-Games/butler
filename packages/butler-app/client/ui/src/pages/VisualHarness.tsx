@@ -63,6 +63,7 @@ function harnessModelCatalog(auth: string | null): ModelCatalogView {
 }
 
 export function VisualHarness() {
+  const fixture = (window as Window & { butlerConversationFixture?: { messages: import("@/app/types").MessageRecord[]; background?: string } }).butlerConversationFixture;
   const leftOpen = useButlerStore((state) => state.leftOpen);
   const setLeftOpen = useButlerStore((state) => state.setLeftOpen);
   const rightOpen = useButlerStore((state) => state.rightOpen);
@@ -135,10 +136,12 @@ export function VisualHarness() {
     ];
     // `?locale=ko` renders the harness in Korean.
     const language = new URLSearchParams(window.location.search).get("locale") === "ko" ? "ko" : EMPTY_SETTINGS.language;
+    const background = fixture?.background === "plain" ? { conversation_background: { source: { kind: "none" as const }, overlay: 0 } } : {};
     return visualTheme === EMPTY_SETTINGS.appearance_theme
-      ? { ...EMPTY_SETTINGS, language, diagnostics_enabled: developerMode, worker_profiles: workerProfiles }
+      ? { ...EMPTY_SETTINGS, ...background, language, diagnostics_enabled: developerMode, worker_profiles: workerProfiles }
       : {
           ...EMPTY_SETTINGS,
+          ...background,
           appearance_theme: visualTheme,
           language,
           diagnostics_enabled: developerMode,
@@ -180,12 +183,12 @@ export function VisualHarness() {
     } else {
       setLeftOpen(false);
     }
-    setRightOpen(true);
+    setRightOpen(!fixture);
     setRightTab("summary");
     setView({ kind: "session" });
     setActiveChatId("butler-client");
     setNavigation(harnessNavigation);
-    setMessages(HARNESS_MESSAGES);
+    setMessages(fixture?.messages ?? HARNESS_MESSAGES);
     setSettings(harnessSettings);
     setModelCatalog(harnessCatalog);
     setSummary(harnessSummary);
@@ -342,7 +345,7 @@ export function VisualHarness() {
           }
         />
       )}
-      {isSettingsView && <AppToaster />}
+      {(isSettingsView || fixture) && <AppToaster />}
       {ss03Surface && <SessionObserverDialog />}
     </AdaptiveShell>
   );

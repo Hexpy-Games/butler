@@ -36,6 +36,7 @@ pub(super) fn message_result() -> MessageSendResult {
             artifacts: None,
             changed_files: None,
             plan_document: None,
+            answer_blocks: None,
             work_blocks: None,
             turn_activity_rows: None,
         }),
