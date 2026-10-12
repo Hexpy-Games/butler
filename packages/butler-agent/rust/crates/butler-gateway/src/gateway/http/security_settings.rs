@@ -13,6 +13,7 @@
 //!   signed URLs, browser sessions and live streams stop working at once.
 //! - the `security` object of `GET`/`PATCH /settings`.
 
+mod links;
 pub(super) mod vault;
 
 use std::sync::Arc;
@@ -38,8 +39,7 @@ struct SecurityView {
     bind_addresses: Vec<String>,
     /// Failed LAN binds, one entry per address; empty while access is off.
     bind_errors: Vec<super::listeners::BindError>,
-    /// URLs other computers on the LAN can open; empty while remote access
-    /// is off.
+    /// LAN and registered host URLs. Tunnel hosts work without LAN listeners.
     lan_urls: Vec<String>,
     /// Extra host names the gateway answers (tunnels, reverse proxies).
     allowed_hosts: Vec<String>,
@@ -182,15 +182,12 @@ fn view(state: &HttpState) -> Result<SecurityView, HttpError> {
     let mut bind_addresses = vec![state.remote.primary().to_string()];
     bind_addresses.extend(remote.lan_listeners.iter().map(ToString::to_string));
     let connection_code = None;
+    let lan_urls = links::connection_urls(&remote, state.security.port());
     Ok(SecurityView {
         remote_access_enabled: remote.exposure.remote_access_enabled,
         bind_addresses,
         bind_errors: remote.bind_errors,
-        lan_urls: remote
-            .lan_authorities
-            .iter()
-            .map(|authority| format!("http://{authority}"))
-            .collect(),
+        lan_urls,
         allowed_hosts: remote.exposure.allowed_hosts,
         content_hosts: remote.exposure.content_hosts,
         connection_code,

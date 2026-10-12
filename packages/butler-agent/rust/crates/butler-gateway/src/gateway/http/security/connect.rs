@@ -16,13 +16,15 @@ pub(in crate::gateway::http) const MAX_FORM_BYTES: usize = 4096;
 pub(in crate::gateway::http) async fn connect_request(
     state: &Arc<HttpState>,
     request: Request<Body>,
+    origin: &super::RequestOrigin,
 ) -> Result<Response, HttpError> {
     let form = *request.method() == Method::POST;
-    let ip = request
+    let peer = request
         .extensions()
         .get::<ConnectInfo<std::net::SocketAddr>>()
-        .map(|info| info.0.ip().to_string())
-        .unwrap_or_default();
+        .map(|info| info.0);
+    let secure = super::client_place::is_proxied_https(peer, request.headers(), origin);
+    let ip = peer.map(|peer| peer.ip().to_string()).unwrap_or_default();
     let encoded = if form {
         read_body_with_limit(request.into_body(), MAX_FORM_BYTES)
             .await?
@@ -52,7 +54,7 @@ pub(in crate::gateway::http) async fn connect_request(
     } else {
         "This computer · browser"
     };
-    let (cookie, id) = state.devices.pair(name, &ip).await?;
+    let (cookie, id) = state.devices.pair(name, &ip, secure).await?;
     let mut payload = Map::new();
     payload.insert("device_id".into(), Value::String(id.clone()));
     payload.insert("name".into(), Value::String(name.into()));

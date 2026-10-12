@@ -25,6 +25,14 @@ async fn sec_15_headless_cli_refreshes_and_exits_on_pair() -> Result<(), Harness
     let s = Setup::new("SEC-15")?.data_folder_token().start().await?;
     let app = admin(&s);
     let browser = browser();
+    app.set_remote(true).await?;
+    assert_eq!(
+        s.agent
+            .cli(&["remote", "hosts", "add", "butler.example.com"])?
+            .code,
+        Some(0)
+    );
+    let view = app.view().await?;
     let mut command = tokio::process::Command::from(s.agent.launch.command());
     let mut child = command
         .args(["remote", "pair"])
@@ -34,6 +42,19 @@ async fn sec_15_headless_cli_refreshes_and_exits_on_pair() -> Result<(), Harness
         .kill_on_drop(true)
         .spawn()?;
     let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    for url in view["lan_urls"].as_array().unwrap() {
+        let line = tokio::time::timeout(Duration::from_secs(10), lines.next_line())
+            .await
+            .expect("CLI address timeout")?
+            .expect("CLI stopped before address");
+        assert_eq!(line, format!("Address: {}", url.as_str().unwrap()));
+    }
+    assert!(
+        view["lan_urls"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("https://butler.example.com"))
+    );
     let first = next_code(&mut lines).await?;
     assert_eq!(first.len(), 8);
     advance(&app, 60).await?;
