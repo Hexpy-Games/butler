@@ -30,6 +30,9 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 - Check at iPhone-width mobile, tablet-ish, and desktop viewports.
 - Keep domain data, app state, and business decisions outside this component.
 
+## Horizontal fields
+With `orientation="horizontal"`, put the control first, then `FieldContent` (label, optional description). The control centers on the label's line; the description runs below the label, never beside the control.
+
 ## Wrong use cases
 - Do not use Field as a domain-specific component with embedded feature logic; create a domain component under `src/components` and compose this component instead.
 - Do not import from `@/butler-ds/shadcn/ui` in app code; import from `@/butler-ds` so the public API remains stable.

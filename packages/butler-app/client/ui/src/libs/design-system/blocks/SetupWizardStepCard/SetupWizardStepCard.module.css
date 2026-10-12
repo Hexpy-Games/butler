@@ -1,3 +1,14 @@
+/* One step-strip line tall (the strip is Caption text): Back centers on the
+   strip's first line, also when a narrow card wraps the strip. */
+.back {
+  display: inline-flex;
+  flex: none;
+  min-height: 1lh;
+  align-items: center;
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
+}
+
 /* contentKey: the next step's content fades in; the frame and header stay. */
 .bodyEnter {
   animation: setup-step-enter var(--motion-base) var(--motion-ease-decelerate)

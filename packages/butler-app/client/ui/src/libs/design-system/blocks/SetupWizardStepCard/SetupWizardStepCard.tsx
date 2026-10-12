@@ -46,11 +46,16 @@ export function SetupWizardStepCard({
   const fade = useRef(false);
   if (contentKey !== firstKey.current && !fade.current) fade.current = !prefersReducedMotion();
   const header = onBack || steps;
+  // The header row aligns to its top: Back sits on the step strip's first line, also when a narrow card wraps the strip.
   return (
     <SetupWizardContent width="wide" surface="solid">
       {header ? (
-        <Stack align="row" justify={onBack ? "between" : "end"} cross="center" gap="md" data-slot="setup-step-header">
-          {onBack ? <Button iconStart={<ArrowLeft size="md" />} size="sm" text={backLabel} type="button" variant="inline" onClick={onBack} /> : null}
+        <Stack align="row" justify={onBack ? "between" : "end"} cross="start" gap="md" data-slot="setup-step-header">
+          {onBack ? (
+            <span className={styles.back}>
+              <Button iconStart={<ArrowLeft size="md" />} size="sm" text={backLabel} type="button" variant="inline" onClick={onBack} />
+            </span>
+          ) : null}
           {steps ? <SetupWizardProgress activeIndex={activeIndex} ariaLabel={progressLabel} steps={steps} /> : null}
         </Stack>
       ) : null}

@@ -51,7 +51,19 @@
   font-size: var(--font-size-2);
 }
 
+/* The action centers on the first line, like the icon: a one-line notice
+   looks centered, a wrapped one keeps its action beside the first line. The
+   extra block padding holds a small control that is taller than the line. */
+.notice:has(> .action) {
+  padding-block: calc(
+    var(--space-sm) + max(0px, (var(--control-height-sm) - 1lh) / 2)
+  );
+}
+
 .action {
+  display: flex;
+  height: 1lh;
   flex-shrink: 0;
-  align-self: center;
+  align-self: flex-start;
+  align-items: center;
 }
