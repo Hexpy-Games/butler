@@ -39,10 +39,11 @@ const EXIT_FALLBACK_MS = 400;
 /**
  * Replaces the focus column when `stepKey` changes. A static, inert copy of
  * the old card stays in place while the new card arrives on the same top
- * edge. When the card width changes (the 420px intro and a 520px step) the
- * card morphs: one surface moves its real edges, never scaled. Otherwise the
- * copy fades out and the new card rises in. Under reduced motion the card
- * swaps at once. The copy is plain DOM: the old step's React tree is not
+ * edge. When both frames hold a solid card (any step change, forward or
+ * back: the 420px intro and a 520px step, or two steps of different heights)
+ * the card morphs: one surface moves its real edges, never scaled. Otherwise
+ * the copy fades out and the new card rises in. Under reduced motion the card
+ * swaps at once. The copy is plain DOM: the React tree of the old step is not
  * rendered again.
  */
 export class SetupWizardStage extends Component<SetupWizardStageProps, SetupWizardStageState> {
@@ -98,7 +99,7 @@ export class SetupWizardStage extends Component<SetupWizardStageProps, SetupWiza
     this.intro?.dispose();
   }
 
-  /** The intro ↔ step card morph; false when the cards share a width (plain swap). */
+  /** The card morph of any step change; false when a frame holds no solid card (plain swap). */
   private startMorph(ghosts: HTMLDivElement, snapshot: HTMLElement): boolean {
     const root = this.root.current, frame = this.frame.current, surface = this.surface.current;
     if (!root || !frame || !surface || !canMorph(snapshot, frame)) return false;

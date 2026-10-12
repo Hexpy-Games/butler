@@ -27,7 +27,7 @@ function insetOf(big: SetupMorphBox, small: SetupMorphBox, radius: string): stri
  * rect, commits that, then switches both to their end state so the
  * transitions run (top edge fixed at the new card's top).
  */
-export function startLayers(surface: HTMLElement, big: HTMLElement, from: SetupMorphBox, to: SetupMorphBox, grow: boolean) {
+export function startLayers(surface: HTMLElement, big: HTMLElement, from: SetupMorphBox, to: SetupMorphBox, grow: boolean): string {
   const radius = getComputedStyle(big).borderTopLeftRadius;
   const closed = insetOf(grow ? to : from, grow ? from : to, radius);
   const open = `inset(0px round ${radius})`;
@@ -40,6 +40,19 @@ export function startLayers(surface: HTMLElement, big: HTMLElement, from: SetupM
   void surface.offsetWidth;
   surface.dataset.phase = "to";
   big.dataset.phase = "to";
+  return radius;
+}
+
+/**
+ * The new card settled another size mid-morph (content that loads in): the
+ * surface, and the clip of a shrinking card, head for the new rect from where
+ * they are (the transitions retarget). A growing card is clipped open anyway.
+ */
+export function retargetLayers(surface: HTMLElement, big: HTMLElement, from: SetupMorphBox, to: SetupMorphBox, grow: boolean, radius: string) {
+  surface.style.setProperty(SURFACE_VARS[4], px(to.left));
+  surface.style.setProperty(SURFACE_VARS[5], px(to.width));
+  surface.style.setProperty(SURFACE_VARS[6], px(to.height));
+  if (!grow) big.style.setProperty(CLIP_VARS[1], insetOf(from, to, radius));
 }
 
 /**
