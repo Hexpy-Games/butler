@@ -7,9 +7,11 @@ import {
   FieldLabel,
   Inline,
   Input,
+  SetupWizardStepAction,
   Spinner,
   Stack,
   InlineReference,
+  Tooltip,
   Typo,
 } from "@/butler-ds";
 import { PROVIDER_CARDS, type FirstRunProviderCardId } from "@/app/setupProviders.ts";
@@ -29,13 +31,14 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
     onVerified: (credentialId) => flow.connectKey(cardId, credentialId),
   });
   const bad = isKeyFailure(key.status);
+  const connected = Boolean(flow.commit.connected);
+  const connecting = Boolean(flow.commit.pending) && !connected;
   return (
     <FirstRunStepCard flow={flow} contentKey={`key:${cardId}`} icon={<CardGlyph cardId={cardId} />} title={copy.keyTitle(name)}
       description={copy.keyHint} onBack={flow.backToList}
-      footerStart={<Inline gap="md">
-        {spec.keyUrl ? <Typo.Body as="span"><InlineReference kind="external" href={spec.keyUrl} iconSrc={faviconSrc(spec.keyUrl)}>{copy.getKey}</InlineReference></Typo.Body> : null}
-        <Typo.Caption tone="tertiary">{copy.keyStored}</Typo.Caption>
-      </Inline>}
+      actions={<Tooltip label={connected ? undefined : copy.connectFirst}>
+        <SetupWizardStepAction forward disabled={!connected} onClick={flow.toReply}>{connecting ? copy.connecting : copy.next}</SetupWizardStepAction>
+      </Tooltip>}
     >
       <Field data-test-class="first-run-key-field">
         <FieldLabel htmlFor="first-run-api-key">{copy.keyLabel}</FieldLabel>
@@ -51,8 +54,12 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
           value={key.value}
           onChange={(event) => key.change(event.target.value)}
         />
-        <KeyStatusLine copy={copy} status={key.status} onRetry={key.retry} />
+        <KeyStatusLine copy={copy} status={connected ? "valid" : connecting ? "checking" : key.status} onRetry={key.retry} />
       </Field>
+      <Inline gap="md">
+        {spec.keyUrl ? <Typo.Body as="span"><InlineReference kind="external" href={spec.keyUrl} iconSrc={faviconSrc(spec.keyUrl)}>{copy.getKey}</InlineReference></Typo.Body> : null}
+        <Typo.Caption tone="tertiary">{copy.keyStored}</Typo.Caption>
+      </Inline>
     </FirstRunStepCard>
   );
 }
