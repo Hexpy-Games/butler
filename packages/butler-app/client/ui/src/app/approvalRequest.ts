@@ -190,8 +190,9 @@ function details(
     approval.examplesTruncated?.[index] ? `${example}…` : example);
   const outside = approval.targets.filter(target => target.kind === "outside").map(target => target.path);
   if (shown.length) {
-    const rest = approval.count - shown.length;
-    return [...notice, ...outside.filter(path => !shown.includes(path)), ...shown, ...(rest > 0 ? [copy.more(rest)] : [])];
+    const additionalOutside = outside.filter(path => !shown.includes(path));
+    const rest = approval.count - shown.length - (kind === "edit_files" ? additionalOutside.length : 0);
+    return [...notice, ...additionalOutside, ...shown, ...(rest > 0 ? [copy.more(rest)] : [])];
   }
   // Without examples, say what the request acts on: its targets, else the reason.
   const targets = kind === "manage_schedule"

@@ -95,6 +95,9 @@ test("up to three examples show, then a +N more line for the rest", () => {
     examples: ["a.png", "b.png", "c.png", "d.png"] });
   expect(approvalRequestView(card(edits), en).details).toEqual(["a.png", "b.png", "c.png", "+21 more"]);
   expect(approvalRequestView(card(edits), ko).details).toEqual(["a.png", "b.png", "c.png", "외 21개"]);
+  const outside = summary("edit_files", { count: 5, examples: ["a.txt", "b.txt", "c.txt"],
+    targets: [folder("garden"), { kind: "outside", path: "/tmp/d.txt" }] });
+  expect(approvalRequestView(card(outside), en).details).toEqual(["/tmp/d.txt", "a.txt", "b.txt", "c.txt", "+1 more"]);
   const command = summary("run_command", { examples: ["npm test"] });
   expect(approvalRequestView(card(command), en).details).toEqual(["npm test"]);
   // Nothing to count without examples: a connector call is not "+1 more".
