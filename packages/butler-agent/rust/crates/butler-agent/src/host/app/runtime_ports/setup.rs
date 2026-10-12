@@ -116,6 +116,21 @@ impl AppSetupPort for AppSetup {
         self.0.preparation.retry_memory_model()
     }
 
+    fn choose_memory_model(&self, enabled: bool) -> ApplicationFuture<SetupReadinessView> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            this.preparation
+                .choose_memory_model(enabled)
+                .await
+                .map_err(|code| GatewayApplicationError::Public {
+                    status: 409,
+                    code: code.into(),
+                    message: "The memory model choice could not be saved.".into(),
+                    source: None,
+                })
+        })
+    }
+
     fn local_model_servers(&self) -> ApplicationFuture<LocalModelServersView> {
         let this = self.0.clone();
         Box::pin(async move {

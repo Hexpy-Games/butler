@@ -11,7 +11,7 @@ interface FirstRunCopy {
   welcomeTitle: string;
   welcomeLede: string;
   start: string;
-  steps: { welcome: string; consent: string; connect: string; ready: string };
+  steps: { welcome: string; consent: string; memory: string; connect: string; ready: string };
   consentTitle: string;
   consentItems: Array<{ body: string; caption?: string }>;
   consentProviderLink: string;
@@ -34,8 +34,22 @@ interface FirstRunCopy {
   reportUnavailable: string;
   quit: string;
   interfaceLanguage: string;
+  /** First-run step that decides whether the memory model is downloaded. */
+  memoryChoice: {
+    title: string;
+    lede: string;
+    on: string;
+    off: string;
+    offDescription: string;
+    /** Download size beside the memory-model choice. */
+    size: (sizeMB: number) => string;
+    continue: string;
+    saveFailed: string;
+  };
   memoryModel: {
     label: string;
+    /** The model's trade-off; `sizeMB` is omitted while the size is unknown. */
+    description: (sizeMB?: number) => string;
     downloading: string;
     verifying: string;
     failed: string;
@@ -1075,6 +1089,7 @@ export interface AppCopy {
     mcpDisabled: string;
     /** An imported server still waiting for a key in its settings. */
     mcpNeedsSecret: string;
+    mcpToolFilterReview: string;
     mcpIdRequired: string;
     mcpIdInvalid: string;
     mcpIdPreview: (id: string) => string;

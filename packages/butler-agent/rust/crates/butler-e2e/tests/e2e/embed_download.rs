@@ -11,7 +11,7 @@ use butler_e2e::e2e::{
     HarnessError,
     scenario::{Fixture, Setup},
 };
-use embed_download_support::{Server, model_until, snapshot};
+use embed_download_support::{Server, choose, model_until, snapshot};
 use std::{sync::atomic::Ordering, time::Duration};
 
 #[tokio::test]
@@ -27,6 +27,7 @@ async fn stub_rejects_real_model_sources_before_network_or_retry() -> Result<(),
             .env("BUTLER_E2E_EMBED_SOURCES", source)
             .start()
             .await?;
+        choose(&s.gw, true).await?;
         let started = std::time::Instant::now();
         let failed = model_until(&s.gw, "failed").await?;
         assert_eq!(
@@ -81,6 +82,7 @@ async fn background_progress_resume_mirror_and_idle() -> Result<(), HarnessError
         .env("BUTLER_E2E_EMBED_MANIFEST", server.manifest())
         .start()
         .await?;
+    choose(&s.gw, true).await?;
     let downloading = model_until(&s.gw, "downloading").await?;
     assert!(downloading["bytes_done"].as_u64().unwrap() > 0);
     assert_eq!(downloading["bytes_total"], server.total());
@@ -146,6 +148,7 @@ async fn corrupt_assets_fail_verification_without_publication() -> Result<(), Ha
         .env("BUTLER_E2E_EMBED_MANIFEST", server.manifest())
         .start()
         .await?;
+    choose(&s.gw, true).await?;
     let failed = model_until(&s.gw, "failed").await?;
     assert_eq!(failed["reason"], "embed_asset_hash_mismatch");
     assert_eq!(server.requests(), 6);
@@ -169,6 +172,7 @@ async fn failure_is_bounded_and_retry_preserves_chat_readiness() -> Result<(), H
         .env("BUTLER_E2E_EMBED_MANIFEST", server.manifest())
         .start()
         .await?;
+    choose(&s.gw, true).await?;
     let failed = model_until(&s.gw, "failed").await?;
     assert_eq!(failed["reason"], "embed_asset_download_failed");
     assert_eq!(server.requests(), 6, "three attempts per source, then stop");
@@ -212,6 +216,7 @@ async fn chat_works_while_memory_model_downloads() -> Result<(), HarnessError> {
         .env("BUTLER_E2E_EMBED_MANIFEST", server.manifest())
         .start()
         .await?;
+    choose(&s.gw, true).await?;
     model_until(&s.gw, "downloading").await?;
     let (_, turn) = s.turn("general", &prompt).await?;
     assert_eq!(butler_e2e::e2e::gateway::turn_state(&turn), "delivered");
@@ -224,6 +229,57 @@ async fn chat_works_while_memory_model_downloads() -> Result<(), HarnessError> {
     assert_ne!(
         s.gw.get("/setup/readiness").await?.data()["memory_model"]["state"],
         "ready"
+    );
+    s.finish().await
+}
+
+fn stored_choice(data: &std::path::Path) -> Option<String> {
+    let config: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(data.join("butler.config.json")).ok()?).ok()?;
+    config["memory"]["embeddings"].as_str().map(str::to_owned)
+}
+
+#[tokio::test]
+async fn fresh_profile_downloads_only_after_the_choice() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let server = Server::start().await;
+    server.primary_ok.store(true, Ordering::SeqCst);
+    let mut s = Setup::new("EMBED-CHOICE")?
+        .fixture(Fixture::Empty)
+        .env("BUTLER_E2E_EMBED_MANIFEST", server.manifest())
+        .start()
+        .await?;
+    let unset = s.gw.get("/setup/readiness").await?.data()["memory_model"].clone();
+    assert_eq!(unset["state"], "unset");
+    assert_eq!(
+        unset["bytes_total"], 586_779_294_u64,
+        "the choice can show the size"
+    );
+    let status = s.agent.cli_async(&["status", "--json"]).await?;
+    assert_eq!(status.json()?["data"]["memoryModel"]["state"], "unset");
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let root = s.sandbox.data.join("cache/models/Xenova/bge-m3");
+    assert_eq!(server.requests(), 0, "unset never downloads");
+    assert!(!root.exists());
+    assert_eq!(choose(&s.gw, false).await?["state"], "off");
+    assert_eq!(stored_choice(&s.sandbox.data).as_deref(), Some("off"));
+    s.restart().await?;
+    let off = s.gw.get("/setup/readiness").await?.data()["memory_model"].clone();
+    assert_eq!(off["state"], "off", "the choice survives restart");
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert_eq!(server.requests(), 0, "off never downloads");
+    assert!(!root.exists());
+    choose(&s.gw, true).await?;
+    model_until(&s.gw, "ready").await?;
+    assert_eq!(
+        server.requests(),
+        4,
+        "one request per file after the choice"
+    );
+    assert_eq!(stored_choice(&s.sandbox.data).as_deref(), Some("on"));
+    eprintln!(
+        "EMBED-CHOICE unset=0 off=0 on={} requests",
+        server.requests()
     );
     s.finish().await
 }

@@ -132,6 +132,17 @@ impl Preparation {
         self.state.borrow().clone()
     }
 
+    /// The persisted memory-model choice; like retry, it never resets setup steps.
+    pub(super) async fn choose_memory_model(
+        &self,
+        enabled: bool,
+    ) -> Result<SetupReadinessView, &'static str> {
+        let model = self.acquisition.choose(enabled).await?;
+        self.state
+            .send_modify(|view| view.memory_model = Some(model));
+        Ok(self.state.borrow().clone())
+    }
+
     pub(super) async fn close(&self) {
         self.memory_relay.abort();
         let run = self.run.lock().take();
