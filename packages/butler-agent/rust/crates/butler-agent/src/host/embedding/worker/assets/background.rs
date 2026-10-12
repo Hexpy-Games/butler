@@ -1,84 +1,13 @@
-//! Service-owned acquisition. Blocking file work runs off Tokio's workers.
+//! Download of the pinned model files. Blocking file work runs off Tokio's workers.
 use super::{
     Asset, MODEL_ROOT, REVISION, acquire, cleanup_complete_staging, complete, pinned_assets,
 };
 use butler_gateway::gateway::MemoryModelProgress;
-use parking_lot::Mutex;
 use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
-use tokio::{sync::watch, task::JoinHandle};
-use tokio_util::sync::CancellationToken;
-
-pub(crate) struct Acquisition {
-    root: PathBuf,
-    state: watch::Sender<MemoryModelProgress>,
-    task: Mutex<Option<(CancellationToken, JoinHandle<()>)>>,
-}
-impl Acquisition {
-    pub(crate) fn start(root: PathBuf) -> Self {
-        let state = watch::channel(MemoryModelProgress {
-            state: "queued".into(),
-            bytes_done: 0,
-            bytes_total: 0,
-            reason: None,
-        })
-        .0;
-        let this = Self {
-            root,
-            state,
-            task: Mutex::new(None),
-        };
-        this.retry();
-        this
-    }
-    pub(crate) fn subscribe(&self) -> watch::Receiver<MemoryModelProgress> {
-        self.state.subscribe()
-    }
-
-    pub(crate) fn retry(&self) {
-        let mut slot = self.task.lock();
-        if self.state.borrow().state == "ready" {
-            return;
-        }
-        if slot.as_ref().is_some_and(|(_, task)| !task.is_finished()) {
-            return;
-        }
-        self.state.send_modify(|view| {
-            view.state = "queued".into();
-            view.reason = None;
-        });
-        let root = self.root.clone();
-        let state = self.state.clone();
-        let stop = CancellationToken::new();
-        let cancelled = stop.clone();
-        let runtime = tokio::runtime::Handle::current();
-        let task = tokio::task::spawn_blocking(move || {
-            runtime.block_on(async {
-                tokio::select! {
-                    () = cancelled.cancelled() => {},
-                    () = run(root, state) => {},
-                }
-            });
-        });
-        *slot = Some((stop, task));
-    }
-    pub(crate) async fn close(&self) {
-        let task = self.task.lock().take();
-        if let Some((stop, task)) = task {
-            stop.cancel();
-            let _ = task.await;
-        }
-    }
-}
-impl Drop for Acquisition {
-    fn drop(&mut self) {
-        if let Some((stop, _)) = self.task.get_mut().take() {
-            stop.cancel();
-        }
-    }
-}
+use tokio::sync::watch;
 
 #[derive(serde::Deserialize)]
 struct Manifest {
@@ -123,7 +52,7 @@ fn manifest() -> Manifest {
         ],
     }
 }
-async fn run(root: PathBuf, state: watch::Sender<MemoryModelProgress>) {
+pub(super) async fn run(root: PathBuf, state: watch::Sender<MemoryModelProgress>) {
     let manifest = manifest();
     let total = manifest.assets.iter().map(|a| a.bytes).sum();
     let mut last = Instant::now();

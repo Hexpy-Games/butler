@@ -10,8 +10,10 @@ use std::{
 use reqwest::Client;
 
 mod background;
+mod choice;
 mod download;
-pub(crate) use background::Acquisition;
+mod lifecycle;
+pub(crate) use lifecycle::{Acquisition, ModelOwners};
 use sha2::{Digest, Sha256};
 
 use butler_memory::cognition::ensure_data_authority;
@@ -77,8 +79,11 @@ fn complete(root: &Path, assets: &[Asset]) -> bool {
 pub(crate) fn cached_status(data_root: &Path) -> serde_json::Value {
     let assets = pinned_assets();
     let root = data_root.join(MODEL_ROOT);
-    let ready = complete(&root, &assets);
     let total: u64 = assets.iter().map(|asset| asset.bytes).sum();
+    let (choice, ready) = choice::read(data_root);
+    if choice != choice::Choice::On {
+        return serde_json::json!({"state": choice.idle_state(), "bytes_done": 0, "bytes_total": total});
+    }
     let done: u64 = assets
         .iter()
         .map(|asset| {

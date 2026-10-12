@@ -7,6 +7,7 @@ export async function firstRunStub(gateway: NativeAppServerHandle) {
   const state = {
     oauthStatus: "pending", label: "yeonwoo@example.com", started: 0, cancelled: 0,
     holdCommit: false, failCommit: false, readiness: "ready", local: false, localCalls: 0,
+    memoryModel: "unset" as "unset" | "off" | "ready",
   };
   const catalog = await gateway.api<ModelCatalogView>("/model-catalog");
   const localModel = catalog.registered_models!.find(model => model.model_ref === "local/stub")!;
@@ -28,10 +29,13 @@ export async function firstRunStub(gateway: NativeAppServerHandle) {
       if (path.endsWith("/cancel")) { state.cancelled++; return json(response, { status: "cancelled" }); }
       return json(response, { status: state.oauthStatus, label: state.label });
     }
-    if (path === "/setup/readiness" || path === "/setup/readiness/retry") return json(response, {
+    if (path === "/setup/memory-model") state.memoryModel = (await requestBody(request)).enabled ? "ready" : "off";
+    if (path === "/setup/readiness" || path === "/setup/readiness/retry" || path === "/setup/memory-model") return json(response, {
       status: state.readiness, steps: ["data_folder", "model_config", "agent_runtime"].map((id, index) => ({
         id, status: state.readiness === "ready" || index === 0 ? "done" : state.readiness === "failed" ? "failed" : "running",
       })),
+      // The memory model is a separate, user-chosen download; no network here.
+      memory_model: { state: state.memoryModel, bytes_done: 0, bytes_total: state.memoryModel === "ready" ? 0 : 586_779_294 },
     });
     if (path === "/setup/local-model-servers") {
       state.localCalls++;

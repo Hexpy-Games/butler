@@ -20,6 +20,7 @@ pub(super) async fn open(
         Arc<EmbeddingOwner>,
         Arc<GenerationVectorAdapter>,
         Option<FreshMemoryGeneration>,
+        Arc<butler_memory::management::MemoryManagement>,
     ),
     BtccError,
 > {
@@ -53,7 +54,12 @@ pub(super) async fn open(
         cognition_paths.clone(),
         embedding.clone(),
     ));
-    Ok((coordinator, embedding, vectors, fresh))
+    let management = Arc::new(butler_memory::management::MemoryManagement::new(
+        paths.data_root.clone(),
+        cognition_paths.clone(),
+        coordinator.clone(),
+    ));
+    Ok((coordinator, embedding, vectors, fresh, management))
 }
 
 /// Compose the rule owner and request targeted recovery without delaying admission.
@@ -71,4 +77,18 @@ pub(super) fn rule_owner(
     );
     services.recover_at_startup(stop.clone());
     services
+}
+
+/// The memory-model lifecycle; it follows the user's persisted choice.
+pub(super) async fn acquisition(
+    data_root: &std::path::Path,
+    embedding: &Arc<EmbeddingOwner>,
+    memory_sync: &crate::host::memory_jobs::sync::MemorySync,
+) -> Arc<crate::host::embedding::worker::assets::Acquisition> {
+    use crate::host::embedding::worker::assets::{Acquisition, ModelOwners};
+    let owners = ModelOwners {
+        owner: embedding.clone(),
+        consumer: memory_sync.consumer(),
+    };
+    Arc::new(Acquisition::open(data_root.to_path_buf(), owners).await)
 }

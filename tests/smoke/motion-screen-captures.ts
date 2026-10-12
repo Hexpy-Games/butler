@@ -23,7 +23,6 @@ try {
           await server.signIn(context);
           await page.goto(server.url);
           await page.locator(completed ? '[data-test-class~="composer-card"]' : '[data-test-class~="first-run-setup"]').waitFor();
-          if (!completed) await page.locator('[data-test-class="memory-model-status"]').getByRole("button").waitFor();
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(750);
           const prefix = `${completed ? "completed" : "pending"}-${width}-${theme}-${wallpaper}`;

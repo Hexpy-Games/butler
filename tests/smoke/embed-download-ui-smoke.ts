@@ -40,45 +40,56 @@ async function runCase(language: "ko" | "en", theme: "light" | "dark", width: nu
   const context = await browser.newContext({ locale: language, colorScheme: theme, viewport: { width, height: 900 } });
   await server.signIn(context);
   const page = await context.newPage();
-  let state = "downloading";
+  let state = "unset";
   let retried = false;
-  const model = () => ({ state, bytes_done: state === "failed" ? 0 : 312_000_000, bytes_total: 570_000_000,
+  let chosen: boolean | null = null;
+  const model = () => ({ state, bytes_done: ["failed", "unset"].includes(state) ? 0 : 312_000_000, bytes_total: 570_000_000,
     reason: state === "failed" ? "embed_asset_download_failed" : undefined });
-  await page.route("**/setup/readiness", (route) => route.fulfill({ json: { data: { status: "ready", steps: [], memory_model: model() } } }));
+  const view = () => ({ json: { data: { status: "ready", steps: [], memory_model: model() } } });
+  await page.route("**/setup/readiness", (route) => route.fulfill(view()));
+  await page.route("**/setup/memory-model", (route) => {
+    chosen = route.request().postDataJSON().enabled === true;
+    state = chosen ? "downloading" : "off";
+    return route.fulfill(view());
+  });
   await page.route("**/setup/readiness/retry", (route) => {
     assert(route.request().postDataJSON().memory_model_only === true, "model retry preserves setup readiness");
     retried = true;
     state = "downloading";
-    return route.fulfill({ json: { data: { status: "ready", steps: [], memory_model: model() } } });
+    return route.fulfill(view());
   });
   const copy = firstRunCopy[language];
-  const row = page.locator('[data-test-class="memory-model-status"]');
+  const row = page.locator("[data-test-class='memory-model-status']");
   await page.goto(server.url);
-  await row.waitFor();
-  for (const next of ["downloading", "verifying", "failed"]) {
-    state = next;
-    await row.getByText(next === "downloading" ? `${copy.memoryModel.downloading} · 54% · 312 / 570 MB`
-      : next === "verifying" ? copy.memoryModel.verifying : copy.memoryModel.failed, { exact: true }).waitFor();
-    if (next === "failed") {
+  await page.locator("#first-run-start").waitFor();
+  assert(await row.count() === 0, "welcome shows no download before the choice");
+  await page.getByRole("button", { name: copy.start, exact: true }).click();
+  await page.getByRole("button", { name: copy.agree, exact: true }).click();
+  const next = page.getByRole("button", { name: copy.memoryChoice.continue, exact: true });
+  await next.waitFor();
+  assert(await next.isDisabled(), "a memory choice is required");
+  assert(chosen === null && await row.count() === 0, "nothing downloads before Continue");
+  await page.locator("[data-memory-choice=on]").getByText(copy.memoryChoice.size(570), { exact: true }).waitFor();
+  await page.locator("[data-memory-choice=on]").click();
+  assert(chosen === null, "picking alone saves nothing");
+  await next.click();
+  await page.locator("[data-first-run-screen='connect']").waitFor();
+  assert(chosen === true, "Continue saves on");
+  for (const step of ["downloading", "verifying", "failed"]) {
+    state = step;
+    await row.getByText(step === "downloading" ? `${copy.memoryModel.downloading} · 54% · 312 / 570 MB`
+      : step === "verifying" ? copy.memoryModel.verifying : copy.memoryModel.failed, { exact: true }).waitFor();
+    if (step === "failed") {
       assert(!/\d+%|\d+ \/ \d+ MB/u.test(await row.innerText()), "failed has no stale progress");
       assert(await row.getByText(copy.memoryModel.reasons.embed_asset_download_failed, { exact: true }).count() === 1, "localized reason");
-      await page.locator("#first-run-start").focus();
-      await page.keyboard.press("Tab");
-      assert(await row.getByRole("button", { name: copy.memoryModel.retry, exact: true }).evaluate((node) =>
-        node === document.activeElement && getComputedStyle(node).boxShadow !== "none"), "Start then retry with visible keyboard focus");
     }
     await audit(page);
-    if (width === 375 || width === 1280) await page.screenshot({ path: `${output}/status-${next}-${language}-${theme}-${width}.png` });
+    if (width === 375 || width === 1280) await page.screenshot({ path: `${output}/status-${step}-${language}-${theme}-${width}.png` });
     cases += 1;
   }
   await row.getByRole("button", { name: copy.memoryModel.retry, exact: true }).click();
   await row.getByText(`${copy.memoryModel.downloading} · 54% · 312 / 570 MB`, { exact: true }).waitFor();
   assert(retried, "first-run retry is sent");
-  await page.getByRole("button", { name: copy.start, exact: true }).click();
-  const agree = page.getByRole("button", { name: copy.agree, exact: true });
-  assert(await agree.isEnabled(), "download does not block consent");
-  await agree.click();
-  await page.locator('[data-first-run-screen="connect"]').waitFor();
   await verifySettings(page, language, row, () => { state = "failed"; }, () => { state = "ready"; });
   await context.close();
 }
@@ -92,8 +103,7 @@ async function verifySettings(page: Page, language: "ko" | "en", row: ReturnType
   const showSidebar = page.getByRole("button", { name: copy.titlebar.showLeftPanel, exact: true });
   if (await showSidebar.isVisible()) await showSidebar.click();
   await page.getByRole("button", { name: copy.sidebar.settings, exact: true }).click();
-  const general = page.getByRole("button", { name: language === "ko" ? "일반" : "General", exact: true });
-  if (await general.isVisible()) await general.click();
+  await page.getByRole("button", { name: copy.settings.sections.memory, exact: true }).click();
   await row.waitFor();
   const section = page.locator('[data-settings-section-id="memory-model"]');
   assert(await section.count() === 1, "own status section");
@@ -106,6 +116,11 @@ async function verifySettings(page: Page, language: "ko" | "en", row: ReturnType
   ready();
   await row.waitFor({ state: "hidden" });
   assert(await section.getByText(copy.firstRun.memoryModel.ready, { exact: true }).count() === 1, "ready status stays labeled");
+  const toggle = section.getByRole("switch", { name: copy.firstRun.memoryChoice.on, exact: true });
+  assert(await toggle.getAttribute("aria-checked") === "true", "the first-run choice shows as on");
+  await toggle.click();
+  await section.getByText(copy.firstRun.memoryModel.ready, { exact: true }).waitFor({ state: "detached" });
+  assert(await toggle.getAttribute("aria-checked") === "false", "the same switch turns the model off");
   await page.route("**/updates", route => route.fulfill({ json: { data: { components: [] } } }));
   const back = page.locator('[data-test-class="settings-view settings-view-active"] main')
     .getByRole("button", { name: copy.settings.back, exact: true });

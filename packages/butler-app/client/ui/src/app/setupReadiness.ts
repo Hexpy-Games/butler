@@ -17,8 +17,9 @@ export interface SetupReadinessStep {
   error?: { code: string; detail?: string };
 }
 
+/** `unset`: not chosen yet, nothing downloads. `off`: memory without the model. Both carry the download size. */
 export interface MemoryModelProgress {
-  state: "queued" | "downloading" | "verifying" | "ready" | "failed";
+  state: "unset" | "off" | "queued" | "downloading" | "verifying" | "ready" | "failed";
   bytes_done: number;
   bytes_total: number;
   reason?: string;
@@ -40,6 +41,18 @@ export interface LocalPreparation {
 export const SETUP_READINESS_EVENT = "setup.readiness_changed";
 
 const STATUSES: readonly SetupReadinessStatus[] = ["preparing", "ready", "failed"];
+const MODEL_STATES: readonly MemoryModelProgress["state"][] = ["unset", "off", "queued", "downloading", "verifying", "ready", "failed"];
+
+/** The model is chosen and nothing more will change without the user. */
+export function memoryModelSettled(model: MemoryModelProgress | undefined): boolean {
+  return !model || ["unset", "off", "ready", "failed"].includes(model.state);
+}
+
+/** The persisted choice: on once chosen (downloading, ready or failed), null while unset. */
+export function memoryModelChoice(model: MemoryModelProgress | undefined): "on" | "off" | null {
+  if (!model || model.state === "unset") return null;
+  return model.state === "off" ? "off" : "on";
+}
 const STEP_STATUSES: readonly SetupReadinessStepStatus[] = ["pending", "running", "done", "failed"];
 
 function normalizeStep(value: unknown): SetupReadinessStep | null {
@@ -63,7 +76,7 @@ export function normalizeReadiness(value: unknown): SetupReadinessView | null {
   if (!STATUSES.includes(record.status as SetupReadinessStatus)) return null;
   const steps = Array.isArray(record.steps) ? record.steps.map(normalizeStep).filter((step) => step !== null) : [];
   const model = record.memory_model as MemoryModelProgress | undefined;
-  const validModel = model && ["queued", "downloading", "verifying", "ready", "failed"].includes(model.state)
+  const validModel = model && MODEL_STATES.includes(model.state)
     && Number.isFinite(model.bytes_done) && Number.isFinite(model.bytes_total);
   return { status: record.status as SetupReadinessStatus, steps, ...(validModel ? { memory_model: model } : {}) };
 }
