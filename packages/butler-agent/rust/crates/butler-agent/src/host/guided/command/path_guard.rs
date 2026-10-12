@@ -2,6 +2,7 @@
 //! This guard is not an OS sandbox and cannot interpret arbitrary programs.
 use super::{CommandScope, GuidedCommand, active_root, error, ledger_guard};
 use butler_core::json::JsonDocument;
+use butler_platform::secure_fs::Canonical as _;
 use butler_turn::btcc::BtccError;
 use butler_turn::workspace::{Commands, looks_sensitive};
 use serde_json::{Map, Value, json};
@@ -29,7 +30,7 @@ impl GuidedCommand {
             let timing = super::timing::CommandTiming::new("guard_work");
             let cwd = Commands::guarded_directory(&root, requested.as_deref())?;
             timing.mark("cwd_done");
-            let denied = sensitive(&command)
+            let denied = sensitive(&command, &cwd)
                 .or_else(|| ledger_guard::guard(&command, &cwd, &root, &data, installation.as_deref(), home.as_deref()));
             timing.mark("guard_done");
             Ok::<_, butler_turn::workspace::CommandError>(denied.map(|denied| json!({
@@ -47,12 +48,20 @@ impl GuidedCommand {
     }
 }
 
-fn sensitive(command: &str) -> Option<Value> {
+fn sensitive(command: &str, cwd: &Path) -> Option<Value> {
     let denied = |target: &str| {
         json!({"error":"protected_path", "message":"Credential paths are protected.",
         "protected_path":target,
         "next":[{"action":"Use credential tools for credentials; inspect ordinary files with normal approval."}]})
     };
+    for directory in [
+        cwd.to_path_buf(),
+        cwd.canonical().unwrap_or_else(|_| cwd.to_path_buf()),
+    ] {
+        if looks_sensitive(&directory.to_string_lossy()) {
+            return Some(denied(&directory.to_string_lossy()));
+        }
+    }
     for raw in butler_platform::command_sandbox::path_tokens(command) {
         let token = butler_platform::command_sandbox::normalize_path_token(raw);
         if looks_sensitive(&token) {
