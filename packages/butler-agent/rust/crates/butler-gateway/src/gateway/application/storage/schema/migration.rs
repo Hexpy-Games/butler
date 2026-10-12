@@ -18,6 +18,7 @@ const COLUMNS: &[(&str, &str, &str)] = &[
     ("messages", "safe_error_code", "TEXT"),
     ("messages", "retryable", "INTEGER NOT NULL DEFAULT 0"),
     ("messages", "plan_json", "TEXT"),
+    ("messages", "blocks_json", "TEXT"),
     ("messages", "content_parts_json", "TEXT"),
     ("session_queued_messages", "content_parts_json", "TEXT"),
     (

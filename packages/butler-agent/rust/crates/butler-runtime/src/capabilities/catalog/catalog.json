@@ -41,6 +41,31 @@
   ],
   "tools": [
     {
+      "name": "answer_blocks",
+      "definition": {
+        "type": "function",
+        "name": "answer_blocks",
+        "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use cards, table, gallery, facts, metrics, chart, callout or actions; for example, compare two methods. Images use ids from image_collect. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
+        "parameters": {
+          "$ref": "answer-blocks.schema.json"
+        },
+        "effectBoundary": "turn_local",
+        "concurrencySafe": false,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "hidden",
+        "handlerValidatesArguments": true
+      },
+      "effectBoundary": "turn_local",
+      "category": "message",
+      "tags": [
+        "blocks",
+        "cards",
+        "table",
+        "facts"
+      ],
+      "durable": false
+    },
+    {
       "name": "web_search",
       "definition": {
         "type": "function",
@@ -6681,6 +6706,19 @@
     "render_project_dashboard"
   ],
   "rawDefinitions": {
+    "answer_blocks": {
+      "type": "function",
+      "name": "answer_blocks",
+      "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use cards, table, gallery, facts, metrics, chart, callout or actions; for example, compare two methods. Images use ids from image_collect. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
+      "parameters": {
+        "$ref": "answer-blocks.schema.json"
+      },
+      "effectBoundary": "turn_local",
+      "concurrencySafe": false,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "hidden",
+      "handlerValidatesArguments": true
+    },
     "read_conversation_session": {
       "type": "function",
       "name": "read_conversation_session",
@@ -11852,6 +11890,7 @@
   ],
   "profiles": {
     "startup": [
+      "answer_blocks",
       "get_context_monitor",
       "read_tool_evidence_artifact",
       "list_tool_capabilities",

@@ -147,6 +147,19 @@
   display: none;
 }
 
+/* Vertical footer: a short read time ("오후 12:59 확인") stays whole down to
+   a 168px card. The site icon goes with the site name (the button's name and
+   tooltip keep both) and the actions close up. */
+@container item-card (width < 340px) {
+  .footer .source > [data-site-icon] {
+    display: none;
+  }
+
+  .footer .actions {
+    gap: var(--space-xs);
+  }
+}
+
 /* Row (340px and up): a 112px picture on the start side, the body beside
    it, the footer across the full width. Text shows whole. */
 @container item-card (width >= 340px) {

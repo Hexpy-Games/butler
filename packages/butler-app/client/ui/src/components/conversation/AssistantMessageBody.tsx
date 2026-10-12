@@ -7,7 +7,7 @@ import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { AssistantFailureNotice } from "./FailureNoticeContainer";
 import { CompletedTurnActivity } from "./CompletedTurnActivity";
 import { CompletedWorkBlocks } from "./CompletedWorkBlocks";
-import { MessageMarkdown } from "./MessageMarkdown";
+import { AssistantReply } from "./AssistantReply";
 import { PlanDocumentMessage } from "./PlanDocumentMessage";
 import { StewardParentProgress } from "./StewardParentProgress";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection";
@@ -37,13 +37,7 @@ export function AssistantMessageBody({ message, running, failureNotice, stewardP
           {failureNotice ? (
             <AssistantFailureNotice message={message} />
           ) : (
-            <MessageMarkdown
-              artifacts={message.artifacts}
-              attachments={message.attachments}
-              refreshFileUrls={refreshFileUrls}
-              streaming={message.status === "streaming"}
-              text={message.text}
-            />
+            <AssistantReply message={message} refreshFileUrls={refreshFileUrls} />
           )}
           <ErrorBoundary fallback={null}>
             <StewardParentProgress progress={stewardProgress} />
@@ -52,13 +46,7 @@ export function AssistantMessageBody({ message, running, failureNotice, stewardP
       ) : failureNotice ? (
         <AssistantFailureNotice message={message} />
       ) : (
-        <MessageMarkdown
-          artifacts={message.artifacts}
-          attachments={message.attachments}
-          refreshFileUrls={refreshFileUrls}
-          streaming={message.status === "streaming"}
-          text={message.text}
-        />
+        <AssistantReply message={message} refreshFileUrls={refreshFileUrls} />
       )}
       {message.question_summary?.map(question => (
         <Stack key={question.id} gap="none" data-test-class="assistant-question-summary">

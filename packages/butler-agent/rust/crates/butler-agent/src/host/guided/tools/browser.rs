@@ -114,6 +114,7 @@ pub(super) async fn execute(
     } else if call.name == "browser_observe" && result["status"] == "ok" {
         project_observation(&mut result);
     }
+    super::answer_blocks::remember_browser_source(owner, call, occurrence, &result).await?;
     encode_page_data(result)
 }
 fn host_op(name: &str, zoom: bool) -> &'static str {

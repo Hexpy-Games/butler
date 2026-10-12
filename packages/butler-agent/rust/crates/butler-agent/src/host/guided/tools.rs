@@ -2,6 +2,7 @@
 //! while this owner keeps only occurrence counters and provider-call mapping.
 
 mod access;
+mod answer_blocks;
 mod discovery;
 mod dispatch;
 mod effect;
@@ -119,6 +120,7 @@ impl GuidedToolBinding {
 struct State {
     next_call_index: u64,
     output_checks: u8,
+    answer_blocks: Vec<Value>,
     output_images: u8,
     journal_by_provider: HashMap<String, String>,
     described_ids: HashSet<String>,
@@ -282,6 +284,7 @@ impl GuidedTools {
                     | ToolName::WriteFile
                     | ToolName::OutputCheck
                     | ToolName::OutputPublish
+                    | ToolName::AnswerBlocks
                     | ToolName::EditFile
                     | ToolName::GrepFiles
                     | ToolName::ReadToolOutputArtifact
