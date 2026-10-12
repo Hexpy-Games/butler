@@ -21,7 +21,6 @@ async fn message_and_turn_cursors_preserve_distinct_public_rules() {
         AppApplicationConfig {
             database_path: path.clone(),
             butler_data: path.parent().unwrap().into(),
-            project_workspace_root: path.parent().unwrap().into(),
             folder_selection_secret: None,
         },
         dependencies(Arc::new(Native(Mutex::new(Vec::new()))), 40),
@@ -141,7 +140,6 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
         AppApplicationConfig {
             database_path: path,
             butler_data: root.clone(),
-            project_workspace_root: root.clone(),
             folder_selection_secret: None,
         },
         dependencies(native.clone(), 100),
