@@ -11,6 +11,7 @@ export interface AgentImportSource {
   needs_secret: number;
   skipped: number;
   unreadable: boolean;
+  /** Selectable items: the importable instruction file label, and every importable server. */
   items?: {
     instructions: string[];
     servers: { name: string; needs_secret: boolean }[];
@@ -41,5 +42,6 @@ const action = <T>(op: string, body: unknown) =>
   api<T>(`/security/agent-import/${op}`, { method: "POST", body: JSON.stringify(body) });
 
 export const listAgentImportSources = () => api<{ sources: AgentImportSource[] }>("/security/agent-import/sources");
-export const startAgentImport = (source: string) => action<AgentImportCounts>("start", { source });
+export const startAgentImport = (source: string, selection?: Omit<AgentImportRequest, "source">) =>
+  action<AgentImportCounts>("start", { ...selection, source });
 export const undoAgentImport = (run_id: string) => action<{ instructions: number; servers: number }>("undo", { run_id });
