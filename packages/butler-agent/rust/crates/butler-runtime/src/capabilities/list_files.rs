@@ -111,7 +111,7 @@ pub(super) async fn execute(
             };
             let mut result = json!({
                 "ok":false, "error":error, "guard":rejection.guard,
-                "message":rejection.guard["message"],
+                "message":rejection.guard["message"].as_str().unwrap_or("The requested directory could not be accessed."),
                 "recovery_hint":"Choose a directory the OS account can access.",
                 "evidence_capability_receipts":evidence::list_limitation(error)
             });

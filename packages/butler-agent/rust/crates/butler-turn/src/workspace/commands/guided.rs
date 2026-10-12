@@ -161,7 +161,16 @@ async fn prepare_command(
             "command must be a string",
         ));
     }
-    let cwd = resolve_guided_cwd(&input.workspace_root, input.cwd.as_deref()).await?;
+    let cwd = resolve_guided_cwd(
+        &input.workspace_root,
+        input.cwd.as_deref(),
+        if input.access == GuidedAccess::ContainedObservation {
+            crate::workspace::PathForm::Contained
+        } else {
+            crate::workspace::PathForm::RelativeOrAbsolute
+        },
+    )
+    .await?;
     let (invocation, environment, process_cwd) = tokio::task::spawn_blocking({
         let input = input.clone();
         let host = input.host_environment.clone();
@@ -329,10 +338,11 @@ async fn send_completion(
 pub(super) async fn resolve_guided_cwd(
     root: &std::path::Path,
     cwd: Option<&str>,
+    path_form: crate::workspace::PathForm,
 ) -> Result<PathBuf, CommandError> {
     let root = root.to_path_buf();
     let cwd = cwd.map(str::to_owned);
-    tokio::task::spawn_blocking(move || guarded_directory(&root, cwd.as_deref()))
+    tokio::task::spawn_blocking(move || guarded_directory(&root, cwd.as_deref(), path_form))
         .await
         .map_err(|error| {
             CommandError::new(CommandCode::CommandCwdFailed, error.to_string()).with_source(error)
@@ -342,6 +352,7 @@ pub(super) async fn resolve_guided_cwd(
 pub(super) fn guarded_directory(
     root: &std::path::Path,
     cwd: Option<&str>,
+    path_form: crate::workspace::PathForm,
 ) -> Result<PathBuf, CommandError> {
     let Some(requested) = cwd.filter(|value| !value.is_empty()) else {
         return Ok(root.to_path_buf());
@@ -364,7 +375,7 @@ pub(super) fn guarded_directory(
     let result = resolve_workspace_path_guard(GuardInput {
         root,
         requested,
-        path_form: crate::workspace::PathForm::RelativeOrAbsolute,
+        path_form,
         allow_directories: true,
         protected_roots: &[],
     })
@@ -372,7 +383,19 @@ pub(super) fn guarded_directory(
     if let Some(reason) = result.reason {
         return Err(CommandError::CwdRejected {
             reason,
-            message: super::super::path_messages::explanation(reason).0.into(),
+            message: if path_form.contained() {
+                format!(
+                    "{} Workspace root: {}",
+                    result
+                        .public_rejection()
+                        .get("message")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("The requested directory could not be accessed."),
+                    result.root.display()
+                )
+            } else {
+                super::super::path_messages::explanation(reason).0.into()
+            },
         });
     }
     if let Some(path) = result.real.as_deref()

@@ -6,6 +6,12 @@ use std::{
 
 /// Expand a home prefix and apply native rooted-path semantics before joining a workspace.
 pub fn parse(root: &Path, requested: &str) -> io::Result<PathBuf> {
+    if requested.contains('\0') {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Paths cannot contain a NUL byte",
+        ));
+    }
     let expanded = expand_home(requested, super::user_dirs::non_empty_home_dir().as_deref())?;
     #[cfg(windows)]
     let expanded = windows_rooted(&root.to_string_lossy(), &expanded)?.replace('/', "\\");
@@ -27,7 +33,7 @@ pub fn expand_home(requested: &str, home: Option<&Path>) -> io::Result<String> {
     };
     let home = home.ok_or_else(|| {
         io::Error::new(
-            io::ErrorKind::NotFound,
+            io::ErrorKind::InvalidInput,
             "User home directory is unavailable",
         )
     })?;
@@ -46,7 +52,7 @@ pub fn windows_rooted(root: &str, requested: &str) -> io::Result<String> {
     if path.starts_with("//") {
         return Ok(path);
     }
-    if path.as_bytes().get(1) == Some(&b':') {
+    if has_drive_prefix(&path) {
         if path.as_bytes().get(2) != Some(&b'/') {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -63,7 +69,7 @@ pub fn windows_rooted(root: &str, requested: &str) -> io::Result<String> {
         .strip_prefix("//?/UNC/")
         .map(|unc| format!("//{unc}"))
         .unwrap_or_else(|| root.strip_prefix("//?/").unwrap_or(&root).to_owned());
-    let prefix = if root.as_bytes().get(1) == Some(&b':') {
+    let prefix = if has_drive_prefix(&root) {
         root.get(..2)
     } else if let Some(unc) = root.strip_prefix("//") {
         let mut parts = unc.split('/');
@@ -89,12 +95,15 @@ pub fn windows_rooted(root: &str, requested: &str) -> io::Result<String> {
 pub fn has_windows_root(value: &str) -> bool {
     value.starts_with('\\')
         || value.starts_with("//")
-        || value
-            .as_bytes()
-            .first()
-            .is_some_and(u8::is_ascii_alphabetic)
-            && value.as_bytes().get(1) == Some(&b':')
-            && matches!(value.as_bytes().get(2), Some(b'/' | b'\\'))
+        || has_drive_prefix(value) && matches!(value.as_bytes().get(2), Some(b'/' | b'\\'))
+}
+
+fn has_drive_prefix(value: &str) -> bool {
+    value
+        .as_bytes()
+        .first()
+        .is_some_and(u8::is_ascii_alphabetic)
+        && value.as_bytes().get(1) == Some(&b':')
 }
 
 /// Normalize discovery separators without turning a drive root into a drive-relative path.
@@ -104,8 +113,7 @@ pub fn discovery_root(value: &str) -> String {
     let trimmed = slash.trim_end_matches('/');
     if trimmed.is_empty() && slash.starts_with('/') {
         "/".into()
-    } else if trimmed.len() == 2 && trimmed.as_bytes().get(1) == Some(&b':') && slash.ends_with('/')
-    {
+    } else if trimmed.len() == 2 && has_drive_prefix(trimmed) && slash.ends_with('/') {
         format!("{trimmed}/")
     } else if trimmed.is_empty() {
         ".".into()

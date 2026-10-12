@@ -25,10 +25,11 @@ impl GuidedCommand {
         let data = scope.butler_data.to_path_buf();
         let installation = scope.installation_root.map(Path::to_path_buf);
         let home = self.host_environment.get("HOME").map(PathBuf::from);
+        let path_form = super::directory_path_form(scope.contained_reads);
         timing.mark("before_job");
         let rejected = self.jobs.run(move || {
             let timing = super::timing::CommandTiming::new("guard_work");
-            let cwd = Commands::guarded_directory(&root, requested.as_deref())?;
+            let cwd = Commands::guarded_directory_in_scope(&root, requested.as_deref(), path_form)?;
             timing.mark("cwd_done");
             let denied = sensitive(&command, &cwd)
                 .or_else(|| ledger_guard::guard(&command, &cwd, &root, &data, installation.as_deref(), home.as_deref()));

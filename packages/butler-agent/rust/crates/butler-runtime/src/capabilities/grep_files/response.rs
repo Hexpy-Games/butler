@@ -30,7 +30,7 @@ pub(super) fn guard_rejection(root: &str, rejection: &WorkspaceListRejection) ->
         || root.split(['/', '\\']).any(|segment| segment == "..");
     json!({"ok":false,"error":error,"searched_root":if unsafe_root { "." } else { root },
         "guard":rejection.guard,
-        "message":rejection.guard["message"],
+        "message":rejection.guard["message"].as_str().unwrap_or("The requested directory could not be accessed."),
         "recovery_hint":"Choose an existing, non-sensitive directory the OS account can access.",
         "evidence_capability_receipts":evidence::grep_limitation(error)})
 }

@@ -12,6 +12,8 @@ mod capabilities;
 mod capability_stub;
 #[path = "windows_commands/file_paths.rs"]
 mod file_paths;
+#[path = "windows_commands/invalid_batch.rs"]
+mod invalid_batch;
 #[path = "windows_commands/observation.rs"]
 mod observation;
 #[path = "windows_commands/observation_stub.rs"]
