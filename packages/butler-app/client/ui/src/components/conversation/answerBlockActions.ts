@@ -1,21 +1,15 @@
-import type { CardValue, CardItem } from "../../../../shared/app-contracts";
+import type { CardItem } from "../../../../shared/app-contracts";
+import { getAppLocale } from "@/app/copy";
 import { faviconSrc } from "@/app/favicons";
 import { notifyError, notifyStatus } from "@/app/notifications";
 import { openLink } from "../browser/browserBridge";
 import { saveLibrary } from "../browser/libraryStore";
-
-export function formatAnswerValue(value: CardValue, amount = value.amount): string {
-  if (value.cur) {
-    try { return new Intl.NumberFormat("ko-KR", { style: "currency", currency: value.cur }).format(amount); }
-    catch { return `${amount} ${value.cur}`; }
-  }
-  return [new Intl.NumberFormat("ko-KR").format(amount), value.unit].filter(Boolean).join(" ");
-}
+import { formatAnswerValue } from "./answerValueFormat";
 
 export function answerSource(item: { source?: string; checked?: string }) {
   if (!item.source) return undefined;
   const url = item.source;
-  const site = new URL(url).hostname;
+  const site = new URL(url).hostname.replace(/^www\./u, "");
   const date = item.checked ? new Date(item.checked) : undefined;
   const today = date?.toLocaleDateString("ko-KR") === new Date().toLocaleDateString("ko-KR");
   const checked = date ? `${today ? "" : `${date.toLocaleDateString("ko-KR")} `}${date.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" })} 확인` : undefined;
@@ -27,7 +21,7 @@ export function runAnswerAction(action: () => Promise<unknown>) {
 }
 
 export function answerCardCopy(item: CardItem): string {
-  return [item.title, item.value ? formatAnswerValue(item.value) : undefined, item.source].filter(Boolean).join(" · ");
+  return [item.title, item.value ? formatAnswerValue(item.value, getAppLocale()) : undefined, item.source].filter(Boolean).join(" · ");
 }
 
 async function assetCrop(img?: string): Promise<string | undefined> {
@@ -47,7 +41,7 @@ export async function saveAnswerItem(item: CardItem) {
   const source = answerSource(item);
   await saveLibrary({ id: crypto.randomUUID(), kind: "scrap", title: item.title,
     url: item.source ?? "", site: source?.site, crop: await assetCrop(item.img),
-    capturedAt: new Date().toISOString(), text: [item.value ? formatAnswerValue(item.value) : undefined,
+    capturedAt: new Date().toISOString(), text: [item.value ? formatAnswerValue(item.value, getAppLocale()) : undefined,
       ...(item.facts ?? []), item.text, source?.checked].filter(Boolean).join(" · ") });
   notifyStatus("서랍에 저장했어요");
 }

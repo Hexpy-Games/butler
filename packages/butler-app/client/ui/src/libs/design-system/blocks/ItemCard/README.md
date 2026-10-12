@@ -16,9 +16,11 @@ product, a code library) on a `Card padding="sm"` inside an `article`:
 
 ## Orientation
 The card's own width decides (a container query on the article, not the
-viewport): below 340px it stacks (picture on top); at 340px and up it is a row
-with a 112px picture on the start side, the footer across the full width, the
-text whole and the site added to the source line. Cards in one grid row share
+viewport): below 340px it stacks (picture on top) and the footer shows only the
+read time beside closer-set actions, so a short time stays whole down to a
+168px card; at 340px and up it is a row with a 112px picture on the start
+side, the footer across the full width, the text whole and the site icon and
+name added to the source line. Cards in one grid row share
 the height and their footers line up.
 
 ## When to use this block

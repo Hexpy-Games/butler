@@ -71,12 +71,15 @@ async function checkMock(page: Page, width: number, theme: string, background: s
     await page.waitForFunction(() => [...document.querySelectorAll('[data-slot="media-frame"]')].every(node => ["empty", "failed"].includes(node.getAttribute("data-fit") ?? "")));
     assert.equal(await page.locator('[data-answer-block="table"] tbody tr').count(), 4);
     assert.equal(await page.locator('[data-answer-block="actions"] button').count(), 3);
-    assert((await cards.first().innerText()).includes("₩76,390"));
+    assert((await cards.first().innerText()).includes("76,390원"));
+    assert((await cards.nth(3).innerText()).includes("368,000원"), "the struck-through value uses the same format");
     assert((await cards.first().innerText()).includes("오후 5:41 확인"));
     const sourceText = await cards.first().locator('[data-slot="item-card-footer"] [role="button"]').evaluate(node => {
       const range = document.createRange(); range.selectNodeContents(node); return node.textContent;
     });
     assert(sourceText?.includes("musinsa.com"));
+    const clipped = await page.locator('[data-slot="item-card-footer"] [role="button"] > :last-child').evaluateAll(nodes => nodes.filter(node => node.scrollWidth > node.clientWidth).map(node => node.textContent));
+    assert.deepEqual(clipped, [], "every card shows its whole read time");
     assert(await page.locator('[data-test-class="answer-blocks"]').evaluate(node => node.previousElementSibling?.getAttribute("data-test-class") === "turn-result-section"));
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "no page horizontal overflow");
     geometry.push({ width, theme, background, ...state });
@@ -84,7 +87,7 @@ async function checkMock(page: Page, width: number, theme: string, background: s
   assert.equal(await page.locator('[data-sonner-toast][data-type="error"]').count(), 0, "offline conversation fixtures are complete");
   await page.screenshot({ path: join(evidence, `${stage}-${width}-${theme}-${background}.png`) });
   if (stage === "after") {
-    await page.locator('[data-answer-block="table"]').scrollIntoViewIfNeeded();
+    await page.locator('[data-test-class~="conversation-scroll"]').evaluate(node => { node.scrollTop = node.scrollHeight; });
     await page.screenshot({ path: join(evidence, `${stage}-${width}-${theme}-${background}-table-actions.png`) });
   }
 }

@@ -2,12 +2,15 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { CardsBlock, CardItem } from "../../../../shared/app-contracts";
 import { Button, Collapsible, CopyButton, Grid, IconButton, ItemCard, Library, MediaFrame, Stack } from "@/butler-ds";
 import { openLink } from "../browser/browserBridge";
-import { answerCardCopy, answerSource, formatAnswerValue, runAnswerAction, saveAnswerItem } from "./answerBlockActions";
+import { useAppLocale } from "@/app/copy";
+import { answerCardCopy, answerSource, runAnswerAction, saveAnswerItem } from "./answerBlockActions";
+import { formatAnswerValue } from "./answerValueFormat";
 
 function AnswerCard({ item, media }: { item: CardItem; media: CardsBlock["media"] }) {
+  const locale = useAppLocale();
   return <ItemCard title={item.title} eyebrow={item.label} subtitle={item.sub}
     media={<MediaFrame aspect={media ?? "4:5"} src={item.img ? `/assets/${encodeURIComponent(item.img)}` : undefined} alt={item.title} />}
-    value={item.value ? { amount: formatAnswerValue(item.value), was: item.value.was === undefined ? undefined : formatAnswerValue(item.value, item.value.was), wasLabel: "이전", note: item.value.note } : undefined}
+    value={item.value ? { amount: formatAnswerValue(item.value, locale), was: item.value.was === undefined ? undefined : formatAnswerValue(item.value, locale, item.value.was), wasLabel: "이전", note: item.value.note } : undefined}
     facts={item.facts} text={item.text} showMoreLabel="더 보기" showLessLabel="접기" source={answerSource(item)}
     onOpen={item.source ? () => runAnswerAction(() => openLink(item.source!)) : undefined}
     actions={<><IconButton label="서랍에 저장" onClick={() => runAnswerAction(() => saveAnswerItem(item))}><Library size="sm" /></IconButton>

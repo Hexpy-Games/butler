@@ -1,7 +1,7 @@
 import { memo, useMemo } from "react";
 import type { AnswerBlock, AnswerBlockSet } from "../../../../shared/app-contracts";
 import { parseAnswerBlocks } from "../../../../shared/answer-blocks-parse";
-import { Button, Popup, Inline, KeyValueRow, MetricCard, MetricGrid, Notice, PillButton, Presence, Stack, Typo } from "@/butler-ds";
+import { Button, Popup, Inline, KeyValueRow, MetricCard, MetricGrid, Notice, PillButton, Presence, Reply, Stack, Typo } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
 import { openLink } from "../browser/browserBridge";
 import { AnswerCards } from "./AnswerCards";
@@ -24,7 +24,7 @@ function Block({ block }: { block: AnswerBlock }) {
     case "chart": return <AnswerChart block={block} />;
     case "callout": return <Notice tone={block.tone ?? "neutral"} message={block.text} />;
     case "actions": return <Inline>{block.items.map((item, index) => "ask" in item
-      ? <PillButton key={index} onClick={() => runAnswerAction(() => sendMessage(item.ask))}>{item.ask}</PillButton>
+      ? <PillButton key={index} surface="glass" icon={<Reply size="sm" />} onClick={() => runAnswerAction(() => sendMessage(item.ask))}>{item.ask}</PillButton>
       : <Button key={index} variant="secondary" iconStart={<Popup size="sm" />} onClick={() => runAnswerAction(() => openLink(item.open))}>{item.label}</Button>)}</Inline>;
   }
 }
