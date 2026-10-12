@@ -9,8 +9,15 @@ import { freeGatewayPort, type NativeAppServerHandle } from "./native-app-server
 import { connectElectronMain } from "./electron-main-cdp";
 import { smokeElectronArgs } from "./smoke-browser";
 
+interface FirstRunElectronOptions {
+  /** Extra main-process environment (fixture hooks). */
+  env?: Record<string, string>;
+  /** Hide, show and focus the App window as a user would (default); false leaves it as launched. */
+  foreground?: boolean;
+}
+
 /** Spawn this checkout's Electron App and attach to its real renderer through CDP. */
-export async function firstRunElectron(server: NativeAppServerHandle, serverUrl = server.url, readySelector = "[data-first-run-screen]") {
+export async function firstRunElectron(server: NativeAppServerHandle, serverUrl = server.url, readySelector = "[data-first-run-screen]", options: FirstRunElectronOptions = {}) {
   const root = process.env.BUTLER_SMOKE_REPOSITORY_ROOT ?? process.cwd();
   const scratch = mkdtempSync(join(tmpdir(), "first-run-electron-"));
   const home = join(scratch, "home");
@@ -26,7 +33,7 @@ export async function firstRunElectron(server: NativeAppServerHandle, serverUrl 
     ...process.env, HOME: home, BUTLER_DATA: server.butlerData, CODEX_HOME: join(home, ".codex"),
     BUTLER_APP_SERVER_URL: serverUrl, BUTLER_APP_SERVER_PORT: String(server.port),
     BUTLER_APP_ELECTRON_USER_DATA_DIR: join(scratch, "profile"), BUTLER_APP_GATEWAY_PID_FILE: "off",
-    BUTLER_E2E_TIER: "stub",
+    BUTLER_E2E_TIER: "stub", ...options.env,
   } });
   let browser: Awaited<ReturnType<typeof chromium.connectOverCDP>> | undefined;
   let inspector: Awaited<ReturnType<typeof connectElectronMain>> | undefined;
@@ -45,7 +52,7 @@ export async function firstRunElectron(server: NativeAppServerHandle, serverUrl 
     const module = `process.getBuiltinModule('module').createRequire(${JSON.stringify(join(app, "package.json"))})`;
     let shown = false;
     while (Date.now() < deadline) {
-      if (!shown) shown = await inspector.evaluate<boolean>(`(()=>{const w=${module}('electron').BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().startsWith('app://butler/'));if(!w)return false;w.hide();w.show();w.focus();return true})()`);
+      if (!shown && options.foreground !== false) shown = await inspector.evaluate<boolean>(`(()=>{const w=${module}('electron').BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().startsWith('app://butler/'));if(!w)return false;w.hide();w.show();w.focus();return true})()`);
       for (const page of context.pages()) {
         if (await page.evaluate(selector => Boolean(window.butlerApp) && Boolean(document.querySelector(selector)), readySelector).catch(() => false)) {
           const startupPages = context.pages().filter(candidate => candidate !== page && candidate.url().includes("/lifecycle/"));

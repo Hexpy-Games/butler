@@ -22,6 +22,8 @@ interface SetupWizardStageProps {
   intro?: SetupWizardIntro;
   /** The ink intro clock the backdrop shares (intro `full` or `rerun`). */
   timeline?: WallpaperIntroTimeline | null;
+  /** The card waits unseen until the host can show the intro; it arrives when the hold ends. */
+  held?: boolean;
   children: ReactNode;
 }
 
@@ -44,7 +46,7 @@ const EXIT_FALLBACK_MS = 400;
  * rendered again.
  */
 export class SetupWizardStage extends Component<SetupWizardStageProps, SetupWizardStageState> {
-  state: SetupWizardStageState = { enteringKey: null, introPhase: this.props.intro === "full" && this.props.timeline ? "pending" : null };
+  state: SetupWizardStageState = { enteringKey: null, introPhase: this.props.held || (this.props.intro === "full" && this.props.timeline) ? "pending" : null };
   private intro: SetupIntroRun | null = null;
   private readonly root = createRef<HTMLDivElement>();
   private readonly frame = createRef<HTMLDivElement>();
@@ -53,7 +55,7 @@ export class SetupWizardStage extends Component<SetupWizardStageProps, SetupWiza
   private exitTimer: ReturnType<typeof setTimeout> | undefined;
   private morph: SetupWizardMorph | null = null;
   /** The first card's key while the re-run entrance applies; cleared by the first step change. */
-  private rerunKey = this.props.intro === "rerun" && !prefersReducedMotion() ? this.props.stepKey : null;
+  private rerunKey = this.props.intro === "rerun" && !this.props.held && !prefersReducedMotion() ? this.props.stepKey : null;
 
   getSnapshotBeforeUpdate(previous: SetupWizardStageProps): HTMLElement | null {
     if (previous.stepKey === this.props.stepKey) return null;
@@ -64,12 +66,11 @@ export class SetupWizardStage extends Component<SetupWizardStageProps, SetupWiza
   }
 
   componentDidMount() {
-    const { timeline, intro } = this.props, stage = this.root.current, surface = this.surface.current;
-    if (!timeline || !stage || !surface) return;
-    this.intro = runSetupIntro({ stage, surface, timeline, frame: () => this.frame.current, rerun: intro === "rerun", onPhase: (introPhase) => this.setState({ introPhase }) });
+    if (!this.props.held) this.startIntro();
   }
 
   componentDidUpdate(previous: SetupWizardStageProps, _state: SetupWizardStageState, snapshot: HTMLElement | null) {
+    if (previous.held && !this.props.held) this.release();
     const ghosts = this.ghosts.current;
     const changed = previous.stepKey !== this.props.stepKey;
     if (!snapshot || !ghosts) return changed ? this.intro?.stepChanged(null, null) : undefined;
@@ -117,6 +118,20 @@ export class SetupWizardStage extends Component<SetupWizardStageProps, SetupWiza
     // The print beat: the ink keep-out moves from the old card to the new one, then the intro hands off.
     this.intro?.stepChanged(morph.from, morph.to);
     return true;
+  }
+
+  private startIntro() {
+    const { timeline, intro } = this.props, stage = this.root.current, surface = this.surface.current;
+    if (!timeline || !stage || !surface) return;
+    this.intro = runSetupIntro({ stage, surface, timeline, frame: () => this.frame.current, rerun: intro === "rerun", onPhase: (introPhase) => this.setState({ introPhase }) });
+  }
+
+  /** The hold ended: the card arrives as it would have at mount (the re-run entrance, or with the reveal). */
+  private release() {
+    const { intro, stepKey, timeline } = this.props;
+    if (intro === "rerun" && !prefersReducedMotion()) this.rerunKey = stepKey;
+    this.startIntro();
+    if (intro !== "full" || !timeline) this.setState({ introPhase: null });
   }
 
   render() {
