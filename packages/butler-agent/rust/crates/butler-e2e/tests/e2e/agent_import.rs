@@ -8,6 +8,8 @@
     clippy::panic,
     reason = "E2E assertions"
 )]
+mod state;
+
 use super::memory_fixture;
 use butler_e2e::e2e::{
     HarnessError, fixtures,
@@ -245,7 +247,10 @@ async fn agent_import_detects_imports_dedupes_strips_secrets_and_undoes() -> Res
         "no secret: ready to use"
     );
     let github = server(&rows, "github");
-    assert_eq!(github["enabled"], false, "waits for its secret");
+    assert_eq!(
+        github["enabled"], true,
+        "keeps source on while waiting for its secret"
+    );
     assert_eq!(
         slots(github, "env"),
         [("GITHUB_PERSONAL_ACCESS_TOKEN".to_owned(), false)]
