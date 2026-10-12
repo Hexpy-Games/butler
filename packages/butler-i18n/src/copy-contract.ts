@@ -1075,6 +1075,7 @@ export interface AppCopy {
     mcpDisabled: string;
     /** An imported server still waiting for a key in its settings. */
     mcpNeedsSecret: string;
+    mcpToolFilterReview: string;
     mcpIdRequired: string;
     mcpIdInvalid: string;
     mcpIdPreview: (id: string) => string;

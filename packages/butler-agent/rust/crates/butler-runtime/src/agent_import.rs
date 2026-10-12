@@ -72,12 +72,7 @@ impl McpServer {
         !self.env_keys.is_empty() || !self.header_keys.is_empty()
     }
 
-    /// Ready to run as soon as it is added.
-    pub fn ready(&self) -> bool {
-        !self.needs_secret() && !self.disabled && !self.restricted
-    }
-
-    /// Butler registry input: secret names as empty slots; off unless ready.
+    /// Butler registry input: retain source state, except unsupported filters.
     pub fn registry_input(&self, id: &str) -> Value {
         let slots = |keys: &[String]| {
             keys.iter()
@@ -87,7 +82,8 @@ impl McpServer {
         let mut input = json!({
             "id": id,
             "display_name": self.name,
-            "enabled": self.ready(),
+            "enabled": !self.disabled && !self.restricted,
+            "tool_filter_review_required": self.restricted,
             "env": slots(&self.env_keys),
             "headers": slots(&self.header_keys),
         });
