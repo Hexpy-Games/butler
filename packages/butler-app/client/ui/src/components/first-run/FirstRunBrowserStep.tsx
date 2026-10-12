@@ -1,8 +1,20 @@
 import { useState } from "react";
 import { appCopy } from "@/app/copy";
 import {
-  Button, ButtonContainer, CheckCircle2, ChoiceCard, ChoiceCardList, Download, EmptyLine, FileText, Inline, Notice,
-  SetupWizardStepAction, Spinner, Stack, Tooltip, Typo,
+  Button,
+  ButtonContainer,
+  CheckCircle2,
+  ChoiceCard,
+  ChoiceCardList,
+  EmptyLine,
+  FileText,
+  Inline,
+  Notice,
+  SetupWizardStepAction,
+  Spinner,
+  Stack,
+  Tooltip,
+  Typo,
 } from "@/butler-ds";
 import { BrandIcon, BrowserImportItems, browserBrand } from "../settings/BrowserImportSources";
 import type { ImportSource } from "../settings/signInsApi";
@@ -25,7 +37,7 @@ export function FirstRunBrowserStep({ flow }: { flow: FirstRunFlow }) {
   const empty = sources !== null && !imp.error && sources.length === 0;
   const primary = denied ? copy.pickFolder : imp.busy ? text.importing : text.importAction;
   return (
-    <FirstRunStepCard flow={flow} contentKey="browsers" icon={<Download size="lg" />} title={text.browsersTitle}
+    <FirstRunStepCard flow={flow} contentKey="browsers" title={text.browsersTitle}
       titleId="first-run-browsers-title" description={text.browsersBody} onBack={flow.backFromImport}
       actions={done || empty || imp.undone
         ? <SetupWizardStepAction forward disabled={imp.busy || !!imp.exportId} onClick={flow.finishImport}>{text.next}</SetupWizardStepAction>

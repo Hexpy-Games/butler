@@ -17,7 +17,6 @@ import {
 } from "@/butler-ds";
 import { customModelOptions } from "@/app/setupProviders.ts";
 import { discoverLocalModels } from "@/components/settings/localModelApi";
-import { CardGlyph } from "./CardGlyph";
 import { ModelLogo } from "./FirstRunModelPicker";
 import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { FirstRunFlow } from "./useFirstRunFlow";
@@ -43,7 +42,7 @@ export function FirstRunCustomServer({ flow }: { flow: FirstRunFlow }) {
         {server.busy ? copy.checking : copy.customConnect}
       </SetupWizardStepAction>;
   return (
-    <FirstRunStepCard flow={flow} contentKey="custom" icon={<CardGlyph cardId="other" />} title={copy.otherTitle}
+    <FirstRunStepCard flow={flow} contentKey="custom" title={copy.otherTitle}
       titleId="first-run-other-title" description={copy.otherBody} onBack={flow.backToList} actions={action}
       footerStart={model && !connected ? <Typo.Caption tone="tertiary">{copy.localNote}</Typo.Caption> : undefined}
     >

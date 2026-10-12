@@ -23,7 +23,7 @@ export function FirstRunAgentStep({ flow }: { flow: FirstRunFlow }) {
   const empty = pick.sources !== null && !pick.error && !pick.sources.some(importable);
   const forward = done || empty || pick.undone;
   return (
-    <FirstRunStepCard flow={flow} contentKey="agents" icon={<Bot size="lg" />} title={text.agentsTitle}
+    <FirstRunStepCard flow={flow} contentKey="agents" title={text.agentsTitle}
       titleId="first-run-agents-title" description={text.agentsBody} onBack={flow.backFromImport}
       actions={forward
         ? <SetupWizardStepAction forward disabled={pick.busy} onClick={flow.toBrowsers}>{text.next}</SetupWizardStepAction>

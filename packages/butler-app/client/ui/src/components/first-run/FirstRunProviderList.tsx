@@ -8,7 +8,6 @@ import {
   ChoiceTileGrid,
   Inline,
   Notice,
-  Sparkles,
   Spinner,
   Stack,
   Button,
@@ -29,7 +28,7 @@ export function FirstRunProviderList({ flow }: { flow: FirstRunFlow }) {
   // Run setup again opens "more" when the AI in use is there.
   const [expanded, setExpanded] = useState(() => Boolean(flow.currentCardId && layout.more.includes(flow.currentCardId)));
   return (
-    <FirstRunStepCard flow={flow} contentKey="providers" icon={<Sparkles size="lg" />} title={copy.connectTitle}
+    <FirstRunStepCard flow={flow} contentKey="providers" title={copy.connectTitle}
       titleId="first-run-connect-title" description={copy.connectLede} onBack={flow.backFromConnect}
       footerStart={<Button
         aria-controls="first-run-more-providers" aria-expanded={expanded}

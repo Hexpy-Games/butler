@@ -1,4 +1,4 @@
-import { ButlerThinkingMark, CheckCircle2, KeyValueRow, SetupWizardStepAction, Stack, Typo } from "@/butler-ds";
+import { KeyValueRow, SetupWizardStepAction, Stack, Typo } from "@/butler-ds";
 import { SUPPORTED_UI_LANGUAGES } from "@/app/firstRunSetup.ts";
 import { FirstRunPrepStatus } from "./FirstRunPrepStatus";
 import { FirstRunStepCard } from "./FirstRunStepCard";
@@ -9,7 +9,7 @@ export function FirstRunReady({ flow }: { flow: FirstRunFlow }) {
   const { copy, commit, reply, imported } = flow;
   const text = { ...copy, ...copy.import, ...copy.summary };
   if (!commit.connected) return (
-    <FirstRunStepCard flow={flow} contentKey="finishing" icon={<ButlerThinkingMark size="lg" state="working" />}
+    <FirstRunStepCard flow={flow} contentKey="finishing"
       title={copy.finishing} footerStart={<FirstRunPrepStatus flow={flow} />} />
   );
   const cardId = commit.connected.cardId;
@@ -17,7 +17,7 @@ export function FirstRunReady({ flow }: { flow: FirstRunFlow }) {
   const agents = imported.agents ?? { instructions: 0, servers: 0 };
   const browsers = imported.browsers;
   return (
-    <FirstRunStepCard flow={flow} contentKey="ready" icon={<CheckCircle2 size="lg" />}
+    <FirstRunStepCard flow={flow} contentKey="ready"
       title={text.doneTitle} description={text.doneBody} onBack={flow.backFromReady}
       actions={<SetupWizardStepAction forward disabled={reply.saving} onClick={reply.complete}>{copy.finish}</SetupWizardStepAction>}
     >
