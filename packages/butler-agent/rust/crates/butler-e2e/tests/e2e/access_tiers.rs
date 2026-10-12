@@ -1,5 +1,6 @@
 //! PERM-01: project reads, exact approvals, real-path sensitivity and normal-chat isolation.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+mod sandbox_data_reads;
 pub(super) mod stub;
 use butler_e2e::e2e::{
     HarnessError,
