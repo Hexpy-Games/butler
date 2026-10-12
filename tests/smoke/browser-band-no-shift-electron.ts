@@ -31,9 +31,9 @@ type Frame = { rect: Rect | null; tone: string | null; bands: number };
 let tab = "";
 const tabExpr = () => `globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)})`;
 const card = (value: string) => waitBrowser(() => app.page.expression(`document.querySelector('[data-slot=page-card]')?.dataset.holder===${JSON.stringify(value)}`), `holder ${value}`);
-// "none" is the empty reserved row; a baseline renderer had no idle band, so there idle reads as none.
+// "none" is the empty reserved row: no band while Butler does nothing on the tab.
 const tone = (value: string) => waitBrowser(() => app.page.expression(`(() => { const actual=document.querySelector('[data-slot=page-band]')?.dataset.tone ?? 'none';
-  return actual===${JSON.stringify(value)} || ${baseline && value === "idle"} && actual==='none'; })()`), `band ${value}`);
+  return actual===${JSON.stringify(value)}; })()`), `band ${value}`);
 const bandText = (text: string) => waitBrowser(() => app.page.expression(`[...document.querySelectorAll('[data-slot=page-band]')].some(n=>n.textContent.includes(${JSON.stringify(text)}))`), `band text ${text}`);
 const openPopup = (url: string) => app.main(`${tabExpr()}.view.webContents.executeJavaScript(${JSON.stringify(`setTimeout(()=>open(${JSON.stringify(url)}),0)`)})`);
 
@@ -103,7 +103,7 @@ async function sequence(language: "ko" | "en", theme: "light" | "dark", width: n
   await app.settings(language, theme, width); await app.call("activate", { id: tab }); await app.click(language === "ko" ? "브라우저" : "Browser");
   await nativeAligned(app);
   await startTrace();
-  await tone("idle"); await app.shot(`${prefix}-1-idle`);
+  await tone("none"); await app.shot(`${prefix}-1-idle`);
   // Hold on: a real stub turn acts, then the model "thinks" until the gate opens.
   holdTurn();
   app.stub.set([describeBrowser, () => bridgeBrowser("browser_observe", { tab }), actConfirm, thinking]);
@@ -130,23 +130,22 @@ async function sequence(language: "ko" | "en", theme: "light" | "dark", width: n
   await app.page.expression(`[...document.querySelectorAll('[data-slot=page-band-actions] button')].find(n=>n.textContent.trim()===${JSON.stringify(copy.giveBack)}).focus()`);
   assert.equal(await app.page.expression("document.activeElement?.closest('[data-slot=page-band]') !== null"), true, "band action takes keyboard focus");
   await app.main(`(() => { const c=${app.win}.webContents; for (const type of ["keyDown", "char", "keyUp"]) c.sendInputEvent({ type, keyCode: type === "char" ? "\\r" : "Return" }); })()`);
-  // Giving back releases the hold until Butler acts again: the row stays, idle.
-  await waitBrowser(() => app.main(`${tabExpr()}.holder==='agent'`), "given back by keyboard"); await card("none"); await tone("idle");
+  // Giving back releases the hold until Butler acts again: the row stays, empty.
+  await waitBrowser(() => app.main(`${tabExpr()}.holder==='agent'`), "given back by keyboard"); await card("none"); await tone("none");
   openGate(); await app.delivered();
   // Hold on again, then stop the task from the band.
   holdTurn();
   app.stub.set([describeBrowser, () => bridgeBrowser("browser_observe", { tab }), thinking]);
   await app.send("Observe, then keep the turn open"); await card("butler"); await tone("agent");
-  await app.click(copy.stopTask); await card("none"); await tone("idle");
+  await app.click(copy.stopTask); await card("none"); await tone("none");
   openGate();
   await waitBrowser(async () => !(await app.gateway.api<{ active_turn?: { id: string } | null }>("/session-view?session_id=general")).active_turn, "stopped turn ends");
   await app.shot(`${prefix}-7-stopped`);
   await app.call("pick", { id: tab, value: true }); await tone("pick"); await app.shot(`${prefix}-8-pick`);
-  // Picking takes the tab for you (non-sticky), so Done leaves your control band; give it back from the band.
-  await app.click(copy.finish); await card("user"); await tone("user");
-  await app.click(copy.giveBack); await card("none"); await tone("idle");
+  // Picking takes the tab for you (non-sticky) with no Butler turn running, so Done leaves no band: the tab is yours.
+  await app.click(copy.finish); await card("none"); await tone("none");
   await new Promise(done => setTimeout(done, 300));
-  return finishTrace(prefix, ["idle", "agent", "waiting", "user", "pick"]);
+  return finishTrace(prefix, ["none", "agent", "waiting", "user", "pick"]);
 }
 
 /** Your tab or a signed-in tab: the row starts empty; pick mode and pop-ups come and go in it. */

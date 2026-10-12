@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode, type Ref } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import type { DsBaseProps } from "../../lib/dsProps";
 import { dsClass } from "../../lib/internal";
 import { cn } from "../../lib/utils";
@@ -21,7 +21,8 @@ export interface PageCardProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
   /**
    * Keep one band row (`--browser-band-height`) whether or not a band shows, so a band appearing,
    * changing tone or leaving never moves the native view. Use it for every tab in BrowserPane;
-   * with no band the row is a quiet strip with the band's hairline.
+   * with no band the row is empty and the card surface starts under it, so the row reads as the pane
+   * around the toolbar and a band arriving extends the card up over it.
    */
   reserveBand?: boolean;
   /** Page load progress (0–100): a 2px line on the card's top edge. Omit when loaded. */
@@ -51,6 +52,27 @@ export interface PageCardProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
 }
 
 /**
+ * The native view takes one radius for all four corners (View.setBorderRadius): the card inner radius
+ * where a page corner meets a corner of the card surface, else 0, so the page stays square under a band
+ * and above a letterbox. A page that reaches the card bottom corners keeps the radius under a band too.
+ */
+function pageRadius(inner: HTMLElement, frame: HTMLElement | null) {
+  const computed = getComputedStyle(inner);
+  const border = parseFloat(computed.borderBottomWidth) || 0;
+  const radius = Math.max(0, parseFloat(computed.borderBottomLeftRadius) - border);
+  const content = inner.querySelector<HTMLElement>("[data-slot=page-card-content]");
+  if (!frame || !content || !Number.isFinite(radius) || radius === 0) return 0;
+  const box = inner.getBoundingClientRect(), area = content.getBoundingClientRect(), page = frame.getBoundingClientRect();
+  const tolerance = radius * (inner.offsetWidth ? box.width / inner.offsetWidth : 1);
+  const row = inner.querySelector<HTMLElement>("[data-slot=page-card-band]");
+  // With an empty reserved row the surface starts under the row (see .card in the CSS).
+  const surfaceTop = row && row.childElementCount === 0 ? row.getBoundingClientRect().bottom : box.top + border;
+  const sides = page.left - area.left <= tolerance && area.right - page.right <= tolerance;
+  const top = page.top - surfaceTop <= tolerance, bottom = area.bottom - page.bottom <= tolerance;
+  return sides && (top || bottom) ? radius : 0;
+}
+
+/**
  * The web page as one elevated card inside BrowserPane: it wraps NativeViewSlot, so the native view's
  * bounds are exactly the card's content area (inside its border, under the band). Holder edges are
  * drawn outside the content, so changing the holder never moves the native view; with `reserveBand`
@@ -61,17 +83,27 @@ export function PageCard({
   stillAlt, occluderSelector, children, internal, overlay, contentRef, panelId, className, ...props
 }: PageCardProps) {
   const inner = useRef<HTMLDivElement | null>(null);
+  const last = useRef<NativeViewBounds | null>(null);
   const [scale, setScale] = useState<number | null>(null);
   const report = useCallback((bounds: NativeViewBounds) => {
+    last.current = bounds;
     const node = inner.current;
-    const computed = node ? getComputedStyle(node) : null;
-    const radius = computed ? Math.max(0, parseFloat(computed.borderBottomLeftRadius) - parseFloat(computed.borderBottomWidth)) : 0;
-    // The note reads the layout scale (the frame's CSS width over the page width), which equals
+    // The note reads the layout scale (the frame CSS width over the page width), which equals
     // bounds.scale in the App and stays right inside a scaled preview.
-    const area = node?.querySelector<HTMLElement>("[data-slot='native-view-frame']");
+    const area = node?.querySelector<HTMLElement>("[data-slot=native-view-frame]") ?? null;
     setScale(bounds.visible && viewport && area ? area.offsetWidth / viewport.width : null);
-    onBoundsChange({ ...bounds, radius: Number.isFinite(radius) ? radius : 0 });
+    onBoundsChange({ ...bounds, radius: node ? pageRadius(node, area) : 0 });
   }, [onBoundsChange, viewport]);
+  // A band arriving or leaving keeps the bounds but can change the page corners: report again.
+  const bandShown = useRef<boolean | null>(null);
+  useLayoutEffect(() => {
+    const row = inner.current?.querySelector("[data-slot=page-card-band]");
+    const shown = Boolean(row?.childElementCount);
+    if (bandShown.current === shown) return;
+    const first = bandShown.current === null;
+    bandShown.current = shown;
+    if (!first && last.current) report(last.current);
+  });
   const ratio = viewport ? { "--page-card-viewport-ratio": viewport.height / viewport.width } as CSSProperties : undefined;
   return (
     <div {...props} className={cn(styles.card, className)} data-slot="page-card" data-holder={holder}>

@@ -17,6 +17,12 @@ pub(super) async fn run(client: &Client) -> Result<(), CliError> {
 }
 
 async fn foreground(client: &Client) -> Result<(), CliError> {
+    let view = client.request(Method::GET, "/security", None).await?;
+    if let Some(urls) = view["lan_urls"].as_array() {
+        for url in urls.iter().filter_map(|url| url.as_str()) {
+            println!("Address: {url}");
+        }
+    }
     loop {
         let issued = client
             .request(Method::POST, "/security/pairing", None)
