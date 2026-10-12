@@ -13,6 +13,8 @@ export interface BrowserTab {
   id: string; owner: string; url: string; title: string; favicon: string;
   preview?: string; picking?: boolean; selectionCount?: number;
   stills?: boolean; agent?: boolean; driven?: boolean; profile?: "signed_out" | "signed_in"; epoch?: number; holder?: "agent" | "user"; sticky?: boolean; waiting?: boolean; busy?: boolean; inUse?: boolean;
+  /** You took the tab over while a Butler turn held it; clears when that turn ends. */
+  paused?: boolean;
   status: "idle" | "loading" | "crashed"; canBack: boolean; canForward: boolean;
   /** A sign-in step only the user can do (mfa, passkey, captcha, secure_keypad, unknown_form). */
   signinStep?: string;

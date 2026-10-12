@@ -5,7 +5,7 @@ import { notifyError, notifyStatus } from "@/app/notifications";
 import { browserCall, type BrowserTab } from "./browserBridge";
 import { popupNotice } from "./browserPopupNotice";
 
-/** Tabs Butler can hold show the idle line in the reserved row; your own tabs leave it empty. */
+/** Tabs Butler can hold: the tabs of a conversation, never your own. */
 export function browserHoldable(tab?: BrowserTab) {
   return Boolean(tab && tab.owner !== "mine");
 }
@@ -37,11 +37,12 @@ function SaveSignInBand({ tab }: { tab: BrowserTab }) {
 export function browserHolder(tab?: BrowserTab): PageCardHolder {
   if (!tab || !browserHoldable(tab) || !tab.url) return "none";
   if (tab.waiting) return "waiting";
-  if (tab.holder === "user") return "user";
+  // You hold the tab: a band only while a Butler turn is paused on it, not for your own browsing.
+  if (tab.holder === "user") return tab.paused ? "user" : "none";
   return tab.inUse || tab.busy ? "butler" : "none";
 }
 
-/** The tab's one band: pick mode, the holder, a pop-up, or the idle line on Butler's tabs. A second state joins as the detail. */
+/** The tab's one band: pick mode, the holder or a pop-up; none while Butler does nothing on the tab. A second state joins as the detail. */
 export function AgentControl({ tab }: { tab?: BrowserTab }) {
   const copy = appCopy.browser;
   const popup = tab ? popupNotice(tab) : null;
@@ -70,6 +71,5 @@ export function AgentControl({ tab }: { tab?: BrowserTab }) {
   }
   if (popup) return <PageBand tone="info" icon={<Popup />} label={popup.label} detail={popup.detail}
     actions={popup.action && <ButtonContainer size="xs">{popup.action}</ButtonContainer>} />;
-  if (!browserHoldable(tab)) return null;
-  return <PageBand data-test-class="browser-idle-band" tone="idle" icon={<ButlerThinkingMark size="sm" />} label={copy.butlerTab} />;
+  return null;
 }
