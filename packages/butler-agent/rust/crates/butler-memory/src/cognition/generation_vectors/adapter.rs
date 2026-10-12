@@ -114,6 +114,10 @@ impl GenerationVectorAdapter {
 }
 
 impl RecallVectorPort for GenerationVectorAdapter {
+    fn enabled(&self) -> bool {
+        self.embedding.enabled()
+    }
+
     fn warm<'a>(
         &'a self,
         generation: &'a MemoryGenerationHandle,

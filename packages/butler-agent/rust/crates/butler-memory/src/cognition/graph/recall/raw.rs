@@ -49,22 +49,18 @@ pub(super) fn select(
         });
     }
     let predicate = scope::source(input, "s", "c");
-    let stats_sql = format!(
-        r"
-        SELECT COUNT(*) count, AVG(length(raw.text)) average_length
-        FROM memory_source_text raw
-        JOIN memory_source_leaves s ON s.source_id=raw.source_id
-        JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
-        WHERE {}
-    ",
-        predicate.sql
-    );
-    let (population, average_length): (i64, Option<f64>) = db
-        .query_row(&stats_sql, params_from_iter(&predicate.args), |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })
-        .map_err(db_error)?;
-    let weights = term_weights(db, &predicate, terms, population)?;
+    // Corpus-wide statistics, as FTS5's BM25 uses: kept by triggers, so no scan.
+    let corpus = super::super::source_stats::read(db)?;
+    let (population, average_length) = match corpus {
+        Some(stats) => stats,
+        None => scoped_stats(db, &predicate)?,
+    };
+    let frequency = if corpus.is_some() {
+        Frequency::Corpus
+    } else {
+        Frequency::Scoped(&predicate)
+    };
+    let weights = term_weights(db, frequency, terms, population)?;
     let sources = ranked_sources(
         db,
         predicate,
@@ -106,16 +102,51 @@ fn query_terms(input: &RecallRequest) -> Vec<String> {
     all_terms
 }
 
-/// Inverse document frequency of each term within the scoped sources.
-fn term_weights<'a>(
+/// Where document frequencies are counted: the whole index (with corpus
+/// statistics) or, before those exist, the scoped sources.
+#[derive(Clone, Copy)]
+enum Frequency<'a> {
+    Corpus,
+    Scoped(&'a scope::Predicate),
+}
+
+/// Source count and average length of the scoped sources: a full scan, used
+/// only until the corpus statistics are installed.
+fn scoped_stats(
     db: &Connection,
     predicate: &scope::Predicate,
+) -> CognitionResult<(i64, Option<f64>)> {
+    let stats_sql = format!(
+        r"
+        SELECT COUNT(*) count, AVG(length(raw.text)) average_length
+        FROM memory_source_text raw
+        JOIN memory_source_leaves s ON s.source_id=raw.source_id
+        JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
+        WHERE {}
+    ",
+        predicate.sql
+    );
+    db.query_row(&stats_sql, params_from_iter(&predicate.args), |row| {
+        Ok((row.get(0)?, row.get(1)?))
+    })
+    .map_err(db_error)
+}
+
+/// Inverse document frequency of each term; a term index range per term.
+fn term_weights<'a>(
+    db: &Connection,
+    frequency: Frequency<'_>,
     terms: &'a [String],
     population: i64,
 ) -> CognitionResult<Vec<WeightedTerm<'a>>> {
     let encoded_terms = serde_json::to_string(terms).map_err(json_error)?;
-    let frequency_sql = format!(
-        r"
+    let mut frequency_args = vec![SqlValue::Text(encoded_terms)];
+    let frequency_sql = match frequency {
+        Frequency::Corpus => "SELECT term, COUNT(*) count FROM memory_source_terms WHERE term IN (SELECT value FROM json_each(?)) GROUP BY term".to_owned(),
+        Frequency::Scoped(predicate) => {
+            frequency_args.extend(predicate.args.iter().cloned());
+            format!(
+                r"
         SELECT p.term, COUNT(*) count
         FROM memory_source_terms p
         JOIN memory_source_text raw ON raw.id=p.source_key
@@ -124,10 +155,10 @@ fn term_weights<'a>(
         WHERE p.term IN (SELECT value FROM json_each(?)) AND {}
         GROUP BY p.term
     ",
-        predicate.sql
-    );
-    let mut frequency_args = vec![SqlValue::Text(encoded_terms)];
-    frequency_args.extend(predicate.args.iter().cloned());
+                predicate.sql
+            )
+        }
+    };
     let mut statement = db.prepare(&frequency_sql).map_err(db_error)?;
     let frequencies = statement
         .query_map(params_from_iter(&frequency_args), |row| {

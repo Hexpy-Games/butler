@@ -24,8 +24,8 @@ use super::{
     selection::Selection,
 };
 mod empty;
-use empty::disabled;
 pub(super) use empty::empty;
+use empty::{disabled, model_off};
 
 /// What the vector lane contributed to a first page.
 #[derive(Clone, Default)]
@@ -35,6 +35,9 @@ pub(super) struct VectorFacts {
     pub candidates: usize,
     pub partial: bool,
     pub searched: bool,
+    /// The memory model is off by choice: the lane is switched off, like
+    /// `include_vector=false`, and never makes a recall partial.
+    pub disabled: bool,
     pub matches: Option<crate::cognition::recall::RecallVectorMatches>,
 }
 
@@ -261,7 +264,7 @@ fn build<'a>(
         || vector_partial
         || selection.candidate_limit
         || limits.deadline_hit
-        || vector.code.is_some();
+        || (vector.code.is_some() && !vector.disabled);
     ResponseView {
         status: derive_status(
             results.len(),
@@ -326,6 +329,9 @@ fn vector_lane(
 ) -> RecallCoverageLane {
     if !input.include_vector {
         return disabled();
+    }
+    if vector.disabled {
+        return model_off();
     }
     if !vector.searched {
         return RecallCoverageLane {
