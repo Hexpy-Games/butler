@@ -1,7 +1,8 @@
 //! `observe: true` folds the follow-up observation into the act result: one model
-//! round per batch instead of act + observe. The observation is the newest cycle.
+//! round per batch instead of act + observe. The observation is the newest cycle;
+//! it carries pixels only when the batch's result is visual (see `look`).
 use super::super::GuidedTools;
-use super::{batch_value, client::Client, images, page_data, project_observation};
+use super::{batch_value, client::Client, images, look, page_data, project_observation};
 use butler_core::json::JsonDocument;
 use butler_turn::btcc::{GuidedInvocation, ToolExecutionError};
 use serde_json::{Value, json};
@@ -21,22 +22,21 @@ pub(super) async fn finish(
     if args["observe"] != true || !dispatched {
         return super::encoded(&action);
     }
-    if !client
-        .vision(&invocation.model_execution.active_model_ref())
+    let model = invocation.model_execution.active_model_ref();
+    let pixels = look::admitted(client, &model, look::after_act(args, &action))
         .await
-    {
-        action["observation"] = json!({"status":"unavailable","reason":"vision_required"});
-        return super::encoded(&action);
-    }
+        .unwrap_or(look::Pixels::Never);
     let mut observation = client
         .call(
             "tab.observe",
             &args["tab"],
-            &json!({"tab":args["tab"],"include_image":true,"settle":true}),
+            &json!({"tab":args["tab"],"include_image":pixels.include(),"settle":true}),
             invocation.cancellation,
         )
         .await;
-    images::finish(owner, "browser_observe", &mut observation).await?;
+    if pixels == look::Pixels::Always || observation.get("image").is_some() {
+        images::finish(owner, "browser_observe", &mut observation).await?;
+    }
     if observation["status"] != "ok" {
         action["observation"] = json!({"status":observation["status"],"reason":observation["reason"],
             "recovery":"The batch result above is authoritative. Call browser_observe before the next action."});

@@ -214,7 +214,7 @@ fn valid_web_provider(value: &Value) -> bool {
 fn valid_reader_backend(value: &Value) -> bool {
     matches!(
         value.as_str(),
-        Some("lightweight" | "auto" | "lightpanda" | "jina-hosted" | "disabled")
+        Some("browser" | "lightweight" | "auto" | "lightpanda" | "jina-hosted" | "disabled")
     )
 }
 

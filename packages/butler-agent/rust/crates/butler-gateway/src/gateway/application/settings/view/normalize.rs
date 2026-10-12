@@ -18,7 +18,7 @@ pub(super) fn ui_defaults() -> Value {
         "translucent_sidebar":true, "smart_grouping_enabled":true, "diagnostics_enabled":false,
         "desktop_notifications":{"enabled":true,"assistant_messages":true,"task_completions":true},
         "desktop_tray_enabled":true,
-        "web_search":{"provider":"duckduckgo-html","reader_backend":"lightweight","api_key_configured":false,"api_key_env_var":null,"planning_enabled":true,"planning_default_depth":"balanced"},
+        "web_search":{"provider":"duckduckgo-html","reader_backend":"browser","api_key_configured":false,"api_key_env_var":null,"planning_enabled":true,"planning_default_depth":"balanced"},
         "model_fallback":{"enabled":false,"models":[]}, "profile_label":"Local Butler"
     })
 }

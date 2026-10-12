@@ -384,10 +384,7 @@ impl Headless {
             _ => {}
         }
         if dialog {
-            return page
-                .shared
-                .with_tab(id, |t| t.pending_dialog())
-                .unwrap_or_else(|| refused("not_your_tab"));
+            return pending_dialog(&page, id);
         }
         let crashed = page
             .shared
@@ -402,6 +399,7 @@ impl Headless {
         }
         let outcome = match op {
             "tab.observe" => observe::observe(&page, args).await,
+            "tab.read" => render::read_tab(&page).await,
             "tab.screenshot" => capture::screenshot(&page, args).await,
             "tab.zoom" => capture::zoom(&page, args).await,
             "tab.prepare" => act::prepare(&page, args).await,
@@ -483,4 +481,11 @@ impl Headless {
             browser.stop().await;
         }
     }
+}
+
+/// The dialog a tab call waits behind.
+fn pending_dialog(page: &page::Page, id: &str) -> Value {
+    page.shared
+        .with_tab(id, |t| t.pending_dialog())
+        .unwrap_or_else(|| refused("not_your_tab"))
 }

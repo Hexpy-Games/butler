@@ -120,6 +120,7 @@ async fn serve_host(
     let mut buffer = String::new();
     let mut ops = Vec::new();
     let mut observations = 0;
+    let mut last_act = None;
     loop {
         let frame = super::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
         let op = frame["op"].as_str().unwrap().to_owned();
@@ -151,7 +152,9 @@ async fn serve_host(
             }
             "tab.observe" => {
                 observations += 1;
-                assert_eq!(frame["args"]["include_image"], true);
+                let expected =
+                    super::browser_delegation::expected_pixels(&frame, last_act.as_ref());
+                assert_eq!(frame["args"]["include_image"], expected);
                 let pixels = include_bytes!("../../fixtures/browser-route/observation.jpg");
                 json!({"status":"ok","tab":"fixture","obs":format!("obs-{observations}"),"url":"https://example.com",
                     "text":"textbox Search [e1]; canvas Drawing [e2]","image":{"mime_type":"image/jpeg","data":STANDARD.encode(pixels)}})
@@ -166,6 +169,9 @@ async fn serve_host(
             "tab.act" => act(&frame, &steps),
             _ => panic!("unexpected browser op {op}"),
         };
+        if op == "tab.act" {
+            last_act = Some((frame["args"].clone(), result.clone()));
+        }
         let response = admin
             .send(
                 Method::POST,
