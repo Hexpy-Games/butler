@@ -43,7 +43,7 @@ export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps
       anchor="top"
       intro={mode === "first-run" && !completedAt && scene !== "still" ? "full" : "rerun"}
       introHeld={scene === "hold"}
-      stepKey={flow.step === "welcome" ? "welcome" : "steps"}
+      stepKey={flow.step}
       onScroll={(event) => { event.currentTarget.scrollLeft = 0; }}
       windowControls={<WindowControls />}
     >
