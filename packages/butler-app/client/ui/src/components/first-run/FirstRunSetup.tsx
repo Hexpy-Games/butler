@@ -5,7 +5,8 @@ import { useButlerStore } from "@/app/store.ts";
 import { resolveAppearanceTheme } from "@/app/utils.ts";
 import { WindowControls } from "@/components/layout/WindowControls";
 import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
-import { FirstRunBrowserImport } from "./FirstRunBrowserImport";
+import { FirstRunAgentStep } from "./FirstRunAgentStep";
+import { FirstRunBrowserStep } from "./FirstRunBrowserStep";
 import { useSetupScene } from "./useSetupSceneReady";
 import { FirstRunConsent } from "./FirstRunConsent";
 import { FirstRunConnect } from "./FirstRunConnect";
@@ -50,14 +51,14 @@ export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps
       anchor="top"
       intro={intro}
       introHeld={scene === "hold"}
-      stepKey={flow.step}
+      stepKey={flow.stageKey}
       onScroll={(event) => { event.currentTarget.scrollLeft = 0; }}
       windowControls={<WindowControls />}
     >
       {flow.step === "welcome" ? <FirstRunWelcome flow={flow} />
         : flow.step === "consent" ? <FirstRunConsent flow={flow} />
           : flow.step === "memory" ? <FirstRunMemory flow={flow} />
-          : flow.step === "import" ? <FirstRunBrowserImport flow={flow} />
+          : flow.step === "import" ? (flow.importStage === "agents" ? <FirstRunAgentStep flow={flow} /> : <FirstRunBrowserStep flow={flow} />)
           : flow.step === "ready" ? <FirstRunReady flow={flow} /> : <FirstRunConnect flow={flow} />}
     </SetupWizardShell>
   );

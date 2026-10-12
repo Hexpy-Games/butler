@@ -108,7 +108,23 @@ interface FirstRunCopy {
   keyStored: string;
   finishing: string;
   readyTitle: (name: string) => string;
-  readyBody: string;
+  next: string;
+  /** Tooltip on ② Next while it waits for the connection. */
+  connectFirst: string;
+  replyTitle: string;
+  replyBody: string;
+  doneTitle: string;
+  doneBody: string;
+  import: {
+    agentsTitle: string; agentsBody: string; agentsEmpty: string;
+    browsersTitle: string; browsersBody: string; browsersEmpty: string;
+    importAction: string; importing: string; searching: string; skip: string;
+  };
+  summary: {
+    rowAi: string; rowReply: string; rowAgents: string; rowBrowsers: string;
+    agentCounts: (instructions: number, servers: number) => string;
+    browserCounts: (bookmarks: number, passwords: number) => string;
+  };
   replyLanguage: string;
   finish: string;
   finishFailed: string;
@@ -1928,8 +1944,6 @@ export interface AppCopy {
     agentImport: {
       /** One-line purpose under the section title. */
       purpose: string;
-      /** First-run import step: one line covering AI tools and browsers. */
-      stepPurpose: string;
       /** What a detected tool holds (instructions, MCP server count). */
       found: (instructions: boolean, servers: number) => string;
       run: string;
