@@ -44,7 +44,26 @@ fn socketpair_denials() -> Result<Vec<SeccompRule>, Error> {
     ])
 }
 
+fn ioctl_denials() -> Result<Vec<SeccompRule>, Error> {
+    // These generic kernel requests change only the calling process's fd
+    // close-on-exec/nonblocking flags, never file metadata or device state.
+    // In particular, stream IPC needs FIONBIO to select blocking behavior.
+    let conditions = [libc::FIOCLEX, libc::FIONCLEX, libc::FIONBIO]
+        .into_iter()
+        .map(|request| -> Result<_, Error> {
+            Ok(SeccompCondition::new(
+                1,
+                SeccompCmpArgLen::Dword,
+                SeccompCmpOp::Ne,
+                u64::from(u32::try_from(request)?),
+            )?)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(vec![SeccompRule::new(conditions)?])
+}
+
 pub(super) fn filter() -> Result<BpfProgram, Error> {
+    let ioctl = ioctl_denials()?;
     let mut rules = metadata_syscalls()
         .into_iter()
         .map(|number| (number, vec![]))
@@ -56,6 +75,10 @@ pub(super) fn filter() -> Result<BpfProgram, Error> {
         // Anonymous pairs need no connect(). Deny it even on inherited fds.
         (libc::SYS_connect, vec![]),
         (libc::SYS_io_uring_setup, vec![]),
+        // Landlock's device right does not cover filesystem ioctls that alter
+        // regular-file metadata. Deny driver/filesystem commands while
+        // allowing only local descriptor flags needed by ordinary IPC.
+        (libc::SYS_ioctl, ioctl.clone()),
     ]);
     rules.push((libc::SYS_socketpair, socketpair_denials()?));
     #[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
@@ -67,6 +90,9 @@ pub(super) fn filter() -> Result<BpfProgram, Error> {
                 .into_iter()
                 .map(|(number, conditions)| (number | X32_SYSCALL_BIT, conditions)),
         );
+        // x32 ioctl has a distinct compat entry, beyond the common table.
+        const X32_IOCTL: i64 = 514;
+        rules.push((X32_IOCTL | X32_SYSCALL_BIT, ioctl));
     }
     Ok(SeccompFilter::new(
         rules.into_iter().collect(),
