@@ -1,7 +1,7 @@
 //! Chromium macOS Login Data and Safe Storage. Windows uses the guided CSV flow.
-use super::{ImportError, Login, LoginBatch, SafeStorageKeySource};
+use super::{ImportError, LoginBatch, SafeStorageKeySource};
 #[cfg(target_os = "macos")]
-use super::{Snapshot, sql_error};
+use super::{Login, Snapshot, sql_error};
 use std::path::Path;
 #[cfg(target_os = "macos")]
 use zeroize::Zeroizing;
