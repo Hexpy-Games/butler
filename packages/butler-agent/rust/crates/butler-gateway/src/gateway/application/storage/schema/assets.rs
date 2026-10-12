@@ -20,6 +20,9 @@ pub(super) fn create(db: &Connection) -> Result<(), AppStorageError> {
         INSERT INTO app_asset_sweep SELECT sha256 FROM app_assets WHERE id=OLD.asset_id ON CONFLICT(sha256) DO NOTHING;
         DELETE FROM app_assets WHERE id=OLD.asset_id;
       END;
+      CREATE TRIGGER IF NOT EXISTS asset_message_delete AFTER DELETE ON messages BEGIN
+        DELETE FROM app_asset_refs WHERE owner_kind='message' AND owner_id=OLD.id;
+      END;
       CREATE TRIGGER IF NOT EXISTS asset_library_insert AFTER INSERT ON browser_library BEGIN
         INSERT INTO app_asset_refs SELECT a.id,'library',NEW.id FROM json_tree(NEW.payload) j
         JOIN app_assets a ON a.id=j.value WHERE j.type='text' ON CONFLICT(asset_id,owner_kind,owner_id) DO NOTHING;
@@ -29,5 +32,33 @@ pub(super) fn create(db: &Connection) -> Result<(), AppStorageError> {
         JOIN app_assets a ON a.id=j.value WHERE j.type='text' ON CONFLICT(asset_id,owner_kind,owner_id) DO NOTHING;
         DELETE FROM app_asset_refs WHERE owner_kind='library' AND owner_id=NEW.id
         AND asset_id NOT IN(SELECT value FROM json_tree(NEW.payload) WHERE type='text');
+      END;").map_err(AppStorageError::sqlite)?;
+    message_bindings(db)
+}
+
+/// T3 owns the column; install its indexed media bindings once it is present.
+fn message_bindings(db: &Connection) -> Result<(), AppStorageError> {
+    let mut columns = db
+        .prepare("PRAGMA table_info(messages)")
+        .map_err(AppStorageError::sqlite)?;
+    let columns = columns
+        .query_map([], |r| r.get::<_, String>(1))
+        .map_err(AppStorageError::sqlite)?;
+    let mut present = false;
+    for name in columns {
+        present |= name.map_err(AppStorageError::sqlite)? == "blocks_json";
+    }
+    if !present {
+        return Ok(());
+    }
+    db.execute_batch("CREATE TRIGGER IF NOT EXISTS asset_message_insert AFTER INSERT ON messages BEGIN
+      INSERT INTO app_asset_refs SELECT a.id,'message',NEW.id FROM json_tree(COALESCE(NEW.blocks_json,'[]')) j
+      JOIN app_assets a ON a.id=j.value WHERE j.type='text' ON CONFLICT(asset_id,owner_kind,owner_id) DO NOTHING;
+      END;
+      CREATE TRIGGER IF NOT EXISTS asset_message_update AFTER UPDATE OF blocks_json ON messages BEGIN
+      INSERT INTO app_asset_refs SELECT a.id,'message',NEW.id FROM json_tree(COALESCE(NEW.blocks_json,'[]')) j
+      JOIN app_assets a ON a.id=j.value WHERE j.type='text' ON CONFLICT(asset_id,owner_kind,owner_id) DO NOTHING;
+      DELETE FROM app_asset_refs WHERE owner_kind='message' AND owner_id=NEW.id
+      AND asset_id NOT IN(SELECT value FROM json_tree(COALESCE(NEW.blocks_json,'[]')) WHERE type='text');
       END;") .map_err(AppStorageError::sqlite)
 }

@@ -1,14 +1,14 @@
 /** Read only the observed element's media source and accompanying page text. */
 export async function imageSource({ ref, obs, epoch, url }) {
   const state = globalThis.__butlerObservation;
-  if (!state || state.obs !== obs || state.epoch !== epoch) return { reason: "stale_ref" };
+  if (ref && (!state || state.obs !== obs || state.epoch !== epoch)) return { reason: "stale_ref" };
   const backgroundOf = element => getComputedStyle(element).backgroundImage.match(/^url\(["']?(.*?)["']?\)$/u)?.[1];
-  const candidates = ref ? [] : [...document.images, ...document.links, ...[...state.refs.values()].map(value => value.deref()).filter(Boolean)];
+  const candidates = ref ? [] : [...document.images, ...document.links, ...[...state?.refs?.values() ?? []].map(value => value.deref()).filter(Boolean)];
   const element = ref ? state.refs.get(ref)?.deref() : candidates.find(element => element.currentSrc === url || element.src === url || element.href === url || backgroundOf(element) === url);
-  if (!element?.isConnected) return { reason: ref ? "stale_ref" : "image_url_not_observed" };
+  if (!element?.isConnected) return ref ? { reason: "stale_ref" } : { source_url: url, alt: "", nearby_text: "" };
   const image = element.matches("img") ? element : element.matches("picture") ? element.querySelector("img") : null;
   const background = backgroundOf(element);
-  const result = { source_url: image?.currentSrc || image?.src || background || url || "",
+  const result = { source_url: url ?? (image?.currentSrc || image?.src || background || ""),
     alt: image?.alt || element.getAttribute("aria-label") || element.textContent?.trim() || "",
     nearby_text: element.parentElement?.innerText || "" };
   // Embedded resources belong to this frame's Blob/data session, not a session HTTP fetch.

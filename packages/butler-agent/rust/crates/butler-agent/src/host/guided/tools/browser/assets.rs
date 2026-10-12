@@ -1,4 +1,4 @@
-//! Conversation-scoped asset lookup for structured-answer validation.
+//! Authenticated App asset lookup for structured-answer validation.
 use super::super::GuidedTools;
 use serde_json::{Value, json};
 use std::collections::HashSet;

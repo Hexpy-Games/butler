@@ -1,9 +1,12 @@
 //! Raster normalization and bounded, DNS-pinned public image downloads.
-use image::{ImageReader, codecs::jpeg::JpegEncoder, imageops::FilterType};
+use image::{
+    DynamicImage, ImageDecoder, ImageReader, codecs::jpeg::JpegEncoder, imageops::FilterType,
+};
 use std::{io::Cursor, time::Duration};
 use url::Url;
 
 pub const MAX_DOWNLOAD: usize = 8 * 1024 * 1024;
+const MAX_DECODE_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_ASSET: usize = 250 * 1024;
 pub struct NormalizedImage {
     pub bytes: Vec<u8>,
@@ -21,9 +24,18 @@ pub fn normalize(bytes: &[u8]) -> Result<NormalizedImage, &'static str> {
     let mut limits = image::Limits::default();
     limits.max_image_width = Some(16384);
     limits.max_image_height = Some(16384);
-    limits.max_alloc = Some(128 * 1024 * 1024);
+    limits.max_alloc = Some(MAX_DECODE_BYTES);
     reader.limits(limits);
-    let image = reader.decode().map_err(|_| "invalid_image")?.to_rgb8();
+    let mut decoder = reader.into_decoder().map_err(|_| "invalid_image")?;
+    if decoder.total_bytes() > MAX_DECODE_BYTES {
+        return Err("invalid_image");
+    }
+    let orientation = decoder
+        .orientation()
+        .unwrap_or(image::metadata::Orientation::NoTransforms);
+    let mut decoded = DynamicImage::from_decoder(decoder).map_err(|_| "invalid_image")?;
+    decoded.apply_orientation(orientation);
+    let image = decoded.to_rgb8();
     for side in [1280, 960, 640, 320] {
         let long = image.width().max(image.height());
         let side = side.min(long);

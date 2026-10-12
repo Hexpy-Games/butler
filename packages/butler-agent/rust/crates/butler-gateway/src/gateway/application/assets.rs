@@ -1,10 +1,12 @@
 //! App-owned content assets. No timers, disk thumbnails or duplicate file writes.
+mod cache;
 mod store;
 use super::{AppApplication, GatewayApplicationError, app_error};
 use base64::{Engine, engine::general_purpose::STANDARD};
+use cache::Derivatives;
 use parking_lot::Mutex;
 use serde_json::{Value, json};
-use std::{collections::VecDeque, sync::Arc};
+use std::sync::Arc;
 
 pub enum AppAssetCommand {
     Collect {
@@ -15,7 +17,6 @@ pub enum AppAssetCommand {
         source_url: String,
     },
     Lookup {
-        session: String,
         ids: Vec<String>,
     },
     Read {
@@ -24,7 +25,6 @@ pub enum AppAssetCommand {
     },
     Sweep,
 }
-type Derivatives = VecDeque<(String, Vec<u8>)>;
 #[derive(Clone, Default)]
 pub(super) struct AssetCache(Arc<Mutex<Derivatives>>);
 impl AppApplication {
@@ -56,9 +56,9 @@ impl AppApplication {
                     .await
                     .map_err(app_error)
             }
-            AppAssetCommand::Lookup { session, ids } => self
+            AppAssetCommand::Lookup { ids } => self
                 .storage
-                .read(move |db| store::lookup(db, &session, &ids))
+                .read(move |db| store::lookup(db, &ids))
                 .await
                 .map_err(app_error),
             AppAssetCommand::Read { id, width } => self.read_asset(id, width).await,
@@ -85,19 +85,8 @@ impl AppApplication {
             .read(move |db| store::hash(db, &identity))
             .await
             .map_err(|e| GatewayApplicationError::public(404, e.code(), "Image not found."))?;
-        let key = format!("{id}:{}", width.unwrap_or(0));
-        let cached = {
-            let mut cache = self.asset_cache.0.lock();
-            cache
-                .iter()
-                .position(|(k, _)| *k == key)
-                .and_then(|i| cache.remove(i))
-                .map(|entry| {
-                    let bytes = entry.1.clone();
-                    cache.push_back(entry);
-                    bytes
-                })
-        };
+        let key = format!("{hash}:{}", width.unwrap_or(0));
+        let cached = self.asset_cache.0.lock().get(&key);
         let bytes = if let Some(bytes) = cached {
             bytes
         } else {
@@ -107,14 +96,7 @@ impl AppApplication {
             .await
             .map_err(|_| GatewayApplicationError::internal())?
             .map_err(app_error)?;
-            let mut cache = self.asset_cache.0.lock();
-            while cache.iter().map(|(_, b)| b.len()).sum::<usize>() + bytes.len() > 8 * 1024 * 1024
-            {
-                if cache.pop_front().is_none() {
-                    break;
-                }
-            }
-            cache.push_back((key, bytes.clone()));
+            self.asset_cache.0.lock().insert(key, bytes.clone());
             bytes
         };
         Ok(json!({"data":STANDARD.encode(bytes),"mime":"image/jpeg"}))

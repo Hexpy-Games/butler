@@ -108,16 +108,14 @@ pub(super) fn collect(
     )
 }
 
-pub(super) fn lookup(
-    db: &Connection,
-    session: &str,
-    ids: &[String],
-) -> Result<Value, AppStorageError> {
-    let mut query = db.prepare_cached("SELECT a.id FROM app_assets a JOIN app_asset_refs r ON r.asset_id=a.id WHERE a.id=?1 AND r.owner_kind='chat' AND r.owner_id=?2").map_err(AppStorageError::sqlite)?;
+pub(super) fn lookup(db: &Connection, ids: &[String]) -> Result<Value, AppStorageError> {
+    let mut query = db
+        .prepare_cached("SELECT id FROM app_assets WHERE id=?1")
+        .map_err(AppStorageError::sqlite)?;
     let mut found = Vec::new();
     for id in ids {
         if query
-            .query_row(params![id, session], |r| r.get::<_, String>(0))
+            .query_row([id], |r| r.get::<_, String>(0))
             .optional()
             .map_err(AppStorageError::sqlite)?
             .is_some()

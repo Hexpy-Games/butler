@@ -50,11 +50,7 @@ pub(super) async fn finish(
     }
     Ok(())
 }
-pub(super) async fn lookup(
-    state: &HttpState,
-    session: &str,
-    args: &Value,
-) -> Result<Value, HttpError> {
+pub(super) async fn lookup(state: &HttpState, args: &Value) -> Result<Value, HttpError> {
     let ids = args["ids"]
         .as_array()
         .filter(|ids| ids.len() <= 512)
@@ -64,10 +60,7 @@ pub(super) async fn lookup(
         .collect::<Result<Vec<_>, _>>()?;
     Ok(state
         .application
-        .assets(AppAssetCommand::Lookup {
-            session: session.into(),
-            ids,
-        })
+        .assets(AppAssetCommand::Lookup { ids })
         .await?)
 }
 

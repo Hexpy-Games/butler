@@ -7,6 +7,9 @@ const SOURCE: &str =
 
 pub(crate) async fn collect(page: &Page, args: &Value) -> Result<Value, String> {
     let epoch = page.epoch().ok_or("tab_closed")?;
+    if args["url"].is_string() {
+        return url_source(page, args, epoch).await;
+    }
     let observation = page
         .shared
         .with_tab(&page.tab, |t| t.observation.clone())
@@ -149,4 +152,21 @@ async fn check_ref(
         }
     }
     Ok(None)
+}
+
+async fn url_source(page: &Page, args: &Value, epoch: u64) -> Result<Value, String> {
+    let frames = page.frame_worlds().await?;
+    let frame = frames.first().ok_or("frame_unavailable")?;
+    let function = SOURCE.replacen("export ", "", 1);
+    let mut source = page
+        .evaluate(
+            frame,
+            &format!("({function})({})", json!({"url":args["url"]})),
+        )
+        .await?;
+    if page.epoch() != Some(epoch) {
+        return Err("control_changed".into());
+    }
+    source["status"] = json!("ok");
+    Ok(source)
 }

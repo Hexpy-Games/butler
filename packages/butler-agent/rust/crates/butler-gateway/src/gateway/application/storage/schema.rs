@@ -32,7 +32,6 @@ pub(super) fn migrate(
     let turns_new = !migration::table_exists(connection, "turns")?;
     core::create(connection)?;
     library::create(connection)?;
-    assets::create(connection)?;
     super::history::schema::create(connection)?;
     security::create(connection)?;
     // Open-turn lookups filter on the state alone; databases that predate the
@@ -49,6 +48,7 @@ pub(super) fn migrate(
     // database, the connected provider's routine preset for a new one.
     record_default_model_policy(connection, !turns_new)?;
     migration::add_current_columns(connection)?;
+    assets::create(connection)?;
     connection.execute_batch(
         "CREATE INDEX IF NOT EXISTS chats_archived_idx ON chats(archived);
          CREATE INDEX IF NOT EXISTS projects_archived_idx ON projects(archived);

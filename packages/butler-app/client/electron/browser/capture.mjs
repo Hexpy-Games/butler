@@ -152,7 +152,14 @@ function overlaps(a, b) {
 
 /** Source images use the tab's network session, retaining its authenticated pixels. */
 export async function collectImage(tab, args) {
-  const observation = tab.observation, epoch = tab.epoch;
+  const epoch = tab.epoch;
+  if (args.url != null) {
+    const source = await tab.view.webContents.executeJavaScriptInIsolatedWorld(9001,
+      [{ code: `(${imageSource.toString()})(${JSON.stringify({ url: args.url })})` }]);
+    if (epoch !== tab.epoch || tab.holder !== "agent") return { status: "not_dispatched", reason: "control_changed" };
+    return { status: "ok", ...source };
+  }
+  const observation = tab.observation;
   if (!observation || observation.epoch !== epoch) return { status: "refused", reason: "stale_ref" };
   const observationId = args.observation ?? observation.obs;
   if (observationId !== observation.obs) return { status:"refused", reason:"stale_ref" };
@@ -179,7 +186,7 @@ export async function collectImage(tab, args) {
   if (!source.source_url && args.ref) return { ...await screenshotTab(tab, { ...args, observation:observationId }), ...source };
   if (args.url) return { status: "ok", ...source };
   try {
-    const response = await tab.view.webContents.session.fetch(source.source_url, { signal: AbortSignal.timeout(10000) });
+    const response = await tab.view.webContents.session.fetch(source.source_url, { credentials: "include", signal: AbortSignal.timeout(10000) });
     if (!response.ok || !response.headers.get("content-type")?.startsWith("image/")) return { status:"refused", reason:"invalid_image" };
     const reader = response.body.getReader(), chunks = []; let size = 0;
     try {

@@ -10,10 +10,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let session = frame["session"].as_str().unwrap_or("").to_owned();
     super::calls_validation::validate(&state, &mut frame, &op, &session)?;
     if op == "assets.lookup" {
-        return response(
-            0,
-            super::assets::lookup(&state, &session, &frame["args"]).await?,
-        );
+        return response(0, super::assets::lookup(&state, &frame["args"]).await?);
     }
     let count = if op == "tab.act" {
         frame["args"]["steps"].as_array().map_or(0, Vec::len)

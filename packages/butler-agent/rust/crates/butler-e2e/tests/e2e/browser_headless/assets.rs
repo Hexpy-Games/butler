@@ -25,6 +25,18 @@ async fn image_assets_collect_dedupe_crop_guard_serve_and_sweep() -> Result<(), 
     let session = chat.data()["session"]["id"].as_str().unwrap();
     let (_, url) = support::publish_in(&s, session, "Publish images").await?;
     let tab = open(&admin, session, &url).await?["tab"].clone();
+    let private_before_observe = call(
+        &admin,
+        session,
+        "tab.image_collect",
+        &tab,
+        json!({"url":"http://127.0.0.1:9/private.jpg"}),
+    )
+    .await?;
+    assert_eq!(
+        private_before_observe["reason"], "private_image_url",
+        "URL collection does not require browser_observe"
+    );
     let page = call(
         &admin,
         session,
@@ -133,6 +145,19 @@ async fn image_assets_collect_dedupe_crop_guard_serve_and_sweep() -> Result<(), 
         "Library keeps the source asset after chat deletion"
     );
     assert_eq!(s.gw.get(first["url"].as_str().unwrap()).await?.status, 200);
+    let retained = call(
+        &admin,
+        "general",
+        "assets.lookup",
+        &Value::Null,
+        json!({"ids":[first["id"]]}),
+    )
+    .await?;
+    assert_eq!(
+        retained["ids"],
+        json!([first["id"]]),
+        "Library assets remain valid in another chat"
+    );
     assert_eq!(s.gw.delete("/library/saved-image").await?.status, 200);
     assert_eq!(
         files(&root)?.len(),
