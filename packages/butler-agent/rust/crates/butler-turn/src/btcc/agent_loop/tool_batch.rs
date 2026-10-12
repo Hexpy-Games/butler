@@ -17,6 +17,13 @@ pub(super) struct ExecutedCall {
     pub pending_authority: Option<String>,
 }
 
+impl PreparedCall<'_> {
+    fn visible(&self) -> bool {
+        self.tool
+            .is_none_or(|tool| tool.transcript_visibility.as_deref() != Some("hidden"))
+    }
+}
+
 impl ExecutedCall {
     pub(super) fn restored(result: ToolResult) -> Self {
         let pending_authority = super::continuation::pending_authority(result.output.as_ref());
@@ -77,7 +84,11 @@ pub(super) fn prepare<'a>(
             )),
         ),
         (Some(tool), Some(arguments)) => {
-            let error = validate_required(&tool.parameters, &arguments);
+            let error = if tool.handler_validates_arguments == Some(true) {
+                None
+            } else {
+                validate_required(&tool.parameters, &arguments)
+            };
             (arguments, error)
         }
     };
@@ -131,7 +142,8 @@ pub(super) async fn execute<'a>(
     invocation: GuidedInvocation<'a>,
     prepared: &'a PreparedCall<'a>,
 ) -> Result<ExecutedCall, BtccError> {
-    operation(
+    visible_operation(
+        prepared,
         invocation.progress,
         &prepared.call,
         Status::Started,
@@ -147,7 +159,8 @@ pub(super) async fn execute<'a>(
             error: Some(error.clone()),
             output: None,
         };
-        operation(
+        visible_operation(
+            prepared,
             invocation.progress,
             &prepared.call,
             Status::Failed,
@@ -201,7 +214,8 @@ async fn publish_result(
         .filter(|e| e.code == "hook_denied")
         .map(|_| denied_operation(policy, &prepared.call));
     let operation_call_id = policy.operation_result_call_id(&prepared.call.id);
-    operation(
+    visible_operation(
+        prepared,
         invocation.progress,
         visible.as_ref().unwrap_or(&prepared.call),
         if result.ok {
@@ -216,6 +230,15 @@ async fn publish_result(
 }
 
 fn enrich_rejection(result: &mut ToolResult, prepared: &PreparedCall<'_>) {
+    if result
+        .output
+        .as_ref()
+        .and_then(|output| output.field("error").ok().flatten())
+        .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+        .is_some_and(|error| error.get("problems").is_some_and(Value::is_array))
+    {
+        return;
+    }
     if let Some(error) = &mut result.error {
         let schema = prepared.tool.map(|tool| &tool.parameters);
         error.message.push_str(&format!(
@@ -260,7 +283,8 @@ async fn execute_validated<'a>(
             }
         }
         Err(ToolExecutionError::Integrity(error)) => {
-            operation(
+            visible_operation(
+                prepared,
                 invocation.progress,
                 &prepared.call,
                 if invocation.cancellation.is_cancelled() {
@@ -371,5 +395,18 @@ fn tool_error(code: &str, message: String, field: Option<String>) -> ToolError {
         code: code.into(),
         message,
         field,
+    }
+}
+
+async fn visible_operation(
+    prepared: &PreparedCall<'_>,
+    progress: &dyn crate::btcc::AgentLoopProgress,
+    call: &ModelRoundToolCall,
+    status: Status,
+    output: Option<&JsonDocument>,
+    operation_call_id: Option<&str>,
+) {
+    if prepared.visible() {
+        operation(progress, call, status, output, operation_call_id).await;
     }
 }

@@ -2,11 +2,10 @@ import { useState, type ReactNode } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Button } from "../../components/Button";
 import { ButlerThinkingMark } from "../../components/ButlerThinkingMark";
-import { CheckIcon, Copy, Globe2, ShieldCheck, Sparkles } from "../../components/Icons";
+import { CheckIcon, Copy, Globe2 } from "../../components/Icons";
 import { IconSlot } from "../../components/IconSlot";
 import { IconTile } from "../../components/IconTile";
 import { Inline } from "../../components/Inline";
-import { ProviderLogo } from "../../components/ProviderLogo";
 import { Spinner } from "../../components/Spinner";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
@@ -66,7 +65,7 @@ function Frame({ tone, children, stepKey }: { tone: Tone; children: ReactNode; s
 
 function Consent({ copy }: { copy: Copy }) {
   return (
-    <SetupWizardStepCard activeIndex={1} backLabel={copy.back} icon={<ShieldCheck size="lg" />} onBack={() => undefined}
+    <SetupWizardStepCard activeIndex={1} backLabel={copy.back} onBack={() => undefined}
       progressLabel={copy.progress} steps={steps(copy)} title={copy.consentTitle} footerStart={<Prep copy={copy} />}
       actions={<><SetupWizardStepAction text={copy.decline} /><SetupWizardStepAction forward text={copy.agree} /></>}>
       <Typo.Body>{copy.consentBody}</Typo.Body>
@@ -76,8 +75,7 @@ function Consent({ copy }: { copy: Copy }) {
 
 function SignIn({ copy }: { copy: Copy }) {
   return (
-    <SetupWizardStepCard activeIndex={2} backLabel={copy.back} description={copy.signInBody} icon={<ProviderLogo name="openai" size="lg" />}
-      onBack={() => undefined} progressLabel={copy.progress} steps={steps(copy)} title={copy.signInTitle}
+    <SetupWizardStepCard activeIndex={2} backLabel={copy.back} description={copy.signInBody} onBack={() => undefined} progressLabel={copy.progress} steps={steps(copy)} title={copy.signInTitle}
       actions={<SetupWizardStepAction text={copy.cancel} />}>
       <Notice tone="neutral" icon={<Spinner size={14} />} message={copy.waiting} action={(
         <Inline gap="md" wrap={false}>
@@ -91,8 +89,7 @@ function SignIn({ copy }: { copy: Copy }) {
 
 function TimedOut({ copy }: { copy: Copy }) {
   return (
-    <SetupWizardStepCard activeIndex={2} backLabel={copy.back} description={copy.timedOutBody} icon={<ProviderLogo name="openai" size="lg" />}
-      onBack={() => undefined} progressLabel={copy.progress} steps={steps(copy)} title={copy.timedOut}
+    <SetupWizardStepCard activeIndex={2} backLabel={copy.back} description={copy.timedOutBody} onBack={() => undefined} progressLabel={copy.progress} steps={steps(copy)} title={copy.timedOut}
       actions={<SetupWizardStepAction forward text={copy.retry} />} />
   );
 }
@@ -114,7 +111,7 @@ function FlowDemo({ copy, tone }: { copy: Copy; tone: Tone }) {
   const titles = [copy.consentTitle, copy.pickTitle, copy.signInTitle];
   const step = (
     <SetupWizardStepCard activeIndex={index} backLabel={copy.back} contentKey={String(index)} description={index === 2 ? copy.pickBody : undefined}
-      icon={index === 1 ? <ShieldCheck size="lg" /> : <Sparkles size="lg" />} onBack={() => setIndex((value) => value - 1)}
+      onBack={() => setIndex((value) => value - 1)}
       progressLabel={copy.progress} steps={steps(copy)} title={titles[index - 1] ?? copy.signInTitle}
       actions={<SetupWizardStepAction forward text={copy.next} onClick={next} />} />
   );

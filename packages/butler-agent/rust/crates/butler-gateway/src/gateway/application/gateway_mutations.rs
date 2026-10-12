@@ -53,7 +53,11 @@ impl GatewayMutationCommands for AppApplication {
         permanent: bool,
     ) -> ApplicationFuture<AppProjectActionResult> {
         let this = self.clone_handle();
-        Box::pin(async move { this.delete_project_owned(id, permanent).await })
+        Box::pin(async move {
+            let result = this.delete_project_owned(id, permanent).await?;
+            this.assets_owned(AppAssetCommand::Sweep).await?;
+            Ok(result)
+        })
     }
     fn update_session(
         &self,
@@ -81,7 +85,11 @@ impl GatewayMutationCommands for AppApplication {
         permanent: bool,
     ) -> ApplicationFuture<AppSessionActionResult> {
         let this = self.clone_handle();
-        Box::pin(async move { this.delete_session_owned(id, permanent).await })
+        Box::pin(async move {
+            let result = this.delete_session_owned(id, permanent).await?;
+            this.assets_owned(AppAssetCommand::Sweep).await?;
+            Ok(result)
+        })
     }
     fn mutate_space(
         &self,

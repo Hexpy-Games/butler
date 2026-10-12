@@ -1,4 +1,4 @@
-import { Field, FieldLabel, MessageSquare, NativeSelect, NativeSelectOption, SetupWizardStepAction, Typo } from "@/butler-ds";
+import { Field, FieldLabel, NativeSelect, NativeSelectOption, SetupWizardStepAction, Typo } from "@/butler-ds";
 import { SUPPORTED_UI_LANGUAGES } from "@/app/firstRunSetup.ts";
 import { FirstRunPrepStatus } from "./FirstRunPrepStatus";
 import { FirstRunStepCard } from "./FirstRunStepCard";
@@ -8,7 +8,7 @@ import type { FirstRunFlow } from "./useFirstRunFlow";
 export function FirstRunReplyLanguage({ flow }: { flow: FirstRunFlow }) {
   const { copy, reply } = flow;
   return (
-    <FirstRunStepCard flow={flow} contentKey="reply" icon={<MessageSquare size="lg" />} title={copy.replyTitle}
+    <FirstRunStepCard flow={flow} contentKey="reply" title={copy.replyTitle}
       titleId="first-run-reply-title" description={copy.replyBody} onBack={flow.backFromReply}
       footerStart={!flow.commit.connected ? <FirstRunPrepStatus flow={flow} /> : undefined}
       actions={<>

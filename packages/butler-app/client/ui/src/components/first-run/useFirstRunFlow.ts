@@ -26,7 +26,6 @@ export type ConnectView =
   | { kind: "list" }
   | { kind: "signin" }
   | { kind: "key"; cardId: FirstRunProviderCardId }
-  | { kind: "local" }
   | { kind: "custom" }
   | { kind: "customModels"; options: LocalModelOption[]; apiKey?: string };
 
@@ -117,7 +116,11 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     setAppCopyLanguage(language);
   }, [language]);
 
-  const stageKey = step === "connect" ? `connect:${aiStage}` : step === "import" ? `import:${importStage}` : step;
+  // Import ①'s result is its own screen after the run (no undo in first run; Settings changes things later).
+  const agentsDone = Boolean(imports.agentImport.result) && !imports.agentImport.error;
+  const browsersDone = Boolean(imports.browserImport.result) && !imports.browserImport.error;
+  const importKey = (importStage === "agents" ? agentsDone : browsersDone) ? `${importStage}:done` : importStage;
+  const stageKey = step === "connect" ? `connect:${aiStage}` : step === "import" ? `import:${importKey}` : step;
   const substep = step === "connect" ? { index: ["pick", "auth", "reply"].indexOf(aiStage) + 1, total: 3 }
     : step === "import" ? { index: importStage === "agents" ? 1 : 2, total: 2 } : undefined;
 
@@ -129,8 +132,8 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     repairPreparation: setup.repair,
     agree,
     start: navigation.start,
-    ...connectionActions({ stages, commit, signIn, local, current, onCancel }),
-    aiStage, importStage, stageKey, substep, ...imports,
+    ...connectionActions({ stages, commit, signIn, current, onCancel }),
+    aiStage, importStage, agentsDone, browsersDone, stageKey, substep, ...imports,
     backToWelcome: navigation.backToWelcome,
     decline: () => navigation.decline(clearAcceptance),
     backToConsent: navigation.backToConsent,

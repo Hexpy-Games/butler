@@ -16,6 +16,7 @@ pub(super) async fn collect(
 ) -> Result<JournalCloseout, BtccError> {
     let mut artifacts = artifacts::ArtifactCollector::default();
     let mut changed = changed::ChangedCollector::default();
+    let mut answer_blocks = Vec::new();
     let mut after = 0;
     loop {
         let page = journal
@@ -36,6 +37,20 @@ pub(super) async fn collect(
             if row.status == "completed" {
                 artifacts.add(row)?;
                 changed.add(row)?;
+                if row.tool_name == "answer_blocks"
+                    && row
+                        .result
+                        .as_ref()
+                        .is_some_and(|r| r.field("ok").ok().flatten() == Some("true"))
+                {
+                    let mut spec: serde_json::Value = row.arguments.read().map_err(invalid)?;
+                    butler_runtime::capabilities::answer_blocks::normalize(&mut spec);
+                    butler_runtime::capabilities::answer_blocks::accept(
+                        &mut answer_blocks,
+                        &row.call_id,
+                        spec,
+                    );
+                }
             }
             after = row.rowid;
         }
@@ -49,6 +64,7 @@ pub(super) async fn collect(
     Ok(JournalCloseout {
         artifacts: artifacts::with_changed_files(artifacts.finish(), &changed_files, workspace),
         changed_files,
+        answer_blocks,
     })
 }
 
@@ -82,6 +98,7 @@ pub(super) fn merge_files(mut child: JournalCloseout, own: JournalCloseout) -> J
     let mut merged = JournalCloseout {
         artifacts: Vec::new(),
         changed_files: Vec::new(),
+        answer_blocks: own.answer_blocks,
     };
     child.changed_files.extend(own.changed_files);
     child.artifacts.extend(own.artifacts);

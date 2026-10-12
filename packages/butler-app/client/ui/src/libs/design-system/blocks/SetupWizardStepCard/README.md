@@ -6,9 +6,11 @@ One step of a focus-variant setup flow, in the wide (520px) solid card of
 
 1. **Header row**: the back action (`onBack`, `backLabel`, inline `ArrowLeft`)
    at the start and the step indicator (`steps`, `activeIndex`,
-   `progressLabel`, rendered by `SetupWizardProgress`) at the end.
-2. **Title row**: one 20px glyph with no tile (`icon`), centered on the H4
-   title's first line, then the title and an optional one-line description.
+   `progressLabel`, rendered by `SetupWizardProgress`) at the end. The row
+   aligns to its top, so Back stays on the strip's first line when a narrow
+   card wraps the strip.
+2. **Title**: the H4 title and an optional one-line description, with no
+   glyph: the title starts on the same left edge as the content below it.
 3. **Content**: `children`.
 4. **Footer row**: `footerStart` (status, a quiet link) at the start and
    `actions` at the end in a large `ButtonContainer`.
@@ -35,7 +37,7 @@ affordance across all steps; product screens only pass content.
   <SetupWizardStepCard
     steps={steps} activeIndex={1} progressLabel="Setup steps"
     onBack={backToIntro} backLabel="Back"
-    icon={<ShieldCheck size="lg" />} title="Before you start" titleId="setup-step-title"
+    title="Before you start" titleId="setup-step-title"
     contentKey="consent"
     footerStart={<PrepStatus />}
     actions={<><SetupWizardStepAction text="Decline" /><SetupWizardStepAction forward text="Agree and continue" /></>}
@@ -65,7 +67,8 @@ First-run setup and any later setup flow that uses the focus shell.
 ## Wrong use cases
 - The intro or welcome screen: use `SetupWizardContent` with its own centered
   composition.
-- A grey `IconTile` behind the title glyph, or a stretched primary button.
+- A glyph before the title (it indents the title off the content edge), or a
+  stretched primary button.
 
 ## Tags
 setup, wizard, step, first-run, onboarding

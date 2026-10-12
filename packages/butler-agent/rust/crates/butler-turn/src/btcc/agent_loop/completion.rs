@@ -156,6 +156,7 @@ pub(super) async fn finish(
     let terminal_outcome = (suspension.is_none()
         && closeout.runtime_failure.is_none()
         && closeout.content.trim().is_empty()
+        && closeout.answer_blocks.is_empty()
         && input.semantic.context.empty_response_policy
             == Some(super::contracts::EmptyResponsePolicy::TypedTerminal))
     .then_some(TerminalOutcome::NoVisible);
@@ -172,6 +173,7 @@ pub(super) async fn finish(
             .or_else(|| state.runtime_failure.clone()),
         artifacts: closeout.artifacts,
         changed_files: closeout.changed_files,
+        answer_blocks: closeout.answer_blocks,
         model_identity: closeout.model_identity,
     })
 }

@@ -1,5 +1,7 @@
 //! Conversation-owned browser tools; web content cannot select authority or owners.
+mod assets;
 mod authority;
+pub(super) use assets::lookup_assets;
 mod client;
 mod dialog;
 mod effect;
@@ -33,12 +35,20 @@ pub(super) fn supports(name: &str) -> bool {
             | "browser_tabs"
             | "browser_selection"
             | "browser_screenshot"
+            | "image_collect"
             | "browser_close"
             | "browser_wait_for_user"
             | "browser_sign_in"
             | "browser_pay_fill"
             | "browser_autofill_fill"
     )
+}
+fn admitted(owner: &GuidedTools, name: &str) -> bool {
+    owner
+        .binding
+        .allowed_tools_and_effects
+        .as_ref()
+        .is_none_or(|names| names.iter().any(|allowed| allowed == name))
 }
 pub(super) async fn execute(
     owner: &GuidedTools,
@@ -47,12 +57,7 @@ pub(super) async fn execute(
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let mut args = Value::Object(call.arguments.clone());
-    if owner
-        .binding
-        .allowed_tools_and_effects
-        .as_ref()
-        .is_some_and(|names| !names.iter().any(|name| name == &call.name))
-    {
+    if !admitted(owner, &call.name) {
         return finish_batch(
             &args,
             json!({"status":"not_dispatched","reason":"tool_not_admitted"}),
@@ -102,6 +107,7 @@ pub(super) async fn execute(
     if call.name == "browser_open" {
         open::remember(owner, &args, &result);
     }
+    assets::model_result(&call.name, &mut result);
     let image_class = if zoom { "browser_zoom" } else { &call.name };
     if pixels == look::Pixels::Always || result.get("image").is_some() {
         images::finish(owner, image_class, &mut result).await?;
@@ -114,6 +120,7 @@ pub(super) async fn execute(
     } else if call.name == "browser_observe" && result["status"] == "ok" {
         project_observation(&mut result);
     }
+    super::answer_blocks::remember_browser_source(owner, call, occurrence, &result).await?;
     encode_page_data(result)
 }
 fn host_op(name: &str, zoom: bool) -> &'static str {
@@ -123,6 +130,7 @@ fn host_op(name: &str, zoom: bool) -> &'static str {
         "browser_observe" => "tab.observe",
         "browser_selection" => "tab.selection",
         "browser_screenshot" => "tab.screenshot",
+        "image_collect" => "tab.image_collect",
         "browser_close" => "tab.close",
         _ => "tabs.list",
     }

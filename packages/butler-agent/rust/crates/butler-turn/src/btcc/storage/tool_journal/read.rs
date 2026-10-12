@@ -96,8 +96,8 @@ pub(super) fn closeout_page(
     let mut statement = db
         .prepare(
             "SELECT rowid,tool_name,status,
-            CASE WHEN tool_name='edit_file' THEN arguments_json ELSE '{}' END,
-            result_json,result_sha256,changed_files_json
+            CASE WHEN tool_name IN ('edit_file','answer_blocks') THEN arguments_json ELSE '{}' END,
+            result_json,result_sha256,changed_files_json,call_id
          FROM btcc_guided_tool_calls WHERE turn_id=?1 AND rowid>?2 ORDER BY rowid LIMIT ?3",
         )
         .map_err(StorageError::sqlite)?;
@@ -117,12 +117,13 @@ pub(super) fn closeout_page(
                     row.get::<_, Option<String>>(4)?,
                     row.get::<_, Option<String>>(5)?,
                     row.get::<_, Option<String>>(6)?,
+                    row.get::<_, String>(7)?,
                 ))
             },
         )
         .map_err(StorageError::sqlite)?;
     rows.map(|row| {
-        let (rowid, tool_name, status, arguments, result, result_sha256, changed_files) =
+        let (rowid, tool_name, status, arguments, result, result_sha256, changed_files, call_id) =
             row.map_err(StorageError::sqlite)?;
         if let Some(raw) = &result
             && result_sha256.as_deref() != Some(digest(raw).as_str())
@@ -139,6 +140,7 @@ pub(super) fn closeout_page(
         };
         Ok(ToolJournalCloseoutRow {
             rowid,
+            call_id,
             tool_name,
             status,
             arguments: document(arguments)?,

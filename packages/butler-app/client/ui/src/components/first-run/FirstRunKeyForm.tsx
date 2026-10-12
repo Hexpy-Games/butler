@@ -15,7 +15,6 @@ import {
   Typo,
 } from "@/butler-ds";
 import { PROVIDER_CARDS, type FirstRunProviderCardId } from "@/app/setupProviders.ts";
-import { CardGlyph } from "./CardGlyph";
 import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { KeyCheckFailure } from "@/app/setupConnection.ts";
 import { RETRYABLE_KEY_FAILURES, useKeyVerification, type KeyStatus } from "./useKeyVerification";
@@ -34,7 +33,7 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
   const connected = Boolean(flow.commit.connected);
   const connecting = Boolean(flow.commit.pending) && !connected;
   return (
-    <FirstRunStepCard flow={flow} contentKey={`key:${cardId}`} icon={<CardGlyph cardId={cardId} />} title={copy.keyTitle(name)}
+    <FirstRunStepCard flow={flow} contentKey={`key:${cardId}`} title={copy.keyTitle(name)}
       description={copy.keyHint} onBack={flow.backToList}
       actions={<Tooltip label={connected ? undefined : copy.connectFirst}>
         <SetupWizardStepAction forward disabled={!connected} onClick={flow.toReply}>{connecting ? copy.connecting : copy.next}</SetupWizardStepAction>

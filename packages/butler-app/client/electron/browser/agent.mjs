@@ -9,7 +9,7 @@ import { agentPopupAllowed } from "./popup-policy.mjs";
 import { observeTab } from "./observe.mjs";
 import { readTab } from "./reader-render.mjs";
 import { prepareBatch, actBatch } from "./act.mjs";
-import { screenshotTab } from "./capture.mjs";
+import { screenshotTab, collectImage } from "./capture.mjs";
 import { zoomTab } from "./zoom.mjs";
 import { applySignedInPolicy, revokeSignedInSite, signedInPlace } from "./signed-in.mjs";
 import { fillSignIn } from "./signin-fill.mjs";
@@ -119,7 +119,7 @@ export async function executeBrowser(browser, frame) {
   }
   if (frame.op === "use.signin_revoked") { if (typeof frame.args?.site === "string") revokeSignedInSite(browser, frame.args.site, controlTab); return; }
   if (frame.op === "use.finished") { finishUse(browser, frame.session, frame.turn_id); return; }
-  const tracked = ["tab.open", "tab.observe", "tab.read", "tab.zoom", "tab.screenshot", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill", "pay.inspect", "pay.fill", "autofill.fill"].includes(frame.op);
+  const tracked = ["tab.open", "tab.observe", "tab.read", "tab.zoom", "tab.screenshot", "tab.image_collect", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill", "pay.inspect", "pay.fill", "autofill.fill"].includes(frame.op);
   // Direct main-only harness calls have no gateway id, but use the same lifetime.
   if (tracked && !frame.id) { frame = { ...frame, id: randomUUID() }; startUse(browser, frame); }
   try { return await executeCall(browser, frame, tracked); }
@@ -178,6 +178,7 @@ async function executeFrame(browser, frame) {
   if (!browser.uses.has(frame.id)) return { status: "unknown", reason: "cancelled" };
   if (op === "tab.observe") return observeTab(tab, args);
   if (op === "tab.read") return readTab(tab);
+  if (op === "tab.image_collect") return collectImage(tab, args);
   if (op === "tab.screenshot") return screenshotTab(tab, args);
   if (op === "tab.zoom") return zoomTab(tab, args);
   if (op === "tab.prepare") return prepareBatch(tab, args);

@@ -36,7 +36,7 @@ pub(super) async fn execute(
         return super::memory_write::execute(owner, invocation, call, call_id).await;
     }
     if web::supports(&call.name) {
-        return web::execute(owner, invocation, call).await;
+        return web::execute(owner, invocation, call, call_id).await;
     }
     if matches!(
         ToolName::parse(call.name.as_str()),
@@ -394,6 +394,7 @@ async fn domain_tool(
         return Some(super::library::execute(owner, call).await);
     }
     match call.name.as_str() {
+        "answer_blocks" => Some(super::answer_blocks::execute(owner, call, call_id).await),
         "output_check" => Some(super::outputs::inspect(owner, invocation, call).await),
         "output_publish" => Some(super::outputs::publish(owner, invocation, call).await),
         "read_file" | "list_files" | "grep_files" => {

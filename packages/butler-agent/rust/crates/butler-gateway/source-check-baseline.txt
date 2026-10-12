@@ -6,8 +6,7 @@ src/gateway/application/new_chat_briefing.rs	AppApplication::new_chat_briefing_v
 src/gateway/application/plan_decisions/workflow.rs	AppApplication::decide_session_plan_owned	146
 src/gateway/application/progress_view.rs	read	106
 src/gateway/application/project_sources.rs	AppApplication::resolve_project_sources	132
-src/gateway/application/projection/final_candidate.rs	candidate	87
-src/gateway/application/projection/final_result.rs	apply	213
+src/gateway/application/projection/final_result.rs	apply	208
 src/gateway/application/projection/non_final.rs	apply	179
 src/gateway/application/projection/non_final/runtime_progress.rs	row_from_runtime_event	139
 src/gateway/application/projects/dashboard/board.rs	board_cards	95

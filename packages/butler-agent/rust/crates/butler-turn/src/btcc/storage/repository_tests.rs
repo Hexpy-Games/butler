@@ -292,6 +292,7 @@ async fn final_outbox_canonical_insert_and_observation_use_separate_transactions
         execution_outcome: None,
         artifacts: vec![],
         changed_files: vec![],
+        answer_blocks: Vec::new(),
         plan: Some(json!({"private":"retained"})),
         model_identity: None,
         extensions: serde_json::Map::from_iter([("futureField".into(), json!({"retained":true}))]),

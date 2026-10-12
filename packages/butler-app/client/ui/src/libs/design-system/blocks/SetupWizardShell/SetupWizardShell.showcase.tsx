@@ -2,7 +2,6 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
-import { ShieldCheck } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { SetupWizardStepAction, SetupWizardStepCard } from "../SetupWizardStepCard";
@@ -84,14 +83,14 @@ function MorphFlow({ context, tone, intro }: { context: ShowcaseRenderContext; t
   return (
     <SetupWizardShell anchor="top" embedded intro={intro} stepKey={`step-${step}`} title="Butler" tone={tone} variant="focus">
       {step === 1 ? (
-        <SetupWizardStepCard activeIndex={1} backLabel={copy.back} icon={<ShieldCheck size="lg" />} onBack={() => setStep(0)}
+        <SetupWizardStepCard activeIndex={1} backLabel={copy.back} onBack={() => setStep(0)}
           steps={steps} title={copy.title} titleId={`${id}-title`}
           actions={<SetupWizardStepAction forward text={copy.accept} onClick={() => setStep(2)} />}>
           <Typo.Body>{copy.body}</Typo.Body>
           <SetupWizardList>{copy.items.map((item) => <li key={item}><Typo.Body as="span">{item}</Typo.Body></li>)}</SetupWizardList>
         </SetupWizardStepCard>
       ) : step === 2 ? (
-        <SetupWizardStepCard activeIndex={2} backLabel={copy.back} icon={<ShieldCheck size="lg" />} onBack={() => setStep(1)}
+        <SetupWizardStepCard activeIndex={2} backLabel={copy.back} onBack={() => setStep(1)}
           steps={steps} title={copy.steps[2]} titleId={`${id}-title`} />
       ) : (
         <SetupWizardContent surface="solid">
