@@ -6,7 +6,6 @@ use butler_turn::btcc::{
     AuthorityOutcomeInput, BtccError, ModelRoundToolCall, RequestDecision, ToolExecutionError,
 };
 use serde_json::{Value, json};
-use std::path::Path;
 
 pub(super) async fn execute(
     owner: &GuidedTools,
@@ -150,15 +149,10 @@ fn normalized(owner: &GuidedTools, call: &ModelRoundToolCall) -> Result<Value, T
             ToolExecutionError::Integrity(BtccError::relayed(e.code(), "Workspace unavailable"))
         })?
         .unwrap_or_else(|| owner.binding.workspace_path.clone());
-    let absolute = |path: &str| {
-        let path = Path::new(path);
-        if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            workspace.join(path)
-        }
-        .to_string_lossy()
-        .into_owned()
+    let absolute = |path: &str| -> String {
+        butler_platform::tool_paths::parse(&workspace, path)
+            .map(|parsed| workspace.join(parsed).to_string_lossy().into_owned())
+            .unwrap_or_else(|_| path.to_owned())
     };
     let mut args = Value::Object(call.arguments.clone());
     if call.name == "read_file" {

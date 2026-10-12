@@ -61,12 +61,15 @@ pub(super) async fn operation(
         let examples = if case.tool == "run_command" {
             json!([case.args["command"]])
         } else if case.tool == "list_files" {
-            json!([s.sandbox.root.join(case.args["root"].as_str().unwrap())])
+            json!([s.sandbox.root.join(butler_platform::tool_paths::parse(
+                &s.sandbox.root,
+                case.args["root"].as_str().unwrap()
+            )?)])
         } else if case.tool == "read_file" {
-            json!([s
-                .sandbox
-                .root
-                .join(case.args["requests"][0]["path"].as_str().unwrap())])
+            json!([s.sandbox.root.join(butler_platform::tool_paths::parse(
+                &s.sandbox.root,
+                case.args["requests"][0]["path"].as_str().unwrap()
+            )?)])
         } else {
             json!([if case.args["path"] == "home/.butler/../escape.txt" {
                 "home/escape.txt"
@@ -92,16 +95,22 @@ pub(super) async fn operation(
             }
         );
         if case.tool == "list_files" {
-            assert_eq!(operation["targets"], examples);
+            assert_eq!(operation["targets"], json!([case.args["root"]]));
         } else if case.tool == "run_command" {
             assert_eq!(operation["command"], case.args["command"]);
             let cwd = case.args["cwd"].as_str().filter(|path| *path != ".");
-            assert_eq!(
-                operation["targets"],
-                json!([
-                    cwd.map_or_else(|| s.sandbox.root.clone(), |path| s.sandbox.root.join(path))
-                ])
+            let target = cwd.map_or_else(
+                || {
+                    s.sandbox
+                        .root
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned()
+                },
+                str::to_owned,
             );
+            assert_eq!(operation["targets"], json!([target]));
         }
         if case.tool == "write_file" {
             assert!(

@@ -149,7 +149,15 @@ impl Commands {
         root: &std::path::Path,
         cwd: Option<&str>,
     ) -> Result<PathBuf, CommandError> {
-        guided::guarded_directory(root, cwd)
+        guided::guarded_directory(root, cwd, super::PathForm::RelativeOrAbsolute)
+    }
+    /// Resolve a command directory within the caller's admitted path scope.
+    pub fn guarded_directory_in_scope(
+        root: &std::path::Path,
+        cwd: Option<&str>,
+        path_form: super::PathForm,
+    ) -> Result<PathBuf, CommandError> {
+        guided::guarded_directory(root, cwd, path_form)
     }
     /// The environment guided commands run with.
     pub fn tool_environment(

@@ -62,9 +62,18 @@ enum ReadStage {
 
 fn io_failure(path: &str, error: &std::io::Error, stage: ReadStage) -> Value {
     let absent = error.kind() == std::io::ErrorKind::NotFound;
-    let code = if absent { "not_found" } else { "io_error" };
-    let not_found = "The requested workspace file was not found.";
-    let retry = "Check workspace permissions and retry the read.";
+    let code = super::path_messages::io_reason(error);
+    if matches!(code, "permission_denied" | "invalid_path") {
+        let (message, hint) = super::path_messages::explanation(code);
+        let message = if code == "invalid_path" {
+            error.to_string()
+        } else {
+            message.into()
+        };
+        return failure(path, code, &message, hint);
+    }
+    let not_found = "The requested file was not found.";
+    let retry = "Check the path and OS account permissions, then retry the read.";
     match stage {
         ReadStage::Inspect => failure(
             path,
@@ -72,7 +81,7 @@ fn io_failure(path: &str, error: &std::io::Error, stage: ReadStage) -> Value {
             if absent {
                 not_found
             } else {
-                "The workspace file could not be inspected."
+                "The requested file could not be inspected."
             },
             if absent {
                 "Restart discovery or choose an existing file."
@@ -86,7 +95,7 @@ fn io_failure(path: &str, error: &std::io::Error, stage: ReadStage) -> Value {
             if absent {
                 not_found
             } else {
-                "The workspace file could not be inspected before reading."
+                "The requested file could not be inspected before reading."
             },
             retry,
         ),
@@ -96,7 +105,7 @@ fn io_failure(path: &str, error: &std::io::Error, stage: ReadStage) -> Value {
             if absent {
                 not_found
             } else {
-                "The workspace file could not be read."
+                "The requested file could not be read."
             },
             retry,
         ),
@@ -140,28 +149,16 @@ fn admitted_file(input: &ReadFileInput) -> std::io::Result<Result<PathBuf, Value
         path_form: input.path_form,
         allow_directories: false,
         protected_roots: &input.protected_roots,
-    })?;
+    });
+    let guard = match guard {
+        Ok(guard) => guard,
+        Err(error) => return Ok(Err(io_failure(&input.path, &error, ReadStage::Inspect))),
+    };
     let Some((_, file)) = guard.accepted() else {
-        let safe = if input.path_form.contained() {
-            guard.safe_path().unwrap_or_else(|| ".".into())
-        } else {
-            input.path.clone()
-        };
-        let mut rejection = failure(
-            &safe,
-            if guard.reason == Some("directory_not_allowed") {
-                "not_a_file"
-            } else {
-                guard.reason.unwrap_or("path_rejected")
-            },
-            "The file path is not an admitted workspace file.",
-            "Choose a contained, non-sensitive regular file path.",
-        );
-        if let Some(fields) = rejection.as_object_mut() {
-            fields.insert("workspace_root".into(), json!(guard.root));
-            fields.insert("guard".into(), guard.public_rejection());
-        }
-        return Ok(Err(rejection));
+        return Ok(Err(super::path_messages::read_rejection(
+            &guard,
+            &input.path,
+        )));
     };
     let checks = [
         (

@@ -299,3 +299,11 @@ fn not_admitted() -> Result<JsonDocument, BtccError> {
     }))
     .map_err(|source| error("command_result_encoding_failed").with_source(source))
 }
+
+fn directory_path_form(contained: bool) -> butler_turn::workspace::PathForm {
+    if contained {
+        butler_turn::workspace::PathForm::Contained
+    } else {
+        butler_turn::workspace::PathForm::RelativeOrAbsolute
+    }
+}

@@ -41,10 +41,10 @@ pub(crate) type CommandSource = Arc<dyn Error + Send + Sync>;
 pub enum CommandError {
     /// The workspace path guard rejected the command directory; `reason` is
     /// the guard's wire code.
-    #[error("{reason}: Use a command directory inside the session workspace: {workspace_root}")]
+    #[error("{reason}: {message}")]
     CwdRejected {
         reason: &'static str,
-        workspace_root: String,
+        message: String,
     },
     /// A command check failed (empty command, cwd outside the workspace, timeout,
     /// capture limit, cancelled lane). Nothing lower-level failed.
@@ -107,11 +107,10 @@ impl CommandError {
     /// The user-facing message.
     pub fn message(&self) -> String {
         match self {
-            Self::Detected { message, .. } | Self::Failed { message, .. } => message.clone(),
+            Self::Detected { message, .. }
+            | Self::Failed { message, .. }
+            | Self::CwdRejected { message, .. } => message.clone(),
             Self::Io { source } => source.to_string(),
-            Self::CwdRejected { workspace_root, .. } => {
-                format!("Use a command directory inside the session workspace: {workspace_root}")
-            }
         }
     }
 }

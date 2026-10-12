@@ -22,19 +22,30 @@ pub(super) async fn prepare(
     let workspace = active_root(&scope)?;
     let guarded_root = workspace.clone();
     let requested = args.get("cwd").and_then(Value::as_str).map(str::to_owned);
-    let cwd = owner
+    let path_form = super::directory_path_form(scope.contained_reads);
+    let (cwd, root_identity, cwd_identity) = owner
         .jobs
-        .run(move || Commands::guarded_directory(&guarded_root, requested.as_deref()))
+        .run(move || {
+            let cwd = Commands::guarded_directory_in_scope(
+                &guarded_root,
+                requested.as_deref(),
+                path_form,
+            )?;
+            let root_identity = canonical_root(&guarded_root);
+            let cwd_identity = canonical_root(&cwd);
+            Ok::<_, butler_turn::workspace::CommandError>((cwd, root_identity, cwd_identity))
+        })
         .await?
         .map_err(BtccError::from)?;
-    let root_identity = canonical_root(&workspace);
-    let cwd_identity = canonical_root(&cwd);
-    let relative = butler_platform::secure_fs::relative_path(&cwd_identity, &root_identity)
-        .ok_or_else(|| error("command_cwd_rejected"))?;
-    let relative = if relative.as_os_str().is_empty() {
+    let directory = match butler_platform::secure_fs::relative_path(&cwd_identity, &root_identity) {
+        Some(directory) => directory,
+        None if scope.contained_reads => return Err(error("command_cwd_rejected")),
+        None => cwd_identity.clone(),
+    };
+    let directory = if directory.as_os_str().is_empty() {
         ".".to_owned()
     } else {
-        relative
+        directory
             .to_string_lossy()
             .replace(std::path::MAIN_SEPARATOR, "/")
     };
@@ -42,13 +53,13 @@ pub(super) async fn prepare(
     proposed
         .entry("state_effect")
         .or_insert_with(|| Value::String("read_only".into()));
-    proposed.insert("cwd".into(), Value::String(relative.clone()));
+    proposed.insert("cwd".into(), Value::String(directory.clone()));
     let input = normalize(&Value::Object(proposed))
         .map_err(|e| BtccError::relayed("command_effect_invalid", e.to_string()).with_source(e))?;
     let Some(effect) = input.get("state_effect").and_then(Value::as_str) else {
         return Err(error("command_effect_invalid"));
     };
-    let target = target(&relative, effect);
+    let target = target(&directory, effect);
     let adapter = CommandEffectAdapter {
         observation: owner.clone(),
         installation_root: scope.installation_root.map(Path::to_path_buf),
@@ -59,6 +70,7 @@ pub(super) async fn prepare(
         host_environment: owner.host_environment.clone(),
         butler_data: scope.butler_data.to_path_buf(),
         workspace,
+        contained_reads: scope.contained_reads,
         root_identity,
         cwd,
         cwd_identity,
@@ -82,6 +94,7 @@ struct CommandEffectAdapter {
     host_environment: Arc<HashMap<String, String>>,
     butler_data: PathBuf,
     workspace: PathBuf,
+    contained_reads: bool,
     root_identity: PathBuf,
     cwd: PathBuf,
     cwd_identity: PathBuf,
@@ -139,9 +152,16 @@ impl EffectAdapter for CommandEffectAdapter {
                     "The command was cancelled before dispatch.",
                 )));
             }
-            if canonical_root(&self.workspace) != self.root_identity
-                || canonical_root(&self.cwd) != self.cwd_identity
-            {
+            let workspace = self.workspace.clone();
+            let cwd = self.cwd.clone();
+            let (root_identity, cwd_identity) = self
+                .jobs
+                .run(move || (canonical_root(&workspace), canonical_root(&cwd)))
+                .await
+                .map_err(|error| {
+                    butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
+                })?;
+            if root_identity != self.root_identity || cwd_identity != self.cwd_identity {
                 return Ok(AdapterOutcome::NotApplied(adapter_error(
                     "command_workspace_identity_changed",
                     "The approved command workspace or directory changed before dispatch.",
@@ -205,7 +225,7 @@ impl CommandEffectAdapter {
                         workspace_path: &self.workspace,
                         butler_data: &self.butler_data,
                         execution: super::CommandExecution::Registered,
-                        contained_reads: false,
+                        contained_reads: self.contained_reads,
                         abort: signal.clone(),
                         allowed_tools_and_effects: self.allowed_tools_and_effects.as_deref(),
                         installation_root: self.installation_root.as_deref(),
@@ -226,7 +246,7 @@ impl CommandEffectAdapter {
                     workspace_path: &self.workspace,
                     butler_data: &self.butler_data,
                     execution: super::CommandExecution::Registered,
-                    contained_reads: false,
+                    contained_reads: self.contained_reads,
                     abort: signal.clone(),
                     allowed_tools_and_effects: self.allowed_tools_and_effects.as_deref(),
                     installation_root: self.installation_root.as_deref(),
