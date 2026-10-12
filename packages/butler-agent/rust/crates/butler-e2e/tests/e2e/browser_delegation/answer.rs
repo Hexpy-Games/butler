@@ -132,14 +132,7 @@ async fn wait_answer(
                         .as_array()
                         .is_some_and(|sets| !sets.is_empty())
             }) {
-                assert!(
-                    script
-                        .requests
-                        .lock()
-                        .unwrap()
-                        .iter()
-                        .any(|r| r.to_string().contains("image_assets:"))
-                );
+                assert_presentation_contract(&script.requests.lock().unwrap());
                 return Ok(message);
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -147,6 +140,59 @@ async fn wait_answer(
     })
     .await
     .unwrap()
+}
+
+/// The presentation is decided in the parent Plan: the Plan records it, the
+/// delegated task asks for per-item facts and one image per item, the parent
+/// receives the ids with the instruction to present them, and the reporting
+/// round and answer_blocks refer back to the planned blocks.
+fn assert_presentation_contract(requests: &[Value]) {
+    let steward = requests
+        .iter()
+        .find(|r| {
+            r["instructions"]
+                .as_str()
+                .is_some_and(|text| text.contains("Steward role"))
+        })
+        .expect("a steward request");
+    let task = steward["input"].to_string();
+    assert!(
+        task.contains("Presentation: cards, table")
+            && task.contains("Butler's Plan presents this result as cards, table")
+            && task.contains(
+                "collect one representative image per item with image_collect while its page is open"
+            ),
+        "the planned presentation drives the delegated task: {task}"
+    );
+    assert!(
+        requests.iter().any(|r| r
+            .to_string()
+            .contains("when your Plan's Presentation line names blocks, present the result with them as planned")),
+        "the final-report round presents as planned"
+    );
+    let result = requests
+        .iter()
+        .find(|r| r.to_string().contains("image_assets:"))
+        .expect("parent received collected ids");
+    assert!(
+        result
+            .to_string()
+            .contains("Put them on those items' answer_blocks cards in your own reply"),
+        "delivered ids carry the presentation instruction"
+    );
+    let blocks = result["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "answer_blocks")
+        .expect("parent is offered answer_blocks");
+    assert!(
+        blocks["description"]
+            .as_str()
+            .unwrap()
+            .contains("Use it unasked as the Plan's Presentation line decided"),
+        "{blocks}"
+    );
 }
 
 fn strip_signatures(value: &mut Value) {
