@@ -1,11 +1,19 @@
-import { api } from "@/app/api.ts";
 import { connectionCardId, type FirstRunProviderCardId } from "@/app/setupProviders.ts";
 import { useEffect, useRef, useState } from "react";
 import { consentAcceptedPatch, consentIsCurrent } from "@/app/onboarding.ts";
 import { commitConnection, type PendingConnection } from "@/app/setupConnection.ts";
 import type { SetupReadinessStatus } from "@/app/setupReadiness.ts";
 import { useButlerStore } from "@/app/store.ts";
-import type { ModelCatalogView, SettingsView } from "@/app/types.ts";
+import type { SettingsView } from "@/app/types.ts";
+
+/** The onboarding gate loads authoritative settings and catalog before mounting setup. */
+function savedConnection(resume: boolean) {
+  const { settings, modelCatalog } = useButlerStore.getState();
+  if (!resume || !settings.onboarding?.accepted_at || !consentIsCurrent(settings.onboarding) || settings.onboarding.completed_at) return null;
+  const model = modelCatalog.registered_models?.find((entry) => entry.model_ref === settings.model);
+  const cardId = connectionCardId(model);
+  return cardId ? { cardId, settings } : null;
+}
 
 /**
  * Waits for readiness, registers the chosen model and persists consent.
@@ -17,6 +25,7 @@ export function useConnectionCommit({ readinessStatus, acceptedAt, language, res
   language: SettingsView["language"];
   resume: boolean;
 }) {
+  const [saved, setSaved] = useState(() => savedConnection(resume));
   const [pending, setPending] = useState<PendingConnection | null>(null);
   const [committing, setCommitting] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -50,19 +59,8 @@ export function useConnectionCommit({ readinessStatus, acceptedAt, language, res
   }, [acceptedAt, connected, failed, language, pending, readinessStatus]);
 
   useEffect(() => {
-    if (!resume || readinessStatus !== "ready") return;
-    let cancelled = false;
-    void Promise.all([api<SettingsView>("/settings"), api<ModelCatalogView>("/model-catalog")]).then(([settings, catalog]) => {
-      if (cancelled || !settings.onboarding?.accepted_at || !consentIsCurrent(settings.onboarding) || settings.onboarding.completed_at) return;
-      const model = catalog.registered_models?.find((entry) => entry.model_ref === settings.model);
-      const cardId = connectionCardId(model);
-      if (cardId) {
-        useButlerStore.getState().setModelCatalog(catalog);
-        setConnected({ cardId, settings });
-      }
-    }).catch(() => { /* The normal connection path remains available. */ });
-    return () => { cancelled = true; };
-  }, [readinessStatus, resume]);
+    if (saved && readinessStatus === "ready") setConnected(saved);
+  }, [readinessStatus, saved]);
 
   return {
     connected,
@@ -70,7 +68,7 @@ export function useConnectionCommit({ readinessStatus, acceptedAt, language, res
     committing,
     failed,
     /** A choice is made but Butler is still getting ready. */
-    waitingForReady: Boolean(pending) && readinessStatus !== "ready",
+    waitingForReady: Boolean(saved && !connected) || (Boolean(pending) && readinessStatus !== "ready"),
     submit: (connection: PendingConnection) => {
       setFailed(false);
       setPending(connection);
@@ -78,6 +76,7 @@ export function useConnectionCommit({ readinessStatus, acceptedAt, language, res
     retry: () => setFailed(false),
     clear: () => {
       setFailed(false);
+      setSaved(null);
       setPending(null);
       setConnected(null);
     },
