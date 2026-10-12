@@ -105,7 +105,13 @@ fn legacy(
     let iv = material
         .get(material.len() - 8..)
         .ok_or(ImportError::Format)?;
-    triple_des(key, iv, cipher)
+    if cipher.is_empty() || !cipher.len().is_multiple_of(8) {
+        return Err(ImportError::Format);
+    }
+    triple_des(key, iv, cipher).map_err(|e| match e {
+        ImportError::Format => ImportError::IncorrectPassword,
+        other => other,
+    })
 }
 
 fn triple_des(key: &[u8], iv: &[u8], cipher: &[u8]) -> Result<Zeroizing<Vec<u8>>, ImportError> {
@@ -119,12 +125,32 @@ fn triple_des(key: &[u8], iv: &[u8], cipher: &[u8]) -> Result<Zeroizing<Vec<u8>>
 
 pub(super) fn login(encoded: &[u8], key: &[u8]) -> Result<Zeroizing<Vec<u8>>, ImportError> {
     let root = Node::parse(encoded)?;
-    if root.child(0)?.bytes(4)? != [0xf8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1] {
-        return Err(ImportError::Format);
-    }
+    // The SDR key identifier selects a key in key4.db; it is not a fixed constant.
+    root.child(0)?.bytes(4)?;
     let algorithm = root.child(1)?;
-    if algorithm.child(0)?.bytes(6)? != DES3 {
-        return Err(ImportError::Format);
+    let iv = algorithm.child(1)?.bytes(4)?;
+    let cipher = root.child(2)?.bytes(4)?;
+    match algorithm.child(0)?.bytes(6)? {
+        DES3 => triple_des(key, iv, cipher),
+        AES256 => cbc::Decryptor::<aes::Aes256>::new_from_slices(key, iv)
+            .map_err(|_| ImportError::Format)?
+            .decrypt_padded_vec_mut::<Pkcs7>(cipher)
+            .map(Zeroizing::new)
+            .map_err(|_| ImportError::Format),
+        _ => Err(ImportError::Format),
     }
-    triple_des(key, algorithm.child(1)?.bytes(4)?, root.child(2)?.bytes(4)?)
+}
+
+/// SDR key IDs are stored in the login envelope and key4.db's a102 column.
+pub(super) fn key_id(encoded: &[u8]) -> Result<Vec<u8>, ImportError> {
+    Ok(Node::parse(encoded)?.child(0)?.bytes(4)?.to_vec())
+}
+
+/// NSS can keep both 3DES and AES keys under the same SDR identifier.
+pub(super) fn key_size(encoded: &[u8]) -> Result<usize, ImportError> {
+    match Node::parse(encoded)?.child(1)?.child(0)?.bytes(6)? {
+        DES3 => Ok(24),
+        AES256 => Ok(32),
+        _ => Err(ImportError::Format),
+    }
 }

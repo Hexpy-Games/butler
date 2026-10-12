@@ -143,10 +143,6 @@ async fn permission_denied_picker_and_locked_profile_retry() -> Result<(), Harne
             "BUTLER_BROWSER_IMPORT_DENIED_FIXTURE",
             protected.to_string_lossy(),
         )
-        .env(
-            "BUTLER_BROWSER_IMPORT_PICKED_FIXTURE",
-            chosen.to_string_lossy(),
-        )
         .start()
         .await?;
     let a = admin(&s);
@@ -164,8 +160,31 @@ async fn permission_denied_picker_and_locked_profile_retry() -> Result<(), Harne
         )
         .await?;
     assert_eq!(denied.status, 422);
+    let empty = s.sandbox.home.join("Empty Folder");
+    std::fs::create_dir_all(&empty)?;
+    for path in [
+        std::path::PathBuf::from("relative"),
+        empty,
+        chosen.join("missing"),
+        chosen.join("Bookmarks"),
+    ] {
+        let invalid = a
+            .send(
+                Method::POST,
+                "/security/browser-import/folder",
+                Some(json!({"source":"chrome:blocked","path":path})),
+                &[],
+            )
+            .await?;
+        assert_eq!(invalid.status, 422);
+    }
     assert_eq!(
-        post(&a, "folder", json!({"source":"chrome:blocked"})).await?["selected"],
+        post(
+            &a,
+            "folder",
+            json!({"source":"chrome:blocked","path":chosen})
+        )
+        .await?["selected"],
         true
     );
     assert_eq!(post(&a, "start", body).await?["bookmarks"], 1);

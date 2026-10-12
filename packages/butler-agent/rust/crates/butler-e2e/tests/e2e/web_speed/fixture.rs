@@ -22,6 +22,7 @@ pub(super) struct StateData {
     pub(super) parallel: AtomicUsize,
     pub(super) planners: AtomicUsize,
     pub(super) outputs: Mutex<Vec<Value>>,
+    pub(super) planning_preset: Mutex<Value>,
 }
 
 pub(super) struct Fixture {
@@ -70,8 +71,9 @@ async fn model(State(state): State<Arc<StateData>>, Json(body): Json<Value>) -> 
         .contains("Smart Search Planning");
     let item = if planning {
         state.planners.fetch_add(1, Ordering::SeqCst);
-        assert_eq!(body["model"], "gpt-6-luna");
-        assert_eq!(body["reasoning"]["effort"], "low");
+        let preset = state.planning_preset.lock().unwrap();
+        assert_eq!(body["model"], preset["model"]);
+        assert_eq!(body["reasoning"]["effort"], preset["effort"]);
         message(&json!({"depth":"deep","intent":"compare sources","scope":"comparison",
             "decomposition":[{"id":"sources","label":"Sources","priority":"high"}],
             "queries":(["alpha","beta","gamma"].map(|q|json!({"bucketId":"sources","query":q,"purpose":"comparison","priority":"high","expectedSourceType":"review"}))),

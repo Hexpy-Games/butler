@@ -72,6 +72,7 @@ pub(in crate::gateway) fn serve(
             output_data: config.output_data,
             signin_secrets: super::signin_secrets::SignInSecrets::new(),
             browser_import: super::browser_import::ImportSessions::default(),
+            import_dependencies: config.browser_import,
             agent_imports: super::agent_import::AgentImports::default(),
         });
         // Publish the saved exposure before loopback admission: a successful

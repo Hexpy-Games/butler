@@ -12,10 +12,10 @@ pub(super) fn track(db: &Connection, run: &str, kind: &str, id: &str) -> Result<
     Ok(())
 }
 pub(super) fn additions(db: &Connection, run: &str) -> Result<Value> {
-    let mut statement = db.prepare("SELECT kind,entry_id FROM browser_import_additions WHERE run_id=?1 ORDER BY kind,entry_id").map_err(sql)?;
+    let mut statement = db.prepare("SELECT a.kind,a.entry_id,CASE WHEN a.kind<>'passwords' OR v.revision=a.run_id THEN 1 ELSE 0 END FROM browser_import_additions a LEFT JOIN browser_signin_versions v ON v.entry_id=a.entry_id WHERE a.run_id=?1 UNION ALL SELECT 'updated',u.entry_id,CASE WHEN v.revision=u.revision THEN 1 ELSE 0 END FROM browser_import_updates u LEFT JOIN browser_signin_versions v ON v.entry_id=u.entry_id WHERE u.run_id=?1 ORDER BY 1,2").map_err(sql)?;
     let rows = statement
         .query_map([run], |r| {
-            Ok(json!({"kind":r.get::<_,String>(0)?,"id":r.get::<_,String>(1)?}))
+            Ok(json!({"kind":r.get::<_,String>(0)?,"id":r.get::<_,String>(1)?,"current":r.get::<_,bool>(2)?}))
         })
         .map_err(sql)?
         .collect::<std::result::Result<Vec<_>, _>>()

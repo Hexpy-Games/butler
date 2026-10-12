@@ -39,6 +39,7 @@ pub(super) async fn start(state: &Arc<HttpState>, body: &mut Value) -> Result<Va
         .join(format!("browser-import-{}", uuid::Uuid::new_v4()));
     let selection = super::selection::Selection {
         profile,
+        keys: state.import_dependencies.keys.clone(),
         items: super::selection::Items {
             bookmarks: wants_bookmarks,
             passwords: wants_passwords,
@@ -53,6 +54,7 @@ pub(super) async fn start(state: &Arc<HttpState>, body: &mut Value) -> Result<Va
         bookmarks,
         passwords,
         mut history,
+        invalid,
     } = blocking(move || selection.read()).await??;
     let run = uuid::Uuid::new_v4().to_string();
     let mut counts = save(state, &run, bookmarks, passwords).await?;
@@ -65,6 +67,7 @@ pub(super) async fn start(state: &Arc<HttpState>, body: &mut Value) -> Result<Va
             history,
         )))
         .await?;
+    counts["invalid"] = json!(invalid);
     counts["history"] = recorded["recorded"].clone();
     counts["run_id"] = json!(run);
     counts["needs_csv"] = json!(csv);
@@ -89,7 +92,7 @@ pub(super) async fn save(
             run_id: run.into(),
         })
         .await?;
-    let (mut inserted, mut updated) = (0_u64, 0_u64);
+    let (mut inserted, mut updated, mut existing) = (0_u64, 0_u64, 0_u64);
     for row in unique(passwords) {
         let input = AppSignInUpsert {
             site: row.site,
@@ -97,19 +100,21 @@ pub(super) async fn save(
             username: row.username,
             source: "import".into(),
             import_run: Some(run.into()),
+            modified_ms: row.modified_ms,
         };
         match signins::store(state, input, row.password).await {
             Ok(saved) if saved["action"] == "inserted" => inserted += 1,
+            Ok(saved) if saved["action"] == "skipped" => existing += 1,
             Ok(_) => updated += 1,
             Err(_) => {
                 return Ok(
-                    json!({"bookmarks":saved["imported"],"existing":saved["existing"],"passwords":inserted,"updated":updated,"error":"signin_store_failed"}),
+                    json!({"bookmarks":saved["imported"],"existing":saved["existing"].as_u64().unwrap_or(0)+existing,"passwords":inserted,"updated":updated,"error":"signin_store_failed"}),
                 );
             }
         }
     }
     Ok(
-        json!({"bookmarks":saved["imported"],"existing":saved["existing"],"passwords":inserted,"updated":updated}),
+        json!({"bookmarks":saved["imported"],"existing":saved["existing"].as_u64().unwrap_or(0)+existing,"passwords":inserted,"updated":updated}),
     )
 }
 
@@ -137,7 +142,7 @@ pub(super) async fn audit(
             )
         })
         .unwrap_or("file");
-    state.application.signins(AppSignInCommand::ImportSummary { source:source.into(), kind:"browser".into(), counts:json!({"bookmarks":counts["bookmarks"],"passwords":counts["passwords"],"updated":counts["updated"],"existing":counts["existing"],"history":counts["history"]}) }).await?;
+    state.application.signins(AppSignInCommand::ImportSummary { source:source.into(), kind:"browser".into(), counts:json!({"bookmarks":counts["bookmarks"],"passwords":counts["passwords"],"updated":counts["updated"],"existing":counts["existing"],"history":counts["history"],"invalid":counts["invalid"]}) }).await?;
     Ok(())
 }
 
@@ -146,11 +151,12 @@ pub(super) async fn undo(state: &Arc<HttpState>, body: &Value) -> Result<Value, 
         .as_str()
         .filter(|s| uuid::Uuid::parse_str(s).is_ok())
         .ok_or_else(|| failure("invalid_import_request"))?;
+    let _mutation = state.signin_secrets.mutation.lock().await;
     let rows = state
         .application
         .signins(AppSignInCommand::ImportAdditions { run_id: run.into() })
         .await?;
-    let (mut bookmarks, mut passwords) = (0_u64, 0_u64);
+    let (mut bookmarks, mut passwords, mut updated) = (0_u64, 0_u64, 0_u64);
     for row in rows["items"].as_array().into_iter().flatten() {
         let id = row["id"].as_str().unwrap_or_default();
         if row["kind"] == "bookmarks" {
@@ -164,6 +170,19 @@ pub(super) async fn undo(state: &Arc<HttpState>, body: &Value) -> Result<Value, 
             if result["deleted"] == true {
                 bookmarks += 1;
             }
+        } else if row["kind"] == "updated" {
+            if super::password_undo::restore(state, row, run).await? {
+                updated += 1;
+            }
+        } else if row["current"] != true {
+            state
+                .application
+                .signins(AppSignInCommand::ForgetAddition {
+                    run_id: run.into(),
+                    kind: "passwords".into(),
+                    id: id.into(),
+                })
+                .await?;
         } else {
             signin_secrets::delete(state, id).await?;
             let result = state
@@ -181,7 +200,7 @@ pub(super) async fn undo(state: &Arc<HttpState>, body: &Value) -> Result<Value, 
             run.into(),
         )))
         .await?;
-    let counts = json!({"bookmarks":bookmarks,"passwords":passwords,"history":history["deleted"],"updated":0});
+    let counts = json!({"bookmarks":bookmarks,"passwords":passwords,"history":history["deleted"],"updated":updated});
     audit(state, "file", &counts).await?;
     Ok(counts)
 }

@@ -33,24 +33,20 @@ pub(super) async fn resolve(
     let preset = read.catalog.search_planning_preset(&provider);
     let selected = explicit
         .map(str::to_owned)
-        .or_else(|| preset.map(|preset| preset.model));
-    // Local/custom models and hosted registrations retain their own connection.
-    let selected = selected.filter(|model| {
-        provider == "openai"
-            || explicit.is_some()
-            || read
-                .registered
-                .iter()
-                .any(|entry| &entry.model_ref == model)
-    });
+        .or_else(|| preset.as_ref().map(|preset| preset.model.clone()));
     let model = selected.unwrap_or_else(|| default.clone());
     let metadata = read.catalog.find_model_metadata(Some(&model));
-    let effort = metadata.map_or(ReasoningEffort::Low, |metadata| {
-        if metadata.reasoning_efforts.contains(&ReasoningEffort::Low) {
-            ReasoningEffort::Low
-        } else {
-            metadata.default_reasoning_effort
-        }
+    let preset_effort = preset
+        .filter(|preset| preset.model == model)
+        .map(|preset| preset.effort);
+    let effort = preset_effort.unwrap_or_else(|| {
+        metadata.map_or(ReasoningEffort::Low, |metadata| {
+            if metadata.reasoning_efforts.contains(&ReasoningEffort::Low) {
+                ReasoningEffort::Low
+            } else {
+                metadata.default_reasoning_effort
+            }
+        })
     });
     (Some(model), requested_effort.unwrap_or(effort))
 }

@@ -1,5 +1,6 @@
 //! Sign-in rows. Callers own the enclosing transaction; values never include secrets.
 mod imports;
+mod versions;
 use super::{AppSignInCommand, AppSignInUpsert};
 use crate::gateway::application::AppStorageError;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -29,6 +30,12 @@ pub(super) fn write(
 ) -> Result<Value> {
     match command {
         AppSignInCommand::Upsert(input) => upsert(db, &input, now, id),
+        AppSignInCommand::FinishImportUpdate {
+            id,
+            run_id,
+            modified_ms,
+        } => versions::finish(db, &id, &run_id, modified_ms),
+        AppSignInCommand::RestoreImportUpdate { id, run_id } => versions::restore(db, &id, &run_id),
         AppSignInCommand::Forget { id } | AppSignInCommand::Delete { id } => {
             db.execute(
                 "DELETE FROM browser_signin_identity WHERE entry_id=?1",
@@ -37,6 +44,11 @@ pub(super) fn write(
             .map_err(sql)?;
             db.execute(
                 "DELETE FROM browser_import_additions WHERE kind='passwords' AND entry_id=?1",
+                [&id],
+            )
+            .map_err(sql)?;
+            db.execute(
+                "DELETE FROM browser_signin_versions WHERE entry_id=?1",
                 [&id],
             )
             .map_err(sql)?;
@@ -171,6 +183,12 @@ fn upsert(db: &Connection, input: &AppSignInUpsert, now: &str, id: &str) -> Resu
         && let Some(existing) = entry_where(db, "site", &input.site)?
     {
         let id = existing["id"].as_str().unwrap_or_default();
+        versions::set(
+            db,
+            id,
+            versions::millis(now),
+            &uuid::Uuid::new_v4().to_string(),
+        )?;
         db.execute(
             "DELETE FROM browser_signin_identity WHERE entry_id=?1",
             [id],
@@ -197,7 +215,23 @@ fn upsert(db: &Connection, input: &AppSignInUpsert, now: &str, id: &str) -> Resu
         .optional()
         .map_err(sql)?;
     if let Some(id) = existing {
-        return Ok(json!({"id":id,"action":"updated"}));
+        let latest = versions::latest(db, &id)?;
+        let action = if input.source == "import" {
+            if input.modified_ms.is_some_and(|t| t > latest) {
+                "updated"
+            } else {
+                "skipped"
+            }
+        } else {
+            versions::set(
+                db,
+                &id,
+                versions::millis(now),
+                &uuid::Uuid::new_v4().to_string(),
+            )?;
+            "updated"
+        };
+        return Ok(json!({"id":id,"action":action}));
     }
     db.execute("INSERT INTO browser_signin_entries(id,site,origins_json,username,policy,created_at,source) VALUES(?1,?2,?3,?4,'ask',?5,?6)",
         params![id,input.site,json!([input.origin]).to_string(),input.username,now,input.source]).map_err(sql)?;
@@ -206,6 +240,15 @@ fn upsert(db: &Connection, input: &AppSignInUpsert, now: &str, id: &str) -> Resu
         params![input.origin, input.username, id],
     )
     .map_err(sql)?;
+    versions::set(
+        db,
+        id,
+        input.modified_ms.unwrap_or_else(|| versions::millis(now)),
+        input
+            .import_run
+            .as_deref()
+            .unwrap_or(&uuid::Uuid::new_v4().to_string()),
+    )?;
     if let Some(run) = &input.import_run {
         imports::track(db, run, "passwords", id)?;
     }

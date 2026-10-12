@@ -37,6 +37,7 @@ export const runImport = (input: ImportRequest) =>
   api<Record<string, number>>("/security/browser-import/run", { method: "POST", body: JSON.stringify(input) });
 
 interface DesktopBridge {
+  pickBrowserFolder?: () => Promise<string | null>;
   pickImportFile?: (kind: "bookmarks" | "passwords") => Promise<{ path: string; name: string } | null>;
 }
 interface BrowserBridge { call?: (op: string, input?: unknown) => Promise<unknown> }
@@ -55,12 +56,16 @@ export async function signOutSite(site: string) {
   await (globalThis as { butlerBrowser?: BrowserBridge }).butlerBrowser?.call?.("signout", { site });
 }
 
-export interface BrowserImportCounts { run_id: string; bookmarks: number; history?: number; passwords: number; updated: number; existing: number; needs_csv?: boolean; export_id?: string; waiting?: boolean; error?: string }
+export interface BrowserImportCounts { run_id: string; bookmarks: number; history?: number; passwords: number; updated: number; invalid?: number; existing: number; needs_csv?: boolean; export_id?: string; waiting?: boolean; error?: string }
 export interface BrowserImportInput { source: string; bookmarks: boolean; history?: boolean; passwords: boolean; primary_password?: string; bookmarks_path?: string; passwords_path?: string }
 const importAction = <T>(op: string, body: unknown) => api<T>(`/security/browser-import/${op}`, { method: "POST", body: JSON.stringify(body) });
 export const startBrowserImport = (input: BrowserImportInput) => importAction<BrowserImportCounts>("start", input);
 export const undoBrowserImport = (run_id: string) => importAction("undo", { run_id });
-export const pickBrowserFolder = (source: string) => importAction<{ selected: boolean; source?: string }>("folder", { source });
+export async function pickBrowserFolder(source: string) {
+  const path = await (globalThis as { butlerApp?: DesktopBridge }).butlerApp?.pickBrowserFolder?.();
+  if (!path) return { selected: false };
+  return importAction<{ selected: boolean; source?: string }>("folder", { source, path });
+}
 export const openImportDiskAccess = () => importAction("disk-access", {});
 export const beginPasswordExport = (source: string, run_id: string) => importAction<{ export_id: string }>("export", { source, run_id });
 export const pollPasswordExport = (export_id: string) => importAction<BrowserImportCounts>("export/poll", { export_id });

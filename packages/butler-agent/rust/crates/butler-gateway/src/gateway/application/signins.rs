@@ -16,6 +16,7 @@ pub struct AppSignInUpsert {
     /// `manual` replaces the site's entry; `import` keeps an entry for another account.
     pub source: String,
     pub import_run: Option<String>,
+    pub modified_ms: Option<i64>,
 }
 
 /// Explicit sign-in commands over the App SQLite owner lane.
@@ -31,6 +32,17 @@ pub enum AppSignInCommand {
     },
     /// Adds or merges; answers `{id, action: inserted|updated|replaced|skipped}`.
     Upsert(AppSignInUpsert),
+    /// Finalizes metadata after a newer import secret and its backup are stored.
+    FinishImportUpdate {
+        id: String,
+        run_id: String,
+        modified_ms: i64,
+    },
+    /// Restores an import update only while it is the current revision.
+    RestoreImportUpdate {
+        id: String,
+        run_id: String,
+    },
     /// Undoes an insert whose secret could not be stored.
     Forget {
         id: String,

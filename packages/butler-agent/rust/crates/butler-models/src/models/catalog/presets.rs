@@ -21,19 +21,8 @@ pub struct ModelPreset {
 impl super::ModelCatalogSnapshot {
     /// Lightweight query planning stays on the conversation's provider.
     pub fn search_planning_preset(&self, provider_id: &str) -> Option<ModelPreset> {
-        let mut preset = if provider_id == "openai" {
-            ModelPreset {
-                model: "openai/gpt-6-luna".into(),
-                effort: ReasoningEffort::Low,
-            }
-        } else {
-            self.routine_preset(provider_id)?
-        };
-        let metadata = self.find_static_model_metadata(Some(&preset.model))?;
-        if metadata.reasoning_efforts.contains(&ReasoningEffort::Low) {
-            preset.effort = ReasoningEffort::Low;
-        }
-        Some(preset)
+        let presets = self.static_catalog.provider_presets(provider_id)?;
+        Some(presets.planning.unwrap_or(presets.routine))
     }
 }
 
@@ -42,6 +31,9 @@ impl super::ModelCatalogSnapshot {
 pub struct ProviderPresets {
     /// Everyday default: the latest balanced-tier model at medium effort.
     pub routine: ModelPreset,
+    /// Lightweight query planning; providers without one use routine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planning: Option<ModelPreset>,
 }
 
 /// How a provider bills requests made with an API key.

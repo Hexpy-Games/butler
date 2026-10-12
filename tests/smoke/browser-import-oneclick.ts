@@ -14,7 +14,7 @@ if (runtime !== null) process.exit(runtime);
 const output = process.env.BUTLER_IMPORT_EVIDENCE;
 assert.ok(output, "explicit evidence directory required");
 const before = process.env.BUTLER_IMPORT_BEFORE_UI;
-const stage = before ? "before" : "after";
+const stage = process.env.BUTLER_IMPORT_STAGE ?? (before ? "before" : "after");
 mkdirSync(join(output, stage), { recursive: true });
 const server = await createNativeAppServer({ onboardingComplete: false, uiRoot: resolve(before ?? "packages/butler-app/client/ui/dist") });
 let app: Awaited<ReturnType<typeof firstRunElectron>> | undefined;
@@ -58,13 +58,13 @@ async function handle(request: import("node:http").IncomingMessage, response: im
     if (mode === "primary" && !input.primary_password) return error("primary_password_required");
     await page.locator('[data-test-class="import-progress"]').waitFor();
     await page.locator('[data-test-class="import-progress"]').scrollIntoViewIfNeeded(); await capture("progress");
-    return reply({ run_id: "00000000-0000-4000-8000-000000000001", bookmarks: 120, history: 240, passwords: input.source.startsWith("safari:") ? 0 : 34, updated: input.source.startsWith("safari:") ? 0 : 5, existing: 0, needs_csv: input.source.startsWith("safari:") });
+    return reply({ run_id: "00000000-0000-4000-8000-000000000001", bookmarks: 120, history: 240, passwords: input.source.startsWith("safari:") ? 0 : 34, invalid: 2, updated: input.source.startsWith("safari:") ? 0 : 5, existing: 0, needs_csv: input.source.startsWith("safari:") });
   }
   if (path === "/security/browser-import/export") return reply({ export_id: "fixture-export" });
-  if (path === "/security/browser-import/export/poll") return reply(csvReady ? { run_id: "00000000-0000-4000-8000-000000000001", bookmarks: 0, passwords: 34, updated: 5, existing: 0, export_id: "fixture-export" } : { waiting: true });
+  if (path === "/security/browser-import/export/poll") return reply(csvReady ? { run_id: "00000000-0000-4000-8000-000000000001", bookmarks: 0, passwords: 34, updated: 5, invalid: 2, existing: 0, export_id: "fixture-export" } : { waiting: true });
   if (path === "/security/browser-import/export/delete") { csvDeleted = true; return reply({ deleted: true }); }
   if (path === "/security/browser-import/export/cancel") return reply({ cancelled: true });
-  if (path === "/security/browser-import/folder") { mode = "success"; return reply({ selected: true, source: "chrome:work" }); }
+  if (path === "/security/browser-import/folder") { assert.equal(JSON.parse(raw.toString()).path, resolve("/tmp/browser-import-picked")); mode = "success"; return reply({ selected: true, source: "chrome:work" }); }
   if (path === "/security/browser-import/undo") return reply({ bookmarks: 120, history: 240, passwords: 34 });
   const headers = new Headers();
   for (const [name, value] of Object.entries(request.headers)) if (value && !["host", "connection", "content-length"].includes(name)) headers.set(name, Array.isArray(value) ? value.join(",") : value);
@@ -157,6 +157,13 @@ try {
   const address = proxy.address(); assert.ok(address && typeof address !== "string");
   app = await firstRunElectron(server, `http://127.0.0.1:${address.port}`);
   page = app.page;
+  await app.main(`(()=>{const {dialog}=process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve("packages/butler-app/client/electron/main.mjs"))})("electron");dialog.showOpenDialog=async(_window,options)=>{
+    if(options.properties.length!==1 || options.properties[0]!=="openDirectory") throw new Error("folder picker options");
+    return {canceled:globalThis.importFolderCanceled===true,filePaths:[${JSON.stringify(resolve("/tmp/browser-import-picked"))}]};
+  }})()`);
+  await app.main("globalThis.importFolderCanceled=true");
+  assert.equal(await page.evaluate(() => (window as unknown as { butlerApp: { pickBrowserFolder: () => Promise<string | null> } }).butlerApp.pickBrowserFolder()), null);
+  await app.main("globalThis.importFolderCanceled=false");
   for (const locale of ["ko", "en"] as const) for (const theme of ["light", "dark"] as const) {
     cell = `${locale}-${theme}-1440`;
     const copy = getAppCopy(locale === "ko" ? "ko-KR" : "en-US");
@@ -222,21 +229,22 @@ try {
     await page.reload();
     await section.locator("[data-import-source]").nth(3).waitFor();
     await section.locator('[data-import-source="chrome:work"] button').click();
-    await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240), { exact: true }).waitFor();
+    await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240, 2), { exact: true }).waitFor();
     await capture("result");
     await section.getByRole("button", { name: copy.settings.browserImport.undo, exact: true }).click();
     await section.getByText(copy.settings.browserImport.undone).waitFor();
+    await capture("undone");
     await section.getByRole("button", { name: copy.settings.browserImport.more, exact: true }).click();
     mode = "permission"; await section.locator('[data-import-source="chrome:work"] button').click();
     await section.locator('[data-test-class="import-permission"]').waitFor();
     await section.locator('[data-test-class="import-permission"]').scrollIntoViewIfNeeded(); await capture("permission");
     await section.getByRole("button", { name: copy.settings.browserImport.pickFolder, exact: true }).click();
-    await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240), { exact: true }).waitFor();
+    await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240, 2), { exact: true }).waitFor();
     await section.getByRole("button", { name: copy.settings.browserImport.more, exact: true }).click();
     mode = "primary"; await section.locator('[data-import-source="firefox:default"] button').click();
     await section.getByLabel(copy.settings.browserImport.primaryPassword, { exact: true }).fill("fixture-primary");
     await section.getByRole("button", { name: copy.settings.browserImport.run, exact: true }).click();
-    await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240), { exact: true }).waitFor();
+    await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240, 2), { exact: true }).waitFor();
     assert.equal(await section.locator('input[type="password"]').count(), 0);
     mode = "success";
     await section.getByRole("button", { name: copy.settings.browserImport.more, exact: true }).click();
@@ -245,7 +253,7 @@ try {
     await section.getByText(copy.settings.browserImport.waitingCsv, { exact: true }).waitFor();
     await capture("csv-waiting");
     csvReady = true;
-    await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240), { exact: true }).waitFor();
+    await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240, 2), { exact: true }).waitFor();
     await section.getByRole("button", { name: copy.settings.browserImport.undo, exact: true }).click();
     await section.getByText(copy.settings.browserImport.undone, { exact: true }).waitFor();
     await section.getByRole("button", { name: copy.settings.browserImport.deleteCsv, exact: true }).click();
@@ -253,7 +261,7 @@ try {
     assert.equal(csvDeleted, true, "CSV deletion needs the owner's click");
     await section.getByRole("button", { name: copy.settings.browserImport.more, exact: true }).click();
     await section.locator('[data-import-source="chrome:work"] button').click();
-    await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240), { exact: true }).waitFor();
+    await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240, 2), { exact: true }).waitFor();
     for (const width of [320, 390, 430]) { await page.setViewportSize({ width, height: 1000 }); await capture(`result-${width}`); }
   }
   if (!before) assert.ok(runs.every(run => run.history === true), "history is selected by default");

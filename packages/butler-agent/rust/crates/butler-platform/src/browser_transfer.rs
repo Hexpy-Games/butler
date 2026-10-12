@@ -1,5 +1,7 @@
 //! Native browser import: access, private SQLite snapshots, decryption and exports.
 mod chromium;
+mod dependencies;
+pub use dependencies::{ImportDependencies, SafeStorageKeySource, SystemSafeStorage};
 mod der;
 mod downloads;
 mod firefox;
@@ -7,8 +9,6 @@ mod locks;
 mod nss;
 use crate::browser_profiles::{BookmarkFormat, BrowserProfile, ProfileAccess};
 use crate::secrets::SecretText;
-#[cfg(feature = "test-support")]
-pub use chromium::fixture_storage_absent;
 pub use downloads::DownloadWatch;
 #[cfg(feature = "test-support")]
 pub use locks::fixture_profile_lock;
@@ -57,6 +57,8 @@ pub struct Login {
     pub username: SecretText,
     /// Decrypted password.
     pub password: SecretText,
+    /// Latest source use or modification, milliseconds since Unix epoch.
+    pub modified_ms: Option<i64>,
 }
 
 /// Translate filesystem failures without exposing paths.
@@ -166,39 +168,32 @@ pub fn password_mode(profile: &BrowserProfile) -> &'static str {
     }
 }
 
+/// Decrypted rows and the number of unreadable entries.
+#[derive(Debug, Default)]
+pub struct LoginBatch {
+    /// Successfully decrypted rows.
+    pub logins: Vec<Login>,
+    /// Unsupported, corrupt or invalid rows.
+    pub invalid: usize,
+}
+
 /// Decrypt the selected profile; no secrets enter logs.
 pub fn passwords(
     profile: &BrowserProfile,
     primary: &SecretText,
     scratch: &Path,
-) -> Result<Vec<Login>, ImportError> {
+    keys: &dyn SafeStorageKeySource,
+) -> Result<LoginBatch, ImportError> {
     if profile.access == ProfileAccess::PermissionDenied {
         return Err(ImportError::PermissionDenied);
     }
     let dir = profile.bookmarks.parent().ok_or(ImportError::NotFound)?;
     match profile.format {
-        BookmarkFormat::Firefox => firefox::passwords(dir, primary, scratch),
-        BookmarkFormat::Chromium => chromium::passwords(profile.browser, dir, scratch),
+        BookmarkFormat::Firefox => firefox::passwords(dir, primary, scratch)
+            .map(|logins| LoginBatch { logins, invalid: 0 }),
+        BookmarkFormat::Chromium => chromium::passwords(profile.browser, dir, scratch, keys),
         BookmarkFormat::Safari => Err(ImportError::CsvRequired),
     }
-}
-
-#[cfg(any(target_os = "macos", windows))]
-/// Native user folder selection.
-pub fn pick_folder() -> Option<PathBuf> {
-    #[cfg(feature = "test-support")]
-    if let Some(folder) = std::env::var_os("BUTLER_BROWSER_IMPORT_PICKED_FIXTURE") {
-        let folder = PathBuf::from(folder);
-        if crate::user_dirs::non_empty_home_dir().is_some_and(|home| folder.starts_with(home)) {
-            return Some(folder);
-        }
-    }
-    rfd::FileDialog::new().pick_folder()
-}
-#[cfg(not(any(target_os = "macos", windows)))]
-/// Native user folder selection.
-pub fn pick_folder() -> Option<PathBuf> {
-    None
 }
 
 /// Open the source browser password export instructions.

@@ -19,6 +19,8 @@ pub struct GatewayConfig {
     pub allowed_hosts: Vec<String>,
     pub content_hosts: Vec<String>,
     pub output_data: Option<std::path::PathBuf>,
+    /// Read-only native browser source dependencies.
+    pub browser_import: butler_platform::browser_transfer::ImportDependencies,
     /// Settings → Security: also listen on the machine's LAN addresses (same
     /// port) and answer their Host names.
     pub remote_access_enabled: bool,
@@ -67,6 +69,7 @@ impl Default for GatewayConfig {
             allowed_hosts: Vec::new(),
             content_hosts: Vec::new(),
             output_data: None,
+            browser_import: Default::default(),
             remote_access_enabled: false,
             admin_credential: None,
             security_store: None,
