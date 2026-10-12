@@ -24,6 +24,20 @@ export function wireUserDialogs(browser, tab) {
       });
     });
     contents.on("-cancel-dialogs", () => { if (tab.dialog?.pageBeforeUnload) void resolveDialog(browser, tab, { accept: false }, "page_closed"); });
+  } else {
+    // Electron's default handler opens a native message box parented to the
+    // tab's window, which shows the hidden agent window. Agent tab dialogs stay
+    // in the in-app flow: CDP reports them and this keeps Chromium's callback.
+    contents.removeAllListeners("-run-dialog");
+    contents.on("-run-dialog", (info, callback) => {
+      const native = (accept, value) => { if (!contents.isDestroyed()) callback(accept === true, value ?? ""); };
+      const open = tab.dialog;
+      if (open && !open.answering && !open.callback && !open.native && open.type === info.dialogType && open.message === String(info.messageText ?? "")) { open.native = native; return; }
+      if (open) { native(false, ""); return; }
+      beginDialog(browser, tab, { type: info.dialogType, message: info.messageText, origin: info.frame?.url ?? contents.getURL(), defaultPrompt: info.defaultPromptText });
+      if (tab.dialog) tab.dialog.native = native;
+    });
+    contents.on("-cancel-dialogs", () => { if (tab.dialog?.native) void resolveDialog(browser, tab, { accept: false }, "page_closed"); });
   }
   contents.on("input-event", (_event, input) => {
     if (["mouseDown", "keyDown"].includes(input.type)) { tab.popupGesture = true; tab.popupGestureAt = Date.now(); }

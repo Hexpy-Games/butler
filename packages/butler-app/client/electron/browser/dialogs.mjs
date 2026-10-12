@@ -26,6 +26,7 @@ export async function resolveDialog(browser, tab, answer, reason = "answered") {
   if (!dialog || dialog.answering) return;
   dialog.answering = true; clearTimeout(dialog.timer);
   if (dialog.callback) dialog.callback(answer);
+  else if (dialog.native) dialog.native(answer.accept, answer.value);
   else if (!dialog.beforeUnloadClose && tab.view && !tab.view.webContents.isDestroyed()) {
     await tab.view.webContents.debugger.sendCommand("Page.handleJavaScriptDialog", { accept: answer.accept === true, promptText: answer.value ?? "" }, dialog.sessionId).catch(() => {});
   }
