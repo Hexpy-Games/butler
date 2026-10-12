@@ -33,6 +33,7 @@ pub(super) struct McpServerConfig {
     pub id: String,
     pub display_name: String,
     pub enabled: bool,
+    pub tool_filter_review_required: bool,
     pub transport: McpTransportKind,
     pub command: Option<String>,
     pub args: Vec<String>,
@@ -42,6 +43,15 @@ pub(super) struct McpServerConfig {
     headers: Vec<KeyValueSecret>,
     created_at: String,
     updated_at: String,
+}
+
+impl McpServerConfig {
+    /// Empty literal slots must be filled before any connection is attempted.
+    pub(super) fn needs_secret(&self) -> bool {
+        self.env.iter().chain(&self.headers).any(|item| {
+            item.secret.source == SecretSource::Literal && item.secret.value.trim().is_empty()
+        })
+    }
 }
 
 pub(super) struct ResolvedServerSecrets {
@@ -150,6 +160,7 @@ pub(super) fn server_to_value(server: &McpServerConfig) -> Value {
         "id": server.id,
         "display_name": server.display_name,
         "enabled": server.enabled,
+        "tool_filter_review_required": server.tool_filter_review_required,
         "transport": match server.transport {
             McpTransportKind::Stdio => "stdio",
             McpTransportKind::Http => "http",
@@ -230,6 +241,7 @@ pub(super) fn redact_server(server: &McpServerConfig) -> Value {
         "id": server.id,
         "display_name": server.display_name,
         "enabled": server.enabled,
+        "tool_filter_review_required": server.tool_filter_review_required,
         "transport": match server.transport {
             McpTransportKind::Stdio => "stdio",
             McpTransportKind::Http => "http",
@@ -344,6 +356,8 @@ fn normalize_server(
         id,
         display_name,
         enabled: value.get("enabled") != Some(&Value::Bool(false)),
+        tool_filter_review_required: value.get("tool_filter_review_required")
+            == Some(&Value::Bool(true)),
         transport,
         command,
         args: value
@@ -394,7 +408,7 @@ fn normalize_secrets(value: Option<&Value>) -> Vec<KeyValueSecret> {
             };
             // An empty literal is a slot the user still has to fill (an
             // imported server whose secret was not copied); it resolves to
-            // nothing, so the variable or header is simply not sent.
+            // nothing; connection waits until all slots are filled.
             if key.is_empty() || (value.is_empty() && source != SecretSource::Literal) {
                 return None;
             }
