@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { apiErrorCode } from "@/app/api";
-import { listAgentImportSources, startAgentImport, undoAgentImport, type AgentImportCounts, type AgentImportSource } from "../settings/agentImportApi";
+import { listAgentImportSources, startAgentImport, undoAgentImport, type AgentImportCounts, type AgentImportRequest, type AgentImportSource } from "../settings/agentImportApi";
+
+/** Per-source item choice; a source without one imports everything it holds. */
+export type AgentImportSelection = Omit<AgentImportRequest, "source">;
 
 /** Component-local state: counts and an opaque receipt only. */
 export function useAgentImport(enabled = true) {
@@ -27,14 +30,14 @@ export function useAgentImport(enabled = true) {
     try { await task(); } catch (e) { if (mounted.current) setError(apiErrorCode(e) ?? "import_failed"); }
     finally { if (mounted.current) setBusy(false); }
   }
-  const run = (keys: string | string[]) => work(async () => {
+  const run = (keys: string | string[], selections?: Record<string, AgentImportSelection>) => work(async () => {
     const sources = typeof keys === "string" ? [keys] : keys;
     setSelected(sources[0] ?? null); setUndone(false);
     if (undone) receipts.current = [];
     const total: AgentImportCounts = { run_id: "", instructions: 0, servers: 0, needs_secret: 0, instructions_existing: 0, servers_existing: 0, skipped: 0 };
     if (result && !undone) Object.assign(total, result, { error: undefined });
     for (const key of sources) {
-      const counts = await startAgentImport(key);
+      const counts = await startAgentImport(key, selections?.[key]);
       receipts.current.push(counts);
       if (mounted.current) setBySource(prior => ({ ...prior, [key]: counts }));
       total.run_id = counts.run_id;

@@ -119,7 +119,8 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   // Import ①'s result is its own screen after the run (no undo in first run; Settings changes things later).
   const agentsDone = Boolean(imports.agentImport.result) && !imports.agentImport.error;
   const browsersDone = Boolean(imports.browserImport.result) && !imports.browserImport.error;
-  const importKey = (importStage === "agents" ? agentsDone : browsersDone) ? `${importStage}:done` : importStage;
+  const agentPage = imports.agentPicks.current ? `agents:${imports.agentPicks.current.key}` : "agents";
+  const importKey = importStage === "agents" ? agentsDone ? "agents:done" : agentPage : browsersDone ? "browsers:done" : "browsers";
   const stageKey = step === "connect" ? `connect:${aiStage}` : step === "import" ? `import:${importKey}` : step;
   const substep = step === "connect" ? { index: ["pick", "auth", "reply"].indexOf(aiStage) + 1, total: 3 }
     : step === "import" ? { index: importStage === "agents" ? 1 : 2, total: 2 } : undefined;
