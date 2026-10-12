@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { appCopy } from "@/app/copy";
 import { Button, ButtonContainer, CheckIcon, EmptyLine, FieldLegend, FieldSet, FileText, Globe2, ListRow, Square, Stack, Tooltip } from "@/butler-ds";
 import type { ImportSource } from "./signInsApi";
-import type { useBrowserImport } from "./useBrowserImport";
+import type { useBrowserImport } from "../imports/useBrowserImport";
 
 const BRANDS: Record<string, string> = { chrome: "Chrome", chromium: "Chromium", edge: "Edge", brave: "Brave", arc: "Arc", whale: "Whale", firefox: "Firefox", zen: "Zen", safari: "Safari" };
 // Whale icon: the official favicon from shared-whale.pstatic.net (Naver trademark).
@@ -33,7 +33,12 @@ export function BrowserImportItems({ flow, keychain }: { flow: ImportFlow; keych
   );
 }
 
-function BrandIcon({ browser }: { browser: string }) {
+/** Brand name of a detected browser; unknown browsers keep their own id. */
+export function browserBrand(browser: string): string {
+  return BRANDS[browser] ?? browser;
+}
+
+export function BrandIcon({ browser }: { browser: string }) {
   if (!BRANDS[browser]) return <Globe2 size="md" />;
   return <img src={`/browser-icons/${browser}.${browser === "whale" ? "png" : "svg"}`} width={20} height={20} alt="" />;
 }
@@ -41,7 +46,7 @@ function BrandIcon({ browser }: { browser: string }) {
 /** One detected profile: brand, profile name and its own import action. */
 function SourceRow({ source, flow, blocked, hint }: { source: ImportSource; flow: ImportFlow; blocked: boolean; hint?: string }) {
   const copy = appCopy.settings.browserImport;
-  const brand = BRANDS[source.browser] ?? source.browser;
+  const brand = browserBrand(source.browser);
   const denied = source.permission === "denied";
   const profile = denied ? copy.fullDiskAccess : source.name === brand ? undefined : source.name;
   const action = denied ? copy.pickFolder : copy.run;

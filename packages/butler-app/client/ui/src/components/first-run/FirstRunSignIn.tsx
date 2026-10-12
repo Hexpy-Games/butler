@@ -1,5 +1,5 @@
 import {
-  AlertCircle, Button, CheckCircle2, ButtonContainer, Copy, Globe2, Notice, SetupWizardStepAction, Spinner, Stack, Typo,
+  AlertCircle, Button, CheckCircle2, ButtonContainer, Copy, Globe2, Notice, SetupWizardStepAction, Spinner, Stack, Tooltip, Typo,
 } from "@/butler-ds";
 import { CardGlyph } from "./CardGlyph";
 import { FirstRunStepCard } from "./FirstRunStepCard";
@@ -18,7 +18,7 @@ export function FirstRunSignIn({ flow }: { flow: FirstRunFlow }) {
   if (connected) return (
     <FirstRunStepCard flow={flow} contentKey="signin:connected" icon={<CardGlyph cardId="chatgpt" />}
       title={copy.readyTitle(copy.providerNames.chatgpt)} onBack={flow.backToList}
-      actions={<SetupWizardStepAction forward onClick={flow.toReply}>{flow.copy.next}</SetupWizardStepAction>}
+      actions={<SetupWizardStepAction forward onClick={flow.toReply}>{copy.next}</SetupWizardStepAction>}
     >
       {signIn.account ? <Notice tone="neutral" icon={<CheckCircle2 size="md" />} message={signIn.account} /> : null}
     </FirstRunStepCard>
@@ -30,7 +30,7 @@ export function FirstRunSignIn({ flow }: { flow: FirstRunFlow }) {
         ? <SetupWizardStepAction variant="default" onClick={() => void signIn.start()}>{copy.retry}</SetupWizardStepAction>
         : <>
           <SetupWizardStepAction disabled={state !== "waiting"} onClick={() => void signIn.cancel()}>{copy.cancel}</SetupWizardStepAction>
-          <SetupWizardStepAction forward disabled>{flow.copy.next}</SetupWizardStepAction>
+          <Tooltip label={copy.connectFirst}><SetupWizardStepAction forward disabled>{copy.next}</SetupWizardStepAction></Tooltip>
         </>}
     >
       {stopped ? null : <SignInStatus flow={flow} state={state} />}

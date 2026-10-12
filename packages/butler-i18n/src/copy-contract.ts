@@ -109,6 +109,8 @@ interface FirstRunCopy {
   finishing: string;
   readyTitle: (name: string) => string;
   next: string;
+  /** Tooltip on ② Next while it waits for the connection. */
+  connectFirst: string;
   replyTitle: string;
   replyBody: string;
   doneTitle: string;

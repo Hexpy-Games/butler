@@ -219,6 +219,7 @@ const firstRun = {
     keyStored: "키는 이 컴퓨터에만 저장됩니다.",
     readyTitle: (name: string) => `${name}에 연결했습니다`,
     next: "다음",
+    connectFirst: "먼저 연결하세요",
     replyTitle: "어떤 언어로 답할까요?",
     replyBody: "나중에 설정에서 바꿀 수 있습니다.",
     doneTitle: "준비를 마쳤습니다",

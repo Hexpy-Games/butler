@@ -1,25 +1,18 @@
 import { useState } from "react";
 import { appCopy } from "@/app/copy";
 import {
-  Button, ButtonContainer, CheckCircle2, ChoiceCard, ChoiceCardList, Download, EmptyLine, FileText, Globe2, Inline, Notice,
-  SetupWizardStepAction, Spinner, Stack, Typo,
+  Button, ButtonContainer, CheckCircle2, ChoiceCard, ChoiceCardList, Download, EmptyLine, FileText, Inline, Notice,
+  SetupWizardStepAction, Spinner, Stack, Tooltip, Typo,
 } from "@/butler-ds";
-import { BrowserImportItems } from "../settings/BrowserImportSources";
-import { type ImportSource } from "../settings/signInsApi";
+import { BrandIcon, BrowserImportItems, browserBrand } from "../settings/BrowserImportSources";
+import type { ImportSource } from "../settings/signInsApi";
 import { BrowserImportFeedback } from "../imports/BrowserImportFeedback";
 import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
-const BRANDS: Record<string, string> = { chrome: "Chrome", chromium: "Chromium", edge: "Edge", brave: "Brave", arc: "Arc", whale: "Whale", firefox: "Firefox", zen: "Zen", safari: "Safari" };
-
-function BrandIcon({ browser }: { browser: string }) {
-  if (!BRANDS[browser]) return <Globe2 size="md" />;
-  return <img src={`/browser-icons/${browser}.${browser === "whale" ? "png" : "svg"}`} width={20} height={20} alt="" />;
-}
-
 /** Import ②: one detected browser profile at a time, what to bring, then Import; Next after a result. */
 export function FirstRunBrowserStep({ flow }: { flow: FirstRunFlow }) {
-  const proposal = { ...flow.copy, ...flow.copy.import };
+  const text = { ...flow.copy, ...flow.copy.import };
   const copy = appCopy.settings.browserImport;
   const { browserImport: imp, keychain } = flow;
   const [chosen, setChosen] = useState<string | null>(null);
@@ -27,23 +20,26 @@ export function FirstRunBrowserStep({ flow }: { flow: FirstRunFlow }) {
   const current = sources?.find(source => source.key === chosen) ?? sources?.find(source => source.permission !== "denied") ?? sources?.[0];
   const denied = current?.permission === "denied";
   const nothing = !imp.bookmarks && !imp.passwords && !imp.history;
+  const keychainBlocked = !denied && imp.passwords && !keychain;
   const done = Boolean(imp.result) && !imp.error;
   const empty = sources !== null && !imp.error && sources.length === 0;
-  const primary = denied ? copy.pickFolder : imp.busy ? proposal.importing : proposal.importAction;
+  const primary = denied ? copy.pickFolder : imp.busy ? text.importing : text.importAction;
   return (
-    <FirstRunStepCard flow={flow} contentKey="browsers" icon={<Download size="lg" />} title={proposal.browsersTitle}
-      titleId="first-run-browsers-title" description={proposal.browsersBody} onBack={flow.backFromImport}
+    <FirstRunStepCard flow={flow} contentKey="browsers" icon={<Download size="lg" />} title={text.browsersTitle}
+      titleId="first-run-browsers-title" description={text.browsersBody} onBack={flow.backFromImport}
       actions={done || empty || imp.undone
-        ? <SetupWizardStepAction forward disabled={imp.busy || !!imp.exportId} onClick={flow.finishImport}>{proposal.next}</SetupWizardStepAction>
+        ? <SetupWizardStepAction forward disabled={imp.busy || !!imp.exportId} onClick={flow.finishImport}>{text.next}</SetupWizardStepAction>
         : <>
-          <SetupWizardStepAction disabled={imp.busy || !!imp.exportId} onClick={flow.finishImport}>{proposal.skip}</SetupWizardStepAction>
-          <SetupWizardStepAction variant="default" disabled={imp.busy || !!imp.exportId || !current || (!denied && (nothing || (imp.passwords && !keychain)))}
-            onClick={() => current && void (denied ? imp.folder(current.key) : imp.run(current.key))}>{primary}</SetupWizardStepAction>
+          <SetupWizardStepAction disabled={imp.busy || !!imp.exportId} onClick={flow.finishImport}>{text.skip}</SetupWizardStepAction>
+          <Tooltip label={keychainBlocked ? copy.needsKeychain : undefined}>
+            <SetupWizardStepAction variant="default" disabled={imp.busy || !!imp.exportId || !current || (!denied && (nothing || keychainBlocked))}
+              onClick={() => current && void (denied ? imp.folder(current.key) : imp.run(current.key))}>{primary}</SetupWizardStepAction>
+          </Tooltip>
         </>}
     >
       {sources === null ? (
-        <Inline role="status"><Spinner size={14} /><Typo.Caption tone="secondary">{proposal.searching}</Typo.Caption></Inline>
-      ) : empty ? <EmptyLine message={proposal.browsersEmpty} /> : done ? null : <>
+        <Inline role="status"><Spinner size={14} /><Typo.Caption tone="secondary">{text.searching}</Typo.Caption></Inline>
+      ) : empty ? <EmptyLine message={text.browsersEmpty} /> : done ? null : <>
         <ChoiceCardList aria-labelledby="first-run-browsers-title" role="radiogroup">
           {sources.map(source => <SourceCard key={source.key} source={source} selected={source.key === current?.key}
             disabled={imp.busy} onPick={() => setChosen(source.key)} />)}
@@ -71,7 +67,7 @@ export function FirstRunBrowserStep({ flow }: { flow: FirstRunFlow }) {
 
 function SourceCard({ source, selected, disabled, onPick }: { source: ImportSource; selected: boolean; disabled: boolean; onPick: () => void }) {
   const copy = appCopy.settings.browserImport;
-  const brand = BRANDS[source.browser] ?? source.browser;
+  const brand = browserBrand(source.browser);
   const denied = source.permission === "denied";
   return <ChoiceCard role="radio" aria-checked={selected} selected={selected} chevron={false} data-import-source={source.key}
     icon={<BrandIcon browser={source.browser} />} title={brand}

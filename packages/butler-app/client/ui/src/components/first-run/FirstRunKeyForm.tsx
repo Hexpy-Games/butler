@@ -11,6 +11,7 @@ import {
   Spinner,
   Stack,
   InlineReference,
+  Tooltip,
   Typo,
 } from "@/butler-ds";
 import { PROVIDER_CARDS, type FirstRunProviderCardId } from "@/app/setupProviders.ts";
@@ -35,9 +36,9 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
   return (
     <FirstRunStepCard flow={flow} contentKey={`key:${cardId}`} icon={<CardGlyph cardId={cardId} />} title={copy.keyTitle(name)}
       description={copy.keyHint} onBack={flow.backToList}
-      actions={<SetupWizardStepAction forward disabled={!connected} onClick={flow.toReply}>
-        {connecting ? copy.connecting : flow.copy.next}
-      </SetupWizardStepAction>}
+      actions={<Tooltip label={connected ? undefined : copy.connectFirst}>
+        <SetupWizardStepAction forward disabled={!connected} onClick={flow.toReply}>{connecting ? copy.connecting : copy.next}</SetupWizardStepAction>
+      </Tooltip>}
     >
       <Field data-test-class="first-run-key-field">
         <FieldLabel htmlFor="first-run-api-key">{copy.keyLabel}</FieldLabel>

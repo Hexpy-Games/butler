@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAgentImport } from "../imports/useAgentImport";
 import { listSignIns, type BrowserImportCounts } from "../settings/signInsApi";
-import { useBrowserImport } from "../settings/useBrowserImport";
+import { useBrowserImport } from "../imports/useBrowserImport";
 
 export function useFirstRunImports(enabled: boolean) {
   const started = useRef(false);

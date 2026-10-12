@@ -2,7 +2,7 @@ import { useId, useState } from "react";
 import { appCopy } from "@/app/copy";
 import { Button, ButtonContainer, Input, Stack, Typo } from "@/butler-ds";
 import { openImportDiskAccess } from "../settings/signInsApi";
-import type { useBrowserImport } from "../settings/useBrowserImport";
+import type { useBrowserImport } from "./useBrowserImport";
 
 export function BrowserImportFeedback({ flow }: { flow: ReturnType<typeof useBrowserImport> }) {
   const copy = appCopy.settings.browserImport;

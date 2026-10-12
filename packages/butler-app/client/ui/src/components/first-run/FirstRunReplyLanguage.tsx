@@ -7,14 +7,13 @@ import type { FirstRunFlow } from "./useFirstRunFlow";
 /** AI step ③: the reply language; Next saves it and ends the AI step. */
 export function FirstRunReplyLanguage({ flow }: { flow: FirstRunFlow }) {
   const { copy, reply } = flow;
-  const proposal = copy;
   return (
-    <FirstRunStepCard flow={flow} contentKey="reply" icon={<MessageSquare size="lg" />} title={proposal.replyTitle}
-      titleId="first-run-reply-title" description={proposal.replyBody} onBack={flow.backFromReply}
+    <FirstRunStepCard flow={flow} contentKey="reply" icon={<MessageSquare size="lg" />} title={copy.replyTitle}
+      titleId="first-run-reply-title" description={copy.replyBody} onBack={flow.backFromReply}
       footerStart={!flow.commit.connected ? <FirstRunPrepStatus flow={flow} /> : undefined}
       actions={<>
         {reply.failed && !reply.value ? <SetupWizardStepAction onClick={reply.retry}>{copy.retry}</SetupWizardStepAction> : null}
-        <SetupWizardStepAction forward disabled={!reply.value || reply.saving} onClick={reply.save}>{proposal.next}</SetupWizardStepAction>
+        <SetupWizardStepAction forward disabled={!reply.value || reply.saving} onClick={reply.save}>{copy.next}</SetupWizardStepAction>
       </>}
     >
       <Field>

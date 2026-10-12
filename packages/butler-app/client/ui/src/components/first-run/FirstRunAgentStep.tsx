@@ -13,7 +13,7 @@ const importable = (source: AgentImportSource) => source.instructions || source.
 
 /** Import ①: other AI tools. Pick the detected tools, import, then Next. */
 export function FirstRunAgentStep({ flow }: { flow: FirstRunFlow }) {
-  const proposal = { ...flow.copy, ...flow.copy.import };
+  const text = { ...flow.copy, ...flow.copy.import };
   const copy = appCopy.settings.agentImport;
   const pick = flow.agentImport;
   const [picked, setPicked] = useState<string[]>([]);
@@ -23,21 +23,21 @@ export function FirstRunAgentStep({ flow }: { flow: FirstRunFlow }) {
   const empty = pick.sources !== null && !pick.error && !pick.sources.some(importable);
   const forward = done || empty || pick.undone;
   return (
-    <FirstRunStepCard flow={flow} contentKey="agents" icon={<Bot size="lg" />} title={proposal.agentsTitle}
-      titleId="first-run-agents-title" description={proposal.agentsBody} onBack={flow.backFromImport}
+    <FirstRunStepCard flow={flow} contentKey="agents" icon={<Bot size="lg" />} title={text.agentsTitle}
+      titleId="first-run-agents-title" description={text.agentsBody} onBack={flow.backFromImport}
       actions={forward
-        ? <SetupWizardStepAction forward disabled={pick.busy} onClick={flow.toBrowsers}>{proposal.next}</SetupWizardStepAction>
+        ? <SetupWizardStepAction forward disabled={pick.busy} onClick={flow.toBrowsers}>{text.next}</SetupWizardStepAction>
         : <>
-          <SetupWizardStepAction disabled={pick.busy} onClick={flow.toBrowsers}>{proposal.skip}</SetupWizardStepAction>
+          <SetupWizardStepAction disabled={pick.busy} onClick={flow.toBrowsers}>{text.skip}</SetupWizardStepAction>
           <SetupWizardStepAction variant="default" disabled={pick.busy || picked.length === 0}
             onClick={() => void pick.run(picked)}>
-            {pick.busy ? proposal.importing : proposal.importAction}
+            {pick.busy ? text.importing : text.importAction}
           </SetupWizardStepAction>
         </>}
     >
       {pick.sources === null ? (
-        <Inline role="status"><Spinner size={14} /><Typo.Caption tone="secondary">{proposal.searching}</Typo.Caption></Inline>
-      ) : empty ? <EmptyLine message={proposal.agentsEmpty} /> : done ? null : (
+        <Inline role="status"><Spinner size={14} /><Typo.Caption tone="secondary">{text.searching}</Typo.Caption></Inline>
+      ) : empty ? <EmptyLine message={text.agentsEmpty} /> : done ? null : (
         <ChoiceCardList aria-labelledby="first-run-agents-title" role="group">
           {pick.sources.map(source => {
             const on = picked.includes(source.key);

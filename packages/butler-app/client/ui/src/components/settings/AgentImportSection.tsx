@@ -27,7 +27,7 @@ function resultText(result: AgentImportCounts): string {
 }
 
 /**
- * Other AI tools first, then browsers: Settings and the first-run import step.
+ * Other AI tools first, then browsers (Settings; first run uses its own import substeps).
  * Settings adds the memory import as one more row after the detected tools.
  */
 export function AgentImportSection({ children }: { children?: ReactNode }) {
