@@ -22,7 +22,7 @@ use crate::skills::Skills;
 use butler_turn::workspace::{WorkspaceFiles, WorkspaceMutations, WorkspaceReference};
 
 pub use catalog::{
-    BridgeCatalogTool, CatalogError, ToolCatalog, describe_native, search_native,
+    BridgeCatalogTool, CatalogError, ToolCatalog, answer_blocks, describe_native, search_native,
     validate_native_arguments,
 };
 
