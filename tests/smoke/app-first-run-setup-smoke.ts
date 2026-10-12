@@ -422,11 +422,14 @@ async function verifyConnection(cdp: CdpClient): Promise<void> {
   await fillInput(cdp, "#first-run-server-url", `http://127.0.0.1:${stubModelPort}/v1`);
   await clickButton(cdp, "연결");
   await waitForText(cdp, stubModelId);
-  await clickButton(cdp, "연결");
-  // Optional browser import comes after the AI choice, right before the finish.
+  await clickButton(cdp, "다음");
+  await waitForExpression(cdp, "document.querySelector('#first-run-reply-language')?.disabled === false", "reply language choice");
+  await clickButton(cdp, "다음");
+  await waitForHeading(cdp, "다른 AI에서 가져오기");
+  await clickButton(cdp, "건너뛰기");
   await waitForHeading(cdp, "다른 브라우저에서 가져오기");
   await clickButton(cdp, "건너뛰기");
-  await waitForExpression(cdp, "document.querySelector('#first-run-reply-language')?.disabled === false", "reply language choice");
+  await waitForHeading(cdp, "준비를 마쳤습니다");
   await clickButton(cdp, "대화 시작");
   await waitForExpression(
     cdp,
