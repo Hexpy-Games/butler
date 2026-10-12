@@ -8,6 +8,7 @@
     clippy::panic,
     reason = "E2E assertions"
 )]
+mod selection;
 mod state;
 
 use super::memory_fixture;

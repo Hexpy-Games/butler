@@ -1,7 +1,7 @@
 //! Settings: import from other AI agents (host only). A global instruction
 //! file becomes one Butler instruction under a source heading; MCP servers
 //! become Butler servers with secret names as empty slots, never values.
-//! Answers carry counts and home-relative file labels only.
+//! Answers carry counts, home-relative file labels and server names/flags only.
 use super::{HttpError, HttpState, json, read_body_with_limit};
 use crate::gateway::AppMemoryCommand;
 use crate::gateway::protocol::{APP_PROTOCOL_VERSION, ApiEnvelope};
@@ -129,6 +129,13 @@ async fn sources() -> Result<Value, HttpError> {
                 "needs_secret": servers.iter().filter(|server| server.needs_secret()).count(),
                 "skipped": found.servers.skipped,
                 "unreadable": found.unreadable,
+                "items": {
+                    "instructions": found.setup.instructions.iter()
+                        .map(|file| &file.label).collect::<Vec<_>>(),
+                    "servers": servers.iter().map(|server| json!({
+                        "name": server.name, "needs_secret": server.needs_secret(),
+                    })).collect::<Vec<_>>(),
+                },
             })
         })
         .collect();
@@ -144,7 +151,9 @@ async fn memory(state: &Arc<HttpState>, command: AppMemoryCommand) -> Result<Val
 
 async fn start(state: &Arc<HttpState>, body: &Value) -> Result<Value, HttpError> {
     let key = body["source"].as_str().ok_or_else(invalid)?.to_owned();
-    let found = blocking(move || {
+    let selection: import::ImportSelection =
+        serde_json::from_value(body.clone()).map_err(|_| invalid())?;
+    let mut found = blocking(move || {
         agent_homes::detect()
             .into_iter()
             .find(|setup| setup.agent.key() == key)
@@ -152,6 +161,12 @@ async fn start(state: &Arc<HttpState>, body: &Value) -> Result<Value, HttpError>
     })
     .await?
     .ok_or_else(|| HttpError::public(404, "import_not_found", "Agent not found."))?;
+    selection
+        .select_servers(&mut found.servers)
+        .map_err(|_| invalid())?;
+    if !selection.instructions {
+        found.instructions = Ok(None);
+    }
     let mut added = Added::default();
     let mut counts = json!({
         "instructions": 0, "instructions_existing": 0,

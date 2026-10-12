@@ -11,6 +11,18 @@ export interface AgentImportSource {
   needs_secret: number;
   skipped: number;
   unreadable: boolean;
+  items?: {
+    instructions: string[];
+    servers: { name: string; needs_secret: boolean }[];
+  };
+}
+
+export interface AgentImportRequest {
+  source: string;
+  /** Omitted means import the instruction file. */
+  instructions?: boolean;
+  /** Omitted means all servers; an empty array means none. */
+  servers?: string[];
 }
 
 export interface AgentImportCounts {
