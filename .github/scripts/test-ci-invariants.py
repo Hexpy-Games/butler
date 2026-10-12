@@ -386,32 +386,35 @@ class Coverage(unittest.TestCase):
         listing = 'e2e-list.json' if (INVENTORY / 'e2e-list.json').exists() else 'list.json'
         directory = INVENTORY / 'shards' if (INVENTORY / 'shards').exists() else INVENTORY
         inventory = json.loads((INVENTORY / listing).read_text())
-        tests = {name: test for suite in inventory['rust-suites'].values()
-                 if suite['binary-name'] == 'e2e' for name, test in suite['testcases'].items()}
+        tests = {(suite['binary-name'], name): test for suite in inventory['rust-suites'].values()
+                 if suite['package-name'] == 'butler-e2e' for name, test in suite['testcases'].items()}
         selections = json.loads((directory / 'selection.json').read_text())
-        ordinary = [name for shard in selections for binary, name in shard]
-        expected = {name for name in tests if not any(part.startswith(('ins_', 'perf_')) for part in name.split('::'))
-                    and not name.endswith('idle_disk_writes_and_cpu_stay_bounded')}
+        ordinary = [(binary, name) for shard in selections for binary, name in shard]
+        expected = {case for case in tests
+                    if not any(part.startswith(('ins_', 'perf_')) for part in case[1].split('::'))
+                    and not case[1].endswith('idle_disk_writes_and_cpu_stay_bounded')}
         self.assertEqual(len(ordinary), len(set(ordinary)))
         self.assertEqual(set(ordinary), expected)
-        installs = {name for name in tests if any(part.startswith('ins_') for part in name.split('::'))}
-        groups = [{name for name in installs if '::ins_02_' in name},
-                  {name for name in installs if '::ins_14_' in name},
-                  {name for name in installs if '::ins_02_' not in name and '::ins_14_' not in name}]
+        installs = {case for case in tests if any(part.startswith('ins_') for part in case[1].split('::'))}
+        groups = [{case for case in installs if '::ins_02_' in case[1]},
+                  {case for case in installs if '::ins_14_' in case[1]},
+                  {case for case in installs if '::ins_02_' not in case[1] and '::ins_14_' not in case[1]}]
         self.assertEqual(sum(map(len, groups)), len(installs))
         perf_inventory = json.loads((INVENTORY / 'perf-list.json').read_text())
-        perf = {name for suite in perf_inventory['rust-suites'].values() for name, test in suite['testcases'].items()
+        perf = {(suite['binary-name'], name) for suite in perf_inventory['rust-suites'].values()
+                if suite['package-name'] == 'butler-e2e'
+                for name, test in suite['testcases'].items()
                 if test['filter-match']['status'] == 'matches'}
         perf_selections = json.loads((directory / 'perf-selection.json').read_text())
-        selected = [name for shard in perf_selections for binary, name in shard]
-        idle = {name for name in perf if name.startswith('idle_resources::')}
-        owner = {name for name in perf if name.startswith('data_perf::')}
+        selected = [(binary, name) for shard in perf_selections for binary, name in shard]
+        idle = {case for case in perf if case[1].startswith('idle_resources::')}
+        owner = {case for case in perf if case[1].startswith('data_perf::')}
         self.assertEqual(len(selected), len(set(selected)))
         self.assertEqual(set(selected) | idle | owner, perf)
         self.assertTrue(idle, 'The complete idle observation must remain selected')
         self.assertTrue(owner, 'The complete owner-scale observation must remain selected')
-        runnable = {name for name, test in tests.items() if not test['ignored']}
-        disk = {name for name in tests if name.endswith('idle_disk_writes_and_cpu_stay_bounded')}
+        runnable = {case for case, test in tests.items() if not test['ignored']}
+        disk = {case for case in tests if case[1].endswith('idle_disk_writes_and_cpu_stay_bounded')}
         self.assertEqual((set(ordinary) | installs | perf | disk) & runnable, runnable)
         print(f'Compiled inventory: {len(tests)} tests, {len(tests) - len(runnable)} existing ignored; '
               f'ordinary {list(map(len, selections))}, install {list(map(len, groups))}, '
