@@ -10,6 +10,7 @@ import { waitBrowser } from "../support/browser-agent-app";
 import { firstRunElectron } from "../support/first-run-electron";
 import { firstRunStub } from "../support/first-run-stub";
 import { nativeSmokeRuntime } from "../support/native-smoke-runtime";
+import { substepBackPaths } from "../support/first-run-substeps";
 import { settleFirstRun } from "../support/first-run-visual";
 import { installIntroProbe, assertIntroIdle } from "../support/first-run-intro";
 
@@ -64,6 +65,15 @@ async function capture(page: Page, name: string) {
   measurements.push({ name, ...geometry });
   writeFileSync(join(output, "measurements.json"), JSON.stringify(measurements, null, 2));
   await page.screenshot({ path: join(output, `${name}.png`) });
+  const viewport = page.viewportSize()!;
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await settleFirstRun(page);
+    const theme = await server.api<{ appearance_theme: string }>("/settings");
+    await page.screenshot({ path: join(output, `${name}-${theme.appearance_theme}-${width}.png`) });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name}: ${width} overflow`);
+  }
+  await page.setViewportSize(viewport);
   assert.equal(geometry.overflow, false, name);
   if (geometry.viewport[0] === 960) {
     assert.equal(geometry.card.width, geometry.intro ? 420 : 520, name);
@@ -80,13 +90,13 @@ async function capture(page: Page, name: string) {
     const ids = await page.locator("ol li").count() === 6 ? ["welcome", "consent", "memory", "connect", "import", "ready"] : ["welcome", "consent", "connect", "ready"];
     const lang = await page.locator("html").getAttribute("lang") === "ko-KR" ? "ko" : "en";
     const label = step === "import" ? getAppCopy(lang === "ko" ? "ko-KR" : "en-US").settings.pageSections.import : firstRunCopy[lang].steps[step as "consent" | "memory" | "ready" | "connect"];
-    assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${ids.indexOf(step ?? "") + 1}\n${label}`);
+    assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${ids.indexOf(step ?? "") + 1}\n${label}${step === "connect" ? await page.locator("#first-run-reply-language").count() ? " 3/3" : await page.locator("#first-run-connect-title").count() ? " 1/3" : " 2/3" : step === "import" ? await page.locator("#first-run-agents-title").count() ? " 1/2" : " 2/2" : ""}`);
   }
 }
 
 async function reset(page: Page, language: "ko" | "en", theme: "light" | "dark") {
   stub.state.oauthStatus = "pending"; stub.state.holdCommit = false; stub.state.failCommit = false; stub.state.local = false;
-  stub.state.readiness = "ready"; stub.state.label = "yeonwoo@example.com"; stub.state.memoryModel = "unset";
+  stub.state.importEmpty = false; stub.state.readiness = "ready"; stub.state.label = "yeonwoo@example.com"; stub.state.memoryModel = "unset";
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language, appearance_theme: theme, onboarding: fresh }) });
   await page.reload();
   await page.locator("#first-run-language").selectOption(language);
@@ -115,24 +125,36 @@ async function passMemory(page: Page, language: "ko" | "en", name?: string) {
 }
 
 /** First run: the optional import step sits between the AI choice and the finish. */
-async function passImport(page: Page, language: "ko" | "en", preparing = false) {
-  await page.locator('[data-first-run-screen="import"]').waitFor();
-  if (preparing) await page.locator('[data-settings-section-id="browser-import"] [data-slot="settings-section-skeleton"]').waitFor();
-  await page.getByRole("button", { name: getAppCopy(language === "ko" ? "ko-KR" : "en-US").settings.browserImport.skip, exact: true }).click();
+async function passImport(page: Page, language: "ko" | "en") {
+  const copy = firstRunCopy[language];
+  for (const [id, title] of [["agents", copy.import.agentsTitle], ["browsers", copy.import.browsersTitle]]) {
+    await page.getByRole("heading", { name: title, exact: true }).waitFor();
+    await capture(page, `after-${language}-import-${id}`);
+    const skip = page.getByRole("button", { name: copy.import.skip, exact: true });
+    const next = page.getByRole("button", { name: copy.next, exact: true });
+    await Promise.race([skip.waitFor(), next.waitFor()]);
+    await (await next.count() ? next : skip).click();
+  }
 }
 
 async function confirmReady(page: Page, language: "ko" | "en", name: string, viaImport = true) {
-  if (viaImport) await passImport(page, language);
   const copy = firstRunCopy[language];
-  await page.getByRole("heading", { name: copy.readyTitle(name), exact: true }).waitFor();
+  if (!await page.locator("#first-run-reply-language").count()) {
+    await page.getByRole("button", { name: copy.next, exact: true }).waitFor({ state: "visible" });
+    await page.getByRole("button", { name: copy.next, exact: true }).click();
+  }
   await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
   assert.equal(await page.getByRole("heading", { name: copy.signInTitle("ChatGPT"), exact: true }).count(), 0);
+  await capture(page, `after-${language}-reply-${name}`);
+  await page.locator("#first-run-reply-language").selectOption(language === "ko" ? "en" : "ko");
+  await page.getByRole("button", { name: copy.next, exact: true }).click();
+  if (viaImport) await passImport(page, language);
+  await page.getByRole("heading", { name: copy.doneTitle, exact: true }).waitFor();
   const before = await server.api<{ onboarding: { completed_at: string | null } }>("/settings");
   assert.equal(before.onboarding.completed_at, null, "ready still requires explicit completion");
 }
 
 async function finish(page: Page, language: "ko" | "en") {
-  await page.locator("#first-run-reply-language").selectOption(language === "ko" ? "en" : "ko");
   await page.getByRole("button", { name: firstRunCopy[language].finish, exact: true }).click();
   await page.locator('[data-test-class="workspace"]').waitFor();
   const saved = await server.api<{ onboarding: { completed_at: string | null } }>("/settings");
@@ -183,8 +205,11 @@ async function signInStates(page: Page, language: "ko" | "en", prefix: string) {
   await capture(page, `${prefix}-signin-commit-failed`);
   stub.state.failCommit = false;
   await page.getByRole("button", { name: copy.retry, exact: true }).click();
-  await confirmReady(page, language, "ChatGPT");
+  await page.getByRole("heading", { name: copy.readyTitle("ChatGPT"), exact: true }).waitFor();
   await page.getByText(stub.state.label, { exact: true }).waitFor();
+  await capture(page, `${prefix}-signin-connected`);
+  await substepBackPaths(page, language, copy, stub.state);
+  await confirmReady(page, language, "ChatGPT");
 }
 
 async function matrixCase(page: Page, language: "ko" | "en", theme: "light" | "dark") {
@@ -208,7 +233,8 @@ async function matrixCase(page: Page, language: "ko" | "en", theme: "light" | "d
 async function otherConnection(page: Page, language: "ko" | "en", theme: "light" | "dark", kind: "key" | "local" | "custom") {
   const copy = firstRunCopy[language], prefix = `after-${language}-${theme}`;
   await reset(page, language, theme);
-  stub.state.local = kind === "local";
+  stub.state.local = kind === "local"; stub.state.localModels = 2;
+  stub.state.importEmpty = language === "en" && theme === "dark" && kind === "custom";
   await reachProviders(page, language);
   if (kind === "key") {
     await page.locator('[data-card-id="claude"]').click();
@@ -218,7 +244,7 @@ async function otherConnection(page: Page, language: "ko" | "en", theme: "light"
     await page.locator('[data-card-id="local"]').click();
     await page.locator('[role="radio"]').waitFor();
     await capture(page, `${prefix}-local`);
-    await page.getByRole("button", { name: copy.customConnect, exact: true }).click();
+    await page.getByRole("button", { name: copy.next, exact: true }).click();
   } else {
     await page.locator('[aria-controls="first-run-more-providers"]').click();
     await page.locator('[data-card-id="other"]').click();
@@ -229,7 +255,7 @@ async function otherConnection(page: Page, language: "ko" | "en", theme: "light"
     await page.getByRole("button", { name: copy.customConnect, exact: true }).click();
     await page.locator('[role="radio"]').waitFor();
     await capture(page, `${prefix}-custom-models`);
-    await page.getByRole("button", { name: copy.customConnect, exact: true }).click();
+    await page.getByRole("button", { name: copy.next, exact: true }).click();
   }
   await confirmReady(page, language, copy.providerNames[kind === "key" ? "claude" : kind === "local" ? "local" : "other"]);
   await capture(page, `${prefix}-ready-${kind}`);
@@ -252,13 +278,12 @@ async function preparationStates(page: Page) {
   await reachProviders(page, "ko");
   stub.state.label = "Smoke profile"; stub.state.oauthStatus = "profile_exists";
   await page.locator('[data-card-id="chatgpt"]').click();
-  // A choice made while Butler prepares moves on to the optional import; the finish step then waits.
-  await passImport(page, "ko", true);
-  await page.getByRole("heading", { name: copy.finishing, exact: true }).waitFor();
+  await page.getByText(copy.connecting, { exact: true }).waitFor();
   assert.equal(await page.locator("#first-run-reply-language").count(), 0, "preparation precedes reply language");
+  assert.equal(await page.locator('[data-first-run-screen="import"]').count(), 0, "import waits for saved reply language");
   await capture(page, "after-finishing");
   stub.state.readiness = "ready";
-  await confirmReady(page, "ko", "ChatGPT", false);
+  await confirmReady(page, "ko", "ChatGPT");
   assert.equal(await page.getByText("Smoke profile", { exact: true }).count(), 0, "non-email profile labels are not accounts");
   await capture(page, "after-ready-no-account");
   await finish(page, "ko");
@@ -267,12 +292,13 @@ async function preparationStates(page: Page) {
 /** Relaunch with durable consent/connection, then trace every renderer frame from startup. */
 async function resumeImport(page: Page) {
   await reset(page, "ko", "light");
-  stub.state.local = true;
+  stub.state.local = true; stub.state.localModels = 1;
   await reachProviders(page, "ko");
   await page.locator('[data-card-id="local"]').click();
-  await page.locator('[role="radio"]').waitFor();
-  await page.getByRole("button", { name: firstRunCopy.ko.customConnect, exact: true }).click();
+  await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
+  await page.getByRole("button", { name: firstRunCopy.ko.next, exact: true }).click();
   await page.locator('[data-first-run-screen="import"]').waitFor();
+  assert.equal(await page.locator("#first-run-models-title").count(), 0, "single model skips auth picker");
   await capture(page, "before-resume-import");
   await app!.stop();
   stub.state.readiness = "preparing";
@@ -296,14 +322,13 @@ async function resumeImport(page: Page) {
       env: { BUTLER_APP_RENDERER_DIST: renderer },
     });
     page = app.page;
-    await page.locator('[data-first-run-screen="import"]').waitFor();
-    await page.locator('[data-settings-section-id="browser-import"] [data-slot="settings-section-skeleton"]').waitFor();
+    await page.locator("#first-run-reply-language:disabled").waitFor();
     await capture(page, "after-resume-import-preparing");
     stub.state.readiness = "ready";
-    await page.locator('[data-settings-section-id="browser-import"] [data-slot="settings-section-skeleton"]').waitFor({ state: "hidden" });
+    await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
     await capture(page, "after-resume-import-ready");
     const frames = await page.evaluate(() => (window as unknown as { firstRunFrames: string[] }).firstRunFrames);
-    assert.deepEqual(frames, ["import"], "saved import is the first rendered step, including readiness wait");
+    assert.deepEqual(frames, ["connect"], "saved connection resumes at reply language, including readiness wait");
     measurements.push({ name: "resume-first-render", frames });
     assert.equal((await server.api<{ onboarding: { completed_at: string | null } }>("/settings")).onboarding.completed_at, null);
   } finally {

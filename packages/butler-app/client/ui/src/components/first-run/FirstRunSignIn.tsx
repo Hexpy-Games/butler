@@ -1,5 +1,5 @@
 import {
-  AlertCircle, Button, ButtonContainer, Copy, Globe2, Notice, SetupWizardStepAction, Spinner, Stack, Typo,
+  AlertCircle, Button, CheckCircle2, ButtonContainer, Copy, Globe2, Notice, SetupWizardStepAction, Spinner, Stack, Typo,
 } from "@/butler-ds";
 import { CardGlyph } from "./CardGlyph";
 import { FirstRunStepCard } from "./FirstRunStepCard";
@@ -14,12 +14,24 @@ export function FirstRunSignIn({ flow }: { flow: FirstRunFlow }) {
   const title = state === "cancelled" ? copy.signInCancelled : state === "timedout" ? copy.signInTimedOut
     : state === "failed" ? copy.signInFailed : copy.signInTitle(copy.providerNames.chatgpt);
   const description = stopped ? state === "timedout" ? copy.signInTimedOutBody : copy.signInCancelledBody : copy.signInBody;
+  const connected = Boolean(flow.commit.connected);
+  if (connected) return (
+    <FirstRunStepCard flow={flow} contentKey="signin:connected" icon={<CardGlyph cardId="chatgpt" />}
+      title={copy.readyTitle(copy.providerNames.chatgpt)} onBack={flow.backToList}
+      actions={<SetupWizardStepAction forward onClick={flow.toReply}>{flow.copy.next}</SetupWizardStepAction>}
+    >
+      {signIn.account ? <Notice tone="neutral" icon={<CheckCircle2 size="md" />} message={signIn.account} /> : null}
+    </FirstRunStepCard>
+  );
   return (
     <FirstRunStepCard flow={flow} contentKey={`signin:${state}`} icon={<CardGlyph cardId="chatgpt" />}
       title={title} description={description} onBack={flow.backToList}
       actions={stopped
         ? <SetupWizardStepAction variant="default" onClick={() => void signIn.start()}>{copy.retry}</SetupWizardStepAction>
-        : <SetupWizardStepAction disabled={state !== "waiting"} onClick={() => void signIn.cancel()}>{copy.cancel}</SetupWizardStepAction>}
+        : <>
+          <SetupWizardStepAction disabled={state !== "waiting"} onClick={() => void signIn.cancel()}>{copy.cancel}</SetupWizardStepAction>
+          <SetupWizardStepAction forward disabled>{flow.copy.next}</SetupWizardStepAction>
+        </>}
     >
       {stopped ? null : <SignInStatus flow={flow} state={state} />}
     </FirstRunStepCard>

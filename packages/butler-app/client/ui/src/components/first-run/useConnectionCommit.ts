@@ -64,6 +64,7 @@ export function useConnectionCommit({ readinessStatus, acceptedAt, language, res
 
   return {
     connected,
+    savedCardId: saved?.cardId,
     pending,
     committing,
     failed,

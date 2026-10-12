@@ -6,7 +6,8 @@ import type { AppModelSummary, ModelCatalogView } from "../../packages/butler-ap
 export async function firstRunStub(gateway: NativeAppServerHandle) {
   const state = {
     oauthStatus: "pending", label: "yeonwoo@example.com", started: 0, cancelled: 0,
-    holdCommit: false, failCommit: false, readiness: "ready", local: false, localCalls: 0,
+    holdCommit: false, failCommit: false, readiness: "ready", local: false, localCalls: 0, localModels: 1,
+    importEmpty: false, importRuns: 0, importUndos: 0,
     memoryModel: "unset" as "unset" | "off" | "ready",
   };
   const catalog = await gateway.api<ModelCatalogView>("/model-catalog");
@@ -14,6 +15,30 @@ export async function firstRunStub(gateway: NativeAppServerHandle) {
   const server = createServer((request, response) => {
     void handle(request, response).catch(() => { if (!response.headersSent) json(response, {}, 500); });
   });
+  async function importFixture(path: string, request: IncomingMessage, response: ServerResponse): Promise<boolean> {
+    if (path === "/security/signins") { json(response, { available: true, sites: [] }); return true; }
+    const agent = "/security/agent-import/", browser = "/security/browser-import/";
+    if (!path.startsWith(agent) && !path.startsWith(browser)) return false;
+    if (path.endsWith("/sources")) {
+      const sources = path.startsWith(agent) ? [
+        { key: "codex", name: "Codex", instructions: true, servers: 2, needs_secret: 0, skipped: 0, unreadable: false, instructions_file: null },
+        { key: "opencode", name: "OpenCode", instructions: false, servers: 0, needs_secret: 0, skipped: 0, unreadable: false, instructions_file: null },
+      ] : [
+        { key: "chrome:default", browser: "chrome", name: "Default", permission: "ready" },
+        { key: "safari", browser: "safari", name: "Safari", permission: "denied" },
+      ];
+      json(response, { sources: state.importEmpty ? [] : sources }); return true;
+    }
+    if (path.endsWith("/start")) {
+      await requestBody(request); state.importRuns++;
+      json(response, path.startsWith(agent)
+        ? { run_id: `agent-${state.importRuns}`, instructions: 1, servers: 2, instructions_existing: 0, servers_existing: 0, needs_secret: 0, skipped: 0 }
+        : { run_id: `browser-${state.importRuns}`, bookmarks: 128, passwords: 37, history: 9, updated: 0, existing: 0 });
+      return true;
+    }
+    if (path.endsWith("/undo")) { await requestBody(request); state.importUndos++; json(response, {}); return true; }
+    return false;
+  }
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     if (request.method === "OPTIONS") {
       response.writeHead(204, { "access-control-allow-origin": "app://butler", "access-control-allow-headers": "authorization,content-type",
@@ -21,6 +46,7 @@ export async function firstRunStub(gateway: NativeAppServerHandle) {
       response.end(); return;
     }
     const path = new URL(request.url!, "http://localhost").pathname;
+    if (await importFixture(path, request, response)) return;
     if (path === "/setup/oauth/start") {
       state.started++;
       return json(response, { status: "pending", flow_id: `stub-${state.started}`, auth_url: "https://signin.invalid/first-run" });
@@ -40,7 +66,7 @@ export async function firstRunStub(gateway: NativeAppServerHandle) {
     if (path === "/setup/local-model-servers") {
       state.localCalls++;
       return json(response, { servers: state.local ? [{ id: "ollama", label: "Ollama", server_url: "http://127.0.0.1:11434",
-        reachable: true, models: [{ id: "stub", size_bytes: 1024 * 1024 * 1024 }] }] : [] });
+        reachable: true, models: Array.from({ length: state.localModels }, (_, i) => ({ id: i ? `stub-${i}` : "stub", size_bytes: 1024 * 1024 * 1024 })) }] : [] });
     }
     if (path === "/setup/credentials/verify") return json(response, { valid: true, verified: true });
     if (path === "/credentials" && request.method === "POST") return json(response, { credential: { id: "stub-key" }, created: true });
