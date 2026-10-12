@@ -277,6 +277,7 @@ fn turn_calls(prompt: &str) -> Vec<(&'static str, Value)> {
                 json!({"path":"headless-site","title":"Headless fixture"}),
             ),
         ],
+        "Publish parallel" => super::parallel::publish_calls(),
         "Publish shop" => vec![
             (
                 "write_file",
@@ -312,6 +313,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
             "Publish broken",
             "Publish fixture",
             "Publish shop",
+            "Publish parallel",
             "Open fixture",
             "Observe fixture",
             "Act fixture",

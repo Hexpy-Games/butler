@@ -15,6 +15,7 @@
 //!   pipe.
 //! - [`app_browser`]: the installed App's Electron, found and run without a
 //!   window as a browser host.
+//! - [`process_priority`]: background scheduling priority for long CPU work.
 //! - [`process_control`]: process groups, group signals, exit signals,
 //!   liveness, detached processes and the stop requests a service receives.
 //! - [`instance`]: the instance lock, host facts, process identity and
@@ -35,6 +36,7 @@
 //!   systemd `--user`, Task Scheduler).
 //! - [`network`]: the machine's own interface addresses.
 //! - [`cpu`]: how many performance cores the machine has.
+//! - [`memory`]: how much physical memory the machine has.
 //! - [`desktop`]: whether a browser can open, and opening a link in it.
 //! - [`sqlite`]: file database opens with the host's path-capable VFS.
 //! - [`stdio`]: this process's stdin and stdout as one async stream.
@@ -69,9 +71,11 @@ pub mod fs_space;
 pub mod install_link;
 pub mod instance;
 pub mod launcher;
+pub mod memory;
 pub mod network;
 pub mod process_control;
 pub mod process_names;
+pub mod process_priority;
 pub mod secrets;
 pub mod secure_fs;
 pub mod service_registration;

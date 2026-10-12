@@ -22,7 +22,8 @@ pub(in crate::cognition) use contracts::{
 };
 pub(in crate::cognition) use expansion::expand_graph;
 pub(in crate::cognition) use ranking::{
-    cosine_relevance, diversify_by_session, fuse_episode_candidates, rank_episodes,
+    cosine_relevance, diversify_by_session, fuse_episode_candidates, fuse_reciprocal_rank,
+    rank_episodes,
 };
 
 pub(in crate::cognition) use semantic::{

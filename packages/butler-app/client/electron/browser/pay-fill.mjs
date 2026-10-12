@@ -26,6 +26,12 @@ async function scan(tab, args) {
   return frames;
 }
 
+function incompatibleTargets(frames) {
+  const targets = frames.flatMap(frame => frame.incompatible ?? []);
+  return targets.length ? { status: "not_dispatched", reason: "incompatible_target", targets,
+    recovery: "Observe and choose targets whose accessible label, autocomplete, name, input type and inputmode match each sensitive field kind." } : null;
+}
+
 function merchantOrigin(browser, tab, top) {
   const opener = tab.opener ? browser.tabs.get(tab.opener) : null;
   return opener?.url ? originOf(opener.url) || top : top;
@@ -47,6 +53,8 @@ export async function inspectPay(browser, tab, args, controlTab) {
   const kind = args.kind === "profile" ? "profile" : "card";
   const top = originOf(tab.view.webContents.getURL());
   const frames = await scan(tab, args);
+  const refusal = incompatibleTargets(frames);
+  if (refusal) return refusal;
   if (args.section_ref && !frames.length) return { status: "not_dispatched", reason: "section_missing", tab: tab.id,
     recovery: "section_ref is not in the latest observation. Observe and pass current form field refs." };
   if (kind === "profile" && (!Array.isArray(args.targets) || !args.targets.length
@@ -108,6 +116,8 @@ export async function fillPay(browser, tab, args, controlTab) {
   if (top !== args.top_origin) return { status: "origin_mismatch", tab: tab.id, url: contents.getURL() };
   const bound = new Set([top, ...(Array.isArray(args.frame_origins) ? args.frame_origins : [])]);
   const frames = (await scan(tab, args)).filter(frame => bound.has(frame.origin));
+  const refusal = incompatibleTargets(frames);
+  if (refusal) return refusal;
   const steps = plan(kind, frames);
   if (kind === "profile" && steps.length !== args.targets?.length) return { status: "not_dispatched", reason: "target_missing", tab: tab.id };
   const human = humanStep(frames);

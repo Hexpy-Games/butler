@@ -7,6 +7,7 @@
 mod fill;
 mod migration;
 mod profile_tool;
+mod target_refusal;
 mod tool;
 
 use super::host::{admin, attach, call, snapshot};

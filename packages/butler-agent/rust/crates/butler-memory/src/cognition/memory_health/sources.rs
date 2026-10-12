@@ -22,8 +22,8 @@ use crate::cognition::CognitionCode;
 use crate::profile::ProfileCoverageHealth;
 mod files;
 use files::{
-    count_jsonl, count_sqlite_rows, read_project_failures, read_registered_projects,
-    read_vector_stats, sanitize_project_memory_id, scan_files,
+    count_jsonl, count_sqlite_rows, memory_model_off, read_project_failures,
+    read_registered_projects, read_vector_stats, sanitize_project_memory_id, scan_files,
 };
 
 const STALE_AFTER_MS: i64 = 7 * 24 * 60 * 60 * 1_000;
@@ -90,7 +90,10 @@ pub(super) fn read(
     let serving = super::serving::read(data_root, paths, now, profile);
     let failed_vectors = serving.stages.node_vectors.failed + serving.stages.episode_vectors.failed;
     if let Some(count) = serving.memories_without_vectors.filter(|count| *count > 0) {
-        let status = if failed_vectors == 0 {
+        let status = if memory_model_off(&data_root.join("butler.config.json")) {
+            // Text recall serves them; they are embedded only if the model is turned on.
+            "memory model off, embedded if turned on".to_owned()
+        } else if failed_vectors == 0 {
             "pending batch embedding, will be embedded later".to_owned()
         } else {
             format!("{failed_vectors} failed; remaining pending batch embedding")
