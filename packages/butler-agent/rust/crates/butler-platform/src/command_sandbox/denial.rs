@@ -1,6 +1,7 @@
 //! Model-facing feedback for Linux kernel denials, never a user notice.
 
-/// Identifies Linux read-only failures that need an explicitly different effect.
+/// Adds cautious feedback to Linux permission failures. Stderr alone cannot
+/// distinguish a sandbox denial from DAC, another LSM, or application output.
 /// Call only for failed commands actually run with read-only access.
 pub fn sandbox_denial(stderr: &str) -> Option<(&'static str, &'static str)> {
     #[cfg(target_os = "linux")]
@@ -16,18 +17,9 @@ pub fn sandbox_denial(stderr: &str) -> Option<(&'static str, &'static str)> {
         {
             return None;
         }
-        if ["socket", "connect", "network", "/dev/tcp", "/dev/udp"]
-            .iter()
-            .any(|signature| text.contains(signature))
-        {
-            return Some((
-                "network",
-                "This command ran read-only and was denied network access. If it must use the network, rerun it with state_effect \"remote_observation\" to request approval.",
-            ));
-        }
         Some((
-            "write",
-            "This command ran read-only and was denied write access. If it must write, rerun it with state_effect \"mutation\" to request approval.",
+            "possible",
+            "This command may have been denied by the sandbox. Check the requested operation, paths and ordinary filesystem permissions. Only if it needs writes or network access, request approval with state_effect \"mutation\" or \"remote_observation\", respectively.",
         ))
     }
     #[cfg(not(target_os = "linux"))]

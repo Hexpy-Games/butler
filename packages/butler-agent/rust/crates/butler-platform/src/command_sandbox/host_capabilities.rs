@@ -22,10 +22,12 @@ impl Level {
 /// Host command boundaries, probed once per process without idle work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SandboxCapabilities {
-    /// File writes, including truncation.
+    /// File content and metadata writes, including truncation and device ioctls.
     pub read_only: Level,
-    /// TCP, UDP, raw and unix sockets.
+    /// External sockets of any family; anonymous local stream pairs may be allowed.
     pub network_deny: Level,
+    /// Signals and abstract Unix sockets cannot reach processes outside the sandbox.
+    pub process_scoping: Level,
     /// Credential roots and project secret names.
     pub private_reads: Level,
     /// Legacy protected installation roots.
@@ -52,6 +54,7 @@ fn probe() -> SandboxCapabilities {
     return SandboxCapabilities {
         read_only: Level::Enforced,
         network_deny: Level::Enforced,
+        process_scoping: Level::Unavailable("process scoping is not probed on macOS"),
         private_reads: Level::Enforced,
         write_protection: Level::Enforced,
     };
@@ -66,6 +69,7 @@ pub(super) fn unavailable(reason: &'static str) -> SandboxCapabilities {
     SandboxCapabilities {
         read_only: Level::Unavailable(reason),
         network_deny: Level::Unavailable(reason),
+        process_scoping: Level::Unavailable(reason),
         private_reads: Level::Unavailable(reason),
         write_protection: Level::Unavailable(reason),
     }

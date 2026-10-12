@@ -403,26 +403,10 @@ fn has_parent_segment(value: &str) -> bool {
     value.split(['/', '\\']).any(|part| part == "..")
 }
 pub fn looks_sensitive(relative: &str) -> bool {
-    let parts: Vec<_> = relative
+    relative
         .split(['/', '\\'])
         .filter(|part| !part.is_empty())
-        .collect();
-    parts.iter().enumerate().any(|(index, part)| {
-        let lower = part.to_lowercase();
-        matches!(
-            lower.as_str(),
-            ".git"
-                | ".ssh"
-                | ".gnupg"
-                | "chatgpt-oauth.json"
-                | "credentials.json"
-                | "secrets.json"
-                | "id_rsa"
-                | "id_ed25519"
-        ) || lower.ends_with(".pem")
-            || lower.ends_with(".key")
-            || index + 1 == parts.len() && lower.starts_with(".env")
-    })
+        .any(butler_platform::command_sandbox::secret_name)
 }
 pub(super) fn protected_path(root: &Path, target: &Path, extra: &[PathBuf]) -> bool {
     let target = realpath_or_nearest(target);

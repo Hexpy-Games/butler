@@ -6,10 +6,6 @@ use super::{Invocation, ProtectError, Protection, SandboxError};
 
 const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 
-pub(super) fn read_only(invocation: Invocation) -> Result<Invocation, SandboxError> {
-    read_only_contained(invocation, &std::collections::HashMap::new(), &[], &[])
-}
-
 pub(super) fn read_only_contained(
     invocation: Invocation,
     environment: &std::collections::HashMap<String, String>,
@@ -24,40 +20,21 @@ pub(super) fn read_only_contained(
         "(deny network*)",
     ]
     .join("\n");
-    let mut private = denied
-        .iter()
-        .map(|root| root.to_path_buf())
-        .collect::<Vec<_>>();
-    if !allowed.is_empty()
-        && let Some(home) = environment.get("HOME")
-    {
-        private.extend(
-            [
-                ".ssh",
-                ".gnupg",
-                ".aws",
-                ".kube",
-                ".docker",
-                ".netrc",
-                ".git-credentials",
-                "Library/Keychains",
-                ".butler-e2e-auth",
-            ]
-            .into_iter()
-            .map(|name| Path::new(home).join(name)),
-        );
-    }
-    let denied = private
-        .iter()
-        .map(std::path::PathBuf::as_path)
-        .collect::<Vec<_>>();
-    for (action, roots) in [("deny", denied.as_slice()), ("allow", allowed)] {
+    for (action, roots) in [("deny", denied), ("allow", allowed)] {
         for root in roots {
             let real = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
             for path in [*root, real.as_path()] {
                 let quoted = serde_json::to_string(&path.to_string_lossy())?;
                 profile.push_str(&format!("\n({action} file-read* (subpath {quoted}))"));
             }
+        }
+    }
+    // Credentials stay denied even when the admitted project overlaps a store.
+    for root in super::credentials::roots(environment) {
+        let real = root.canonicalize().unwrap_or_else(|_| root.clone());
+        for path in [&root, &real] {
+            let quoted = serde_json::to_string(&path.to_string_lossy())?;
+            profile.push_str(&format!("\n(deny file-read* (subpath {quoted}))"));
         }
     }
     for root in allowed {
@@ -81,7 +58,7 @@ fn deny_project_secrets(profile: &mut String, root: &Path) -> Result<(), Sandbox
             out.push(ch);
             out
         });
-    let names = r"(\.git|\.ssh|\.gnupg|\.project-ledger|\.env[^/]*|chatgpt-oauth\.json|credentials\.json|secrets\.json|id_rsa|id_ed25519|[^/]*\.pem|[^/]*\.key)";
+    let names = format!("({})", super::credentials::secret_pattern());
     let names = names
         .chars()
         .map(|ch| {
