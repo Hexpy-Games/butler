@@ -48,11 +48,13 @@ fn request_text(request: &Value) -> String {
 }
 
 async fn start() -> Result<Scenario, HarnessError> {
-    Setup::new("STEWARD-RESULT")?
+    let s = Setup::new("STEWARD-RESULT")?
         .cassette("Q-02-CANCEL")
         .replay_only()
         .start()
-        .await
+        .await?;
+    butler_e2e::e2e::fixtures::default_project_folder(&s).await?;
+    Ok(s)
 }
 
 /// Delivers a steward result to the parent chat the way the host does.
