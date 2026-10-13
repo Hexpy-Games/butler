@@ -6,9 +6,12 @@ export async function installNotificationReplay(page: Page, url: string): Promis
     const calls: unknown[] = [];
     const electron = {
       contextBridge: { exposeInMainWorld: (name: string, value: unknown) => Reflect.set(window, name, { ...(value as Record<string, unknown>) }) },
-      ipcRenderer: { on: () => {}, removeListener: () => {},
+      ipcRenderer: { on: () => {}, removeListener: () => {}, send: () => {},
         invoke: async (channel: string, input?: unknown) => {
           if (channel === "butler:get-server-url") return url;
+          if (channel === "butler-browser:call" && input === "state") {
+            return { enabled: false, blocked: false, activeId: null, nativeCovered: false, tabs: [] };
+          }
           if (channel === "butler:get-local-auth-headers") return {};
           if (channel === "butler:show-desktop-notification") { calls.push(input); return { shown: true }; }
           return {};
