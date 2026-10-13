@@ -3,6 +3,7 @@ use serde_json::{Map, Value, json};
 use super::super::super::{AppSettingsFacts, validation};
 use crate::gateway::GatewayApplicationError;
 use butler_core::public_text::trim_js_whitespace;
+use butler_turn::btcc::AccessMode;
 
 /// The accepted subset of a settings patch. A requested model that is not a
 /// runtime-supported, enabled model is rejected rather than dropped, so the
@@ -107,12 +108,11 @@ pub(super) fn sanitize(
             json!(butler_core::json::saturating_u64(value)),
         );
     }
-    if input
-        .get("access_mode")
-        .and_then(Value::as_str)
-        .is_some_and(|value| butler_turn::btcc::AccessMode::parse(value).is_some())
-    {
-        output.insert("access_mode".into(), input["access_mode"].clone());
+    for key in ["access_mode", "schedule_access_mode"] {
+        let named = input.get(key).and_then(Value::as_str);
+        if let Some(mode) = named.and_then(AccessMode::parse) {
+            output.insert(key.into(), mode.as_str().into());
+        }
     }
     for (key, allowed) in [
         ("follow_up_behavior", &["queue", "steer"][..]),

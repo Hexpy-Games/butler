@@ -20,16 +20,8 @@ export const RECOMMENDED_ACCESS_MODE: AccessMode = "auto";
 /** A new chat's mode on a fresh install (the Settings field marks it as the default). */
 export const CHAT_ACCESS_FACTORY_DEFAULT: AccessMode = "ask_except_reads";
 
-/** Modes the agent does not run yet: hidden from the menus unless already selected. */
-const UNSHIPPED_ACCESS_MODES: ReadonlySet<AccessMode> = new Set<AccessMode>(["auto"]);
-
 export function isAccessMode(value: unknown): value is AccessMode {
   return (ACCESS_MODES as readonly unknown[]).includes(value);
-}
-
-/** The modes a menu offers: every shipped mode, plus the current one. */
-export function accessModeChoices(current: AccessMode): AccessMode[] {
-  return ACCESS_MODES.filter((mode) => !UNSHIPPED_ACCESS_MODES.has(mode) || mode === current);
 }
 
 interface AccessModeMeta {

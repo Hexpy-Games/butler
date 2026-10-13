@@ -26,6 +26,9 @@ pub enum GuidedAccess {
     FullAccessContained,
     ReadOnlyObservation,
     ContainedObservation,
+    /// A mutation contained to the project folder (Auto access): writes only
+    /// inside the workspace root and command scratch folders, no network.
+    ProjectWrite,
 }
 
 /// A guided shell command with its workspace, timeout and access.
