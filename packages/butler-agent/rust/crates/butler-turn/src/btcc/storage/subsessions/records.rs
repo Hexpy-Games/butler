@@ -87,6 +87,10 @@ pub struct SubsessionPacket {
     pub worker_profile: Option<PacketWorkerProfile>,
     pub model_ref: String,
     pub reasoning_effort: String,
+    /// The unattended schedule run this work belongs to (D8): its children
+    /// and the results they report cannot wait for the user either.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schedule_run: Option<crate::btcc::ScheduleRunContext>,
 }
 
 /// The plan action a worker executes.
@@ -191,6 +195,10 @@ pub struct NativeStewardContext {
     pub workspace_path: String,
     pub model_ref: String,
     pub reasoning_effort: String,
+    /// The unattended schedule run this work belongs to (D8): its children
+    /// and the results they report cannot wait for the user either.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schedule_run: Option<crate::btcc::ScheduleRunContext>,
 }
 
 fn legacy_context_role() -> String {
@@ -215,7 +223,7 @@ pub enum ParentResultInput {
     /// A worker result for its steward's queue.
     StewardQueue(WorkerResultInput),
     /// A steward result for the butler App (posted as this JSON).
-    ButlerApp(StewardResultInput),
+    ButlerApp(Box<StewardResultInput>),
 }
 
 /// A worker result for the steward.
@@ -242,6 +250,10 @@ pub struct StewardResultInput {
     pub reasoning_effort: String,
     pub access_mode: String,
     pub timestamp: String,
+    /// The unattended schedule run this work belongs to (D8): its children
+    /// and the results they report cannot wait for the user either.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schedule_run: Option<crate::btcc::ScheduleRunContext>,
 }
 
 /// The route of an outbox row, read before the row is decoded.
@@ -293,6 +305,7 @@ impl SubsessionPacket {
             worker_profile: None,
             model_ref: "provider/model".into(),
             reasoning_effort: "medium".into(),
+            schedule_run: None,
         }
     }
 }
@@ -331,6 +344,7 @@ impl DispatchIntent {
                     workspace_path: "/tmp".into(),
                     model_ref: "provider/model".into(),
                     reasoning_effort: "medium".into(),
+                    schedule_run: None,
                 },
                 raw: EnvelopeRaw {
                     source: "fixture".into(),
@@ -427,7 +441,7 @@ mod tests {
             serde_json::to_string(&worker).unwrap(),
             r#"{"route":"steward_queue","text":"t","model_ref":"m","reasoning_effort":"r","timestamp":"now"}"#
         );
-        let steward = ParentResultInput::ButlerApp(StewardResultInput {
+        let steward = ParentResultInput::ButlerApp(Box::new(StewardResultInput {
             relation_id: "rel".into(),
             result_id: "res".into(),
             parent_session_id: "ps".into(),
@@ -440,7 +454,8 @@ mod tests {
             reasoning_effort: "r".into(),
             access_mode: "a".into(),
             timestamp: "now".into(),
-        });
+            schedule_run: None,
+        }));
         assert_eq!(
             serde_json::to_string(&steward).unwrap(),
             r#"{"route":"butler_app","relation_id":"rel","result_id":"res","parent_session_id":"ps","parent_turn_id":"pt","parent_chat_id":"pc","message_id":"msg","safe_title":"Delegated result","text":"t","model_ref":"m","reasoning_effort":"r","access_mode":"a","timestamp":"now"}"#

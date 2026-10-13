@@ -6,6 +6,7 @@ use serde_json::Map;
 #[test]
 fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     super::sizing::sizing_counts_image_allowance_and_preserves_complete_wire_bytes();
+    super::sizing::long_history_sizing_matches_full_projection();
     let (catalog, snapshot) = catalog();
     drop(catalog);
     let messages = [ModelRoundMessage {
@@ -426,7 +427,7 @@ fn compiled_body_matches(config: &ProviderRequestConfig) {
         for _ in 0..2 {
             if let Some(items) = body.get("input").and_then(serde_json::Value::as_array) {
                 assert_eq!(
-                    sizing.array_json(items).unwrap(),
+                    sizing.array_sizing(items).unwrap().0,
                     butler_core::json::stringify(&serde_json::Value::Array(items.clone())).unwrap()
                 );
             }

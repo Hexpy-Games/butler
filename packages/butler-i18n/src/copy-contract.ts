@@ -1070,8 +1070,10 @@ export interface AppCopy {
       title: string;
       prompt: string;
     };
-    /** One line under the access selector while Ask first is selected. */
+    /** One line under the access selector while an asking mode is selected. */
     accessHint: string;
+    /** Desktop notification when an unattended run skipped a step for permission. */
+    needsPermissionNotify: string;
     saveFailed: string;
     /** Inline messages for a save the gateway refused (400). */
     errors: {
@@ -1088,6 +1090,8 @@ export interface AppCopy {
       failed: string;
       running: string;
       skippedTargetUnavailable: string;
+      /** A run that skipped a step needing permission. */
+      needsPermission: string;
       cancelled: string;
       notRun: string;
     };

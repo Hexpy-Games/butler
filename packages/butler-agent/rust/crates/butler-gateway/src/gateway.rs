@@ -104,7 +104,7 @@ pub use application::{
 };
 pub(crate) use application::{
     AutomationDetailView, AutomationListView, AutomationMutationResult, AutomationRunListView,
-    AutomationRunResult, CreateAutomationRequest, UpdateAutomationRequest,
+    AutomationRunResult, AutomationRunSummary, CreateAutomationRequest, UpdateAutomationRequest,
 };
 #[cfg(test)]
 pub(crate) use application::{TestProjectDashboardBriefing, TestProjectDashboardLedger};

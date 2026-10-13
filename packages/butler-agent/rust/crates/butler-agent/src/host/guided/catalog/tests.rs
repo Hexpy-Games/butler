@@ -297,6 +297,8 @@ fn ask_first_admits_the_attached_image_tool() {
         ("off", "ask_first"),
         ("on", "ask_except_reads"),
         ("off", "ask_except_reads"),
+        ("on", "auto"),
+        ("off", "auto"),
     ] {
         let mut turn = phase_turn(access, &image_context());
         turn.context["executionPolicy"]["requiredNativeTools"] = json!(["analyze_attached_image"]);
@@ -337,6 +339,7 @@ fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
         ("full_access", true, true, true),
         ("ask_first", true, true, true),
         ("ask_except_reads", true, true, true),
+        ("auto", true, true, true),
         ("read_only", false, false, false),
     ];
     for (access, exempt, mcp, automation) in cases {

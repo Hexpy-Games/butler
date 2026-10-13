@@ -1,21 +1,51 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::CommandError;
+
+/// The scratch folders a guided command may write besides its workspace.
+pub(super) struct Scratch {
+    pub(super) temporary: PathBuf,
+    pub(super) cache: PathBuf,
+    pub(super) artifacts: PathBuf,
+}
+
+impl Scratch {
+    /// A project-write command gets its own temp and cache folders, so it can
+    /// neither touch another Butler component's temp files nor plant files an
+    /// unsandboxed command later picks up from a shared cache.
+    pub(super) fn new(butler_data: &Path, project_write: bool) -> Self {
+        let (temporary, cache) = if project_write {
+            ("tmp/project-write", "cache/project-write")
+        } else {
+            ("tmp", "cache/tools")
+        };
+        Self {
+            temporary: butler_data.join(temporary),
+            cache: butler_data.join(cache),
+            artifacts: butler_data.join("artifacts/generated"),
+        }
+    }
+}
 
 pub(super) fn guided_environment(
     host: &HashMap<String, String>,
     butler_data: &Path,
 ) -> Result<HashMap<String, String>, CommandError> {
+    scratch_environment(host, butler_data, &Scratch::new(butler_data, false))
+}
+
+pub(super) fn scratch_environment(
+    host: &HashMap<String, String>,
+    butler_data: &Path,
+    scratch: &Scratch,
+) -> Result<HashMap<String, String>, CommandError> {
     let mut env = butler_platform::command_sandbox::tool_environment(host);
-    let temporary = butler_data.join("tmp");
-    let cache = butler_data.join("cache/tools");
-    let artifacts = butler_data.join("artifacts/generated");
-    std::fs::create_dir_all(&temporary).map_err(CommandError::io)?;
-    std::fs::create_dir_all(&cache).map_err(CommandError::io)?;
-    let temporary = temporary.to_string_lossy().into_owned();
-    let cache = cache.to_string_lossy().into_owned();
-    let artifacts = artifacts.to_string_lossy().into_owned();
+    std::fs::create_dir_all(&scratch.temporary).map_err(CommandError::io)?;
+    std::fs::create_dir_all(&scratch.cache).map_err(CommandError::io)?;
+    let temporary = scratch.temporary.to_string_lossy().into_owned();
+    let cache = scratch.cache.to_string_lossy().into_owned();
+    let artifacts = scratch.artifacts.to_string_lossy().into_owned();
     for key in ["TMPDIR", "TEMP", "TMP"] {
         env.insert(key.to_owned(), temporary.clone());
     }

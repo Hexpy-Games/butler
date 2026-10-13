@@ -1,0 +1,69 @@
+//! Attention from an unattended schedule run (D8): the run skipped a step
+//! that needs the user's permission. The run and its schedule record the
+//! reason, and subscribers (the App's run badge and notification) hear it.
+
+use rusqlite::params;
+
+use super::{AutomationRunSummary, dispatch::run_event, records, store::publish};
+use crate::gateway::application::{
+    AppApplication, AppStorageError, GatewayApplicationError, app_error, public,
+};
+
+/// The only attention codes a run may report.
+const CODES: &[&str] = &["schedule_permission_required"];
+
+impl AppApplication {
+    pub(crate) async fn automation_run_attention_owned(
+        &self,
+        automation_id: String,
+        run_id: String,
+        code: String,
+    ) -> Result<AutomationRunSummary, GatewayApplicationError> {
+        if !CODES.contains(&code.as_str()) {
+            return Err(public(
+                400,
+                "automation_attention_invalid",
+                "Unknown schedule attention code.",
+            ));
+        }
+        let now = self.dependencies.identity_clock.now_iso();
+        let subscribers = self.subscribers.clone();
+        self.storage
+            .execute(move |db| {
+                let changed = db
+                    .execute(
+                        "UPDATE app_automation_runs SET safe_error_code=?1 WHERE id=?2 AND automation_id=?3",
+                        params![code, run_id, automation_id],
+                    )
+                    .map_err(AppStorageError::sqlite)?;
+                if changed == 0 {
+                    return Err(AppStorageError::new(
+                        crate::gateway::application::storage::AppStorageCode::AutomationNotFound,
+                        "Schedule run not found.",
+                    ));
+                }
+                db.execute(
+                    "UPDATE app_automations SET last_safe_error_code=?1,updated_at=?2 WHERE id=?3",
+                    params![code, now, automation_id],
+                )
+                .map_err(AppStorageError::sqlite)?;
+                let run = records::run(db, &run_id)?;
+                publish(
+                    db,
+                    &subscribers,
+                    "automation.run",
+                    &run_event(
+                        &run.automation_id,
+                        &run.target_session_id,
+                        &run.state,
+                        &run.trigger,
+                        run.safe_error_code.clone(),
+                    ),
+                    &now,
+                )?;
+                Ok(run)
+            })
+            .await
+            .map_err(app_error)
+    }
+}

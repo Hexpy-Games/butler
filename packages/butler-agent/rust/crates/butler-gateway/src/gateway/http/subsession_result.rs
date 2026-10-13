@@ -42,6 +42,15 @@ pub(super) async fn post(
     if butler_turn::btcc::AccessMode::parse(&access).is_none() {
         return Err(invalid_request());
     }
+    // The result of a steward an unattended schedule run started: the turn
+    // that reads it cannot wait for the user either (D8).
+    let schedule_run = object
+        .get("schedule_run")
+        .cloned()
+        .map(serde_json::from_value::<butler_turn::btcc::ScheduleRunContext>)
+        .transpose()
+        .map_err(|_| invalid_request())?
+        .filter(|run| run.unattended);
     let client = format!(
         "subsession-result:{}",
         butler_turn::btcc::digest_identity(&format!("{relation_id}\0{result_id}"))
@@ -66,6 +75,7 @@ pub(super) async fn post(
                     result_id,
                     safe_title,
                 }),
+                schedule_run,
             },
         })
         .await?;
