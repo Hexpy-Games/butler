@@ -13,12 +13,20 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    const SHAPE: &str = "ask_user requires 1–4 questions with unique ids, eyebrow, title, kind single/multi/text and allow_custom. single/multi take 2–6 options with unique ids, labels and kind; text takes no options. No icon field.";
     let questions = serde_json::from_value::<UserQuestions>(json!(call.arguments));
-    let questions = match questions {
-        Ok(q) if q.validate().is_ok() => q,
-        _ => {
+    // Validation feedback goes back to the model for a retry; skip/input options
+    // are then dropped structurally (the card has its own Skip and free input).
+    let questions = match questions.map(|q| (q.validate(), q)) {
+        Ok((Ok(()), q)) => q.normalized(),
+        Ok((Err(reason), _)) => {
             return encode(
-                &json!({"ok":false,"error":{"code":"invalid_arguments", "message":"ask_user requires 1–4 questions with unique ids, eyebrow, title, kind single/multi, allow_custom, and 2–6 options with unique ids and labels. No icon field."}}),
+                &json!({"ok":false,"error":{"code":"invalid_arguments","message":format!("{SHAPE} {reason}")}}),
+            );
+        }
+        Err(_) => {
+            return encode(
+                &json!({"ok":false,"error":{"code":"invalid_arguments","message":SHAPE}}),
             );
         }
     };

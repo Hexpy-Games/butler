@@ -34,7 +34,7 @@ export function FirstRunProviderList({ flow }: { flow: FirstRunFlow }) {
         aria-controls="first-run-more-providers" aria-expanded={expanded}
         iconEnd={expanded ? <ChevronUpIcon size="sm" /> : <ChevronDown size="sm" />}
         size="sm" text={expanded ? copy.showLess : copy.moreProviders(layout.more.length)}
-        type="button" variant="link" onClick={() => setExpanded((value) => !value)}
+        type="button" variant="inline" onClick={() => setExpanded((value) => !value)}
       />}
     >
       {flow.online ? null : <Notice tone="warning" icon={<Globe2 size="md" />} message={copy.offline} />}

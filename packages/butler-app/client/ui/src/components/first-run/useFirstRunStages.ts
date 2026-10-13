@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { PROVIDER_CARDS, type FirstRunProviderCardId, type LocalModelOption } from "@/app/setupProviders.ts";
-import type { ConnectView, FirstRunMode, ImportStage } from "./useFirstRunFlow";
+import type { ConnectView, FirstRunMode } from "./useFirstRunFlow";
 import type { useConnectionCommit } from "./useConnectionCommit";
 import type { useSignIn } from "./useSignIn";
 
@@ -8,14 +8,13 @@ export function useFirstRunStages(mode: FirstRunMode) {
   const [view, setView] = useState<ConnectView>({ kind: "list" });
   // First run only: the optional import step sits between the connection and the finish.
   const [importDone, setImportDone] = useState(false);
-  // AI step substeps: ① pick, ② sign in / key / model, ③ reply language. Import: ① AI tools, ② browsers.
+  // AI step substeps: ① pick, ② sign in / key / model, ③ reply language. Import is one step (other AI tools).
   const [authDone, setAuthDone] = useState(false);
   const [replyDone, setReplyDone] = useState(false);
   const [advanceOnConnect, setAdvanceOnConnect] = useState(false);
-  const [importStage, setImportStage] = useState<ImportStage>("agents");
 
   return { mode, view, setView, importDone, setImportDone, authDone, setAuthDone, replyDone, setReplyDone,
-    advanceOnConnect, setAdvanceOnConnect, importStage, setImportStage };
+    advanceOnConnect, setAdvanceOnConnect };
 }
 
 export function connectionActions({ stages, commit, signIn, current, onCancel }: {
@@ -75,7 +74,7 @@ function pickProvider(
 }
 
 function stageActions(stages: ReturnType<typeof useFirstRunStages>, commit: ReturnType<typeof useConnectionCommit>) {
-  const { view, setView, setImportDone, setAuthDone, setReplyDone, setAdvanceOnConnect, importStage, setImportStage, mode } = stages;
+  const { view, setView, setImportDone, setAuthDone, setReplyDone, setAdvanceOnConnect, mode } = stages;
   return {
     /** ② done: the connection is live; ③ asks the reply language. */
     toReply: () => setAuthDone(true),
@@ -90,10 +89,9 @@ function stageActions(stages: ReturnType<typeof useFirstRunStages>, commit: Retu
       if (view.kind === "list" && cardId) setView(connectionView(cardId));
       setAuthDone(false);
     },
-    toBrowsers: () => setImportStage("browsers"),
-    backFromImport: () => { if (importStage === "browsers") setImportStage("agents"); else setReplyDone(false); },
+    backFromImport: () => setReplyDone(false),
     finishImport: () => setImportDone(true),
     /** Ready goes back to the import step on first run, else to ③. */
-    backFromReady: () => { if (mode === "first-run") { setImportDone(false); setImportStage("browsers"); } else setReplyDone(false); },
+    backFromReady: () => { if (mode === "first-run") setImportDone(false); else setReplyDone(false); },
   };
 }
