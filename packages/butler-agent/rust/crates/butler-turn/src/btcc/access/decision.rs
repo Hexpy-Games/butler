@@ -7,7 +7,9 @@ use serde_json::{Map, Value};
 pub enum CapabilityKind {
     Exempt(ApprovalExemptAction),
     InternalRead,
-    WebRequest { carries_data: bool },
+    WebRequest {
+        carries_data: bool,
+    },
     FileRead,
     CommandObservation {
         sandboxed: bool,
