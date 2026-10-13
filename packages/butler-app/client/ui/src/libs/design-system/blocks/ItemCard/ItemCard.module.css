@@ -54,6 +54,47 @@
   text-align: start;
 }
 
+/* The whole card opens the item: the title's target stretches over the card
+   (its one tab stop). The picture viewer, Show more and the footer sit above
+   it and keep their own actions. */
+.card[data-interactive="true"] {
+  position: relative;
+}
+
+.body .open::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: "";
+}
+
+.card [data-item-card-media="viewer"],
+.textBlock button,
+.footer {
+  position: relative;
+  z-index: 1;
+}
+
+/* The card's hover means "open the item"; a part with its own action
+   drops it while the pointer is on that part. */
+.card[data-interactive="true"]:has(
+    [data-item-card-media="viewer"]:hover,
+    .textBlock button:hover,
+    .footer [data-slot="clickable"]:hover,
+    .footer button:hover
+  ):hover {
+  background: var(--surface-raised);
+}
+
+/* Above the app-wide pointer cursor of [role="button"]. */
+.card [data-item-card-media="viewer"][role="button"] {
+  cursor: zoom-in;
+}
+
+.card [data-item-card-media="viewer"]:hover [data-slot="media-frame"] {
+  filter: brightness(0.94);
+}
+
 .title {
   font-size: var(--font-size-3);
   line-height: var(--line-height-body);

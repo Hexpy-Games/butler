@@ -11,7 +11,7 @@ use url::Url;
 mod schema;
 #[path = "answer_blocks_sets.rs"]
 mod sets;
-pub use sets::{accept, normalize, shown, sources};
+pub use sets::{accept, normalize, pictured_sources, shown, sources};
 
 pub const ANSWER_BLOCKS_SCHEMA: &str = include_str!("answer-blocks.schema.json");
 pub const MAX_SPEC_BYTES: usize = 24 * 1024;
@@ -91,6 +91,13 @@ pub fn source_identity(source: &str) -> Option<String> {
         url.host_str()?.to_lowercase(),
         url.path()
     ))
+}
+
+/// The page a URL shows, for matching one page across links that differ only
+/// in scheme, a leading `www.`, query or fragment.
+pub fn page_identity(source: &str) -> Option<String> {
+    let identity = source_identity(source)?;
+    Some(identity.replacen("https://www.", "https://", 1))
 }
 
 fn semantic(

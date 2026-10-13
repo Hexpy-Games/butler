@@ -14,7 +14,7 @@
  * or video, plugins, closed shadow roots) comes back as an island rectangle for main to crop from the screen.
  * Coordinates are this frame's viewport CSS pixels.
  */
-export async function snapshotPage(args) {
+export async function snapshotPage(args, collectFonts, inlineBlobs) {
   const SVG = "http://www.w3.org/2000/svg", MATH = "http://www.w3.org/1998/Math/MathML";
   const MASK = "#d9d9d9", CLEAR = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
   const MAX_NODES = 40000, MAX_CHARS = 12 * 1024 * 1024;
@@ -63,6 +63,7 @@ export async function snapshotPage(args) {
   const out = { assets: new Map(), islands: [], frames: [], rules: [], families: new Map(), chars: new Set(), masks: [],
     refs: new Set(), ids: new Set(), roots: new Set([document]), nodes: 0 };
 
+  const { noteFont, noteText, fontFaces } = collectFonts(out);
   const style = (el, pseudo) => el.ownerDocument.defaultView.getComputedStyle(el, pseudo);
   const esc = text => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;").replace(/\u00a0/gu, "&nbsp;");
   const quote = text => String(text).replace(/&/gu, "&amp;").replace(/"/gu, "&quot;").replace(/</gu, "&lt;");
@@ -120,20 +121,6 @@ export async function snapshotPage(args) {
     if (id !== null) { out.refs.add(id); return `url("#${raw.slice(raw.indexOf("#") + 1)}")`; }
     return `url("${asset(url)}")`;
   });
-  function noteFont(cs) {
-    const italic = /^(italic|oblique)/u.test(cs.fontStyle) ? "italic" : "normal";
-    for (const family of cs.fontFamily.split(",")) {
-      const name = family.trim().replace(/^["']|["']$/gu, "").toLowerCase();
-      if (!name) continue;
-      if (!out.families.has(name)) out.families.set(name, new Set());
-      out.families.get(name).add(`${cs.fontWeight}|${italic}`);
-    }
-  }
-  function noteText(text) {
-    if (out.chars.size > 6000) return;
-    for (const char of text) out.chars.add(char);
-  }
-
   /** Declarations the reset copy needs: every inherited value at a copy root, the differences elsewhere. */
   function declarations(cs, parent, names = NAMES) {
     let text = "";
@@ -169,7 +156,8 @@ export async function snapshotPage(args) {
       const ps = style(el, pseudo);
       if (!ps || ["none", "normal", ""].includes(ps.content) || ps.display === "none") continue;
       rules.push([pseudo, declarations(ps, cs)]);
-      noteFont(ps); noteText(ps.content);
+      noteFont(ps); noteText(ps.content.replace(/\\([0-9a-f]{1,6})\s?|\\(.)/giu, (_match, hex, char) =>
+        hex ? String.fromCodePoint(Math.min(parseInt(hex, 16), 0x10ffff)) : char));
     }
     if (cs.display === "list-item") {
       const ms = style(el, "::marker"), names = ["color", "font-size", "font-weight", "font-family", "font-style"];
@@ -450,52 +438,18 @@ export async function snapshotPage(args) {
     }
     return html ? `<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"><defs>${html}</defs></svg>` : "";
   }
-  /** @font-face rules of the families the copy uses; sheets this world cannot read are fetched by main. */
-  function fontFaces() {
-    const faces = [], sheets = new Set(), seen = new Set();
-    const walk = (rules, base) => {
-      for (const rule of rules) {
-        if (rule.type === 5) {
-          const s = rule.style, family = s.getPropertyValue("font-family").trim().replace(/^["']|["']$/gu, "").toLowerCase();
-          if (out.families.has(family)) faces.push({ family, src: s.getPropertyValue("src"), weight: s.getPropertyValue("font-weight"), style: s.getPropertyValue("font-style"),
-            stretch: s.getPropertyValue("font-stretch"), range: s.getPropertyValue("unicode-range"), features: s.getPropertyValue("font-feature-settings"), base });
-        } else if (rule.type === 3) visit(rule.styleSheet);
-        else if (rule.cssRules) walk(rule.cssRules, base);
-      }
-    };
-    function visit(sheet) {
-      if (!sheet || seen.has(sheet)) return;
-      seen.add(sheet);
-      let rules;
-      try { rules = sheet.cssRules; } catch { if (sheet.href) sheets.add(sheet.href); return; }
-      walk(rules, sheet.href || sheet.ownerNode?.baseURI || location.href);
-    }
-    for (const root of out.roots) if (root.nodeType === 9) { for (const sheet of root.styleSheets) visit(sheet); for (const sheet of root.adoptedStyleSheets ?? []) visit(sheet); }
-    return { faces, sheets: [...sheets] };
-  }
-  async function inlineBlobs(parts) {
-    for (const [url, token] of [...out.assets]) {
-      if (!url.startsWith("blob:")) continue;
-      out.assets.delete(url);
-      let data = CLEAR;
-      try {
-        const blob = await (await fetch(url)).blob();
-        if (blob.size <= 3 * 1024 * 1024) data = await new Promise(resolve => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => resolve(CLEAR); reader.readAsDataURL(blob); });
-      } catch { /* revoked */ }
-      for (const key of Object.keys(parts)) parts[key] = parts[key].split(token).join(data);
-    }
-  }
 
   async function finish(html, extra) {
     const parts = { html: html + definitions(), css: out.rules.join("") };
-    await inlineBlobs(parts);
+    await inlineBlobs(out.assets, parts, CLEAR);
     return { ...extra, html: parts.html, css: parts.css, assets: [...out.assets], islands: out.islands, frames: out.frames, masks: out.masks,
       fonts: fontFaces(), families: [...out.families].map(([family, keys]) => [family, [...keys]]), chars: [...out.chars].join(""), base: location.href };
   }
   try {
     const view = { left: 0, top: 0, right: document.documentElement.clientWidth || innerWidth, bottom: document.documentElement.clientHeight || innerHeight };
     if (args.op === "element") {
-      const el = elementOf(args.identity);
+      // The App's own UI names its part by a transient marker instead of a pick identity.
+      const el = args.selector ? document.querySelector(args.selector) : elementOf(args.identity);
       if (!el?.isConnected) return null;
       const offset = offsetOf(el.ownerDocument), r = el.getBoundingClientRect(), cs = style(el);
       const transformed = cs.transform !== "none" && el.offsetWidth !== undefined;

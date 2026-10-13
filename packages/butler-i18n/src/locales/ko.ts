@@ -937,6 +937,18 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
         open: (site) => `${site} 페이지 열기`,
       },
     },
+    imageViewer: {
+      viewImage: (name) => `이미지 크게 보기: ${name}`,
+      close: "닫기",
+      previous: "이전 이미지",
+      next: "다음 이미지",
+      position: (current, total) => `${current} / ${total}`,
+      failed: "이미지를 불러오지 못했어요",
+      openSource: "원본 페이지 열기",
+      copyImage: "이미지 복사",
+      imageCopied: "이미지를 복사했어요",
+      checked: (time) => `${time} 확인`,
+    },
     stoppedStatus: "중지됨",
     fileChanges: {
       regionLabel: "변경된 파일",

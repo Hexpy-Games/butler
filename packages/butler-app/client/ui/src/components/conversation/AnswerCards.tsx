@@ -1,23 +1,28 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AnswerCardsView, AnswerCardView } from "../../../../shared/answer-blocks-view";
 import { Button, Collapsible, CopyButton, Grid, IconButton, ItemCard, Library, MediaFrame, Stack } from "@/butler-ds";
-import { gatewayImageSource } from "@/app/messageFileUrls";
-import { openLink } from "../browser/browserBridge";
 import { appCopy, useAppLocale } from "@/app/copy";
-import { answerCardCopy, answerSource, runAnswerAction, saveAnswerItem } from "./answerBlockActions";
+import { openConversationLink } from "../browser/browserBridge";
+import { openImageViewer, type ViewerImage } from "../media/imageViewerState";
+import { answerCardCopy, answerImages, answerPart, answerSource, runAnswerAction, saveAnswerItem, useAnswerSession } from "./answerBlockActions";
 import { formatAnswerValue } from "./answerValueFormat";
 
-function AnswerCard({ item, media }: { item: AnswerCardView; media: AnswerCardsView["media"] }) {
+/** The card opens its source page in the conversation's browser; its picture opens the viewer on the block's pictures. */
+function AnswerCard({ item, media, images, index }: { item: AnswerCardView; media: AnswerCardsView["media"]; images: ViewerImage[]; index: number }) {
   const locale = useAppLocale();
+  const sessionId = useAnswerSession();
   const copy = appCopy.conversation.answerBlocks;
-  const source = answerSource(item);
+  const source = answerSource(item, sessionId);
+  const picture = images[index]?.src;
   return <ItemCard title={item.title} eyebrow={item.label} subtitle={item.sub}
     media={<MediaFrame aspect={media ?? "1:1"} fit="cover" placeholder placeholderIcon={source?.icon}
-      src={gatewayImageSource(item.image_url)} alt={item.title} />}
+      src={picture || undefined} alt={item.title} />}
+    onMediaOpen={picture ? () => openImageViewer(images, index) : undefined}
+    mediaLabel={appCopy.conversation.imageViewer.viewImage(item.title)}
     value={item.value ? { amount: formatAnswerValue(item.value, locale), was: item.value.was === undefined ? undefined : formatAnswerValue(item.value, locale, item.value.was), wasLabel: copy.previousValue, note: item.value.note } : undefined}
     facts={item.facts} text={item.text} showMoreLabel={copy.showMore} showLessLabel={copy.showLess} source={source}
-    onOpen={item.source ? () => runAnswerAction(() => openLink(item.source!)) : undefined}
-    actions={<><IconButton label={copy.saveToLibrary} onClick={() => runAnswerAction(() => saveAnswerItem(item))}><Library size="sm" /></IconButton>
+    onOpen={item.source ? () => runAnswerAction(() => openConversationLink(item.source!, sessionId)) : undefined}
+    actions={<><IconButton label={copy.saveToLibrary} onClick={(event) => { const part = answerPart(event.currentTarget); runAnswerAction(() => saveAnswerItem(item, sessionId, part)); }}><Library size="sm" /></IconButton>
       <CopyButton label={copy.copy} copiedLabel={copy.copied} text={answerCardCopy(item)} /></>} />;
 }
 
@@ -48,7 +53,10 @@ export function AnswerCards({ block }: { block: AnswerCardsView }) {
   const [expanded, setExpanded] = useState(false);
   const copy = appCopy.conversation.answerBlocks;
   const { ref, columns } = useCardColumns(expanded ? block.items.length : Math.min(6, block.items.length));
-  const cards = (items: AnswerCardView[], offset = 0) => items.map((item, index) => <AnswerCard key={`${offset + index}:${item.key ?? item.title}`} item={item} media={block.media} />);
+  const sessionId = useAnswerSession();
+  const images = useMemo(() => answerImages(block.items, sessionId, copy.image), [block.items, sessionId, copy.image]);
+  const cards = (items: AnswerCardView[], offset = 0) => items.map((item, index) => <AnswerCard key={`${offset + index}:${item.key ?? item.title}`}
+    item={item} media={block.media} images={images} index={offset + index} />);
   return <Stack gap="sm">
     {!expanded ? <Grid ref={ref} gap="sm" columns={columns} data-test-class="answer-cards">{cards(block.items.slice(0, 6))}</Grid> : null}
     <Collapsible open={expanded}><Grid ref={expanded ? ref : undefined} gap="sm" columns={columns} data-test-class="answer-cards">{cards(block.items)}</Grid></Collapsible>

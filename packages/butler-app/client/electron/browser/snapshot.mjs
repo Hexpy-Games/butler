@@ -1,6 +1,7 @@
 import { BrowserWindow, nativeImage } from "electron";
 import { isIP } from "node:net";
 import { guardUrl, privateAddress } from "./guard.mjs";
+import { snapshotFonts, inlineSnapshotBlobs } from "./snapshot-page-resources.mjs";
 import { snapshotPage } from "./snapshot-page.mjs";
 
 /**
@@ -9,7 +10,7 @@ import { snapshotPage } from "./snapshot-page.mjs";
  * their own worlds and unreadable media cropped from the screen. The copy has no scripts, handlers, form actions
  * or remote loads, and its CSP admits only inline styles and data: images and fonts.
  */
-export const SNAPSHOT_SOURCE = snapshotPage.toString();
+export const SNAPSHOT_SOURCE = `(args) => (${snapshotPage.toString()})(args, ${snapshotFonts.toString()}, ${inlineSnapshotBlobs.toString()})`;
 export const SNAPSHOT_LIMIT = 5 * 1024 * 1024;
 const ASSET_LIMIT = 3 * 1024 * 1024, FONT_BUDGET = 2.5 * 1024 * 1024, SHEET_LIMIT = 512 * 1024, FRAME_DEPTH = 4;
 const CLEAR = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -59,8 +60,12 @@ function localPage(origins) {
   });
 }
 
-/** Bytes of one resource through the tab's own session (its cache and cookies); only what the page could load. */
+/**
+ * Bytes of one resource through the tab's own session (its cache and cookies); only what the page could load.
+ * A source that is not a web tab (the App's own UI) brings its own reader.
+ */
 async function fetchAsset(tab, url, origins) {
+  if (tab.fetchAsset) return tab.fetchAsset(url);
   try {
     const parsed = new URL(url);
     if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) return null;
@@ -86,12 +91,15 @@ function sniff(body, type) {
   if (/^image\/(svg\+xml|x-icon|vnd\.microsoft\.icon|bmp)$/u.test(type) || /<svg[\s>]/u.test(body.subarray(0, 512).toString("utf8"))) return type.startsWith("image/") ? type : "image/svg+xml";
   return null;
 }
-async function inlineAll(tab, urls, origins, kind) {
+async function inlineAll(tab, urls, origins, kind, chars = "") {
   const found = new Map(), queue = [...new Set(urls)];
   const work = async () => {
     for (let url = queue.shift(); url; url = queue.shift()) {
       const asset = await fetchAsset(tab, url, origins), type = asset && sniff(asset.body, asset.type);
-      if (type && (kind === "font" ? type.startsWith("font/") : type.startsWith("image/"))) found.set(url, `data:${type};base64,${asset.body.toString("base64")}`);
+      if (!type || !(kind === "font" ? type.startsWith("font/") : type.startsWith("image/"))) continue;
+      const subset = kind === "font" && tab.subsetFont;
+      const body = subset ? await tab.subsetFont(asset.body, chars) : asset.body;
+      found.set(url, `data:${subset ? "font/woff2" : type};base64,${body.toString("base64")}`);
     }
   };
   await Promise.all(Array.from({ length: 6 }, work));
@@ -137,7 +145,8 @@ function neededFaces(faces, families, chars) {
 }
 function faceSource(face) {
   const sources = [...face.src.matchAll(/url\(\s*(["']?)([^"')]+)\1\s*\)\s*(?:format\(\s*["']?([\w-]+)["']?\s*\))?/giu)].map(m => ({ url: m[2], format: (m[3] ?? "").toLowerCase() }));
-  const rank = format => ["woff2", "woff", "truetype", "opentype", ""].indexOf(format);
+  // A variable font names its format with "-variations" ("woff2-variations"); it is the same container.
+  const rank = format => ["woff2", "woff", "truetype", "opentype", ""].indexOf(format.replace(/-variations$/u, ""));
   const usable = sources.filter(source => rank(source.format) >= 0).sort((a, b) => rank(a.format) - rank(b.format))[0];
   try { return usable && new URL(usable.url, face.base).href; } catch { return null; }
 }
@@ -155,7 +164,7 @@ async function fontCss(tab, parts, origins) {
     faces.push(...parseFaces(sheet.body.toString("utf8"), href).filter(face => families.has(face.family)));
   }
   const needed = neededFaces(faces, families, [...chars]).map(face => ({ face, url: faceSource(face) })).filter(entry => entry.url);
-  const data = await inlineAll(tab, needed.map(entry => entry.url), origins, "font");
+  const data = await inlineAll(tab, needed.map(entry => entry.url), origins, "font", [...chars].join(""));
   let css = "", total = 0;
   for (const { face, url } of needed) {
     const src = data.get(url);

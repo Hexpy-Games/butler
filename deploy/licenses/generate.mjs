@@ -9,7 +9,7 @@ export { root, sha256, inputDigest } from "./inputs.mjs";
 export const allowlist = new Set([
   "MIT", "MIT-0", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC",
   "0BSD", "Unlicense", "CC0-1.0", "Unicode-3.0", "Unicode-DFS-2016",
-  "Zlib", "zlib-acknowledgement", "BSL-1.0", "OFL-1.1",
+  "Zlib", "zlib-acknowledgement", "BSL-1.0", "OFL-1.1", "Python-2.0",
   "Apache-2.0 WITH LLVM-exception", "blessing",
 ]);
 // Existing copyleft is disclosed, never covered by the general allowlist.
@@ -132,7 +132,7 @@ export function generate(catalog = JSON.parse(readFileSync(join(root, "deploy/li
       throw new Error(`Missing or invalid license link: ${component.id}`);
     }
     const attribution = (component.copyright ?? []).join("\n");
-    return `\n===== COMPONENT =====\n${component.name} ${component.version}\n${component.license}\n${component.links.map((link) => `License: ${link}`).join("\n")}\n${attribution}`;
+    return `\n===== COMPONENT =====\n${component.name} ${component.version}\n${component.license}\n${component.links.map((link) => `License: ${link}`).join("\n")}${attribution ? `\n${attribution}` : ""}`;
   });
   return `Butler third-party disclosures\n\nComponent names, shipped versions, SPDX licenses, upstream links and available copyright lines.\nSupplier collections are disclosed as supplied; their individual versions and SPDX IDs are not consistently available.\nElectron retains its own LICENSE and LICENSES.chromium.html in its runtime.\n\n${sections.join("\n")}\n`;
 }
