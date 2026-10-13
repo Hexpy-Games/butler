@@ -9,6 +9,7 @@ pub(super) async fn prepare(s: &Scenario) -> Result<(), HarnessError> {
     tokio::time::timeout(Duration::from_secs(90), async {
         memory_stubs::text_complete(&s.sandbox.data, 1).await?;
         let graph = memory_stubs::graph_path(&s.sandbox.data)?;
+        seeds_complete(&graph).await?;
         let session = {
             let mut db = butler_platform::sqlite::open(&graph)?;
             let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
@@ -42,4 +43,23 @@ pub(super) async fn prepare(s: &Scenario) -> Result<(), HarnessError> {
     })
     .await
     .map_err(|_| harness_error("judge fixture text/FTS projection exceeded 90s"))?
+}
+
+/// Conversation registration can finish before the explicit-memory registration.
+async fn seeds_complete(graph: &std::path::Path) -> Result<(), HarnessError> {
+    loop {
+        let ready = {
+            let db =
+                butler_platform::sqlite::open_with_flags(graph, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+            db.query_row(
+                "SELECT EXISTS(SELECT 1 FROM memory_chunks WHERE status='active' AND source_key LIKE 'conversation_turn:%') AND EXISTS(SELECT 1 FROM memory_chunks WHERE status='active' AND source_key LIKE 'explicit_record:%') AND NOT EXISTS(SELECT 1 FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE json_extract(j.semantic_graph_state,'$.state')!='complete' OR json_extract(j.hot_cache_state,'$.state')!='complete')",
+                [],
+                |row| row.get::<_, bool>(0),
+            )?
+        };
+        if ready {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
 }

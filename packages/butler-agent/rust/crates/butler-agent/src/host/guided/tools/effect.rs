@@ -99,32 +99,8 @@ async fn execute_effect(
         super::access::decision_for_kind(owner, call, &Value::Object(call.arguments.clone()), kind)
             .await
             .map_err(ToolExecutionError::Integrity)?;
-    if decision == butler_turn::btcc::AccessDecision::Deny(butler_turn::btcc::DenyReason::ReadOnly)
-    {
-        return ordinary(
-            "read_only",
-            "This Turn has read-only access; no change was applied.",
-            None,
-        );
-    }
-    if call.name == ToolName::BindSessionGitWorktree
-        && (matches!(decision, butler_turn::btcc::AccessDecision::Deny(_))
-            || owner.binding.project_id.is_none())
-    {
-        return ordinary(
-            "session_workspace_unavailable",
-            "An explicit project Turn with full access is required.",
-            None,
-        );
-    }
-    if call.name == ToolName::RequestServiceRestart
-        && matches!(decision, butler_turn::btcc::AccessDecision::Deny(_))
-    {
-        return ordinary(
-            "restart_full_access_required",
-            "A full-access App Turn is required to request a service restart.",
-            None,
-        );
+    if let Some(refusal) = admission_refusal(owner, call, decision).await? {
+        return Ok(refusal);
     }
     let work = owner
         .work
@@ -253,7 +229,7 @@ async fn prepare(
     } else if mcp::supports(&call.name) {
         mcp::prepare(owner, &call.arguments).map(|prepared| (prepared.0, prepared.1, prepared.2))
     } else if automation::supports(&call.name) {
-        automation::prepare(owner, call, occurrence)
+        automation::prepare(owner, call, occurrence).await
     } else if topic_conversation::supports(&call.name) {
         topic_conversation::prepare(owner, call, occurrence)
     } else if call.name == ToolName::RequestServiceRestart {
@@ -399,4 +375,48 @@ fn contract_feedback(
         "required_effect":{"capability":capability,"target":target}}});
     value["error"]["effect_status"] = "rejected".into();
     JsonDocument::from_value(&value).map_err(wire_error)
+}
+
+/// Mode refusal and unattended attention are settled before preparing any effect.
+async fn admission_refusal(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    decision: butler_turn::btcc::AccessDecision,
+) -> Result<Option<JsonDocument>, ToolExecutionError> {
+    if matches!(decision, butler_turn::btcc::AccessDecision::Deny(_)) && owner.unattended() {
+        return super::turn_guard::unattended_denial(owner, call)
+            .await
+            .map(Some);
+    }
+    if decision == butler_turn::btcc::AccessDecision::Deny(butler_turn::btcc::DenyReason::ReadOnly)
+    {
+        return ordinary(
+            "read_only",
+            "This Turn has read-only access; no change was applied.",
+            None,
+        )
+        .map(Some);
+    }
+    if call.name == ToolName::BindSessionGitWorktree
+        && (matches!(decision, butler_turn::btcc::AccessDecision::Deny(_))
+            || owner.binding.project_id.is_none())
+    {
+        return ordinary(
+            "session_workspace_unavailable",
+            "An explicit project Turn with full access is required.",
+            None,
+        )
+        .map(Some);
+    }
+    if call.name == ToolName::RequestServiceRestart
+        && matches!(decision, butler_turn::btcc::AccessDecision::Deny(_))
+    {
+        return ordinary(
+            "restart_full_access_required",
+            "A full-access App Turn is required to request a service restart.",
+            None,
+        )
+        .map(Some);
+    }
+    Ok(None)
 }

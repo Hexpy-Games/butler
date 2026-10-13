@@ -114,6 +114,7 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
         }
     }
     assert_stored_ids(&s)?;
+    assert_request_view_hides_presentation(&s, &session).await?;
     s.restart().await?;
     let view =
         s.gw.get(&format!("/session-view?session_id={session}"))
@@ -144,6 +145,37 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
     verify_asset_sweep(&s, &session, &reopened).await?;
     s.finish().await?;
     server.abort();
+    Ok(())
+}
+
+/// The delegated request view shows the objective and real checks; the
+/// planned `Presentation:` line reaches only the model.
+async fn assert_request_view_hides_presentation(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    session: &str,
+) -> Result<(), HarnessError> {
+    let view =
+        s.gw.get(&format!("/session-view?session_id={session}"))
+            .await?;
+    let child = view.data()["steward_children"][0]["session_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let view =
+        s.gw.get(&format!("/session-view?session_id={child}"))
+            .await?;
+    let request = view.data()["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "user")
+        .and_then(|message| message["text"].as_str())
+        .unwrap_or_default()
+        .to_owned();
+    assert!(
+        request.contains("• Approach verified") && !request.contains("Presentation:"),
+        "delegated request view: {request}"
+    );
     Ok(())
 }
 
@@ -180,7 +212,7 @@ fn assert_presentation_contract(requests: &[Value]) {
         .find(|r| {
             r["instructions"]
                 .as_str()
-                .is_some_and(|text| text.contains("Steward role"))
+                .is_some_and(|text| text.contains("You run one delegated Work"))
         })
         .expect("a steward request");
     let task = steward["input"].to_string();

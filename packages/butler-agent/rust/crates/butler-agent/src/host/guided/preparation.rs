@@ -107,11 +107,7 @@ impl GuidedPreparation {
                 .get("projectRef")
                 .and_then(serde_json::Value::as_str)
         });
-        let plan_mode = turn.model_selection.controls.get("planMode")
-            == Some(&serde_json::Value::Bool(true))
-            && policy.tracking_mode == "ledger"
-            && project_id.is_some_and(|v| !v.is_empty());
-        if plan_mode {
+        if attended_project_plan(turn, &policy.tracking_mode, project_id) {
             return Err(contract("guided_project_plan_mutation_unsupported"));
         }
         let budget = self.budget.bind(turn, start.claim)?;
@@ -218,4 +214,19 @@ fn preparation_error(error: GuidedPreparationError) -> BtccError {
             BtccError::relayed("guided_policy_invalid", message)
         }
     }
+}
+
+fn attended_project_plan(
+    turn: &butler_turn::btcc::TurnRecord,
+    tracking_mode: &str,
+    project_id: Option<&str>,
+) -> bool {
+    // An unattended plan continues through the ordinary action permission gates;
+    // an action its mode cannot perform uses the existing schedule fail-fast path.
+    let unattended =
+        turn.context.pointer("/scheduleRun/unattended") == Some(&serde_json::Value::Bool(true));
+    !unattended
+        && tracking_mode == "ledger"
+        && project_id.is_some_and(|id| !id.is_empty())
+        && turn.model_selection.controls.get("planMode") == Some(&serde_json::Value::Bool(true))
 }

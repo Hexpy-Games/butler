@@ -83,7 +83,7 @@ export function ActivityLayoutHarness() {
   const approval = normalizeApprovalSummary(approvalFixture ?? { action_kind: "other", count: 1, risk: "low",
     targets: [{ kind: "folder", path: "C:\\Users\\test\\Downloads" }], examples: ["C:\\Users\\test\\Downloads"],
     operation: { tool: "list_files", access: "read_only", targets: ["C:\\Users\\test\\Downloads"] } });
-  const decision = approvalRequestView({ approval, reason: "", scope: undefined }, appCopy.interfaceTemplates.approvalRequest, appCopy.guided.tools);
+  const decision = approvalRequestView({ approval, reason: (window as Window & { butlerApprovalReason?: string }).butlerApprovalReason ?? "", scope: undefined }, appCopy.interfaceTemplates.approvalRequest, appCopy.guided.tools);
   const canOpenTab = params.get("browser") === "1";
   const handoff = browserHandoffView({ approval }, appCopy.interfaceTemplates.approvalRequest, canOpenTab);
   return (
