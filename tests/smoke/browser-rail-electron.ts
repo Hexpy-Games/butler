@@ -26,7 +26,7 @@ async function matrix(screen: string) {
     console.log(screen, theme, width, wallpaper);
     const source = wallpaper ? { kind: "live", module: "butler.riso-print" } : { kind: "none" };
     await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme,
-      reduce_motion: true, wallpaper: { source, motion: "paused", pauseOnBattery: true }, conversation_background: { source, overlay: 0 } }) });
+      reduce_motion: screen === "new-chat", wallpaper: { source, motion: "paused", pauseOnBattery: true }, conversation_background: { source, overlay: 0 } }) });
     await app.main(`${app.win}.setContentSize(${width},900)`);
     await app.page.reload(); await shellReady(app, "ko");
     if (await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='false'")) await app.click("사이드바 보기");
