@@ -3,7 +3,7 @@ use super::GuidedTools;
 use butler_core::tool_protocol::ToolName;
 use butler_turn::btcc::{
     AccessDecision, AccessRequest, ApprovalRisk, BtccError, CapabilityKind, ModelRoundToolCall,
-    TargetScope, TurnTaint, command_access_risk, command_scope_unresolved, decide, needs_scope,
+    TargetScope, command_access_risk, command_scope_unresolved, decide, needs_scope,
 };
 use butler_turn::workspace::{FolderRelation, ScopeRoots, classify_targets};
 use serde_json::Value;
@@ -43,7 +43,7 @@ pub(super) async fn decision_for_kind(
                 ApprovalRisk::Medium
             },
             scope,
-            taint: TurnTaint::Clean,
+            taint: owner.taint(),
         },
     ))
 }
@@ -103,13 +103,24 @@ async fn target_scope(
                 &targets.iter().map(String::as_str).collect::<Vec<_>>(),
             )
         } else {
-            let targets = if name == "read_file" {
-                args["requests"]
+            let paths = |list: &str| -> Vec<&str> {
+                args[list]
                     .as_array()
-                    .map(|requests| requests.iter().filter_map(|r| r["path"].as_str()).collect())
+                    .map(|items| items.iter().filter_map(|r| r["path"].as_str()).collect())
                     .unwrap_or_default()
-            } else {
-                vec![args["root"].as_str().unwrap_or(".")]
+            };
+            let targets = match name.as_str() {
+                "read_file" => paths("requests"),
+                // A missing path cannot be proven inside the project.
+                "write_file" | "edit_file" => {
+                    let mut targets = paths("edits");
+                    targets.extend(args["path"].as_str());
+                    if targets.is_empty() {
+                        return TargetScope::Outside;
+                    }
+                    targets
+                }
+                _ => vec![args["root"].as_str().unwrap_or(".")],
             };
             classify_targets(&roots, &root, &targets)
         }
@@ -131,7 +142,7 @@ pub(super) fn for_kind(owner: &GuidedTools, kind: CapabilityKind) -> AccessDecis
             kind,
             risk: ApprovalRisk::Medium,
             scope: TargetScope::NoTarget,
-            taint: TurnTaint::Clean,
+            taint: owner.taint(),
         },
     )
 }

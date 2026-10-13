@@ -52,6 +52,7 @@ pub(super) async fn execute(
                 model_ref: owner.binding.model_ref.clone(),
                 reasoning_effort: owner.binding.reasoning_effort.clone(),
                 access_mode: access_mode(owner),
+                schedule_run: owner.unattended_run(),
             },
             &reviewed,
         )

@@ -300,6 +300,14 @@
               ],
               "description": "Effect intent: mutation and remote_observation require accepted Plan Review and admitted execution authority; ask_first suspends for approval and resumes after approval, while full_access uses existing authority. For read_only and validation, the admitted access mode owns the execution environment; validation_suite only labels evidence."
             },
+            "sandbox": {
+              "type": "string",
+              "enum": [
+                "project",
+                "none"
+              ],
+              "description": "Containment of a state_effect mutation. project (default): writes only inside the project folder, no network. none: no containment; asks the user unless access is full."
+            },
             "output_mode": {
               "type": "string",
               "enum": [
@@ -8507,6 +8515,14 @@
               "remote_observation"
             ],
             "description": "Effect intent used by the command executor. Permission mode and per-operation approval govern execution: ask_first requests approval of the exact command at execution time; full_access runs directly. Work and Plan are progress records, never an effect allowlist. validation_suite only labels evidence."
+          },
+          "sandbox": {
+            "type": "string",
+            "enum": [
+              "project",
+              "none"
+            ],
+            "description": "Containment of a state_effect mutation. project (default): writes only inside the project folder, no network. none: no containment; asks the user unless access is full."
           },
           "output_mode": {
             "type": "string",

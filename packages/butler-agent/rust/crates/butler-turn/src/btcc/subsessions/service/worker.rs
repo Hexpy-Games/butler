@@ -55,6 +55,7 @@ impl SubsessionService {
             reasoning: &profile.reasoning_effort,
             text: render_input(&packet, profile.prompt.as_deref()),
             now: &now,
+            schedule_run: packet.schedule_run.clone(),
         });
         let intent = DispatchIntent {
             envelope,

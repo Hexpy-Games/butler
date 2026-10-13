@@ -7,7 +7,7 @@ import {
   RECOMMENDED_ACCESS_MODE,
   accessDescription,
   accessLabel,
-  accessModeChoices,
+  ACCESS_MODES,
   accessModeIcon,
   accessPermissionTone,
 } from "./accessModeUtils";
@@ -29,7 +29,7 @@ export function AccessModeOptions({
   useAppLocale();
   return (
     <OptionMenu title={appCopy.composer.permission}>
-      {accessModeChoices(value).map((item) => (
+      {ACCESS_MODES.map((item) => (
         <OptionMenuItem
           description={accessDescription(item)}
           descriptionPlacement="block"

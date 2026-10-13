@@ -89,6 +89,31 @@ pub(in crate::gateway::application) fn conversation_access_mode(
     }
 }
 
+/// The access mode a new schedule takes when its request names none (D7):
+/// the saved `schedule_access_mode`, else the default the conversation
+/// default implies ([`AccessMode::schedule_default_for`]). Nothing is
+/// written, so existing schedules and installs keep what they stored.
+pub(in crate::gateway::application) fn schedule_access_mode(
+    db: &Connection,
+) -> Result<AccessMode, AppStorageError> {
+    let global = read_json(db, SETTINGS_KEY)?;
+    let saved = |key: &str| {
+        global
+            .as_ref()
+            .and_then(|stored| stored.get(key))
+            .and_then(Value::as_str)
+            .and_then(parse_access)
+    };
+    if let Some(mode) = saved("schedule_access_mode") {
+        return Ok(mode);
+    }
+    let conversation = match saved("access_mode") {
+        Some(mode) => mode,
+        None => default_access_mode(db)?,
+    };
+    Ok(AccessMode::schedule_default_for(&conversation))
+}
+
 /// The stored and wire name of `mode`.
 pub(in crate::gateway::application) fn access_mode_name(mode: &AccessMode) -> &'static str {
     mode.as_str()

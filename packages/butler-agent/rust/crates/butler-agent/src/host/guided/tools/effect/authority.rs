@@ -43,7 +43,7 @@ fn public_action_title(call: &ModelRoundToolCall) -> Option<String> {
 pub(super) async fn gate(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
-    occurrence: &str,
+    (occurrence, decision): (&str, butler_turn::btcc::AccessDecision),
     work: &WorkView,
     target: &str,
     input: &Value,
@@ -63,6 +63,8 @@ pub(super) async fn gate(
         normalized_target,
         normalized_input,
         adapter,
+        honor_standing_permission: decision
+            != butler_turn::btcc::AccessDecision::Ask(butler_turn::btcc::GrantUse::Ignore),
     };
     let resume_ref = owner.binding.authority_request_ref.as_deref().filter(|_| {
         owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
@@ -80,6 +82,7 @@ struct ReviewedOperation<'a> {
     normalized_target: String,
     normalized_input: Value,
     adapter: &'a dyn EffectAdapter,
+    honor_standing_permission: bool,
 }
 
 async fn admit(
@@ -95,7 +98,9 @@ async fn admit(
         normalized_target,
         normalized_input,
         adapter,
+        honor_standing_permission,
     } = operation;
+    let subject = grant_subject(call, &normalized_target);
     let input = AuthorityAdmissionInput {
         public_action_title: public_action_title(call),
         owner_session_id: owner.binding.owner_session_id.clone(),
@@ -113,6 +118,8 @@ async fn admit(
         reasoning_effort: owner.binding.reasoning_effort.clone(),
         category: (call.name != ToolName::RunCommand).then(|| "reviewed_effect".to_owned()),
         normalized_input,
+        honor_standing_permission,
+        unattended: owner.unattended(),
     };
     let admitted = match owner.authority.admit(input).await {
         Ok(value) => value,
@@ -144,7 +151,27 @@ async fn admit(
             "authority_request_modified",
             "The reviewed command was replaced before it could run.",
         ),
+        AuthorityAdmissionResult::Unattended => {
+            super::super::turn_guard::unattended_result(owner, adapter.capability(), &subject)
+                .await
+                .map(Gate::Return)
+        }
     }
+}
+
+/// What a grant for this operation would name: the executable of a command,
+/// else the operation's target.
+fn grant_subject(call: &ModelRoundToolCall, target: &str) -> String {
+    if call.name == ToolName::RunCommand
+        && let Some(executable) = call
+            .arguments
+            .get("command")
+            .and_then(Value::as_str)
+            .and_then(|command| command.split_whitespace().next())
+    {
+        return executable.to_owned();
+    }
+    target.to_owned()
 }
 
 pub(super) async fn settle(
@@ -256,6 +283,7 @@ async fn resume(
         normalized_target,
         normalized_input,
         adapter,
+        honor_standing_permission: _,
     } = operation;
     let execution = match owner
         .authority

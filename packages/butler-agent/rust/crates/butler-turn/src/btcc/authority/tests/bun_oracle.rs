@@ -55,6 +55,8 @@ fn input(value: &Value) -> AuthorityAdmissionInput {
             .and_then(Value::as_str)
             .map(str::to_owned),
         normalized_input: value["normalizedInput"].clone(),
+        honor_standing_permission: true,
+        unattended: false,
     }
 }
 

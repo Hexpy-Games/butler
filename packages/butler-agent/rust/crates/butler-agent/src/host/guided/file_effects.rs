@@ -22,8 +22,8 @@ pub(crate) struct PreparedGuidedFileEffect {
 
 pub(crate) struct GuidedFileEffects {
     scope: EffectFileScope,
-    /// The session's working folder; a folder switch moves it mid-turn.
-    workspace: Option<butler_turn::workspace::WorkspaceReference>,
+    capabilities: Arc<Capabilities>,
+    context: RegisteredWriteContext,
     registered_write: Arc<RegisteredWrite>,
     registered_edit: Arc<RegisteredEdit>,
 }
@@ -35,24 +35,38 @@ impl GuidedFileEffects {
         scope: EffectFileScope,
     ) -> Self {
         Self {
-            workspace: context.workspace_reference.clone(),
             scope,
             registered_edit: Arc::new(RegisteredEdit::new(capabilities.clone(), context.clone())),
-            registered_write: Arc::new(RegisteredWrite::new(capabilities, context)),
+            registered_write: Arc::new(RegisteredWrite::new(capabilities.clone(), context.clone())),
+            capabilities,
+            context,
         }
     }
 
-    /// The write scope in the current working folder.
+    /// The write scope in the current working folder; a folder switch moves
+    /// it mid-turn.
     fn scope(&self) -> EffectFileScope {
         let mut scope = self.scope.clone();
         if let Some(path) = self
-            .workspace
+            .context
+            .workspace_reference
             .as_ref()
             .and_then(|reference| reference.get().ok())
         {
             scope.workspace = path;
         }
         scope
+    }
+
+    /// The same effects for writes that run without approval because their
+    /// targets are inside the project: every guard re-checks containment,
+    /// secrets and symlink escapes at the moment it touches the file.
+    pub(crate) fn contained(&self) -> Self {
+        let mut context = self.context.clone();
+        context.contained = true;
+        let mut scope = self.scope.clone();
+        scope.contained = true;
+        Self::new(self.capabilities.clone(), context, scope)
     }
 
     pub(crate) async fn prepare(

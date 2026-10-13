@@ -51,6 +51,7 @@ pub(super) fn validate_message_request(
         access_mode: object.get("access_mode").cloned(),
         plan_mode: object.get("plan_mode").cloned(),
         subsession_result: None,
+        schedule_run: None,
     })
 }
 

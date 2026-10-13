@@ -1205,7 +1205,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       title: "Schedule title",
       prompt: "Prompt body",
     },
-    accessHint: "With Ask first, runs wait for your approval while you're away.",
+    accessHint: "Scheduled runs skip steps that need approval and let you know.",
+    needsPermissionNotify: "A schedule skipped a step that needs your permission.",
     saveFailed: "Schedule save failed",
     errors: {
       title: "Enter a title.",
@@ -1221,6 +1222,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       failed: "Failed",
       running: "Running",
       skippedTargetUnavailable: "Target unavailable",
+      needsPermission: "Needs permission",
       cancelled: "Cancelled",
       notRun: "Not run yet",
     },

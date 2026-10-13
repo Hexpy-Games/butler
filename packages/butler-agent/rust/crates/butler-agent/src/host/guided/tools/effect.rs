@@ -86,7 +86,13 @@ async fn execute_effect(
     if let Some(result) = observation::execute(owner, call, occurrence, &scope).await? {
         return Ok(result);
     }
-    let decision = super::access::for_kind(owner, super::access::kind(call).gated_effect());
+    // One decision per call, from the exact requested targets. The adapters
+    // re-check containment when the targets are touched.
+    let kind = super::access::kind(call).gated_effect();
+    let decision =
+        super::access::decision_for_kind(owner, call, &Value::Object(call.arguments.clone()), kind)
+            .await
+            .map_err(ToolExecutionError::Integrity)?;
     if decision == butler_turn::btcc::AccessDecision::Deny(butler_turn::btcc::DenyReason::ReadOnly)
     {
         return ordinary(
@@ -120,7 +126,8 @@ async fn execute_effect(
         .await
         .map_err(ToolExecutionError::Integrity)?
         .unwrap_or_else(|| runtime_work::untracked(owner));
-    let prepared = prepare(owner, call, occurrence, scope, &work).await;
+    let contained = contained_run(owner, occurrence, decision, kind);
+    let prepared = prepare(owner, call, occurrence, (scope, contained), &work).await;
     let (target, input, adapter) = match prepared {
         Ok(prepared) => prepared,
         Err(error) => return ordinary(error.code(), error.message(), None),
@@ -129,11 +136,43 @@ async fn execute_effect(
         owner,
         invocation,
         call,
-        occurrence,
+        (occurrence, decision),
         work,
         (target, input, adapter),
     ))
     .await
+}
+
+/// How an approval-free call outside full access runs: file effects re-check
+/// project containment at use, and an Auto mutation runs in the
+/// project-write sandbox when the decision allowed it because of that sandbox.
+#[derive(Clone, Copy, Default)]
+struct Contained {
+    files: bool,
+    project_write: bool,
+}
+
+fn contained_run(
+    owner: &GuidedTools,
+    occurrence: &str,
+    decision: butler_turn::btcc::AccessDecision,
+    kind: butler_turn::btcc::CapabilityKind,
+) -> Contained {
+    let mode = &owner.binding.access_mode;
+    if decision != butler_turn::btcc::AccessDecision::Allow
+        || *mode == AccessMode::FullAccess
+        || super::access::resumes(owner, occurrence)
+    {
+        return Contained::default();
+    }
+    Contained {
+        files: true,
+        project_write: *mode == AccessMode::Auto
+            && kind
+                == (butler_turn::btcc::CapabilityKind::CommandMutation {
+                    sandbox: butler_turn::btcc::CommandSandbox::ProjectWrite,
+                }),
+    }
 }
 
 /// Approval and journal dispatch share the prepared exact operation.
@@ -141,28 +180,18 @@ async fn execute_prepared(
     owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
-    occurrence: &str,
+    (occurrence, decision): (&str, butler_turn::btcc::AccessDecision),
     work: WorkView,
     prepared: (String, Value, Arc<dyn EffectAdapter>),
 ) -> Result<JsonDocument, ToolExecutionError> {
     let (target, input, adapter) = prepared;
-    let resumes_authority = owner.binding.authority_request_ref.is_some()
-        && owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
-        && !*owner.authority_consumed.lock();
-    let decision = super::access::decision_for_kind(
-        owner,
-        call,
-        &input,
-        super::access::kind(call).gated_effect(),
-    )
-    .await
-    .map_err(ToolExecutionError::Integrity)?;
+    let resumes_authority = super::access::resumes(owner, occurrence);
     let approved =
         if matches!(decision, butler_turn::btcc::AccessDecision::Ask(_)) || resumes_authority {
             match authority::gate(
                 owner,
                 call,
-                occurrence,
+                (occurrence, decision),
                 &work,
                 &target,
                 &input,
@@ -208,7 +237,7 @@ async fn prepare(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
     occurrence: &str,
-    scope: CommandScope<'_>,
+    (scope, contained): (CommandScope<'_>, Contained),
     work: &WorkView,
 ) -> Result<(String, Value, Arc<dyn EffectAdapter>), BtccError> {
     if session_worktree::supports(&call.name) {
@@ -228,14 +257,20 @@ async fn prepare(
     } else if call.name == ToolName::RunCommand {
         owner
             .command
-            .prepare_effect(&call.arguments, scope)
+            .prepare_effect(&call.arguments, scope, contained.project_write)
             .await
             .map(|prepared| (prepared.target, prepared.input, prepared.adapter))
     } else if ledger_input::managed(&call.name) {
         ledger::prepare(owner, &call.name, &call.arguments).await
     } else {
-        owner
-            .file_effects
+        let contained_effects;
+        let effects = if contained.files {
+            contained_effects = owner.file_effects.contained();
+            &contained_effects
+        } else {
+            &owner.file_effects
+        };
+        effects
             .prepare(
                 &call.name,
                 &Value::Object(call.arguments.clone()),
@@ -305,7 +340,7 @@ fn receipt_result(
     JsonDocument::from_encoded(encoded).map_err(wire_error)
 }
 
-fn wire_error(error: butler_core::json::JsonError) -> ToolExecutionError {
+pub(super) fn wire_error(error: butler_core::json::JsonError) -> ToolExecutionError {
     ToolExecutionError::Integrity(
         BtccError::relayed("guided_tool_result_json", error.to_string()).with_source(error),
     )

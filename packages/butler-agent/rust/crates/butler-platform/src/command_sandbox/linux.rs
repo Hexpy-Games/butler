@@ -211,6 +211,19 @@ pub(super) fn protect_writes(
     Ok(Protection::Unavailable(invocation))
 }
 
+/// Project-write containment is enforced only on macOS for now; mutating
+/// commands keep asking here.
+pub(super) fn project_write(
+    invocation: Invocation,
+    _environment: &HashMap<String, String>,
+    _root: &Path,
+    _writable: &[&Path],
+    _denied: &[&Path],
+) -> Result<Invocation, SandboxError> {
+    drop(invocation);
+    Err(SandboxError::ProjectWriteUnavailable)
+}
+
 pub(super) fn trampoline() -> Result<(), Error> {
     let mut arguments = std::env::args().skip(1);
     match arguments.next().as_deref() {
