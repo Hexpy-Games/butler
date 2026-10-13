@@ -55,7 +55,7 @@ async fn target_scope(
     if call.name == ToolName::SwitchFolder {
         return Ok(folder_scope(owner, args).await);
     }
-    let consented = *owner.folder_consent.lock();
+    let consented = owner.folder_consented();
     let root = owner.current_workspace()?;
     let project = consented.then(|| root.clone());
     let data = owner.binding.butler_data.clone();
@@ -125,7 +125,7 @@ async fn folder_scope(owner: &GuidedTools, args: &Value) -> TargetScope {
     let contained = super::effect::session_folder::relation(owner, args)
         .await
         .is_some_and(FolderRelation::contained);
-    if contained && *owner.folder_consent.lock() {
+    if contained && owner.folder_consented() {
         TargetScope::ProjectFolder
     } else {
         TargetScope::Outside

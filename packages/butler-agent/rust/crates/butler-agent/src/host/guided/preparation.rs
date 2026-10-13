@@ -36,9 +36,6 @@ pub(crate) struct PreparedNativeGuidedTurn {
     pub semantic: SemanticTurn,
     pub phase: GuidedPhaseSelection,
     pub workspace: WorkspaceReference,
-    /// Whether a moved working folder counts as the project folder; `None`
-    /// when the session works in its project (or default) folder.
-    pub folder_consent: Option<bool>,
     pub accepted_plan: Option<ProjectLedgerPlan>,
     pub initial_work: GuidedWork,
     pub work_scope: WorkTurnScope,
@@ -132,12 +129,6 @@ impl GuidedPreparation {
             )
             .await
             .map_err(BtccError::from)?;
-        let folder_consent = match recovered.authority {
-            butler_turn::workspace::SessionWorkspaceAuthority::SessionFolder {
-                consented, ..
-            } => Some(consented),
-            _ => None,
-        };
         let workspace = recovered.workspace_reference;
         let accepted_plan = self.accepted_plan(turn, project_id, &workspace).await?;
         let work_scope = work_scope_for_turn(turn, &policy.tracking_mode);
@@ -187,7 +178,6 @@ impl GuidedPreparation {
             semantic,
             phase,
             workspace,
-            folder_consent,
             accepted_plan,
             initial_work,
             work_scope,

@@ -8,6 +8,7 @@ mod dispatch;
 mod effect;
 mod execute;
 mod feedback;
+mod folder;
 mod hooks;
 mod image;
 mod library;
@@ -160,9 +161,6 @@ pub(crate) struct GuidedTools {
     app_endpoint: Arc<crate::host::ActiveAppEndpoint>,
     browser_http: OnceCell<reqwest::Client>,
     binding: GuidedToolBinding,
-    /// Whether the current working folder counts as the project folder; a
-    /// folder switch changes it with the workspace reference.
-    folder_consent: Arc<Mutex<bool>>,
     state: Mutex<State>,
     resume: OnceCell<Mutex<ResumePool>>,
     authority_consumed: Mutex<bool>,
@@ -273,7 +271,6 @@ impl GuidedTools {
             web_session,
             app_endpoint,
             browser_http: OnceCell::new(),
-            folder_consent: Arc::new(Mutex::new(binding.project_folder.is_some())),
             turn_taint: Mutex::new(binding.turn_guard.initial_taint),
             attention_sent: Mutex::new(false),
             binding,
@@ -468,23 +465,6 @@ impl ToolPort for GuidedTools {
 }
 
 impl GuidedTools {
-    /// The session's working folder now; a folder switch moves it mid-turn.
-    fn current_workspace(&self) -> Result<PathBuf, BtccError> {
-        match &self.binding.workspace_reference {
-            Some(reference) => reference
-                .get()
-                .map_err(|error| BtccError::relayed(error.code(), "Workspace unavailable")),
-            None => Ok(self.binding.workspace_path.clone()),
-        }
-    }
-
-    /// The working folder now, or the turn's folder when it is unavailable;
-    /// approvals and outputs bind to it.
-    fn active_workspace_path(&self) -> PathBuf {
-        self.current_workspace()
-            .unwrap_or_else(|_| self.binding.workspace_path.clone())
-    }
-
     fn same_turn(&self, invocation: GuidedInvocation<'_>) -> Result<(), BtccError> {
         if invocation.turn.turn_id == self.binding.turn_id {
             Ok(())

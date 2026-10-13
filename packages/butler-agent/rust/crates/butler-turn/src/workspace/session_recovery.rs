@@ -126,12 +126,7 @@ impl SessionWorkspaceRecovery {
                 code: "session_workspace_unavailable",
             },
         };
-        let workspace_reference = match &validation {
-            SessionWorkspaceValidation::Valid { path, .. } => {
-                WorkspaceReference::new(std::path::Path::new(path))
-            }
-            SessionWorkspaceValidation::Invalid { code } => WorkspaceReference::unavailable(code),
-        };
+        let workspace_reference = reference(&validation, &authority);
         Ok(RecoveredSessionWorkspaceReference {
             authority,
             workspace_reference,
@@ -201,5 +196,22 @@ impl SessionWorkspaceRecovery {
             abort,
         )
         .await
+    }
+}
+
+/// The reference of a recovered workspace; a moved folder's carries its consent.
+fn reference(
+    validation: &SessionWorkspaceValidation,
+    authority: &SessionWorkspaceAuthority,
+) -> WorkspaceReference {
+    match validation {
+        SessionWorkspaceValidation::Valid { path, .. } => {
+            let reference = WorkspaceReference::new(std::path::Path::new(path));
+            if let SessionWorkspaceAuthority::SessionFolder { consented, .. } = authority {
+                reference.set_consent(*consented);
+            }
+            reference
+        }
+        SessionWorkspaceValidation::Invalid { code } => WorkspaceReference::unavailable(code),
     }
 }

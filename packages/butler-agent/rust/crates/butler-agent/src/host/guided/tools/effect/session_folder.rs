@@ -5,7 +5,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use parking_lot::Mutex;
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
@@ -97,7 +96,7 @@ async fn inspect(owner: &GuidedTools, path: &str) -> Result<FolderInspection, Bt
 /// it, which is consent; full access alone is not.
 fn consent(owner: &GuidedTools, relation: FolderRelation) -> bool {
     if relation.contained() {
-        *owner.folder_consent.lock()
+        owner.folder_consented()
     } else {
         owner.binding.access_mode != AccessMode::FullAccess
     }
@@ -118,7 +117,6 @@ fn effect(
         folders: owner.session_worktrees.folders(),
         session_id: owner.binding.source_session_id.clone(),
         reference,
-        consent: owner.folder_consent.clone(),
         consented,
         target,
     })
@@ -128,7 +126,6 @@ struct SessionFolderEffect {
     folders: SessionFolders,
     session_id: String,
     reference: WorkspaceReference,
-    consent: Arc<Mutex<bool>>,
     consented: bool,
     target: String,
 }
@@ -183,7 +180,7 @@ impl SessionFolderEffect {
         self.reference
             .set(path)
             .map_err(|error| AdapterOutcome::Uncertain(Some(adapter(error.code()))))?;
-        *self.consent.lock() = self.consented;
+        self.reference.set_consent(self.consented);
         Ok(json!({
             "ok": true,
             "working_folder": path,

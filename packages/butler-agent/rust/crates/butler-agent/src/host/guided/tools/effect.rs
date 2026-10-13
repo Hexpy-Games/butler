@@ -17,6 +17,12 @@ pub(super) fn is_managed_project_ledger_effect(name: &str) -> bool {
     ledger_input::managed(name)
 }
 
+/// Effects routed by name beyond the fixed tool list: managed ledger writes
+/// and working-folder moves.
+pub(super) fn routes_effect(name: &str) -> bool {
+    ledger_input::managed(name) || name == ToolName::SwitchFolder
+}
+
 use std::sync::Arc;
 
 use butler_core::tool_protocol::ToolName;
