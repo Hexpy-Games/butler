@@ -177,10 +177,10 @@ export async function collectImage(tab, args) {
   }
   const frame = args.ref ? observation.bindings.get(args.ref) : observation.main;
   if (!frame) return { status: "refused", reason: "stale_ref" };
-  // Source pixels do not depend on what covers the element; crops still require a clear target.
+  // An image's own pixels or file do not depend on what covers it on the page;
+  // only a rendered crop needs the element to be the unobstructed target.
   const source = await evaluateWorld(frame, imageSourceScript({ ref:args.ref, url:args.url, obs:observationId, epoch }));
   if (source.reason) return { status: "refused", reason: source.reason, recovery: source.recovery };
-  if (!source.image && !source.capture_element && source.source_url) return { status: "ok", ...source };
   if (source.image) return collectedPixels(tab, epoch, Buffer.from(source.image.data, "base64"), source);
   const described = { alt: source.alt, nearby_text: source.nearby_text, source_url: source.source_url || tab.url };
   const original = source.fetch_source ? { fetch_source: true, referer: source.referer, user_agent: source.user_agent } : {};

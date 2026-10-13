@@ -3,7 +3,7 @@
 
 mod patterns;
 mod title;
-pub use title::public_title;
+pub use title::{names_internal_role, public_title};
 mod source_regex;
 
 use std::borrow::Cow;

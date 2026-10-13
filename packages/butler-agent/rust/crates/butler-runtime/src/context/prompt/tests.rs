@@ -47,8 +47,8 @@ impl ModelConfigurationClock for Clock {
     }
 }
 impl PromptClock for Clock {
-    fn default_timezone(&self) -> &'static str {
-        "UTC"
+    fn default_timezone(&self) -> String {
+        "UTC".into()
     }
     fn now_epoch_millis(&self) -> i64 {
         1_789_344_000_000

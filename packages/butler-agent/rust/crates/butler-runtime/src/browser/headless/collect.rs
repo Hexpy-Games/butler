@@ -46,7 +46,8 @@ pub(crate) async fn collect(page: &Page, args: &Value) -> Result<Value, String> 
     } else {
         observation.frames.first().ok_or("frame_unavailable")?
     };
-    // Source pixels do not require an unobstructed crop target.
+    // An image's own pixels or file do not depend on what covers it on the page;
+    // only a rendered crop needs the element to be the unobstructed target.
     let source = page
         .evaluate(
             frame,
@@ -58,9 +59,7 @@ pub(crate) async fn collect(page: &Page, args: &Value) -> Result<Value, String> 
             json!({"status":"refused","reason":source["reason"],"recovery":source["recovery"]}),
         );
     }
-    if source["image"].is_object()
-        || (source["capture_element"] != true && source["source_url"].is_string())
-    {
+    if source["image"].is_object() {
         if page.epoch() != Some(epoch) {
             return Err("control_changed".into());
         }

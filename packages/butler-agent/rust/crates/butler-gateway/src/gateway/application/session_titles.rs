@@ -75,14 +75,14 @@ impl AppApplication {
             .session_title_generator
             .generate(
                 AppSessionTitleInput {
-                    text: prompt,
+                    text: prompt.clone(),
                     model_ref: model.to_owned(),
                 },
                 cancellation.clone(),
             )
             .await
             .map_err(|_| "provider")?;
-        let title = normalized_title(&generated).ok_or("invalid_output")?;
+        let title = normalized_title(&generated, &prompt).ok_or("invalid_output")?;
         if cancellation.is_cancelled() {
             return Ok(());
         }
@@ -223,7 +223,7 @@ fn provisional_title(text: &str) -> String {
             || butler_core::public_text::trim_js_whitespace(text),
             |(first, _)| first,
         );
-    let title = butler_core::public_text::public_title(&collapsed(first), "");
+    let title = collapsed(first);
     if title.is_empty() {
         "새 대화".into()
     } else if title.encode_utf16().count() > 48 {
@@ -233,15 +233,17 @@ fn provisional_title(text: &str) -> String {
     }
 }
 
-fn normalized_title(text: &str) -> Option<String> {
-    let clean = butler_core::public_text::public_title(text, "");
-    let title = collapsed(&clean);
+fn normalized_title(text: &str, source: &str) -> Option<String> {
+    let title = collapsed(&butler_core::public_text::public_title(text, source));
     let title = title
         .trim_start_matches(['"', '\'', '`'])
         .trim_end_matches(['"', '\'', '`', '.'])
         .trim_start_matches('#')
         .trim();
-    if title.is_empty() || contains_product_name(title) || title.chars().any(char::is_control) {
+    if title.is_empty()
+        || butler_core::public_text::names_internal_role(title)
+        || title.chars().any(char::is_control)
+    {
         return None;
     }
     Some(if title.encode_utf16().count() > 64 {
@@ -249,11 +251,4 @@ fn normalized_title(text: &str) -> Option<String> {
     } else {
         title.to_owned()
     })
-}
-
-fn contains_product_name(title: &str) -> bool {
-    title.contains("스튜어드")
-        || title
-            .split(|character: char| !character.is_alphanumeric())
-            .any(|word| word == "Steward")
 }

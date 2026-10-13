@@ -334,10 +334,6 @@ fn project_message(
     } else {
         text
     };
-    let text = text
-        .replace("steward", "Butler")
-        .replace("Steward", "Butler")
-        .replace("스튜어드", "버틀러");
     let status = match message.message.status {
         ConversationStatus::Failed => "failed",
         ConversationStatus::Pending => "thinking",

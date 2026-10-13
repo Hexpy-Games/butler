@@ -39,7 +39,7 @@
         "source": {"$ref": "#/$defs/source"}
       }
     },
-    "cell": {"type": ["string", "number", "null"], "description": "At most 60 characters; put explanations in reply text."},
+    "cell": {"type": ["string", "number", "null"], "description": "At most 60 characters."},
     "block": {
       "oneOf": [
         {

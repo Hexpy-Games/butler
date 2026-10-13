@@ -9,7 +9,6 @@ use butler_runtime::context::ContextCode;
 use timezone_names::TimeZoneNames;
 
 pub(crate) struct SystemPromptClock {
-    default_timezone: String,
     names: TimeZoneNames,
     transitions: TimeZoneData,
 }
@@ -17,8 +16,6 @@ pub(crate) struct SystemPromptClock {
 impl SystemPromptClock {
     pub(crate) fn new() -> ContextResult<Self> {
         Ok(Self {
-            default_timezone: butler_platform::instance::system_time_zone_name()
-                .unwrap_or_else(|_| "UTC".into()),
             names: TimeZoneNames::new()?,
             transitions: TimeZoneData::new()?,
         })
@@ -97,8 +94,8 @@ impl SystemPromptClock {
 }
 
 impl PromptClock for SystemPromptClock {
-    fn default_timezone(&self) -> &str {
-        &self.default_timezone
+    fn default_timezone(&self) -> String {
+        butler_platform::instance::system_time_zone_name().unwrap_or_else(|_| "UTC".into())
     }
     fn local_timestamp(&self, value: i64, timezone: &str) -> ContextResult<String> {
         let offset = match fixed_offset(timezone) {

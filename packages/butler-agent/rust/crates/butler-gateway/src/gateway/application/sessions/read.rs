@@ -265,7 +265,7 @@ fn project(row: SessionRow) -> Result<AppSessionSummary, AppStorageError> {
         branch_seed: None,
         id: row.id.clone(),
         kind: chat_kind(&row.kind)?,
-        title: butler_core::public_text::public_title(&row.title, "New chat"),
+        title: row.title,
         project_id,
         project,
         session_hint: row

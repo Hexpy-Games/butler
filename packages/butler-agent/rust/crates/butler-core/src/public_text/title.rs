@@ -1,30 +1,37 @@
-//! Titles contain human text, never protocol markers or internal role names.
-use super::{fixed_regex, fixed_regex_ci, sanitize_public_text};
+//! A generated title summarizes human text; it never introduces protocol tokens.
+use super::fixed_regex;
 use regex::Regex;
 use std::sync::LazyLock;
 
-static MARKERS: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+"));
-static ROLES: LazyLock<Regex> = LazyLock::new(|| fixed_regex_ci(r"\bsteward\b|스튜어드"));
+/// Protocol-shaped tokens: upper snake case such as `TASK_DONE`.
+static PROTOCOL_TOKEN: LazyLock<Regex> =
+    LazyLock::new(|| fixed_regex(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+"));
 
-/// Removes protocol markers and internal role names before a title reaches the UI.
-pub fn public_title(value: &str, fallback: &str) -> String {
-    let markers = MARKERS.replace_all(value, "");
-    let roles = ROLES.replace_all(&markers, "");
-    let changed = markers.as_ref() != value || roles.as_ref() != markers.as_ref();
-    let title = sanitize_public_text(&roles, "");
-    let title = if changed {
-        title.trim_matches(|c: char| {
-            c.is_whitespace() || matches!(c, '…' | '.' | '-' | ':' | '_' | '"' | '\'' | '`' | '#')
-        })
-    } else {
-        title.as_str()
-    };
-    if title.is_empty() {
-        return if fallback.is_empty() {
-            String::new()
+/// Removes protocol-shaped tokens that `source`, the text the title
+/// summarizes, does not contain; tokens the human wrote stay.
+pub fn public_title(title: &str, source: &str) -> String {
+    let mut changed = false;
+    let kept = PROTOCOL_TOKEN.replace_all(title, |token: &regex::Captures<'_>| {
+        if source.contains(&token[0]) {
+            token[0].to_owned()
         } else {
-            public_title(fallback, "")
-        };
+            changed = true;
+            String::new()
+        }
+    });
+    if !changed {
+        return title.to_owned();
     }
-    title.to_owned()
+    kept.trim_matches(|c: char| {
+        c.is_whitespace() || matches!(c, '…' | '.' | '-' | ':' | '_' | '"' | '\'' | '`' | '#')
+    })
+    .to_owned()
+}
+
+/// Whether `text` names the internal delegation role, which is never shown.
+pub fn names_internal_role(text: &str) -> bool {
+    text.contains("스튜어드")
+        || text
+            .split(|character: char| !character.is_alphanumeric())
+            .any(|word| word == "Steward")
 }

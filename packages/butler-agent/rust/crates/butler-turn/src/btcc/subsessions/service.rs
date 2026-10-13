@@ -242,10 +242,7 @@ impl SubsessionService {
             now: &now,
             schedule_run: packet.schedule_run.clone(),
         });
-        let title = butler_core::public_text::public_title(
-            request.safe_title.as_deref().unwrap_or(""),
-            &butler_core::public_text::public_title(&request.request, ""),
-        );
+        let title = helpers::delegation_title(request.safe_title.as_deref(), &request.request);
         let intent = DispatchIntent {
             envelope,
             metadata: DispatchMetadata {
@@ -259,7 +256,7 @@ impl SubsessionService {
                     turn_id: request.parent_turn_id,
                     anchor_message_id: request.anchor_message_id,
                 },
-                title.chars().take(64).collect(),
+                title,
                 packet,
                 intent,
                 now,

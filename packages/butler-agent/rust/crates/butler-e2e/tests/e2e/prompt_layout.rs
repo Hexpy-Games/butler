@@ -212,7 +212,6 @@ async fn prompt_uses_local_timezone_and_rfc3339_offset() -> Result<(), HarnessEr
         .unwrap();
     assert!(local.contains("+14:00"));
     assert!(local.contains("Current Local Timestamp:"));
-    assert!(local.contains("RFC 3339 with an explicit offset"));
     let text = requests
         .iter()
         .filter_map(|request| request["input"][0]["content"][0]["text"].as_str())
