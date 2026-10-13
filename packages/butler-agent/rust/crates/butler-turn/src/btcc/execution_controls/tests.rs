@@ -26,6 +26,7 @@ fn creation_matches_actual_legacy_controls_and_signature() {
                 result_id: "result".into(),
                 safe_title: "Atlas  보고".into(),
             }),
+            schedule_run: None,
         },
         "2026-09-14T00:00:00.000Z",
     )

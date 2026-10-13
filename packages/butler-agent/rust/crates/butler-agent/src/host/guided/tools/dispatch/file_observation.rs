@@ -33,6 +33,10 @@ pub(super) async fn execute(
         !gated && owner.binding.access_mode.reviews_effects(),
     )
     .await;
+    if gated {
+        // An approved read reached beyond the project: external content (D5).
+        owner.mark_external();
+    }
     if let Some(request_ref) = approval {
         owner
             .authority
@@ -112,15 +116,10 @@ pub(in crate::host::guided::tools) async fn gate(
             normalized_input: args.clone(),
             model_ref: owner.binding.model_ref.clone(),
             reasoning_effort: owner.binding.reasoning_effort.clone(),
-            category: Some(
-                if call.name == "run_command" {
-                    "command_observation"
-                } else {
-                    "file_observation"
-                }
-                .into(),
-            ),
+            category: Some(category(call).into()),
             public_action_title: Some(call.name.clone()),
+            honor_standing_permission: true,
+            unattended: owner.unattended(),
         })
         .await
         .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
@@ -135,7 +134,40 @@ pub(in crate::host::guided::tools) async fn gate(
         AuthorityAdmissionResult::Modified { .. } => {
             Gate::Pending(json!({"ok":false,"error":"authority_request_modified"}))
         }
+        AuthorityAdmissionResult::Unattended => Gate::Pending(
+            super::super::turn_guard::unattended_feedback(owner, &call.name, &observed(call, args))
+                .await,
+        ),
     })
+}
+
+fn category(call: &ModelRoundToolCall) -> &'static str {
+    if call.name == "run_command" {
+        "command_observation"
+    } else {
+        "file_observation"
+    }
+}
+
+/// What an observation reads, for an unattended run's report.
+fn observed(call: &ModelRoundToolCall, args: &Value) -> String {
+    let paths: Vec<&str> = if call.name == "run_command" {
+        args["command"]
+            .as_str()
+            .and_then(|command| command.split_whitespace().next())
+            .into_iter()
+            .collect()
+    } else if call.name == "read_file" {
+        args["requests"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|request| request["path"].as_str())
+            .collect()
+    } else {
+        args["root"].as_str().into_iter().collect()
+    };
+    paths.join(", ")
 }
 
 fn normalized(owner: &GuidedTools, call: &ModelRoundToolCall) -> Result<Value, ToolExecutionError> {

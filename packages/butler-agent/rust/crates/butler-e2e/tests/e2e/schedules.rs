@@ -151,8 +151,9 @@ async fn sched_01_schedule_runs_with_its_own_access_mode() -> Result<(), Harness
 }
 
 /// SCHED-02 — The schedule API carries `access_mode`: create takes it (or the
-/// target conversation's current mode), update replaces it, reads return it,
-/// and an unknown mode is refused.
+/// schedule default, D7: never the target conversation's mode), update
+/// replaces it, reads return it, and an unknown mode is refused. A saved
+/// schedule default is what new schedules take.
 #[tokio::test]
 async fn sched_02_schedule_api_carries_access_mode() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -163,7 +164,12 @@ async fn sched_02_schedule_api_carries_access_mode() -> Result<(), HarnessError>
     let strict = new_chat(&s, "strict").await?;
     set_chat_access(&s, &strict, "ask_first").await?;
     let inherited = create(&s, &strict, "Summarize my day.", None).await?;
-    assert_eq!(inherited["access_mode"], "ask_first", "{inherited}");
+    assert_eq!(inherited["access_mode"], "full_access", "{inherited}");
+    s.patch_settings(json!({"schedule_access_mode": "auto"}), "schedule default")
+        .await?;
+    assert_eq!(s.gw.settings().await?["schedule_access_mode"], "auto");
+    let chosen = create(&s, &strict, "Summarize my day.", None).await?;
+    assert_eq!(chosen["access_mode"], "auto", "{chosen}");
 
     let id = inherited["id"].as_str().unwrap();
     let updated =

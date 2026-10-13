@@ -94,6 +94,12 @@ pub(super) fn creation_mode(
     None
 }
 
+// Commands are never sandboxed (always asked) here, so no auto-allowed
+// command can create a hard link to read later.
+pub(super) fn has_other_links(_metadata: &Metadata) -> bool {
+    false
+}
+
 pub(super) fn file_mode(_metadata: &Metadata) -> Option<FileMode> {
     None
 }

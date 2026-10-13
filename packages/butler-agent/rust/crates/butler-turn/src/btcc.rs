@@ -121,8 +121,8 @@ pub use effects::workspace_edit::{
 pub use effects::workspace_file::{WorkspaceFileEffectAdapter, normalized_workspace_effect_path};
 pub use effects::{EffectService, accepted_plan_effect_id};
 pub use execution_controls::{
-    ControlResolution, ControlSource, ExecutionControls, ModelFallback, SubsessionResultContext,
-    VerifiedExecutionControls,
+    ControlResolution, ControlSource, ExecutionControls, ModelFallback, ScheduleRunContext,
+    SubsessionResultContext, VerifiedExecutionControls,
 };
 pub use guided_budget::{GuidedContinuationBudgetFactory, TurnContinuationBudgetPort};
 pub use guided_turn::{
