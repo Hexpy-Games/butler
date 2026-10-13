@@ -15,6 +15,8 @@ use std::sync::{Arc, Mutex};
 pub(super) struct StateData {
     /// Each tool output the model received, in order.
     pub(super) outputs: Mutex<Vec<Value>>,
+    /// Bytes of each complete model-facing tool output, including metadata.
+    pub(super) output_bytes: Mutex<Vec<usize>>,
     /// The tools (name, description, parameters) of the first agent request.
     pub(super) tools: Mutex<Vec<Value>>,
 }
@@ -93,6 +95,8 @@ fn next(state: &StateData, body: &Value, tools: &[Value]) -> Value {
                 .collect();
         }
     }
+    *state.output_bytes.lock().unwrap() =
+        output_texts(body).iter().map(|text| text.len()).collect();
     let outputs = outputs(body);
     *state.outputs.lock().unwrap() = outputs.clone();
     let first_url = || outputs[0]["results"][0]["url"].clone();
@@ -125,6 +129,16 @@ fn next(state: &StateData, body: &Value, tools: &[Value]) -> Value {
 
 /// Every function output in the request, decoded.
 fn outputs(body: &Value) -> Vec<Value> {
+    output_texts(body)
+        .into_iter()
+        .filter_map(|text| {
+            let value: Value = serde_json::from_str(text).ok()?;
+            Some(value.get("output").cloned().unwrap_or(value))
+        })
+        .collect()
+}
+
+fn output_texts(body: &Value) -> Vec<&str> {
     body["input"]
         .as_array()
         .into_iter()
@@ -132,15 +146,13 @@ fn outputs(body: &Value) -> Vec<Value> {
         .filter(|item| item["type"] == "function_call_output")
         .filter_map(|item| {
             let output = &item["output"];
-            let text = output.as_str().or_else(|| {
+            output.as_str().or_else(|| {
                 output
                     .as_array()?
                     .iter()
                     .find(|p| p["type"] == "input_text")?["text"]
                     .as_str()
-            })?;
-            let value: Value = serde_json::from_str(text).ok()?;
-            Some(value.get("output").cloned().unwrap_or(value))
+            })
         })
         .collect()
 }
@@ -155,12 +167,18 @@ fn message(text: &str) -> Value {
 
 /// Bytes the turn wrote per browser and web step: its tool journal rows and
 /// its progress events (the transcript carries the same events).
-pub(super) fn step_bytes(data: &std::path::Path, turn: &str) -> String {
+pub(super) fn step_bytes(
+    data: &std::path::Path,
+    turn: &str,
+    outputs: &[Value],
+    output_bytes: &[usize],
+) -> String {
     let db = butler_platform::sqlite::open_with_flags(
         data.join("agent-runtime/btcc.sqlite"),
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )
     .unwrap();
+    let model_bytes = web_read_model_bytes(&db, turn, &outputs[2], output_bytes[2]);
     let mut journal = db
         .prepare(
             "SELECT tool_name, length(result_json) FROM btcc_guided_tool_calls WHERE turn_id=?1",
@@ -185,8 +203,45 @@ pub(super) fn step_bytes(data: &std::path::Path, turn: &str) -> String {
         .sum::<usize>();
     let journal = rows.iter().map(|(_, n)| *n).sum::<i64>();
     format!(
-        "search-browser bytes: {} tool steps, journal {journal} B, progress {progress} B, {} B/step",
+        "search-browser bytes: {} tool steps, journal {journal} B, progress {progress} B, {} B/step; {model_bytes}",
         rows.len(),
         (usize::try_from(journal).unwrap_or(0) + progress) / rows.len().max(1)
     )
+}
+
+/// Reconstruct the previous projection from the immutable stored result and
+/// compare it with the model's actual first web_read output. The unchanged
+/// envelope and metadata retain their actual wire size; host receipts stay
+/// available to the App.
+fn web_read_model_bytes(
+    db: &rusqlite::Connection,
+    turn: &str,
+    model: &Value,
+    after: usize,
+) -> String {
+    let raw: String = db.query_row(
+        "SELECT result_json FROM btcc_guided_tool_calls WHERE turn_id=?1 AND tool_name='web_read' ORDER BY rowid LIMIT 1",
+        [turn], |row| row.get(0),
+    ).unwrap();
+    let mut before: Value = serde_json::from_str(&raw).unwrap();
+    before["tool_name"] = json!("web_read");
+    let mut projected = before.clone();
+    for key in [
+        "evidence_receipts",
+        "evidence_capability_receipts",
+        "public_web_evidence_items",
+    ] {
+        assert!(
+            before.get(key).is_some(),
+            "stored host bookkeeping lost {key}"
+        );
+        projected.as_object_mut().unwrap().remove(key);
+    }
+    assert_eq!(&projected, model, "projection changed web content");
+    let before = after + before.to_string().len() - model.to_string().len();
+    assert!(
+        before < 50 * 1024,
+        "previous projection fit without a byte cut"
+    );
+    format!("web_read model output {before} -> {after} B (before reconstructed from stored result)")
 }

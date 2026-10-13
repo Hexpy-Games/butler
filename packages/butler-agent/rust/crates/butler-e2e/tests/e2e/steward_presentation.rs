@@ -6,6 +6,7 @@
     reason = "test assertions"
 )]
 mod files;
+mod intent;
 #[path = "steward_presentation/stub.rs"]
 pub(super) mod stub;
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
@@ -72,6 +73,7 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
             .contains("키센스.txt"),
         "Delivery must preserve decomposed filename bytes: {complete}"
     );
+    intent::assert_intent_carried(&script.requests.lock().unwrap());
     files::assert_delegated_files(&s).await?;
     assert_sidebar_work(&s, false).await?;
     let activity = s.gw.get("/worker-activity?include_history=true").await?;

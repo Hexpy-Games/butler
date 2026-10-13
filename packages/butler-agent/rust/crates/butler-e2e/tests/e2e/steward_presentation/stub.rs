@@ -104,6 +104,7 @@ async fn reply(
 /// a table, which the delegated task then carries.
 fn parent_item(step: usize, presented: bool) -> Value {
     let mut parent_plan = plan(false, "steward");
+    parent_plan["intent"] = json!({"goal":"Choose the better approach for the owner's next step","deliver":"A one-line recommendation","next":"Apply the chosen approach","assume":"Both files are current"});
     if presented {
         parent_plan["presentation"] = json!(["cards", "table"]);
     }

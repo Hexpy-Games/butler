@@ -104,6 +104,7 @@ mod project_git;
 mod projection_backlog;
 mod projection_settlement;
 mod projects;
+mod prompt_hedge;
 mod prompt_history;
 mod prompt_history_cache;
 mod prompt_layout;
