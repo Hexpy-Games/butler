@@ -1613,7 +1613,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       consolidationModel: "Chat memory model",
       localReasoningBudget: "Local reasoning budget",
       contextLimit: "Context limit",
-      scheduleAccess: "Default schedule permission",
+      scheduleAccess: "New schedules",
       chatAccess: "New chats",
       planModeDefault: "Use plan mode by default",
       name: "Name",

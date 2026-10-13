@@ -45,7 +45,8 @@ try {
     await chat.waitFor();
     assert((await chat.innerText()).includes("먼저 확인"));
     const schedule = page.locator('[data-setting-id="schedule-access-mode"]');
-    assert.equal(await schedule.count(), before ? 0 : 1);
+    assert.equal(await schedule.count(), 1);
+    await schedule.getByText(before ? "예약 작업 기본 권한" : "새 예약 작업", { exact: true }).waitFor();
     if (!before) assert((await schedule.innerText()).includes("알아서 진행"));
     const permissions = page.locator('[data-settings-section-id="default-permission"]');
     await permissions.evaluate(node => node.scrollIntoView({ block: "center" }));
@@ -67,6 +68,14 @@ try {
         await new Promise(done => setTimeout(done, 50));
       }
     }
+    await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en" }) });
+    await page.goto(`${server.url}?settings=general`);
+    const englishSchedule = page.locator('[data-setting-id="schedule-access-mode"]');
+    await englishSchedule.getByText(before ? "Default schedule permission" : "New schedules", { exact: true }).waitFor();
+    await englishSchedule.getByText(getAppCopy("en-US").settings.descriptions.scheduleAccess, { exact: true }).waitFor();
+    await englishSchedule.evaluate(node => node.scrollIntoView({ block: "center" }));
+    await capture(page, `settings-en-${theme}-${width}.png`);
+    captures++;
     for (const lang of ["ko", "en"] as const) for (const kind of ["schedule", "web", "taint"]) {
       await page.goto(`${server.url}?visual=components&surface=activity-layout&approval=1&state=completed&theme=${theme}&lang=${lang}&kind=${kind}`);
       const card = page.locator('[data-test-class="composer-authority-decision"]');
