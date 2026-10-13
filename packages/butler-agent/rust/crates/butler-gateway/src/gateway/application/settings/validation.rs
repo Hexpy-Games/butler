@@ -15,6 +15,7 @@ const UPDATE_KEYS: &[&str] = &[
     "worker_profiles",
     "max_simultaneous_workers",
     "access_mode",
+    "schedule_access_mode",
     "plan_mode_default",
     "follow_up_behavior",
     "multiline_send_behavior",

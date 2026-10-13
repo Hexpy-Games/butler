@@ -42,7 +42,7 @@ pub(crate) use crate::host::guided::prompt::{
 pub(crate) use crate::host::guided::registered_edit::RegisteredEdit;
 pub(crate) use crate::host::guided::steering::GuidedSteering;
 use crate::host::guided::tools::MonitoringReaders;
-pub(crate) use crate::host::guided::tools::{GuidedToolBinding, GuidedTools};
+pub(crate) use crate::host::guided::tools::{GuidedToolBinding, GuidedTools, TurnGuard};
 pub(crate) use crate::host::guided::work::GuidedWorkAdapter;
 pub(crate) use crate::host::guided::work_tools::GuidedWorkTools;
 pub(crate) use crate::host::service::conversation_observer::ConversationObserver;

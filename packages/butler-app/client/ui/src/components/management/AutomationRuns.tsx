@@ -16,15 +16,16 @@ export function AutomationRuns({ runs }: AutomationRunsProps) {
       emptyLabel={appCopy.automations.runs.empty}
       runs={runs.slice(0, 6).map((run) => ({
         id: run.id,
-        title: automationRunLabel(run.state),
+        title: automationRunLabel(run),
         meta: relativeAge(run.started_at),
       }))}
     />
   );
 }
 
-function automationRunLabel(state: string): string {
+function automationRunLabel({ state, safe_error_code }: AutomationRunSummary): string {
   const copy = appCopy.automations.runs;
+  if (safe_error_code === "schedule_permission_required") return copy.needsPermission;
   if (state === "queued") return copy.queued;
   if (state === "succeeded") return copy.succeeded;
   if (state === "failed") return copy.failed;
