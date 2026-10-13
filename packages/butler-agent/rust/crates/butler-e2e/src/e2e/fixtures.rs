@@ -16,6 +16,35 @@ use super::sandbox::copy_tree;
 pub const FIXTURE_TIME: &str = "2026-09-27T00:00:00Z";
 pub const FIXTURE_TIMEZONE: &str = "UTC";
 
+/// Pin prompt fixtures through the real folder CLI and PATCH /settings path.
+/// Keep fallback/first-run scenarios free to exercise an unset preference.
+pub async fn default_project_folder(
+    scenario: &super::scenario::Scenario,
+) -> Result<(), HarnessError> {
+    let folder = scenario.sandbox.home.join("butler-workspace");
+    fs::create_dir_all(&folder)?;
+    let path = folder
+        .to_str()
+        .ok_or_else(|| super::harness_error("fixture folder is not UTF-8"))?;
+    let result = scenario
+        .agent
+        .cli_async(&["folder", "set", path, "--json"])
+        .await?;
+    if result.code != Some(0) {
+        return Err(super::harness_error(format!(
+            "fixture folder selection failed: {}",
+            result.stderr
+        )));
+    }
+    let settings = scenario.gw.get("/settings").await?;
+    if settings.data()["default_project_workspace_path"] != json!(path) {
+        return Err(super::harness_error(
+            "fixture folder setting was not applied",
+        ));
+    }
+    Ok(())
+}
+
 /// A third-party assistant export as an owner would paste it into profile
 /// import (PRO-02, MIG-03): input text, not a provider response. Synthetic.
 pub const PROFILE_EXPORT: &str = "## Identity\n[unknown] - Name: Sam Rivera; prefers to be called Sam.\n[unknown] - Lives in Lisbon.\n\n## Career\n[2024-03-01] - Works as a landscape architect.\n\n## Preferences\n[unknown] - Prefers short, direct answers.\n";
