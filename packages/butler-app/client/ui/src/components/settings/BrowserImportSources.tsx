@@ -85,3 +85,14 @@ export function BrowserImportSources({ flow, keychain, blocked }: { flow: Import
     </>
   );
 }
+
+/** The imported profile and what came over, as a row (first-line aligned, no undo). */
+export function ImportedProfile({ flow }: { flow: ImportFlow }) {
+  const copy = appCopy.settings.browserImport;
+  const result = flow.result!;
+  const source = flow.sources?.find(entry => entry.key === flow.selected);
+  const brand = source ? browserBrand(source.browser) : copy.fromFile;
+  return <ListRow icon={source ? <BrandIcon browser={source.browser} /> : <FileText size="md" />}
+    title={source && source.name !== brand ? `${brand} · ${source.name}` : brand}
+    description={copy.result(result.bookmarks, result.passwords, result.updated, result.history ?? 0, result.invalid ?? 0)} />;
+}

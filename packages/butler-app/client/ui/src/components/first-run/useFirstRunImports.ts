@@ -8,6 +8,6 @@ export function useFirstRunImports(enabled: boolean) {
   if (enabled) started.current = true;
   const agentImport = useAgentImport(started.current);
   const agentPicks = useAgentPicks(agentImport);
-  const agents = agentImport.result && !agentImport.undone ? agentImport.result : undefined;
+  const agents = agentImport.result ?? undefined;
   return { agentImport, agentPicks, imported: { agents } };
 }

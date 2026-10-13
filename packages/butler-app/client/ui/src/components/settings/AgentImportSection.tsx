@@ -33,7 +33,7 @@ function resultText(result: AgentImportCounts): string {
 export function AgentImportSection({ children }: { children?: ReactNode }) {
   const copy = appCopy.settings.agentImport;
   const flow = useAgentImport();
-  const added = flow.result ? flow.result.instructions + flow.result.servers > 0 : false;
+  const imported = flow.sources?.find(source => source.key === flow.selected);
   return (
     <SettingsSection id="agent-import" kind="list" title={appCopy.settings.pageSections.agentImport}
       description={copy.purpose} state={flow.sources === null ? "loading" : "ready"}>
@@ -43,9 +43,9 @@ export function AgentImportSection({ children }: { children?: ReactNode }) {
       {children}
       {flow.busy ? <Stack align="row" gap="sm" cross="center" role="status"><Spinner /><Typo.Text>{copy.importing}</Typo.Text></Stack> : null}
       {flow.result ? <Stack gap="sm" role="status" data-test-class="agent-import-result">
-        <Typo.Text>{flow.undone ? copy.undone : resultText(flow.result)}</Typo.Text>
+        {/* What was added and any key still to enter; change imported items in their own settings. */}
+        <ListRow icon={<Bot size="md" />} title={imported?.name ?? copy.run} description={resultText(flow.result)} />
         <ButtonContainer size="sm">
-          {added ? <Button size="sm" variant="outline" disabled={flow.busy || flow.undone} onClick={() => void flow.undo()}>{copy.undo}</Button> : null}
           <Button size="sm" variant="ghost" disabled={flow.busy} onClick={flow.more}>{copy.more}</Button>
         </ButtonContainer>
       </Stack> : null}
