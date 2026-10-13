@@ -9,7 +9,10 @@
   grid-template-columns: minmax(0, 1fr);
   container-name: composer;
   container-type: inline-size;
-  width: min(100%, var(--conversation-content-width, 760px));
+  width: min(
+    100%,
+    var(--conversation-column-width, var(--conversation-content-width, 760px))
+  );
   max-width: 920px;
   margin: 0 auto;
   transition: translate var(--motion-base) var(--motion-ease-standard);
@@ -27,16 +30,23 @@
   z-index: 12;
   right: auto;
   bottom: calc(22px + var(--safe-area-bottom) + var(--keyboard-inset-bottom));
-  left: 50%;
+  /* Beside a TabRail the column moves left (ConversationShell). */
+  left: calc(50% - var(--conversation-column-shift, 0px));
   width: calc(100% - var(--adaptive-composer-inset) * 2);
-  max-width: var(--conversation-content-width, 760px);
+  max-width: var(
+    --conversation-column-width,
+    var(--conversation-content-width, 760px)
+  );
   margin-inline: 0;
   pointer-events: none;
   transform: translateX(-50%);
 }
 
 .large {
-  max-width: var(--conversation-content-width, 760px);
+  max-width: var(
+    --conversation-column-width,
+    var(--conversation-content-width, 760px)
+  );
 }
 
 .notice {
