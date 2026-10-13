@@ -21,6 +21,10 @@ const shot = async (name: string) => {
   await app.page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   writeFileSync(join(evidence, `${name}.png`), await app.page.screenshot()); captures++;
 };
+async function clickVisible(selector: string) {
+  await waitBrowser(() => app.page.expression(`(()=>{const node=document.querySelector(${JSON.stringify(selector)});if(!node)return false;const r=node.getBoundingClientRect();return r.width>0&&r.height>0&&node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))})()`), "target is hit-testable after motion");
+  await app.page.clickSelector(selector);
+}
 async function matrix(screen: string) {
   for (const theme of ["light", "dark"]) for (const width of [1440, 390]) for (const wallpaper of [false, true]) {
     console.log(screen, theme, width, wallpaper);
@@ -93,7 +97,7 @@ try {
   }
   await matrix("approval");
   if (!baseline) {
-    await app.page.clickSelector(`${media} [role="button"]`);
+    await clickVisible(`${media} [role="button"]`);
     await waitBrowser(() => app.main(`${browser}.activeId===${JSON.stringify(tab)}`), "approval media opens exact tab");
     await togglePane(app, false);
   }
@@ -115,6 +119,7 @@ try {
     await waitBrowser(() => app.page.expression("document.querySelector('[data-slot=activity-glow]')?.getAttribute('data-state')==='error'"), "error glow");
   }
   // New chat has no tabs: capture the completed onboarding screen independently.
+  await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ reduce_motion: true }) });
   await app.gateway.api("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "Empty capture" }) });
   await app.page.reload(); await shellReady(app, "ko");
   if (await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='false'")) await app.click("사이드바 보기");
