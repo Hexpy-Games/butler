@@ -45,7 +45,7 @@ impl SqliteSubsessionRepository {
                     text: text.clone(), model_ref: model.into(),
                     reasoning_effort: reasoning.into(), timestamp: now.clone(),
                 }),
-                ChildRole::Steward => ParentResultInput::ButlerApp(StewardResultInput {
+                ChildRole::Steward => ParentResultInput::ButlerApp(Box::new(StewardResultInput {
                     relation_id: delegation.relation_id.clone(),
                     result_id: result_id.clone(),
                     parent_session_id: delegation.parent_session_id.clone(),
@@ -55,7 +55,7 @@ impl SqliteSubsessionRepository {
                     safe_title: result_title(&delegation.safe_title), text: text.clone(), model_ref: model.into(),
                     reasoning_effort: reasoning.into(), access_mode: access.into(), timestamp: now.clone(),
                     schedule_run: packet.schedule_run.clone(),
-                }),
+                })),
             };
             let input = serde_json::to_string(&input).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;
             tx.execute("INSERT OR IGNORE INTO btcc_subsession_outbox (outbox_id,relation_id,result_id,parent_session_id,parent_turn_id,message_id,input_json,status,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",params![format!("outbox-{result_id}"),delegation.relation_id,result_id,delegation.parent_session_id,delegation.parent_turn_id,format!("subsession-result-message:{result_id}"),input,now]).map_err(StorageError::sqlite)?;
