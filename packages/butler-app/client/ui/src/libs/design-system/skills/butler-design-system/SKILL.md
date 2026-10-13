@@ -46,6 +46,12 @@ lints below enforce most of this; the rest is review.
 6. **Motion only via the DS.** Product code never declares transitions,
    animations, keyframes or `element.animate()`; DS components own motion on
    `--motion-*` tokens and honor reduced motion.
+7. **Bare icons in cards and rows.** ChoiceCard, ChoiceTile, CheckCard,
+   ListRow and any card or list-item row show their glyph alone in an
+   `IconSlot` (`minHeight="line"`), never on an `IconTile` or other boxed
+   background. The glyph and any trailing mark center on the title's first
+   line; the description starts at the title's left edge. `lint:design`
+   fails on an IconTile inside those blocks or passed as their `icon`.
 
 ## First Principles
 

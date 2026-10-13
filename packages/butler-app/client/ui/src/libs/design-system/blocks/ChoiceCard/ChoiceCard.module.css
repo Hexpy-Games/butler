@@ -73,8 +73,8 @@
   opacity: 0.5;
 }
 
-/* First-line rule: the logo tile and the trailing mark center on the title
-   line (row 1); the description runs below the title. */
+/* First-line rule: the bare glyph (no tile) and the trailing mark center on
+   the title line (row 1); the description starts under the title. */
 .card {
   display: grid;
   min-height: 64px;
@@ -85,8 +85,11 @@
   padding: var(--space-md);
 }
 
-.card > :first-child {
+/* The glyph's line box is the title's (Label) line box. */
+.icon {
   grid-row: 1;
+  font-size: var(--typo-label-size);
+  line-height: var(--typo-label-line-height);
 }
 
 .text {
@@ -111,15 +114,10 @@
   min-width: 0;
 }
 
-/* Row 1 is as tall as the 36px tile; pull the description up to the title's
-   line box so title and description keep their hairline gap. */
 .description {
   grid-column: 2;
   grid-row: 2;
-  margin-block-start: calc(
-    (var(--typo-label-size) * var(--typo-label-line-height) - 36px) / 2 +
-      var(--border-hairline)
-  );
+  margin-block-start: var(--border-hairline);
   color: var(--text-secondary);
 }
 

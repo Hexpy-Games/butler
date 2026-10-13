@@ -2,7 +2,7 @@ import { Children, useId, type ButtonHTMLAttributes, type HTMLAttributes, type R
 import type { DsBaseProps } from "../../lib/dsProps";
 import { dsClass } from "../../lib/internal";
 import { cn } from "../../lib/utils";
-import { IconTile } from "../../components/IconTile";
+import { IconSlot } from "../../components/IconSlot";
 import { Tooltip } from "../../components/Tooltip";
 import { Typo } from "../../components/Typo";
 // The card surface, border, radius, padding, hover, focus and selected look are ChoiceCard's own classes.
@@ -10,7 +10,7 @@ import surface from "../ChoiceCard/ChoiceCard.module.css";
 import styles from "./CheckCard.module.css";
 
 export interface CheckCardProps extends Omit<DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>>, "title" | "disabled" | "onChange" | "role"> {
-  /** Optional glyph in the leading IconTile (a ProviderLogo or an icon). */
+  /** Optional leading glyph (a ProviderLogo or an icon), shown bare: cards never put a tile behind it. */
   icon?: ReactNode;
   title: ReactNode;
   description?: ReactNode;
@@ -78,7 +78,7 @@ export function CheckCard({
       }}
     >
       {indicatorSide === "start" ? indicator : null}
-      {icon ? <IconTile className={dsClass(styles.tile)} size="md">{icon}</IconTile> : null}
+      {icon ? <IconSlot className={dsClass(cn(surface.icon, styles.icon))} minHeight="line" size="lg">{icon}</IconSlot> : null}
       <span className={cn(surface.titleRow, styles.title)}>
         <Typo.Label as="span" truncate weight="semibold">{title}</Typo.Label>
       </span>

@@ -39,8 +39,9 @@ import { CheckCard, CheckCardList, ProviderLogo } from "@/butler-ds";
 - Press scales the card on `--motion-scale-press`; the border, background and
   focus ring change on `--motion-base` / `--motion-fast`.
 - Reduced motion: no scale and no stroke travel; only fades.
-- The indicator and the logo tile center on the title line, never on title +
-  description.
+- The glyph is bare (no IconTile or boxed background). The glyph and the
+  indicator center on the title's first line; the description starts at the
+  title's left edge. Line heights come from the type scale (Label, Caption).
 
 ## Review variants
 `indicatorSide` (`end` | `start`) and `checkedMark` (`check` | `fill`) exist

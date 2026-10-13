@@ -3,7 +3,7 @@ import type { DsBaseProps } from "../../lib/dsProps";
 import { dsClass } from "../../lib/internal";
 import { cn } from "../../lib/utils";
 import { AlertCircle, ChevronRight } from "../../components/Icons";
-import { IconTile } from "../../components/IconTile";
+import { IconSlot } from "../../components/IconSlot";
 import { Spinner } from "../../components/Spinner";
 import { Typo } from "../../components/Typo";
 import styles from "./ChoiceCard.module.css";
@@ -12,7 +12,7 @@ import styles from "./ChoiceCard.module.css";
 export type ChoiceCardState = "default" | "loading" | "error" | "disabled";
 
 interface ChoiceBaseProps extends Omit<DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>>, "title" | "disabled"> {
-  /** Glyph shown in the leading IconTile (a ProviderLogo or an icon). */
+  /** The leading glyph (a ProviderLogo or an icon), shown bare: cards never put a tile behind it. */
   icon: ReactNode;
   title: ReactNode;
   description?: ReactNode;
@@ -73,7 +73,7 @@ export function ChoiceCard({
       data-slot="choice-card"
       onClick={guardedClick(state, onClick)}
     >
-      <IconTile size="md">{icon}</IconTile>
+      <IconSlot className={dsClass(styles.icon)} minHeight="line" size="lg">{icon}</IconSlot>
       <span className={styles.text}>
         <span className={styles.titleRow}>
           <Typo.Label as="span" truncate weight="semibold">{title}</Typo.Label>
@@ -101,7 +101,7 @@ export function ChoiceTile({
       data-slot="choice-tile"
       onClick={guardedClick(state, onClick)}
     >
-      <IconTile className={dsClass(styles.tileIcon)} size="sm">{icon}</IconTile>
+      <IconSlot className={dsClass(styles.tileIcon)} size="lg">{icon}</IconSlot>
       <span className={styles.tileTitle}>
         <Typo.Label as="span" data-slot="choice-tile-title" lineClamp={2} weight="semibold">{title}</Typo.Label>
       </span>

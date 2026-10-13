@@ -24,7 +24,7 @@
 
 /* Layout: the indicator sits on the title line, at the end (default) or the
    start; without an icon the title takes the icon's column. */
-.tile {
+.icon {
   grid-row: 1;
 }
 
@@ -59,7 +59,7 @@
   grid-column: 1;
 }
 
-.card[data-indicator="start"] .tile {
+.card[data-indicator="start"] .icon {
   grid-column: 2;
 }
 
@@ -75,12 +75,6 @@
 .card[data-indicator="start"][data-icon="none"] .title,
 .card[data-indicator="start"][data-icon="none"] .description {
   grid-column: 2;
-}
-
-/* Without the 36px tile the title line sets row 1, so the description keeps
-   its hairline gap instead of ChoiceCard's pull-up. */
-.card[data-icon="none"] .description {
-  margin-block-start: var(--border-hairline);
 }
 
 /* The round indicator: a ring on the card surface; checked fills it with the

@@ -57,6 +57,7 @@ export const guidance: ShowcaseGuidance = {
   content: [
     "Title: the service name people know (ChatGPT, not OpenAI OAuth). Description: what they need, in a few words.",
     "Tags are two or three words (No key needed, Free · Private).",
+    "The icon is bare: a logo or glyph with no tile or boxed background behind it.",
   ],
   accessibility: [
     "Each card is a button; the description is its aria-describedby. Loading sets aria-busy, unavailable sets aria-disabled.",

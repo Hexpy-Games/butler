@@ -23,6 +23,13 @@ In a `ChoiceCard` the logo tile and the trailing chevron or meta center on the
 title's line (the first line), never on title + description; the description
 runs below the title.
 
+## Icons
+Cards and tiles show the glyph bare (a `ProviderLogo` or an icon) in an
+`IconSlot`: never an `IconTile` or any boxed background behind it. In a
+`ChoiceCard` the glyph and the trailing chevron or meta center on the title's
+first line; the description starts at the title's left edge. `lint:design`
+fails on an IconTile passed as a card icon.
+
 ## Equal size
 Tiles in a grid are always the same size: rows are `1fr`, the name sits in a
 fixed two-line box (clamped with an ellipsis after two lines) and the
