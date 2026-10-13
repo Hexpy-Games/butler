@@ -1,6 +1,7 @@
 use rusqlite::{Connection, OptionalExtension, Row, params_from_iter};
 use serde_json::Value;
 
+use super::reads::{read_marker_columns, unread};
 use super::{AppStorageError, contracts::*, json_error};
 use crate::gateway::application::message_visibility::owner_visible;
 use crate::gateway::application::storage::AppStorageCode;
@@ -61,7 +62,10 @@ SELECT c.id,c.kind,c.title,c.project_id,c.created_at,c.updated_at,
  c.pinned,c.archived,
  (SELECT COUNT(*) FROM app_automations a WHERE a.target_session_id=c.id AND a.state!='deleted'),
  (SELECT display_name FROM projects p WHERE p.id=c.project_id) AS project_display_name,
- c.runtime_session_hint
+ c.runtime_session_hint,
+ ",
+    read_marker_columns!(),
+    r"
 FROM chats c
 LEFT JOIN turns t ON t.rowid=(
  SELECT latest.rowid FROM turns latest WHERE latest.chat_id=c.id ORDER BY latest.rowid DESC LIMIT 1
@@ -88,6 +92,8 @@ struct SessionRow {
     archived: i64,
     automation_target_count: i64,
     project_display_name: Option<String>,
+    latest_reply_rowid: Option<i64>,
+    read_rowid: i64,
 }
 
 fn session_row(row: &Row<'_>) -> rusqlite::Result<SessionRow> {
@@ -110,6 +116,8 @@ fn session_row(row: &Row<'_>) -> rusqlite::Result<SessionRow> {
         archived: row.get(14)?,
         automation_target_count: row.get(15)?,
         project_display_name: row.get(16)?,
+        latest_reply_rowid: row.get(18)?,
+        read_rowid: row.get(19)?,
     })
 }
 
@@ -282,7 +290,7 @@ fn project(row: SessionRow) -> Result<AppSessionSummary, AppStorageError> {
         safe_status_label_key: None,
         safe_status_label_parameters: parameters,
         safe_status_content: content,
-        unread_count: 0,
+        unread: unread(row.latest_reply_rowid, row.read_rowid),
         pinned: row.pinned == 1,
         archived: row.archived == 1,
         automation_target_count: u64::try_from(row.automation_target_count.max(0))

@@ -154,8 +154,8 @@ pub use session_controls::{AppSessionControlUpdate, AppSessionControlsView};
 use session_queue_mutations::SessionQueueMutationOwner;
 pub use sessions::{
     AppChatKind, AppChatSummary, AppCreateSessionInput, AppCreateSessionRequest,
-    AppCreateSessionResult, AppSessionActionResult, AppSessionBranchQuery, AppSessionSummary,
-    AppSessionUpdate, AppSessionWorkProgress, AppSessionWorkspaceProvisioner,
+    AppCreateSessionResult, AppSessionActionResult, AppSessionBranchQuery, AppSessionReadResult,
+    AppSessionSummary, AppSessionUpdate, AppSessionWorkProgress, AppSessionWorkspaceProvisioner,
     AppSessionWorkspaceSnapshot, AppWorkProgress, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkspaceMode,
 };
