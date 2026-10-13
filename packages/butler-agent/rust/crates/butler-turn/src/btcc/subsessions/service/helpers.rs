@@ -39,14 +39,19 @@ pub(super) fn render_input(packet: &SubsessionPacket, profile_prompt: Option<&st
     }
 }
 /// Facts the goal needs are worth getting, also behind a page control;
-/// operating controls for details that would not change the answer costs
-/// rounds without changing it. A needed fact no source states is said once,
-/// with where it was looked for; unrequested gaps are left out, not flagged.
-const NEEDED_FACTS: &str = "Get the facts the goal needs, operating a page control when a needed fact sits behind it; leave controls alone for details that would not change the answer. Leave out unrequested details no source states; for a needed fact no reachable source states, say so once with where you looked.";
+/// operating controls or scrolling through image sections for details that
+/// would not change the answer costs rounds without changing it. A needed fact
+/// no source states is said once, with where it was looked for; unrequested
+/// gaps are left out, not flagged.
+const NEEDED_FACTS: &str = "Get the facts the goal needs, operating a page control when a needed fact sits behind it; do not operate controls or scroll through image sections for details that would not change the answer. Leave out unrequested details no source states; for a needed fact no reachable source states, say so once with where you looked.";
+/// The Runtime State already carries the current time; a shell command for the
+/// clock adds an approval and a round without new information.
+const CLOCK: &str =
+    "Take the current date and time from Runtime State; do not run a command to read the clock.";
 
 pub(super) fn render_steward_input(packet: &SubsessionPacket) -> String {
     format!(
-        "role: steward\nrequest: {}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.{}{} {NEEDED_FACTS}",
+        "role: steward\nrequest: {}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.{}{} {NEEDED_FACTS} {CLOCK}",
         packet.objective,
         criteria(packet),
         packet.prior_context.as_deref().unwrap_or("none"),
@@ -94,12 +99,12 @@ fn planned_presentation(packet: &SubsessionPacket) -> String {
         .iter()
         .any(|block| matches!(*block, "cards" | "gallery"))
     {
-        " When the items have a visual appearance, collect one representative photo per item with image_collect and name its id with the item. When no page you used shows one, find one: search for images of that item or open its official or gallery pages, and collect a real photo of it. Never use a screenshot of text as an item's photo, and leave no item without an image."
+        " When the items have a visual appearance, collect one representative photo per item with image_collect and name its id with the item. Collect it from the page you read for that item: its main image ref, or that image's URL when the ref is refused. One collected photo per item is enough; do not scroll, click or collect again to find a larger or better one. When no page you used shows one, find one: search for images of that item or open its official or gallery pages, and collect a real photo of it. Never use a screenshot of text as an item's photo, and leave no item without an image."
     } else {
         ""
     };
     format!(
-        " Butler's Plan presents this result as {blocks}: report per item the facts its source states and that source.{images}"
+        " Butler's Plan presents this result as {blocks}: report per item the facts its source states and that source. Butler builds those blocks from your report, so report plain per-item lines, not tables or a formatted document.{images}"
     )
 }
 pub(super) fn allowed_effects(access: &str) -> Vec<String> {

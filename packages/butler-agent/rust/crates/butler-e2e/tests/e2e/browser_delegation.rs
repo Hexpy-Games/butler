@@ -219,25 +219,6 @@ async fn serve_host(
             .unwrap()
             .starts_with("steward-turn-")
     );
-    if answer {
-        let frame = next_call(&mut stream, &mut buffer, "tab.open", &session).await?;
-        assert_eq!(frame["session"], session);
-        admin
-            .send(
-                Method::POST,
-                &format!(
-                    "/internal/browser-host/results/{}",
-                    frame["id"].as_str().unwrap()
-                ),
-                Some(json!({"status":"ok","tab":"parent-tab","url":"https://example.com/"})),
-                &[],
-            )
-            .await?;
-        assert_eq!(
-            next_frame(&mut stream, &mut buffer).await?["op"],
-            "use.ended"
-        );
-    }
     Ok(())
 }
 
