@@ -15,12 +15,15 @@ export function BrowserToggle() {
   const views = useButlerStore((state) => state.sessionViews);
   const agentTabs = useMemo(() => conversationAgentTabs(session, tabs, views), [session, tabs, views]);
   const browsing = agentTabs.some((tab) => tab.busy || tab.inUse);
+  // Butler's tabs never become active on their own, so the globe opens the one it is using.
+  const target = agentTabs.find((tab) => tab.waiting || tab.signinStep || tab.payStep || tab.dialog)
+    ?? agentTabs.filter((tab) => tab.busy || tab.inUse).at(-1);
   if (!window.butlerBrowser) return null;
   return <IconButton data-test-class="titlebar-browser-toggle" aria-pressed={open}
     label={open ? appCopy.browser.hide : appCopy.browser.show}
     tone={browsing ? "riso" : open ? "butler" : "default"} indicator={browsing && !open}
     disabled={!enabled} onClick={() => {
       if (open) useBrowserShellState.getState().setOpen(session, false);
-      else void openConversationBrowser(session);
+      else void openConversationBrowser(session, target?.id);
     }}><Globe2 size="md" /></IconButton>;
 }

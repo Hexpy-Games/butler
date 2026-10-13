@@ -77,6 +77,17 @@ try {
   await push([tab], views, "unrelated"); await state(false);
   await push([{ ...tab, busy: false }]); await state(false);
   await push([]); await state(false);
+  // The globe opens the tab Butler is using, not the conversation's last viewed tab.
+  await push([{ ...tab, id: "older", owner: "conversation:general", agent: false, busy: false }, { ...tab, id: "working", owner: "conversation:general" }]);
+  await state(true);
+  type Bridge = { butlerBrowser: { call(op: string, input?: unknown): Promise<{ activeId: string | null } | undefined> } };
+  const active = () => page.evaluate(async () => (await (window as unknown as Bridge).butlerBrowser.call("state"))?.activeId);
+  await page.evaluate(() => (window as unknown as Bridge).butlerBrowser.call("activate", { id: "older" }));
+  await button.click();
+  for (let attempt = 0; await active() !== "working"; attempt++) {
+    assert.ok(attempt < 50, "globe opens Butler's working tab"); await page.waitForTimeout(100);
+  }
+  checks++;
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ functional: "passed", checks, screenshots: 8, liveModelCalls: 0 }));
   console.log(JSON.stringify({ functional: "passed", checks, screenshots: 8 }));
 } finally { await closeHarness(); }
