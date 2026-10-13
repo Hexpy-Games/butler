@@ -1,3 +1,4 @@
+import { retainAnswerBlocks } from "./stableAnswerBlocks";
 import { generalChatCleared } from "./generalChatEvents";
 import { create } from "zustand";
 import { mergeSessionViewWindow } from "./sessionViewWindow.ts";
@@ -362,7 +363,7 @@ function retainFrozenTurnPresentation(
   previous: MessageRecord | undefined,
   incoming: MessageRecord,
 ): MessageRecord {
-  let retained = incoming;
+  let retained = retainAnswerBlocks(previous, incoming);
   if (previous?.work_blocks?.length && !retained.work_blocks) {
     retained = { ...retained, work_blocks: previous.work_blocks };
   }

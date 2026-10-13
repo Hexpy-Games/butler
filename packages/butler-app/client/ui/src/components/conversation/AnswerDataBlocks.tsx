@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import type { ChartBlock, TableBlock } from "../../../../shared/app-contracts";
 import type { AnswerGalleryView } from "../../../../shared/answer-blocks-view";
@@ -9,15 +9,15 @@ import { openImageViewer } from "../media/imageViewerState";
 import { answerImages, answerPart, answerSource, runAnswerAction, saveAnswerItem, useAnswerSession } from "./answerBlockActions";
 import { appCopy, useAppLocale } from "@/app/copy";
 
-export function AnswerSourceLine({ item }: { item: { source?: string; checked?: string } }) {
+export const AnswerSourceLine = memo(function AnswerSourceLine({ item }: { item: { source?: string; checked?: string } }) {
   useAppLocale();
   const source = answerSource(item, useAnswerSession());
   return source ? <Clickable variant="text" aria-label={source.label} onClick={source.onOpen}>
     <Typo.Caption tone="tertiary">{[source.site, source.checked].filter(Boolean).join(" · ")}</Typo.Caption>
   </Clickable> : null;
-}
+});
 
-export function AnswerTable({ block }: { block: TableBlock }) {
+export const AnswerTable = memo(function AnswerTable({ block }: { block: TableBlock }) {
   useAppLocale();
   const copy = appCopy.conversation.answerBlocks;
   const [expanded, setExpanded] = useState(false);
@@ -32,10 +32,10 @@ export function AnswerTable({ block }: { block: TableBlock }) {
     {block.rows.length > 10 ? <Button variant="inline" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
       {expanded ? copy.showLess : copy.showMoreItems(block.rows.length - 10)}</Button> : null}
   </Stack>;
-}
+});
 
 /** Each picture opens the viewer on the gallery's pictures; the viewer opens its source page. */
-export function AnswerGallery({ block }: { block: AnswerGalleryView }) {
+export const AnswerGallery = memo(function AnswerGallery({ block }: { block: AnswerGalleryView }) {
   useAppLocale();
   const copy = appCopy.conversation.answerBlocks;
   const sessionId = useAnswerSession();
@@ -54,9 +54,9 @@ export function AnswerGallery({ block }: { block: AnswerGalleryView }) {
       </ButtonContainer>
     </Stack>)}
   </Stack></ScrollArea>;
-}
+});
 
-export function AnswerChart({ block }: { block: ChartBlock }) {
+export const AnswerChart = memo(function AnswerChart({ block }: { block: ChartBlock }) {
   useAppLocale();
   const copy = appCopy.conversation.answerBlocks;
   const series = block.series.map((item, index) => ({ ...item, key: `series${index}`, color: CHART_COLORS[index] }));
@@ -77,4 +77,4 @@ export function AnswerChart({ block }: { block: ChartBlock }) {
     </ChartContainer>
     <AnswerSourceLine item={block} />
   </Stack>;
-}
+});
