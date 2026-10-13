@@ -51,6 +51,7 @@ fn normalize(text: &str, paths: &butler_e2e::e2e::sanitize::Placeholders) -> Str
             for field in [
                 "Current Time UTC:",
                 "Current Local Time:",
+                "Current Local Timestamp:",
                 "Live Configuration Hash:",
             ] {
                 if line.starts_with(field) {

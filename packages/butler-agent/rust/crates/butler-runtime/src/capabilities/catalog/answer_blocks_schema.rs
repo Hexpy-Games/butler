@@ -185,7 +185,7 @@ fn string_check(text: &str, schema: &Value, path: &str, problems: &mut Vec<Answe
                 problems,
                 path,
                 format!(
-                    "use {} {limit} characters; move longer detail to reply text or a table",
+                    "use {} {limit} characters; move longer detail to reply text",
                     if too_long { "at most" } else { "at least" }
                 ),
             );
