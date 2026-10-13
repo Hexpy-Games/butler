@@ -31,6 +31,8 @@ export type NativeAppServerOptions = {
   /** Marks first-chat onboarding complete before launch. Default true. */
   onboardingComplete?: boolean;
   stubReply?: (request: StubModelRequest) => string | Promise<string>;
+  /** Offline provider deltas, paced by the scenario. */
+  stubTextStream?: (request: StubModelRequest) => AsyncIterable<string>;
   /** Deterministic tool response for browser tests of durable forms. */
   stubToolCall?: (request: StubModelRequest) => { name: string; arguments: Record<string, unknown> } | null;
   readyTimeoutMs?: number;
@@ -290,6 +292,7 @@ export async function startStubModel(
   reply: NativeAppServerOptions["stubReply"],
   calls: StubModelRequest[],
   toolReply?: NativeAppServerOptions["stubToolCall"],
+  textStream?: NativeAppServerOptions["stubTextStream"],
 ): Promise<{ server: Server; port: number }> {
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
@@ -318,7 +321,14 @@ export async function startStubModel(
     }
     response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
     const base = { id: `stub-${calls.length}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model: "stub" };
-    response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: "assistant", content: text, ...(toolCalls ? { tool_calls: toolCalls.map((tool, index) => ({ ...tool, index })) } : {}) } }] })}\n\n`);
+    if (textStream && !toolCalls) {
+      for await (const content of textStream(call)) {
+        if (response.destroyed) break;
+        response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: "assistant", content } }] })}\n\n`);
+      }
+    } else {
+      response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: "assistant", content: text, ...(toolCalls ? { tool_calls: toolCalls.map((tool, index) => ({ ...tool, index })) } : {}) } }] })}\n\n`);
+    }
     response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: finishReason }], usage })}\n\n`);
     response.end("data: [DONE]\n\n");
   });
@@ -352,7 +362,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
   cpSync(uiRoot, join(resources, "app-client/dist"), { recursive: true });
 
   const stubModelCalls: StubModelRequest[] = [];
-  const stub = await startStubModel(options.stubReply, stubModelCalls, options.stubToolCall);
+  const stub = await startStubModel(options.stubReply, stubModelCalls, options.stubToolCall, options.stubTextStream);
   if (options.onboardingComplete !== false) writeOnboardingComplete(butlerData);
   const configPath = join(butlerData, "butler.config.json");
   if (!existsSync(configPath)) {
