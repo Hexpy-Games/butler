@@ -64,6 +64,12 @@ pub(super) fn sizing_counts_image_allowance_and_preserves_complete_wire_bytes() 
 }
 
 pub(super) fn long_history_sizing_matches_full_projection() {
+    for sample in 0..5 {
+        long_history_sizing_sample(sample);
+    }
+}
+
+fn long_history_sizing_sample(sample: usize) {
     let (catalog, snapshot) = catalog();
     let cache = super::super::sizing::Cache::default();
     let mut projection_cache = super::super::prefix_diagnostics::components::Cache::default();
@@ -123,7 +129,7 @@ pub(super) fn long_history_sizing_matches_full_projection() {
         assert_eq!(cached_text, text);
         assert_eq!(cached_images, images);
         eprintln!(
-            "sizing round={round} messages={} images={images} wire_bytes={} pressure_bytes={} measure_ms={:.3}",
+            "sizing sample={sample} round={round} messages={} images={images} wire_bytes={} pressure_bytes={} measure_ms={:.3}",
             messages.len(),
             wire.len(),
             measured.pressure_bytes,
