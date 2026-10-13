@@ -5,6 +5,39 @@
   aspect-ratio: 1;
   border-radius: var(--radius-pill);
   background: var(--accent);
+  opacity: 1;
+  transform: scale(1);
+  /* Transitions, not keyframes: a dot that returns mid-exit reverses from
+     where it is instead of restarting. */
+  transition:
+    opacity var(--motion-base) var(--motion-ease-decelerate),
+    transform var(--motion-base) var(--motion-ease-decelerate);
+}
+
+/* Enter: scale up from 60% while fading in, in the slot the spinner left. */
+@starting-style {
+  .dot[data-state="open"] {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+/* Exit when read: a quick fade in place. */
+.dot[data-state="closed"] {
+  opacity: 0;
+  transition: opacity var(--motion-exit-base) var(--motion-ease-accelerate);
+}
+
+/* Reduced motion (OS setting or the app override): the dot appears and
+   disappears at once. */
+.dot[data-reduced] {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot {
+    transition: none;
+  }
 }
 
 /* Forced colors drop backgrounds; keep the dot visible in the text color. */

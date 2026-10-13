@@ -12,8 +12,11 @@ The trailing slot of `NavRow` and `CollapsibleNavGroup` rows, in the same column
 ## Why to use this component
 It aligns with the other status marks (first line, sidebar density) and keeps one look for "new" across the app.
 
+## Motion
+It scales from 60% and fades in over `--motion-base` (decelerate), and fades out over `--motion-exit-base` (accelerate) when read. Both are transitions, so a dot that comes back mid-exit reverses in place. Under reduced motion (OS or app setting) it shows and hides at once. Keep it mounted with `present={false}` so the exit can play; `onExitComplete` tells you when the slot is free.
+
 ## How to use this component
-`<UnreadDot label="Unread" />`. Show one trailing mark at a time: attention, then working, then unread. Put the same label in the row's `ariaDescription`, because a row's own name hides the marks inside it.
+`<UnreadDot label="Unread" present={unread} />`. Show one trailing mark at a time: attention, then working, then unread. Put the same label in the row's `ariaDescription`, because a row's own name hides the marks inside it.
 
 ## Who can use this component
 Product components and blocks.

@@ -10,7 +10,7 @@ export function SpaceActivity({ session }: { session?: SessionSummary }) {
   useAppLocale();
   const unread = useSessionUnread(session);
   const activity = spaceActivity(session);
-  if (!activity) return unread ? <UnreadDot label={appCopy.space.unread} /> : null;
+  if (!activity) return <UnreadDot label={appCopy.space.unread} present={unread} />;
   return (
     <IconSlot
       size="sidebar"

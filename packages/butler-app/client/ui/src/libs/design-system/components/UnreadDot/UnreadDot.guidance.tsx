@@ -47,7 +47,7 @@ export const guidance: ShowcaseGuidance = {
   content: ["Label it Unread (읽지 않음)."],
   accessibility: [
     "role=\"img\" with the label. Inside a row with its own name, also pass the label as the row's ariaDescription.",
-    "Static: no animation, so reduced motion needs no change. Forced colors draw it in the text color.",
+    "Never pulses. Enter and exit are short transitions; reduced motion shows and hides it at once. Forced colors draw it in the text color.",
   ],
-  tokens: ["--accent", "--radius-pill", "--sidebar-icon-size"],
+  tokens: ["--accent", "--radius-pill", "--sidebar-icon-size", "--motion-base", "--motion-exit-base", "--motion-ease-decelerate", "--motion-ease-accelerate"],
 };

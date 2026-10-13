@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { useOrganization } from "@/app/space/organization";
@@ -20,6 +21,10 @@ export function SpaceRowActions({ row, collapsible, menuOpen, onMenuChange }: {
   const expanded = useOrganization(s => !s.collapsed.includes(row.node.key));
   const toggle = useOrganization(s => s.toggle);
   const unreadInside = useButlerStore(s => unreadAncestors(projectSpace(s.navigation)).has(row.node.key));
+  const showDot = !expanded && unreadInside;
+  // The dot keeps the rest slot until its exit fade ends; then the chevron returns.
+  const [dotMounted, setDotMounted] = useState(showDot);
+  if (showDot && !dotMounted) setDotMounted(true);
   const menu = <SpaceRowMenu row={row} open={menuOpen} onOpenChange={onMenuChange} />;
   if (row.node.kind === "session") return menu;
   return (
@@ -34,7 +39,9 @@ export function SpaceRowActions({ row, collapsible, menuOpen, onMenuChange }: {
         </IconButton>
       )}
       {collapsible ? (
-        <NavRowSwap open={menuOpen} rest={!expanded && unreadInside ? <UnreadDot label={appCopy.space.unread} /> : (
+        <NavRowSwap open={menuOpen} rest={dotMounted ? (
+          <UnreadDot label={appCopy.space.unread} present={showDot} onExitComplete={() => setDotMounted(false)} />
+        ) : (
           <IconButton
             // The row already toggles with Enter/Space. Keep one keyboard target for that action.
             tabIndex={-1}
