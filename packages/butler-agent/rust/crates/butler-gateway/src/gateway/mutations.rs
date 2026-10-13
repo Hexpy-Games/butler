@@ -9,6 +9,7 @@ pub trait GatewayMutationCommands: Send + Sync + 'static {
         _id: String,
         _run_id: String,
         _code: String,
+        _tainted: bool,
     ) -> ApplicationFuture<AutomationRunSummary> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

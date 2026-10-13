@@ -1,12 +1,13 @@
+import { appCopy } from "./copy.ts";
 import type { AppCopy } from "./copy.ts";
 import { approvalTargetsFromTransport, isAbsolutePath } from "./approvalTargets.ts";
-import type { ApprovalRisk, ApprovalSummary, AuthorityApprovalCard } from "./types.ts";
+import type { AccessMode, ApprovalRisk, ApprovalSummary, AuthorityApprovalCard } from "./types.ts";
 
 type ApprovalRequestCopy = AppCopy["interfaceTemplates"]["approvalRequest"];
 
 /** The `approval.action_kind` values the agent sends (#277). */
 export const APPROVAL_ACTION_KINDS = [
-  "edit_files", "run_command", "network_command", "use_connector", "manage_schedule",
+  "edit_files", "run_command", "network_command", "web_request", "use_connector", "manage_schedule",
   "update_project", "start_conversation", "restart_service", "create_worktree", "other",
 ] as const;
 export type ApprovalActionKind = (typeof APPROVAL_ACTION_KINDS)[number];
@@ -64,6 +65,7 @@ export function normalizeApprovalSummary(value: unknown): ApprovalSummary | unde
   return {
     actionKind, targets, count, examples,
     ...(operation ? { operation } : {}),
+    ...(isAccessMode(value.schedule_access_mode) ? { scheduleAccessMode: value.schedule_access_mode } : {}),
     ...(value.command_access === "read_only_unisolated" ? { commandAccess: value.command_access } : {}),
     ...(examplesTruncated.some(Boolean) ? { examplesTruncated } : {}),
     ...(typeof risk === "string" && RISKS.includes(risk) ? { risk: risk as ApprovalRisk } : {}),
@@ -77,8 +79,8 @@ function normalizeBrowserSteps(value: unknown): BrowserStep[] | undefined {
     if (!isRecord(step) || typeof step.action !== "string" || typeof step.role !== "string"
       || typeof step.name !== "string" || typeof step.frame !== "string" || !Array.isArray(step.addons)
       || !step.addons.every((addon): addon is string => typeof addon === "string")) return [];
-    return [{action: step.action, role: step.role, name: step.name, frame: step.frame,
-      ...(typeof step.value_preview === "string" ? {value_preview: step.value_preview} : {}), addons: step.addons}];
+    return [{ action: step.action, role: step.role, name: step.name, frame: step.frame,
+      ...(typeof step.value_preview === "string" ? { value_preview: step.value_preview } : {}), addons: step.addons }];
   });
 }
 
@@ -123,13 +125,15 @@ export function approvalRequestView(
   const workspace = workspaceLabel(approval);
   const operation = approval.operation;
   return {
-    title: operation ? copy.operation(toolLabels[operation.tool] ?? operation.tool.replaceAll("_", " "), operation.access === "read_only")
+    title: actionKind === "web_request" ? copy.webRequest : actionKind === "manage_schedule" ? sentence(actionKind, approval, workspace, copy) : operation ? copy.operation(toolLabels[operation.tool] ?? operation.tool.replaceAll("_", " "), operation.access === "read_only")
       : sentence(actionKind, approval, workspace, copy),
-    details: operation ? [...(operation.command ? [operation.command] : []), ...operation.targets.map((target,index)=>index===0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target),
+    details: [...(card.reason === "authority.taintReason" ? [copy.taintReason] : []),
+      ...(approval.scheduleAccessMode ? [copy.scheduleMode(accessLabel(approval.scheduleAccessMode))] : []),
+      ...(actionKind === "web_request" ? [copy.webRequestDesc] : []), ...(operation ? [...(operation.command ? [operation.command] : []), ...operation.targets.map((target, index)=>index===0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target),
       ...(operation.tool === "browser_sign_in_wait" ? [copy.signInStep(operation.sign_in_step ?? "unknown_form")] : []),
       ...(operation.tool === "browser_pay_wait" ? [copy.payStep(operation.wait_reason ?? "unknown_form")] : []),
       ...(operation.browser_steps ?? []).map(step => [copy.browserStep(step.action, step.role, step.name, step.frame), step.value_preview, ...step.addons].filter(Boolean).join(" · "))]
-      : details(approval, actionKind, card, copy),
+      : details(approval, actionKind, card, copy))],
     pathDetails: operation?.targets ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
       ...approval.targets.filter(target => target.kind === "outside").map(target => target.path)],
     risk: approval.risk ?? "high",
@@ -145,6 +149,7 @@ function sentence(kind: ApprovalActionKind, approval: ApprovalSummary, workspace
   switch (kind) {
     case "edit_files": return outside ? copy.editFilesOutside(approval.count) : copy.editFiles(approval.count, workspace);
     case "run_command": return outside ? copy.runCommandOutside : copy.runCommand(workspace);
+    case "web_request": return copy.webRequest;
     case "network_command": return outside ? copy.networkCommandOutside : copy.networkCommand(workspace);
     case "use_connector": {
       const path = approval.targets.find((target) => target.kind === "connector")?.path.trim() ?? "";
@@ -227,4 +232,12 @@ export function browserHandoffView(
   if (operation?.tool !== "browser_wait_for_user") return undefined;
   const reason = operation.wait_reason ?? "other";
   return { title: copy.waitHandoff(reason), details: site ? [site, where] : [where], signIn: ["sign_in", "secure_field", "secure_keypad"].includes(reason) };
+}
+
+function isAccessMode(value: unknown): value is AccessMode {
+  return typeof value === "string" && ["auto", "read_only", "ask_first", "ask_except_reads", "full_access"].includes(value);
+}
+function accessLabel(mode: AccessMode): string {
+  const p = appCopy.permissions;
+  return { auto: p.auto, read_only: p.readOnly, ask_first: p.askAlways, ask_except_reads: p.askFirst, full_access: p.fullAccess }[mode];
 }

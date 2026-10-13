@@ -1693,6 +1693,7 @@ export interface TimelineEvent {
     event_id?: string;
     /** `settings.updated`: the changed settings subset. */
     settings?: Record<string, unknown>;
+    tainted?: boolean;
     /** `automation.run`: the run's conversation and its safe error code. */
     target_session_id?: string;
     safe_error_code?: string;
@@ -1850,6 +1851,7 @@ export interface ApprovalSummary {
   /** Exact local decision facts; do not apply workspace-label normalization. */
   operation?: { tool: string; access: "read_only" | "change"; targets: string[]; command?: string; allow_conversation?: boolean; browser_mode?: "signed_out" | "signed_in"; sign_in_step?: string; wait_reason?: string; browser_steps?: Array<{ action: string; role: string; name: string; frame: string; value_preview?: string | null; addons: string[] }> };
   commandAccess?: "read_only_unisolated";
+  scheduleAccessMode?: AccessMode;
   actionKind: string;
   /** The folder first where there is one, then files, a connector or a named target. */
   targets: ApprovalTarget[];

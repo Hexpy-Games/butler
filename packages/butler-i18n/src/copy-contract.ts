@@ -189,6 +189,10 @@ export interface ApprovalRequestCopy {
   runCommandOutside: string;
   readOnlyUnisolated: string;
   networkCommandOutside: string;
+  webRequest: string;
+  webRequestDesc: string;
+  taintReason: string;
+  scheduleMode: (mode: string) => string;
   runCommand: (workspace: string | null) => string;
   networkCommand: (workspace: string | null) => string;
   useConnector: (tool: string | null, server: string | null) => string;
@@ -1391,6 +1395,7 @@ export interface AppCopy {
       contextLimit: string;
       /** Settings → General → Default permission: the new-chat field. */
       chatAccess: string;
+      scheduleAccess: string;
       planModeDefault: string;
       name: string;
       job: string;
@@ -1491,6 +1496,7 @@ export interface AppCopy {
     descriptions: {
       runtimeSupportedModelsOnly: string;
       chatAccess: string;
+      scheduleAccess: string;
       language: string;
       timezone: string;
       consolidationModel: string;

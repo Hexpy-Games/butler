@@ -590,6 +590,10 @@ export const koKrCopy: AppCopy = {
       editFilesOutside: count => `작업 폴더 밖을 포함한 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
       readOnlyUnisolated: "읽기 전용 요청 · 격리 없음",
       runCommandOutside: "작업 폴더 밖에서 명령을 실행할까요?",
+      webRequest: "웹 요청을 보낼까요?",
+      webRequestDesc: "외부에서 읽은 내용이 포함될 수 있습니다.",
+      taintReason: "방금 외부에서 가져온 내용을 읽어서 다시 확인합니다.",
+      scheduleMode: mode => `실행 권한: ${mode}`,
       networkCommandOutside: "작업 폴더 밖에서 인터넷을 쓰는 명령을 실행할까요?",
       runCommand: workspace => `${workspaceName(workspace)}에서 명령을 실행할까요?`,
       networkCommand: workspace => `${workspaceName(workspace)}에서 인터넷을 쓰는 명령을 실행할까요?`,
@@ -1612,6 +1616,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       consolidationModel: "대화 기억 정리 모델",
       localReasoningBudget: "로컬 추론 예산",
       contextLimit: "컨텍스트 한도",
+      scheduleAccess: "예약 작업 기본 권한",
       chatAccess: "새 대화",
       planModeDefault: "기본으로 계획 모드 사용",
       name: "이름",
@@ -1715,6 +1720,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     descriptions: {
       runtimeSupportedModelsOnly:
         "현재 실행 가능한 제공자의 모델만 표시합니다.",
+      scheduleAccess: "새 예약 작업이 이 권한으로 실행됩니다.",
       chatAccess: "새 대화가 이 권한으로 시작합니다. 대화마다 바꿀 수 있습니다.",
       language: "버틀러 앱의 인터페이스 언어를 설정합니다",
       timezone:

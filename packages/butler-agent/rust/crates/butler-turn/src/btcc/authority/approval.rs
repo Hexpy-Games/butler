@@ -46,6 +46,9 @@ pub struct AuthorityApproval {
     /// Declared observation intent; OS isolation is unavailable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command_access: Option<String>,
+    /// Exact reviewed schedule mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schedule_access_mode: Option<String>,
 }
 
 /// What kind of action waits for the user.
@@ -58,6 +61,8 @@ pub enum ApprovalActionKind {
     RunCommand,
     /// Run a command that reaches the network.
     NetworkCommand,
+    /// A web URL or search query carrying outside content.
+    WebRequest,
     /// Call a tool of a connected MCP server.
     UseConnector,
     /// Create, delete or run schedules.
@@ -121,6 +126,12 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
     match facts.capability {
         "run_command" | "preview_start" => command(facts, ApprovalActionKind::RunCommand),
         "run_command_remote_observation" => command(facts, ApprovalActionKind::NetworkCommand),
+        "web_read" | "web_search" => single(
+            ApprovalActionKind::WebRequest,
+            ApprovalTargetKind::Other,
+            facts.target,
+            ApprovalRisk::High,
+        ),
         "call_mcp_tool" => single(
             ApprovalActionKind::UseConnector,
             ApprovalTargetKind::Connector,
@@ -238,6 +249,7 @@ fn file_edits(facts: ApprovalFacts<'_>) -> AuthorityApproval {
     targets.extend(files);
     AuthorityApproval {
         operation: None,
+        schedule_access_mode: None,
         command_access: None,
         action_kind: ApprovalActionKind::EditFiles,
         targets,
@@ -280,6 +292,7 @@ fn file_reads(facts: ApprovalFacts<'_>) -> AuthorityApproval {
         examples_truncated: vec![false; paths.len()],
         examples: paths,
         risk: ApprovalRisk::Low,
+        schedule_access_mode: None,
         command_access: None,
     }
 }
@@ -320,6 +333,7 @@ fn command(facts: ApprovalFacts<'_>, kind: ApprovalActionKind) -> AuthorityAppro
         .unzip();
     AuthorityApproval {
         operation: None,
+        schedule_access_mode: None,
         command_access: (!butler_platform::command_sandbox::approval_free_reads()
             && matches!(
                 facts.input.get("state_effect").and_then(Value::as_str),
@@ -355,6 +369,7 @@ fn single(
 ) -> AuthorityApproval {
     AuthorityApproval {
         operation: None,
+        schedule_access_mode: None,
         command_access: None,
         action_kind,
         targets: vec![ApprovalTarget {

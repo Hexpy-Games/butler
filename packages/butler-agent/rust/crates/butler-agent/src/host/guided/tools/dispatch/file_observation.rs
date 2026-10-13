@@ -112,13 +112,13 @@ pub(in crate::host::guided::tools) async fn gate(
             action_key: occurrence.into(),
             authority_generation: 1,
             capability: call.name.clone(),
-            target: format!("observation:{}", call.name),
+            target: request_target(call, args),
             normalized_input: args.clone(),
             model_ref: owner.binding.model_ref.clone(),
             reasoning_effort: owner.binding.reasoning_effort.clone(),
             category: Some(category(call).into()),
-            public_action_title: Some(call.name.clone()),
-            honor_standing_permission: true,
+            public_action_title: Some(approval_reason(call)),
+            honor_standing_permission: !matches!(call.name.as_str(), "web_read" | "web_search"),
             unattended: owner.unattended(),
         })
         .await
@@ -142,7 +142,9 @@ pub(in crate::host::guided::tools) async fn gate(
 }
 
 fn category(call: &ModelRoundToolCall) -> &'static str {
-    if call.name == "run_command" {
+    if matches!(call.name.as_str(), "web_read" | "web_search") {
+        "reviewed_effect"
+    } else if call.name == "run_command" {
         "command_observation"
     } else {
         "file_observation"
@@ -151,7 +153,16 @@ fn category(call: &ModelRoundToolCall) -> &'static str {
 
 /// What an observation reads, for an unattended run's report.
 fn observed(call: &ModelRoundToolCall, args: &Value) -> String {
-    let paths: Vec<&str> = if call.name == "run_command" {
+    let paths: Vec<&str> = if matches!(call.name.as_str(), "web_read" | "web_search") {
+        args[if call.name == "web_read" {
+            "url"
+        } else {
+            "query"
+        }]
+        .as_str()
+        .into_iter()
+        .collect()
+    } else if call.name == "run_command" {
         args["command"]
             .as_str()
             .and_then(|command| command.split_whitespace().next())
@@ -199,4 +210,19 @@ fn normalized(owner: &GuidedTools, call: &ModelRoundToolCall) -> Result<Value, T
         args["root"] = json!(absolute(args["root"].as_str().unwrap_or(".")));
     }
     Ok(args)
+}
+
+fn request_target(call: &ModelRoundToolCall, args: &Value) -> String {
+    if matches!(call.name.as_str(), "web_read" | "web_search") {
+        observed(call, args)
+    } else {
+        format!("observation:{}", call.name)
+    }
+}
+fn approval_reason(call: &ModelRoundToolCall) -> String {
+    if matches!(call.name.as_str(), "web_read" | "web_search") {
+        "authority.taintReason".into()
+    } else {
+        call.name.clone()
+    }
 }

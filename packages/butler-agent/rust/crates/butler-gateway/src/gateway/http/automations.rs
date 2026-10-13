@@ -62,7 +62,7 @@ pub(super) async fn route(
             StatusCode::OK,
             state
                 .application
-                .automation_run_attention(decode(id)?, decode(run_id)?, input.code)
+                .automation_run_attention(decode(id)?, decode(run_id)?, input.code, input.tainted)
                 .await?,
         );
     }
@@ -183,6 +183,8 @@ fn list_query(uri: &Uri) -> (Option<String>, bool) {
 /// The body of a run attention report.
 #[derive(serde::Deserialize)]
 struct AttentionRequest {
+    #[serde(default)]
+    tainted: bool,
     code: String,
 }
 fn not_found() -> HttpError {

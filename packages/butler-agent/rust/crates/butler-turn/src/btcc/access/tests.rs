@@ -1,4 +1,5 @@
 #![allow(clippy::unwrap_used, reason = "security boundary assertions")]
+mod web;
 use super::*;
 use crate::btcc::ApprovalRisk;
 use AccessDecision::{Allow, Ask, Deny};
@@ -6,7 +7,7 @@ use AccessMode::{AskAlways, AskExceptReads, Auto, FullAccess, ReadOnly};
 use CapabilityKind::{
     ButlerOutput, CommandMutation, CommandObservation, Connector, CrossConversation, Exempt,
     FileEdit, FileRead, FullOnly, InternalRead, Network, OtherEffect, ProjectRecord, Schedule,
-    SettingsWrite,
+    SettingsWrite, WebRequest,
 };
 use TargetScope::{NoTarget, Outside, ProjectFolder, Protected};
 use butler_core::tool_protocol::ToolName;
@@ -108,6 +109,10 @@ const KINDS: &[CapabilityKind] = &[
     Exempt(ApprovalExemptAction::AttachedImageAnalysis),
     Exempt(ApprovalExemptAction::LibraryOrganize),
     InternalRead,
+    WebRequest {
+        carries_data: false,
+    },
+    WebRequest { carries_data: true },
     FileRead,
     CommandObservation { sandboxed: true },
     CommandObservation { sandboxed: false },
@@ -133,6 +138,13 @@ const KINDS: &[CapabilityKind] = &[
 fn expected(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     if *mode == FullAccess {
         return Allow;
+    }
+    if let WebRequest { carries_data } = request.kind {
+        return match (mode, request.taint, carries_data) {
+            (_, TurnTaint::Clean, _) | (_, _, false) => Allow,
+            (ReadOnly, _, true) => Deny(DenyReason::ReadOnly),
+            _ => Ask(GrantUse::Ignore),
+        };
     }
     if [
         FullOnly(FullOnlyAction::ServiceRestart),
@@ -175,6 +187,7 @@ fn order(decision: AccessDecision) -> u8 {
 #[test]
 fn access_boundary_matches_the_owner_table() {
     contained_read_rechecks_swapped_secret();
+    web::boundaries();
     assert_eq!(
         AccessMode::ALL.map(|mode| mode.as_str()),
         butler_core::tool_protocol::ACCESS_MODE_WIRE_NAMES,

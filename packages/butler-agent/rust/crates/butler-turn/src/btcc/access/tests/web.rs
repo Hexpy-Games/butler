@@ -1,0 +1,31 @@
+use super::super::{web_read_carries_data, web_search_carries_data};
+
+pub(super) fn boundaries() {
+    for (url, carries) in [
+        ("https://example.com/news", false),
+        ("https://example.com/?q=note", true),
+        ("https://example.com/#note", true),
+        ("https://user@example.com/", true),
+        ("https://example.com/abcdefghijklmnopqrstuvwx", true),
+        ("https://example.com/.abcdefghijklmnopqrstuvw", false),
+        ("https://example.com/000000000000000000000000", true),
+        ("https://example.com/abcdefghijkl/mnopqrstuvwx", true),
+    ] {
+        assert_eq!(web_read_carries_data(url, false), carries, "{url}");
+        assert!(!web_read_carries_data(url, true), "provenance: {url}");
+    }
+    let query_url = format!("https://example.com/?q={}", "x".repeat(30));
+    assert!(web_read_carries_data(&query_url, false));
+    assert!(!web_read_carries_data(&query_url, true));
+    assert!(web_search_carries_data(&"x ".repeat(65)));
+    let long_path = format!("https://example.com/{}", ".".repeat(40));
+    assert!(web_read_carries_data(&long_path, false));
+    assert!(!web_read_carries_data(
+        &long_path.replace(&".".repeat(40), &".".repeat(39)),
+        false
+    ));
+    assert!(!web_search_carries_data(&"x ".repeat(59)));
+    assert!(web_search_carries_data(&"x ".repeat(60)));
+    assert!(!web_search_carries_data(&"가".repeat(23)));
+    assert!(web_search_carries_data(&"가".repeat(24)));
+}

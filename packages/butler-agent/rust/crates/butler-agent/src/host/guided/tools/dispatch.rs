@@ -6,6 +6,7 @@ mod project;
 mod publication;
 mod steward;
 mod web;
+pub(super) use web::web_provenance;
 mod work;
 mod worker;
 use butler_core::tool_protocol::ToolName;

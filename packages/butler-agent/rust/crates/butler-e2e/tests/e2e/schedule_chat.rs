@@ -95,7 +95,12 @@ async fn ordinary_chat_creates_schedule_only_after_approval() -> Result<(), Harn
         .as_str()
         .or_else(|| request["ref"].as_str())
         .unwrap();
+    assert_eq!(request["approval"]["schedule_access_mode"], "full_access");
     assert_eq!(s.gw.get("/automations/morning-briefing").await?.status, 404);
+    let changed =
+        s.gw.patch("/settings", json!({"schedule_access_mode":"read_only"}))
+            .await?;
+    assert_eq!(changed.status, 200);
     let allowed =
         s.gw.post(
             &format!("/authority-requests/{reference}/allow?session_id=general"),

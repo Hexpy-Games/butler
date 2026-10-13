@@ -87,7 +87,7 @@ async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), Harn
         sandbox_holds(&s, &chat, &script, &project).await?;
     }
     risky_steps_ask(&s, &chat, &script, &outside).await?;
-    external_content_reasks(&s, &chat, &script, &outside).await?;
+    external_content_reasks(&mut s, &chat, &script, &outside).await?;
     unattended_schedule(&s, &chat, &script, &outside).await?;
     eprintln!(
         "PERM-02 complete: elapsed_ms={} model_requests={}",
@@ -214,14 +214,14 @@ async fn risky_steps_ask(
 /// D5: a standing "allow in this conversation" covers a network command until
 /// the turn reads external content; then the same command asks again.
 async fn external_content_reasks(
-    s: &Scenario,
+    s: &mut Scenario,
     chat: &str,
     script: &Arc<Script>,
     outside: &Path,
 ) -> Result<(), HarnessError> {
-    let net = || {
+    let net = |id: &str| {
         call(
-            "net-echo",
+            id,
             "run_command",
             &json!({"command":"echo remote-ok","summary":"Check remote","state_effect":"remote_observation"}),
         )
@@ -232,11 +232,11 @@ async fn external_content_reasks(
         &json!({"requests":[{"path":outside.to_string_lossy()}]}),
     );
     let rounds = [
-        ("Check the remote once.", vec![net()]),
-        ("Check the remote again.", vec![net()]),
+        ("Check the remote once.", vec![net("net-echo")]),
+        ("Check the remote again.", vec![net("net-echo")]),
         (
             "Read the outside note, then check the remote.",
-            vec![read_outside, net()],
+            vec![read_outside, net("net-echo"), net("net-after-restart")],
         ),
     ];
     for (prompt, steps) in &rounds {
@@ -268,9 +268,25 @@ async fn external_content_reasks(
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     assert_counts(s, &id, 2, 1)?;
+    let cards = s.gw.approval_requests(chat).await?;
+    assert_eq!(cards[0]["reason"], "authority.taintReason");
+    s.restart().await?;
+    decide_all(s, chat, "allow", "once").await?;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while s.gw.approval_requests(chat).await?.is_empty() {
+        assert!(Instant::now() < deadline, "taint was lost across restart");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_counts(s, &id, 3, 1)?;
+    assert_eq!(
+        s.gw.approval_requests(chat).await?[0]["reason"],
+        "authority.taintReason"
+    );
     decide_all(s, chat, "deny", "once").await?;
     delivered(s, chat, &id).await?;
-    eprintln!("PERM-02 taint: granted=honored after_external_read=asked authority_count=2");
+    eprintln!(
+        "PERM-02 taint: granted=honored after_external_read=asked restart_preserved=true authority_count=3"
+    );
     Ok(())
 }
 
@@ -301,12 +317,24 @@ async fn unattended_schedule(
     script: &Arc<Script>,
     outside: &Path,
 ) -> Result<(), HarnessError> {
+    let settings =
+        s.gw.patch("/settings", json!({"plan_mode_default":true}))
+            .await?;
+    assert_eq!(settings.status, 200);
     let step = mutation("cleanup", &format!("rm -f '{}'", outside.display()));
-    script
-        .rounds
-        .lock()
-        .unwrap()
-        .insert(SCHEDULED.into(), vec![step.clone(), done(), step]);
+    script.rounds.lock().unwrap().insert(
+        SCHEDULED.into(),
+        vec![
+            call(
+                "scheduled-note",
+                "write_file",
+                &json!({"path":"scheduled-note.md","content":"planned auto edit"}),
+            ),
+            step.clone(),
+            done(),
+            step,
+        ],
+    );
     let created =
         s.gw.post(
             "/automations",
@@ -327,7 +355,26 @@ async fn unattended_schedule(
     let turn = run["turn_id"].as_str().unwrap().to_owned();
     let waited = Instant::now();
     delivered(s, chat, &turn).await?;
+    let scheduled_turn =
+        s.gw.wait_terminal(chat, &turn, Duration::from_secs(20))
+            .await?;
+    assert_eq!(
+        scheduled_turn["execution_controls"]["plan_mode"], true,
+        "{scheduled_turn}"
+    );
+    assert_eq!(
+        scheduled_turn["execution_controls"]["access_mode"], "auto",
+        "{scheduled_turn}"
+    );
     assert_counts(s, &turn, 0, 0)?;
+    let scheduled_note = outside
+        .parent()
+        .unwrap()
+        .join("proj/작업 Project/scheduled-note.md");
+    assert_eq!(
+        std::fs::read_to_string(scheduled_note)?,
+        "planned auto edit"
+    );
     let output = outputs(s, chat, &turn, script, SCHEDULED).await?;
     assert!(
         output
@@ -345,6 +392,13 @@ async fn unattended_schedule(
         waited.elapsed().as_millis()
     );
 
+    let controls =
+        s.gw.patch(
+            &format!("/sessions/{chat}/controls"),
+            json!({"plan_mode":false}),
+        )
+        .await?;
+    assert_eq!(controls.status, 200);
     let manual =
         s.gw.post(&format!("/automations/{schedule}/run"), json!({}))
             .await?;

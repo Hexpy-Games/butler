@@ -7,9 +7,13 @@ impl GatewayMutationCommands for AppApplication {
         id: String,
         run_id: String,
         code: String,
+        tainted: bool,
     ) -> ApplicationFuture<crate::gateway::AutomationRunSummary> {
         let this = self.clone_handle();
-        Box::pin(async move { this.automation_run_attention_owned(id, run_id, code).await })
+        Box::pin(async move {
+            this.automation_run_attention_owned(id, run_id, code, tainted)
+                .await
+        })
     }
     fn preview_session_open(&self, id: String) -> ApplicationFuture<bool> {
         let this = self.clone_handle();

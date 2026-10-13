@@ -3,6 +3,7 @@
 mod auto;
 mod sandbox_data_reads;
 pub(super) mod stub;
+mod web_guard;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
