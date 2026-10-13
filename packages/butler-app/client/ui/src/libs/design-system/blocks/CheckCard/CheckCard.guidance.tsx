@@ -57,14 +57,15 @@ export const guidance: ShowcaseGuidance = {
     "Title: the item's own name (Codex, linear, Bookmarks). Description: what it holds or what it needs, in a few words (MCP server · Needs a key).",
     "Start items checked when they are what people usually want; let the action button carry the verb (Import, Next).",
     "The icon is bare: a logo or glyph with no tile or boxed background behind it.",
+    "Leading icon = title text size, aligned to the title line; trailing controls vertically centered.",
   ],
   accessibility: [
     "Each card is a button with role=checkbox and aria-checked; click or Space toggles it. The description is its aria-describedby.",
     "CheckCardList is a ul with role=group; pass label, or aria-labelledby pointing at the step title or a legend.",
     "disabledReason keeps the card focusable (aria-disabled) so keyboard and pointer users can read the tooltip.",
-    "Motion: checking fills the ring from the centre and draws the check; unchecking reverses, quicker. Press scales on --motion-scale-press. Reduced motion keeps only fades.",
+    "Motion: checking fills the ring from the centre and draws the check; unchecking reverses, quicker. Press fades in the stretched-row pressed fill; the card never scales. Reduced motion keeps only fades.",
   ],
   tokens: ["--control-bg", "--control-hover-bg", "--line", "--line-strong", "--accent", "--color-info-bg", "--primary-foreground", "--radius-panel", "--radius-pill", "--focus-ring",
-    "--icon-size-lg", "--border-width-strong", "--motion-base", "--motion-fast", "--motion-instant", "--motion-exit-base", "--motion-exit-fast", "--motion-ease-standard",
-    "--motion-ease-decelerate", "--motion-ease-accelerate", "--motion-ease-draw", "--motion-scale-check", "--motion-scale-press"],
+    "--icon-size-sm", "--icon-size-md", "--icon-size-xs", "--border-hairline", "--selection-strong", "--motion-base", "--motion-fast", "--motion-instant", "--motion-exit-base", "--motion-exit-fast", "--motion-ease-standard",
+    "--motion-ease-decelerate", "--motion-ease-accelerate", "--motion-ease-draw", "--motion-scale-check"],
 };

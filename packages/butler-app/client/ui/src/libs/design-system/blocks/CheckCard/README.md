@@ -4,8 +4,8 @@
 A card that is picked or not. Several `CheckCard`s in a `CheckCardList` let
 people choose the items to act on: tools to import from, files and servers to
 bring over, things to include. It uses the ChoiceCard surface (border, radius,
-padding, hover, focus ring and selected look) with a round check indicator on
-the title line instead of a chevron.
+padding, hover, press fill, focus ring, selected look and leading glyph) with
+a round check indicator in place of the chevron.
 
 | Export | Props |
 | --- | --- |
@@ -30,22 +30,25 @@ import { CheckCard, CheckCardList, ProviderLogo } from "@/butler-ds";
 ```
 
 ## Indicator and motion
-- Unchecked: a ring (`--line-strong`, `--border-width-strong`) on the card
-  surface. Checked: the ring fills with `--accent` from the centre and the
+- Unchecked: a hairline ring (`--line-strong`, `--border-hairline`), the size of
+  a trailing chevron (`--icon-size-md`), on the card surface. Checked: the ring fills with `--accent` from the centre and the
   check (CheckIcon geometry) draws in on `--motion-ease-draw`; the card takes
   the ChoiceCard selected look.
 - Unchecking reverses quicker (exit tokens): the check undraws, then the fill
   clears. Both layers stay mounted, so toggling mid-animation reverses cleanly.
-- Press scales the card on `--motion-scale-press`; the border, background and
-  focus ring change on `--motion-base` / `--motion-fast`.
+- Press: the ChoiceCard pressed fill (`--selection-strong`) fades in under the
+  content on `--motion-fast`; the card never scales. The border, background
+  and focus ring change on `--motion-base` / `--motion-fast`.
 - Reduced motion: no scale and no stroke travel; only fades.
-- The glyph is bare (no IconTile or boxed background). The glyph and the
-  indicator center on the title's first line; the description starts at the
-  title's left edge. Line heights come from the type scale (Label, Caption).
 
-## Review variants
-`indicatorSide` (`end` | `start`) and `checkedMark` (`check` | `fill`) exist
-while the owner picks one look; they are removed once it is chosen.
+## Alignment
+Leading icon = title text size, aligned to the title line; trailing controls vertically centered.
+
+- The glyph is bare (no IconTile or boxed background), the title's text size,
+  and centers on the title's line in one-line and two-line cards alike.
+- The check indicator centers vertically on the card.
+- The description starts at the title's left edge. Line heights come from the
+  type scale (Label, Caption).
 
 ## Tags
 check, checkbox, multi-select, card, import

@@ -10,7 +10,7 @@ import surface from "../ChoiceCard/ChoiceCard.module.css";
 import styles from "./CheckCard.module.css";
 
 export interface CheckCardProps extends Omit<DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>>, "title" | "disabled" | "onChange" | "role"> {
-  /** Optional leading glyph (a ProviderLogo or an icon), shown bare: cards never put a tile behind it. */
+  /** Optional leading glyph (a ProviderLogo or an icon), shown bare at the title's text size on the title line. */
   icon?: ReactNode;
   title: ReactNode;
   description?: ReactNode;
@@ -20,10 +20,6 @@ export interface CheckCardProps extends Omit<DsBaseProps<ButtonHTMLAttributes<HT
   disabled?: boolean;
   /** Cannot be picked, with the reason in a tooltip; the card stays focusable so the reason can be read. */
   disabledReason?: string;
-  /** Review variant: the round indicator at the end (default) or the start of the card. */
-  indicatorSide?: "end" | "start";
-  /** Review variant: a checked indicator shows a check (default) or is only filled. */
-  checkedMark?: "check" | "fill";
 }
 
 /** CheckIcon's geometry (Hugeicons 24 grid), drawn as a stroke so it can draw in. */
@@ -33,15 +29,13 @@ const CHECK_PATH = "M5 14L8.5 17.5L19 6.5";
  * The round check indicator: a ring on the card surface. Checked fills it with the accent from the centre
  * and draws the check; both stay mounted so a toggle mid-animation reverses cleanly.
  */
-function Indicator({ checked, mark }: { checked: boolean; mark: "check" | "fill" }) {
+function Indicator({ checked }: { checked: boolean }) {
   return (
     <span aria-hidden="true" className={styles.indicator} data-checked={checked ? "true" : undefined}>
       <span className={styles.fill} />
-      {mark === "check" ? (
-        <svg className={styles.mark} viewBox="0 0 24 24" fill="none" focusable="false">
-          <path d={CHECK_PATH} pathLength={1} stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      ) : null}
+      <svg className={styles.mark} viewBox="0 0 24 24" fill="none" focusable="false">
+        <path d={CHECK_PATH} pathLength={1} stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
     </span>
   );
 }
@@ -52,11 +46,10 @@ function Indicator({ checked, mark }: { checked: boolean; mark: "check" | "fill"
  */
 export function CheckCard({
   icon, title, description, checked, onCheckedChange, disabled = false, disabledReason,
-  indicatorSide = "end", checkedMark = "check", className, onClick, ...props
+  className, onClick, ...props
 }: CheckCardProps) {
   const descriptionId = useId();
   const blocked = disabled || Boolean(disabledReason);
-  const indicator = <span className={styles.slot}><Indicator checked={checked} mark={checkedMark} /></span>;
   const card = (
     <button
       aria-describedby={description ? descriptionId : undefined}
@@ -65,7 +58,6 @@ export function CheckCard({
       aria-disabled={blocked ? true : undefined}
       className={cn(surface.card, styles.card, className)}
       data-icon={icon ? undefined : "none"}
-      data-indicator={indicatorSide}
       data-selected={checked ? "true" : undefined}
       data-slot="check-card"
       data-state={blocked ? "disabled" : "default"}
@@ -77,15 +69,14 @@ export function CheckCard({
         onCheckedChange(!checked);
       }}
     >
-      {indicatorSide === "start" ? indicator : null}
-      {icon ? <IconSlot className={dsClass(cn(surface.icon, styles.icon))} minHeight="line" size="lg">{icon}</IconSlot> : null}
+      {icon ? <IconSlot className={dsClass(surface.icon)} minHeight="line" size="sm">{icon}</IconSlot> : null}
       <span className={cn(surface.titleRow, styles.title)}>
         <Typo.Label as="span" truncate weight="semibold">{title}</Typo.Label>
       </span>
       {description ? (
         <Typo.Caption className={dsClass(cn(surface.description, styles.description))} id={descriptionId} truncate>{description}</Typo.Caption>
       ) : null}
-      {indicatorSide === "end" ? indicator : null}
+      <span className={styles.slot}><Indicator checked={checked} /></span>
     </button>
   );
   return disabledReason ? <Tooltip label={disabledReason}>{card}</Tooltip> : card;

@@ -12,7 +12,7 @@ import styles from "./ChoiceCard.module.css";
 export type ChoiceCardState = "default" | "loading" | "error" | "disabled";
 
 interface ChoiceBaseProps extends Omit<DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>>, "title" | "disabled"> {
-  /** The leading glyph (a ProviderLogo or an icon), shown bare: cards never put a tile behind it. */
+  /** The leading glyph (a ProviderLogo or an icon), shown bare at the title's text size: cards never put a tile behind it. */
   icon: ReactNode;
   title: ReactNode;
   description?: ReactNode;
@@ -32,7 +32,7 @@ export interface ChoiceCardProps extends ChoiceBaseProps {
 export interface ChoiceTileProps extends ChoiceBaseProps {
   /** Dashed, transparent tile for a choice that is not available yet. */
   placeholder?: boolean;
-  /** Corner glyph for the tile's own action (a refresh mark). */
+  /** Trailing glyph for the tile's own action (a refresh mark), centered on the tile's end. */
   cornerIcon?: ReactNode;
 }
 
@@ -56,7 +56,7 @@ function stateAttributes(state: ChoiceCardState, selected: boolean) {
   };
 }
 
-/** A full-width choice row: leading logo tile, title with tag, one-line description, trailing chevron. */
+/** A full-width choice row: leading glyph on the title line, title with tag, one-line description, trailing chevron centered. */
 export function ChoiceCard({
   icon, title, description, tag, meta, chevron = true, state = "default", selected = false, onClick, className, ...props
 }: ChoiceCardProps) {
@@ -73,7 +73,7 @@ export function ChoiceCard({
       data-slot="choice-card"
       onClick={guardedClick(state, onClick)}
     >
-      <IconSlot className={dsClass(styles.icon)} minHeight="line" size="lg">{icon}</IconSlot>
+      <IconSlot className={dsClass(styles.icon)} minHeight="line" size="sm">{icon}</IconSlot>
       <span className={styles.text}>
         <span className={styles.titleRow}>
           <Typo.Label as="span" truncate weight="semibold">{title}</Typo.Label>
@@ -101,7 +101,7 @@ export function ChoiceTile({
       data-slot="choice-tile"
       onClick={guardedClick(state, onClick)}
     >
-      <IconSlot className={dsClass(styles.tileIcon)} size="lg">{icon}</IconSlot>
+      <IconSlot className={dsClass(styles.tileIcon)} size="sm">{icon}</IconSlot>
       <span className={styles.tileTitle}>
         <Typo.Label as="span" data-slot="choice-tile-title" lineClamp={2} weight="semibold">{title}</Typo.Label>
       </span>

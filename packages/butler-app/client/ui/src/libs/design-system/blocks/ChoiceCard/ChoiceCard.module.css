@@ -17,6 +17,10 @@
 
 .card,
 .tile {
+  --choice-card-glyph-size: var(--icon-size-sm);
+
+  position: relative;
+  isolation: isolate;
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -36,6 +40,34 @@
 .tile:hover {
   border-color: var(--line-strong);
   background: var(--control-hover-bg);
+}
+
+/* Press: the pressed fill of a stretched Clickable row (--selection-strong),
+   laid under the content. Wide surfaces never scale (Clickable rule). */
+.card::before,
+.tile::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--selection-strong);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+.card:active:not(
+    [data-state="disabled"],
+    [data-state="loading"],
+    [aria-disabled="true"]
+  )::before,
+.tile:active:not(
+    [data-state="disabled"],
+    [data-state="loading"],
+    [aria-disabled="true"]
+  )::before {
+  opacity: 1;
 }
 
 .card:focus-visible,
@@ -73,8 +105,9 @@
   opacity: 0.5;
 }
 
-/* First-line rule: the bare glyph (no tile) and the trailing mark center on
-   the title line (row 1); the description starts under the title. */
+/* Leading glyph: the title's text size, centered on the title line (row 1).
+   Trailing control (chevron, size, spinner, check): centered on the card.
+   The description starts under the title. */
 .card {
   display: grid;
   min-height: 64px;
@@ -85,11 +118,33 @@
   padding: var(--space-md);
 }
 
-/* The glyph's line box is the title's (Label) line box. */
+/* The slot's line box is the title's (Label) line box; the glyph inside is
+   the icon step just above the title's text size, whatever size it was
+   given: --icon-size-sm beside 13px titles, --icon-size-md beside the 15px
+   titles of the 640px-and-below type ramp. The glyph's ink centre meets the
+   letters' ink centre (both centre in the line box), so no offset is added.
+   (--choice-card-glyph-size is set on .card and .tile at the top.) */
+@media (width <= 640px) {
+  .card:not([data-viewport="desktop"], [data-viewport="desktop"] *),
+  .tile:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+    --choice-card-glyph-size: var(--icon-size-md);
+  }
+}
+
+.card .icon,
+.tile .tileIcon {
+  width: var(--choice-card-glyph-size);
+}
+
 .icon {
   grid-row: 1;
   font-size: var(--typo-label-size);
   line-height: var(--typo-label-line-height);
+}
+
+.card .icon > :is(svg, img, span) {
+  width: var(--choice-card-glyph-size);
+  height: var(--choice-card-glyph-size);
 }
 
 .text {
@@ -128,7 +183,7 @@
 .end {
   display: flex;
   grid-column: 3;
-  grid-row: 1;
+  grid-row: 1 / span 2;
   align-items: center;
   color: var(--text-tertiary);
 }
@@ -179,6 +234,11 @@
   grid-column: 1;
 }
 
+.tile .tileIcon > :is(svg, img, span) {
+  width: var(--choice-card-glyph-size);
+  height: var(--choice-card-glyph-size);
+}
+
 .tileTitle {
   display: flex;
   height: calc(var(--typo-label-size) * var(--typo-label-line-height) * 2);
@@ -188,8 +248,9 @@
   grid-column: 2;
 }
 
-/* Room for the corner glyph (refresh, spinner). */
-.tile[data-corner="true"] .tileTitle {
+/* Room for the trailing glyph (refresh, spinner). */
+.tile[data-corner="true"] .tileTitle,
+.tile[data-corner="true"] .tileDescription {
   padding-inline-end: var(--space-md);
 }
 
@@ -200,11 +261,13 @@
   color: var(--text-secondary);
 }
 
+/* The trailing glyph is centered on the tile, like a card's trailing control. */
 .corner {
   position: absolute;
-  top: var(--space-sm);
+  top: 50%;
   right: var(--space-sm);
   display: flex;
+  translate: 0 -50%;
   color: var(--text-tertiary);
 }
 

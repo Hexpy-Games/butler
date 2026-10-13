@@ -1,20 +1,13 @@
 /* CheckCard rides on ChoiceCard's .card surface (border, radius, padding,
-   hover, focus ring, selected look). This file adds the round indicator, the
-   layout for the indicator side and an optional icon, and the motion. */
+   hover, press fill, focus ring, selected look, the leading glyph on the
+   title line). This file adds the round indicator, centered on the card at
+   the end, and its motion. */
 
 .card[data-slot="check-card"] {
   transition:
     background-color var(--motion-base) var(--motion-ease-standard),
     border-color var(--motion-base) var(--motion-ease-standard),
-    box-shadow var(--motion-fast) var(--motion-ease-standard),
-    scale var(--motion-fast) var(--motion-ease-standard);
-}
-
-/* Press: the DS press-in, released on --motion-fast (scale token is 1 under
-   reduced motion). */
-.card[data-slot="check-card"]:active:not([aria-disabled="true"]) {
-  scale: var(--motion-scale-press);
-  transition-duration: var(--motion-instant);
+    box-shadow var(--motion-fast) var(--motion-ease-standard);
 }
 
 /* Disabled dims the content (ChoiceCard rule); the change itself fades. */
@@ -22,72 +15,40 @@
   transition: opacity var(--motion-base) var(--motion-ease-standard);
 }
 
-/* Layout: the indicator sits on the title line, at the end (default) or the
-   start; without an icon the title takes the icon's column. */
-.icon {
-  grid-row: 1;
-}
-
+/* The indicator spans the title and description rows, centered on the card. */
 .slot {
   display: flex;
-  grid-row: 1;
+  grid-column: 3;
+  grid-row: 1 / span 2;
   align-items: center;
 }
 
-.card[data-indicator="end"] .slot {
-  grid-column: 3;
-}
-
-.card[data-indicator="end"][data-icon="none"] {
+/* Without an icon the title takes the icon's column. */
+.card[data-icon="none"] {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
-.card[data-indicator="end"][data-icon="none"] .title,
-.card[data-indicator="end"][data-icon="none"] .description {
+.card[data-icon="none"] .title,
+.card[data-icon="none"] .description {
   grid-column: 1;
 }
 
-.card[data-indicator="end"][data-icon="none"] .slot {
+.card[data-icon="none"] .slot {
   grid-column: 2;
 }
 
-.card[data-indicator="start"] {
-  grid-template-columns: auto auto minmax(0, 1fr);
-}
-
-.card[data-indicator="start"] .slot {
-  grid-column: 1;
-}
-
-.card[data-indicator="start"] .icon {
-  grid-column: 2;
-}
-
-.card[data-indicator="start"] .title,
-.card[data-indicator="start"] .description {
-  grid-column: 3;
-}
-
-.card[data-indicator="start"][data-icon="none"] {
-  grid-template-columns: auto minmax(0, 1fr);
-}
-
-.card[data-indicator="start"][data-icon="none"] .title,
-.card[data-indicator="start"][data-icon="none"] .description {
-  grid-column: 2;
-}
-
-/* The round indicator: a ring on the card surface; checked fills it with the
-   accent from the centre and draws the check (CheckIcon geometry). */
+/* The round indicator: a hairline ring on the card surface, the size of a
+   trailing chevron; checked fills it with the accent from the centre and
+   draws the check (CheckIcon geometry). */
 .indicator {
   position: relative;
   display: inline-grid;
   box-sizing: border-box;
-  width: var(--icon-size-lg);
-  height: var(--icon-size-lg);
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
   flex: none;
   place-items: center;
-  border: var(--border-width-strong) solid var(--line-strong);
+  border: var(--border-hairline) solid var(--line-strong);
   border-radius: var(--radius-pill);
   transition: border-color var(--motion-base) var(--motion-ease-standard);
 }
@@ -98,7 +59,7 @@
 
 .fill {
   position: absolute;
-  inset: calc(-1 * var(--border-width-strong));
+  inset: calc(-1 * var(--border-hairline));
   border-radius: var(--radius-pill);
   background: var(--accent);
   opacity: 0;
@@ -121,8 +82,8 @@
 
 .mark {
   position: relative;
-  width: var(--icon-size-sm);
-  height: var(--icon-size-sm);
+  width: var(--icon-size-xs);
+  height: var(--icon-size-xs);
   color: var(--primary-foreground);
   opacity: 0;
   transition: opacity var(--motion-exit-fast) var(--motion-ease-accelerate);

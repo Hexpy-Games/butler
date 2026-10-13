@@ -49,9 +49,11 @@ lints below enforce most of this; the rest is review.
 7. **Bare icons in cards and rows.** ChoiceCard, ChoiceTile, CheckCard,
    ListRow and any card or list-item row show their glyph alone in an
    `IconSlot` (`minHeight="line"`), never on an `IconTile` or other boxed
-   background. The glyph and any trailing mark center on the title's first
-   line; the description starts at the title's left edge. `lint:design`
-   fails on an IconTile inside those blocks or passed as their `icon`.
+   background. Leading icon = title text size, aligned to the title line;
+   trailing controls (chevron, size, spinner, check) vertically centered on
+   the card. The description starts at the title's left edge. Borders stay
+   1px; wide cards and rows never scale on press. `lint:design` fails on an
+   IconTile inside those blocks or passed as their `icon`.
 
 ## First Principles
 

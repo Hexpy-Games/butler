@@ -58,11 +58,14 @@ export const guidance: ShowcaseGuidance = {
     "Title: the service name people know (ChatGPT, not OpenAI OAuth). Description: what they need, in a few words.",
     "Tags are two or three words (No key needed, Free · Private).",
     "The icon is bare: a logo or glyph with no tile or boxed background behind it.",
+    "Leading icon = title text size, aligned to the title line; trailing controls vertically centered.",
+    "Selected is a 1px accent border on the info tint; press is the stretched-row pressed fill, never a scale.",
   ],
   accessibility: [
     "Each card is a button; the description is its aria-describedby. Loading sets aria-busy, unavailable sets aria-disabled.",
     "For single choice lists pass role=radiogroup on ChoiceCardList and role=radio with aria-checked on each card.",
     "For picking several items use CheckCard in a CheckCardList, not ChoiceCard.",
   ],
-  tokens: ["--control-bg", "--control-hover-bg", "--line", "--line-strong", "--accent", "--color-info-bg", "--danger-line-strong", "--radius-panel", "--focus-ring"],
+  tokens: ["--control-bg", "--control-hover-bg", "--line", "--line-strong", "--accent", "--color-info-bg", "--danger-line-strong", "--radius-panel", "--focus-ring",
+    "--border-hairline", "--icon-size-sm", "--icon-size-md", "--selection-strong", "--motion-fast", "--motion-ease-standard"],
 };

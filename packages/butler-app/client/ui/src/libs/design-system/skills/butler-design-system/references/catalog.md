@@ -2257,7 +2257,7 @@ Choose several items to act on (import, include, bring over): a card per item wi
 - Not for: Picking exactly one option → `ChoiceCard`
 - Not for: A setting that is on or off and takes effect at once → `Switch`
 - Not for: A long, dense list of rows → `ListRow`
-- Tokens: `--control-bg`, `--control-hover-bg`, `--line`, `--line-strong`, `--accent`, `--color-info-bg`, `--primary-foreground`, `--radius-panel`, `--radius-pill`, `--focus-ring`, `--icon-size-lg`, `--border-width-strong`, `--motion-base`, `--motion-fast`, `--motion-instant`, `--motion-exit-base`, `--motion-exit-fast`, `--motion-ease-standard`, `--motion-ease-decelerate`, `--motion-ease-accelerate`, `--motion-ease-draw`, `--motion-scale-check`, `--motion-scale-press`
+- Tokens: `--control-bg`, `--control-hover-bg`, `--line`, `--line-strong`, `--accent`, `--color-info-bg`, `--primary-foreground`, `--radius-panel`, `--radius-pill`, `--focus-ring`, `--icon-size-sm`, `--icon-size-md`, `--icon-size-xs`, `--border-hairline`, `--selection-strong`, `--motion-base`, `--motion-fast`, `--motion-instant`, `--motion-exit-base`, `--motion-exit-fast`, `--motion-ease-standard`, `--motion-ease-decelerate`, `--motion-ease-accelerate`, `--motion-ease-draw`, `--motion-scale-check`
 
 ### ChoiceCard
 
@@ -2271,7 +2271,7 @@ Big, recognizable choices: a row card or a grid tile with a logo, a name, a shor
 - Not for: Two to four short text options → `SegmentedControl`
 - Not for: A card that shows content, not a choice → `Card`
 - Not for: Picking several items to act on → `CheckCard`
-- Tokens: `--control-bg`, `--control-hover-bg`, `--line`, `--line-strong`, `--accent`, `--color-info-bg`, `--danger-line-strong`, `--radius-panel`, `--focus-ring`
+- Tokens: `--control-bg`, `--control-hover-bg`, `--line`, `--line-strong`, `--accent`, `--color-info-bg`, `--danger-line-strong`, `--radius-panel`, `--focus-ring`, `--border-hairline`, `--icon-size-sm`, `--icon-size-md`, `--selection-strong`, `--motion-fast`, `--motion-ease-standard`
 
 ### DialogForm
 
