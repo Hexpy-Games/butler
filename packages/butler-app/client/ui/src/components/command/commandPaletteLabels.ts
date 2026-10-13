@@ -1,3 +1,4 @@
+import { sessionDisplayTitle } from "@/app/sessionTitle.ts";
 import { scheduleFrequency } from "@/app/scheduleLabels";
 import { appCopy, type AppCopy } from "@/app/copy.ts";
 import type { CommandPaletteResult } from "@/app/types.ts";
@@ -21,4 +22,8 @@ export function commandResultSubtitle(
   const subtitle = result.subtitle?.trim();
   if (!subtitle || subtitle === SERVER_KIND_SUBTITLES[result.kind]) return labels[result.kind];
   return subtitle;
+}
+
+export function commandResultTitle(result: CommandPaletteResult): string {
+  return result.kind === "chat" || result.kind === "project_session" ? sessionDisplayTitle(result) : result.title;
 }

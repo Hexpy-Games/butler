@@ -1,3 +1,4 @@
+import { sessionDisplayTitle } from "@/app/sessionTitle.ts";
 import { appCopy } from "@/app/copy.ts";
 import type {
   ArchiveListView,
@@ -37,7 +38,7 @@ export function archiveItems(archives: ArchiveListView | null): ArchiveItem[] {
       (session): ArchiveItem => ({
         kind: "session",
         id: session.id,
-        title: session.title,
+        title: sessionDisplayTitle(session),
         updatedAt: session.last_activity_at,
         session,
       }),

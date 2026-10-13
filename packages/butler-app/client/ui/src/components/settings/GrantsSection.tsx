@@ -1,3 +1,4 @@
+import { sessionDisplayTitle } from "@/app/sessionTitle.ts";
 import { useMemo, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { CardList, EmptyLine, Input, Inline, NativeSelect, NativeSelectOption, Stack } from "@/butler-ds";
@@ -17,7 +18,7 @@ export function GrantsSection({ grants }: { grants: ReturnType<typeof useGrants>
   const search = hasFilters ? query.trim().toLocaleLowerCase(locale) : "";
   const searchable = useMemo(() => grants.rows.map(row => ({
     row,
-    texts: [row.target, row.cwd ?? "", ...[...row.places.values()].map(title => title ?? copy.deletedChat), row.project ?? "", copy.kind[row.kind]]
+    texts: [row.target, row.cwd ?? "", ...[...row.places].map(([id, title]) => sessionDisplayTitle({ id, title: title ?? copy.deletedChat })), row.project ?? "", copy.kind[row.kind]]
       .map(text => text.toLocaleLowerCase(locale)),
   })), [grants.rows, locale, copy.deletedChat, copy.kind]);
   const visible = useMemo(() => searchable.filter(({ row, texts }) =>

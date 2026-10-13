@@ -1762,12 +1762,12 @@ export function allSessionsFromNavigation(
 ): SessionOption[] {
   const chatSessions = (navigation.chats ?? []).map((chat) => ({
     id: chat.id,
-    label: chat.title,
+    label: sessionDisplayTitle(chat),
   }));
   const projectSessions = (navigation.projects ?? []).flatMap((project) =>
     (project.sessions ?? []).map((session) => ({
       id: session.id,
-      label: `${project.display_name} / ${session.title}`,
+      label: `${project.display_name} / ${sessionDisplayTitle(session)}`,
     })),
   );
   return [...chatSessions, ...projectSessions];

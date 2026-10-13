@@ -88,6 +88,9 @@ export function backgroundTab(browser, tab) {
     browser.agentWindow = new BrowserWindow({ show: false, width: 1280, height: 800, webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true } });
   }
   browser.agentWindow.contentView.addChildView(tab.view); tab.attached = browser.agentWindow;
+  // Hidden agent pages use the full logical viewport, not the last pane's
+  // scale (which can be zero while its slot unmounts). Tools and frames share it.
+  if (tab.agent) tab.bounds = { x: 0, y: 0, width: 1280, height: 800, scale: 1, visible: false };
   tab.view.setBounds({ x: 0, y: 0, width: tab.agent ? 1280 : Math.round(tab.bounds?.width ?? 1280), height: tab.agent ? 800 : Math.round(tab.bounds?.height ?? 800) }); emulation(tab);
 }
 function armExpiry(browser, tab) {
