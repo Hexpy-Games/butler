@@ -48,12 +48,7 @@ pub(super) async fn bind(
         return Err(invalid("Native subsession binding mismatch"));
     }
     let content = super::user_message(envelope)?;
-    let mut app_context =
-        json!({"session":{"id":session_id},"contentParts":[{"type":"text","text":content}]});
-    // A child of an unattended schedule run cannot wait for the user (D8).
-    if let Some(run) = object.get("scheduleRun").filter(|run| run.is_object()) {
-        app_context["scheduleRun"] = run.clone();
-    }
+    let app_context = child_context(context, session_id, &content);
     let turn_role = if expected_role == SessionRole::Steward {
         TurnRole::Steward
     } else {
@@ -92,4 +87,14 @@ pub(super) async fn bind(
         resume: false,
         preparation_cancellation: CancellationToken::new(),
     })
+}
+
+fn child_context(context: &Value, session_id: &str, content: &str) -> Value {
+    let mut app_context =
+        json!({"session":{"id":session_id},"contentParts":[{"type":"text","text":content}]});
+    // A child of an unattended schedule run cannot wait for the user (D8).
+    if let Some(run) = context.get("scheduleRun").filter(|run| run.is_object()) {
+        app_context["scheduleRun"] = run.clone();
+    }
+    app_context
 }

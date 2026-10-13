@@ -69,102 +69,7 @@ pub(super) async fn execute(
         return list_automations(owner, call).await;
     }
     if call.name == ToolName::DelegateToWorker {
-        let required = |key: &str| {
-            call.arguments
-                .get(key)
-                .and_then(Value::as_str)
-                .map(butler_core::public_text::trim_js_whitespace)
-                .filter(|v| !v.is_empty())
-                .map(str::to_owned)
-                .ok_or_else(|| {
-                    ToolExecutionError::Integrity(BtccError::relayed(
-                        "worker_delegation_input_invalid",
-                        format!("{key} is required"),
-                    ))
-                })
-        };
-        let acceptance = call
-            .arguments
-            .get("acceptance_criteria")
-            .and_then(Value::as_array)
-            .ok_or_else(|| {
-                ToolExecutionError::Integrity(BtccError::relayed(
-                    "worker_delegation_input_invalid",
-                    "acceptance_criteria is required",
-                ))
-            })?
-            .iter()
-            .map(|v| {
-                v.as_str().map(str::to_owned).ok_or_else(|| {
-                    ToolExecutionError::Integrity(BtccError::relayed(
-                        "worker_delegation_input_invalid",
-                        "acceptance_criteria is invalid",
-                    ))
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        if acceptance.len() > 8 {
-            return Err(ToolExecutionError::Integrity(BtccError::relayed(
-                "worker_delegation_input_invalid",
-                "acceptance_criteria is too large",
-            )));
-        }
-        let reviewed = owner
-            .work
-            .bound_work()
-            .await
-            .map_err(ToolExecutionError::Integrity)?
-            .ok_or_else(|| {
-                ToolExecutionError::Integrity(BtccError::relayed(
-                    "delegation_reviewed_plan_required",
-                    "Reviewed parent Work is required",
-                ))
-            })?;
-        let result = owner
-            .subsessions
-            .delegate_worker(
-                butler_turn::btcc::WorkerDelegationRequest {
-                    parent_session_id: owner.binding.source_session_id.clone(),
-                    parent_turn_id: owner.binding.turn_id.clone(),
-                    anchor_message_id: invocation.turn.original_message_id.clone(),
-                    source_tool_call_id: call_id.into(),
-                    action_key: required("action_key")?,
-                    objective: required("objective")?,
-                    acceptance_criteria: acceptance,
-                    implementation_brief: required("implementation_brief")?,
-                    safe_title: call
-                        .arguments
-                        .get("safe_title")
-                        .and_then(Value::as_str)
-                        .map(str::to_owned),
-                    profile_id: call
-                        .arguments
-                        .get("profile_id")
-                        .and_then(Value::as_str)
-                        .map(str::to_owned),
-                    access_mode: access_mode(owner),
-                    schedule_run: owner.unattended_run(),
-                },
-                &reviewed,
-            )
-            .await
-            .map_err(ToolExecutionError::Integrity)?;
-        if let Some(task_id) = result.get("task_id").and_then(Value::as_str) {
-            owner
-                .work_streams
-                .link_worker(
-                    crate::host::guided::work_streams::WorkStreamScope {
-                        session_id: owner.binding.source_session_id.clone(),
-                        origin_chat_id: None,
-                        project_id: owner.binding.memory.project_id.clone(),
-                        turn_id: owner.binding.turn_id.clone(),
-                    },
-                    task_id.to_owned(),
-                )
-                .await
-                .map_err(ToolExecutionError::Integrity)?;
-        }
-        return encoded(&result);
+        return delegate_worker(owner, invocation, call, call_id).await;
     }
     if matches!(
         ToolName::parse(call.name.as_str()),
@@ -304,6 +209,133 @@ pub(super) async fn execute(
         }
     };
     encoded(&result.unwrap_or_else(|error| super::message::tool_failure(&call.name, error.code())))
+}
+
+struct WorkerDelegationArgs {
+    action_key: String,
+    objective: String,
+    acceptance_criteria: Vec<String>,
+    implementation_brief: String,
+    safe_title: Option<String>,
+    profile_id: Option<String>,
+}
+
+impl WorkerDelegationArgs {
+    fn parse(call: &ModelRoundToolCall) -> Result<Self, ToolExecutionError> {
+        let acceptance_criteria = call
+            .arguments
+            .get("acceptance_criteria")
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                ToolExecutionError::Integrity(BtccError::relayed(
+                    "worker_delegation_input_invalid",
+                    "acceptance_criteria is required",
+                ))
+            })?
+            .iter()
+            .map(|value| {
+                value.as_str().map(str::to_owned).ok_or_else(|| {
+                    ToolExecutionError::Integrity(BtccError::relayed(
+                        "worker_delegation_input_invalid",
+                        "acceptance_criteria is invalid",
+                    ))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if acceptance_criteria.len() > 8 {
+            return Err(ToolExecutionError::Integrity(BtccError::relayed(
+                "worker_delegation_input_invalid",
+                "acceptance_criteria is too large",
+            )));
+        }
+        Ok(Self {
+            action_key: required_argument(call, "action_key")?,
+            objective: required_argument(call, "objective")?,
+            acceptance_criteria,
+            implementation_brief: required_argument(call, "implementation_brief")?,
+            safe_title: optional_argument(call, "safe_title"),
+            profile_id: optional_argument(call, "profile_id"),
+        })
+    }
+}
+
+fn required_argument(call: &ModelRoundToolCall, key: &str) -> Result<String, ToolExecutionError> {
+    call.arguments
+        .get(key)
+        .and_then(Value::as_str)
+        .map(butler_core::public_text::trim_js_whitespace)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| {
+            ToolExecutionError::Integrity(BtccError::relayed(
+                "worker_delegation_input_invalid",
+                format!("{key} is required"),
+            ))
+        })
+}
+
+fn optional_argument(call: &ModelRoundToolCall, key: &str) -> Option<String> {
+    call.arguments
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+}
+
+async fn delegate_worker(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    call_id: &str,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let args = WorkerDelegationArgs::parse(call)?;
+    let reviewed = owner
+        .work
+        .bound_work()
+        .await
+        .map_err(ToolExecutionError::Integrity)?
+        .ok_or_else(|| {
+            ToolExecutionError::Integrity(BtccError::relayed(
+                "delegation_reviewed_plan_required",
+                "Reviewed parent Work is required",
+            ))
+        })?;
+    let result = owner
+        .subsessions
+        .delegate_worker(
+            butler_turn::btcc::WorkerDelegationRequest {
+                parent_session_id: owner.binding.source_session_id.clone(),
+                parent_turn_id: owner.binding.turn_id.clone(),
+                anchor_message_id: invocation.turn.original_message_id.clone(),
+                source_tool_call_id: call_id.into(),
+                action_key: args.action_key,
+                objective: args.objective,
+                acceptance_criteria: args.acceptance_criteria,
+                implementation_brief: args.implementation_brief,
+                safe_title: args.safe_title,
+                profile_id: args.profile_id,
+                access_mode: access_mode(owner),
+                schedule_run: owner.unattended_run(),
+            },
+            &reviewed,
+        )
+        .await
+        .map_err(ToolExecutionError::Integrity)?;
+    if let Some(task_id) = result.get("task_id").and_then(Value::as_str) {
+        owner
+            .work_streams
+            .link_worker(
+                crate::host::guided::work_streams::WorkStreamScope {
+                    session_id: owner.binding.source_session_id.clone(),
+                    origin_chat_id: None,
+                    project_id: owner.binding.memory.project_id.clone(),
+                    turn_id: owner.binding.turn_id.clone(),
+                },
+                task_id.to_owned(),
+            )
+            .await
+            .map_err(ToolExecutionError::Integrity)?;
+    }
+    encoded(&result)
 }
 
 async fn read_tool_artifact(

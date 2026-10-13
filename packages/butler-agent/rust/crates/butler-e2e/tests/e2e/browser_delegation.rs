@@ -242,23 +242,46 @@ async fn serve_host(
             .starts_with("steward-turn-")
     );
     if answer {
-        let frame = next_call(&mut stream, &mut buffer, "tab.open", &session).await?;
+        answer_capture_calls(&mut stream, &mut buffer, &admin, &session).await?;
+    }
+    Ok(())
+}
+
+async fn answer_capture_calls(
+    stream: &mut Response,
+    buffer: &mut String,
+    admin: &AdminClient,
+    session: &str,
+) -> Result<(), HarnessError> {
+    for op in ["tab.observe", "tab.screenshot"] {
+        let frame = next_call(stream, buffer, op, session).await?;
         assert_eq!(frame["session"], session);
-        admin
+        let result = match op {
+            "tab.observe" => {
+                json!({"status":"ok","tab":"parent-tab","obs":"parent-observation","url":"https://example.com/","text":"Parent page","image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})
+            }
+            _ => {
+                json!({"status":"ok","tab":"parent-tab","url":"https://example.com/","image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})
+            }
+        };
+        let reply = admin
             .send(
                 Method::POST,
                 &format!(
                     "/internal/browser-host/results/{}",
                     frame["id"].as_str().unwrap()
                 ),
-                Some(json!({"status":"ok","tab":"parent-tab","url":"https://example.com/"})),
+                Some(result),
                 &[],
             )
             .await?;
-        assert_eq!(
-            next_frame(&mut stream, &mut buffer).await?["op"],
-            "use.ended"
-        );
+        assert_eq!(reply.status, 200);
+        let ended = next_frame(stream, buffer).await?;
+        assert_eq!(ended["op"], "use.ended");
+        assert_eq!(ended["session"], session);
+        assert_eq!(ended["turn_id"], frame["turn_id"]);
+        assert_eq!(ended["args"]["id"], frame["id"]);
+        assert_eq!(ended["args"]["abort"], false);
     }
     Ok(())
 }

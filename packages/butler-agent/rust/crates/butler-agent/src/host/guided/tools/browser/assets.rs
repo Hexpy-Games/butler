@@ -37,7 +37,7 @@ pub(super) fn model_result(name: &str, result: &mut Value) {
             object.remove(key);
         }
     }
-    if result["status"] != "ok" && result["recovery"].is_null() {
+    if result["status"] != "ok" {
         result["recovery"] = json!(collect_recovery(result["reason"].as_str().unwrap_or("")));
     }
 }
