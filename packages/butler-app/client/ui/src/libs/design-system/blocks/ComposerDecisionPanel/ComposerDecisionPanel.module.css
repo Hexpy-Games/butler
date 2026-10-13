@@ -26,10 +26,11 @@
   );
 }
 
-/* Media: a 16:10 page thumbnail at the subject row's end (144px; 112px in a
-   composer under 600px). The subject and the details keep the first column;
-   the error and the actions span both. A narrow composer drops it above the
-   actions, still at the row's end. */
+/* Media: a 16:10 page thumbnail beside the subject and details, top-aligned
+   at the row's end (144px; 112px in a composer under 600px). The subject and
+   the details keep the first column; the error and the actions span both. A
+   narrow composer (under 420px) puts it under the details in the text
+   column, as wide as that column (at most 240px tall). */
 .withMedia {
   grid-template-columns: minmax(0, 1fr) auto;
 }
@@ -80,9 +81,29 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  /* The details' own bottom inset gives way so the thumbnail follows them at
+     the standard gap. */
+  .withMedia > [data-panel-part="body"] {
+    padding-bottom: 0;
+  }
+
   .withMedia > .media {
+    --decision-media-width: min(100%, calc(240px * 16 / 10));
+
     grid-row: auto;
     grid-column: 1;
-    padding: 0 var(--space-lg) var(--space-sm);
+    justify-content: flex-start;
+    padding: 0 var(--space-lg) var(--space-md)
+      calc(var(--space-lg) + var(--icon-size-sm) + var(--space-sm));
+  }
+
+  /* Under details, their scroll edge, inner and detail insets (fade size +
+     xs + sm) give way: the gap under the text is the 12px gap between the
+     title and the details. */
+  .withMedia > [data-panel-part="body"] ~ .media {
+    margin-top: calc(
+      var(--space-md) - var(--scroll-fade-size) - var(--space-xs) -
+        var(--space-sm)
+    );
   }
 }
