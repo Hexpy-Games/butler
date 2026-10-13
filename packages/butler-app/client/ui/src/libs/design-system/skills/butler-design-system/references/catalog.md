@@ -166,6 +166,7 @@
 | A searchable select (with FilteredSelectPopover) | `Popover` |  |
 | A section inside the page | `FormSection` | `SettingsHeader` |
 | A service logo on a choice card, model row or connection list | `ProviderLogo` |  |
+| A setting that takes effect at once | `Switch` | `ChoiceCard` |
 | A settings list of configured things with per-item actions | `CardList` |  |
 | A settings list that loads, can fail or can be empty (kind list or status) | `SettingsSection` |  |
 | A settings or inspector panel | `SurfacePanel` | `Box` |
@@ -460,6 +461,7 @@
 | Pick one value in a dense form or a secret row | `NativeSelect` |  |
 | Picking a value for a form | `Select` | `DropdownMenu` |
 | Picking one service, model or option where logos and names help recognition | `ChoiceCard` |  |
+| Picking several things to bring over or include (ChoiceCheckCard) | `ChoiceCard` |  |
 | Pin or favorite a sidebar row without adding a trailing action | `GlyphToggle` |  |
 | Place several buttons next to each other | `ButtonContainer` |  |
 | Place the floating sidebar toggle in the titlebar row | `ChromeFrame` |  |
@@ -2244,9 +2246,11 @@ Big, recognizable choices: a row card or a grid tile with a logo, a name, a shor
 
 - Use for: Picking one service, model or option where logos and names help recognition
 - Use for: A long tail of choices in an equal-size grid
+- Use for: Picking several things to bring over or include (ChoiceCheckCard)
 - Not for: Choosing a value inside a form → `Select`
 - Not for: Two to four short text options → `SegmentedControl`
 - Not for: A card that shows content, not a choice → `Card`
+- Not for: A setting that takes effect at once → `Switch`
 - Tokens: `--control-bg`, `--control-hover-bg`, `--line`, `--line-strong`, `--accent`, `--color-info-bg`, `--danger-line-strong`, `--radius-panel`, `--focus-ring`
 
 ### DialogForm

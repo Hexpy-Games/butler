@@ -224,7 +224,7 @@ try {
     }
     assert.equal(await section.locator("[data-import-source]").count(), 4);
     await section.getByText(copy.settings.browserImport.chooseItems, { exact: true }).waitFor();
-    for (const label of [copy.settings.browserImport.bookmarks, copy.settings.browserImport.passwords, copy.settings.browserImport.history]) assert.equal(await section.getByRole("switch", { name: label, exact: true }).getAttribute("aria-checked"), "true");
+    for (const label of [copy.settings.browserImport.bookmarks, copy.settings.browserImport.passwords, copy.settings.browserImport.history]) assert.equal(await section.getByRole("checkbox", { name: label, exact: true }).getAttribute("aria-checked"), "true");
     fixtureSources = [];
     await page.reload();
     await section.getByText(copy.settings.browserImport.noSources, { exact: true }).waitFor();

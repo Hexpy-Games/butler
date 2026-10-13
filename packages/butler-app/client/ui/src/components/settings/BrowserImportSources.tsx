@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { appCopy } from "@/app/copy";
 import {
-  Button, ButtonContainer, EmptyLine, Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet, FileText, Globe2, ListRow, Stack, Switch,
+  Bookmark, Button, ButtonContainer, ChoiceCardList, ChoiceCheckCard, EmptyLine, FieldLegend, FieldSet, FileText, Globe2, History, Key, ListRow, Stack,
   Tooltip,
 } from "@/butler-ds";
 import type { ImportSource } from "./signInsApi";
@@ -16,29 +16,23 @@ function withHint(hint: string | undefined, key: string, control: ReactNode) {
   return hint ? <Tooltip key={key} label={hint}>{control}</Tooltip> : control;
 }
 
-/** What every import includes, chosen once above the sources: one DS Switch per item, so on and off read alike everywhere. */
+/** What every import includes, chosen once above the sources: multi-select check cards (DS ChoiceCheckCard). */
 export function BrowserImportItems({ flow, keychain }: { flow: ImportFlow; keychain: boolean }) {
   const copy = appCopy.settings.browserImport;
   const items = [
-    { id: "bookmarks", label: copy.bookmarks, on: flow.bookmarks, set: flow.setBookmarks, hint: undefined },
-    { id: "passwords", label: copy.passwords, on: flow.passwords, set: flow.setPasswords, hint: keychain ? undefined : copy.needsKeychain },
-    { id: "history", label: copy.history, on: flow.history, set: flow.setHistory, hint: undefined },
+    { id: "bookmarks", label: copy.bookmarks, icon: <Bookmark size="md" />, on: flow.bookmarks, set: flow.setBookmarks, hint: undefined },
+    { id: "passwords", label: copy.passwords, icon: <Key size="md" />, on: flow.passwords, set: flow.setPasswords, hint: keychain ? undefined : copy.needsKeychain },
+    { id: "history", label: copy.history, icon: <History size="md" />, on: flow.history, set: flow.setHistory, hint: undefined },
   ];
   return (
     <FieldSet>
-      <FieldLegend variant="label">{copy.chooseItems}</FieldLegend>
-      <FieldGroup>
+      <FieldLegend variant="label" id="browser-import-items">{copy.chooseItems}</FieldLegend>
+      <ChoiceCardList role="group" aria-labelledby="browser-import-items">
         {items.map(item => (
-          <Field key={item.id} orientation="horizontal" data-browser-import-item={item.id}>
-            <Switch id={`browser-import-${item.id}`} size="sm" checked={item.on} disabled={flow.busy}
-              aria-describedby={item.hint ? `browser-import-${item.id}-hint` : undefined} onCheckedChange={item.set} />
-            <FieldContent>
-              <FieldLabel htmlFor={`browser-import-${item.id}`}>{item.label}</FieldLabel>
-              {item.hint ? <FieldDescription id={`browser-import-${item.id}-hint`}>{item.hint}</FieldDescription> : null}
-            </FieldContent>
-          </Field>
+          <ChoiceCheckCard key={item.id} data-browser-import-item={item.id} icon={item.icon} title={item.label} description={item.hint}
+            checked={item.on} disabled={flow.busy} onCheckedChange={item.set} />
         ))}
-      </FieldGroup>
+      </ChoiceCardList>
     </FieldSet>
   );
 }

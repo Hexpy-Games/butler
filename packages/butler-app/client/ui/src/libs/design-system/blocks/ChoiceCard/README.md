@@ -12,6 +12,7 @@ one-line description). `ChoiceCardList` and `ChoiceTileGrid` lay them out.
 | --- | --- |
 | `ChoiceCard` | `icon`, `title`, `description`, `tag`, `meta` (replaces the chevron), `chevron` (default on), `state`, `selected` |
 | `ChoiceTile` | `icon`, `title`, `description`, `state`, `selected`, `placeholder` (dashed, not available yet), `cornerIcon` |
+| `ChoiceCheckCard` | `icon`, `title`, `description`, `checked`, `onCheckedChange`, `disabled`, `disabledReason` (tooltip; stays focusable) |
 | `ChoiceCardList` | A `ul`; each child becomes a list item |
 | `ChoiceTileGrid` | A `ul` grid: two columns, three when the grid is at least 480px wide |
 
@@ -22,6 +23,16 @@ and description), `disabled` (dimmed, `aria-disabled`; clicks are ignored).
 In a `ChoiceCard` the logo tile and the trailing chevron or meta center on the
 title's line (the first line), never on title + description; the description
 runs below the title.
+
+## Multi-select (check cards)
+`ChoiceCheckCard` is the multi-select member of the family: the same card
+surface, padding, radius and selected look as `ChoiceCard`, the logo tile on the
+left on the title line, and a square check box at the right in place of the
+chevron. The whole card is a `role="checkbox"` with `aria-checked`; click or
+Space toggles it. Put the cards in a `ChoiceCardList role="group"` labelled by
+the step title or a legend. Use it to pick several things to bring over (tools,
+items, files); use `Switch` only for settings that take effect at once, and
+radio rows (`ChoiceCard role="radio"`) for one choice.
 
 ## Equal size
 Tiles in a grid are always the same size: rows are `1fr`, the name sits in a

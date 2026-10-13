@@ -257,3 +257,21 @@
     }
   }
 }
+
+/* ChoiceCheckCard: a square check box at the end, on the title line. */
+.checkBox {
+  display: inline-grid;
+  box-sizing: border-box;
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+  place-items: center;
+  border: var(--border-width-strong) solid var(--line-strong);
+  border-radius: calc(var(--radius-control) / 2);
+  background: var(--control-bg);
+  color: var(--primary-foreground);
+}
+
+.checkBox[data-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+}
