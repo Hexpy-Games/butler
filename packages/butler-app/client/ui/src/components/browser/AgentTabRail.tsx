@@ -5,9 +5,12 @@ import { browserCall, openConversationBrowser } from "./browserBridge";
 import { agentTabState, useConversationAgentTabs } from "./useConversationAgentTabs";
 import { useDocumentVisible, useLiveFrames } from "./useLiveFrames";
 
+/** The shelf chip's site name. An address without one (an IP or localhost, as Butler's own previews) shows the title. */
 function siteTitle(url: string, fallback: string) {
-  try { return new URL(url).hostname || fallback; }
-  catch { return fallback; }
+  try {
+    const host = new URL(url).hostname.replace(/^www\./u, "");
+    return !host || host === "localhost" || /^[\d.]+$|^\[.*\]$/u.test(host) ? fallback : host;
+  } catch { return fallback; }
 }
 
 /** Stream only the cards DS will show, measured from the conversation, not the window. */
@@ -26,7 +29,7 @@ export function AgentTabRail({ session }: { session: string }) {
   }, [session]);
   const cap = box ? tabRailCap(box.height) : 0;
   const mode = box ? tabRailMode(box.width) : "full";
-  const frames = useLiveFrames(visible ? tabs.slice(0, cap).map(tab => tab.id) : [], mode === "full" ? 416 : mode === "compact" ? 256 : 96);
+  const frames = useLiveFrames(tabs.slice(0, cap).map(tab => tab.id), mode === "full" ? 416 : mode === "compact" ? 256 : 96, !visible);
   const copy = appCopy.browser;
   return <TabRail view={session} labels={{ region: copy.rail.region, close: copy.closeTab, more: copy.rail.more }}
     onMore={id => void openConversationBrowser(session, id)} tabs={tabs.map(tab => {

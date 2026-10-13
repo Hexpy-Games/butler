@@ -1,4 +1,3 @@
-import { conversationAgentTabs } from "./conversationAgentTabs";
 import { useEffect, useRef, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { BrowserPane, Button, EmptyLine, PageCard, Plus, Stack, TabStrip, type TabStripGroup } from "@/butler-ds";
@@ -15,6 +14,8 @@ import { browserCall, useBrowserState } from "./browserBridge";
 import { useBrowserPage } from "./useBrowserPage";
 import { publicBrowserOwner, relevantConversationTab } from "./browserOwnership";
 import { useBrowserShellState } from "./browserShellState";
+import { familyAgentTabs } from "./conversationAgentTabs";
+import { useConversationFamily } from "./useConversationAgentTabs";
 
 export function BrowserArea({ sessionId }: { sessionId?: string }) {
   const locale = useAppLocale();
@@ -25,8 +26,8 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [dialogContainer, setDialogContainer] = useState<HTMLDivElement | null>(null);
   const creating = useRef(false);
-  const views = useButlerStore(store => store.sessionViews);
-  const rolled = sessionId ? conversationAgentTabs(sessionId, state.tabs, views) : [];
+  const family = useConversationFamily(sessionId ?? "");
+  const rolled = sessionId ? familyAgentTabs(family, state.tabs) : [];
   const visibleTabs = state.tabs.filter((item) => item.owner === "mine" || publicBrowserOwner(item.owner, navigation));
   const tabs = sessionId ? state.tabs.filter((item) => item.owner === `conversation:${sessionId}` || rolled.includes(item)) : visibleTabs;
   const lastTab = useBrowserShellState((shell) => sessionId ? shell.conversations[sessionId]?.lastTab : undefined);

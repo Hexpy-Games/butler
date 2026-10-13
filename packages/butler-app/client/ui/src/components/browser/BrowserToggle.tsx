@@ -14,10 +14,9 @@ export function BrowserToggle() {
   const attention = agentTabs.find(tab => agentTabState(tab) === "attention");
   const activity = attention ? "attention" : agentTabs.some(tab => agentTabState(tab) === "busy") ? "busy"
     : agentTabs.some(tab => agentTabState(tab) === "error") ? "error" : "idle";
-  const suffix = activity === "attention" ? appCopy.browser.rail.needsCheck : activity === "busy" ? appCopy.browser.agentUsing : activity === "error" ? appCopy.browser.rail.error : "";
   if (!window.butlerBrowser) return null;
   return <ActivityGlow state={open ? "idle" : activity}><IconButton data-test-class="titlebar-browser-toggle" aria-pressed={open}
-    label={open ? appCopy.browser.hide : [appCopy.browser.show, suffix].filter(Boolean).join(" · ")}
+    label={open ? appCopy.browser.hide : activity === "idle" ? appCopy.browser.show : appCopy.browser.glow[activity]}
     tone={activityGlowTone(activity, open)}
     disabled={!enabled} onClick={() => {
       if (open) useBrowserShellState.getState().setOpen(session, false);
