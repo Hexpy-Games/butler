@@ -1,6 +1,7 @@
 import { appCopy } from "./copy.ts";
 import type { AppCopy } from "./copy.ts";
 import { approvalTargetsFromTransport, isAbsolutePath } from "./approvalTargets.ts";
+import { scheduleTiming } from "./scheduleLabels.ts";
 import type { AccessMode, ApprovalRisk, ApprovalSummary, AuthorityApprovalCard } from "./types.ts";
 
 type ApprovalRequestCopy = AppCopy["interfaceTemplates"]["approvalRequest"];
@@ -62,10 +63,11 @@ export function normalizeApprovalSummary(value: unknown): ApprovalSummary | unde
     examplesTruncated.push(Array.isArray(value.examples_truncated) && value.examples_truncated[index] === true);
   });
   const operation = normalizeOperation(value.operation);
+  const schedule = normalizeSchedule(value.schedule);
   return {
     actionKind, targets, count, examples,
     ...(operation ? { operation } : {}),
-    ...(isAccessMode(value.schedule_access_mode) ? { scheduleAccessMode: value.schedule_access_mode } : {}),
+    ...(schedule ? { schedule } : {}),
     ...(value.command_access === "read_only_unisolated" ? { commandAccess: value.command_access } : {}),
     ...(examplesTruncated.some(Boolean) ? { examplesTruncated } : {}),
     ...(typeof risk === "string" && RISKS.includes(risk) ? { risk: risk as ApprovalRisk } : {}),
@@ -82,6 +84,18 @@ function normalizeBrowserSteps(value: unknown): BrowserStep[] | undefined {
     return [{ action: step.action, role: step.role, name: step.name, frame: step.frame,
       ...(typeof step.value_preview === "string" ? { value_preview: step.value_preview } : {}), addons: step.addons }];
   });
+}
+
+function normalizeSchedule(value: unknown): ApprovalSummary["schedule"] {
+  if (!isRecord(value) || typeof value.title !== "string"
+    || (value.schedule_type !== "once" && value.schedule_type !== "interval")) return undefined;
+  const text = (key: string) => typeof value[key] === "string" && value[key].trim() ? value[key] : undefined;
+  const runAt = text("run_at");
+  const startAt = text("start_at");
+  return { title: value.title.trim(), scheduleType: value.schedule_type,
+    ...(runAt ? { runAt } : {}), ...(startAt ? { startAt } : {}),
+    ...(typeof value.interval_seconds === "number" ? { intervalSeconds: value.interval_seconds } : {}),
+    ...(isAccessMode(value.access_mode) ? { accessMode: value.access_mode } : {}) };
 }
 
 function normalizeOperation(value: unknown): ApprovalSummary["operation"] {
@@ -124,16 +138,16 @@ export function approvalRequestView(
     ? approval.actionKind as ApprovalActionKind : "other";
   const workspace = workspaceLabel(approval);
   const operation = approval.operation;
+  // A tool without a readable label reads as its action kind's sentence, never its internal name.
+  const label = operation ? toolLabels[operation.tool] : undefined;
+  const { schedule } = approval;
   return {
-    title: actionKind === "web_request" ? copy.webRequest : actionKind === "manage_schedule" ? sentence(actionKind, approval, workspace, copy) : operation ? copy.operation(toolLabels[operation.tool] ?? operation.tool.replaceAll("_", " "), operation.access === "read_only")
+    title: operation && label && !SENTENCE_KINDS.has(actionKind) ? copy.operation(label, operation.access === "read_only")
       : sentence(actionKind, approval, workspace, copy),
     details: [...(card.reason === "authority.taintReason" ? [copy.taintReason] : []),
-      ...(approval.scheduleAccessMode ? [copy.scheduleMode(accessLabel(approval.scheduleAccessMode))] : []),
-      ...(actionKind === "web_request" ? [copy.webRequestDesc] : []), ...(operation ? [...(operation.command ? [operation.command] : []), ...operation.targets.map((target, index)=>index===0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target),
-      ...(operation.tool === "browser_sign_in_wait" ? [copy.signInStep(operation.sign_in_step ?? "unknown_form")] : []),
-      ...(operation.tool === "browser_pay_wait" ? [copy.payStep(operation.wait_reason ?? "unknown_form")] : []),
-      ...(operation.browser_steps ?? []).map(step => [copy.browserStep(step.action, step.role, step.name, step.frame), step.value_preview, ...step.addons].filter(Boolean).join(" · "))]
-      : details(approval, actionKind, card, copy))],
+      ...(actionKind === "web_request" ? [copy.webRequestDesc] : []),
+      ...(schedule ? [schedule.title, scheduleTiming(schedule), ...(schedule.accessMode ? [copy.scheduleMode(accessLabel(schedule.accessMode))] : [])].filter(Boolean)
+        : operation ? operationDetails(operation, copy) : details(approval, actionKind, card, copy))],
     pathDetails: operation?.targets ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
       ...approval.targets.filter(target => target.kind === "outside").map(target => target.path)],
     risk: approval.risk ?? "high",
@@ -142,6 +156,18 @@ export function approvalRequestView(
         : copy.covers.other,
     actionKind,
   };
+}
+
+/** Kinds whose own sentence names the action better than a tool label. */
+const SENTENCE_KINDS: ReadonlySet<string> = new Set(["web_request", "manage_schedule"]);
+
+/** The exact operation, as the local decision shows it. */
+function operationDetails(operation: NonNullable<ApprovalSummary["operation"]>, copy: ApprovalRequestCopy): string[] {
+  return [...(operation.command ? [operation.command] : []),
+    ...operation.targets.map((target, index) => index === 0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target),
+    ...(operation.tool === "browser_sign_in_wait" ? [copy.signInStep(operation.sign_in_step ?? "unknown_form")] : []),
+    ...(operation.tool === "browser_pay_wait" ? [copy.payStep(operation.wait_reason ?? "unknown_form")] : []),
+    ...(operation.browser_steps ?? []).map(step => [copy.browserStep(step.action, step.role, step.name, step.frame), step.value_preview, ...step.addons].filter(Boolean).join(" · "))];
 }
 
 function sentence(kind: ApprovalActionKind, approval: ApprovalSummary, workspace: string | null, copy: ApprovalRequestCopy): string {
@@ -173,13 +199,13 @@ function workspaceLabel(approval: ApprovalSummary): string | null {
   return label || null;
 }
 
-/** `automation:create|delete|due:<id>` (the agent's schedule target): the operation and the schedule. */
+/** `automation:create:<id>`, `automation:delete_automation:<id>` or `automation:due:<now>` (the agent's schedule target). */
 function scheduleOperation(approval: ApprovalSummary): { operation: "create" | "delete" | "run" | "change"; id: string } {
   const path = approval.targets.find((target) => target.kind === "schedule")?.path ?? "";
   const [, operation = "", ...rest] = path.split(":");
   const id = rest.join(":");
   if (operation === "create") return { operation: "create", id };
-  if (operation === "delete") return { operation: "delete", id };
+  if (operation === "delete" || operation === "delete_automation") return { operation: "delete", id };
   if (operation === "due") return { operation: "run", id: "" };
   return { operation: "change", id: path };
 }

@@ -180,7 +180,7 @@ async fn unattended(
                 results
                     .iter()
                     .any(|value| value.contains("schedule_permission_required")
-                        && value.contains("authority.taintReason")),
+                        && value.contains("read outside content")),
                 "{results:?}"
             );
             break;

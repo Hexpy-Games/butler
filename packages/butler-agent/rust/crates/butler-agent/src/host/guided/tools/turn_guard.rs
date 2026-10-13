@@ -167,7 +167,8 @@ pub(super) async fn unattended_feedback(
 ) -> Value {
     notify(owner).await;
     json!({"ok":false,"error":{
-        "reason": (owner.taint() == TurnTaint::External).then_some("authority.taintReason"),
+        "reason": (owner.taint() == TurnTaint::External)
+            .then_some("This run read outside content, so the step needs a fresh permission."),
         "code":"schedule_permission_required",
         "message":"This scheduled run cannot ask for permission, so this step did not run.",
         "recoverable":true,

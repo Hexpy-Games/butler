@@ -84,10 +84,7 @@ pub(super) fn request(
     let mut approval = approval::summarize(facts);
     approval.operation = Some(approval::exact_operation(facts));
     if record.capability == "create_automation" {
-        approval.schedule_access_mode = input
-            .get("access_mode")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned);
+        approval.schedule = Some(approval::schedule(&input));
     }
     Ok(AuthorityRequestProjection {
         request_ref: record.request_ref.clone(),

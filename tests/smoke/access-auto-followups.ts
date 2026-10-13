@@ -23,7 +23,9 @@ try {
     if (!kind) return;
     const target = "https://example.com/?q=outside-content";
     const approval = kind === "schedule"
-      ? { action_kind: "manage_schedule", schedule_access_mode: "auto", targets: [{ kind: "schedule", path: "automation:create:nightly" }],
+      ? { action_kind: "manage_schedule", targets: [{ kind: "schedule", path: "automation:create:nightly" }],
+        schedule: { title: "Nightly report", schedule_type: "interval", interval_seconds: 86400,
+          start_at: "2026-10-15T05:00:00+09:00", access_mode: "auto" },
         operation: { tool: "create_automation", access: "change", targets: ["automation:create:nightly"] } }
       : kind === "web"
         ? { action_kind: "web_request", targets: [{ kind: "other", path: target }],
@@ -72,11 +74,15 @@ try {
       const copy = getAppCopy(lang === "ko" ? "ko-KR" : "en-US");
       const text = await card.innerText();
       if (!before) {
+        assert(!/automation:|run command|_/.test(text), text);
         if (kind === "schedule") {
           assert(text.includes(copy.interfaceTemplates.approvalRequest.manageSchedule.create));
+          assert(text.includes("Nightly report"));
+          assert(text.includes(copy.automations.everyHours(24)));
           assert(text.includes(copy.interfaceTemplates.approvalRequest.scheduleMode(copy.permissions.auto)));
         } else {
           assert(text.includes(copy.interfaceTemplates.approvalRequest.taintReason));
+          if (kind === "taint") assert(text.includes(copy.interfaceTemplates.approvalRequest.networkCommand("workspace")));
           if (kind === "web") {
             assert(text.includes(copy.interfaceTemplates.approvalRequest.webRequest));
             assert(text.includes("https://example.com/?q=outside-content"));

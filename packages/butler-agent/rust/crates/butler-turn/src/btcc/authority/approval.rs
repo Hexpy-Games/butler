@@ -6,7 +6,9 @@
 
 mod command_risk;
 mod operation;
+mod schedule;
 pub(super) use operation::exact_operation;
+pub(super) use schedule::schedule;
 
 use std::collections::HashSet;
 use std::path::{Component, Path};
@@ -46,9 +48,9 @@ pub struct AuthorityApproval {
     /// Declared observation intent; OS isolation is unavailable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command_access: Option<String>,
-    /// Exact reviewed schedule mode.
+    /// What a reviewed schedule create sets up.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub schedule_access_mode: Option<String>,
+    pub schedule: Option<schedule::ApprovalSchedule>,
 }
 
 /// What kind of action waits for the user.
@@ -249,7 +251,7 @@ fn file_edits(facts: ApprovalFacts<'_>) -> AuthorityApproval {
     targets.extend(files);
     AuthorityApproval {
         operation: None,
-        schedule_access_mode: None,
+        schedule: None,
         command_access: None,
         action_kind: ApprovalActionKind::EditFiles,
         targets,
@@ -292,7 +294,7 @@ fn file_reads(facts: ApprovalFacts<'_>) -> AuthorityApproval {
         examples_truncated: vec![false; paths.len()],
         examples: paths,
         risk: ApprovalRisk::Low,
-        schedule_access_mode: None,
+        schedule: None,
         command_access: None,
     }
 }
@@ -333,7 +335,7 @@ fn command(facts: ApprovalFacts<'_>, kind: ApprovalActionKind) -> AuthorityAppro
         .unzip();
     AuthorityApproval {
         operation: None,
-        schedule_access_mode: None,
+        schedule: None,
         command_access: (!butler_platform::command_sandbox::approval_free_reads()
             && matches!(
                 facts.input.get("state_effect").and_then(Value::as_str),
@@ -369,7 +371,7 @@ fn single(
 ) -> AuthorityApproval {
     AuthorityApproval {
         operation: None,
-        schedule_access_mode: None,
+        schedule: None,
         command_access: None,
         action_kind,
         targets: vec![ApprovalTarget {

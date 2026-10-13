@@ -32,7 +32,7 @@ pub(super) async fn execute(
     {
         arguments["url"] = Value::String(page.final_url.clone());
     }
-    let approved = match authorize(owner, call, call_id, &arguments).await? {
+    let approved = match authorize(owner, call, call_id, &arguments, live.is_some()).await? {
         super::file_observation::Gate::Pending(result) => return super::encoded(&result),
         super::file_observation::Gate::Allowed(reference) => reference,
     };
@@ -127,6 +127,7 @@ async fn authorize(
     call: &ModelRoundToolCall,
     call_id: &str,
     arguments: &Value,
+    open_tab: bool,
 ) -> Result<super::file_observation::Gate, ToolExecutionError> {
     let target = arguments[if call.name == ToolName::WebSearch {
         "query"
@@ -138,9 +139,10 @@ async fn authorize(
     let carries_data = if call.name == ToolName::WebSearch {
         butler_turn::btcc::web_search_carries_data(target)
     } else {
+        // A page already open in a tab is read there; no request leaves.
         butler_turn::btcc::web_read_carries_data(
             target,
-            owner.web_provenance.lock().contains(target),
+            open_tab || owner.web_provenance.lock().contains(target),
         )
     };
     let decision = super::super::access::for_kind(
@@ -149,7 +151,12 @@ async fn authorize(
     );
     if matches!(decision, butler_turn::btcc::AccessDecision::Deny(_)) {
         return Ok(super::file_observation::Gate::Pending(
-            json!({"ok":false,"error":{"code":"web_request_blocked_after_external_content"}}),
+            json!({"ok":false,"error":{
+                "code":"web_request_blocked_after_external_content",
+                "message":"This read-only turn read outside content, so it cannot send a request that may carry it.",
+                "recoverable":true,
+                "next_action":"Continue without this request.",
+            }}),
         ));
     }
     if matches!(decision, butler_turn::btcc::AccessDecision::Ask(_))
