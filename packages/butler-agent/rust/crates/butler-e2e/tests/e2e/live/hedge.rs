@@ -84,24 +84,21 @@ fn fixtures(s: &Scenario) -> Result<(), HarnessError> {
     for (name, text) in [
         (
             "Cargo.toml",
-            "[package]\nname = \"harbor\"\nversion = \"0.4.2\"\n",
+            include_str!("../../../fixtures/live-hedge/Cargo.toml.fixture"),
         ),
         (
             "CHANGELOG.md",
-            "## 0.4.2 — 2026-09-28\n\n캐시 안정성 개선.\n",
+            include_str!("../../../fixtures/live-hedge/CHANGELOG.md"),
         ),
+        ("a.txt", include_str!("../../../fixtures/live-hedge/a.txt")),
+        ("b.txt", include_str!("../../../fixtures/live-hedge/b.txt")),
         (
             "notes/2026-09-30.md",
-            "# 2026-09-30 회의\n결정: 사용자별 캐시를 비교한다. 메모리 사용량을 측정한다.\n할 일: 민수 — 2026-10-02까지 읽기 성능 측정. 지연 — 2026-10-05까지 메모리 보고서 작성.\n",
+            include_str!("../../../fixtures/live-hedge/notes/2026-09-30.md"),
         ),
         (
             "notes/2026-10-07.md",
-            "# 2026-10-07 회의\n결정: 공유 캐시를 기본으로 한다. 콜드 스타트를 개선한다.\n할 일: 민수 — 2026-10-09까지 공유 캐시 구현. 지연 — 2026-10-12까지 시작 시간 측정.\n",
-        ),
-        ("a.txt", "Approach A: cache per user; fast reads, 2x memory"),
-        (
-            "b.txt",
-            "Approach B: shared cache; half the memory, slower cold start",
+            include_str!("../../../fixtures/live-hedge/notes/2026-10-07.md"),
         ),
     ] {
         std::fs::write(workspace.join(name), text)?;

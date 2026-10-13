@@ -30,19 +30,30 @@ QUESTIONS = {
 }
 
 
+CAPABILITIES = "The assistant could search the web, read pages, read and list workspace files, and recall memory."
+
+
+def state_text(case):
+    tools = case.get("tools") or []
+    if tools:
+        used = "\n\n".join(
+            f"{index}. {tool.get('name', '')} ({'ok' if tool.get('ok') else 'failed'})\n{tool.get('output', '')}"
+            for index, tool in enumerate(tools, 1)
+        )
+    else:
+        used = "(no tools were used)"
+    return (
+        f"User request:\n{case.get('prompt', '')}\n\n"
+        f"{CAPABILITIES}\n\n"
+        f"Tools used, with outputs:\n{used}\n\n"
+        f"Assistant answer:\n{case.get('answer', '')}"
+    )
+
+
 def body(case):
-    tools = "\n".join(
-        f"{tool['name']} (ok={tool['ok']}): {tool['output']}"
-        for tool in case["tools"]
-    )
-    state = (
-        f"User request:\n{case['prompt']}\nTools used:\n{tools}\n"
-        f"Answer:\n{case['answer']}\n"
-        "The assistant could search the web, read pages, read and list workspace files, and recall memory."
-    )
     return {
         "model": "jev-1.13.0",
-        "state": state,
+        "state": state_text(case),
         "questions": {
             name: {"type": "noul", "instructions": {"task": task},
                    "criteria": {"true": yes, "false": no}}
