@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
-import { Monitor, RefreshCcw, Server } from "../../components/Icons";
+import { Server } from "../../components/Icons";
 import { ProviderLogo } from "../../components/ProviderLogo";
 import { Tag } from "../../components/Tag";
 import { ChoiceCard, ChoiceCardList, ChoiceTile, ChoiceTileGrid, type ChoiceCardState } from "./ChoiceCard";
@@ -17,13 +17,13 @@ const labels = {
     signIn: "Sign in with ChatGPT", noKey: "No key needed", claude: "Use an Anthropic API key", gemini: "Use a Google AI Studio key",
     computer: "This computer", models: "2 models · Ollama", free: "Free · Private", off: "Ollama or LM Studio off",
     zai: "Z.AI Coding Plan", zaiKey: "Coding Plan key", other: "Other (OpenAI-compatible)", own: "Your own server",
-    grok: "xAI API key", kimi: "Moonshot API key", connecting: "Connecting…", failed: "Key didn't work",
+    grok: "xAI API key", kimi: "Moonshot API key", inUse: "In use", openaiKey: "OpenAI API key", connecting: "Connecting…", failed: "Key didn't work",
   },
   "ko-KR": {
     signIn: "ChatGPT 계정으로 로그인", noKey: "키 필요 없음", claude: "Anthropic API 키로 연결", gemini: "Google AI Studio 키로 연결",
     computer: "이 컴퓨터", models: "모델 2개 · Ollama", free: "무료 · 비공개", off: "Ollama·LM Studio 꺼짐",
     zai: "Z.AI 코딩 플랜", zaiKey: "코딩 플랜 키", other: "기타 (OpenAI 호환)", own: "직접 서버 입력",
-    grok: "xAI API 키", kimi: "Moonshot API 키", connecting: "연결 중…", failed: "키를 확인하지 못했습니다",
+    grok: "xAI API 키", kimi: "Moonshot API 키", inUse: "사용 중", openaiKey: "OpenAI API 키", connecting: "연결 중…", failed: "키를 확인하지 못했습니다",
   },
 } as const;
 
@@ -49,10 +49,10 @@ export const stories: ShowcaseStory[] = [
     widths: ["375", "app"],
     render: (context) => (
       <ChoiceCardList>
-        <ChoiceCard icon={<ProviderLogo name="openai" size="lg" />} title="ChatGPT" tag={<Tag tone="accent">{text(context).noKey}</Tag>} description={text(context).signIn} />
+        <ChoiceCard icon={<ProviderLogo name="openai" size="lg" />} title="ChatGPT" description={text(context).signIn} />
         <ChoiceCard icon={<ProviderLogo name="claude" size="lg" />} title="Claude" description={text(context).claude} />
         <ChoiceCard icon={<ProviderLogo name="gemini" size="lg" />} title="Gemini" description={text(context).gemini} />
-        <ChoiceCard icon={<Monitor size="lg" />} title={text(context).computer} tag={<Tag tone="success">{text(context).free}</Tag>} description={text(context).models} />
+        <ChoiceCard icon={<Server size="lg" />} title={text(context).other} tag={<Tag tone="accent">{text(context).inUse}</Tag>} selected description={text(context).models} />
       </ChoiceCardList>
     ),
   },
@@ -61,7 +61,7 @@ export const stories: ShowcaseStory[] = [
     widths: ["320", "375", "app"],
     render: (context) => (
       <ChoiceTileGrid>
-        <ChoiceTile icon={<Monitor size="md" />} title={text(context).computer} description={text(context).off} placeholder cornerIcon={<RefreshCcw size="xs" />} />
+        <ChoiceTile icon={<ProviderLogo name="openai" />} title="OpenAI API" description={text(context).openaiKey} />
         <ChoiceTile icon={<ProviderLogo name="grok" />} title="Grok" description={text(context).grok} />
         <ChoiceTile icon={<ProviderLogo name="kimi" />} title="Kimi" description={text(context).kimi} state="loading" />
         <ChoiceTile icon={<ProviderLogo name="zai" />} title={text(context).zai} description={text(context).zaiKey} />
