@@ -44,7 +44,7 @@ try {
     if (width === 1100) {
       facts.push({ locale, theme, width, peek: await nativePeekDismiss(app, `${locale}-${theme}-${width}`, evidence) });
     }
-    await app.main(`(()=>{const b=globalThis.browserAgentSubject;b.tabs.get(${JSON.stringify(first)}).busy=true;b.publish()})()`);
+    await app.main(`(()=>{const b=globalThis.browserAgentSubject;b.tabs.get(${JSON.stringify(first)}).driven=true;b.tabs.get(${JSON.stringify(first)}).busy=true;b.publish()})()`);
     await toggleState(app, "riso", false); await app.shot(`${locale}-${theme}-${width}-toggle-busy-open`);
     await togglePane(app, false); await toggleState(app, "riso", true); await app.shot(`${locale}-${theme}-${width}-toggle-busy-closed`);
     await app.main(`(()=>{const b=globalThis.browserAgentSubject;b.tabs.get(${JSON.stringify(first)}).busy=false;b.publish()})()`);
