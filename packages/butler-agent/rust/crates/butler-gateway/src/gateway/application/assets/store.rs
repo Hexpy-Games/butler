@@ -104,7 +104,7 @@ pub(super) fn collect(
     }
     tx.commit().map_err(AppStorageError::sqlite)?;
     Ok(
-        json!({"status":"ok","id":id,"width":image.width,"height":image.height,"alt":alt,"nearby_text":nearby,"url":format!("/assets/{id}")}),
+        json!({"status":"ok","id":id,"width":image.width,"height":image.height,"alt":alt,"nearby_text":nearby,"url":format!("/message-assets/{id}")}),
     )
 }
 

@@ -190,7 +190,7 @@ try {
       const data = url.pathname === "/library" ? body : { accepted: { ...message(null), role: "user", text: body.text, id: body.client_message_id }, replies: [] };
       return route.fulfill({ json: { ok: true, data } });
     }
-    if (url.pathname.startsWith("/assets/") || url.pathname === "/favicons") return route.fulfill({ status: 404 });
+    if (url.pathname.startsWith("/message-assets/") || url.pathname === "/favicons") return route.fulfill({ status: 404 });
     if (/^\/sessions\/[^/]+\/controls$/u.test(url.pathname)) return route.fulfill({ json: { ok: true, data: { session_id: "butler-client", revision: 0, catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-5.6-sol", reasoning_effort: "none", access_mode: "full_access", plan_mode: false } } } });
     if (url.pathname === "/session-queue") return route.fulfill({ json: { ok: true, data: { queued_messages: [] } } });
     if (["/session-view", "/summary", "/navigation", "/events/live", "/health"].includes(url.pathname)) return route.fulfill({ json: { ok: true, data: {} } });

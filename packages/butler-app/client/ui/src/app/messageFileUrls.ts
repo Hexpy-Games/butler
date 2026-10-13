@@ -65,7 +65,7 @@ export function messageFileSource(link: MessageFileLink): string | undefined {
 
 /**
  * The loadable source of a gateway-signed image (an answer block's collected
- * image): the desktop renderer runs on its own app origin, so the signed
+ * image at `/message-assets/<id>`): the desktop renderer runs on its own app origin, so the signed
  * gateway-relative path resolves against the gateway.
  */
 export function gatewayImageSource(imageUrl?: string): string | undefined {

@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { gatewayImageSource } from "../../packages/butler-app/client/ui/src/app/messageFileUrls.ts";
 
-const signed = "/assets/img_20o1dfj3nh?expires=1791829861&signature=abc";
+const signed = "/message-assets/img_20o1dfj3nh?expires=1791829861&signature=abc";
 const scope = globalThis as { window?: { butlerApp?: { serverUrl?: string } } };
 const original = scope.window;
 

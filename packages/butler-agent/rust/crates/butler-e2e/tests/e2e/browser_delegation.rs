@@ -31,7 +31,7 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
         .send()
         .await?;
     assert_eq!(stream.status(), 200);
-    let host = tokio::spawn(serve_host(stream, admin, false));
+    let host = tokio::spawn(serve_host(stream, admin, false, "general".to_owned()));
     s.turn("general", stub::OWNER).await?;
     tokio::time::timeout(Duration::from_secs(30), host)
         .await
@@ -143,6 +143,7 @@ async fn serve_host(
     mut stream: Response,
     admin: AdminClient,
     answer: bool,
+    session: String,
 ) -> Result<(), HarnessError> {
     let mut buffer = String::new();
     let ops = vec![
@@ -154,12 +155,12 @@ async fn serve_host(
         "tab.image_collect",
     ];
     for op in ops {
-        let frame = next_call(&mut stream, &mut buffer, op).await?;
+        let frame = next_call(&mut stream, &mut buffer, op, &session).await?;
         assert_eq!(
-            frame["session"], "general",
+            frame["session"], session,
             "internal session reached browser host: {frame}"
         );
-        let tab = json!({"id":"parent-tab","owner":"conversation:general","profile":"signed_out","epoch":1,"holder":"agent","url":"https://example.com/"});
+        let tab = json!({"id":"parent-tab","owner":format!("conversation:{session}"),"profile":"signed_out","epoch":1,"holder":"agent","url":"https://example.com/"});
         if op == "tab.open" {
             let event = admin
                 .send(
@@ -203,7 +204,7 @@ async fn serve_host(
         if op != "tabs.list" {
             let ended = next_frame(&mut stream, &mut buffer).await?;
             assert_eq!(ended["op"], "use.ended");
-            assert_eq!(ended["session"], "general");
+            assert_eq!(ended["session"], session);
             assert_eq!(ended["turn_id"], frame["turn_id"]);
             assert_eq!(ended["args"]["id"], frame["id"]);
             assert_eq!(ended["args"]["abort"], false);
@@ -211,7 +212,7 @@ async fn serve_host(
     }
     let finished = next_frame(&mut stream, &mut buffer).await?;
     assert_eq!(finished["op"], "use.finished");
-    assert_eq!(finished["session"], "general");
+    assert_eq!(finished["session"], session);
     assert!(
         finished["turn_id"]
             .as_str()
@@ -219,8 +220,8 @@ async fn serve_host(
             .starts_with("steward-turn-")
     );
     if answer {
-        let frame = next_call(&mut stream, &mut buffer, "tab.open").await?;
-        assert_eq!(frame["session"], "general");
+        let frame = next_call(&mut stream, &mut buffer, "tab.open", &session).await?;
+        assert_eq!(frame["session"], session);
         admin
             .send(
                 Method::POST,
@@ -244,13 +245,14 @@ async fn next_call(
     stream: &mut Response,
     buffer: &mut String,
     op: &str,
+    session: &str,
 ) -> Result<Value, HarnessError> {
     let started = if op == "tabs.list" {
         None
     } else {
         let frame = next_frame(stream, buffer).await?;
         assert_eq!(frame["op"], "use.started");
-        assert_eq!(frame["session"], "general");
+        assert_eq!(frame["session"], session);
         Some(frame)
     };
     let frame = next_frame(stream, buffer).await?;

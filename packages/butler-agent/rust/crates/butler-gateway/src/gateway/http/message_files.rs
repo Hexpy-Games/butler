@@ -23,7 +23,7 @@ use butler_core::public_text::trim_js_whitespace;
 const UPLOAD_RETAIN_BYTES: usize = 10 * 1024 * 1024 + 1;
 
 pub(super) fn handles(method: &Method, path: &str) -> bool {
-    (method == Method::GET && path.starts_with("/assets/"))
+    (method == Method::GET && path.starts_with("/message-assets/"))
         || (method == Method::POST && path == "/message-files")
         || (method == Method::GET
             && path
@@ -35,7 +35,7 @@ pub(super) async fn route(
     state: Arc<HttpState>,
     request: Request<Body>,
 ) -> Result<Response, HttpError> {
-    if request.uri().path().starts_with("/assets/") {
+    if request.uri().path().starts_with("/message-assets/") {
         return super::assets::route(state, request).await;
     }
     if request.method() == Method::POST {
