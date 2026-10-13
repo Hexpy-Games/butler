@@ -237,6 +237,7 @@ pub(super) async fn execute(
                 | ToolName::WriteFile
                 | ToolName::EditFile
                 | ToolName::BindSessionGitWorktree
+                | ToolName::SwitchFolder
                 | ToolName::StartTopicConversation
                 | ToolName::RequestServiceRestart
                 | ToolName::CreateAutomation

@@ -5,7 +5,7 @@ use AccessDecision::{Allow, Ask, Deny};
 use AccessMode::{AskAlways, AskExceptReads, FullAccess, ReadOnly};
 use CapabilityKind::{
     ButlerOutput, CommandMutation, CommandObservation, Connector, CrossConversation, Exempt,
-    FileEdit, FileRead, FullOnly, InternalRead, Network, OtherEffect, ProjectRecord, Schedule,
+    FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, OtherEffect, ProjectRecord, Schedule,
     SettingsWrite,
 };
 use TargetScope::{NoTarget, Outside, ProjectFolder, Protected};
@@ -66,6 +66,9 @@ const ALLOW: &[(
         Some(ProjectFolder),
         Some(ApprovalRisk::Low),
     ),
+    // A folder switch within the consented folder or its repository.
+    (AskAlways, FolderSwitch, Some(ProjectFolder), None),
+    (AskExceptReads, FolderSwitch, Some(ProjectFolder), None),
 ];
 const KINDS: &[CapabilityKind] = &[
     Exempt(ApprovalExemptAction::FirstConversationOnboarding),
@@ -93,6 +96,7 @@ const KINDS: &[CapabilityKind] = &[
     FullOnly(FullOnlyAction::ServiceRestart),
     FullOnly(FullOnlyAction::GitWorktree),
     FullOnly(FullOnlyAction::MemoryForget),
+    FolderSwitch,
     OtherEffect,
 ];
 fn expected(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
@@ -228,6 +232,7 @@ fn access_boundary_matches_the_owner_table() {
             "forget_explicit_memory",
             FullOnly(FullOnlyAction::MemoryForget),
         ),
+        ("switch_folder", FolderSwitch),
         ("mcp__x__y", OtherEffect),
     ] {
         assert_eq!(

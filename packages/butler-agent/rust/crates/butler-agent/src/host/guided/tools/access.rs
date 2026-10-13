@@ -4,7 +4,8 @@ use butler_turn::btcc::{
     AccessDecision, AccessRequest, ApprovalRisk, BtccError, CapabilityKind, ModelRoundToolCall,
     TargetScope, TurnTaint, command_access_risk, command_scope_unresolved, decide, needs_scope,
 };
-use butler_turn::workspace::{ScopeRoots, classify_targets};
+use butler_core::tool_protocol::ToolName;
+use butler_turn::workspace::{FolderRelation, ScopeRoots, classify_targets};
 use serde_json::Value;
 
 pub(super) fn kind(call: &ModelRoundToolCall) -> CapabilityKind {
@@ -51,15 +52,21 @@ async fn target_scope(
     call: &ModelRoundToolCall,
     args: &Value,
 ) -> Result<TargetScope, BtccError> {
-    let root = owner
-        .binding
-        .workspace_reference
-        .as_ref()
-        .map(butler_turn::workspace::WorkspaceReference::get)
-        .transpose()
-        .map_err(|e| BtccError::relayed(e.code(), "Workspace unavailable"))?
-        .unwrap_or_else(|| owner.binding.workspace_path.clone());
-    let project = owner.binding.project_folder.as_ref().map(|_| root.clone());
+    let consented = *owner.folder_consent.lock();
+    if call.name == ToolName::SwitchFolder {
+        // The prepared input carries how the target relates to the folder.
+        let contained = args["relation"]
+            .as_str()
+            .and_then(FolderRelation::parse)
+            .is_some_and(FolderRelation::contained);
+        return Ok(if contained && consented {
+            TargetScope::ProjectFolder
+        } else {
+            TargetScope::Outside
+        });
+    }
+    let root = owner.current_workspace()?;
+    let project = consented.then(|| root.clone());
     let data = owner.binding.butler_data.clone();
     let protected = owner.binding.protected_ledger_roots.clone();
     let installation = owner.binding.installation_root.clone();

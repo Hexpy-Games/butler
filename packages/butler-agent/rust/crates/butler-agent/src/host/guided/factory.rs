@@ -131,6 +131,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 semantic,
                 mut phase,
                 workspace,
+                folder_consent,
                 accepted_plan,
                 initial_work,
                 work_scope,
@@ -247,7 +248,9 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         ),
                     },
                     project_id: policy.project_id.clone(),
-                    project_folder: policy.project_id.as_ref().map(|_| workspace_path.clone()),
+                    project_folder: folder_consent
+                        .unwrap_or(policy.project_id.is_some())
+                        .then(|| workspace_path.clone()),
                     project_sources: project_sources(&start.turn.context),
                     visible_names: surface.iter().map(|t| t.name.clone()).collect(),
                     authorized_names: phase.authorized_names.iter().cloned().collect(),

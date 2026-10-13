@@ -24,6 +24,7 @@ const NON_FULL: &[&str] = &[
     "output_check",
     "output_publish",
     "run_command",
+    "switch_folder",
     "write_file",
     "edit_file",
     "list_tool_capabilities",
@@ -84,6 +85,7 @@ const ASK_FIRST_WRITES: &[&str] = &[
     "output_publish",
     "library_organize",
     "run_command",
+    "switch_folder",
     "set_wallpaper",
     "save_wallpaper_module",
     "create_automation",
@@ -269,7 +271,14 @@ fn apply_access_mode(
             }
         }
         names.extend(
-            ["run_command", "write_file", "edit_file", "output_publish"].map(str::to_owned),
+            [
+                "run_command",
+                "switch_folder",
+                "write_file",
+                "edit_file",
+                "output_publish",
+            ]
+            .map(str::to_owned),
         );
         if scope.has_project {
             names.insert("bind_session_git_worktree".into());
@@ -282,6 +291,7 @@ fn apply_access_mode(
         names.extend(
             [
                 "run_command",
+                "switch_folder",
                 "write_file",
                 "edit_file",
                 "read_tool_output_artifact",
@@ -378,6 +388,7 @@ pub(super) fn legacy_visible<'a>(
         AccessMode::AskAlways | AccessMode::AskExceptReads => {
             names.extend([
                 "run_command",
+                "switch_folder",
                 "read_tool_output_artifact",
                 "write_file",
                 "edit_file",
@@ -393,6 +404,7 @@ pub(super) fn legacy_visible<'a>(
         AccessMode::FullAccess => {
             names.extend([
                 "run_command",
+                "switch_folder",
                 "read_tool_output_artifact",
                 "write_file",
                 "edit_file",

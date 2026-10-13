@@ -19,6 +19,9 @@ pub enum CapabilityKind {
     CrossConversation,
     ButlerOutput,
     FullOnly(FullOnlyAction),
+    /// Moving the session's working folder; its scope says whether the
+    /// target stays within the consented folder or its repository.
+    FolderSwitch,
     OtherEffect,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -66,7 +69,8 @@ pub enum AccessDecision {
 pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     use AccessDecision::{Allow, Ask, Deny};
     use CapabilityKind::{
-        ButlerOutput, CommandMutation, CommandObservation, Exempt, FileRead, FullOnly, InternalRead,
+        ButlerOutput, CommandMutation, CommandObservation, Exempt, FileRead, FolderSwitch,
+        FullOnly, InternalRead,
     };
     if *mode == AccessMode::FullAccess {
         return Allow;
@@ -89,6 +93,7 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     match request.kind {
         Exempt(_) | InternalRead | ButlerOutput => Allow,
         FileRead if first && project => Allow,
+        FolderSwitch if project => Allow,
         CommandObservation { sandboxed: true } if project => Allow,
         CommandObservation { sandboxed: false } | CommandMutation { .. }
             if first && project && request.risk == ApprovalRisk::Low =>
@@ -106,6 +111,7 @@ pub fn needs_scope(mode: &AccessMode, kind: CapabilityKind) -> bool {
         CapabilityKind::CommandObservation { sandboxed } => {
             *mode == AccessMode::AskExceptReads || sandboxed && *mode == AccessMode::AskAlways
         }
+        CapabilityKind::FolderSwitch => *mode != AccessMode::FullAccess,
         _ => false,
     }
 }
@@ -122,7 +128,7 @@ impl CapabilityKind {
             BindSessionGitWorktree, CallMcpTool, CreateAutomation, DeleteAutomation, EditFile,
             ForgetExplicitMemory, GrepFiles, ListFiles, OutputPublish, PreviewStart, PreviewStop,
             ReadFile, RequestServiceRestart, RunCommand, RunDueAutomations, SaveWallpaperModule,
-            SetWallpaper, StartTopicConversation, UpdateAutomation, WriteFile,
+            SetWallpaper, StartTopicConversation, SwitchFolder, UpdateAutomation, WriteFile,
         };
         let Some(tool) = ToolName::parse(name) else {
             return Self::OtherEffect;
@@ -159,6 +165,7 @@ impl CapabilityKind {
             SetWallpaper | SaveWallpaperModule => Self::SettingsWrite,
             StartTopicConversation => Self::CrossConversation,
             OutputPublish => Self::ButlerOutput,
+            SwitchFolder => Self::FolderSwitch,
             _ => Self::InternalRead,
         }
     }

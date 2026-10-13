@@ -164,6 +164,9 @@ impl AppSessionWorkspaceProvisioner for AppSessionWorkspaces {
                 .map_err(GatewayApplicationError::internal_from)?;
             match recovered.authority {
                 SessionWorkspaceAuthority::Project { workspace_path } => Ok(workspace_path),
+                SessionWorkspaceAuthority::SessionFolder { workspace_path, .. } => {
+                    Ok(Some(workspace_path))
+                }
                 SessionWorkspaceAuthority::SessionWorktree { workspace_path, .. }
                     if matches!(
                         recovered.validation,
@@ -220,6 +223,9 @@ impl AppSessionWorkspaceProvisioner for AppSessionWorkspaces {
                         "workspace_status":"unavailable"
                     }),
                 },
+                SessionWorkspaceAuthority::SessionFolder { workspace_path, .. } => {
+                    folder_info(&recovery, &workspace_path, cancellation).await?
+                }
                 SessionWorkspaceAuthority::Project { .. } => {
                     let Some(path) = query.project_workspace_path.as_deref() else {
                         return Ok(serde_json::json!({
@@ -275,6 +281,37 @@ impl AppSessionWorkspaceProvisioner for AppSessionWorkspaces {
             }))
         })
     }
+}
+
+/// A moved working folder: its path, name and Git state.
+async fn folder_info(
+    recovery: &SessionWorkspaceRecovery,
+    path: &str,
+    cancellation: tokio_util::sync::CancellationToken,
+) -> Result<Value, GatewayApplicationError> {
+    let mut value = match recovery
+        .inspect_project(path, cancellation)
+        .await
+        .map_err(GatewayApplicationError::internal_from)?
+    {
+        ProjectWorkspaceInspection::Git { branch, dirty } => serde_json::json!({
+            "available":true,"workspace_mode":"git","branch_name":branch,
+            "safe_status":branch.as_ref().map(|name|format!("Git branch {name}")).unwrap_or_else(||"Detached HEAD".into()),
+            "workspace_status":"available","dirty":dirty
+        }),
+        ProjectWorkspaceInspection::Folder => serde_json::json!({
+            "available":false,"workspace_mode":"folder","safe_status":"Working folder",
+            "workspace_status":"available"
+        }),
+        ProjectWorkspaceInspection::Unavailable { code } => serde_json::json!({
+            "available":false,"workspace_mode":"unknown","safe_status":"Working folder",
+            "safe_error_code":code,"workspace_status":"available"
+        }),
+    };
+    value["workspace_binding"] = "session_folder".into();
+    value["workspace_label"] = safe_basename(path).into();
+    value["workspace_path"] = path.into();
+    Ok(value)
 }
 
 fn safe_basename(path: &str) -> String {

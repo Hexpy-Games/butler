@@ -103,7 +103,7 @@ pub(in crate::host::guided::tools) async fn gate(
             source_turn_id: owner.binding.turn_id.clone(),
             operation_occurrence_id: Some(occurrence.into()),
             source_work_id: String::new(),
-            workspace_path: owner.binding.workspace_path.to_string_lossy().into_owned(),
+            workspace_path: owner.active_workspace_path().to_string_lossy().into_owned(),
             plan_revision_id: String::new(),
             action_key: occurrence.into(),
             authority_generation: 1,

@@ -14,7 +14,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::{Commands, SessionBindingStore, WorkspaceFiles, WorkspaceReference, WorkspaceResult};
 pub use authority::SessionWorkspaceAuthority;
-use authority::resolve_authority;
+use authority::{resolve_authority, resolve_without_folder};
 pub use git::ProjectWorkspaceInspection;
 use git::{inspect_project_workspace, validate_linked_worktree};
 pub use git_status::ProjectGitStatus;
@@ -64,8 +64,29 @@ impl SessionWorkspaceRecovery {
         project_workspace_path: Option<&str>,
         abort: CancellationToken,
     ) -> WorkspaceResult<RecoveredSessionWorkspaceReference> {
-        let binding = self.bindings.get_by_session_id(session_id).await?;
-        let authority = resolve_authority(binding.as_ref(), project_workspace_path);
+        let mut binding = self.bindings.get_by_session_id(session_id).await?;
+        let mut authority = resolve_authority(binding.as_ref(), project_workspace_path);
+        if let SessionWorkspaceAuthority::SessionFolder {
+            workspace_path,
+            origin_path,
+            ..
+        } = &authority
+        {
+            let path = std::path::PathBuf::from(workspace_path);
+            let present = self
+                .files
+                .run(move || path.metadata().is_ok_and(|metadata| metadata.is_dir()))
+                .await?;
+            if !present {
+                // The moved folder is gone (e.g. a removed worktree): work in
+                // the folder the session had before its first move.
+                let origin = origin_path.clone();
+                if let Some(binding) = binding.as_mut() {
+                    binding.workspace_path.clone_from(&origin);
+                }
+                authority = resolve_without_folder(binding.as_ref(), Some(&origin));
+            }
+        }
         drop(binding);
         if let SessionWorkspaceAuthority::Unavailable { error_code, .. } = &authority {
             let error_code = *error_code;
@@ -78,6 +99,12 @@ impl SessionWorkspaceRecovery {
             });
         }
         let validation = match &authority {
+            SessionWorkspaceAuthority::SessionFolder { workspace_path, .. } => {
+                SessionWorkspaceValidation::Valid {
+                    path: workspace_path.clone(),
+                    dirty: false,
+                }
+            }
             SessionWorkspaceAuthority::Project { workspace_path } => {
                 if let Some(path) = workspace_path
                     .as_deref()

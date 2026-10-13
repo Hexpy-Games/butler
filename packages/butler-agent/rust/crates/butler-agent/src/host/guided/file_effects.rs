@@ -22,6 +22,8 @@ pub(crate) struct PreparedGuidedFileEffect {
 
 pub(crate) struct GuidedFileEffects {
     scope: EffectFileScope,
+    /// The session's working folder; a folder switch moves it mid-turn.
+    workspace: Option<butler_turn::workspace::WorkspaceReference>,
     registered_write: Arc<RegisteredWrite>,
     registered_edit: Arc<RegisteredEdit>,
 }
@@ -33,10 +35,24 @@ impl GuidedFileEffects {
         scope: EffectFileScope,
     ) -> Self {
         Self {
+            workspace: context.workspace_reference.clone(),
             scope,
             registered_edit: Arc::new(RegisteredEdit::new(capabilities.clone(), context.clone())),
             registered_write: Arc::new(RegisteredWrite::new(capabilities, context)),
         }
+    }
+
+    /// The write scope in the current working folder.
+    fn scope(&self) -> EffectFileScope {
+        let mut scope = self.scope.clone();
+        if let Some(path) = self
+            .workspace
+            .as_ref()
+            .and_then(|reference| reference.get().ok())
+        {
+            scope.workspace = path;
+        }
+        scope
     }
 
     pub(crate) async fn prepare(
@@ -61,8 +77,9 @@ impl GuidedFileEffects {
         &self,
         args: &Value,
     ) -> Result<PreparedGuidedFileEffect, BtccError> {
+        let scope = self.scope();
         if let Some(path) = args.get("path").and_then(Value::as_str)
-            && let Err(error) = butler_turn::workspace::guard_effect_file(&self.scope, path).await
+            && let Err(error) = butler_turn::workspace::guard_effect_file(&scope, path).await
             && error.code() == "protected_path"
         {
             // Refuse protected data before asking for approval. Other boundary
@@ -70,7 +87,7 @@ impl GuidedFileEffects {
             return Err(BtccError::relayed(error.code(), error.message()));
         }
         let adapter: Arc<dyn EffectAdapter> = Arc::new(WorkspaceFileEffectAdapter::new(
-            self.scope.clone(),
+            scope,
             self.registered_write.clone(),
         ));
         let input = adapter
