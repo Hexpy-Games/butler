@@ -5,6 +5,8 @@
 //! the classifier. A scheduled (unattended) run never waits: the step Auto
 //! would ask about fails fast with a reason, and the run is flagged; "run
 //! now" is attended and asks as usual.
+mod unattended;
+
 use super::stub::{self, Script, call};
 use super::{approve, assert_counts, delivered, outputs, paused};
 use butler_e2e::e2e::{

@@ -52,9 +52,21 @@ async fn reply(
                 == key.user_request
         })
         .count();
+    let work = work_id(&body);
     requests.push(body);
-    let item = script.rounds.lock().expect("script lock").get(&key.user_request).and_then(|r| r.get(step)).cloned()
+    // Rounds keyed by a prefix serve turns whose full request text is
+    // rendered by Butler (a delegated steward's packet, a delegated result).
+    let rounds = script.rounds.lock().expect("script lock");
+    let round = rounds.get(&key.user_request).or_else(|| {
+        rounds
+            .iter()
+            .find(|(prefix, _)| key.user_request.starts_with(prefix.as_str()))
+            .map(|(_, round)| round)
+    });
+    let item = round.and_then(|r| r.get(step)).cloned()
         .unwrap_or_else(|| json!({"type":"message","id":"msg_done","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Checked.","annotations":[]}]}));
+    let item: Value = serde_json::from_str(&item.to_string().replace("{{WORK}}", &work))
+        .expect("stub item");
     (
         [("content-type", "text/event-stream")],
         super::super::token_cache::wire(&item),
@@ -63,4 +75,22 @@ async fn reply(
 }
 pub(crate) fn call(id: &str, name: &str, args: &Value) -> Value {
     json!({"type":"function_call","id":format!("fc_{id}"),"call_id":id,"name":name,"arguments":args.to_string(),"status":"completed"})
+}
+/// The Work id the newest tool output of this request reported, for
+/// `{{WORK}}` placeholders in scripted calls.
+fn work_id(body: &Value) -> String {
+    body["input"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .rev()
+        .filter_map(|item| item["output"].as_str())
+        .filter_map(|output| serde_json::from_str::<Value>(output).ok())
+        .find_map(|value| {
+            value
+                .pointer("/output/work/work_id")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
+        .unwrap_or_default()
 }

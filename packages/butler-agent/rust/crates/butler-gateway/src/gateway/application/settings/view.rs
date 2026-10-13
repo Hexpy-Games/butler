@@ -255,8 +255,6 @@ pub(super) fn read(
     );
     Ok(Value::Object(output))
 }
-/// The legacy main-screen keys, normalized, and the `wallpaper` setting, which
-/// they describe until a PATCH stores one.
 /// The resolved conversation access mode and the schedule default (D7).
 fn insert_access(
     db: &Connection,
@@ -272,6 +270,8 @@ fn insert_access(
     Ok(())
 }
 
+/// The legacy main-screen keys, normalized, and the `wallpaper` setting, which
+/// they describe until a PATCH stores one.
 fn appearance(stored: &Map<String, Value>, output: &mut Map<String, Value>) {
     output.insert(
         "appearance_theme".into(),

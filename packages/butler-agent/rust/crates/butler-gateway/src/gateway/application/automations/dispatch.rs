@@ -190,7 +190,7 @@ impl AppApplication {
                     &completed,
                 )?;
             }
-            db.execute("UPDATE app_automations SET last_run_at=?1,last_run_state=?2,last_safe_error_code=?3,consecutive_failure_count=CASE WHEN ?2='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?1 WHERE id=?4",params![completed,result.state,result.safe_error,queued.automation.id]).map_err(AppStorageError::sqlite)?;
+            db.execute("UPDATE app_automations SET last_run_at=?1,last_run_state=?2,last_safe_error_code=COALESCE(?3,(SELECT safe_error_code FROM app_automation_runs WHERE id=?5)),consecutive_failure_count=CASE WHEN ?2='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?1 WHERE id=?4",params![completed,result.state,result.safe_error,queued.automation.id,queued.run_id]).map_err(AppStorageError::sqlite)?;
             let run=records::run(db,&queued.run_id)?;
             publish(
                 db,
@@ -303,7 +303,7 @@ impl AppApplication {
         self.storage.execute(move|db|{
             let placeholder=if result.state=="queued"{result.turn_id.as_deref()}else{None};
             record_run(db,&run_id,&result,&completed,placeholder)?;
-            db.execute("UPDATE app_automations SET next_run_at=?1,last_run_at=?2,last_run_state=?3,last_safe_error_code=?4,run_count=run_count+1,consecutive_failure_count=CASE WHEN ?3='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?2,state=CASE WHEN schedule_type='once' THEN 'paused' ELSE state END WHERE id=?5",params![next,completed,result.state,result.safe_error,row.id]).map_err(AppStorageError::sqlite)?;
+            db.execute("UPDATE app_automations SET next_run_at=?1,last_run_at=?2,last_run_state=?3,last_safe_error_code=COALESCE(?4,(SELECT safe_error_code FROM app_automation_runs WHERE id=?6)),run_count=run_count+1,consecutive_failure_count=CASE WHEN ?3='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?2,state=CASE WHEN schedule_type='once' THEN 'paused' ELSE state END WHERE id=?5",params![next,completed,result.state,result.safe_error,row.id,run_id]).map_err(AppStorageError::sqlite)?;
             let run=records::run(db,&run_id)?;
             publish(
                 db,
@@ -427,7 +427,8 @@ fn record_run(
     } else {
         result.turn_id.as_deref()
     };
-    // An unattended run may report attention (D8) before its dispatch is recorded.
+    // An unattended run may report attention (D8) before its dispatch is
+    // recorded; the schedule's last code then follows the run's.
     db.execute("UPDATE app_automation_runs SET state=?1,completed_at=?2,safe_error_code=COALESCE(?3,safe_error_code),queued_message_id=?4,turn_id=?5 WHERE id=?6",params![result.state,completed,result.safe_error,placeholder,turn,run_id]).map_err(AppStorageError::sqlite)?;
     if let Some(message_id) = placeholder {
         let (text, status, retryable) = if result.state == "queued" {

@@ -9,7 +9,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
-use super::environment::guided_environment;
+use super::environment::{Scratch, scratch_environment};
 use super::process::{
     FORCE_SETTLEMENT_GRACE, GroupSignal, ProcessHost, TERMINATION_GRACE, signal_command,
     signal_name,
@@ -182,7 +182,8 @@ async fn prepare_command(
         let cwd = cwd.clone();
         move || {
             let invocation = invocation(&input)?;
-            let environment = guided_environment(&host, &butler_data)?;
+            let scratch = Scratch::new(&butler_data, input.access == GuidedAccess::ProjectWrite);
+            let environment = scratch_environment(&host, &butler_data, &scratch)?;
             let process_cwd = command_sandbox::working_directory(&cwd).map_err(CommandError::io)?;
             Ok::<_, CommandError>((invocation, environment, process_cwd))
         }
@@ -421,19 +422,19 @@ pub(super) fn guarded_directory(
 }
 
 /// A mutating command auto-allowed inside the project: it may write only the
-/// project and the command scratch folders its environment names (temp,
-/// tool cache, generated artifacts), never the rest of the Butler data folder.
+/// project and its own scratch folders (temp, tool cache, generated
+/// artifacts), never the rest of the Butler data folder.
 fn project_write_shell(
     input: &GuidedCommandInput,
     environment: &HashMap<String, String>,
 ) -> Result<command_sandbox::Invocation, command_sandbox::SandboxError> {
     let data = &input.butler_data;
-    let scratch = [
-        data.join("tmp"),
-        data.join("cache/tools"),
-        data.join("artifacts/generated"),
+    let scratch = Scratch::new(data, true);
+    let writable = [
+        scratch.temporary.as_path(),
+        scratch.cache.as_path(),
+        scratch.artifacts.as_path(),
     ];
-    let writable: Vec<&Path> = scratch.iter().map(PathBuf::as_path).collect();
     // App project folders live under the data folder; the default deny already
     // covers it otherwise, so deny it explicitly only when it is not an ancestor.
     let denied: Vec<&Path> =

@@ -86,8 +86,9 @@ pub struct MessageSendRequest {
     pub access_mode: Option<Value>,
     pub plan_mode: Option<Value>,
     pub subsession_result: Option<butler_turn::btcc::SubsessionResultContext>,
-    /// Set only by the scheduler (never parsed from a client body): the
-    /// schedule run this message starts, and whether nobody attends it.
+    /// Set only by the scheduler and the internal steward-result route (never
+    /// parsed from a client body): the schedule run this message belongs to,
+    /// and whether nobody attends it.
     pub schedule_run: Option<butler_turn::btcc::ScheduleRunContext>,
 }
 

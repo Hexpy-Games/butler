@@ -71,9 +71,11 @@ fn initial_taint(context: &Value, restored: Option<&AuthorityLoopContinuation>) 
     }
 }
 
-/// Tools whose results bring in content from the web, a connector or a page.
-fn reads_external(name: &str) -> bool {
-    matches!(
+/// Tools whose results bring in content from the web, a connector or a page,
+/// including a command that reaches the network.
+fn reads_external(name: &str, args: &Value) -> bool {
+    (name == "run_command" && args["state_effect"] == "remote_observation")
+        || matches!(
         name,
         "web_search"
             | "web_read"
@@ -99,8 +101,8 @@ impl GuidedTools {
     }
 
     /// Records the taint a finished call of `effective_name` brings in.
-    pub(super) fn observe_result(&self, effective_name: &str) {
-        if reads_external(effective_name) {
+    pub(super) fn observe_result(&self, effective_name: &str, args: &Value) {
+        if reads_external(effective_name, args) {
             self.mark_external();
         }
     }
@@ -115,6 +117,16 @@ impl GuidedTools {
 
     pub(super) fn unattended(&self) -> bool {
         self.binding.turn_guard.unattended.is_some()
+    }
+
+    /// The unattended run a delegated child inherits, so it cannot wait either.
+    pub(super) fn unattended_run(&self) -> Option<butler_turn::btcc::ScheduleRunContext> {
+        let run = self.binding.turn_guard.unattended.as_ref()?;
+        Some(butler_turn::btcc::ScheduleRunContext {
+            automation_id: run.automation_id.clone().unwrap_or_default(),
+            run_id: run.run_id.clone().unwrap_or_default(),
+            unattended: true,
+        })
     }
 }
 
