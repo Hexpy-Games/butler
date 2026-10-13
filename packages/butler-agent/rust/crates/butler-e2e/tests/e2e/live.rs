@@ -21,6 +21,7 @@ use butler_e2e::e2e::{HarnessError, live, media, nonce};
 use serde_json::{Value, json};
 
 mod drift;
+mod hedge;
 pub(super) mod profile;
 
 const IGNORE: &str = "";
