@@ -43,6 +43,7 @@ import {
   navigationWithOptimisticSession,
   navigationWithoutOptimisticSession,
   optimisticSessionId,
+  draftSessionControls,
   summaryWithSessionId,
 } from "./optimisticSession.ts";
 import {
@@ -1773,6 +1774,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           title: titleFromPrompt(messageTitle),
           statusLabel: appCopy.sidebar.newSessionStarting,
           startedAt,
+          controls: draftSessionControls(controls, get().settings),
         }
       : null;
     // A follow-up sent while a turn runs is shown as a queued record (in the
@@ -1871,6 +1873,13 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         });
         const previousChatId = targetChatId;
         targetChatId = session.session.id;
+        // The draft composer's choice becomes the conversation's controls before the
+        // composer reads them for the new id; the message still carries it as well.
+        if (optimisticStart.controls) {
+          await api(`/sessions/${encodeURIComponent(targetChatId)}/controls`, {
+            method: "PATCH", body: JSON.stringify(optimisticStart.controls),
+          }).catch(() => undefined);
+        }
         dashboardTarget?.onSessionCreated?.(targetChatId);
         set((state) => ({
           activeChatId:
