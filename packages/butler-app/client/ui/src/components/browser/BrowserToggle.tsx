@@ -1,5 +1,3 @@
-import { useEffect, useRef } from "react";
-import { notifyStatus } from "@/app/notifications";
 import { agentTabState, useConversationAgentTabs } from "./useConversationAgentTabs";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
@@ -16,11 +14,6 @@ export function BrowserToggle() {
   const attention = agentTabs.find(tab => agentTabState(tab) === "attention");
   const activity = attention ? "attention" : agentTabs.some(tab => agentTabState(tab) === "busy") ? "busy"
     : agentTabs.some(tab => agentTabState(tab) === "error") ? "error" : "idle";
-  const previous = useRef({ session, activity });
-  useEffect(() => {
-    if (activity === "attention" && (previous.current.activity !== activity || previous.current.session !== session)) notifyStatus(appCopy.browser.rail.needsCheck);
-    previous.current = { session, activity };
-  }, [session, activity]);
   const suffix = activity === "attention" ? appCopy.browser.rail.needsCheck : activity === "busy" ? appCopy.browser.agentUsing : activity === "error" ? appCopy.browser.rail.error : "";
   if (!window.butlerBrowser) return null;
   return <ActivityGlow state={open ? "idle" : activity}><IconButton data-test-class="titlebar-browser-toggle" aria-pressed={open}
