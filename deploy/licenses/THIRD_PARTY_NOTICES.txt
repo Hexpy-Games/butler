@@ -2467,6 +2467,21 @@ License: https://github.com/oyvindln/adler2/blob/89a031a0f42eeff31c70dc598b398cb
 Copyright (C) Jonas Schievink <jonasschievink@gmail.com>
 
 =====
+aead 0.5.2
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/traits/blob/1ae238c527c204dd9590e3abc406cfbb342d46ea/aead/LICENSE-APACHE
+License: https://github.com/RustCrypto/traits/blob/1ae238c527c204dd9590e3abc406cfbb342d46ea/aead/LICENSE-MIT
+Copyright (c) 2019 The RustCrypto Project Developers
+Copyright (c) 2019 MobileCoin, LLC
+
+=====
+aes-gcm 0.10.3
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/AEADs/blob/fa8197f11d79a079fcb1f6ef67fa9119ce6939b9/aes-gcm/LICENSE-APACHE
+License: https://github.com/RustCrypto/AEADs/blob/fa8197f11d79a079fcb1f6ef67fa9119ce6939b9/aes-gcm/LICENSE-MIT
+Copyright (c) 2019 The RustCrypto Project Developers
+
+=====
 aes 0.8.4
 MIT OR Apache-2.0
 License: https://github.com/RustCrypto/block-ciphers/blob/f2dbee516b4d0cf4cb4f3045d09e35b5fd80087b/aes/LICENSE-APACHE
@@ -3420,6 +3435,14 @@ License: https://github.com/BurntSushi/rust-csv/blob/4a3997e91d668ea1d8595bdef15
 Copyright (c) 2015 Andrew Gallant
 
 =====
+ctr 0.9.2
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/block-modes/blob/65320945adb1b6f7290e61b033f9e04ccdb2581b/ctr/LICENSE-APACHE
+License: https://github.com/RustCrypto/block-modes/blob/65320945adb1b6f7290e61b033f9e04ccdb2581b/ctr/LICENSE-MIT
+Copyright (c) 2018-2022 RustCrypto Developers
+Copyright (c) 2018 Artyom Pavlov
+
+=====
 ctutils 0.4.2
 Apache-2.0 OR MIT
 License: https://github.com/RustCrypto/utils/blob/53f7fc3fa806e6d4e9650675e7b97d3621cff340/ctutils/LICENSE-APACHE
@@ -4179,6 +4202,13 @@ License: https://github.com/rust-random/getrandom/blob/5e7cd5733536844a9856dc725
 License: https://github.com/rust-random/getrandom/blob/5e7cd5733536844a9856dc7259bd4696bbe5e3ae/LICENSE-MIT
 Copyright (c) 2018-2026 The rust-random Project Developers
 Copyright (c) 2014 The Rust Project Developers
+
+=====
+ghash 0.5.1
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/universal-hashes/blob/655c6cbef85b0faa7ff24c0686986cf2c27b2c6d/ghash/LICENSE-APACHE
+License: https://github.com/RustCrypto/universal-hashes/blob/655c6cbef85b0faa7ff24c0686986cf2c27b2c6d/ghash/LICENSE-MIT
+Copyright (c) 2019 RustCrypto Developers
 
 =====
 gif 0.14.2
@@ -5370,6 +5400,13 @@ License: https://github.com/rust-onig/rust-onig/blob/3572dd210e9bbfbf056c12f3a65
 Copyright (c) 2002-2021  K.Kosako  <kkosako0@gmail.com>
 
 =====
+opaque-debug 0.3.1
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/utils/blob/dd4adddf8b716bb51eb8ccb8c73e47bff1e358aa/opaque-debug/LICENSE-APACHE
+License: https://github.com/RustCrypto/utils/blob/dd4adddf8b716bb51eb8ccb8c73e47bff1e358aa/opaque-debug/LICENSE-MIT
+Copyright (c) 2018-2024 The RustCrypto Project Developers
+
+=====
 openssl-probe 0.2.1
 MIT OR Apache-2.0
 License: https://github.com/rustls/openssl-probe/blob/9181752ff5eab32339111dbdcc6cdc9f5a5eb06e/LICENSE-APACHE
@@ -5598,6 +5635,13 @@ MIT OR Apache-2.0
 License: https://github.com/linebender/kurbo/blob/0ffc830eca99e68ba6bab54224cfac2c66bde2f9/polycool/LICENSE-APACHE
 License: https://github.com/linebender/kurbo/blob/0ffc830eca99e68ba6bab54224cfac2c66bde2f9/polycool/LICENSE-MIT
 Copyright (c) 2018 Raph Levien
+
+=====
+polyval 0.6.2
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/universal-hashes/blob/4e7d04f7c8e44f634ada8c673c8cb1672a64d374/polyval/LICENSE-APACHE
+License: https://github.com/RustCrypto/universal-hashes/blob/4e7d04f7c8e44f634ada8c673c8cb1672a64d374/polyval/LICENSE-MIT
+Copyright (c) 2019-2023 RustCrypto Developers
 
 =====
 portable-atomic 1.15.0
@@ -6905,6 +6949,13 @@ License: https://crates.io/crates/unicode_categories/0.1.1
 Copyright (c) 2015 The unicode-categories Developers
 
 =====
+universal-hash 0.5.1
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/traits/blob/742af86f821d7f79e76962d302c819b14622a485/universal-hash/LICENSE-APACHE
+License: https://github.com/RustCrypto/traits/blob/742af86f821d7f79e76962d302c819b14622a485/universal-hash/LICENSE-MIT
+Copyright (c) 2019-2020 RustCrypto Developers
+
+=====
 untrusted 0.9.0
 ISC
 License: https://github.com/briansmith/untrusted/blob/89c8b8415f692d3803d183fc5fbf9ec08a6adcf4/LICENSE.txt
@@ -7045,6 +7096,14 @@ MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/core/license-apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/core/license-mit
 Copyright (c) Microsoft Corporation.
+
+=====
+windows-dpapi 0.2.0
+MIT OR Apache-2.0
+License: https://github.com/sheridans/windows-dpapi/blob/4ac261cc789ab046dd8bac3e914f49b26b8b7d77/LICENSE-APACHE
+License: https://github.com/sheridans/windows-dpapi/blob/4ac261cc789ab046dd8bac3e914f49b26b8b7d77/LICENSE-MIT
+Copyright 2025 Sam Sheridan
+Copyright (c) 2025 Sam Sheridan
 
 =====
 windows-future 0.2.1

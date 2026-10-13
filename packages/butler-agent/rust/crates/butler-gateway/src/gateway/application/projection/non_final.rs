@@ -178,6 +178,9 @@ pub(super) fn apply(
     if kind == "turn_failed" && btcc_retains_authority(&tx, &turn_id)? {
         return skip(tx, action_id, cursor, now);
     }
+    if is_runtime_event || is_progress {
+        project_resumed(&tx, subscribers, chat_id, &turn_id, now)?;
+    }
     let terminal = if is_runtime_event {
         project_runtime_event(RuntimeInput {
             db: &tx,
