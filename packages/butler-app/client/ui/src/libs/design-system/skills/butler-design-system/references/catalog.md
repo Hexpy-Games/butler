@@ -1674,7 +1674,7 @@ One 40px line on a PageCard's top edge for page-scoped state: who holds the tab,
 
 `import { PageCard } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/PageCard`
 
-The web page as one elevated card that wraps NativeViewSlot: who holds the tab, the band, the load line and Butler's letterboxed page.
+The web page as one elevated card that wraps NativeViewSlot: who holds the tab, the band, the load line and Butler's fixed-size page fitted to the card's width.
 
 - Use for: The page area of BrowserPane (one card per visible tab)
 - Use for: Showing who holds a tab: nobody, Butler (riso edge), you, or an approval
