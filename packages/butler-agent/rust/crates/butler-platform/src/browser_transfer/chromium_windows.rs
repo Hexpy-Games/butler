@@ -45,7 +45,11 @@ pub(in crate::browser_transfer) fn passwords(
     let mut key = None;
     let mut batch = LoginBatch::default();
     while let Some(row) = rows.next().map_err(|e| sql_error(&e))? {
-        let encrypted = Zeroizing::new(row.get::<_, Vec<u8>>(2).map_err(|e| sql_error(&e))?);
+        // A NULL or TEXT password cell is one corrupt row, not a failed import.
+        let Ok(encrypted) = row.get::<_, Vec<u8>>(2).map(Zeroizing::new) else {
+            batch.invalid += 1;
+            continue;
+        };
         if encrypted.is_empty() {
             continue;
         }

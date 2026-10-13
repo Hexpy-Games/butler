@@ -324,7 +324,7 @@ async fn chromium_dpapi_import_reports_csv_and_undoes_v10() -> Result<(), Harnes
             .await?;
         assert_eq!(run.status, 200, "{}", run.text);
         assert_eq!(run.data()["passwords"], 1);
-        assert_eq!(run.data()["invalid"], 2);
+        assert_eq!(run.data()["invalid"], 3);
         assert_eq!(run.data()["csv_required"], 1);
         assert_eq!(run.data()["needs_csv"], true);
         let view = a.send(Method::GET, "/security/signins", None, &[]).await?;
@@ -349,7 +349,7 @@ async fn chromium_dpapi_import_reports_csv_and_undoes_v10() -> Result<(), Harnes
             .1;
         let db = rusqlite::Connection::open(root.join("Work/Login Data"))?;
         db.execute(
-            "DELETE FROM logins WHERE substr(password_value,1,3) != X'763230'",
+            "DELETE FROM logins WHERE password_value IS NULL OR substr(password_value,1,3) != X'763230'",
             [],
         )?;
         drop(db);

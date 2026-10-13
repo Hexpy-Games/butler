@@ -52,10 +52,11 @@ fn create(root: &Path, password: &str) -> std::io::Result<()> {
         .last_mut()
         .ok_or_else(|| std::io::Error::other("fixture empty ciphertext"))? ^= 1;
     for encrypted in [
-        value,
-        b"v20app-bound".to_vec(),
-        tampered,
-        b"v10short".to_vec(),
+        Some(value),
+        Some(b"v20app-bound".to_vec()),
+        Some(tampered),
+        Some(b"v10short".to_vec()),
+        None,
     ] {
         db.execute("INSERT INTO logins VALUES('https://login.fixture-shop.test','fixture',?1,0,13300000000000000)", [encrypted])
             .map_err(|_| std::io::Error::other("fixture insert failed"))?;
