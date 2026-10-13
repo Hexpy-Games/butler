@@ -142,9 +142,10 @@ fn explain_refusal(result: &mut Value) {
         "secure_field" => {
             "The capture overlaps a protected field. Choose an image or region without protected fields."
         }
-        _ => {
-            "Observe the tab again, check the image is visible, and collect a fresh ref or valid region."
-        }
+        // Other refusals (a covered element, a timeout, a changed page) keep the
+        // agent's per-reason recovery, which names one other source and when to
+        // stop instead of a generic retry.
+        _ => return,
     };
     result["recovery"] = json!(recovery);
 }
