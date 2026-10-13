@@ -12,7 +12,10 @@ use std::io;
 pub(crate) fn ensure_data_authority(data_root: &Path, descendants: &[&Path]) -> io::Result<()> {
     let canonical_data = canonicalize_nearest_existing(data_root)?;
     for descendant in descendants {
-        if !canonicalize_nearest_existing(descendant)?.starts_with(&canonical_data) {
+        if !butler_platform::secure_fs::path_is_within(
+            &canonicalize_nearest_existing(descendant)?,
+            &canonical_data,
+        ) {
             return Err(unsafe_path());
         }
     }
