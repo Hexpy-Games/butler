@@ -7,7 +7,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 ALLOW = (
-    'README.md', 'AGENTS.md', 'CONTRIBUTING.md', 'LICENSE*',
+    'README.md', 'AGENTS.md', 'CONTRIBUTING.md', 'LICENSE*', 'OFL.txt',
     '**/README.md', '**/SKILL.md',
     '**/skills/**/resources/**', '**/skills/**/references/**',
     '.github/releases/**', '.github/ISSUE_TEMPLATE/**', '.github/pull_request_template.md',
@@ -33,7 +33,7 @@ ALLOW = (
     'packages/butler-agent/rust/crates/*/os-specific-baseline.txt',
     'packages/butler-agent/rust/crates/*/src/**/wire_codes.txt',
     'packages/butler-agent/rust/crates/butler-models/src/models/catalog/zai-image-model.txt',
-    '**/LICENSE*', '**/THIRD_PARTY_NOTICES.*',
+    '**/LICENSE*', '**/OFL.txt', '**/THIRD_PARTY_NOTICES.*',
 )
 
 

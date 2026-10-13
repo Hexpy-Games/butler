@@ -17,6 +17,9 @@ pub struct RegisteredWriteContext {
     pub allowed_tools_and_effects: Option<Vec<String>>,
     pub mutation_scope: Option<Vec<String>>,
     pub installation_root: Option<PathBuf>,
+    /// Writes run without approval because their targets are inside the
+    /// project: containment and secrets are re-checked at commit time.
+    pub contained: bool,
 }
 
 pub struct RegisteredWrite {
@@ -47,7 +50,7 @@ impl RegisteredWritePort for RegisteredWrite {
                 .invoke(
                     "write_file",
                     CapabilityInvocation {
-                        contained: false,
+                        contained: self.context.contained,
                         call: &call,
                         workspace_reference: self.context.workspace_reference.as_ref(),
                         workspace_path: Some(&self.context.workspace_path),

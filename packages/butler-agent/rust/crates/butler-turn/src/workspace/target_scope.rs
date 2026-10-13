@@ -72,6 +72,10 @@ fn classify(
     if inside_relative(project, &real).is_none_or(|rel| looks_sensitive(&rel.to_string_lossy()))
         || protected_path(project, &real, roots.protected_ledger_roots)
         || installed
+        // A hard link may alias a file outside the project (for example a
+        // key linked in by a command); treat it like the outside original.
+        || std::fs::symlink_metadata(&real)
+            .is_ok_and(|metadata| butler_platform::secure_fs::has_other_links(&metadata))
     {
         TargetScope::Protected
     } else {

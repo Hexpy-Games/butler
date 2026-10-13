@@ -31,6 +31,9 @@ try {
   assert.equal(embedded.image.data, jpg.toString("base64"), "embedded bytes survive CSP without a fetch");
   const cross = await page.evaluate(imageSourceScript({ ref: "img1", obs: "obs", epoch: 1 }));
   assert.equal(cross.capture_element, true, "tainted canvas requests host element capture");
+  assert.equal(cross.fetch_source, true, "a withheld photo names its own file for the host");
+  assert.equal(cross.source_url, `http://127.0.0.1:${cdn.port}/photo.jpg`);
+  assert.equal(cross.referer, `http://127.0.0.1:${site.port}/`, "the host download carries the page Referer");
   const pixels = await page.locator('img[alt="CDN"]').screenshot({ path: `${evidence}/cdn-element.png` });
   assert.ok(pixels.length > 100);
   assert.equal(requests, 1, "collect uses the already-loaded CDN pixels");

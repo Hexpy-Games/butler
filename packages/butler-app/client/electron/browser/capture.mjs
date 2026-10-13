@@ -176,16 +176,20 @@ export async function collectImage(tab, args) {
   }
   const frame = args.ref ? observation.bindings.get(args.ref) : observation.main;
   if (!frame) return { status: "refused", reason: "stale_ref" };
-  if (args.ref) {
-    const target = await evaluateWorld(frame, resolveSource({ ref:args.ref, obs:observationId, epoch }));
-    if (target.reason) return { status: "refused", reason: target.reason };
-  }
+  // Source pixels do not depend on what covers the element; crops still require a clear target.
   const source = await evaluateWorld(frame, imageSourceScript({ ref:args.ref, url:args.url, obs:observationId, epoch }));
   if (source.reason) return { status: "refused", reason: source.reason, recovery: source.recovery };
   if (!source.image && !source.capture_element && source.source_url) return { status: "ok", ...source };
   if (source.image) return collectedPixels(tab, epoch, Buffer.from(source.image.data, "base64"), source);
+  const described = { alt: source.alt, nearby_text: source.nearby_text, source_url: source.source_url || tab.url };
+  const original = source.fetch_source ? { fetch_source: true, referer: source.referer, user_agent: source.user_agent } : {};
+  if (args.ref) {
+    const target = await evaluateWorld(frame, resolveSource({ ref:args.ref, obs:observationId, epoch }));
+    if (target.reason) return source.fetch_source ? { status: "ok", ...described, ...original } : { status: "refused", reason: target.reason };
+  }
   const crop = await screenshotTab(tab, { ...args, observation:observationId });
-  return { ...crop, alt: source.alt, nearby_text: source.nearby_text, source_url: source.source_url || tab.url };
+  if (crop.status !== "ok" && source.fetch_source) return { status: "ok", ...described, ...original };
+  return { ...crop, ...described, ...original };
 }
 function collectedPixels(tab, epoch, bytes, source) {
   if (epoch !== tab.epoch || tab.holder !== "agent") return { status:"not_dispatched", reason:"control_changed" };

@@ -56,6 +56,7 @@ async fn image_collect_loaded_formats_and_session_context() -> Result<(), Harnes
         "protected",
         "large",
         "svg",
+        "covered",
     ] {
         let reference = page["nodes"]
             .as_array()

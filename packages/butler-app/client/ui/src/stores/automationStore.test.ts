@@ -6,13 +6,16 @@ import type { FormEvent } from "react";
 import { toast } from "sonner";
 import { appCopy, getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
 import type { AccessMode } from "@/app/types.ts";
+import { useButlerStore } from "@/app/store.ts";
 import { useAutomationStore } from "./automationStore.ts";
 
 const initialLocale = getAppLocale();
 const initialState = useAutomationStore.getState();
+const initialSettings = useButlerStore.getState().settings;
 afterAll(() => {
   setAppCopyLanguage(initialLocale);
   useAutomationStore.setState(initialState, true);
+  useButlerStore.setState({ settings: initialSettings });
 });
 afterEach(() => {
   delete (globalThis as { window?: unknown }).window;
@@ -74,9 +77,10 @@ function existingSchedule(access_mode: AccessMode): Handler {
   });
 }
 
-test("a new schedule preselects the target conversation's current access mode and sends it on create", async () => {
+test("a new schedule preselects the schedule default from settings and sends it on create", async () => {
+  useButlerStore.setState({ settings: { ...initialSettings, schedule_access_mode: "full_access" } });
   const calls = installBridge({
-    getSessionControls: controlsFor({ "chat-a": "full_access" }),
+    getSessionControls: controlsFor({ "chat-a": "read_only" }),
     createAutomation: () => ({ ok: true, data: { automation: {} } }),
   });
   await useAutomationStore.getState().initialize("new", sessions, noop);
@@ -86,6 +90,7 @@ test("a new schedule preselects the target conversation's current access mode an
   useAutomationStore.getState().setPromptBody("Summarize my day.");
   await useAutomationStore.getState().save(submit, saved, noop);
 
+  expect(calls.some((call) => call.method === "getSessionControls")).toBe(false);
   const create = calls.find((call) => call.method === "createAutomation");
   expect(create?.input).toMatchObject({
     title: "Morning brief",
@@ -96,31 +101,19 @@ test("a new schedule preselects the target conversation's current access mode an
   });
 });
 
-test("a new schedule falls back to ask first when the target conversation's mode is unknown", async () => {
-  installBridge({ getSessionControls: controlsFor({}) });
+test("a new schedule defaults to Auto, and changing the target keeps the mode", async () => {
+  useButlerStore.setState({ settings: { ...initialSettings, schedule_access_mode: undefined } });
+  installBridge({});
   await useAutomationStore.getState().initialize("new", sessions, noop);
-  expect(useAutomationStore.getState().accessMode).toBe("ask_except_reads");
-});
-
-test("changing the target follows that conversation's mode until the user picks one", async () => {
-  installBridge({ getSessionControls: controlsFor({ "chat-a": "ask_first", "chat-b": "full_access" }) });
-  await useAutomationStore.getState().initialize("new", sessions, noop);
-  expect(useAutomationStore.getState().accessMode).toBe("ask_first");
+  expect(useAutomationStore.getState().accessMode).toBe("auto");
 
   await useAutomationStore.getState().setTargetSessionId("chat-b");
-  expect(useAutomationStore.getState().accessMode).toBe("full_access");
+  expect(useAutomationStore.getState().accessMode).toBe("auto");
 
   useAutomationStore.getState().setAccessMode("read_only");
-  await useAutomationStore.getState().setTargetSessionId("chat-a");
-  expect(useAutomationStore.getState().accessMode).toBe("read_only");
-});
-
-test("an empty target from the form's hidden select keeps the target and its mode", async () => {
-  installBridge({ getSessionControls: controlsFor({ "chat-a": "full_access" }) });
-  await useAutomationStore.getState().initialize("new", sessions, noop);
   await useAutomationStore.getState().setTargetSessionId("");
-  expect(useAutomationStore.getState().targetSessionId).toBe("chat-a");
-  expect(useAutomationStore.getState().accessMode).toBe("full_access");
+  expect(useAutomationStore.getState().targetSessionId).toBe("chat-b");
+  expect(useAutomationStore.getState().accessMode).toBe("read_only");
 });
 
 test("editing preselects the schedule's own mode and sends the chosen mode on save", async () => {

@@ -30,6 +30,9 @@ pub(super) async fn execute(
             );
         }
     };
+    if owner.unattended() {
+        return encode(&super::turn_guard::unattended_question());
+    }
     let admitted = owner
         .authority
         .ask_user(

@@ -1,10 +1,11 @@
 use super::AccessMode;
 
 impl AccessMode {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
         Self::ReadOnly,
         Self::AskAlways,
         Self::AskExceptReads,
+        Self::Auto,
         Self::FullAccess,
     ];
     pub fn as_str(&self) -> &'static str {
@@ -12,6 +13,7 @@ impl AccessMode {
             Self::ReadOnly => "read_only",
             Self::AskAlways => "ask_first",
             Self::AskExceptReads => "ask_except_reads",
+            Self::Auto => "auto",
             Self::FullAccess => "full_access",
         }
     }
@@ -23,6 +25,7 @@ impl AccessMode {
             Self::ReadOnly => 0,
             Self::AskAlways => 1,
             Self::AskExceptReads => 2,
+            Self::Auto => 3,
             Self::FullAccess => 4,
         }
     }
@@ -34,6 +37,16 @@ impl AccessMode {
         }
     }
     pub fn reviews_effects(&self) -> bool {
-        matches!(self, Self::AskAlways | Self::AskExceptReads)
+        matches!(self, Self::AskAlways | Self::AskExceptReads | Self::Auto)
+    }
+    /// D7: the schedule default implied by a conversation default the user
+    /// never overrode for schedules. Read-only and full access stay as they
+    /// are (never a silent widening or narrowing); every asking mode is Auto.
+    pub fn schedule_default_for(conversation_default: &Self) -> Self {
+        match conversation_default {
+            Self::ReadOnly => Self::ReadOnly,
+            Self::FullAccess => Self::FullAccess,
+            Self::AskAlways | Self::AskExceptReads | Self::Auto => Self::Auto,
+        }
     }
 }

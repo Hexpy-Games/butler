@@ -46,9 +46,7 @@ pub(crate) async fn collect(page: &Page, args: &Value) -> Result<Value, String> 
     } else {
         observation.frames.first().ok_or("frame_unavailable")?
     };
-    if let Some(refused) = check_ref(page, frame, &args, epoch).await? {
-        return Ok(refused);
-    }
+    // Source pixels do not require an unobstructed crop target.
     let source = page
         .evaluate(
             frame,
@@ -70,11 +68,40 @@ pub(crate) async fn collect(page: &Page, args: &Value) -> Result<Value, String> 
         result["status"] = json!("ok");
         return Ok(result);
     }
-    let mut crop = capture::screenshot(page, &args).await?;
-    crop["alt"] = source["alt"].clone();
-    crop["nearby_text"] = source["nearby_text"].clone();
-    crop["source_url"] = source["source_url"].clone();
-    Ok(crop)
+    fallback_capture(page, frame, &args, epoch, source).await
+}
+
+async fn fallback_capture(
+    page: &Page,
+    frame: &super::state::Frame,
+    args: &Value,
+    epoch: u64,
+    source: Value,
+) -> Result<Value, String> {
+    let original = source["fetch_source"] == true;
+    let described = |mut result: Value| {
+        for key in ["alt", "nearby_text", "source_url"] {
+            result[key] = source[key].clone();
+        }
+        if original {
+            for key in ["fetch_source", "referer", "user_agent"] {
+                result[key] = source[key].clone();
+            }
+        }
+        result
+    };
+    if let Some(refused) = check_ref(page, frame, args, epoch).await? {
+        return Ok(if original {
+            described(json!({"status":"ok"}))
+        } else {
+            refused
+        });
+    }
+    let crop = capture::screenshot(page, args).await?;
+    if crop["status"] != "ok" && original {
+        return Ok(described(json!({"status":"ok"})));
+    }
+    Ok(described(crop))
 }
 
 async fn check_ref(

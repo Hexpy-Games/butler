@@ -88,6 +88,7 @@ fn strict_create(value: &Value) -> Result<MessageSendRequest, HttpError> {
     }
     Ok(MessageSendRequest {
         subsession_result: None,
+        schedule_run: None,
         expected_project_id: None,
         content_parts,
         chat_id: optional_string_value(object, "chat_id", "Queued message request is invalid.")?,

@@ -123,10 +123,9 @@ test("API key copy claims Keychain storage only where the agent reports it (#217
   }
 });
 
-test("the schedule access hint names the Ask first mode with the composer's label", () => {
+test("the schedule access hint is one line", () => {
   for (const locale of ["en-US", "ko-KR"] as const) {
     const copy = getAppCopy(locale);
-    expect(copy.automations.accessHint).toContain(copy.permissions.askFirst);
     expect(copy.automations.accessHint).not.toContain("\n");
   }
 });

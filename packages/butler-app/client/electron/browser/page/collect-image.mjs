@@ -60,9 +60,14 @@ export async function imageSource({ ref, obs, epoch, url }) {
     if (/^(data|blob):/u.test(result.source_url)) result.source_url = location.href;
   } catch {
     // Cross-origin pixels can be captured by the host without relaxing CORS.
-    // The host fetches a larger public source when canvas is tainted.
-    if (pixels !== image && image) return { ...result, ...requestContext(image, result.source_url) };
     result.capture_element = true;
+    // A photo element's own file is the full original, whatever covers or shrinks
+    // it on the page; the host downloads it with this page's request context and
+    // keeps the rendered crop for when that download is unusable. A background
+    // may be a sprite, so only its rendered crop represents it.
+    if (image && /^https?:/u.test(result.source_url)) {
+      Object.assign(result, { fetch_source: true }, requestContext(image, result.source_url));
+    }
   }
   return result;
 }
