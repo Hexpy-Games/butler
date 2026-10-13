@@ -23,7 +23,7 @@ const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const card = { title: "Gooseneck pour-over kettle", sub: "Kitchen · 1.0 L", label: "Best value", key: "kettle",
   value: { amount: 39, cur: "USD", was: 59 }, facts: ["Ships in 2 days", "Matte black"], text: "Pours a steady thin stream for even extraction.",
-  source: "https://shop.example.com/kettle", checked: "2026-10-13T08:41:00Z", img: "img_kettle0001" };
+  source: "https://shop.example.com/kettle", checked: "2026-10-13T08:41:00Z", img: "img_kettle0001", ...JSON.parse(process.env.BUTLER_APP_PART_CARD ?? "{}") };
 const fixture = { background: "plain", messages: [{ id: "answer", chat_id: "butler-client", role: "assistant", status: "delivered", text: "One pick.",
   created_at: "2026-10-13T08:51:00Z", answer_blocks: [{ call_id: "blocks", set_ids: [], spec: { v: 1, blocks: [{ type: "cards", media: "1:1",
     items: [{ ...card, image_url: `/message-assets/${card.img}?expires=4102444800&signature=smoke` }] }] } }] }] };
@@ -107,7 +107,10 @@ app.whenReady().then(async () => {
   }
   const ran = await viewer.webContents.executeJavaScript("window.messages");
   const mismatch = mismatched / Math.max(1, compared);
-  const summary = { bytes: html.length, ms: elapsed, size: `${Math.round(copy.width)}x${Math.round(copy.height)}`, crop: `${cs.width}x${cs.height}`,
+  const bytes = Buffer.byteLength(html);
+  const imageBytes = [...html.matchAll(/data:image\/[^"\s)]+/gu)].reduce((total, match) => total + Buffer.byteLength(match[0]), 0);
+  const bytesWithoutImages = bytes - imageBytes;
+  const summary = { bytes, bytesWithoutImages, imageBytes, ms: elapsed, size: `${Math.round(copy.width)}x${Math.round(copy.height)}`, crop: `${cs.width}x${cs.height}`,
     shot: `${ss.width}x${ss.height}`, mismatchPercent: Number((mismatch * 100).toFixed(2)), offlineRequests: requests, viewerMessages: ran, ...facts };
   // The 서랍 item the App saves for this card (the shape saveAnswerItem posts).
   writeFileSync(join(evidence, "card-scrap.json"), JSON.stringify({ id: "answer-card-smoke", kind: "scrap", title: card.title, url: card.source,
@@ -117,6 +120,7 @@ app.whenReady().then(async () => {
   writeFileSync(join(evidence, "card-snapshot.json"), JSON.stringify(summary, null, 2));
   console.log(JSON.stringify(summary));
   win.destroy(); viewer.destroy();
+  assert.ok(bytesWithoutImages < 200 * 1024, `snapshot excluding images is under 200 KB (${bytesWithoutImages})`);
   assert.deepEqual(requests, [], "the viewer loads nothing from the network");
   assert.equal(ran, 0, "no script ran in the viewer");
   assert.ok(Object.values(facts).every(Boolean), `copy facts: ${JSON.stringify(facts)}`);

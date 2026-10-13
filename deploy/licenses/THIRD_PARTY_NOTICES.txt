@@ -17,7 +17,6 @@ Eigen 1d8b82b0740839c0de7f1242a3585e3390ff5f33
 MPL-2.0
 License: https://gitlab.com/libeigen/eigen/-/raw/1d8b82b0740839c0de7f1242a3585e3390ff5f33/COPYING.MPL2
 
-
 ===== COMPONENT =====
 Rust standard library 1.99.0
 MIT OR Apache-2.0
@@ -31,12 +30,10 @@ SQLite 3.50.2
 blessing
 License: https://www.sqlite.org/copyright.html
 
-
 ===== COMPONENT =====
 onnx b8baa8446686496da4cc8fda09f2b6fe65c2a02c
 Apache-2.0
 License: https://raw.githubusercontent.com/onnx/onnx/b8baa8446686496da4cc8fda09f2b6fe65c2a02c/LICENSE
-
 
 ===== COMPONENT =====
 onnxruntime e0b66cad282043d4377cea5269083f17771b6dfc
@@ -684,6 +681,17 @@ License: https://www.npmjs.com/package/@ungap/structured-clone/v/1.3.1
 Copyright (c) 2021, Andrea Giammarchi, @WebReflection
 
 ===== COMPONENT =====
+argparse 2.0.1
+Python-2.0
+License: https://www.npmjs.com/package/argparse/v/2.0.1
+i.e., "Copyright (c) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
+2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020 Python Software Foundation;
+License Agreement and CNRI's notice of copyright, i.e., "Copyright (c)
+1995-2001 Corporation for National Research Initiatives; All Rights
+Copyright (c) 1991 - 1995, Stichting Mathematisch Centrum Amsterdam,
+The Netherlands.  All rights reserved.
+
+===== COMPONENT =====
 aria-hidden 1.2.6
 MIT
 License: https://www.npmjs.com/package/aria-hidden/v/1.2.6
@@ -886,10 +894,22 @@ License: https://www.npmjs.com/package/extend/v/3.0.2
 Copyright (c) 2014 Stefan Thomas
 
 ===== COMPONENT =====
+fontverter 2.0.0
+BSD-3-Clause
+License: https://www.npmjs.com/package/fontverter/v/2.0.0
+Copyright (c) 2012, Andreas Lind Petersen
+
+===== COMPONENT =====
 get-nonce 1.0.1
 MIT
 License: https://www.npmjs.com/package/get-nonce/v/1.0.1
 Copyright (c) 2020 Anton Korzunov
+
+===== COMPONENT =====
+harfbuzzjs 1.6.2
+MIT
+License: https://www.npmjs.com/package/harfbuzzjs/v/1.6.2
+Copyright (c) 2019-2026 The harfbuzzjs project authors
 
 ===== COMPONENT =====
 hast-util-to-jsx-runtime 2.3.6
@@ -1277,6 +1297,18 @@ License: https://www.npmjs.com/package/ms/v/2.1.3
 Copyright (c) 2020 Vercel, Inc.
 
 ===== COMPONENT =====
+p-limit 3.1.0
+MIT
+License: https://www.npmjs.com/package/p-limit/v/3.1.0
+Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
+
+===== COMPONENT =====
+pako 1.0.11
+(MIT AND Zlib)
+License: https://www.npmjs.com/package/pako/v/1.0.11
+Copyright (C) 2014-2017 by Vitaly Puzrin and Andrei Tuputcyn
+
+===== COMPONENT =====
 parse-entities 4.0.2
 MIT
 License: https://www.npmjs.com/package/parse-entities/v/4.0.2
@@ -1428,6 +1460,12 @@ License: https://www.npmjs.com/package/style-to-object/v/1.0.14
 Copyright (c) 2017 Menglin "Mark" Xu <mark@remarkablemark.org>
 
 ===== COMPONENT =====
+subset-font 2.9.0
+BSD-3-Clause
+License: https://www.npmjs.com/package/subset-font/v/2.9.0
+Copyright (c) 2012, Andreas Lind Petersen
+
+===== COMPONENT =====
 tabbable 6.5.0
 MIT
 License: https://www.npmjs.com/package/tabbable/v/6.5.0
@@ -1542,11 +1580,30 @@ Copyright (C) 2010-2013 Raymond Hill
 Copyright 2021 Mike Bostock
 
 ===== COMPONENT =====
+wawoff2 2.0.1
+MIT
+License: https://www.npmjs.com/package/wawoff2/v/2.0.1
+Copyright (c) 2013-2017 by the WOFF2 Authors.
+
+===== COMPONENT =====
+woff2sfnt-sfnt2woff 1.0.0
+MIT
+License: https://www.npmjs.com/package/woff2sfnt-sfnt2woff/v/1.0.0
+* MIT License Copyright(c) 2014 Onur Demiralay
+Copyright (c) <year> <copyright holders>
+
+===== COMPONENT =====
 yjs 13.6.32
 MIT
 License: https://www.npmjs.com/package/yjs/v/13.6.32
 Copyright (c) 2023
 - Kevin Jahns <kevin.jahns@protonmail.com>.
+
+===== COMPONENT =====
+yocto-queue 0.1.0
+MIT
+License: https://www.npmjs.com/package/yocto-queue/v/0.1.0
+Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
 
 ===== COMPONENT =====
 zustand 5.0.13
@@ -2456,13 +2513,11 @@ MIT OR Apache-2.0
 License: https://github.com/zakarumych/allocator-api2/blob/63cd7fcc2f8854b5821c7054d026e8a4647acde1/LICENSE-APACHE
 License: https://github.com/zakarumych/allocator-api2/blob/63cd7fcc2f8854b5821c7054d026e8a4647acde1/LICENSE-MIT
 
-
 ===== COMPONENT =====
 anyhow 1.0.104
 MIT OR Apache-2.0
 License: https://github.com/dtolnay/anyhow/blob/1dbe1862aae650423e3361fbd20b7d17c5109cc3/LICENSE-APACHE
 License: https://github.com/dtolnay/anyhow/blob/1dbe1862aae650423e3361fbd20b7d17c5109cc3/LICENSE-MIT
-
 
 ===== COMPONENT =====
 apple-native-keyring-store 1.0.2
@@ -2800,7 +2855,6 @@ Apache-2.0 OR MIT
 License: https://github.com/smol-rs/async-channel/blob/35a63c456aaa1906015f5a825e7e35505a749afa/LICENSE-APACHE
 License: https://github.com/smol-rs/async-channel/blob/35a63c456aaa1906015f5a825e7e35505a749afa/LICENSE-MIT
 
-
 ===== COMPONENT =====
 async-compression 0.4.46
 MIT OR Apache-2.0
@@ -2814,13 +2868,11 @@ Apache-2.0 OR MIT
 License: https://github.com/smol-rs/async-executor/blob/543403e773ec4941a6272e29c2ff649bfd01a4f8/LICENSE-APACHE
 License: https://github.com/smol-rs/async-executor/blob/543403e773ec4941a6272e29c2ff649bfd01a4f8/LICENSE-MIT
 
-
 ===== COMPONENT =====
 async-io 2.6.0
 Apache-2.0 OR MIT
 License: https://github.com/smol-rs/async-io/blob/576b470ca3cadefdec8b169279df23c9a0a63495/LICENSE-APACHE
 License: https://github.com/smol-rs/async-io/blob/576b470ca3cadefdec8b169279df23c9a0a63495/LICENSE-MIT
-
 
 ===== COMPONENT =====
 async-lock 3.4.2
@@ -2828,13 +2880,11 @@ Apache-2.0 OR MIT
 License: https://github.com/smol-rs/async-lock/blob/f07ba65a02ec3eca32fa95e6d13dc754d619bb35/LICENSE-APACHE
 License: https://github.com/smol-rs/async-lock/blob/f07ba65a02ec3eca32fa95e6d13dc754d619bb35/LICENSE-MIT
 
-
 ===== COMPONENT =====
 async-process 2.5.0
 Apache-2.0 OR MIT
 License: https://github.com/smol-rs/async-process/blob/81112a911898d607d176d37b85f56a1da0061455/LICENSE-APACHE
 License: https://github.com/smol-rs/async-process/blob/81112a911898d607d176d37b85f56a1da0061455/LICENSE-MIT
-
 
 ===== COMPONENT =====
 async-recursion 1.1.1
@@ -2842,13 +2892,11 @@ MIT OR Apache-2.0
 License: https://github.com/dcchut/async-recursion/blob/3254b12e384f7688f9a1b95c54cfa07fe82baee7/LICENSE-APACHE
 License: https://github.com/dcchut/async-recursion/blob/3254b12e384f7688f9a1b95c54cfa07fe82baee7/LICENSE-MIT
 
-
 ===== COMPONENT =====
 async-signal 0.2.14
 Apache-2.0 OR MIT
 License: https://github.com/smol-rs/async-signal/blob/d750e57adccbd90c4c4e93d184aeabcf5b22f057/LICENSE-APACHE
 License: https://github.com/smol-rs/async-signal/blob/d750e57adccbd90c4c4e93d184aeabcf5b22f057/LICENSE-MIT
-
 
 ===== COMPONENT =====
 async-task 4.7.1
@@ -2856,13 +2904,11 @@ Apache-2.0 OR MIT
 License: https://github.com/smol-rs/async-task/blob/3065c372e1ef1611230195ad7f3aae80ffde8261/LICENSE-APACHE
 License: https://github.com/smol-rs/async-task/blob/3065c372e1ef1611230195ad7f3aae80ffde8261/LICENSE-MIT
 
-
 ===== COMPONENT =====
 async-trait 0.1.92
 MIT OR Apache-2.0
 License: https://github.com/dtolnay/async-trait/blob/82e7e9edd60f622294373a23c0ce9c0077ad0263/LICENSE-APACHE
 License: https://github.com/dtolnay/async-trait/blob/82e7e9edd60f622294373a23c0ce9c0077ad0263/LICENSE-MIT
-
 
 ===== COMPONENT =====
 async_cell 0.2.3
@@ -3021,13 +3067,11 @@ block2 0.6.2
 MIT
 License: https://crates.io/crates/block2/0.6.2
 
-
 ===== COMPONENT =====
 blocking 1.7.0
 Apache-2.0 OR MIT
 License: https://github.com/smol-rs/blocking/blob/e29a5e6979f56c7537b04ab17ca7bdceee66ef5f/LICENSE-APACHE
 License: https://github.com/smol-rs/blocking/blob/e29a5e6979f56c7537b04ab17ca7bdceee66ef5f/LICENSE-MIT
-
 
 ===== COMPONENT =====
 bon-macros 3.10.1
@@ -3215,7 +3259,6 @@ Apache-2.0 OR MIT
 License: https://github.com/smol-rs/concurrent-queue/blob/e874f701f8413de01948c4903f894e5c845d8950/LICENSE-APACHE
 License: https://github.com/smol-rs/concurrent-queue/blob/e874f701f8413de01948c4903f894e5c845d8950/LICENSE-MIT
 
-
 ===== COMPONENT =====
 const-oid 0.10.2
 Apache-2.0 OR MIT
@@ -3229,7 +3272,6 @@ CC0-1.0 OR MIT-0 OR Apache-2.0
 License: https://github.com/cesarb/constant_time_eq/blob/86f38ed9ad4d0500c5472bb8cb2ddc4fe5ac7143/LICENSE-APACHE
 License: https://github.com/cesarb/constant_time_eq/blob/86f38ed9ad4d0500c5472bb8cb2ddc4fe5ac7143/LICENSE-CC0
 License: https://github.com/cesarb/constant_time_eq/blob/86f38ed9ad4d0500c5472bb8cb2ddc4fe5ac7143/LICENSE-MIT0
-
 
 ===== COMPONENT =====
 core-foundation-sys 0.8.7
@@ -3350,12 +3392,10 @@ cssparser-macros 0.7.1
 MPL-2.0
 License: https://github.com/servo/rust-cssparser/blob/d128a90e1203fc4afb959420d6dc5e24f77a3191/macros/LICENSE
 
-
 ===== COMPONENT =====
 cssparser 0.37.0
 MPL-2.0
 License: https://github.com/servo/rust-cssparser/blob/4c49486494fb24dc01390e3baca9698ef1744c71/LICENSE
-
 
 ===== COMPONENT =====
 csv-core 0.1.13
@@ -3419,7 +3459,6 @@ dary_heap 0.3.9
 MIT OR Apache-2.0
 License: https://github.com/hanmertens/dary_heap/blob/42ab38d7a47d741d4ef3377639d77cc9f95e5373/LICENSE-APACHE
 License: https://github.com/hanmertens/dary_heap/blob/42ab38d7a47d741d4ef3377639d77cc9f95e5373/LICENSE-MIT
-
 
 ===== COMPONENT =====
 dashmap 6.2.1
@@ -3733,7 +3772,6 @@ MIT OR Apache-2.0
 License: https://github.com/yaahc/displaydoc/blob/20016487354a96b22a7b97974483ae4f51a1bddc/LICENSE-APACHE
 License: https://github.com/yaahc/displaydoc/blob/20016487354a96b22a7b97974483ae4f51a1bddc/LICENSE-MIT
 
-
 ===== COMPONENT =====
 dom_query 0.28.0
 MIT
@@ -3758,26 +3796,22 @@ dtoa-short 0.3.5
 MPL-2.0
 License: https://github.com/upsuper/dtoa-short/blob/2d905cdb8b2e08163dc0d015f529877fe657b4ef/LICENSE
 
-
 ===== COMPONENT =====
 dtoa 1.0.11
 MIT OR Apache-2.0
 License: https://github.com/dtolnay/dtoa/blob/4c30faa2d91f167d7c343d13ebc9d30730456d56/LICENSE-APACHE
 License: https://github.com/dtolnay/dtoa/blob/4c30faa2d91f167d7c343d13ebc9d30730456d56/LICENSE-MIT
 
-
 ===== COMPONENT =====
 dunce 1.0.5
 CC0-1.0 OR MIT-0 OR Apache-2.0
 License: https://crates.io/crates/dunce/1.0.5
-
 
 ===== COMPONENT =====
 dyn-clone 1.0.20
 MIT OR Apache-2.0
 License: https://github.com/dtolnay/dyn-clone/blob/1d2d15c5d9d0d538c9da2141a75422d94c6be194/LICENSE-APACHE
 License: https://github.com/dtolnay/dyn-clone/blob/1d2d15c5d9d0d538c9da2141a75422d94c6be194/LICENSE-MIT
-
 
 ===== COMPONENT =====
 ecb 0.2.1
@@ -3807,7 +3841,6 @@ Copyright © WHATWG (Apple, Google, Mozilla, Microsoft).
 endi 1.1.1
 MIT
 License: https://github.com/zeenix/endi/blob/226224559725a9ef0e0687b3a54eca9ad6a5a6c7/LICENSE-MIT
-
 
 ===== COMPONENT =====
 enumflags2 0.7.12
@@ -3844,7 +3877,6 @@ esaxx-rs 0.1.10
 Apache-2.0
 License: https://github.com/Narsil/esaxx-rs/blob/dacdea35f18b551cb23bd3bf6ab58363784a94f4/LICENSE
 
-
 ===== COMPONENT =====
 ethnum 1.5.3
 MIT OR Apache-2.0
@@ -3858,13 +3890,11 @@ Apache-2.0 OR MIT
 License: https://github.com/smol-rs/event-listener-strategy/blob/f533c437e8a6561e9b625c3ee036a8ea7d19375c/LICENSE-APACHE
 License: https://github.com/smol-rs/event-listener-strategy/blob/f533c437e8a6561e9b625c3ee036a8ea7d19375c/LICENSE-MIT
 
-
 ===== COMPONENT =====
 event-listener 5.4.2
 Apache-2.0 OR MIT
 License: https://github.com/smol-rs/event-listener/blob/77004ac77dcef7884bf71a99c276a50f83a7fa4e/LICENSE-APACHE
 License: https://github.com/smol-rs/event-listener/blob/77004ac77dcef7884bf71a99c276a50f83a7fa4e/LICENSE-MIT
-
 
 ===== COMPONENT =====
 fallible-iterator 0.3.0
@@ -3904,13 +3934,11 @@ Apache-2.0 OR MIT
 License: https://github.com/smol-rs/fastrand/blob/7a1cc2c69ebde6cb3442809213db3fe19a2cb0ba/LICENSE-APACHE
 License: https://github.com/smol-rs/fastrand/blob/7a1cc2c69ebde6cb3442809213db3fe19a2cb0ba/LICENSE-MIT
 
-
 ===== COMPONENT =====
 fdeflate 0.3.7
 MIT OR Apache-2.0
 License: https://github.com/image-rs/fdeflate/blob/c365c7e6ffa81feb2e1fb762eed7299f05c9b0ca/LICENSE-APACHE
 License: https://github.com/image-rs/fdeflate/blob/c365c7e6ffa81feb2e1fb762eed7299f05c9b0ca/LICENSE-MIT
-
 
 ===== COMPONENT =====
 filedescriptor 0.8.3
@@ -3937,12 +3965,10 @@ flagset 0.4.7
 Apache-2.0
 License: https://github.com/enarx/flagset/blob/a268760a22ae833593e8e4cdd84ab44d2af31fda/LICENSE
 
-
 ===== COMPONENT =====
 flatbuffers 25.12.19
 Apache-2.0
 License: https://github.com/google/flatbuffers/blob/7e163021e59cca4f8e1e35a7c828b5c6b7915953/LICENSE
-
 
 ===== COMPONENT =====
 flate2 1.1.10
@@ -3993,7 +4019,6 @@ Copyright (c) 2015 Pierre Baillet
 fsst 4.0.0
 Apache-2.0
 License: https://crates.io/crates/fsst/4.0.0
-
 
 ===== COMPONENT =====
 fst 0.4.7
@@ -4151,7 +4176,6 @@ MIT OR Apache-2.0
 License: https://github.com/VoidStarKat/half-rs/blob/8cc891f3e4aad956eca7fa79b1f42f87ecd141ae/LICENSE-APACHE
 License: https://github.com/VoidStarKat/half-rs/blob/8cc891f3e4aad956eca7fa79b1f42f87ecd141ae/LICENSE-MIT
 
-
 ===== COMPONENT =====
 hashbrown 0.14.5
 MIT OR Apache-2.0
@@ -4242,7 +4266,6 @@ Copyright (c) 2014 The html5ever Project Developers
 htmlescape 0.3.1
 Apache-2.0
 License: https://crates.io/crates/htmlescape/0.3.1
-
 
 ===== COMPONENT =====
 http-body-util 0.1.5
@@ -4470,7 +4493,6 @@ ident_case 1.0.1
 MIT OR Apache-2.0
 License: https://github.com/TedDriggs/ident_case/blob/bf0d863e3006b40a0d923a81d7b2dd2db1136c2c/LICENSE
 
-
 ===== COMPONENT =====
 idna 1.1.0
 MIT OR Apache-2.0
@@ -4499,13 +4521,11 @@ MIT OR Apache-2.0
 License: https://github.com/image-rs/image-webp/blob/08b57d473c90148dd4b37a075df365afc3dfcc2b/LICENSE-APACHE
 License: https://github.com/image-rs/image-webp/blob/08b57d473c90148dd4b37a075df365afc3dfcc2b/LICENSE-MIT
 
-
 ===== COMPONENT =====
 image 0.25.10
 MIT OR Apache-2.0
 License: https://github.com/image-rs/image/blob/76e57184f22772dad1138e96954e57945406b15e/LICENSE-APACHE
 License: https://github.com/image-rs/image/blob/76e57184f22772dad1138e96954e57945406b15e/LICENSE-MIT
-
 
 ===== COMPONENT =====
 indexmap 2.14.2
@@ -4569,7 +4589,6 @@ MIT OR Apache-2.0
 License: https://github.com/dtolnay/itoa/blob/af77385d0daf4d0e949e81f2588be2e44f69f086/LICENSE-APACHE
 License: https://github.com/dtolnay/itoa/blob/af77385d0daf4d0e949e81f2588be2e44f69f086/LICENSE-MIT
 
-
 ===== COMPONENT =====
 jiff-core 0.1.1
 Unlicense OR MIT
@@ -4603,7 +4622,6 @@ jsonb 0.5.6
 Apache-2.0
 License: https://github.com/databendlabs/jsonb/blob/c39b24aaea2c27edf6e596874d3a08b8e7806e60/LICENSE
 
-
 ===== COMPONENT =====
 keyring-core 1.0.0
 MIT OR Apache-2.0
@@ -4617,66 +4635,55 @@ lance-arrow 4.0.0
 Apache-2.0
 License: https://crates.io/crates/lance-arrow/4.0.0
 
-
 ===== COMPONENT =====
 lance-bitpacking 4.0.0
 Apache-2.0
 License: https://crates.io/crates/lance-bitpacking/4.0.0
-
 
 ===== COMPONENT =====
 lance-core 4.0.0
 Apache-2.0
 License: https://crates.io/crates/lance-core/4.0.0
 
-
 ===== COMPONENT =====
 lance-datafusion 4.0.0
 Apache-2.0
 License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-datafusion/protos/license_header.txt
-
 
 ===== COMPONENT =====
 lance-datagen 4.0.0
 Apache-2.0
 License: https://crates.io/crates/lance-datagen/4.0.0
 
-
 ===== COMPONENT =====
 lance-encoding 4.0.0
 Apache-2.0
 License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-encoding/protos/license_header.txt
-
 
 ===== COMPONENT =====
 lance-file 4.0.0
 Apache-2.0
 License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-file/protos/license_header.txt
 
-
 ===== COMPONENT =====
 lance-index 4.0.0
 Apache-2.0
 License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-index/protos/license_header.txt
-
 
 ===== COMPONENT =====
 lance-io 4.0.0
 Apache-2.0
 License: https://crates.io/crates/lance-io/4.0.0
 
-
 ===== COMPONENT =====
 lance-linalg 4.0.0
 Apache-2.0
 License: https://crates.io/crates/lance-linalg/4.0.0
 
-
 ===== COMPONENT =====
 lance-namespace-impls 4.0.0
 Apache-2.0
 License: https://crates.io/crates/lance-namespace-impls/4.0.0
-
 
 ===== COMPONENT =====
 lance-namespace-reqwest-client 0.6.1
@@ -4689,30 +4696,25 @@ lance-namespace 4.0.0
 Apache-2.0
 License: https://crates.io/crates/lance-namespace/4.0.0
 
-
 ===== COMPONENT =====
 lance-table 4.0.0
 Apache-2.0
 License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-table/protos/license_header.txt
-
 
 ===== COMPONENT =====
 lance-testing 4.0.0
 Apache-2.0
 License: https://crates.io/crates/lance-testing/4.0.0
 
-
 ===== COMPONENT =====
 lance 4.0.0
 Apache-2.0
 License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance/protos/license_header.txt
 
-
 ===== COMPONENT =====
 lancedb 0.27.2
 Apache-2.0
 License: https://github.com/lancedb/lancedb/blob/294e1bacb4347f4ddcc623626de5e9cbefb92886/LICENSE
-
 
 ===== COMPONENT =====
 landlock 0.4.7
@@ -4771,7 +4773,6 @@ lexical-util 1.0.7
 MIT OR Apache-2.0
 License: https://github.com/Alexhuszagh/rust-lexical/blob/ddfc0f6bfcc0085ff982f567f41f24a5541a14ea/lexical-util/LICENSE-APACHE
 License: https://github.com/Alexhuszagh/rust-lexical/blob/ddfc0f6bfcc0085ff982f567f41f24a5541a14ea/lexical-util/LICENSE-MIT
-
 
 ===== COMPONENT =====
 lexical-write-float 1.0.6
@@ -4841,7 +4842,6 @@ License: https://github.com/sunfishcode/linux-raw-sys/blob/0e2918cf3e366d9c923d4
 License: https://github.com/sunfishcode/linux-raw-sys/blob/0e2918cf3e366d9c923d4ca05f169b49d826db56/LICENSE-Apache-2.0_WITH_LLVM-exception
 License: https://github.com/sunfishcode/linux-raw-sys/blob/0e2918cf3e366d9c923d4ca05f169b49d826db56/LICENSE-MIT
 
-
 ===== COMPONENT =====
 linux-raw-sys 0.4.15
 Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
@@ -4849,7 +4849,6 @@ License: https://github.com/sunfishcode/linux-raw-sys/blob/77e4a4223b14957ad8fa2
 License: https://github.com/sunfishcode/linux-raw-sys/blob/77e4a4223b14957ad8fa2958ea411cd4b54314e7/LICENSE-APACHE
 License: https://github.com/sunfishcode/linux-raw-sys/blob/77e4a4223b14957ad8fa2958ea411cd4b54314e7/LICENSE-Apache-2.0_WITH_LLVM-exception
 License: https://github.com/sunfishcode/linux-raw-sys/blob/77e4a4223b14957ad8fa2958ea411cd4b54314e7/LICENSE-MIT
-
 
 ===== COMPONENT =====
 litemap 0.7.5
@@ -5088,13 +5087,11 @@ MIT OR Apache-2.0
 License: https://github.com/dtolnay/monostate/blob/f31ba9ffb9ac4f90631742b529f7418613e4b071/impl/LICENSE-APACHE
 License: https://github.com/dtolnay/monostate/blob/f31ba9ffb9ac4f90631742b529f7418613e4b071/impl/LICENSE-MIT
 
-
 ===== COMPONENT =====
 monostate 0.1.18
 MIT OR Apache-2.0
 License: https://github.com/dtolnay/monostate/blob/f31ba9ffb9ac4f90631742b529f7418613e4b071/LICENSE-APACHE
 License: https://github.com/dtolnay/monostate/blob/f31ba9ffb9ac4f90631742b529f7418613e4b071/LICENSE-MIT
-
 
 ===== COMPONENT =====
 moxcms 0.8.1
@@ -5184,13 +5181,11 @@ notify 8.2.0
 CC0-1.0
 License: https://github.com/notify-rs/notify/blob/a1d7c2d8f80786679d58ec6d5986a1d4278bc8cf/notify/LICENSE-CC0
 
-
 ===== COMPONENT =====
 ntapi 0.4.3
 Apache-2.0 OR MIT
 License: https://github.com/MSxDOS/ntapi/blob/3f8ac79fdfea53d8fbe1282237173cee8c4f198c/LICENSE-APACHE
 License: https://github.com/MSxDOS/ntapi/blob/3f8ac79fdfea53d8fbe1282237173cee8c4f198c/LICENSE-MIT
-
 
 ===== COMPONENT =====
 num-bigint 0.4.8
@@ -5260,12 +5255,10 @@ objc2-core-foundation 0.3.2
 Zlib OR Apache-2.0 OR MIT
 License: https://crates.io/crates/objc2-core-foundation/0.3.2
 
-
 ===== COMPONENT =====
 objc2-encode 4.1.0
 MIT
 License: https://crates.io/crates/objc2-encode/4.1.0
-
 
 ===== COMPONENT =====
 objc2-foundation 0.3.2
@@ -5273,24 +5266,20 @@ MIT
 License: https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/framework-crates/objc2-foundation/src/copying.rs
 License: https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/framework-crates/objc2-foundation/src/tests/copying.rs
 
-
 ===== COMPONENT =====
 objc2-io-kit 0.3.2
 Zlib OR Apache-2.0 OR MIT
 License: https://crates.io/crates/objc2-io-kit/0.3.2
-
 
 ===== COMPONENT =====
 objc2-local-authentication 0.3.2
 Zlib OR Apache-2.0 OR MIT
 License: https://crates.io/crates/objc2-local-authentication/0.3.2
 
-
 ===== COMPONENT =====
 objc2 0.6.5
 MIT
 License: https://crates.io/crates/objc2/0.6.5
-
 
 ===== COMPONENT =====
 object_store 0.12.5
@@ -5304,13 +5293,11 @@ MIT OR Apache-2.0
 License: https://github.com/matklad/once_cell/blob/80fe900b21f6d76c1a2ed74d3343e8a3a88c46d0/LICENSE-APACHE
 License: https://github.com/matklad/once_cell/blob/80fe900b21f6d76c1a2ed74d3343e8a3a88c46d0/LICENSE-MIT
 
-
 ===== COMPONENT =====
 oneshot 0.1.13
 MIT OR Apache-2.0
 License: https://github.com/faern/oneshot/blob/a6a03981ec4d9aa3abb4445f0b90919d08a746ad/LICENSE-APACHE
 License: https://github.com/faern/oneshot/blob/a6a03981ec4d9aa3abb4445f0b90919d08a746ad/LICENSE-MIT
-
 
 ===== COMPONENT =====
 onig 6.5.3
@@ -5338,7 +5325,6 @@ option-ext 0.2.0
 MPL-2.0
 License: https://github.com/soc/option-ext/blob/272f22fc9ea1ac6b08f01704af52c4ac338df4e2/LICENSE.txt
 
-
 ===== COMPONENT =====
 ordered-float 5.5.0
 MIT
@@ -5350,7 +5336,6 @@ ordered-stream 0.2.0
 MIT OR Apache-2.0
 License: https://github.com/danieldg/ordered-stream/blob/5c58ca1a3d680c2406f0c6a1520c3476c27048aa/LICENSE-APACHE
 License: https://github.com/danieldg/ordered-stream/blob/5c58ca1a3d680c2406f0c6a1520c3476c27048aa/LICENSE-MIT
-
 
 ===== COMPONENT =====
 ort-sys 2.0.0-rc.13
@@ -5402,13 +5387,11 @@ MIT OR Apache-2.0
 License: https://github.com/dtolnay/paste/blob/a2c7e27875277450ed28147623ba5218dd23e732/LICENSE-APACHE
 License: https://github.com/dtolnay/paste/blob/a2c7e27875277450ed28147623ba5218dd23e732/LICENSE-MIT
 
-
 ===== COMPONENT =====
 pastey 0.2.3
 MIT OR Apache-2.0
 License: https://github.com/as1100k/pastey/blob/c377d07c9d1a418e9922af59dc932736752a95cc/LICENSE-APACHE
 License: https://github.com/as1100k/pastey/blob/c377d07c9d1a418e9922af59dc932736752a95cc/LICENSE-MIT
-
 
 ===== COMPONENT =====
 path_abs 0.5.1
@@ -5492,13 +5475,11 @@ Apache-2.0 OR MIT
 License: https://github.com/taiki-e/pin-project/blob/c3b6b85f7e1674602c0ed693da985b33b2452c3c/pin-project-internal/LICENSE-APACHE
 License: https://github.com/taiki-e/pin-project/blob/c3b6b85f7e1674602c0ed693da985b33b2452c3c/pin-project-internal/LICENSE-MIT
 
-
 ===== COMPONENT =====
 pin-project-lite 0.2.17
 Apache-2.0 OR MIT
 License: https://github.com/taiki-e/pin-project-lite/blob/3bdf763446aa78f90e3bdac1ef583e014832ab4c/LICENSE-APACHE
 License: https://github.com/taiki-e/pin-project-lite/blob/3bdf763446aa78f90e3bdac1ef583e014832ab4c/LICENSE-MIT
-
 
 ===== COMPONENT =====
 pin-project 1.1.13
@@ -5506,13 +5487,11 @@ Apache-2.0 OR MIT
 License: https://github.com/taiki-e/pin-project/blob/c3b6b85f7e1674602c0ed693da985b33b2452c3c/LICENSE-APACHE
 License: https://github.com/taiki-e/pin-project/blob/c3b6b85f7e1674602c0ed693da985b33b2452c3c/LICENSE-MIT
 
-
 ===== COMPONENT =====
 piper 0.2.5
 MIT OR Apache-2.0
 License: https://github.com/smol-rs/piper/blob/85da45edce0b9262f00d79d9a42ce0372fb42a10/LICENSE-APACHE
 License: https://github.com/smol-rs/piper/blob/85da45edce0b9262f00d79d9a42ce0372fb42a10/LICENSE-MIT
-
 
 ===== COMPONENT =====
 png 0.18.1
@@ -5527,13 +5506,11 @@ Apache-2.0 OR MIT
 License: https://github.com/smol-rs/polling/blob/f404d08dd2a61994ac5fe0ed663bc051bd94c053/LICENSE-APACHE
 License: https://github.com/smol-rs/polling/blob/f404d08dd2a61994ac5fe0ed663bc051bd94c053/LICENSE-MIT
 
-
 ===== COMPONENT =====
 portable-atomic 1.15.0
 Apache-2.0 OR MIT
 License: https://github.com/taiki-e/portable-atomic/blob/e4595528211f1d53b7f4d93e528ef84b491fc871/LICENSE-APACHE
 License: https://github.com/taiki-e/portable-atomic/blob/e4595528211f1d53b7f4d93e528ef84b491fc871/LICENSE-MIT
-
 
 ===== COMPONENT =====
 potential_utf 0.1.6
@@ -5570,13 +5547,11 @@ MIT OR Apache-2.0
 License: https://github.com/dtolnay/prettyplease/blob/49e50897b580a5b7591ead6ef73f3fe09e76d896/LICENSE-APACHE
 License: https://github.com/dtolnay/prettyplease/blob/49e50897b580a5b7591ead6ef73f3fe09e76d896/LICENSE-MIT
 
-
 ===== COMPONENT =====
 proc-macro-crate 3.5.0
 MIT OR Apache-2.0
 License: https://github.com/bkchr/proc-macro-crate/blob/8f3d8b04539f732e09c07907f138a248c8d0eed9/LICENSE-APACHE
 License: https://github.com/bkchr/proc-macro-crate/blob/8f3d8b04539f732e09c07907f138a248c8d0eed9/LICENSE-MIT
-
 
 ===== COMPONENT =====
 proc-macro2 1.0.107
@@ -5584,24 +5559,20 @@ MIT OR Apache-2.0
 License: https://github.com/dtolnay/proc-macro2/blob/ed8a5497669cd63db33bf24646f261b012bbbc4a/LICENSE-APACHE
 License: https://github.com/dtolnay/proc-macro2/blob/ed8a5497669cd63db33bf24646f261b012bbbc4a/LICENSE-MIT
 
-
 ===== COMPONENT =====
 prost-derive 0.14.4
 Apache-2.0
 License: https://github.com/tokio-rs/prost/blob/13646cde7eab75c81b3047767aa0a86e7dbecf12/prost-derive/LICENSE
-
 
 ===== COMPONENT =====
 prost-types 0.14.4
 Apache-2.0
 License: https://github.com/tokio-rs/prost/blob/13646cde7eab75c81b3047767aa0a86e7dbecf12/prost-types/LICENSE
 
-
 ===== COMPONENT =====
 prost 0.14.4
 Apache-2.0
 License: https://github.com/tokio-rs/prost/blob/13646cde7eab75c81b3047767aa0a86e7dbecf12/prost/LICENSE
-
 
 ===== COMPONENT =====
 psl-types 2.0.11
@@ -5635,7 +5606,6 @@ quote 1.0.47
 MIT OR Apache-2.0
 License: https://github.com/dtolnay/quote/blob/723dcb47d3f0ddc896e17287c8a8d3f2ea2317d5/LICENSE-APACHE
 License: https://github.com/dtolnay/quote/blob/723dcb47d3f0ddc896e17287c8a8d3f2ea2317d5/LICENSE-MIT
-
 
 ===== COMPONENT =====
 radium 0.7.0
@@ -5786,13 +5756,11 @@ MIT OR Apache-2.0
 License: https://github.com/dtolnay/ref-cast/blob/971b90557fc096216a52b2672a6ab5d39523162c/derive/LICENSE-APACHE
 License: https://github.com/dtolnay/ref-cast/blob/971b90557fc096216a52b2672a6ab5d39523162c/derive/LICENSE-MIT
 
-
 ===== COMPONENT =====
 ref-cast 1.0.27
 MIT OR Apache-2.0
 License: https://github.com/dtolnay/ref-cast/blob/971b90557fc096216a52b2672a6ab5d39523162c/LICENSE-APACHE
 License: https://github.com/dtolnay/ref-cast/blob/971b90557fc096216a52b2672a6ab5d39523162c/LICENSE-MIT
-
 
 ===== COMPONENT =====
 regex-automata 0.4.18
@@ -5898,12 +5866,10 @@ rpassword 7.5.4
 Apache-2.0
 License: https://github.com/conradkleinespel/rpassword/blob/11515101cf108ce825dcd5ef5bac703a591f36c1/LICENSE-APACHE
 
-
 ===== COMPONENT =====
 rtoolbox 0.0.6
 Apache-2.0
 License: https://github.com/conradkleinespel/rtoolbox/blob/af99b45fefac5f9eb6891fb4ddd9c1e992fbf24d/LICENSE-APACHE
-
 
 ===== COMPONENT =====
 rusqlite 0.37.0
@@ -5931,7 +5897,6 @@ Apache-2.0 OR MIT
 License: https://github.com/rust-lang/rustc-hash/blob/c13e7ccca705e6255387a2ebc6dca142d6881621/LICENSE-APACHE
 License: https://github.com/rust-lang/rustc-hash/blob/c13e7ccca705e6255387a2ebc6dca142d6881621/LICENSE-MIT
 
-
 ===== COMPONENT =====
 rustix 0.38.44
 Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
@@ -5940,7 +5905,6 @@ License: https://github.com/bytecodealliance/rustix/blob/acf4a284ea893efa93953e1
 License: https://github.com/bytecodealliance/rustix/blob/acf4a284ea893efa93953e1ff2f2f0ab00be1cdc/LICENSE-Apache-2.0_WITH_LLVM-exception
 License: https://github.com/bytecodealliance/rustix/blob/acf4a284ea893efa93953e1ff2f2f0ab00be1cdc/LICENSE-MIT
 
-
 ===== COMPONENT =====
 rustix 1.1.5
 Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
@@ -5948,7 +5912,6 @@ License: https://github.com/bytecodealliance/rustix/blob/287214b889865d8e1406a0e
 License: https://github.com/bytecodealliance/rustix/blob/287214b889865d8e1406a0ee71cc409b6f6191c8/LICENSE-APACHE
 License: https://github.com/bytecodealliance/rustix/blob/287214b889865d8e1406a0ee71cc409b6f6191c8/LICENSE-Apache-2.0_WITH_LLVM-exception
 License: https://github.com/bytecodealliance/rustix/blob/287214b889865d8e1406a0ee71cc409b6f6191c8/LICENSE-MIT
-
 
 ===== COMPONENT =====
 rustls-native-certs 0.8.4
@@ -5989,20 +5952,17 @@ MIT OR Apache-2.0
 License: https://github.com/dtolnay/rustversion/blob/3a7c76605450b9a7299c6502a421909de9126a59/LICENSE-APACHE
 License: https://github.com/dtolnay/rustversion/blob/3a7c76605450b9a7299c6502a421909de9126a59/LICENSE-MIT
 
-
 ===== COMPONENT =====
 ryu-js 1.0.3
 Apache-2.0 OR BSL-1.0
 License: https://github.com/boa-dev/ryu-js/blob/f8d66267a2f5c92d1d9d634c92d06d1541640506/LICENSE-APACHE
 License: https://github.com/boa-dev/ryu-js/blob/f8d66267a2f5c92d1d9d634c92d06d1541640506/LICENSE-BOOST
 
-
 ===== COMPONENT =====
 ryu 1.0.23
 Apache-2.0 OR BSL-1.0
 License: https://github.com/dtolnay/ryu/blob/f0b52bb194befe6fd242154f2182fafd43a819b8/LICENSE-APACHE
 License: https://github.com/dtolnay/ryu/blob/f0b52bb194befe6fd242154f2182fafd43a819b8/LICENSE-BOOST
-
 
 ===== COMPONENT =====
 same-file 1.0.6
@@ -6069,13 +6029,11 @@ selectors 0.38.0
 MPL-2.0
 License: https://crates.io/crates/selectors/0.38.0
 
-
 ===== COMPONENT =====
 semver 1.0.28
 MIT OR Apache-2.0
 License: https://github.com/dtolnay/semver/blob/7625c7aa3f0e8ba21e099d1765bcebcb72aa8816/LICENSE-APACHE
 License: https://github.com/dtolnay/semver/blob/7625c7aa3f0e8ba21e099d1765bcebcb72aa8816/LICENSE-MIT
-
 
 ===== COMPONENT =====
 seq-macro 0.3.6
@@ -6083,13 +6041,11 @@ MIT OR Apache-2.0
 License: https://github.com/dtolnay/seq-macro/blob/828442657f65fbf3730763e0ecdcf5c7b1155399/LICENSE-APACHE
 License: https://github.com/dtolnay/seq-macro/blob/828442657f65fbf3730763e0ecdcf5c7b1155399/LICENSE-MIT
 
-
 ===== COMPONENT =====
 serde 1.0.229
 MIT OR Apache-2.0
 License: https://github.com/serde-rs/serde/blob/7fc3b4c30c94f73a96ebd1553f2b090d928fc3a8/serde/LICENSE-APACHE
 License: https://github.com/serde-rs/serde/blob/7fc3b4c30c94f73a96ebd1553f2b090d928fc3a8/serde/LICENSE-MIT
-
 
 ===== COMPONENT =====
 serde_core 1.0.229
@@ -6097,13 +6053,11 @@ MIT OR Apache-2.0
 License: https://github.com/serde-rs/serde/blob/7fc3b4c30c94f73a96ebd1553f2b090d928fc3a8/serde_core/LICENSE-APACHE
 License: https://github.com/serde-rs/serde/blob/7fc3b4c30c94f73a96ebd1553f2b090d928fc3a8/serde_core/LICENSE-MIT
 
-
 ===== COMPONENT =====
 serde_derive 1.0.229
 MIT OR Apache-2.0
 License: https://github.com/serde-rs/serde/blob/7fc3b4c30c94f73a96ebd1553f2b090d928fc3a8/serde_derive/LICENSE-APACHE
 License: https://github.com/serde-rs/serde/blob/7fc3b4c30c94f73a96ebd1553f2b090d928fc3a8/serde_derive/LICENSE-MIT
-
 
 ===== COMPONENT =====
 serde_derive_internals 0.30.0
@@ -6111,13 +6065,11 @@ MIT OR Apache-2.0
 License: https://github.com/serde-rs/serde/blob/747814f7d5fbab872df3b02f070c165b91bde062/serde_derive_internals/LICENSE-APACHE
 License: https://github.com/serde-rs/serde/blob/747814f7d5fbab872df3b02f070c165b91bde062/serde_derive_internals/LICENSE-MIT
 
-
 ===== COMPONENT =====
 serde_json 1.0.151
 MIT OR Apache-2.0
 License: https://github.com/serde-rs/json/blob/de8500740cdcabffb9734f503e4889def823cf10/LICENSE-APACHE
 License: https://github.com/serde-rs/json/blob/de8500740cdcabffb9734f503e4889def823cf10/LICENSE-MIT
-
 
 ===== COMPONENT =====
 serde_path_to_error 0.1.20
@@ -6125,13 +6077,11 @@ MIT OR Apache-2.0
 License: https://github.com/dtolnay/path-to-error/blob/097ed8772815ab6a676ebf3998b6de4770af090d/LICENSE-APACHE
 License: https://github.com/dtolnay/path-to-error/blob/097ed8772815ab6a676ebf3998b6de4770af090d/LICENSE-MIT
 
-
 ===== COMPONENT =====
 serde_repr 0.1.21
 MIT OR Apache-2.0
 License: https://github.com/dtolnay/serde-repr/blob/205ce23cf7c55981be8c1e02ac87695c57a13ee0/LICENSE-APACHE
 License: https://github.com/dtolnay/serde-repr/blob/205ce23cf7c55981be8c1e02ac87695c57a13ee0/LICENSE-MIT
-
 
 ===== COMPONENT =====
 serde_urlencoded 0.7.1
@@ -6159,7 +6109,6 @@ servo_arc 0.4.3
 MIT OR Apache-2.0
 License: https://github.com/servo/stylo/blob/f319793c6989dba83994fbd10d560b21ad4a0c85/servo_arc/LICENSE-APACHE
 License: https://github.com/servo/stylo/blob/f319793c6989dba83994fbd10d560b21ad4a0c85/servo_arc/LICENSE-MIT
-
 
 ===== COMPONENT =====
 sha1 0.10.7
@@ -6207,7 +6156,6 @@ simdutf8 0.1.5
 MIT OR Apache-2.0
 License: https://github.com/rusticstuff/simdutf8/blob/87ee8d9d20b849eae1974a82b248ee6fe7491bcc/LICENSE-Apache
 License: https://github.com/rusticstuff/simdutf8/blob/87ee8d9d20b849eae1974a82b248ee6fe7491bcc/LICENSE-MIT
-
 
 ===== COMPONENT =====
 siphasher 1.0.3
@@ -6285,18 +6233,15 @@ spm_precompiled 0.1.4
 Apache-2.0
 License: https://github.com/huggingface/spm_precompiled/blob/effe52a6d6f5d8312b1d096ab712cf4cc20b59b6/LICENSE
 
-
 ===== COMPONENT =====
 sqlparser 0.59.0
 Apache-2.0
 License: https://crates.io/crates/sqlparser/0.59.0
 
-
 ===== COMPONENT =====
 sqlparser_derive 0.3.0
 Apache-2.0
 License: https://crates.io/crates/sqlparser_derive/0.3.0
-
 
 ===== COMPONENT =====
 sse-stream 0.2.6
@@ -6380,13 +6325,11 @@ MIT OR Apache-2.0
 License: https://github.com/dtolnay/syn/blob/bfa790b8e445dc67b7ab94d75adb1a92d6296c9a/LICENSE-APACHE
 License: https://github.com/dtolnay/syn/blob/bfa790b8e445dc67b7ab94d75adb1a92d6296c9a/LICENSE-MIT
 
-
 ===== COMPONENT =====
 syn 2.0.119
 MIT OR Apache-2.0
 License: https://github.com/dtolnay/syn/blob/3295f9e9841785ac88a5e558c884854d5fb7d67f/LICENSE-APACHE
 License: https://github.com/dtolnay/syn/blob/3295f9e9841785ac88a5e558c884854d5fb7d67f/LICENSE-MIT
-
 
 ===== COMPONENT =====
 syn 3.0.5
@@ -6394,12 +6337,10 @@ MIT OR Apache-2.0
 License: https://github.com/dtolnay/syn/blob/e0ad92d68b588c964e82bb74c3bd3e1e99f97ceb/LICENSE-APACHE
 License: https://github.com/dtolnay/syn/blob/e0ad92d68b588c964e82bb74c3bd3e1e99f97ceb/LICENSE-MIT
 
-
 ===== COMPONENT =====
 sync_wrapper 1.0.2
 Apache-2.0
 License: https://github.com/Actyx/sync_wrapper/blob/55413956c36aeab47feb8c04d1b7a044d6df336a/LICENSE
-
 
 ===== COMPONENT =====
 synstructure 0.13.2
@@ -6510,13 +6451,11 @@ MIT OR Apache-2.0
 License: https://github.com/dtolnay/thiserror/blob/41938bd3a03a70d34ed8e53d99c89c770c7c9c41/impl/LICENSE-APACHE
 License: https://github.com/dtolnay/thiserror/blob/41938bd3a03a70d34ed8e53d99c89c770c7c9c41/impl/LICENSE-MIT
 
-
 ===== COMPONENT =====
 thiserror-impl 2.0.20
 MIT OR Apache-2.0
 License: https://github.com/dtolnay/thiserror/blob/b1d5db5e039275d95bf7536a2b2192aeb4dc28bf/impl/LICENSE-APACHE
 License: https://github.com/dtolnay/thiserror/blob/b1d5db5e039275d95bf7536a2b2192aeb4dc28bf/impl/LICENSE-MIT
-
 
 ===== COMPONENT =====
 thiserror 1.0.69
@@ -6524,13 +6463,11 @@ MIT OR Apache-2.0
 License: https://github.com/dtolnay/thiserror/blob/41938bd3a03a70d34ed8e53d99c89c770c7c9c41/LICENSE-APACHE
 License: https://github.com/dtolnay/thiserror/blob/41938bd3a03a70d34ed8e53d99c89c770c7c9c41/LICENSE-MIT
 
-
 ===== COMPONENT =====
 thiserror 2.0.20
 MIT OR Apache-2.0
 License: https://github.com/dtolnay/thiserror/blob/b1d5db5e039275d95bf7536a2b2192aeb4dc28bf/LICENSE-APACHE
 License: https://github.com/dtolnay/thiserror/blob/b1d5db5e039275d95bf7536a2b2192aeb4dc28bf/LICENSE-MIT
-
 
 ===== COMPONENT =====
 thread-tree 0.3.3
@@ -6585,7 +6522,6 @@ Copyright (c) 2019 Daniel "Lokathor" Gee.
 tokenizers 0.22.2
 Apache-2.0
 License: https://github.com/huggingface/tokenizers/blob/6573f2c56172bac56f211e77934be3215adef2c2/tokenizers/LICENSE
-
 
 ===== COMPONENT =====
 tokio-macros 2.7.2
@@ -6885,7 +6821,6 @@ MIT OR Apache-2.0
 License: https://github.com/ohadravid/win32job-rs/blob/29913d5f6acd47a491f73819ff6d54b63fb851b2/LICENSE-APACHE
 License: https://github.com/ohadravid/win32job-rs/blob/29913d5f6acd47a491f73819ff6d54b63fb851b2/LICENSE-MIT
 
-
 ===== COMPONENT =====
 winapi-util 0.1.11
 Unlicense OR MIT
@@ -7108,7 +7043,6 @@ winnow 1.0.4
 MIT
 License: https://github.com/winnow-rs/winnow/blob/7539ec0fc27144bfdcf9a68b0dbbec48bd0d5bae/LICENSE-MIT
 
-
 ===== COMPONENT =====
 winsafe 0.0.29
 MIT
@@ -7147,7 +7081,6 @@ Copyright (c) 2018 myrrlyn (Alexander Payne)
 xxhash-rust 0.8.18
 BSL-1.0
 License: https://github.com/DoumanAsh/xxhash-rust/blob/f93abc7ce0363e6910601e89ada2240f9ed7def6/LICENSE
-
 
 ===== COMPONENT =====
 yoke-derive 0.7.5
@@ -7294,12 +7227,10 @@ zlib-rs 0.6.7
 Zlib
 License: https://github.com/trifectatechfoundation/zlib-rs/blob/734b2c1f42e2efaafe04cbab9c61cfaa5dead9ad/zlib-rs/LICENSE
 
-
 ===== COMPONENT =====
 zmij 1.0.23
 MIT
 License: https://github.com/dtolnay/zmij/blob/7b7cc48b58028e8af7be87e94c0c1c8936f1a57c/LICENSE-MIT
-
 
 ===== COMPONENT =====
 zopfli 0.8.3
@@ -7365,7 +7296,6 @@ Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors
 zvariant_utils 4.2.0
 MIT
 License: https://github.com/z-galaxy/zbus/blob/0f4db6980bc1566278618a46c9ffa7f5f025c18a/zvariant_utils/LICENSE
-
 
 ===== COMPONENT =====
 IBM Plex Mono 2.5.0

@@ -1,10 +1,10 @@
 {
   "inputs": {
-    "bun.lock": "2be066dc47b7104c4fb96106514ced22c3632d18a06d81b9c8516eaffce6b7da",
+    "bun.lock": "c897d780149e0002b1c6fb43ed2704741b92c3cf4d2c0e34c39c044b5382f98d",
     "deploy/licenses/disclosure.py": "a2e4f4796b81881e944e1b7f605ce9b8850ccaee60c09d3124108d07f1304036",
-    "deploy/licenses/generate.mjs": "714ebe25f13c4ba3cb5666febaa8b048f1b1f848b34f65907d787dfc1a8093e1",
+    "deploy/licenses/generate.mjs": "82e8b5f80db3a6785f9969fa913787f5c3aa4e0f802fb94e5e9f8001c42f3d8e",
     "deploy/licenses/inputs.mjs": "8b8f71b92ff873d77dade2f90fbea05395cfdc3151c900607774de31796a7657",
-    "deploy/licenses/refresh.py": "27180cf428992f1976388063f42faae7113255f6630f15e48c6012b4ee9268bc",
+    "deploy/licenses/refresh.py": "18d7030c6b2430f87fafdb891c33063080e1fefd2a1733747e03b545353cff97",
     "packages/butler-agent/rust/Cargo.lock": "31352ce0ae5f39adbe63fd8647ad1df521dccc83137f08a8b4af07868f2eecd0",
     "packages/butler-agent/rust/Cargo.toml": "84e021c080b775ab00c9967a4ec8c75c8c46fced4a9eab1b8d30d4fab2d4ef61",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
@@ -26,7 +26,7 @@
     "packages/butler-agent/rust/rust-toolchain.toml": "2ad6f15416572b4836585087f1d4abc53b8fa2dbd616f8dacfaa587ed6714228",
     "packages/butler-agent/rust/scripts/static-ort.lock.json": "a1aee730fc0773ca02d23bad8da95c0efe56a07ded67dc36d251f475a90369b2",
     "packages/butler-agent/rust/tools/source-check/Cargo.toml": "e50cffe7e1c5a79f1fe76bf689eb65fb682a29cd8425ae3609c35cfa1f56603c",
-    "packages/butler-app/client/electron/package.json": "f4eb5555a4170da30ca8905f4d2b546f2c50877ccf7ef37b44d63d0cc07e2f9b",
+    "packages/butler-app/client/electron/package.json": "75bf192017270ab76ef12a560dd7643789a965331e1958edb5f5a930fd1587a8",
     "packages/butler-app/client/ui/package.json": "2bf91d383db65633acf08715f188ce069c047178c7091108b519a00999d91499",
     "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE": "3d1d0a9fe82fdc1492422398bfac65d2205a9326eebf619e238b84e9b6376d36",
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",
@@ -2255,6 +2255,34 @@
       ]
     },
     {
+      "id": "npm:argparse@2.0.1",
+      "name": "argparse",
+      "version": "2.0.1",
+      "license": "Python-2.0",
+      "source": "https://registry.npmjs.org/argparse/-/argparse-2.0.1.tgz",
+      "artifacts": [
+        "App/Agent browser renderer"
+      ],
+      "evidenceSha256": [
+        "de4d1f2d2ad5ad0cfd1657a106476b31cb5db5ef9d1ff842b237c0c81f0c8a23"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "integrity": "sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==",
+      "links": [
+        "https://www.npmjs.com/package/argparse/v/2.0.1"
+      ],
+      "copyright": [
+        "i.e., \"Copyright (c) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,",
+        "2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020 Python Software Foundation;",
+        "License Agreement and CNRI's notice of copyright, i.e., \"Copyright (c)",
+        "1995-2001 Corporation for National Research Initiatives; All Rights",
+        "Copyright (c) 1991 - 1995, Stichting Mathematisch Centrum Amsterdam,",
+        "The Netherlands.  All rights reserved."
+      ]
+    },
+    {
       "id": "npm:aria-hidden@1.2.6",
       "name": "aria-hidden",
       "version": "1.2.6",
@@ -3018,6 +3046,29 @@
       ]
     },
     {
+      "id": "npm:fontverter@2.0.0",
+      "name": "fontverter",
+      "version": "2.0.0",
+      "license": "BSD-3-Clause",
+      "source": "https://registry.npmjs.org/fontverter/-/fontverter-2.0.0.tgz",
+      "artifacts": [
+        "App/Agent browser renderer"
+      ],
+      "evidenceSha256": [
+        "b6a2bd466724fee12c200fc7a5ebd22c98606ecc1c4206cbae50ccb69b4c36f3"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "integrity": "sha512-DFVX5hvXuhi1Jven1tbpebYTCT9XYnvx6/Z+HFUPb7ZRMCW+pj2clU9VMhoTPgWKPhAs7JJDSk3CW1jNUvKCZQ==",
+      "links": [
+        "https://www.npmjs.com/package/fontverter/v/2.0.0"
+      ],
+      "copyright": [
+        "Copyright (c) 2012, Andreas Lind Petersen"
+      ]
+    },
+    {
       "id": "npm:get-nonce@1.0.1",
       "name": "get-nonce",
       "version": "1.0.1",
@@ -3038,6 +3089,29 @@
       ],
       "copyright": [
         "Copyright (c) 2020 Anton Korzunov"
+      ]
+    },
+    {
+      "id": "npm:harfbuzzjs@1.6.2",
+      "name": "harfbuzzjs",
+      "version": "1.6.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/harfbuzzjs/-/harfbuzzjs-1.6.2.tgz",
+      "artifacts": [
+        "App/Agent browser renderer"
+      ],
+      "evidenceSha256": [
+        "5d09767b2cc476f08028b56d9384dc45061c5a3e90f9ad966e44addc8d26c8b1"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "integrity": "sha512-95c1vWuzoHjM19d5fQgPbz1wcv1pTa0UM9dZrdPgSMUEVuSwuzeVPkq6UhHHw3jLOkE9AYzzTP8XQkRBpPYpEg==",
+      "links": [
+        "https://www.npmjs.com/package/harfbuzzjs/v/1.6.2"
+      ],
+      "copyright": [
+        "Copyright (c) 2019-2026 The harfbuzzjs project authors"
       ]
     },
     {
@@ -4514,6 +4588,52 @@
       ]
     },
     {
+      "id": "npm:p-limit@3.1.0",
+      "name": "p-limit",
+      "version": "3.1.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/p-limit/-/p-limit-3.1.0.tgz",
+      "artifacts": [
+        "App/Agent browser renderer"
+      ],
+      "evidenceSha256": [
+        "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3"
+      ],
+      "files": [
+        "license"
+      ],
+      "integrity": "sha512-TYOanM3wGwNGsZN2cVTYPArw454xnXj5qmWF1bEoAc4+cU/ol7GVh7odevjp1FNHduHc3KZMcFduxU5Xc6uJRQ==",
+      "links": [
+        "https://www.npmjs.com/package/p-limit/v/3.1.0"
+      ],
+      "copyright": [
+        "Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)"
+      ]
+    },
+    {
+      "id": "npm:pako@1.0.11",
+      "name": "pako",
+      "version": "1.0.11",
+      "license": "(MIT AND Zlib)",
+      "source": "https://registry.npmjs.org/pako/-/pako-1.0.11.tgz",
+      "artifacts": [
+        "App/Agent browser renderer"
+      ],
+      "evidenceSha256": [
+        "a04665b3b2de56c66730c1f720f528175739e4104f79073614aa611da1e85539"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "integrity": "sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==",
+      "links": [
+        "https://www.npmjs.com/package/pako/v/1.0.11"
+      ],
+      "copyright": [
+        "Copyright (C) 2014-2017 by Vitaly Puzrin and Andrei Tuputcyn"
+      ]
+    },
+    {
       "id": "npm:parse-entities@4.0.2",
       "name": "parse-entities",
       "version": "4.0.2",
@@ -5090,6 +5210,29 @@
       ]
     },
     {
+      "id": "npm:subset-font@2.9.0",
+      "name": "subset-font",
+      "version": "2.9.0",
+      "license": "BSD-3-Clause",
+      "source": "https://registry.npmjs.org/subset-font/-/subset-font-2.9.0.tgz",
+      "artifacts": [
+        "App/Agent browser renderer"
+      ],
+      "evidenceSha256": [
+        "b6a2bd466724fee12c200fc7a5ebd22c98606ecc1c4206cbae50ccb69b4c36f3"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "integrity": "sha512-WJulQeFwbewrXIGcLJbSZFWI44fHW8gNRuPzLywfDL8w38IPRbN1JFxwG76aoohw9kcFdvjVIn2QmID1iy119A==",
+      "links": [
+        "https://www.npmjs.com/package/subset-font/v/2.9.0"
+      ],
+      "copyright": [
+        "Copyright (c) 2012, Andreas Lind Petersen"
+      ]
+    },
+    {
       "id": "npm:tabbable@6.5.0",
       "name": "tabbable",
       "version": "6.5.0",
@@ -5534,6 +5677,57 @@
       ]
     },
     {
+      "id": "npm:wawoff2@2.0.1",
+      "name": "wawoff2",
+      "version": "2.0.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/wawoff2/-/wawoff2-2.0.1.tgz",
+      "artifacts": [
+        "App/Agent browser renderer"
+      ],
+      "evidenceSha256": [
+        "d42a3e363d99da22b860ab760faa37dfa9781d74c9f3ed634d05109081616513"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "integrity": "sha512-r0CEmvpH63r4T15ebFqeOjGqU4+EgTx4I510NtK35EMciSdcTxCw3Byy3JnBonz7iyIFZ0AbVo0bbFpEVuhCYA==",
+      "links": [
+        "https://www.npmjs.com/package/wawoff2/v/2.0.1"
+      ],
+      "copyright": [
+        "Copyright (c) 2013-2017 by the WOFF2 Authors."
+      ]
+    },
+    {
+      "id": "npm:woff2sfnt-sfnt2woff@1.0.0",
+      "name": "woff2sfnt-sfnt2woff",
+      "version": "1.0.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/woff2sfnt-sfnt2woff/-/woff2sfnt-sfnt2woff-1.0.0.tgz",
+      "artifacts": [
+        "App/Agent browser renderer"
+      ],
+      "evidenceSha256": [
+        "d3daf63ff23421333dca7a5fbb84711a9eead66452b26dfedc10eab2b058086b",
+        "cce36ad9e28248894557e3be0c10ab7d236a3757f466fb5e386ee6e2817e30d4",
+        "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+      ],
+      "files": [
+        "index.js (upstream MIT copyright declaration)",
+        "package.json (upstream MIT declaration)",
+        "Full MIT license (upstream omits text)"
+      ],
+      "integrity": "sha512-edK4COc1c1EpRfMqCZO1xJOvdUtM5dbVb9iz97rScvnTevqEB3GllnLWCmMVp1MfQBdF1DFg/11I0rSyAdS4qQ==",
+      "links": [
+        "https://www.npmjs.com/package/woff2sfnt-sfnt2woff/v/1.0.0"
+      ],
+      "copyright": [
+        "* MIT License Copyright(c) 2014 Onur Demiralay",
+        "Copyright (c) <year> <copyright holders>"
+      ]
+    },
+    {
       "id": "npm:yjs@13.6.32",
       "name": "yjs",
       "version": "13.6.32",
@@ -5555,6 +5749,29 @@
       "copyright": [
         "Copyright (c) 2023",
         "- Kevin Jahns <kevin.jahns@protonmail.com>."
+      ]
+    },
+    {
+      "id": "npm:yocto-queue@0.1.0",
+      "name": "yocto-queue",
+      "version": "0.1.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/yocto-queue/-/yocto-queue-0.1.0.tgz",
+      "artifacts": [
+        "App/Agent browser renderer"
+      ],
+      "evidenceSha256": [
+        "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3"
+      ],
+      "files": [
+        "license"
+      ],
+      "integrity": "sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==",
+      "links": [
+        "https://www.npmjs.com/package/yocto-queue/v/0.1.0"
+      ],
+      "copyright": [
+        "Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)"
       ]
     },
     {
