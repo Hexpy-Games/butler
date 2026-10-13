@@ -1,7 +1,7 @@
 import { BrowserWindow, nativeImage } from "electron";
 import { evaluateWorld, framePoint } from "./frame-worlds.mjs";
 import { resolveSource } from "./page/snapshot.mjs";
-import { imageSource } from "./page/collect-image.mjs";
+import { imageSourceScript } from "./page/collect-image.mjs";
 import { secureBoxes, captureViewport } from "./capture-security.mjs";
 
 /** Compose on a Butler-owned bitmap, never modify the page or capture the pointer. */
@@ -156,7 +156,7 @@ export async function collectImage(tab, args) {
   const epoch = tab.epoch;
   if (args.url != null) {
     const source = await tab.view.webContents.executeJavaScriptInIsolatedWorld(9001,
-      [{ code: `(${imageSource.toString()})(${JSON.stringify({ url: args.url })})` }]);
+      [{ code: imageSourceScript({ url: args.url }) }]);
     if (epoch !== tab.epoch || tab.holder !== "agent") return { status: "not_dispatched", reason: "control_changed" };
     return { status: "ok", ...source };
   }
@@ -179,7 +179,7 @@ export async function collectImage(tab, args) {
   if (!frame) return { status: "refused", reason: "stale_ref" };
   // An image's own pixels or file do not depend on what covers it on the page;
   // only a rendered crop needs the element to be the unobstructed target.
-  const source = await evaluateWorld(frame, `(${imageSource.toString()})(${JSON.stringify({ ref:args.ref, url:args.url, obs:observationId, epoch })})`);
+  const source = await evaluateWorld(frame, imageSourceScript({ ref:args.ref, url:args.url, obs:observationId, epoch }));
   if (source.reason) return { status: "refused", reason: source.reason, recovery: source.recovery };
   if (source.image) return collectedPixels(tab, epoch, Buffer.from(source.image.data, "base64"), source);
   const described = { alt: source.alt, nearby_text: source.nearby_text, source_url: source.source_url || tab.url };
