@@ -129,7 +129,8 @@ export function contrast(element) {
 export function semantic(element, discoverPointer = true) {
   const tag = element.localName, type = element.getAttribute("type");
   const page=globalThis.__butlerPerceptionCache?.page;
-  const role = element.getAttribute("role") ?? ({ button: "button", a: "link", select: "combobox", textarea: "textbox", canvas: styleValue(element, "pointerEvents") === "none" ? "image" : "canvas", img: "image", summary: "button" }[tag])
+  const declaredRole = element.getAttribute("role");
+  const role = (declaredRole === "img" ? "image" : declaredRole) ?? ({ button: "button", a: "link", select: "combobox", textarea: "textbox", canvas: styleValue(element, "pointerEvents") === "none" ? "image" : "canvas", img: "image", summary: "button" }[tag])
     ?? (/^h[1-6]$/u.test(tag) ? "heading" : undefined)
     ?? (tag === "input" ? ({ checkbox: "checkbox", radio: "radio", range: "slider", submit: "button", button: "button" }[type] ?? "textbox") : scrollRegion(element) ? "scroll_region" : "");
   const interactiveRole = /^(button|link|combobox|textbox|checkbox|radio|slider|spinbutton|switch|option|menuitem|menuitemcheckbox|menuitemradio|tab|treeitem|canvas|scroll_region)$/u.test(role);
@@ -322,7 +323,7 @@ export function layoutRegions(elements) {
  * field (number, expiry, CVC, holder name, the PIN's first numbers, the owner
  * birth date) or a autofill field. Self-contained: it also runs in the fill
  * world. Context-dependent kinds stay generic (`birth`, `pin_short`). */
-export function vaultKind(element) {
+export function vaultKind(element, sensitive = false) {
   if (!element || !/^(input|select)$/u.test(element.localName ?? "")) return null;
   const type = (element.getAttribute("type") ?? "text").toLowerCase();
   if (/^(hidden|submit|button|checkbox|radio|file|image|reset|range|color|search)$/u.test(type)) return null;
@@ -330,8 +331,13 @@ export function vaultKind(element) {
   const byAuto = { "cc-number": "number", "cc-csc": "cvc", "cc-exp": "expiry", "cc-exp-month": "exp_month", "cc-exp-year": "exp_year",
     "cc-name": "name", "cc-given-name": "name", "cc-family-name": "name", bday: "birth", "bday-year": "birth", "bday-month": "birth", "bday-day": "birth",
     "given-name": "given_name", "family-name": "surname", name: "full_name", sex: "gender", tel: "phone", email: "email", country: "nationality", "country-name": "nationality" };
-  if (byAuto[auto]) return byAuto[auto];
-  const label = `${element.id} ${element.getAttribute("name") ?? ""} ${element.getAttribute("placeholder") ?? ""} ${element.getAttribute("aria-label") ?? ""} ${element.labels?.[0]?.textContent ?? ""}`.toLowerCase();
+  if (Object.hasOwn(byAuto, auto)) return byAuto[auto];
+  if (sensitive && auto && !["on", "off"].includes(auto)) return "other";
+  if (sensitive && type === "email") return "email";
+  if (sensitive && type === "tel") return "phone";
+  const labelled = (element.getAttribute("aria-labelledby") ?? "").split(/\s+/u)
+    .map(id => element.getRootNode().getElementById?.(id)?.textContent ?? "").join(" ");
+  const label = `${sensitive ? "" : element.id} ${element.getAttribute("name") ?? ""} ${sensitive ? "" : element.getAttribute("placeholder") ?? ""} ${element.getAttribute("aria-label") ?? ""} ${[...(element.labels ?? [])].map(label => label.textContent).join(" ")} ${labelled}`.toLowerCase();
   const max = element.maxLength > 0 ? element.maxLength : 0;
   if (/card.?(number|num|no)|cardno|ccnum|cc.?number|카드.?번호/u.test(label)) return "number";
   if (/(^|[^a-z])(cvc|cvv|csc|cvn)\d?([^a-z]|$)|security.?code|card.?code|보안.?코드/u.test(label)) return "cvc";
@@ -368,4 +374,23 @@ export function postsForm(element, key) {
   if (key === undefined ? !submitter : !(key === "Enter" || submitter && key === "Space")) return false;
   const method = submitter && element.getAttribute("formmethod") || form.getAttribute("method") || "get";
   return method.toLowerCase() === "post";
+}
+
+/** Whether the viewport says more in pixels than in text, from structure only:
+ * a large visible canvas or video, or images filling most of it around little
+ * text. An "auto" observation attaches its screenshot only then. */
+export function visualPage(elements, textLength) {
+  const viewport = innerWidth * innerHeight;
+  if (!viewport) return false;
+  let drawn = 0, pictured = 0;
+  for (const element of elements) {
+    const tag = element.localName;
+    if (!/^(canvas|video|img|svg)$/u.test(tag) || tag === "svg" && element.ownerSVGElement) continue;
+    const box = element.getBoundingClientRect();
+    const area = Math.max(0, Math.min(box.right, innerWidth) - Math.max(box.left, 0)) * Math.max(0, Math.min(box.bottom, innerHeight) - Math.max(box.top, 0));
+    if (area < 1024 || paintState(element).invisible || paintState(element).opacity < .1) continue;
+    if (tag === "canvas" || tag === "video") drawn += area; else pictured += area;
+  }
+  const media = Math.min(1, (drawn + pictured) / viewport);
+  return drawn / viewport >= .25 || media >= .5 && textLength < 600 || media >= .1 && textLength < 80;
 }

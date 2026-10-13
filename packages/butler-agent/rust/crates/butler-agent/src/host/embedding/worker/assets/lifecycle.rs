@@ -31,6 +31,8 @@ pub(crate) struct Acquisition {
     backfill_wanted: Arc<AtomicBool>,
     backfill: Slot,
     watcher: Mutex<Option<JoinHandle<()>>>,
+    /// Serializes switches: save, in-memory choice and turning on or off.
+    switch: tokio::sync::Mutex<()>,
 }
 
 /// Runtime owners the model choice controls.
@@ -49,6 +51,16 @@ impl Acquisition {
         if choice == Choice::On && ready {
             owners.owner.enable();
         }
+        if choice == Choice::Off {
+            // A switch to off that could not delete the files (Windows keeps a
+            // file a live process holds) finishes here, before any worker runs.
+            let off_root = root.clone();
+            if let Ok(Err(code)) =
+                tokio::task::spawn_blocking(move || choice::remove_model(&off_root)).await
+            {
+                butler_core::diagnostic!("[memory-model] off: model files kept ({code})");
+            }
+        }
         let this = Self {
             root,
             state: watch::channel(idle_view(choice)).0,
@@ -58,6 +70,7 @@ impl Acquisition {
             backfill_wanted: Arc::default(),
             backfill: Arc::default(),
             watcher: Mutex::new(None),
+            switch: tokio::sync::Mutex::new(()),
         };
         *this.watcher.lock() = Some(this.watch_ready(owners.consumer));
         this.retry();
@@ -102,6 +115,8 @@ impl Acquisition {
 
     /// Persists the choice, then downloads (on) or stops the model and frees its files (off).
     pub(crate) async fn choose(&self, on: bool) -> Result<MemoryModelProgress, &'static str> {
+        // Concurrent switches apply in order; the saved and running choice agree.
+        let _switch = self.switch.lock().await;
         let root = self.root.clone();
         tokio::task::spawn_blocking(move || choice::persist(&root, on))
             .await

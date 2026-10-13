@@ -1,44 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { apiErrorCode } from "@/app/api";
+import { type ReactNode } from "react";
 import { appCopy } from "@/app/copy";
 import { Bot, Button, ButtonContainer, EmptyLine, ListRow, SettingsSection, Spinner, Stack, Typo } from "@/butler-ds";
-import { listAgentImportSources, startAgentImport, undoAgentImport, type AgentImportCounts, type AgentImportSource } from "./agentImportApi";
-
-/** Component-local state: counts and an opaque receipt only. */
-function useAgentImport() {
-  const [sources, setSources] = useState<AgentImportSource[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AgentImportCounts | null>(null);
-  const [undone, setUndone] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    void listAgentImportSources()
-      .then(view => { if (mounted.current) setSources(view.sources); })
-      .catch(e => { if (mounted.current) { setSources([]); setError(apiErrorCode(e) ?? "import_unreadable"); } });
-    return () => { mounted.current = false; };
-  }, []);
-  async function work(task: () => Promise<void>) {
-    setBusy(true); setError(null);
-    try { await task(); } catch (e) { if (mounted.current) setError(apiErrorCode(e) ?? "import_failed"); }
-    finally { if (mounted.current) setBusy(false); }
-  }
-  const run = (key: string) => work(async () => {
-    setSelected(key); setUndone(false);
-    const counts = await startAgentImport(key);
-    if (!mounted.current) return;
-    setResult(counts); setError(counts.error ?? null);
-  });
-  const undo = () => work(async () => {
-    if (!result) return;
-    await undoAgentImport(result.run_id);
-    if (mounted.current) setUndone(true);
-  });
-  const more = () => { setResult(null); setError(null); setUndone(false); };
-  return { sources, busy, error, result, undone, selected, run, undo, more };
-}
+import type { AgentImportCounts, AgentImportSource } from "./agentImportApi";
+import { useAgentImport } from "../imports/useAgentImport";
 
 type AgentImportFlow = ReturnType<typeof useAgentImport>;
 
@@ -63,7 +27,7 @@ function resultText(result: AgentImportCounts): string {
 }
 
 /**
- * Other AI tools first, then browsers: Settings and the first-run import step.
+ * Other AI tools first, then browsers (Settings; first run uses its own import substeps).
  * Settings adds the memory import as one more row after the detected tools.
  */
 export function AgentImportSection({ children }: { children?: ReactNode }) {

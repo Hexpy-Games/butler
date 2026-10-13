@@ -5,6 +5,7 @@
 //! the required [`GatewayApplication`] implementation supplied at composition.
 
 mod application;
+pub use application::AppAssetCommand;
 pub use application::storage::history::{AppHistoryCommand, AppHistoryQuery};
 mod file_watch;
 pub use file_watch::FileChangeWatch;
@@ -293,6 +294,9 @@ pub trait GatewayApplication:
     fn run_automation(&self, id: String) -> ApplicationFuture<AutomationRunResult>;
     fn dispatch_due_automations(&self) -> ApplicationFuture<AutomationRunListView>;
     fn list_automation_runs(&self, id: String) -> ApplicationFuture<AutomationRunListView>;
+    fn assets(&self, _command: AppAssetCommand) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn upload_message_file(&self, input: AppFileUpload) -> ApplicationFuture<MessageFileRef>;
     fn download_message_file(&self, id: String) -> ApplicationFuture<AppFileDownload>;
     fn runtime_readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError>;
@@ -455,3 +459,5 @@ mod tests;
 mod wallpaper_modules;
 mod wallpaper_store;
 mod wallpapers;
+
+pub use application::project_folder;

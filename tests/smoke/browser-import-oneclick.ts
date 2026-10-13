@@ -87,51 +87,51 @@ async function capture(state: string) {
 type AppCopy = ReturnType<typeof getAppCopy>;
 let fixtureSources = sources;
 async function wizardCapture(state: string) { await settleFirstRun(page); await capture(state); }
-/** Consent is saved and the default model is the registered stub, so the wizard resumes with that AI connected. */
+/** Consent is saved and the default model is the registered stub, so the wizard resumes at the reply language (AI ③). */
 async function connectStub() {
   await page.reload();
-  await page.locator("[data-first-run-screen=\"import\"]").waitFor();
+  await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
 }
-/** Step order, back targets and the import step between the AI choice and the finish. */
+/** The card morph briefly shows the leaving and arriving cards; read the step once only one is left. */
+async function activeStep() {
+  await settleFirstRun(page);
+  return await page.locator("ol [aria-current=\"step\"]").innerText();
+}
+/** Step order, back targets and the import step (other AI tools) between the AI choice and the finish. */
 async function wizardFlow(copy: AppCopy) {
-  const steps = copy.firstRun.steps;
+  const steps = copy.firstRun.steps, text = copy.firstRun;
   await page.locator("[data-first-run-screen=\"memory\"]").waitFor();
   await page.locator("[data-memory-choice=\"off\"]").click();
-  await page.getByRole("button", { name: copy.firstRun.memoryChoice.continue, exact: true }).click();
+  await page.getByRole("button", { name: text.memoryChoice.continue, exact: true }).click();
   await page.locator("#first-run-connect-title").waitFor();
   // The previous step's card may still be leaving; read the step list once it is alone.
   await page.waitForFunction(() => document.querySelectorAll("ol").length === 1);
-  const labels = (await page.locator("ol li").allInnerTexts()).map(text => text.split("\n").at(-1)?.trim());
+  // The active step carries its substep count ("AI 연결 1/3"); the labels themselves stay the step names.
+  const labels = (await page.locator("ol li").allInnerTexts()).map(entry => entry.split("\n").at(-1)?.replace(/\s\d+\/\d+$/u, "").trim());
   assert.deepEqual(labels, [steps.welcome, steps.consent, steps.memory, steps.connect, copy.settings.pageSections.import, steps.ready]);
+  assert.equal(await activeStep(), `4\n${steps.connect} 1/3`);
   await wizardCapture("connect");
-  await page.getByRole("button", { name: copy.firstRun.back, exact: true }).click();
+  await page.getByRole("button", { name: text.back, exact: true }).click();
   await page.locator("[data-first-run-screen=\"memory\"]").waitFor();
-  await page.getByRole("button", { name: copy.firstRun.memoryChoice.continue, exact: true }).click();
+  await page.getByRole("button", { name: text.memoryChoice.continue, exact: true }).click();
   await page.locator("#first-run-connect-title").waitFor();
   await connectStub();
-  const wizard = page.locator("[data-first-run-screen=\"import\"] [data-settings-section-id=\"browser-import\"]");
-  await wizard.locator("[data-import-source]").nth(3).waitFor();
-  const agents = page.locator("[data-first-run-screen=\"import\"] [data-settings-section-id=\"agent-import\"]");
-  await agents.locator("[data-agent-import-source]").nth(3).waitFor();
-  const [agentsBox, browsersBox] = [await agents.boundingBox(), await wizard.boundingBox()];
-  assert.ok(agentsBox && browsersBox && agentsBox.y < browsersBox.y, "other AI tools come before browsers");
-  assert.equal(await page.locator("ol [aria-current=\"step\"]").innerText(), `5\n${copy.settings.pageSections.import}`);
-  await wizardCapture("wizard-import");
-  await page.getByRole("button", { name: copy.firstRun.back, exact: true }).click();
-  await page.locator("#first-run-connect-title").waitFor();
-  fixtureSources = [];
-  await connectStub();
-  await wizard.getByText(copy.settings.browserImport.noSources, { exact: true }).waitFor();
-  await wizardCapture("wizard-import-empty");
-  fixtureSources = sources;
-  await page.getByRole("button", { name: copy.settings.browserImport.continue, exact: true }).click();
-  await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
+  const runsBefore = agentRuns.length;
+  await page.getByRole("button", { name: text.next, exact: true }).click();
+  await page.locator("[data-agent-import-source]").nth(3).waitFor();
+  // Import is one page (other AI tools); browsers are imported from Settings only.
+  assert.equal(await activeStep(), `5\n${copy.settings.pageSections.import}`, "import has no substep counter");
+  await wizardCapture("wizard-agents");
+  await page.getByRole("button", { name: text.import.skip, exact: true }).click();
+  await page.getByRole("heading", { name: text.doneTitle, exact: true }).waitFor();
+  assert.equal(agentRuns.length, runsBefore, "Skip imports nothing");
+  assert.equal(await page.locator("[data-import-source]").count(), 0, "no browser import in first run");
   await wizardCapture("ready");
-  await page.getByRole("button", { name: copy.firstRun.back, exact: true }).click();
-  await page.locator("[data-first-run-screen=\"import\"]").waitFor();
-  await page.getByRole("button", { name: copy.settings.browserImport.continue, exact: true }).click();
-  await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
-  await page.getByRole("button", { name: copy.firstRun.finish, exact: true }).click();
+  await page.getByRole("button", { name: text.back, exact: true }).click();
+  await page.locator("#first-run-agents-title").waitFor();
+  await page.getByRole("button", { name: text.import.skip, exact: true }).click();
+  await page.getByRole("heading", { name: text.doneTitle, exact: true }).waitFor();
+  await page.getByRole("button", { name: text.finish, exact: true }).click();
   await page.locator("[data-test-class=\"first-run-setup\"]").waitFor({ state: "detached" });
 }
 /** Settings → Personalization: other AI tools as rows, one import, its result and undo. */
@@ -220,7 +220,7 @@ try {
     }
     assert.equal(await section.locator("[data-import-source]").count(), 4);
     await section.getByText(copy.settings.browserImport.chooseItems, { exact: true }).waitFor();
-    for (const label of [copy.settings.browserImport.bookmarks, copy.settings.browserImport.passwords, copy.settings.browserImport.history]) assert.equal(await section.getByRole("checkbox", { name: label, exact: true }).getAttribute("aria-checked"), "true");
+    for (const label of [copy.settings.browserImport.bookmarks, copy.settings.browserImport.passwords, copy.settings.browserImport.history]) assert.equal(await section.getByRole("switch", { name: label, exact: true }).getAttribute("aria-checked"), "true");
     fixtureSources = [];
     await page.reload();
     await section.getByText(copy.settings.browserImport.noSources, { exact: true }).waitFor();

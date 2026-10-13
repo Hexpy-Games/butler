@@ -10,6 +10,7 @@ use butler_turn::btcc::{ChangedFileSummary, FinalArtifact, TurnOutcomeKind};
 use butler_turn::workspace::SessionTransportBinding;
 
 pub(super) struct Terminal<'a> {
+    pub(super) answer_blocks: &'a [Value],
     pub(super) text: &'a str,
     canonical: Option<&'a str>,
     turn_id: &'a str,
@@ -33,6 +34,7 @@ pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, Ing
     let terminal = match result {
         TurnOutcomeKind::Delivered(value) => Terminal {
             text: &value.content,
+            answer_blocks: &value.answer_blocks,
             canonical: Some(&value.message_id),
             turn_id: &value.turn_id,
             kind: if value.runtime_failure.is_some() {
@@ -55,6 +57,7 @@ pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, Ing
         },
         TurnOutcomeKind::AlreadyDelivered(value) => Terminal {
             text: &value.content,
+            answer_blocks: &value.answer_blocks,
             canonical: Some(&value.message_id),
             turn_id: &value.turn_id,
             kind: if value.runtime_failure.is_some() {
@@ -76,6 +79,7 @@ pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, Ing
             cancelled(turn_id)
         }
         TurnOutcomeKind::Suspended { turn_id, reason } => Terminal {
+            answer_blocks: &[],
             text: "",
             canonical: None,
             turn_id,
@@ -100,6 +104,7 @@ pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, Ing
 
 pub(super) fn cancelled(turn_id: &str) -> Terminal<'_> {
     Terminal {
+        answer_blocks: &[],
         text: "",
         canonical: None,
         turn_id,
@@ -116,6 +121,7 @@ pub(super) fn cancelled(turn_id: &str) -> Terminal<'_> {
 /// A turn a crashed process was running: failed, and a retry may resume it.
 pub(super) fn crash_interrupted(turn_id: &str) -> Terminal<'_> {
     Terminal {
+        answer_blocks: &[],
         text: "Butler stopped before finishing this reply. Retry to continue.",
         canonical: None,
         turn_id,
@@ -132,6 +138,7 @@ pub(super) fn crash_interrupted(turn_id: &str) -> Terminal<'_> {
 /// A turn BTCC rejected for a reason a retry cannot change: failed for good.
 pub(super) fn rejected<'a>(turn_id: &'a str, code: &'a str) -> Terminal<'a> {
     Terminal {
+        answer_blocks: &[],
         text: "Butler could not continue this reply.",
         canonical: None,
         turn_id,
@@ -190,6 +197,12 @@ pub(super) fn action(
         }
     }
     let mut message = Map::new();
+    if !terminal.answer_blocks.is_empty() {
+        message.insert(
+            "answerBlocks".into(),
+            serde_json::json!(terminal.answer_blocks),
+        );
+    }
     message.insert("text".into(), terminal.text.into());
     message.insert(
         "replyToMessageId".into(),

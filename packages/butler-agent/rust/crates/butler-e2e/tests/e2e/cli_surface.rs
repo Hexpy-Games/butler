@@ -73,6 +73,8 @@ fn cli_surface_exposes_only_user_commands() -> Result<(), HarnessError> {
         "mcp.test",
         "skills.list",
         "skills.import",
+        "folder.show",
+        "folder.set",
         "config.get",
         "config.set",
         "help",

@@ -8,6 +8,7 @@ use serde_json::Value;
 
 use super::Capabilities;
 
+pub mod answer_blocks;
 mod bridge;
 mod validation;
 pub use bridge::{BridgeCatalogTool, describe_native, search_native};
@@ -41,8 +42,11 @@ impl ToolCatalog {
         Self::validate(SOURCE, capabilities)
     }
 
-    pub fn source(&self) -> &'static str {
-        self.source
+    pub fn source(&self) -> Result<String, CatalogError> {
+        let mut source: Value =
+            serde_json::from_str(self.source).map_err(CatalogError::InvalidSource)?;
+        expand_schemas(&mut source)?;
+        serde_json::to_string(&source).map_err(CatalogError::InvalidSource)
     }
 
     fn validate(source: &'static str, capabilities: &Capabilities) -> Result<Self, CatalogError> {
@@ -69,4 +73,27 @@ impl ToolCatalog {
         }
         Ok(Self { source })
     }
+}
+
+/// Bundled schema references are resolved once, before provider surface selection.
+fn expand_schemas(value: &mut Value) -> Result<(), CatalogError> {
+    if value.get("$ref").and_then(Value::as_str) == Some("answer-blocks.schema.json") {
+        *value = serde_json::from_str(answer_blocks::ANSWER_BLOCKS_SCHEMA)
+            .map_err(CatalogError::InvalidSource)?;
+        return Ok(());
+    }
+    match value {
+        Value::Object(fields) => {
+            for field in fields.values_mut() {
+                expand_schemas(field)?;
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                expand_schemas(item)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }

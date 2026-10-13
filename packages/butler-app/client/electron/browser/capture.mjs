@@ -1,6 +1,7 @@
 import { BrowserWindow, nativeImage } from "electron";
 import { evaluateWorld, framePoint } from "./frame-worlds.mjs";
 import { resolveSource } from "./page/snapshot.mjs";
+import { imageSource } from "./page/collect-image.mjs";
 import { secureBoxes } from "./capture-security.mjs";
 
 /** Compose on a Butler-owned bitmap, never modify the page or capture the pointer. */
@@ -147,4 +148,45 @@ export async function screenshotTab(tab, args) {
 }
 function overlaps(a, b) {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+/** Source images use the tab's network session, retaining its authenticated pixels. */
+export async function collectImage(tab, args) {
+  const epoch = tab.epoch;
+  if (args.url != null) {
+    const source = await tab.view.webContents.executeJavaScriptInIsolatedWorld(9001,
+      [{ code: `(${imageSource.toString()})(${JSON.stringify({ url: args.url })})` }]);
+    if (epoch !== tab.epoch || tab.holder !== "agent") return { status: "not_dispatched", reason: "control_changed" };
+    return { status: "ok", ...source };
+  }
+  const observation = tab.observation;
+  if (!observation || observation.epoch !== epoch) return { status: "refused", reason: "stale_ref" };
+  const observationId = args.observation ?? observation.obs;
+  if (observationId !== observation.obs) return { status:"refused", reason:"stale_ref" };
+  if (args.region) {
+    const region = args.region, scale = tab.bounds?.scale ?? 1;
+    const viewport = await evaluateWorld(observation.main, "({width:innerWidth,height:innerHeight})");
+    if (!Array.isArray(region) || region.length !== 4 || !region.every(Number.isFinite)) return { status: "refused", reason: "invalid_region" };
+    const [x, y, width, height] = region;
+    if (x < 0 || y < 0 || width <= 0 || height <= 0 || x + width > viewport.width || y + height > viewport.height) return { status: "refused", reason: "invalid_region" };
+    const rect = { x: Math.floor(x*scale), y: Math.floor(y*scale), width: Math.ceil(width*scale), height: Math.ceil(height*scale) };
+    if ((await secureBoxes(tab)).some(mark => overlaps(rect, mark.rect))) return { status: "refused", reason: "secure_field" };
+    const image = await tab.view.webContents.capturePage(rect, { stayHidden: true });
+    return collectedPixels(tab, epoch, image.toPNG(), { alt: "", nearby_text: "", source_url: tab.url });
+  }
+  const frame = args.ref ? observation.bindings.get(args.ref) : observation.main;
+  if (!frame) return { status: "refused", reason: "stale_ref" };
+  if (args.ref) {
+    const target = await evaluateWorld(frame, resolveSource({ ref:args.ref, obs:observationId, epoch }));
+    if (target.reason) return { status: "refused", reason: target.reason };
+  }
+  const source = await evaluateWorld(frame, `(${imageSource.toString()})(${JSON.stringify({ ref:args.ref, url:args.url, obs:observationId, epoch })})`);
+  if (source.reason) return { status: "refused", reason: source.reason, recovery: source.recovery };
+  if (source.image) return collectedPixels(tab, epoch, Buffer.from(source.image.data, "base64"), source);
+  const crop = await screenshotTab(tab, { ...args, observation:observationId });
+  return { ...crop, alt: source.alt, nearby_text: source.nearby_text, source_url: source.source_url || tab.url };
+}
+function collectedPixels(tab, epoch, bytes, source) {
+  if (epoch !== tab.epoch || tab.holder !== "agent") return { status:"not_dispatched", reason:"control_changed" };
+  return { status:"ok", ...source, image:{ data:bytes.toString("base64") } };
 }

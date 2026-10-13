@@ -3,7 +3,7 @@ import type { TaskGraphCopy } from "./task-graph-copy.ts";
 import type { LifecycleCopy } from "./lifecycle.ts";
 /** Provider cards on the first-run "Pick an AI" screen. */
 export type FirstRunProviderCardId =
-  | "chatgpt" | "claude" | "gemini" | "local" | "openai" | "grok" | "qwen"
+  | "chatgpt" | "claude" | "gemini" | "openai" | "grok" | "qwen"
   | "kimi" | "zaiCoding" | "zaiApi" | "opencodeGo" | "other";
 
 interface FirstRunCopy {
@@ -66,14 +66,11 @@ interface FirstRunCopy {
   prepWaitConnect: string;
   providerNames: Record<FirstRunProviderCardId, string>;
   providerDescriptions: Record<FirstRunProviderCardId, string>;
-  tagNoKey: string;
-  tagLocal: string;
   /** Tag on the connected AI when setup runs again. */
   tagCurrent: string;
   localModelCount: (count: number) => string;
   moreProviders: (count: number) => string;
   showLess: string;
-  localOff: string;
   localMissing: string;
   rescan: string;
   checking: string;
@@ -108,12 +105,46 @@ interface FirstRunCopy {
   keyStored: string;
   finishing: string;
   readyTitle: (name: string) => string;
-  readyBody: string;
+  next: string;
+  /** Tooltip on ② Next while it waits for the connection. */
+  connectFirst: string;
+  replyTitle: string;
+  replyBody: string;
+  doneTitle: string;
+  doneBody: string;
+  import: {
+    agentsTitle: string; agentsBody: string; agentsEmpty: string;
+    importAction: string; importing: string; searching: string; skip: string;
+    /** Tooltip on a disabled Next or Import while nothing is picked. */
+    pickOne: string;
+    /** Import after the run: one row per tool with what was added and any follow-up. */
+    agentsDoneTitle: string;
+    agentsAdded: (instructions: number, servers: number) => string;
+    agentsNothing: string;
+    agentsNeedsKey: (count: number) => string;
+    /** Import, one page per chosen tool: its instruction file and servers, each a pick card. */
+    agentItemsTitle: (name: string) => string;
+    agentItemsProgress: (name: string, index: number, total: number) => string;
+    itemInstructions: string;
+    itemServer: string;
+    itemNeedsKey: string;
+    itemFileEmpty: string;
+    itemFileUnreadable: string;
+    itemFileTooLarge: string;
+  };
+  summary: {
+    rowAi: string; rowReply: string; rowAgents: string;
+    /** Only the nonzero counts ("MCP 서버 2개"); the row is hidden when both are zero. */
+    agentCounts: (instructions: number, servers: number) => string;
+  };
   replyLanguage: string;
   finish: string;
   finishFailed: string;
-  localTitle: string;
-  localBody: string;
+  /** Other ②: models on this computer and a typed server, on one screen. */
+  otherTitle: string;
+  otherBody: string;
+  /** Other ②: the choice that opens the server address form. */
+  otherServer: string;
   localNote: string;
   customTitle: string;
   customBody: string;
@@ -198,6 +229,7 @@ interface ConversationWorkCopy {
   collapseHistoryLabel: (primaryLabel: string, count: number) => string;
   viewAllLabel: CountFormatter;
   collapseLabel: string;
+  showDetailsLabel: string;
   toolchainRegionLabel: (label: string) => string;
   detailsRegionLabel: (label: string) => string;
   webSearchSummary: CountFormatter;
@@ -214,6 +246,37 @@ interface ConversationCopy {
     copyCode: string;
     copied: string;
     copyFailed: string;
+  };
+  answerBlocks: {
+    previousValue: string;
+    showMore: string;
+    showLess: string;
+    showMoreItems: (count: number) => string;
+    saveToLibrary: string;
+    copy: string;
+    copied: string;
+    savedToLibrary: string;
+    actionFailed: string;
+    openImage: string;
+    image: string;
+    chart: string;
+    source: {
+      checkedAt: (time: string, site: string) => string;
+      checkedOn: (date: string, site: string) => string;
+      open: (site: string) => string;
+    };
+  };
+  imageViewer: {
+    viewImage: (name: string) => string;
+    close: string;
+    previous: string;
+    next: string;
+    position: (current: number, total: number) => string;
+    failed: string;
+    openSource: string;
+    copyImage: string;
+    imageCopied: string;
+    checked: (time: string) => string;
   };
   work: ConversationWorkCopy;
   stoppedStatus: string;
@@ -1404,6 +1467,7 @@ export interface AppCopy {
       searchProviderOpenAi: string;
       searchProviderCodex: string;
       searchProviderDisabled: string;
+      searchReaderBrowser: string;
       searchReaderLightweight: string;
       searchReaderAuto: string;
       searchReaderLightpanda: string;
@@ -1926,8 +1990,6 @@ export interface AppCopy {
     agentImport: {
       /** One-line purpose under the section title. */
       purpose: string;
-      /** First-run import step: one line covering AI tools and browsers. */
-      stepPurpose: string;
       /** What a detected tool holds (instructions, MCP server count). */
       found: (instructions: boolean, servers: number) => string;
       run: string;

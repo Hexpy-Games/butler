@@ -6,10 +6,10 @@ use std::{future::Future, path::PathBuf, sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 
 use butler_memory::cognition::{
-    CognitionError, CognitionPathEnvironment, CognitionResult, LegacyIndexService,
-    LegacySessionOffsets, append_legacy_session_diagnostic, ensure_data_authority,
-    index_legacy_transcript_query, normalize_session_id_for_storage, prepare_legacy_transcript,
-    read_legacy_new_lines,
+    CognitionEmbeddingPort, CognitionError, CognitionPathEnvironment, CognitionResult,
+    LegacyIndexService, LegacySessionOffsets, append_legacy_session_diagnostic,
+    ensure_data_authority, index_legacy_transcript_query, normalize_session_id_for_storage,
+    prepare_legacy_transcript, read_legacy_new_lines,
 };
 use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelProvider;
@@ -26,6 +26,7 @@ pub(in crate::host) struct LegacySessionSync {
     bindings: SessionBindingStore,
     index: LegacyIndexService,
     hot: hot::LegacyHot,
+    embedding: Arc<EmbeddingOwner>,
 }
 
 impl LegacySessionSync {
@@ -42,8 +43,9 @@ impl LegacySessionSync {
                 data_root.clone(),
                 paths.clone(),
                 coordinator.clone(),
-                embedding,
+                embedding.clone(),
             ),
+            embedding,
             hot: hot::LegacyHot::new(data_root.clone(), paths.clone(), coordinator, provider),
             data_root,
             paths,
@@ -170,6 +172,10 @@ impl LegacySessionSync {
                     })?
                     .map_err(|failure| failure.code().to_owned())?;
                 }
+                // With the memory model off there is no legacy vector index to
+                // feed; the summaries are kept and the offsets still advance, so
+                // a chunk is never summarized twice.
+                let vectors = self.embedding.enabled();
                 for chunk in chunks {
                     if cancellation.is_cancelled() {
                         return Err("memory_write_aborted".into());
@@ -179,55 +185,14 @@ impl LegacySessionSync {
                     {
                         continue;
                     }
-                    match self
-                        .hot
-                        .save(
-                            &chunk.conversation_text,
-                            &project,
-                            &chunk.storage_id,
-                            topic,
-                            cancellation,
-                        )
-                        .await
-                    {
-                        Ok(entry) if !entry.is_empty() => {
-                            let hot_id = normalize_session_id_for_storage(&format!(
-                                "hot_{}",
-                                chunk.storage_id
-                            ));
-                            let admission = cancellation.child_token();
-                            if let Err(failure) = await_index(
-                                self.index.index_hot_entry(
-                                    &entry,
-                                    &hot_id,
-                                    &chunk.storage_id,
-                                    &project,
-                                    topic,
-                                    &admission,
-                                ),
-                                &admission,
-                            )
-                            .await
-                            {
-                                log_hot_failure("index", failure.code());
-                            }
-                        }
-                        Err(code) => log_hot_failure("save", code.message()),
-                        _ => {}
-                    }
-                    let admission = cancellation.child_token();
-                    await_index(
-                        self.index.index_transcript(
-                            &chunk.index_text,
-                            &chunk.storage_id,
-                            &chunk.original_id,
-                            &project,
-                            &admission,
-                        ),
-                        &admission,
-                    )
-                    .await
-                    .map_err(|failure| failure.code().to_owned())?;
+                    let chunk = ChunkTexts {
+                        conversation: &chunk.conversation_text,
+                        index: &chunk.index_text,
+                        storage_id: &chunk.storage_id,
+                        original_id: &chunk.original_id,
+                    };
+                    self.sync_chunk(chunk, &project, topic, vectors, cancellation)
+                        .await?;
                 }
             }
             offsets.insert(key, next);
@@ -245,6 +210,75 @@ impl LegacySessionSync {
         butler_core::diagnostic!("[session-sync] legacySessions={visited}");
         Ok(())
     }
+    /// Saves one chunk's hot summary and, with the memory model on, indexes
+    /// the summary and the chunk for legacy vector search.
+    async fn sync_chunk(
+        &self,
+        chunk: ChunkTexts<'_>,
+        project: &str,
+        topic: Option<&str>,
+        vectors: bool,
+        cancellation: &CancellationToken,
+    ) -> Result<(), crate::host::HostError> {
+        match self
+            .hot
+            .save(
+                chunk.conversation,
+                project,
+                chunk.storage_id,
+                topic,
+                cancellation,
+            )
+            .await
+        {
+            Ok(entry) if vectors && !entry.is_empty() => {
+                let hot_id = normalize_session_id_for_storage(&format!("hot_{}", chunk.storage_id));
+                let admission = cancellation.child_token();
+                if let Err(failure) = await_index(
+                    self.index.index_hot_entry(
+                        &entry,
+                        &hot_id,
+                        chunk.storage_id,
+                        project,
+                        topic,
+                        &admission,
+                    ),
+                    &admission,
+                )
+                .await
+                {
+                    log_hot_failure("index", failure.code());
+                }
+            }
+            Err(code) => log_hot_failure("save", code.message()),
+            _ => {}
+        }
+        if !vectors {
+            return Ok(());
+        }
+        let admission = cancellation.child_token();
+        await_index(
+            self.index.index_transcript(
+                chunk.index,
+                chunk.storage_id,
+                chunk.original_id,
+                project,
+                &admission,
+            ),
+            &admission,
+        )
+        .await
+        .map_err(|failure| failure.code().to_owned())?;
+        Ok(())
+    }
+}
+
+/// The texts and ids of one transcript chunk.
+struct ChunkTexts<'a> {
+    conversation: &'a str,
+    index: &'a str,
+    storage_id: &'a str,
+    original_id: &'a str,
 }
 
 fn compare_sessions(

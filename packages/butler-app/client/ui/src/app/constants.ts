@@ -15,7 +15,7 @@ export const EMPTY_NAVIGATION: NavigationView = {
 
 export const DEFAULT_WEB_SEARCH_SETTINGS: WebSearchSettingsView = {
   provider: "duckduckgo-html",
-  reader_backend: "lightweight",
+  reader_backend: "browser",
   api_key_configured: false,
   api_key_env_var: null,
   planning_enabled: true,

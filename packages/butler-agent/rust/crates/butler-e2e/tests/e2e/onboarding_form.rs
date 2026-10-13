@@ -50,6 +50,28 @@ async fn onboarding_form_replays_questions_and_persists_profile() -> Result<(), 
         let view = s.gw.get("/session-view?session_id=general").await?;
         let q = &view.data()["pending_questions"][0];
         assert_eq!(q["questions"], stub::questions(id));
+        let question = &q["questions"]["questions"][0];
+        if id == "principal_name" {
+            assert_eq!(question["kind"], "text");
+            assert_eq!(question["options"], json!([]));
+        } else {
+            assert_eq!(question["kind"], "single");
+            assert_eq!(question["allow_custom"], true);
+            let options = question["options"].as_array().unwrap();
+            assert!((2..=4).contains(&options.len()));
+            let profile: Value = serde_json::from_slice(&std::fs::read(
+                s.sandbox.data.join("personalization/profile.json"),
+            )?)?;
+            let name = profile["principal_name"].as_str().unwrap();
+            assert_eq!(name, "민수");
+            assert_eq!(
+                options
+                    .iter()
+                    .map(|o| o["label"].as_str().unwrap())
+                    .collect::<Vec<_>>(),
+                [name.to_owned(), format!("{name}님")]
+            );
+        }
         let requests = s.provider()?.requests();
         let request = requests.last().unwrap();
         assert!(
@@ -70,8 +92,19 @@ async fn onboarding_form_replays_questions_and_persists_profile() -> Result<(), 
             prompt.contains("각 온보딩 질문은 반드시 `ask_user`"),
             "onboarding does not require question forms"
         );
+        assert!(prompt.contains("호칭 2~4개를 선택지로 제안"));
+        let selected = if id == "preferred_address" {
+            vec!["polite"]
+        } else {
+            vec![]
+        };
+        let custom = if selected.is_empty() {
+            json!(answer)
+        } else {
+            Value::Null
+        };
         let reply = s.gw.post(&format!("/authority-requests/{}/answer?session_id=general",q["request_ref"].as_str().unwrap()),
-            json!({"status":"answered","answers":[{"id":id,"selected":[],"custom":answer,"skipped":false}]})).await?;
+            json!({"status":"answered","answers":[{"id":id,"selected":selected,"custom":custom,"skipped":false}]})).await?;
         assert_eq!(reply.status, 202, "{}", reply.text);
         if id == "principal_name" {
             let deadline = std::time::Instant::now() + Duration::from_secs(20);

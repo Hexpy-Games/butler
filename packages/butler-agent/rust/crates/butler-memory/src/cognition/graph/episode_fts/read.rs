@@ -3,7 +3,7 @@ use super::{
     super::{db_error, recall::scope},
     tokenize,
 };
-use crate::cognition::{CognitionResult, MemoryGenerationHandle, recall::RecallRequest};
+use crate::cognition::{CognitionResult, recall::RecallRequest};
 use rusqlite::{Connection, OptionalExtension, params_from_iter, types::Value};
 
 pub(in crate::cognition::graph) fn ready(db: &Connection) -> CognitionResult<bool> {
@@ -17,25 +17,23 @@ pub(in crate::cognition::graph) fn ready(db: &Connection) -> CognitionResult<boo
     .map_err(db_error)
 }
 
-pub(in crate::cognition::graph) fn compatible_vectors(
-    db: &Connection,
-    generation: &MemoryGenerationHandle,
-) -> CognitionResult<bool> {
-    let Some(embedding) = &generation.embedding else {
-        return Ok(false);
-    };
-    db.query_row("SELECT 1 FROM memory_vector_units u JOIN memory_projection_jobs j ON j.job_id=u.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE u.state='complete' AND c.status='active' AND j.generation=?1 AND json_extract(u.receipt_json,'$.embedding_version')=?2 LIMIT 1", [generation.generation_id.as_str(),embedding.version()], |_| Ok(())).optional().map(|row| row.is_some()).map_err(db_error)
-}
+/// Episodes one FTS selection returns.
+const SELECTED: usize = 30;
 
+/// The best [`SELECTED`] current episodes in BM25 order. `current` is the cheap
+/// per-hit check; `verify` validates a batch of hits that would fill the
+/// selection, so only selected hits are hydrated and rejected ones refill.
+/// Either returns `None` at the deadline, which makes the selection partial.
 pub(in crate::cognition::graph) fn select(
     db: &Connection,
     input: &RecallRequest,
     mut current: impl FnMut(&str, &str) -> CognitionResult<Option<bool>>,
+    mut verify: impl FnMut(&[(String, String)]) -> CognitionResult<Option<Vec<bool>>>,
 ) -> CognitionResult<(Vec<String>, bool)> {
     if !ready(db)? {
         return Ok((Vec::new(), true));
     }
-    let expression = tokenize::query(&input.cue);
+    let expression = tokenize::recall_query(&input.cue);
     if expression.is_empty() {
         return Ok((Vec::new(), false));
     }
@@ -60,20 +58,40 @@ pub(in crate::cognition::graph) fn select(
     let mut statement = db.prepare(&sql).map_err(db_error)?;
     let mut rows = statement.query(params_from_iter(args)).map_err(db_error)?;
     let mut ids = Vec::new();
-    while let Some(row) = rows.next().map_err(db_error)? {
-        let id: String = row.get(0).map_err(db_error)?;
-        let refs: String = row.get(1).map_err(db_error)?;
-        match current(&id, &refs)? {
-            Some(true) => ids.push(id),
-            Some(false) => {}
-            None => {
-                partial = true;
-                break;
+    let mut batch = Vec::<(String, String)>::new();
+    let mut exhausted = false;
+    while ids.len() < SELECTED {
+        if !exhausted && ids.len() + batch.len() < SELECTED {
+            match rows.next().map_err(db_error)? {
+                Some(row) => {
+                    let id: String = row.get(0).map_err(db_error)?;
+                    let refs: String = row.get(1).map_err(db_error)?;
+                    match current(&id, &refs)? {
+                        Some(true) => batch.push((id, refs)),
+                        Some(false) => {}
+                        None => {
+                            partial = true;
+                            exhausted = true;
+                        }
+                    }
+                }
+                None => exhausted = true,
             }
+            continue;
         }
-        if ids.len() == 30 {
+        if batch.is_empty() {
             break;
         }
+        let Some(valid) = verify(&batch)? else {
+            partial = true;
+            break;
+        };
+        ids.extend(
+            batch
+                .drain(..)
+                .zip(valid)
+                .filter_map(|((id, _), valid)| valid.then_some(id)),
+        );
     }
     Ok((ids, partial))
 }

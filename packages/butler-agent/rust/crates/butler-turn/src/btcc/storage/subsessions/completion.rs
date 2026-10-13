@@ -33,6 +33,7 @@ impl SqliteSubsessionRepository {
             tx.execute("INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,?6,?10,?7,?8,'[]',?9)",params![result_id,delegation.relation_id,delegation.task_id,child_session,child_turn,status,summary,evidence_json,now,code]).map_err(StorageError::sqlite)?;
             let feedback = delegation_feedback(&tx, &delegation, &result_id, failure_reason.as_deref())?;
             let mut text = format!("Delegated result\nstatus: {status}\nsummary: {summary}\nevidence_refs: {evidence_json}{feedback}");
+            text.push_str(&super::assets::delivery_assets(&tx, &child_turn)?);
             text.push_str(&delivery_artifacts(&tx, &child_turn, &status)?);
             if let Some(code) = failure_code.as_deref().or(code) { text.push_str(&format!("\ncode: {code}")); }
             if let Some(handoff) = handoff {
@@ -51,7 +52,7 @@ impl SqliteSubsessionRepository {
                     parent_turn_id: delegation.parent_turn_id.clone(),
                     parent_chat_id: parent_chat.ok_or_else(|| StorageError::new(StorageCode::ParentAppBindingRequired,"Parent App binding is missing"))?.into(),
                     message_id: format!("subsession-result-message:{result_id}"),
-                    safe_title: "Delegated result".into(), text: text.clone(), model_ref: model.into(),
+                    safe_title: result_title(&delegation.safe_title), text: text.clone(), model_ref: model.into(),
                     reasoning_effort: reasoning.into(), access_mode: access.into(), timestamp: now.clone(),
                 }),
             };
@@ -60,6 +61,15 @@ impl SqliteSubsessionRepository {
             tx.commit().map_err(StorageError::sqlite)?;
             Ok(())
         }).await
+    }
+}
+
+/// The result Turn is titled after the delegated work it reports, the same
+/// title the App shows for that work.
+fn result_title(relation_title: &str) -> String {
+    match relation_title.trim() {
+        "" => "Delegated result".into(),
+        title => title.into(),
     }
 }
 

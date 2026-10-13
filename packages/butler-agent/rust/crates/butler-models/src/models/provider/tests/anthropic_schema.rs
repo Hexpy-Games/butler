@@ -37,6 +37,8 @@ async fn serialize_catalog(definitions: &[Value]) {
             description: tool["description"].as_str().unwrap().into(),
             parameters: tool["parameters"].as_object().unwrap().clone(),
             concurrency_safe: None,
+            transcript_visibility: None,
+            handler_validates_arguments: None,
             tool_contract_version: None,
         })
         .collect();
@@ -158,6 +160,8 @@ fn variants_and_integer_fields() {
             description: "Choose a variant".into(),
             parameters: parameters.as_object().unwrap().clone(),
             concurrency_safe: None,
+            transcript_visibility: None,
+            handler_validates_arguments: None,
             tool_contract_version: None,
         }];
         for max in [

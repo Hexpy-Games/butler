@@ -88,7 +88,7 @@ pub(super) fn command(
                 governing_refs: Some(strings(args.get("governing_refs"), "governing_refs")?),
                 execution_mode: Some(execution_mode(args.get("execution_mode"))?),
                 actions,
-                checks: strings(args.get("checks"), "checks")?,
+                checks: planned_checks(args)?,
             })
         }
         "record_work_checkpoint" => Command::Checkpoint(CheckpointInput {
@@ -202,6 +202,37 @@ fn boolean(value: Option<&Value>, field: &str) -> Result<bool, WorkArgumentError
         _ => Err(WorkArgumentError::NotBoolean(field.to_owned())),
     }
 }
+/// The Plan's checks plus its presentation decision, recorded as one
+/// `Presentation:` line so it travels with the Plan: delegated children
+/// receive it among their acceptance criteria and the reporting round reads
+/// it from the Work. A revision's decision replaces the previous line.
+fn planned_checks(args: &Map<String, Value>) -> Result<Vec<String>, WorkArgumentError> {
+    let mut checks = strings(args.get("checks"), "checks")?;
+    let Some(value) = args.get("presentation") else {
+        return Ok(checks);
+    };
+    let mut blocks = Vec::new();
+    for (index, item) in array(Some(value), "presentation")?.iter().enumerate() {
+        let block = required(Some(item), &format!("presentation[{index}]"))?;
+        if !PRESENTATION.contains(&block.as_str()) {
+            return Err(WorkArgumentError::Unsupported("presentation", block));
+        }
+        if !blocks.contains(&block) {
+            blocks.push(block);
+        }
+    }
+    checks.retain(|check| !check.starts_with(PRESENTATION_LINE));
+    if !blocks.is_empty() {
+        checks.push(format!("{PRESENTATION_LINE} {}", blocks.join(", ")));
+    }
+    Ok(checks)
+}
+
+const PRESENTATION: [&str; 7] = [
+    "text", "cards", "table", "gallery", "facts", "metrics", "chart",
+];
+const PRESENTATION_LINE: &str = "Presentation:";
+
 fn execution_mode(value: Option<&Value>) -> Result<ExecutionMode, WorkArgumentError> {
     match value.and_then(Value::as_str) {
         Some("direct") => Ok(ExecutionMode::Direct),

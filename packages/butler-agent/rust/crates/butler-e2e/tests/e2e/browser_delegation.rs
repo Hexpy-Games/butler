@@ -5,6 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
+pub(super) mod answer;
 use super::steward_presentation::stub;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup, security::AdminClient};
@@ -30,7 +31,7 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
         .send()
         .await?;
     assert_eq!(stream.status(), 200);
-    let host = tokio::spawn(serve_host(stream, admin));
+    let host = tokio::spawn(serve_host(stream, admin, false, "general".to_owned()));
     s.turn("general", stub::OWNER).await?;
     tokio::time::timeout(Duration::from_secs(30), host)
         .await
@@ -57,6 +58,16 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
     .await
     .unwrap();
     assert!(
+        script
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|request| request.to_string().contains("image_assets:")
+                && request.to_string().contains("img_")),
+        "parent must receive collected ids"
+    );
+    assert!(
         script.requests.lock().unwrap().iter().any(|request| request
             .to_string()
             .contains("attached to your reply automatically")),
@@ -69,6 +80,21 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
             .unwrap()
             .iter()
             .any(|request| request.to_string().contains("input_image"))
+    );
+    assert!(
+        script.requests.lock().unwrap().iter().any(|request| request
+            .to_string()
+            .contains("Another element covers this image. Do not retry the same source.")),
+        "a refused collection names another source instead of a retry"
+    );
+    assert!(
+        !script
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|request| request.to_string().contains("Butler's Plan presents")),
+        "a Plan without a presentation decision asks the steward for no blocks"
     );
     {
         let requests = script.requests.lock().unwrap();
@@ -94,21 +120,47 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
         "SELECT t.session_id FROM btcc_guided_tool_calls c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE c.tool_name='browser_open'",
         [], |row| row.get(0)).unwrap();
     assert_eq!(session, child, "tool really ran in the internal child");
+    let raw: String = db
+        .query_row(
+            "SELECT result_json FROM btcc_guided_tool_calls WHERE tool_name='image_collect' ORDER BY rowid LIMIT 1",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let asset: Value = serde_json::from_str(&raw).unwrap();
+    assert!(asset["id"].as_str().unwrap().starts_with("img_"));
+    assert!(
+        asset.get("signed_url").is_none(),
+        "HTTP signatures stay out of model results"
+    );
     drop(db);
     s.finish().await?;
     server.abort();
     Ok(())
 }
 
-async fn serve_host(mut stream: Response, admin: AdminClient) -> Result<(), HarnessError> {
+async fn serve_host(
+    mut stream: Response,
+    admin: AdminClient,
+    answer: bool,
+    session: String,
+) -> Result<(), HarnessError> {
     let mut buffer = String::new();
-    for op in ["tab.open", "tabs.list", "tab.observe", "tab.screenshot"] {
-        let frame = next_call(&mut stream, &mut buffer, op).await?;
+    let ops = vec![
+        "tab.open",
+        "tabs.list",
+        "tab.observe",
+        "tab.screenshot",
+        "tab.image_collect",
+        "tab.image_collect",
+    ];
+    for op in ops {
+        let frame = next_call(&mut stream, &mut buffer, op, &session).await?;
         assert_eq!(
-            frame["session"], "general",
+            frame["session"], session,
             "internal session reached browser host: {frame}"
         );
-        let tab = json!({"id":"parent-tab","owner":"conversation:general","profile":"signed_out","epoch":1,"holder":"agent","url":"https://example.com/"});
+        let tab = json!({"id":"parent-tab","owner":format!("conversation:{session}"),"profile":"signed_out","epoch":1,"holder":"agent","url":"https://example.com/"});
         if op == "tab.open" {
             let event = admin
                 .send(
@@ -124,6 +176,12 @@ async fn serve_host(mut stream: Response, admin: AdminClient) -> Result<(), Harn
             "tabs.list" => json!({"tabs":[tab]}),
             "tab.observe" => {
                 json!({"status":"ok","tab":"parent-tab","obs":"parent-observation","url":"https://example.com/","text":"Parent page","image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})
+            }
+            "tab.image_collect" if !answer && frame["args"]["ref"] == "image-ref-8" => {
+                json!({"status":"refused","reason":"blocked_by"})
+            }
+            "tab.image_collect" => {
+                json!({"status":"ok","source_url":"https://example.com/image.jpg","alt":"Collected raster","nearby_text":"Context","image":{"data":STANDARD.encode(if answer && frame["args"]["ref"] == "image-ref-8" { include_bytes!("browser_outputs/second.jpg").as_slice() } else { include_bytes!("browser_outputs/pixel.jpg").as_slice() })}})
             }
             "tab.screenshot" => {
                 json!({"status":"ok","tab":"parent-tab","url":"https://example.com/","image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})
@@ -146,7 +204,7 @@ async fn serve_host(mut stream: Response, admin: AdminClient) -> Result<(), Harn
         if op != "tabs.list" {
             let ended = next_frame(&mut stream, &mut buffer).await?;
             assert_eq!(ended["op"], "use.ended");
-            assert_eq!(ended["session"], "general");
+            assert_eq!(ended["session"], session);
             assert_eq!(ended["turn_id"], frame["turn_id"]);
             assert_eq!(ended["args"]["id"], frame["id"]);
             assert_eq!(ended["args"]["abort"], false);
@@ -154,13 +212,32 @@ async fn serve_host(mut stream: Response, admin: AdminClient) -> Result<(), Harn
     }
     let finished = next_frame(&mut stream, &mut buffer).await?;
     assert_eq!(finished["op"], "use.finished");
-    assert_eq!(finished["session"], "general");
+    assert_eq!(finished["session"], session);
     assert!(
         finished["turn_id"]
             .as_str()
             .unwrap()
             .starts_with("steward-turn-")
     );
+    if answer {
+        let frame = next_call(&mut stream, &mut buffer, "tab.open", &session).await?;
+        assert_eq!(frame["session"], session);
+        admin
+            .send(
+                Method::POST,
+                &format!(
+                    "/internal/browser-host/results/{}",
+                    frame["id"].as_str().unwrap()
+                ),
+                Some(json!({"status":"ok","tab":"parent-tab","url":"https://example.com/"})),
+                &[],
+            )
+            .await?;
+        assert_eq!(
+            next_frame(&mut stream, &mut buffer).await?["op"],
+            "use.ended"
+        );
+    }
     Ok(())
 }
 
@@ -168,13 +245,14 @@ async fn next_call(
     stream: &mut Response,
     buffer: &mut String,
     op: &str,
+    session: &str,
 ) -> Result<Value, HarnessError> {
     let started = if op == "tabs.list" {
         None
     } else {
         let frame = next_frame(stream, buffer).await?;
         assert_eq!(frame["op"], "use.started");
-        assert_eq!(frame["session"], "general");
+        assert_eq!(frame["session"], session);
         Some(frame)
     };
     let frame = next_frame(stream, buffer).await?;
@@ -203,4 +281,29 @@ pub(super) async fn next_frame(
             buffer.push_str(std::str::from_utf8(&chunk).unwrap());
         }
     }
+}
+
+/// The `include_image` an observation frame must carry: the model's `look`;
+/// after a batch whose effect only pixels show (points, drags, a canvas hit)
+/// a screenshot; otherwise `auto`, where the host decides from the page.
+pub(super) fn expected_pixels(frame: &Value, last_act: Option<&(Value, Value)>) -> Value {
+    let args = &frame["args"];
+    match args["look"].as_str() {
+        Some("always") => return json!(true),
+        Some("never") => return json!(false),
+        _ => {}
+    }
+    let visual = args["settle"] == true
+        && last_act.is_some_and(|(act, result)| {
+            let steps = act["steps"].as_array().into_iter().flatten();
+            let canvas = result["steps"].as_array().into_iter().flatten();
+            steps.into_iter().any(|step| {
+                step.get("point").is_some()
+                    || step.get("target_point").is_some()
+                    || step["action"] == "drag"
+            }) || canvas
+                .into_iter()
+                .any(|step| step["hit"]["role"] == "canvas")
+        });
+    if visual { json!(true) } else { json!("auto") }
 }

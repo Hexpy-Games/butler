@@ -5,11 +5,14 @@ use super::*;
 /// Driving a tab is a core capability: when the turn may use the browser, its
 /// everyday tools are offered directly instead of through tool search, which
 /// cost browsing tasks extra search and describe rounds before the first page.
-const BROWSER_CORE: [&str; 4] = [
+/// Collecting an image of what a page shows belongs to the same everyday set:
+/// answers that present visual items need it without an extra search.
+const BROWSER_CORE: [&str; 5] = [
     "browser_open",
     "browser_observe",
     "browser_act",
     "browser_close",
+    "image_collect",
 ];
 
 /// Names of the tools the provider surface offers: initial tools of the
@@ -93,7 +96,10 @@ pub(super) fn profile_candidates(
     }
     for tool in catalog.tools.iter().filter(|tool| {
         catalog.profile("startup").contains(&tool.name)
-            && matches!(tool.category.as_deref(), Some("memory" | "skill"))
+            && matches!(
+                tool.category.as_deref(),
+                Some("memory" | "skill" | "message")
+            )
             && !tool.tags.iter().any(|tag| tag == "context")
     }) {
         names.insert(tool.name.clone());

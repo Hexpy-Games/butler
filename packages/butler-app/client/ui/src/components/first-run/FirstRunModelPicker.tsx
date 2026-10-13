@@ -1,14 +1,15 @@
 import { useState } from "react";
 import {
   SetupWizardStepAction,
+  CheckCircle2,
   ChoiceCard,
   ChoiceCardList,
+  Notice,
   ProviderLogo,
   Server,
   Typo,
 } from "@/butler-ds";
 import type { FirstRunProviderCardId, LocalModelOption, ProviderCardLogo } from "@/app/setupProviders.ts";
-import { CardGlyph } from "./CardGlyph";
 import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
@@ -24,16 +25,17 @@ export function FirstRunModelPicker({ cardId, flow, options, apiKey, title, body
   const { copy } = flow;
   const [selectedKey, setSelectedKey] = useState(options[0]?.key ?? "");
   const selected = options.find((option) => option.key === selectedKey) ?? options[0];
-  const busy = Boolean(flow.commit.pending);
+  const busy = Boolean(flow.commit.pending) && !flow.commit.connected;
   return (
-    <FirstRunStepCard flow={flow} contentKey={`models:${cardId}`} icon={<CardGlyph cardId={cardId} />} title={title}
+    <FirstRunStepCard flow={flow} contentKey={`models:${cardId}`} title={title}
       titleId="first-run-models-title" description={body} onBack={flow.backToList}
       footerStart={<Typo.Caption tone="tertiary">{copy.localNote}</Typo.Caption>}
-      actions={<SetupWizardStepAction forward disabled={!selected || busy} onClick={() => selected && flow.connectLocal(cardId, selected, apiKey)}>
-        {busy ? copy.connecting : copy.customConnect}
+      actions={<SetupWizardStepAction forward disabled={(!selected && !flow.commit.connected) || busy} onClick={() => flow.commit.connected ? flow.toReply() : selected && flow.connectAndAdvance(cardId, selected, apiKey)}>
+        {busy ? copy.connecting : flow.copy.next}
       </SetupWizardStepAction>}
     >
-      {options.length === 0 ? <Typo.Body tone="secondary">{copy.noModels}</Typo.Body> : (
+      {flow.commit.connected ? <Notice tone="neutral" icon={<CheckCircle2 size="md" />} message={copy.keyValid} />
+        : options.length === 0 ? <Typo.Body tone="secondary">{copy.noModels}</Typo.Body> : (
         <ChoiceCardList aria-labelledby="first-run-models-title" role="radiogroup">
           {options.map((option) => (
             <ChoiceCard
@@ -56,6 +58,6 @@ export function FirstRunModelPicker({ cardId, flow, options, apiKey, title, body
   );
 }
 
-function ModelLogo({ logo }: { logo?: ProviderCardLogo }) {
+export function ModelLogo({ logo }: { logo?: ProviderCardLogo }) {
   return logo ? <ProviderLogo name={logo} /> : <Server size="md" />;
 }

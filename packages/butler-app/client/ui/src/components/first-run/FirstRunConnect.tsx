@@ -3,16 +3,16 @@ import { FirstRunKeyForm } from "./FirstRunKeyForm";
 import { FirstRunModelPicker } from "./FirstRunModelPicker";
 import { FirstRunProviderList } from "./FirstRunProviderList";
 import { FirstRunSignIn } from "./FirstRunSignIn";
+import { FirstRunReplyLanguage } from "./FirstRunReplyLanguage";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
-/** Existing connection options; every settled connection moves to the ready step. */
+/** Existing connection options, followed by the explicit reply-language choice. */
 export function FirstRunConnect({ flow }: { flow: FirstRunFlow }) {
   const { copy, view } = flow;
+  if (flow.aiStage === "reply") return <FirstRunReplyLanguage flow={flow} />;
   return view.kind === "list" ? <FirstRunProviderList flow={flow} />
     : view.kind === "signin" ? <FirstRunSignIn flow={flow} />
       : view.kind === "key" ? <FirstRunKeyForm cardId={view.cardId} flow={flow} key={view.cardId} />
-        : view.kind === "local" ? (
-          <FirstRunModelPicker body={copy.localBody} cardId="local" flow={flow} options={flow.local.options} title={copy.localTitle} />
-        ) : view.kind === "custom" ? <FirstRunCustomServer flow={flow} />
+        : view.kind === "custom" ? <FirstRunCustomServer flow={flow} />
           : <FirstRunModelPicker apiKey={view.apiKey} cardId="other" flow={flow} options={view.options} title={copy.customTitle} />;
 }

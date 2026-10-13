@@ -247,6 +247,10 @@ pub struct FinalArtifact {
     pub size_bytes: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
+    /// The page a capture shows, so a reply that already pictures that page's
+    /// item in its answer blocks does not attach the same item again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
 }
 
 /// The kind of produced artifact.
@@ -358,6 +362,8 @@ pub struct DeliveredOutcome {
     pub artifacts: Vec<FinalArtifact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changed_files: Vec<ChangedFileSummary>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub answer_blocks: Vec<serde_json::Value>,
     /// Passthrough: only pre-cutover payloads carry a plan; it is relayed as stored.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan: Option<Value>,
@@ -384,6 +390,8 @@ pub struct AlreadyDeliveredOutcome {
     pub artifacts: Vec<FinalArtifact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changed_files: Vec<ChangedFileSummary>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub answer_blocks: Vec<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

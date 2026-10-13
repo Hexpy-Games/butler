@@ -8,12 +8,16 @@ use tokio::sync::oneshot;
 pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Response, HttpError> {
     let op = frame["op"].as_str().unwrap_or("").to_owned();
     let session = frame["session"].as_str().unwrap_or("").to_owned();
-    validate(&state, &mut frame, &op, &session)?;
+    super::calls_validation::validate(&state, &mut frame, &op, &session)?;
+    if op == "assets.lookup" {
+        return response(0, super::assets::lookup(&state, &frame["args"]).await?);
+    }
     let count = if op == "tab.act" {
         frame["args"]["steps"].as_array().map_or(0, Vec::len)
     } else {
         0
     };
+    let _slot = state.browser.3.page_work(&op).await?;
     let mut frame = match super::backend::route(&state, frame, &op, &session, count).await? {
         Ok(response) => return Ok(response),
         Err(frame) => frame,
@@ -29,15 +33,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     if let Some(answer) = signed_in_call(&state, &mut frame, &op, &session).await? {
         return response(count, answer);
     }
-    let deadline = match op.as_str() {
-        "tab.open" => 20000,
-        "tab.act" => 30000,
-        "signin.fill" | "pay.fill" | "autofill.fill" => 25000,
-        "pay.inspect" => 8000,
-        // A post-batch observation first waits up to 2 s for the page to settle.
-        "tab.observe" if frame["args"]["settle"] == true => 8000,
-        _ => 5000,
-    };
+    let deadline = deadline(&op, &frame);
     let id = uuid::Uuid::new_v4().to_string();
     let (sender, receiver) = oneshot::channel();
     let tab = frame["tab"].as_str().map(str::to_owned);
@@ -76,12 +72,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
         }
     }
     super::signed_in::recheck(&sent, &mut result);
-    enforce_result_policy(&state, &session, &op, &mut result);
-    if op == "tab.wait" {
-        result["site"] = json!(super::hand_back::tab_site(&state, &sent["tab"]));
-    }
-    super::pay::finish_call(&state, &op, &sent, &session, &mut result).await?;
-    store_still(&state, &session, &mut result).await?;
+    finish_result(&state, &session, &op, &sent, &mut result).await?;
     response(count, result)
 }
 
@@ -179,9 +170,6 @@ fn dispatch(
             return response(count, json!({"status":"unavailable","reason":"no_browser"}))
                 .map(Some);
         }
-        if hub.pending.len() >= 8 {
-            return Err(error(429, "browser_busy"));
-        }
         // Ephemeral presenter events share the authenticated tool frame; never model output.
         if let Some(pointer) = pointer_event(&op, &frame["args"]) {
             frame["pointer"] = pointer;
@@ -197,8 +185,10 @@ fn page_op(op: &str) -> bool {
     matches!(
         op,
         "tab.observe"
+            | "tab.read"
             | "tab.zoom"
             | "tab.screenshot"
+            | "tab.image_collect"
             | "tab.prepare"
             | "tab.act"
             | "tab.dialog"
@@ -233,6 +223,7 @@ pub(super) fn enforce_result_policy(
     op: &str,
     result: &mut Value,
 ) {
+    super::backend::full_recovery(state, session, result);
     let denied = result
         .get("url")
         .and_then(Value::as_str)
@@ -266,85 +257,6 @@ pub(super) fn enforce_result_policy(
         }
     }
     *result = json!({"status":if op == "tab.act" {"unknown"} else {"not_dispatched"},"reason":"navigation_denied"});
-}
-fn validate(
-    state: &HttpState,
-    frame: &mut Value,
-    op: &str,
-    session: &str,
-) -> Result<(), HttpError> {
-    if session.is_empty()
-        || session.len() > 128
-        || !session
-            .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
-    {
-        return Err(error(400, "invalid_session"));
-    }
-    if !matches!(
-        op,
-        "tab.open"
-            | "tab.observe"
-            | "tab.selection"
-            | "tab.zoom"
-            | "tab.screenshot"
-            | "tab.prepare"
-            | "tab.act"
-            | "tab.dialog"
-            | "tab.close"
-            | "tabs.list"
-            | "tab.wait"
-            | "tab.waiting"
-            | "tab.cancel"
-            | "owner.closed"
-            | "signin.lookup"
-            | "signin.fill"
-            | "signin.grant"
-            | "pay.inspect"
-            | "pay.lookup"
-            | "pay.fill"
-            | "autofill.fill"
-    ) {
-        return Err(error(400, "invalid_browser_op"));
-    }
-    if op == "tab.open" {
-        let raw = frame["args"]["url"].as_str().unwrap_or("").to_owned();
-        let content = url::Url::parse(&raw).ok().filter(|u| {
-            u.host_str() == Some("127.0.0.1")
-                && u.port() == Some(super::super::content::port(state))
-                && u.scheme() == "http"
-                && u.username().is_empty()
-                && u.password().is_none()
-                && (u.path().starts_with("/__o/")
-                    || super::super::content::preview::owner_id(state, session, &raw).is_some())
-        });
-        let url = match content {
-            Some(url) => url,
-            None => butler_runtime::browser::public_url(&raw)
-                .map_err(|_| error(400, "navigation_denied"))?,
-        };
-        frame["args"]["policy"] = butler_runtime::browser::navigation_policy(
-            &format!("http://127.0.0.1:{}", super::super::content::port(state)),
-            url.as_str(),
-        );
-        if let Some(id) = super::super::content::preview::owner_id(state, session, &raw) {
-            frame["args"]["preview_id"] = json!(id);
-        }
-        if state
-            .previews
-            .owned(session, frame["args"]["preview_id"].as_str().unwrap_or(""))
-        {
-            frame["args"]["policy"]["preview"] = json!(true);
-        }
-    }
-    if op == "tab.act"
-        && frame["args"]["steps"]
-            .as_array()
-            .is_none_or(|s| s.is_empty() || s.len() > 10)
-    {
-        return Err(error(400, "invalid_steps"));
-    }
-    Ok(())
 }
 pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Response, HttpError> {
     let tabs = value["tabs"]
@@ -479,4 +391,34 @@ fn pointer_event(op: &str, args: &Value) -> Option<Value> {
         _ => return None,
     };
     Some(json!({"mode":mode}))
+}
+
+async fn finish_result(
+    state: &Arc<HttpState>,
+    session: &str,
+    op: &str,
+    sent: &Value,
+    result: &mut Value,
+) -> Result<(), HttpError> {
+    enforce_result_policy(state, session, op, result);
+    if op == "tab.wait" {
+        result["site"] = json!(super::hand_back::tab_site(state, &sent["tab"]));
+    }
+    super::pay::finish_call(state, op, sent, session, result).await?;
+    super::assets::finish(state, session, op, result).await?;
+    super::shots::keep(state, session, result).await?;
+    Ok(())
+}
+
+fn deadline(op: &str, frame: &Value) -> u64 {
+    match op {
+        "tab.open" => 20000,
+        "tab.act" => 30000,
+        "signin.fill" | "pay.fill" | "autofill.fill" => 25000,
+        "tab.image_collect" => 15000,
+        "pay.inspect" | "tab.read" => 8000,
+        // A post-batch observation first waits up to 2 s for the page to settle.
+        "tab.observe" if frame["args"]["settle"] == true => 8000,
+        _ => 5000,
+    }
 }

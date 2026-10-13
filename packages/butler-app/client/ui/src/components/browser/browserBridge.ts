@@ -105,7 +105,8 @@ export async function openConversationBrowser(session: string, requestedTab?: st
   connectBrowser();
   const store = useButlerStore.getState();
   store.setRightOpen(false);
-  store.openSession(session);
+  // A link from the open conversation keeps its view; only another conversation is opened.
+  if (store.activeChatId !== session || store.view.kind !== "session") store.openSession(session);
   const shell = useBrowserShellState.getState();
   shell.setOpen(session, true);
   const snapshot = await browserCall("open") as BrowserSnapshot | undefined;
@@ -125,6 +126,17 @@ export async function focusBrowserTab(id: string, sessionId: string, fallback: s
   const state = await browserCall("state") as BrowserSnapshot | undefined;
   if (state?.tabs.some((tab) => tab.id === id)) await openConversationBrowser(sessionId, id);
   else void openLink(fallback);
+}
+
+/**
+ * A link a conversation's message shows (answer cards, source lines, actions, the image viewer) opens in
+ * that conversation's browser, grouped with its tabs, like the agent's own tabs. Without a public
+ * conversation it is an ordinary link.
+ */
+export async function openConversationLink(url: string, sessionId: string | undefined) {
+  const owned = sessionId && publicBrowserOwner(`conversation:${sessionId}`, useButlerStore.getState().navigation);
+  if (window.butlerBrowser && owned && /^https?:/iu.test(url)) await openBrowser({ url, sessionId: owned });
+  else await openLink(url);
 }
 
 /** Desktop links share the main-process opener; remote clients keep web navigation. */

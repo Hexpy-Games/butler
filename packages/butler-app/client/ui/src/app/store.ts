@@ -338,6 +338,7 @@ function messageRecordsEqual(
       structurallyEqual(message.attachments ?? [], other.attachments ?? []) &&
       structurallyEqual(message.artifacts ?? [], other.artifacts ?? []) &&
       structurallyEqual(message.work_blocks ?? [], other.work_blocks ?? []) &&
+      structurallyEqual(message.answer_blocks ?? [], other.answer_blocks ?? []) &&
       structurallyEqual(
         message.turn_activity_rows ?? [],
         other.turn_activity_rows ?? [],

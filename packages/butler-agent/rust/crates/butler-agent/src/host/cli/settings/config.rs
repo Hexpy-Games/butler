@@ -19,6 +19,7 @@ pub(super) const SAFE_CONFIG_PATHS: &[&str] = &[
     "personalization.profiling.extractorModel",
     "webSearch.provider",
     "webSearch.readerBackend",
+    "webSearch.readerBackendRevision",
     "webSearch.model",
     "webSearch.apiBase",
     "webSearch.braveApiBase",
@@ -48,6 +49,7 @@ const WEB_SEARCH_PROVIDERS: &[&str] = &[
     "disabled",
 ];
 const READER_BACKENDS: &[&str] = &[
+    "browser",
     "auto",
     "lightpanda",
     "lightweight",
@@ -104,6 +106,13 @@ pub(super) fn set_path(config: &mut Value, dotted_path: &str, value: Value) {
             config,
             "user.responseLanguageDefaultSource",
             Value::from("explicit"),
+        );
+    }
+    if dotted_path == "webSearch.readerBackend" {
+        set_path(
+            config,
+            "webSearch.readerBackendRevision",
+            Value::from(butler_core::configuration::WEB_READER_REVISION),
         );
     }
     let mut parts = dotted_path.split('.').peekable();

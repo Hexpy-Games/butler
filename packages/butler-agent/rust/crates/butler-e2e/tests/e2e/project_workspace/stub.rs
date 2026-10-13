@@ -113,7 +113,7 @@ fn response(item: &Value) -> ResponseRecord {
     }
 }
 
-pub(super) type DefaultFolderRequests = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
+pub(crate) type DefaultFolderRequests = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
 
 pub(super) fn assert_default_folder(requests: &DefaultFolderRequests, folder: &Path, count: usize) {
     let expected = serde_json::to_string(&format!(
@@ -135,7 +135,7 @@ pub(super) fn assert_default_folder(requests: &DefaultFolderRequests, folder: &P
     }
 }
 
-pub(super) async fn default_folder_model()
+pub(crate) async fn default_folder_model()
 -> Result<(String, tokio::task::JoinHandle<()>, DefaultFolderRequests), HarnessError> {
     use axum::{Router, routing::post};
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;

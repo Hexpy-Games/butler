@@ -24,9 +24,13 @@ pub(super) struct WorkerChild {
     pub(super) initialized: bool,
 }
 
+/// Starts the private worker. A worker started for background maintenance
+/// lowers its own priority; it exits after a minute idle, so a later
+/// interactive start runs at normal priority again.
 pub(super) async fn spawn_worker(
     executable: &std::path::Path,
     data_root: &std::path::Path,
+    background: bool,
 ) -> CognitionResult<WorkerChild> {
     let role = butler_platform::process_names::Role::Memory;
     let executable = butler_platform::process_names::executable_async(executable, role)
@@ -37,6 +41,10 @@ pub(super) async fn spawn_worker(
     let mut child = command
         .arg("--private-embedding-worker")
         .env("BUTLER_DATA", data_root)
+        .env(
+            super::super::worker::PRIORITY_ENV,
+            if background { "background" } else { "normal" },
+        )
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

@@ -434,3 +434,5 @@ async fn open_readers(path: PathBuf) -> StorageResult<read_pool::ReadPool> {
             AppStorageError::new(AppStorageCode::AppSqliteJoinFailed, error.to_string())
         })?
 }
+
+pub(in crate::gateway::application) use schema::create_settings_table;

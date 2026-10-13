@@ -17,6 +17,8 @@ mod calls;
 mod capture;
 mod cdp;
 mod check;
+mod collect;
+mod collect_crop;
 mod dialogs;
 pub mod downloads;
 mod events;
@@ -187,11 +189,16 @@ impl Headless {
         let _in_flight = lifecycle::InFlight::enter(&self.in_flight);
         let op = frame["op"].as_str().unwrap_or("").to_owned();
         let session = frame["session"].as_str().unwrap_or("").to_owned();
+        let turn = frame["turn_id"].as_str();
+        self.drive(&session, &frame["tab"], turn);
         let mut result = if valid_session(&session) {
             self.call(&op, &session, &frame).await
         } else {
             refused("invalid_session")
         };
+        if op == "tab.open" {
+            self.drive(&session, &result["tab"], turn);
+        }
         let count = if op == "tab.act" {
             frame["args"]["steps"].as_array().map_or(0, Vec::len)
         } else {
@@ -217,11 +224,23 @@ impl Headless {
                 result["observe_required"] = json!(true);
             }
         }
-        self.drain(&op, &session, &mut result);
+        self.drain(&op, &session, turn, &mut result);
         result
     }
 
-    fn drain(&self, op: &str, session: &str, result: &mut Value) {
+    /// Records the running turn that drives `tab`, so its events reach it.
+    fn drive(&self, session: &str, tab: &Value, turn: Option<&str>) {
+        if let (Some(browser), Some(tab), Some(turn)) = (self.browser(), tab.as_str(), turn) {
+            let owner = format!("conversation:{session}");
+            browser.shared.with_tab(tab, |t| {
+                if t.owner == owner {
+                    t.turn = Some(turn.to_owned());
+                }
+            });
+        }
+    }
+
+    fn drain(&self, op: &str, session: &str, turn: Option<&str>, result: &mut Value) {
         if matches!(
             op,
             "tab.prepare" | "tab.waiting" | "tab.cancel" | "owner.closed"
@@ -235,9 +254,8 @@ impl Headless {
         let events = browser
             .shared
             .lock()
-            .events
-            .remove(&format!("conversation:{session}"));
-        if let Some(events) = events.filter(|e| !e.is_empty()) {
+            .drain(&format!("conversation:{session}"), turn);
+        if !events.is_empty() {
             result["events"] = json!(events);
         }
     }
@@ -265,18 +283,21 @@ impl Headless {
                 json!({"status":"ok"})
             }
             "tab.open" => {
-                self.open(
-                    session,
-                    args,
-                    frame["deadline_ms"].as_u64().unwrap_or(20_000),
-                )
-                .await
+                let deadline = frame["deadline_ms"].as_u64().unwrap_or(20_000);
+                self.open(session, args, deadline, frame["turn_id"].as_str())
+                    .await
             }
             _ => self.tab_call(op, session, frame).await,
         }
     }
 
-    async fn open(self: &Arc<Self>, session: &str, args: &Value, deadline_ms: u64) -> Value {
+    async fn open(
+        self: &Arc<Self>,
+        session: &str,
+        args: &Value,
+        deadline_ms: u64,
+        turn: Option<&str>,
+    ) -> Value {
         if args["profile"] == "signed_in" || args["signed_in"] == true {
             return refused("signed_in_unavailable");
         }
@@ -298,18 +319,10 @@ impl Headless {
             Err(unavailable) => return unavailable,
         };
         let owner = format!("conversation:{session}");
-        {
-            let state = browser.shared.lock();
-            if state.tabs.len() >= 6
-                || state.tabs.values().filter(|t| t.owner == owner).count() >= 3
-            {
-                return refused("tab_budget_exhausted");
-            }
-            let driving: std::collections::HashSet<&String> =
-                state.tabs.values().map(|t| &t.owner).collect();
-            if driving.len() >= 2 && !driving.contains(&owner) {
-                return json!({"status":"not_dispatched","reason":"browser_busy"});
-            }
+        // Memory bounds the open tabs; conversations share them (several
+        // browse at once), and an idle tab closes to make room for a new one.
+        if !targets::make_room(&browser, &[], turn).await {
+            return refused("tab_budget_exhausted");
         }
         let remaining = Duration::from_millis(deadline_ms.saturating_sub(500))
             .saturating_sub(started.elapsed());
@@ -373,10 +386,7 @@ impl Headless {
             _ => {}
         }
         if dialog {
-            return page
-                .shared
-                .with_tab(id, |t| t.pending_dialog())
-                .unwrap_or_else(|| refused("not_your_tab"));
+            return pending_dialog(&page, id);
         }
         let crashed = page
             .shared
@@ -391,6 +401,8 @@ impl Headless {
         }
         let outcome = match op {
             "tab.observe" => observe::observe(&page, args).await,
+            "tab.read" => render::read_tab(&page).await,
+            "tab.image_collect" => collect::collect(&page, args).await,
             "tab.screenshot" => capture::screenshot(&page, args).await,
             "tab.zoom" => capture::zoom(&page, args).await,
             "tab.prepare" => act::prepare(&page, args).await,
@@ -472,4 +484,11 @@ impl Headless {
             browser.stop().await;
         }
     }
+}
+
+/// The dialog a tab call waits behind.
+fn pending_dialog(page: &page::Page, id: &str) -> Value {
+    page.shared
+        .with_tab(id, |t| t.pending_dialog())
+        .unwrap_or_else(|| refused("not_your_tab"))
 }

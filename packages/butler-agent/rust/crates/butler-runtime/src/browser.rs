@@ -1,9 +1,16 @@
 //! Ephemeral browser ownership and network policy; authority is durable in BTCC.
+mod image_assets;
+pub use image_assets::{
+    MAX_DOWNLOAD as MAX_IMAGE_DOWNLOAD, NormalizedImage, fetch as fetch_image,
+    normalize as normalize_image,
+};
 pub mod app_host;
+pub mod capacity;
 pub mod egress;
 pub mod headless;
 pub mod reader;
 pub use app_host::{AppHost, AppHostConfig, AppHostSource, HostCredentials};
+pub use capacity::call_slots;
 pub use egress::{
     ContentOrigin, EgressProxy, LoopbackFixtures, fetch_permitted, guard_url, guarded_client,
 };
@@ -25,7 +32,7 @@ pub struct TabRegistry {
 }
 impl TabRegistry {
     pub fn replace(&mut self, tabs: &[Value]) -> Result<(), &'static str> {
-        if tabs.len() > 36 {
+        if tabs.len() > capacity::MAX_TABS {
             return Err("tab_budget_exhausted");
         }
         let mut next = HashMap::new();

@@ -176,6 +176,7 @@ async fn serve_host(mut stream: reqwest::Response, admin: AdminClient) -> Result
     let mut click = false;
     let mut drag = false;
     let mut points = 0;
+    let mut last_act = None;
     let mut observations = 0;
     loop {
         let frame = super::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
@@ -216,9 +217,12 @@ async fn serve_host(mut stream: reqwest::Response, admin: AdminClient) -> Result
                 json!({"status":"ok","tab":"fixture","url":"https://example.com"})
             }
             "tab.observe" => {
-                assert_eq!(frame["args"]["include_image"], true);
+                let expected =
+                    super::browser_delegation::expected_pixels(&frame, last_act.as_ref());
+                assert_eq!(frame["args"]["include_image"], expected);
                 observations += 1;
-                if observations == 7 {
+                // The last look:"always" observation: a required capture that fails.
+                if observations == 6 {
                     json!({"status":"ok","tab":"fixture","obs":"obs","text":"Capture unavailable"})
                 } else {
                     let pixels = include_bytes!("../../fixtures/browser-route/observation.jpg");
@@ -263,6 +267,9 @@ async fn serve_host(mut stream: reqwest::Response, admin: AdminClient) -> Result
             }
             _ => panic!("unexpected browser op {op}"),
         };
+        if op == "tab.act" {
+            last_act = Some((frame["args"].clone(), result.clone()));
+        }
         let response = admin
             .send(
                 Method::POST,

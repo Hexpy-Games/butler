@@ -18,6 +18,7 @@ import { MessageArtifacts } from "./MessageArtifacts";
 import { MessageChangedFiles } from "./MessageChangedFiles";
 import { MessageAttachments } from "./MessageAttachments";
 import { UserMessageText } from "./UserMessageText";
+import { MessageImageContext, openMessageImage } from "./messageImages";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection";
 
@@ -44,8 +45,9 @@ function MessageContentComponent({
   const refreshFileUrls = useCallback(() => refreshSessionFileUrls(sessionId, { cursor }), [cursor, sessionId]);
   const running = Boolean(liveActivity) || message.status === "streaming" || message.status === "pending";
   const failureNotice = isAssistantFailureNoticeMessage(message);
+  const openImage = useCallback((key: string) => openMessageImage(message, key), [message]);
   return (
-    <>
+    <MessageImageContext.Provider value={openImage}>
       {message.role === "assistant" ? (
         <AssistantMessageBody message={message} running={running} failureNotice={failureNotice}
           stewardProgress={stewardProgress} refreshFileUrls={refreshFileUrls} />
@@ -88,7 +90,7 @@ function MessageContentComponent({
             withCurrentControls={canRetryWithCurrentControls(message)}
           />
         )}
-    </>
+    </MessageImageContext.Provider>
   );
 }
 

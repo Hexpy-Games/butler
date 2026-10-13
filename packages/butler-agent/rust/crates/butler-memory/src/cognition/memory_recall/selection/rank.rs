@@ -1,7 +1,8 @@
-//! Source score channels, round-robin fusion, relationship-qualified ranking.
+//! Source score channels, candidate fusion, relationship-qualified ranking.
 //!
 //! [`rank`] scores every episode per channel (graph, lexical, context from
-//! mentions; raw sources and temporal seeds add to lexical and context),
+//! mentions; raw sources and temporal seeds add to lexical and context; the
+//! lexical channel fuses raw lexical and episode FTS by reciprocal rank),
 //! fuses the admitted channels into candidates, drops superseded rows, ranks
 //! and diversifies them, and records per-candidate metrics.
 
@@ -16,7 +17,7 @@ use crate::cognition::{
     recall::{
         Channel, EpisodeRankInput, ExecutedEpisodeChannels, RankedEpisode, RecallAdmittedChannels,
         RecallRequest, RecallTimeBasis, Salience, TimeBasis, diversify_by_session,
-        fuse_episode_candidates, rank_episodes,
+        fuse_episode_candidates, fuse_reciprocal_rank, rank_episodes,
     },
 };
 
@@ -279,8 +280,7 @@ impl ChannelLists {
     ) -> Self {
         let when = |on: bool, ids: Vec<String>| if on { ids } else { Vec::new() };
         let lexical_candidates =
-            fuse_episode_candidates(&[], &[], &ranked_ids(&scores.lexical), &seeds.fts_episodes)
-                .episode_ids;
+            fuse_reciprocal_rank(&[&ranked_ids(&scores.lexical), &seeds.fts_episodes]);
         let lexical = when(admitted.lexical, lexical_candidates.clone());
         let lexical_fusion = if admitted.explicit && !admitted.lexical {
             lexical_candidates

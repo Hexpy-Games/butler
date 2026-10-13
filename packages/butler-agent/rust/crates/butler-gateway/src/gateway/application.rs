@@ -1,5 +1,7 @@
 //! Durable application service behind the native App HTTP facade.
 
+mod assets;
+pub use assets::AppAssetCommand;
 mod admission;
 mod admission_identity;
 mod authority_permissions;
@@ -44,6 +46,7 @@ pub use memory_management::{AppMemoryCommand, AppMemoryPort, MemoryEventSink};
 mod outputs;
 mod plan_decisions;
 mod progress_view;
+pub mod project_folder;
 mod project_sources;
 mod projection;
 mod projects;
@@ -68,6 +71,7 @@ mod session_views;
 mod sessions;
 pub(super) mod settings;
 mod setup;
+mod skill_settings;
 mod subsession_events;
 mod task_graphs;
 pub use task_graphs::{
@@ -208,6 +212,7 @@ pub struct AppApplication {
     queue_owner: String,
     butler_data: PathBuf,
     wallpapers: AppWallpaperFiles,
+    asset_cache: assets::AssetCache,
     settings_update_lock: Arc<tokio::sync::Mutex<()>>,
     plan_decision_locks: PlanDecisionLocks,
     setup_readiness: setup::ReadinessRelay,
@@ -303,6 +308,7 @@ impl AppApplication {
             project_dashboard_briefing: projects::ProjectDashboardBriefingOwner::new(),
             queue_owner,
             wallpapers: AppWallpaperFiles::new(&config.butler_data),
+            asset_cache: assets::AssetCache::default(),
             butler_data: config.butler_data,
             settings_update_lock: Arc::new(tokio::sync::Mutex::new(())),
             plan_decision_locks: PlanDecisionLocks::default(),

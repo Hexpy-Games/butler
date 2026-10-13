@@ -17,6 +17,8 @@ use super::{
 };
 
 pub(super) use super::providers::contracts::SearchResult;
+
+const OPEN_RESULTS: &str = "Open the results worth reading with browser_open {results:[ids]} (background tabs, in parallel), then web_read {tab} each one for its text.";
 use crate::web_access::WebAccessCode;
 pub(super) use parse::{is_duckduckgo_challenge, parse_results};
 
@@ -58,7 +60,7 @@ impl WebSession {
             .metrics()
             .record(&searched.provider, query, None);
         let search_ms = search_started.elapsed().as_millis();
-        Ok(project_search(
+        let mut result = project_search(
             query,
             coverage_limit,
             searched,
@@ -66,7 +68,29 @@ impl WebSession {
             total_started.elapsed().as_millis(),
             planning_ms,
             search_ms,
-        ))
+        );
+        self.identify_results(&mut result);
+        Ok(result)
+    }
+
+    /// Each result gets the id `browser_open` opens it by.
+    fn identify_results(&self, result: &mut Value) {
+        let Some(items) = result["results"].as_array_mut() else {
+            return;
+        };
+        let pairs = items
+            .iter()
+            .map(|item| {
+                let text = |key: &str| item[key].as_str().unwrap_or("").to_owned();
+                (text("url"), text("title"))
+            })
+            .collect::<Vec<_>>();
+        for (item, id) in items.iter_mut().zip(self.result_ids(&pairs)) {
+            item["id"] = json!(id);
+        }
+        if !pairs.is_empty() {
+            result["next"] = json!(OPEN_RESULTS);
+        }
     }
     async fn plan_search(
         &self,

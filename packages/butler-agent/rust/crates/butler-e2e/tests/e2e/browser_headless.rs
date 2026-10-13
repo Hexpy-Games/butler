@@ -7,11 +7,14 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod assets;
 mod backend;
 mod downloads;
 mod guard;
 mod hidden;
 mod identity;
+mod images;
+mod parallel;
 mod preview;
 mod real_app;
 mod selfcheck;

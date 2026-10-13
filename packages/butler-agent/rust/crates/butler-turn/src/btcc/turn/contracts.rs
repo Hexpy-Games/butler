@@ -147,6 +147,8 @@ pub struct FinalPayload {
     pub artifacts: Vec<FinalArtifact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changed_files: Vec<ChangedFileSummary>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub answer_blocks: Vec<serde_json::Value>,
     /// Passthrough: only pre-cutover payloads carry a plan; it is relayed as stored.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan: Option<Value>,
@@ -357,6 +359,7 @@ pub struct AgentLoopResult {
     pub runtime_failure: Option<RuntimeFailure>,
     pub artifacts: Vec<FinalArtifact>,
     pub changed_files: Vec<ChangedFileSummary>,
+    pub answer_blocks: Vec<serde_json::Value>,
     pub model_identity: Option<ModelIdentity>,
 }
 

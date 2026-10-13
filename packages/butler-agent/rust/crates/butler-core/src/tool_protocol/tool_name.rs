@@ -141,6 +141,7 @@ tool_names! {
     PreviewStart = "preview_start",
     PreviewStop = "preview_stop",
     OutputPublish = "output_publish",
+    AnswerBlocks = "answer_blocks",
     BrowserHistorySearch = "browser_history_search",
     LibrarySearch = "library_search",
     LibraryOrganize = "library_organize",

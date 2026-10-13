@@ -1,18 +1,30 @@
 import type { UserQuestion, UserQuestionAnswer, MessageRecord, AnsweredUserQuestions, PendingUserQuestions } from "@/app/types";
 import type { ComposerQuestion, QuestionAnswer } from "@/butler-ds";
 
+/** Concrete answers only: the card has its own Skip and free input, so options of those kinds never show. */
+function answerOptions(q: UserQuestion) {
+  return q.kind === "text" ? [] : q.options.filter(o => !o.kind || o.kind === "answer");
+}
 export function questionProps(questions: readonly UserQuestion[]): ComposerQuestion[] {
-  return questions.map(q => ({ id: q.id, header: q.eyebrow, text: q.title, type: q.kind,
-    options: q.options, allowOther: q.allow_custom }));
+  return questions.map(q => {
+    const options = answerOptions(q);
+    // No concrete answer left: a free-text question, one input.
+    if (!options.length) return { id: q.id, header: q.eyebrow, text: q.title, type: "text", options: [] };
+    return { id: q.id, header: q.eyebrow, text: q.title, type: q.kind, options, allowOther: q.allow_custom || options.length < q.options.length };
+  });
 }
 export function answerProps(questions: readonly UserQuestion[], answers: readonly UserQuestionAnswer[]): QuestionAnswer[] {
-  return answers.map(a => ({ id: a.id, selected: a.selected.map(id => questions.find(q => q.id === a.id)?.options.findIndex(o => o.id === id) ?? -1),
-    text: "", other: a.custom ?? "", skipped: a.skipped }));
+  return answers.map(a => {
+    const q = questions.find(q => q.id === a.id);
+    const options = q ? answerOptions(q) : [];
+    return { id: a.id, selected: a.selected.map(id => options.findIndex(o => o.id === id)), text: "", other: a.custom ?? "", skipped: a.skipped };
+  });
 }
 export function answerWire(questions: readonly UserQuestion[], answers: readonly QuestionAnswer[]): UserQuestionAnswer[] {
   return questions.map(q => {
     const a = answers.find(a => a.id === q.id);
-    return { id: q.id, selected: a?.selected.flatMap(i => q.options[i] ? [q.options[i].id] : []) ?? [],
+    const options = answerOptions(q);
+    return { id: q.id, selected: a?.selected.flatMap(i => options[i] ? [options[i].id] : []) ?? [],
       custom: a?.other.trim() || a?.text.trim() || null, skipped: a?.skipped ?? true };
   });
 }

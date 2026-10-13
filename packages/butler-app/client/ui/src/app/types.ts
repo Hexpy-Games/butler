@@ -1,3 +1,4 @@
+import type { AnswerBlockSet } from "../../../shared/app-contracts.ts";
 import type { ReactElement, ReactNode } from "react";
 // Relative (not `@/butler-ds`): the root typecheck reaches this file without the UI path aliases.
 import type { WallpaperSetting, WallpaperSource } from "../libs/design-system/blocks/Wallpaper/types.ts";
@@ -373,6 +374,7 @@ export type WebSearchProviderSetting =
   | "disabled";
 
 export type WebSearchReaderBackendSetting =
+  | "browser"
   | "lightweight"
   | "auto"
   | "lightpanda"
@@ -919,6 +921,7 @@ export interface MessageRecord {
     | "automation";
   text: string;
   plan_document?: PlanDocumentRecord;
+  answer_blocks?: Array<AnswerBlockSet>;
   attachments?: MessageFileRef[];
   artifacts?: SessionArtifactSummary[];
   changed_files?: ChangedFileDetail[];
@@ -1886,8 +1889,10 @@ export interface CalendarSchedule {
 }
 
 export interface UserQuestion {
-  id: string; eyebrow: string; title: string; kind: "single" | "multi"; allow_custom: boolean;
-  options: { id: string; label: string; description?: string; recommended?: boolean }[];
+  /** `text`: a free-text answer with no options. */
+  id: string; eyebrow: string; title: string; kind: "single" | "multi" | "text"; allow_custom: boolean;
+  /** `skip` and `input` duplicate the card's own Skip and free input; the runtime drops them. */
+  options: { id: string; label: string; description?: string; recommended?: boolean; kind?: "answer" | "skip" | "input" }[];
 }
 export interface PendingUserQuestions {
   request_ref: string; source_turn_id: string; source_session_id: string;

@@ -7,12 +7,14 @@ import { BrowserWindow } from "electron";
 import { guardUrl, installNavigationGuard } from "./guard.mjs";
 import { agentPopupAllowed } from "./popup-policy.mjs";
 import { observeTab } from "./observe.mjs";
+import { readTab } from "./reader-render.mjs";
 import { prepareBatch, actBatch } from "./act.mjs";
-import { screenshotTab } from "./capture.mjs";
+import { screenshotTab, collectImage } from "./capture.mjs";
 import { zoomTab } from "./zoom.mjs";
 import { applySignedInPolicy, revokeSignedInSite, signedInPlace } from "./signed-in.mjs";
 import { fillSignIn } from "./signin-fill.mjs";
 import { fillPay, inspectPay } from "./pay-fill.mjs";
+import { makeAgentRoom } from "./capacity.mjs";
 
 export function controlTab(browser, tab, holder, sticky = false) {
   if (!tab || tab.owner === "mine") return;
@@ -26,13 +28,17 @@ export function controlTab(browser, tab, holder, sticky = false) {
 }
 export function wireAgentTab(browser, tab) {
   const contents = tab.view.webContents;
-  contents.once("did-finish-load", () => { tab.loaded = true; emulation(tab); });
+  // A new document can get a new page widget without the emulated metrics, and
+  // the page would then perceive the pane's size: every committed document
+  // gets them again, wherever the tab is attached.
+  contents.on("did-finish-load", () => { tab.loaded = true; emulation(tab); });
+  contents.on("dom-ready", () => emulation(tab));
   contents.setBackgroundThrottling(false);
 
   contents.on("did-frame-navigate", () => { tab.epoch++; tab.observation = null; browser.publish(); });
   contents.on("did-navigate-in-page", () => { tab.epoch++; tab.observation = null; browser.publish(); });
   // A new top-level page holds no field Butler filled from a saved item.
-  contents.on("did-navigate", () => { tab.vaultFilled = false; });
+  contents.on("did-navigate", () => { tab.vaultFilled = false; emulation(tab); });
   const takeover = input => {
     if (!tab.expectedInputs?.some(expected => expected.type === input.type && (expected.x === undefined || expected.x === input.x && expected.y === input.y)) && tab.holder === "agent" && ["mouseDown", "keyDown"].includes(input.type)) controlTab(browser, tab, "user");
   };
@@ -113,7 +119,7 @@ export async function executeBrowser(browser, frame) {
   }
   if (frame.op === "use.signin_revoked") { if (typeof frame.args?.site === "string") revokeSignedInSite(browser, frame.args.site, controlTab); return; }
   if (frame.op === "use.finished") { finishUse(browser, frame.session, frame.turn_id); return; }
-  const tracked = ["tab.open", "tab.observe", "tab.zoom", "tab.screenshot", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill", "pay.inspect", "pay.fill", "autofill.fill"].includes(frame.op);
+  const tracked = ["tab.open", "tab.observe", "tab.read", "tab.zoom", "tab.screenshot", "tab.image_collect", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill", "pay.inspect", "pay.fill", "autofill.fill"].includes(frame.op);
   // Direct main-only harness calls have no gateway id, but use the same lifetime.
   if (tracked && !frame.id) { frame = { ...frame, id: randomUUID() }; startUse(browser, frame); }
   try { return await executeCall(browser, frame, tracked); }
@@ -163,8 +169,7 @@ async function executeFrame(browser, frame) {
   if (!tab.agent && !tab.driven) {
     tab.policy=args.policy ?? {};
     if (!await guardUrl(tab.url,tab.view.webContents.session,tab.policy)) return {status:"not_dispatched",reason:"navigation_denied"};
-    const agents=[...browser.tabs.values()].filter(item=>item.agent || item.driven);
-    if (agents.length>=6 || agents.filter(item=>item.owner===owner).length>=3) return {status:"not_dispatched",reason:"tab_budget_exhausted"};
+    if (!makeAgentRoom(browser, tab)) return {status:"not_dispatched",reason:"tab_budget_exhausted"};
     tab.driven=true;tab.onPointer=(step,target)=>browser.pointer.step(tab,step,target);tab.loaded=!tab.view.webContents.isLoading();
     wireAgentTab(browser,tab);backgroundTab(browser,tab);
     await new Promise(resolve=>setTimeout(resolve,0));
@@ -172,6 +177,8 @@ async function executeFrame(browser, frame) {
   }
   if (!browser.uses.has(frame.id)) return { status: "unknown", reason: "cancelled" };
   if (op === "tab.observe") return observeTab(tab, args);
+  if (op === "tab.read") return readTab(tab);
+  if (op === "tab.image_collect") return collectImage(tab, args);
   if (op === "tab.screenshot") return screenshotTab(tab, args);
   if (op === "tab.zoom") return zoomTab(tab, args);
   if (op === "tab.prepare") return prepareBatch(tab, args);
@@ -179,7 +186,7 @@ async function executeFrame(browser, frame) {
   if (op === "pay.inspect") return inspectPay(browser, tab, args, controlTab);
   if (op === "pay.fill" || op === "autofill.fill") return fillPay(browser, tab, args, controlTab);
   if (op === "tab.act") {
-    if (new Set([...browser.tabs.values()].filter(item=>item.busy).map(item=>item.owner)).size>=2 && ![...browser.tabs.values()].some(item=>item.busy && item.owner===owner)) return {status:"not_dispatched",reason:"browser_busy"};
+    // Tabs act independently; only a second batch on a tab whose batch still runs is refused.
     if (tab.busy) return { status: "not_dispatched", reason: "browser_busy" };
     tab.busy = true; tab.cancelled = false; tab.callId = frame.call_id; browser.publish();
     try { return await actBatch(tab, { ...args, deadline_ms: frame.deadline_ms }, session); }
@@ -199,10 +206,20 @@ function parsed(contents, url) {
 async function openAgent(browser, { session, args, id: callId }, source) {
   const signedIn = args.profile === "signed_in" || args.signed_in === true;
   if (signedIn && (args.policy?.mode !== "signed_in" || signedInPlace(args.url, args.policy) !== "granted")) return { status: "refused", reason: "signed_in_unavailable" };
-  const agentTabs = [...browser.tabs.values()].filter(tab => tab.agent);
-  if (agentTabs.length >= 6 || agentTabs.filter(tab => tab.owner === `conversation:${session}`).length >= 3) return { status: "refused", reason: "tab_budget_exhausted" };
-  const driving = new Set(agentTabs.filter(tab => tab.holder === "agent").map(tab => tab.owner));
-  if (driving.size >= 2 && !driving.has(`conversation:${session}`)) return { status: "not_dispatched", reason: "browser_busy" };
+  if (!makeAgentRoom(browser)) return { status: "refused", reason: "tab_budget_exhausted" };
+  const opening = openingBurst(browser, `conversation:${session}`);
+  try { return await openTab(browser, { session, args, callId, signedIn, source, opening }); }
+  finally { if (--opening.count === 0) browser.opening.delete(`conversation:${session}`); }
+}
+// Opens that overlap form one burst: its first page to arrive is shown, the
+// rest stay in the background, so parallel tabs never flip the visible one.
+function openingBurst(browser, owner) {
+  browser.opening ??= new Map();
+  const burst = browser.opening.get(owner) ?? { count: 0, shown: false };
+  burst.count++; browser.opening.set(owner, burst);
+  return burst;
+}
+async function openTab(browser, { session, args, callId, signedIn, source, opening }) {
   const id = browser.create({ owner: `conversation:${session}`, url: args.url, preview_id: args.preview_id, agent: true, policy: args.policy, partition: source?.partition, profile: source?.profile ?? (signedIn ? "signed_in" : undefined) }, false);
   const tab = browser.tabs.get(id);
   tab.onPointer=(step,target)=>browser.pointer.step(tab,step,target);
@@ -219,7 +236,8 @@ async function openAgent(browser, { session, args, id: callId }, source) {
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
   touch(browser, tab);
   // The renderer activates through the normal detach/attach path only for its visible owner.
-  if (!source) browser.focusRequest = id;
+  // Search results open as background tabs: the user stays where they are.
+  if (!source && args.background !== true && !opening.shown) { opening.shown = true; browser.focusRequest = id; }
   browser.publish();
   return { status: "ok", tab: id, url: tab.url, title: tab.title, epoch: tab.epoch, profile: tab.profile };
 }

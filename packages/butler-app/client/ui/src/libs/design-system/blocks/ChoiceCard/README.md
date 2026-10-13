@@ -18,6 +18,11 @@ one-line description). `ChoiceCardList` and `ChoiceTileGrid` lay them out.
 `state`: `default`, `loading` (spinner, `aria-busy`), `error` (danger border
 and description), `disabled` (dimmed, `aria-disabled`; clicks are ignored).
 
+## Alignment
+In a `ChoiceCard` the logo tile and the trailing chevron or meta center on the
+title's line (the first line), never on title + description; the description
+runs below the title.
+
 ## Equal size
 Tiles in a grid are always the same size: rows are `1fr`, the name sits in a
 fixed two-line box (clamped with an ellipsis after two lines) and the
@@ -34,6 +39,12 @@ import { ChoiceCard, ChoiceCardList, ProviderLogo, Tag } from "@/butler-ds";
     tag={<Tag tone="accent">No key needed</Tag>} description="Sign in with ChatGPT" onClick={pick} />
 </ChoiceCardList>
 ```
+
+## Picking several
+Pass `role="group"` on `ChoiceCardList`; each card takes `role="checkbox"`,
+`aria-checked`, `selected`, `chevron={false}` and, when picked, a `CheckIcon`
+as `meta` (the check sits on the right). Use this, not a list of `Switch`es,
+when people pick items to bring in or act on.
 
 ## Wrong use cases
 - Do not use it for a form value; use `Select` or `SegmentedControl`.

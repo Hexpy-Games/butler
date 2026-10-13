@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
 import { appCopy } from "@/app/copy";
-import { Button, ButtonContainer, CheckIcon, EmptyLine, FieldLegend, FieldSet, FileText, Globe2, ListRow, Square, Stack, Tooltip } from "@/butler-ds";
+import {
+  Button, ButtonContainer, EmptyLine, Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet, FileText, Globe2, ListRow, Stack, Switch,
+  Tooltip,
+} from "@/butler-ds";
 import type { ImportSource } from "./signInsApi";
-import type { useBrowserImport } from "./useBrowserImport";
+import type { useBrowserImport } from "../imports/useBrowserImport";
 
 const BRANDS: Record<string, string> = { chrome: "Chrome", chromium: "Chromium", edge: "Edge", brave: "Brave", arc: "Arc", whale: "Whale", firefox: "Firefox", zen: "Zen", safari: "Safari" };
 // Whale icon: the official favicon from shared-whale.pstatic.net (Naver trademark).
@@ -13,27 +16,39 @@ function withHint(hint: string | undefined, key: string, control: ReactNode) {
   return hint ? <Tooltip key={key} label={hint}>{control}</Tooltip> : control;
 }
 
-/** What every import includes, chosen once above the sources. */
+/** What every import includes, chosen once above the sources: one DS Switch per item, so on and off read alike everywhere. */
 export function BrowserImportItems({ flow, keychain }: { flow: ImportFlow; keychain: boolean }) {
   const copy = appCopy.settings.browserImport;
   const items = [
-    { label: copy.bookmarks, on: flow.bookmarks, set: flow.setBookmarks, hint: undefined },
-    { label: copy.passwords, on: flow.passwords, set: flow.setPasswords, hint: keychain ? undefined : copy.needsKeychain },
-    { label: copy.history, on: flow.history, set: flow.setHistory, hint: undefined },
+    { id: "bookmarks", label: copy.bookmarks, on: flow.bookmarks, set: flow.setBookmarks, hint: undefined },
+    { id: "passwords", label: copy.passwords, on: flow.passwords, set: flow.setPasswords, hint: keychain ? undefined : copy.needsKeychain },
+    { id: "history", label: copy.history, on: flow.history, set: flow.setHistory, hint: undefined },
   ];
   return (
     <FieldSet>
       <FieldLegend variant="label">{copy.chooseItems}</FieldLegend>
-      <ButtonContainer size="sm">
-        {items.map(item => withHint(item.hint, item.label,
-          <Button key={item.label} size="sm" variant="ghost" role="checkbox" aria-checked={item.on} disabled={flow.busy}
-            iconStart={item.on ? <CheckIcon size="sm" /> : <Square size="sm" />} onClick={() => item.set(!item.on)}>{item.label}</Button>))}
-      </ButtonContainer>
+      <FieldGroup>
+        {items.map(item => (
+          <Field key={item.id} orientation="horizontal" data-browser-import-item={item.id}>
+            <Switch id={`browser-import-${item.id}`} size="sm" checked={item.on} disabled={flow.busy}
+              aria-describedby={item.hint ? `browser-import-${item.id}-hint` : undefined} onCheckedChange={item.set} />
+            <FieldContent>
+              <FieldLabel htmlFor={`browser-import-${item.id}`}>{item.label}</FieldLabel>
+              {item.hint ? <FieldDescription id={`browser-import-${item.id}-hint`}>{item.hint}</FieldDescription> : null}
+            </FieldContent>
+          </Field>
+        ))}
+      </FieldGroup>
     </FieldSet>
   );
 }
 
-function BrandIcon({ browser }: { browser: string }) {
+/** Brand name of a detected browser; unknown browsers keep their own id. */
+export function browserBrand(browser: string): string {
+  return BRANDS[browser] ?? browser;
+}
+
+export function BrandIcon({ browser }: { browser: string }) {
   if (!BRANDS[browser]) return <Globe2 size="md" />;
   return <img src={`/browser-icons/${browser}.${browser === "whale" ? "png" : "svg"}`} width={20} height={20} alt="" />;
 }
@@ -41,7 +56,7 @@ function BrandIcon({ browser }: { browser: string }) {
 /** One detected profile: brand, profile name and its own import action. */
 function SourceRow({ source, flow, blocked, hint }: { source: ImportSource; flow: ImportFlow; blocked: boolean; hint?: string }) {
   const copy = appCopy.settings.browserImport;
-  const brand = BRANDS[source.browser] ?? source.browser;
+  const brand = browserBrand(source.browser);
   const denied = source.permission === "denied";
   const profile = denied ? copy.fullDiskAccess : source.name === brand ? undefined : source.name;
   const action = denied ? copy.pickFolder : copy.run;

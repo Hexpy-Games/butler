@@ -4,7 +4,6 @@ import { afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { ShieldCheck } from "../../components/Icons";
 import { SetupWizardShell } from "../SetupWizardShell";
 import { SetupWizardStepAction, SetupWizardStepCard } from "./SetupWizardStepCard";
 
@@ -41,7 +40,7 @@ afterEach(async () => {
 
 function card(contentKey: string, onBack?: () => void) {
   return (
-    <SetupWizardStepCard activeIndex={1} backLabel="Back" contentKey={contentKey} icon={<ShieldCheck size="lg" />} onBack={onBack}
+    <SetupWizardStepCard activeIndex={1} backLabel="Back" contentKey={contentKey} onBack={onBack}
       progressLabel="Setup steps" steps={STEPS} title={`Step ${contentKey}`} titleId="step-title"
       actions={<><SetupWizardStepAction text="Decline" /><SetupWizardStepAction forward text="Continue" /></>} />
   );

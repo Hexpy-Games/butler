@@ -44,14 +44,14 @@ async fn newer_password_update_and_restart_undo_restore_keychain_secret() -> Res
         Ok(())
     };
     let body = json!({"source":"file","bookmarks":false,"passwords":true,"passwords_path":path});
-    write(OLD, Some(1700000000000))?;
+    write(OLD, Some(1_700_000_000_000))?;
     let original = post(&a, "start", body.clone()).await?;
     assert_eq!(original["passwords"], 1);
     let view = a.send(Method::GET, "/security/signins", None, &[]).await?;
     let entry = view.data()["sites"][0]["entry"].clone();
     let mut cleanup = super::fill::Cleanup::new(&a);
     cleanup.track(entry["id"].as_str().unwrap());
-    for time in [None, Some(1690000000000), Some(1700000000000)] {
+    for time in [None, Some(1_690_000_000_000), Some(1_700_000_000_000)] {
         write(NEW, time)?;
         let skipped = post(&a, "start", body.clone()).await?;
         assert_eq!(skipped["updated"], 0);

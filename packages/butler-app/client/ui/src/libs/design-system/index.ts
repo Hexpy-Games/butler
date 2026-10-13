@@ -71,6 +71,7 @@ export * from "./components/IconSlot";
 export * from "./components/IconTile";
 export * from "./components/ProviderLogo";
 export * from "./components/AspectFrame";
+export * from "./components/MediaFrame";
 export * from "./components/GlyphToggle";
 
 // Blocks
@@ -160,6 +161,8 @@ export * from "./blocks/SelectionBar";
 export * from "./blocks/DragPreview";
 export * from "./blocks/ElementChip";
 export * from "./blocks/LibraryCard";
+export * from "./blocks/ItemCard";
+export * from "./blocks/ImageViewer";
 export * from "./blocks/GroupTile";
 export * from "./blocks/TagField";
 export * from "./blocks/PopupWindowChrome";

@@ -1,0 +1,124 @@
+/* A fixed-shape slot on the neutral matte. Pictures are never tinted or
+   inverted in dark mode; only the matte follows the theme. */
+.frame {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  min-width: 0;
+  aspect-ratio: 16 / 10;
+  border-radius: var(--radius-control);
+  background: var(--muted);
+}
+
+.frame[data-aspect="1:1"] {
+  aspect-ratio: 1;
+}
+
+.frame[data-aspect="4:5"] {
+  aspect-ratio: 4 / 5;
+}
+
+.frame[data-aspect="3:4"] {
+  aspect-ratio: 3 / 4;
+}
+
+.frame[data-aspect="16:9"] {
+  aspect-ratio: 16 / 9;
+}
+
+/* A typical picture spans the frame and is contained in it, letterboxed on
+   the matte. An extreme one (a heading strip, a tall column) would become a
+   full-width band of its own page colour, flush with the frame's edges and
+   split by matte bars, which reads as a spill: it sits whole, inset on the
+   matte with a hairline frame. The picture box is one definite track, so the
+   matted picture's max-height resolves against it. Until its shape is known
+   the picture stays hidden. */
+.picture {
+  position: absolute;
+  display: grid;
+  inset: 0;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  place-items: center;
+}
+
+.frame[data-fit="matte"] .picture {
+  inset: var(--space-md);
+}
+
+/* A corner overlay (a kind tag) keeps the matted picture's top clear. */
+.frame[data-fit="matte"][data-clear-top] .picture {
+  top: calc(var(--tag-height-sm) + var(--space-sm));
+}
+
+.image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.frame[data-fit="pending"] .image {
+  visibility: hidden;
+}
+
+.frame[data-fit="fill"] .image {
+  width: 100%;
+  height: 100%;
+}
+
+.frame[data-fit="matte"] .image {
+  border-radius: calc(var(--radius-control) / 2);
+  box-shadow:
+    0 0 0 var(--border-hairline) var(--line),
+    var(--browser-card-shadow);
+}
+
+/* Cover: the picture fills the frame, cropped from the center. */
+.frame[data-fit="cover"] .image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* Placeholder: a missing or broken picture on a soft tinted surface with one
+   centered mark, the same shape as a picture so a row keeps its rhythm. */
+.frame[data-placeholder] {
+  background:
+    radial-gradient(
+      circle at 50% 45%,
+      color-mix(in srgb, var(--accent) 10%, transparent),
+      transparent 72%
+    ),
+    var(--muted);
+}
+
+.placeholder {
+  position: absolute;
+  display: grid;
+  inset: 0;
+  place-items: center;
+}
+
+.glyph {
+  display: grid;
+  color: var(--icon-muted);
+}
+
+/* Favicons are drawn for light pages: a light plate keeps them readable in dark mode. */
+.plate {
+  display: grid;
+  width: var(--icon-size-2xl);
+  height: var(--icon-size-2xl);
+  place-items: center;
+  border-radius: var(--radius-control);
+  background: var(--favicon-plate);
+  box-shadow: 0 0 0 var(--border-hairline) var(--favicon-plate-line);
+}
+
+.favicon {
+  display: block;
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
+  object-fit: contain;
+}

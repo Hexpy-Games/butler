@@ -31,6 +31,7 @@ impl SqliteSubsessionRepository {
                 let mut files = JournalCloseout {
                     artifacts: Vec::new(),
                     changed_files: Vec::new(),
+                    answer_blocks: Vec::new(),
                 };
                 for raw in rows {
                     let Some(raw) = raw.map_err(StorageError::sqlite)? else {

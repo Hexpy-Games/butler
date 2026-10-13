@@ -204,6 +204,13 @@ def js_components():
             revision = "8ca9ba5ea52de03308fe8ced94f7b159a44d28ff"
             url = f"https://raw.githubusercontent.com/theKashey/react-remove-scroll-bar/{revision}/LICENSE"
             files = [(url, fetch(url))]
+        if name == "woff2sfnt-sfnt2woff" and version == "1.0.0" and not files:
+            # The pinned distribution declares MIT and its copyright in source,
+            # but omits the license body. Keep both declarations and link MIT.
+            header = (directory / "index.js").read_text().split("*/", 1)[0] + "*/"
+            files = [("index.js (upstream MIT copyright declaration)", header),
+                     ("package.json (upstream MIT declaration)", (directory / "package.json").read_text()),
+                     ("Full MIT license (upstream omits text)", fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt"))]
         if not files:
             raise ValueError(f"Missing npm license evidence: {name} {version}")
         if name == "electron":

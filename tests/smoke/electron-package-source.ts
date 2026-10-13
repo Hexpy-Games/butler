@@ -1,9 +1,11 @@
 // test-category: format-pin
 /** Load the release-staged shell, including its browser menu imports. */
 import { strict as assert } from "node:assert";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { stageElectronPackageSource } from "../../packages/butler-app/scripts/release/electron-package-source.ts";
 import { spawnElectron, stopElectronChild } from "../support/electron-child.ts";
 import { smokeElectronArgs } from "../support/smoke-browser.ts";
@@ -21,6 +23,20 @@ try {
   assert.ok(existsSync(join(source, "i18n/native-context-menu.mjs")));
   assert.equal(existsSync(join(source, "butler-platform/link-menu-smoke-capture.mjs")), false);
   assert.equal(existsSync(join(source, "butler-platform/link-menu-smoke-windows.swift")), false);
+  const font = resolve("packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/IBMPlexMono-Regular-Latin1.woff2");
+  const subsetter = pathToFileURL(join(source, "browser/snapshot-font.mjs")).href;
+  const fontLog = join(evidence, "packaged-font.log"), writer = openSync(fontLog, "w");
+  try {
+    const code = `import {readFileSync} from 'node:fs';import {subsetSnapshotFont} from ${JSON.stringify(subsetter)};
+      const bytes=await subsetSnapshotFont(readFileSync(${JSON.stringify(font)}),'Office ffi 123');console.log(bytes.length)`;
+    const script = join(dir, "font-smoke.mjs"); writeFileSync(script, code);
+    const result = spawnSync(executable, [script], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, stdio: ["ignore", writer, writer], timeout: 30_000,
+    });
+    assert.equal(result.status, 0, readFileSync(fontLog, "utf8"));
+    const bytes = Number(readFileSync(fontLog, "utf8").trim());
+    assert.ok(bytes > 0 && bytes < readFileSync(font).length, "staged worker and font dependencies produce a subset");
+  } finally { closeSync(writer); }
   const home = join(dir, "home"); mkdirSync(home);
   const data = join(dir, "data"); mkdirSync(data);
   const profile = join(dir, "profile"); mkdirSync(profile);

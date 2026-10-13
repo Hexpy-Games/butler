@@ -8,8 +8,6 @@ import {
   ChoiceTileGrid,
   Inline,
   Notice,
-  RefreshCcw,
-  Sparkles,
   Spinner,
   Stack,
   Button,
@@ -30,13 +28,13 @@ export function FirstRunProviderList({ flow }: { flow: FirstRunFlow }) {
   // Run setup again opens "more" when the AI in use is there.
   const [expanded, setExpanded] = useState(() => Boolean(flow.currentCardId && layout.more.includes(flow.currentCardId)));
   return (
-    <FirstRunStepCard flow={flow} contentKey="providers" icon={<Sparkles size="lg" />} title={copy.connectTitle}
+    <FirstRunStepCard flow={flow} contentKey="providers" title={copy.connectTitle}
       titleId="first-run-connect-title" description={copy.connectLede} onBack={flow.backFromConnect}
       footerStart={<Button
         aria-controls="first-run-more-providers" aria-expanded={expanded}
         iconEnd={expanded ? <ChevronUpIcon size="sm" /> : <ChevronDown size="sm" />}
-        size="sm" text={expanded ? copy.showLess : copy.moreProviders(layout.more.length - (layout.localPlaceholder ? 1 : 0))}
-        type="button" variant="link" onClick={() => setExpanded((value) => !value)}
+        size="sm" text={expanded ? copy.showLess : copy.moreProviders(layout.more.length)}
+        type="button" variant="inline" onClick={() => setExpanded((value) => !value)}
       />}
     >
       {flow.online ? null : <Notice tone="warning" icon={<Globe2 size="md" />} message={copy.offline} />}
@@ -63,9 +61,7 @@ export function FirstRunProviderList({ flow }: { flow: FirstRunFlow }) {
 function TopCard({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: FirstRunFlow }) {
   const view = providerCardView(cardId, flow, "card");
   const current = flow.currentCardId === cardId;
-  const tag = current ? <Tag tone="accent">{flow.copy.tagCurrent}</Tag>
-    : view.tag === "noKey" ? <Tag tone="accent">{flow.copy.tagNoKey}</Tag>
-      : view.tag === "local" ? <Tag tone="success">{flow.copy.tagLocal}</Tag> : null;
+  const tag = current ? <Tag tone="accent">{flow.copy.tagCurrent}</Tag> : null;
   return (
     <ChoiceCard
       aria-current={current ? true : undefined}
@@ -83,21 +79,17 @@ function TopCard({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: First
 
 function MoreTile({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: FirstRunFlow }) {
   const view = providerCardView(cardId, flow, "tile");
-  const placeholder = cardId === "local";
   const current = flow.currentCardId === cardId;
   return (
     <ChoiceTile
       aria-current={current ? true : undefined}
       selected={current}
-      aria-label={placeholder ? `${flow.copy.providerNames.local}. ${flow.copy.localMissing}. ${flow.copy.rescan}` : undefined}
-      cornerIcon={placeholder && view.state !== "loading" ? <RefreshCcw size="xs" /> : undefined}
       data-card-id={cardId}
       description={view.description}
       icon={<CardGlyph cardId={cardId} size="md" />}
-      placeholder={placeholder}
       state={view.state}
       title={flow.copy.providerNames[cardId]}
-      onClick={() => (placeholder ? flow.local.rescan() : flow.pick(cardId))}
+      onClick={() => flow.pick(cardId)}
     />
   );
 }

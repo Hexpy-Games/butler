@@ -20,6 +20,7 @@ const DISCOVERY: &[&str] = &[
     "list_files",
 ];
 const NON_FULL: &[&str] = &[
+    "answer_blocks",
     "output_check",
     "output_publish",
     "run_command",
@@ -298,7 +299,13 @@ fn apply_access_mode(
 }
 
 /// Only the butler may delegate to stewards and only a steward to workers.
+/// Stewards and workers report to their parent instead of answering the
+/// user, so they never show answer blocks: a child's blocks would be accepted
+/// but never reach the conversation.
 fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
+    if matches!(policy.role, PolicyRole::Steward | PolicyRole::Worker) {
+        names.remove("answer_blocks");
+    }
     for (role, tools) in [("butler", STEWARD_PARENT), ("steward", WORKER_DELEGATION)] {
         if policy.role.as_str() == role {
             names.extend(tools.iter().map(|name| (*name).to_owned()));
@@ -311,7 +318,8 @@ fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
 }
 
 /// Tools every legacy surface shows.
-const LEGACY_BASE: [&str; 19] = [
+const LEGACY_BASE: [&str; 20] = [
+    "answer_blocks",
     "tool_search",
     "tool_describe",
     "tool_call",
@@ -423,6 +431,11 @@ pub(super) fn phase_allows(phase: GuidedPhase, tool: &GuidedCatalogTool) -> bool
             | "browser_pay_fill"
             | "browser_autofill_fill"
     ) {
+        return true;
+    }
+    if tool.effect_boundary.as_deref() == Some("turn_local")
+        && tool.category.as_deref() == Some("message")
+    {
         return true;
     }
     if tool.effect_boundary.as_deref() != Some("none") {

@@ -23,7 +23,7 @@ pub(crate) struct Rect {
 }
 
 impl Rect {
-    fn overlaps(self, other: Self) -> bool {
+    pub(super) fn overlaps(self, other: Self) -> bool {
         self.x < other.x + other.width
             && other.x < self.x + self.width
             && self.y < other.y + other.height
@@ -167,7 +167,7 @@ pub(crate) async fn observation_image(
 }
 
 /// A viewport crop in page coordinates for `Page.captureScreenshot`.
-async fn clip(page: &Page, rect: Rect, scale: f64) -> Result<Value, String> {
+pub(super) async fn clip(page: &Page, rect: Rect, scale: f64) -> Result<Value, String> {
     let viewport = page.viewport().await?;
     Ok(
         json!({"x":rect.x + num(&viewport["x"], 0.0),"y":rect.y + num(&viewport["y"], 0.0),"width":rect.width,"height":rect.height,"scale":scale}),

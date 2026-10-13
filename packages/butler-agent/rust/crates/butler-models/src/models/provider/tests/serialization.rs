@@ -94,6 +94,8 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
         description: "discover".into(),
         parameters: Map::new(),
         concurrency_safe: None,
+        transcript_visibility: None,
+        handler_validates_arguments: None,
         tool_contract_version: None,
     }];
     request.tools = &replacement;
@@ -149,6 +151,8 @@ fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fen
             description: "Search".into(),
             parameters: Map::new(),
             concurrency_safe: None,
+            transcript_visibility: None,
+            handler_validates_arguments: None,
             tool_contract_version: None,
         }];
         let mut request = request(
@@ -212,6 +216,8 @@ fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fen
             description: "Search".into(),
             parameters: Map::new(),
             concurrency_safe: None,
+            transcript_visibility: None,
+            handler_validates_arguments: None,
             tool_contract_version: None,
         }];
         let mut input = request(
@@ -279,6 +285,8 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
         description: "Search".into(),
         parameters: Map::new(),
         concurrency_safe: None,
+        transcript_visibility: None,
+        handler_validates_arguments: None,
         tool_contract_version: None,
     }];
     let messages = [

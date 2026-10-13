@@ -1,11 +1,17 @@
 //! Conversation-owned browser tools; web content cannot select authority or owners.
+mod assets;
 mod authority;
+pub(super) use assets::lookup_assets;
 mod client;
 mod dialog;
 mod effect;
 mod grant;
 pub(super) mod images;
+mod live;
+pub(super) use live::page as live_page;
+mod look;
 mod observe_after;
+mod open;
 mod pay;
 mod preview;
 mod signin;
@@ -29,12 +35,20 @@ pub(super) fn supports(name: &str) -> bool {
             | "browser_tabs"
             | "browser_selection"
             | "browser_screenshot"
+            | "image_collect"
             | "browser_close"
             | "browser_wait_for_user"
             | "browser_sign_in"
             | "browser_pay_fill"
             | "browser_autofill_fill"
     )
+}
+fn admitted(owner: &GuidedTools, name: &str) -> bool {
+    owner
+        .binding
+        .allowed_tools_and_effects
+        .as_ref()
+        .is_none_or(|names| names.iter().any(|allowed| allowed == name))
 }
 pub(super) async fn execute(
     owner: &GuidedTools,
@@ -43,12 +57,7 @@ pub(super) async fn execute(
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let mut args = Value::Object(call.arguments.clone());
-    if owner
-        .binding
-        .allowed_tools_and_effects
-        .as_ref()
-        .is_some_and(|names| !names.iter().any(|name| name == &call.name))
-    {
+    if !admitted(owner, &call.name) {
         return finish_batch(
             &args,
             json!({"status":"not_dispatched","reason":"tool_not_admitted"}),
@@ -72,23 +81,19 @@ pub(super) async fn execute(
     if call.name == "browser_sign_in" || call.name.ends_with("_fill") {
         return pay::execute(owner, invocation, call, occurrence, client, args).await;
     }
-    // look "never" asks for a text-only observation: no screenshot, no vision.
-    let text_only =
-        call.name == "browser_observe" && args["look"] == "never" && args.get("region").is_none();
-    if matches!(call.name.as_str(), "browser_observe" | "browser_screenshot") {
-        if !text_only
-            && !client
-                .vision(&invocation.model_execution.active_model_ref())
-                .await
-        {
-            return encoded(&json!({"status":"unavailable","reason":"vision_required"}));
-        }
-        if call.name == "browser_observe" {
-            args["include_image"] = json!(!text_only);
-        }
+    if call.name == "browser_open" && args.get("results").is_some() {
+        return open::execute(owner, invocation, call, occurrence, client).await;
     }
     // A region makes the observation a close-up of the newest observation.
     let zoom = call.name == "browser_observe" && args.get("region").is_some();
+    let model = invocation.model_execution.active_model_ref();
+    let requested = look::requested(&call.name, &args, zoom);
+    let Some(pixels) = look::admitted(&client, &model, requested).await else {
+        return encoded(&json!({"status":"unavailable","reason":"vision_required"}));
+    };
+    if call.name == "browser_observe" {
+        args["include_image"] = pixels.include();
+    }
     let request = (host_op(&call.name, zoom), &args["tab"], &args);
     let mut result = grant::call(
         owner,
@@ -99,8 +104,12 @@ pub(super) async fn execute(
         invocation.cancellation,
     )
     .await?;
+    if call.name == "browser_open" {
+        open::remember(owner, &args, &result);
+    }
+    assets::model_result(&call.name, &mut result);
     let image_class = if zoom { "browser_zoom" } else { &call.name };
-    if !text_only {
+    if pixels == look::Pixels::Always || result.get("image").is_some() {
         images::finish(owner, image_class, &mut result).await?;
     }
     if result["status"] == "dialog_pending" {
@@ -111,6 +120,7 @@ pub(super) async fn execute(
     } else if call.name == "browser_observe" && result["status"] == "ok" {
         project_observation(&mut result);
     }
+    super::answer_blocks::remember_browser_source(owner, call, occurrence, &result).await?;
     encode_page_data(result)
 }
 fn host_op(name: &str, zoom: bool) -> &'static str {
@@ -120,6 +130,7 @@ fn host_op(name: &str, zoom: bool) -> &'static str {
         "browser_observe" => "tab.observe",
         "browser_selection" => "tab.selection",
         "browser_screenshot" => "tab.screenshot",
+        "image_collect" => "tab.image_collect",
         "browser_close" => "tab.close",
         _ => "tabs.list",
     }
