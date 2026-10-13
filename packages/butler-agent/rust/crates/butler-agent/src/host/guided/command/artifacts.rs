@@ -236,6 +236,15 @@ fn verified_source(path: &Path, workspace: &Path, generated: &Path) -> Option<(P
     if !real.starts_with(workspace) && !real.starts_with(generated) {
         return None;
     }
+    // Copies land in a folder later commands read; never publish project
+    // metadata or secrets that the command itself could not read.
+    if real.strip_prefix(workspace).is_ok_and(|relative| {
+        relative.components().any(|part| {
+            butler_platform::command_sandbox::secret_name(&part.as_os_str().to_string_lossy())
+        })
+    }) {
+        return None;
+    }
     let before = fs::symlink_metadata(&real).ok()?;
     if !before.is_file() || before.file_type().is_symlink() {
         return None;
