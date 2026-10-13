@@ -14,6 +14,7 @@ mod path_messages;
 mod target_scope;
 pub use target_scope::{ScopeRoots, TargetScope, classify_targets};
 mod reference;
+mod session_folder;
 mod session_recovery;
 mod session_worktree;
 mod status;
@@ -43,6 +44,11 @@ pub use mutations::{
 pub use mutations::{net_changed_file_detail, prepare_exact_text};
 pub use path_guard::{PathForm, looks_sensitive, safe_workspace_path};
 pub use reference::WorkspaceReference;
+pub use session_folder::{
+    FolderInspection, FolderRefusal, FolderRelation, FolderRoots, SESSION_FOLDER_KEY,
+    SessionFolderMarker, SessionFolders, SwitchSessionFolder, SwitchSessionFolderResult,
+    active_session_folder, read_session_folder,
+};
 pub use session_recovery::{
     ProjectGitStatus, ProjectWorkspaceInspection, SessionWorkspaceAuthority,
     SessionWorkspaceRecovery, SessionWorkspaceValidation,

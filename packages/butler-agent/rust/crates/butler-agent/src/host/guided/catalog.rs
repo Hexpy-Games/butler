@@ -29,8 +29,7 @@ impl GuidedCatalog {
     pub(crate) fn load(capabilities: &Capabilities) -> Result<Self, GuidedCatalogError> {
         let source = ToolCatalog::load(capabilities).map_err(GuidedCatalogError::Source)?;
         let snapshot =
-            GuidedCatalogSnapshot::parse(&source.source().map_err(GuidedCatalogError::Source)?)
-                .map_err(GuidedCatalogError::Policy)?;
+            GuidedCatalogSnapshot::parse(source.source()).map_err(GuidedCatalogError::Policy)?;
         Ok(Self { snapshot })
     }
 
