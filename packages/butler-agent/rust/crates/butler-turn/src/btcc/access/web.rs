@@ -9,7 +9,10 @@ pub fn web_read_carries_data(value: &str, discovered: bool) -> bool {
         return true;
     };
     let (authority, path) = rest.split_once('/').unwrap_or((rest, ""));
-    value.contains(['?', '#']) || authority.contains('@') || path.split('/').any(data_like_segment)
+    value.contains(['?', '#'])
+        || authority.contains('@')
+        || authority.split(['.', ':']).any(data_like_segment)
+        || path.split('/').any(data_like_segment)
 }
 
 fn data_like_segment(segment: &str) -> bool {

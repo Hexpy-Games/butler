@@ -25,6 +25,8 @@ pub(super) fn boundaries() {
         ),
         ("https://example.com/ZXh0ZXJuYWwtY29udGVudA==", true),
         ("https://example.com/Rust_programming_language_2026", false),
+        ("https://aGVsbG8td29ybGQtZXhmaWx0cmF0ZQ.example.com/", true),
+        ("https://docs.example-company.co.kr/guide", false),
     ] {
         assert_eq!(web_read_carries_data(url, false), carries, "{url}");
         assert!(!web_read_carries_data(url, true), "provenance: {url}");
