@@ -1,8 +1,9 @@
+import { subsetSnapshotFont } from "./snapshot-font.mjs";
 import { SNAPSHOT_SOURCE, snapshotPick } from "./snapshot.mjs";
 
 /** The App's own UI runs the scrap snapshot in its own isolated world; it never shares the page worlds. */
 const APP_WORLD = 9003;
-const ASSET_LIMIT = 3 * 1024 * 1024, APP_FONT_BUDGET = 3 * 1024 * 1024;
+const ASSET_LIMIT = 3 * 1024 * 1024;
 const TARGET = /^[a-z0-9-]{8,64}$/iu;
 
 /**
@@ -36,9 +37,8 @@ export async function snapshotApp(win, target) {
   const contents = win.webContents;
   const scale = contents.getZoomFactor();
   const tab = {
-    // The App's one text face (Pretendard Variable, ~2.7 MB inlined) must travel with the copy: a fallback face's
-    // wider glyphs re-wrap the card's fixed-width lines. A page scrap keeps the default font budget.
-    epoch: 1, url: contents.getURL(), bounds: { scale }, fetchAsset: appAsset(contents), fontBudget: APP_FONT_BUDGET,
+    // Keep the original glyph metrics, variation axes and layout features in a self-contained subset.
+    epoch: 1, url: contents.getURL(), bounds: { scale }, fetchAsset: appAsset(contents), subsetFont: subsetSnapshotFont,
     view: { webContents: contents, getBounds: () => { const { width, height } = win.getContentBounds(); return { x: 0, y: 0, width, height }; } },
   };
   const selector = `[data-butler-snapshot="${target}"]`;
