@@ -83,5 +83,8 @@ pub(super) fn remember(owner: &GuidedTools, args: &Value, result: &Value) {
     {
         let landed = result["url"].as_str().unwrap_or(url);
         owner.web_session.remember_tab(url, tab, landed);
+        // The page was requested already; reading it again sends nothing new.
+        owner.web_session.discover(url);
+        owner.web_session.discover(landed);
     }
 }
