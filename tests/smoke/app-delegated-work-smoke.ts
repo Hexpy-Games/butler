@@ -1,6 +1,6 @@
 // Replay the public navigation/session-view/event contracts through the real App.
 import { strict as assert } from "node:assert";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
@@ -12,13 +12,18 @@ import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import type { NavigationView, SessionView, SessionViewTurn } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
 const output = process.env.BUTLER_SMOKE_SCREENSHOTS;
+const clockNow = output ? new Date("2026-05-01T00:12:00.000Z") : new Date();
 if (output) mkdirSync(output, { recursive: true });
 const server = await createNativeAppServer({ uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist") });
 const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
 const context = await browser.newContext();
+if (output) await context.addInitScript(() => {
+  let seed = 0x2f6b1d;
+  Math.random = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+});
 const baseline = process.env.BUTLER_SMOKE_BASELINE === "1";
 const navigation = await server.api<NavigationView>("/navigation");
-navigation.chats = [{ id: "general", kind: "chat", title: "General", last_activity_at: new Date().toISOString(), pinned: false, archived: false }];
+navigation.chats = [{ id: "general", kind: "chat", title: "General", last_activity_at: clockNow.toISOString(), pinned: false, archived: false }];
 const parent = await server.api<SessionView>("/session-view?session_id=general");
 const child = structuredClone(HARNESS_SS03_SUMMARY.steward_children![0]!);
 child.relation.parent_session_id = "general";
@@ -42,7 +47,7 @@ let awaiting = false;
 let ownState = "delivered";
 const grants = Array.from({ length: 20 }, (_, i) => ({ grant_ref: `grant-${i}`, capability: i % 2 ? "read_file" : "run_command",
   target: i % 2 ? `C:/workspace/report-${i}.html` : `node --check report-${i}.html`, cwd: "C:/workspace",
-  title: "internal", description: "internal", created_at: new Date().toISOString() }));
+  title: "internal", description: "internal", created_at: clockNow.toISOString() }));
 let requests = 0;
 const timings: number[] = [];
 
@@ -68,6 +73,7 @@ try {
     awaiting = false;
     ownState = "delivered";
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", appearance_theme: theme,
+      ...(output ? { reduce_motion: true } : {}),
       desktop_notifications: { enabled: true, assistant_messages: false, task_completions: false },
       wallpaper: { source: wallpaper ? { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } } : { kind: "none" } } }) });
     await server.signIn(page);
@@ -93,59 +99,54 @@ try {
       await page.evaluate(() => document.fonts.ready);
       await page.waitForFunction(() => document.getAnimations().every(animation =>
         animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
-      if (output) await page.screenshot({ path: `${output}/${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}-${state}.png` });
+      await page.waitForLoadState("networkidle");
+      if (output) await page.screenshot({ animations: "disabled", caret: "hide", path: `${output}/${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}-${state}.png` });
     };
+    if (output) await page.clock.setFixedTime(clockNow);
     await page.goto(server.url);
     try { await pill.waitFor(); } catch (error) {
       console.error(JSON.stringify({ width, theme, requests, body: await page.locator("body").innerText() }));
       await capture("failure"); throw error;
     }
     if (!await row.isVisible()) await page.getByRole("button", { name: appCopy.titlebar.showLeftPanel, exact: true }).click();
-    if (!baseline) {
-      await spinner.waitFor();
-      const animation = await spinner.locator("circle").evaluate(circle => getComputedStyle(circle).animationName);
-      assert(animation.includes("spinner-rotate"), "the existing DS working animation is active");
-    }
+    await spinner.waitFor();
+    const animation = await spinner.locator("circle").evaluate(circle => getComputedStyle(circle).animationName);
+    assert(animation.includes("spinner-rotate"), "the existing DS working animation is active");
     await capture("running");
     awaiting = true;
-    await page.evaluate(childId => (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent({
-      id: 90, type: "subsession.changed", created_at: new Date().toISOString(),
+    await page.evaluate(({ childId, createdAt }) => (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent({
+      id: 90, type: "subsession.changed", created_at: createdAt,
       payload: { session_id: "general", child_session_id: childId },
-    }), child.session_id);
-    if (!baseline) {
-      await page.waitForFunction(() => (window as unknown as { __notifications: unknown[] }).__notifications.length === 1);
-      assert.equal(await spinner.count(), 0, "attention replaces running animation");
-      await row.getByLabel(appCopy.space.attention, { exact: true }).waitFor();
-    }
+    }), { childId: child.session_id, createdAt: clockNow.toISOString() });
+    await page.waitForFunction(() => (window as unknown as { __notifications: unknown[] }).__notifications.length === 1);
+    assert.equal(await spinner.count(), 0, "attention replaces running animation");
+    await row.getByLabel(appCopy.space.attention, { exact: true }).waitFor();
     await capture("sidebar-attention");
     awaiting = false;
     await page.evaluate(() => (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent({
       id: 91, type: "question.answered", payload: { session_id: "general" },
     }));
-    if (!baseline) {
-      await spinner.waitFor();
-      await page.getByText(`General · ${appCopy.space.attention}`, { exact: true }).waitFor({ state: "detached" });
-    }
+    await spinner.waitFor();
+    await page.getByText(`General · ${appCopy.space.attention}`, { exact: true }).waitFor({ state: "detached" });
     await page.reload(); // A fresh App boot projects the still-running durable child.
     await pill.waitFor();
     if (!await row.isVisible()) await page.getByRole("button", { name: appCopy.titlebar.showLeftPanel, exact: true }).click();
-    if (!baseline) await spinner.waitFor();
+    await spinner.waitFor();
     // Sidebar overlays the composer on mobile: close it after observing the row.
     if (width < 640) await page.getByRole("button", { name: appCopy.titlebar.hideLeftPanel, exact: true }).last().click();
     const access = page.locator('[data-test-class="access-button"]');
     await page.getByRole("textbox").first().focus();
     await access.click();
     await capture("grants-collapsed");
-    if (!baseline) {
-      assert.equal(await page.locator('[data-test-class="granted-permission"]').count(), 0);
-      assert.equal(await page.locator('[data-slot="option-menu-item"]').count(), 3, "only the original access modes");
-      assert.equal(await access.getAttribute("aria-label"), `${appCopy.composer.permission}: ${appCopy.permissions.askFirst}`, "grants do not add a count");
-      assert(!(await page.locator('[data-test-class="composer-menu"]').innerText()).includes("Allowed"), "no grants section");
-    }
+    assert.equal(await page.locator('[data-test-class="granted-permission"]').count(), 0);
+    assert.equal(await page.locator('[data-slot="option-menu-item"]').count(), 5, "every access mode and no grant rows");
+    assert.equal(await access.getAttribute("aria-label"), `${appCopy.composer.permission}: ${appCopy.permissions.askFirst}`, "grants do not add a count");
+    assert(!(await page.locator('[data-test-class="composer-menu"]').innerText()).includes("Allowed"), "no grants section");
     await page.keyboard.press("Escape");
     await pill.click();
     await dialog.getByRole("button", { name: "Stop", exact: true }).waitFor();
     await capture("modal-running");
+    if (output) writeFileSync(`${output}/${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}-modal-running.txt`, await dialog.innerText());
     if (!baseline) {
       const text = await dialog.innerText();
       assert(text.includes(DELIVERED));
@@ -154,19 +155,18 @@ try {
     }
     const beforeIdle = requests;
     await page.waitForTimeout(2100);
-    if (!baseline) assert.equal(requests, beforeIdle, "no observer polling during idle");
+    assert.equal(requests, beforeIdle, "no observer polling during idle");
     await dialog.getByRole("button", { name: "Stop", exact: true }).click();
     await page.waitForFunction(() => !document.querySelector('[data-test-class="steward-observer-dialog"] button:disabled'));
     assert(stopRequested, "Stop used the public cancellation endpoint");
     assert.equal(await pill.count(), 1, "request acceptance is not terminal confirmation");
     phase = "cancelled";
-    const elapsed = await page.evaluate(async ({ childId, baseline }) => {
+    const elapsed = await page.evaluate(async ({ childId, createdAt }) => {
       const start = performance.now();
       (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent({
-        id: 100, type: "subsession.changed", created_at: new Date().toISOString(),
+        id: 100, type: "subsession.changed", created_at: createdAt,
         payload: { session_id: "general", child_session_id: childId },
       });
-      if (baseline) return 0;
       return await new Promise<number>((done, reject) => {
         const check = () => {
           const modal = document.querySelector('[data-test-class="steward-observer-dialog"]');
@@ -188,28 +188,27 @@ try {
           spinners: document.querySelectorAll('[data-test-class="app-sidebar"] [data-slot="spinner"]').length,
         }))); }, 500);
       });
-    }, { childId: child.session_id, baseline });
+    }, { childId: child.session_id, createdAt: clockNow.toISOString() });
     timings.push(elapsed);
+    const completed = dialog.locator(`[data-test-class="turn-current-phase-activity"][data-turn-id="${observer.latest_turn!.id}"]`);
+    await completed.getByRole("button", { expanded: false }).waitFor();
     await capture("modal-stopped");
-    if (!baseline) {
-      const completed = dialog.locator(`[data-test-class="turn-current-phase-activity"][data-turn-id="${observer.latest_turn!.id}"]`);
-      await completed.getByRole("button", { expanded: false }).waitFor();
-      assert.equal(await dialog.getByRole("button", { name: "Stop", exact: true }).count(), 0);
-      await page.keyboard.press("Escape");
-      for (const terminal of ["delivered", "failed"] as const) {
-        ownState = terminal;
-        phase = "running";
-        await page.reload();
-        await pill.waitFor();
-        if (!await row.isVisible()) await page.getByRole("button", { name: appCopy.titlebar.showLeftPanel, exact: true }).click();
-        await spinner.waitFor();
-        phase = terminal;
-        await page.evaluate(childId => (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent({
-          id: 101, type: "subsession.changed", payload: { session_id: "general", child_session_id: childId },
-        }), child.session_id);
-        await pill.waitFor({ state: "detached" });
-        assert.equal(await spinner.count(), 0, `${terminal} clears the row`);
-      }
+    if (output) writeFileSync(`${output}/${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}-modal-stopped.txt`, await dialog.innerText());
+    assert.equal(await dialog.getByRole("button", { name: "Stop", exact: true }).count(), 0);
+    await page.keyboard.press("Escape");
+    for (const terminal of ["delivered", "failed"] as const) {
+      ownState = terminal;
+      phase = "running";
+      await page.reload();
+      await pill.waitFor();
+      if (!await row.isVisible()) await page.getByRole("button", { name: appCopy.titlebar.showLeftPanel, exact: true }).click();
+      await spinner.waitFor();
+      phase = terminal;
+      await page.evaluate(childId => (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent({
+        id: 101, type: "subsession.changed", payload: { session_id: "general", child_session_id: childId },
+      }), child.session_id);
+      await pill.waitFor({ state: "detached" });
+      assert.equal(await spinner.count(), 0, `${terminal} clears the row`);
     }
     await page.close();
   }
