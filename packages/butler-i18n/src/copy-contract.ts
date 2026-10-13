@@ -698,6 +698,8 @@ export interface AppCopy {
     allFavorites: string;
     working: string;
     attention: string;
+    /** A finished reply the owner has not read; the sidebar dot's name. */
+    unread: string;
     /** What a waiting browser hand-off needs, in place of `attention`. */
     signInAttention: string;
     paymentAttention: string;

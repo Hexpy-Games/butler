@@ -19,6 +19,8 @@ export interface CollapsibleNavGroupProps extends DsPrivateStyleProps {
   children: ReactNode;
   /** Actions to display on the group header */
   actions?: ReactNode;
+  /** Header state for assistive technology (such as Unread inside a folded group). */
+  ariaDescription?: string;
   /** Opt-in tree hierarchy; flat remains the default for existing navigation. */
   indented?: boolean;
   /** Opt-in stacked sticky header, relative to the outer list scroll container. */
@@ -36,6 +38,7 @@ export function CollapsibleNavGroup({
   onToggle,
   children,
   actions,
+  ariaDescription,
   className,
   indented = false,
   stickyDepth,
@@ -64,6 +67,7 @@ export function CollapsibleNavGroup({
         className={dsClass(styles.header)}
         dataTestClass={dataTestClass}
         ariaExpanded={expanded}
+        ariaDescription={ariaDescription}
       />
       <Collapsible
         open={expanded}
