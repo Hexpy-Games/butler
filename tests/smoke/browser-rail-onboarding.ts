@@ -20,6 +20,7 @@ try {
       reduce_motion: true, wallpaper: { source, motion: "paused", pauseOnBattery: true }, conversation_background: { source, overlay: 0 } }) });
     await page.setViewportSize({ width, height: 900 }); await page.goto(server.url);
     await page.locator("[data-test-class=first-run-setup]").waitFor();
+    await page.waitForFunction(() => !document.querySelector("[data-test-class=first-run-setup]")?.getAnimations({ subtree: true }).some(animation => animation.playState === "running" && animation.effect?.getComputedTiming().iterations !== Infinity));
     await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
     await page.screenshot({ path: join(evidence, `${theme}-${width}-${wallpaper ? "wallpaper" : "plain"}.png`) });
   }
