@@ -6,9 +6,9 @@ pub(super) fn assert_intent_carried(requests: &[Value]) {
     let request = requests
         .iter()
         .find(|request| {
-            request["instructions"]
-                .as_str()
-                .is_some_and(|text| text.contains("Steward role"))
+            matching::key("/codex/responses", request, &Placeholders::default())
+                .user_request
+                .starts_with("role: steward\n")
         })
         .expect("the child ran");
     let input = request["input"].to_string();
