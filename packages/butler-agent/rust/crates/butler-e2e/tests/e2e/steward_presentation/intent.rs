@@ -8,7 +8,7 @@ pub(super) fn assert_intent_carried(requests: &[Value]) {
         .find(|request| {
             matching::key("/codex/responses", request, &Placeholders::default())
                 .user_request
-                .starts_with("role: steward\n")
+                .starts_with("role: steward")
         })
         .expect("the child ran");
     let input = request["input"].to_string();
