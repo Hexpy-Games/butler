@@ -225,10 +225,13 @@ async fn with_child_messages(
         )
         .await
         .map_err(GatewayApplicationError::internal_from)?;
+    let request = projection
+        .as_object_mut()
+        .and_then(|object| object.remove("delegated_request"));
     let messages: Vec<_> = page
         .messages
         .iter()
-        .filter_map(|message| project_message(message, session_id))
+        .filter_map(|message| project_message(message, session_id, request.as_ref()))
         .collect();
     let turn_id = projection
         .pointer("/latest_turn/id")
@@ -285,6 +288,7 @@ async fn with_child_messages(
 fn project_message(
     message: &ConversationMessageWithParts,
     public_session_id: &str,
+    request: Option<&serde_json::Value>,
 ) -> Option<serde_json::Value> {
     if !matches!(
         message.message.role,
@@ -319,6 +323,21 @@ fn project_message(
         })
         .collect::<Vec<_>>()
         .join("\n");
+    let text = if message.message.role == ConversationRole::User
+        && request.is_some_and(|request| {
+            request["turn_id"].as_str() == message.message.turn_id.as_deref()
+        }) {
+        request
+            .and_then(|request| request["text"].as_str())
+            .unwrap_or("")
+            .to_owned()
+    } else {
+        text
+    };
+    let text = text
+        .replace("steward", "Butler")
+        .replace("Steward", "Butler")
+        .replace("스튜어드", "버틀러");
     let status = match message.message.status {
         ConversationStatus::Failed => "failed",
         ConversationStatus::Pending => "thinking",
@@ -459,7 +478,7 @@ mod tests {
                 status: ConversationStatus::Complete,
             }],
         };
-        let projected = project_message(&message, "steward-public").unwrap();
+        let projected = project_message(&message, "steward-public", None).unwrap();
         assert_eq!(projected["text"], "first\nsecond");
         assert_eq!(projected["cursor"], 7);
         assert_eq!(projected["chat_id"], "steward-public");

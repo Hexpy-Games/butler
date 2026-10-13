@@ -111,11 +111,7 @@ fn parent_item(step: usize, presented: bool) -> Value {
         0 => call("start", "start_work", &json!({"objective":OWNER})),
         1 => call("plan", "replace_work_plan", &parent_plan),
         2 => call("review", "record_work_review", &review()),
-        3 => call(
-            "delegate",
-            "delegate_to_steward",
-            &json!({"request":OWNER,"safe_title":"Compare approaches"}),
-        ),
+        3 => call("delegate", "delegate_to_steward", &json!({"request":OWNER})),
         _ => message("Direction delivered."),
     }
 }

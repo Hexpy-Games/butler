@@ -9,6 +9,7 @@ use butler_runtime::context::ContextCode;
 use timezone_names::TimeZoneNames;
 
 pub(crate) struct SystemPromptClock {
+    default_timezone: String,
     names: TimeZoneNames,
     transitions: TimeZoneData,
 }
@@ -16,6 +17,8 @@ pub(crate) struct SystemPromptClock {
 impl SystemPromptClock {
     pub(crate) fn new() -> ContextResult<Self> {
         Ok(Self {
+            default_timezone: butler_platform::instance::system_time_zone_name()
+                .unwrap_or_else(|_| "UTC".into()),
             names: TimeZoneNames::new()?,
             transitions: TimeZoneData::new()?,
         })
@@ -94,6 +97,23 @@ impl SystemPromptClock {
 }
 
 impl PromptClock for SystemPromptClock {
+    fn default_timezone(&self) -> &str {
+        &self.default_timezone
+    }
+    fn local_timestamp(&self, value: i64, timezone: &str) -> ContextResult<String> {
+        let offset = match fixed_offset(timezone) {
+            Some(offset) => offset,
+            None => self.transitions.facts(timezone, value.div_euclid(1000))?.0,
+        };
+        let offset =
+            chrono::FixedOffset::east_opt(offset).ok_or_else(|| failure("Invalid offset"))?;
+        let time = chrono::DateTime::from_timestamp_millis(value)
+            .ok_or_else(|| failure("Invalid time"))?;
+        Ok(time
+            .with_timezone(&offset)
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, false))
+    }
+
     fn now_epoch_millis(&self) -> i64 {
         butler_models::models::ModelConfigurationClock::now_epoch_millis(
             &crate::host::SystemIdentity,

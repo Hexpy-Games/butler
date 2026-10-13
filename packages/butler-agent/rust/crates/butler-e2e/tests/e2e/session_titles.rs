@@ -335,13 +335,13 @@ async fn title_07_queued_followup_does_not_generate_again() -> Result<(), Harnes
 }
 
 #[tokio::test]
-async fn title_08_airline_steward_title_is_accepted() -> Result<(), HarnessError> {
+async fn title_08_role_word_is_removed_from_generated_title() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, prompt) = start_with_title("TITLE-08", "Airline steward duties", None).await?;
     let chat = chat(&s, &provisional(&prompt), &prompt).await?;
     let (_, turn) = s.turn(&chat, &prompt).await?;
     assert_eq!(turn["state"], "delivered");
-    wait_title(&s, &chat, "Airline steward duties").await?;
+    wait_title(&s, &chat, "Airline duties").await?;
     assert!(!s.agent.logs().contains("reason=invalid_output"));
     s.finish().await
 }
@@ -410,5 +410,17 @@ async fn title_10_emoji_cap_keeps_the_code_point_intact() -> Result<(), HarnessE
     let (_, turn) = s.turn(&chat, &prompt).await?;
     assert_eq!(turn["state"], "delivered");
     wait_title(&s, &chat, &expected).await?;
+    s.finish().await
+}
+
+#[tokio::test]
+async fn title_11_protocol_markers_never_reach_titles() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, prompt) =
+        start_with_title("TITLE-11", "Planning a Simple Reply…SEARCH_DONE", None).await?;
+    let chat = chat(&s, &provisional(&prompt), &prompt).await?;
+    let (_, turn) = s.turn(&chat, &prompt).await?;
+    assert_eq!(turn["state"], "delivered");
+    wait_title(&s, &chat, TITLE).await?;
     s.finish().await
 }

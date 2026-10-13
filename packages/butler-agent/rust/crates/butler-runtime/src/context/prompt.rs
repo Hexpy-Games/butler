@@ -16,6 +16,10 @@ pub use types::*;
 use crate::context::ContextResult;
 
 pub trait PromptClock: Send + Sync {
+    fn default_timezone(&self) -> &str;
+    fn local_timestamp(&self, value: i64, _timezone: &str) -> ContextResult<String> {
+        self.iso_from_epoch_millis(value)
+    }
     fn now_epoch_millis(&self) -> i64;
     fn parse_timestamp(&self, value: &str) -> Option<i64>;
     fn iso_from_epoch_millis(&self, value: i64) -> ContextResult<String>;

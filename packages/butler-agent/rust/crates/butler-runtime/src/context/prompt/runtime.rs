@@ -19,18 +19,11 @@ pub(super) struct RuntimeStateInput<'a> {
 }
 
 pub(super) fn runtime_state(input: RuntimeStateInput<'_>) -> ContextResult<ContextSection> {
-    let timestamp = if input.request.message.timestamp.is_empty() {
-        input.clock.now_epoch_millis()
-    } else {
-        input
-            .clock
-            .parse_timestamp(&input.request.message.timestamp)
-            .unwrap_or_else(|| input.clock.now_epoch_millis())
-    };
+    let timestamp = input.clock.now_epoch_millis();
     let user = input.config.get("user").and_then(Value::as_object);
     let timezone = safe_config_text(user.and_then(|value| value.get("timezone")));
     let timezone = if timezone.is_empty() {
-        "UTC"
+        input.clock.default_timezone()
     } else {
         &timezone
     };
@@ -55,6 +48,8 @@ pub(super) fn runtime_state(input: RuntimeStateInput<'_>) -> ContextResult<Conte
         format!("Current Time UTC: {utc}"),
         format!("Current Local Time: {local}"),
         format!("User Timezone: {timezone}"),
+        format!("Current Local Timestamp: {}", input.clock.local_timestamp(timestamp, timezone).unwrap_or_else(|_| utc.clone())),
+        "Use the user’s local date and timezone for answers. Store checked timestamps as RFC 3339 with an explicit offset; never label a local date as UTC.".into(),
         format!("Interface Language (app labels only): {language}"),
         format!("Assistant Response Language: {}", input.response_language),
     ];

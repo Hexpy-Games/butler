@@ -223,7 +223,7 @@ fn provisional_title(text: &str) -> String {
             || butler_core::public_text::trim_js_whitespace(text),
             |(first, _)| first,
         );
-    let title = collapsed(first);
+    let title = butler_core::public_text::public_title(&collapsed(first), "");
     if title.is_empty() {
         "새 대화".into()
     } else if title.encode_utf16().count() > 48 {
@@ -234,7 +234,8 @@ fn provisional_title(text: &str) -> String {
 }
 
 fn normalized_title(text: &str) -> Option<String> {
-    let title = collapsed(text);
+    let clean = butler_core::public_text::public_title(text, "");
+    let title = collapsed(&clean);
     let title = title
         .trim_start_matches(['"', '\'', '`'])
         .trim_end_matches(['"', '\'', '`', '.'])
