@@ -11,6 +11,9 @@ use super::GuidedTools;
 
 /// The continuation extension that carries the taint across a suspension.
 const TAINT_KEY: &str = "turnTaint";
+/// The continuation extension that carries the turn's web provenance and
+/// search result ids across a suspension.
+const WEB_KEY: &str = "turnWeb";
 
 /// A schedule run nobody attends. The ids are absent for schedules the agent
 /// dispatches itself, which have no App run to flag.
@@ -71,6 +74,21 @@ fn initial_taint(context: &Value, restored: Option<&AuthorityLoopContinuation>) 
     }
 }
 
+/// The web provenance a turn starts with: URLs in the user's message, plus
+/// what the turn found and the result ids it handed out before a suspension.
+pub(super) fn restore_web(
+    session: &butler_runtime::web_access::WebSession,
+    message: &str,
+    restored: Option<&AuthorityLoopContinuation>,
+) {
+    if let Some(saved) = restored.and_then(|continuation| continuation.extensions.get(WEB_KEY)) {
+        session.restore(saved);
+    }
+    for url in super::dispatch::web_provenance(message) {
+        session.discover(&url);
+    }
+}
+
 /// Tools whose results bring in content from the web, a connector or a page,
 /// including a command that reaches the network.
 fn reads_external(name: &str, args: &Value) -> bool {
@@ -111,6 +129,9 @@ impl GuidedTools {
         let mut extensions = Map::new();
         if self.taint() == TurnTaint::External {
             extensions.insert(TAINT_KEY.into(), "external".into());
+        }
+        if let Some(web) = self.web_session.snapshot() {
+            extensions.insert(WEB_KEY.into(), web);
         }
         extensions
     }

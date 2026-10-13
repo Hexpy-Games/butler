@@ -49,4 +49,51 @@ pub(super) fn boundaries() {
     assert!(web_search_carries_data(&"x ".repeat(60)));
     assert!(!web_search_carries_data(&"가".repeat(23)));
     assert!(web_search_carries_data(&"가".repeat(24)));
+    search_syntax_boundaries();
+}
+
+/// Public search syntax is not data; opaque tokens and pasted text still are.
+fn search_syntax_boundaries() {
+    let sites = (1..=8)
+        .map(|n| format!("site:museum{n}.example.org"))
+        .collect::<Vec<_>>()
+        .join(" OR ");
+    let keywords = (1..=12)
+        .map(|n| format!("\"opening hours {n}\""))
+        .collect::<Vec<_>>()
+        .join(" OR ");
+    let prose = "the quick brown fox jumps over the lazy dog ".repeat(3);
+    for (query, carries) in [
+        (
+            "site:example.org/kr/whatson/exhibition 2026 opening hours",
+            false,
+        ),
+        (
+            "site:example.org/MUSEUM/contents/M0202010000.do \"special exhibition\"",
+            false,
+        ),
+        ("site:example.org/?menuno=239 2026-10-17 exhibition", false),
+        (
+            "-site:example.com (exhibition OR museum) \"2026.10.18\"",
+            false,
+        ),
+        (
+            "https://docs.example-company.co.kr/guide/readable_words-joined",
+            false,
+        ),
+        (&sites, false),
+        (&keywords, false),
+        (&format!("{sites} {keywords}"), false),
+        ("site:example.org/ZXh0ZXJuYWwtY29udGVudA== hours", true),
+        ("site:aGVsbG8td29ybGQtZXhmaWx0cmF0ZQ.example.com", true),
+        ("inurl:0123456789abcdef0123456789abcdef", true),
+        ("museum 0123456789abcdef0123456789abcdef", true),
+        ("https://example.com/?token=aB3dE5fG7hI9jK1lM3nO5pQ7", true),
+        (&format!("\"{prose}\""), true),
+        (&format!("site:example.org {prose}"), true),
+        (&format!("{prose} OR museum"), true),
+        (&format!("{} OR museum", "x ".repeat(59)), false),
+    ] {
+        assert_eq!(web_search_carries_data(query), carries, "{query}");
+    }
 }

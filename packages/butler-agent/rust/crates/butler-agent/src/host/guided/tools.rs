@@ -166,7 +166,6 @@ pub(crate) struct GuidedTools {
     authority_consumed: Mutex<bool>,
     turn_taint: Mutex<butler_turn::btcc::TurnTaint>,
     attention_sent: Mutex<bool>,
-    web_provenance: Mutex<HashSet<String>>,
 }
 
 /// A guided tool invocation that violated its contract; becomes a BTCC error.
@@ -236,6 +235,7 @@ impl GuidedTools {
     ) -> Result<Self, BtccError> {
         binding.validate_surface()?;
         let described_ids = resume::restored_descriptions(restored);
+        turn_guard::restore_web(&web_session, &binding.current_user_message, restored);
         Ok(Self {
             capabilities,
             command,
@@ -267,7 +267,6 @@ impl GuidedTools {
             browser_http: OnceCell::new(),
             turn_taint: Mutex::new(binding.turn_guard.initial_taint),
             attention_sent: Mutex::new(false),
-            web_provenance: Mutex::new(dispatch::web_provenance(&binding.current_user_message)),
             binding,
             state: Mutex::new(State {
                 described_ids,
