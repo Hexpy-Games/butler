@@ -247,6 +247,10 @@ pub struct FinalArtifact {
     pub size_bytes: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
+    /// The page a capture shows, so a reply that already pictures that page's
+    /// item in its answer blocks does not attach the same item again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
 }
 
 /// The kind of produced artifact.

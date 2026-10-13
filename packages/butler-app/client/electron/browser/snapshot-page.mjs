@@ -495,7 +495,8 @@ export async function snapshotPage(args) {
   try {
     const view = { left: 0, top: 0, right: document.documentElement.clientWidth || innerWidth, bottom: document.documentElement.clientHeight || innerHeight };
     if (args.op === "element") {
-      const el = elementOf(args.identity);
+      // The App's own UI names its part by a transient marker instead of a pick identity.
+      const el = args.selector ? document.querySelector(args.selector) : elementOf(args.identity);
       if (!el?.isConnected) return null;
       const offset = offsetOf(el.ownerDocument), r = el.getBoundingClientRect(), cs = style(el);
       const transformed = cs.transform !== "none" && el.offsetWidth !== undefined;

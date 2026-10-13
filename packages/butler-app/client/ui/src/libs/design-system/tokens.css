@@ -704,6 +704,7 @@
   --switch-inline-track-bg: rgba(0, 0, 0, 0.14);
   --dialog-overlay-bg: rgba(0, 0, 0, 0.12);
   --command-overlay-bg: rgba(0, 0, 0, 0.06);
+  --image-viewer-overlay-bg: rgba(0, 0, 0, 0.78);
   --chrome-button-bg: rgba(0, 0, 0, 0.18);
   --chrome-divider-bg: rgba(0, 0, 0, 0.12);
   --danger-line: rgba(190, 56, 54, 0.24);
@@ -1048,6 +1049,7 @@
   --switch-inline-track-bg: rgba(255, 255, 255, 0.14);
   --dialog-overlay-bg: rgba(0, 0, 0, 0.34);
   --command-overlay-bg: rgba(0, 0, 0, 0.26);
+  --image-viewer-overlay-bg: rgba(0, 0, 0, 0.86);
   --chrome-button-bg: rgba(255, 255, 255, 0.11);
   --chrome-divider-bg: rgba(255, 255, 255, 0.1);
   --danger-line: rgba(190, 56, 54, 0.28);
@@ -1217,6 +1219,7 @@
   --switch-inline-track-bg: rgba(0, 0, 0, 0.14);
   --dialog-overlay-bg: rgba(0, 0, 0, 0.12);
   --command-overlay-bg: rgba(0, 0, 0, 0.06);
+  --image-viewer-overlay-bg: rgba(0, 0, 0, 0.78);
   --chrome-button-bg: rgba(0, 0, 0, 0.18);
   --chrome-divider-bg: rgba(0, 0, 0, 0.12);
   --danger-line: rgba(190, 56, 54, 0.24);

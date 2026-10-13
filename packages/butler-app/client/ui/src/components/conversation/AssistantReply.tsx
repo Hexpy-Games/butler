@@ -8,6 +8,6 @@ export function AssistantReply({ message, refreshFileUrls }: { message: MessageR
   return <>
     <MessageMarkdown artifacts={message.artifacts} attachments={message.attachments}
       refreshFileUrls={refreshFileUrls} streaming={message.status === "streaming"} text={message.text} />
-    <AnswerBlocks sets={message.answer_blocks} />
+    <AnswerBlocks sets={message.answer_blocks} sessionId={message.chat_id} />
   </>;
 }
