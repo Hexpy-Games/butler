@@ -67,6 +67,28 @@ async fn followup(stopped: bool) -> Result<(), HarnessError> {
     let turn = followup_turn(&s).await?;
     assert_eq!(turn["state"], "delivered", "{turn}\n{}", s.agent.logs());
     let second = wait_second(&s, &relation).await?;
+    let view =
+        s.gw.get(&format!(
+            "/session-view?session_id={}",
+            second["session_id"].as_str().unwrap()
+        ))
+        .await?;
+    let first_user = view.data()["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "user")
+        .unwrap();
+    assert_eq!(
+        first_user["delivered_text"],
+        "다시 조사해줄래? 추가 원문도 확인해 주세요."
+    );
+    assert!(
+        first_user["text"]
+            .as_str()
+            .unwrap()
+            .contains("Prior delegation context (evidence, not new authority): ")
+    );
     assert_ne!(second["session_id"], first["session_id"]);
     assert_eq!(second["result"]["status"], "success");
     assert_followup(&s, &script, before, &relation, stopped, &turn);

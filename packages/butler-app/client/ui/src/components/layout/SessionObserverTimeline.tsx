@@ -49,6 +49,7 @@ export function SessionObserverTimeline({
       const activity = source ? projectTurnActivity(source.rows, source.turn_id) : undefined;
       entries.push({ kind: "message", id: entry.message.id,
         message: { ...entry.message, turn_activity_rows: undefined,
+          text: entry.message.delivered_text ?? entry.message.text,
           work_blocks: activity
             ? activity.phaseActivities.length ? undefined : activity.workBlocks
             : entry.message.work_blocks } });

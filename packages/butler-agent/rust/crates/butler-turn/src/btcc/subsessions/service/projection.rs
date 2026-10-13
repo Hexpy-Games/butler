@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 
 use super::SubsessionService;
-use crate::btcc::{BtccCode, StorageCode};
+use crate::btcc::{BtccCode, ChildRole, StorageCode};
 use crate::btcc::{BtccError, StoredSubsessionDelegation};
 
 impl SubsessionService {
@@ -135,7 +135,17 @@ impl SubsessionService {
             .into_iter()
             .partition(|value| value.get("role").and_then(Value::as_str) == Some("steward"));
         let own = if let Some(relation) = relation {
-            Some(self.project_child(&relation).await?)
+            let mut own = self.project_child(&relation).await?;
+            if relation.packet.child_role == ChildRole::Steward {
+                let object = own.as_object_mut().ok_or_else(|| {
+                    BtccError::detected(BtccCode::SubsessionProjectionInvalid, "projection invalid")
+                })?;
+                object.insert(
+                    "delegated_request".into(),
+                    json!({"turn_id": relation.child_turn_id, "text": relation.packet.objective}),
+                );
+            }
+            Some(own)
         } else {
             None
         };

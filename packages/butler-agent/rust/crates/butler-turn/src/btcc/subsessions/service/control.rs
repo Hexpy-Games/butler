@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 
 use super::selection::{RelationPurpose, RelationQuery};
-use super::{SubsessionService, error};
+use super::{SubsessionService, direction_text, error};
 use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, StoredSubsessionDelegation, StoredSubsessionDirection};
 use crate::workspace::SessionRole;
@@ -316,7 +316,7 @@ impl SubsessionService {
             "eventId":format!("subsession-direction:{}",direction.instruction_id),"transport":"app","accountId":"local",
             "peer":{"kind":"dm","id":relation.child_session_id,"parentId":relation.parent_session_id},
             "sender":{"id":if role=="worker"{"steward-worker-direction"}else{"butler-steward-direction"},"displayName":if role=="worker"{"Steward"}else{"Butler"}},
-            "message":{"id":format!("subsession-direction-message:{}",direction.instruction_id),"text":format!("{}\n\nContinue the existing Work from its retained checkpoint. Review the new direction against the existing result; do not restart completed actions or create a replacement Work.",direction.instruction),"timestamp":direction.created_at},
+            "message":{"id":format!("subsession-direction-message:{}",direction.instruction_id),"text":direction_text(&direction.instruction),"timestamp":direction.created_at},
             "routingHints":{"sessionId":relation.child_session_id,"turnId":turn_id},
             "nativeStewardContext":{"version":1,"role":role,"projectName":child.project_id.unwrap_or_default(),"workspacePath":child.workspace_path,"modelRef":child.model_ref,"reasoningEffort":child.metadata.as_ref().and_then(|m|m.get("reasoning_effort")).and_then(Value::as_str).unwrap_or("")},
             "raw":{"source":"btcc-subsession-direction","instruction_id":direction.instruction_id}

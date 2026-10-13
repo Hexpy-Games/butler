@@ -11,4 +11,5 @@ pub use service::{
     InterruptedSubsessionEvent, StewardDelegationRequest, SubsessionCancelRequest,
     SubsessionChildQueue, SubsessionDirectionRequest, SubsessionEnqueue, SubsessionResumeRequest,
     SubsessionService, WorkerDelegationRequest, WorkerProfile, WorkerProfileReader,
+    delivered_direction,
 };

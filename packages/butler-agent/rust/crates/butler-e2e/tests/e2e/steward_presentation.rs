@@ -9,6 +9,7 @@ mod files;
 mod intent;
 #[path = "steward_presentation/stub.rs"]
 pub(super) mod stub;
+mod visible;
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -62,6 +63,7 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
     s.turn("general", stub::DIRECTION).await?;
     std::fs::remove_file(s.sandbox.data.join("e2e-hold-tool"))?;
     let complete = wait_result(&s).await?;
+    visible::assert_delivered_messages(&s, &child_id).await?;
     assert_eq!(complete["relation"]["relation_id"], relation);
     assert_eq!(complete["session_id"], child_id);
     assert_eq!(complete["result"]["status"], "success", "{complete}");

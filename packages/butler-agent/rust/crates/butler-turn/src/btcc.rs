@@ -169,6 +169,7 @@ pub use subsessions::{
     InterruptedSubsessionEvent, StewardDelegationRequest, SubsessionCancelRequest,
     SubsessionChildQueue, SubsessionDirectionRequest, SubsessionEnqueue, SubsessionResumeRequest,
     SubsessionService, WorkerDelegationRequest, WorkerProfile, WorkerProfileReader,
+    delivered_direction,
 };
 pub use work::WorkStatus as DurableWorkStatus;
 pub use work::policy::{

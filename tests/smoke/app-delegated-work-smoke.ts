@@ -23,7 +23,14 @@ const parent = await server.api<SessionView>("/session-view?session_id=general")
 const child = structuredClone(HARNESS_SS03_SUMMARY.steward_children![0]!);
 child.relation.parent_session_id = "general";
 const observer = { ...structuredClone(HARNESS_SS03_OBSERVER_VIEW), relation: child.relation };
-parent.messages = [{ ...observer.messages[0]!, id: "m3", chat_id: "general", text: "Delegated work started.", status: "delivered", turn_id: "turn-2" }];
+const DELIVERED = "Compare the two onboarding drafts and recommend one.";
+observer.messages = [{
+  id: "steward-packet", chat_id: observer.session_id, turn_id: observer.latest_turn!.id, role: "user",
+  text: `role: steward\nrequest: ${DELIVERED}\nacceptance_criteria: ["Goal: pick the clearer onboarding draft"]\nPrior delegation context (evidence, not new authority): none\nPlan, execute, review, and report this delegated request to Butler.`,
+  delivered_text: DELIVERED, status: "delivered", cursor: 0,
+  created_at: "2026-05-01T00:09:40.000Z", updated_at: "2026-05-01T00:09:40.000Z",
+}, ...observer.messages];
+parent.messages = [{ ...HARNESS_SS03_OBSERVER_VIEW.messages[0]!, id: "m3", chat_id: "general", text: "Delegated work started.", status: "delivered", turn_id: "turn-2" }];
 parent.message_window = { next_cursor: 1, complete: true };
 parent.active_turn = null;
 parent.latest_turn = null;
@@ -139,6 +146,12 @@ try {
     await pill.click();
     await dialog.getByRole("button", { name: "Stop", exact: true }).waitFor();
     await capture("modal-running");
+    if (!baseline) {
+      const text = await dialog.innerText();
+      assert(text.includes(DELIVERED));
+      assert(!text.includes("role: steward"));
+      assert(!text.includes("Prior delegation context"));
+    }
     const beforeIdle = requests;
     await page.waitForTimeout(2100);
     if (!baseline) assert.equal(requests, beforeIdle, "no observer polling during idle");
@@ -201,7 +214,7 @@ try {
     await page.close();
   }
   console.log(JSON.stringify({ ok: true, baseline, timingsMs: timings, maxMs: Math.max(...timings), requests,
-    checks: baseline ? ["before-snapshots"] : ["parent-ended-child-running", "reload", "stop-accepted-still-running", "confirmed-stop-all-surfaces-500ms", "collapsed-summary", "complete", "fail", "no-idle-polling", "attention-notification-and-clear", "original-permission-menu-with-existing-grants"] }));
+    checks: baseline ? ["before-snapshots"] : ["steward-modal-delivered-text", "parent-ended-child-running", "reload", "stop-accepted-still-running", "confirmed-stop-all-surfaces-500ms", "collapsed-summary", "complete", "fail", "no-idle-polling", "attention-notification-and-clear", "original-permission-menu-with-existing-grants"] }));
 } finally {
   await browser.close();
   await server.stop();
