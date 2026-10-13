@@ -17,9 +17,8 @@ import { useFirstRunStages, connectionActions } from "./useFirstRunStages";
 import type { FirstRunStep } from "./FirstRunSteps";
 
 export type AiStage = "pick" | "auth" | "reply";
-export type ImportStage = "agents" | "browsers";
 
-/** `first-run`: welcome, consent, memory, pick an AI, optional import, then finish. `consent`: a newer consent only. `rerun`: from Settings, cancellable. */
+/** `first-run`: welcome, consent, memory, pick an AI, optional import from other AI tools, then finish. `consent`: a newer consent only. `rerun`: from Settings, cancellable. */
 export type FirstRunMode = "first-run" | "consent" | "rerun";
 
 export type ConnectView =
@@ -73,7 +72,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   const navigation = useConsentScreen(mode);
   const { screen, setScreen, focusStart } = navigation;
   const stages = useFirstRunStages(mode);
-  const { view, importDone, authDone, replyDone, advanceOnConnect, importStage, setAuthDone, setReplyDone, setAdvanceOnConnect } = stages;
+  const { view, importDone, authDone, replyDone, advanceOnConnect, setAuthDone, setReplyDone, setAdvanceOnConnect } = stages;
   const copy = firstRunCopy[language];
   const { acceptedAt, savingConsent, agree, clearAcceptance } = useWelcomeConsent({
     language, onAgree: () => setScreen(mode === "first-run" ? "memory" : "connect"),
@@ -118,12 +117,11 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
 
   // Import ①'s result is its own screen after the run (no undo in first run; Settings changes things later).
   const agentsDone = Boolean(imports.agentImport.result) && !imports.agentImport.error;
-  const browsersDone = Boolean(imports.browserImport.result) && !imports.browserImport.error;
   const agentPage = imports.agentPicks.current ? `agents:${imports.agentPicks.current.key}` : "agents";
-  const importKey = importStage === "agents" ? agentsDone ? "agents:done" : agentPage : browsersDone ? "browsers:done" : "browsers";
+  const importKey = agentsDone ? "agents:done" : agentPage;
   const stageKey = step === "connect" ? `connect:${aiStage}` : step === "import" ? `import:${importKey}` : step;
-  const substep = step === "connect" ? { index: ["pick", "auth", "reply"].indexOf(aiStage) + 1, total: 3 }
-    : step === "import" ? { index: importStage === "agents" ? 1 : 2, total: 2 } : undefined;
+  // Only the AI step has substeps; import is a single page.
+  const substep = step === "connect" ? { index: ["pick", "auth", "reply"].indexOf(aiStage) + 1, total: 3 } : undefined;
 
   return {
     mode, copy, language, setLanguage, online, screen, step, focusStart, view, savingConsent, local, signIn, commit, reply, memory,
@@ -134,7 +132,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     agree,
     start: navigation.start,
     ...connectionActions({ stages, commit, signIn, current, onCancel }),
-    aiStage, importStage, agentsDone, browsersDone, stageKey, substep, ...imports,
+    aiStage, agentsDone, stageKey, substep, ...imports,
     backToWelcome: navigation.backToWelcome,
     decline: () => navigation.decline(clearAcceptance),
     backToConsent: navigation.backToConsent,

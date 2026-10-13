@@ -6,7 +6,6 @@ import { resolveAppearanceTheme } from "@/app/utils.ts";
 import { WindowControls } from "@/components/layout/WindowControls";
 import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
 import { FirstRunAgentStep } from "./FirstRunAgentStep";
-import { FirstRunBrowserStep } from "./FirstRunBrowserStep";
 import { useSetupScene } from "./useSetupSceneReady";
 import { FirstRunConsent } from "./FirstRunConsent";
 import { FirstRunConnect } from "./FirstRunConnect";
@@ -58,7 +57,7 @@ export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps
       {flow.step === "welcome" ? <FirstRunWelcome flow={flow} />
         : flow.step === "consent" ? <FirstRunConsent flow={flow} />
           : flow.step === "memory" ? <FirstRunMemory flow={flow} />
-          : flow.step === "import" ? (flow.importStage === "agents" ? <FirstRunAgentStep flow={flow} /> : <FirstRunBrowserStep flow={flow} />)
+          : flow.step === "import" ? <FirstRunAgentStep flow={flow} />
           : flow.step === "ready" ? <FirstRunReady flow={flow} /> : <FirstRunConnect flow={flow} />}
     </SetupWizardShell>
   );

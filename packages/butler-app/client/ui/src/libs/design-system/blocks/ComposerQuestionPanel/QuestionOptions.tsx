@@ -24,7 +24,7 @@ export function QuestionOptions({ model: m, labels }: { model: ReturnType<typeof
       else if (rect.bottom > frame.bottom) scroll.scrollTop += rect.bottom - frame.bottom;
     } }, [m.highlight, m.otherOpen]);
   const q = m.question;
-  if (q.type === "text") return <Input aria-label={q.text} placeholder={q.placeholder} value={m.answer.text} disabled={m.busy}
+  if (q.type === "text") return <Input aria-label={q.text} placeholder={q.placeholder ?? labels.other} value={m.answer.text} disabled={m.busy}
     onChange={(e) => m.update({ text: e.target.value, skipped: false })} />;
   const options = [...q.options, ...(q.allowOther ? [{ label: labels.other }] : [])];
   return <Stack gap="xs" role={q.type === "multi" ? "group" : "radiogroup"} aria-label={q.text}>

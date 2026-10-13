@@ -7,13 +7,14 @@ type FirstRunCopy = ReturnType<typeof getAppCopy>["firstRun"];
 type ImportState = { importRuns: number; agentSources: string[]; agentRequests: Record<string, unknown>[] };
 
 /**
- * Import ①: tools that hold something start on, the empty one is blocked; one page per chosen tool with
+ * Import: tools that hold something start picked, the empty one is blocked; one page per chosen tool with
  * every item on; Back walks the pages and imports nothing; the last page imports only what stays on.
  */
 export async function agentImport(page: Page, copy: FirstRunCopy, state: ImportState, capture: (page: Page, name: string) => Promise<void>, prefix: string) {
   const text = copy.import;
-  const tool = (key: string) => page.locator(`[data-agent-import-source="${key}"] [role="switch"]`);
-  const item = (name: string) => page.locator(`[data-agent-import-item="${name}"] [role="switch"]`);
+  // DS pick cards: the whole card is a checkbox with a check on the right, no switches.
+  const tool = (key: string) => page.locator(`[data-agent-import-source="${key}"][role="checkbox"]`);
+  const item = (name: string) => page.locator(`[data-agent-import-item="${name}"][role="checkbox"]`);
   const next = () => page.getByRole("button", { name: copy.next, exact: true }).click();
   /** The card morph briefly shows the leaving and arriving pages; wait for one page with this progress. */
   const onPage = async (name: string, index: number) => {
@@ -22,6 +23,7 @@ export async function agentImport(page: Page, copy: FirstRunCopy, state: ImportS
   };
   const back = () => page.getByRole("button", { name: copy.back, exact: true }).click();
   await page.locator("#first-run-agents-title").waitFor();
+  assert.equal(await page.locator('[data-first-run-screen] [role="switch"]').count(), 0, "no switches on the import step");
   const [runs, requests] = [state.importRuns, state.agentRequests.length];
   await tool("claude-code").and(page.locator('[aria-checked="true"]')).waitFor();
   assert.equal(await tool("codex").getAttribute("aria-checked"), "true");

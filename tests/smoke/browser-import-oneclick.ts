@@ -97,7 +97,7 @@ async function activeStep() {
   await settleFirstRun(page);
   return await page.locator("ol [aria-current=\"step\"]").innerText();
 }
-/** Step order, back targets and the two import substeps (other AI tools, then browsers) between the AI choice and the finish. */
+/** Step order, back targets and the import step (other AI tools) between the AI choice and the finish. */
 async function wizardFlow(copy: AppCopy) {
   const steps = copy.firstRun.steps, text = copy.firstRun;
   await page.locator("[data-first-run-screen=\"memory\"]").waitFor();
@@ -119,30 +119,18 @@ async function wizardFlow(copy: AppCopy) {
   const runsBefore = agentRuns.length;
   await page.getByRole("button", { name: text.next, exact: true }).click();
   await page.locator("[data-agent-import-source]").nth(3).waitFor();
-  assert.equal(await activeStep(), `5\n${copy.settings.pageSections.import} 1/2`, "other AI tools come before browsers");
+  // Import is one page (other AI tools); browsers are imported from Settings only.
+  assert.equal(await activeStep(), `5\n${copy.settings.pageSections.import}`, "import has no substep counter");
   await wizardCapture("wizard-agents");
   await page.getByRole("button", { name: text.import.skip, exact: true }).click();
-  await page.locator("[data-import-source]").nth(3).waitFor();
-  assert.equal(await activeStep(), `5\n${copy.settings.pageSections.import} 2/2`);
-  assert.equal(agentRuns.length, runsBefore, "Skip imports nothing");
-  await wizardCapture("wizard-import");
-  await page.getByRole("button", { name: text.back, exact: true }).click();
-  await page.locator("#first-run-agents-title").waitFor();
-  await page.getByRole("button", { name: text.back, exact: true }).click();
-  await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
-  fixtureSources = [];
-  await connectStub();
-  await page.getByRole("button", { name: text.next, exact: true }).click();
-  await page.getByRole("button", { name: text.import.skip, exact: true }).click();
-  await page.getByText(text.import.browsersEmpty, { exact: true }).waitFor();
-  await wizardCapture("wizard-import-empty");
-  fixtureSources = sources;
-  await page.getByRole("button", { name: text.next, exact: true }).click();
   await page.getByRole("heading", { name: text.doneTitle, exact: true }).waitFor();
+  assert.equal(agentRuns.length, runsBefore, "Skip imports nothing");
+  assert.equal(await page.locator("[data-import-source]").count(), 0, "no browser import in first run");
   await wizardCapture("ready");
   await page.getByRole("button", { name: text.back, exact: true }).click();
-  await page.locator("#first-run-browsers-title").waitFor();
-  await page.getByRole("button", { name: text.next, exact: true }).click();
+  await page.locator("#first-run-agents-title").waitFor();
+  await page.getByRole("button", { name: text.import.skip, exact: true }).click();
+  await page.getByRole("heading", { name: text.doneTitle, exact: true }).waitFor();
   await page.getByRole("button", { name: text.finish, exact: true }).click();
   await page.locator("[data-test-class=\"first-run-setup\"]").waitFor({ state: "detached" });
 }

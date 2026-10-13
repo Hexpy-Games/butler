@@ -40,6 +40,12 @@ import { ChoiceCard, ChoiceCardList, ProviderLogo, Tag } from "@/butler-ds";
 </ChoiceCardList>
 ```
 
+## Picking several
+Pass `role="group"` on `ChoiceCardList`; each card takes `role="checkbox"`,
+`aria-checked`, `selected`, `chevron={false}` and, when picked, a `CheckIcon`
+as `meta` (the check sits on the right). Use this, not a list of `Switch`es,
+when people pick items to bring in or act on.
+
 ## Wrong use cases
 - Do not use it for a form value; use `Select` or `SegmentedControl`.
 - Do not nest buttons inside a card; the whole card is the button.
