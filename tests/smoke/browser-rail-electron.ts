@@ -68,7 +68,7 @@ try {
     const result = await app.main<{ tab: string; status: string }>(`${browser}.execute(${JSON.stringify({ op: "tab.open", session: "general", args: { url: app.url, background: true, policy: { content_origin: new URL(app.url).origin } } })})`);
     assert.equal(result.status, "ok"); ids.push(result.tab);
   }
-  await app.main(`(()=>{for(const [n,id] of ${JSON.stringify(ids)}.entries()){const tab=${browser}.tabs.get(id);tab.title='Page '+(n+1);tab.busy=true;tab.lastAgentCall=4-n;} ${browser}.publish()})()`);
+  await app.main(`(()=>{for(const [n,id] of ${JSON.stringify(ids)}.entries()){const tab=${browser}.tabs.get(id);tab.title='Page '+(n+1);tab.busy=true;tab.lastAgentCall=Date.now()-n;} ${browser}.publish()})()`);
   await app.click("General");
   assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))"), false, "no automatic area open");
   if (!baseline) {
