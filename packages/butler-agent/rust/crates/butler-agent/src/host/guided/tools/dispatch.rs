@@ -143,6 +143,7 @@ pub(super) async fn execute(
                         .and_then(Value::as_str)
                         .map(str::to_owned),
                     access_mode: access_mode(owner),
+                    schedule_run: owner.unattended_run(),
                 },
                 &reviewed,
             )

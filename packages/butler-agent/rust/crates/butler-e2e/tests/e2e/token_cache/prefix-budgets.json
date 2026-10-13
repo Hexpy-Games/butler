@@ -25,5 +25,11 @@
   "delegated|worker|ask_except_reads": 162,
   "legacy|butler|ask_except_reads|ledger": 2519,
   "legacy|butler|ask_except_reads|local": 2456,
-  "legacy|butler|ask_except_reads|none": 2456
+  "legacy|butler|ask_except_reads|none": 2456,
+  "delegated|steward|auto|mutation": 807,
+  "delegated|steward|auto|read_only": 801,
+  "delegated|worker|auto": 162,
+  "legacy|butler|auto|ledger": 2519,
+  "legacy|butler|auto|local": 2456,
+  "legacy|butler|auto|none": 2456
 }

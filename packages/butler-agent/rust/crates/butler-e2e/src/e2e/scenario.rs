@@ -50,6 +50,7 @@ pub enum Access {
     FullAccess,
     AskAlways,
     AskExceptReads,
+    Auto,
 }
 
 impl Access {
@@ -59,6 +60,7 @@ impl Access {
             Self::FullAccess => "full_access",
             Self::AskAlways => "ask_first",
             Self::AskExceptReads => "ask_except_reads",
+            Self::Auto => "auto",
         }
     }
 }

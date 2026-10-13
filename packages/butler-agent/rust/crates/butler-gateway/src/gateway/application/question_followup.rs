@@ -25,6 +25,7 @@ pub(super) async fn send(
             access_mode: None,
             plan_mode: None,
             subsession_result: None,
+            schedule_run: None,
         },
     })
     .await?;
