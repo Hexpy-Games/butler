@@ -2,7 +2,7 @@ import { BrowserWindow, nativeImage } from "electron";
 import { evaluateWorld, framePoint } from "./frame-worlds.mjs";
 import { resolveSource } from "./page/snapshot.mjs";
 import { imageSource } from "./page/collect-image.mjs";
-import { secureBoxes } from "./capture-security.mjs";
+import { secureBoxes, captureViewport } from "./capture-security.mjs";
 
 /** Compose on a Butler-owned bitmap, never modify the page or capture the pointer. */
 async function markedImage(image, marks) {
@@ -86,7 +86,7 @@ function encode(image, max = 1024) {
 export async function maskSecure(tab, image, marks) {
   marks ??= await secureBoxes(tab);
   if (!marks.length) return image;
-  const viewport = await tab.view.webContents.executeJavaScriptInIsolatedWorld(9001, [{ code: "({width:innerWidth,height:innerHeight})" }]);
+  const viewport = await captureViewport(tab);
   const size = image.getSize(), scale = tab.bounds?.scale ?? 1;
   const sx = size.width / (viewport.width * scale), sy = size.height / (viewport.height * scale);
   return markedImage(image, marks.map(mark => ({ ...mark, rect: { x: mark.rect.x * sx, y: mark.rect.y * sy, width: mark.rect.width * sx, height: mark.rect.height * sy } })));

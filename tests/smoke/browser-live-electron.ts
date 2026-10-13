@@ -8,12 +8,20 @@ import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { startWriteTrace } from "./browser-p0-write-trace";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence);
-const fixture = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: request => new Response(new URL(request.url).pathname.endsWith("vault")
+const fixture = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request => {
+  const path = new URL(request.url).pathname;
+  if (path.endsWith("resource")) {
+    await Bun.sleep(6000);
+    return new Response('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="blue"/></svg>', { headers: { "content-type": "image/svg+xml" } });
+  }
+  if (path.endsWith("loading")) return new Response('<h1>Loading</h1><img src="resource">', { headers: { "content-type": "text/html" } });
+  return new Response(path.endsWith("vault")
   ? "<!doctype html><style>body{margin:0}input{box-sizing:border-box;width:1280px;height:300px;background:white;font-size:80px}</style><input autocomplete=\"cc-number\" aria-label=\"Card number\">"
   : `<!doctype html><style>body{margin:0}button{font-size:40px}</style><button onclick="this.textContent=++window.acts">0</button><canvas width="1280" height="700"></canvas>
 <script>window.acts=0;const c=document.querySelector('canvas').getContext('2d');let n=0;
 function draw(){c.fillStyle='hsl('+n++%360+' 65% 60%)';c.fillRect(0,0,1280,700);requestAnimationFrame(draw)}draw()</script>`,
-  { headers: { "content-type": "text/html" } }) });
+  { headers: { "content-type": "text/html" } });
+} });
 const app = await browserAgentApp(evidence, () => null);
 const subject = "globalThis.browserAgentSubject";
 const origin = `http://127.0.0.1:${fixture.port}`;
@@ -107,5 +115,17 @@ try {
   const png = await app.page!.expression<string>(`document.getElementById(${JSON.stringify(vault.tab)}).toDataURL('image/png')`);
   writeFileSync(join(evidence, "masked-frame.png"), Buffer.from(png.split(",")[1], "base64"));
   await app.page!.expression(`liveStops[${JSON.stringify(vault.tab)}]()`);
-  console.log("subscribe/unsubscribe, visibility, area-open and vault masking: PASS");
+  await app.call("close", { id: vault.tab });
+  const loading = await execute<Result>("tab.open", undefined, { url: `${origin}/__o/loading`, background: true, policy: { content_origin: origin } });
+  await app.page!.expression(`subscribeLive(${JSON.stringify(loading.tab)})`);
+  try { await waitBrowser(() => app.page!.expression(`liveCounts[${JSON.stringify(loading.tab)}]>=2`), "slow refresh while loading"); }
+  catch (error) {
+    const facts = await app.main(`(()=>{const service=${subject}.live;const state=service.subscriptions.get(${JSON.stringify(loading.tab)});const tab=${subject}.tabs.get(${JSON.stringify(loading.tab)});return {documentVisible:service.documentVisible,areaVisible:${subject}.areaVisible,allowed:service.allowed(tab,state),loading:tab.view.webContents.isLoading(),url:tab.url,seq:state.seq,frozen:state.frozen,dirty:state.dirty,capturing:state.capturing,attemptedAt:state.attemptedAt}})()`);
+    writeFileSync(join(evidence, "loading-failure.json"), JSON.stringify(facts)); throw error;
+  }
+  await waitBrowser(() => app.main(`(()=>{const state=${subject}.live.subscriptions.get(${JSON.stringify(loading.tab)});return !state.dirty&&!state.capturing&&!state.timer&&!${subject}.tabs.get(${JSON.stringify(loading.tab)}).view.webContents.isLoading()})()`), "loading stopped and final frame delivered");
+  const idleCount = (await counts())[loading.tab]; await Bun.sleep(2300);
+  assert.equal((await counts())[loading.tab], idleCount, "idle tab has no periodic captures");
+  await app.page!.expression(`liveStops[${JSON.stringify(loading.tab)}]()`);
+  console.log("subscribe/unsubscribe, visibility, system idle, area-open, vault masking, loading refresh and idle stop: PASS");
 } finally { await app.stop(); fixture.stop(true); }

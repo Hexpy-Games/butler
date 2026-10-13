@@ -1,5 +1,5 @@
 import { powerMonitor } from "electron";
-import { secureBoxes } from "./capture-security.mjs";
+import { secureBoxes, captureViewport } from "./capture-security.mjs";
 import { maskSecure } from "./capture.mjs";
 
 const REFRESH_MS = 2000;
@@ -117,7 +117,7 @@ export class BrowserLiveFrames {
       state.timer = setTimeout(() => { state.timer = null; this.sync(); }, REFRESH_MS);
       return;
     }
-    state.capturing = true; state.attemptedAt = Date.now();
+    state.capturing = true; state.dirty = false; state.attemptedAt = Date.now();
     const revision = state.revision;
     try {
       let image = await tab.view.webContents.capturePage(undefined, { stayHidden: true });
@@ -126,15 +126,16 @@ export class BrowserLiveFrames {
       const masked = Boolean(marks.length || tab.vaultFilled || tab.payStep || tab.signinStep === "secure_keypad");
       // Fail closed: an unlocatable sensitive surface cannot become a thumbnail.
       if (masked && !marks.length) {
-        const viewport = await tab.view.webContents.executeJavaScriptInIsolatedWorld(9001,
-          [{ code: "({width:innerWidth,height:innerHeight})" }]);
+        const viewport = await captureViewport(tab);
         const scale = tab.bounds?.scale ?? 1;
         marks.push({ secure: true, rect: { x: 0, y: 0, width: viewport.width * scale, height: viewport.height * scale } });
       }
       image = image.resize({ width: state.width, height: Math.round(state.width * 260 / 416) });
       if (masked) image = await maskSecure(tab, image, marks);
-      if (this.subscriptions.get(tab.id) !== state || revision !== state.revision ||
-          !this.allowed(tab, state) || powerMonitor.getSystemIdleTime() >= IDLE_SECONDS) return;
+      if (this.subscriptions.get(tab.id) !== state || revision !== state.revision) return;
+      if (!this.allowed(tab, state) || powerMonitor.getSystemIdleTime() >= IDLE_SECONDS) {
+        state.dirty = true; return;
+      }
       state.frame = { tab: tab.id, seq: ++state.seq, bytes: new Uint8Array(image.toJPEG(60)), masked };
       state.dirty = false; state.frozen = masked;
       state.sender.send("browser:frame", state.frame);
@@ -144,6 +145,6 @@ export class BrowserLiveFrames {
 
   dispose() {
     for (const id of this.subscriptions.keys()) this.unsubscribe(id);
-    this.unbindWindow(); this.window = null;
+    this.fills.clear(); this.unbindWindow(); this.window = null;
   }
 }
