@@ -5,6 +5,11 @@ import { browserCall, openConversationBrowser } from "./browserBridge";
 import { agentTabState, useConversationAgentTabs } from "./useConversationAgentTabs";
 import { useDocumentVisible, useLiveFrames } from "./useLiveFrames";
 
+function siteTitle(url: string, fallback: string) {
+  try { return new URL(url).hostname || fallback; }
+  catch { return fallback; }
+}
+
 /** Stream only the cards DS will show, measured from the conversation, not the window. */
 export function AgentTabRail({ session }: { session: string }) {
   useAppLocale();
@@ -27,7 +32,7 @@ export function AgentTabRail({ session }: { session: string }) {
     onMore={id => void openConversationBrowser(session, id)} tabs={tabs.map(tab => {
       const state = agentTabState(tab);
       const onOpen = () => void openConversationBrowser(session, tab.id);
-      return { id: tab.id, title: tab.title || copy.newTab, favicon: tab.favicon, frame: frames[tab.id], state,
+      return { id: tab.id, title: tab.title || copy.newTab, shortTitle: siteTitle(tab.url, tab.title || copy.newTab), favicon: tab.favicon, frame: frames[tab.id], state,
         stateLabel: state === "attention" ? copy.rail.needsCheck : state === "busy" ? copy.agentUsing : state === "held" ? copy.userControl : copy.rail.error,
         onOpen, onClose: () => void browserCall("close", { id: tab.id }),
         needsYou: { action: { label: copy.rail.openToCheck, onAction: onOpen } },
