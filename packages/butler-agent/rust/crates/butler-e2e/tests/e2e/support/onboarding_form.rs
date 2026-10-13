@@ -5,7 +5,12 @@ use butler_e2e::e2e::{
 use serde_json::{Value, json};
 pub(super) const PROMPT: &str = "온보딩 해줘";
 pub(super) fn questions(id: &str) -> Value {
-    json!({"questions":[{"id":id,"eyebrow":"온보딩","title":"어떻게 불러드리면 좋겠습니까?","kind":"single","allow_custom":true,"options":[{"id":"name","label":"이름으로 부르기"},{"id":"skip","label":"건너뛰기"}]}]})
+    let question = if id == "principal_name" {
+        json!({"id":id,"eyebrow":"온보딩","title":"이름을 알려주시겠습니까?","kind":"text","allow_custom":true,"options":[]})
+    } else {
+        json!({"id":id,"eyebrow":"온보딩","title":"어떻게 불러드리면 좋겠습니까?","kind":"single","allow_custom":true,"options":[{"id":"name","label":"민수"},{"id":"polite","label":"민수님"}]})
+    };
+    json!({"questions":[question]})
 }
 pub(super) fn cassette() -> Result<Cassette, HarnessError> {
     let mut c = Cassette::load("TOOL-01")?;
