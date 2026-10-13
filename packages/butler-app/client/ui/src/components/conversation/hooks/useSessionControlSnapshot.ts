@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
+import { useButlerStore } from "@/app/store.ts";
 import type { ControlsLoadState, SessionControlsView } from "@/app/types.ts";
 import type { ComposerControlPatch } from "./useComposerControls.ts";
 
@@ -15,6 +16,11 @@ export function useSessionControlSnapshot(activeChatId: string) {
     let cancelled = false;
     setSnapshot(null);
     if (!isServerBackedSessionId(activeChatId)) {
+      // A conversation still being created shows the controls its draft chose.
+      const { optimisticSessionStart: start, modelCatalog } = useButlerStore.getState();
+      if (start?.id === activeChatId && start.controls) {
+        setSnapshot({ session_id: activeChatId, controls: start.controls, revision: 0, catalog_generation: modelCatalog.generation });
+      }
       setLoadState("ready");
       return;
     }

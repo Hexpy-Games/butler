@@ -37,6 +37,8 @@ export interface NavRowProps extends DsPrivateStyleProps, WindowDragProps {
   onContextMenu?: HTMLAttributes<HTMLDivElement>["onContextMenu"];
   /** Accessible label (falls back to label if string) */
   ariaLabel?: string;
+  /** Row state for assistive technology (such as Unread); the row's name hides the marks inside it. */
+  ariaDescription?: string;
   /** Expanded state for tree-like navigation rows */
   ariaExpanded?: boolean;
   /** Row density; omit inside a SidebarShell to follow the shell's density. */
@@ -61,6 +63,7 @@ export function NavRow({
   onClick,
   onContextMenu,
   ariaLabel,
+  ariaDescription,
   ariaExpanded,
   density,
   reserveIcon = false,
@@ -90,6 +93,7 @@ export function NavRow({
       <Clickable
         aria-current={active ? "page" : undefined}
         aria-label={accessibleLabel}
+        aria-description={ariaDescription}
         aria-disabled={disabled}
         className={dsClass(rowClassName)}
         data-has-hover-actions={hasHoverActions ? "true" : undefined}
@@ -112,6 +116,7 @@ export function NavRow({
       data-test-class={dataTestClass}
       data-sidebar-density={density}
       title={accessibleLabel}
+      aria-description={ariaDescription}
       aria-disabled={disabled}
       aria-expanded={ariaExpanded}
       data-has-hover-actions={hasHoverActions ? "true" : undefined}

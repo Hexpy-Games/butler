@@ -69,7 +69,7 @@ impl Launch {
             serde_json::json!({ "token": token }).to_string(),
         )?;
         let tmp = sandbox.root.join("tmp");
-        fs::create_dir_all(&tmp)?;
+        fs::create_dir_all(tmp.join("test-secrets"))?;
         let (port, reservation) = ports::reserve()?;
         Ok(Self {
             binary: sandbox.binary.clone(),
