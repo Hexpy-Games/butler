@@ -13,6 +13,7 @@ mod downloads;
 mod guard;
 mod hidden;
 mod identity;
+mod images;
 mod parallel;
 mod preview;
 mod real_app;

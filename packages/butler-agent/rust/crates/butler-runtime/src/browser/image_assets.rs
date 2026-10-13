@@ -64,13 +64,16 @@ pub fn normalize(bytes: &[u8]) -> Result<NormalizedImage, &'static str> {
     Err("image_too_large")
 }
 
-pub async fn fetch(raw: &str) -> Result<Vec<u8>, &'static str> {
-    tokio::time::timeout(Duration::from_secs(10), fetch_inner(raw))
-        .await
-        .map_err(|_| "image_timeout")?
+pub async fn fetch(raw: &str, referer: &str, user_agent: &str) -> Result<Vec<u8>, &'static str> {
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        fetch_inner(raw, referer, user_agent),
+    )
+    .await
+    .map_err(|_| "image_timeout")?
 }
 
-async fn fetch_inner(raw: &str) -> Result<Vec<u8>, &'static str> {
+async fn fetch_inner(raw: &str, referer: &str, user_agent: &str) -> Result<Vec<u8>, &'static str> {
     let mut url = Url::parse(raw).map_err(|_| "invalid_image_url")?;
     for _ in 0..5 {
         if !matches!(url.scheme(), "http" | "https")
@@ -95,11 +98,16 @@ async fn fetch_inner(raw: &str) -> Result<Vec<u8>, &'static str> {
         .await
         .map_err(|_| "image_fetch_failed")?
         .map_err(|_| "image_fetch_failed")?;
-        let mut response = client
+        let mut request = client
             .get(url.clone())
-            .send()
-            .await
-            .map_err(|_| "image_fetch_failed")?;
+            .header(reqwest::header::ACCEPT, "image/*");
+        if !user_agent.is_empty() {
+            request = request.header(reqwest::header::USER_AGENT, user_agent);
+        }
+        if let Some(referer) = image_referer(referer, &url) {
+            request = request.header(reqwest::header::REFERER, referer);
+        }
+        let mut response = request.send().await.map_err(|_| "image_fetch_failed")?;
         if response.status().is_redirection() {
             let location = response
                 .headers()
@@ -110,7 +118,11 @@ async fn fetch_inner(raw: &str) -> Result<Vec<u8>, &'static str> {
             continue;
         }
         if !response.status().is_success() {
-            return Err("image_fetch_failed");
+            return Err(match response.status().as_u16() {
+                401 | 403 => "image_access_denied",
+                404 | 410 => "image_not_found",
+                _ => "image_http_failed",
+            });
         }
         if !response
             .headers()
@@ -136,4 +148,21 @@ async fn fetch_inner(raw: &str) -> Result<Vec<u8>, &'static str> {
         return Ok(bytes);
     }
     Err("image_redirect_limit")
+}
+
+fn image_referer(raw: &str, target: &Url) -> Option<String> {
+    let mut page = Url::parse(raw).ok()?;
+    if !matches!(page.scheme(), "http" | "https")
+        || (page.scheme() == "https" && target.scheme() == "http")
+    {
+        return None;
+    }
+    page.set_username("").ok()?;
+    page.set_password(None).ok()?;
+    page.set_fragment(None);
+    if page.origin() != target.origin() {
+        page.set_path("/");
+        page.set_query(None);
+    }
+    Some(page.into())
 }

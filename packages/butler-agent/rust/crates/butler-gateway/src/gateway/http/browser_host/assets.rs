@@ -9,7 +9,11 @@ pub(super) async fn finish(
     op: &str,
     result: &mut Value,
 ) -> Result<(), HttpError> {
-    if op != "tab.image_collect" || result["status"] != "ok" {
+    if op != "tab.image_collect" {
+        return Ok(());
+    }
+    if result["status"] != "ok" {
+        explain_refusal(result);
         return Ok(());
     }
     let source_url = result["source_url"]
@@ -25,12 +29,18 @@ pub(super) async fn finish(
             .and_then(|raw| STANDARD.decode(raw).ok())
             .ok_or("invalid_image")
     } else {
-        butler_runtime::browser::fetch_image(&source_url).await
+        butler_runtime::browser::fetch_image(
+            &source_url,
+            result["referer"].as_str().unwrap_or(""),
+            result["user_agent"].as_str().unwrap_or(""),
+        )
+        .await
     };
     let bytes = match bytes {
         Ok(bytes) => bytes,
         Err(reason) => {
             *result = json!({"status":"refused","reason":reason});
+            explain_refusal(result);
             return Ok(());
         }
     };
@@ -48,6 +58,7 @@ pub(super) async fn finish(
         }) => *result = json!({"status":"refused","reason":code}),
         Err(_) => *result = json!({"status":"refused","reason":"asset_store_failed"}),
     }
+    explain_refusal(result);
     Ok(())
 }
 pub(super) async fn lookup(state: &HttpState, args: &Value) -> Result<Value, HttpError> {
@@ -79,4 +90,44 @@ pub(super) fn validate(op: &str, args: &Value) -> Result<(), HttpError> {
         ));
     }
     Ok(())
+}
+
+fn explain_refusal(result: &mut Value) {
+    if result["status"] != "refused" || result["recovery"].is_string() {
+        return;
+    }
+    let recovery = match result["reason"].as_str().unwrap_or("") {
+        "stale_ref" => "Observe the tab again and use a fresh image ref.",
+        "private_image_url" => {
+            "URL downloads require a public address. Collect an already-loaded image by ref or visible region."
+        }
+        "image_too_large" => {
+            "The source exceeds safe download or decode limits. Collect its loaded ref or a visible region."
+        }
+        "invalid_image" => {
+            "The source is not a supported raster image. Collect its loaded ref or a visible region for browser-rendered pixels."
+        }
+        "image_access_denied" => {
+            "The server denied this download (HTTP 401/403). Collect the image from a tab where it has loaded, by ref or visible region."
+        }
+        "image_not_found" => {
+            "The source no longer exists (HTTP 404/410). Observe the page again and collect its current image ref."
+        }
+        "image_http_failed" => {
+            "The image server returned an HTTP error. Collect an already-loaded image by ref or visible region."
+        }
+        "image_fetch_failed" | "image_timeout" => {
+            "The image request failed or timed out. Open the page, wait for the image, then collect its ref or a visible region."
+        }
+        "image_redirect_limit" => {
+            "The image redirected too many times. Open its page and collect the loaded image by ref."
+        }
+        "secure_field" => {
+            "The capture overlaps a protected field. Choose an image or region without protected fields."
+        }
+        _ => {
+            "Observe the tab again, check the image is visible, and collect a fresh ref or valid region."
+        }
+    };
+    result["recovery"] = json!(recovery);
 }
