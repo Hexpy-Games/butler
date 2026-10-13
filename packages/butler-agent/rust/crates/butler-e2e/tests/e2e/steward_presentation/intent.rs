@@ -22,4 +22,12 @@ pub(super) fn assert_intent_carried(requests: &[Value]) {
         assert!(input.contains(expected), "missing {expected}: {input}");
     }
     assert!(!input.contains("as unconfirmed"), "{input}");
+    assert!(input.contains(super::stub::REVISED_CHECK), "{input}");
+    assert_eq!(
+        input
+            .matches("Goal: Choose the better approach for the owner's next step")
+            .count(),
+        1,
+        "{input}"
+    );
 }
