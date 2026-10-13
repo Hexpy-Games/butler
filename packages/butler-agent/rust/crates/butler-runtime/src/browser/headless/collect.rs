@@ -29,9 +29,8 @@ pub(crate) async fn collect(page: &Page, args: &Value) -> Result<Value, String> 
     } else {
         observation.frames.first().ok_or("frame_unavailable")?
     };
-    if let Some(refused) = check_ref(page, frame, &args, epoch).await? {
-        return Ok(refused);
-    }
+    // An image's own pixels or file do not depend on what covers it on the page;
+    // only a rendered crop needs the element to be the unobstructed target.
     let function = SOURCE.replacen("export ", "", 1);
     let source = page
         .evaluate(
@@ -55,11 +54,30 @@ pub(crate) async fn collect(page: &Page, args: &Value) -> Result<Value, String> 
         result["status"] = json!("ok");
         return Ok(result);
     }
-    let mut crop = capture::screenshot(page, &args).await?;
-    crop["alt"] = source["alt"].clone();
-    crop["nearby_text"] = source["nearby_text"].clone();
-    crop["source_url"] = source["source_url"].clone();
-    Ok(crop)
+    let original = source["fetch_source"] == true;
+    let described = |mut result: Value| {
+        for key in ["alt", "nearby_text", "source_url"] {
+            result[key] = source[key].clone();
+        }
+        if original {
+            for key in ["fetch_source", "referer", "user_agent"] {
+                result[key] = source[key].clone();
+            }
+        }
+        result
+    };
+    if let Some(refused) = check_ref(page, frame, &args, epoch).await? {
+        return Ok(if original {
+            described(json!({"status":"ok"}))
+        } else {
+            refused
+        });
+    }
+    let crop = capture::screenshot(page, &args).await?;
+    if crop["status"] != "ok" && original {
+        return Ok(described(json!({"status":"ok"})));
+    }
+    Ok(described(crop))
 }
 
 async fn check_ref(

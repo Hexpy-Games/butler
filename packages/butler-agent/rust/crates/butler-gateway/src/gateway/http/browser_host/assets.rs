@@ -22,19 +22,36 @@ pub(super) async fn finish(
         .unwrap_or("")
         .to_owned();
     let pixels = result.as_object_mut().and_then(|o| o.remove("image"));
-    let bytes = if let Some(pixels) = pixels {
+    let rendered = pixels.map(|pixels| {
         pixels["data"]
             .as_str()
             .filter(|raw| raw.len() <= 12 * 1024 * 1024)
             .and_then(|raw| STANDARD.decode(raw).ok())
             .ok_or("invalid_image")
-    } else {
+    });
+    let original = || {
         butler_runtime::browser::fetch_image(
             &source_url,
             result["referer"].as_str().unwrap_or(""),
             result["user_agent"].as_str().unwrap_or(""),
         )
-        .await
+    };
+    let bytes = match rendered {
+        // A photo whose pixels the page withholds is collected from its own file
+        // (full size, whatever covers it); its rendered crop is the fallback.
+        Some(rendered) if result["fetch_source"] == true => match original().await {
+            Ok(bytes) => match tokio::task::spawn_blocking(move || {
+                butler_runtime::browser::normalize_image(&bytes).map(|_| bytes)
+            })
+            .await
+            {
+                Ok(Ok(bytes)) => Ok(bytes),
+                _ => rendered,
+            },
+            Err(reason) => rendered.or(Err(reason)),
+        },
+        Some(rendered) => rendered,
+        None => original().await,
     };
     let bytes = match bytes {
         Ok(bytes) => bytes,
@@ -125,9 +142,10 @@ fn explain_refusal(result: &mut Value) {
         "secure_field" => {
             "The capture overlaps a protected field. Choose an image or region without protected fields."
         }
-        _ => {
-            "Observe the tab again, check the image is visible, and collect a fresh ref or valid region."
-        }
+        // Other refusals (a covered element, a timeout, a changed page) keep the
+        // agent's per-reason recovery, which names one other source and when to
+        // stop instead of a generic retry.
+        _ => return,
     };
     result["recovery"] = json!(recovery);
 }

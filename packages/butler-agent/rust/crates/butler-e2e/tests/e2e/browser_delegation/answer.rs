@@ -5,20 +5,10 @@ use std::sync::Arc;
 pub(crate) fn parent_item(body: &Value, step: &mut usize) -> Value {
     let current = *step;
     *step += 1;
+    // The parent cites the page only its steward read: delegated reads are
+    // this conversation's provenance.
     let (name, args) = match current {
-        0 => (
-            "tool_describe",
-            json!({"ids":["native:browser_observe","native:browser_screenshot"]}),
-        ),
-        1 => (
-            "tool_call",
-            json!({"id":"native:browser_observe","arguments":{"tab":"parent-tab"}}),
-        ),
-        2 => (
-            "tool_call",
-            json!({"id":"native:browser_screenshot","arguments":{"tab":"parent-tab","observation":"parent-observation"}}),
-        ),
-        3 => {
+        0 => {
             let pattern = regex::Regex::new(r"img_[a-z0-9]{10,12}").unwrap();
             let mut ids = pattern
                 .find_iter(&body.to_string())
@@ -81,15 +71,6 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
         .unwrap()
         .unwrap()?;
     let message = wait_answer(&s, &script, &session).await?;
-    let attachments = message["attachments"]
-        .as_array()
-        .expect("final reply attachments");
-    assert_eq!(
-        attachments.len(),
-        1,
-        "the pictured page capture is removed and the other page capture stays: {attachments:?}"
-    );
-    assert_remaining_capture_source(&s, &session)?;
     let sets = &message["answer_blocks"];
     assert_eq!(sets[0]["spec"]["blocks"].as_array().unwrap().len(), 3);
     for (index, item) in sets[0]["spec"]["blocks"][0]["items"]
@@ -189,6 +170,12 @@ fn assert_presentation_contract(requests: &[Value]) {
         .expect("a steward request");
     let task = steward["input"].to_string();
     assert!(
+        steward
+            .to_string()
+            .contains("This Turn is already bound to this Work"),
+        "a steward starts on its runtime-bound child Work, without a continue_work round"
+    );
+    assert!(
         task.contains("Presentation: cards, table")
             && task.contains("Butler's Plan presents this result as cards, table")
             && task.contains("collect one representative photo per item with image_collect"),
@@ -273,29 +260,6 @@ fn assert_stored_ids(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), Harn
     assert!(spec.contains("img_"));
     assert!(!spec.contains("image_url"), "Signed URLs are HTTP metadata");
     assert!(!spec.contains("/assets/"));
-    Ok(())
-}
-
-fn assert_remaining_capture_source(
-    s: &butler_e2e::e2e::scenario::Scenario,
-    session: &str,
-) -> Result<(), HarnessError> {
-    let db = butler_platform::sqlite::open_with_flags(
-        s.sandbox.data.join("agent-runtime/btcc.sqlite"),
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )?;
-    let session_suffix = format!("%{session}");
-    let raw: String = db.query_row(
-        "SELECT final_payload_json FROM btcc_turns WHERE session_id LIKE ?1 AND final_payload_json IS NOT NULL",
-        [session_suffix],
-        |row| row.get(0),
-    )?;
-    let payload: Value = serde_json::from_str(&raw)?;
-    let artifacts = payload["artifacts"]
-        .as_array()
-        .expect("parent final payload artifacts");
-    assert_eq!(artifacts.len(), 1, "only the unpictured page capture stays");
-    assert_eq!(artifacts[0]["sourceUrl"], "https://example.org/");
     Ok(())
 }
 
