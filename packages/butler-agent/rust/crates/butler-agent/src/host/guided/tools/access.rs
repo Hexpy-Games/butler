@@ -3,24 +3,41 @@ use super::GuidedTools;
 use butler_core::tool_protocol::ToolName;
 use butler_turn::btcc::{
     AccessDecision, AccessRequest, ApprovalRisk, BtccError, CapabilityKind, ModelRoundToolCall,
-    TargetScope, command_access_risk, command_scope_unresolved, decide, needs_scope,
+    TargetScope, ToolExecutionError, command_access_risk, command_scope_unresolved, decide,
+    needs_scope,
 };
 use butler_turn::workspace::{FolderRelation, ScopeRoots, classify_targets};
 use serde_json::Value;
 
-pub(super) fn kind(call: &ModelRoundToolCall) -> CapabilityKind {
-    CapabilityKind::of_call(
+pub(super) async fn kind(call: &ModelRoundToolCall) -> Result<CapabilityKind, BtccError> {
+    if call.name == "run_command" {
+        // The first probe spawns a helper and waits for it. Cache it from a
+        // blocking worker before synchronous classification touches it.
+        tokio::task::spawn_blocking(butler_platform::command_sandbox::capabilities)
+            .await
+            .map_err(|error| BtccError::relayed("sandbox_probe_failed", error.to_string()))?;
+    }
+    Ok(CapabilityKind::of_call(
         &call.name,
         &call.arguments,
         super::effect::is_managed_project_ledger_effect(&call.name),
-    )
+    ))
 }
+pub(super) async fn gated_kind(
+    call: &ModelRoundToolCall,
+) -> Result<CapabilityKind, ToolExecutionError> {
+    Ok(kind(call)
+        .await
+        .map_err(ToolExecutionError::Integrity)?
+        .gated_effect())
+}
+
 pub(super) async fn decision(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
     args: &Value,
 ) -> Result<AccessDecision, BtccError> {
-    decision_for_kind(owner, call, args, kind(call)).await
+    decision_for_kind(owner, call, args, kind(call).await?).await
 }
 pub(super) async fn decision_for_kind(
     owner: &GuidedTools,

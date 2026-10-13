@@ -169,8 +169,16 @@ fn append_sandbox(encoded: &mut String, input: Assembly<'_>) -> Result<(), BtccE
         effect,
         base,
         budget,
+        summary,
         ..
     } = input;
+    if !summary.sandbox_violation.is_empty() {
+        append_value(
+            encoded,
+            "sandbox_violation",
+            &serde_json::json!(summary.sandbox_violation),
+        )?;
+    }
     let failed = budget.exit_code != Some(0) || budget.timed_out;
     append_denial(encoded, base, failed && !registered && effect.is_none())?;
     if registered {

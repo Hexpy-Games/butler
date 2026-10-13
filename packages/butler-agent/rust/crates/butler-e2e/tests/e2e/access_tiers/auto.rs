@@ -44,6 +44,7 @@ async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), Harn
     std::fs::create_dir_all(project.join(".git"))?;
     std::fs::write(project.join(".git/config"), "original-config")?;
     std::fs::write(project.join("a.txt"), "project-marker")?;
+    std::fs::create_dir_all(project.join("src"))?;
     let contained = butler_platform::command_sandbox::project_write_available();
 
     // In-folder edit and a project-contained command: no card (macOS); the
@@ -56,7 +57,7 @@ async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), Harn
                 "write_file",
                 &json!({"path":"notes.md","content":"auto-notes"}),
             ),
-            mutation("make", "echo hi > made.txt"),
+            mutation("make", "echo hi > src/made.txt"),
             call("read", "read_file", &json!({"requests":[{"path":"a.txt"}]})),
         ],
     );
@@ -75,7 +76,7 @@ async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), Harn
         std::fs::read_to_string(project.join("notes.md"))?,
         "auto-notes"
     );
-    assert!(project.join("made.txt").exists());
+    assert!(project.join("src/made.txt").exists());
     let output = outputs(&s, &chat, &id, &script, EDIT).await?;
     assert!(output.iter().any(|v| v.contains("project-marker")));
     eprintln!(
@@ -131,11 +132,24 @@ async fn sandbox_holds(
                 &json!({"path":"build.sh","content":body}),
             ),
             mutation("build", "sh build.sh"),
+            // Declared outputs must not copy protected files into artifacts
+            // that the next contained command can read.
+            call(
+                "publish",
+                "run_command",
+                &json!({"command":"true","summary":"Publish","state_effect":"mutation",
+                    "output_paths":[".git/config"]}),
+            ),
         ],
     );
     let id = accepted_turn_id(&s.gw.say(chat, ESCAPE).await?)?;
     delivered(s, chat, &id).await?;
     assert_counts(s, &id, 0, 0)?;
+    let published = s.sandbox.data.join("artifacts/generated/published");
+    assert!(
+        !published.exists() || std::fs::read_dir(&published)?.next().is_none(),
+        "a protected project file was published"
+    );
     let parent = project.parent().unwrap();
     assert!(
         !parent.join("escape.txt").exists(),
@@ -146,7 +160,7 @@ async fn sandbox_holds(
         "original-config"
     );
     let output = outputs(s, chat, &id, script, ESCAPE).await?;
-    assert_eq!(output.len(), 2);
+    assert_eq!(output.len(), 3);
     let command = output
         .iter()
         .find(|raw| raw.contains("project_write"))
