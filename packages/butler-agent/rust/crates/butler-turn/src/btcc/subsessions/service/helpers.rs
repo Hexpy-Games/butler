@@ -199,9 +199,25 @@ pub(super) fn child_metadata(
 
     let metadata = json!({"source":if role=="worker"{"btcc-worker"}else{"btcc-subsession"},"reasoning_effort":packet.reasoning_effort,"subsession":{"relation_id":packet.relation_id,"delegation_id":packet.delegation_id,"task_id":packet.task_id,"parent_session_id":packet.parent_session_id,"execution_mode":packet.execution_mode,"mutation_scope":packet.mutation_scope,"allowed_tools_and_effects":packet.allowed_tools_and_effects},"runtimePolicy":runtime_policy});
     match metadata {
-        Value::Object(metadata) => metadata,
+        Value::Object(metadata) => inherit_folder(metadata, parent),
         _ => Map::new(),
     }
+}
+
+/// The child works in the parent's current folder with the same consent.
+fn inherit_folder(
+    mut metadata: Map<String, Value>,
+    parent: &crate::workspace::StoredSessionBinding,
+) -> Map<String, Value> {
+    if crate::workspace::active_session_folder(parent).is_some()
+        && let Some(folder) = parent
+            .metadata
+            .as_ref()
+            .and_then(|value| value.get(crate::workspace::SESSION_FOLDER_KEY))
+    {
+        metadata.insert(crate::workspace::SESSION_FOLDER_KEY.into(), folder.clone());
+    }
+    metadata
 }
 
 pub(super) fn child_work_scope(

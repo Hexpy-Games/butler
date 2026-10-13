@@ -176,7 +176,7 @@ impl Status {
 fn operation_target(call: &super::contracts::ModelRoundToolCall) -> Option<String> {
     let keys: &[&str] = match call.name.as_str() {
         "run_command" => &["command"],
-        "write_file" | "edit_file" | "read_file" => &["path"],
+        "write_file" | "edit_file" | "read_file" | "switch_folder" => &["path"],
         "list_files" | "grep_files" => &["path", "directory", "root"],
         _ => return None,
     };

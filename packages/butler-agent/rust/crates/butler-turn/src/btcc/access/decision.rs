@@ -8,8 +8,12 @@ pub enum CapabilityKind {
     Exempt(ApprovalExemptAction),
     InternalRead,
     FileRead,
-    CommandObservation { sandboxed: bool },
-    CommandMutation { sandbox: CommandSandbox },
+    CommandObservation {
+        sandboxed: bool,
+    },
+    CommandMutation {
+        sandbox: CommandSandbox,
+    },
     Network,
     Connector,
     FileEdit,
@@ -19,6 +23,9 @@ pub enum CapabilityKind {
     CrossConversation,
     ButlerOutput,
     FullOnly(FullOnlyAction),
+    /// Moving the session's working folder; its scope says whether the
+    /// target stays within the consented folder or its repository.
+    FolderSwitch,
     OtherEffect,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,7 +79,7 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     use AccessDecision::{Allow, Ask, Deny};
     use CapabilityKind::{
         ButlerOutput, CommandMutation, CommandObservation, Connector, Exempt, FileEdit, FileRead,
-        FullOnly, InternalRead, Network, ProjectRecord,
+        FolderSwitch, FullOnly, InternalRead, Network, ProjectRecord,
     };
     if *mode == AccessMode::FullAccess {
         return Allow;
@@ -96,7 +103,8 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     match request.kind {
         Exempt(_) | InternalRead | ButlerOutput => Allow,
         FileRead if first && project => Allow,
-        CommandObservation { sandboxed: true } if project => Allow,
+        // A folder switch within the consented folder or its repository.
+        FolderSwitch | CommandObservation { sandboxed: true } if project => Allow,
         CommandObservation { sandboxed: false } | CommandMutation { .. }
             if first && project && request.risk == ApprovalRisk::Low =>
         {
@@ -125,6 +133,7 @@ pub fn needs_scope(mode: &AccessMode, kind: CapabilityKind) -> bool {
             first || sandboxed && *mode == AccessMode::AskAlways
         }
         CapabilityKind::FileEdit => *mode == AccessMode::Auto,
+        CapabilityKind::FolderSwitch => *mode != AccessMode::FullAccess,
         _ => false,
     }
 }
@@ -141,7 +150,7 @@ impl CapabilityKind {
             BindSessionGitWorktree, CallMcpTool, CreateAutomation, DeleteAutomation, EditFile,
             ForgetExplicitMemory, GrepFiles, ListFiles, OutputPublish, PreviewStart, PreviewStop,
             ReadFile, RequestServiceRestart, RunCommand, RunDueAutomations, SaveWallpaperModule,
-            SetWallpaper, StartTopicConversation, UpdateAutomation, WriteFile,
+            SetWallpaper, StartTopicConversation, SwitchFolder, UpdateAutomation, WriteFile,
         };
         let Some(tool) = ToolName::parse(name) else {
             return Self::OtherEffect;
@@ -178,6 +187,7 @@ impl CapabilityKind {
             SetWallpaper | SaveWallpaperModule => Self::SettingsWrite,
             StartTopicConversation => Self::CrossConversation,
             OutputPublish => Self::ButlerOutput,
+            SwitchFolder => Self::FolderSwitch,
             _ => Self::InternalRead,
         }
     }
