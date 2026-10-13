@@ -1,5 +1,7 @@
 //! Ephemeral browser ownership and network policy; authority is durable in BTCC.
 mod image_assets;
+mod image_formats;
+mod svg_limits;
 pub use image_assets::{
     MAX_DOWNLOAD as MAX_IMAGE_DOWNLOAD, NormalizedImage, fetch as fetch_image,
     normalize as normalize_image,
