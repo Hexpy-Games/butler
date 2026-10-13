@@ -7,6 +7,7 @@ import { PillButton } from "../../components/PillButton";
 import styles from "./ConversationShell.module.css";
 import { dsClass } from "../../lib/internal";
 import { ConversationShellElementContext, useConversationColumnRect, type ConversationColumnRect } from "./conversationColumn";
+import { ConversationRailContext, useRailReserve } from "./conversationRail";
 
 export type { ConversationColumnRect } from "./conversationColumn";
 
@@ -22,6 +23,10 @@ export interface ConversationShellProps {
    * it, never takes pointer input. It stays mounted while the content swaps.
    */
   background?: ReactNode;
+  /** A `TabRail`: the column and composer move left only as far as needed; a shelf pushes the messages down. */
+  rail?: ReactNode;
+  /** The rail's view (conversation id): room made for the first tab stays for the whole view. */
+  railView?: string;
 }
 
 export function ConversationShell({
@@ -31,8 +36,12 @@ export function ConversationShell({
   titleIconGap,
   titleIconSize,
   background,
+  rail,
+  railView,
 }: ConversationShellProps) {
   const [element, setElement] = useState<HTMLElement | null>(null);
+  const hasRail = rail !== undefined && rail !== null && rail !== false;
+  const { reserved, report } = useRailReserve(hasRail, railView);
   const style = {
     "--composer-reserve": `${composerReserve}px`,
     ...(titleIconSize ? { "--new-chat-title-icon-size": titleIconSize } : {}),
@@ -48,8 +57,9 @@ export function ConversationShell({
   return (
     <ConversationShellElementContext.Provider value={element}>
       <section
-        className={cn(styles.shell, background ? styles.withBackground : undefined)}
+        className={cn(styles.shell, background ? styles.withBackground : undefined, reserved ? styles.railed : undefined)}
         data-test-class="conversation"
+        data-rail={reserved ? "reserved" : undefined}
         ref={setElement}
         style={style}
       >
@@ -59,6 +69,7 @@ export function ConversationShell({
           </div>
         ) : null}
         {children}
+        {hasRail ? <ConversationRailContext.Provider value={report}>{rail}</ConversationRailContext.Provider> : null}
       </section>
     </ConversationShellElementContext.Provider>
   );

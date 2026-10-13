@@ -169,6 +169,9 @@ export * from "./blocks/TagField";
 export * from "./blocks/PopupWindowChrome";
 export * from "./blocks/StatusCapsule";
 export * from "./blocks/TabStrip";
+export * from "./blocks/ActivityGlow";
+export * from "./blocks/LiveTabCard";
+export * from "./blocks/TabRail";
 export * from "./blocks/NativeViewSlot";
 
 export * from "./blocks/ComposerQuestionPanel";

@@ -340,6 +340,8 @@ export const koKrCopy: AppCopy = {
     signInsHelp: "버틀러가 입력할 수 있는 계정이에요.", addSignIn: "추가", fillPolicy: "입력", ask: "묻기", always: "항상", never: "안 함",
     standing: "모든 대화에서 사용", lastUsed: "최근 사용", deletePassword: "비밀번호 삭제", signOutSite: "이 사이트 로그아웃", revoke: "버틀러 접근 해제",
     usedTimes: (count) => `사용 기록 ${count}건`, filled: "입력함", askedApproved: "물어보고 입력함",
+    rail: { region: "버틀러의 탭", openToCheck: "열어서 확인", needsCheck: "확인 필요", pageError: "페이지 오류", error: "오류", more: (count) => `탭 ${count}개 더 · 브라우저에서 보기` },
+    glow: { busy: "브라우저 보기 · 버틀러가 사용 중", attention: "브라우저 보기 · 직접 확인 필요", error: "브라우저 보기 · 오류" },
   },
   projectStatistics: {
     flow: "작업이 어떻게 달라졌나요", flowHelp: "등록한 일과 완료가 기록된 일입니다. 개수의 차이가 프로젝트 전체 진척을 뜻하지는 않습니다.",
