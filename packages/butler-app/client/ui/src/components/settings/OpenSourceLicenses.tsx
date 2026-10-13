@@ -31,7 +31,7 @@ export function OpenSourceLicenses() {
         return new Response(response.body.pipeThrough(new DecompressionStream("gzip"))).text();
       })
       .then((text) => {
-        const entries = text.split("\n===== COMPONENT =====\n").slice(1).map((section) => {
+        const entries = text.split(/\n=====(?: COMPONENT =====)?\n/).slice(1).map((section) => {
           const [name, license] = section.split("\n", 2);
           const body = section.slice(name.length + license.length + 2);
           return { title: name, license, text: body, search: `${name}\n${license}\n${body}`.toLowerCase() };

@@ -18,23 +18,7 @@ pub fn normalize(bytes: &[u8]) -> Result<NormalizedImage, &'static str> {
     if bytes.len() > MAX_DOWNLOAD {
         return Err("image_too_large");
     }
-    let mut reader = ImageReader::new(Cursor::new(bytes))
-        .with_guessed_format()
-        .map_err(|_| "invalid_image")?;
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(16384);
-    limits.max_image_height = Some(16384);
-    limits.max_alloc = Some(MAX_DECODE_BYTES);
-    reader.limits(limits);
-    let mut decoder = reader.into_decoder().map_err(|_| "invalid_image")?;
-    if decoder.total_bytes() > MAX_DECODE_BYTES {
-        return Err("invalid_image");
-    }
-    let orientation = decoder
-        .orientation()
-        .unwrap_or(image::metadata::Orientation::NoTransforms);
-    let mut decoded = DynamicImage::from_decoder(decoder).map_err(|_| "invalid_image")?;
-    decoded.apply_orientation(orientation);
+    let decoded = decode(bytes)?;
     let image = decoded.to_rgb8();
     for side in [1280, 960, 640, 320] {
         let long = image.width().max(image.height());
@@ -62,6 +46,37 @@ pub fn normalize(bytes: &[u8]) -> Result<NormalizedImage, &'static str> {
         }
     }
     Err("image_too_large")
+}
+
+fn decode(bytes: &[u8]) -> Result<DynamicImage, &'static str> {
+    if oxideav_avif::probe(bytes) {
+        return super::image_formats::avif(bytes);
+    }
+    if image::guess_format(bytes).is_err() {
+        return super::image_formats::svg(bytes);
+    }
+    raster(bytes)
+}
+
+pub(super) fn raster(bytes: &[u8]) -> Result<DynamicImage, &'static str> {
+    let mut reader = ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|_| "invalid_image")?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(16384);
+    limits.max_image_height = Some(16384);
+    limits.max_alloc = Some(MAX_DECODE_BYTES);
+    reader.limits(limits);
+    let mut decoder = reader.into_decoder().map_err(|_| "invalid_image")?;
+    if decoder.total_bytes() > MAX_DECODE_BYTES {
+        return Err("invalid_image");
+    }
+    let orientation = decoder
+        .orientation()
+        .unwrap_or(image::metadata::Orientation::NoTransforms);
+    let mut decoded = DynamicImage::from_decoder(decoder).map_err(|_| "invalid_image")?;
+    decoded.apply_orientation(orientation);
+    Ok(decoded)
 }
 
 pub async fn fetch(raw: &str, referer: &str, user_agent: &str) -> Result<Vec<u8>, &'static str> {

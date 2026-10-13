@@ -14,7 +14,7 @@ const fixture = JSON.parse(readFileSync(join(root, "deploy/licenses/fixtures/unk
 assert.throws(() => validateLicense(fixture), /outside allowlist/, "unknown license must fail CI");
 assert.throws(() => validateLicense({ id: "fixture:unknown-choice", license: "MIT OR LicenseRef-Unknown" }), /outside allowlist/);
 const catalog = JSON.parse(readFileSync(join(root, "deploy/licenses/catalog.json"), "utf8"));
-assert.equal(first.split("\n===== COMPONENT =====\n").length - 1, catalog.components.length);
+assert.equal(first.split("\n=====\n").length - 1, catalog.components.length);
 assert.ok(!catalog.texts, "no license text store");
 for (const component of catalog.components) {
   assert.ok(first.includes(`${component.name} ${component.version}\n${component.license}\n`));
