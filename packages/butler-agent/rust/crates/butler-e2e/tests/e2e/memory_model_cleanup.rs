@@ -30,7 +30,10 @@ fn leftovers(data: &Path) -> Result<(), HarnessError> {
     std::fs::create_dir_all(&staging)?;
     for asset in ASSETS {
         let path = data.join(MODEL).join(asset);
-        std::fs::create_dir_all(path.parent().unwrap())?;
+        std::fs::create_dir_all(
+            path.parent()
+                .ok_or_else(|| std::io::Error::other("model asset has no parent"))?,
+        )?;
         std::fs::write(path, b"interrupted model acquisition")?;
         std::fs::write(
             staging.join(format!("{}.part", asset.replace('/', "_"))),
@@ -136,7 +139,7 @@ async fn off_never_deletes_model_files_aliased_outside_data() -> Result<(), Harn
     leftovers(&outside)?;
     let model: std::path::PathBuf = s.sandbox.data.join(MODEL).components().collect();
     std::fs::create_dir_all(model.parent().unwrap())?;
-    let external = butler_platform::secure_fs::canonicalize(&outside.join(MODEL))?;
+    let external = butler_platform::secure_fs::canonicalize(outside.join(MODEL))?;
     directory_alias(&external, &model)?;
     let reply =
         s.gw.post("/setup/memory-model", json!({"enabled":false}))
