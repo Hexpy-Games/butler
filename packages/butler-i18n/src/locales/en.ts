@@ -734,6 +734,7 @@ export const enUsCopy: AppCopy = {
     allFavorites: "Show all favorites",
     working: "Working",
     attention: "Needs attention",
+    unread: "Unread",
     signInAttention: "Sign-in needs you",
     tabAttention: "Needs you in the tab",
     paymentAttention: "Payment needs you",

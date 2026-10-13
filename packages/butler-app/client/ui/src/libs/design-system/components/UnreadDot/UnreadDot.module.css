@@ -1,0 +1,15 @@
+/* Half the glyph column: 7px in compact rows, 8px by default, 10px in large rows. */
+.dot {
+  display: block;
+  width: 50%;
+  aspect-ratio: 1;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+/* Forced colors drop backgrounds; keep the dot visible in the text color. */
+@media (forced-colors: active) {
+  .dot {
+    background: CanvasText;
+  }
+}

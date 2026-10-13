@@ -70,6 +70,10 @@ impl GatewayMutationCommands for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.clear_general_owned(title).await })
     }
+    fn mark_session_read(&self, id: String) -> ApplicationFuture<AppSessionReadResult> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.mark_session_read_owned(id).await })
+    }
     fn delete_session(
         &self,
         id: String,

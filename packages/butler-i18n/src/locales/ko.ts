@@ -731,6 +731,7 @@ export const koKrCopy: AppCopy = {
     allFavorites: "즐겨찾기 모두 보기",
     working: "작업 중",
     attention: "확인 필요",
+    unread: "읽지 않음",
     signInAttention: "로그인 확인 필요",
     tabAttention: "직접 확인 필요",
     paymentAttention: "결제 확인 필요",

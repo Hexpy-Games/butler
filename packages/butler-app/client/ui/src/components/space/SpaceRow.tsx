@@ -1,4 +1,4 @@
-import { useAppLocale } from "@/app/copy.ts";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { SpaceRowLabel } from "./SpaceRowLabel";
 import { SpaceRowMeta } from "./SpaceRowMeta";
 import { memo, useEffect, useRef, useState } from "react";
@@ -17,6 +17,7 @@ import { SpaceRowActions } from "./SpaceRowActions";
 import { SidebarSessionLoadMore } from "../layout/SidebarSessionLoadMore";
 import { SpaceDragRow } from "./SpaceDragRow";
 import { useSpaceDrag } from "@/app/space/drag";
+import { unreadAncestors, useSessionUnread } from "@/app/space/unread";
 
 export const SpaceRow = memo(function SpaceRow({
   rowKey,
@@ -42,6 +43,8 @@ export const SpaceRow = memo(function SpaceRow({
     return children.find(child => child.node.key === current?.node.key || current?.ancestors.includes(child.node.key))?.node.key;
   });
   const expanded = useOrganization((s) => !s.collapsed.includes(rowKey));
+  const sessionUnread = useSessionUnread(row?.session);
+  const unreadInside = useButlerStore(s => unreadAncestors(projectSpace(s.navigation)).has(rowKey));
   const toggle = useOrganization((s) => s.toggle);
   const revealPath = useOrganization((s) => s.revealPath);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -88,6 +91,7 @@ export const SpaceRow = memo(function SpaceRow({
             icon={<SpaceGlyph row={row} />}
             label={label}
             actions={actions}
+            ariaDescription={!expanded && unreadInside ? appCopy.space.unread : undefined}
           >
             <CollapsibleList scope={rowKey}>
               {children.slice(0, limit).map((child) => (
@@ -123,6 +127,7 @@ export const SpaceRow = memo(function SpaceRow({
             meta={flat ? <SpaceRowMeta row={row} /> : undefined}
             active={active}
             ariaLabel={row.title}
+            ariaDescription={sessionUnread ? appCopy.space.unread : undefined}
             actionsVisibility="visible"
             actions={actions}
             onClick={() => {

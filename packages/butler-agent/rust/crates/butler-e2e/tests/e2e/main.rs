@@ -124,6 +124,7 @@ mod service_diagnostics;
 mod service_stop;
 mod service_supervision;
 mod session_branches;
+mod session_reads;
 mod settings;
 mod setup_keys;
 mod setup_local_models;
