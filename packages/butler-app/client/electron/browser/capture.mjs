@@ -2,7 +2,7 @@ import { BrowserWindow, nativeImage } from "electron";
 import { evaluateWorld, framePoint } from "./frame-worlds.mjs";
 import { resolveSource } from "./page/snapshot.mjs";
 import { imageSourceScript } from "./page/collect-image.mjs";
-import { secureBoxes } from "./capture-security.mjs";
+import { secureBoxes, captureViewport } from "./capture-security.mjs";
 
 /** Compose on a Butler-owned bitmap, never modify the page or capture the pointer. */
 async function markedImage(image, marks) {
@@ -83,10 +83,10 @@ function encode(image, max = 1024) {
 }
 
 /** Paints every secure field (saved-item fills included) black on a page capture. */
-export async function maskSecure(tab, image) {
-  const marks = await secureBoxes(tab);
+export async function maskSecure(tab, image, marks) {
+  marks ??= await secureBoxes(tab);
   if (!marks.length) return image;
-  const viewport = await tab.view.webContents.executeJavaScriptInIsolatedWorld(9001, [{ code: "({width:innerWidth,height:innerHeight})" }]);
+  const viewport = await captureViewport(tab);
   const size = image.getSize(), scale = tab.bounds?.scale ?? 1;
   const sx = size.width / (viewport.width * scale), sy = size.height / (viewport.height * scale);
   return markedImage(image, marks.map(mark => ({ ...mark, rect: { x: mark.rect.x * sx, y: mark.rect.y * sy, width: mark.rect.width * sx, height: mark.rect.height * sy } })));
@@ -95,6 +95,7 @@ export async function maskSecure(tab, image) {
 export async function observationImage(tab) {
   const epoch = tab.epoch;
   const image = await tab.view.webContents.capturePage(undefined, { stayHidden: true });
+  tab.afterCapture?.(image);
   // A tiny unmarked thumbnail lets progress notes tell a pixel-only change from none.
   if (!image.isEmpty()) tab.observation.thumb = image.resize({ width: 160, height: 100 }).toBitmap();
   const captured = encode(await markedImage(image, await bitmapMarks(tab, image, await boxes(tab))));
