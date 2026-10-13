@@ -1618,7 +1618,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       consolidationModel: "대화 기억 정리 모델",
       localReasoningBudget: "로컬 추론 예산",
       contextLimit: "컨텍스트 한도",
-      scheduleAccess: "예약 작업 기본 권한",
+      scheduleAccess: "새 예약 작업",
       chatAccess: "새 대화",
       planModeDefault: "기본으로 계획 모드 사용",
       name: "이름",
