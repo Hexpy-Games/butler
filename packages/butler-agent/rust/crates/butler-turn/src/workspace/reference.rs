@@ -2,9 +2,11 @@ use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// The shared, updatable workspace path of a session (or why it is unavailable).
+/// The shared, updatable workspace path of a session (or why it is unavailable),
+/// and whether the user consented to it as the project folder when the
+/// session moved its folder (`None`: the session's own project rule applies).
 #[derive(Clone, Debug)]
-pub struct WorkspaceReference(Arc<Mutex<ReferenceState>>);
+pub struct WorkspaceReference(Arc<Mutex<ReferenceState>>, Arc<Mutex<Option<bool>>>);
 
 #[derive(Debug)]
 enum ReferenceState {
@@ -35,12 +37,18 @@ impl WorkspaceReferenceError {
 impl WorkspaceReference {
     /// A reference to `path`.
     pub fn new(path: &Path) -> Self {
-        Self(Arc::new(Mutex::new(ReferenceState::Path(resolve(path)))))
+        Self(
+            Arc::new(Mutex::new(ReferenceState::Path(resolve(path)))),
+            Arc::default(),
+        )
     }
 
     /// A reference that reports `code` until set.
     pub fn unavailable(code: &'static str) -> Self {
-        Self(Arc::new(Mutex::new(ReferenceState::Unavailable(code))))
+        Self(
+            Arc::new(Mutex::new(ReferenceState::Unavailable(code))),
+            Arc::default(),
+        )
     }
 
     /// The current path.
@@ -49,6 +57,16 @@ impl WorkspaceReference {
             ReferenceState::Path(path) => Ok(path.clone()),
             ReferenceState::Unavailable(code) => Err(WorkspaceReferenceError::Unavailable { code }),
         }
+    }
+
+    /// Whether the folder counts as the project folder, when decided.
+    pub fn consent(&self) -> Option<bool> {
+        *self.1.lock()
+    }
+
+    /// Records whether the folder counts as the project folder.
+    pub fn set_consent(&self, consented: bool) {
+        *self.1.lock() = Some(consented);
     }
 
     /// Points the reference at `path`.

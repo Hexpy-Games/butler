@@ -40,10 +40,7 @@ pub(super) async fn upsert_app_binding(
     let project_workspace = project
         .and_then(|value| value.get("workspacePath"))
         .and_then(Value::as_str);
-    let marked = existing
-        .as_ref()
-        .and_then(|binding| binding.metadata.as_ref())
-        .is_some_and(|metadata| metadata.contains_key("sessionWorkspace"));
+    let marked = existing.as_ref().is_some_and(owns_folder);
     let workspace = if marked {
         existing
             .as_ref()
@@ -227,6 +224,16 @@ pub(super) async fn upsert_app_binding(
             IngressError::new("session_binding_unavailable", "Session binding unavailable")
                 .with_source(source)
         })
+}
+
+/// A session worktree or a moved working folder keeps the session's own
+/// folder; the App's project folder does not replace it.
+fn owns_folder(binding: &StoredSessionBinding) -> bool {
+    binding
+        .metadata
+        .as_ref()
+        .is_some_and(|metadata| metadata.contains_key("sessionWorkspace"))
+        || butler_turn::workspace::active_session_folder(binding).is_some()
 }
 
 /// The access modes an App turn binds with.

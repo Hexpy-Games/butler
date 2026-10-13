@@ -29,6 +29,14 @@ pub enum SessionWorkspaceAuthority {
         workspace_label: &'static str,
         error_code: &'static str,
     },
+    /// The agent moved the session's working folder (`switch_folder`).
+    SessionFolder {
+        workspace_path: String,
+        /// The user consented to the folder: it counts as the project folder.
+        consented: bool,
+        /// The folder before the first move, used when this one is gone.
+        origin_path: String,
+    },
 }
 
 enum ParsedMarker {
@@ -38,6 +46,21 @@ enum ParsedMarker {
 }
 
 pub(super) fn resolve_authority(
+    binding: Option<&StoredSessionBinding>,
+    project_workspace_path: Option<&str>,
+) -> SessionWorkspaceAuthority {
+    if let Some(folder) = binding.and_then(crate::workspace::active_session_folder) {
+        return SessionWorkspaceAuthority::SessionFolder {
+            workspace_path: folder.path,
+            consented: folder.consented,
+            origin_path: folder.origin_path,
+        };
+    }
+    resolve_without_folder(binding, project_workspace_path)
+}
+
+/// The authority a binding has without its moved working folder.
+pub(super) fn resolve_without_folder(
     binding: Option<&StoredSessionBinding>,
     project_workspace_path: Option<&str>,
 ) -> SessionWorkspaceAuthority {

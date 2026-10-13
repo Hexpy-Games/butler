@@ -189,6 +189,7 @@ mod project_artifacts;
 mod project_instructions;
 mod project_workspace;
 mod schedule_handoff;
+mod session_folder;
 mod storage_concurrency;
 mod supervisor_ownership;
 
