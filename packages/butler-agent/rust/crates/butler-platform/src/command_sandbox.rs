@@ -53,6 +53,13 @@ pub fn approval_free_reads() -> bool {
     capabilities().approval_free_reads()
 }
 
+/// Whether [`project_write_shell`] can contain a mutating command to its
+/// project (writes inside the project only, no network). Only the macOS
+/// seatbelt enforces it today; other hosts keep asking for such commands.
+pub fn project_write_available() -> bool {
+    cfg!(target_os = "macos")
+}
+
 /// Entry point of the single-threaded trampoline, never called by the agent.
 #[cfg(target_os = "linux")]
 pub fn trampoline() -> Result<(), Box<dyn std::error::Error>> {
@@ -98,6 +105,9 @@ pub enum SandboxError {
     /// This host cannot enforce [`ShellAccess::ReadOnly`].
     #[error("this host cannot enforce read-only commands")]
     ReadOnlyUnavailable,
+    /// This host cannot contain a mutating command to its project.
+    #[error("this host cannot contain commands to the project folder")]
+    ProjectWriteUnavailable,
     /// The read-deny paths could not be quoted into the sandbox profile.
     #[error("sandbox profile encoding failed")]
     Profile(#[from] serde_json::Error),
@@ -149,6 +159,26 @@ pub fn login_shell_contained(
         environment,
         deny_reads,
         allow_reads,
+    )
+}
+
+/// The login shell of a mutating command contained to `root`: it may write
+/// only inside `root` and the `writable` scratch roots, never below `denied`
+/// or to project metadata and secrets, may not read credential stores, and
+/// has no network. Hosts without [`project_write_available`] refuse it.
+pub fn project_write_shell(
+    command: &str,
+    environment: &HashMap<String, String>,
+    root: &Path,
+    writable: &[&Path],
+    denied: &[&Path],
+) -> Result<Invocation, SandboxError> {
+    sandbox::project_write(
+        shell::login_shell(command, environment),
+        environment,
+        root,
+        writable,
+        denied,
     )
 }
 

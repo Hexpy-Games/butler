@@ -243,6 +243,18 @@ function notifyDesktopEvent(
 ): void {
   const settings = useButlerStore.getState().settings.desktop_notifications;
   if (!settings.enabled || !isRecentEvent(event)) return;
+  if (
+    event.type === "automation.run" &&
+    event.payload?.safe_error_code === "schedule_permission_required"
+  ) {
+    void showDesktopNotification({
+      kind: "task_completion",
+      title: appCopy.firstRun.product,
+      body: appCopy.automations.needsPermissionNotify,
+      sessionId: event.payload.target_session_id,
+    });
+    return;
+  }
   const message = event.payload?.message;
   if (
     settings.assistant_messages &&

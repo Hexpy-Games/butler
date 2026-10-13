@@ -20,6 +20,7 @@ fn reconstructs_same_durable_identity_before_and_after_a_single_edit() {
         butler_data: root.join("data"),
         protected_roots: vec![],
         installation_root: None,
+        contained: false,
     };
     let adapter: Arc<dyn EffectAdapter> = Arc::new(WorkspaceFileEditEffectAdapter::new(
         scope,

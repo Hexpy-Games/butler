@@ -313,6 +313,11 @@ pub(crate) trait GuidedPolicyPort: Send + Sync {
         invocation: GuidedInvocation<'a>,
     ) -> PortFuture<'a, Option<GuidedPresentation>>;
 
+    /// Tool state the authority continuation carries across a suspension.
+    fn continuation_extensions(&self) -> serde_json::Map<String, serde_json::Value> {
+        serde_json::Map::new()
+    }
+
     fn closeout<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,

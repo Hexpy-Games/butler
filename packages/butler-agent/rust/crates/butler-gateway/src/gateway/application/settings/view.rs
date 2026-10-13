@@ -203,10 +203,7 @@ pub(super) fn read(
             .cloned()
             .unwrap_or(json!(10)),
     );
-    output.insert(
-        "access_mode".into(),
-        json!(super::access_mode_name(&controls.access)),
-    );
+    insert_access(db, &controls.access, &mut output)?;
     output.insert(
         "plan_mode_default".into(),
         json!(
@@ -258,6 +255,21 @@ pub(super) fn read(
     );
     Ok(Value::Object(output))
 }
+/// The resolved conversation access mode and the schedule default (D7).
+fn insert_access(
+    db: &Connection,
+    access: &butler_turn::btcc::AccessMode,
+    output: &mut Map<String, Value>,
+) -> Result<(), AppStorageError> {
+    output.insert("access_mode".into(), json!(super::access_mode_name(access)));
+    let schedule = super::schedule_access_mode(db)?;
+    output.insert(
+        "schedule_access_mode".into(),
+        json!(super::access_mode_name(&schedule)),
+    );
+    Ok(())
+}
+
 /// The legacy main-screen keys, normalized, and the `wallpaper` setting, which
 /// they describe until a PATCH stores one.
 fn appearance(stored: &Map<String, Value>, output: &mut Map<String, Value>) {

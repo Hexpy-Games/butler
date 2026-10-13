@@ -117,6 +117,8 @@ async fn real_work_and_authority_resume_prepare_against_one_reopened_storage_own
             reasoning_effort: "medium".into(),
             category: None,
             normalized_input: json!({"command":"echo hi","cwd":"/tmp","state_effect":"mutation"}),
+            honor_standing_permission: true,
+            unattended: false,
         })
         .await
         .unwrap();
