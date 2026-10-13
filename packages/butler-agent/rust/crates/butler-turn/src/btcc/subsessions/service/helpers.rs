@@ -23,18 +23,36 @@ pub(super) fn render_input(packet: &SubsessionPacket, profile_prompt: Option<&st
         None => base,
     }
 }
-/// Reading what pages state is enough evidence; operating a page's controls
-/// to confirm unrequested details costs rounds without changing the answer.
-const PAGE_FACTS: &str = "Do not operate page controls to verify details the user's request did not ask for; report a detail a page does not state as unconfirmed.";
+/// Facts the goal needs are worth getting, also behind a page control;
+/// operating controls for details that would not change the answer costs
+/// rounds without changing it. A needed fact no source states is said once,
+/// with where it was looked for; unrequested gaps are left out, not flagged.
+const NEEDED_FACTS: &str = "Get the facts the goal needs, operating a page control when a needed fact sits behind it; leave controls alone for details that would not change the answer. Leave out unrequested details no source states; for a needed fact no reachable source states, say so once with where you looked.";
 
 pub(super) fn render_steward_input(packet: &SubsessionPacket) -> String {
     format!(
-        "role: steward\nrequest: {}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.{} {PAGE_FACTS}",
+        "role: steward\nrequest: {}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.{}{} {NEEDED_FACTS}",
         packet.objective,
         criteria(packet),
         packet.prior_context.as_deref().unwrap_or("none"),
+        planned_intent(packet),
         planned_presentation(packet)
     )
+}
+
+/// The parent Plan's Conception lines (see `intent_lines` in the Work tool
+/// decoder) tell the steward how Butler read the request; the request itself
+/// stays unchanged.
+fn planned_intent(packet: &SubsessionPacket) -> &'static str {
+    if packet
+        .acceptance_criteria
+        .iter()
+        .any(|line| line.starts_with("Goal:"))
+    {
+        " Its Goal, Deliver, Next and Assumed criteria are Butler's reading of the request: serve that goal, deliver those items, prepare Next when it is cheap, and correct an assumption the evidence contradicts."
+    } else {
+        ""
+    }
 }
 
 /// The parent Plan's presentation decision (its `Presentation:` acceptance
