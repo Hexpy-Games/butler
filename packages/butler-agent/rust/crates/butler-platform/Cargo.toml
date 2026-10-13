@@ -49,6 +49,8 @@ zip.workspace = true
 # contain command trees, paths without a needless `\\?\` prefix, and the
 # system time zone's IANA name.
 [target.'cfg(windows)'.dependencies]
+windows-dpapi = "=0.2.0"
+aes-gcm = { version = "0.10", features = ["zeroize"] }
 dunce.workspace = true
 winsafe = { workspace = true, features = ["advapi", "shell"] }
 iana-time-zone.workspace = true

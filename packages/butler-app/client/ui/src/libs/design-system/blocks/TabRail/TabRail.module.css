@@ -1,0 +1,127 @@
+/* The layer fills its positioned parent (the conversation card) and lets
+   pointer input through; only the rail itself takes it. It is the box the
+   mode is measured from. */
+.layer {
+  position: absolute;
+  z-index: var(--z-content);
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.rail {
+  position: absolute;
+  top: var(--tab-rail-top, var(--tab-rail-inset));
+  right: var(--tab-rail-inset);
+  display: flex;
+  width: var(--tab-rail-width);
+  max-height: calc(100% - var(--tab-rail-top, var(--tab-rail-inset)));
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-md);
+  pointer-events: auto;
+}
+
+.rail[data-mode="compact"] {
+  width: var(--tab-rail-compact-width);
+}
+
+/* Shelf: a glass strip across the card's top; the chips scroll sideways
+   inside it, never the page. */
+.rail[data-mode="shelf"] {
+  top: var(--tab-rail-shelf-top, var(--space-sm));
+  right: var(--space-sm);
+  left: var(--space-sm);
+  width: auto;
+}
+
+.shelf {
+  display: flex;
+  height: var(--tab-rail-shelf-height);
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-xs);
+  padding-inline: var(--space-xs);
+}
+
+.shelfScroll {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.shelfRow {
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.rail[data-mode="shelf"] .item {
+  flex: none;
+}
+
+/* Cards enter with a fade and a 4px rise and leave faster; reduced motion
+   gives no phases at all (the hook), and the media rule backs it up. */
+.item[data-phase="enter"] {
+  animation: tab-rail-enter var(--motion-base) var(--motion-ease-decelerate)
+    both;
+}
+
+.item[data-phase="leave"] {
+  animation: tab-rail-leave var(--motion-fast) var(--motion-ease-accelerate)
+    both;
+  pointer-events: none;
+}
+
+.more {
+  display: flex;
+  flex: none;
+  align-self: flex-start;
+}
+
+.rail[data-mode="shelf"] .more {
+  align-self: center;
+}
+
+/* Hidden tabs' favicons, stacked with a ring of the surface between them. */
+.stack {
+  display: inline-flex;
+}
+
+.stack > * {
+  border-radius: var(--radius-control);
+  background: var(--favicon-plate);
+  box-shadow: 0 0 0 1.5px var(--surface-raised);
+}
+
+.stack > * + * {
+  margin-inline-start: calc(-1 * var(--space-xs) - 1px);
+}
+
+@keyframes tab-rail-enter {
+  from {
+    opacity: 0;
+    translate: 0 var(--motion-distance-sm);
+  }
+}
+
+@keyframes tab-rail-leave {
+  to {
+    opacity: 0;
+    translate: 0 calc(-1 * var(--motion-distance-sm));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item[data-phase] {
+    animation: none;
+  }
+}
+
+.layer[data-reduced="true"] .item[data-phase] {
+  animation: none;
+}

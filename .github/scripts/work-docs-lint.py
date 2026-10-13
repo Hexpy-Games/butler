@@ -33,7 +33,7 @@ ALLOW = (
     'packages/butler-agent/rust/crates/*/os-specific-baseline.txt',
     'packages/butler-agent/rust/crates/*/src/**/wire_codes.txt',
     'packages/butler-agent/rust/crates/butler-models/src/models/catalog/zai-image-model.txt',
-    '**/LICENSE*', '**/OFL.txt', '**/THIRD_PARTY_NOTICES.*',
+    '**/LICENSE*', '**/THIRD_PARTY_NOTICES.*', '**/OFL.txt',  # Font licenses ship beside fonts.
 )
 
 

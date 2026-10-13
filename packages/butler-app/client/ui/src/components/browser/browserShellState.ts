@@ -1,3 +1,4 @@
+import { persistedBrowserShell } from "./browserShellPersistence";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { BROWSER_CHAT_WIDTH, clampBrowserChatWidth } from "@/butler-ds";
@@ -25,4 +26,4 @@ export const useBrowserShellState = create<BrowserShellState>()(persist((set) =>
     conversations: { ...state.conversations, [session]: { ...state.conversations[session], open: state.conversations[session]?.open ?? false, lastTab } },
   })),
   setChatWidth: (width) => set({ chatWidth: clampBrowserChatWidth(width) }),
-}), { name: "butler-browser-shell" }));
+}), { name: "butler-browser-shell", partialize: (state) => persistedBrowserShell(state) }));

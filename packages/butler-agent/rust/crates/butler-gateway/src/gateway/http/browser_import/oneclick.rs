@@ -55,6 +55,7 @@ pub(super) async fn start(state: &Arc<HttpState>, body: &mut Value) -> Result<Va
         passwords,
         mut history,
         invalid,
+        csv_required,
     } = blocking(move || selection.read()).await??;
     let run = uuid::Uuid::new_v4().to_string();
     let mut counts = save(state, &run, bookmarks, passwords).await?;
@@ -70,7 +71,8 @@ pub(super) async fn start(state: &Arc<HttpState>, body: &mut Value) -> Result<Va
     counts["invalid"] = json!(invalid);
     counts["history"] = recorded["recorded"].clone();
     counts["run_id"] = json!(run);
-    counts["needs_csv"] = json!(csv);
+    counts["needs_csv"] = json!(csv || csv_required > 0);
+    counts["csv_required"] = json!(csv_required);
     audit(state, &source, &counts).await?;
     Ok(counts)
 }
@@ -142,7 +144,7 @@ pub(super) async fn audit(
             )
         })
         .unwrap_or("file");
-    state.application.signins(AppSignInCommand::ImportSummary { source:source.into(), kind:"browser".into(), counts:json!({"bookmarks":counts["bookmarks"],"passwords":counts["passwords"],"updated":counts["updated"],"existing":counts["existing"],"history":counts["history"],"invalid":counts["invalid"]}) }).await?;
+    state.application.signins(AppSignInCommand::ImportSummary { source:source.into(), kind:"browser".into(), counts:json!({"bookmarks":counts["bookmarks"],"passwords":counts["passwords"],"updated":counts["updated"],"existing":counts["existing"],"history":counts["history"],"invalid":counts["invalid"],"csv_required":counts["csv_required"]}) }).await?;
     Ok(())
 }
 
