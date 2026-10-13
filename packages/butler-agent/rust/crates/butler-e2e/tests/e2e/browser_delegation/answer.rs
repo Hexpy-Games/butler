@@ -21,7 +21,7 @@ pub(crate) fn parent_item(body: &Value, step: &mut usize) -> Value {
                 "answer_blocks",
                 json!({"v":1,"blocks":[
                 {"type":"cards","items":[
-                    {"title":"First image","img":ids[0],"source":"https://example.com/","checked":chrono::Utc::now().to_rfc3339(),"value":{"amount":2,"unit":"items"}},
+                    {"title":"First image","img":ids[0],"source":"https://example.com/","checked":chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(5 * 3600 + 45 * 60).unwrap()).to_rfc3339(),"value":{"amount":2,"unit":"items"}},
                     {"title":"Second image","img":ids[1]}]},
                 {"type":"gallery","items":[{"img":ids[0],"caption":"First image"},{"img":ids[1],"caption":"Second image"}]},
                 {"type":"table","columns":["Image","Count"],"rows":[["First",1],["Second",1]]}]}),
@@ -82,6 +82,12 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
     assert_remaining_capture_source(&s, &session)?;
     let sets = &message["answer_blocks"];
     assert_eq!(sets[0]["spec"]["blocks"].as_array().unwrap().len(), 3);
+    assert!(
+        sets[0]["spec"]["blocks"][0]["items"][0]["checked"]
+            .as_str()
+            .unwrap()
+            .ends_with("+05:45")
+    );
     for (index, item) in sets[0]["spec"]["blocks"][0]["items"]
         .as_array()
         .unwrap()
