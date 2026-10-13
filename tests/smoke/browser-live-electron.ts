@@ -73,17 +73,20 @@ try {
   await app.page!.expression(`${JSON.stringify(ids)}.forEach(subscribeLive)`);
   await waitBrowser(async () => Object.keys(await counts()).length === 3, "three subscribed frames");
   for (const id of ids) await changed(id);
-  const processorCount = cpus().length;
-  const metrics = () => app.main<Array<{ pid: number; cpu: { percentCPUUsage: number } }>>("process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').app.getAppMetrics()");
-  await metrics(); const samples: number[] = [];
-  const disk = startWriteTrace((await metrics()).map(metric => metric.pid), 10);
-  for (let second = 0; second < 10; second++) {
-    if (second % 2 === 0) for (const id of ids) await changed(id);
-    await Bun.sleep(1000);
-    samples.push((await metrics()).reduce((total, metric) => total + metric.cpu.percentCPUUsage, 0) * processorCount);
+  // Resource sampling is separate from the functional contract on constrained runners.
+  if (process.env.BUTLER_BROWSER_FUNCTIONAL_ONLY !== "1") {
+    const processorCount = cpus().length;
+    const metrics = () => app.main<Array<{ pid: number; cpu: { percentCPUUsage: number } }>>("process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').app.getAppMetrics()");
+    await metrics(); const samples: number[] = [];
+    const disk = startWriteTrace((await metrics()).map(metric => metric.pid), 10);
+    for (let second = 0; second < 10; second++) {
+      if (second % 2 === 0) for (const id of ids) await changed(id);
+      await Bun.sleep(1000);
+      samples.push((await metrics()).reduce((total, metric) => total + metric.cpu.percentCPUUsage, 0) * processorCount);
+    }
+    const result = { cpuOneCorePercent: samples.reduce((a, b) => a + b, 0) / samples.length, processorCount, frames: await counts(), disk: await disk };
+    writeFileSync(join(evidence, "measurements.json"), JSON.stringify(result, null, 2)); console.log(JSON.stringify(result));
   }
-  const result = { cpuOneCorePercent: samples.reduce((a, b) => a + b, 0) / samples.length, processorCount, frames: await counts(), disk: await disk };
-  writeFileSync(join(evidence, "measurements.json"), JSON.stringify(result, null, 2)); console.log(JSON.stringify(result));
   await waitBrowser(() => app.page!.expression("Object.keys(liveCounts).every(id=>liveCounts[id]===liveDraws[id])"), "every JPEG drawn");
   writeFileSync(join(evidence, "frames.png"), await app.page!.screenshot());
   const idleBefore = await counts();
@@ -120,7 +123,7 @@ try {
     try {const read=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')(${JSON.stringify(join(process.cwd(), "packages/butler-app/client/electron/browser/capture-security.mjs"))});return {...await read.captureViewport(tab),snapshots}}
     finally {api.sendCommand=send}
   })()`);
-  assert.deepEqual(viewport, {width:1280,height:800,snapshots:0}, "viewport has no DOM snapshot");
+  assert.deepEqual(viewport, { width:1280, height:800, snapshots:0 }, "viewport has no DOM snapshot");
   await app.main(`${subject}.pullVault=async()=>({values:{number:'4111111111111111'}})`);
   const filled = await execute<{ status: string; filled: string[] }>("pay.fill", vault.tab, { top_origin: origin, frame_origins: [], fill_token: "0".repeat(32) });
   assert.equal(filled.status, "filled"); assert.ok(filled.filled.length);

@@ -145,7 +145,7 @@ export class BrowserLiveFrames {
     try {
       const masked = this.sensitive(tab);
       let image = state.pendingImage; state.pendingImage = null;
-      image ??= await tab.view.webContents.capturePage(undefined, { stayHidden: true });
+      image ??= await tab.view.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true });
       if (image.isEmpty()) return;
       // Locating secure fields re-runs page perception, so only sensitive pages pay for it.
       const marks = masked ? await secureBoxes(tab) : [];
