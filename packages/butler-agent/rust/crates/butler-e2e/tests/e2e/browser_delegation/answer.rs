@@ -170,6 +170,12 @@ fn assert_presentation_contract(requests: &[Value]) {
         .expect("a steward request");
     let task = steward["input"].to_string();
     assert!(
+        steward
+            .to_string()
+            .contains("This Turn is already bound to this Work"),
+        "a steward starts on its runtime-bound child Work, without a continue_work round"
+    );
+    assert!(
         task.contains("Presentation: cards, table")
             && task.contains("Butler's Plan presents this result as cards, table")
             && task.contains("collect one representative photo per item with image_collect"),

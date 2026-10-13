@@ -105,10 +105,17 @@ fn source_prompt(
     if let Some(work) = work_context::render(state.work.context.as_ref()) {
         let summary = butler_core::public_text::trim_js_whitespace(&work);
         if !summary.is_empty() {
+            // The runtime binds a child Turn (and a resumed one) before its first
+            // round; saying so spares a continue_work round that changes nothing.
+            let bound = if state.work.bound {
+                "This Turn is already bound to this Work; use it without continue_work.\n"
+            } else {
+                ""
+            };
             entries.push(
                 "work",
                 format!(
-                    "## Current Work\n\n{}",
+                    "## Current Work\n\n{bound}{}",
                     butler_core::json::Utf16Prefix::new(summary, 8_000).utf8_for_hash()
                 ),
             );
