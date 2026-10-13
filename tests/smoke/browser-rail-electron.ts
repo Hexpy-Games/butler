@@ -19,13 +19,18 @@ let captures = 0;
 const focusApp = () => app.main(`process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve("packages/butler-app/client/electron/package.json"))})('electron').app.focus({steal:true});${app.win}.show();${app.win}.focus();${app.win}.moveTop();${app.win}.webContents.focus()`);
 const shot = async (name: string) => {
   await focusApp();
-  await app.page.movePointer(0, 0);
+  await app.page.movePointer(200, 24);
   await app.page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   writeFileSync(join(evidence, `${name}.png`), await app.page.screenshot()); captures++;
 };
 async function clickVisible(selector: string) {
   await focusApp();
-  await waitBrowser(() => app.page.expression(`(()=>{const node=document.querySelector(${JSON.stringify(selector)});if(!node)return false;const r=node.getBoundingClientRect();return r.width>0&&r.height>0&&node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))})()`), "target is hit-testable after motion");
+  try {
+    await waitBrowser(() => app.page.expression(`(()=>{const node=document.querySelector(${JSON.stringify(selector)});if(!node)return false;const r=node.getBoundingClientRect();return r.width>0&&r.height>0&&node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))})()`), "target is hit-testable after motion");
+  } catch (error) {
+    writeFileSync(join(evidence, "hit-test-failure.json"), JSON.stringify(await app.page.expression(`(()=>{const node=document.querySelector(${JSON.stringify(selector)}),r=node?.getBoundingClientRect(),hit=r&&document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);const parents=[];for(let n=node;n;n=n.parentElement)parents.push({slot:n.getAttribute('data-slot'),test:n.getAttribute('data-test-class'),pointer:getComputedStyle(n).pointerEvents,transform:getComputedStyle(n).transform,rect:n.getBoundingClientRect().toJSON()});return {left:document.querySelector('[data-test-class=mac-window]')?.getAttribute('data-left-open'),rect:r?.toJSON(),hit:hit?.getAttribute('data-slot'),tag:hit?.tagName,parents}})()`)));
+    throw error;
+  }
   await app.page.clickSelector(selector);
 }
 async function settleSidebar() {
