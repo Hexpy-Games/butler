@@ -136,6 +136,7 @@ fn grant_kind(capability: &str) -> &'static str {
         "run_command_remote_observation" => "network",
         "run_command" => "command",
         "call_mcp_tool" => "connector",
+        "web_search" | "web_read" => "web_request",
         "write_file" | "edit_file" => "file_edit",
         "read_file" | "list_files" | "grep_files" => "file_read",
         "create_automation" | "update_automation" | "delete_automation" | "run_due_automations" => {
@@ -166,6 +167,8 @@ pub(super) async fn unattended_feedback(
 ) -> Value {
     notify(owner).await;
     json!({"ok":false,"error":{
+        "reason": (owner.taint() == TurnTaint::External)
+            .then_some("This run read outside content, so the step needs a fresh permission."),
         "code":"schedule_permission_required",
         "message":"This scheduled run cannot ask for permission, so this step did not run.",
         "recoverable":true,
@@ -205,10 +208,23 @@ async fn notify(owner: &GuidedTools) {
         encode(automation),
         encode(run_id)
     );
-    let body = json!({"code":"schedule_permission_required"});
+    let body = json!({"code":"schedule_permission_required", "tainted":owner.taint() == TurnTaint::External});
     let _ = client.request(Method::POST, &path, Some(body)).await;
 }
 
 fn encode(segment: &str) -> String {
     url::form_urlencoded::byte_serialize(segment.as_bytes()).collect()
+}
+
+/// A denied scheduled action needs a different mode, rather than a waiting review.
+pub(super) async fn unattended_denial(
+    owner: &GuidedTools,
+    call: &butler_turn::btcc::ModelRoundToolCall,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let subject = call
+        .arguments
+        .get("path")
+        .and_then(Value::as_str)
+        .unwrap_or(&call.name);
+    unattended_result(owner, &call.name, subject).await
 }

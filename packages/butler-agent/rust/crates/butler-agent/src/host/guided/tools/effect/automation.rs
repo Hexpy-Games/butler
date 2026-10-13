@@ -25,7 +25,7 @@ pub(super) fn supports(name: &str) -> bool {
     )
 }
 
-pub(super) fn prepare(
+pub(super) async fn prepare(
     owner: &GuidedTools,
     call: &butler_turn::btcc::ModelRoundToolCall,
     occurrence: &str,
@@ -77,7 +77,10 @@ pub(super) fn prepare(
             ));
         }
     };
-    let input = Value::Object(call.arguments.clone());
+    let mut input = Value::Object(call.arguments.clone());
+    if call.name == ToolName::CreateAutomation {
+        resolve_default(owner, occurrence, &mut input).await?;
+    }
     let adapter = AutomationEffect {
         endpoint: owner.app_endpoint.clone(),
         session_id: owner
@@ -194,4 +197,48 @@ fn policy(code: &str) -> EffectFailure {
 
 fn adapter(code: &str) -> EffectAdapterError {
     EffectAdapterError::new(code, "Automation effect was not applied")
+}
+
+async fn resolve_default(
+    owner: &GuidedTools,
+    occurrence: &str,
+    input: &mut Value,
+) -> Result<(), BtccError> {
+    // Reuse the exact reviewed mode on resume, even if Settings changed while parked.
+    if super::super::access::resumes(owner, occurrence) {
+        let stored = owner
+            .authority
+            .execution(butler_turn::btcc::AuthorityExecutionInput {
+                owner_session_id: owner.binding.owner_session_id.clone(),
+                request_ref: owner
+                    .binding
+                    .authority_request_ref
+                    .clone()
+                    .unwrap_or_default(),
+                source_session_id: Some(owner.binding.source_session_id.clone()),
+                client_message_id: None,
+                turn_id: owner.binding.turn_id.clone(),
+            })
+            .await
+            .map_err(BtccError::from)?;
+        *input = stored.normalized_input;
+        return Ok(());
+    }
+    let client = ScheduleClient::active(&owner.app_endpoint)
+        .map_err(|e| BtccError::relayed("schedule_default_unavailable", e.message().to_owned()))?;
+    let settings = client
+        .request(reqwest::Method::GET, "/settings", None)
+        .await
+        .map_err(|e| BtccError::relayed("schedule_default_unavailable", e.message().to_owned()))?;
+    let mode = settings.get("settings").unwrap_or(&settings)["schedule_access_mode"]
+        .as_str()
+        .and_then(butler_turn::btcc::AccessMode::parse)
+        .ok_or_else(|| {
+            BtccError::relayed(
+                "schedule_default_unavailable",
+                "Schedule permission unavailable.",
+            )
+        })?;
+    input["access_mode"] = Value::String(mode.as_str().into());
+    Ok(())
 }

@@ -79,6 +79,8 @@ pub fn stored_binding_access_mode(binding: &StoredSessionBinding) -> AccessMode 
 }
 
 mod decision;
+mod web;
+pub use web::{web_read_carries_data, web_search_carries_data};
 mod mode;
 pub use decision::*;
 #[cfg(test)]
