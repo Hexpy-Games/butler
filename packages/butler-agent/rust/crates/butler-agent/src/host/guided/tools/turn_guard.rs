@@ -76,18 +76,18 @@ fn initial_taint(context: &Value, restored: Option<&AuthorityLoopContinuation>) 
 fn reads_external(name: &str, args: &Value) -> bool {
     (name == "run_command" && args["state_effect"] == "remote_observation")
         || matches!(
-        name,
-        "web_search"
-            | "web_read"
-            | "call_mcp_tool"
-            | "read_mcp_resource"
-            | "browser_open"
-            | "browser_observe"
-            | "browser_act"
-            | "browser_selection"
-            | "browser_screenshot"
-            | "browser_tabs"
-    )
+            name,
+            "web_search"
+                | "web_read"
+                | "call_mcp_tool"
+                | "read_mcp_resource"
+                | "browser_open"
+                | "browser_observe"
+                | "browser_act"
+                | "browser_selection"
+                | "browser_screenshot"
+                | "browser_tabs"
+        )
 }
 
 impl GuidedTools {

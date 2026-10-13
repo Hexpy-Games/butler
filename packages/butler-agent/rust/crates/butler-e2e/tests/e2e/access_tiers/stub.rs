@@ -65,8 +65,8 @@ async fn reply(
     });
     let item = round.and_then(|r| r.get(step)).cloned()
         .unwrap_or_else(|| json!({"type":"message","id":"msg_done","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Checked.","annotations":[]}]}));
-    let item: Value = serde_json::from_str(&item.to_string().replace("{{WORK}}", &work))
-        .expect("stub item");
+    let item: Value =
+        serde_json::from_str(&item.to_string().replace("{{WORK}}", &work)).expect("stub item");
     (
         [("content-type", "text/event-stream")],
         super::super::token_cache::wire(&item),

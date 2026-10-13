@@ -205,7 +205,9 @@ async fn settled(s: &Scenario) -> Result<(), HarnessError> {
 
 fn authority_requests(s: &Scenario) -> Result<u64, HarnessError> {
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    Ok(db.query_row("SELECT count(*) FROM btcc_authority_requests", [], |row| {
-        row.get(0)
-    })?)
+    Ok(
+        db.query_row("SELECT count(*) FROM btcc_authority_requests", [], |row| {
+            row.get(0)
+        })?,
+    )
 }
