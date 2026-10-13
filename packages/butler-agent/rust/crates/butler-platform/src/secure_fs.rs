@@ -486,5 +486,7 @@ pub fn workspace_test_alias(path: &Path) -> PathBuf {
 }
 #[cfg(feature = "test-support")]
 pub mod fixture_links;
+#[cfg(feature = "test-support")]
+pub mod fixture_locks;
 mod path_identity;
 pub use path_identity::{same_file, same_metadata};
