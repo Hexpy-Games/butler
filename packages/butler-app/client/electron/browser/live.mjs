@@ -56,7 +56,8 @@ export class BrowserLiveFrames {
       win.on(event, listener); this.windowListeners.push([event, listener]);
     }
     const reset = () => { for (const id of this.subscriptions.keys()) this.unsubscribe(id); };
-    win.webContents.on("did-start-navigation", reset);
+    this.navigationReset = (_event, _url, inPlace, mainFrame) => { if (mainFrame && !inPlace) reset(); };
+    win.webContents.on("did-start-navigation", this.navigationReset);
     win.webContents.once("destroyed", reset);
     win.webContents.on("render-process-gone", reset);
     this.resetRenderer = reset;
@@ -65,7 +66,7 @@ export class BrowserLiveFrames {
   unbindWindow() {
     if (this.window && !this.window.isDestroyed()) {
       for (const [event, listener] of this.windowListeners) this.window.removeListener(event, listener);
-      this.window.webContents.removeListener("did-start-navigation", this.resetRenderer);
+      this.window.webContents.removeListener("did-start-navigation", this.navigationReset);
       this.window.webContents.removeListener("destroyed", this.resetRenderer);
       this.window.webContents.removeListener("render-process-gone", this.resetRenderer);
     }
