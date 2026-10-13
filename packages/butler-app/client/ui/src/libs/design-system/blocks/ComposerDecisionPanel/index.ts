@@ -1,2 +1,2 @@
 export { ComposerDecisionPanel } from "./ComposerDecisionPanel";
-export type { ComposerDecisionPanelProps } from "./ComposerDecisionPanel";
+export type { ComposerDecisionMedia, ComposerDecisionPanelProps } from "./ComposerDecisionPanel";

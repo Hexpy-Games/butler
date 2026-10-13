@@ -83,6 +83,7 @@ the state.
 - Supports `aria-current="page"` for active state
 - Accepts `ariaLabel` prop for screen readers
 - Falls back to string label for accessible name
+- Accepts `ariaDescription` for row state the name hides, such as Unread (the trailing marks sit inside the row's named button)
 
 ## Responsive behavior
 

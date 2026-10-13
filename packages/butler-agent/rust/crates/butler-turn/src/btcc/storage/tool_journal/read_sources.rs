@@ -1,4 +1,5 @@
 //! Indexed conversation provenance; only successful reader output supplies URLs.
+//! A conversation's provenance includes what its delegated children read.
 use super::ToolJournalRepository;
 use crate::btcc::storage::{StorageError, StorageResult};
 
@@ -29,8 +30,11 @@ impl ToolJournalRepository {
     ) -> StorageResult<Vec<String>> {
         self.storage
             .execute(move |db| {
+                // A delegated child reads on this conversation's behalf: its
+                // reads (and its own children's) are this conversation's reads.
                 let mut query = db.prepare_cached(
-                "SELECT EXISTS(SELECT 1 FROM btcc_guided_tool_calls WHERE read_source_session=?1 AND read_source=?2 AND status='completed' AND read_source IS NOT NULL)"
+                "WITH RECURSIVE tree(id) AS (SELECT ?1 UNION SELECT r.child_session_id FROM btcc_session_relations r JOIN tree ON r.parent_session_id=tree.id) \
+                 SELECT EXISTS(SELECT 1 FROM btcc_guided_tool_calls WHERE read_source_session IN tree AND read_source=?2 AND status='completed' AND read_source IS NOT NULL)"
             ).map_err(StorageError::sqlite)?;
                 let mut found = Vec::new();
                 for source in sources {

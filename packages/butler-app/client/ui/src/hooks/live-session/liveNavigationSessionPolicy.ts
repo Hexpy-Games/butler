@@ -14,7 +14,7 @@ const SAFE_SESSION_KEYS = new Set([
   "active_turn_state",
   "running_delegated_work",
   "safe_status_label",
-  "unread_count",
+  "unread",
   "pinned",
   "archived",
   "automation_target_count",
@@ -52,7 +52,7 @@ export function safeSessionSummary(value: unknown): SessionSummary | null {
     ("active_turn_state" in safeValue && typeof safeValue.active_turn_state !== "string") ||
     ("running_delegated_work" in safeValue && typeof safeValue.running_delegated_work !== "boolean") ||
     ("safe_status_label" in safeValue && typeof safeValue.safe_status_label !== "string") ||
-    ("unread_count" in safeValue && !isNonNegativeNumber(safeValue.unread_count)) ||
+    ("unread" in safeValue && typeof safeValue.unread !== "boolean") ||
     ("automation_target_count" in safeValue &&
       !isNonNegativeNumber(safeValue.automation_target_count)) ||
     ("pinned" in safeValue && typeof safeValue.pinned !== "boolean") ||
@@ -102,8 +102,8 @@ export function safeSessionSummary(value: unknown): SessionSummary | null {
   if (typeof safeValue.safe_status_label === "string") {
     summary.safe_status_label = safeValue.safe_status_label;
   }
-  if (typeof safeValue.unread_count === "number" && Number.isFinite(safeValue.unread_count)) {
-    summary.unread_count = safeValue.unread_count;
+  if (typeof safeValue.unread === "boolean") {
+    summary.unread = safeValue.unread;
   }
   if (typeof safeValue.automation_target_count === "number" &&
     Number.isFinite(safeValue.automation_target_count)) {

@@ -163,7 +163,7 @@ impl Snapshot {
 pub fn password_mode(profile: &BrowserProfile) -> &'static str {
     match profile.format {
         BookmarkFormat::Firefox => "direct",
-        BookmarkFormat::Chromium if cfg!(target_os = "macos") => "direct",
+        BookmarkFormat::Chromium if cfg!(any(target_os = "macos", windows)) => "direct",
         _ => "csv",
     }
 }
@@ -175,6 +175,8 @@ pub struct LoginBatch {
     pub logins: Vec<Login>,
     /// Unsupported, corrupt or invalid rows.
     pub invalid: usize,
+    /// App-bound rows requiring the browser's CSV export.
+    pub csv_required: usize,
 }
 
 /// Decrypt the selected profile; no secrets enter logs.
@@ -189,8 +191,12 @@ pub fn passwords(
     }
     let dir = profile.bookmarks.parent().ok_or(ImportError::NotFound)?;
     match profile.format {
-        BookmarkFormat::Firefox => firefox::passwords(dir, primary, scratch)
-            .map(|logins| LoginBatch { logins, invalid: 0 }),
+        BookmarkFormat::Firefox => {
+            firefox::passwords(dir, primary, scratch).map(|logins| LoginBatch {
+                logins,
+                ..LoginBatch::default()
+            })
+        }
         BookmarkFormat::Chromium => chromium::passwords(profile.browser, dir, scratch, keys),
         BookmarkFormat::Safari => Err(ImportError::CsvRequired),
     }
@@ -228,3 +234,9 @@ pub fn open_disk_access() -> Result<(), ImportError> {
 pub fn open_disk_access() -> Result<(), ImportError> {
     Err(ImportError::Format)
 }
+
+#[cfg(feature = "test-support")]
+#[path = "browser_transfer/chromium_fixture.rs"]
+mod chromium_fixture;
+#[cfg(feature = "test-support")]
+pub use chromium_fixture::{chromium_password_fixture, chromium_safe_storage_fixture_supported};

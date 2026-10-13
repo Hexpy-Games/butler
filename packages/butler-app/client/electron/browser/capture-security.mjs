@@ -4,7 +4,7 @@ import { perceptionSource } from "./page/snapshot.mjs";
 /** Re-read secure rectangles without replacing the observation's model refs. */
 export async function secureBoxes(tab) {
   const boxes = [], scale = tab.bounds?.scale ?? 1;
-  for (const frame of await frameWorlds(tab)) {
+  for (const frame of await frameWorlds(tab, { immediate: true })) {
     const source = perceptionSource({ obs: "capture-security", epoch: tab.epoch,
       prefix: "secure-", secureKeypads: tab.policy?.secure_keypads ?? [] });
     const nodes = await evaluateWorld(frame, `(()=>{
@@ -19,4 +19,20 @@ export async function secureBoxes(tab) {
     }
   }
   return boxes;
+}
+
+/** Electron WebContents scripts wait for load completion; capture privacy cannot. */
+export async function captureViewport(tab) {
+  await tab.debuggerReady;
+  const api = tab.view.webContents.debugger;
+  const { frameTree } = await api.sendCommand("Page.getFrameTree");
+  const { executionContextId } = await api.sendCommand("Page.createIsolatedWorld", {
+    frameId: frameTree.frame.id, worldName: "butler-capture-viewport",
+  });
+  // Layout metrics exclude scrollbars; masking needs the whole captured viewport.
+  const { result, exceptionDetails } = await api.sendCommand("Runtime.evaluate", {
+    contextId: executionContextId, expression: "({width:innerWidth,height:innerHeight})", returnByValue: true,
+  });
+  if (exceptionDetails || !result.value?.width || !result.value?.height) throw new Error("viewport_unavailable");
+  return result.value;
 }

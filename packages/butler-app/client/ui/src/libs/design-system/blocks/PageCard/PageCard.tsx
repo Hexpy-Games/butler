@@ -28,7 +28,11 @@ export interface PageCardProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
   /** Page load progress (0–100): a 2px line on the card's top edge. Omit when loaded. */
   loading?: number;
   loadingLabel?: string;
-  /** Butler's tabs keep a fixed page size (1280×800): scaled to the card, letterboxed, the scale noted below. */
+  /**
+   * Butler's tabs keep a fixed page size (1280×800): the page fits the card's width and the card ends with it
+   * (its scale noted below), so no empty band is left under the page. Only a pane wider than the page's
+   * aspect letterboxes it at the sides.
+   */
   viewport?: NativeViewViewport;
   /** Where the native view goes, with the card's inner corner radius. */
   onBoundsChange: (bounds: PageCardBounds) => void;
@@ -54,7 +58,7 @@ export interface PageCardProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
 /**
  * The native view takes one radius for all four corners (View.setBorderRadius): the card inner radius
  * where a page corner meets a corner of the card surface, else 0, so the page stays square under a band
- * and above a letterbox. A page that reaches the card bottom corners keeps the radius under a band too.
+ * and beside a letterbox. A page that reaches the card bottom corners keeps the radius under a band too.
  */
 function pageRadius(inner: HTMLElement, frame: HTMLElement | null) {
   const computed = getComputedStyle(inner);
@@ -104,9 +108,13 @@ export function PageCard({
     bandShown.current = shown;
     if (!first && last.current) report(last.current);
   });
-  const ratio = viewport ? { "--page-card-viewport-ratio": viewport.height / viewport.width } as CSSProperties : undefined;
+  const fixedPage = Boolean(viewport) && !internal;
+  const note = viewport && scale !== null && fixedPage && !hidden
+    ? `${viewport.width} × ${viewport.height} · ${Math.round(scale * 100)}%` : null;
+  const ratio = viewport ? { "--page-card-viewport-width": viewport.width, "--page-card-viewport-height": viewport.height } as CSSProperties : undefined;
   return (
-    <div {...props} className={cn(styles.card, className)} data-slot="page-card" data-holder={holder}>
+    <div {...props} className={cn(styles.card, className)} data-slot="page-card" data-holder={holder}
+      data-fixed-page={fixedPage ? "" : undefined}>
       <div ref={inner} className={styles.inner}>
         {loading !== undefined ? (
           <div className={styles.loadLine}><ProgressMeter thin value={loading} ariaLabel={loadingLabel} /></div>
@@ -121,14 +129,10 @@ export function PageCard({
               {children}
             </NativeViewSlot>
           )}
-          {viewport && scale !== null && !internal && !hidden ? (
-            <span className={styles.scaleNote} data-slot="page-card-scale">
-              {`${viewport.width} × ${viewport.height} · ${Math.round(scale * 100)}%`}
-            </span>
-          ) : null}
           {overlay}
         </div>
       </div>
+      {note ? <span className={styles.scaleNote} data-slot="page-card-scale">{note}</span> : null}
     </div>
   );
 }

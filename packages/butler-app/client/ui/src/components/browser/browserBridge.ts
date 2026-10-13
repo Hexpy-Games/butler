@@ -5,7 +5,7 @@ import { notifyStatus } from "@/app/notifications";
 import { appCopy } from "@/app/copy";
 import type { PickedElement } from "./browserElements";
 import { connectElementDrag, type ElementDragEvent } from "./elementDrag";
-import { publicBrowserOwner } from "./browserOwnership";
+import { publicBrowserOwner, relevantConversationTab } from "./browserOwnership";
 import { useBrowserShellState } from "./browserShellState";
 
 export interface BrowserTab {
@@ -15,6 +15,8 @@ export interface BrowserTab {
   stills?: boolean; agent?: boolean; driven?: boolean; profile?: "signed_out" | "signed_in"; epoch?: number; holder?: "agent" | "user"; sticky?: boolean; waiting?: boolean; busy?: boolean; inUse?: boolean;
   /** You took the tab over while a Butler turn held it; clears when that turn ends. */
   paused?: boolean;
+  /** When Butler last worked in this tab (ms since epoch); absent if it never has. */
+  agentAt?: number;
   status: "idle" | "loading" | "crashed"; canBack: boolean; canForward: boolean;
   /** A sign-in step only the user can do (mfa, passkey, captcha, secure_keypad, unknown_form). */
   signinStep?: string;
@@ -25,7 +27,9 @@ export interface BrowserTab {
 export interface BrowserSnapshot {
   enabled: boolean; blocked: boolean; activeId: string | null; nativeCovered: boolean; focusRequest?: string; tabs: BrowserTab[];
 }
+export interface BrowserFrame { tab: string; seq: number; bytes: Uint8Array; masked: boolean }
 interface BrowserBridge {
+  onFrame: (tabId: string, handler: (frame: BrowserFrame) => void, widthPx?: number) => () => void;
   call: (op: string, input?: unknown) => Promise<unknown>;
   subscribe: (handler: (state: BrowserSnapshot) => void) => () => void;
   onPointer: (handler: (point: { x: number; y: number } | null) => void) => () => void;
@@ -111,9 +115,9 @@ export async function openConversationBrowser(session: string, requestedTab?: st
   shell.setOpen(session, true);
   const snapshot = await browserCall("open") as BrowserSnapshot | undefined;
   const tabs = snapshot?.tabs.filter((tab) => tab.owner === `conversation:${session}`) ?? [];
-  const remembered = requestedTab ?? shell.conversations[session]?.lastTab;
-  const target = tabs.find((tab) => tab.id === remembered)?.id ?? tabs[0]?.id
-    ?? await browserCall("create", { owner: `conversation:${session}`, profile: "signed_out" });
+  // No blank tab is made for you: before Butler opens a page the pane shows its empty state.
+  const target = tabs.find((tab) => tab.id === requestedTab)?.id
+    ?? relevantConversationTab(tabs, shell.conversations[session]?.lastTab)?.id;
   // Switching away while opening must not steal another conversation's native view.
   const current = useButlerStore.getState();
   if (typeof target === "string" && current.activeChatId === session && current.view.kind === "session") {

@@ -436,6 +436,11 @@ async function verifyConnection(cdp: CdpClient): Promise<void> {
     `document.querySelector(${JSON.stringify(firstRunSelector)}) === null && document.querySelector('[data-test-class="workspace"]') !== null`,
     "workspace after first-run completion",
   );
+  // The connect step already showed the connection: no late toast greets the workspace.
+  await new Promise((done) => setTimeout(done, 1500));
+  await captureThemes(cdp, "first-run-landing");
+  assert(!(await evaluateBoolean(cdp, "[...document.querySelectorAll('[data-sonner-toast]')].some((toast) => toast.textContent?.includes('연결했습니다'))")),
+    "no connected toast after first-run");
   await verifyMemorySettings(cdp);
 
 }
