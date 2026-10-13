@@ -5,13 +5,10 @@ use std::sync::Arc;
 pub(crate) fn parent_item(body: &Value, step: &mut usize) -> Value {
     let current = *step;
     *step += 1;
+    // The parent cites the page only its steward read: delegated reads are
+    // this conversation's provenance.
     let (name, args) = match current {
-        0 => ("tool_describe", json!({"ids":["native:browser_open"]})),
-        1 => (
-            "tool_call",
-            json!({"id":"native:browser_open","arguments":{"url":"https://example.com/"}}),
-        ),
-        2 => {
+        0 => {
             let pattern = regex::Regex::new(r"img_[a-z0-9]{10,12}").unwrap();
             let mut ids = pattern
                 .find_iter(&body.to_string())
