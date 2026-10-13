@@ -38,22 +38,17 @@ pub(super) async fn execute(
     };
     let result = fetch(owner, invocation, call, &arguments, live).await;
     settle(owner, approved, &result).await?;
-    if call.name == ToolName::WebSearch && result["ok"] == true {
-        let mut provenance = owner.web_provenance.lock();
-        for item in result["results"].as_array().into_iter().flatten() {
-            if provenance.len() >= 512 {
-                break;
-            }
-            if let Some(url) = item["url"].as_str() {
-                provenance.insert(url.to_owned());
-            }
+    // Search results are the turn's provenance by their ids (the web session
+    // keeps both). A page read once is requested again with nothing new, so
+    // its later chunks and where it landed are found too.
+    if call.name == ToolName::WebRead && result["ok"] == true {
+        if let Some(requested) = arguments["url"].as_str() {
+            owner.web_session.discover(requested);
         }
-    }
-    if call.name == ToolName::WebRead
-        && result["ok"] == true
-        && let Some(source) = result["source_url"].as_str()
-    {
-        super::super::answer_blocks::remember_source(owner, call_id, source).await?;
+        if let Some(source) = result["source_url"].as_str() {
+            owner.web_session.discover(source);
+            super::super::answer_blocks::remember_source(owner, call_id, source).await?;
+        }
     }
     super::encoded(&result)
 }
@@ -142,7 +137,7 @@ async fn authorize(
         // A page already open in a tab is read there; no request leaves.
         butler_turn::btcc::web_read_carries_data(
             target,
-            open_tab || owner.web_provenance.lock().contains(target),
+            open_tab || owner.web_session.discovered(target),
         )
     };
     let decision = super::super::access::for_kind(

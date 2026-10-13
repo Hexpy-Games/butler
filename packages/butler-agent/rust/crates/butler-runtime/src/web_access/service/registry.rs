@@ -1,9 +1,18 @@
 //! Turn-scoped links between search results, browser tabs and page reads:
-//! the ids the model opens results by, the tabs pages are open in, and one
-//! in-flight read per page so a URL is read once per turn.
-use std::{collections::HashMap, sync::Arc};
+//! the ids the model opens results by, the tabs pages are open in, the URLs
+//! the turn found, and one in-flight read per page so a URL is read once per
+//! turn. All but the in-flight reads survive an approval suspension.
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
+
+use serde_json::{Value, json};
 
 use super::WebSession;
+
+/// Found URLs kept beyond search results (the user's message, pages read or opened).
+const MAX_DISCOVERED: usize = 512;
 
 #[derive(Default)]
 pub(super) struct Registry {
@@ -11,6 +20,8 @@ pub(super) struct Registry {
     by_url: HashMap<String, usize>,
     opened: HashMap<String, Opened>,
     reads: HashMap<String, Arc<tokio::sync::Mutex<()>>>,
+    /// Exact URLs (fragment kept) the turn found outside its search results.
+    discovered: HashSet<String>,
 }
 
 /// One search result as `browser_open` opens it.
@@ -43,6 +54,12 @@ pub(crate) fn page_key(url: &str) -> String {
         }
         Err(_) => url.trim().to_owned(),
     }
+}
+
+/// A URL as provenance compares it: normalized with its fragment kept, since
+/// a page script can read the fragment.
+fn exact_key(url: &str) -> String {
+    url::Url::parse(url.trim()).map_or_else(|_| url.trim().to_owned(), |parsed| parsed.to_string())
 }
 
 /// The turn cache key of a tab's page while the tab stays at `epoch`.
@@ -121,6 +138,94 @@ impl WebSession {
             .map(|(tab, _)| tab.clone())
     }
 
+    /// Records `url` as found by this turn (in the user's message, or a page
+    /// it read or opened): requesting it again sends nothing new.
+    pub fn discover(&self, url: &str) {
+        let key = exact_key(url);
+        let mut state = self.state.lock();
+        let registry = &mut state.registry;
+        if registry.discovered.len() < MAX_DISCOVERED && !registry.is_result(&key) {
+            registry.discovered.insert(key);
+        }
+    }
+
+    /// Whether this turn found `url` itself: a search result, a URL in the
+    /// user's message, or a page it already read or opened.
+    pub fn discovered(&self, url: &str) -> bool {
+        let key = exact_key(url);
+        let state = self.state.lock();
+        state.registry.discovered.contains(&key) || state.registry.is_result(&key)
+    }
+
+    /// The result ids, found URLs, opened tabs and planner state this turn
+    /// carries across an approval suspension; `None` before any web use.
+    pub fn snapshot(&self) -> Option<Value> {
+        let state = self.state.lock();
+        let registry = &state.registry;
+        if registry.results.is_empty()
+            && registry.discovered.is_empty()
+            && registry.opened.is_empty()
+            && !state.first_search_consumed
+        {
+            return None;
+        }
+        let results = registry
+            .results
+            .iter()
+            .map(|result| json!([result.url, result.title]))
+            .collect::<Vec<_>>();
+        let mut discovered = registry.discovered.iter().collect::<Vec<_>>();
+        discovered.sort_unstable();
+        let mut opened = registry
+            .opened
+            .iter()
+            .map(|(requested, opened)| json!([requested, opened.tab, opened.landed]))
+            .collect::<Vec<_>>();
+        opened.sort_unstable_by_key(ToString::to_string);
+        Some(json!({
+            "results": results,
+            "discovered": discovered,
+            "opened": opened,
+            "planned": state.first_search_consumed,
+        }))
+    }
+
+    /// Restores a [`Self::snapshot`]: result `r<n>` is again the n-th result.
+    pub fn restore(&self, snapshot: &Value) {
+        let text = |item: &Value, index: usize| item[index].as_str().unwrap_or("").to_owned();
+        let mut state = self.state.lock();
+        state.first_search_consumed |= snapshot["planned"] == true;
+        let registry = &mut state.registry;
+        for item in snapshot["results"].as_array().into_iter().flatten() {
+            let url = text(item, 0);
+            let key = page_key(&url);
+            if url.is_empty() || registry.by_url.contains_key(&key) {
+                continue;
+            }
+            registry.results.push(SearchResultRef {
+                id: format!("r{}", registry.results.len() + 1),
+                url,
+                title: text(item, 1),
+            });
+            registry.by_url.insert(key, registry.results.len() - 1);
+        }
+        let discovered = snapshot["discovered"].as_array().into_iter().flatten();
+        for url in discovered.filter_map(Value::as_str) {
+            if registry.discovered.len() < MAX_DISCOVERED {
+                registry.discovered.insert(url.to_owned());
+            }
+        }
+        for item in snapshot["opened"].as_array().into_iter().flatten() {
+            let (requested, tab, landed) = (text(item, 0), text(item, 1), text(item, 2));
+            if !requested.is_empty() && !tab.is_empty() {
+                registry
+                    .opened
+                    .entry(requested)
+                    .or_insert(Opened { tab, landed });
+            }
+        }
+    }
+
     /// The gate one read of `key` holds, so a parallel read of the same page
     /// waits for the first and reuses it.
     pub(in crate::web_access) fn read_gate(&self, key: &str) -> Arc<tokio::sync::Mutex<()>> {
@@ -131,5 +236,14 @@ impl WebSession {
             .entry(key.to_owned())
             .or_default()
             .clone()
+    }
+}
+
+impl Registry {
+    /// Whether the exact URL `key` is one of this turn's search results.
+    fn is_result(&self, key: &str) -> bool {
+        self.by_url
+            .get(&page_key(key))
+            .is_some_and(|index| exact_key(&self.results[*index].url) == key)
     }
 }

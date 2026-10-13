@@ -124,7 +124,7 @@ fn next(state: &StateData, body: &Value, tools: &[Value]) -> Value {
 }
 
 /// Every function output in the request, decoded.
-fn outputs(body: &Value) -> Vec<Value> {
+pub(super) fn outputs(body: &Value) -> Vec<Value> {
     body["input"]
         .as_array()
         .into_iter()
@@ -145,11 +145,11 @@ fn outputs(body: &Value) -> Vec<Value> {
         .collect()
 }
 
-fn call(round: usize, name: &str, args: &Value) -> Value {
+pub(super) fn call(round: usize, name: &str, args: &Value) -> Value {
     json!({"type":"function_call","id":format!("fc_research_{round}"),"call_id":format!("call_research_{round}"),"name":name,"arguments":args.to_string(),"status":"completed"})
 }
 
-fn message(text: &str) -> Value {
+pub(super) fn message(text: &str) -> Value {
     json!({"type":"message","id":"msg_research","role":"assistant","status":"completed","content":[{"type":"output_text","text":text,"annotations":[]}]})
 }
 
