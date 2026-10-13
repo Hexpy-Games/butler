@@ -37,8 +37,8 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
       result = { status: "unknown", reason: "executor_error" };
     }
     await flushState();
-    // Rendered pages exceed the result size; they have their own route.
-    const results = ["reader.render", "tab.read"].includes(frame.op) ? "renders" : "results";
+    // Media and rendered pages carry bounded bytes on their own routes.
+    const results = frame.op === "tab.image_collect" ? "images" : ["reader.render", "tab.read"].includes(frame.op) ? "renders" : "results";
     await request(`/internal/browser-host/${results}/${encodeURIComponent(frame.id)}`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(result),
     });

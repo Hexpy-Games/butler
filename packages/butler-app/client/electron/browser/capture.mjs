@@ -181,23 +181,10 @@ export async function collectImage(tab, args) {
     if (target.reason) return { status: "refused", reason: target.reason };
   }
   const source = await evaluateWorld(frame, `(${imageSource.toString()})(${JSON.stringify({ ref:args.ref, url:args.url, obs:observationId, epoch })})`);
-  if (source.reason) return { status: "refused", reason: source.reason };
+  if (source.reason) return { status: "refused", reason: source.reason, recovery: source.recovery };
   if (source.image) return collectedPixels(tab, epoch, Buffer.from(source.image.data, "base64"), source);
-  if (!source.source_url && args.ref) return { ...await screenshotTab(tab, { ...args, observation:observationId }), ...source };
-  if (args.url) return { status: "ok", ...source };
-  try {
-    const response = await tab.view.webContents.session.fetch(source.source_url, { credentials: "include", signal: AbortSignal.timeout(10000) });
-    if (!response.ok || !response.headers.get("content-type")?.startsWith("image/")) return { status:"refused", reason:"invalid_image" };
-    const reader = response.body.getReader(), chunks = []; let size = 0;
-    try {
-      while (true) {
-        const { done, value } = await reader.read(); if (done) break;
-        size += value.length; if (size > 8*1024*1024) return { status:"refused", reason:"image_too_large" };
-        chunks.push(Buffer.from(value));
-      }
-    } finally { await reader.cancel(); }
-    return collectedPixels(tab, epoch, Buffer.concat(chunks), source);
-  } catch { return { status:"refused", reason:"image_fetch_failed" }; }
+  const crop = await screenshotTab(tab, { ...args, observation:observationId });
+  return { ...crop, alt: source.alt, nearby_text: source.nearby_text, source_url: source.source_url || tab.url };
 }
 function collectedPixels(tab, epoch, bytes, source) {
   if (epoch !== tab.epoch || tab.holder !== "agent") return { status:"not_dispatched", reason:"control_changed" };

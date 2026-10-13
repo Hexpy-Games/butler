@@ -129,7 +129,8 @@ export function contrast(element) {
 export function semantic(element, discoverPointer = true) {
   const tag = element.localName, type = element.getAttribute("type");
   const page=globalThis.__butlerPerceptionCache?.page;
-  const role = element.getAttribute("role") ?? ({ button: "button", a: "link", select: "combobox", textarea: "textbox", canvas: styleValue(element, "pointerEvents") === "none" ? "image" : "canvas", img: "image", summary: "button" }[tag])
+  const declaredRole = element.getAttribute("role");
+  const role = (declaredRole === "img" ? "image" : declaredRole) ?? ({ button: "button", a: "link", select: "combobox", textarea: "textbox", canvas: styleValue(element, "pointerEvents") === "none" ? "image" : "canvas", img: "image", summary: "button" }[tag])
     ?? (/^h[1-6]$/u.test(tag) ? "heading" : undefined)
     ?? (tag === "input" ? ({ checkbox: "checkbox", radio: "radio", range: "slider", submit: "button", button: "button" }[type] ?? "textbox") : scrollRegion(element) ? "scroll_region" : "");
   const interactiveRole = /^(button|link|combobox|textbox|checkbox|radio|slider|spinbutton|switch|option|menuitem|menuitemcheckbox|menuitemradio|tab|treeitem|canvas|scroll_region)$/u.test(role);

@@ -123,6 +123,12 @@ async fn image_assets_collect_dedupe_crop_guard_serve_and_sweep() -> Result<(), 
     )
     .await?;
     assert_eq!(private["reason"], "private_image_url", "{private}");
+    assert!(
+        private["recovery"]
+            .as_str()
+            .unwrap()
+            .contains("public address")
+    );
     verify_delivery(&s, &first).await?;
     save_evidence(&s, &page, &crop, &files_before[0].0).await?;
     call(&admin, session, "tab.close", &tab, json!({})).await?;
