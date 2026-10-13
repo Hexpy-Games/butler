@@ -73,12 +73,20 @@ try {
     awaiting = false;
     ownState = "delivered";
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", appearance_theme: theme,
-      ...(output ? { reduce_motion: true } : {}),
       desktop_notifications: { enabled: true, assistant_messages: false, task_completions: false },
       wallpaper: { source: wallpaper ? { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } } : { kind: "none" } } }) });
     await server.signIn(page);
     await installWorkReplay(page);
     await installNotificationReplay(page, server.url);
+    // Screenshot mode: report battery power, so the conversation wallpaper holds its frame through the
+    // product's on-battery pause. App reduce-motion would also stop the DS Spinner asserted below.
+    if (output) await page.addInitScript(() => {
+      const bridge = (window as unknown as { butlerApp: Record<string, unknown> }).butlerApp;
+      bridge.onPowerState = (handler: (state: { onBattery: boolean; constrained: boolean }) => void) => {
+        handler({ onBattery: true, constrained: false });
+        return () => {};
+      };
+    });
     await page.route("**/authority-requests?**", route => route.fulfill({ json: { protocol_version: "butler.app.v1", data: { session_id: "general", requests: [], permissions: [...grants, grants[0]] } } }));
     await page.route("**/navigation", route => route.fulfill({ json: { protocol_version: "butler.app.v1", data: { ...navigation,
       chats: navigation.chats.map(s => ({ ...s, active_turn_state: ownState, running_delegated_work: phase === "running", attention_required: awaiting && s.id === "general" })) } } }));
@@ -99,6 +107,8 @@ try {
       await page.evaluate(() => document.fonts.ready);
       await page.waitForFunction(() => document.getAnimations().every(animation =>
         animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+      if (output) await page.waitForFunction(() => [...document.querySelectorAll<HTMLCanvasElement>("canvas[data-wallpaper-state]")]
+        .every(canvas => canvas.dataset.wallpaperState !== "pending"));
       await page.waitForLoadState("networkidle");
       if (output) await page.screenshot({ animations: "disabled", caret: "hide", path: `${output}/${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}-${state}.png` });
     };
@@ -139,7 +149,11 @@ try {
     await access.click();
     await capture("grants-collapsed");
     assert.equal(await page.locator('[data-test-class="granted-permission"]').count(), 0);
-    assert.equal(await page.locator('[data-slot="option-menu-item"]').count(), 5, "every access mode and no grant rows");
+    const options = page.locator('[data-slot="option-menu-item"]');
+    const labels = [appCopy.permissions.auto, appCopy.permissions.readOnly, appCopy.permissions.askAlways,
+      appCopy.permissions.askFirst, appCopy.permissions.fullAccess];
+    assert.equal(await options.count(), labels.length, "only access modes, no grant rows");
+    for (let index = 0; index < labels.length; index++) assert((await options.nth(index).innerText()).includes(labels[index]!), "access mode order and labels");
     assert.equal(await access.getAttribute("aria-label"), `${appCopy.composer.permission}: ${appCopy.permissions.askFirst}`, "grants do not add a count");
     assert(!(await page.locator('[data-test-class="composer-menu"]').innerText()).includes("Allowed"), "no grants section");
     await page.keyboard.press("Escape");
