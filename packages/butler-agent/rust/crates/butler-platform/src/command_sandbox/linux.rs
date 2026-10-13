@@ -211,8 +211,10 @@ pub(super) fn protect_writes(
     Ok(Protection::Unavailable(invocation))
 }
 
-/// Project-write containment is enforced only on macOS for now; mutating
-/// commands keep asking here.
+// Landlock grants rights to objects/hierarchies, not names. Granting creation
+// on a project directory would also allow new secret names (including nested
+// .git/.env paths); splitting around existing secrets cannot enforce Seatbelt's
+// name policy. Keep admission unavailable until that boundary can be enforced.
 pub(super) fn project_write(
     invocation: Invocation,
     _environment: &HashMap<String, String>,
