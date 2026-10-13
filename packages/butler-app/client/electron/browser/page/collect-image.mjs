@@ -2,10 +2,10 @@
 export async function imageSource({ ref, obs, epoch, url }) {
   const state = globalThis.__butlerObservation;
   if (ref && (!state || state.obs !== obs || state.epoch !== epoch)) return { reason: "stale_ref" };
-  const requestContext = element => {
+  const requestContext = (element, target = url) => {
     const policy = element?.referrerPolicy || document.referrerPolicy;
     let referer = policy === "no-referrer" ? "" : /^(origin|strict-origin)$/u.test(policy) ? `${location.origin}/` : location.href;
-    try { if (policy === "same-origin" && new URL(url, location.href).origin !== location.origin) referer = ""; }
+    try { if (policy === "same-origin" && new URL(target, location.href).origin !== location.origin) referer = ""; }
     catch { referer = ""; }
     return { referer, user_agent: navigator.userAgent };
   };
@@ -55,6 +55,13 @@ export async function imageSource({ ref, obs, epoch, url }) {
   } catch {
     // Cross-origin pixels can be captured by the host without relaxing CORS.
     result.capture_element = true;
+    // A photo element's own file is the full original, whatever covers or shrinks
+    // it on the page; the host downloads it with this page's request context and
+    // keeps the rendered crop for when that download is unusable. A background
+    // may be a sprite, so only its rendered crop represents it.
+    if (image && /^https?:/u.test(result.source_url)) {
+      Object.assign(result, { fetch_source: true }, requestContext(image, result.source_url));
+    }
   }
   return result;
 }

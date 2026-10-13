@@ -24,8 +24,9 @@ pub(super) fn render_input(packet: &SubsessionPacket, profile_prompt: Option<&st
     }
 }
 /// Reading what pages state is enough evidence; operating a page's controls
-/// to confirm unrequested details costs rounds without changing the answer.
-const PAGE_FACTS: &str = "Do not operate page controls to verify details the user's request did not ask for; report a detail a page does not state as unconfirmed.";
+/// or scrolling through its image sections to confirm unrequested details
+/// costs rounds without changing the answer.
+const PAGE_FACTS: &str = "Do not operate page controls or scroll through a page's image sections to verify details the user's request did not ask for; report a detail the page's text does not state as unconfirmed.";
 
 pub(super) fn render_steward_input(packet: &SubsessionPacket) -> String {
     format!(
@@ -61,12 +62,12 @@ fn planned_presentation(packet: &SubsessionPacket) -> String {
         .iter()
         .any(|block| matches!(*block, "cards" | "gallery"))
     {
-        " When the items have a visual appearance, collect one representative photo per item with image_collect and name its id with the item. When no page you used shows one, find one: search for images of that item or open its official or gallery pages, and collect a real photo of it. Never use a screenshot of text as an item's photo, and leave no item without an image."
+        " When the items have a visual appearance, collect one representative photo per item with image_collect and name its id with the item. Collect it from the page you read for that item: its main image ref, or that image's URL when the ref is refused. One collected photo per item is enough; do not scroll, click or collect again to find a larger or better one. When no page you used shows one, find one: search for images of that item or open its official or gallery pages, and collect a real photo of it. Never use a screenshot of text as an item's photo, and leave no item without an image."
     } else {
         ""
     };
     format!(
-        " Butler's Plan presents this result as {blocks}: report per item the facts its source states and that source.{images}"
+        " Butler's Plan presents this result as {blocks}: report per item the facts its source states and that source. Butler builds those blocks from your report, so report plain per-item lines, not tables or a formatted document.{images}"
     )
 }
 pub(super) fn allowed_effects(access: &str) -> Vec<String> {
