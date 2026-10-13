@@ -124,6 +124,10 @@ impl GatewayApplication for AppApplication {
                 .await
         })
     }
+    fn branch_source(&self, session_id: String) -> ApplicationFuture<AppBranchSourceLocation> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.branch_source_owned(session_id).await })
+    }
     fn list_chats(&self) -> ApplicationFuture<Vec<AppChatSummary>> {
         let this = self.clone_handle();
         Box::pin(async move { this.list_chats().await })
