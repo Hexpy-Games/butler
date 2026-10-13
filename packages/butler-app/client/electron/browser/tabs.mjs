@@ -1,3 +1,4 @@
+import { BrowserLiveFrames } from "./live.mjs";
 import { linkMenuItems } from "./links.mjs";
 import { configureWebIdentity } from "./identity.mjs";
 import { wireHistory } from "./history.mjs";
@@ -41,6 +42,7 @@ class UserBrowser {
 
   constructor(app, getWindow, getLanguage) {
     this.getWindow = getWindow;
+    this.live = new BrowserLiveFrames(this);
     this.getLanguage = getLanguage;
     this.pointer = new BrowserPointer(this, controlTab);
     this.selection = new BrowserSelection(this);
@@ -61,6 +63,7 @@ class UserBrowser {
         signinStep: tab.signinStep ?? undefined, payStep: tab.payStep ?? undefined, saveOffer: tab.saveOffer ? { username: tab.saveOffer.username, host: new URL(tab.saveOffer.origin).host } : undefined })) };
   }
   publish() {
+    this.live.sync();
     this.pointer.sync(this.tabs.get(this.activeId));
     this.onState?.(this.snapshot());
     const win = this.getWindow();
@@ -162,6 +165,8 @@ class UserBrowser {
     tab.session = tab.view.webContents.session;
     tab.identityReady = configureWebIdentity(tab.view.webContents, !supplied);
     attachNativeWorlds(tab);
+    this.live.watch(tab);
+    tab.afterAction = () => this.live.changed(tab);
     wireTab(tab, { update: (item) => this.update(item), capture: (item) => this.capture(item),
       detach: (item) => this.detach(item), publish: () => this.publish(), nativeCover: () => this.nativeCover(),
       linkMenu: (url) => linkMenuItems(this, url, tab), language: this.getLanguage,
@@ -220,6 +225,7 @@ class UserBrowser {
     if (!tab || tab.closing) return;
     tab.flushHistory?.();
     tab.closing = true;
+    this.live.unsubscribe(id);
     clearOffer(tab);
     this.downloads.cancelTab(id);
     closeUse(this, tab);
@@ -346,6 +352,7 @@ class UserBrowser {
       if (tab.holder === "user" && !tab.sticky) controlTab(this, tab, "agent");
       this.detach(tab); backgroundTab(this, tab);
     }
+    this.live.sync();
   }
   control(id, holder, sticky) {
     if (!["agent", "user"].includes(holder)) throw new Error("invalid_control");
@@ -357,10 +364,15 @@ class UserBrowser {
     for (const peer of this.tabs.values()) if (peer.owner === tab.owner) peer.stills = value !== false;
     this.publish();
   }
-  execute(frame) { return executeBrowser(this, frame); }
+  async execute(frame) {
+    const release = ["signin.fill", "pay.fill", "autofill.fill"].includes(frame.op) ? this.live.pauseFill(frame.tab) : () => {};
+    try { return await executeBrowser(this, frame); }
+    finally { release(); this.live.changed(this.tabs.get(frame.tab)); }
+  }
   syncAll() { for (const tab of this.tabs.values()) this.sync(tab); }
   flush() { return this.restore.flush(); }
   async dispose() {
+    this.live.dispose();
     this.downloads.stop();
     this.resetUse();
     this.areaVisible = false;

@@ -1467,7 +1467,36 @@ function requestTaskGraph(scope, tail, { id, revision, cursor, limit } = {}) {
   return requestJson(`/${scope}/${encodeURIComponent(id)}/${tail}${suffix}`);
 }
 const browserCall = (op, input) => ipcRenderer.invoke("butler-browser:call", op, input);
+const frameSubscriptions = new Map();
+const frameCall = (op, input) => ipcRenderer.invoke("butler-browser:call", op, input).catch(() => {});
+let frameVisibilityWatching = false;
+
 contextBridge.exposeInMainWorld("butlerBrowser", {
+  onFrame(tabId, handler, widthPx = 416) {
+    if (!frameVisibilityWatching) {
+      frameVisibilityWatching = true;
+      document.addEventListener("visibilitychange", () => {
+        if (frameSubscriptions.size) void frameCall("frame.visibility", { value: !document.hidden });
+      });
+    }
+    const listener = (_event, frame) => { if (frame.tab === tabId) handler(frame); };
+    ipcRenderer.on("browser:frame", listener);
+    const count = frameSubscriptions.get(tabId) ?? 0;
+    frameSubscriptions.set(tabId, count + 1);
+    if (!count) {
+      void frameCall("frame.visibility", { value: !document.hidden });
+      void frameCall("frame.subscribe", { id: tabId, widthPx });
+    }
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      ipcRenderer.removeListener("browser:frame", listener);
+      const remaining = (frameSubscriptions.get(tabId) ?? 1) - 1;
+      if (remaining) frameSubscriptions.set(tabId, remaining);
+      else { frameSubscriptions.delete(tabId); void frameCall("frame.unsubscribe", { id: tabId }); }
+    };
+  },
   onDownload(handler) {
     const listener = (_event, value) => handler(value);
     ipcRenderer.on("butler-browser:download", listener);

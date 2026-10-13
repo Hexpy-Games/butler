@@ -83,8 +83,8 @@ function encode(image, max = 1024) {
 }
 
 /** Paints every secure field (saved-item fills included) black on a page capture. */
-export async function maskSecure(tab, image) {
-  const marks = await secureBoxes(tab);
+export async function maskSecure(tab, image, marks) {
+  marks ??= await secureBoxes(tab);
   if (!marks.length) return image;
   const viewport = await tab.view.webContents.executeJavaScriptInIsolatedWorld(9001, [{ code: "({width:innerWidth,height:innerHeight})" }]);
   const size = image.getSize(), scale = tab.bounds?.scale ?? 1;
