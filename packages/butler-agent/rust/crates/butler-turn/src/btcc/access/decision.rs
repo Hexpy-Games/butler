@@ -7,6 +7,9 @@ use serde_json::{Map, Value};
 pub enum CapabilityKind {
     Exempt(ApprovalExemptAction),
     InternalRead,
+    WebRequest {
+        carries_data: bool,
+    },
     FileRead,
     CommandObservation {
         sandboxed: bool,
@@ -83,6 +86,15 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     };
     if *mode == AccessMode::FullAccess {
         return Allow;
+    }
+    if let CapabilityKind::WebRequest { carries_data } = request.kind {
+        return if request.taint != TurnTaint::External || !carries_data {
+            Allow
+        } else if *mode == AccessMode::ReadOnly {
+            Deny(DenyReason::ReadOnly)
+        } else {
+            Ask(GrantUse::Ignore)
+        };
     }
     if matches!(request.kind, FullOnly(_)) {
         return Deny(DenyReason::FullAccessRequired);
@@ -162,6 +174,17 @@ impl CapabilityKind {
             return Self::ProjectRecord;
         }
         match tool {
+            ToolName::WebRead => Self::WebRequest {
+                carries_data: super::web_read_carries_data(
+                    arguments.get("url").and_then(Value::as_str).unwrap_or(""),
+                    false,
+                ),
+            },
+            ToolName::WebSearch => Self::WebRequest {
+                carries_data: super::web_search_carries_data(
+                    arguments.get("query").and_then(Value::as_str).unwrap_or(""),
+                ),
+            },
             ForgetExplicitMemory => Self::FullOnly(FullOnlyAction::MemoryForget),
             RequestServiceRestart => Self::FullOnly(FullOnlyAction::ServiceRestart),
             BindSessionGitWorktree => Self::FullOnly(FullOnlyAction::GitWorktree),

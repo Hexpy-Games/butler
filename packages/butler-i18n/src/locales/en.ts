@@ -593,6 +593,10 @@ export const enUsCopy: AppCopy = {
       editFilesOutside: count => `Edit ${count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files"}, including outside the project folder?`,
       readOnlyUnisolated: "Read-only request · No isolation",
       runCommandOutside: "Run a command outside the project folder?",
+      webRequest: "Send this web request?",
+      webRequestDesc: "This request may carry outside content.",
+      taintReason: "Asking again because this turn read outside content.",
+      scheduleMode: mode => `Run permission: ${mode}`,
       networkCommandOutside: "Run a command that uses the internet outside the project folder?",
       runCommand: workspace => `Run a command ${inWorkspace(workspace)}?`,
       networkCommand: workspace => `Run a command that uses the internet ${inWorkspace(workspace)}?`,
@@ -1609,6 +1613,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       consolidationModel: "Chat memory model",
       localReasoningBudget: "Local reasoning budget",
       contextLimit: "Context limit",
+      scheduleAccess: "Default schedule permission",
       chatAccess: "New chats",
       planModeDefault: "Use plan mode by default",
       name: "Name",
@@ -1712,6 +1717,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     descriptions: {
       runtimeSupportedModelsOnly:
         "Only models from currently runnable providers are shown.",
+      scheduleAccess: "New schedules run with this permission.",
       chatAccess: "New chats start with this. Change it in any chat.",
       language: "Sets the Butler App interface language.",
       timezone:
