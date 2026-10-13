@@ -55,7 +55,7 @@ pub(super) async fn execute(
     }
     // One decision per call, from the exact requested targets. The adapters
     // re-check containment when the targets are touched.
-    let kind = super::access::kind(call).gated_effect();
+    let kind = super::access::gated_kind(call).await?;
     let decision =
         super::access::decision_for_kind(owner, call, &Value::Object(call.arguments.clone()), kind)
             .await

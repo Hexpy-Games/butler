@@ -234,7 +234,7 @@ fn read(id: &str, path: &str) -> Value {
         &json!({"requests":[{"path":path,"max_bytes":2048}]}),
     )
 }
-async fn outputs(
+pub(super) async fn outputs(
     s: &Scenario,
     chat: &str,
     id: &str,

@@ -44,6 +44,7 @@ async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), Harn
     std::fs::create_dir_all(project.join(".git"))?;
     std::fs::write(project.join(".git/config"), "original-config")?;
     std::fs::write(project.join("a.txt"), "project-marker")?;
+    std::fs::create_dir_all(project.join("src"))?;
     let contained = butler_platform::command_sandbox::project_write_available();
 
     // In-folder edit and a project-contained command: no card (macOS); the
@@ -56,7 +57,7 @@ async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), Harn
                 "write_file",
                 &json!({"path":"notes.md","content":"auto-notes"}),
             ),
-            mutation("make", "echo hi > made.txt"),
+            mutation("make", "echo hi > src/made.txt"),
             call("read", "read_file", &json!({"requests":[{"path":"a.txt"}]})),
         ],
     );
@@ -75,7 +76,7 @@ async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), Harn
         std::fs::read_to_string(project.join("notes.md"))?,
         "auto-notes"
     );
-    assert!(project.join("made.txt").exists());
+    assert!(project.join("src/made.txt").exists());
     let output = outputs(&s, &chat, &id, &script, EDIT).await?;
     assert!(output.iter().any(|v| v.contains("project-marker")));
     eprintln!(
