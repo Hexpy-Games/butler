@@ -33,6 +33,8 @@ function props(locale: Locale, item: FixtureItem, src: string | undefined = fixt
       </>
     ),
     onOpen: () => undefined,
+    onMediaOpen: () => undefined,
+    mediaLabel: item.title,
   };
 }
 

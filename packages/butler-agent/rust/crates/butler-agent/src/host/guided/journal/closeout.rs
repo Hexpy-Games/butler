@@ -93,6 +93,26 @@ fn safe_path(value: &str, artifact: bool) -> Option<String> {
     Some(normalized)
 }
 
+/// An answer that pictures an item in its blocks shows that picture once: a
+/// capture of the same item's page (its own or a delegated result's) is not
+/// attached beside it. Captures of other pages and every other file stay.
+pub(super) fn without_pictured(mut closeout: JournalCloseout) -> JournalCloseout {
+    let pictured =
+        butler_runtime::capabilities::answer_blocks::pictured_sources(&closeout.answer_blocks);
+    if pictured.is_empty() {
+        return closeout;
+    }
+    closeout.artifacts.retain(|artifact| {
+        artifact.kind != butler_turn::btcc::ArtifactKind::Image
+            || artifact
+                .source_url
+                .as_deref()
+                .and_then(butler_runtime::capabilities::answer_blocks::page_identity)
+                .is_none_or(|page| !pictured.contains(&page))
+    });
+    closeout
+}
+
 /// Child results precede local edits; the latest file record wins by path.
 pub(super) fn merge_files(mut child: JournalCloseout, own: JournalCloseout) -> JournalCloseout {
     let mut merged = JournalCloseout {

@@ -53,8 +53,26 @@ export interface ItemCardProps extends DsPrivateStyleProps {
   source?: ItemCardSource;
   /** Footer IconButtons and CopyButtons (icon-sm), set in a ButtonContainer by the card. */
   actions?: ReactNode;
-  /** Opens the item; the media and the title are the target. */
+  /** Opens the item (its page). The whole card is the target; the title is its one tab stop. */
   onOpen?: (event: MouseEvent) => void;
+  /**
+   * Opens the picture itself (an image viewer). The picture becomes its own button, named by
+   * `mediaLabel`; without it the picture is part of the card's `onOpen` target.
+   */
+  onMediaOpen?: (event: MouseEvent) => void;
+  /** Accessible name of the picture button ("View photo: …" / "사진 크게 보기: …"). */
+  mediaLabel?: string;
+}
+
+function Media({ media, onOpen, onMediaOpen, mediaLabel }: Pick<ItemCardProps, "media" | "onOpen" | "onMediaOpen" | "mediaLabel">) {
+  if (onMediaOpen) {
+    return (
+      <Clickable className={dsClass(styles.media)} variant="text" data-item-card-media="viewer" aria-label={mediaLabel} onClick={onMediaOpen}>
+        {media}
+      </Clickable>
+    );
+  }
+  return <span className={styles.media} data-item-card-media={onOpen ? "item" : undefined}>{media}</span>;
 }
 
 function Value({ value }: { value: ItemCardValue }) {
@@ -94,21 +112,18 @@ function Footer({ source, actions }: Pick<ItemCardProps, "source" | "actions">) 
  * One found item (a paper, a place, a recipe, a product, a library) on a Card: picture, eyebrow, subtitle,
  * title, a value, facts, text and a footer with its source and actions. Below 340px of its own width it
  * stacks and the footer keeps only the read time; at 340px and up it is a row with a 112px picture on the
- * start side and the footer adds the site icon and name.
+ * start side and the footer adds the site icon and name. With `onOpen` the whole card opens the item; the
+ * picture (with `onMediaOpen`), the source line, Show more and the actions keep their own targets.
  */
 export function ItemCard({
-  title, eyebrow, subtitle, media, value, facts = [], text, showMoreLabel, showLessLabel, source, actions, onOpen, className,
+  title, eyebrow, subtitle, media, value, facts = [], text, showMoreLabel, showLessLabel, source, actions, onOpen, onMediaOpen, mediaLabel, className,
 }: ItemCardProps) {
   const titleId = useId();
   const heading = <Typo.Text id={titleId} className={dsClass(styles.title)} weight="semibold" lineClamp={2}>{title}</Typo.Text>;
   return (
     <article className={cn(styles.root, className)} aria-labelledby={titleId} data-slot="item-card">
       <Card className={dsClass(styles.card)} padding="sm" interactive={Boolean(onOpen)} data-media={media ? "true" : undefined}>
-        {media ? (
-          onOpen ? (
-            <Clickable className={dsClass(styles.media)} variant="text" tabIndex={-1} aria-hidden="true" onClick={onOpen}>{media}</Clickable>
-          ) : <span className={styles.media}>{media}</span>
-        ) : null}
+        {media ? <Media media={media} onOpen={onOpen} onMediaOpen={onMediaOpen} mediaLabel={mediaLabel} /> : null}
         <span className={styles.body}>
           {eyebrow ? <span className={styles.eyebrow}><Tag tone="accent" size="sm">{eyebrow}</Tag></span> : null}
           {subtitle ? <Typo.Caption tone="tertiary" truncate>{subtitle}</Typo.Caption> : null}

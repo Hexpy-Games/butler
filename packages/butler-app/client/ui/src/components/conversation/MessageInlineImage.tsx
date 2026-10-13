@@ -9,6 +9,7 @@ import { ArtifactPreviewImage, Button, ButtonContainer, Expand, Stack } from "@/
 import { artifactCardActions } from "@/components/artifacts/artifactActions";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store";
+import { useOpenMessageImage } from "./messageImages";
 
 export interface MessageInlineImageProps
   extends Omit<ImgHTMLAttributes<HTMLImageElement>, "className" | "style"> {
@@ -19,8 +20,10 @@ export interface MessageInlineImageProps
 
 /**
  * A markdown image. Message files load through their signed URL; a failed
- * load (expired or revoked signature) refreshes the session once. A message
- * file opens full size in the artifact viewer.
+ * load (expired or revoked signature) refreshes the session once. The picture
+ * opens the image viewer on the message's pictures; Open shows a message file
+ * in the artifact viewer. A relative path that names no message file cannot
+ * load, so it shows nothing.
  */
 export function MessageInlineImage({
   alt,
@@ -31,10 +34,13 @@ export function MessageInlineImage({
   ...props
 }: MessageInlineImageProps) {
   const openArtifact = useButlerStore((state) => state.openArtifact);
+  const openImage = useOpenMessageImage();
   const file = markdownImageFile(src, attachments, artifacts);
   const source = useMessageFileSource(file, refreshFileUrls);
   const resolvedSrc = file ? source.src : src;
-  if (!resolvedSrc) return null;
+  if (!resolvedSrc || (!file && !/^(https?:|data:image\/|\/)/iu.test(resolvedSrc))) return null;
+  const key = file?.url ?? resolvedSrc;
+  const view = openImage ? () => openImage(key) : undefined;
   const attachment = attachments.find(item => item.url === file?.url);
   const artifact = artifacts.find(item => item.url === file?.url) ?? (attachment ? {
     id: `artifact-${attachment.file_id}`, file_id: attachment.file_id,
@@ -52,7 +58,11 @@ export function MessageInlineImage({
       decoding="async"
       loading="lazy"
       src={resolvedSrc}
-      onClick={open}
+      role={view ? "button" : undefined}
+      tabIndex={view ? 0 : undefined}
+      aria-label={view ? appCopy.conversation.imageViewer.viewImage(alt || artifact?.title || appCopy.conversation.answerBlocks.image) : undefined}
+      onClick={view ?? open}
+      onKeyDown={view ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); view(); } } : undefined}
       onError={file ? source.onError : undefined}
       onLoad={file ? source.onLoad : undefined}
     />

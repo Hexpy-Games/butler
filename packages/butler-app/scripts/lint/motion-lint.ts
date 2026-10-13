@@ -272,6 +272,11 @@ export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
     constants: {},
   },
   {
+    prefix: "components/media/imageEncode.ts",
+    justification: "One-shot re-encode of a picture the user copies (the clipboard takes PNG) or saves to the library (a scrap keeps JPEG); it never animates.",
+    constants: {},
+  },
+  {
     prefix: "libs/design-system/components/ButlerThinkingMark/",
     justification: "Riso halftone thinking mark: a spring-driven morph and an orbiting-light simulation drawn per frame on a canvas.",
     constants: {
