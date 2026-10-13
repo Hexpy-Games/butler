@@ -10,6 +10,7 @@ pub(super) fn isolated_command(program: &Path, home: &Path) -> Command {
     command
         .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
         .env("HOME", home)
+        .env("BUTLER_TEST_SECRET_STORE", home.join("test-secrets.json"))
         // Browser import reads the account folders from the OS, not HOME;
         // test-support agents read fixture profiles here instead.
         .env("BUTLER_BROWSER_PROFILES_HOME", home)

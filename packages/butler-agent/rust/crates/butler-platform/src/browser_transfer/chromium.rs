@@ -1,8 +1,13 @@
-//! Chromium macOS Login Data and Safe Storage. Windows uses the guided CSV flow.
+//! Chromium Login Data; platform-specific key protection and ciphers.
+#[cfg(windows)]
+#[path = "chromium_windows.rs"]
+mod windows;
 use super::{ImportError, LoginBatch, SafeStorageKeySource};
 #[cfg(target_os = "macos")]
 use super::{Login, Snapshot, sql_error};
 use std::path::Path;
+#[cfg(windows)]
+pub(super) use windows::passwords;
 #[cfg(target_os = "macos")]
 use zeroize::Zeroizing;
 
@@ -20,7 +25,7 @@ pub(super) fn passwords(
     let key = keys.key(browser)?;
     read_logins(&source, scratch, &key)
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 pub(super) fn passwords(
     _browser: &str,
     _dir: &Path,

@@ -282,3 +282,62 @@ pub(super) async fn assert_password(
     drop(host);
     Ok(())
 }
+
+#[tokio::test]
+async fn chromium_dpapi_import_reports_csv_and_undoes_v10() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("BROWSER-IMPORT-DPAPI")?.env("BUTLER_SECRET_STORE", "");
+    let roots = profile_roots(&setup.sandbox.home);
+    for browser in ["chrome", "edge", "brave"] {
+        let root = &roots
+            .chromium
+            .iter()
+            .find(|(b, _)| *b == browser)
+            .unwrap()
+            .1;
+        butler_e2e::skip_unless!(
+            butler_platform::browser_transfer::chromium_password_fixture(root, CANARY)?,
+            "current-user DPAPI fixture requires Windows"
+        );
+    }
+    let s = setup.start().await?;
+    std::fs::write(
+        s.sandbox.data.join("butler.config.json"),
+        br#"{"secrets":{"store":"system"}}"#,
+    )?;
+    let a = admin(&s);
+    let mut cleanup = Cleanup::new(&a);
+    for browser in ["chrome", "edge", "brave"] {
+        let run = a
+            .send(
+                Method::POST,
+                "/security/browser-import/start",
+                Some(
+                    json!({"source":format!("{browser}:Work"),"bookmarks":false,"passwords":true}),
+                ),
+                &[],
+            )
+            .await?;
+        assert_eq!(run.status, 200, "{}", run.text);
+        assert_eq!(run.data()["passwords"], 1);
+        assert_eq!(run.data()["invalid"], 2);
+        assert_eq!(run.data()["csv_required"], 1);
+        assert_eq!(run.data()["needs_csv"], true);
+        let view = a.send(Method::GET, "/security/signins", None, &[]).await?;
+        let entry = &view.data()["sites"][0]["entry"];
+        cleanup.track(entry["id"].as_str().unwrap());
+        assert_imported_password(&s, entry).await?;
+        let undo = a
+            .send(
+                Method::POST,
+                "/security/browser-import/undo",
+                Some(json!({"run_id":run.data()["run_id"]})),
+                &[],
+            )
+            .await?;
+        assert_eq!(undo.data()["passwords"], 1);
+    }
+    super::canary_absent(&s.sandbox.data, CANARY, &s.agent.logs());
+    drop(cleanup);
+    s.finish().await
+}
