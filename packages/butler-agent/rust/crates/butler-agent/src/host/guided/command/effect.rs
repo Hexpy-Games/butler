@@ -18,6 +18,7 @@ pub(super) async fn prepare(
     owner: &GuidedCommand,
     args: &Map<String, Value>,
     scope: CommandScope<'_>,
+    project_write: bool,
 ) -> Result<PreparedCommandEffect, BtccError> {
     let workspace = active_root(&scope)?;
     let guarded_root = workspace.clone();
@@ -76,6 +77,7 @@ pub(super) async fn prepare(
         cwd_identity,
         target: target.clone(),
         effect: effect.to_owned(),
+        project_write: project_write && effect == "mutation",
     };
     Ok(PreparedCommandEffect {
         target,
@@ -100,6 +102,8 @@ struct CommandEffectAdapter {
     cwd_identity: PathBuf,
     target: String,
     effect: String,
+    /// Runs in the project-write sandbox instead of with full access.
+    project_write: bool,
 }
 
 impl EffectAdapter for CommandEffectAdapter {
@@ -285,7 +289,11 @@ impl CommandEffectAdapter {
                 workspace_root: self.root_identity.clone(),
                 butler_data: self.butler_data.clone(),
                 timeout_ms: args.get("timeout_ms").and_then(Value::as_f64),
-                access: GuidedAccess::FullAccessContained,
+                access: if self.project_write {
+                    GuidedAccess::ProjectWrite
+                } else {
+                    GuidedAccess::FullAccessContained
+                },
                 host_environment: (*self.host_environment).clone(),
                 abort: signal.clone(),
             })
@@ -324,8 +332,31 @@ impl CommandEffectAdapter {
         .map_err(|error| {
             butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
         })?;
+        if self.project_write {
+            return project_write_result(&result).map(AdapterOutcome::Applied);
+        }
         Ok(AdapterOutcome::Applied(result))
     }
+}
+
+/// Labels the project-write sandbox and, when the command failed, tells the
+/// model how to get the access the sandbox withheld (the user is asked).
+fn project_write_result(
+    result: &butler_core::json::JsonDocument,
+) -> Result<butler_core::json::JsonDocument, butler_turn::btcc::EffectFailure> {
+    let failure = |error: butler_core::json::JsonError| {
+        butler_turn::btcc::EffectFailure::adapter("command_result_encoding_failed")
+            .with_source(error)
+    };
+    let mut value: Value = serde_json::from_str(result.as_str()).map_err(|error| {
+        butler_turn::btcc::EffectFailure::adapter("command_result_encoding_failed")
+            .with_source(error)
+    })?;
+    value["sandbox"] = "project_write".into();
+    if value["ok"] == false {
+        value["next_action"] = "This command ran contained to the project folder: no writes elsewhere (including .git and secrets) and no network. If it needs those, run it again with sandbox \"none\"; the user will be asked.".into();
+    }
+    butler_core::json::JsonDocument::from_value(&value).map_err(failure)
 }
 
 fn canonical_root(path: &Path) -> PathBuf {

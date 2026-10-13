@@ -58,6 +58,8 @@ fn input(work: &str, plan: &str) -> AuthorityAdmissionInput {
         reasoning_effort: "medium".into(),
         category: None,
         normalized_input: json!({"command":"echo hi","cwd":"/tmp","state_effect":"mutation"}),
+        honor_standing_permission: true,
+        unattended: false,
     }
 }
 

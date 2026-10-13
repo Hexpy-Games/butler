@@ -179,6 +179,7 @@ impl AppApplication {
             access_mode: None,
             plan_mode: None,
             subsession_result: source.subsession_result,
+            schedule_run: None,
         };
         self.send_with_reused_attachments(
             SendMessageCommand {

@@ -326,6 +326,7 @@ pub(super) struct ChildEnvelopeInput<'a> {
     pub reasoning: &'a str,
     pub text: String,
     pub now: &'a str,
+    pub schedule_run: Option<crate::btcc::ScheduleRunContext>,
 }
 
 pub(super) fn child_envelope(input: ChildEnvelopeInput<'_>) -> ChildEnvelope {
@@ -340,6 +341,7 @@ pub(super) fn child_envelope(input: ChildEnvelopeInput<'_>) -> ChildEnvelope {
         reasoning,
         text,
         now,
+        schedule_run,
     } = input;
     let worker = role == "worker";
     ChildEnvelope {
@@ -376,6 +378,7 @@ pub(super) fn child_envelope(input: ChildEnvelopeInput<'_>) -> ChildEnvelope {
             workspace_path: parent.workspace_path.clone(),
             model_ref: model.into(),
             reasoning_effort: reasoning.into(),
+            schedule_run,
         },
         raw: EnvelopeRaw {
             source: if worker {

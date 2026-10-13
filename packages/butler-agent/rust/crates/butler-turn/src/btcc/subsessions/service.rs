@@ -95,6 +95,8 @@ pub struct StewardDelegationRequest {
     pub model_ref: String,
     pub reasoning_effort: String,
     pub access_mode: String,
+    /// The unattended schedule run delegating, if any (D8).
+    pub schedule_run: Option<crate::btcc::ScheduleRunContext>,
 }
 
 /// A steward's request to delegate one plan action to a worker.
@@ -111,6 +113,8 @@ pub struct WorkerDelegationRequest {
     pub safe_title: Option<String>,
     pub profile_id: Option<String>,
     pub access_mode: String,
+    /// The unattended schedule run delegating, if any (D8).
+    pub schedule_run: Option<crate::btcc::ScheduleRunContext>,
 }
 
 /// Orchestrates durable steward and worker subsessions and routes their results.
@@ -237,6 +241,7 @@ impl SubsessionService {
             reasoning: &request.reasoning_effort,
             text: render_steward_input(&packet),
             now: &now,
+            schedule_run: packet.schedule_run.clone(),
         });
         let intent = DispatchIntent {
             envelope,

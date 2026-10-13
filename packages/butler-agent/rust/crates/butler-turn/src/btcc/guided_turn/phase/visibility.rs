@@ -375,7 +375,7 @@ pub(super) fn legacy_visible<'a>(
     }
     match policy.access_mode {
         AccessMode::ReadOnly => {}
-        AccessMode::AskAlways | AccessMode::AskExceptReads => {
+        AccessMode::AskAlways | AccessMode::AskExceptReads | AccessMode::Auto => {
             names.extend([
                 "run_command",
                 "read_tool_output_artifact",

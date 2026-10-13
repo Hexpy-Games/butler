@@ -580,6 +580,8 @@ export interface SettingsView {
   worker_profiles: WorkerProfile[];
   max_simultaneous_workers: number;
   access_mode: AccessMode;
+  /** A new schedule's access mode, resolved by the gateway (saved, else derived; D7). */
+  schedule_access_mode?: AccessMode;
   plan_mode_default: boolean;
   follow_up_behavior: "queue" | "steer";
   multiline_send_behavior:
@@ -1693,6 +1695,9 @@ export interface TimelineEvent {
     event_id?: string;
     /** `settings.updated`: the changed settings subset. */
     settings?: Record<string, unknown>;
+    /** `automation.run`: the run's conversation and its safe error code. */
+    target_session_id?: string;
+    safe_error_code?: string;
   };
 }
 
@@ -1767,6 +1772,7 @@ export interface AutomationSummary {
 export interface AutomationRunSummary {
   id: string;
   state: string;
+  safe_error_code?: string;
   started_at: string;
 }
 
