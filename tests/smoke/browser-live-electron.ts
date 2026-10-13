@@ -111,9 +111,15 @@ try {
   const black = await app.page!.expression<number>(`(()=>{const c=document.getElementById(${JSON.stringify(vault.tab)});const p=c.getContext('2d').getImageData(10,10,350,60).data;let n=0;for(let i=0;i<p.length;i+=4)if(p[i]<10&&p[i+1]<10&&p[i+2]<10)n++;return n})()`);
   assert.equal(black, 350 * 60, "card rectangle is opaque black");
   await quiet([vault.tab], `${subject}.live.changed(${subject}.tabs.get(${JSON.stringify(vault.tab)}))`);
+  // A later consumer of a frozen tab gets the masked still without a new capture.
+  const replayed = await app.page!.expression<{ masked: boolean; seq: number }>(`new Promise(done=>{const stop=window.butlerBrowser.onFrame(${JSON.stringify(vault.tab)},frame=>{stop();done({masked:frame.masked,seq:frame.seq})})})`);
+  assert.deepEqual(replayed, { masked: true, seq: (await app.page!.expression<{ seq: number }>(`liveFrames[${JSON.stringify(vault.tab)}]`)).seq });
   writeFileSync(join(evidence, "masked.png"), await app.page!.screenshot());
   const png = await app.page!.expression<string>(`document.getElementById(${JSON.stringify(vault.tab)}).toDataURL('image/png')`);
   writeFileSync(join(evidence, "masked-frame.png"), Buffer.from(png.split(",")[1], "base64"));
+  // The freeze follows the sensitive state, not the first masked frame.
+  await app.main(`(()=>{const tab=${subject}.tabs.get(${JSON.stringify(vault.tab)});tab.vaultFilled=false;${subject}.publish()})()`);
+  await waitBrowser(() => app.page!.expression(`liveFrames[${JSON.stringify(vault.tab)}]?.masked===false`), "unmasked frame after the sensitive state clears");
   await app.page!.expression(`liveStops[${JSON.stringify(vault.tab)}]()`);
   await app.call("close", { id: vault.tab });
   const loading = await execute<Result>("tab.open", undefined, { url: `${origin}/__o/loading`, background: true, policy: { content_origin: origin } });

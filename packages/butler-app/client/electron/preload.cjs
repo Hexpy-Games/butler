@@ -1468,6 +1468,9 @@ function requestTaskGraph(scope, tail, { id, revision, cursor, limit } = {}) {
 }
 const browserCall = (op, input) => ipcRenderer.invoke("butler-browser:call", op, input);
 const frameSubscriptions = new Map();
+// Last frame per subscribed tab, so a second consumer of a static (or frozen) tab draws at once.
+const lastFrames = new Map();
+ipcRenderer.on("browser:frame", (_event, frame) => { if (frameSubscriptions.has(frame.tab)) lastFrames.set(frame.tab, frame); });
 const frameCall = (op, input) => ipcRenderer.invoke("butler-browser:call", op, input).catch(() => {});
 let frameVisibilityWatching = false;
 
@@ -1483,18 +1486,21 @@ contextBridge.exposeInMainWorld("butlerBrowser", {
     ipcRenderer.on("browser:frame", listener);
     const count = frameSubscriptions.get(tabId) ?? 0;
     frameSubscriptions.set(tabId, count + 1);
+    let active = true;
     if (!count) {
       void frameCall("frame.visibility", { value: !document.hidden });
       void frameCall("frame.subscribe", { id: tabId, widthPx });
+    } else if (lastFrames.has(tabId)) {
+      const frame = lastFrames.get(tabId);
+      queueMicrotask(() => { if (active) handler(frame); });
     }
-    let active = true;
     return () => {
       if (!active) return;
       active = false;
       ipcRenderer.removeListener("browser:frame", listener);
       const remaining = (frameSubscriptions.get(tabId) ?? 1) - 1;
       if (remaining) frameSubscriptions.set(tabId, remaining);
-      else { frameSubscriptions.delete(tabId); void frameCall("frame.unsubscribe", { id: tabId }); }
+      else { frameSubscriptions.delete(tabId); lastFrames.delete(tabId); void frameCall("frame.unsubscribe", { id: tabId }); }
     };
   },
   onDownload(handler) {

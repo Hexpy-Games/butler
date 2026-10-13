@@ -20,7 +20,7 @@ export class BrowserLiveFrames {
     if (!tab || !(tab.agent || tab.driven) || tab.closing) throw new Error("invalid_frame_tab");
     if (this.subscriptions.has(id)) return;
     const width = Number.isFinite(widthPx) ? Math.max(48, Math.min(416, Math.round(widthPx))) : 416;
-    const state = { sender, width, seq: 0, revision: 0, dirty: true, frozen: false, frame: null, timer: null, capturing: false, attemptedAt: 0 };
+    const state = { sender, width, seq: 0, revision: 0, dirty: true, frozen: false, timer: null, capturing: false, attemptedAt: 0 };
     this.subscriptions.set(id, state);
     this.sync();
   }
@@ -35,12 +35,7 @@ export class BrowserLiveFrames {
 
   watch(tab) {
     const contents = tab.view.webContents;
-    contents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => {
-      if (!mainFrame || inPlace) return;
-      const state = this.subscriptions.get(tab.id);
-      if (state) { state.frozen = false; state.frame = null; }
-      this.changed(tab);
-    });
+    contents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => { if (mainFrame && !inPlace) this.changed(tab); });
     for (const event of ["did-navigate", "did-navigate-in-page", "did-start-loading", "did-stop-loading", "did-finish-load"])
       contents.on(event, () => this.changed(tab));
     contents.once("destroyed", () => this.unsubscribe(tab.id));
@@ -81,6 +76,11 @@ export class BrowserLiveFrames {
       !(this.browser.areaVisible && this.browser.activeId === tab.id);
   }
 
+  /** Saved-item fills and human secure steps freeze the card on one masked still. */
+  sensitive(tab) {
+    return Boolean(tab.vaultFilled || tab.payStep || tab.signinStep === "secure_keypad");
+  }
+
   pauseFill(id) {
     if (!id) return () => {};
     this.fills.set(id, (this.fills.get(id) ?? 0) + 1);
@@ -105,6 +105,7 @@ export class BrowserLiveFrames {
     for (const [id, state] of this.subscriptions) {
       const tab = this.browser.tabs.get(id);
       if (!tab || state.sender.isDestroyed()) { this.unsubscribe(id); continue; }
+      if (state.frozen && !this.sensitive(tab)) { state.frozen = false; state.dirty = true; }
       if (!this.allowed(tab, state) || state.frozen) { clearTimeout(state.timer); state.timer = null; continue; }
       if (!state.timer && !state.capturing && (state.dirty || tab.view.webContents.isLoading())) {
         state.timer = setTimeout(() => { state.timer = null; void this.capture(tab, state); }, Math.max(0, state.attemptedAt + REFRESH_MS - Date.now()));
@@ -121,10 +122,11 @@ export class BrowserLiveFrames {
     state.capturing = true; state.dirty = false; state.attemptedAt = Date.now();
     const revision = state.revision;
     try {
+      const masked = this.sensitive(tab);
       let image = await tab.view.webContents.capturePage(undefined, { stayHidden: true });
       if (image.isEmpty()) return;
-      const marks = await secureBoxes(tab);
-      const masked = Boolean(marks.length || tab.vaultFilled || tab.payStep || tab.signinStep === "secure_keypad");
+      // Locating secure fields re-runs page perception, so only sensitive pages pay for it.
+      const marks = masked ? await secureBoxes(tab) : [];
       // Fail closed: an unlocatable sensitive surface cannot become a thumbnail.
       if (masked && !marks.length) {
         const viewport = await captureViewport(tab);
@@ -134,12 +136,11 @@ export class BrowserLiveFrames {
       image = image.resize({ width: state.width, height: Math.round(state.width * 260 / 416) });
       if (masked) image = await maskSecure(tab, image, marks);
       if (this.subscriptions.get(tab.id) !== state || revision !== state.revision) return;
-      if (!this.allowed(tab, state) || powerMonitor.getSystemIdleTime() >= IDLE_SECONDS) {
+      if (!this.allowed(tab, state) || this.sensitive(tab) !== masked || powerMonitor.getSystemIdleTime() >= IDLE_SECONDS) {
         state.dirty = true; return;
       }
-      state.frame = { tab: tab.id, seq: ++state.seq, bytes: new Uint8Array(image.toJPEG(60)), masked };
       state.dirty = false; state.frozen = masked;
-      state.sender.send("browser:frame", state.frame);
+      state.sender.send("browser:frame", { tab: tab.id, seq: ++state.seq, bytes: new Uint8Array(image.toJPEG(60)), masked });
     } catch { /* A destroyed or unreadable page never emits unmasked pixels. */ }
     finally { state.capturing = false; this.sync(); }
   }
