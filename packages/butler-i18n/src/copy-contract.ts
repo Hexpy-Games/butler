@@ -266,6 +266,18 @@ interface ConversationCopy {
       open: (site: string) => string;
     };
   };
+  imageViewer: {
+    viewImage: (name: string) => string;
+    close: string;
+    previous: string;
+    next: string;
+    position: (current: number, total: number) => string;
+    failed: string;
+    openSource: string;
+    copyImage: string;
+    imageCopied: string;
+    checked: (time: string) => string;
+  };
   work: ConversationWorkCopy;
   stoppedStatus: string;
   fileChanges: {

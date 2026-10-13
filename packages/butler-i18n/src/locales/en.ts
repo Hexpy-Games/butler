@@ -940,6 +940,18 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
         open: (site) => `Open ${site} page`,
       },
     },
+    imageViewer: {
+      viewImage: (name) => `View image: ${name}`,
+      close: "Close",
+      previous: "Previous image",
+      next: "Next image",
+      position: (current, total) => `${current} / ${total}`,
+      failed: "Image unavailable",
+      openSource: "Open source page",
+      copyImage: "Copy image",
+      imageCopied: "Image copied",
+      checked: (time) => `Checked ${time}`,
+    },
     stoppedStatus: "Stopped",
     fileChanges: {
       regionLabel: "Changed files",

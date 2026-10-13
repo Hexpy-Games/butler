@@ -59,8 +59,12 @@ function localPage(origins) {
   });
 }
 
-/** Bytes of one resource through the tab's own session (its cache and cookies); only what the page could load. */
+/**
+ * Bytes of one resource through the tab's own session (its cache and cookies); only what the page could load.
+ * A source that is not a web tab (the App's own UI) brings its own reader.
+ */
 async function fetchAsset(tab, url, origins) {
+  if (tab.fetchAsset) return tab.fetchAsset(url);
   try {
     const parsed = new URL(url);
     if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) return null;
@@ -137,7 +141,8 @@ function neededFaces(faces, families, chars) {
 }
 function faceSource(face) {
   const sources = [...face.src.matchAll(/url\(\s*(["']?)([^"')]+)\1\s*\)\s*(?:format\(\s*["']?([\w-]+)["']?\s*\))?/giu)].map(m => ({ url: m[2], format: (m[3] ?? "").toLowerCase() }));
-  const rank = format => ["woff2", "woff", "truetype", "opentype", ""].indexOf(format);
+  // A variable font names its format with "-variations" ("woff2-variations"); it is the same container.
+  const rank = format => ["woff2", "woff", "truetype", "opentype", ""].indexOf(format.replace(/-variations$/u, ""));
   const usable = sources.filter(source => rank(source.format) >= 0).sort((a, b) => rank(a.format) - rank(b.format))[0];
   try { return usable && new URL(usable.url, face.base).href; } catch { return null; }
 }
@@ -159,7 +164,7 @@ async function fontCss(tab, parts, origins) {
   let css = "", total = 0;
   for (const { face, url } of needed) {
     const src = data.get(url);
-    if (!src || (total += src.length) > FONT_BUDGET) continue;
+    if (!src || (total += src.length) > (tab.fontBudget ?? FONT_BUDGET)) continue;
     css += `@font-face{font-family:"${face.family.replace(/["\\]/gu, "")}";src:url("${src}");font-display:block;` +
       ["weight", "style", "stretch", "range", "features"].map(key => face[key] ? `${{ weight: "font-weight", style: "font-style", stretch: "font-stretch", range: "unicode-range", features: "font-feature-settings" }[key]}:${face[key]};` : "").join("") + "}";
   }

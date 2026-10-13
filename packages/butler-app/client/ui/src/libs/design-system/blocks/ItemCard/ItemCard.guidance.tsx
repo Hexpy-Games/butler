@@ -54,7 +54,9 @@ export const guidance: ShowcaseGuidance = {
     "Source: the site and the time it was read (“오후 5:41 확인” / “Checked 5:41 PM”); never call a stored value current.",
   ],
   accessibility: [
-    "The card is an article labelled by its title. The title is one button; the picture opens the same item but is out of the tab order.",
+    "The card is an article labelled by its title. The title is its one button and its target covers the whole card, so a click anywhere opens the item.",
+    "With onMediaOpen the picture is its own button (named by mediaLabel) that opens the image viewer; without it the picture is part of the card target.",
+    "The source line, Show more and the actions keep their own actions; the card's hover drops while the pointer is on one of them.",
     "The source line is a button named by source.label (site and read time). Actions are labelled IconButtons.",
     "wasLabel is read before the struck-through amount. Show more carries aria-expanded and aria-controls.",
   ],
