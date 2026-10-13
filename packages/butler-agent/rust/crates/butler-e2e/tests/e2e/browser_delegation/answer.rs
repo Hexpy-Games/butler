@@ -212,7 +212,7 @@ fn assert_presentation_contract(requests: &[Value]) {
         .find(|r| {
             r["instructions"]
                 .as_str()
-                .is_some_and(|text| text.contains("Steward role"))
+                .is_some_and(|text| text.contains("You run one delegated Work"))
         })
         .expect("a steward request");
     let task = steward["input"].to_string();
