@@ -58,7 +58,8 @@ async fn scheduled_runs_never_wait_in_any_mode() -> Result<(), HarnessError> {
     eprintln!("PERM-03 full_access: ran=true run_flagged=false");
 
     let schedule = create(&s, DELEGATE, "auto").await?;
-    scheduled_run(&s, &schedule).await?;
+    let run = scheduled_run(&s, &schedule).await?;
+    let run_id = run["id"].as_str().unwrap().to_owned();
     let deadline = Instant::now() + Duration::from_secs(30);
     while feedback(&script, "result-net").is_empty() {
         assert!(
@@ -72,6 +73,11 @@ async fn scheduled_runs_never_wait_in_any_mode() -> Result<(), HarnessError> {
     assert!(feedback(&script, "result-net").contains("schedule_permission_required"));
     settled(&s).await?;
     assert_eq!(authority_requests(&s)?, 0, "{}", s.agent.logs());
+    // The steward's skipped step flags the schedule run that delegated it.
+    run_where(&s, &schedule, |run| {
+        run["id"] == run_id.as_str() && run["safe_error_code"] == "schedule_permission_required"
+    })
+    .await?;
     eprintln!(
         "PERM-03 delegated: steward=failed_fast result_turn=failed_fast authority_count=0 elapsed_ms={}",
         started.elapsed().as_millis()
