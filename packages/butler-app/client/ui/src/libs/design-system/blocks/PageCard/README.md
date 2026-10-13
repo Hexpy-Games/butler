@@ -6,8 +6,9 @@ the native view's bounds are exactly the card's content area (inside its 1px
 transparent border, under the band; the pane's hairlines bound the card, so it
 draws no parallel line of its own), and it reports them with the inner corner `radius`
 for `View.setBorderRadius`. It shows who holds the tab, a `PageBand`, a 2px
-load line (`ProgressMeter thin`) and, for Butler's fixed 1280×800 tabs, a
-letterbox with the scale noted under the page. With `reserveBand` the band
+load line (`ProgressMeter thin`) and, for Butler's fixed 1280×800 tabs, the
+page fitted to the card's width with the card ending under it and the scale
+noted below. With `reserveBand` the band
 row is always there, so a band appearing, changing or leaving never moves the
 native view. With no band the row is empty and the card surface (fill, shadow,
 holder edge) starts under it: the row reads as the pane around the toolbar and
@@ -16,7 +17,7 @@ band and page one card with no line between them.
 
 The native view takes one radius for all four corners, so the reported
 `radius` is the inner corner radius only where a page corner meets a corner of
-the surface, else 0: square under a band and above a letterbox. A page that
+the surface, else 0: square under a band and beside a letterbox. A page that
 reaches the card bottom corners keeps the radius under a band; the band fill
 runs one corner radius under the page so those corners meet the band without a
 notch.
@@ -50,8 +51,10 @@ The content area is the tab panel (`panelId`). The band is the live region
 for holder changes. Under reduced motion the riso edge is static.
 
 ## Responsive behavior
-The card fills its stage; fixed-size pages scale to the card's width and
-letterbox below on `--muted`.
+A page you browse fills the stage. A fixed-size page fits the stage's width and
+the card ends with the page, so no empty band is left under it in the card;
+only a stage too short for the page's aspect letterboxes it at the sides on
+`--muted`.
 
 ## Wrong use cases
 - Do not change the card's border or size per holder in product CSS.
