@@ -234,7 +234,6 @@ impl AppApplication {
                 .unwrap_or_else(|| current.text.clone())
         });
         let inspect_request = MessageSendRequest {
-            subsession_result: None,
             expected_project_id: None,
             content_parts: content.clone(),
             chat_id: Some(Value::String(current.chat_id.clone())),
@@ -245,6 +244,7 @@ impl AppApplication {
             reasoning_effort: None,
             access_mode: None,
             plan_mode: None,
+            ..MessageSendRequest::default()
         };
         let inspect_chat = current.chat_id.clone();
         let inspect_id = format!("queue-update-{}", current.id);
@@ -267,7 +267,6 @@ impl AppApplication {
             plan_mode: false,
         });
         let controls_request = MessageSendRequest {
-            subsession_result: None,
             expected_project_id: None,
             content_parts: None,
             chat_id: Some(Value::String(current.chat_id.clone())),
@@ -285,6 +284,7 @@ impl AppApplication {
                 request.access_mode.clone().unwrap_or(base.access_mode),
             )),
             plan_mode: Some(Value::Bool(request.plan_mode.unwrap_or(base.plan_mode))),
+            ..MessageSendRequest::default()
         };
         let resolution_request = controls_request.clone();
         let chat_id = current.chat_id.clone();

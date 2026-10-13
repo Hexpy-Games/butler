@@ -83,6 +83,7 @@ pub(super) fn steward(
         worker_profile: None,
         model_ref: request.model_ref.clone(),
         reasoning_effort: request.reasoning_effort.clone(),
+        schedule_run: request.schedule_run.clone(),
     }
 }
 
@@ -133,5 +134,6 @@ pub(super) fn worker(
         }),
         model_ref: profile.model_ref.clone(),
         reasoning_effort: profile.reasoning_effort.clone(),
+        schedule_run: request.schedule_run.clone(),
     }
 }

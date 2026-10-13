@@ -262,7 +262,8 @@ async fn acc_04_mcp_tool_asks_in_ask_first() -> Result<(), HarnessError> {
 /// that never saved an access mode keeps full access after the upgrade: in
 /// its settings, its conversations, the schedules the upgrade fills and new
 /// schedules. A mode the user then saves is what it runs with, across a
-/// restart.
+/// restart. New schedules default to Auto (D7) unless the conversation
+/// default is full access or read-only; existing schedules keep their mode.
 #[tokio::test]
 async fn acc_05_an_existing_install_keeps_full_access_until_it_saves_a_mode()
 -> Result<(), HarnessError> {
@@ -276,8 +277,9 @@ async fn acc_05_an_existing_install_keeps_full_access_until_it_saves_a_mode()
         "new install"
     );
     assert_eq!(chat_access(&s, "general").await?, "ask_except_reads");
+    assert_eq!(s.gw.settings().await?["schedule_access_mode"], "auto");
     let stored = schedule(&s).await?;
-    assert_eq!(stored["access_mode"], "ask_except_reads", "{stored}");
+    assert_eq!(stored["access_mode"], "auto", "{stored}");
     let stored = stored["id"].as_str().unwrap().to_owned();
 
     // The data folder as the release before ask-first left it: no recorded
@@ -307,6 +309,10 @@ async fn acc_05_an_existing_install_keeps_full_access_until_it_saves_a_mode()
         "upgraded"
     );
     assert_eq!(chat_access(&s, "general").await?, "full_access");
+    assert_eq!(
+        s.gw.settings().await?["schedule_access_mode"],
+        "full_access"
+    );
     let filled = s.gw.get(&format!("/automations/{stored}")).await?;
     assert_eq!(
         filled.data()["automation"]["access_mode"],
@@ -321,7 +327,7 @@ async fn acc_05_an_existing_install_keeps_full_access_until_it_saves_a_mode()
     s.restart().await?;
     assert_eq!(s.gw.settings().await?["access_mode"], "ask_first", "saved");
     assert_eq!(chat_access(&s, "general").await?, "ask_first");
-    assert_eq!(schedule(&s).await?["access_mode"], "ask_first");
+    assert_eq!(schedule(&s).await?["access_mode"], "auto");
     let kept = s.gw.get(&format!("/automations/{stored}")).await?;
     assert_eq!(
         kept.data()["automation"]["access_mode"],
