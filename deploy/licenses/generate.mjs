@@ -132,7 +132,7 @@ export function generate(catalog = JSON.parse(readFileSync(join(root, "deploy/li
       throw new Error(`Missing or invalid license link: ${component.id}`);
     }
     const attribution = (component.copyright ?? []).join("\n");
-    return `\n===== COMPONENT =====\n${component.name} ${component.version}\n${component.license}\n${component.links.map((link) => `License: ${link}`).join("\n")}${attribution ? `\n${attribution}` : ""}`;
+    return `\n=====\n${component.name} ${component.version}\n${component.license}\n${component.links.map((link) => `License: ${link}`).join("\n")}${attribution ? `\n${attribution}` : ""}`;
   });
   return `Butler third-party disclosures\n\nComponent names, shipped versions, SPDX licenses, upstream links and available copyright lines.\nSupplier collections are disclosed as supplied; their individual versions and SPDX IDs are not consistently available.\nElectron retains its own LICENSE and LICENSES.chromium.html in its runtime.\n\n${sections.join("\n")}\n`;
 }
