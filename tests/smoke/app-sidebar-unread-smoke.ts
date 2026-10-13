@@ -176,14 +176,39 @@ async function readFlow(browser: Browser, server: NativeAppServerHandle, chats: 
   await second.context().close();
 }
 
+/** Spinner → dot at turn end in one slot; the dot scales in, and reduced motion drops the transition. */
+async function motionFlow(browser: Browser, server: NativeAppServerHandle, chats: Chats): Promise<void> {
+  const page = await open(browser, server, 1280, "Planning notes");
+  const slot = (selector: string) => row(page, "Long task").locator(selector).first();
+  await slot('[data-slot="spinner"]').waitFor();
+  const before = await slot('[data-slot="icon-slot"]:has([data-slot="spinner"])').boundingBox();
+  hold.release?.();
+  await waitUnread(server, chats.running, true);
+  await dot(page, "Long task").waitFor();
+  const after = await dot(page, "Long task").boundingBox();
+  assert(before && after, "both marks measured");
+  for (const key of ["x", "y", "width", "height"] as const) {
+    assert(Math.abs(before[key] - after[key]) < 0.5, `spinner → dot keeps the slot ${key}: ${before[key]} vs ${after[key]}`);
+  }
+  const transition = () => dot(page, "Long task").locator("span").evaluate((node) => {
+    const style = getComputedStyle(node);
+    return { property: style.transitionProperty, duration: style.transitionDuration };
+  });
+  const normal = await transition();
+  assert(normal.property.includes("transform") && normal.duration !== "0s", `dot enters with motion: ${JSON.stringify(normal)}`);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const reduced = await transition();
+  assert(reduced.property === "none" || reduced.duration === "0s", `reduced motion is instant: ${JSON.stringify(reduced)}`);
+  await page.context().close();
+}
+
 const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
 let server = await start();
 try {
   const chats = await seed(server);
   await captureMatrix(browser, server);
   await readFlow(browser, server, chats);
-  hold.release?.();
-  await waitUnread(server, chats.running, true);
+  await motionFlow(browser, server, chats);
   await server.stop();
   server = await start();
   const page = await open(browser, server, 1280, "Planning notes");
