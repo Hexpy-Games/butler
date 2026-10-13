@@ -193,3 +193,76 @@ async fn unattended(
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn external_content_scores_individual_path_segments() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (url, script, server) = stub::start().await?;
+    let setup = Setup::new("PERM-WEB-PATH")?
+        .access(Access::Auto)
+        .stub_cassette(Cassette::load("TOOL-01")?)
+        .env("BUTLER_CODEX_BASE_URL", url);
+    let outside = setup.sandbox.home.join("outside.txt");
+    std::fs::write(&outside, "External note")?;
+    let s = setup.start().await?;
+    let config_path = s.sandbox.data.join("butler.config.json");
+    let mut config: serde_json::Value = serde_json::from_slice(&std::fs::read(&config_path)?)?;
+    config["webSearch"] =
+        json!({"provider":"mock", "readerBackend":"disabled", "planning":{"enabled":false}});
+    std::fs::write(config_path, serde_json::to_vec(&config)?)?;
+    for (index, (path, carries)) in [
+        ("wiki/Rust_programming_language", false),
+        ("abcdefghijkl/mnopqrstuvwx", false),
+        ("docs/readable-deep.link_slug", false),
+        ("aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5zA7b", true),
+        ("ZXh0ZXJuYWwtY29udGVudA==", true),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let target = format!("https://example.com/{path}");
+        let prompt = format!("Read the outside note, then follow link {index}.");
+        script.rounds.lock().unwrap().insert(
+            prompt.clone(),
+            vec![
+                call(
+                    "outside",
+                    "read_file",
+                    &json!({"requests":[{"path":outside.to_string_lossy()}]}),
+                ),
+                call("web", "web_read", &json!({"url":target})),
+            ],
+        );
+        let turn = paused(&s, "general", &prompt).await?;
+        approve(&s, "general", "allow").await?;
+        if carries {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            loop {
+                let cards = s.gw.approval_requests("general").await?;
+                if let Some(card) = cards.first() {
+                    assert_eq!(card["approval"]["action_kind"], "web_request", "{card}");
+                    assert_eq!(card["approval"]["operation"]["targets"][0], target);
+                    break;
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "opaque segment did not ask"
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
+            approve(&s, "general", "deny").await?;
+        }
+        delivered(&s, "general", &turn).await?;
+        assert_counts(&s, &turn, if carries { 2 } else { 1 }, 0)?;
+        let results = outputs(&s, "general", &turn, &script, &prompt).await?;
+        assert_eq!(
+            results
+                .iter()
+                .any(|value| value.contains("authority_request_denied")),
+            carries
+        );
+    }
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

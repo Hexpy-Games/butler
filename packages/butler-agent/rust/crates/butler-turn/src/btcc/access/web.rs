@@ -9,14 +9,15 @@ pub fn web_read_carries_data(value: &str, discovered: bool) -> bool {
         return true;
     };
     let (authority, path) = rest.split_once('/').unwrap_or((rest, ""));
-    value.contains(['?', '#'])
-        || authority.contains('@')
-        || path.split('/').any(|part| part.chars().count() >= 40)
-        || value
-            .split(|c: char| {
-                !(c.is_ascii_alphanumeric() || matches!(c, '+' | '/' | '=' | '-' | '_'))
-            })
-            .any(|part| part.len() >= 24)
+    value.contains(['?', '#']) || authority.contains('@') || path.split('/').any(data_like_segment)
+}
+
+fn data_like_segment(segment: &str) -> bool {
+    // Slug separators end a word; slash boundaries are handled by the caller.
+    segment.chars().count() >= 40
+        || segment
+            .split(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '+' | '=')))
+            .any(|token| token.len() >= 24)
 }
 
 /// A long query or an uninterrupted token can carry outside content.
