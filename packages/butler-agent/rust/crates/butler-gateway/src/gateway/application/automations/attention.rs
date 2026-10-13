@@ -18,6 +18,7 @@ impl AppApplication {
         automation_id: String,
         run_id: String,
         code: String,
+        tainted: bool,
     ) -> Result<AutomationRunSummary, GatewayApplicationError> {
         if !CODES.contains(&code.as_str()) {
             return Err(public(
@@ -48,19 +49,10 @@ impl AppApplication {
                 )
                 .map_err(AppStorageError::sqlite)?;
                 let run = records::run(db, &run_id)?;
-                publish(
-                    db,
-                    &subscribers,
-                    "automation.run",
-                    &run_event(
-                        &run.automation_id,
-                        &run.target_session_id,
-                        &run.state,
-                        &run.trigger,
-                        run.safe_error_code.clone(),
-                    ),
-                    &now,
-                )?;
+                let mut event = run_event(&run.automation_id, &run.target_session_id,
+                    &run.state, &run.trigger, run.safe_error_code.clone());
+                event["tainted"] = serde_json::Value::Bool(tainted);
+                publish(db, &subscribers, "automation.run", &event, &now)?;
                 Ok(run)
             })
             .await

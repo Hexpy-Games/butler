@@ -102,7 +102,11 @@ async fn admit(
     } = operation;
     let subject = grant_subject(call, &normalized_target);
     let input = AuthorityAdmissionInput {
-        public_action_title: public_action_title(call),
+        public_action_title: if honor_standing_permission {
+            public_action_title(call)
+        } else {
+            Some("authority.taintReason".into())
+        },
         owner_session_id: owner.binding.owner_session_id.clone(),
         source_session_id: owner.binding.source_session_id.clone(),
         source_turn_id: owner.binding.turn_id.clone(),

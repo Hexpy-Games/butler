@@ -250,7 +250,9 @@ function notifyDesktopEvent(
     void showDesktopNotification({
       kind: "task_completion",
       title: appCopy.firstRun.product,
-      body: appCopy.automations.needsPermissionNotify,
+      body: event.payload?.tainted === true
+        ? `${appCopy.automations.needsPermissionNotify} ${appCopy.interfaceTemplates.approvalRequest.taintReason}`
+        : appCopy.automations.needsPermissionNotify,
       sessionId: event.payload.target_session_id,
     });
     return;

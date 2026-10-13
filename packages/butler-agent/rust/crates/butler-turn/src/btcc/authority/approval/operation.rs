@@ -92,7 +92,8 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
         access: if read_only { "read_only" } else { "change" }.into(),
         targets,
         command,
-        allow_conversation: None,
+        // R5 web requests are never covered by a standing permission.
+        allow_conversation: matches!(facts.capability, "web_read" | "web_search").then_some(false),
         browser_tab: None,
         browser_mode: None,
         browser_steps: Vec::new(),

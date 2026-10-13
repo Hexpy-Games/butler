@@ -17,6 +17,7 @@ use std::{
 };
 
 const CHECK: &str = "Nightly remote check.";
+const READ_ONLY: &str = "Nightly read-only plan.";
 const FULL: &str = "Nightly remote check with full access.";
 const DELEGATE: &str = "Nightly delegated research.";
 const STEWARD: &str = "role: steward";
@@ -33,9 +34,23 @@ async fn scheduled_runs_never_wait_in_any_mode() -> Result<(), HarnessError> {
         .env("BUTLER_CODEX_BASE_URL", url)
         .start()
         .await?;
+    assert_eq!(
+        s.gw.patch("/settings", json!({"plan_mode_default":true}))
+            .await?
+            .status,
+        200
+    );
     let rounds = [
         (CHECK, vec![network("net")]),
         (FULL, vec![network("full-net")]),
+        (
+            READ_ONLY,
+            vec![call(
+                "readonly-restart",
+                "request_service_restart",
+                &json!({}),
+            )],
+        ),
         (DELEGATE, delegation()),
         (STEWARD, steward()),
         (RESULT, vec![network("result-net")]),
@@ -49,6 +64,17 @@ async fn scheduled_runs_never_wait_in_any_mode() -> Result<(), HarnessError> {
     assert_eq!(run["safe_error_code"], "schedule_permission_required");
     assert!(feedback(&script, "net").contains("schedule_permission_required"));
     eprintln!("PERM-03 ask_first: failed_fast=true run_flagged=true");
+
+    let schedule = create(&s, READ_ONLY, "read_only").await?;
+    let run = scheduled_run(&s, &schedule).await?;
+    assert_eq!(
+        run["safe_error_code"],
+        "schedule_permission_required",
+        "{}",
+        feedback(&script, "readonly-restart")
+    );
+    assert!(feedback(&script, "readonly-restart").contains("schedule_permission_required"));
+    eprintln!("PERM-03 read_only_plan: failed_fast=true run_flagged=true");
 
     let schedule = create(&s, FULL, "full_access").await?;
     let run = scheduled_run(&s, &schedule).await?;
