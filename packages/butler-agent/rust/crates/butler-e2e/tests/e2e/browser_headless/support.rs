@@ -80,6 +80,13 @@ pub(crate) fn setup(id: &str) -> Result<Setup, HarnessError> {
             cache().to_string_lossy().into_owned(),
         ));
     }
+    // Agent launch clears inherited environment; Electron still needs the
+    // selected display while its profile and home remain isolated.
+    let setup = if let Ok(display) = std::env::var("DISPLAY") {
+        setup.env("DISPLAY", display)
+    } else {
+        setup
+    };
     let (executable, app) = electron();
     // Chrome can never come into it: no cache, and nowhere to download from.
     let cache = no_chrome_cache(id);

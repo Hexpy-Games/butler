@@ -92,6 +92,8 @@
      a plain top inset. */
   --workspace-left-radius: var(--shell-card-radius);
   --conversation-top-reserve: var(--space-lg);
+  /* A TabRail shelf (ConversationShell rail slot) sits 8px into the card. */
+  --conversation-rail-shelf-top: var(--space-sm);
 
   position: relative;
   isolation: isolate;

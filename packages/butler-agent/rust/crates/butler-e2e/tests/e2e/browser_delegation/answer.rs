@@ -71,6 +71,15 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
         .unwrap()
         .unwrap()?;
     let message = wait_answer(&s, &script, &session).await?;
+    let attachments = message["attachments"]
+        .as_array()
+        .expect("final reply attachments");
+    assert_eq!(
+        attachments.len(),
+        1,
+        "the pictured page capture is removed and the other page capture stays: {attachments:?}"
+    );
+    assert_remaining_capture_source(&s, &session)?;
     let sets = &message["answer_blocks"];
     assert_eq!(sets[0]["spec"]["blocks"].as_array().unwrap().len(), 3);
     assert!(
@@ -266,6 +275,29 @@ fn assert_stored_ids(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), Harn
     assert!(spec.contains("img_"));
     assert!(!spec.contains("image_url"), "Signed URLs are HTTP metadata");
     assert!(!spec.contains("/assets/"));
+    Ok(())
+}
+
+fn assert_remaining_capture_source(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    session: &str,
+) -> Result<(), HarnessError> {
+    let db = butler_platform::sqlite::open_with_flags(
+        s.sandbox.data.join("agent-runtime/btcc.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    let session_suffix = format!("%{session}");
+    let raw: String = db.query_row(
+        "SELECT final_payload_json FROM btcc_turns WHERE session_id LIKE ?1 AND final_payload_json IS NOT NULL",
+        [session_suffix],
+        |row| row.get(0),
+    )?;
+    let payload: Value = serde_json::from_str(&raw)?;
+    let artifacts = payload["artifacts"]
+        .as_array()
+        .expect("parent final payload artifacts");
+    assert_eq!(artifacts.len(), 1, "only the unpictured page capture stays");
+    assert_eq!(artifacts[0]["sourceUrl"], "https://example.org/");
     Ok(())
 }
 

@@ -30,10 +30,10 @@ fn leftovers(data: &Path) -> Result<(), HarnessError> {
     std::fs::create_dir_all(&staging)?;
     for asset in ASSETS {
         let path = data.join(MODEL).join(asset);
-        std::fs::create_dir_all(
-            path.parent()
-                .ok_or_else(|| std::io::Error::other("model asset has no parent"))?,
-        )?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| HarnessError("model asset has no parent directory".into()))?;
+        std::fs::create_dir_all(parent)?;
         std::fs::write(path, b"interrupted model acquisition")?;
         std::fs::write(
             staging.join(format!("{}.part", asset.replace('/', "_"))),
