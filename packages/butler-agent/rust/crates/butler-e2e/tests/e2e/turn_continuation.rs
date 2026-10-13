@@ -32,7 +32,9 @@ pub(super) async fn setup(
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url);
     *script.file_root.lock().unwrap() = setup.sandbox.data.display().to_string();
-    Ok((setup.start().await?, script, server))
+    let s = setup.start().await?;
+    butler_e2e::e2e::fixtures::default_project_folder(&s).await?;
+    Ok((s, script, server))
 }
 
 pub(super) use stub::Mode;
