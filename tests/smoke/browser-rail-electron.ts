@@ -46,13 +46,14 @@ async function matrix(screen: string) {
       reduce_motion: screen === "new-chat", wallpaper: { source, motion: "paused", pauseOnBattery: true }, conversation_background: { source, overlay: 0 } }) });
     await app.main(`${app.win}.setContentSize(${width},900)`);
     await app.page.reload(); await shellReady(app, "ko");
-    if (await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='false'")) await app.click("사이드바 보기");
+    if (await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='false'")) await clickVisible('[data-test-class="chrome-floating-toggle-layer"] button');
     await app.page.clickText(screen === "new-chat" ? "Empty capture" : "일반", "[data-test-class=app-sidebar] button,[data-test-class=app-sidebar] [role=button]");
     await settleSidebar();
     const inspector = "[data-test-class=titlebar-right-panel-toggle]";
     if (await app.page.expression(`document.querySelector('${inspector}')?.getAttribute('aria-pressed')==='true'`)) await app.page.clickSelector(inspector);
-    if (width === 390 && await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='true'")) await app.click("사이드바 숨기기");
+    if (width === 390 && await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='true'")) await clickVisible('[data-test-class="chrome-floating-toggle-layer"] button');
     await settleSidebar();
+    if (width === 390) await waitBrowser(() => app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='false'"), "mobile sidebar closed");
     await waitBrowser(() => app.page.expression(screen === "new-chat" ? "Boolean(document.querySelector('[data-test-class=new-chat-empty-state]'))" : "document.querySelector('[data-test-class=custom-titlebar]').textContent.includes('일반')"), "expected conversation visible");
     if (!baseline && screen === "rail") await waitBrowser(() => app.page.expression(`document.querySelectorAll('${rail} [data-slot=live-tab-canvas]').length === 3`), "matrix frames");
     if (!baseline && screen === "approval") await waitBrowser(() => app.page.expression(`Boolean(document.querySelector('${media} [data-slot=live-tab-canvas]'))`), "matrix approval frame");
@@ -137,7 +138,7 @@ try {
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ reduce_motion: true }) });
   await app.gateway.api("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "Empty capture" }) });
   await app.page.reload(); await shellReady(app, "ko");
-  if (await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='false'")) await app.click("사이드바 보기");
+  if (await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='false'")) await clickVisible('[data-test-class="chrome-floating-toggle-layer"] button');
   await app.page.clickText("Empty capture", "[data-test-class=app-sidebar] button,[data-test-class=app-sidebar] [role=button]");
   await settleSidebar();
   await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=new-chat-empty-state]'))"), "empty conversation selected");
