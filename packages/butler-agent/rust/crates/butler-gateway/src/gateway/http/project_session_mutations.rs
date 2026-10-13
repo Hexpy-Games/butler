@@ -185,6 +185,19 @@ async fn session_lifecycle(
         )
         .map(Some);
     }
+    if *method == Method::POST
+        && let Some(encoded) = action_id(path, "/sessions/", "/read")
+    {
+        let id = super::subsessions::decode_component(encoded)?;
+        return json(
+            StatusCode::OK,
+            ApiEnvelope {
+                protocol_version: APP_PROTOCOL_VERSION,
+                data: state.application.mark_session_read(id).await?,
+            },
+        )
+        .map(Some);
+    }
     if *method == Method::DELETE
         && let Some(encoded) = resource_id(path, "/sessions/")
     {

@@ -85,12 +85,13 @@ fn seed(
 
 #[cfg(not(target_os = "macos"))]
 fn seed(
-    _home: &Path,
+    home: &Path,
     key: &SecretKey,
     fixture: &str,
     _applications: &[&Path],
 ) -> std::io::Result<()> {
-    super::SecretStore::system()
-        .and_then(|store| store.set(key, fixture))
+    super::test_keychain::test_store(home)
+        .map_err(|_| std::io::Error::other("test store open failed"))?
+        .set(key, fixture)
         .map_err(|_| std::io::Error::other("test keychain seed failed"))
 }

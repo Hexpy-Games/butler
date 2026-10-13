@@ -876,6 +876,10 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify({}),
   }),
+  markSessionRead: ({ sessionId }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/read`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  }),
   deleteSessionPermanent: ({ sessionId }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}?permanent=true`, {
     method: "DELETE",
   }),

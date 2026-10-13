@@ -33,9 +33,34 @@
   --page-card-top: var(--browser-band-height);
 }
 
+/* Butler's fixed-size page (1280×800) fits the card's width and the card ends
+   with it: no empty band under the page. The scale note sits in a row under
+   the card surface. A stage too short for the page (a pane wider than the
+   page's aspect) shrinks the content area, and the slot letterboxes the page
+   at the sides instead. */
+.card[data-fixed-page] {
+  --page-card-note: calc(
+    var(--space-sm) + var(--font-size-1) * var(--line-height-tight)
+  );
+
+  flex: 0 1 auto;
+  padding-bottom: var(--page-card-note);
+}
+
+.card[data-fixed-page] > .inner {
+  flex: 0 1 auto;
+}
+
+.card[data-fixed-page] .content {
+  width: 100%;
+  flex: 0 1 auto;
+  aspect-ratio: var(--page-card-viewport-width) /
+    var(--page-card-viewport-height);
+}
+
 .card::before {
   position: absolute;
-  inset: var(--page-card-top) 0 0;
+  inset: var(--page-card-top) 0 var(--page-card-note, 0);
   border-radius: inherit;
   background: var(--surface-raised);
   box-shadow: var(--browser-card-shadow);
@@ -59,7 +84,8 @@
   position: absolute;
   z-index: 3;
   inset: calc(var(--page-card-top) - var(--border-hairline))
-    calc(var(--border-hairline) * -1) calc(var(--border-hairline) * -1);
+    calc(var(--border-hairline) * -1)
+    calc(var(--page-card-note, 0px) - var(--border-hairline));
   border-radius: calc(var(--radius-popover) + var(--border-hairline));
   content: "";
   pointer-events: none;
@@ -180,20 +206,19 @@
     calc(var(--radius-popover) - var(--border-hairline)) 0 0;
 }
 
-/* A fixed-size page (Butler's tabs) letterboxes on the muted fill. */
+/* Side letterbox of a fixed-size page in a pane wider than its aspect. */
 .slot[data-fixed-page] {
   background: var(--muted);
 }
 
 .scaleNote {
   position: absolute;
-  top: calc(
-    min(100cqh, 100cqw * var(--page-card-viewport-ratio)) + var(--space-sm)
-  );
+  bottom: 0;
   left: 50%;
   color: var(--text-tertiary);
   font-size: var(--font-size-1);
   font-variant-numeric: tabular-nums;
+  line-height: var(--line-height-tight);
   pointer-events: none;
   transform: translateX(-50%);
 }

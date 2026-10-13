@@ -1,11 +1,16 @@
+import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { useOrganization } from "@/app/space/organization";
-import type { SpaceRowData } from "@/app/space/projection";
-import { ButtonContainer, ChevronDown, ChevronRight, IconButton, LayoutDashboard, NavRowSwap } from "@/butler-ds";
+import { projectSpace, type SpaceRowData } from "@/app/space/projection";
+import { unreadAncestors } from "@/app/space/unread";
+import { ButtonContainer, ChevronDown, ChevronRight, IconButton, LayoutDashboard, NavRowSwap, UnreadDot } from "@/butler-ds";
 import { SpaceRowMenu } from "./SpaceRowMenu";
 
-/** Project navigation stays visible; the disclosure chevron gives way to the row menu on hover. */
+/**
+ * Project navigation stays visible; the disclosure chevron gives way to the row
+ * menu on hover. A folded group holding an unread chat rests on the unread dot.
+ */
 export function SpaceRowActions({ row, collapsible, menuOpen, onMenuChange }: {
   row: SpaceRowData;
   collapsible: boolean;
@@ -15,6 +20,11 @@ export function SpaceRowActions({ row, collapsible, menuOpen, onMenuChange }: {
   useAppLocale();
   const expanded = useOrganization(s => !s.collapsed.includes(row.node.key));
   const toggle = useOrganization(s => s.toggle);
+  const unreadInside = useButlerStore(s => unreadAncestors(projectSpace(s.navigation)).has(row.node.key));
+  const showDot = !expanded && unreadInside;
+  // The dot keeps the rest slot until its exit fade ends; then the chevron returns.
+  const [dotMounted, setDotMounted] = useState(showDot);
+  if (showDot && !dotMounted) setDotMounted(true);
   const menu = <SpaceRowMenu row={row} open={menuOpen} onOpenChange={onMenuChange} />;
   if (row.node.kind === "session") return menu;
   return (
@@ -29,7 +39,9 @@ export function SpaceRowActions({ row, collapsible, menuOpen, onMenuChange }: {
         </IconButton>
       )}
       {collapsible ? (
-        <NavRowSwap open={menuOpen} rest={
+        <NavRowSwap open={menuOpen} rest={dotMounted ? (
+          <UnreadDot label={appCopy.space.unread} present={showDot} onExitComplete={() => setDotMounted(false)} />
+        ) : (
           <IconButton
             // The row already toggles with Enter/Space. Keep one keyboard target for that action.
             tabIndex={-1}
@@ -37,7 +49,7 @@ export function SpaceRowActions({ row, collapsible, menuOpen, onMenuChange }: {
             onClick={() => toggle(row.node.key)}>
             {expanded ? <ChevronDown /> : <ChevronRight />}
           </IconButton>
-        }>
+        )}>
           {menu}
         </NavRowSwap>
       ) : menu}

@@ -151,7 +151,6 @@ interface FirstRunCopy {
   customUrl: string;
   customKey: string;
   customConnect: string;
-  connectedToast: (name: string) => string;
   rerunTitle: string;
   rerunDescription: string;
   rerunAction: string;
@@ -316,7 +315,7 @@ export interface BrowserCopy {
   history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; };
   tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
-  reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string;
+  reload: string; stop: string; loading: string; crashed: string; empty: string; conversationEmpty: string; updateRequired: string; restartRequired: string; failed: string;
   openOutput: string; output: string; show: string; hide: string; active: string; openConversation: string; moveToConversation: string;
   newConversation: string; bringTab: string; resizeChat: string; pick: string; scrap: string; bookmarks: string; bookmarkAdd: string;
   bookmarked: string; manageBookmarks: string; downloads: string; downloading: string; showInFolder: string; more: string; findInPage: string;
@@ -695,6 +694,8 @@ export interface AppCopy {
     allFavorites: string;
     working: string;
     attention: string;
+    /** A finished reply the owner has not read; the sidebar dot's name. */
+    unread: string;
     /** What a waiting browser hand-off needs, in place of `attention`. */
     signInAttention: string;
     paymentAttention: string;

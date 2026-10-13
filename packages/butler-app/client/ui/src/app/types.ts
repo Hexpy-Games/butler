@@ -813,7 +813,8 @@ export interface SessionSummary {
   safe_status_label_key?: string;
   safe_status_label_parameters?: { attempt: number; maxAttempts: number };
   safe_status_content?: InterfaceContentReferences;
-  unread_count?: number;
+  /** A finished reply arrived after the owner last read this session. */
+  unread?: boolean;
   automation_target_count?: number;
 }
 
