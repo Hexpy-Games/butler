@@ -17,7 +17,7 @@ pub(super) async fn publish(
     }
     let args = &call.arguments;
     let request = PublishRequest {
-        workspace: owner.binding.workspace_path.clone(),
+        workspace: owner.active_workspace_path(),
         path: args
             .get("path")
             .and_then(Value::as_str)

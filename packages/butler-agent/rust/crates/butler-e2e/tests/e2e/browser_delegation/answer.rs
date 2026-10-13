@@ -218,6 +218,11 @@ fn assert_presentation_contract(requests: &[Value]) {
         .iter()
         .find(|tool| tool["name"] == "answer_blocks")
         .expect("parent is offered answer_blocks");
+    let catalog = butler_core::tool_catalog::load().unwrap();
+    assert_eq!(
+        blocks["parameters"], catalog["rawDefinitions"]["answer_blocks"]["parameters"],
+        "the parent receives the complete resolved answer schema"
+    );
     assert!(
         blocks["description"]
             .as_str()

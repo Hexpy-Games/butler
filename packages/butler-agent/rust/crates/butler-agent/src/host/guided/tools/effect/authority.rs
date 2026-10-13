@@ -108,7 +108,7 @@ async fn admit(
         source_turn_id: owner.binding.turn_id.clone(),
         operation_occurrence_id: Some(occurrence.to_owned()),
         source_work_id: work.work_id.clone(),
-        workspace_path: owner.binding.workspace_path.to_string_lossy().into_owned(),
+        workspace_path: owner.active_workspace_path().to_string_lossy().into_owned(),
         plan_revision_id: plan_revision_id.to_owned(),
         action_key,
         authority_generation: 1,
@@ -305,7 +305,7 @@ async fn resume(
         }
     };
     if execution.source_work_id != work.work_id
-        || execution.workspace_path != owner.binding.workspace_path.to_string_lossy()
+        || execution.workspace_path != owner.active_workspace_path().to_string_lossy()
         || execution.source_call_id.as_deref() != Some(occurrence)
         || execution.decision != butler_turn::btcc::RequestDecision::Allowed
         || execution.capability != adapter.capability()

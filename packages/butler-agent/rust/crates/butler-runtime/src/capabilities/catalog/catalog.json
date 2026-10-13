@@ -4,6 +4,7 @@
     "web_read",
     "transform_public_data_table",
     "run_command",
+    "switch_folder",
     "read_file",
     "write_file",
     "edit_file",
@@ -800,6 +801,50 @@
         "session",
         "workspace",
         "native"
+      ],
+      "durable": false
+    },
+    {
+      "name": "switch_folder",
+      "definition": {
+        "type": "function",
+        "name": "switch_folder",
+        "description": "Make another existing folder this conversation's working folder. From then on, in this and later turns, relative paths, commands and access checks use it. A git worktree added with run_command becomes the working folder automatically. A subfolder or a worktree of the same repository switches directly; another folder asks the user first unless access is full.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Folder to work in: absolute, or relative to the current working folder."
+            },
+            "reason": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Short reason shown to the user."
+            }
+          },
+          "required": [
+            "path",
+            "reason"
+          ]
+        },
+        "effectBoundary": "reviewed_persistent",
+        "concurrencySafe": false,
+        "interruptBehavior": "cancel",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "reviewed_persistent",
+      "category": "file",
+      "tags": [
+        "folder",
+        "workspace",
+        "worktree",
+        "session",
+        "native",
+        "폴더",
+        "작업 폴더"
       ],
       "durable": false
     },
@@ -9007,6 +9052,35 @@
       "interruptBehavior": "cancel",
       "transcriptVisibility": "visible"
     },
+    "switch_folder": {
+      "type": "function",
+      "name": "switch_folder",
+      "description": "Make another existing folder this conversation's working folder. From then on, in this and later turns, relative paths, commands and access checks use it. A git worktree added with run_command becomes the working folder automatically. A subfolder or a worktree of the same repository switches directly; another folder asks the user first unless access is full.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Folder to work in: absolute, or relative to the current working folder."
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Short reason shown to the user."
+          }
+        },
+        "required": [
+          "path",
+          "reason"
+        ]
+      },
+      "effectBoundary": "reviewed_persistent",
+      "concurrencySafe": false,
+      "interruptBehavior": "cancel",
+      "transcriptVisibility": "visible"
+    },
     "read_mcp_resource": {
       "type": "function",
       "name": "read_mcp_resource",
@@ -12196,6 +12270,7 @@
     ],
     "workspace": [
       "run_command",
+      "switch_folder",
       "read_file",
       "write_file",
       "edit_file",
