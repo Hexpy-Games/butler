@@ -111,3 +111,12 @@ pub(super) fn turn_id(
     .optional()
     .map_err(AppStorageError::sqlite)
 }
+
+/// An already committed event that neither wakes the queue nor ends a turn.
+pub(super) fn handled_without_terminal() -> ProjectionOutcome {
+    ProjectionOutcome {
+        handled: true,
+        wake_queue: false,
+        terminal_turn: None,
+    }
+}

@@ -127,11 +127,7 @@ pub(super) fn apply(
     if claim_status == QueuedTurnClaimStatus::Terminal {
         finish(&tx, action_id, outbound, chat_id, cursor, now)?;
         tx.commit().map_err(AppStorageError::sqlite)?;
-        return Ok(ProjectionOutcome {
-            handled: true,
-            wake_queue: false,
-            terminal_turn: None,
-        });
+        return Ok(handled_without_terminal());
     }
     if claim_status == QueuedTurnClaimStatus::Current {
         let fenced = match claim_id.as_deref() {
@@ -146,11 +142,7 @@ pub(super) fn apply(
     if terminal_update_is_stale(&tx, &kind, &turn_id)? {
         finish(&tx, action_id, outbound, chat_id, cursor, now)?;
         tx.commit().map_err(AppStorageError::sqlite)?;
-        return Ok(ProjectionOutcome {
-            handled: true,
-            wake_queue: false,
-            terminal_turn: None,
-        });
+        return Ok(handled_without_terminal());
     }
     if kind == "turn_suspended" {
         let (terminal, wake_queue) = project_suspended(
