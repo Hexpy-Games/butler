@@ -61,6 +61,9 @@ pub(super) fn render_steward_input(packet: &SubsessionPacket) -> String {
     )
 }
 
+/// Prefix of the Plan's internal presentation acceptance line.
+pub(super) const PRESENTATION_LINE: &str = "Presentation:";
+
 /// The parent Plan's presentation decision (its `Presentation:` acceptance
 /// line) tells the steward what the report must carry: blocks other than text
 /// need per-item facts and sources, and cards or a gallery need one collected
@@ -69,7 +72,7 @@ fn planned_presentation(packet: &SubsessionPacket) -> String {
     let Some(blocks) = packet
         .acceptance_criteria
         .iter()
-        .find_map(|line| line.strip_prefix("Presentation:"))
+        .find_map(|line| line.strip_prefix(PRESENTATION_LINE))
         .map(str::trim)
     else {
         return String::new();

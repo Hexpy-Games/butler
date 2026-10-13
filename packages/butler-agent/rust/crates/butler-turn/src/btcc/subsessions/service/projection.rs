@@ -145,10 +145,19 @@ impl SubsessionService {
             BtccError::detected(BtccCode::SubsessionProjectionInvalid, "projection invalid")
         })?;
         if let Some(relation) = relation {
-            object.insert("delegated_request".into(), json!({"turn_id":relation.child_turn_id,
+            // The Presentation line instructs the model; the user sees only real checks.
+            let checks = relation
+                .packet
+                .acceptance_criteria
+                .iter()
+                .filter(|check| !check.starts_with(super::helpers::PRESENTATION_LINE));
+            object.insert(
+                "delegated_request".into(),
+                json!({"turn_id":relation.child_turn_id,
                 "text":std::iter::once(relation.packet.objective.clone())
-                    .chain(relation.packet.acceptance_criteria.iter().map(|check| format!("• {check}")))
-                    .collect::<Vec<_>>().join("\n\n")}));
+                    .chain(checks.map(|check| format!("• {check}")))
+                    .collect::<Vec<_>>().join("\n\n")}),
+            );
         }
         object.insert("steward_children".into(), json!(stewards));
         object.insert("workers".into(), json!(workers));
