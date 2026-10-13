@@ -21,6 +21,7 @@ use butler_e2e::e2e::{
     gateway::{tool_rows, turn_state},
     scenario::{Access, Scenario, Setup, accepted_turn_id},
 };
+use butler_platform::secure_fs::Canonical as _;
 use serde_json::{Value, json};
 use std::{
     path::{Path, PathBuf},
@@ -46,7 +47,13 @@ fn git(dir: &Path, args: &[&str]) -> Result<(), HarnessError> {
 }
 
 fn canonical(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap()
+    path.canonical().unwrap()
+}
+
+fn command_stdout(output: &str) -> String {
+    let result: Value = serde_json::from_str(output).unwrap();
+    assert_eq!(result["output"]["exit_code"], 0, "{result}");
+    result["output"]["stdout"].as_str().unwrap().to_owned()
 }
 
 /// The project chat's stored folder and its marker (the scenario's only
@@ -145,6 +152,8 @@ async fn project(
     std::fs::write(project.join("a.txt"), "origin-marker\n")?;
     std::fs::write(project.join("sub/s.txt"), "sub-marker\n")?;
     git(&project, &["init", "-q", "-b", "main"])?;
+    // Fixture bytes must not depend on the host's Git checkout policy.
+    git(&project, &["config", "core.autocrlf", "false"])?;
     git(&project, &["add", "."])?;
     git(&project, &["commit", "-q", "-m", "init"])?;
     Ok((s, chat, project, script, server))
@@ -210,7 +219,7 @@ async fn a_new_worktree_becomes_the_working_folder_and_survives_restart() -> Res
         outputs["read"]
     );
     assert!(
-        outputs["pwd"].contains(worktree.to_string_lossy().as_ref()),
+        command_stdout(&outputs["pwd"]).contains(worktree.to_string_lossy().as_ref()),
         "{}",
         outputs["pwd"]
     );
@@ -256,7 +265,7 @@ async fn a_new_worktree_becomes_the_working_folder_and_survives_restart() -> Res
     delivered(&s, &chat, AFTER).await?;
     let outputs = script.outputs(AFTER);
     assert!(
-        outputs["pwd"].contains(worktree.to_string_lossy().as_ref()),
+        command_stdout(&outputs["pwd"]).contains(worktree.to_string_lossy().as_ref()),
         "{}",
         outputs["pwd"]
     );
@@ -394,7 +403,9 @@ async fn full_access_moves_to_another_folder_without_asking() -> Result<(), Harn
     assert_eq!(path, elsewhere.to_string_lossy());
     // Full access alone is not consent for the folder.
     assert_eq!(marker["consented"], false, "{marker}");
-    assert!(script.outputs(OUT)["pwd"].contains(elsewhere.to_string_lossy().as_ref()));
+    assert!(
+        command_stdout(&script.outputs(OUT)["pwd"]).contains(elsewhere.to_string_lossy().as_ref())
+    );
     s.finish().await?;
     server.abort();
     Ok(())
@@ -454,7 +465,7 @@ async fn a_delegated_child_starts_in_the_parents_current_folder() -> Result<(), 
         tokio::time::sleep(Duration::from_millis(200)).await;
     };
     assert!(
-        child_pwd.contains(work.to_string_lossy().as_ref()),
+        command_stdout(&child_pwd).contains(work.to_string_lossy().as_ref()),
         "{child_pwd}\nparent: {:?}",
         script.outputs(ASK)
     );
