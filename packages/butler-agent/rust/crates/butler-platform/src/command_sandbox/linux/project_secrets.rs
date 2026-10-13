@@ -1,5 +1,6 @@
 //! Metadata-only project discovery. Never follow symlinks or enter secret dirs.
 mod quarantine;
+mod tree;
 
 use std::os::unix::fs::PermissionsExt;
 
@@ -12,21 +13,26 @@ use std::time::SystemTime;
 pub(in crate::command_sandbox) fn discover_project_secrets(
     root: &Path,
 ) -> std::io::Result<Vec<PathBuf>> {
-    walk(root, true)
+    Ok(tree::walk(root, true)?
+        .into_iter()
+        .map(|relative| root.join(relative))
+        .collect())
 }
 
 /// Moves secret names absent from the pre-run inventory into a private
 /// data-folder quarantine. Filesystem timestamps may precede wall-clock launch
 /// time by a clock tick, so the inventory is the authority for new names.
-/// Traversal inspects metadata only; cross-mount moves copy quarantined entries.
+/// Directories the walk cannot inspect are quarantined whole. One failed move
+/// never leaves later entries in place: all are attempted, then it reports.
 pub(in crate::command_sandbox) fn sweep_new_secrets(
     root: &Path,
     since: &[PathBuf],
     data: &Path,
 ) -> std::io::Result<Vec<PathBuf>> {
     let existing: HashSet<_> = since.iter().cloned().collect();
-    let secrets: Vec<_> = walk(root, false)?
+    let secrets: Vec<_> = tree::walk(root, false)?
         .into_iter()
+        .map(|relative| root.join(relative))
         .filter(|path| !existing.contains(path))
         .collect();
     if secrets.is_empty() {
@@ -45,46 +51,13 @@ pub(in crate::command_sandbox) fn sweep_new_secrets(
     ));
     std::fs::create_dir(&run)?;
     std::fs::set_permissions(&run, std::fs::Permissions::from_mode(0o700))?;
+    let (source, target) = (tree::open_root(root)?, tree::open_root(&run)?);
+    let mut failure = None;
     for path in &secrets {
         let relative = path.strip_prefix(root).map_err(std::io::Error::other)?;
-        let target = run.join(relative);
-        if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        quarantine::move_entry(path, &target)?;
-    }
-    Ok(secrets)
-}
-
-fn walk(root: &Path, bounded: bool) -> std::io::Result<Vec<PathBuf>> {
-    const MAX_ENTRIES: usize = 200_000;
-    const MAX_DEPTH: usize = 128;
-    let mut pending = vec![(root.to_path_buf(), 0)];
-    let mut secrets = Vec::new();
-    let mut visited = 0;
-    while let Some((dir, depth)) = pending.pop() {
-        if bounded && depth > MAX_DEPTH {
-            return Err(std::io::Error::other(
-                "project secret discovery depth exceeded",
-            ));
-        }
-        for entry in std::fs::read_dir(dir)? {
-            let entry = entry?;
-            visited += 1;
-            if bounded && visited > MAX_ENTRIES {
-                return Err(std::io::Error::other(
-                    "project secret discovery entry limit exceeded",
-                ));
-            }
-            let path = entry.path();
-            if super::super::secret_name(&entry.file_name().to_string_lossy()) {
-                secrets.push(path);
-                // Existing protected directories are excluded, not scanned.
-            } else if entry.file_type()?.is_dir() {
-                pending.push((path, depth + 1));
-            }
+        if let Err(error) = quarantine::move_entry(&source, &target, relative) {
+            failure.get_or_insert(error);
         }
     }
-    secrets.sort();
-    Ok(secrets)
+    failure.map_or(Ok(secrets), Err)
 }

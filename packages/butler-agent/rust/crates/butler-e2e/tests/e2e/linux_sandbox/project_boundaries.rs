@@ -104,13 +104,15 @@ async fn project_write_kernel_boundaries_and_quarantine() -> Result<(), HarnessE
     );
     let since = command_sandbox::discover_project_secrets(root)?;
     let command = format!(
-        "set -e; cat '{}'; echo updated > top.txt; echo complete > src/output; mkdir sub/.git; echo planted > sub/.git/config; echo new > sub/.env; mv sub/ordinary sub/renamed.pem; echo scratch > '{}'",
+        "set -e; cat '{}'; echo updated > top.txt; echo complete > src/output; mkdir sub/.git; echo planted > sub/.git/config; echo new > sub/.env; mv sub/ordinary sub/renamed.pem; echo scratch > '{}'; {}",
         setup.sandbox.data.join("ordinary").display(),
         setup
             .sandbox
             .data
             .join("tmp/project-write/output")
-            .display()
+            .display(),
+        // A directory the sweep cannot list must not hide a new secret.
+        r#"python3 -c "import os; os.mkdir('sub/hide', 0o300); os.mkdir('sub/hide/.git')""#
     );
     let output = run(invoke(&command, &setup), root, &setup.sandbox.home);
     assert!(output.status.success(), "{output:?}");
@@ -126,9 +128,11 @@ async fn project_write_kernel_boundaries_and_quarantine() -> Result<(), HarnessE
         vec![
             root.join("sub/.env"),
             root.join("sub/.git"),
+            root.join("sub/hide"),
             root.join("sub/renamed.pem")
         ]
     );
+    assert!(!root.join("sub/hide").exists());
     assert!(!root.join("sub/.git").exists());
     assert!(!root.join("sub/.env").exists());
     let quarantine = setup.sandbox.data.join("sandbox-quarantine");
@@ -142,6 +146,14 @@ async fn project_write_kernel_boundaries_and_quarantine() -> Result<(), HarnessE
         std::fs::read_to_string(run.join("sub/renamed.pem"))?,
         "old-public"
     );
+    assert!(
+        Command::new("chmod")
+            .arg("700")
+            .arg(run.join("sub/hide"))
+            .status()?
+            .success()
+    );
+    assert!(run.join("sub/hide/.git").is_dir());
     assert_eq!(
         std::fs::read_to_string(root.join("src/output"))?,
         "complete\n"
