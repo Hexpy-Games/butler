@@ -60,13 +60,13 @@ try {
     const panel=document.createElement('div');panel.id='live-frame-consumer';
     panel.style.cssText='position:fixed;right:16px;top:60px;z-index:999999;display:grid;gap:8px';document.body.append(panel);
     globalThis.liveCounts={};globalThis.liveFrames={};globalThis.liveStops={};globalThis.liveDraws={};
-    globalThis.subscribeLive=id=>{liveStops[id]=window.butlerBrowser.onFrame(id,async frame=>{
+    globalThis.subscribeLive=(id,width=416)=>{liveStops[id]=window.butlerBrowser.onFrame(id,async frame=>{
       liveCounts[id]=(liveCounts[id]||0)+1;liveFrames[id]={seq:frame.seq,masked:frame.masked,bytes:Array.from(frame.bytes)};
       const bitmap=await createImageBitmap(new Blob([frame.bytes],{type:'image/jpeg'}));
       let canvas=document.getElementById(id);if(!canvas){canvas=document.createElement('canvas');canvas.id=id;document.getElementById('live-frame-consumer').append(canvas)}
       canvas.width=bitmap.width;canvas.height=bitmap.height;canvas.getContext('2d').drawImage(bitmap,0,0);bitmap.close();
       liveDraws[id]=(liveDraws[id]||0)+1;
-    })};
+    },width)};
   })()`);
   // No subscriptions: no live capture and no frame cache.
   assert.equal(await app.main(`${subject}.live.subscriptions.size`), 0);
@@ -86,12 +86,24 @@ try {
   writeFileSync(join(evidence, "measurements.json"), JSON.stringify(result, null, 2)); console.log(JSON.stringify(result));
   await waitBrowser(() => app.page!.expression("Object.keys(liveCounts).every(id=>liveCounts[id]===liveDraws[id])"), "every JPEG drawn");
   writeFileSync(join(evidence, "frames.png"), await app.page!.screenshot());
-  await quiet(ids, `globalThis.liveIdle=120;for(const id of ${JSON.stringify(ids)})${subject}.live.changed(${subject}.tabs.get(id))`);
-  await app.main("globalThis.liveIdle=0"); await Bun.sleep(2300);
+  const idleBefore = await counts();
+  await app.main("globalThis.liveIdle=120");
+  for (const id of ids) await changed(id);
+  await waitBrowser(async () => { const now = await counts(); return ids.every(id => now[id]! > idleBefore[id]!); }, "frames continue without keyboard/mouse activity");
+  await app.main("globalThis.liveIdle=0");
+
   await quiet(ids, `${subject}.live.visibility(false);for(const id of ${JSON.stringify(ids)})${subject}.live.changed(${subject}.tabs.get(id))`);
   await app.main(`${subject}.live.visibility(true)`); await Bun.sleep(2300);
   await quiet(ids, `${app.win}.hide();for(const id of ${JSON.stringify(ids)})${subject}.live.changed(${subject}.tabs.get(id))`);
   await app.main(`${app.win}.show()`); await Bun.sleep(2300);
+  await quiet(ids, `${app.win}.minimize();for(const id of ${JSON.stringify(ids)})${subject}.live.changed(${subject}.tabs.get(id))`);
+  assert.equal(await app.main(`[...${subject}.live.subscriptions.values()].every(state=>!state.timer)`), true, "minimized: no polling timers");
+  await app.main(`${app.win}.restore()`); await Bun.sleep(2300);
+  const power = "process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').powerMonitor";
+  await quiet(ids, `${power}.emit('lock-screen');for(const id of ${JSON.stringify(ids)})${subject}.live.changed(${subject}.tabs.get(id))`);
+  assert.equal(await app.main(`[...${subject}.live.subscriptions.values()].every(state=>!state.timer)`), true, "locked: no polling timers");
+  const lockedCounts = await counts(); await app.main(`${power}.emit('unlock-screen')`);
+  await waitBrowser(async () => { const now = await counts(); return ids.every(id => now[id]! > lockedCounts[id]!); }, "unlock resumes frames");
   await app.call("activate", { id: ids[0] }); await app.call("open");
   assert.equal(await app.main(`${subject}.areaVisible`), true);
   await quiet([ids[0]], `${subject}.live.changed(${subject}.tabs.get(${JSON.stringify(ids[0])}))`);
@@ -102,6 +114,13 @@ try {
   await app.page!.expression(`${JSON.stringify(ids)}.forEach(id=>document.getElementById(id)?.remove())`);
   for (const id of ids) await app.call("close", { id });
   const vault = await execute<Result>("tab.open", undefined, { url: `${origin}/__o/vault`, background: true, policy: { content_origin: origin } });
+  const viewport = await app.main<{ width: number; height: number; snapshots: number }>(`(async()=>{
+    const tab=${subject}.tabs.get(${JSON.stringify(vault.tab)}),api=tab.view.webContents.debugger,send=api.sendCommand.bind(api);let snapshots=0;
+    api.sendCommand=(method,...args)=>{if(method==='DOMSnapshot.captureSnapshot')snapshots++;return send(method,...args)};
+    try {const read=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')(${JSON.stringify(join(process.cwd(), "packages/butler-app/client/electron/browser/capture-security.mjs"))});return {...await read.captureViewport(tab),snapshots}}
+    finally {api.sendCommand=send}
+  })()`);
+  assert.deepEqual(viewport, {width:1280,height:800,snapshots:0}, "viewport has no DOM snapshot");
   await app.main(`${subject}.pullVault=async()=>({values:{number:'4111111111111111'}})`);
   const filled = await execute<{ status: string; filled: string[] }>("pay.fill", vault.tab, { top_origin: origin, frame_origins: [], fill_token: "0".repeat(32) });
   assert.equal(filled.status, "filled"); assert.ok(filled.filled.length);
@@ -133,5 +152,5 @@ try {
   const idleCount = (await counts())[loading.tab]; await Bun.sleep(2300);
   assert.equal((await counts())[loading.tab], idleCount, "idle tab has no periodic captures");
   await app.page!.expression(`liveStops[${JSON.stringify(loading.tab)}]()`);
-  console.log("subscribe/unsubscribe, visibility, system idle, area-open, vault masking, loading refresh and idle stop: PASS");
+  console.log("subscribe/unsubscribe, visibility, no-input continuation, minimize/lock resume, area-open, vault masking, loading refresh and idle stop: PASS");
 } finally { await app.stop(); fixture.stop(true); }

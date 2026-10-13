@@ -180,7 +180,6 @@ export async function actBatch(tab, args, session) {
       }
       if (tab.dialog) { steps[steps.length-1] = { status:"unknown", reason:"dialog_pending", hit:target.hit }; failed=true; }
       else if (steps.at(-1).status === "completed" && tab.epoch === epoch && tab.holder === "agent") {
-        tab.afterAction?.();
         steps.at(-1).still = await stepStill(tab);
         if(tab.dialog) {steps[steps.length-1]={ status:"unknown", reason:"dialog_pending", hit:target.hit };failed=true;}
       }

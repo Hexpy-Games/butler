@@ -23,6 +23,16 @@ export async function secureBoxes(tab) {
 
 /** Electron WebContents scripts wait for load completion; capture privacy cannot. */
 export async function captureViewport(tab) {
-  const [main] = await frameWorlds(tab, { immediate: true });
-  return evaluateWorld(main, "({width:innerWidth,height:innerHeight})");
+  await tab.debuggerReady;
+  const api = tab.view.webContents.debugger;
+  const { frameTree } = await api.sendCommand("Page.getFrameTree");
+  const { executionContextId } = await api.sendCommand("Page.createIsolatedWorld", {
+    frameId: frameTree.frame.id, worldName: "butler-capture-viewport",
+  });
+  // Layout metrics exclude scrollbars; masking needs the whole captured viewport.
+  const { result, exceptionDetails } = await api.sendCommand("Runtime.evaluate", {
+    contextId: executionContextId, expression: "({width:innerWidth,height:innerHeight})", returnByValue: true,
+  });
+  if (exceptionDetails || !result.value?.width || !result.value?.height) throw new Error("viewport_unavailable");
+  return result.value;
 }

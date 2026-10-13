@@ -1471,7 +1471,19 @@ const frameSubscriptions = new Map();
 // Last frame per subscribed tab, so a second consumer of a static (or frozen) tab draws at once.
 const lastFrames = new Map();
 ipcRenderer.on("browser:frame", (_event, frame) => { if (frameSubscriptions.has(frame.tab)) lastFrames.set(frame.tab, frame); });
+const pendingFrameTabs = new Set();
 const frameCall = (op, input) => ipcRenderer.invoke("butler-browser:call", op, input).catch(() => {});
+function subscribeFrame(tabId) {
+  const viewers = frameSubscriptions.get(tabId);
+  if (!viewers?.size) return;
+  const widthPx = Math.max(...viewers.values());
+  void ipcRenderer.invoke("butler-browser:call", "frame.subscribe", { id: tabId, widthPx })
+    .then(() => pendingFrameTabs.delete(tabId))
+    .catch(() => { if (frameSubscriptions.has(tabId)) pendingFrameTabs.add(tabId); });
+}
+ipcRenderer.on("butler-browser:state", (_event, state) => {
+  for (const tab of state.tabs ?? []) if (pendingFrameTabs.has(tab.id) && (tab.agent || tab.driven)) subscribeFrame(tab.id);
+});
 let frameVisibilityWatching = false;
 
 contextBridge.exposeInMainWorld("butlerBrowser", {
@@ -1484,23 +1496,25 @@ contextBridge.exposeInMainWorld("butlerBrowser", {
     }
     const listener = (_event, frame) => { if (frame.tab === tabId) handler(frame); };
     ipcRenderer.on("browser:frame", listener);
-    const count = frameSubscriptions.get(tabId) ?? 0;
-    frameSubscriptions.set(tabId, count + 1);
+    const viewers = frameSubscriptions.get(tabId) ?? new Map();
+    const count = viewers.size, token = Symbol();
+    const width = Number.isFinite(widthPx) ? Math.max(48, Math.min(416, Math.round(widthPx))) : 416;
+    viewers.set(token, width); frameSubscriptions.set(tabId, viewers);
     let active = true;
     if (!count) {
       void frameCall("frame.visibility", { value: !document.hidden });
-      void frameCall("frame.subscribe", { id: tabId, widthPx });
     } else if (lastFrames.has(tabId)) {
       const frame = lastFrames.get(tabId);
       queueMicrotask(() => { if (active) handler(frame); });
     }
+    subscribeFrame(tabId);
     return () => {
       if (!active) return;
       active = false;
       ipcRenderer.removeListener("browser:frame", listener);
-      const remaining = (frameSubscriptions.get(tabId) ?? 1) - 1;
-      if (remaining) frameSubscriptions.set(tabId, remaining);
-      else { frameSubscriptions.delete(tabId); lastFrames.delete(tabId); void frameCall("frame.unsubscribe", { id: tabId }); }
+      viewers.delete(token);
+      if (viewers.size) subscribeFrame(tabId);
+      else { frameSubscriptions.delete(tabId); pendingFrameTabs.delete(tabId); lastFrames.delete(tabId); void frameCall("frame.unsubscribe", { id: tabId }); }
     };
   },
   onDownload(handler) {

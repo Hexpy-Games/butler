@@ -95,6 +95,7 @@ export async function maskSecure(tab, image, marks) {
 export async function observationImage(tab) {
   const epoch = tab.epoch;
   const image = await tab.view.webContents.capturePage(undefined, { stayHidden: true });
+  tab.afterCapture?.(image);
   // A tiny unmarked thumbnail lets progress notes tell a pixel-only change from none.
   if (!image.isEmpty()) tab.observation.thumb = image.resize({ width: 160, height: 100 }).toBitmap();
   const captured = encode(await markedImage(image, await bitmapMarks(tab, image, await boxes(tab))));
