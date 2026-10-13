@@ -69,6 +69,8 @@ async fn project_write_kernel_boundaries_and_quarantine() -> Result<(), HarnessE
         "echo new > new-top.txt".into(),
         "mkdir new-dir".into(),
         open_pipe.into(),
+        "python3 -c 'import os; os.setsid()'".into(),
+        "python3 -c 'import os; os.setpgid(0, 0)'".into(),
         "sed -i s/original/changed/ top.txt".into(),
         format!(
             "python3 -c \"import socket; socket.create_connection(('127.0.0.1', {}))\"",
@@ -93,6 +95,12 @@ async fn project_write_kernel_boundaries_and_quarantine() -> Result<(), HarnessE
     assert_eq!(
         network.accept().unwrap_err().kind(),
         std::io::ErrorKind::WouldBlock
+    );
+    let workers = r#"python3 -c 'from concurrent.futures import ThreadPoolExecutor; import multiprocessing as m; e=ThreadPoolExecutor(2); assert list(e.map(abs, [-1,-2]))==[1,2]; e.shutdown(); p=m.get_context("fork").Process(target=abs,args=(-3,)); p.start(); p.join(); assert p.exitcode==0'"#;
+    let output = run(invoke(workers, &setup), root, &setup.sandbox.home);
+    assert!(
+        output.status.success(),
+        "ordinary threads and forks: {output:?}"
     );
     let since = command_sandbox::discover_project_secrets(root)?;
     let command = format!(
