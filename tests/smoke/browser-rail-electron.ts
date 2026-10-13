@@ -2,7 +2,7 @@
 /** Offline real App: production rail, live IPC, focus/close, decisions, and visual matrix. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { redesignApp } from "../support/browser-redesign-app";
 import { waitBrowser } from "../support/browser-agent-app";
 import { actConfirm, describeBrowser, bridgeBrowser } from "../support/browser-agent-stub";
@@ -16,12 +16,15 @@ const browser = "globalThis.browserAgentSubject";
 const rail = '[data-slot="tab-rail"]';
 const media = '[data-slot="composer-decision-media"]';
 let captures = 0;
+const focusApp = () => app.main(`process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve("packages/butler-app/client/electron/package.json"))})('electron').app.focus({steal:true});${app.win}.show();${app.win}.focus();${app.win}.moveTop();${app.win}.webContents.focus()`);
 const shot = async (name: string) => {
+  await focusApp();
   await app.page.movePointer(0, 0);
   await app.page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   writeFileSync(join(evidence, `${name}.png`), await app.page.screenshot()); captures++;
 };
 async function clickVisible(selector: string) {
+  await focusApp();
   await waitBrowser(() => app.page.expression(`(()=>{const node=document.querySelector(${JSON.stringify(selector)});if(!node)return false;const r=node.getBoundingClientRect();return r.width>0&&r.height>0&&node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))})()`), "target is hit-testable after motion");
   await app.page.clickSelector(selector);
 }
@@ -31,6 +34,7 @@ async function settleSidebar() {
 }
 async function matrix(screen: string) {
   for (const theme of ["light", "dark"]) for (const width of [1440, 390]) for (const wallpaper of [false, true]) {
+    await focusApp();
     console.log(screen, theme, width, wallpaper);
     const source = wallpaper ? { kind: "live", module: "butler.riso-print" } : { kind: "none" };
     await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme,
