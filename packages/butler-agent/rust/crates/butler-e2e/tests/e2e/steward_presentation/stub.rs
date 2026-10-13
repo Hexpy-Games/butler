@@ -145,6 +145,31 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
         step
     };
     if script.browser.load(Ordering::SeqCst) {
+        let presents_answer_blocks = script.answer_blocks.load(Ordering::SeqCst);
+        if presents_answer_blocks && (7..10).contains(&step) {
+            return match step {
+                7 => call(
+                    "open-other-page",
+                    "tool_call",
+                    &json!({"id":"native:browser_open","arguments":{"url":"https://example.org/"}}),
+                ),
+                8 => call(
+                    "observe-other-page",
+                    "tool_call",
+                    &json!({"id":"native:browser_observe","arguments":{"tab":"other-tab"}}),
+                ),
+                _ => call(
+                    "capture-other-page",
+                    "tool_call",
+                    &json!({"id":"native:browser_screenshot","arguments":{"tab":"other-tab","observation":"other-observation"}}),
+                ),
+            };
+        }
+        let step = if presents_answer_blocks && step >= 10 {
+            step - 3
+        } else {
+            step
+        };
         return match step {
             0 => call("browser-plan", "replace_work_plan", &plan(false, "direct")),
             1 => call("browser-review", "record_work_review", &review()),
