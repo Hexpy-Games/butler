@@ -342,6 +342,8 @@ export const enUsCopy: AppCopy = {
     signInsHelp: "Accounts Butler can fill in.", addSignIn: "Add", fillPolicy: "Fill", ask: "Ask", always: "Always",
     never: "Never", standing: "Use in every chat", lastUsed: "Last used", deletePassword: "Delete password", signOutSite: "Sign out of this site",
     revoke: "Revoke Butler access", usedTimes: (count) => `${count} uses`, filled: "Filled", askedApproved: "Filled after asking",
+    rail: { region: "Butler's tabs", openToCheck: "Open to check", needsCheck: "Needs you", pageError: "Page didn't load", error: "Error", more: (count) => `${count} more ${count === 1 ? "tab" : "tabs"} · View in browser` },
+    glow: { busy: "View browser · Butler is using it", attention: "View browser · Needs you", error: "View browser · Error" },
   },
   projectStatistics: {
     flow: "How work changed", flowHelp: "Registered work and recorded completions. These counts do not represent overall project progress.",

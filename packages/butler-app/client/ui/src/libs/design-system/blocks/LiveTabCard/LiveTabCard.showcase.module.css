@@ -1,0 +1,15 @@
+/* DS Viewer cells: each variant at the width the TabRail gives it. */
+.full {
+  width: var(--tab-rail-width);
+  max-width: 100%;
+}
+
+.compact {
+  width: var(--tab-rail-compact-width);
+  max-width: 100%;
+}
+
+.chip {
+  display: flex;
+  max-width: 100%;
+}
