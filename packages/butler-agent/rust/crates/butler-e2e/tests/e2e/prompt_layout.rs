@@ -187,7 +187,7 @@ async fn prompt_uses_local_timezone_and_rfc3339_offset() -> Result<(), HarnessEr
     butler_e2e::gate!();
     let host = butler_platform::instance::system_time_zone_name()?;
     let s = Setup::new("PROMPT-LOCAL-TIME")?
-        .env("TZ", &host)
+        .env("TZ", "Pacific/Honolulu")
         .synthetic(Script {
             rounds: 1,
             path_for: Box::new(|_| "Cargo.toml".into()),
@@ -195,8 +195,17 @@ async fn prompt_uses_local_timezone_and_rfc3339_offset() -> Result<(), HarnessEr
         })
         .start()
         .await?;
+    let settings = s.gw.get("/settings").await?;
+    assert_eq!(settings.data()["timezone"], "UTC");
+    let config: Value =
+        serde_json::from_slice(&std::fs::read(s.sandbox.data.join("butler.config.json"))?)?;
+    assert_eq!(config["user"]["timezone"], "UTC");
+    s.turn("general", "Reply in the pinned timezone").await?;
+    let pinned = s.provider()?.requests()[0].to_string();
+    assert!(pinned.contains("User Timezone: UTC"));
+    s.gw.patch("/settings", json!({"timezone":host})).await?;
     s.turn("general", "Reply once").await?;
-    let first = s.provider()?.requests()[0].to_string();
+    let first = s.provider()?.requests().last().unwrap().to_string();
     assert!(
         first.contains(&format!("User Timezone: {host}")),
         "host timezone missing"
