@@ -18,6 +18,7 @@ import { Conversation } from "@/components/conversation/Conversation.tsx";
 import { Inspector } from "@/components/inspector/Inspector.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
 import { AppToaster } from "@/components/common/AppToaster.tsx";
+import { ImageViewerHost } from "@/components/media/ImageViewerHost";
 import { SettingsView } from "@/components/settings/SettingsView.tsx";
 import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog.tsx";
 import { useComposerStore } from "@/components/conversation/composerStore.ts";
@@ -346,6 +347,7 @@ export function VisualHarness() {
         />
       )}
       {(isSettingsView || fixture) && <AppToaster />}
+      {fixture && <ImageViewerHost />}
       {ss03Surface && <SessionObserverDialog />}
     </AdaptiveShell>
   );

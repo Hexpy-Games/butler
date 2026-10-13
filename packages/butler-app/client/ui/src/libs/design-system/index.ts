@@ -163,6 +163,7 @@ export * from "./blocks/DragPreview";
 export * from "./blocks/ElementChip";
 export * from "./blocks/LibraryCard";
 export * from "./blocks/ItemCard";
+export * from "./blocks/ImageViewer";
 export * from "./blocks/GroupTile";
 export * from "./blocks/TagField";
 export * from "./blocks/PopupWindowChrome";

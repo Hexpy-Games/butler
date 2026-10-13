@@ -48,10 +48,18 @@ subject (prices, citations, ratings) is built in.
 </Grid>
 ```
 
+## Hit areas
+With `onOpen` the whole card opens the item: the title's target stretches over
+the card and the card shows the hover. With `onMediaOpen` the picture is its
+own target (a zoom-in cursor) that opens the image viewer. The source line,
+Show more and the actions sit above the card target and keep their own
+actions; the card's hover drops while the pointer is on one of them.
+
 ## Accessibility
-The article is labelled by the title. The title is the one tab stop that opens
-the item; the picture opens it for the pointer only. The source line is a
-button named by `source.label`.
+The article is labelled by the title. The title is the card's one tab stop
+that opens the item. With `onMediaOpen` the picture is a second tab stop named
+by `mediaLabel`; without it the picture opens the item for the pointer only.
+The source line is a button named by `source.label`.
 
 ## Responsive behavior
 Fills its grid cell; orientation follows its own width (340px).

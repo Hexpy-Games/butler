@@ -1,3 +1,4 @@
+import { snapshotApp } from "./app-snapshot.mjs";
 import { openExternalSignIn, openLink } from "./links.mjs";
 import { requestClose } from "./dialogs.mjs";
 import { answerUserDialog } from "./user-dialogs.mjs";
@@ -25,6 +26,7 @@ export function installUserBrowser(app, getWindow, getLanguage) {
       case "pick": return browser.selection.mode(input.id, input.value);
       case "selection-command": return browser.selection.command(input.op, input.id);
       case "selection-snapshot": return browser.selection.snapshot(input.id, input.item);
+      case "app-snapshot": return snapshotApp(win, input.target);
       case "open-link": return openLink(browser, input.url);
       case "open-external-signin": return openExternalSignIn(input.url);
       case "state": return browser.snapshot();
