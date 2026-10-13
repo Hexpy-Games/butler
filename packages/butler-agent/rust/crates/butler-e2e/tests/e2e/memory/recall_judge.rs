@@ -7,6 +7,8 @@ use butler_e2e::e2e::{
 };
 use serde_json::{Value, json};
 
+#[path = "recall_judge/empty_evidence.rs"]
+mod empty_evidence;
 #[path = "recall_judge/fixture.rs"]
 mod fixture;
 

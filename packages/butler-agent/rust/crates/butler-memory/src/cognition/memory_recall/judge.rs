@@ -75,7 +75,14 @@ pub(super) async fn run(
     let mut judged = false;
     let mut input_tokens = None;
     let mut output_tokens = None;
-    if fired && let Some(port) = port {
+    // A summary-only judge cannot add evidence when every summary is blank.
+    if fired
+        && prepared
+            .candidates
+            .iter()
+            .any(|c| !c.summary.trim().is_empty())
+        && let Some(port) = port
+    {
         let cancel = shutdown.child_token();
         let _guard = cancel.clone().drop_guard();
         let result = tokio::select! {
