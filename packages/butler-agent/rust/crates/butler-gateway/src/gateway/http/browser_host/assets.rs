@@ -97,6 +97,9 @@ fn explain_refusal(result: &mut Value) {
         return;
     }
     let recovery = match result["reason"].as_str().unwrap_or("") {
+        "blocked_by" => {
+            "Another element covers this image. Do not retry the same source. Try one other source once: the image element's own ref, its image URL from the page, or a region around it. If that also fails, continue without this image."
+        }
         "stale_ref" => "Observe the tab again and use a fresh image ref.",
         "private_image_url" => {
             "URL downloads require a public address. Collect an already-loaded image by ref or visible region."
