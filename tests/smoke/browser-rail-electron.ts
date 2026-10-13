@@ -37,6 +37,16 @@ async function settleSidebar() {
   await app.page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
   await waitBrowser(() => app.page.expression("!document.querySelector('[data-slot=adaptive-shell-sidebar]')?.getAnimations({subtree:true}).some(a=>a.playState==='running'&&a.effect?.getComputedTiming().iterations!==Infinity)"), "sidebar navigation motion settled");
 }
+const frameFacts = () => app.page.expression<Array<{ width: number; height: number; slotWidth: number; colored: number }>>(`
+  [...document.querySelectorAll('${media} canvas')].map(canvas=>{
+    const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+    let colored=0;for(let n=0;n<pixels.length;n+=4)if(pixels[n+2]>120&&pixels[n+2]>pixels[n]+30)colored++;
+    return {width:canvas.width,height:canvas.height,slotWidth:canvas.getBoundingClientRect().width,colored};
+  })`);
+async function checkDecisionFrame(name: string) {
+  try { await waitBrowser(async () => (await frameFacts()).some(frame => frame.width === 416 && frame.colored > 0), "sharp page pixels in the decision slot"); }
+  finally { writeFileSync(join(evidence, `${name}-frame.json`), JSON.stringify(await frameFacts())); }
+}
 async function matrix(screen: string) {
   for (const theme of ["light", "dark"]) for (const width of [1440, 390]) for (const wallpaper of [false, true]) {
     await focusApp();
@@ -56,7 +66,8 @@ async function matrix(screen: string) {
     if (width === 390) await waitBrowser(() => app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='false'"), "mobile sidebar closed");
     await waitBrowser(() => app.page.expression(screen === "new-chat" ? "Boolean(document.querySelector('[data-test-class=new-chat-empty-state]'))" : "document.querySelector('[data-test-class=custom-titlebar]').textContent.includes('일반')"), "expected conversation visible");
     if (!baseline && screen === "rail") await waitBrowser(() => app.page.expression(`document.querySelectorAll('${rail} [data-slot=live-tab-canvas]').length === 3`), "matrix frames");
-    if (!baseline && screen === "approval") await waitBrowser(() => app.page.expression(`Boolean(document.querySelector('${media} [data-slot=live-tab-canvas]'))`), "matrix approval frame");
+    if (!baseline && (screen === "approval" || screen === "handoff")) await waitBrowser(() => app.page.expression(`Boolean(document.querySelector('${media} [data-slot=live-tab-canvas]'))`), "matrix approval frame");
+    if (!baseline && (screen === "approval" || screen === "handoff")) await checkDecisionFrame(`${screen}-${theme}-${width}-${wallpaper ? "wallpaper" : "plain"}`);
     assert.equal(await app.page.expression("document.documentElement.scrollWidth > innerWidth"), false, "no horizontal overflow");
     await shot(`${screen}-${theme}-${width}-${wallpaper ? "wallpaper" : "plain"}`);
   }
@@ -118,6 +129,7 @@ try {
     const cards = await app.gateway.api<{ requests: Array<{ approval: { operation: { browser_tab: string } } }> }>("/authority-requests?session_id=general");
     assert.equal(cards.requests[0]!.approval.operation.browser_tab, tab);
   }
+  if (!baseline) await waitBrowser(() => app.page.expression("[...document.querySelectorAll('[data-sonner-toast]')].some(node=>node.textContent.includes('일반 · 확인 필요'))"), "localized attention toast");
   await matrix("approval");
   if (!baseline) {
     await clickVisible(`${media} [role="button"]`);
@@ -133,7 +145,7 @@ try {
     await app.send("Wait for the user to finish in this tab");
     await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=composer-browser-handoff] [data-slot=live-tab-canvas]'))"), "handoff thumbnail");
     assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))"), false, "handoff does not auto-open");
-    await shot("handoff-ko-dark-390-wallpaper");
+    await matrix("handoff");
     await app.page.clickText("열어서 확인", "[data-test-class=composer-browser-handoff] button");
     await waitBrowser(() => app.main(`${browser}.activeId===${JSON.stringify(tab)}`), "handoff opens exact tab");
     await app.call("control", { id: tab, holder: "agent" }); await app.delivered();

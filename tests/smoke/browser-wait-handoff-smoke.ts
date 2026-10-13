@@ -161,11 +161,11 @@ try {
   assert.ok(hostOps.includes("tab.wait"), `wait dispatched: ${hostOps}`);
   await desk.getByText(`${ASK} · 직접 확인 필요`, { exact: true }).waitFor();
 
-  // 2. Screenshots: desktop 1440/1100 with the browser, phone 375 without; light/dark; KO/EN.
+  // 2. Screenshots: desktop 1440/1100/390 with the browser, phone 375 without; light/dark; KO/EN.
   const phone = await newPage(375, false);
   for (const lang of ["ko", "en"] as const) for (const theme of ["light", "dark"] as const) {
     await settings(lang, theme);
-    for (const width of [1440, 1100]) {
+    for (const width of [1440, 1100, 390]) {
       await desk.setViewportSize({ width, height: 900 }); await desk.reload(); await checkCard(desk, lang, true);
       await shoot(desk, `wait-card-${lang}-${theme}-${width}`);
     }
@@ -204,6 +204,13 @@ try {
   const view = await server.api<{ latest_turn?: { state?: string } }>(`/session-view?session_id=${encodeURIComponent(session)}`);
   assert.equal(view.latest_turn?.state, "cancelled", JSON.stringify(view.latest_turn));
   await shoot(desk, "wait-stopped-ko-light-1440");
+  await desk.keyboard.press("ControlOrMeta+k");
+  await desk.getByRole("combobox").fill("General");
+  const general = desk.getByRole("option").filter({ has: desk.locator("small", { hasText: /^대화$/u }), hasText: /^일반/u });
+  await general.waitFor();
+  await general.scrollIntoViewIfNeeded();
+  assert.ok(!(await general.innerText()).includes("General"), "search uses the sidebar's localized channel title");
+  await shoot(desk, "search-general-ko-light-1440");
   console.log(JSON.stringify({ ok: true, screenshots: shots.length, bridge: bridgeCalls.map(c => c.op), hostOps: [...new Set(hostOps)], modelCalls: server.stubModelCalls.length }));
 } catch (error) {
   for (const [index, page] of [...pages, ...browser.contexts().flatMap(context => context.pages())].entries()) await page.screenshot({ path: join(evidence, `failure-${index}.png`) }).catch(() => {});

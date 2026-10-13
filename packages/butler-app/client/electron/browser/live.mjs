@@ -34,6 +34,8 @@ export class BrowserLiveFrames {
     if (existing) {
       if (existing.width !== width) {
         existing.width = width; existing.revision++; existing.dirty = true; existing.frozen = false;
+        // A newly wider slot needs its own frame now, rather than the shelf refresh delay.
+        existing.attemptedAt = 0;
         this.sync();
       }
       return;
