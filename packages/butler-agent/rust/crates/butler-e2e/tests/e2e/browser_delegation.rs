@@ -146,7 +146,7 @@ async fn serve_host(
     session: String,
 ) -> Result<(), HarnessError> {
     let mut buffer = String::new();
-    let ops = vec![
+    let mut ops = vec![
         "tab.open",
         "tabs.list",
         "tab.observe",
@@ -154,39 +154,61 @@ async fn serve_host(
         "tab.image_collect",
         "tab.image_collect",
     ];
+    if answer {
+        ops.extend(["tab.open", "tab.observe", "tab.screenshot"]);
+    }
+    let mut tabs = Vec::new();
     for op in ops {
         let frame = next_call(&mut stream, &mut buffer, op, &session).await?;
         assert_eq!(
             frame["session"], session,
             "internal session reached browser host: {frame}"
         );
-        let tab = json!({"id":"parent-tab","owner":format!("conversation:{session}"),"profile":"signed_out","epoch":1,"holder":"agent","url":"https://example.com/"});
+        let url = if op == "tab.open" {
+            frame["args"]["url"]
+                .as_str()
+                .unwrap_or("https://example.com/")
+                .to_owned()
+        } else {
+            tabs.iter()
+                .find(|tab: &&Value| tab["id"] == frame["args"]["tab"])
+                .and_then(|tab| tab["url"].as_str())
+                .unwrap_or("https://example.com/")
+                .to_owned()
+        };
+        let tab_id = if url.starts_with("https://example.org/") {
+            "other-tab"
+        } else {
+            "parent-tab"
+        };
+        let tab = json!({"id":tab_id,"owner":format!("conversation:{session}"),"profile":"signed_out","epoch":1,"holder":"agent","url":url});
         if op == "tab.open" {
+            tabs.push(tab.clone());
             let event = admin
                 .send(
                     Method::POST,
                     "/internal/browser-host/events",
-                    Some(json!({"tabs":[tab]})),
+                    Some(json!({"tabs":tabs.clone()})),
                     &[],
                 )
                 .await?;
             assert_eq!(event.status, 200);
         }
         let result = match op {
-            "tabs.list" => json!({"tabs":[tab]}),
-            "tab.observe" => {
-                json!({"status":"ok","tab":"parent-tab","obs":"parent-observation","url":"https://example.com/","text":"Parent page","image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})
-            }
+            "tabs.list" => json!({"tabs":tabs.clone()}),
+            "tab.observe" => json!({"status":"ok","tab":tab_id,
+                "obs":if tab_id == "other-tab" {"other-observation"} else {"parent-observation"},
+                "url":url,"text":if tab_id == "other-tab" {"Other page"} else {"Parent page"},
+                "image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}}),
             "tab.image_collect" if !answer && frame["args"]["ref"] == "image-ref-8" => {
                 json!({"status":"refused","reason":"blocked_by"})
             }
             "tab.image_collect" => {
                 json!({"status":"ok","source_url":"https://example.com/image.jpg","alt":"Collected raster","nearby_text":"Context","image":{"data":STANDARD.encode(if answer && frame["args"]["ref"] == "image-ref-8" { include_bytes!("browser_outputs/second.jpg").as_slice() } else { include_bytes!("browser_outputs/pixel.jpg").as_slice() })}})
             }
-            "tab.screenshot" => {
-                json!({"status":"ok","tab":"parent-tab","url":"https://example.com/","image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})
-            }
-            _ => json!({"status":"ok","tab":"parent-tab","url":"https://example.com/"}),
+            "tab.screenshot" => json!({"status":"ok","tab":tab_id,"url":url,
+                "image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}}),
+            _ => json!({"status":"ok","tab":tab_id,"url":url}),
         };
         assert!(!result.to_string().contains("steward"));
         let reply = admin
