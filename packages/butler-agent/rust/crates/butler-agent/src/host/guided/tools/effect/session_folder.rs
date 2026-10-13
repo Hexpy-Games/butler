@@ -58,6 +58,19 @@ pub(super) async fn prepare(
     ))
 }
 
+/// How the folder a `switch_folder` call (or its prepared input) names
+/// relates to the current folder; `None` when it can never be one.
+pub(in crate::host::guided::tools) async fn relation(
+    owner: &GuidedTools,
+    args: &Value,
+) -> Option<FolderRelation> {
+    let path = args["path"]
+        .as_str()
+        .map(butler_core::public_text::trim_js_whitespace)
+        .filter(|value| !value.is_empty())?;
+    inspect(owner, path).await.ok().map(|found| found.relation)
+}
+
 async fn inspect(owner: &GuidedTools, path: &str) -> Result<FolderInspection, BtccError> {
     let current = owner.current_workspace()?;
     let roots = FolderRoots {

@@ -87,7 +87,10 @@ async fn settle(s: &Scenario, chat: &str, prompt: &str) -> Result<(String, Value
 
 async fn delivered(s: &Scenario, chat: &str, prompt: &str) -> Result<String, HarnessError> {
     let (id, turn) = settle(s, chat, prompt).await?;
-    assert_eq!(turn_state(&turn), "delivered", "{turn}\n{}", s.agent.logs());
+    if turn_state(&turn) != "delivered" {
+        let cards = s.gw.approval_requests(chat).await?;
+        panic!("{prompt}: {turn}\napprovals: {cards:?}");
+    }
     Ok(id)
 }
 

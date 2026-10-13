@@ -8,7 +8,7 @@ mod mcp;
 mod observation;
 mod restart;
 pub(super) mod runtime_work;
-mod session_folder;
+pub(super) mod session_folder;
 mod session_worktree;
 mod topic_conversation;
 mod wallpaper;

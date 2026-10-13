@@ -52,19 +52,10 @@ async fn target_scope(
     call: &ModelRoundToolCall,
     args: &Value,
 ) -> Result<TargetScope, BtccError> {
-    let consented = *owner.folder_consent.lock();
     if call.name == ToolName::SwitchFolder {
-        // The prepared input carries how the target relates to the folder.
-        let contained = args["relation"]
-            .as_str()
-            .and_then(FolderRelation::parse)
-            .is_some_and(FolderRelation::contained);
-        return Ok(if contained && consented {
-            TargetScope::ProjectFolder
-        } else {
-            TargetScope::Outside
-        });
+        return Ok(folder_scope(owner, args).await);
     }
+    let consented = *owner.folder_consent.lock();
     let root = owner.current_workspace()?;
     let project = consented.then(|| root.clone());
     let data = owner.binding.butler_data.clone();
@@ -127,6 +118,18 @@ async fn target_scope(
     })
     .await
     .map_err(|e| BtccError::relayed("scope_classification_failed", e.to_string()))
+}
+/// A folder switch stays in scope within a consented folder or its
+/// repository; a refused folder is outside (its preparation reports why).
+async fn folder_scope(owner: &GuidedTools, args: &Value) -> TargetScope {
+    let contained = super::effect::session_folder::relation(owner, args)
+        .await
+        .is_some_and(FolderRelation::contained);
+    if contained && *owner.folder_consent.lock() {
+        TargetScope::ProjectFolder
+    } else {
+        TargetScope::Outside
+    }
 }
 pub(super) fn resumes(owner: &GuidedTools, occurrence: &str) -> bool {
     owner.binding.authority_request_ref.is_some()

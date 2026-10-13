@@ -64,30 +64,8 @@ impl SessionWorkspaceRecovery {
         project_workspace_path: Option<&str>,
         abort: CancellationToken,
     ) -> WorkspaceResult<RecoveredSessionWorkspaceReference> {
-        let mut binding = self.bindings.get_by_session_id(session_id).await?;
-        let mut authority = resolve_authority(binding.as_ref(), project_workspace_path);
-        if let SessionWorkspaceAuthority::SessionFolder {
-            workspace_path,
-            origin_path,
-            ..
-        } = &authority
-        {
-            let path = std::path::PathBuf::from(workspace_path);
-            let present = self
-                .files
-                .run(move || path.metadata().is_ok_and(|metadata| metadata.is_dir()))
-                .await?;
-            if !present {
-                // The moved folder is gone (e.g. a removed worktree): work in
-                // the folder the session had before its first move.
-                let origin = origin_path.clone();
-                if let Some(binding) = binding.as_mut() {
-                    binding.workspace_path.clone_from(&origin);
-                }
-                authority = resolve_without_folder(binding.as_ref(), Some(&origin));
-            }
-        }
-        drop(binding);
+        let binding = self.bindings.get_by_session_id(session_id).await?;
+        let authority = self.authority(binding, project_workspace_path).await?;
         if let SessionWorkspaceAuthority::Unavailable { error_code, .. } = &authority {
             let error_code = *error_code;
             return Ok(RecoveredSessionWorkspaceReference {
@@ -159,6 +137,37 @@ impl SessionWorkspaceRecovery {
             workspace_reference,
             validation,
         })
+    }
+
+    /// The binding's authority; a moved folder that is gone (e.g. a removed
+    /// worktree) falls back to the folder the session had before its first move.
+    async fn authority(
+        &self,
+        mut binding: Option<super::StoredSessionBinding>,
+        project_workspace_path: Option<&str>,
+    ) -> WorkspaceResult<SessionWorkspaceAuthority> {
+        let authority = resolve_authority(binding.as_ref(), project_workspace_path);
+        let SessionWorkspaceAuthority::SessionFolder {
+            workspace_path,
+            origin_path,
+            ..
+        } = &authority
+        else {
+            return Ok(authority);
+        };
+        let path = std::path::PathBuf::from(workspace_path);
+        let present = self
+            .files
+            .run(move || path.metadata().is_ok_and(|metadata| metadata.is_dir()))
+            .await?;
+        if present {
+            return Ok(authority);
+        }
+        let origin = origin_path.clone();
+        if let Some(binding) = binding.as_mut() {
+            binding.workspace_path.clone_from(&origin);
+        }
+        Ok(resolve_without_folder(binding.as_ref(), Some(&origin)))
     }
 
     /// Whether a project workspace is a folder or git checkout.
