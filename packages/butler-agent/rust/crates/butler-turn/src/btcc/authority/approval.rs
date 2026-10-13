@@ -77,6 +77,8 @@ pub enum ApprovalActionKind {
     RestartService,
     /// Give the conversation its own Git worktree.
     CreateWorktree,
+    /// Move the conversation's working folder outside its current folder.
+    SwitchFolder,
     /// Any other reviewed operation.
     Other,
 }
@@ -157,6 +159,12 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
             ApprovalTargetKind::Folder,
             &workspace_label(facts.workspace),
             ApprovalRisk::Low,
+        ),
+        "switch_folder" => single(
+            ApprovalActionKind::SwitchFolder,
+            ApprovalTargetKind::Outside,
+            facts.target.strip_prefix("folder:").unwrap_or(facts.target),
+            ApprovalRisk::Medium,
         ),
         "browser_act" | "browser_close" => single(
             ApprovalActionKind::Other,

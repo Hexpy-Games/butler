@@ -201,6 +201,7 @@ export interface ApprovalRequestCopy {
   startConversation: string;
   restartService: string;
   createWorktree: string;
+  switchFolder: string;
   /** Any kind this App does not know yet. */
   generic: string;
   /** The line after the examples. */
@@ -2029,6 +2030,7 @@ export interface AppCopy {
     commandPalette: string;
     sessionWorktree: (branch?: string) => string;
     localWorkspace: (branch?: string) => string;
+    sessionFolder: (folder: string, branch?: string) => string;
     hideRightPanel: string;
     showRightPanel: string;
     minimizeWindow: string;

@@ -73,6 +73,9 @@ function workspaceValue(
   if (branch.workspace_binding === "session_worktree") {
     return appCopy.interfacePanels.worktree;
   }
+  if (branch.workspace_binding === "session_folder" && branch.workspace_path) {
+    return branch.workspace_path;
+  }
   if (branch.workspace_binding === "project") {
     return appCopy.composer.workspaceLocal;
   }

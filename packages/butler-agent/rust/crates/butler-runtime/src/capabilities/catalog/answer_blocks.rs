@@ -208,6 +208,15 @@ fn dimensions(value: &Value, path: &str, problems: &mut Vec<AnswerBlocksProblem>
         value.get("rows").and_then(Value::as_array),
     ) {
         for (i, row) in rows.iter().enumerate() {
+            for (column, cell) in row.as_array().into_iter().flatten().enumerate() {
+                if cell.as_str().is_some_and(|text| text.chars().count() > 60) {
+                    push(
+                        problems,
+                        &format!("{path}/rows/{i}/{column}"),
+                        "use at most 60 characters per cell; move longer detail to reply text",
+                    );
+                }
+            }
             length(
                 row,
                 columns.len(),

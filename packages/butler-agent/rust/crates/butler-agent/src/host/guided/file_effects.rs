@@ -43,6 +43,21 @@ impl GuidedFileEffects {
         }
     }
 
+    /// The write scope in the current working folder; a folder switch moves
+    /// it mid-turn.
+    fn scope(&self) -> EffectFileScope {
+        let mut scope = self.scope.clone();
+        if let Some(path) = self
+            .context
+            .workspace_reference
+            .as_ref()
+            .and_then(|reference| reference.get().ok())
+        {
+            scope.workspace = path;
+        }
+        scope
+    }
+
     /// The same effects for writes that run without approval because their
     /// targets are inside the project: every guard re-checks containment,
     /// secrets and symlink escapes at the moment it touches the file.
@@ -76,8 +91,9 @@ impl GuidedFileEffects {
         &self,
         args: &Value,
     ) -> Result<PreparedGuidedFileEffect, BtccError> {
+        let scope = self.scope();
         if let Some(path) = args.get("path").and_then(Value::as_str)
-            && let Err(error) = butler_turn::workspace::guard_effect_file(&self.scope, path).await
+            && let Err(error) = butler_turn::workspace::guard_effect_file(&scope, path).await
             && error.code() == "protected_path"
         {
             // Refuse protected data before asking for approval. Other boundary
@@ -85,7 +101,7 @@ impl GuidedFileEffects {
             return Err(BtccError::relayed(error.code(), error.message()));
         }
         let adapter: Arc<dyn EffectAdapter> = Arc::new(WorkspaceFileEffectAdapter::new(
-            self.scope.clone(),
+            scope,
             self.registered_write.clone(),
         ));
         let input = adapter

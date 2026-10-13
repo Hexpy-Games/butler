@@ -152,7 +152,7 @@ pub(super) async fn execute(
                 | ToolName::DeleteAutomation
                 | ToolName::RunDueAutomations
         )
-    ) || super::effect::is_managed_project_ledger_effect(&call.name)
+    ) || super::effect::routes_effect(&call.name)
     {
         return super::effect::execute(owner, invocation, call, call_id).await;
     }

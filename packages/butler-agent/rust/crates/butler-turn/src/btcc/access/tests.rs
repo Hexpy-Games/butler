@@ -6,8 +6,8 @@ use AccessDecision::{Allow, Ask, Deny};
 use AccessMode::{AskAlways, AskExceptReads, Auto, FullAccess, ReadOnly};
 use CapabilityKind::{
     ButlerOutput, CommandMutation, CommandObservation, Connector, CrossConversation, Exempt,
-    FileEdit, FileRead, FullOnly, InternalRead, Network, OtherEffect, ProjectRecord, Schedule,
-    SettingsWrite, WebRequest,
+    FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, OtherEffect, ProjectRecord,
+    Schedule, SettingsWrite, WebRequest,
 };
 use TargetScope::{NoTarget, Outside, ProjectFolder, Protected};
 use butler_core::tool_protocol::ToolName;
@@ -67,6 +67,10 @@ const ALLOW: &[(
         Some(ProjectFolder),
         Some(ApprovalRisk::Low),
     ),
+    // A folder switch within the consented folder or its repository.
+    (AskAlways, FolderSwitch, Some(ProjectFolder), None),
+    (AskExceptReads, FolderSwitch, Some(ProjectFolder), None),
+    (Auto, FolderSwitch, Some(ProjectFolder), None),
     // Auto (알아서 진행): Ask first plus project edits, project-sandboxed
     // commands and Butler's own ledger records.
     (Auto, InternalRead, None, None),
@@ -133,6 +137,7 @@ const KINDS: &[CapabilityKind] = &[
     FullOnly(FullOnlyAction::ServiceRestart),
     FullOnly(FullOnlyAction::GitWorktree),
     FullOnly(FullOnlyAction::MemoryForget),
+    FolderSwitch,
     OtherEffect,
 ];
 fn expected(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
@@ -279,6 +284,7 @@ fn access_boundary_matches_the_owner_table() {
             "forget_explicit_memory",
             FullOnly(FullOnlyAction::MemoryForget),
         ),
+        ("switch_folder", FolderSwitch),
         ("mcp__x__y", OtherEffect),
     ] {
         assert_eq!(

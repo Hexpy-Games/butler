@@ -8,6 +8,7 @@ mod dispatch;
 mod effect;
 mod execute;
 mod feedback;
+mod folder;
 mod hooks;
 mod image;
 mod library;
@@ -316,6 +317,7 @@ impl GuidedTools {
                     | ToolName::ReadProjectSource
                     | ToolName::ProjectArtifacts
                     | ToolName::BindSessionGitWorktree
+                    | ToolName::SwitchFolder
                     | ToolName::StartTopicConversation
                     | ToolName::RequestServiceRestart
                     | ToolName::CallMcpTool

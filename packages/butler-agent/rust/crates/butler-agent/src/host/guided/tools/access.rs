@@ -1,10 +1,11 @@
 //! Admission decisions and blocking target classification for guided tools.
 use super::GuidedTools;
+use butler_core::tool_protocol::ToolName;
 use butler_turn::btcc::{
     AccessDecision, AccessRequest, ApprovalRisk, BtccError, CapabilityKind, ModelRoundToolCall,
     TargetScope, command_access_risk, command_scope_unresolved, decide, needs_scope,
 };
-use butler_turn::workspace::{ScopeRoots, classify_targets};
+use butler_turn::workspace::{FolderRelation, ScopeRoots, classify_targets};
 use serde_json::Value;
 
 pub(super) fn kind(call: &ModelRoundToolCall) -> CapabilityKind {
@@ -51,15 +52,12 @@ async fn target_scope(
     call: &ModelRoundToolCall,
     args: &Value,
 ) -> Result<TargetScope, BtccError> {
-    let root = owner
-        .binding
-        .workspace_reference
-        .as_ref()
-        .map(butler_turn::workspace::WorkspaceReference::get)
-        .transpose()
-        .map_err(|e| BtccError::relayed(e.code(), "Workspace unavailable"))?
-        .unwrap_or_else(|| owner.binding.workspace_path.clone());
-    let project = owner.binding.project_folder.as_ref().map(|_| root.clone());
+    if call.name == ToolName::SwitchFolder {
+        return Ok(folder_scope(owner, args).await);
+    }
+    let consented = owner.folder_consented();
+    let root = owner.current_workspace()?;
+    let project = consented.then(|| root.clone());
     let data = owner.binding.butler_data.clone();
     let protected = owner.binding.protected_ledger_roots.clone();
     let installation = owner.binding.installation_root.clone();
@@ -120,6 +118,18 @@ async fn target_scope(
     })
     .await
     .map_err(|e| BtccError::relayed("scope_classification_failed", e.to_string()))
+}
+/// A folder switch stays in scope within a consented folder or its
+/// repository; a refused folder is outside (its preparation reports why).
+async fn folder_scope(owner: &GuidedTools, args: &Value) -> TargetScope {
+    let contained = super::effect::session_folder::relation(owner, args)
+        .await
+        .is_some_and(FolderRelation::contained);
+    if contained && owner.folder_consented() {
+        TargetScope::ProjectFolder
+    } else {
+        TargetScope::Outside
+    }
 }
 pub(super) fn resumes(owner: &GuidedTools, occurrence: &str) -> bool {
     owner.binding.authority_request_ref.is_some()

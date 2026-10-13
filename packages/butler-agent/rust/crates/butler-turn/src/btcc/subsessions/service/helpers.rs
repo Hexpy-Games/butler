@@ -11,6 +11,25 @@ fn criteria(packet: &SubsessionPacket) -> String {
     serde_json::to_string(&packet.acceptance_criteria).unwrap_or_default()
 }
 
+/// A card title: the model's safe title, else the request's first line.
+pub(super) fn delegation_title(safe_title: Option<&str>, request: &str) -> String {
+    use butler_core::public_text::{names_internal_role, public_title};
+    if let Some(title) = safe_title
+        .map(|title| public_title(title, request))
+        .filter(|title| !title.trim().is_empty() && !names_internal_role(title))
+    {
+        return title;
+    }
+    let first = request.lines().find(|line| !line.trim().is_empty());
+    let first = first.unwrap_or("").split_whitespace().collect::<Vec<_>>();
+    let title = first.join(" ");
+    if title.chars().count() > 64 {
+        format!("{}…", title.chars().take(63).collect::<String>())
+    } else {
+        title
+    }
+}
+
 pub(super) fn render_input(packet: &SubsessionPacket, profile_prompt: Option<&str>) -> String {
     let base = format!(
         "role: worker\nassigned_objective: {}\nacceptance_criteria: {}\nimplementation_brief: {}\nReport the bounded result to the Steward.",
@@ -180,9 +199,25 @@ pub(super) fn child_metadata(
 
     let metadata = json!({"source":if role=="worker"{"btcc-worker"}else{"btcc-subsession"},"reasoning_effort":packet.reasoning_effort,"subsession":{"relation_id":packet.relation_id,"delegation_id":packet.delegation_id,"task_id":packet.task_id,"parent_session_id":packet.parent_session_id,"execution_mode":packet.execution_mode,"mutation_scope":packet.mutation_scope,"allowed_tools_and_effects":packet.allowed_tools_and_effects},"runtimePolicy":runtime_policy});
     match metadata {
-        Value::Object(metadata) => metadata,
+        Value::Object(metadata) => inherit_folder(metadata, parent),
         _ => Map::new(),
     }
+}
+
+/// The child works in the parent's current folder with the same consent.
+fn inherit_folder(
+    mut metadata: Map<String, Value>,
+    parent: &crate::workspace::StoredSessionBinding,
+) -> Map<String, Value> {
+    if crate::workspace::active_session_folder(parent).is_some()
+        && let Some(folder) = parent
+            .metadata
+            .as_ref()
+            .and_then(|value| value.get(crate::workspace::SESSION_FOLDER_KEY))
+    {
+        metadata.insert(crate::workspace::SESSION_FOLDER_KEY.into(), folder.clone());
+    }
+    metadata
 }
 
 pub(super) fn child_work_scope(

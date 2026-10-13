@@ -22,9 +22,9 @@ export function AnswerTable({ block }: { block: TableBlock }) {
   const copy = appCopy.conversation.answerBlocks;
   const [expanded, setExpanded] = useState(false);
   const rows = (start: number, end?: number) => block.rows.slice(start, end).map((row, index) => <tr key={start + index}>
-    {row.map((cell, column) => column === 0 ? <th key={column} scope="row">{cell}</th> : <td key={column}>{cell}</td>)}</tr>);
+    {row.map((cell, column) => column === 0 ? <th key={column} scope="row"><Typo.Text as="div" wrap="normal" maxWidth="full">{cell}</Typo.Text></th> : <td key={column}><Typo.Text as="div" wrap="anywhere" maxWidth="full">{cell}</Typo.Text></td>)}</tr>);
   const table = (start: number, end?: number) => <MarkdownContent><MarkdownTable>
-    <thead><tr>{block.columns.map((column, index) => <th key={index} scope="col">{column}</th>)}</tr></thead>
+    <thead><tr>{block.columns.map((column, index) => <th key={index} scope="col"><Typo.Text as="div" wrap="normal" weight="medium" maxWidth="full">{column}</Typo.Text></th>)}</tr></thead>
     <tbody>{rows(start, end)}</tbody>
   </MarkdownTable></MarkdownContent>;
   return <Stack gap="sm">{table(0, 10)}

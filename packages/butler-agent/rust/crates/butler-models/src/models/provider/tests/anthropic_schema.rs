@@ -3,11 +3,8 @@ use super::*;
 use butler_turn::btcc::ModelRoundTool;
 use serde_json::{Value, json};
 
-const CATALOG: &str =
-    include_str!("../../../../../butler-runtime/src/capabilities/catalog/catalog.json");
-
 pub(super) async fn all_registered_tools_through_stub() {
-    let catalog_json: Value = serde_json::from_str(CATALOG).unwrap();
+    let catalog_json: Value = butler_core::tool_catalog::load().unwrap();
     let raw = catalog_json["rawDefinitions"].as_object().unwrap();
     let projected = catalog_json["tools"].as_array().unwrap();
     assert!(!raw.is_empty());
@@ -42,6 +39,7 @@ async fn serialize_catalog(definitions: &[Value]) {
             tool_contract_version: None,
         })
         .collect();
+    validate_other_carriers(&tools, definitions);
     let payload = br#"{"content":[{"type":"text","text":"ok"}],"usage":{}}"#;
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -102,6 +100,49 @@ async fn serialize_catalog(definitions: &[Value]) {
     }
     if let Ok(path) = std::env::var("BUTLER_TEST_ANTHROPIC_TOOLS_OUTPUT") {
         std::fs::write(path, serde_json::to_vec_pretty(serialized).unwrap()).unwrap();
+    }
+}
+
+fn validate_other_carriers(tools: &[ModelRoundTool], definitions: &[Value]) {
+    let (_, snapshot) = catalog();
+    for (carrier, model, pointer) in [
+        (serialize::Carrier::Responses, "openai/gpt-5.5", "/tools"),
+        (
+            serialize::Carrier::Chat { stream: false },
+            "openai/gpt-5.5",
+            "/tools",
+        ),
+        (
+            serialize::Carrier::Gemini,
+            "google/gemini-3.8-flash",
+            "/tools/0/functionDeclarations",
+        ),
+    ] {
+        let config = super::serialization::carrier_config(
+            snapshot.find_model_metadata(Some(model)).unwrap(),
+            model,
+        );
+        let mut input = request(
+            model,
+            &[],
+            &ReasoningEffort::None,
+            CancellationToken::new(),
+            None,
+        );
+        input.tools = tools;
+        let body = serialize::body(&input, &config, carrier).unwrap();
+        let serialized = body.pointer(pointer).unwrap().as_array().unwrap();
+        assert_eq!(serialized.len(), definitions.len());
+        for (tool, original) in serialized.iter().zip(definitions) {
+            let tool = if matches!(carrier, serialize::Carrier::Chat { .. }) {
+                &tool["function"]
+            } else {
+                tool
+            };
+            assert_eq!(tool["name"], original["name"]);
+            assert_eq!(tool["parameters"], original["parameters"]);
+            validate_refs(&tool["parameters"], &tool["parameters"]);
+        }
     }
 }
 

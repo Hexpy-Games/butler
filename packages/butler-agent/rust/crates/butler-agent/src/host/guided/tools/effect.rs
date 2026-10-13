@@ -8,12 +8,19 @@ mod mcp;
 mod observation;
 mod restart;
 pub(super) mod runtime_work;
+pub(super) mod session_folder;
 mod session_worktree;
 mod topic_conversation;
 mod wallpaper;
 
 pub(super) fn is_managed_project_ledger_effect(name: &str) -> bool {
     ledger_input::managed(name)
+}
+
+/// Effects routed by name beyond the fixed tool list: managed ledger writes
+/// and working-folder moves.
+pub(super) fn routes_effect(name: &str) -> bool {
+    ledger_input::managed(name) || name == ToolName::SwitchFolder
 }
 
 use std::sync::Arc;
@@ -31,6 +38,38 @@ use butler_turn::btcc::{
 use super::GuidedTools;
 
 pub(super) async fn execute(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    occurrence: &str,
+) -> Result<JsonDocument, ToolExecutionError> {
+    // A command that adds a worktree moves the session into it afterwards.
+    let worktree_snapshot = if call.name == ToolName::RunCommand
+        && session_folder::adds_worktree(
+            call.arguments
+                .get("command")
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
+        ) {
+        match session_folder::command_directory(owner, &call.arguments) {
+            Some(cwd) => session_folder::worktrees(owner, &cwd)
+                .await
+                .map(|before| (cwd, before)),
+            None => None,
+        }
+    } else {
+        None
+    };
+    let result = Box::pin(execute_effect(owner, invocation, call, occurrence)).await?;
+    Ok(match worktree_snapshot {
+        Some(snapshot) => {
+            session_folder::follow_new_worktree(owner, &invocation, call, snapshot, result).await
+        }
+        None => result,
+    })
+}
+
+async fn execute_effect(
     owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
@@ -185,6 +224,8 @@ async fn prepare(
 ) -> Result<(String, Value, Arc<dyn EffectAdapter>), BtccError> {
     if session_worktree::supports(&call.name) {
         session_worktree::prepare(owner, &call.arguments)
+    } else if call.name == ToolName::SwitchFolder {
+        session_folder::prepare(owner, &call.arguments).await
     } else if mcp::supports(&call.name) {
         mcp::prepare(owner, &call.arguments).map(|prepared| (prepared.0, prepared.1, prepared.2))
     } else if automation::supports(&call.name) {
