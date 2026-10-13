@@ -2,9 +2,11 @@
 #[cfg(windows)]
 #[path = "chromium_windows.rs"]
 mod windows;
+#[cfg(not(windows))]
 use super::{ImportError, LoginBatch, SafeStorageKeySource};
 #[cfg(target_os = "macos")]
 use super::{Login, Snapshot, sql_error};
+#[cfg(not(windows))]
 use std::path::Path;
 #[cfg(windows)]
 pub(super) use windows::passwords;

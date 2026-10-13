@@ -239,4 +239,4 @@ pub fn open_disk_access() -> Result<(), ImportError> {
 #[path = "browser_transfer/chromium_fixture.rs"]
 mod chromium_fixture;
 #[cfg(feature = "test-support")]
-pub use chromium_fixture::chromium_password_fixture;
+pub use chromium_fixture::{chromium_password_fixture, chromium_safe_storage_fixture_supported};

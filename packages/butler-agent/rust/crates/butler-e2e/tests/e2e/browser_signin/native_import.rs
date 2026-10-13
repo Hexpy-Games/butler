@@ -122,6 +122,10 @@ async fn firefox_nss_with_and_without_primary_password() -> Result<(), HarnessEr
 async fn chromium_mac_injected_safe_storage_skips_invalid_rows() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
+        butler_platform::browser_transfer::chromium_safe_storage_fixture_supported(),
+        "Safe Storage fixture requires macOS"
+    );
+    butler_e2e::skip_unless!(
         keychain_opt_in(),
         "isolated system-store test opt-in required"
     );
@@ -336,6 +340,38 @@ async fn chromium_dpapi_import_reports_csv_and_undoes_v10() -> Result<(), Harnes
             )
             .await?;
         assert_eq!(undo.data()["passwords"], 1);
+        // App-bound-only profiles must still return a CSV fallback without a legacy key.
+        let root = &roots
+            .chromium
+            .iter()
+            .find(|(b, _)| *b == browser)
+            .unwrap()
+            .1;
+        let db = rusqlite::Connection::open(root.join("Work/Login Data"))?;
+        db.execute(
+            "DELETE FROM logins WHERE substr(password_value,1,3) != X'763230'",
+            [],
+        )?;
+        drop(db);
+        let path = root.join("Local State");
+        let mut state: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+        state["os_crypt"] = json!({});
+        std::fs::write(path, serde_json::to_vec(&state)?)?;
+        let only_bound = a
+            .send(
+                Method::POST,
+                "/security/browser-import/start",
+                Some(
+                    json!({"source":format!("{browser}:Work"),"bookmarks":false,"passwords":true}),
+                ),
+                &[],
+            )
+            .await?;
+        assert_eq!(only_bound.status, 200);
+        assert_eq!(only_bound.data()["passwords"], 0);
+        assert_eq!(only_bound.data()["invalid"], 0);
+        assert_eq!(only_bound.data()["csv_required"], 1);
+        assert_eq!(only_bound.data()["needs_csv"], true);
     }
     super::canary_absent(&s.sandbox.data, CANARY, &s.agent.logs());
     drop(cleanup);

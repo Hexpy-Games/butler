@@ -5,7 +5,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use std::path::Path;
 use zeroize::Zeroizing;
 
-pub(super) fn passwords(
+pub(in crate::browser_transfer) fn passwords(
     _browser: &str,
     dir: &Path,
     scratch: &Path,
@@ -27,7 +27,7 @@ pub(super) fn passwords(
         .map_err(|e| sql_error(&e))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| sql_error(&e))?;
-    let time = |name: &str| {
+    let time = |name: &'static str| {
         if columns.iter().any(|c| c == name) {
             name
         } else {
@@ -53,12 +53,8 @@ pub(super) fn passwords(
             batch.csv_required += 1;
             continue;
         }
-        if key.is_none() {
-            key = Some(master_key(dir));
-        }
         let result = key
-            .as_ref()
-            .unwrap()
+            .get_or_insert_with(|| master_key(dir))
             .as_ref()
             .map_err(|e| *e)
             .and_then(|key| decrypt_row(row, &encrypted, key));
@@ -79,8 +75,10 @@ fn master_key(dir: &Path) -> Result<Zeroizing<Vec<u8>>, ImportError> {
     let bytes = super::super::read(&path, 16 * 1024 * 1024)?;
     let state: serde_json::Value =
         serde_json::from_slice(&bytes).map_err(|_| ImportError::Format)?;
-    let encoded = state["os_crypt"]["encrypted_key"]
-        .as_str()
+    let encoded = state
+        .get("os_crypt")
+        .and_then(|v| v.get("encrypted_key"))
+        .and_then(serde_json::Value::as_str)
         .ok_or(ImportError::CsvRequired)?;
     let protected = Zeroizing::new(STANDARD.decode(encoded).map_err(|_| ImportError::Format)?);
     let blob = protected
@@ -108,10 +106,11 @@ fn decrypt_row(
     if payload.len() < 12 + 16 {
         return Err(ImportError::Format);
     }
+    let (nonce, ciphertext) = payload.split_at_checked(12).ok_or(ImportError::Format)?;
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| ImportError::Format)?;
     let decrypted = Zeroizing::new(
         cipher
-            .decrypt(Nonce::from_slice(&payload[..12]), &payload[12..])
+            .decrypt(Nonce::from_slice(nonce), ciphertext)
             .map_err(|_| ImportError::Format)?,
     );
     let password = std::str::from_utf8(&decrypted).map_err(|_| ImportError::Format)?;

@@ -41,14 +41,16 @@ fn create(root: &Path, password: &str) -> std::io::Result<()> {
         .map_err(|_| std::io::Error::other("fixture schema failed"))?;
     let nonce = [7_u8; 12];
     let ciphertext = Aes256Gcm::new_from_slice(&key)
-        .unwrap()
+        .map_err(|_| std::io::Error::other("fixture key failed"))?
         .encrypt(Nonce::from_slice(&nonce), password.as_bytes())
         .map_err(|_| std::io::Error::other("fixture AES failed"))?;
     let mut value = b"v10".to_vec();
     value.extend(nonce);
     value.extend(ciphertext);
     let mut tampered = value.clone();
-    *tampered.last_mut().unwrap() ^= 1;
+    *tampered
+        .last_mut()
+        .ok_or_else(|| std::io::Error::other("fixture empty ciphertext"))? ^= 1;
     for encrypted in [
         value,
         b"v20app-bound".to_vec(),
@@ -59,4 +61,9 @@ fn create(root: &Path, password: &str) -> std::io::Result<()> {
             .map_err(|_| std::io::Error::other("fixture insert failed"))?;
     }
     Ok(())
+}
+
+/// Whether the macOS Safe Storage fixture matches this platform's cipher.
+pub fn chromium_safe_storage_fixture_supported() -> bool {
+    cfg!(target_os = "macos")
 }

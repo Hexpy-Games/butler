@@ -11,7 +11,7 @@ pub(super) struct TestSecrets(FileSecrets);
 pub(super) fn open(path: &Path) -> Result<SecretStore, SecretError> {
     let parent = path
         .parent()
-        .ok_or_else(|| invalid_path())?
+        .ok_or_else(invalid_path)?
         .canonicalize()
         .map_err(SecretError::File)?;
     let temporary = std::env::temp_dir()
@@ -65,4 +65,20 @@ impl TestSecrets {
     pub(super) fn delete(&self, key: &SecretKey) -> Result<bool, SecretError> {
         self.0.delete(key)
     }
+}
+
+pub(super) fn for_home(home: &Path) -> Result<SecretStore, SecretError> {
+    let home = home.canonicalize().map_err(SecretError::File)?;
+    let temporary = std::env::temp_dir()
+        .canonicalize()
+        .map_err(SecretError::File)?;
+    if home == temporary || !home.starts_with(temporary) {
+        return Err(invalid_path());
+    }
+    let directory = home
+        .parent()
+        .ok_or_else(invalid_path)?
+        .join("tmp/test-secrets");
+    crate::secure_fs::create_private_dir_all(&directory).map_err(SecretError::File)?;
+    open(&directory.join("store.json"))
 }
