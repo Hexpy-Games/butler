@@ -18,7 +18,6 @@ regenerate after the app copy or the Korean pages change.
 | 가져오기 | **Import** (`firstRun.import.importAction`)<br />**import** (`settings.sectionAliases.browser[4]`) | extensions/skills, getting-started/first-run, personalization, settings |
 | 가져오기 프롬프트 | **Import prompt** | personalization |
 | 가져온 프로필 내용 | **Imported profile content** | personalization |
-| 가져올 항목 | **Include** | getting-started/first-run |
 | 가져올 AI 도구 없음 | **No AI tools to import** | getting-started/first-run |
 | 간격 | **Interval** | scheduled-tasks |
 | 개발자 | **Developer** | settings, troubleshooting |
@@ -75,8 +74,6 @@ regenerate after the app copy or the Korean pages change.
 | 남은 작업 | **Open work** | projects |
 | 내 이름 | **My name** | getting-started/first-run, personalization, settings |
 | 네트워크 주소 없음 | **No network address** | troubleshooting |
-| 다른 브라우저에서 가져오기 | **Import from another browser** | getting-started/first-run |
-| 다른 브라우저에서 가져왔습니다 | **Imported from another browser** | getting-started/first-run |
 | 다른 서비스 8개 | **{0} more services** | getting-started/first-run |
 | 다른 컴퓨터에서 접속 허용 | **Allow access from other computers** | advanced/remote-access, settings, troubleshooting |
 | 다른 AI에서 가져오기 | **Import from other AI tools** | getting-started/first-run |
@@ -106,7 +103,6 @@ regenerate after the app copy or the Korean pages change.
 | 대화 기록 반영 | **Conversation history sync** | settings |
 | 대화 기억 정리 | **Chat memory consolidation** | settings |
 | 대화 기억 정리 모델 | **Chat memory model** | models/backup, settings |
-| 대화 시작 | **Start chatting** | getting-started/first-run |
 | 대화 입력 | **Conversation input** | basics/conversation, settings |
 | 대화 제목 | **Conversation title** | basics/conversation |
 | 대화 진행 내역이 없습니다 | **No session progress yet** | basics/right-panel |
@@ -199,6 +195,7 @@ regenerate after the app copy or the Korean pages change.
 | 보관하기 | **Archive** | basics/sidebar-and-spaces |
 | 보내기 | **Send** | basics/conversation |
 | 보안 | **Security** | advanced/remote-access, troubleshooting |
+| 브라우저 | **Browser** | getting-started/first-run |
 | 브라우저에서 열기 | **Open in Browser** (`browser.openOutput`)<br />**Open in browser** (`settings.modelManagement.oauthOpen`) | models/cloud |
 | 브랜치 상세 | **Branch details** | basics/right-panel |
 | 비활성화 | **Disabled** (`settings.options.searchProviderDisabled`)<br />**Disable** (`settings.actions.disableMcpServer`) | extensions/mcp-servers, settings |
@@ -343,7 +340,7 @@ regenerate after the app copy or the Korean pages change.
 | 이름 변경 | **Rename** | basics/sidebar-and-spaces, projects |
 | 이미지 추가 | **Add image** | settings |
 | 이번만 허용 | **Allow once** | basics/conversation |
-| 이전 | **Back** | basics/conversation, getting-started/first-run |
+| 이전 | **Back** (`firstRun.back`)<br />**Was** (`conversation.answerBlocks.previousValue`) | basics/conversation, getting-started/first-run |
 | 인자 | **Arguments** | extensions/mcp-servers |
 | 인증 방식 | **Auth method** | models/cloud |
 | 인증 완료 확인 | **Check completion** | models/cloud, troubleshooting |
@@ -448,6 +445,7 @@ regenerate after the app copy or the Korean pages change.
 | 코딩 | **Coding** | settings |
 | 코어 기본 스킬 | **Core skills** | extensions/skills |
 | 키 발급받기 | **Get a key** | getting-started/first-run |
+| 키 입력 필요 | **Needs a key** | getting-started/first-run |
 | 키 입력 필요 1개 — 설정 › MCP | **1 needs a key — Settings › MCP** | getting-started/first-run |
 | 키체인에 저장 | **Stored in Keychain** | models/cloud |
 | 터널·프록시용 허용 호스트 | **Allowed hosts for tunnels and proxies** | advanced/remote-access, settings |
@@ -595,6 +593,8 @@ same key from `en.ts`.
 | ChatGPT에 로그인하세요 | getting-started/first-run |
 | ChatGPT에 연결했습니다 | getting-started/first-run |
 | Claude 연결 | getting-started/first-run |
+| Codex · 1/2 | getting-started/first-run |
+| Codex에서 가져올 내용 | getting-started/first-run |
 | English | getting-started/first-run |
 | Google | models/cloud |
 | Medium | getting-started/first-run |

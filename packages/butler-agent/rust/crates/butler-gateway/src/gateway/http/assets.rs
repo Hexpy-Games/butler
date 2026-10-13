@@ -16,7 +16,7 @@ pub(super) async fn route(
     let id = request
         .uri()
         .path()
-        .strip_prefix("/assets/")
+        .strip_prefix("/message-assets/")
         .ok_or(HttpError::Internal)?
         .to_owned();
     if !valid_id(&id) {

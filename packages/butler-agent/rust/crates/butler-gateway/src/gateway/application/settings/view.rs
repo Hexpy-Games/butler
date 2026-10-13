@@ -14,7 +14,7 @@ use crate::gateway::application::storage::AppStorageError;
 use crate::gateway::ui_language::UiLanguage;
 use normalize::{
     enum_value, integer, language, main_colors, main_preset, main_theme, multiline, native_value,
-    notifications, object, timezone, ui_defaults, workspace_label,
+    notifications, object, timezone, ui_defaults,
 };
 
 /// The language the App shows (`language` of the settings view): Settings,
@@ -134,10 +134,7 @@ pub(super) fn read(
             .cloned()
             .unwrap_or_else(|| native.get("server_url").cloned().unwrap_or(Value::Null)),
     );
-    output.insert(
-        "default_project_workspace_label".into(),
-        json!(workspace_label(workspace_root)),
-    );
+    super::super::project_folder::project(&mut output, workspace_root);
     output.insert(
         "language".into(),
         json!(language(stored.get("language"), config_user.get("language")).as_str()),

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { AnswerCardsView, AnswerCardView } from "../../../../shared/answer-blocks-view";
 import { Button, Collapsible, CopyButton, Grid, IconButton, ItemCard, Library, MediaFrame, Stack } from "@/butler-ds";
+import { gatewayImageSource } from "@/app/messageFileUrls";
 import { openLink } from "../browser/browserBridge";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { answerCardCopy, answerSource, runAnswerAction, saveAnswerItem } from "./answerBlockActions";
@@ -9,10 +10,12 @@ import { formatAnswerValue } from "./answerValueFormat";
 function AnswerCard({ item, media }: { item: AnswerCardView; media: AnswerCardsView["media"] }) {
   const locale = useAppLocale();
   const copy = appCopy.conversation.answerBlocks;
+  const source = answerSource(item);
   return <ItemCard title={item.title} eyebrow={item.label} subtitle={item.sub}
-    media={<MediaFrame aspect={media ?? "4:5"} src={item.image_url} alt={item.title} />}
+    media={<MediaFrame aspect={media ?? "1:1"} fit="cover" placeholder placeholderIcon={source?.icon}
+      src={gatewayImageSource(item.image_url)} alt={item.title} />}
     value={item.value ? { amount: formatAnswerValue(item.value, locale), was: item.value.was === undefined ? undefined : formatAnswerValue(item.value, locale, item.value.was), wasLabel: copy.previousValue, note: item.value.note } : undefined}
-    facts={item.facts} text={item.text} showMoreLabel={copy.showMore} showLessLabel={copy.showLess} source={answerSource(item)}
+    facts={item.facts} text={item.text} showMoreLabel={copy.showMore} showLessLabel={copy.showLess} source={source}
     onOpen={item.source ? () => runAnswerAction(() => openLink(item.source!)) : undefined}
     actions={<><IconButton label={copy.saveToLibrary} onClick={() => runAnswerAction(() => saveAnswerItem(item))}><Library size="sm" /></IconButton>
       <CopyButton label={copy.copy} copiedLabel={copy.copied} text={answerCardCopy(item)} /></>} />;

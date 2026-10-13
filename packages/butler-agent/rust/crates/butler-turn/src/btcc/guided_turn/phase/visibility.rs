@@ -299,7 +299,13 @@ fn apply_access_mode(
 }
 
 /// Only the butler may delegate to stewards and only a steward to workers.
+/// Stewards and workers report to their parent instead of answering the
+/// user, so they never show answer blocks: a child's blocks would be accepted
+/// but never reach the conversation.
 fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
+    if matches!(policy.role, PolicyRole::Steward | PolicyRole::Worker) {
+        names.remove("answer_blocks");
+    }
     for (role, tools) in [("butler", STEWARD_PARENT), ("steward", WORKER_DELEGATION)] {
         if policy.role.as_str() == role {
             names.extend(tools.iter().map(|name| (*name).to_owned()));

@@ -114,22 +114,28 @@ interface FirstRunCopy {
   doneBody: string;
   import: {
     agentsTitle: string; agentsBody: string; agentsEmpty: string;
-    browsersTitle: string; browsersBody: string; browsersEmpty: string;
     importAction: string; importing: string; searching: string; skip: string;
     /** Tooltip on a disabled Next or Import while nothing is picked. */
     pickOne: string;
-    /** Import ① after the run: one row per tool with what was added and any follow-up. */
+    /** Import after the run: one row per tool with what was added and any follow-up. */
     agentsDoneTitle: string;
     agentsAdded: (instructions: number, servers: number) => string;
     agentsNothing: string;
     agentsNeedsKey: (count: number) => string;
-    /** Import ② after the run: what came over from the browser. */
-    browsersDoneTitle: string;
+    /** Import, one page per chosen tool: its instruction file and servers, each a pick card. */
+    agentItemsTitle: (name: string) => string;
+    agentItemsProgress: (name: string, index: number, total: number) => string;
+    itemInstructions: string;
+    itemServer: string;
+    itemNeedsKey: string;
+    itemFileEmpty: string;
+    itemFileUnreadable: string;
+    itemFileTooLarge: string;
   };
   summary: {
-    rowAi: string; rowReply: string; rowAgents: string; rowBrowsers: string;
+    rowAi: string; rowReply: string; rowAgents: string;
+    /** Only the nonzero counts ("MCP 서버 2개"); the row is hidden when both are zero. */
     agentCounts: (instructions: number, servers: number) => string;
-    browserCounts: (bookmarks: number, passwords: number) => string;
   };
   replyLanguage: string;
   finish: string;

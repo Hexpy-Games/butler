@@ -1,6 +1,7 @@
 import type { AnswerCardView } from "../../../../shared/answer-blocks-view";
 import { getAppCopy, getAppLocale } from "@/app/copy";
 import { faviconSrc } from "@/app/favicons";
+import { gatewayImageSource } from "@/app/messageFileUrls";
 import { notifyError, notifyStatus } from "@/app/notifications";
 import { openLink } from "../browser/browserBridge";
 import { saveLibrary } from "../browser/libraryStore";
@@ -30,8 +31,9 @@ export function answerCardCopy(item: AnswerCardView): string {
 }
 
 async function assetCrop(imageUrl?: string): Promise<string | undefined> {
-  if (!imageUrl) return undefined;
-  const response = await fetch(imageUrl);
+  const source = gatewayImageSource(imageUrl);
+  if (!source) return undefined;
+  const response = await fetch(source);
   if (!response.ok || !response.headers.get("content-type")?.startsWith("image/")) return undefined;
   const blob = await response.blob();
   return await new Promise((resolve, reject) => {

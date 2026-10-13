@@ -52,7 +52,7 @@ impl SqliteSubsessionRepository {
                     parent_turn_id: delegation.parent_turn_id.clone(),
                     parent_chat_id: parent_chat.ok_or_else(|| StorageError::new(StorageCode::ParentAppBindingRequired,"Parent App binding is missing"))?.into(),
                     message_id: format!("subsession-result-message:{result_id}"),
-                    safe_title: "Delegated result".into(), text: text.clone(), model_ref: model.into(),
+                    safe_title: result_title(&delegation.safe_title), text: text.clone(), model_ref: model.into(),
                     reasoning_effort: reasoning.into(), access_mode: access.into(), timestamp: now.clone(),
                 }),
             };
@@ -61,6 +61,15 @@ impl SqliteSubsessionRepository {
             tx.commit().map_err(StorageError::sqlite)?;
             Ok(())
         }).await
+    }
+}
+
+/// The result Turn is titled after the delegated work it reports, the same
+/// title the App shows for that work.
+fn result_title(relation_title: &str) -> String {
+    match relation_title.trim() {
+        "" => "Delegated result".into(),
+        title => title.into(),
     }
 }
 

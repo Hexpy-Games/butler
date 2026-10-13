@@ -93,7 +93,7 @@ async function capture(page: Page, name: string) {
     const ids = await page.locator("ol li").count() === 6 ? ["welcome", "consent", "memory", "connect", "import", "ready"] : ["welcome", "consent", "connect", "ready"];
     const lang = await page.locator("html").getAttribute("lang") === "ko-KR" ? "ko" : "en";
     const label = step === "import" ? getAppCopy(lang === "ko" ? "ko-KR" : "en-US").settings.pageSections.import : firstRunCopy[lang].steps[step as "consent" | "memory" | "ready" | "connect"];
-    assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${ids.indexOf(step ?? "") + 1}\n${label}${step === "connect" ? await page.locator("#first-run-reply-language").count() ? " 3/3" : await page.locator("#first-run-connect-title").count() ? " 1/3" : " 2/3" : step === "import" ? await page.locator("#first-run-agents-title, #first-run-agents-done-title").count() ? " 1/2" : " 2/2" : ""}`);
+    assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${ids.indexOf(step ?? "") + 1}\n${label}${step === "connect" ? await page.locator("#first-run-reply-language").count() ? " 3/3" : await page.locator("#first-run-connect-title").count() ? " 1/3" : " 2/3" : ""}`);
   }
 }
 
@@ -127,18 +127,16 @@ async function passMemory(page: Page, language: "ko" | "en", name?: string) {
   await next.click();
 }
 
-/** First run: the optional import step sits between the AI choice and the finish. */
+/** First run: the optional import step (other AI tools, one page) sits between the AI choice and the finish. */
 async function passImport(page: Page, language: "ko" | "en") {
   const copy = firstRunCopy[language];
-  // Agents show their picker, or their result when this run already imported; Skip leaves both substeps untouched.
-  for (const [id, title] of [["agents", "#first-run-agents-title, #first-run-agents-done-title"], ["browsers", "#first-run-browsers-title, #first-run-browsers-done-title"]]) {
-    await page.locator(title).first().waitFor();
-    await capture(page, `after-${language}-import-${id}`);
-    const skip = page.getByRole("button", { name: copy.import.skip, exact: true });
-    const next = page.getByRole("button", { name: copy.next, exact: true });
-    await Promise.race([skip.waitFor(), next.waitFor()]);
-    await (await skip.count() ? skip : next).click();
-  }
+  // Agents show their picker, or their result when this run already imported; Skip leaves it untouched.
+  await page.locator("#first-run-agents-title, #first-run-agents-done-title").first().waitFor();
+  await capture(page, `after-${language}-import-agents`);
+  const skip = page.getByRole("button", { name: copy.import.skip, exact: true });
+  const next = page.getByRole("button", { name: copy.next, exact: true });
+  await Promise.race([skip.waitFor(), next.waitFor()]);
+  await (await skip.count() ? skip : next).click();
 }
 
 /** ② Next unlocks only once the connection is live; ③ opens only from this click. */
@@ -146,7 +144,7 @@ async function nextFromAuth(page: Page, language: "ko" | "en") {
   await page.getByRole("button", { name: firstRunCopy[language].next, exact: true, disabled: false }).click();
 }
 
-/** From ③ (already open): pick a reply language, pass the import substeps, land on the finish. */
+/** From ③ (already open): pick a reply language, pass the import step, land on the finish. */
 async function confirmReady(page: Page, language: "ko" | "en", name: string, viaImport = true) {
   const copy = firstRunCopy[language];
   await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
@@ -277,6 +275,8 @@ async function otherConnection(page: Page, language: "ko" | "en", theme: "light"
     await page.getByRole("button", { name: copy.next, exact: true }).click();
   }
   await confirmReady(page, language, kind === "key" ? copy.providerNames.claude : `${copy.providerNames.other}-${kind}`);
+  // Import was skipped: no summary row for it (nothing happened, nothing shown).
+  assert.equal(await page.getByText(copy.summary.rowAgents, { exact: true }).count(), 0, "skipped import has no summary row");
   await capture(page, `${prefix}-ready-${kind}`);
   await finish(page, language);
 }

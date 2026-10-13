@@ -1,5 +1,6 @@
 import type { ShowcaseGuidance } from "../../showcase";
 import { Button } from "../../components/Button";
+import { CheckIcon } from "../../components/Icons";
 import { NativeSelect, NativeSelectOption } from "../../components/NativeSelect";
 import { ProviderLogo } from "../../components/ProviderLogo";
 import { Tag } from "../../components/Tag";
@@ -12,6 +13,19 @@ function PickService() {
       <ChoiceCard icon={<ProviderLogo name="openai" size="lg" />} title="ChatGPT" tag={<Tag tone="accent">No key needed</Tag>}
         description="Sign in with ChatGPT" onClick={() => undefined} />
       <ChoiceCard icon={<ProviderLogo name="claude" size="lg" />} title="Claude" description="Use an Anthropic API key" onClick={() => undefined} />
+    </ChoiceCardList>
+  );
+}
+// #endregion
+
+// #region recipe: Pick several
+function PickSeveral() {
+  return (
+    <ChoiceCardList aria-label="What should Butler import?" role="group">
+      <ChoiceCard role="checkbox" aria-checked selected chevron={false} meta={<CheckIcon size="md" />}
+        icon={<ProviderLogo name="claude" />} title="Claude Code" description="Instructions · 3 MCP servers" onClick={() => undefined} />
+      <ChoiceCard role="checkbox" aria-checked={false} chevron={false}
+        icon={<ProviderLogo name="openai" />} title="Codex" description="2 MCP servers" onClick={() => undefined} />
     </ChoiceCardList>
   );
 }
@@ -39,6 +53,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   recipes: [
     { name: "Pick a service", description: "Rows for the well-known choices; the Tag names the easiest path.", render: () => <PickService /> },
+    { name: "Pick several", description: "Each card toggles; a check on the right marks the picked ones. Not a Switch list.", render: () => <PickSeveral /> },
     { name: "More choices in a grid", description: "Tiles are equal size at every width; a long name wraps to two lines.", render: () => <MoreServices /> },
   ],
   doDont: [
@@ -60,6 +75,7 @@ export const guidance: ShowcaseGuidance = {
   accessibility: [
     "Each card is a button; the description is its aria-describedby. Loading sets aria-busy, unavailable sets aria-disabled.",
     "For single choice lists pass role=radiogroup on ChoiceCardList and role=radio with aria-checked on each card.",
+    "For picking several pass role=group on ChoiceCardList and role=checkbox with aria-checked, selected, chevron={false} and a CheckIcon meta on each picked card.",
   ],
   tokens: ["--control-bg", "--control-hover-bg", "--line", "--line-strong", "--accent", "--color-info-bg", "--danger-line-strong", "--radius-panel", "--focus-ring"],
 };

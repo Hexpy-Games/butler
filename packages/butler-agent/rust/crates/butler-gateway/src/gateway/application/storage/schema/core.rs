@@ -3,8 +3,16 @@ use rusqlite::Connection;
 use super::super::AppStorageError;
 
 pub(super) fn create(connection: &Connection) -> Result<(), AppStorageError> {
+    create_settings_table(connection)?;
     connection
         .execute_batch(CORE_SCHEMA)
+        .map_err(AppStorageError::sqlite)
+}
+
+pub(in crate::gateway::application) fn create_settings_table(
+    db: &Connection,
+) -> Result<(), AppStorageError> {
+    db.execute_batch("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL, updated_at TEXT NOT NULL);")
         .map_err(AppStorageError::sqlite)
 }
 
@@ -228,11 +236,6 @@ const CORE_SCHEMA: &str = r"
       safe_error_code TEXT
     );
 
-    CREATE TABLE IF NOT EXISTS app_settings (
-      key TEXT PRIMARY KEY,
-      value_json TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
 
     CREATE TABLE IF NOT EXISTS app_automations (
       id TEXT PRIMARY KEY,

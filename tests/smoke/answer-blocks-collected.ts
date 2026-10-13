@@ -51,7 +51,7 @@ try {
         const fixture = JSON.stringify({ messages: [message], background: "plain" }).replaceAll("<", "\\u003c");
         return route.fulfill({ response, body: (await response.text()).replace("<head>", `<head><script>window.butlerConversationFixture=${fixture}</script>`) });
       }
-      if (url.pathname.startsWith("/assets/")) {
+      if (url.pathname.startsWith("/message-assets/")) {
         const image = assetsDeleted ? undefined : images.get(url.pathname + url.search);
         return image ? route.fulfill({ contentType: "image/jpeg", body: image }) : route.fulfill({ status: 404 });
       }

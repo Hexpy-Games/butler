@@ -67,3 +67,15 @@ fn invalid() -> GatewayApplicationError {
         "Project folder selection is invalid.",
     )
 }
+
+/// Explicit local CLI selection has the same consent as the native picker.
+pub fn issue(path: &std::path::Path, secret: &str) -> Result<String, GatewayApplicationError> {
+    let payload = URL_SAFE_NO_PAD.encode(
+        serde_json::to_vec(&serde_json::json!({
+            "path": path, "expires_at": current_ms() + 300_000.0,
+        }))
+        .map_err(GatewayApplicationError::internal_from)?,
+    );
+    let signature = hmac_sha256_base64(secret.as_bytes(), payload.as_bytes());
+    Ok(format!("v1.{payload}.{signature}"))
+}

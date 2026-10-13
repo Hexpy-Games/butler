@@ -11,9 +11,14 @@ text, a tall column) would become a full-width band of its page colour flush
 with the frame's edges; it sits inset on the matte with a hairline instead.
 `mediaFrameFit(width, height)` is that rule.
 
+`fit="cover"` instead fills the frame, cropped from the center, for answer
+cards and galleries where every frame in a set should read as one picture.
+
 States (`data-fit`): `pending` (hidden until the shape is known), `fill`,
-`matte`, `failed` (load error) and `empty` (no `src`). Failed and empty draw
-the same matte, so a row of cards keeps its rhythm.
+`matte`, `cover`, `failed` (load error) and `empty` (no `src`). Failed and
+empty draw the same matte, so a row of cards keeps its rhythm. With
+`placeholder`, they draw a soft tinted surface with one centered mark
+instead: the `placeholderIcon` favicon on a light plate, or an image glyph.
 
 ## When to use this component
 The picture slot of `ItemCard` and `LibraryCard`, gallery rails and thumbnails
@@ -22,6 +27,9 @@ of collected pictures.
 ## How to use this component
 ```tsx
 <MediaFrame aspect="4:5" src={asset.url} alt={asset.alt} />
+```
+```tsx
+<MediaFrame aspect="1:1" fit="cover" placeholder placeholderIcon={faviconUrl} src={item.imageUrl} />
 ```
 `children` are overlays on the frame (a kind `Tag`, a checkbox); the owner
 positions them. `clearTop` keeps a matted picture clear of a top-corner

@@ -52,6 +52,12 @@ async fn browses_freely_and_asks_only_to_commit(
     let acts = host.acts();
     assert_eq!(acts.len(), 3, "every browsing batch dispatched");
     assert!(acts.iter().all(|args| args["commit_cleared"] == false));
+    // Collecting an image from an owned tab is browsing too: ask-first offers it.
+    assert!(
+        host.ops().iter().any(|op| op == "tab.image_collect"),
+        "{:?}",
+        host.ops()
+    );
 
     let (id, card) = ask(&s, POST).await?;
     let card = card.expect("a signed-in POST submit asks");
@@ -158,7 +164,17 @@ fn browse() -> Turn {
     ];
     let observe = call("browser_observe", json!({"tab":"pub","look":"never"}));
     let banner = act("pub", vec![step("click", "e1", "")]);
-    let calls = vec![observe, banner, act("pub", search), act("pub", filters)];
+    let image = call(
+        "image_collect",
+        json!({"tab":"pub","url":"https://shop.example.test/coat.jpg"}),
+    );
+    let calls = vec![
+        observe,
+        banner,
+        act("pub", search),
+        act("pub", filters),
+        image,
+    ];
     (BROWSE.into(), calls)
 }
 

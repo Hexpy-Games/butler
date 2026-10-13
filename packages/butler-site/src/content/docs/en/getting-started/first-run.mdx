@@ -16,8 +16,8 @@ The first time you open Butler, first-run setup appears instead of the main scre
   3. On the **Which AI should Butler use?** screen, choose an AI.
   4. Sign in, paste an API key or choose a model to connect, then click **Next**.
   5. On the **Which language should Butler reply in?** screen, choose the **Reply language** and click **Next**.
-  6. Import from other AI tools and another browser if you want to. You can skip this.
-  7. On the **You're all set** screen, click **Start chatting**. The new conversation screen opens.
+  6. Import from other AI tools if you want to. You can skip this.
+  7. On the **You're all set** screen, click **Get started**. The new conversation screen opens.
 </Steps>
 
 Meanwhile, Butler gets ready in the background. You can move on to the next screen without waiting for it to finish.
@@ -177,38 +177,32 @@ The third screen is the **Which language should Butler reply in?** screen. It se
 
 ## Import
 
-The **Import** step has two screens. You can skip both, and you can import later in Settings.
+The **Import** step brings over instructions and MCP servers from other AI tools. You can skip it and import later in Settings. Import bookmarks and passwords from another browser in **Settings → Browser**.
 
 ### Import from other AI tools
 
-The **Import from other AI tools** screen lists the AI tools found on this computer, each with a switch. Tools that have instructions or MCP servers to import are switched on.
+The **Import from other AI tools** screen lists the AI tools found on this computer as cards. Tools that have instructions or MCP servers to import are picked and show a check.
 
 <Steps>
-  1. Leave on only the tools to import from.
-  2. Click **Next**. Butler imports the instructions and MCP servers from the tools that are on.
-  3. On the **Imported from other AI tools** screen, check what was added for each tool and click **Next**.
+  1. Click a card to pick or unpick it. Leave picked only the tools to import from.
+  2. Click **Next**. A screen named after each picked tool opens in turn, such as **What to import from Codex**.
+  3. On each screen, leave picked only the instructions and MCP servers to import. Everything is picked at first. Click **Next** to move to the next tool.
+  4. On the last tool's screen, click **Import**. Butler imports only the picked items.
+  5. On the **Imported from other AI tools** screen, check what was added for each tool and click **Next**.
 </Steps>
 
-- MCP servers that need a key before you can use them appear as, for example, **1 needs a key — Settings › MCP**. Add the key in **Settings → MCP**.
+- Each tool screen shows the tool name and its position, such as **Codex · 1/2**.
+- MCP servers that need a key before you can use them show **Needs a key**.
+- An empty or unreadable instruction file appears dimmed with the reason, and you cannot pick it.
+- If you unpick everything, the button on the last tool's screen changes to **Next** and nothing is imported.
+- Click **Back** to return to the previous tool screen, then to the tool list. Nothing is imported before you click **Import**.
+- After the import, servers that need a key appear as, for example, **1 needs a key — Settings › MCP**. Add the key in **Settings → MCP**.
 - Click **Skip** to move on without importing anything.
 - If no tools are found, **No AI tools to import** appears. Click **Next**.
 
-### Import from another browser
-
-<Steps>
-  1. On the **Import from another browser** screen, choose the browser profile to import from.
-  2. Under **Include**, leave on only what to import: bookmarks, passwords or history.
-  3. Click **Import**.
-  4. On the **Imported from another browser** screen, check what was imported and click **Next**.
-</Steps>
-
-- If no item is switched on, you cannot click **Import**.
-- Click **Skip** to move on without importing anything.
-- First run does not undo imports. Change imported items later in Settings.
-
 ## Finish
 
-The **You're all set** screen shows the connected AI, the reply language and how many items were imported. Click **Start chatting** to finish setup and open the new conversation screen. Click **Back** to return to the import screens.
+The **You're all set** screen shows the connected AI and the reply language, plus how many items were imported when you imported any. Click **Get started** to finish setup and open the new conversation screen. Click **Back** to return to the import step.
 
 ## Default model
 
@@ -235,7 +229,7 @@ You can go through the welcome screen and the AI connection again later. The mod
   1. In **Settings → General → App behavior**, click **Run again** next to **Run setup again**.
   2. On the welcome screen, click **Get started**. To leave without changing anything, click **Cancel**.
   3. On the consent screen, click **Agree and continue**.
-  4. Choose an AI and connect it. The AI you use now has the **In use** tag. When the connection finishes, check the [reply language](#reply-language), then click **Start chatting** on the **You're all set** screen.
+  4. Choose an AI and connect it. The AI you use now has the **In use** tag. When the connection finishes, check the [reply language](#reply-language), then click **Get started** on the **You're all set** screen.
 </Steps>
 
 - If you choose the AI you use now again, and it is ChatGPT or a service that connects with an API key, Butler keeps the model, reasoning effort and Worker profile settings.

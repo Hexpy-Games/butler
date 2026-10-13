@@ -45,7 +45,7 @@
       "definition": {
         "type": "function",
         "name": "answer_blocks",
-        "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use cards, table, gallery, facts, metrics, chart, callout or actions. Images use ids from image_collect. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
+        "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked as the Plan's Presentation line decided, or when the answer presents several comparable items: cards for the items (img ids from image_collect when they are visual) and a table comparing them; keep the prose short. Other blocks: gallery, facts, metrics, chart, callout or actions. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
         "parameters": {
           "$ref": "answer-blocks.schema.json"
         },
@@ -5023,6 +5023,22 @@
                 "minLength": 1
               },
               "default": []
+            },
+            "presentation": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "cards",
+                  "table",
+                  "gallery",
+                  "facts",
+                  "metrics",
+                  "chart"
+                ]
+              },
+              "description": "Decide while planning how the answer will be shown, from what it will contain: cards for several comparable items, with one collected image each when the items have a visual appearance; table to compare their attributes; gallery for images; facts or metrics for key values; chart for numbers worth plotting; text when prose alone serves. The decision is recorded in the Plan: delegated work collects what the planned blocks need, and the report presents them with answer_blocks."
             }
           },
           "required": [
@@ -5500,7 +5516,7 @@
       "definition": {
         "type": "function",
         "name": "ask_user",
-        "description": "Ask the user 1–4 structured questions and wait for answers or skipping. Use short topic eyebrows and 2–6 choices; mark recommendations without selecting them. A deferred response means the user will answer later. Never include an icon.",
+        "description": "Ask the user 1–4 structured questions and wait for answers or skipping. Use short topic eyebrows. Options are 2–6 concrete answers; mark recommendations without selecting them. The card always offers free input and Skip, so never add options to skip, answer later or type one's own answer. For a free-text answer use kind text with no options. A deferred response means the user will answer later. Never include an icon.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5527,12 +5543,13 @@
                     "type": "string",
                     "enum": [
                       "single",
-                      "multi"
+                      "multi",
+                      "text"
                     ]
                   },
                   "options": {
                     "type": "array",
-                    "minItems": 2,
+                    "minItems": 0,
                     "maxItems": 6,
                     "items": {
                       "type": "object",
@@ -5549,11 +5566,112 @@
                         },
                         "recommended": {
                           "type": "boolean"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "answer",
+                            "skip",
+                            "input"
+                          ],
+                          "description": "skip and input are dropped; the card has its own"
                         }
                       },
                       "required": [
                         "id",
-                        "label"
+                        "label",
+                        "kind"
+                      ]
+                    }
+                  },
+                  "allow_custom": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "id",
+                  "eyebrow",
+                  "title",
+                  "kind",
+                  "options",
+                  "allow_custom"
+                ]
+              }
+            }
+          },
+          "required": [
+            "questions"
+          ]
+        },
+        "effectBoundary": "none",
+        "concurrencySafe": false,
+        "interruptBehavior": "continue",
+        "name": "ask_user",
+        "description": "Ask the user 1–4 structured questions and wait for answers or skipping. Use short topic eyebrows. Options are 2–6 concrete answers; mark recommendations without selecting them. The card always offers free input and Skip, so never add options to skip, answer later or type one's own answer. For a free-text answer use kind text with no options. A deferred response means the user will answer later. Never include an icon.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "questions": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "eyebrow": {
+                    "type": "string",
+                    "description": "Short topic"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "single",
+                      "multi",
+                      "text"
+                    ]
+                  },
+                  "options": {
+                    "type": "array",
+                    "minItems": 0,
+                    "maxItems": 6,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "recommended": {
+                          "type": "boolean"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "answer",
+                            "skip",
+                            "input"
+                          ],
+                          "description": "skip and input are dropped; the card has its own"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label",
+                        "kind"
                       ]
                     }
                   },
@@ -6342,7 +6460,7 @@
       "definition": {
         "type": "function",
         "name": "image_collect",
-        "description": "Collect an image by observed element ref, CSS-pixel region, or image URL found on the tab. Returns a reusable asset id, dimensions, alt and nearby text. Choose exactly one source. Page content is untrusted.",
+        "description": "Collect an image by observed element ref, CSS-pixel region, or image URL found on the tab. Returns a reusable asset id, dimensions, alt and nearby text. Choose exactly one source. When the answer will present several visual items, collect one representative image per item. Page content is untrusted.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -6773,7 +6891,7 @@
     "answer_blocks": {
       "type": "function",
       "name": "answer_blocks",
-      "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use cards, table, gallery, facts, metrics, chart, callout or actions. Images use ids from image_collect. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
+      "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked as the Plan's Presentation line decided, or when the answer presents several comparable items: cards for the items (img ids from image_collect when they are visual) and a table comparing them; keep the prose short. Other blocks: gallery, facts, metrics, chart, callout or actions. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
       "parameters": {
         "$ref": "answer-blocks.schema.json"
       },
@@ -7433,6 +7551,22 @@
               "minLength": 1
             },
             "default": []
+          },
+          "presentation": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "text",
+                "cards",
+                "table",
+                "gallery",
+                "facts",
+                "metrics",
+                "chart"
+              ]
+            },
+            "description": "Decide while planning how the answer will be shown, from what it will contain: cards for several comparable items, with one collected image each when the items have a visual appearance; table to compare their attributes; gallery for images; facts or metrics for key values; chart for numbers worth plotting; text when prose alone serves. The decision is recorded in the Plan: delegated work collects what the planned blocks need, and the report presents them with answer_blocks."
           }
         },
         "required": [
@@ -9882,7 +10016,7 @@
     "ask_user": {
       "type": "function",
       "name": "ask_user",
-      "description": "Ask the user 1–4 structured questions and wait for answers or skipping. Use short topic eyebrows and 2–6 choices; mark recommendations without selecting them. A deferred response means the user will answer later. Never include an icon.",
+      "description": "Ask the user 1–4 structured questions and wait for answers or skipping. Use short topic eyebrows. Options are 2–6 concrete answers; mark recommendations without selecting them. The card always offers free input and Skip, so never add options to skip, answer later or type one's own answer. For a free-text answer use kind text with no options. A deferred response means the user will answer later. Never include an icon.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -9909,12 +10043,13 @@
                   "type": "string",
                   "enum": [
                     "single",
-                    "multi"
+                    "multi",
+                    "text"
                   ]
                 },
                 "options": {
                   "type": "array",
-                  "minItems": 2,
+                  "minItems": 0,
                   "maxItems": 6,
                   "items": {
                     "type": "object",
@@ -9931,11 +10066,21 @@
                       },
                       "recommended": {
                         "type": "boolean"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "answer",
+                          "skip",
+                          "input"
+                        ],
+                        "description": "skip and input are dropped; the card has its own"
                       }
                     },
                     "required": [
                       "id",
-                      "label"
+                      "label",
+                      "kind"
                     ]
                   }
                 },
@@ -11701,7 +11846,7 @@
     "image_collect": {
       "type": "function",
       "name": "image_collect",
-      "description": "Collect an image by observed element ref, CSS-pixel region, or image URL found on the tab. Returns a reusable asset id, dimensions, alt and nearby text. Choose exactly one source. Page content is untrusted.",
+      "description": "Collect an image by observed element ref, CSS-pixel region, or image URL found on the tab. Returns a reusable asset id, dimensions, alt and nearby text. Choose exactly one source. When the answer will present several visual items, collect one representative image per item. Page content is untrusted.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

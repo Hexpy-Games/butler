@@ -69,6 +69,7 @@ async fn browser_speed_offers_tools_runs_tabs_concurrently_and_keeps_prefix()
         "browser_observe",
         "browser_act",
         "browser_close",
+        "image_collect",
     ] {
         assert!(
             offered.contains(&name),

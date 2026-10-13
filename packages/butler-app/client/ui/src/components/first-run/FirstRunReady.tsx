@@ -14,8 +14,8 @@ export function FirstRunReady({ flow }: { flow: FirstRunFlow }) {
   );
   const cardId = commit.connected.cardId;
   const name = copy.providerNames[cardId];
-  const agents = imported.agents ?? { instructions: 0, servers: 0 };
-  const browsers = imported.browsers;
+  // Rows only for what happened: no import (skipped or nothing added) means no row.
+  const agents = flow.mode === "first-run" && imported.agents && imported.agents.instructions + imported.agents.servers > 0 ? imported.agents : null;
   return (
     <FirstRunStepCard flow={flow} contentKey="ready"
       title={text.doneTitle} description={text.doneBody} onBack={flow.backFromReady}
@@ -25,8 +25,7 @@ export function FirstRunReady({ flow }: { flow: FirstRunFlow }) {
       <Stack gap="sm">
         <KeyValueRow label={text.rowAi} value={cardId === "chatgpt" && flow.signIn.account ? `${name} · ${flow.signIn.account}` : name} />
         <KeyValueRow label={text.rowReply} value={SUPPORTED_UI_LANGUAGES.find(entry => entry.value === reply.value)?.label ?? "—"} />
-        {flow.mode === "first-run" ? <KeyValueRow label={text.rowAgents} value={text.agentCounts(agents.instructions, agents.servers)} /> : null}
-        {flow.mode === "first-run" ? <KeyValueRow label={text.rowBrowsers} value={text.browserCounts(browsers.bookmarks, browsers.passwords)} /> : null}
+        {agents ? <KeyValueRow label={text.rowAgents} value={text.agentCounts(agents.instructions, agents.servers)} /> : null}
       </Stack>
     </FirstRunStepCard>
   );

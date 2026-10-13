@@ -58,8 +58,8 @@ function parse(value: unknown, rule: Rule): unknown {
     }
     // HTTP decoration is transport metadata, outside the model-facing spec.
     if (typeof result.img === "string" && typeof value.image_url === "string"
-      && value.image_url.startsWith(`/assets/${encodeURIComponent(result.img)}?`)
-      && /^\/assets\/img_[a-z0-9]{10,12}\?expires=\d+&signature=[a-zA-Z0-9_-]+$/u.test(value.image_url)) {
+      && value.image_url.startsWith(`/message-assets/${encodeURIComponent(result.img)}?`)
+      && /^\/message-assets\/img_[a-z0-9]{10,12}\?expires=\d+&signature=[a-zA-Z0-9_-]+$/u.test(value.image_url)) {
       result.image_url = value.image_url;
     }
     return rule.required?.some(key => !(key in result)) ? invalid : result;

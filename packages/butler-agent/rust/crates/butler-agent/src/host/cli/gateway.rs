@@ -81,3 +81,16 @@ pub(crate) async fn memory_status(
         .await
         .ok()
 }
+
+/// Folder preferences may be edited offline only when no service owns DATA.
+pub(crate) fn require_stopped(
+    data: &std::path::Path,
+    installation: &ResolvedInstallation,
+) -> Result<(), crate::host::HostError> {
+    if control::verified_instance(data, installation)?.is_some() {
+        return Err(crate::host::HostError::new(
+            "Start the App gateway to change the project folder.",
+        ));
+    }
+    Ok(())
+}

@@ -23,6 +23,7 @@ pub(super) fn authorize(
         "browser_tabs",
         "browser_selection",
         "browser_screenshot",
+        "image_collect",
         "browser_close",
         "browser_wait_for_user",
         "browser_sign_in",

@@ -6,10 +6,12 @@
 mod formats;
 mod jsonc;
 mod secrets;
+mod selection;
 mod toml;
 mod yaml;
 
 use butler_platform::agent_homes::ConfigFormat;
+pub use selection::ImportSelection;
 use serde_json::{Value, json};
 
 /// Largest instruction file imported; larger ones are reported, never cut.

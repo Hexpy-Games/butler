@@ -31,7 +31,7 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
         .send()
         .await?;
     assert_eq!(stream.status(), 200);
-    let host = tokio::spawn(serve_host(stream, admin, false));
+    let host = tokio::spawn(serve_host(stream, admin, false, "general".to_owned()));
     s.turn("general", stub::OWNER).await?;
     tokio::time::timeout(Duration::from_secs(30), host)
         .await
@@ -81,6 +81,21 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
             .iter()
             .any(|request| request.to_string().contains("input_image"))
     );
+    assert!(
+        script.requests.lock().unwrap().iter().any(|request| request
+            .to_string()
+            .contains("Another element covers this image. Do not retry the same source.")),
+        "a refused collection names another source instead of a retry"
+    );
+    assert!(
+        !script
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|request| request.to_string().contains("Butler's Plan presents")),
+        "a Plan without a presentation decision asks the steward for no blocks"
+    );
     {
         let requests = script.requests.lock().unwrap();
         for recovery in [
@@ -128,25 +143,24 @@ async fn serve_host(
     mut stream: Response,
     admin: AdminClient,
     answer: bool,
+    session: String,
 ) -> Result<(), HarnessError> {
     let mut buffer = String::new();
-    let mut ops = vec![
+    let ops = vec![
         "tab.open",
         "tabs.list",
         "tab.observe",
         "tab.screenshot",
         "tab.image_collect",
+        "tab.image_collect",
     ];
-    if answer {
-        ops.push("tab.image_collect");
-    }
     for op in ops {
-        let frame = next_call(&mut stream, &mut buffer, op).await?;
+        let frame = next_call(&mut stream, &mut buffer, op, &session).await?;
         assert_eq!(
-            frame["session"], "general",
+            frame["session"], session,
             "internal session reached browser host: {frame}"
         );
-        let tab = json!({"id":"parent-tab","owner":"conversation:general","profile":"signed_out","epoch":1,"holder":"agent","url":"https://example.com/"});
+        let tab = json!({"id":"parent-tab","owner":format!("conversation:{session}"),"profile":"signed_out","epoch":1,"holder":"agent","url":"https://example.com/"});
         if op == "tab.open" {
             let event = admin
                 .send(
@@ -162,6 +176,9 @@ async fn serve_host(
             "tabs.list" => json!({"tabs":[tab]}),
             "tab.observe" => {
                 json!({"status":"ok","tab":"parent-tab","obs":"parent-observation","url":"https://example.com/","text":"Parent page","image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})
+            }
+            "tab.image_collect" if !answer && frame["args"]["ref"] == "image-ref-8" => {
+                json!({"status":"refused","reason":"blocked_by"})
             }
             "tab.image_collect" => {
                 json!({"status":"ok","source_url":"https://example.com/image.jpg","alt":"Collected raster","nearby_text":"Context","image":{"data":STANDARD.encode(if answer && frame["args"]["ref"] == "image-ref-8" { include_bytes!("browser_outputs/second.jpg").as_slice() } else { include_bytes!("browser_outputs/pixel.jpg").as_slice() })}})
@@ -187,7 +204,7 @@ async fn serve_host(
         if op != "tabs.list" {
             let ended = next_frame(&mut stream, &mut buffer).await?;
             assert_eq!(ended["op"], "use.ended");
-            assert_eq!(ended["session"], "general");
+            assert_eq!(ended["session"], session);
             assert_eq!(ended["turn_id"], frame["turn_id"]);
             assert_eq!(ended["args"]["id"], frame["id"]);
             assert_eq!(ended["args"]["abort"], false);
@@ -195,7 +212,7 @@ async fn serve_host(
     }
     let finished = next_frame(&mut stream, &mut buffer).await?;
     assert_eq!(finished["op"], "use.finished");
-    assert_eq!(finished["session"], "general");
+    assert_eq!(finished["session"], session);
     assert!(
         finished["turn_id"]
             .as_str()
@@ -203,8 +220,8 @@ async fn serve_host(
             .starts_with("steward-turn-")
     );
     if answer {
-        let frame = next_call(&mut stream, &mut buffer, "tab.open").await?;
-        assert_eq!(frame["session"], "general");
+        let frame = next_call(&mut stream, &mut buffer, "tab.open", &session).await?;
+        assert_eq!(frame["session"], session);
         admin
             .send(
                 Method::POST,
@@ -228,13 +245,14 @@ async fn next_call(
     stream: &mut Response,
     buffer: &mut String,
     op: &str,
+    session: &str,
 ) -> Result<Value, HarnessError> {
     let started = if op == "tabs.list" {
         None
     } else {
         let frame = next_frame(stream, buffer).await?;
         assert_eq!(frame["op"], "use.started");
-        assert_eq!(frame["session"], "general");
+        assert_eq!(frame["session"], session);
         Some(frame)
     };
     let frame = next_frame(stream, buffer).await?;

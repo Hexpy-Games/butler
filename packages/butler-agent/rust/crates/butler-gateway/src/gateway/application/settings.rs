@@ -16,7 +16,7 @@ mod diagnostics_reader;
 pub use diagnostics_reader::DiagnosticsSettingsReader;
 mod model;
 mod onboarding;
-mod persistence;
+pub(super) mod persistence;
 mod plan_continuation;
 mod session;
 mod storage_helpers;
@@ -334,8 +334,9 @@ impl super::AppApplication {
             .await
             .map_err(super::app_error)?;
 
-        let prepared = update::prepare(&input, &current, &facts, &current_root, |token| {
-            self.project_creation.resolve_workspace_selection(token)
+        let selected = self.resolve_folder_selection(&input).await?;
+        let prepared = update::prepare(&input, &current, &facts, &current_root, |_| {
+            selected.ok_or_else(crate::gateway::GatewayApplicationError::internal)
         })?;
         self.validate_wallpaper_patch(&prepared.patch).await?;
         if prepared.workspace_root.is_none()
@@ -426,6 +427,26 @@ impl super::AppApplication {
             })
             .await
             .map_err(super::app_error)
+    }
+
+    async fn resolve_folder_selection(
+        &self,
+        input: &Value,
+    ) -> Result<Option<std::path::PathBuf>, crate::gateway::GatewayApplicationError> {
+        let Some(token) = input
+            .get("default_project_folder_selection_token")
+            .and_then(Value::as_str)
+            .filter(|token| !butler_core::public_text::trim_js_whitespace(token).is_empty())
+        else {
+            return Ok(None);
+        };
+        let token = token.to_owned();
+        let owner = self.project_creation.clone();
+        let data = self.butler_data.clone();
+        tokio::task::spawn_blocking(move || owner.resolve_workspace_selection(&token, &data))
+            .await
+            .map_err(crate::gateway::GatewayApplicationError::internal_from)?
+            .map(Some)
     }
 
     async fn validate_wallpaper_patch(

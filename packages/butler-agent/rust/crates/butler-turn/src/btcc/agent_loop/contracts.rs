@@ -382,7 +382,8 @@ pub enum ToolOutcome {
 pub enum BatchDisposition {
     /// Ask the model for its next round.
     Continue,
-    /// Execution is settled: ask the model for the final report without tools.
+    /// Execution is settled: ask the model for the final report; only its
+    /// answer blocks may still run.
     FinalReport,
     /// Suspend the turn until a worker finishes.
     Wait,

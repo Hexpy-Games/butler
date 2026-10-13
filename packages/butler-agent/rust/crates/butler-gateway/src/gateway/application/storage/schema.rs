@@ -142,3 +142,5 @@ pub(super) fn migrate_legacy_schedules(
 mod plans;
 #[cfg(test)]
 mod tests;
+
+pub(in crate::gateway::application) use core::create_settings_table;
