@@ -31,14 +31,32 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   error?: string;
   /** The decision buttons, usually a ButtonContainer justify="end"; they take the composer radius. */
   actions: ReactNode | ((complete: (action: () => void) => void) => ReactNode);
+  /**
+   * A 16:10 page thumbnail at the subject row's end (a `LiveTabFrame` of the tab the decision acts on): 144px wide,
+   * 112px in a composer under 600px, above the actions in a narrow one. `onOpen` opens the page; `label` names it.
+   */
+  media?: ComposerDecisionMedia;
 }
 
-/** A pending decision shown in place of the composer input: subject row, optional details and error, actions. */
-export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, detailsShowMoreLabel, detailsShowLessLabel, aside, error, actions, renderText, className, onKeyDown, ...props }: ComposerDecisionPanelProps) {
+export interface ComposerDecisionMedia {
+  content: ReactNode;
+  label: string;
+  onOpen?: () => void;
+}
+
+function DecisionMedia({ content, label, onOpen }: ComposerDecisionMedia) {
+  return <div className={styles.media} data-slot="composer-decision-media">
+    {onOpen ? <Clickable className={dsClass(styles.mediaTarget)} onClick={onOpen} aria-label={label} title={label}>{content}</Clickable>
+      : <div className={styles.mediaTarget} role="img" aria-label={label}>{content}</div>}
+  </div>;
+}
+
+/** A pending decision shown in place of the composer input: subject row, optional details and error, media, actions. */
+export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, detailsShowMoreLabel, detailsShowLessLabel, aside, error, actions, media, renderText, className, onKeyDown, ...props }: ComposerDecisionPanelProps) {
   const panel = useRef<HTMLDivElement>(null);
   const { defer, deferring } = useComposerPanelTransition(panel);
   const hasDetails = Boolean(details?.length);
-  return <ComposerPanelFrame panelRef={panel} className={className} tabIndex={0} aria-label={title} aria-busy={deferring}
+  return <ComposerPanelFrame panelRef={panel} className={media ? dsClass(styles.withMedia, className) : className} tabIndex={0} aria-label={title} aria-busy={deferring}
     onKeyDown={(event) => { if (deferring) { event.preventDefault(); event.stopPropagation(); return; } composerDecisionKeyboard(event); onKeyDown?.(event); }} {...props}>
     <ComposerPanelHeader icon={icon} eyebrow={eyebrow} dataSlot="composer-decision-subject" hasDetails={hasDetails}
       title={<Clickable variant="text" onClick={onOpen} title={title}>
@@ -48,6 +66,7 @@ export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, d
       <ComposerDecisionDetails lines={details!} renderText={renderText} showMoreLabel={detailsShowMoreLabel} showLessLabel={detailsShowLessLabel} />
     </ComposerPanelBody>}
     {error && <FieldError className={dsClass(styles.error)}><Typo.Caption as="p" tone="inherit">{error}</Typo.Caption></FieldError>}
+    {media && <DecisionMedia {...media} />}
     <ComposerPanelActions dataSlot="composer-decision-actions">{typeof actions === "function" ? actions(defer) : actions}</ComposerPanelActions>
   </ComposerPanelFrame>;
 }

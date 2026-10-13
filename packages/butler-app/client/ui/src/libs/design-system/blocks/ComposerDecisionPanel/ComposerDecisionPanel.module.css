@@ -25,3 +25,64 @@
     var(--space-lg) + var(--icon-size-sm) + var(--space-sm)
   );
 }
+
+/* Media: a 16:10 page thumbnail at the subject row's end (144px; 112px in a
+   composer under 600px). The subject and the details keep the first column;
+   the error and the actions span both. A narrow composer drops it above the
+   actions, still at the row's end. */
+.withMedia {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.withMedia > * {
+  grid-column: 1 / -1;
+}
+
+.withMedia > [data-slot="composer-decision-subject"] {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.withMedia > [data-panel-part="body"] {
+  grid-row: 2;
+  grid-column: 1;
+}
+
+.media {
+  --decision-media-width: 144px;
+
+  display: flex;
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: start;
+  justify-content: flex-end;
+  padding: var(--space-lg) var(--space-lg) var(--space-sm) 0;
+}
+
+.mediaTarget {
+  display: block;
+  width: var(--decision-media-width);
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  box-shadow: 0 0 0 var(--border-hairline) var(--line);
+}
+
+@container composer (width < 600px) {
+  .media {
+    --decision-media-width: 112px;
+  }
+}
+
+@container composer (width < 420px) {
+  .withMedia {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .withMedia > .media {
+    grid-row: auto;
+    grid-column: 1;
+    padding: 0 var(--space-lg) var(--space-sm);
+  }
+}

@@ -51,6 +51,7 @@ export const guidance: ShowcaseGuidance = {
     { when: "A generic scrolling region", use: "ScrollArea" },
     { when: "One message", use: "MessageRow" },
     { when: "A wallpaper behind the new chat only (its wallpaper prop)", use: "PromptSuggestionList" },
+    { when: "Live previews of Butler's tabs (pass it as the rail slot)", use: "TabRail" },
   ],
   recipes: [
     { name: "Conversation with a jump-to-latest button", description: "composerReserve keeps the last message clear of the floating composer.", render: () => <Framed /> },
@@ -66,10 +67,13 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Messages in a plain ScrollArea sit under the composer.", render: () => <ScrollArea maxHeight="xs"><MessageRow role="user">Hidden under the composer</MessageRow></ScrollArea> },
     },
   ],
-  content: ["The jump button says what is below (New messages) or where it goes (Jump to latest)."],
+  content: [
+    "The jump button says what is below (New messages) or where it goes (Jump to latest).",
+    "rail takes a TabRail and railView the conversation id: the column moves left only as far as needed, once per view.",
+  ],
   accessibility: [
     "Auto-scroll only when already at the bottom or while sending; the jump button is keyboard reachable.",
     "The background layer is decorative: aria-hidden and never takes pointer input.",
   ],
-  tokens: ["--composer-reserve", "--page-max-width-reading", "--conversation-bg"],
+  tokens: ["--composer-reserve", "--page-max-width-reading", "--conversation-bg", "--tab-rail-clearance", "--tab-rail-shelf-height"],
 };

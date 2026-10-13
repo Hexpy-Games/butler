@@ -125,6 +125,11 @@ rectangular shell.
 - A wallpaper inside a card resolves against it and is clipped to its corners;
   no title bar overlaps a card, so the message list's top reserve drops to a
   plain inset (`--conversation-top-reserve`).
+- A `TabRail` in the conversation's `rail` slot (`ConversationShell`) sits
+  inside the chat card: full and compact rails 16px from its top and end
+  edge, a shelf 8px into it (`--conversation-rail-shelf-top`). In the flat
+  frame they start under the title bar. The rail measures the card, so the
+  sidebar and the inspector count toward its mode.
 - The window bounds every card: the workspace never grows past the window
   (it keeps a zero minimum height) and the inspector card's height comes from
   its top and bottom insets alone. Long content scrolls inside its card; the

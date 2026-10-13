@@ -8,6 +8,7 @@ import { Tag } from "../../components/Tag";
 import { Typo } from "../../components/Typo";
 import { SplitButton } from "../SplitButton";
 import { ComposerDecisionPanel } from "./ComposerDecisionPanel";
+import { BrowserApproval, BrowserHandoff } from "./ComposerDecisionPanel.showcaseParts";
 
 export const meta: ShowcaseMeta = {
   title: "ComposerDecisionPanel",
@@ -97,6 +98,9 @@ export const stories: ShowcaseStory[] = [
   // An agent without structured approvals: the legacy title, a pending count.
   { name: "Authority decision", widths: ["375", "app"], render: (context) => <ComposerCard><Authority context={context} /></ComposerCard> },
   { name: "Failed decision", render: (context) => <ComposerCard><Authority context={context} error /></ComposerCard> },
+  // media: the tab's page thumbnail (144px; 112px under 600px; above the actions in a narrow composer).
+  { name: "Browser approval with the page", widths: ["320", "375", "app"], render: (context) => <ComposerCard><BrowserApproval {...context} /></ComposerCard> },
+  { name: "Browser hand-off with the page", widths: ["320", "375", "app"], render: (context) => <ComposerCard><BrowserHandoff {...context} /></ComposerCard> },
 ];
 
 function KeyboardDecision({ context }: { context: ShowcaseRenderContext }) {

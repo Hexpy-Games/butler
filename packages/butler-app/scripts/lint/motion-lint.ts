@@ -319,6 +319,11 @@ export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
     },
   },
   {
+    prefix: "libs/design-system/blocks/LiveTabCard/LiveTabFrame.tsx",
+    justification: "Live tab frame: draws the owner's latest screencast ImageBitmap once per new frame (no loop, no timing; frames arrive at the stream's capped rate and swap without a crossfade).",
+    constants: {},
+  },
+  {
     prefix: "libs/design-system/components/FoundationHeroMotion/heroes/typography/specimenMetrics.ts",
     justification: "Typography hero: a 2D context used only for measureText (glyph ink bounds and advances of the live font); it never draws.",
     constants: {},

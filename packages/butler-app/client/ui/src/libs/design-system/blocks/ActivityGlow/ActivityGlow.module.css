@@ -1,0 +1,134 @@
+/* The wrapper takes the button's box; the halo paints under the button
+   (isolated, so its negative z-index stays inside) and the dot over it. */
+.root {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  isolation: isolate;
+  place-items: center;
+}
+
+.halo {
+  position: absolute;
+  z-index: -1;
+  inset: calc(-1 * var(--space-xs) - 1px);
+  border-radius: var(--radius-pill);
+  pointer-events: none;
+}
+
+.ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+/* Busy: a blurred conic ring of the Butler inks turns once every 3.2s while
+   its opacity breathes between 0.28 and 0.7 over 2.4s. Rotation and opacity
+   run on the compositor. */
+.root[data-state="busy"] .halo {
+  animation: activity-glow-breathe var(--activity-glow-breathe-duration)
+    var(--motion-ease-standard) var(--motion-loop-count) alternate;
+  opacity: 0.55;
+}
+
+.root[data-state="busy"] .ring {
+  background: conic-gradient(
+    from 0deg,
+    var(--butler-ink-blue),
+    var(--butler-ink-purple),
+    var(--butler-ink-pink),
+    var(--butler-ink-blue)
+  );
+  filter: blur(3px);
+  mask: radial-gradient(
+    closest-side,
+    transparent 52%,
+    var(--neutral-white) 70%,
+    transparent 100%
+  );
+  animation: activity-glow-spin var(--activity-glow-spin-duration)
+    var(--motion-ease-linear) var(--motion-loop-count);
+}
+
+/* Needs you: a soft amber halo that pulses twice on entry, then holds. */
+.root[data-state="attention"] .ring {
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--color-warning) 55%, transparent),
+    transparent 100%
+  );
+  opacity: 0.6;
+  animation: activity-glow-nudge var(--activity-glow-nudge-duration)
+    var(--motion-ease-standard) 2;
+}
+
+/* The state dot sits on the top-end corner like IconButton's indicator. */
+.dot {
+  position: absolute;
+  z-index: 1;
+  top: 3px;
+  right: 3px;
+  width: var(--space-sm);
+  height: var(--space-sm);
+  border: 1.5px solid var(--workspace-bg);
+  border-radius: var(--radius-pill);
+  pointer-events: none;
+}
+
+.root[data-state="attention"] .dot {
+  background: var(--color-warning);
+}
+
+.root[data-state="error"] .dot {
+  background: var(--color-danger);
+}
+
+.root[data-state="busy"] .dot {
+  background: linear-gradient(
+    135deg,
+    var(--butler-ink-blue),
+    var(--butler-ink-pink)
+  );
+}
+
+@keyframes activity-glow-spin {
+  to {
+    rotate: 1turn;
+  }
+}
+
+@keyframes activity-glow-breathe {
+  from {
+    opacity: 0.28;
+  }
+
+  to {
+    opacity: 0.7;
+  }
+}
+
+@keyframes activity-glow-nudge {
+  0% {
+    opacity: 0.15;
+    scale: 0.8;
+  }
+
+  50% {
+    opacity: 0.75;
+    scale: 1.1;
+  }
+
+  100% {
+    opacity: 0.6;
+    scale: 1;
+  }
+}
+
+/* Reduced motion: no halo at all (the block renders dots only); this rule
+   also stops any halo a forced `reducedMotion={false}` keeps. */
+@media (prefers-reduced-motion: reduce) {
+  .halo,
+  .ring {
+    animation: none;
+  }
+}
