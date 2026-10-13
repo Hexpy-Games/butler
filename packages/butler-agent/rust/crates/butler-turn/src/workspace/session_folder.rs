@@ -145,7 +145,9 @@ pub enum SwitchSessionFolderResult {
         previous_path: String,
     },
     /// The session already works in `path`.
-    Unchanged { path: String },
+    Unchanged {
+        path: String,
+    },
     /// The session has no binding.
     Missing,
     /// The binding changed concurrently.
@@ -292,7 +294,10 @@ impl SessionFolders {
         let now = clock.iso_from_epoch_millis(clock.now_epoch_millis())?;
         let origin = previous
             .filter(|marker| marker.path == binding.workspace_path)
-            .map_or_else(|| binding.workspace_path.clone(), |marker| marker.origin_path);
+            .map_or_else(
+                || binding.workspace_path.clone(),
+                |marker| marker.origin_path,
+            );
         let mut metadata = binding.metadata.clone().unwrap_or_default();
         metadata.insert(
             SESSION_FOLDER_KEY.into(),

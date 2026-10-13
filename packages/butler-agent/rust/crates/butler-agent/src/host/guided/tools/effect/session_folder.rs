@@ -51,7 +51,11 @@ pub(super) async fn prepare(
         "reason": reason,
         "relation": inspection.relation.as_str(),
     });
-    Ok((target.clone(), input, Arc::new(effect(owner, target, consented)?)))
+    Ok((
+        target.clone(),
+        input,
+        Arc::new(effect(owner, target, consented)?),
+    ))
 }
 
 async fn inspect(owner: &GuidedTools, path: &str) -> Result<FolderInspection, BtccError> {
@@ -158,7 +162,9 @@ impl SessionFolderEffect {
                 )));
             }
             SwitchSessionFolderResult::Changed => {
-                return Err(AdapterOutcome::NotApplied(adapter("session_binding_changed")));
+                return Err(AdapterOutcome::NotApplied(adapter(
+                    "session_binding_changed",
+                )));
             }
         };
         self.reference

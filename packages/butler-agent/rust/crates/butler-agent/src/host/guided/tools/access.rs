@@ -1,10 +1,10 @@
 //! Admission decisions and blocking target classification for guided tools.
 use super::GuidedTools;
+use butler_core::tool_protocol::ToolName;
 use butler_turn::btcc::{
     AccessDecision, AccessRequest, ApprovalRisk, BtccError, CapabilityKind, ModelRoundToolCall,
     TargetScope, TurnTaint, command_access_risk, command_scope_unresolved, decide, needs_scope,
 };
-use butler_core::tool_protocol::ToolName;
 use butler_turn::workspace::{FolderRelation, ScopeRoots, classify_targets};
 use serde_json::Value;
 

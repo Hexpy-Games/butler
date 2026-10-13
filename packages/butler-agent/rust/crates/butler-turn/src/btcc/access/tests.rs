@@ -5,8 +5,8 @@ use AccessDecision::{Allow, Ask, Deny};
 use AccessMode::{AskAlways, AskExceptReads, FullAccess, ReadOnly};
 use CapabilityKind::{
     ButlerOutput, CommandMutation, CommandObservation, Connector, CrossConversation, Exempt,
-    FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, OtherEffect, ProjectRecord, Schedule,
-    SettingsWrite,
+    FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, OtherEffect, ProjectRecord,
+    Schedule, SettingsWrite,
 };
 use TargetScope::{NoTarget, Outside, ProjectFolder, Protected};
 use butler_core::tool_protocol::ToolName;

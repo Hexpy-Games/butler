@@ -8,8 +8,12 @@ pub enum CapabilityKind {
     Exempt(ApprovalExemptAction),
     InternalRead,
     FileRead,
-    CommandObservation { sandboxed: bool },
-    CommandMutation { sandbox: CommandSandbox },
+    CommandObservation {
+        sandboxed: bool,
+    },
+    CommandMutation {
+        sandbox: CommandSandbox,
+    },
     Network,
     Connector,
     FileEdit,
@@ -93,8 +97,8 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     match request.kind {
         Exempt(_) | InternalRead | ButlerOutput => Allow,
         FileRead if first && project => Allow,
-        FolderSwitch if project => Allow,
-        CommandObservation { sandboxed: true } if project => Allow,
+        // A folder switch within the consented folder or its repository.
+        FolderSwitch | CommandObservation { sandboxed: true } if project => Allow,
         CommandObservation { sandboxed: false } | CommandMutation { .. }
             if first && project && request.risk == ApprovalRisk::Low =>
         {

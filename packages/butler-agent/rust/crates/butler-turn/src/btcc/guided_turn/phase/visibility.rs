@@ -24,7 +24,6 @@ const NON_FULL: &[&str] = &[
     "output_check",
     "output_publish",
     "run_command",
-    "switch_folder",
     "write_file",
     "edit_file",
     "list_tool_capabilities",
@@ -85,7 +84,6 @@ const ASK_FIRST_WRITES: &[&str] = &[
     "output_publish",
     "library_organize",
     "run_command",
-    "switch_folder",
     "set_wallpaper",
     "save_wallpaper_module",
     "create_automation",
@@ -163,6 +161,10 @@ pub(super) fn legacy_authorized<'a>(
         names.insert("read_project_source".into());
     } else {
         names.remove("read_project_source");
+    }
+    // Moving the working folder goes wherever commands may run.
+    if names.contains("run_command") {
+        names.insert("switch_folder".into());
     }
     let tracked = policy.tracking_mode != "none";
     if tracked {
@@ -271,14 +273,7 @@ fn apply_access_mode(
             }
         }
         names.extend(
-            [
-                "run_command",
-                "switch_folder",
-                "write_file",
-                "edit_file",
-                "output_publish",
-            ]
-            .map(str::to_owned),
+            ["run_command", "write_file", "edit_file", "output_publish"].map(str::to_owned),
         );
         if scope.has_project {
             names.insert("bind_session_git_worktree".into());
@@ -291,7 +286,6 @@ fn apply_access_mode(
         names.extend(
             [
                 "run_command",
-                "switch_folder",
                 "write_file",
                 "edit_file",
                 "read_tool_output_artifact",
@@ -388,7 +382,6 @@ pub(super) fn legacy_visible<'a>(
         AccessMode::AskAlways | AccessMode::AskExceptReads => {
             names.extend([
                 "run_command",
-                "switch_folder",
                 "read_tool_output_artifact",
                 "write_file",
                 "edit_file",
@@ -404,7 +397,6 @@ pub(super) fn legacy_visible<'a>(
         AccessMode::FullAccess => {
             names.extend([
                 "run_command",
-                "switch_folder",
                 "read_tool_output_artifact",
                 "write_file",
                 "edit_file",
@@ -420,6 +412,9 @@ pub(super) fn legacy_visible<'a>(
                 names.insert("analyze_attached_image");
             }
         }
+    }
+    if names.contains("run_command") {
+        names.insert("switch_folder");
     }
     authorized
         .iter()

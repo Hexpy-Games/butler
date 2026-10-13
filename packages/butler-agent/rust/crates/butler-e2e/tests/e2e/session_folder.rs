@@ -12,134 +12,32 @@
     reason = "E2E assertions"
 )]
 
-use axum::{Json, Router, extract::State, response::IntoResponse, routing::post};
+#[path = "session_folder/stub.rs"]
+mod stub;
+
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
     gateway::{tool_rows, turn_state},
-    matching,
-    sanitize::Placeholders,
     scenario::{Access, Scenario, Setup, accepted_turn_id},
 };
 use serde_json::{Value, json};
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
     process::Command,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
-
-const CHILD: &str = "role: steward";
-
-#[derive(Default)]
-struct Script {
-    rounds: Mutex<HashMap<String, Vec<Value>>>,
-    requests: Mutex<Vec<Value>>,
-}
-
-impl Script {
-    fn set(&self, prompt: &str, rounds: Vec<Value>) {
-        self.rounds.lock().unwrap().insert(prompt.into(), rounds);
-    }
-
-    /// The tool outputs the model received for `prompt`, by call id.
-    fn outputs(&self, prompt: &str) -> HashMap<String, String> {
-        let requests = self.requests.lock().unwrap();
-        let mut outputs = HashMap::new();
-        for request in requests.iter().filter(|r| key(r).starts_with(prompt)) {
-            for item in request["input"].as_array().into_iter().flatten() {
-                if item["type"] == "function_call_output" {
-                    outputs.insert(
-                        item["call_id"].as_str().unwrap_or_default().to_owned(),
-                        item["output"].as_str().unwrap_or_default().to_owned(),
-                    );
-                }
-            }
-        }
-        outputs
-    }
-}
-
-fn key(body: &Value) -> String {
-    matching::key("/codex/responses", body, &Placeholders::default()).user_request
-}
-
-async fn start() -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
-    let script = Arc::new(Script::default());
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let url = format!("http://{}", listener.local_addr()?);
-    let app = Router::new()
-        .route("/codex/responses", post(reply))
-        .with_state(script.clone());
-    let server = tokio::spawn(async move {
-        let _ = axum::serve(listener, app).await;
-    });
-    Ok((url, script, server))
-}
-
-async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> axum::response::Response {
-    let request = key(&body);
-    let prompt = if request.starts_with(CHILD) {
-        CHILD.to_owned()
-    } else {
-        request
-    };
-    let mut requests = script.requests.lock().unwrap();
-    let step = requests.iter().filter(|r| {
-        let k = key(r);
-        if prompt == CHILD { k.starts_with(CHILD) } else { k == prompt }
-    }).count();
-    let work = work_id(&body);
-    requests.push(body);
-    let item = script
-        .rounds
-        .lock()
-        .unwrap()
-        .get(&prompt)
-        .and_then(|rounds| rounds.get(step))
-        .cloned()
-        .unwrap_or_else(|| message("Done."));
-    let item: Value = serde_json::from_str(&item.to_string().replace("{{WORK}}", &work)).unwrap();
-    ([("content-type", "text/event-stream")], super::token_cache::wire(&item)).into_response()
-}
-
-fn work_id(body: &Value) -> String {
-    body["input"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .rev()
-        .filter_map(|item| item["output"].as_str())
-        .filter_map(|s| serde_json::from_str::<Value>(s).ok())
-        .find_map(|v| {
-            v.pointer("/output/work/work_id")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        })
-        .unwrap_or_default()
-}
-
-fn call(id: &str, name: &str, args: &Value) -> Value {
-    // The arguments may name {{WORK}}, filled from the turn's Work.
-    json!({"type":"function_call","id":format!("fc_{id}"),"call_id":id,"name":name,"arguments":args.to_string(),"status":"completed"})
-}
-
-fn message(text: &str) -> Value {
-    json!({"type":"message","id":"msg_done","role":"assistant","status":"completed","content":[{"type":"output_text","text":text,"annotations":[]}]})
-}
-
-fn command(id: &str, command: &str, effect: &str) -> Value {
-    call(
-        id,
-        "run_command",
-        &json!({"command":command,"summary":"Run","state_effect":effect}),
-    )
-}
+use stub::{CHILD, Script, call, command, message, start};
 
 fn git(dir: &Path, args: &[&str]) -> Result<(), HarnessError> {
     let status = Command::new("git")
-        .args(["-c", "user.name=Butler Test", "-c", "user.email=test@example.invalid"])
+        .args([
+            "-c",
+            "user.name=Butler Test",
+            "-c",
+            "user.email=test@example.invalid",
+        ])
         .args(args)
         .current_dir(dir)
         .status()?;
@@ -151,12 +49,14 @@ fn canonical(path: &Path) -> PathBuf {
     path.canonicalize().unwrap()
 }
 
-/// The session's stored folder and its marker.
-fn binding(s: &Scenario, session: &str) -> Result<(String, Value), HarnessError> {
+/// The project chat's stored folder and its marker (the scenario's only
+/// project session).
+fn binding(s: &Scenario) -> Result<(String, Value), HarnessError> {
     let db = rusqlite::Connection::open(s.sandbox.data.join("runtime/session-store.sqlite"))?;
     let (path, metadata): (String, Option<String>) = db.query_row(
-        "SELECT workspace_path, metadata_json FROM session_bindings WHERE session_id = ?1",
-        [session],
+        "SELECT workspace_path, metadata_json FROM session_bindings
+         WHERE role = 'butler' AND app_project_id IS NOT NULL",
+        [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
     let metadata: Value = serde_json::from_str(&metadata.unwrap_or_else(|| "{}".into()))?;
@@ -174,9 +74,8 @@ fn authority_count(s: &Scenario, turn: &str) -> Result<u64, HarnessError> {
 
 async fn settle(s: &Scenario, chat: &str, prompt: &str) -> Result<(String, Value), HarnessError> {
     let id = accepted_turn_id(&s.gw.say(chat, prompt).await?)?;
-    let turn = s
-        .gw
-        .wait_turn(
+    let turn =
+        s.gw.wait_turn(
             chat,
             &id,
             &["waiting_for_form", "delivered", "failed", "cancelled"],
@@ -196,9 +95,8 @@ async fn approve(s: &Scenario, chat: &str) -> Result<Vec<Value>, HarnessError> {
     let cards = s.gw.approval_requests(chat).await?;
     for card in &cards {
         let reference = card["request_ref"].as_str().unwrap();
-        let reply = s
-            .gw
-            .post(
+        let reply =
+            s.gw.post(
                 &format!("/authority-requests/{reference}/allow?session_id={chat}"),
                 json!({"scope":"once"}),
             )
@@ -209,13 +107,27 @@ async fn approve(s: &Scenario, chat: &str) -> Result<Vec<Value>, HarnessError> {
 }
 
 async fn wait_delivered(s: &Scenario, chat: &str, id: &str) -> Result<(), HarnessError> {
-    let turn = s.gw.wait_terminal(chat, id, Duration::from_secs(30)).await?;
+    let turn =
+        s.gw.wait_terminal(chat, id, Duration::from_secs(30))
+            .await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}\n{}", s.agent.logs());
     Ok(())
 }
 
 /// A project chat on 먼저 확인 or full access whose folder is a git repository.
-async fn project(access: Access, id: &str) -> Result<(Scenario, String, PathBuf, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
+async fn project(
+    access: Access,
+    id: &str,
+) -> Result<
+    (
+        Scenario,
+        String,
+        PathBuf,
+        Arc<Script>,
+        tokio::task::JoinHandle<()>,
+    ),
+    HarnessError,
+> {
     let (url, script, server) = start().await?;
     let setup = Setup::new(id)?
         .access(access)
@@ -247,10 +159,22 @@ async fn a_new_worktree_becomes_the_working_folder_and_survives_restart() -> Res
     script.set(
         MAKE,
         vec![
-            command("add", "git worktree add ../wt-feature -b feature", "mutation"),
-            call("write", "write_file", &json!({"path":"made.txt","content":"made-in-worktree"})),
+            command(
+                "add",
+                "git worktree add ../wt-feature -b feature",
+                "mutation",
+            ),
+            call(
+                "write",
+                "write_file",
+                &json!({"path":"made.txt","content":"made-in-worktree"}),
+            ),
             json!([
-                call("read", "read_file", &json!({"requests":[{"path":"made.txt"}]})),
+                call(
+                    "read",
+                    "read_file",
+                    &json!({"requests":[{"path":"made.txt"}]})
+                ),
                 command("pwd", "pwd", "read_only"),
             ]),
             call(
@@ -265,30 +189,52 @@ async fn a_new_worktree_becomes_the_working_folder_and_survives_restart() -> Res
     let outputs = script.outputs(MAKE);
     let added: Value = serde_json::from_str(&outputs["add"])?;
     assert_eq!(
-        added["working_folder_change"]["working_folder"],
+        added["output"]["working_folder_change"]["working_folder"],
         worktree.to_string_lossy().as_ref(),
         "{added}"
     );
-    assert_eq!(std::fs::read_to_string(worktree.join("made.txt"))?, "made-in-worktree");
-    assert!(!project.join("made.txt").exists(), "write landed in the old folder");
-    assert!(outputs["read"].contains("made-in-worktree"), "{}", outputs["read"]);
+    assert_eq!(
+        std::fs::read_to_string(worktree.join("made.txt"))?,
+        "made-in-worktree"
+    );
+    assert!(
+        !project.join("made.txt").exists(),
+        "write landed in the old folder"
+    );
+    assert!(
+        outputs["read"].contains("made-in-worktree"),
+        "{}",
+        outputs["read"]
+    );
     assert!(
         outputs["pwd"].contains(worktree.to_string_lossy().as_ref()),
         "{}",
         outputs["pwd"]
     );
-    assert_eq!(std::fs::read_to_string(worktree.join("a.txt"))?, "edited-in-worktree\n");
-    assert_eq!(std::fs::read_to_string(project.join("a.txt"))?, "origin-marker\n");
+    assert_eq!(
+        std::fs::read_to_string(worktree.join("a.txt"))?,
+        "edited-in-worktree\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(project.join("a.txt"))?,
+        "origin-marker\n"
+    );
     let rows = tool_rows(&s.gw.messages(&chat).await?, &id);
     assert!(
-        rows.iter().any(|row| row["safe_tool_name"] == "switch_folder"
-            && row["safe_input_label"] == worktree.to_string_lossy().as_ref()),
+        rows.iter()
+            .any(|row| row["safe_tool_name"] == "switch_folder"
+                && row["safe_input_label"] == worktree.to_string_lossy().as_ref()),
         "no folder activity row: {rows:#?}"
     );
-    let session = s.gw.get(&format!("/session-summary?session_id={chat}")).await?;
+    let session =
+        s.gw.get(&format!("/session-summary?session_id={chat}"))
+            .await?;
     let branch = &session.data()["branch_info"];
     assert_eq!(branch["workspace_binding"], "session_folder", "{branch}");
-    assert_eq!(branch["workspace_path"], worktree.to_string_lossy().as_ref());
+    assert_eq!(
+        branch["workspace_path"],
+        worktree.to_string_lossy().as_ref()
+    );
     assert_eq!(branch["branch_name"], "feature");
 
     s.restart().await?;
@@ -297,13 +243,25 @@ async fn a_new_worktree_becomes_the_working_folder_and_survives_restart() -> Res
         AFTER,
         vec![json!([
             command("pwd", "pwd", "read_only"),
-            call("read", "read_file", &json!({"requests":[{"path":"made.txt"}]})),
+            call(
+                "read",
+                "read_file",
+                &json!({"requests":[{"path":"made.txt"}]})
+            ),
         ])],
     );
     delivered(&s, &chat, AFTER).await?;
     let outputs = script.outputs(AFTER);
-    assert!(outputs["pwd"].contains(worktree.to_string_lossy().as_ref()), "{}", outputs["pwd"]);
-    assert!(outputs["read"].contains("made-in-worktree"), "{}", outputs["read"]);
+    assert!(
+        outputs["pwd"].contains(worktree.to_string_lossy().as_ref()),
+        "{}",
+        outputs["pwd"]
+    );
+    assert!(
+        outputs["read"].contains("made-in-worktree"),
+        "{}",
+        outputs["read"]
+    );
     eprintln!(
         "FOLDER-01: elapsed_ms={} model_requests={}",
         started.elapsed().as_millis(),
@@ -316,21 +274,26 @@ async fn a_new_worktree_becomes_the_working_folder_and_survives_restart() -> Res
 
 // FOLDER-02 (먼저 확인)
 #[tokio::test]
-async fn a_folder_elsewhere_asks_first_and_is_consented_once_approved() -> Result<(), HarnessError> {
+async fn a_folder_elsewhere_asks_first_and_is_consented_once_approved() -> Result<(), HarnessError>
+{
     butler_e2e::gate!();
     let (s, chat, project, script, server) = project(Access::AskExceptReads, "FOLDER-02").await?;
     const SUB: &str = "Work in the sub folder.";
     script.set(
         SUB,
         vec![
-            call("switch", "switch_folder", &json!({"path":"sub","reason":"Focus on sub"})),
+            call(
+                "switch",
+                "switch_folder",
+                &json!({"path":"sub","reason":"Focus on sub"}),
+            ),
             call("read", "read_file", &json!({"requests":[{"path":"s.txt"}]})),
         ],
     );
     let id = delivered(&s, &chat, SUB).await?;
     assert_eq!(authority_count(&s, &id)?, 0, "a subfolder switch asked");
     let sub = canonical(&project.join("sub"));
-    assert_eq!(binding(&s, &chat)?.0, sub.to_string_lossy());
+    assert_eq!(binding(&s)?.0, sub.to_string_lossy());
     assert!(script.outputs(SUB)["read"].contains("sub-marker"));
 
     let elsewhere = s.sandbox.home.join("elsewhere");
@@ -348,20 +311,39 @@ async fn a_folder_elsewhere_asks_first_and_is_consented_once_approved() -> Resul
     );
     let (id, turn) = settle(&s, &chat, OUT).await?;
     assert_eq!(turn_state(&turn), "waiting_for_form", "{turn}");
-    assert_eq!(binding(&s, &chat)?.0, sub.to_string_lossy(), "moved before approval");
+    assert_eq!(
+        binding(&s)?.0,
+        sub.to_string_lossy(),
+        "moved before approval"
+    );
     let cards = approve(&s, &chat).await?;
     assert_eq!(cards.len(), 1);
-    assert_eq!(cards[0]["approval"]["action_kind"], "switch_folder", "{}", cards[0]);
+    assert_eq!(
+        cards[0]["approval"]["action_kind"], "switch_folder",
+        "{}",
+        cards[0]
+    );
     wait_delivered(&s, &chat, &id).await?;
-    let (path, marker) = binding(&s, &chat)?;
+    let (path, marker) = binding(&s)?;
     assert_eq!(path, elsewhere.to_string_lossy());
     assert_eq!(marker["consented"], true, "{marker}");
 
     // The approved folder counts as the project folder: reads ask nothing.
     const READ: &str = "Read the marker there.";
-    script.set(READ, vec![call("read", "read_file", &json!({"requests":[{"path":"o.txt"}]}))]);
+    script.set(
+        READ,
+        vec![call(
+            "read",
+            "read_file",
+            &json!({"requests":[{"path":"o.txt"}]}),
+        )],
+    );
     let id = delivered(&s, &chat, READ).await?;
-    assert_eq!(authority_count(&s, &id)?, 0, "a read in the approved folder asked");
+    assert_eq!(
+        authority_count(&s, &id)?,
+        0,
+        "a read in the approved folder asked"
+    );
     assert!(script.outputs(READ)["read"].contains("elsewhere-marker"));
 
     // Protected folders stay refused.
@@ -377,7 +359,7 @@ async fn a_folder_elsewhere_asks_first_and_is_consented_once_approved() -> Resul
     let id = delivered(&s, &chat, DATA).await?;
     assert_eq!(authority_count(&s, &id)?, 0);
     assert!(script.outputs(DATA)["switch"].contains("folder_protected"));
-    assert_eq!(binding(&s, &chat)?.0, elsewhere.to_string_lossy());
+    assert_eq!(binding(&s)?.0, elsewhere.to_string_lossy());
     s.finish().await?;
     server.abort();
     Ok(())
@@ -405,7 +387,7 @@ async fn full_access_moves_to_another_folder_without_asking() -> Result<(), Harn
     );
     let id = delivered(&s, &chat, OUT).await?;
     assert_eq!(authority_count(&s, &id)?, 0);
-    let (path, marker) = binding(&s, &chat)?;
+    let (path, marker) = binding(&s)?;
     assert_eq!(path, elsewhere.to_string_lossy());
     // Full access alone is not consent for the folder.
     assert_eq!(marker["consented"], false, "{marker}");
@@ -432,12 +414,12 @@ async fn a_delegated_child_starts_in_the_parents_current_folder() -> Result<(), 
     script.set(
         ASK,
         vec![
-            call("switch", "switch_folder", &json!({"path":work.to_string_lossy(),"reason":"Work here"})),
             call("start", "start_work", &json!({"objective":ASK})),
             call("plan", "replace_work_plan", &json!({"objective":ASK,"execution_mode":"steward",
                 "actions":[{"action_key":"check","description":"Check the folder","dependency_keys":[]}],
                 "checks":["Folder checked"]})),
             call("review", "record_work_review", &json!({"subject":"plan","verdict":"accept","summary":"Ready"})),
+            call("switch", "switch_folder", &json!({"path":work.to_string_lossy(),"reason":"Work here"})),
             call("delegate", "delegate_to_steward", &json!({"request":"Check the working folder.","safe_title":"Folder check"})),
         ],
     );
@@ -461,10 +443,18 @@ async fn a_delegated_child_starts_in_the_parents_current_folder() -> Result<(), 
         if let Some(output) = script.outputs(CHILD).remove("child-pwd") {
             break output;
         }
-        assert!(Instant::now() < deadline, "the child never ran pwd\n{}", s.agent.logs());
+        assert!(
+            Instant::now() < deadline,
+            "the child never ran pwd\n{}",
+            s.agent.logs()
+        );
         tokio::time::sleep(Duration::from_millis(200)).await;
     };
-    assert!(child_pwd.contains(work.to_string_lossy().as_ref()), "{child_pwd}");
+    assert!(
+        child_pwd.contains(work.to_string_lossy().as_ref()),
+        "{child_pwd}\nparent: {:?}",
+        script.outputs(ASK)
+    );
     let db = rusqlite::Connection::open(s.sandbox.data.join("runtime/session-store.sqlite"))?;
     let child: String = db.query_row(
         "SELECT workspace_path FROM session_bindings WHERE role = 'steward'",

@@ -828,7 +828,7 @@
         "transcriptVisibility": "visible"
       },
       "effectBoundary": "reviewed_persistent",
-      "category": "work",
+      "category": "file",
       "tags": [
         "folder",
         "workspace",
@@ -12254,6 +12254,7 @@
     ],
     "workspace": [
       "run_command",
+      "switch_folder",
       "read_file",
       "write_file",
       "edit_file",
