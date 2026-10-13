@@ -83,13 +83,20 @@ pub(super) async fn create_plan(
         Some("deep") => "deep",
         _ => "balanced",
     };
-    let timezone = config["user"]["timezone"]
+    let configured_timezone = config["user"]["timezone"]
         .as_str()
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
-        .or(access.environment_value("TZ")?)
-        .unwrap_or_else(|| "UTC".into());
+        .or(access.environment_value("TZ")?);
+    let timezone = match configured_timezone {
+        Some(timezone) => timezone,
+        None => tokio::task::spawn_blocking(butler_platform::instance::system_time_zone_name)
+            .await
+            .ok()
+            .and_then(Result::ok)
+            .unwrap_or_else(|| "UTC".into()),
+    };
     let (model, effort) = settings::resolve(access, &config).await;
     let original = bounded_original_request(turn_context).unwrap_or_else(|| input.query.clone());
     plan_attempts(

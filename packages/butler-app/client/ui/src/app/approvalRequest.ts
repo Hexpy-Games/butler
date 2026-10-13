@@ -7,7 +7,7 @@ type ApprovalRequestCopy = AppCopy["interfaceTemplates"]["approvalRequest"];
 /** The `approval.action_kind` values the agent sends (#277). */
 export const APPROVAL_ACTION_KINDS = [
   "edit_files", "run_command", "network_command", "use_connector", "manage_schedule",
-  "update_project", "start_conversation", "restart_service", "create_worktree", "other",
+  "update_project", "start_conversation", "restart_service", "create_worktree", "switch_folder", "other",
 ] as const;
 export type ApprovalActionKind = (typeof APPROVAL_ACTION_KINDS)[number];
 
@@ -158,6 +158,7 @@ function sentence(kind: ApprovalActionKind, approval: ApprovalSummary, workspace
     case "start_conversation": return copy.startConversation;
     case "restart_service": return copy.restartService;
     case "create_worktree": return copy.createWorktree;
+    case "switch_folder": return copy.switchFolder;
     case "other": return copy.generic;
   }
 }

@@ -14,7 +14,7 @@ import { ComposerBrowserHandoffSurface } from "./ComposerBrowserHandoffSurface";
 const KIND_ICONS: Record<ApprovalActionKind, typeof ShieldCheck> = {
   edit_files: Folder, run_command: Terminal, network_command: Globe2, use_connector: McpServer,
   manage_schedule: Clock3, update_project: ListChecks, start_conversation: MessageSquarePlus,
-  restart_service: RefreshCcw, create_worktree: GitBranch, other: ShieldCheck,
+  restart_service: RefreshCcw, create_worktree: GitBranch, switch_folder: Folder, other: ShieldCheck,
 };
 const RISK_TONES: Record<ApprovalRisk, TagTone> = { low: "neutral", medium: "warning", high: "danger" };
 

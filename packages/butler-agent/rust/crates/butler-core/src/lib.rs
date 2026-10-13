@@ -70,4 +70,5 @@ pub mod json_lines;
 pub mod locale;
 pub mod public_text;
 pub mod segmentation;
+pub mod tool_catalog;
 pub mod tool_protocol;

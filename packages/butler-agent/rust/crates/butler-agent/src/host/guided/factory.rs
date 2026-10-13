@@ -246,7 +246,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         ),
                     },
                     project_id: policy.project_id.clone(),
-                    project_folder: policy.project_id.as_ref().map(|_| workspace_path.clone()),
+                    project_folder: project_folder(&workspace, &phase),
                     project_sources: project_sources(&start.turn.context),
                     visible_names: surface.iter().map(|t| t.name.clone()).collect(),
                     authorized_names: phase.authorized_names.iter().cloned().collect(),
@@ -370,6 +370,19 @@ impl GuidedTurnFactoryAdapter {
             );
         Ok((Arc::new(work), tools))
     }
+}
+
+/// The project folder for containment: a moved folder counts when the user
+/// consented to it; otherwise a project turn's folder does. The reference
+/// keeps the decision so a folder switch can change it.
+fn project_folder(
+    workspace: &butler_turn::workspace::WorkspaceReference,
+    phase: &butler_turn::btcc::GuidedPhaseSelection,
+) -> Option<PathBuf> {
+    let policy = &phase.execution_policy;
+    let consented = workspace.consent().unwrap_or(policy.project_id.is_some());
+    workspace.set_consent(consented);
+    consented.then(|| PathBuf::from(&policy.workspace_path))
 }
 
 /// Keep the model's policy root and tool reference on the same recovered path.
