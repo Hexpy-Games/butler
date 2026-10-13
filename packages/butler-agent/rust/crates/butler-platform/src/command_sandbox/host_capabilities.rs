@@ -32,9 +32,18 @@ pub struct SandboxCapabilities {
     pub private_reads: Level,
     /// Legacy protected installation roots.
     pub write_protection: Level,
+    /// Project mutations, with post-run cleanup on hosts with name limitations.
+    pub project_write: Level,
 }
 
 impl SandboxCapabilities {
+    /// Whether project mutations can run without exact-action approval.
+    pub fn project_write_available(&self) -> bool {
+        matches!(self.project_write, Level::Enforced | Level::Partial(_))
+            && self.read_only.is_enforced()
+            && self.network_deny.is_enforced()
+    }
+
     /// Linux top-level secret protection complements the existing lexical guard.
     pub fn approval_free_reads(&self) -> bool {
         self.read_only.is_enforced()
@@ -57,6 +66,7 @@ fn probe() -> SandboxCapabilities {
         process_scoping: Level::Unavailable("process scoping is not probed on macOS"),
         private_reads: Level::Enforced,
         write_protection: Level::Enforced,
+        project_write: Level::Enforced,
     };
     #[cfg(target_os = "linux")]
     return super::linux::probe();
@@ -72,5 +82,6 @@ pub(super) fn unavailable(reason: &'static str) -> SandboxCapabilities {
         process_scoping: Level::Unavailable(reason),
         private_reads: Level::Unavailable(reason),
         write_protection: Level::Unavailable(reason),
+        project_write: Level::Unavailable(reason),
     }
 }

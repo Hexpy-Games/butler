@@ -6,7 +6,9 @@
 mod denial;
 pub use denial::{isolation_failure, isolation_failure_exit, sandbox_denial};
 mod credentials;
+mod project_secrets;
 pub use credentials::secret_name;
+pub use project_secrets::{discover_project_secrets, sweep_new_secrets};
 mod environment;
 pub use environment::tool_environment;
 mod operators;
@@ -54,10 +56,9 @@ pub fn approval_free_reads() -> bool {
 }
 
 /// Whether [`project_write_shell`] can contain a mutating command to its
-/// project (writes inside the project only, no network). Only the macOS
-/// seatbelt enforces it today; other hosts keep asking for such commands.
+/// project (writes inside the project only, no network).
 pub fn project_write_available() -> bool {
-    cfg!(target_os = "macos")
+    capabilities().project_write_available()
 }
 
 /// Entry point of the single-threaded trampoline, never called by the agent.
@@ -108,6 +109,9 @@ pub enum SandboxError {
     /// This host cannot contain a mutating command to its project.
     #[error("this host cannot contain commands to the project folder")]
     ProjectWriteUnavailable,
+    /// Filesystem discovery or policy preparation failed; never run uncontained.
+    #[error("sandbox filesystem preparation failed: {0}")]
+    Filesystem(#[from] std::io::Error),
     /// The read-deny paths could not be quoted into the sandbox profile.
     #[error("sandbox profile encoding failed")]
     Profile(#[from] serde_json::Error),

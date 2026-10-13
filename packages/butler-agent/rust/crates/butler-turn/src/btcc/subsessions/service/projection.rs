@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 
 use super::SubsessionService;
-use crate::btcc::{BtccCode, ChildRole, StorageCode};
+use crate::btcc::{BtccCode, StorageCode};
 use crate::btcc::{BtccError, StoredSubsessionDelegation};
 
 impl SubsessionService {
@@ -134,18 +134,8 @@ impl SubsessionService {
         let (stewards, workers): (Vec<_>, Vec<_>) = summaries
             .into_iter()
             .partition(|value| value.get("role").and_then(Value::as_str) == Some("steward"));
-        let own = if let Some(relation) = relation {
-            let mut own = self.project_child(&relation).await?;
-            if relation.packet.child_role == ChildRole::Steward {
-                let object = own.as_object_mut().ok_or_else(|| {
-                    BtccError::detected(BtccCode::SubsessionProjectionInvalid, "projection invalid")
-                })?;
-                object.insert(
-                    "delegated_request".into(),
-                    json!({"turn_id": relation.child_turn_id, "text": relation.packet.objective}),
-                );
-            }
-            Some(own)
+        let own = if let Some(relation) = &relation {
+            Some(self.project_child(relation).await?)
         } else {
             None
         };
@@ -154,6 +144,21 @@ impl SubsessionService {
         let object = projection.as_object_mut().ok_or_else(|| {
             BtccError::detected(BtccCode::SubsessionProjectionInvalid, "projection invalid")
         })?;
+        if let Some(relation) = relation {
+            // Presentation and intent lines instruct the model; the user sees only real checks.
+            let checks = relation
+                .packet
+                .acceptance_criteria
+                .iter()
+                .filter(|check| !model_only_line(check));
+            object.insert(
+                "delegated_request".into(),
+                json!({"turn_id":relation.child_turn_id,
+                "text":std::iter::once(relation.packet.objective.clone())
+                    .chain(checks.map(|check| format!("• {check}")))
+                    .collect::<Vec<_>>().join("\n\n")}),
+            );
+        }
         object.insert("steward_children".into(), json!(stewards));
         object.insert("workers".into(), json!(workers));
         Ok(projection)
@@ -181,7 +186,11 @@ impl SubsessionService {
             false
         };
         let turn=latest.as_ref().map(|(id,state)|json!({"id":id,"state":if retryable { "runtime_fault" } else { state },"retryable":retryable,"cancellable":state == "admitted" && !retryable,"created_at":relation.created_at,"updated_at":relation.created_at}));
-        let relation_view = json!({"relation_id":relation.relation_id,"parent_session_id":relation.parent_session_id,"parent_turn_id":relation.parent_turn_id,"child_session_id":relation.child_session_id,"anchor_message_id":relation.anchor_message_id,"ordinal":relation.ordinal,"safe_title":relation.safe_title,"created_at":relation.created_at});
+        let title = super::helpers::delegation_title(
+            Some(&relation.safe_title),
+            &relation.packet.objective,
+        );
+        let relation_view = json!({"relation_id":relation.relation_id,"parent_session_id":relation.parent_session_id,"parent_turn_id":relation.parent_turn_id,"child_session_id":relation.child_session_id,"anchor_message_id":relation.anchor_message_id,"ordinal":relation.ordinal,"safe_title":title,"created_at":relation.created_at});
         let result_view = result.map(|mut value| {
             if let Some(object) = value.as_object_mut() {
                 object.insert("relation_id".into(), json!(relation.relation_id));
@@ -194,7 +203,7 @@ impl SubsessionService {
             && self
                 .waiting_for_children(&relation.child_session_id)
                 .await?;
-        let mut projection = json!({"role":role,"relation":relation_view,"session_id":relation.child_session_id,"title":relation.safe_title,"status":status,"active_turn":if status=="active" && !retryable{turn.clone()}else{None},"latest_turn":turn,"waiting_for_children":waiting_for_children,"result":result_view,"updated_at":relation.created_at,"model_ref":relation.packet.model_ref,"terminal":result_view.is_some()});
+        let mut projection = json!({"role":role,"relation":relation_view,"session_id":relation.child_session_id,"title":title,"status":status,"active_turn":if status=="active" && !retryable{turn.clone()}else{None},"latest_turn":turn,"waiting_for_children":waiting_for_children,"result":result_view,"updated_at":relation.created_at,"model_ref":relation.packet.model_ref,"terminal":result_view.is_some()});
         if let Some((id, _)) = &latest {
             self.plan_counters(id, &mut projection).await?;
         }
@@ -323,4 +332,12 @@ fn projected_status(result: Option<&Value>, latest: Option<&(String, String)>) -
         _ if latest.is_some_and(|(_, state)| state == "admitted") => "active",
         _ => "waiting",
     }
+}
+
+/// Plan acceptance lines that instruct the model and are not checks for the user.
+fn model_only_line(check: &str) -> bool {
+    check.starts_with(super::helpers::PRESENTATION_LINE)
+        || crate::btcc::PLAN_INTENT_LINES
+            .iter()
+            .any(|line| check.starts_with(line))
 }

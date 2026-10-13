@@ -652,6 +652,12 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       sessionId: decodeURIComponent(sessionArchiveMatch[1]!),
     });
   }
+  const sessionReadMatch = url.pathname.match(/^\/sessions\/([^/]+)\/read$/u);
+  if (method === "POST" && sessionReadMatch) {
+    return await callBridge<T>(bridge, "markSessionRead", {
+      sessionId: decodeURIComponent(sessionReadMatch[1]!),
+    });
+  }
   if (method === "DELETE" && sessionMatch) {
     return await callBridge<T>(
       bridge,

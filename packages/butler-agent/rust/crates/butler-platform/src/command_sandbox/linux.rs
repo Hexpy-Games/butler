@@ -1,6 +1,9 @@
 //! Safe Landlock trampoline; never restrict the multithreaded agent itself.
 mod complement;
+mod process;
+mod project_secrets;
 mod seccomp;
+pub(super) use project_secrets::{discover_project_secrets, sweep_new_secrets};
 
 use std::collections::HashMap;
 use std::os::unix::process::CommandExt;
@@ -24,6 +27,9 @@ struct Policy {
     credentials: Vec<PathBuf>,
     allowed: Vec<PathBuf>,
     tcp: bool,
+    project: Option<PathBuf>,
+    writable: Vec<PathBuf>,
+    write_denied: Vec<PathBuf>,
 }
 
 fn helper() -> std::io::Result<PathBuf> {
@@ -106,6 +112,11 @@ pub(super) fn probe() -> SandboxCapabilities {
             "private root contents denied; project regular secrets at top level; directory names and secret symlinks need lexical guard",
         ),
         write_protection: Level::Unavailable("Linux protected roots are deferred"),
+        project_write: if seccomp && scopes_available() && ioctl_available() {
+            Level::Partial("new secret names below top level are swept after the run")
+        } else {
+            Level::Unavailable("project writes require Landlock ABI v6 and network denial")
+        },
     }
 }
 
@@ -187,6 +198,9 @@ pub(super) fn read_only_contained(
         credentials: super::credentials::roots(environment),
         allowed: allowed.iter().map(|path| path.to_path_buf()).collect(),
         tcp: tcp_available(),
+        project: None,
+        writable: Vec::new(),
+        write_denied: Vec::new(),
     };
     let mut arguments = vec![
         "--policy".into(),
@@ -211,17 +225,49 @@ pub(super) fn protect_writes(
     Ok(Protection::Unavailable(invocation))
 }
 
-/// Project-write containment is enforced only on macOS for now; mutating
-/// commands keep asking here.
 pub(super) fn project_write(
     invocation: Invocation,
-    _environment: &HashMap<String, String>,
-    _root: &Path,
-    _writable: &[&Path],
-    _denied: &[&Path],
+    environment: &HashMap<String, String>,
+    root: &Path,
+    writable: &[&Path],
+    denied: &[&Path],
 ) -> Result<Invocation, SandboxError> {
-    drop(invocation);
-    Err(SandboxError::ProjectWriteUnavailable)
+    if !super::project_write_available() {
+        return Err(SandboxError::ProjectWriteUnavailable);
+    }
+    let real = root.canonicalize()?;
+    let policy = Policy {
+        // Outside reads match ReadOnly. Denials of existing project secrets
+        // retain both their lexical path and resolved aliases in complement.
+        denied: denied
+            .iter()
+            .filter(|path| path.starts_with(root) || path.starts_with(&real))
+            .map(|path| path.to_path_buf())
+            .collect(),
+        write_denied: denied.iter().map(|path| path.to_path_buf()).collect(),
+        credentials: super::credentials::roots(environment),
+        allowed: vec![real.clone()],
+        tcp: tcp_available(),
+        project: Some(real),
+        writable: writable
+            .iter()
+            .map(|path| path.canonicalize())
+            .collect::<Result<_, _>>()?,
+    };
+    let mut arguments = vec![
+        "--policy".into(),
+        serde_json::to_string(&policy)?,
+        "--".into(),
+        invocation.program,
+    ];
+    arguments.extend(invocation.arguments);
+    Ok(Invocation {
+        program: helper()
+            .map_err(|_| SandboxError::ProjectWriteUnavailable)?
+            .to_string_lossy()
+            .into_owned(),
+        arguments,
+    })
 }
 
 pub(super) fn trampoline() -> Result<(), Error> {
@@ -243,6 +289,16 @@ pub(super) fn trampoline() -> Result<(), Error> {
         &policy.allowed,
         &policy.credentials,
     )?;
+    if let Some(project) = &policy.project {
+        complement::project_write(
+            &mut rules,
+            project,
+            &policy.writable,
+            &policy.write_denied,
+            &policy.credentials,
+            &policy.denied,
+        )?;
+    }
     let status = rules.restrict_self()?;
     if status.ruleset != RulesetStatus::FullyEnforced || !status.no_new_privs {
         return Err("Landlock was not fully enforced".into());

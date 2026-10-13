@@ -1,3 +1,4 @@
+// test-category: race
 /** Real spawn + CDP: internal tool ownership and foreground conversation isolation. */
 import { Database } from "bun:sqlite";
 import { strict as assert } from "node:assert";
@@ -6,7 +7,7 @@ import { join } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { browserStub } from "../support/browser-agent-stub";
 import { browserDelegationObjective, browserDelegationStub } from "../support/browser-delegation-stub";
-import { shellReady, togglePane } from "../support/browser-shell-acceptance";
+import { shellReady, togglePane, toggleState } from "../support/browser-shell-acceptance";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence);
 const foreground = process.env.BUTLER_BROWSER_DELEGATION_FOREGROUND === "1";
@@ -39,8 +40,14 @@ try {
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: "dark" }) });
   await app.shot("dark-before-open");
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: "light" }) });
+  await app.main("(()=>{const b=globalThis.browserAgentSubject,execute=b.execute;b.execute=async function(frame){if(frame.op==='tab.observe')await new Promise(done=>globalThis.releaseDelegatedObserve=done);return execute.call(this,frame)}})()");
   await app.gateway.api("/messages", { method: "POST", body: JSON.stringify({ chat_id: "general", text: browserDelegationObjective, client_message_id: crypto.randomUUID() }) });
   await waitBrowser(async () => (await app.call<{ tabs: Tab[] }>("state")).tabs.some(tab => tab.agent), "delegated browser tab");
+  await waitBrowser(() => app.main("typeof globalThis.releaseDelegatedObserve === 'function'"), "delegated observation held");
+  assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))"), false, "agent browser_open leaves the area closed");
+  await toggleState(app, foreground ? "riso" : null, foreground);
+  await app.shot("delegated-in-use-closed");
+  await app.main("globalThis.releaseDelegatedObserve()");
   const db = new Database(join(app.gateway.butlerData, "agent-runtime/btcc.sqlite"), { readonly: true });
   await waitBrowser(async () => Boolean(db.query("SELECT 1 FROM btcc_guided_tool_calls WHERE tool_name='browser_tabs' AND status='completed'").get()), "delegated tools complete");
   const execution = db.query("SELECT t.session_id,c.tool_name,c.result_json FROM btcc_guided_tool_calls c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE c.tool_name IN ('browser_open','browser_observe','browser_tabs') ORDER BY c.turn_sequence").all() as Array<{ session_id: string; tool_name: string; result_json: string }>;
@@ -52,16 +59,16 @@ try {
   assert.equal(state.tabs.filter(tab => tab.agent).length, 1);
   const tab = state.tabs.find(tab => tab.agent)!; assert.equal(tab.owner, "conversation:general");
   assert.ok(!JSON.stringify(state).includes(childId) && !/steward|스튜어드/iu.test(JSON.stringify(state)));
-  assert.equal(state.activeId, foreground ? tab.id : priorTab);
+  assert.equal(state.activeId, priorTab, "agent open never activates the tab");
   // The route's title and pane are public UI proof; no test-only store mutation.
   assert.equal(await app.page.expression(`document.querySelector('[data-test-class=custom-titlebar]').textContent.includes(${JSON.stringify(foreground ? "General" : "Current conversation")})`), true);
   const text = await app.page.expression<string>("document.body.innerText");
   assert.ok(!text.includes(childId) && !/steward|스튜어드/iu.test(text), text);
   await app.shot("after-open");
-  if (!foreground) {
-    assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))"), false);
-    await app.click("General"); await togglePane(app, true);
-  }
+  assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))"), false);
+  if (!foreground) await app.click("General");
+  await togglePane(app, true);
+  await app.call("activate", { id: tab.id });
   await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))"), "parent conversation docking");
   assert.equal(await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab.id)}).view.webContents.executeJavaScript('document.body.innerText')`), "Parent-owned page\n\nComplete fixture content.");
   for (const theme of ["light", "dark"]) {

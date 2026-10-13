@@ -84,7 +84,7 @@ async fn prepare_input(
 ) -> Result<Value, &'static str> {
     let mut input = Value::Object(call.arguments.clone());
     if call.name == "preview_start" {
-        let workspace = owner.binding.workspace_path.clone();
+        let workspace = owner.active_workspace_path();
         let path = input["cwd"].as_str().unwrap_or(".").to_owned();
         let cwd = tokio::task::spawn_blocking(move || {
             let root = workspace.canonicalize()?;

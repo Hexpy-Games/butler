@@ -63,6 +63,10 @@ async fn browses_freely_and_asks_only_to_commit(
     let card = card.expect("a signed-in POST submit asks");
     let operation = &card["approval"]["operation"];
     assert_eq!(operation["tool"], "browser_act", "{card}");
+    assert_eq!(
+        operation["browser_tab"], "acct",
+        "exact thumbnail tab binding"
+    );
     assert_eq!(operation["browser_mode"], "signed_in", "{card}");
     assert_eq!(operation["browser_steps"][0]["name"], "Post", "{card}");
     assert_eq!(card["approval"]["risk"], "medium", "{card}");

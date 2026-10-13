@@ -352,9 +352,14 @@ fn project_write_result(
         butler_turn::btcc::EffectFailure::adapter("command_result_encoding_failed")
             .with_source(error)
     })?;
-    value["sandbox"] = "project_write".into();
+    value["sandbox"] = if value.get("sandbox_violation").is_some() {
+        "project_write_contained_swept"
+    } else {
+        "project_write_contained"
+    }
+    .into();
     if value["ok"] == false {
-        value["next_action"] = "This command ran contained to the project folder: no writes elsewhere (including .git and secrets) and no network. If it needs those, run it again with sandbox \"none\"; the user will be asked.".into();
+        value["next_action"] = "This command ran contained to the project folder: no writes elsewhere (including .git and existing secrets) and no network. Creating, deleting or renaming top-level project entries is also blocked. If it needs those, run it again with sandbox \"none\"; the user will be asked.".into();
     }
     butler_core::json::JsonDocument::from_value(&value).map_err(failure)
 }

@@ -9,7 +9,7 @@ import { AnswerCards } from "./AnswerCards";
 import { AnswerChart, AnswerGallery, AnswerSourceLine, AnswerTable } from "./AnswerDataBlocks";
 import { AnswerSessionContext, runAnswerAction, useAnswerSession } from "./answerBlockActions";
 
-function Block({ block }: { block: AnswerBlockView }) {
+const Block = memo(function Block({ block }: { block: AnswerBlockView }) {
   const sendMessage = useButlerStore(state => state.sendMessage);
   const sessionId = useAnswerSession();
   switch (block.type) {
@@ -29,21 +29,19 @@ function Block({ block }: { block: AnswerBlockView }) {
       ? <PillButton key={index} surface="glass" icon={<Reply size="sm" />} onClick={() => runAnswerAction(() => sendMessage(item.ask))}>{item.ask}</PillButton>
       : <Button key={index} variant="secondary" iconStart={<Popup size="sm" />} onClick={() => runAnswerAction(() => openConversationLink(item.open, sessionId))}>{item.label}</Button>)}</Inline>;
   }
-}
+});
 
-/** Domain records are parsed once per snapshot; all presentation belongs to DS blocks. */
+/** Domain records are parsed once per changed block snapshot; all presentation belongs to DS blocks. */
 export const AnswerBlocks = memo(function AnswerBlocks({ sets, sessionId }: { sets?: AnswerBlockSet[]; sessionId?: string }) {
   const parsed = useMemo(() => sets?.flatMap(set => {
     const spec = parseAnswerBlocks(set?.spec);
-    return spec ? [{ call: set.call_id, spec }] : [];
+    return spec ? spec.blocks : [];
   }) ?? [], [sets]);
   if (!parsed.length) return null;
   return <AnswerSessionContext.Provider value={sessionId}><Presence present motion="fade"><Stack gap="md" data-test-class="answer-blocks">
-    {parsed.map((set, setIndex) => <Stack key={`${setIndex}:${set.call}`} gap="md">
-      {set.spec.blocks.map((block, index) => <Stack key={`${index}:${block.id ?? block.type}`} gap="sm" data-answer-block={block.type}>
-        {block.title ? <Typo.SectionTitle>{block.title}</Typo.SectionTitle> : null}
-        <Block block={block} />
-      </Stack>)}
+    {parsed.map((block, index) => <Stack key={block.id ?? `${index}:${block.type}`} gap="sm" data-answer-block={block.type}>
+      {block.title ? <Typo.SectionTitle>{block.title}</Typo.SectionTitle> : null}
+      <Block block={block} />
     </Stack>)}
   </Stack></Presence></AnswerSessionContext.Provider>;
 });

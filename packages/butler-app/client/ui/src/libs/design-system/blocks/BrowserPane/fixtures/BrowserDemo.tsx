@@ -23,7 +23,7 @@ export interface BrowserDemoProps {
   band?: DemoBandKind | null;
   /** Butler's pointer clicking the first product (agent tabs). */
   pointer?: boolean;
-  /** Butler's fixed 1280×800 page (letterboxed); false: a page you browse at the card's size. */
+  /** Butler's fixed 1280×800 page (fitted to the card's width); false: a page you browse at the card's size. */
   agent?: boolean;
   loading?: number;
   overlay?: ReactNode;

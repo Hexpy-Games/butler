@@ -9,6 +9,7 @@ pub trait GatewayMutationCommands: Send + Sync + 'static {
         _id: String,
         _run_id: String,
         _code: String,
+        _tainted: bool,
     ) -> ApplicationFuture<AutomationRunSummary> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
@@ -44,6 +45,10 @@ pub trait GatewayMutationCommands: Send + Sync + 'static {
         title: Option<String>,
     ) -> ApplicationFuture<AppSessionActionResult>;
     fn clear_general(&self, title: String) -> ApplicationFuture<serde_json::Value>;
+    /// Moves the chat's read marker to its latest finished reply.
+    fn mark_session_read(&self, _id: String) -> ApplicationFuture<AppSessionReadResult> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn delete_session(
         &self,
         id: String,

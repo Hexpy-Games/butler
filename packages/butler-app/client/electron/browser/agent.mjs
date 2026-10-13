@@ -88,6 +88,9 @@ export function backgroundTab(browser, tab) {
     browser.agentWindow = new BrowserWindow({ show: false, width: 1280, height: 800, webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true } });
   }
   browser.agentWindow.contentView.addChildView(tab.view); tab.attached = browser.agentWindow;
+  // Hidden agent pages use the full logical viewport, not the last pane's
+  // scale (which can be zero while its slot unmounts). Tools and frames share it.
+  if (tab.agent) tab.bounds = { x: 0, y: 0, width: 1280, height: 800, scale: 1, visible: false };
   tab.view.setBounds({ x: 0, y: 0, width: tab.agent ? 1280 : Math.round(tab.bounds?.width ?? 1280), height: tab.agent ? 800 : Math.round(tab.bounds?.height ?? 800) }); emulation(tab);
 }
 function armExpiry(browser, tab) {
@@ -140,7 +143,7 @@ async function executeFrame(browser, frame) {
   const { op, session, args = {} } = frame;
   if (!/^[a-zA-Z0-9_-]{1,128}$/u.test(session ?? "")) return { status: "refused", reason: "invalid_session" };
   const owner = `conversation:${session}`;
-  if (op === "tabs.list") return { tabs: browser.snapshot().tabs.filter(tab => tab.owner === owner).map(({ saveOffer: _offer, ...tab }) => tab) };
+  if (op === "tabs.list") return { tabs: browser.snapshot().tabs.filter(tab => tab.owner === owner).map(({ saveOffer: _offer, agentAt: _at, ...tab }) => tab) };
   if (op === "owner.closed") {
     for (const tab of [...browser.tabs.values()]) if (tab.owner === owner) browser.close(tab.id);
     browser.events?.delete(owner); return { status: "ok" };
@@ -207,19 +210,9 @@ async function openAgent(browser, { session, args, id: callId }, source) {
   const signedIn = args.profile === "signed_in" || args.signed_in === true;
   if (signedIn && (args.policy?.mode !== "signed_in" || signedInPlace(args.url, args.policy) !== "granted")) return { status: "refused", reason: "signed_in_unavailable" };
   if (!makeAgentRoom(browser)) return { status: "refused", reason: "tab_budget_exhausted" };
-  const opening = openingBurst(browser, `conversation:${session}`);
-  try { return await openTab(browser, { session, args, callId, signedIn, source, opening }); }
-  finally { if (--opening.count === 0) browser.opening.delete(`conversation:${session}`); }
+  return openTab(browser, { session, args, callId, signedIn, source });
 }
-// Opens that overlap form one burst: its first page to arrive is shown, the
-// rest stay in the background, so parallel tabs never flip the visible one.
-function openingBurst(browser, owner) {
-  browser.opening ??= new Map();
-  const burst = browser.opening.get(owner) ?? { count: 0, shown: false };
-  burst.count++; browser.opening.set(owner, burst);
-  return burst;
-}
-async function openTab(browser, { session, args, callId, signedIn, source, opening }) {
+async function openTab(browser, { session, args, callId, signedIn, source }) {
   const id = browser.create({ owner: `conversation:${session}`, url: args.url, preview_id: args.preview_id, agent: true, policy: args.policy, partition: source?.partition, profile: source?.profile ?? (signedIn ? "signed_in" : undefined) }, false);
   const tab = browser.tabs.get(id);
   tab.onPointer=(step,target)=>browser.pointer.step(tab,step,target);
@@ -235,9 +228,6 @@ async function openTab(browser, { session, args, callId, signedIn, source, openi
   catch { browser.close(id); return { status: "unknown", reason: "navigation_failed" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
   touch(browser, tab);
-  // The renderer activates through the normal detach/attach path only for its visible owner.
-  // Search results open as background tabs: the user stays where they are.
-  if (!source && args.background !== true && !opening.shown) { opening.shown = true; browser.focusRequest = id; }
   browser.publish();
   return { status: "ok", tab: id, url: tab.url, title: tab.title, epoch: tab.epoch, profile: tab.profile };
 }

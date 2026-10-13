@@ -21,7 +21,7 @@ pub(crate) fn parent_item(body: &Value, step: &mut usize) -> Value {
                 "answer_blocks",
                 json!({"v":1,"blocks":[
                 {"type":"cards","items":[
-                    {"title":"First image","img":ids[0],"source":"https://example.com/","checked":chrono::Utc::now().to_rfc3339(),"value":{"amount":2,"unit":"items"}},
+                    {"title":"First image","img":ids[0],"source":"https://example.com/","checked":chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(5 * 3600 + 45 * 60).unwrap()).to_rfc3339(),"value":{"amount":2,"unit":"items"}},
                     {"title":"Second image","img":ids[1]}]},
                 {"type":"gallery","items":[{"img":ids[0],"caption":"First image"},{"img":ids[1],"caption":"Second image"}]},
                 {"type":"table","columns":["Image","Count"],"rows":[["First",1],["Second",1]]}]}),
@@ -71,8 +71,23 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
         .unwrap()
         .unwrap()?;
     let message = wait_answer(&s, &script, &session).await?;
+    let attachments = message["attachments"]
+        .as_array()
+        .expect("final reply attachments");
+    assert_eq!(
+        attachments.len(),
+        1,
+        "the pictured page capture is removed and the other page capture stays: {attachments:?}"
+    );
+    assert_remaining_capture_source(&s, &session)?;
     let sets = &message["answer_blocks"];
     assert_eq!(sets[0]["spec"]["blocks"].as_array().unwrap().len(), 3);
+    assert!(
+        sets[0]["spec"]["blocks"][0]["items"][0]["checked"]
+            .as_str()
+            .unwrap()
+            .ends_with("+05:45")
+    );
     for (index, item) in sets[0]["spec"]["blocks"][0]["items"]
         .as_array()
         .unwrap()
@@ -99,6 +114,7 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
         }
     }
     assert_stored_ids(&s)?;
+    assert_request_view_hides_presentation(&s, &session).await?;
     s.restart().await?;
     let view =
         s.gw.get(&format!("/session-view?session_id={session}"))
@@ -129,6 +145,37 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
     verify_asset_sweep(&s, &session, &reopened).await?;
     s.finish().await?;
     server.abort();
+    Ok(())
+}
+
+/// The delegated request view shows the objective and real checks; the
+/// planned `Presentation:` line reaches only the model.
+async fn assert_request_view_hides_presentation(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    session: &str,
+) -> Result<(), HarnessError> {
+    let view =
+        s.gw.get(&format!("/session-view?session_id={session}"))
+            .await?;
+    let child = view.data()["steward_children"][0]["session_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let view =
+        s.gw.get(&format!("/session-view?session_id={child}"))
+            .await?;
+    let request = view.data()["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "user")
+        .and_then(|message| message["delivered_text"].as_str())
+        .unwrap_or_default()
+        .to_owned();
+    assert!(
+        request.contains("• Approach verified") && !request.contains("Presentation:"),
+        "delegated request view: {request}"
+    );
     Ok(())
 }
 
@@ -165,7 +212,7 @@ fn assert_presentation_contract(requests: &[Value]) {
         .find(|r| {
             r["instructions"]
                 .as_str()
-                .is_some_and(|text| text.contains("Steward role"))
+                .is_some_and(|text| text.contains("You run one delegated Work"))
         })
         .expect("a steward request");
     let task = steward["input"].to_string();
@@ -203,6 +250,11 @@ fn assert_presentation_contract(requests: &[Value]) {
         .iter()
         .find(|tool| tool["name"] == "answer_blocks")
         .expect("parent is offered answer_blocks");
+    let catalog = butler_core::tool_catalog::load().unwrap();
+    assert_eq!(
+        blocks["parameters"], catalog["rawDefinitions"]["answer_blocks"]["parameters"],
+        "the parent receives the complete resolved answer schema"
+    );
     assert!(
         blocks["description"]
             .as_str()
@@ -260,6 +312,29 @@ fn assert_stored_ids(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), Harn
     assert!(spec.contains("img_"));
     assert!(!spec.contains("image_url"), "Signed URLs are HTTP metadata");
     assert!(!spec.contains("/assets/"));
+    Ok(())
+}
+
+fn assert_remaining_capture_source(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    session: &str,
+) -> Result<(), HarnessError> {
+    let db = butler_platform::sqlite::open_with_flags(
+        s.sandbox.data.join("agent-runtime/btcc.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    let session_suffix = format!("%{session}");
+    let raw: String = db.query_row(
+        "SELECT final_payload_json FROM btcc_turns WHERE session_id LIKE ?1 AND final_payload_json IS NOT NULL",
+        [session_suffix],
+        |row| row.get(0),
+    )?;
+    let payload: Value = serde_json::from_str(&raw)?;
+    let artifacts = payload["artifacts"]
+        .as_array()
+        .expect("parent final payload artifacts");
+    assert_eq!(artifacts.len(), 1, "only the unpictured page capture stays");
+    assert_eq!(artifacts[0]["sourceUrl"], "https://example.org/");
     Ok(())
 }
 

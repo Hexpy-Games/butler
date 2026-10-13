@@ -37,6 +37,7 @@ pub use access::{
     AccessDecision, AccessRequest, ApprovalExemptAction, CapabilityKind, CommandSandbox,
     DenyReason, FullOnlyAction, GrantUse, TargetScope, TurnTaint, command_access_risk,
     command_scope_unresolved, decide, needs_scope, stored_binding_access_mode,
+    web_read_carries_data, web_search_carries_data,
 };
 pub use contracts::{
     AcceptedWorkResult, AcceptedWorkStatus, AccessMode, AdmissionKind, AlreadyDeliveredOutcome,

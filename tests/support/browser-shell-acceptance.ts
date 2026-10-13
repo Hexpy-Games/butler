@@ -26,7 +26,7 @@ export async function togglePane(app: ShellApp, open: boolean) {
 
 export async function toggleState(app: ShellApp, tone: string | null, dot: boolean) {
   await waitBrowser(() => app.page.expression(`document.querySelector('${toggle}')?.getAttribute('data-tone') === ${JSON.stringify(tone)} &&
-    Boolean(document.querySelector('${toggle} [data-slot="icon-button-indicator"]')) === ${dot}`), "browser icon state");
+    Boolean(document.querySelector('${toggle}')?.closest('[data-slot="activity-glow"]')?.querySelector('[data-slot="activity-glow-halo"],[data-slot="activity-glow-dot"]')) === ${dot}`), "browser icon state");
   assert.equal(await app.page.expression(`document.querySelector('${toggle}').hasAttribute('data-selected')`), false);
 }
 

@@ -22,7 +22,7 @@ async function handOff(label: string) {
   const shown = await tabOf(tab);
   assert.deepEqual([shown.holder, shown.waiting], ["user", true], `${label}: the user holds the waiting tab`);
   const text = await app.page.expression<string>(`${card}.innerText`);
-  for (const line of ["Needs you in the tab", "Stop task", "Open tab"]) assert.ok(text.includes(line), `${label}: ${line} in ${text}`);
+  for (const line of ["Needs you in the tab", "Stop task", "Open to check"]) assert.ok(text.includes(line), `${label}: ${line} in ${text}`);
   assert.ok(!text.includes(tab) && !/Allow|Deny|risk/u.test(text), `${label}: no permission ask or tab id: ${text}`);
   await new Promise(done => setTimeout(done, 1500));
   assert.equal((await turn()).latest_turn?.state, "waiting_for_form", `${label}: still waiting for the hand-back`);

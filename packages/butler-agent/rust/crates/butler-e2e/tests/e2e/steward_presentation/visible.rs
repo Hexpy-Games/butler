@@ -14,7 +14,11 @@ pub(super) async fn assert_delivered_messages(
         .iter()
         .find(|message| message["role"] == "user")
         .unwrap();
-    assert_eq!(first["delivered_text"], stub::OWNER);
+    let delivered = first["delivered_text"].as_str().unwrap();
+    assert!(delivered.starts_with(stub::OWNER), "{delivered}");
+    for intent in ["Goal:", "Deliver:", "Next:", "Assumed:"] {
+        assert!(!delivered.contains(intent), "{delivered}");
+    }
     assert!(
         first["text"]
             .as_str()

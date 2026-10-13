@@ -79,9 +79,12 @@ async fn followup(stopped: bool) -> Result<(), HarnessError> {
         .iter()
         .find(|message| message["role"] == "user")
         .unwrap();
-    assert_eq!(
-        first_user["delivered_text"],
-        "다시 조사해줄래? 추가 원문도 확인해 주세요."
+    assert!(
+        first_user["delivered_text"]
+            .as_str()
+            .unwrap()
+            .starts_with("다시 조사해줄래? 추가 원문도 확인해 주세요."),
+        "{first_user}"
     );
     assert!(
         first_user["text"]

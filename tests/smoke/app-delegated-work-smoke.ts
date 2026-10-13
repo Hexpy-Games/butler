@@ -66,7 +66,8 @@ function views(): { parent: SessionView; observer: SessionView } {
 try {
   for (const width of [1280, 375]) for (const theme of ["light", "dark"]) for (const wallpaper of [false, true]) {
     const page = await context.newPage();
-    page.on("pageerror", error => console.error("pageerror", error.message));
+    const pageErrors: string[] = [];
+    page.on("pageerror", error => { pageErrors.push(error.message); console.error("pageerror", error.message); });
     await page.setViewportSize({ width, height: 800 });
     phase = "running";
     stopRequested = false;
@@ -77,7 +78,7 @@ try {
       wallpaper: { source: wallpaper ? { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } } : { kind: "none" } } }) });
     await server.signIn(page);
     await installWorkReplay(page);
-    await installNotificationReplay(page, server.url);
+    await installNotificationReplay(page, server.url, wallpaper);
     // Screenshot mode: report battery power, so the conversation wallpaper holds its frame through the
     // product's on-battery pause. App reduce-motion would also stop the DS Spinner asserted below.
     if (output) await page.addInitScript(() => {
@@ -115,7 +116,8 @@ try {
     if (output) await page.clock.setFixedTime(clockNow);
     await page.goto(server.url);
     try { await pill.waitFor(); } catch (error) {
-      console.error(JSON.stringify({ width, theme, requests, body: await page.locator("body").innerText() }));
+      console.error(JSON.stringify({ width, theme, requests, body: await page.locator("body").innerText(),
+        crashes: await page.evaluate(() => (window as unknown as { __uiCrashes: unknown[] }).__uiCrashes) }));
       await capture("failure"); throw error;
     }
     if (!await row.isVisible()) await page.getByRole("button", { name: appCopy.titlebar.showLeftPanel, exact: true }).click();
@@ -123,6 +125,7 @@ try {
     const animation = await spinner.locator("circle").evaluate(circle => getComputedStyle(circle).animationName);
     assert(animation.includes("spinner-rotate"), "the existing DS working animation is active");
     await capture("running");
+    if (wallpaper) assert(await page.evaluate(() => (window as unknown as { __wallpaperLogFailures: number }).__wallpaperLogFailures > 0), "unavailable wallpaper log sink was exercised");
     awaiting = true;
     await page.evaluate(({ childId, createdAt }) => (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent({
       id: 90, type: "subsession.changed", created_at: createdAt,
@@ -224,10 +227,12 @@ try {
       await pill.waitFor({ state: "detached" });
       assert.equal(await spinner.count(), 0, `${terminal} clears the row`);
     }
+    assert.deepEqual(pageErrors, [], "no uncaught bridge errors");
+    assert.deepEqual(await page.evaluate(() => (window as unknown as { __uiCrashes: unknown[] }).__uiCrashes), [], "no contained view crashes");
     await page.close();
   }
   console.log(JSON.stringify({ ok: true, baseline, timingsMs: timings, maxMs: Math.max(...timings), requests,
-    checks: baseline ? ["before-snapshots"] : ["steward-modal-delivered-text", "parent-ended-child-running", "reload", "stop-accepted-still-running", "confirmed-stop-all-surfaces-500ms", "collapsed-summary", "complete", "fail", "no-idle-polling", "attention-notification-and-clear", "original-permission-menu-with-existing-grants"] }));
+    checks: baseline ? ["before-snapshots"] : ["steward-modal-delivered-text", "parent-ended-child-running", "reload", "stop-accepted-still-running", "confirmed-stop-all-surfaces-500ms", "collapsed-summary", "complete", "fail", "no-idle-polling", "attention-notification-and-clear", "access-modes-with-existing-grants", "unavailable-wallpaper-log", "no-ui-crashes"] }));
 } finally {
   await browser.close();
   await server.stop();

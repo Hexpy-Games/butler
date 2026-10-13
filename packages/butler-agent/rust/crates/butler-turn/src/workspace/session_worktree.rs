@@ -158,6 +158,16 @@ impl SessionWorktrees {
         })?
     }
 
+    /// The working-folder owner over the same bindings, commands and files.
+    pub fn folders(&self) -> super::SessionFolders {
+        super::SessionFolders::new(
+            self.inner.bindings.clone(),
+            self.inner.commands.clone(),
+            self.inner.files.clone(),
+            self.inner.host_environment.clone(),
+        )
+    }
+
     /// Refuses new operations and waits for running ones.
     pub async fn close(&self) {
         {
@@ -318,6 +328,8 @@ impl Owner {
             .clock
             .iso_from_epoch_millis(self.clock.now_epoch_millis())?;
         let mut metadata = binding.metadata.unwrap_or_default();
+        // A bound session worktree supersedes a moved working folder.
+        metadata.remove(super::SESSION_FOLDER_KEY);
         metadata.insert(
             "sessionWorkspace".into(),
             marker(anchor, bound.branch, &now),

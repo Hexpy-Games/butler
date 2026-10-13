@@ -25,7 +25,7 @@ function UserTab() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "The web page as one elevated card that wraps NativeViewSlot: who holds the tab, the band, the load line and Butler's letterboxed page.",
+  purpose: "The web page as one elevated card that wraps NativeViewSlot: who holds the tab, the band, the load line and Butler's fixed-size page fitted to the card's width.",
   whenToUse: [
     "The page area of BrowserPane (one card per visible tab)",
     "Showing who holds a tab: nobody, Butler (riso edge), you, or an approval",

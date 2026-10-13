@@ -62,6 +62,36 @@ scroll, and never the same value twice.
 </ConversationShell>
 ```
 
+### Tab rail
+
+`rail` mounts a `TabRail` (Butler's live tabs) over the shell. `railView` (the
+conversation id) latches the room the column makes. While the rail shows a tab,
+and for the rest of that view once it has, the shell sets `data-rail="reserved"`:
+
+- Full (960px or wider) and compact (720px or wider): the message column and the
+  floating composer keep their width and centring. They move left only as far
+  as they must to stay `--tab-rail-clearance` (24px) clear of the rail. At
+  1440 with the sidebar open, that is 65px. They narrow only when the move would
+  bring them within 24px of the card's leading edge (`railColumn` in TabRail
+  computes the same numbers).
+- Narrower than 720px: the shelf strip sits on top, and the messages start below
+  it (`--conversation-rail-top`).
+- Cards that come and go later never move the column back. Pass `rail={null}`
+  while the browser area is open. The column then returns, and a later rail
+  reserves room again.
+
+The rail sits 16px into a shell card (`--conversation-top-reserve`), or under the
+title bar in the flat frame. The composer follows through
+`--conversation-column-width` and `--conversation-column-shift`, which
+ComposerCard reads.
+
+```tsx
+<ConversationShell composerReserve={reserve} railView={sessionId}
+  rail={areaOpen ? null : <TabRail view={sessionId} tabs={tabs} labels={labels} onMore={openFirstHidden} />}>
+  …
+</ConversationShell>
+```
+
 ## Who can use this component
 
 Agents building Butler chat, transcript, or conversation preview surfaces.
@@ -84,4 +114,4 @@ blocks such as `ChromeFrame`, `SurfacePanel`, or `InspectorPanel` instead.
 
 ## Tags
 
-conversation, chat, virtual-list, scroll, composer-reserve, background, wallpaper
+conversation, chat, virtual-list, scroll, composer-reserve, background, wallpaper, rail, tabs

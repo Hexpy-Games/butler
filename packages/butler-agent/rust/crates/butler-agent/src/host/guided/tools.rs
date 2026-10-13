@@ -8,6 +8,7 @@ mod dispatch;
 mod effect;
 mod execute;
 mod feedback;
+mod folder;
 mod hooks;
 mod image;
 mod library;
@@ -165,6 +166,7 @@ pub(crate) struct GuidedTools {
     authority_consumed: Mutex<bool>,
     turn_taint: Mutex<butler_turn::btcc::TurnTaint>,
     attention_sent: Mutex<bool>,
+    web_provenance: Mutex<HashSet<String>>,
 }
 
 /// A guided tool invocation that violated its contract; becomes a BTCC error.
@@ -233,14 +235,7 @@ impl GuidedTools {
         binding: GuidedToolBinding,
     ) -> Result<Self, BtccError> {
         binding.validate_surface()?;
-        let described_ids = restored
-            .into_iter()
-            .flat_map(|continuation| &continuation.messages)
-            .flat_map(|message| message.tool_calls.as_deref().unwrap_or(&[]))
-            .filter(|call| call.name == ToolName::ToolCall)
-            .filter_map(|call| call.arguments.get("id").and_then(Value::as_str))
-            .map(str::to_owned)
-            .collect();
+        let described_ids = resume::restored_descriptions(restored);
         Ok(Self {
             capabilities,
             command,
@@ -272,6 +267,7 @@ impl GuidedTools {
             browser_http: OnceCell::new(),
             turn_taint: Mutex::new(binding.turn_guard.initial_taint),
             attention_sent: Mutex::new(false),
+            web_provenance: Mutex::new(dispatch::web_provenance(&binding.current_user_message)),
             binding,
             state: Mutex::new(State {
                 described_ids,
@@ -321,6 +317,7 @@ impl GuidedTools {
                     | ToolName::ReadProjectSource
                     | ToolName::ProjectArtifacts
                     | ToolName::BindSessionGitWorktree
+                    | ToolName::SwitchFolder
                     | ToolName::StartTopicConversation
                     | ToolName::RequestServiceRestart
                     | ToolName::CallMcpTool

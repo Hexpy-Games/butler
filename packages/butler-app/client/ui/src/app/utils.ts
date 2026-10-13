@@ -1,3 +1,4 @@
+import { retainAnswerBlocks } from "./stableAnswerBlocks";
 import { sessionDisplayTitle } from "./sessionTitle.ts";
 import { ACTIVE_TURN_STATES } from "./constants.ts";
 import { appCopy, interfaceText } from "./copy.ts";
@@ -1074,7 +1075,7 @@ function mergeMessageRecord(
   incoming: MessageRecord,
 ): MessageRecord {
   if (isStaleMessageRecord(previous, incoming)) return previous;
-  let next = incoming;
+  let next = retainAnswerBlocks(previous, incoming);
   if (previous.work_blocks?.length && !next.work_blocks) {
     next = { ...next, work_blocks: previous.work_blocks };
   }
@@ -1762,12 +1763,12 @@ export function allSessionsFromNavigation(
 ): SessionOption[] {
   const chatSessions = (navigation.chats ?? []).map((chat) => ({
     id: chat.id,
-    label: chat.title,
+    label: sessionDisplayTitle(chat),
   }));
   const projectSessions = (navigation.projects ?? []).flatMap((project) =>
     (project.sessions ?? []).map((session) => ({
       id: session.id,
-      label: `${project.display_name} / ${session.title}`,
+      label: `${project.display_name} / ${sessionDisplayTitle(session)}`,
     })),
   );
   return [...chatSessions, ...projectSessions];

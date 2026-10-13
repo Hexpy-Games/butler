@@ -1,3 +1,4 @@
+import { sessionDisplayTitle } from "@/app/sessionTitle.ts";
 import { useEffect, useRef } from "react";
 import { useButlerStore } from "@/app/store.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -29,7 +30,7 @@ export function useSessionAttentionNotifications(): void {
       if (waiting.current.has(session.id)) continue;
       void attentionLabel(session.id).then((label) => {
         if (!waiting.current.has(session.id)) return;
-        const body = `${session.title} · ${label}`;
+        const body = `${sessionDisplayTitle(session)} · ${label}`;
         notifyStatus(body, { id: `attention:${session.id}`, duration: Infinity });
         if (useButlerStore.getState().settings.desktop_notifications.enabled) {
           void showDesktopNotification({ kind: "task_completion", title: appCopy.firstRun.product,

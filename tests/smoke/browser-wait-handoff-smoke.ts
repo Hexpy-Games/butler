@@ -1,7 +1,7 @@
 // test-category: race
 /** browser_wait_for_user hand-off through the real gateway and UI; stub model and a scripted
  * browser host. The user holds the tab for a secure field → hand-off card (no permission ask) →
- * Open tab → Give back to Butler → the call resumes; Stop task cancels. Desktop pages get a
+ * Open to check → Give back to Butler → the call resumes; Stop task cancels. Desktop pages get a
  * recording browser bridge; the phone page has none. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -127,8 +127,8 @@ const card = (page: Page) => page.locator('[data-test-class="composer-browser-ha
 async function settle(page: Page) { await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(150); }
 async function shoot(page: Page, name: string) { await settle(page); const path = join(evidence!, `${name}.png`); await page.screenshot({ path }); shots.push(path); }
 const copy = {
-  ko: { title: "직접 입력 필요", detail: "fixture-shop.test", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "데스크톱 앱에서 마무리해 주세요", open: "탭 열기", stop: "작업 중지", giveBack: "버틀러에게 돌려주기", status: "탭에서 마치기를 기다리고 있습니다.", band: "버틀러가 기다리는 중" },
-  en: { title: "Your input needed", detail: "fixture-shop.test", inTab: "Finish in the tab, then give it back to Butler", onDesktop: "Finish in the desktop app", open: "Open tab", stop: "Stop task", giveBack: "Give back to Butler", status: "Waiting for you to finish in the tab.", band: "Butler is waiting" },
+  ko: { title: "직접 입력 필요", detail: "fixture-shop.test", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "데스크톱 앱에서 마무리해 주세요", open: "열어서 확인", stop: "작업 중지", giveBack: "버틀러에게 돌려주기", status: "탭에서 마치기를 기다리고 있습니다.", band: "버틀러가 기다리는 중" },
+  en: { title: "Your input needed", detail: "fixture-shop.test", inTab: "Finish in the tab, then give it back to Butler", onDesktop: "Finish in the desktop app", open: "Open to check", stop: "Stop task", giveBack: "Give back to Butler", status: "Waiting for you to finish in the tab.", band: "Butler is waiting" },
 };
 async function checkCard(page: Page, lang: "ko" | "en", desktop: boolean) {
   const panel = card(page); await panel.waitFor({ timeout: 30_000 });
@@ -161,11 +161,11 @@ try {
   assert.ok(hostOps.includes("tab.wait"), `wait dispatched: ${hostOps}`);
   await desk.getByText(`${ASK} · 직접 확인 필요`, { exact: true }).waitFor();
 
-  // 2. Screenshots: desktop 1440/1100 with the browser, phone 375 without; light/dark; KO/EN.
+  // 2. Screenshots: desktop 1440/1100/390 with the browser, phone 375 without; light/dark; KO/EN.
   const phone = await newPage(375, false);
   for (const lang of ["ko", "en"] as const) for (const theme of ["light", "dark"] as const) {
     await settings(lang, theme);
-    for (const width of [1440, 1100]) {
+    for (const width of [1440, 1100, 390]) {
       await desk.setViewportSize({ width, height: 900 }); await desk.reload(); await checkCard(desk, lang, true);
       await shoot(desk, `wait-card-${lang}-${theme}-${width}`);
     }
@@ -177,9 +177,9 @@ try {
   }
   await settings("ko", "light"); await desk.setViewportSize({ width: 1440, height: 900 }); await desk.reload(); await checkCard(desk, "ko", true);
 
-  // 3. 탭 열기 opens and focuses the waiting tab; its band says Butler waits and offers the hand-back.
+  // 3. 열어서 확인 opens and focuses the waiting tab; its band says Butler waits and offers the hand-back.
   bridgeCalls.length = 0;
-  await card(desk).getByRole("button", { name: copy.ko.open, exact: true }).click();
+  await card(desk).locator("button").filter({ hasText: new RegExp(`^${copy.ko.open}$`, "u") }).click();
   for (let i = 0; !bridgeCalls.some(c => c.op === "activate") && i < 50; i++) await desk.waitForTimeout(100);
   assert.ok(bridgeCalls.some(c => c.op === "activate" && (c.input as { id?: string }).id === TAB), `activate ${TAB}: ${JSON.stringify(bridgeCalls)}`);
   await desk.getByText(copy.ko.band, { exact: true }).waitFor();
@@ -204,6 +204,13 @@ try {
   const view = await server.api<{ latest_turn?: { state?: string } }>(`/session-view?session_id=${encodeURIComponent(session)}`);
   assert.equal(view.latest_turn?.state, "cancelled", JSON.stringify(view.latest_turn));
   await shoot(desk, "wait-stopped-ko-light-1440");
+  await desk.keyboard.press("ControlOrMeta+k");
+  await desk.getByRole("combobox").fill("General");
+  const general = desk.getByRole("option").filter({ has: desk.locator("small", { hasText: /^대화$/u }), hasText: /^일반/u });
+  await general.waitFor();
+  await general.scrollIntoViewIfNeeded();
+  assert.ok(!(await general.innerText()).includes("General"), "search uses the sidebar's localized channel title");
+  await shoot(desk, "search-general-ko-light-1440");
   console.log(JSON.stringify({ ok: true, screenshots: shots.length, bridge: bridgeCalls.map(c => c.op), hostOps: [...new Set(hostOps)], modelCalls: server.stubModelCalls.length }));
 } catch (error) {
   for (const [index, page] of [...pages, ...browser.contexts().flatMap(context => context.pages())].entries()) await page.screenshot({ path: join(evidence, `failure-${index}.png`) }).catch(() => {});

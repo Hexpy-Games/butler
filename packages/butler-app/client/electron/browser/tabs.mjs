@@ -1,3 +1,4 @@
+import { BrowserLiveFrames } from "./live.mjs";
 import { linkMenuItems } from "./links.mjs";
 import { configureWebIdentity } from "./identity.mjs";
 import { wireHistory } from "./history.mjs";
@@ -41,6 +42,7 @@ class UserBrowser {
 
   constructor(app, getWindow, getLanguage) {
     this.getWindow = getWindow;
+    this.live = new BrowserLiveFrames(this);
     this.getLanguage = getLanguage;
     this.pointer = new BrowserPointer(this, controlTab);
     this.selection = new BrowserSelection(this);
@@ -57,10 +59,11 @@ class UserBrowser {
     const popups = new Map();
     for (const child of this.tabs.values()) if (child.popup && child.opener && !child.closing) popups.set(child.opener, { id: child.id, url: child.url });
     return { enabled: this.enabled(), blocked: this.breaker.tripped, activeId: this.activeId, nativeCovered: this.nativeCovers > 0, focusRequest: this.focusRequest,
-      tabs: [...this.tabs.values()].filter(tab => !tab.popup).map(tab => ({ id: tab.id, owner: tab.owner, opener: tab.opener, preview: tab.preview, popup: popups.get(tab.id), dialog: publicDialog(tab), blockedPopup: tab.blockedPopup, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, driven: tab.driven, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab), paused: Boolean(tab.pausedTurns), picking: tab.picking === true, selectionCount: tab.selections?.length ?? 0, stills: this.stillPreferences.get(tab.owner) !== false,
+      tabs: [...this.tabs.values()].filter(tab => !tab.popup).map(tab => ({ id: tab.id, owner: tab.owner, opener: tab.opener, preview: tab.preview, popup: popups.get(tab.id), dialog: publicDialog(tab), blockedPopup: tab.blockedPopup, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, driven: tab.driven, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab), paused: Boolean(tab.pausedTurns), agentAt: tab.lastAgentCall ?? undefined, privacyFrozen: this.live.sensitive(tab), picking: tab.picking === true, selectionCount: tab.selections?.length ?? 0, stills: this.stillPreferences.get(tab.owner) !== false,
         signinStep: tab.signinStep ?? undefined, payStep: tab.payStep ?? undefined, saveOffer: tab.saveOffer ? { username: tab.saveOffer.username, host: new URL(tab.saveOffer.origin).host } : undefined })) };
   }
   publish() {
+    this.live.sync();
     this.pointer.sync(this.tabs.get(this.activeId));
     this.onState?.(this.snapshot());
     const win = this.getWindow();
@@ -162,6 +165,8 @@ class UserBrowser {
     tab.session = tab.view.webContents.session;
     tab.identityReady = configureWebIdentity(tab.view.webContents, !supplied);
     attachNativeWorlds(tab);
+    this.live.watch(tab);
+    tab.afterCapture = image => this.live.changed(tab, image);
     wireTab(tab, { update: (item) => this.update(item), capture: (item) => this.capture(item),
       detach: (item) => this.detach(item), publish: () => this.publish(), nativeCover: () => this.nativeCover(),
       linkMenu: (url) => linkMenuItems(this, url, tab), language: this.getLanguage,
@@ -220,6 +225,7 @@ class UserBrowser {
     if (!tab || tab.closing) return;
     tab.flushHistory?.();
     tab.closing = true;
+    this.live.unsubscribe(id);
     clearOffer(tab);
     this.downloads.cancelTab(id);
     closeUse(this, tab);
@@ -346,6 +352,7 @@ class UserBrowser {
       if (tab.holder === "user" && !tab.sticky) controlTab(this, tab, "agent");
       this.detach(tab); backgroundTab(this, tab);
     }
+    this.live.sync();
   }
   control(id, holder, sticky) {
     if (!["agent", "user"].includes(holder)) throw new Error("invalid_control");
@@ -357,10 +364,20 @@ class UserBrowser {
     for (const peer of this.tabs.values()) if (peer.owner === tab.owner) peer.stills = value !== false;
     this.publish();
   }
-  execute(frame) { return executeBrowser(this, frame); }
+  async execute(frame) {
+    const filled = ["signin.fill", "pay.fill", "autofill.fill"].includes(frame.op);
+    const action = ["tab.act", "tab.dialog"].includes(frame.op);
+    const release = filled || action ? this.live.pauseCapture(frame.tab, filled) : () => {};
+    try { return await executeBrowser(this, frame); }
+    finally {
+      release();
+      if (frame.op === "tab.zoom") this.live.changed(this.tabs.get(frame.tab));
+    }
+  }
   syncAll() { for (const tab of this.tabs.values()) this.sync(tab); }
   flush() { return this.restore.flush(); }
   async dispose() {
+    this.live.dispose();
     this.downloads.stop();
     this.resetUse();
     this.areaVisible = false;

@@ -29,6 +29,9 @@ export function installUserBrowser(app, getWindow, getLanguage) {
       case "app-snapshot": return snapshotApp(win, input.target);
       case "open-link": return openLink(browser, input.url);
       case "open-external-signin": return openExternalSignIn(input.url);
+      case "frame.subscribe": return browser.live.subscribe(input.id, event.sender, input.widthPx);
+      case "frame.unsubscribe": return browser.live.unsubscribe(input.id);
+      case "frame.visibility": return browser.live.visibility(input.value === true);
       case "state": return browser.snapshot();
       case "focus-app": return win.webContents.focus();
       case "open": return browser.open();
