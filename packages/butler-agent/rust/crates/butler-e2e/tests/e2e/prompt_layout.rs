@@ -201,11 +201,12 @@ async fn prompt_uses_local_timezone_and_rfc3339_offset() -> Result<(), HarnessEr
         serde_json::from_slice(&std::fs::read(s.sandbox.data.join("butler.config.json"))?)?;
     assert_eq!(config["user"]["timezone"], "UTC");
     s.turn("general", "Reply in the pinned timezone").await?;
-    let pinned = s.provider()?.requests()[0].to_string();
+    // Bootstrap calls can precede the parent turn; inspect its runtime state.
+    let pinned = parent_prompt(&s.provider()?.requests())?;
     assert!(pinned.contains("User Timezone: UTC"));
     s.gw.patch("/settings", json!({"timezone":host})).await?;
     s.turn("general", "Reply once").await?;
-    let first = s.provider()?.requests().last().unwrap().to_string();
+    let first = parent_prompt(&s.provider()?.requests())?;
     assert!(
         first.contains(&format!("User Timezone: {host}")),
         "host timezone missing"
@@ -244,4 +245,14 @@ async fn prompt_uses_local_timezone_and_rfc3339_offset() -> Result<(), HarnessEr
     );
 
     s.finish().await
+}
+
+fn parent_prompt(requests: &[Value]) -> Result<String, HarnessError> {
+    requests
+        .iter()
+        .rev()
+        .filter_map(|request| request["input"][0]["content"][0]["text"].as_str())
+        .find(|text| text.contains("Session ID: butler/app-general"))
+        .map(str::to_owned)
+        .ok_or_else(|| std::io::Error::other("parent turn runtime state missing").into())
 }
