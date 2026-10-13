@@ -179,7 +179,7 @@ try {
 
   // 3. 열어서 확인 opens and focuses the waiting tab; its band says Butler waits and offers the hand-back.
   bridgeCalls.length = 0;
-  await card(desk).getByRole("button", { name: copy.ko.open, exact: true }).click();
+  await card(desk).locator("button").filter({ hasText: new RegExp(`^${copy.ko.open}$`, "u") }).click();
   for (let i = 0; !bridgeCalls.some(c => c.op === "activate") && i < 50; i++) await desk.waitForTimeout(100);
   assert.ok(bridgeCalls.some(c => c.op === "activate" && (c.input as { id?: string }).id === TAB), `activate ${TAB}: ${JSON.stringify(bridgeCalls)}`);
   await desk.getByText(copy.ko.band, { exact: true }).waitFor();

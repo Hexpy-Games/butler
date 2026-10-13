@@ -29,10 +29,12 @@ async function matrix(screen: string) {
       reduce_motion: true, wallpaper: { source, motion: "paused", pauseOnBattery: true }, conversation_background: { source, overlay: 0 } }) });
     await app.main(`${app.win}.setContentSize(${width},900)`);
     await app.page.reload(); await shellReady(app, "ko");
-    const inspector = '[data-test-class=titlebar-right-panel-toggle]';
+    if (await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='false'")) await app.click("사이드바 보기");
+    await app.page.clickText(screen === "new-chat" ? "Empty capture" : "일반", "[data-test-class=app-sidebar] button,[data-test-class=app-sidebar] [role=button]");
+    const inspector = "[data-test-class=titlebar-right-panel-toggle]";
     if (await app.page.expression(`document.querySelector('${inspector}')?.getAttribute('aria-pressed')==='true'`)) await app.page.clickSelector(inspector);
-    if (await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='true'") && width === 390) await app.click("사이드바 숨기기");
-    await waitBrowser(() => app.page.expression(`document.querySelector('[data-test-class=custom-titlebar]').textContent.includes(${JSON.stringify(screen === "new-chat" ? "Empty capture" : "일반")})`), "expected conversation visible");
+    if (width === 390 && await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='true'")) await app.click("사이드바 숨기기");
+    await waitBrowser(() => app.page.expression(screen === "new-chat" ? "Boolean(document.querySelector('[data-test-class=new-chat-empty-state]'))" : "document.querySelector('[data-test-class=custom-titlebar]').textContent.includes('일반')"), "expected conversation visible");
     if (!baseline && screen === "rail") await waitBrowser(() => app.page.expression(`document.querySelectorAll('${rail} [data-slot=live-tab-canvas]').length === 3`), "matrix frames");
     if (!baseline && screen === "approval") await waitBrowser(() => app.page.expression(`Boolean(document.querySelector('${media} [data-slot=live-tab-canvas]'))`), "matrix approval frame");
     assert.equal(await app.page.expression("document.documentElement.scrollWidth > innerWidth"), false, "no horizontal overflow");
@@ -52,6 +54,11 @@ try {
   if (!baseline) {
     await waitBrowser(() => app.page.expression(`document.querySelectorAll('${rail} [data-slot=live-tab-canvas]').length===3`), "three parallel frames");
     assert.equal(await app.main(`${browser}.live.subscriptions.size`), 3, "hidden fourth tab has no stream");
+    await app.main(`${app.win}.setContentSize(1440,540)`);
+    await waitBrowser(() => app.page.expression(`document.querySelectorAll('${rail} [data-slot=live-tab-canvas]').length===2`), "short card shows two frames");
+    assert.equal(await app.main(`${browser}.live.subscriptions.size`), 2);
+    await app.main(`${app.win}.setContentSize(1440,900)`);
+    await waitBrowser(() => app.page.expression(`document.querySelectorAll('${rail} [data-slot=live-tab-canvas]').length===3`), "tall card shows three frames");
     await app.page.clickSelector(`${rail} button[aria-label="1 more tab · View in browser"]`);
     await waitBrowser(() => app.main(`${browser}.activeId===${JSON.stringify(ids[3])}`), "more focuses first hidden tab");
     await togglePane(app, false);
@@ -92,12 +99,27 @@ try {
   }
   const pending = await app.gateway.api<{ active_turn: { id: string } }>("/session-view?session_id=general");
   await app.gateway.api(`/turns/${pending.active_turn.id}/cancel`, { method: "POST", body: "{}" });
+  await waitBrowser(async () => !(await app.gateway.api<{ active_turn?: unknown }>("/session-view?session_id=general")).active_turn, "approval turn cancelled");
+  if (!baseline) {
+    await app.call("control", { id: tab, holder: "user", sticky: true });
+    app.stub.set([describeBrowser, () => bridgeBrowser("browser_wait_for_user", { tab, reason: "secure_field" })]);
+    await app.send("Wait for the user to finish in this tab");
+    await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=composer-browser-handoff] [data-slot=live-tab-canvas]'))"), "handoff thumbnail");
+    assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))"), false, "handoff does not auto-open");
+    await shot("handoff-ko-dark-390-wallpaper");
+    await app.page.clickText("열어서 확인", "[data-test-class=composer-browser-handoff] button");
+    await waitBrowser(() => app.main(`${browser}.activeId===${JSON.stringify(tab)}`), "handoff opens exact tab");
+    await app.call("control", { id: tab, holder: "agent" }); await app.delivered();
+    await togglePane(app, false);
+    await app.main(`(()=>{for(const t of ${browser}.tabs.values())t.busy=false;${browser}.tabs.get(${JSON.stringify(tab)}).status='crashed';${browser}.publish()})()`);
+    await waitBrowser(() => app.page.expression("document.querySelector('[data-slot=activity-glow]')?.getAttribute('data-state')==='error'"), "error glow");
+  }
   // New chat has no tabs: capture the completed onboarding screen independently.
   await app.gateway.api("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "Empty capture" }) });
   await app.page.reload(); await shellReady(app, "ko");
   if (await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='false'")) await app.click("사이드바 보기");
-  await app.page.clickText("Empty capture", '[data-test-class=app-sidebar] button,[data-test-class=app-sidebar] [role=button]');
-  await waitBrowser(() => app.page.expression("document.querySelector('[data-test-class=custom-titlebar]').textContent.includes('Empty capture')"), "empty conversation selected");
+  await app.page.clickText("Empty capture", "[data-test-class=app-sidebar] button,[data-test-class=app-sidebar] [role=button]");
+  await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=new-chat-empty-state]'))"), "empty conversation selected");
   for (const id of ids) await app.call("close", { id });
   await matrix("new-chat");
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ baseline, captures, liveModelCalls: 0, functional: "passed" }));
