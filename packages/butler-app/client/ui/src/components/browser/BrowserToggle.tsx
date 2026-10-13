@@ -1,3 +1,5 @@
+import { useMemo } from "react";
+import { conversationAgentTabs } from "./conversationAgentTabs";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { Globe2, IconButton } from "@/butler-ds";
@@ -9,7 +11,10 @@ export function BrowserToggle() {
   const session = useButlerStore((state) => state.activeChatId);
   const open = useBrowserShellState((state) => Boolean(state.conversations[session]?.open));
   const enabled = useBrowserState((state) => state.enabled);
-  const browsing = useBrowserState((state) => state.tabs.some((tab) => tab.owner === `conversation:${session}` && tab.busy));
+  const tabs = useBrowserState((state) => state.tabs);
+  const views = useButlerStore((state) => state.sessionViews);
+  const agentTabs = useMemo(() => conversationAgentTabs(session, tabs, views), [session, tabs, views]);
+  const browsing = agentTabs.some((tab) => tab.busy || tab.inUse);
   if (!window.butlerBrowser) return null;
   return <IconButton data-test-class="titlebar-browser-toggle" aria-pressed={open}
     label={open ? appCopy.browser.hide : appCopy.browser.show}
