@@ -11,6 +11,25 @@ fn criteria(packet: &SubsessionPacket) -> String {
     serde_json::to_string(&packet.acceptance_criteria).unwrap_or_default()
 }
 
+/// A card title: the model's safe title, else the request's first line.
+pub(super) fn delegation_title(safe_title: Option<&str>, request: &str) -> String {
+    use butler_core::public_text::{names_internal_role, public_title};
+    if let Some(title) = safe_title
+        .map(|title| public_title(title, request))
+        .filter(|title| !title.trim().is_empty() && !names_internal_role(title))
+    {
+        return title;
+    }
+    let first = request.lines().find(|line| !line.trim().is_empty());
+    let first = first.unwrap_or("").split_whitespace().collect::<Vec<_>>();
+    let title = first.join(" ");
+    if title.chars().count() > 64 {
+        format!("{}…", title.chars().take(63).collect::<String>())
+    } else {
+        title
+    }
+}
+
 pub(super) fn render_input(packet: &SubsessionPacket, profile_prompt: Option<&str>) -> String {
     let base = format!(
         "role: worker\nassigned_objective: {}\nacceptance_criteria: {}\nimplementation_brief: {}\nReport the bounded result to the Steward.",

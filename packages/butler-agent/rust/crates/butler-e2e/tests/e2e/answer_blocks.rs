@@ -86,6 +86,17 @@ fn assert_feedback(
             .any(|p| p["path"] == "/blocks/0/items/0/source"
                 && p["fix"].as_str().unwrap().contains("not opened"))
     );
+    assert!(
+        problems.iter().any(|p| p["path"] == "/blocks/1/rows/0/0"
+            && p["fix"].as_str().unwrap().contains("at most 60"))
+    );
+    assert!(
+        s.provider()?
+            .requests()
+            .iter()
+            .any(|request| request.to_string().contains("at most 60")),
+        "cell correction must reach the model"
+    );
     let accepted: Value = serde_json::from_str(&results[1])?;
     assert_eq!(accepted, json!({"ok":true,"shown":{"cards":2}}));
     Ok(())
@@ -105,6 +116,12 @@ fn cassette() -> Result<Cassette, HarnessError> {
     invalid["blocks"][0]["items"][0]["value"] = json!({"amount":2,"unit":"steps"});
     invalid["blocks"][0]["items"][0]["source"] = json!("https://example.org/methods");
     invalid["blocks"][0]["items"][0]["checked"] = json!(chrono::Utc::now().to_rfc3339());
+    invalid["blocks"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"type":"table",
+        "columns":["Method","Notes"],"rows":[["x".repeat(61),"Complete input"]]}));
+
     for (step, spec) in [Some(invalid), Some(corrected()), None]
         .into_iter()
         .enumerate()
