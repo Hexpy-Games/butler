@@ -33,6 +33,7 @@ export function ComposerAuthorityDecisionSurface({ decision }: { decision: Compo
   if (handoff) return <ComposerBrowserHandoffSurface decision={{ ...decision, handoff }} />;
   const Icon = KIND_ICONS[decision.actionKind];
   return <ComposerDecisionPanel
+    media={decision.media}
     icon={<Icon aria-hidden="true" size="lg" />}
     eyebrow={appCopy.composer.permission}
     title={decision.title}

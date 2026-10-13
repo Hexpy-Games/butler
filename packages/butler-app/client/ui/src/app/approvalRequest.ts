@@ -105,6 +105,7 @@ function normalizeOperation(value: unknown): ApprovalSummary["operation"] {
     .filter((target): target is string => typeof target === "string" && Boolean(target.trim()));
   const browser_steps = normalizeBrowserSteps(value.browser_steps);
   return { tool: value.tool, access: value.access, targets,
+    ...(typeof value.browser_tab === "string" ? { browser_tab: value.browser_tab } : {}),
     ...(browser_steps ? { browser_steps } : {}),
     ...(typeof value.sign_in_step === "string" ? { sign_in_step: value.sign_in_step } : {}),
     ...(typeof value.wait_reason === "string" ? { wait_reason: value.wait_reason } : {}),

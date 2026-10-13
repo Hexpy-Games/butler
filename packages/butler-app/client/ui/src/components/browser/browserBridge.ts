@@ -1,3 +1,4 @@
+import { conversationAgentTabs } from "./conversationAgentTabs";
 import type { PageDialog } from "./BrowserDialog";
 import { create } from "zustand";
 import { useButlerStore } from "@/app/store";
@@ -10,6 +11,7 @@ import { useBrowserShellState } from "./browserShellState";
 
 export interface BrowserTab {
   popup?: { id: string; url: string }; dialog?: PageDialog | null; blockedPopup?: { url: string; site: string; reason: string } | null; opener?: string;
+  privacyFrozen?: boolean;
   id: string; owner: string; url: string; title: string; favicon: string;
   preview?: string; picking?: boolean; selectionCount?: number;
   stills?: boolean; agent?: boolean; driven?: boolean; profile?: "signed_out" | "signed_in"; epoch?: number; holder?: "agent" | "user"; sticky?: boolean; waiting?: boolean; busy?: boolean; inUse?: boolean;
@@ -114,10 +116,12 @@ export async function openConversationBrowser(session: string, requestedTab?: st
   const shell = useBrowserShellState.getState();
   shell.setOpen(session, true);
   const snapshot = await browserCall("open") as BrowserSnapshot | undefined;
-  const tabs = snapshot?.tabs.filter((tab) => tab.owner === `conversation:${session}`) ?? [];
-  // No blank tab is made for you: before Butler opens a page the pane shows its empty state.
-  const target = tabs.find((tab) => tab.id === requestedTab)?.id
+  const all = snapshot?.tabs ?? [];
+  const rolled = conversationAgentTabs(session, all, store.sessionViews);
+  const tabs = all.filter(tab => tab.owner === `conversation:${session}` || rolled.includes(tab));
+  const target = tabs.find(tab => tab.id === requestedTab)?.id
     ?? relevantConversationTab(tabs, shell.conversations[session]?.lastTab)?.id;
+
   // Switching away while opening must not steal another conversation's native view.
   const current = useButlerStore.getState();
   if (typeof target === "string" && current.activeChatId === session && current.view.kind === "session") {

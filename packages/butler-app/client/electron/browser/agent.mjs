@@ -207,19 +207,9 @@ async function openAgent(browser, { session, args, id: callId }, source) {
   const signedIn = args.profile === "signed_in" || args.signed_in === true;
   if (signedIn && (args.policy?.mode !== "signed_in" || signedInPlace(args.url, args.policy) !== "granted")) return { status: "refused", reason: "signed_in_unavailable" };
   if (!makeAgentRoom(browser)) return { status: "refused", reason: "tab_budget_exhausted" };
-  const opening = openingBurst(browser, `conversation:${session}`);
-  try { return await openTab(browser, { session, args, callId, signedIn, source, opening }); }
-  finally { if (--opening.count === 0) browser.opening.delete(`conversation:${session}`); }
+  return openTab(browser, { session, args, callId, signedIn, source });
 }
-// Opens that overlap form one burst: its first page to arrive is shown, the
-// rest stay in the background, so parallel tabs never flip the visible one.
-function openingBurst(browser, owner) {
-  browser.opening ??= new Map();
-  const burst = browser.opening.get(owner) ?? { count: 0, shown: false };
-  burst.count++; browser.opening.set(owner, burst);
-  return burst;
-}
-async function openTab(browser, { session, args, callId, signedIn, source, opening }) {
+async function openTab(browser, { session, args, callId, signedIn, source }) {
   const id = browser.create({ owner: `conversation:${session}`, url: args.url, preview_id: args.preview_id, agent: true, policy: args.policy, partition: source?.partition, profile: source?.profile ?? (signedIn ? "signed_in" : undefined) }, false);
   const tab = browser.tabs.get(id);
   tab.onPointer=(step,target)=>browser.pointer.step(tab,step,target);
@@ -235,9 +225,6 @@ async function openTab(browser, { session, args, callId, signedIn, source, openi
   catch { browser.close(id); return { status: "unknown", reason: "navigation_failed" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
   touch(browser, tab);
-  // The renderer activates through the normal detach/attach path only for its visible owner.
-  // Search results open as background tabs: the user stays where they are.
-  if (!source && args.background !== true && !opening.shown) { opening.shown = true; browser.focusRequest = id; }
   browser.publish();
   return { status: "ok", tab: id, url: tab.url, title: tab.title, epoch: tab.epoch, profile: tab.profile };
 }

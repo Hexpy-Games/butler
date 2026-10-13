@@ -8,6 +8,7 @@ export function ComposerBrowserHandoffSurface({ decision }: { decision: Composer
   const copy = appCopy.interfaceTemplates.approvalRequest.signInHandoff;
   const { handoff } = decision;
   return <ComposerDecisionPanel
+    media={decision.media}
     icon={handoff.signIn ? <Key aria-hidden="true" size="lg" /> : <Globe2 aria-hidden="true" size="lg" />}
     eyebrow={copy.eyebrow}
     title={decision.title}
