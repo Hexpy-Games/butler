@@ -25,7 +25,7 @@ export function ComposerPanelHeader({ icon, eyebrow, title, aside, tabbed = fals
   </Inline>;
 }
 export function ComposerPanelBody({ children, dataSlot, single = false }: { children: ReactNode; dataSlot: string; single?: boolean }) {
-  return <div className={styles.body}><ScrollArea maxHeight="xs" dataSlot={dataSlot} contentClassName={single ? dsClass(styles.singleContent) : undefined}>
+  return <div className={styles.body} data-panel-part="body"><ScrollArea maxHeight="xs" dataSlot={dataSlot} contentClassName={single ? dsClass(styles.singleContent) : undefined}>
     <div className={styles.scrollContent}>{children}</div>
   </ScrollArea></div>;
 }

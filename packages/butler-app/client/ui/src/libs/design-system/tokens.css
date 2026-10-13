@@ -165,6 +165,12 @@
   --spinner-rotate-duration: 2000ms;
   --pulse-duration: 1250ms;
   --shimmer-duration: 1400ms;
+  /* ActivityGlow (the titlebar browser toggle while Butler browses): one turn
+     of the busy ink ring, one breath of its opacity, one entry pulse of the
+     needs-you halo. The loops stop under reduced motion (loop count 0). */
+  --activity-glow-spin-duration: 3200ms;
+  --activity-glow-breathe-duration: 2400ms;
+  --activity-glow-nudge-duration: 1200ms;
   /* Iterations of a decorative status loop (activity pulse). Reduced motion
      (OS or data-motion scope) sets 0, so the loop never runs and the element
      shows its static resting state. */
@@ -216,6 +222,14 @@
   --browser-chat-width: 400px;
   --browser-chat-width-min: 340px;
   --browser-chat-width-max: 560px;
+  /* TabRail beside the conversation: full cards (208, 16:10 frame) from a
+     960px conversation, compact thumbnails (128) from 720px, a shelf strip
+     below. The column keeps --tab-rail-clearance from the rail. */
+  --tab-rail-width: 208px;
+  --tab-rail-compact-width: 128px;
+  --tab-rail-shelf-height: 46px;
+  --tab-rail-inset: var(--space-lg);
+  --tab-rail-clearance: var(--space-2xl);
   /* Marks Butler draws over web pages (pointer, pick badges): one shadow
      that separates them from any page, light or dark. */
   --browser-overlay-shadow: 0 1px 4px rgba(0, 0, 0, 0.32);

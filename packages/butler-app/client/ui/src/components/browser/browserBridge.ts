@@ -27,7 +27,9 @@ export interface BrowserTab {
 export interface BrowserSnapshot {
   enabled: boolean; blocked: boolean; activeId: string | null; nativeCovered: boolean; focusRequest?: string; tabs: BrowserTab[];
 }
+export interface BrowserFrame { tab: string; seq: number; bytes: Uint8Array; masked: boolean }
 interface BrowserBridge {
+  onFrame: (tabId: string, handler: (frame: BrowserFrame) => void, widthPx?: number) => () => void;
   call: (op: string, input?: unknown) => Promise<unknown>;
   subscribe: (handler: (state: BrowserSnapshot) => void) => () => void;
   onPointer: (handler: (point: { x: number; y: number } | null) => void) => () => void;

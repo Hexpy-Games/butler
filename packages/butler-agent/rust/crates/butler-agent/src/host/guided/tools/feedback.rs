@@ -11,6 +11,8 @@ pub(super) fn solvable(code: &str) -> bool {
 
 pub(super) const SOLVABLE: &[&str] = &[
     "schedule_access_exceeds_turn",
+    "schedule_permission_required",
+    "schedule_question_unavailable",
     "delegation_reviewed_plan_required",
     "delegation_allowed_effects_required",
     "delegation_mutation_scope_required",
@@ -155,8 +157,17 @@ pub(super) async fn contextual_result(
 
 /// Invalid adapter input is corrected in place, independently of Work tracking.
 pub(super) fn repair(code: &str) -> &'static str {
-    if code == "schedule_access_exceeds_turn" {
-        return "Omit access_mode to use this conversation's access.";
+    match code {
+        "schedule_access_exceeds_turn" => {
+            return "Omit access_mode to use this conversation's access.";
+        }
+        "schedule_permission_required" => {
+            return "This scheduled run cannot ask. Skip this step, finish what you can, and report what needs permission.";
+        }
+        "schedule_question_unavailable" => {
+            return "This scheduled run cannot ask the user. Proceed on a reasonable assumption you state in the report, or skip the step and report what needs the user.";
+        }
+        _ => {}
     }
     "Correct the tool arguments using the returned error and tool schema, then retry the exact operation in this turn. Permission mode and operation approval govern execution; no Work or Plan effect declaration is required."
 }

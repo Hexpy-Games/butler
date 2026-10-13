@@ -13,11 +13,12 @@ import type {
   SessionOption,
   StatusPill,
 } from "@/app/types.ts";
+import { useButlerStore } from "@/app/store.ts";
 import { isAccessMode } from "@/components/conversation/accessModeUtils";
 import {
   DEFAULT_SCHEDULE_ACCESS_MODE,
   automationSaveError,
-  conversationAccessMode,
+  scheduleDefaultAccessMode,
   withoutFieldError,
   type AutomationSaveError,
 } from "./automationForm.ts";
@@ -37,8 +38,6 @@ interface AutomationStore {
   startAt?: string;
   /** The access the schedule's runs get, independent of the target conversation. */
   accessMode: AccessMode;
-  /** True once the user picked a mode, so a new target no longer replaces it. */
-  accessModeChosen: boolean;
   state: string;
   runs: AutomationRunSummary[];
   saving: boolean;
@@ -76,20 +75,6 @@ interface AutomationStore {
   ) => Promise<void>;
 }
 
-let accessModeRequest = 0;
-
-/**
- * A new schedule starts from its target conversation's current mode, or Ask
- * first when the UI cannot read it, until the user picks a mode.
- */
-async function followTargetAccessMode(targetSessionId: string): Promise<void> {
-  const request = ++accessModeRequest;
-  const mode = await conversationAccessMode(targetSessionId);
-  const current = useAutomationStore.getState();
-  if (request !== accessModeRequest || !current.isNew || current.accessModeChosen) return;
-  useAutomationStore.setState({ accessMode: mode ?? DEFAULT_SCHEDULE_ACCESS_MODE });
-}
-
 export const useAutomationStore = create<AutomationStore>((set, get) => ({
   // Initial state
   automationId: "",
@@ -101,7 +86,6 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
   schedule: null,
   scheduleType: "interval",
   accessMode: DEFAULT_SCHEDULE_ACCESS_MODE,
-  accessModeChosen: false,
   state: "enabled",
   runs: [],
   saving: false,
@@ -117,26 +101,22 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
   setTargetSessionId: async (targetSessionId) => {
     // A schedule always has a target. Inside a <form>, Radix Select's hidden
     // native select reports "" when the value arrives in the same render as
-    // its options; ignoring it keeps the target (and the mode that follows it).
+    // its options; ignoring it keeps the target.
     if (!targetSessionId) return;
     set((current) => ({ targetSessionId, saveError: withoutFieldError(current.saveError, "form") }));
-    const { isNew, accessModeChosen } = get();
-    if (isNew && !accessModeChosen) await followTargetAccessMode(targetSessionId);
   },
   setIntervalSeconds: (intervalSeconds) =>
     set((current) => ({ intervalSeconds, saveError: withoutFieldError(current.saveError, "interval") })),
   setAccessMode: (accessMode) =>
     set((current) => ({
       accessMode,
-      accessModeChosen: true,
       saveError: withoutFieldError(current.saveError, "accessMode"),
     })),
 
   // Initialize - loads automation data
   initialize: async (automationId, sessionOptions, onStatus) => {
     const isNew = !automationId || automationId === "new";
-    accessModeRequest += 1;
-    set({ automationId, isNew, sessionOptions, saveError: null, accessModeChosen: false });
+    set({ automationId, isNew, sessionOptions, saveError: null });
 
     if (isNew) {
       const targetSessionId = sessionOptions[0]?.id ?? "general";
@@ -149,11 +129,11 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
         scheduleType: "interval",
         runAt: undefined,
         startAt: undefined,
-        accessMode: DEFAULT_SCHEDULE_ACCESS_MODE,
+        // Unattended runs start from the schedule default (D7), not the chat's mode.
+        accessMode: scheduleDefaultAccessMode(useButlerStore.getState().settings),
         state: "enabled",
         runs: [],
       });
-      await followTargetAccessMode(targetSessionId);
       return;
     }
 

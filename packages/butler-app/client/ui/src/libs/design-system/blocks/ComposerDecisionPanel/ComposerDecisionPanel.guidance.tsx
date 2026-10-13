@@ -5,6 +5,8 @@ import { Folder, ListChecks } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { Tag } from "../../components/Tag";
 import { Typo } from "../../components/Typo";
+import { LIVE_PAGES } from "../LiveTabCard/fixtures";
+import { LiveTabFrame } from "../LiveTabCard/LiveTabFrame";
 import { ComposerDecisionPanel } from "./ComposerDecisionPanel";
 
 // #region recipe: Plan waiting for acceptance
@@ -33,6 +35,20 @@ function ApprovalRequest() {
 }
 // #endregion
 
+// #region recipe: Browser approval with the page
+function BrowserApproval() {
+  return (
+    <ComposerDecisionPanel icon={<Folder aria-hidden="true" size="lg" />} eyebrow="Permission" title="Click ‘Book now’" onOpen={() => undefined}
+      details={["Pine Grove Campground · Oct 20 and 22, 2 nights"]} aside={<Tag tone="warning">Medium risk</Tag>}
+      media={{ content: <LiveTabFrame frame={LIVE_PAGES.bookingApproval} />, label: "Open tab · Pine Grove Campground", onOpen: () => undefined }}
+      actions={<ButtonContainer size="sm" justify="end">
+        <Button size="sm" variant="secondary">Deny</Button>
+        <Button size="sm">Allow once</Button>
+      </ButtonContainer>} />
+  );
+}
+// #endregion
+
 export const guidance: ShowcaseGuidance = {
   purpose: "The composer's decision state: what is being decided, optional detail lines, an optional failure, and the decision buttons in the composer radius.",
   whenToUse: ["A plan waiting for acceptance or an authority request that replaces the composer input"],
@@ -43,6 +59,7 @@ export const guidance: ShowcaseGuidance = {
   recipes: [
     { name: "Plan waiting for acceptance", description: "Icon, clickable title, then a ButtonContainer justify=\"end\" of decisions.", render: () => <PlanDecision /> },
     { name: "Approval request with examples and risk", description: "A one-sentence question, up to three examples and a \"+N more\" line as details, a risk Tag in the aside.", render: () => <ApprovalRequest /> },
+    { name: "Browser approval with the page", description: "media: the tab's 16:10 frame at the subject row's end; clicking it opens the tab.", render: () => <BrowserApproval /> },
   ],
   doDont: [
     {
@@ -60,6 +77,7 @@ export const guidance: ShowcaseGuidance = {
     "Details show exactly what is decided: never cut a command or path; pass the Show more/less labels so a long block clamps with the full text one click away.",
     "Paths in details are relative to the workspace, never absolute.",
     "Buttons are verbs (Accept plan, Deny, Allow once).",
+    "media label names the target page (Open tab · Pine Grove Campground); a browser hand-off's primary action is 열어서 확인 / Open to check (butler-i18n browser.rail.openToCheck).",
   ],
   accessibility: ["The icon is decorative (aria-hidden); the title is a button that opens the source; details are plain text and the Show more button carries aria-expanded and aria-controls; errors are announced with role=\"alert\"."],
   tokens: ["--adaptive-composer-radius", "--space-xs", "--space-sm", "--space-md", "--space-lg", "--icon-size-sm", "--text-secondary"],

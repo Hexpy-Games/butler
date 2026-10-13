@@ -55,6 +55,7 @@ pub(super) async fn post(
                     access_mode: None,
                     plan_mode: None,
                     subsession_result: None,
+                    schedule_run: None,
                 },
             })
             .await?;

@@ -336,6 +336,10 @@ export interface BrowserCopy {
   enabledHelp: string; shareSignIn: string; shareSignInHelp: string; signIns: string; signInsHelp: string; addSignIn: string; fillPolicy: string;
   ask: string; always: string; never: string; standing: string; lastUsed: string; deletePassword: string; signOutSite: string; revoke: string;
   usedTimes: (count: number) => string; filled: string; askedApproved: string;
+  /** The live tab rail beside the conversation (TabRail, LiveTabCard). */
+  rail: { region: string; openToCheck: string; needsCheck: string; pageError: string; error: string; more: (count: number) => string };
+  /** The titlebar browser toggle while Butler browses in the background (ActivityGlow): label suffixes per state. */
+  glow: { busy: string; attention: string; error: string };
   scraps: string; documents: string; outputs: string; loadMore: string; emptyLibrary: string; bookmarkFolder: string;
 }
 
@@ -1065,8 +1069,10 @@ export interface AppCopy {
       title: string;
       prompt: string;
     };
-    /** One line under the access selector while Ask first is selected. */
+    /** One line under the access selector while an asking mode is selected. */
     accessHint: string;
+    /** Desktop notification when an unattended run skipped a step for permission. */
+    needsPermissionNotify: string;
     saveFailed: string;
     /** Inline messages for a save the gateway refused (400). */
     errors: {
@@ -1083,6 +1089,8 @@ export interface AppCopy {
       failed: string;
       running: string;
       skippedTargetUnavailable: string;
+      /** A run that skipped a step needing permission. */
+      needsPermission: string;
       cancelled: string;
       notRun: string;
     };

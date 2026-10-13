@@ -114,6 +114,7 @@ fn create_plan_queue_message(
     }
     let request = MessageSendRequest {
         subsession_result: None,
+        schedule_run: None,
         expected_project_id: None,
         content_parts: None,
         chat_id: Some(Value::String(input.chat_id.clone())),

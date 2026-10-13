@@ -2,7 +2,7 @@ import { nativeFrameWorld } from "./native-worlds.mjs";
 import { closedRoots } from "./closed-roots.mjs";
 
 /** CDP frame IDs differ from Electron Blink frame tokens. Keep refs in owned worlds. */
-export async function frameWorlds(tab) {
+export async function frameWorlds(tab, { immediate = false } = {}) {
   await tab.debuggerReady;
   await Promise.all(tab.frameAttachPromises.values());
   const debuggerApi=tab.view.webContents.debugger;
@@ -15,7 +15,7 @@ export async function frameWorlds(tab) {
     if(!documents.has(sessionId)) documents.set(sessionId,await api.sendCommand("DOMSnapshot.captureSnapshot",{computedStyles:[]}));
     const mainId=sessionId?id:root.frame.id;
     let closed=await closedRoots(api,id,mainId,documents.get(sessionId),true);
-    const native=closed.hasClosedRoots ? undefined : parent ? nativeFrameWorld(tab,id) : tab.view.webContents;
+    const native=closed.hasClosedRoots || immediate && tab.view.webContents.isLoading() ? undefined : parent ? nativeFrameWorld(tab,id) : tab.view.webContents;
     if (!native && !closed.contextId) closed=await closedRoots(api,id,mainId,documents.get(sessionId));
     const contextId=closed.contextId;
     const url=/^about:(blank|srcdoc)$/u.test(tree.frame.url)?parent?.url:tree.frame.url;

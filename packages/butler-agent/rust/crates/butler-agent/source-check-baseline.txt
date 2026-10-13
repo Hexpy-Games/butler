@@ -16,7 +16,7 @@ src/host/guided/command/artifacts.rs	declared	84
 src/host/guided/command/evidence.rs	capability_receipts	85
 src/host/guided/command/output.rs	from_streams	175
 src/host/guided/command/output/assemble.rs	assemble	139
-src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	200
+src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	199
 src/host/guided/file_effects/edit.rs	decode	115
 src/host/guided/file_effects/edit.rs	recover	149
 src/host/guided/file_effects/edit/legacy.rs	recover	90
@@ -30,7 +30,7 @@ src/host/guided/prompt/prior_tool/semantic.rs	facts	93
 src/host/guided/prompt/work_context.rs	render	267
 src/host/guided/tools/discovery/invoke.rs	run	134
 src/host/guided/tools/discovery/invoke.rs	run_mcp	115
-src/host/guided/tools/dispatch.rs	execute	284
+src/host/guided/tools/dispatch.rs	execute	190
 src/host/guided/tools/effect/ledger_input.rs	prepare	94
 src/host/guided/tools/effect/topic_conversation.rs	TopicConversationEffect::request	97
 src/host/guided/tools/execute.rs	execute	123
@@ -49,7 +49,6 @@ src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	125
 src/host/runtime.rs	AgentRuntime::open	389
 src/host/service/ingress/bind.rs	bind_and_request	136
 src/host/service/ingress/bind.rs	control_request	81
-src/host/service/ingress/bind/internal_subsession.rs	bind	87
 src/host/service/ingress/bind/policy.rs	upsert_app_binding	213
 src/host/service/ingress/dispatch.rs	execute	127
 src/host/service/progress_publisher.rs	ProgressPublisher::publish	89
