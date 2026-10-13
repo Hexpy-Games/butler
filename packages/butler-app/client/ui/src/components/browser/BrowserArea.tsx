@@ -1,3 +1,4 @@
+import { conversationAgentTabs } from "./conversationAgentTabs";
 import { useEffect, useRef, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { BrowserPane, Button, EmptyLine, PageCard, TabStrip, type TabStripGroup } from "@/butler-ds";
@@ -24,8 +25,10 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [dialogContainer, setDialogContainer] = useState<HTMLDivElement | null>(null);
   const creating = useRef(false);
+  const views = useButlerStore(store => store.sessionViews);
+  const rolled = sessionId ? conversationAgentTabs(sessionId, state.tabs, views) : [];
   const visibleTabs = state.tabs.filter((item) => item.owner === "mine" || publicBrowserOwner(item.owner, navigation));
-  const tabs = sessionId ? visibleTabs.filter((item) => item.owner === `conversation:${sessionId}`) : visibleTabs;
+  const tabs = sessionId ? state.tabs.filter((item) => item.owner === `conversation:${sessionId}` || rolled.includes(item)) : visibleTabs;
   const lastTab = useBrowserShellState((shell) => sessionId ? shell.conversations[sessionId]?.lastTab : undefined);
   const tab = tabs.find((item) => item.id === state.activeId) ?? tabs.find((item) => item.id === lastTab) ?? tabs[0];
   const copy = appCopy.browser;
@@ -44,7 +47,7 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
   const groups: TabStripGroup[] = [];
   for (const item of tabs) {
     let group = groups.find((entry) => entry.id === item.owner);
-    if (!group) { group = { id: item.owner, kind: item.owner === "mine" ? "mine" : "conversation", label: item.owner === "mine" ? copy.myTabs : activeChatFromNavigation(navigation, item.owner.slice(13)).shortTitle, collapsed: collapsed[item.owner], tabs: [] }; groups.push(group); }
+    if (!group) { group = { id: item.owner, kind: item.owner === "mine" ? "mine" : "conversation", label: item.owner === "mine" ? copy.myTabs : activeChatFromNavigation(navigation, sessionId ?? item.owner.slice(13)).shortTitle, collapsed: collapsed[item.owner], tabs: [] }; groups.push(group); }
     if (item.waiting) group.state = "waiting"; else if (item.busy) group.state ??= "working";
     if (item.status === "crashed") group.state ??= "crashed";
     group.tabs.push({ id: item.id, title: item.title, faviconSrc: item.favicon,

@@ -1,7 +1,7 @@
 // test-category: race
 /** browser_wait_for_user hand-off through the real gateway and UI; stub model and a scripted
  * browser host. The user holds the tab for a secure field → hand-off card (no permission ask) →
- * Open tab → Give back to Butler → the call resumes; Stop task cancels. Desktop pages get a
+ * Open to check → Give back to Butler → the call resumes; Stop task cancels. Desktop pages get a
  * recording browser bridge; the phone page has none. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -127,8 +127,8 @@ const card = (page: Page) => page.locator('[data-test-class="composer-browser-ha
 async function settle(page: Page) { await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(150); }
 async function shoot(page: Page, name: string) { await settle(page); const path = join(evidence!, `${name}.png`); await page.screenshot({ path }); shots.push(path); }
 const copy = {
-  ko: { title: "직접 입력 필요", detail: "fixture-shop.test", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "데스크톱 앱에서 마무리해 주세요", open: "탭 열기", stop: "작업 중지", giveBack: "버틀러에게 돌려주기", status: "탭에서 마치기를 기다리고 있습니다.", band: "버틀러가 기다리는 중" },
-  en: { title: "Your input needed", detail: "fixture-shop.test", inTab: "Finish in the tab, then give it back to Butler", onDesktop: "Finish in the desktop app", open: "Open tab", stop: "Stop task", giveBack: "Give back to Butler", status: "Waiting for you to finish in the tab.", band: "Butler is waiting" },
+  ko: { title: "직접 입력 필요", detail: "fixture-shop.test", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "데스크톱 앱에서 마무리해 주세요", open: "열어서 확인", stop: "작업 중지", giveBack: "버틀러에게 돌려주기", status: "탭에서 마치기를 기다리고 있습니다.", band: "버틀러가 기다리는 중" },
+  en: { title: "Your input needed", detail: "fixture-shop.test", inTab: "Finish in the tab, then give it back to Butler", onDesktop: "Finish in the desktop app", open: "Open to check", stop: "Stop task", giveBack: "Give back to Butler", status: "Waiting for you to finish in the tab.", band: "Butler is waiting" },
 };
 async function checkCard(page: Page, lang: "ko" | "en", desktop: boolean) {
   const panel = card(page); await panel.waitFor({ timeout: 30_000 });
@@ -177,7 +177,7 @@ try {
   }
   await settings("ko", "light"); await desk.setViewportSize({ width: 1440, height: 900 }); await desk.reload(); await checkCard(desk, "ko", true);
 
-  // 3. 탭 열기 opens and focuses the waiting tab; its band says Butler waits and offers the hand-back.
+  // 3. 열어서 확인 opens and focuses the waiting tab; its band says Butler waits and offers the hand-back.
   bridgeCalls.length = 0;
   await card(desk).getByRole("button", { name: copy.ko.open, exact: true }).click();
   for (let i = 0; !bridgeCalls.some(c => c.op === "activate") && i < 50; i++) await desk.waitForTimeout(100);

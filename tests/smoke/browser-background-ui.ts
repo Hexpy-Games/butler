@@ -53,7 +53,7 @@ try {
     await page.waitForFunction(({ selector, active }) => {
       const button = document.querySelector(selector)!;
       return (button.getAttribute("data-tone") === "riso") === active
-        && Boolean(button.querySelector('[data-slot="icon-button-indicator"]')) === active;
+        && (button.closest('[data-slot="activity-glow"]')?.getAttribute('data-state') === 'busy') === active;
     }, { selector, active });
     assert.equal(await button.getAttribute("aria-pressed"), "false"); checks++;
   }

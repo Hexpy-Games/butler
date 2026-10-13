@@ -43,6 +43,7 @@ const subscribers = new Set<(value: BrowserSnapshot) => void>();
 const publish = () => { for (const subscriber of subscribers) subscriber({ ...snapshot, tabs: [...snapshot.tabs] }); };
 const addressListeners = new Set<() => void>();
 window.butlerBrowser = {
+  onFrame() { return () => {}; },
   subscribe(callback) { subscribers.add(callback); callback(snapshot); return () => { subscribers.delete(callback); }; },
   onPointer() { return () => {}; },
   onElementDrag() { return () => {}; },
