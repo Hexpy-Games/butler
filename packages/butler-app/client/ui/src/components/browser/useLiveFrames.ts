@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /** Ephemeral decoded frames; never enter a persisted store or a message file. */
 export function useLiveFrames(ids: readonly string[], width = 416) {
-  const key = JSON.stringify(ids);
+  const key = JSON.stringify([...ids].sort());
   const [frames, setFrames] = useState<Record<string, ImageBitmap>>({});
   const owned = useRef(new Set<ImageBitmap>());
   useLayoutEffect(() => {

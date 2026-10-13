@@ -74,6 +74,13 @@ try {
   if (!baseline) {
     await waitBrowser(() => app.page.expression(`document.querySelectorAll('${rail} [data-slot=live-tab-canvas]').length===3`), "three parallel frames");
     assert.equal(await app.main(`${browser}.live.subscriptions.size`), 3, "hidden fourth tab has no stream");
+    await app.main(`globalThis.railStreams=new Map(${browser}.live.subscriptions);${browser}.tabs.get(${JSON.stringify(ids[2])}).lastAgentCall=Date.now();${browser}.publish()`);
+    await waitBrowser(() => app.page.expression("document.querySelector('[data-slot=live-tab-card] [role=button]')?.getAttribute('aria-label')==='Page 3 · Butler is browsing'"), "recent action orders first");
+    await app.page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+    await app.call("state");
+    assert.equal(await app.main(`[...globalThis.railStreams].every(([id,state])=>${browser}.live.subscriptions.get(id)===state)`), true, "reordering visible cards keeps their streams");
+    await app.main(`(()=>{for(const [n,id] of ${JSON.stringify(ids)}.entries())${browser}.tabs.get(id).lastAgentCall=Date.now()-n;${browser}.publish()})()`);
+    await waitBrowser(() => app.page.expression("document.querySelector('[data-slot=live-tab-card] [role=button]')?.getAttribute('aria-label')==='Page 1 · Butler is browsing'"), "initial ordering restored");
     await app.main(`${app.win}.setContentSize(1440,540)`);
     await waitBrowser(() => app.page.expression(`document.querySelectorAll('${rail} [data-slot=live-tab-canvas]').length===2`), "short card shows two frames");
     assert.equal(await app.main(`${browser}.live.subscriptions.size`), 2);
