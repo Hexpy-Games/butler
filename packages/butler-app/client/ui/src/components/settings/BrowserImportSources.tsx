@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { appCopy } from "@/app/copy";
 import {
-  Bookmark, Button, ButtonContainer, ChoiceCardList, ChoiceCheckCard, EmptyLine, FieldLegend, FieldSet, FileText, Globe2, History, Key, ListRow, Stack,
+  Bookmark, Button, ButtonContainer, CheckCard, CheckCardList, EmptyLine, FieldLegend, FieldSet, FileText, Globe2, History, Key, ListRow, Stack,
   Tooltip,
 } from "@/butler-ds";
 import type { ImportSource } from "./signInsApi";
@@ -16,7 +16,7 @@ function withHint(hint: string | undefined, key: string, control: ReactNode) {
   return hint ? <Tooltip key={key} label={hint}>{control}</Tooltip> : control;
 }
 
-/** What every import includes, chosen once above the sources: multi-select check cards (DS ChoiceCheckCard). */
+/** What every import includes, chosen once above the sources: multi-select check cards (DS CheckCard). */
 export function BrowserImportItems({ flow, keychain }: { flow: ImportFlow; keychain: boolean }) {
   const copy = appCopy.settings.browserImport;
   const items = [
@@ -27,12 +27,12 @@ export function BrowserImportItems({ flow, keychain }: { flow: ImportFlow; keych
   return (
     <FieldSet>
       <FieldLegend variant="label" id="browser-import-items">{copy.chooseItems}</FieldLegend>
-      <ChoiceCardList role="group" aria-labelledby="browser-import-items">
+      <CheckCardList aria-labelledby="browser-import-items">
         {items.map(item => (
-          <ChoiceCheckCard key={item.id} data-browser-import-item={item.id} icon={item.icon} title={item.label} description={item.hint}
+          <CheckCard key={item.id} data-browser-import-item={item.id} icon={item.icon} title={item.label} description={item.hint}
             checked={item.on} disabled={flow.busy} onCheckedChange={item.set} />
         ))}
-      </ChoiceCardList>
+      </CheckCardList>
     </FieldSet>
   );
 }

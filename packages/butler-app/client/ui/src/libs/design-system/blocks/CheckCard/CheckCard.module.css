@@ -1,0 +1,164 @@
+/* CheckCard rides on ChoiceCard's .card surface (border, radius, padding,
+   hover, focus ring, selected look). This file adds the round indicator, the
+   layout for the indicator side and an optional icon, and the motion. */
+
+.card[data-slot="check-card"] {
+  transition:
+    background-color var(--motion-base) var(--motion-ease-standard),
+    border-color var(--motion-base) var(--motion-ease-standard),
+    box-shadow var(--motion-fast) var(--motion-ease-standard),
+    scale var(--motion-fast) var(--motion-ease-standard);
+}
+
+/* Press: the DS press-in, released on --motion-fast (scale token is 1 under
+   reduced motion). */
+.card[data-slot="check-card"]:active:not([aria-disabled="true"]) {
+  scale: var(--motion-scale-press);
+  transition-duration: var(--motion-instant);
+}
+
+/* Disabled dims the content (ChoiceCard rule); the change itself fades. */
+.card[data-slot="check-card"] > * {
+  transition: opacity var(--motion-base) var(--motion-ease-standard);
+}
+
+/* Layout: the indicator sits on the title line, at the end (default) or the
+   start; without an icon the title takes the icon's column. */
+.tile {
+  grid-row: 1;
+}
+
+.slot {
+  display: flex;
+  grid-row: 1;
+  align-items: center;
+}
+
+.card[data-indicator="end"] .slot {
+  grid-column: 3;
+}
+
+.card[data-indicator="end"][data-icon="none"] {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.card[data-indicator="end"][data-icon="none"] .title,
+.card[data-indicator="end"][data-icon="none"] .description {
+  grid-column: 1;
+}
+
+.card[data-indicator="end"][data-icon="none"] .slot {
+  grid-column: 2;
+}
+
+.card[data-indicator="start"] {
+  grid-template-columns: auto auto minmax(0, 1fr);
+}
+
+.card[data-indicator="start"] .slot {
+  grid-column: 1;
+}
+
+.card[data-indicator="start"] .tile {
+  grid-column: 2;
+}
+
+.card[data-indicator="start"] .title,
+.card[data-indicator="start"] .description {
+  grid-column: 3;
+}
+
+.card[data-indicator="start"][data-icon="none"] {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.card[data-indicator="start"][data-icon="none"] .title,
+.card[data-indicator="start"][data-icon="none"] .description {
+  grid-column: 2;
+}
+
+/* Without the 36px tile the title line sets row 1, so the description keeps
+   its hairline gap instead of ChoiceCard's pull-up. */
+.card[data-icon="none"] .description {
+  margin-block-start: var(--border-hairline);
+}
+
+/* The round indicator: a ring on the card surface; checked fills it with the
+   accent from the centre and draws the check (CheckIcon geometry). */
+.indicator {
+  position: relative;
+  display: inline-grid;
+  box-sizing: border-box;
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
+  flex: none;
+  place-items: center;
+  border: var(--border-width-strong) solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  transition: border-color var(--motion-base) var(--motion-ease-standard);
+}
+
+.indicator[data-checked="true"] {
+  border-color: var(--accent);
+}
+
+.fill {
+  position: absolute;
+  inset: calc(-1 * var(--border-width-strong));
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  opacity: 0;
+  transform: scale(var(--motion-scale-check));
+  /* Unchecking: the check undraws first, then the fill clears. */
+  transition:
+    opacity var(--motion-exit-base) var(--motion-ease-accelerate)
+      var(--motion-instant),
+    transform var(--motion-exit-base) var(--motion-ease-accelerate)
+      var(--motion-instant);
+}
+
+.indicator[data-checked="true"] .fill {
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity var(--motion-base) var(--motion-ease-decelerate),
+    transform var(--motion-base) var(--motion-ease-decelerate);
+}
+
+.mark {
+  position: relative;
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+  color: var(--primary-foreground);
+  opacity: 0;
+  transition: opacity var(--motion-exit-fast) var(--motion-ease-accelerate);
+}
+
+.mark path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset var(--motion-exit-fast)
+    var(--motion-ease-accelerate);
+}
+
+/* Checking: the check draws in one beat after the fill starts. */
+.indicator[data-checked="true"] .mark {
+  opacity: 1;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard)
+    var(--motion-instant);
+}
+
+.indicator[data-checked="true"] .mark path {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset var(--motion-base) var(--motion-ease-draw)
+    var(--motion-instant);
+}
+
+/* Reduced motion: no stroke travel and no scale (token is 1); only fades. */
+@media (prefers-reduced-motion: reduce) {
+  .mark path,
+  .indicator[data-checked="true"] .mark path {
+    stroke-dashoffset: 0;
+    transition: none;
+  }
+}

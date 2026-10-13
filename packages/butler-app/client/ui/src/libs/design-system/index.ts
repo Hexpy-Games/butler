@@ -94,6 +94,7 @@ export * from "./blocks/CardList";
 export * from "./blocks/SortableCardList";
 export * from "./blocks/ListRow";
 export * from "./blocks/ChoiceCard";
+export * from "./blocks/CheckCard";
 export * from "./blocks/EmptyLine";
 export * from "./blocks/Notice";
 export * from "./blocks/ConversationShell";
