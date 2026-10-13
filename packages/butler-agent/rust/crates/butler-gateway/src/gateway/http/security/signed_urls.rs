@@ -25,7 +25,7 @@ const FILE_ROUTE_PREFIX: &str = "/message-files/";
 const SIGNED_URL_FIELD: &str = "signed_url";
 /// Bodies without this byte string have nothing to sign.
 const JSON_MARKER: &[u8] = b"\"/message-files/";
-const ASSET_MARKER: &[u8] = b"\"/assets/";
+const ASSET_MARKER: &[u8] = b"\"/message-assets/";
 /// Larger JSON bodies are passed through unsigned.
 const MAX_DECORATED_BODY_BYTES: u64 = 32 * 1024 * 1024;
 
@@ -144,7 +144,7 @@ impl ResourceSigner {
                 {
                     object.insert(
                         "image_url".to_owned(),
-                        Value::String(self.sign(&format!("/assets/{id}"), now)),
+                        Value::String(self.sign(&format!("/message-assets/{id}"), now)),
                     );
                 }
                 let signed = object
@@ -161,10 +161,10 @@ impl ResourceSigner {
     }
 }
 
-/// Whether `path` is exactly `/message-files/file-<uuid>`.
+/// Whether `path` names one message file or collected image.
 pub(in crate::gateway::http) fn is_file_path(path: &str) -> bool {
     if path
-        .strip_prefix("/assets/")
+        .strip_prefix("/message-assets/")
         .is_some_and(super::super::assets::valid_id)
     {
         return true;

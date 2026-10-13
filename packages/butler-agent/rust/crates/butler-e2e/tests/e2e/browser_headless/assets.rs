@@ -186,6 +186,10 @@ async fn verify_delivery(
     asset: &Value,
 ) -> Result<(), HarnessError> {
     let url = asset["url"].as_str().unwrap();
+    assert_eq!(
+        url,
+        format!("/message-assets/{}", asset["id"].as_str().unwrap())
+    );
     let unsigned = reqwest::get(format!("{}{url}", s.gw.base)).await?;
     assert_eq!(unsigned.status(), 401);
     let signed = asset["signed_url"].as_str().unwrap();

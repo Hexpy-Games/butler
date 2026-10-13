@@ -43,11 +43,22 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
     let (url, script, server) = stub::start().await?;
     script.browser.store(true, Ordering::SeqCst);
     script.answer_blocks.store(true, Ordering::SeqCst);
-    let mut s = Setup::new("ANSWER-BLOCKS-COLLECTED")?
+    let setup = Setup::new("ANSWER-BLOCKS-COLLECTED")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
-        .start()
+        .env("BUTLER_CODEX_BASE_URL", url);
+    let (static_path, static_bytes) = install_ui_asset(&setup)?;
+    let mut s = setup.start().await?;
+    let static_file = reqwest::get(format!("{}{static_path}", s.gw.base)).await?;
+    assert_eq!(static_file.status(), 200);
+    assert_eq!(static_file.bytes().await?.as_ref(), static_bytes.as_slice());
+    let chat =
+        s.gw.post(
+            "/sessions",
+            json!({"kind":"chat","title":"Collected answer"}),
+        )
         .await?;
+    assert_eq!(chat.status, 201);
+    let session = chat.data()["session"]["id"].as_str().unwrap().to_owned();
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let stream = reqwest::Client::new()
         .get(format!("{}/internal/browser-host", s.gw.base))
@@ -56,13 +67,13 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
         .send()
         .await?;
     assert_eq!(stream.status(), 200);
-    let host = tokio::spawn(serve_host(stream, admin, true));
-    s.turn("general", stub::OWNER).await?;
+    let host = tokio::spawn(serve_host(stream, admin, true, session.clone()));
+    s.turn(&session, stub::OWNER).await?;
     tokio::time::timeout(Duration::from_secs(30), host)
         .await
         .unwrap()
         .unwrap()?;
-    let message = wait_answer(&s, &script).await?;
+    let message = wait_answer(&s, &script, &session).await?;
     let sets = &message["answer_blocks"];
     assert_eq!(sets[0]["spec"]["blocks"].as_array().unwrap().len(), 3);
     for (index, item) in sets[0]["spec"]["blocks"][0]["items"]
@@ -73,7 +84,7 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
     {
         let signed = item["image_url"].as_str().unwrap();
         assert!(signed.starts_with(&format!(
-            "/assets/{}?expires=",
+            "/message-assets/{}?expires=",
             item["img"].as_str().unwrap()
         )));
         let response = reqwest::get(format!("{}{signed}", s.gw.base)).await?;
@@ -90,8 +101,11 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
             )?;
         }
     }
+    assert_stored_ids(&s)?;
     s.restart().await?;
-    let view = s.gw.get("/session-view?session_id=general").await?;
+    let view =
+        s.gw.get(&format!("/session-view?session_id={session}"))
+            .await?;
     let reopened = view.data()["messages"]
         .as_array()
         .unwrap()
@@ -115,6 +129,7 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
             serde_json::to_vec_pretty(&reopened)?,
         )?;
     }
+    verify_asset_sweep(&s, &session, &reopened).await?;
     s.finish().await?;
     server.abort();
     Ok(())
@@ -123,10 +138,11 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
 async fn wait_answer(
     s: &butler_e2e::e2e::scenario::Scenario,
     script: &Arc<stub::Script>,
+    session: &str,
 ) -> Result<Value, HarnessError> {
     tokio::time::timeout(Duration::from_secs(30), async {
         loop {
-            if let Some(message) = s.gw.messages("general").await?.into_iter().find(|m| {
+            if let Some(message) = s.gw.messages(session).await?.into_iter().find(|m| {
                 m["status"] == "delivered"
                     && m["answer_blocks"]
                         .as_array()
@@ -208,4 +224,77 @@ fn strip_signatures(value: &mut Value) {
         }
         _ => {}
     }
+}
+
+/// Use an actual Vite build asset, without bundling the UI into every scenario.
+fn install_ui_asset(setup: &Setup) -> Result<(String, Vec<u8>), HarnessError> {
+    let dist =
+        butler_e2e::e2e::binary::workspace_root().join("../../butler-app/client/ui/dist/assets");
+    let source = std::fs::read_dir(dist)?
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .find(|entry| entry.path().extension().is_some_and(|ext| ext == "js"))
+        .expect("Build the App UI before the collected-answer E2E")
+        .path();
+    let name = source.file_name().unwrap().to_str().unwrap();
+    let target = setup.sandbox.resources.join("app-client/dist/assets");
+    std::fs::create_dir_all(&target)?;
+    let bytes = std::fs::read(&source)?;
+    std::fs::write(target.join(name), &bytes)?;
+    Ok((format!("/assets/{name}"), bytes))
+}
+
+fn assert_stored_ids(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), HarnessError> {
+    let db = butler_platform::sqlite::open_with_flags(
+        s.sandbox.data.join("app-server/butler-client.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    let spec: String = db.query_row(
+        "SELECT blocks_json FROM messages WHERE blocks_json IS NOT NULL LIMIT 1",
+        [],
+        |row| row.get(0),
+    )?;
+    assert!(spec.contains("img_"));
+    assert!(!spec.contains("image_url"), "Signed URLs are HTTP metadata");
+    assert!(!spec.contains("/assets/"));
+    Ok(())
+}
+
+async fn verify_asset_sweep(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    session: &str,
+    message: &Value,
+) -> Result<(), HarnessError> {
+    let items = message["answer_blocks"][0]["spec"]["blocks"][0]["items"]
+        .as_array()
+        .unwrap();
+    for item in items {
+        let response = reqwest::get(format!(
+            "{}{}",
+            s.gw.base,
+            item["image_url"].as_str().unwrap()
+        ))
+        .await?;
+        assert_eq!(response.status(), 200, "Reopened image remains loadable");
+    }
+    assert_eq!(
+        s.gw.delete(&format!("/sessions/{session}?permanent=true"))
+            .await?
+            .status,
+        200
+    );
+    for item in items {
+        let response = reqwest::get(format!(
+            "{}{}",
+            s.gw.base,
+            item["image_url"].as_str().unwrap()
+        ))
+        .await?;
+        assert_eq!(
+            response.status(),
+            404,
+            "Deleted chat sweeps its collected image"
+        );
+    }
+    Ok(())
 }

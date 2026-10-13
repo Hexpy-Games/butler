@@ -14,7 +14,7 @@
 // `devOrigins` (BUTLER_APP_DEV_ORIGIN), or the gateway answers 403
 // origin_not_allowed.
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, openSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -327,6 +327,13 @@ export async function startStubModel(
   return { server, port: typeof address === "object" && address ? address.port : 0 };
 }
 
+function spawnLoggedGateway(command: string, args: string[],
+  options: Omit<SpawnOptions, "detached"> & { cleanupPaths: string[] }, logPath: string): TrackedProcess {
+  const log = openSync(logPath, "a");
+  try { return spawnTrackedProcess(command, args, { ...options, stdio: ["pipe", log, log] }); }
+  finally { closeSync(log); }
+}
+
 export async function createNativeAppServer(options: NativeAppServerOptions = {}): Promise<NativeAppServerHandle> {
   const scratch = mkdtempSync(join(tmpdir(), "butler-native-smoke-"));
   const butlerData = options.butlerData ?? join(scratch, "data");
@@ -362,12 +369,12 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
   }
 
   const port = await freeGatewayPort();
-  const gateway = spawnTrackedProcess(
+  const logPath = join(scratch, "gateway.log");
+  const gateway = spawnLoggedGateway(
     join(installation, "bin/butler-agent"),
     ["--installation-root", installation, "--resource-root", resources],
     {
       cwd: butlerData,
-      stdio: ["pipe", "pipe", "pipe"],
       cleanupPaths: [scratch],
       env: {
         PATH: process.env.PATH ?? "/usr/bin:/bin",
@@ -386,22 +393,23 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
         ...options.env,
       },
     },
+    logPath,
   );
   const child = gateway.child;
+  let finalOutput = "";
+  const output = (): string => existsSync(logPath) ? readFileSync(logPath, "utf8") : finalOutput;
   const stop = async (): Promise<void> => {
+    finalOutput = output();
     await gateway.stop();
     await new Promise<void>((done) => stub.server.close(() => done()));
   };
-  let output = "";
-  child.stdout?.on("data", (chunk) => { output += String(chunk); });
-  child.stderr?.on("data", (chunk) => { output += String(chunk); });
   const url = `http://127.0.0.1:${port}/`;
   const deadline = Date.now() + (options.readyTimeoutMs ?? 60_000);
   let token: string | null = null;
   for (;;) {
     if (child.exitCode !== null) {
       await stop();
-      throw new Error(`Native gateway exited (${child.exitCode}):\n${output.slice(-4000)}`);
+      throw new Error(`Native gateway exited (${child.exitCode}):\n${output().slice(-4000)}`);
     }
     token ??= readLocalAuthToken(butlerData);
     try {
@@ -416,7 +424,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
     } catch { /* not listening yet */ }
     if (Date.now() > deadline) {
       await stop();
-      throw new Error(`Native gateway did not become ready on ${url}:\n${output.slice(-4000)}`);
+      throw new Error(`Native gateway did not become ready on ${url}:\n${output().slice(-4000)}`);
     }
     await new Promise((done) => setTimeout(done, 200));
   }
@@ -433,10 +441,10 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
   };
 
   return {
-    diagnostics() { return output.replaceAll(token ?? "", "[redacted]").replace(/(__o\/)[^/\s]+/gu,"$1[redacted]").slice(-12000); },
+    diagnostics() { return output().replaceAll(token ?? "", "[redacted]").replace(/(__o\/)[^/\s]+/gu, "$1[redacted]").slice(-12000); },
     assertRunning() {
       if (child.exitCode !== null || child.signalCode !== null) {
-        const tail = token ? output.slice(-4000).replaceAll(token, "[redacted]") : output.slice(-4000);
+        const tail = token ? output().slice(-4000).replaceAll(token, "[redacted]") : output().slice(-4000);
         throw new Error(`Native gateway exited: code=${child.exitCode}, signal=${child.signalCode}\n${tail}`);
       }
     },

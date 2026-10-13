@@ -1,7 +1,7 @@
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 // Stub App harness: approval priority, question delivery, transcript and reload at mobile/desktop widths.
 import { strict as assert } from "node:assert";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { api } from "../../packages/butler-app/client/ui/src/app/api";
@@ -83,6 +83,10 @@ try {
     await panel.getByText("Full", { exact: true }).click();
     await card.waitFor();
     assert.deepEqual(response, { status: "answered", answers: [{ id: "format", selected: ["full"], custom: null, skipped: false }] });
+    if (process.env.BUTLER_SMOKE_EVIDENCE) {
+      mkdirSync(process.env.BUTLER_SMOKE_EVIDENCE, { recursive: true });
+      await page.screenshot({ path: join(process.env.BUTLER_SMOKE_EVIDENCE, `ask-user-${width}.png`) });
+    }
     await page.close();
   }
   // A free-text question is one input; options that duplicate the card's Skip and free input never show,
