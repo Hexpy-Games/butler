@@ -23,7 +23,7 @@ const kinds = ["components", "blocks"] as const;
 /** Interactive items whose item page must show a states matrix. */
 const REQUIRES_STATE_MATRIX = [
   "components/Breadcrumb", "components/Button", "components/Card", "components/Clickable", "components/ColorSwatchInput",
-  "components/CopyButton", "components/IconButton", "components/Input", "components/NativeSelect", "components/PillButton",
+  "components/CopyButton", "components/DoneIconButton", "components/IconButton", "components/Input", "components/NativeSelect", "components/PillButton",
   "components/SegmentedControl", "components/Select", "components/Slider", "components/Switch", "components/Tabs",
   "components/Textarea", "blocks/ComposerControl", "blocks/DisclosureRow", "blocks/NavRow", "blocks/OptionMenu",
   "blocks/SplitButton", "blocks/ChoiceCard", "blocks/TabStrip",

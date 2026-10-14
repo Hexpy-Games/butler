@@ -4,7 +4,7 @@ import type { ShowcaseRenderContext } from "../../showcase";
 import { Button } from "../../components/Button";
 import { CopyButton } from "../../components/CopyButton";
 import { Grid } from "../../components/Grid";
-import { IconButton } from "../../components/IconButton";
+import { DoneIconButton } from "../../components/DoneIconButton";
 import { Scrap } from "../../components/Icons";
 import { MediaFrame } from "../../components/MediaFrame";
 import { useLateSrc } from "../../components/MediaFrame/MediaFrame.demo";
@@ -12,7 +12,7 @@ import { FIXTURE_FAVICON, fixturePicture } from "../../components/MediaFrame/fix
 import { Presence } from "../../components/Presence";
 import { Stack } from "../../components/Stack";
 import { settleGrid } from "../../lib/gridSettle";
-import { fixtureItems, LABELS, type FixtureItem } from "./fixtures";
+import { fixtureItems, fixtureSave, LABELS, type FixtureItem } from "./fixtures";
 import { ItemCard } from "./ItemCard";
 import { ItemCardSkeleton } from "./ItemCardSkeleton";
 
@@ -33,7 +33,7 @@ function StreamCard({ locale, item, round, reducedMotion }: { locale: Locale; it
       <ItemCard title={item.title} eyebrow={item.eyebrow} subtitle={item.subtitle} facts={item.facts} value={{ ...item.value, wasLabel: labels.before }}
         media={<MediaFrame aspect="1:1" fit="cover" placeholder={src !== undefined} placeholderIcon={FIXTURE_FAVICON} src={src} reducedMotion={reducedMotion} />}
         source={{ site: item.site, checked: labels.checked, label: `${item.site}, ${labels.open}`, onOpen: () => undefined }}
-        actions={<><IconButton label={labels.save}><Scrap size="sm" /></IconButton><CopyButton label={labels.copy} copiedLabel={labels.copied} text={item.title} /></>}
+        actions={<><DoneIconButton icon={<Scrap size="sm" />} label={labels.save} doneLabel={labels.saved} onAction={fixtureSave} /><CopyButton label={labels.copy} copiedLabel={labels.copied} text={item.title} /></>}
         onOpen={() => undefined} />
     </Presence>
   );
@@ -117,7 +117,7 @@ function PairCard({ locale, media }: { locale: Locale; media: "1:1" | null }) {
     <ItemCard title={short.title} subtitle={short.subtitle} facts={short.facts}
       media={media ? <MediaFrame aspect={media} fit="cover" src={fixturePicture("place")} /> : undefined}
       source={{ site, checked: labels.checked, label: `${site}, ${labels.open}`, onOpen: () => undefined }}
-      actions={<><IconButton label={labels.save}><Scrap size="sm" /></IconButton><CopyButton label={labels.copy} copiedLabel={labels.copied} text={short.title} /></>} />
+      actions={<><DoneIconButton icon={<Scrap size="sm" />} label={labels.save} doneLabel={labels.saved} onAction={fixtureSave} /><CopyButton label={labels.copy} copiedLabel={labels.copied} text={short.title} /></>} />
   );
 }
 
