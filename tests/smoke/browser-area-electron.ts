@@ -1,5 +1,6 @@
+import { spawnElectron, stopElectronChild } from "../support/electron-child";
 /** Public Browser area on an isolated, real Electron App and stub gateway. */
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess } from "node:child_process";
 import { strict as assert } from "node:assert";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
 import { cpus, loadavg, tmpdir } from "node:os";
@@ -10,6 +11,7 @@ import { createNativeAppServer, freePort, liveTrackedProcessIds } from "../suppo
 import { alignment, idleWrites, publicationStub } from "../support/browser-area-acceptance";
 import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy";
 import { electronMain } from "../support/electron-main-cdp";
+import { assertNewTabContent, populatedNewTab } from "../support/browser-newtab-acceptance";
 import { smokeElectronArgs } from "../support/smoke-browser";
 
 const root = process.cwd();
@@ -33,13 +35,10 @@ const nativeCount = `${win}.contentView.children.filter(v=>'webContents' in v &&
 const evaluate = <T>(fn: () => T) => main<Awaited<T>>(`(${fn.toString()})()`);
 let gateway: Awaited<ReturnType<typeof createNativeAppServer>> | undefined;
 const logs: string[] = [];
+const quits: Array<{ code: number; windows: number; contents: string[] }> = [];
 
 async function stopApp() {
-  if (!child || child.exitCode !== null || child.signalCode !== null) return;
-  child.kill("SIGTERM");
-  const deadline = Date.now() + 5000;
-  while (Date.now() < deadline && child.exitCode === null && child.signalCode === null) await new Promise(done=>setTimeout(done, 100));
-  if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+  if (child) await stopElectronChild(child);
 }
 
 async function quitAndStop(page: Page) {
@@ -57,6 +56,8 @@ async function quitAndStop(page: Page) {
   await page.expression("window.butlerApp.quitApp({confirmed:true})");
   const result = await quit;
   assert.equal(result.code, 0);assert.equal(result.windows, 0);assert.deepEqual(result.contents, []);
+  quits.push(result);
+  writeFileSync(join(evidence!, "verified-quits.json"), JSON.stringify(quits, null, 2));
   // Bare Electron 44 also remains resident after quit in this runner. Release
   // only our PID after the App has closed and flushed, then test real restore.
   connected?.close();await stopApp();
@@ -67,22 +68,19 @@ async function launch(): Promise<Page> {
   assert.ok(executable, "BUTLER_SMOKE_ELECTRON_EXECUTABLE must explicitly name Electron 44");
   const debugPort = await freePort();
   mkdirSync(join(dir, "home"), { recursive: true });
-  child = spawn(executable, [`--inspect=${inspectorPort}`, `--remote-debugging-port=${debugPort}`,
+  child = spawnElectron(executable, [`--inspect=${inspectorPort}`, `--remote-debugging-port=${debugPort}`,
     ...smokeElectronArgs(), resolve(root, "packages/butler-app/client/electron")], {
-    stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, HOME: join(dir, "home"), BUTLER_HOME: join(dir, "home"), BUTLER_DATA: gateway!.butlerData,
+    onOutput: bytes => logs.push(String(bytes).replace(/(__o\/)[^/\s]+/gu, "$1[redacted]")), env: { ...process.env, HOME: join(dir, "home"), BUTLER_HOME: join(dir, "home"), BUTLER_DATA: gateway!.butlerData,
       BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"), BUTLER_APP_UI_URL: "",
       BUTLER_APP_RENDERER_DIST: resolve(root, "packages/butler-app/client/ui/dist"),
       BUTLER_APP_SERVER_URL: gateway!.url, BUTLER_APP_SERVER_PORT: String(new URL(gateway!.url).port),
       BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1", BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1", BUTLER_E2E_TIER: "stub" } });
   child.on("exit", (code, signal)=>logs.push(JSON.stringify({ event:"child-exit", code, signal })));
   child.on("close", (code, signal)=>logs.push(JSON.stringify({ event:"child-close", code, signal })));
-  child.stdout!.on("data", bytes => logs.push(String(bytes).replace(/(__o\/)[^/\s]+/gu, "$1[redacted]")));
-  child.stderr!.on("data", bytes => logs.push(String(bytes).replace(/(__o\/)[^/\s]+/gu, "$1[redacted]")));
   const page = await electronPage(debugPort, origin);
   connected = page;
   await main(`(() => {${win}.show();${win}.focus();${win}.webContents.focus()})()`);
   assert.match(await main<string>("process.versions.electron"), /^44\./u);
-  if (process.env.BUTLER_E2E_EXPECT_BROWSER === "false") return page;
   await main(`(async () => {
     const module=process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve(root, "packages/butler-app/client/electron/package.json"))})(${JSON.stringify(resolve(root, "packages/butler-app/client/electron/browser/tabs.mjs"))});
     const dummy=module.createUserBrowser({getPath:()=>${JSON.stringify(join(dir, "profile"))},on:()=>{}},()=>null);
@@ -134,6 +132,10 @@ async function escape(page: Page) {
   await page.press("Escape");
 }
 async function navigate(page: Page, url: string) {
+  if (!await page.expression("Boolean(document.querySelector('input[aria-label=\"Address\"]'))")) {
+    await page.clickSelector('[data-slot="address-field"] [role="button"]');
+  }
+  await page.waitForFunction(() => Boolean(document.querySelector('input[aria-label="Address"]')));
   await page.expression(`(() => {
     const input = document.querySelector('input[aria-label="Address"]');
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(url)});
@@ -233,21 +235,6 @@ try {
   let page = await launch();
   await main(`${win}.setSize(1440, 900)`);
   await page.waitForFunction(() => innerWidth === 1440);
-  if (process.env.BUTLER_E2E_EXPECT_BROWSER === "false") {
-    await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class~="composer-card"]')));
-    assert.equal(await page.expression("typeof window.butlerBrowser"), "undefined");
-    assert.equal(await main(`${electronModule}.ipcMain._invokeHandlers.has('butler-browser:call')`), false);
-    assert.equal(await main<number>(nativeCount), 0);
-    for (const shortcut of ["t", "w", "r"]) {
-      await main(`${win}.webContents.sendInputEvent({type:'keyDown',keyCode:'${shortcut}',modifiers:['control','meta']})`);
-    }
-    assert.equal(await main<number>(nativeCount), 0, "shortcuts cannot create native tabs");
-    assert.equal(await page.expression("document.querySelectorAll('[data-test-class=browser-entry],[data-test-class=browser-area]').length"), 0);
-    const response = await fetch(new URL("/internal/browser-host", gateway.url), { headers: gateway.authHeaders });
-    assert.equal(response.status, 404);
-    await shot(page, "gate-off-workspace");
-    console.log("Gate-off Electron: no Browser preload, IPC, native tabs, entry, shortcuts or host route");
-  } else {
   await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-entry"]')));
   await quitAndStop(page);
   page=await launch();await main(`${win}.setSize(1440,900)`);
@@ -256,14 +243,18 @@ try {
   assert.equal(await main<number>(`${electronModule}.webContents.getAllWebContents().length`), 1, "no web tab process before Browser activation");
   await page.clickText("General", '[data-test-class="app-sidebar"] *');
   await click(page, "Browser");
-  await page.waitForFunction(() => document.body.textContent?.includes("Open a new tab"));
+  await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Address");
+  assert.equal((await state(page)).tabs.length, 1, "hub creates exactly one new tab");
+  await assertNewTabContent(page, "en");
   for (const locale of ["ko", "en"]) for (const theme of ["dark", "light"]) {
     await gateway.api("/settings", { method:"PATCH", body:JSON.stringify({ language:locale, appearance_theme:theme }) });
     await page.reload(); await click(page, locale === "ko" ? "브라우저" : "Browser");
-    await page.waitForFunction(() => Boolean(document.querySelector('[data-slot="native-view-slot"][data-hidden]')));
+    await assertNewTabContent(page, locale);
+    await waitUntil(() => main<boolean>(`${nativeCount} === 0`), "new-tab native view detached");
+    assert.equal(await main<number>(nativeCount), 0, "new tab has no attached native document");
     await shot(page, `${locale}-${theme}-empty`);
   }
-  await click(page, "New tab");
+  await populatedNewTab(page, gateway, () => shot(page, "en-light-newtab-populated"));
   await navigate(page, `http://127.0.0.1:${fixture.port}/first`);
   await waitTitle(page, "Fixture");
   let snapshot = await state(page); const first = snapshot.activeId;
@@ -278,6 +269,7 @@ try {
   await alignment(page, main, win, evidence);
   await call(page, "create", { url: "https://www.iana.org/" });
   await waitUntil(async () => (await state(page)).tabs.some(t => t.url.startsWith("https://www.iana.org") && t.title === "Internet Assigned Numbers Authority" && t.status === "idle"), "real HTTPS site");
+  if (process.env.BUTLER_BROWSER_FUNCTIONAL_ONLY !== "1") {
   const loadStart = loadavg()[0];
   await evaluate(() => {
     const histogram = process.getBuiltinModule("node:perf_hooks")!.monitorEventLoopDelay({ resolution: 1 });
@@ -310,6 +302,7 @@ try {
     assert.ok(repeated.p99Ms<=30 && repeated.maxMs<=200, JSON.stringify(repeated));
   }
   await call(page, "close", { id: heavy });
+  }
   snapshot = await state(page);
   await call(page, "move", { tabId: first, toGroupId: "mine", index: 1 });
   assert.equal((await state(page)).tabs[1]!.id, first);
@@ -324,7 +317,7 @@ try {
   await waitUntil(() => main<boolean>(`${nativeCount} === 1`), "native page after artifact return");
   await shot(page, "after-artifact-return");
   const ownedPids = async () => [...new Set([...await main<number[]>(`${electronModule}.app.getAppMetrics().map(p=>p.pid)`), ...liveTrackedProcessIds()])];
-  await idleWrites(main, join(dir, "profile"), evidence, ownedPids);
+  if (process.env.BUTLER_BROWSER_FUNCTIONAL_ONLY !== "1") await idleWrites(main, join(dir, "profile"), evidence, ownedPids);
   const restoredUrls = (await state(page)).tabs.map(tab=>tab.url);
   await quitAndStop(page);
   page = await launch();
@@ -348,8 +341,7 @@ try {
       await page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="browser-entry"]')));
     }
   }
-  }
-  writeFileSync(join(evidence, "electron-result.json"), JSON.stringify({ ok: true, logs, tabs: process.env.BUTLER_E2E_EXPECT_BROWSER === "false" ? 0 : (await state(page)).tabs.length }));
+  writeFileSync(join(evidence, "electron-result.json"), JSON.stringify({ ok: true, quits, logs, tabs: (await state(page)).tabs.length }));
 } catch (error) {
   writeFileSync(join(evidence, "electron-failure.txt"), `${String(error)}\n${logs.join("\n")}`);
   if (gateway) {

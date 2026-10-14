@@ -7,4 +7,9 @@ mod rows;
 mod search;
 
 pub use adapter::GenerationVectorAdapter;
-pub(crate) use rows::{GenerationVectorRow, GenerationVectorStore, persisted_receipt};
+pub(crate) use rows::{
+    GenerationVectorRow, GenerationVectorStore, persisted_receipt, unit_receipt,
+};
+
+#[cfg(test)]
+pub(crate) use search::tests::cosine_distance_preserves_semantic_relevance;

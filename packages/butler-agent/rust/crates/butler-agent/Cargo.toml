@@ -11,11 +11,14 @@ publish.workspace = true
 name = "butler_agent"
 
 [features]
+# Fixture-only source keychain service; never enabled in shipped binaries.
+e2e-fixtures = ["butler-platform/test-support", "dep:butler-test-support"]
 default = ["prebuilt-ort"]
 prebuilt-ort = ["butler-gateway/prebuilt-ort", "butler-memory/prebuilt-ort"]
 static-ort = ["butler-gateway/static-ort", "butler-memory/static-ort"]
 
 [dependencies]
+butler-test-support = { path = "../butler-test-support", optional = true }
 butler-gateway = { path = "../butler-gateway", default-features = false }
 butler-memory = { path = "../butler-memory", default-features = false }
 butler-ledger = { path = "../butler-ledger" }

@@ -1,3 +1,4 @@
+import { openExternalSignIn } from "@/app/openExternalSignIn";
 import { useAppLocale } from "@/app/copy.ts";
 import { Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -69,7 +70,7 @@ export function HostedModelForm({
           }}
           onOAuthOpenUrl={() => {
             if (form.oauthLogin?.auth_url) {
-              window.open(form.oauthLogin.auth_url, "_blank", "noopener");
+              openExternalSignIn(form.oauthLogin.auth_url);
             }
           }}
           onOAuthRestart={() => void form.handleOAuthRestart()}

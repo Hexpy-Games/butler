@@ -54,7 +54,9 @@ impl TurnRuntime {
         conversation: &dyn PreparedConversation,
         destination: ProgressDestination,
     ) -> Result<(TurnOutcome, bool), BtccError> {
+        let timing = super::super::agent_loop::command_timing::CommandTiming::new("turn_load");
         let (mut turn, fresh) = self.store.load_or_admit(prepared).await?;
+        timing.mark("loaded");
         if fresh && prepared.is_fresh && turn.semantic_state != TurnSemanticState::Cancelled {
             self.publish(conversation, &turn, &destination, ProgressEvent::Started)
                 .await?;
@@ -69,6 +71,7 @@ impl TurnRuntime {
                 .resume_authority(&turn.turn_id)
                 .await?
                 .unwrap_or(turn);
+            timing.mark("authority_resumed");
         }
         if let Some(reason) = turn.suspension {
             return Ok((suspended(&turn, reason), fresh));
@@ -77,6 +80,7 @@ impl TurnRuntime {
             self.publish_state(conversation, &turn, &destination).await;
         }
         if turn.semantic_state != TurnSemanticState::DeliveryCommitted {
+            timing.mark("before_agent");
             turn = Box::pin(self.run_until_undecided(
                 turn,
                 conversation,
@@ -84,6 +88,7 @@ impl TurnRuntime {
                 prepared.request.recovery_attempt.unwrap_or(1),
             ))
             .await?;
+            timing.mark("agent_returned");
         }
         if let Some(reason) = turn.suspension {
             return Ok((suspended(&turn, reason), fresh));
@@ -135,6 +140,8 @@ impl TurnRuntime {
         destination: &ProgressDestination,
         recovery_attempt: u32,
     ) -> Result<TurnRecord, BtccError> {
+        let timing =
+            super::super::agent_loop::command_timing::CommandTiming::new("turn_transition");
         let permit = self.supervisor.enter(&turn.turn_id, turn.semantic_state)?;
         let claim = self.store.acquire_state_claim(&turn).await?;
         let progress = self.progress_scope(conversation, &turn, destination);
@@ -150,7 +157,9 @@ impl TurnRuntime {
                 permit.cancellation(),
             )
             .await;
+        timing.mark("agent_returned");
         developer_log.capture(&turn, agent_result.as_ref()).await;
+        timing.mark("developer_log_captured");
         let mut result = match agent_result {
             Ok(result) => result,
             Err(AgentLoopError::Propagate(error)) => return Err(error),
@@ -159,12 +168,16 @@ impl TurnRuntime {
         permit.assert_active()?;
         explain_runtime_failure(&turn, &mut result);
         let transition = guided_transition(&turn, result)?;
+        timing.mark("before_commit");
         let committed = self
             .commit_agent_transition(&turn, &claim, &transition, &permit)
             .await;
+        timing.mark("committed");
         super::super::agent_loop::authority_batch(&progress, &transition, committed.is_ok()).await;
+        timing.mark("authority_events_done");
         committed?;
         let committed = self.store.activate_successor(&turn.turn_id).await?;
+        timing.mark("successor_activated");
         if let TurnTransition::Suspend { reason, .. } = transition {
             if committed.suspension != Some(reason) {
                 return Err(BtccError::detected(
@@ -341,6 +354,7 @@ fn project_terminal(turn: &TurnRecord) -> Result<TurnOutcome, BtccError> {
             execution_outcome: payload.execution_outcome,
             artifacts: payload.artifacts.clone(),
             changed_files: payload.changed_files.clone(),
+            answer_blocks: payload.answer_blocks.clone(),
             plan: payload.plan.clone(),
             model_identity: payload.model_identity.clone(),
         }))
@@ -430,6 +444,7 @@ fn runtime_failure_result(
         runtime_failure: Some(failure),
         artifacts: Vec::new(),
         changed_files: Vec::new(),
+        answer_blocks: Vec::new(),
         model_identity: None,
     }
 }

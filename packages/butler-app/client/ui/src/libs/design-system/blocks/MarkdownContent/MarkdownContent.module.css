@@ -2,7 +2,7 @@
   min-width: 0;
   color: var(--text-primary);
   font-size: var(--font-size-3);
-  line-height: var(--line-height-document);
+  line-height: var(--typo-body-line-height-document);
   overflow: auto;
 }
 
@@ -25,16 +25,19 @@
 .markdown h1 {
   margin-top: calc(var(--space-4) * 2);
   font-size: var(--font-size-6);
+  line-height: var(--typo-h2-line-height);
 }
 
 .markdown h2 {
   margin-top: var(--space-6);
   font-size: var(--font-size-5);
+  line-height: var(--typo-h4-line-height);
 }
 
 .markdown h3 {
   margin-top: var(--space-5);
   font-size: var(--font-size-4);
+  line-height: var(--typo-app-title-line-height);
 }
 
 .markdown h4,
@@ -51,7 +54,7 @@
 .markdown :where(h1, h2, h3, h4, h5, h6) {
   color: var(--text-primary);
   font-weight: var(--font-weight-medium);
-  line-height: 1.25;
+  line-height: var(--typo-body-line-height);
 }
 
 .markdown :where(ul, ol) {
@@ -92,13 +95,23 @@
   color: var(--accent-text);
 }
 
+/* Images keep their natural size, capped by the column width and a bounded
+   height; both sides stay auto, so the aspect ratio holds and nothing
+   upscales. Inline-block keeps a small badge or icon in its sentence; a
+   capture alone in its paragraph fills the column. The edge is an inset
+   outline, not a border, so it adds no size: a 640 px image renders at
+   640 px and a capped one at exactly the column width. */
 .markdown img {
-  display: block;
-  max-width: 30%;
+  display: inline-block;
+  max-width: 100%;
+  max-height: min(calc(var(--adaptive-viewport-block-size) * 0.6), 640px);
   height: auto;
-  border: 1px solid var(--line);
+  outline: 1px solid var(--line);
+  outline-offset: -1px;
   border-radius: var(--radius-panel);
   background: var(--surface-raised);
+  object-fit: contain;
+  vertical-align: middle;
 }
 
 .markdown pre {
@@ -138,6 +151,18 @@
   font-weight: var(--font-weight-medium);
 }
 
+/* A comparison table (rows with their own header cell; GFM tables have none):
+   the row labels stay quiet and every cell keeps one line, so the table
+   scrolls inside its frame instead of breaking short values ("면 100%"). */
+.markdown tbody th {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.markdown table:has(tbody th) :where(th, td) {
+  white-space: nowrap;
+}
+
 /* Streaming reveal: recently appended chunks fade in; opacity only, so the
    inline span never shifts layout. */
 .streamChunk {
@@ -171,6 +196,7 @@
   border-bottom: 1px solid var(--line);
   color: var(--text-tertiary);
   font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height);
 }
 
 .codeHeader > div {

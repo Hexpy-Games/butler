@@ -15,7 +15,16 @@ export type MotionDurationName =
   | "exit-menu"
   | "exit-fast"
   | "exit-base"
-  | "exit-slow";
+  | "exit-slow"
+  | "pointer-glide"
+  | "stagger-row"
+  | "stagger-intro"
+  | "morph-rows"
+  | "intro-drop"
+  | "intro-draw"
+  | "intro-print"
+  | "intro-bloom"
+  | "intro-total";
 
 export type MotionEasingName =
   | "standard"
@@ -23,6 +32,9 @@ export type MotionEasingName =
   | "accelerate"
   | "emphasized"
   | "spring"
+  | "draw"
+  | "settle"
+  | "out-cubic"
   | "linear";
 
 /** Mirrors tokens.css; used when the token stylesheet is not loaded. */
@@ -37,6 +49,15 @@ const DURATION_FALLBACK: Record<MotionDurationName, number> = {
   "exit-fast": 90,
   "exit-base": 110,
   "exit-slow": 150,
+  "pointer-glide": 400,
+  "stagger-row": 30,
+  "stagger-intro": 70,
+  "morph-rows": 150,
+  "intro-drop": 350,
+  "intro-draw": 850,
+  "intro-print": 400,
+  "intro-bloom": 1450,
+  "intro-total": 2900,
 };
 
 const EASING_FALLBACK: Record<MotionEasingName, string> = {
@@ -45,18 +66,38 @@ const EASING_FALLBACK: Record<MotionEasingName, string> = {
   accelerate: "cubic-bezier(0.3, 0, 1, 1)",
   emphasized: "cubic-bezier(0.2, 0.8, 0.2, 1)",
   spring: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+  draw: "cubic-bezier(0.65, 0, 0.35, 1)",
+  // The settle spring is a linear() curve; without tokens it falls back to emphasized.
+  settle: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+  "out-cubic": "cubic-bezier(0.33, 1, 0.68, 1)",
   linear: "linear",
 };
 
 const TRANSFORM_KEYS = new Set(["transform", "translate", "scale", "rotate", "offset", "offsetPath", "offsetDistance"]);
 
-function tokenValue(name: string): string {
+/**
+ * Token reads of the current task. Starting several animations in a row (card rows, a stagger) would otherwise read
+ * the root style after each animate() call, a style recalc per element. Motion tokens only change with the
+ * reduced-motion scope, whose override clears this.
+ */
+const taskTokens = new Map<string, string>();
+
+function readToken(name: string): string {
   if (typeof window === "undefined" || typeof document === "undefined") return "";
   try {
     return window.getComputedStyle((document.getElementById?.("root") ?? document.documentElement)).getPropertyValue(name).trim();
   } catch {
     return "";
   }
+}
+
+function tokenValue(name: string): string {
+  const cached = taskTokens.get(name);
+  if (cached !== undefined) return cached;
+  const value = readToken(name);
+  if (taskTokens.size === 0) queueMicrotask(() => taskTokens.clear());
+  taskTokens.set(name, value);
+  return value;
 }
 
 /**
@@ -68,6 +109,7 @@ export function setReducedMotionOverride(reduced: boolean): void {
   const shell = document.getElementById?.("root") ?? document.documentElement;
   if (reduced) shell.dataset.motion = "reduced";
   else delete shell.dataset.motion;
+  taskTokens.clear();
   publishReducedMotion();
 }
 

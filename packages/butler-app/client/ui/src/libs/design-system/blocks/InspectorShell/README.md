@@ -21,6 +21,15 @@ Butler client containers that render the right inspector.
 ## Best practice
 Keep tabs short and keep domain data mapping outside the block.
 
+The tab row and the content both fade at the edges where they scroll
+(`useScrollEdges`): the content fades top and bottom while it is clipped.
+
+Inside `AdaptiveShell frame="cards"` (docked) the inspector is the side card:
+it fills the card slot under the title row with `--shell-card-bg`, a 12px
+radius and one quiet `--shell-card-edge`; the tab row stays inside the card.
+The title-bar toggle shows "open" by icon colour (IconButton `tone="butler"`
+with `pressed`), never a fill.
+
 ## Wrong use cases
 Do not use it for settings navigation or full-page dashboards. Use SettingsShell or dashboard blocks instead.
 

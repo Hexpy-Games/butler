@@ -4,7 +4,7 @@
  * Owned-PID file tracing: BUTLER_P0_FS_USAGE_SUDO=1 only with authorized noninteractive sudo.
  * Native agent defaults to target/debug/butler-agent; all data is disposable.
  */
-import { quietHost } from "./browser-p0-host-load.ts";
+import { hostWindow, HostLoadExceeded, HostQuietTimeout } from "./browser-p0-host-load.ts";
 import { strict as assert, AssertionError } from "node:assert";
 import { readFileSync } from "node:fs";
 import { browserP0Fixtures } from "./browser-p0-fixtures.ts";
@@ -25,6 +25,8 @@ const major = Number(pin.split(".")[0]);
 const now = Date.now();
 const support = major >= 42 && major <= 44 && now < Date.parse("2026-10-20T00:00:00Z");
 rows.push({ test: "version", metric: "build Electron pin", value: pin, budget: "42–44; support snapshot expires 2026-10-20", status: support ? "PASS" : "FAIL", attribution: "Version policy", mitigation: "Refresh official schedule and upgrade Electron" });
+let invalidWindow = false;
+let quietTimeout = false;
 let app: Awaited<ReturnType<typeof launchP0App>> | undefined;
 const fixtures = browserP0Fixtures();
 try {
@@ -55,20 +57,26 @@ try {
       if (selected !== "all" && selected !== name) continue;
       console.log(JSON.stringify({ started: name }));
       try {
-        await quietHost(`${name} startup`);
         app = await launchP0App({ harness: name !== "normal" });
         if (name === "normal") { await run(); await app.stop(); app = undefined; continue; }
         const initial = await sample(app);
         assert.equal(initial.versions.electron, pin);
         assert(initial.domainBlockingDisabled, "Product keeps App WebGL recovery unblocked");
         evidence[`${name}Runtime`] = { electron: initial.versions.electron, gpu: initial.gpu, crashLimitDisabled: initial.crashLimitDisabled, domainBlockingDisabled: initial.domainBlockingDisabled, mainPID: initial.mainPID, uiPID: initial.uiPID };
-        await app.main.evaluate(`browserP0.open('user','${origin}/video',{user:true})`);
+        await app.main.evaluate(name === "soak"
+          ? `browserP0.openProductGPU('user','${origin}/video')`
+          : `browserP0.open('user','${origin}/video',{user:true})`);
         await waitFor(() => app!.main.evaluate("browserP0.evaluate('user','video.readyState>=3&&!video.paused')"), "decoded user video playing");
-        evidence[name] = await run();
+        evidence[name] = ["gpu-crash", "gpu-hang", "load"].includes(name) ? await hostWindow(name, run) : await run();
       }
-      catch (error) { rows.push({ test: name, metric: "complete scenario", value: String(error), budget: "§9.2 setup and all assertions", status: error instanceof AssertionError ? "FAIL" : "UNAVAILABLE" }); }
+      catch (error) {
+        invalidWindow ||= error instanceof HostLoadExceeded;
+        quietTimeout ||= error instanceof HostQuietTimeout;
+        rows.push({ test: name, metric: "complete scenario", value: String(error), budget: "§9.2 setup and all assertions", status: error instanceof AssertionError ? "FAIL" : "UNAVAILABLE" });
+      }
       if (app) { evidence[`${name}FinalRuntime`] = await sample(app).then(s=>({ gpu: s.gpu, gone: s.gone, crashes: s.crashes, loop: s.loop, resources: s.resources, metrics: s.metrics })).catch(() => null); await app.stop(); app = undefined; }
       console.log(JSON.stringify({ completed: name, rows: rows.filter(r => r.test === name || r.test === name.replaceAll("-", " ")) }));
+      if (quietTimeout || invalidWindow) break;
     }
   }
 } catch (error) {
@@ -76,6 +84,8 @@ try {
 } finally {
   if (app) await app.stop(); fixtures.stop(true);
   // §9.3 requires failures AFTER mitigations. Raw failures alone are not triggers.
-  console.log(JSON.stringify({ rows, evidence, decision: "Review GPU proof, user-tab results, and full soak against §9.3; unavailable is never a pass", gpuSource: process.env.BUTLER_P0_GPU_SOURCE || "agent", agentGPU: process.env.BUTLER_P0_AGENT_GPU || "on", platform: `${process.platform}/${process.arch}` }));
+  console.log(JSON.stringify({ rows, evidence, decision: "Review GPU proof, user-tab results, and full soak against §9.3; unavailable is never a pass", gpuSource: process.env.BUTLER_P0_GPU_SOURCE || "agent", agentGPU: process.env.BUTLER_P0_AGENT_GPU || "on", agentWebGLDefault: false, platform: `${process.platform}/${process.arch}` }));
+  if (quietTimeout) process.exit(76);
+  if (invalidWindow) process.exit(75);
   if (rows.some(r => r.status === "FAIL" || r.status === "UNAVAILABLE")) process.exitCode = 1;
 }

@@ -15,6 +15,7 @@ import type { SettingsView as SettingsData } from "@/app/types.ts";
 import { ComposerFoldField } from "./ComposerFoldField";
 import { ReduceMotionField } from "./ReduceMotionField";
 import { ComposerDecorationSettings } from "./ComposerDecorationSettings";
+import { ConversationBackgroundSettings } from "./ConversationBackgroundSettings";
 import { MainScreenThemeSettings } from "./MainScreenThemeSettings";
 
 export const AppearanceSettings = memo(function AppearanceSettings() {
@@ -22,7 +23,6 @@ export const AppearanceSettings = memo(function AppearanceSettings() {
   const draft = useSettingsUIStore(useShallow((state) => state.draft && ({
     appearance_theme: state.draft.appearance_theme,
     translucent_sidebar: state.draft.translucent_sidebar,
-    smart_grouping_enabled: state.draft.smart_grouping_enabled,
   })));
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
@@ -60,26 +60,23 @@ export const AppearanceSettings = memo(function AppearanceSettings() {
         />
       </SettingsSection>
       <SettingsSection
-        id="sidebar"
-        kind="form"
-        title={sections.sidebar}
-        description={settingsCopy.pageSectionDescriptions.sidebar}
-      >
-        <SettingsSwitch
-          settingId="smart-groups"
-          label={appCopy.interfaceDetails.smartGroups}
-          description={appCopy.interfaceDetails.smartGroupsDescription}
-          checked={draft.smart_grouping_enabled}
-          onChange={(value) => update({ smart_grouping_enabled: value }, setSettings)}
-        />
-      </SettingsSection>
-      <SettingsSection
         id="home-screen"
         kind="form"
         title={sections.homeScreen}
         description={settingsCopy.pageSectionDescriptions.homeScreen}
       >
         <MainScreenThemeSettings />
+      </SettingsSection>
+      <SettingsSection id="conversation" kind="form" title={sections.conversation}
+        description={settingsCopy.pageSectionDescriptions.conversation}>
+        <ConversationBackgroundSettings />
+      </SettingsSection>
+      <SettingsSection
+        id="message-box"
+        kind="form"
+        title={sections.messageBox}
+        description={settingsCopy.pageSectionDescriptions.messageBox}
+      >
         <ComposerFoldField />
         <ComposerDecorationSettings />
       </SettingsSection>

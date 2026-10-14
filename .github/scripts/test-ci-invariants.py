@@ -34,6 +34,10 @@ spec = importlib.util.spec_from_file_location('windows_tests', ROOT / 'test-wind
 windows_tests = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(windows_tests)
 WindowsSafety = windows_tests.WindowsSafety
+spec = importlib.util.spec_from_file_location('native_archive_tests', ROOT / 'test-native-archive-safety.py')
+native_archive_tests = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(native_archive_tests)
+NativeArchiveSafety = native_archive_tests.NativeArchiveSafety
 
 
 class ArchivedLibtest(unittest.TestCase):
@@ -71,12 +75,13 @@ class ArtifactTrust(unittest.TestCase):
         run = dict(id=1, status='completed', conclusion='success', event='pull_request',
                    head_sha='b' * 40, head_repository={'full_name': 'owner/repo'})
         artifacts = [dict(name=f'agent-{kind}-linux-x64', expired=False) for kind in ['payload', 'provenance']]
-        for mismatch in [None, 'sha', 'version', 'digest']:
+        for mismatch in [None, 'sha', 'version', 'digest', 'sandbox_digest']:
             with tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 binary = root / 'fixture'
                 binary.write_bytes(b'complete binary')
-                metadata = dict(expected, binary='butler-agent', sha256=provenance.digest(binary))
+                metadata = dict(expected, binary='butler-agent', sha256=provenance.digest(binary),
+                                sandbox_sha256=hashlib.sha256(b'complete sandbox').hexdigest())
                 if mismatch in ['sha', 'version']:
                     metadata[mismatch] = 'different'
                 def download(args, **kwargs):
@@ -85,27 +90,31 @@ class ArtifactTrust(unittest.TestCase):
                     (directory / 'provenance.json').write_text(json.dumps(metadata))
                     if args[args.index('--name') + 1].startswith('agent-payload-'):
                         (directory / 'butler-agent').write_bytes(b'corrupt' if mismatch == 'digest' else binary.read_bytes())
+                        (directory / 'butler-sandbox').write_bytes(b'corrupt' if mismatch == 'sandbox_digest' else b'complete sandbox')
                 with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo', GITHUB_ENV=str(root / 'env')), \
                      patch.object(provenance, 'output', side_effect=[json.dumps({'workflow_runs': [run]}), json.dumps({'artifacts': artifacts})]), \
                      patch.object(provenance.subprocess, 'run', side_effect=download) as transfer, \
                      patch.object(provenance, 'verify_version') as version, contextlib.redirect_stdout(io.StringIO()):
-                    if mismatch == 'digest':
+                    if mismatch in ['digest', 'sandbox_digest']:
                         with self.assertRaisesRegex(ValueError, 'digest'):
                             provenance.reuse(root / 'result', expected)
                     else:
                         self.assertEqual(provenance.reuse(root / 'result', expected), mismatch is None)
                     self.assertEqual(transfer.call_count, 1 if mismatch in ['sha', 'version'] else 2)
                     self.assertEqual(version.call_count, int(mismatch is None))
+                    if mismatch is None:
+                        self.assertEqual((root / 'result/butler-sandbox').read_bytes(), b'complete sandbox')
 
     # test-category: security
     def test_exact_identity_and_digest_required(self):
         expected = dict(schema=1, sha='a' * 40, platform='linux-x64', version='0.1.0-preview.99',
-                        native_mode='static-ort', profile='release', toolchain='1.91.0',
+                        native_mode='static-ort', profile='release', toolchain='1.99.0',
                         debug_assertions='true', overflow_checks='true', rustflags='mold',
                         lto='', codegen_units='')
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             (directory / 'butler-agent').write_text('#!/bin/sh\necho "butler 0.1.0-preview.99 (fixture)"\n')
+            (directory / 'butler-sandbox').write_bytes(b'complete sandbox')
             provenance.record(directory, expected)
             self.assertTrue(provenance.verify(directory, expected))
             for key in expected:
@@ -133,7 +142,7 @@ class ArtifactTrust(unittest.TestCase):
 class Gate(unittest.TestCase):
     # test-category: pure-logic
     def test_every_selected_job_must_succeed(self):
-        jobs = ['source', 'linux-clippy', 'linux-clippy-lint', 'linux-archive', 'linux-tests', 'linux-native', 'linux-perf-archive', 'linux-perf', 'macos-archive', 'macos-tests', 'macos-native', 'macos-perf-archive', 'macos-perf',
+        jobs = ['source', 'linux-clippy', 'linux-archive', 'linux-tests', 'linux-native', 'linux-perf-archive', 'linux-perf', 'macos-archive', 'macos-tests', 'macos-native', 'macos-perf-archive', 'macos-perf',
                 'macos-package', 'macos-updates', 'linux-arm64-archive', 'linux-arm64-tests', 'linux-package-x64',
                 'linux-package-arm64', 'linux-arm64-native', 'linux-arm64-perf-archive', 'linux-arm64-perf', 'install-x64', 'install-arm64', 'install-macos', 'install-merge', 'ui', 'site', 'ds']
         outputs = dict.fromkeys(['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds'], 'true')
@@ -377,32 +386,35 @@ class Coverage(unittest.TestCase):
         listing = 'e2e-list.json' if (INVENTORY / 'e2e-list.json').exists() else 'list.json'
         directory = INVENTORY / 'shards' if (INVENTORY / 'shards').exists() else INVENTORY
         inventory = json.loads((INVENTORY / listing).read_text())
-        tests = {name: test for suite in inventory['rust-suites'].values()
-                 if suite['binary-name'] == 'e2e' for name, test in suite['testcases'].items()}
+        tests = {(suite['binary-name'], name): test for suite in inventory['rust-suites'].values()
+                 if suite['package-name'] == 'butler-e2e' for name, test in suite['testcases'].items()}
         selections = json.loads((directory / 'selection.json').read_text())
-        ordinary = [name for shard in selections for binary, name in shard]
-        expected = {name for name in tests if not any(part.startswith(('ins_', 'perf_')) for part in name.split('::'))
-                    and not name.endswith('idle_disk_writes_and_cpu_stay_bounded')}
+        ordinary = [(binary, name) for shard in selections for binary, name in shard]
+        expected = {case for case in tests
+                    if not any(part.startswith(('ins_', 'perf_')) for part in case[1].split('::'))
+                    and not case[1].endswith('idle_disk_writes_and_cpu_stay_bounded')}
         self.assertEqual(len(ordinary), len(set(ordinary)))
         self.assertEqual(set(ordinary), expected)
-        installs = {name for name in tests if any(part.startswith('ins_') for part in name.split('::'))}
-        groups = [{name for name in installs if '::ins_02_' in name},
-                  {name for name in installs if '::ins_14_' in name},
-                  {name for name in installs if '::ins_02_' not in name and '::ins_14_' not in name}]
+        installs = {case for case in tests if any(part.startswith('ins_') for part in case[1].split('::'))}
+        groups = [{case for case in installs if '::ins_02_' in case[1]},
+                  {case for case in installs if '::ins_14_' in case[1]},
+                  {case for case in installs if '::ins_02_' not in case[1] and '::ins_14_' not in case[1]}]
         self.assertEqual(sum(map(len, groups)), len(installs))
         perf_inventory = json.loads((INVENTORY / 'perf-list.json').read_text())
-        perf = {name for suite in perf_inventory['rust-suites'].values() for name, test in suite['testcases'].items()
+        perf = {(suite['binary-name'], name) for suite in perf_inventory['rust-suites'].values()
+                if suite['package-name'] == 'butler-e2e'
+                for name, test in suite['testcases'].items()
                 if test['filter-match']['status'] == 'matches'}
         perf_selections = json.loads((directory / 'perf-selection.json').read_text())
-        selected = [name for shard in perf_selections for binary, name in shard]
-        idle = {name for name in perf if name.startswith('idle_resources::')}
-        owner = {name for name in perf if name.startswith('data_perf::')}
+        selected = [(binary, name) for shard in perf_selections for binary, name in shard]
+        idle = {case for case in perf if case[1].startswith('idle_resources::')}
+        owner = {case for case in perf if case[1].startswith('data_perf::')}
         self.assertEqual(len(selected), len(set(selected)))
         self.assertEqual(set(selected) | idle | owner, perf)
         self.assertTrue(idle, 'The complete idle observation must remain selected')
         self.assertTrue(owner, 'The complete owner-scale observation must remain selected')
-        runnable = {name for name, test in tests.items() if not test['ignored']}
-        disk = {name for name in tests if name.endswith('idle_disk_writes_and_cpu_stay_bounded')}
+        runnable = {case for case, test in tests.items() if not test['ignored']}
+        disk = {case for case in tests if case[1].endswith('idle_disk_writes_and_cpu_stay_bounded')}
         self.assertEqual((set(ordinary) | installs | perf | disk) & runnable, runnable)
         print(f'Compiled inventory: {len(tests)} tests, {len(tests) - len(runnable)} existing ignored; '
               f'ordinary {list(map(len, selections))}, install {list(map(len, groups))}, '

@@ -99,9 +99,43 @@ export function observeScrollEdges(
   };
 }
 
+function cssLength(style: CSSStyleDeclaration, name: string): number {
+  return Number.parseFloat(style.getPropertyValue(name)) || 0;
+}
+
+/**
+ * Scrolls `target` (keyboard focus) so its focus ring sits clear of the
+ * scroller's edge fades. Native focus scrolling stops at the scrollport edge
+ * and leaves a partly visible control where it is, under the fade.
+ */
+export function revealFocusInFades(
+  element: HTMLElement,
+  axis: ScrollEdgeAxis,
+  target: Element,
+) {
+  const scrollerStyle = getComputedStyle(element);
+  const targetStyle = getComputedStyle(target);
+  const outline = targetStyle.outlineStyle === "none" ? 0
+    : cssLength(targetStyle, "outline-width") + cssLength(targetStyle, "outline-offset");
+  const ring = Math.max(cssLength(scrollerStyle, "--focus-ring-room"), outline);
+  const fade = cssLength(scrollerStyle, "--scroll-fade-size");
+  const box = element.getBoundingClientRect();
+  const rect = target.getBoundingClientRect();
+  const [start, size, low, high] = axis === "x"
+    ? [box.left + element.clientLeft, element.clientWidth, rect.left - ring, rect.right + ring]
+    : [box.top + element.clientTop, element.clientHeight, rect.top - ring, rect.bottom + ring];
+  const first = start + fade;
+  const last = start + size - fade;
+  const delta = low < first || high - low > last - first ? low - first : high > last ? high - last : 0;
+  if (Math.abs(delta) < 0.5) return;
+  if (axis === "x") element.scrollLeft += delta;
+  else element.scrollTop += delta;
+}
+
 /**
  * Callback ref that opts an element into the shared scroll-fade mask
- * (see scroll-fade.css). Pass `enabled: false` to keep the scroller unmasked.
+ * (see scroll-fade.css) and keeps keyboard focus clear of its fades. Pass
+ * `enabled: false` to keep the scroller unmasked.
  */
 export function useScrollEdges(axis: ScrollEdgeAxis, enabled = true) {
   return useCallback(
@@ -109,7 +143,19 @@ export function useScrollEdges(axis: ScrollEdgeAxis, enabled = true) {
       if (!element || !enabled) return undefined;
       element.dataset.scrollFade = axis;
       const stop = observeScrollEdges(element, axis);
+      let frame = 0;
+      // Only keyboard focus: a pointer press must not move its row (#792).
+      const reveal = (event: FocusEvent) => {
+        const target = event.target;
+        if (!(target instanceof Element) || target === element || !target.matches(":focus-visible")) return;
+        cancelAnimationFrame(frame);
+        // After the browser's own focus scroll.
+        frame = requestAnimationFrame(() => revealFocusInFades(element, axis, target));
+      };
+      element.addEventListener("focusin", reveal);
       return () => {
+        cancelAnimationFrame(frame);
+        element.removeEventListener("focusin", reveal);
         stop();
         delete element.dataset.scrollFade;
       };

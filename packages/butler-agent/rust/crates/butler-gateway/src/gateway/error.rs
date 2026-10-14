@@ -1,6 +1,10 @@
 //! The gateway application error the HTTP layer renders.
 
-use std::sync::Arc;
+use std::{future::Future, pin::Pin, sync::Arc};
+
+/// An owned asynchronous application operation and its public gateway error.
+pub type ApplicationFuture<T> =
+    Pin<Box<dyn Future<Output = Result<T, GatewayApplicationError>> + Send + 'static>>;
 
 /// A gateway application failure as the HTTP layer reports it.
 #[derive(Clone, Debug, thiserror::Error)]

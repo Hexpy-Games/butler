@@ -34,16 +34,17 @@ text as `children`. Give every option an icon or none.
 
 ```tsx
 <SelectTrigger aria-label="Provider">
-  <SelectValue icon={<ProviderLogo name="claude" />}>Anthropic</SelectValue>
+  <SelectValue icon={<ProviderLogo name="anthropic" />}>Anthropic</SelectValue>
 </SelectTrigger>
 <SelectContent>
-  <SelectItem value="anthropic" icon={<ProviderLogo name="claude" />}>Anthropic</SelectItem>
+  <SelectItem value="anthropic" icon={<ProviderLogo name="anthropic" />}>Anthropic</SelectItem>
 </SelectContent>
 ```
 
 Use `SelectButton` for a select-looking trigger that opens a custom popover,
 such as a searchable list inside `Popover`. It shares the `SelectTrigger` border,
-height, left-aligned value, and plain chevron.
+height, left-aligned value, and plain chevron. A filter trigger passes `count` (chosen
+values): the trigger turns accent and shows the number in a badge before the chevron.
 
 Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
 

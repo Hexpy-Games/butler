@@ -163,6 +163,6 @@ async fn skill_222_catalog_load_resource_and_guard() -> Result<(), HarnessError>
             .contains("BUNDLED_RESOURCE_222")
     );
     assert!(skill_requests[7].to_string().contains("skill_path_invalid"));
-    assert!(s.provider()?.misses().is_empty());
+    assert_eq!(s.provider()?.misses(), [] as [std::string::String; 0]);
     s.finish().await
 }

@@ -40,8 +40,14 @@ branch_reservation_lost
 empty_queued_message
 general_channel_protected
 invalid_json
+invalid_library_request
 invalid_session_controls
 invalid_utf8
+library_group_exists
+library_group_kind_mismatch
+library_group_not_found
+library_item_not_found
+library_tag_not_found
 message_file_already_attached
 message_file_not_found
 message_file_wrong_session

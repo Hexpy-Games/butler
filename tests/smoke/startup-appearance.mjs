@@ -1,18 +1,71 @@
+// test-category: pure-logic
 /** Indexed canonical settings: theme setting -> current scene tone -> OS. */
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, relative } from "node:path";
 import { readStartupAppearance, lifecycleAppearance } from "../../packages/butler-app/client/electron/startup-appearance.mjs";
+import { createPowerStateMonitor } from "../../packages/butler-app/client/electron/butler-platform/power.mjs";
 
 const root = process.env.BUTLER_DATA;
 assert.ok(root && !relative(tmpdir(), root).startsWith(".."), "isolated BUTLER_DATA inside TMPDIR");
+assert.deepEqual(readStartupAppearance(join(root, "missing")).source, { kind: "live", module: "butler.riso-print" });
 mkdirSync(join(root, "app-server"), { recursive: true });
 const manifest = JSON.parse(readFileSync(resolve("packages/butler-app/client/ui/lifecycle-assets/manifest.json"), "utf8"));
 const path = join(root, "app-server/butler-client.sqlite");
 const db = new DatabaseSync(path);
+const powerMonitor = new EventEmitter();
+powerMonitor.isOnBatteryPower = () => false;
+powerMonitor.getCurrentThermalState = () => "nominal";
+const powerMessages = [];
+const sendPowerState = (state) => powerMessages.push({ channel: "butler:power-state", payload: state });
+const powerState = createPowerStateMonitor(powerMonitor, sendPowerState);
+sendPowerState(powerState.getState());
+const initialPowerMessages = powerMessages.length;
+let initialRead = null;
 try {
+  assert.deepEqual(powerState.getState(), { onBattery: false, constrained: false });
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  const idlePowerMessages = powerMessages.length - initialPowerMessages;
+  assert.equal(idlePowerMessages, 0, "power state sends no IPC while idle");
+  const initialReadMonitor = new EventEmitter();
+  initialReadMonitor.isOnBatteryPower = () => true;
+  initialReadMonitor.getCurrentThermalState = () => "critical";
+  initialRead = createPowerStateMonitor(initialReadMonitor);
+  assert.deepEqual(initialRead.getState(), { onBattery: true, constrained: true }, "startup reads available power and thermal state");
+  powerMonitor.emit("on-battery");
+  powerMonitor.emit("on-battery");
+  assert.deepEqual(powerMessages.at(-1), { channel: "butler:power-state", payload: { onBattery: true, constrained: false } }, "battery transition emits once");
+  powerMonitor.emit("thermal-state-change", { state: "fair" });
+  powerMonitor.emit("thermal-state-change", { state: "fair" });
+  assert.deepEqual(powerMessages.at(-1)?.payload, { onBattery: true, constrained: false }, "fair thermal state does not constrain wallpaper");
+  powerMonitor.emit("speed-limit-change", { limit: 80 });
+  assert.equal(powerMessages.length, initialPowerMessages + 2, "same derived state does not emit a duplicate");
+  powerMonitor.emit("on-ac");
+  assert.deepEqual(powerMessages.at(-1)?.payload, { onBattery: false, constrained: true });
+  powerMonitor.emit("thermal-state-change", { state: "nominal" });
+  powerMonitor.emit("speed-limit-change", { limit: 80 });
+  assert.deepEqual(powerMessages.at(-1)?.payload, { onBattery: false, constrained: true }, "speed limit retains thermal constraint");
+  powerMonitor.emit("speed-limit-change", { limit: 100 });
+  assert.deepEqual(powerMessages.at(-1)?.payload, { onBattery: false, constrained: false });
+  powerMonitor.emit("speed-limit-change", { limit: 80 });
+  assert.deepEqual(powerMessages.at(-1)?.payload, { onBattery: false, constrained: true }, "speed limiting constrains wallpaper");
+  powerMonitor.emit("speed-limit-change", { limit: 100 });
+  assert.deepEqual(powerMessages.at(-1)?.payload, { onBattery: false, constrained: false });
+  assert.equal(powerMessages.length, initialPowerMessages + 6, "one IPC message per derived state change");
+  const fairMonitor = new EventEmitter();
+  fairMonitor.isOnBatteryPower = () => false;
+  fairMonitor.getCurrentThermalState = () => "serious";
+  const fairState = createPowerStateMonitor(fairMonitor);
+  try {
+    assert.deepEqual(fairState.getState(), { onBattery: false, constrained: true });
+    fairMonitor.emit("thermal-state-change", { state: "fair" });
+    assert.deepEqual(fairState.getState(), { onBattery: false, constrained: false }, "fair is accepted without constraining wallpaper");
+    fairMonitor.emit("thermal-state-change", { state: "unknown" });
+    assert.deepEqual(fairState.getState(), { onBattery: false, constrained: false }, "unknown thermal state does not constrain wallpaper");
+  } finally { fairState.stop(); }
   db.exec("CREATE TABLE app_settings(key TEXT PRIMARY KEY, value_json TEXT NOT NULL)");
   if (process.argv.includes("--owner-scale")) {
     db.exec("CREATE TABLE chats(id INTEGER PRIMARY KEY, payload BLOB); CREATE TABLE events(id INTEGER PRIMARY KEY, chat_id INTEGER)");
@@ -23,6 +76,17 @@ try {
   }
   const write = db.prepare("INSERT OR REPLACE INTO app_settings VALUES ('settings', ?)");
   const times = [];
+  for (const [setting, expected] of [
+    [{}, { kind: "live", module: "butler.riso-print" }],
+    [{ main_screen_theme: "bloom", main_screen_theme_preset: "monochrome" }, { kind: "live", module: "butler.riso-print" }],
+    [{ main_screen_theme: "none" }, { kind: "none" }],
+    [{ main_screen_theme: "silk" }, { kind: "live", module: "butler.silk" }],
+    [{ wallpaper: { source: { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } }, origin: "chosen" } }, { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } }],
+    [{ wallpaper: { source: { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } }, origin: "legacy" } }, { kind: "live", module: "butler.riso-print" }],
+  ]) {
+    write.run(JSON.stringify(setting));
+    assert.deepEqual(readStartupAppearance(root).source, expected);
+  }
   for (const kind of ["live", "image", "none"]) for (const setting of ["light", "dark", "auto"]) for (const dark of [false, true]) for (const hour of [0, 12, 23]) {
     const module = { module: "butler.shoreline", params: { realtime: true } };
     const source = kind === "live" ? { kind, ...module } : kind === "image" ? { kind, asset: "wp_" + "a".repeat(32), filter: module } : { kind };
@@ -43,6 +107,6 @@ try {
   assert.equal(lifecycleAppearance(readStartupAppearance(root), manifest, true).theme, "light", "latest settings replace prior state");
   const plan = db.prepare("EXPLAIN QUERY PLAN SELECT value_json FROM app_settings WHERE key='settings'").all();
   assert.ok(plan.every((row) => !row.detail.includes("SCAN")), "settings uses the key index");
-  console.log(JSON.stringify({ result: "PASS setting/scene/OS precedence, live/image/none, latest state, indexed query", reads: times.length,
+  console.log(JSON.stringify({ result: "PASS power change-only/idle, setting/scene/OS precedence, live/image/none, latest state, indexed query", powerMessages: powerMessages.length, idleMessages: idlePowerMessages, reads: times.length,
     medianMs: times.sort((a, b) => a - b)[Math.floor(times.length / 2)], maxMs: Math.max(...times), bytes: statSync(path).size, ownerScale: process.argv.includes("--owner-scale") }));
-} finally { db.close(); }
+} finally { initialRead?.stop(); powerState.stop(); db.close(); }

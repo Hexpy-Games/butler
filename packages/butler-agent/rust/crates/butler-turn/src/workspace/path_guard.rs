@@ -46,6 +46,7 @@ pub(crate) struct MutationGuardInput<'a> {
 
 #[derive(Clone, Debug)]
 pub struct GuardResult {
+    pub path_form: PathForm,
     pub root: PathBuf,
     pub requested: String,
     pub absolute: Option<PathBuf>,
@@ -88,17 +89,25 @@ impl GuardResult {
     pub fn public_rejection(&self) -> Value {
         let mut result = serde_json::Map::new();
         result.insert("ok".into(), json!(false));
-        result.insert("workspace_root".into(), json!(self.root));
+        if self.path_form.contained() {
+            result.insert("workspace_root".into(), json!(self.root));
+        }
         if let Some(path) = self.safe_path() {
             result.insert("path".into(), json!(path));
         }
         if let Some(reason) = self.reason {
             result.insert("reason".into(), json!(reason));
+            result.insert(
+                "message".into(),
+                json!(super::path_messages::explanation(reason).0),
+            );
         }
-        if matches!(
-            self.reason,
-            Some("path_escape" | "symlink_escape" | "parent_escape")
-        ) {
+        if self.path_form.contained()
+            && matches!(
+                self.reason,
+                Some("path_escape" | "symlink_escape" | "parent_escape")
+            )
+        {
             result.insert(
                 "message".into(),
                 json!("Use a path inside the session workspace root."),
@@ -137,6 +146,7 @@ fn resolve_request(
     let root_lex = lexical_absolute(root)?;
     let mut out = GuardResult {
         root: root_lex.clone(),
+        path_form,
         requested: requested.to_owned(),
         absolute: None,
         real: None,
@@ -147,7 +157,7 @@ fn resolve_request(
         out.reason = Some("missing_path");
         return Ok((out, None));
     }
-    let requested_path = Path::new(requested);
+    let requested_path = butler_platform::tool_paths::parse(&root_lex, requested)?;
     if path_form == PathForm::RelativeOnly && requested_path.is_absolute() {
         out.reason = Some("absolute_path_not_allowed");
         return Ok((out, None));
@@ -159,9 +169,9 @@ fn resolve_request(
         return Ok((out, None));
     }
     let unresolved = if requested_path.is_absolute() {
-        lexical_absolute(requested_path)?
+        lexical_absolute(&requested_path)?
     } else {
-        lexical_absolute(&root_lex.join(requested))?
+        lexical_absolute(&root_lex.join(&requested_path))?
     };
     let absolute = match inside_relative(&root_lex, &unresolved) {
         Some(relative) => root_real.join(relative),
@@ -223,9 +233,12 @@ pub(crate) fn resolve_workspace_path_guard(input: GuardInput<'_>) -> std::io::Re
         root_real,
         absolute,
     } = resolved;
-    let Ok(real) = absolute.canonical() else {
-        out.reason = Some("not_found");
-        return Ok(out);
+    let real = match absolute.canonical() {
+        Ok(real) => real,
+        Err(error) => {
+            out.reason = Some(super::path_messages::io_reason(&error));
+            return Ok(out);
+        }
     };
     out.real = Some(real.clone());
     if input.path_form.contained() && inside_relative(&root_real, &real).is_none() {
@@ -390,26 +403,10 @@ fn has_parent_segment(value: &str) -> bool {
     value.split(['/', '\\']).any(|part| part == "..")
 }
 pub fn looks_sensitive(relative: &str) -> bool {
-    let parts: Vec<_> = relative
+    relative
         .split(['/', '\\'])
         .filter(|part| !part.is_empty())
-        .collect();
-    parts.iter().enumerate().any(|(index, part)| {
-        let lower = part.to_lowercase();
-        matches!(
-            lower.as_str(),
-            ".git"
-                | ".ssh"
-                | ".gnupg"
-                | "chatgpt-oauth.json"
-                | "credentials.json"
-                | "secrets.json"
-                | "id_rsa"
-                | "id_ed25519"
-        ) || lower.ends_with(".pem")
-            || lower.ends_with(".key")
-            || index + 1 == parts.len() && lower.starts_with(".env")
-    })
+        .any(butler_platform::command_sandbox::secret_name)
 }
 pub(super) fn protected_path(root: &Path, target: &Path, extra: &[PathBuf]) -> bool {
     let target = realpath_or_nearest(target);

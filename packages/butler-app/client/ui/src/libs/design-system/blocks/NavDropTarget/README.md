@@ -74,5 +74,21 @@ density.
 - Do not use it for lists without drag and drop; use `NavRow` alone.
 - Do not add drop indicator CSS in product code.
 
+## Outside payloads
+Picked page elements or a browser tab dragged over the sidebar use
+`drop="outside"`: an inset ring and a label beside the row (`hint`, e.g. Add
+to ‘Trip’), or with `invalid` a dashed danger ring and the reason. Wrap the
+tree in `NavDropScope payload="outside"`: no row opens a slot, reorders or
+expands, so row positions never change during the drag. `useNavDropAutoScroll`
+scrolls the list while the pointer is within 40px of its top or bottom edge
+(`navDropAutoScrollStep` is the per-frame step) and `NavDropScope autoScroll`
+shows the edge band.
+
 ## Tags
 navigation, sidebar, drag, drop, reorder
+
+## Dwell to open
+`onDwell` (with `dwellMs`, default 600 ms) is called once when a drag rests on the row, like a spring-loaded
+folder: the App opens that screen (the Library main screen for 서랍) and the drag carries on into it, so a pick can
+land on a group tile there. Leaving the row before the delay cancels it. `useDropDwell` is the same timer for
+other drop targets.

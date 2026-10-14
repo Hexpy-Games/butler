@@ -22,13 +22,80 @@ pub(super) async fn execute(
     outer_call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     match call.name.as_str() {
-        "tool_search" => Box::pin(search(owner, &call.arguments, invocation.cancellation)).await,
+        "tool_search" => {
+            Box::pin(search_with_recovery(
+                owner,
+                &call.arguments,
+                invocation.cancellation,
+            ))
+            .await
+        }
         "tool_describe" => {
             Box::pin(describe(owner, &call.arguments, invocation.cancellation)).await
         }
-        "tool_call" => Box::pin(invoke::run(owner, invocation, call, outer_call_id)).await,
+        "tool_call" => match invoke::nested(call) {
+            Some(error) => encoded(&error),
+            None => Box::pin(invoke::run(owner, invocation, call, outer_call_id)).await,
+        },
         _ => Err(integrity("guided_bridge_tool_invalid")),
     }
+}
+
+async fn search_with_recovery(
+    owner: &GuidedTools,
+    args: &Map<String, Value>,
+    signal: &tokio_util::sync::CancellationToken,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let result = Box::pin(search(owner, args, signal)).await?;
+    let mut value: Value = result
+        .read()
+        .map_err(|_| integrity("guided_bridge_catalog_json"))?;
+    // A category guess can hide the right tool even when something else
+    // matches; filtered searches always show the unfiltered matches too.
+    if !(args.contains_key("category") || args.contains_key("provider")) {
+        return Ok(result);
+    }
+    let found: Vec<Value> = value
+        .get("results")
+        .and_then(Value::as_array)
+        .map(|results| results.iter().map(|tool| tool["id"].clone()).collect())
+        .unwrap_or_default();
+    let mut unfiltered = args.clone();
+    unfiltered.remove("category");
+    unfiltered.remove("provider");
+    let alternatives = Box::pin(search(owner, &unfiltered, signal)).await?;
+    let alternatives: Value = alternatives
+        .read()
+        .map_err(|_| integrity("guided_bridge_catalog_json"))?;
+    let ranked = alternatives
+        .get("results")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let hint = ranked
+        .first()
+        .filter(|best| !found.contains(&best["id"]))
+        .map_or_else(
+            || "Filters narrow the search; a capability outside the guessed category is still available. Inspect other_matches from this session's native surface and describe an enabled match before concluding a tool is missing.".to_owned(),
+            |best| format!(
+                "The best match for this query is outside the requested filter: {} (category {}). Describe it from other_matches, or search again without category.",
+                best["id"].as_str().unwrap_or_default(),
+                best["category"].as_str().unwrap_or_default()
+            ),
+        );
+    if let Some(record) = value.as_object_mut() {
+        record.insert(
+            "other_matches".into(),
+            json!(
+                ranked
+                    .into_iter()
+                    .filter(|tool| !found.contains(&tool["id"]))
+                    .collect::<Vec<_>>()
+            ),
+        );
+        record.insert("recovery_hint".into(), json!(hint));
+    }
+    encoded(&value)
 }
 
 pub(super) fn effective(call: &ModelRoundToolCall) -> (String, Value, Option<String>) {
@@ -63,42 +130,49 @@ pub(super) fn effective(call: &ModelRoundToolCall) -> (String, Value, Option<Str
     )
 }
 
+const CATEGORIES: [&str; 14] = [
+    "search",
+    "data",
+    "command",
+    "file",
+    "work",
+    "monitoring",
+    "automation",
+    "todo",
+    "memory",
+    "project",
+    "skill",
+    "mcp",
+    "dispatch",
+    "control",
+];
+
+/// Maps a requested category, including common aliases, onto a catalog category.
+fn category_filter(requested: Option<&str>) -> Result<Option<&'static str>, Value> {
+    let requested = requested.map(str::to_lowercase);
+    match requested.as_deref() {
+        Some("all" | "any" | "native" | "registry" | "workspace") | None => Ok(None),
+        Some("shell" | "terminal" | "execution" | "execute") => Ok(Some("command")),
+        Some("filesystem" | "files") => Ok(Some("file")),
+        Some("browser") => Ok(Some("control")),
+        Some(value) => CATEGORIES
+            .iter()
+            .find(|known| **known == value)
+            .map(|known| Some(*known))
+            .ok_or_else(|| {
+                json!({"ok":false,"error":{"code":"invalid_tool_category","message":format!("Unknown tool capability category: {value}")},"invalid_category":value,"invalid_provider":null,"valid_categories":CATEGORIES,"results":[]})
+            }),
+    }
+}
+
 async fn search(
     owner: &GuidedTools,
     args: &Map<String, Value>,
     signal: &tokio_util::sync::CancellationToken,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    let category = text(args, "category").map(str::to_lowercase);
-    let category = match category.as_deref() {
-        Some("all" | "any" | "native" | "registry" | "workspace") | None => None,
-        Some("shell" | "terminal" | "execution" | "execute") => Some("command"),
-        Some("filesystem" | "files") => Some("file"),
-        Some(value)
-            if matches!(
-                value,
-                "search"
-                    | "data"
-                    | "command"
-                    | "file"
-                    | "work"
-                    | "monitoring"
-                    | "automation"
-                    | "todo"
-                    | "memory"
-                    | "project"
-                    | "skill"
-                    | "mcp"
-                    | "dispatch"
-                    | "control"
-            ) =>
-        {
-            Some(value)
-        }
-        Some(value) => {
-            return encoded(
-                &json!({"ok":false,"error":{"code":"invalid_tool_category","message":format!("Unknown tool capability category: {value}")},"invalid_category":value,"invalid_provider":null,"valid_categories":["search","data","command","file","work","monitoring","automation","todo","memory","project","skill","mcp","dispatch","control"],"results":[]}),
-            );
-        }
+    let category = match category_filter(text(args, "category")) {
+        Ok(category) => category,
+        Err(refusal) => return encoded(&refusal),
     };
     let provider = text(args, "provider").map(str::to_lowercase);
     match provider.as_deref() {

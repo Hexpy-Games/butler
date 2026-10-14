@@ -1,5 +1,5 @@
 import { observeMark } from "./markObservers";
-import { type ButlerMarkTheme, type ButlerMarkThemeColors } from "./butlerMarkTheme";
+import { type ButlerMarkTheme, type ButlerMarkThemeColors, type RisoInks } from "./butlerMarkTheme";
 import { FRAME_INTERVAL_MS } from "./thinking-mark/constants";
 import { createMarkRenderer } from "./markRenderer";
 import { MorphSim } from "./thinking-mark/motion";
@@ -7,6 +7,8 @@ import { MorphSim } from "./thinking-mark/motion";
 export interface MarkLoopInputs {
   theme?: ButlerMarkTheme;
   themeColors?: ButlerMarkThemeColors;
+  /** The riso inks per theme (the --butler-ink-* tokens); RISO_INKS when omitted. */
+  inks?: (theme: ButlerMarkTheme) => RisoInks;
   isWorking: () => boolean;
   /** Effective reduced motion (prop, OS setting or DS scope): the still logo, no frame loop. */
   isReduced: () => boolean;

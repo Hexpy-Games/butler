@@ -1,7 +1,10 @@
+import { watchStorageCorrection } from "./app-storage-correction.mjs";
 import { isLifecycleWindow } from "./lifecycle-window.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
 import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
 import { createUiCrashStore } from "./ui-crash-store.mjs";
+import { createWallpaperStateLog } from "./wallpaper-state-log.mjs";
+import { startPowerStateMonitor } from "./butler-platform/power.mjs";
 import {
   app,
   BrowserWindow,
@@ -16,7 +19,7 @@ import {
   protocol,
   shell,
 } from "electron";
-import { readProductFeatures } from "./product-features.mjs";
+import { openExternalSignIn, openLink, installAppLinks } from "./browser/links.mjs";
 import { installUserBrowser } from "./browser/ipc.mjs";
 import { prepareAppPackageUpdate } from "./app-package-update.mjs";
 import { unsupportedLegacyData } from "./app-legacy-data.mjs";
@@ -140,8 +143,10 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
 const userHome = homedir();
+let storageCorrectionWatch = null;
 const butlerDataRoot = process.env.BUTLER_DATA || join(userHome, ".butler");
 const uiCrashStore = createUiCrashStore(butlerDataRoot, () => appInfoView().version);
+const wallpaperStateLog = createWallpaperStateLog(butlerDataRoot);
 const legacyDataBlocked = unsupportedLegacyData(butlerDataRoot);
 const preloadPath = resolve(__dirname, "preload.cjs");
 const appCacheBudget = readCacheBudgetArtifact(
@@ -268,6 +273,10 @@ const projectFolderTokenTtlMs = 5 * 60 * 1000;
 const messageFileIdPattern = /^file-[0-9a-f-]{36}$/iu;
 let nativeSettingsCache = null;
 let mainWindow = null;
+let powerStateMonitor = null;
+let powerStateMonitorStart = null;
+const sentPowerStateByWebContents = new WeakMap();
+const readyPowerStateWebContents = new WeakSet();
 let tray = null;
 let isQuitting = false;
 let finalQuitAllowed = false;
@@ -285,6 +294,39 @@ let nativeServiceGatewayLastErrorCode = null;
 const nativeShellPreferences = {
   trayEnabled: !legacyDataBlocked,
 };
+
+function sendPowerState(state, window = mainWindow) {
+  const webContents = window?.webContents;
+  if (!window || window.isDestroyed() || !webContents || webContents.isDestroyed() ||
+      !readyPowerStateWebContents.has(webContents)) return;
+  const previous = sentPowerStateByWebContents.get(webContents);
+  if (previous?.onBattery === state.onBattery && previous?.constrained === state.constrained) return;
+  webContents.send("butler:power-state", state);
+  sentPowerStateByWebContents.set(webContents, state);
+}
+
+async function ensurePowerStateMonitor() {
+  if (!powerStateMonitorStart) {
+    powerStateMonitorStart = startPowerStateMonitor((state) => sendPowerState(state))
+      .then((monitor) => {
+        powerStateMonitor = monitor;
+        return monitor;
+      })
+      .catch(() => {
+        powerStateMonitorStart = null;
+        return null;
+      });
+  }
+  return await powerStateMonitorStart;
+}
+
+async function syncPowerStateToWindow(window) {
+  const monitor = await ensurePowerStateMonitor();
+  if (!monitor || powerStateMonitor !== monitor || window.isDestroyed() || window.webContents.isDestroyed()) return;
+  readyPowerStateWebContents.add(window.webContents);
+  sendPowerState(monitor.getState(), window);
+}
+
 const nativeNotificationState = {
   lastError: null,
   lastAttemptedAt: null,
@@ -319,6 +361,7 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   explicitUiUrl,
   projectFolderTokenSecret,
   startupTimeoutMs: 120_000,
+  startupDeadline: () => storageCorrectionWatch?.deadline() ?? 0,
   onUnexpectedExit: () => { void recoverUnexpectedForegroundExit(); },
   onGatewayStarting: prepareAppForegroundGatewayLaunch,
   onIntentionalExit: handleIntentionalAgentExit,
@@ -580,7 +623,7 @@ async function ensureServer() {
 }
 
 async function recoverUnexpectedForegroundExit() {
-  if (startupPending()) { failStartup(); return; }
+  if (startupPending()) { storageCorrectionWatch?.close(); storageCorrectionWatch = null; failStartup(); return; }
   if (!usesAppForegroundLifecycle || isQuitting || !foregroundInstance) return;
   if (!foregroundRecoveryBudget.record()) {
     foregroundInstance = transitionAppForeground(foregroundInstance, "failed");
@@ -992,7 +1035,7 @@ function beginOAuthLoginProcess(command, args, env) {
       session.authUrl = authUrl.trim();
       session.redirectUri = redirectUriFromAuthUrl(session.authUrl);
       session.state = stateFromAuthUrl(session.authUrl);
-      void shell.openExternal(session.authUrl);
+      void openExternalSignIn(session.authUrl)?.catch(() => {});
       resolveOnce();
     });
     child.stderr?.on("data", (chunk) => {
@@ -2090,11 +2133,14 @@ function safeString(value) {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
-const browserEnabled = readProductFeatures(app.isPackaged ? __dirname : process.env.BUTLER_APP_RENDERER_DIST).browser;
-const browserHost = browserEnabled ? createBrowserHost({
+const browserHost = createBrowserHost({
   fetch: (path, init) => appServerFetch(path, init),
   adminCredential: () => readAppLocalAdmin({ butlerData: butlerDataRoot }),
-}) : null;
+  executeBrowser: frame => userBrowser?.execute(frame),
+  resetBrowser: () => userBrowser?.resetUse(),
+  snapshot: () => userBrowser?.snapshot(),
+  enabled: () => userBrowser?.enabled() ?? false,
+});
 
 let userBrowser;
 async function createWindow() {
@@ -2114,7 +2160,22 @@ async function createWindow() {
   }
   if (!legacyDataBlocked) {
     void loadInitialNativeShellPreferences().catch(() => undefined);
-    browserHost?.start();
+    userBrowser ??= installUserBrowser(app, () => mainWindow, readDesktopLanguage);
+    userBrowser.history = browserHost.history;
+    userBrowser.onState = () => browserHost.changed();
+    userBrowser.pullCredential = (token, origin) => browserHost.credential(token, origin);
+    userBrowser.pullVault = (token, origin, frameOrigins) => browserHost.vault(token, origin, frameOrigins);
+    userBrowser.saveSignIn = (payload) => requestSecurityRoute({ route: "saveSignIn", body: { payload } }, {
+      ensureReady: ensureServer, fetch, serverUrl, authHeaders: appLocalAuthHeaders,
+      adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),
+    });
+    userBrowser.downloadRequest = async input => {
+      const response = await appServerFetch("/internal/browser-host/downloads", { method: "POST",
+        headers: { "content-type": "application/json", "x-butler-admin": await readAppLocalAdmin({ butlerData: butlerDataRoot }) }, body: JSON.stringify(input) });
+      if (!response.ok) throw new Error("download_request_failed");
+      return response.json();
+    };
+    browserHost.start();
   }
   if (!legacyDataBlocked && isPersistentMenuBarHelperSupported()) {
     ensurePersistentMenuBarHelper();
@@ -2151,20 +2212,24 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      additionalArguments: [appCacheBudgetArgument, ...(!browserEnabled ? ["--butler-browser-disabled"] : []), ...(legacyDataBlocked ? ["--butler-legacy-data"] : [])],
+      additionalArguments: [appCacheBudgetArgument, ...(legacyDataBlocked ? ["--butler-legacy-data"] : [])],
     },
   });
   mainWindow = win;
+  win.webContents.on("did-start-navigation", (_event, _url, _inPlace, isMainFrame) => {
+    if (!isMainFrame) return;
+    readyPowerStateWebContents.delete(win.webContents);
+    sentPowerStateByWebContents.delete(win.webContents);
+  });
+  win.webContents.on("did-finish-load", () => { void syncPowerStateToWindow(win); });
   const firstDataPaint = waitForStartupRenderer(win);
-  if (browserEnabled) {
-    userBrowser ??= installUserBrowser(app, () => mainWindow);
-    win.on("hide", () => userBrowser.syncAll());
-    win.on("show", () => userBrowser.syncAll());
-    win.on("closed", () => userBrowser.hide());
-    win.webContents.on("before-input-event", (event, input) => {
-      if (userBrowser.shortcut(input)) event.preventDefault();
-    });
-  }
+  userBrowser ??= installUserBrowser(app, () => mainWindow, readDesktopLanguage);
+  win.on("hide", () => userBrowser.syncAll());
+  win.on("show", () => userBrowser.syncAll());
+  win.on("closed", () => userBrowser.hide());
+  win.webContents.on("before-input-event", (event, input) => {
+    if (userBrowser.shortcut(input)) event.preventDefault();
+  });
   win.setMenu(null);
   win.setMenuBarVisibility(false);
   win.on("close", (event) => {
@@ -2186,8 +2251,9 @@ async function createWindow() {
     win.setVibrancy(macVibrancy);
   }
   if (isWindows) win.setBackgroundMaterial(windowsBackgroundMaterial);
+  if (userBrowser) installAppLinks(win, userBrowser);
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (openExternalUrl(url)) return { action: "deny" };
+    if (openAppLink(url)) return { action: "deny" };
     return { action: "deny" };
   });
   win.webContents.on("before-input-event", (event, input) => {
@@ -2203,7 +2269,7 @@ async function createWindow() {
   win.webContents.on("will-navigate", (event, url) => {
     if (isAppNavigationUrl(url)) return;
     event.preventDefault();
-    openExternalUrl(url);
+    openAppLink(url);
   });
   await prepareAppRendererProtocol();
   await win.loadURL(rendererUrl);
@@ -2375,6 +2441,9 @@ ipcMain.handle("butler:ui-crash", (event, input) => {
   return uiCrashStore.append(input);
 });
 ipcMain.handle("butler:ui-crash-log", () => uiCrashStore.read());
+ipcMain.on("butler:wallpaper-state", (event, line) => {
+  if (event.sender === mainWindow?.webContents && event.senderFrame === event.sender.mainFrame) wallpaperStateLog.record(line);
+});
 
 ipcMain.handle("butler:first-run-setup-diagnostics", async () => ({
   ...firstRunSetupBridge.diagnostics(), ui_crashes: await uiCrashStore.read(),
@@ -2525,6 +2594,22 @@ ipcMain.handle("butler:security-request", async (event, input) => {
     adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),
     onRotated: () => bundledAgentSupervisor.reloadLocalAuth(),
   });
+});
+
+// Browser import: the native dialog picks the export file; its contents are
+// read only by the Agent and never reach the renderer.
+ipcMain.handle("butler:pick-browser-folder", async (event) => {
+  if (!isSecuritySenderOrigin(event.senderFrame?.origin, { appOrigin: APP_RENDERER_ORIGIN, devOrigin: explicitUiUrl ? rendererOrigin : null })) return null;
+  const result = await dialog.showOpenDialog(mainWindow ?? undefined, { properties: ["openDirectory"] });
+  return result.canceled ? null : result.filePaths[0] ?? null;
+});
+
+ipcMain.handle("butler:pick-import-file", async (event, kind) => {
+  if (!isSecuritySenderOrigin(event.senderFrame?.origin, { appOrigin: APP_RENDERER_ORIGIN, devOrigin: explicitUiUrl ? rendererOrigin : null })) return null;
+  const filters = kind === "bookmarks" ? [{ name: "HTML", extensions: ["html", "htm"] }] : [{ name: "CSV", extensions: ["csv"] }];
+  const result = await dialog.showOpenDialog(mainWindow ?? undefined, { properties: ["openFile"], filters });
+  const path = result.canceled ? null : result.filePaths[0];
+  return path ? { path, name: basename(path) } : null;
 });
 
 ipcMain.handle("butler:start-openai-oauth-login", async () =>
@@ -2747,11 +2832,8 @@ if (appSingleInstanceLock) {
         return;
       }
       void installDevtools().catch(() => undefined);
+      await ensurePowerStateMonitor();
       await createWindow();
-      if (!app.isPackaged && process.env.BUTLER_TEST_BROWSER_P0 === "1") {
-        const { installBrowserP0Harness } = await import("../../../../tests/smoke/browser-p0-harness.mjs");
-        installBrowserP0Harness(mainWindow, userBrowser);
-      }
       flushPendingNativeNavigation();
     })
     .catch(handleFatalStartupError);
@@ -2765,8 +2847,10 @@ app.on("window-all-closed", () => {
 app.on("activate", activateButlerApp);
 
 app.on("before-quit", (event) => {
+  storageCorrectionWatch?.close(); storageCorrectionWatch = null;
   if (finalQuitAllowed) {
     mainWindow?.setProgressBar(-1);
+    powerStateMonitor?.stop();
     quitFeedback?.destroy();
     if (tray) {
       tray.destroy();
@@ -2780,13 +2864,15 @@ app.on("before-quit", (event) => {
   // Visible feedback precedes any I/O. The Agent owns shutdown interruption
   // and FIFO recovery; UI cancellation would pause the queue as a user cancel.
   let feedbackReady;
-  if (app.isReady() && !isMenuBarHelperProcess) {
+  // No owned service means there is no durable shutdown to paint or wait for.
+  // This also lets a crashed-service App quit while its renderer is suspended.
+  if (app.isReady() && !isMenuBarHelperProcess && bundledAgentSupervisor.diagnostics().pid !== null) {
     quitFeedback ??= createQuitFeedback(BrowserWindow, desktopLanguage, () => bundledAgentSupervisor.diagnostics());
     feedbackReady = quitFeedback.begin(mainWindow);
   }
   if (isMenuBarHelperProcess) removeMenuBarHelperPid();
   void Promise.resolve(feedbackReady).then(() => {
-    browserHost?.stop();
+    browserHost.stop();
     return stopServerProcess({ reason: "app_quit" });
   }).then(() => {
     finalQuitAllowed = true;
@@ -2925,6 +3011,7 @@ function handleFatalStartupError(error) {
   const message =
     error instanceof Error ? (error.stack ?? error.message) : String(error);
   console.error(message);
+  storageCorrectionWatch?.close(); storageCorrectionWatch = null;
   if (!failStartup()) app.quit();
 }
 
@@ -2933,8 +3020,15 @@ function recordAppStartupProgress(stage, {
   trayReady = Boolean(tray),
 } = {}) {
   startupTiming(stage);
-  if (stage === "agent_starting") startupStage("service");
-  if (stage === "agent_ready") startupStage("screen");
+  if (stage === "agent_starting" && startupPending()) {
+    startupStage("service");
+    storageCorrectionWatch?.close();
+    storageCorrectionWatch = watchStorageCorrection(butlerDataRoot, (deadline) => startupStage("storage", deadline));
+  }
+  if (stage === "agent_ready") {
+    storageCorrectionWatch?.close(); storageCorrectionWatch = null;
+    startupStage("screen");
+  }
   if (legacyDataBlocked) return;
   try {
     const diagnostics = bundledAgentSupervisor.diagnostics();
@@ -3037,7 +3131,7 @@ function isAppNavigationUrl(value) {
   }
 }
 
-function openExternalUrl(value) {
+function openAppLink(value) {
   let url;
   try {
     url = new URL(value);
@@ -3045,6 +3139,7 @@ function openExternalUrl(value) {
     return false;
   }
   if (!["http:", "https:", "mailto:"].includes(url.protocol)) return false;
-  void shell.openExternal(url.toString());
+  if (url.protocol === "mailto:") void shell.openExternal(url.toString());
+  else void openLink(userBrowser, url.toString()).catch(() => {});
   return true;
 }

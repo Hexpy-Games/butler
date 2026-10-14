@@ -1,7 +1,15 @@
+import "./stdio-errors.mjs";
 // Only Electron/Node and the small startup surface load before the first window.
-import { app, protocol } from "electron";
+import { createRequire } from "node:module";
 import { APP_RENDERER_SCHEME_PRIVILEGES } from "./app-renderer-protocol.mjs";
-import { createStartupWindow, failStartup, startupTiming } from "./startup-window.mjs";
+import { startupTiming } from "./startup-timing.mjs";
+import { configureChromiumFeatures } from "./butler-platform/chromium-features.mjs";
+
+// Electron's ESM facade evaluates every API getter, including nativeTheme.
+// Keep it unloaded until ready, after Chromium rebuilds its feature list.
+const { app, protocol } = createRequire(import.meta.url)("electron");
+configureChromiumFeatures(app.commandLine);
+let failStartup = () => false;
 
 protocol.registerSchemesAsPrivileged([APP_RENDERER_SCHEME_PRIVILEGES]);
 startupTiming("entry");
@@ -21,7 +29,10 @@ const backgroundLaunch = process.argv.some((arg) =>
 if (process.env.BUTLER_APP_ELECTRON_USER_DATA_DIR) {
   app.setPath("userData", process.env.BUTLER_APP_ELECTRON_USER_DATA_DIR);
 }
-if (backgroundLaunch) {
+if (process.argv.some((arg) => arg.startsWith("--butler-browser-host="))) {
+  // The Agent's windowless browser host: no single-instance lock, no App UI.
+  await import("./browser-host.mjs");
+} else if (backgroundLaunch) {
   await import("./main.mjs");
 } else if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -29,6 +40,9 @@ if (backgroundLaunch) {
   // Do not top-level-await ready: Electron waits for ESM evaluation before ready.
   void app.whenReady().then(async () => {
     startupTiming("app_ready");
+    const startup = await import("./startup-window.mjs");
+    failStartup = startup.failStartup;
+    const { createStartupWindow } = startup;
     await createStartupWindow();
     setImmediate(() => {
       startupTiming("runtime_import_start");

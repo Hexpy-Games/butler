@@ -30,7 +30,7 @@
   font: inherit;
   font-size: var(--font-size-1);
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-compact);
+  line-height: var(--typo-caption-line-height);
   white-space: nowrap;
   cursor: pointer;
   outline: none;

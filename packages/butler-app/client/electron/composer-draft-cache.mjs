@@ -1,3 +1,4 @@
+import { validElements } from "./browser/element-draft-validation.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import {
   chmodSync,
@@ -68,13 +69,15 @@ function normalizeSnapshot(value, expectedSessionId, maxBytes = defaultMaxDraftB
     typeof value.updated_at !== "string" ||
     !Number.isFinite(Date.parse(value.updated_at)) ||
     (value.content_parts !== undefined && !validContent(value.content_parts)) ||
-    !draftTextWithinBudget(value.content_parts ? JSON.stringify(value.content_parts) : value.text, maxBytes)
+    (value.element_attachments !== undefined && !validElements(value.element_attachments)) ||
+    !draftTextWithinBudget(JSON.stringify(value), maxBytes)
   ) return null;
   return {
     schema: composerDraftSchema,
     session_id: sessionId,
     text: value.text,
     ...(value.content_parts ? { content_parts: value.content_parts } : {}),
+    ...(Array.isArray(value.element_attachments) ? { element_attachments: value.element_attachments } : {}),
     updated_at: value.updated_at,
   };
 }

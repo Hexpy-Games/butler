@@ -1,6 +1,7 @@
+import { spawnElectron, stopElectronChild } from "../support/electron-child";
 /** Real packaged App: runtime, sandbox, stub chat, PDF artifact and tray quit. */
 import { strict as assert } from "node:assert";
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess } from "node:child_process";
 import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -84,13 +85,12 @@ try {
   const debugPort = await freePort();
   // Electron uses its production process model. --single-process is only a
   // restricted Playwright Chromium workaround and crashes Electron 44 on macOS.
-  child = spawn(resolve(executablePath), [`--inspect=${inspectorPort}`, `--remote-debugging-port=${debugPort}`, ...smokeElectronArgs()], { env: {
+  child = spawnElectron(resolve(executablePath), [`--inspect=${inspectorPort}`, `--remote-debugging-port=${debugPort}`, ...smokeElectronArgs()], { env: {
     ...process.env, HOME: home, BUTLER_DATA: data, TMPDIR: dir,
     BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"), BUTLER_APP_SERVER_PORT: String(await freePort()),
     BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1", BUTLER_E2E_TIER: "stub",
     BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9", BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1",
-  }, stdio: ["ignore", "pipe", "pipe"] });
-  child.stdout!.on("data", bytes => logs.push(String(bytes))); child.stderr!.on("data", bytes => logs.push(String(bytes)));
+  }, onOutput: bytes => logs.push(String(bytes)) });
   page = await electronPage(debugPort);
   await page.waitForFunction(() => document.readyState === "complete" && Boolean(window.butlerApp));
   const versions = await main<{ electron: string; chrome: string; node: string }>(
@@ -169,10 +169,8 @@ try {
   throw error;
 } finally {
   page?.close();
-  if (child && child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+  if (child) await stopElectronChild(child);
   for (const pid of [agentPid]) if (running(pid)) process.kill(pid, "SIGTERM");
   provider.stop(true);
-  await new Promise(done => setTimeout(done, 1500));
-  if (child && child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
   rmSync(dir, { recursive: true, force: true });
 }

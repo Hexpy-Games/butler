@@ -1,4 +1,4 @@
-import { browserFeatureEnabled } from "./productFeatures";
+import { retainAnswerBlocks } from "./stableAnswerBlocks";
 import { sessionDisplayTitle } from "./sessionTitle.ts";
 import { ACTIVE_TURN_STATES } from "./constants.ts";
 import { appCopy, interfaceText } from "./copy.ts";
@@ -1075,7 +1075,7 @@ function mergeMessageRecord(
   incoming: MessageRecord,
 ): MessageRecord {
   if (isStaleMessageRecord(previous, incoming)) return previous;
-  let next = incoming;
+  let next = retainAnswerBlocks(previous, incoming);
   if (previous.work_blocks?.length && !next.work_blocks) {
     next = { ...next, work_blocks: previous.work_blocks };
   }
@@ -1435,6 +1435,7 @@ function messageRecordEqual(
     left.cursor === right.cursor &&
     left.created_at === right.created_at &&
     left.updated_at === right.updated_at &&
+    JSON.stringify(left.answer_blocks ?? []) === JSON.stringify(right.answer_blocks ?? []) &&
     workBlockArrayEqual(left.work_blocks ?? [], right.work_blocks ?? []) &&
     progressRowArrayEqual(
       left.turn_activity_rows ?? [],
@@ -1720,7 +1721,9 @@ export function activeTitleForView(
   view: AppView,
   activeChat: ActiveChatView,
 ): { title: string; subtitle?: string } {
-  if (browserFeatureEnabled && view.kind === "browser") return { title: appCopy.browser.title };
+  if (view.kind === "history") return { title: appCopy.browser.history.title };
+  if (view.kind === "browser") return { title: appCopy.browser.title };
+  if (view.kind === "library") return { title: appCopy.browser.library };
   if (view.kind === "settings") return { title: appCopy.settings.title };
   if (view.kind === "automations" || view.kind === "automation-detail")
     return { title: appCopy.automations.title };
@@ -1760,12 +1763,12 @@ export function allSessionsFromNavigation(
 ): SessionOption[] {
   const chatSessions = (navigation.chats ?? []).map((chat) => ({
     id: chat.id,
-    label: chat.title,
+    label: sessionDisplayTitle(chat),
   }));
   const projectSessions = (navigation.projects ?? []).flatMap((project) =>
     (project.sessions ?? []).map((session) => ({
       id: session.id,
-      label: `${project.display_name} / ${session.title}`,
+      label: `${project.display_name} / ${sessionDisplayTitle(session)}`,
     })),
   );
   return [...chatSessions, ...projectSessions];
@@ -1809,7 +1812,8 @@ export function appShellTheme(
   return {
     appearance: resolveAppearanceTheme(settings?.appearance_theme, prefersDark),
     sidebar: settings?.translucent_sidebar === false ? "solid" : "translucent",
-    mainScreen: settings?.main_screen_theme ?? "bloom",
+    // The shell retains its legacy tone hint; Wallpaper owns the riso source.
+    mainScreen: settings?.main_screen_theme === "riso" ? "none" : settings?.main_screen_theme ?? "none",
   };
 }
 
@@ -1825,6 +1829,7 @@ export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
   if (section === "memory") return "memory";
   if (section === "updates") return "updates";
   if (section.includes("default-permission") || section.includes("access-mode") || section.includes("기본 권한")) return "general";
+  if (["browser", "브라우저", "sign-in", "signin", "signins", "로그인", "browser-import"].some(value => section.includes(value))) return "browser";
   if (section.includes("security") || section.includes("보안") || section.includes("개인정보") || section.includes("진단") || section.includes("권한") || section.includes("access")) return "security";
   if (
     section === "logs" ||

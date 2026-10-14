@@ -17,7 +17,7 @@ const labels = {
     models: [["claude", "Claude Sonnet", "Anthropic", "Balanced reasoning"], ["gemini", "Gemini Flash", "Google", "Fast multimodal model"], ["grok", "Grok", "xAI", "Long-context model"]],
   },
   "ko-KR": {
-    title: "예비 모델", description: "포인터나 키보드로 끌어 Butler가 시도할 순서를 바꾸세요.",
+    title: "예비 모델", description: "포인터나 키보드로 끌어 버틀러가 시도할 순서를 바꾸세요.",
     showEmpty: "빈 상태 보기", showCards: "카드 보기", empty: "모델을 추가해 예비 순서를 만드세요.",
     models: [["claude", "Claude Sonnet", "Anthropic", "균형 잡힌 추론"], ["gemini", "Gemini Flash", "Google", "빠른 멀티모달 모델"], ["grok", "Grok", "xAI", "긴 컨텍스트 모델"]],
   },

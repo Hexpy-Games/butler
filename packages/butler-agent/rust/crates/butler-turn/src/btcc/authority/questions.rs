@@ -17,6 +17,8 @@ pub struct UserQuestion {
     pub eyebrow: String,
     pub title: String,
     pub kind: QuestionKind,
+    /// Empty for a text question.
+    #[serde(default)]
     pub options: Vec<QuestionOption>,
     pub allow_custom: bool,
 }
@@ -25,6 +27,8 @@ pub struct UserQuestion {
 pub enum QuestionKind {
     Single,
     Multi,
+    /// A free-text answer: no options, the card shows one input.
+    Text,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -35,6 +39,30 @@ pub struct QuestionOption {
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub recommended: bool,
+    /// What the option does. The card has its own Skip and free input, so
+    /// `skip` and `input` options are dropped before the question is stored.
+    #[serde(default, skip_serializing_if = "OptionKind::is_answer")]
+    pub kind: OptionKind,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OptionKind {
+    /// A concrete answer.
+    #[default]
+    Answer,
+    /// Skip or answer later; the card's Skip covers it.
+    Skip,
+    /// "Type my own"; the card's free input covers it.
+    Input,
+}
+impl OptionKind {
+    #[expect(
+        clippy::trivially_copy_pass_by_ref,
+        reason = "serde skip_serializing_if borrows its field"
+    )]
+    fn is_answer(&self) -> bool {
+        *self == Self::Answer
+    }
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -55,6 +83,14 @@ pub enum UserQuestionResponse {
 impl UserQuestions {
     /// Strict tool validation; callers return this error to the model for retry.
     pub fn validate(&self) -> Result<(), &'static str> {
+        self.check(2)
+    }
+    /// A [`normalized`](Self::normalized) question may keep a single answer
+    /// beside the card's free input once its skip/input options are dropped.
+    pub fn validate_normalized(&self) -> Result<(), &'static str> {
+        self.check(1)
+    }
+    fn check(&self, min_options: usize) -> Result<(), &'static str> {
         if !(1..=4).contains(&self.questions.len()) {
             return Err("Provide 1–4 questions.");
         }
@@ -67,8 +103,15 @@ impl UserQuestions {
             {
                 return Err("Questions need unique ids, a short eyebrow and a nonempty title.");
             }
-            if !(2..=6).contains(&q.options.len()) {
-                return Err("Each question needs 2–6 options.");
+            if q.kind == QuestionKind::Text && !q.options.is_empty() {
+                return Err("A text question takes no options; the card shows one input.");
+            }
+            // After normalization one answer plus the card's free input is still a pick.
+            let choices = q.options.len() + usize::from(q.allow_custom);
+            if q.kind != QuestionKind::Text
+                && (!(min_options..=6).contains(&q.options.len()) || choices < 2)
+            {
+                return Err("Each single or multi question needs 2–6 options.");
             }
             let mut options = HashSet::new();
             for option in &q.options {
@@ -82,6 +125,28 @@ impl UserQuestions {
             }
         }
         Ok(())
+    }
+    /// The card always offers Skip and free input, so options of those kinds are
+    /// dropped: a dropped `input` option turns free input on, and a question left
+    /// with no concrete answer becomes a text question. The rule is structural
+    /// (the option's own kind), so it holds in every language.
+    #[must_use]
+    pub fn normalized(mut self) -> Self {
+        for q in &mut self.questions {
+            if q.options.iter().any(|o| o.kind == OptionKind::Input) {
+                q.allow_custom = true;
+            }
+            q.options.retain(|o| o.kind == OptionKind::Answer);
+            if q.kind == QuestionKind::Text || q.options.is_empty() {
+                q.kind = QuestionKind::Text;
+                q.options.clear();
+                q.allow_custom = true;
+            } else if q.options.len() == 1 {
+                // A lone answer still needs a second choice: the free input.
+                q.allow_custom = true;
+            }
+        }
+        self
     }
     pub(super) fn validate_answer(&self, response: &UserQuestionResponse) -> AuthorityResult<()> {
         let UserQuestionResponse::Answered { answers } = response else {
@@ -104,7 +169,7 @@ impl UserQuestions {
                     .selected
                     .iter()
                     .any(|id| !selected.insert(id) || !q.options.iter().any(|o| &o.id == id))
-                || (q.kind == QuestionKind::Single && answer.selected.len() > 1)
+                || (q.kind != QuestionKind::Multi && answer.selected.len() > 1)
                 || answer
                     .custom
                     .as_ref()
@@ -138,7 +203,7 @@ impl PrincipalAuthority {
         questions: UserQuestions,
     ) -> AuthorityResult<AuthorityAdmissionResult> {
         questions
-            .validate()
+            .validate_normalized()
             .map_err(|_| AuthorityError::policy("question_input_invalid"))?;
         let collation = self.collation.clone();
         let now = (self.clock)();

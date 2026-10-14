@@ -1,5 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
+import { isAbsolutePath } from "@/app/approvalTargets.ts";
 import type { ApprovalActionKind } from "@/app/approvalRequest.ts";
 import type { ApprovalRisk } from "@/app/types.ts";
 import {
@@ -7,23 +8,37 @@ import {
   MessageSquarePlus, RefreshCcw, ShieldCheck, SplitButton, Tag, Terminal, Typo, type TagTone,
 } from "@/butler-ds";
 import type { ComposerAuthorityDecision } from "./useComposerAuthorityDecision";
+import { ComposerBrowserHandoffSurface } from "./ComposerBrowserHandoffSurface";
 
 /** What the request touches, at a glance: a folder for file edits (as in the README demo), a terminal for commands. */
 const KIND_ICONS: Record<ApprovalActionKind, typeof ShieldCheck> = {
-  edit_files: Folder, run_command: Terminal, network_command: Globe2, use_connector: McpServer,
+  edit_files: Folder, run_command: Terminal, network_command: Globe2, web_request: Globe2, use_connector: McpServer,
   manage_schedule: Clock3, update_project: ListChecks, start_conversation: MessageSquarePlus,
-  restart_service: RefreshCcw, create_worktree: GitBranch, other: ShieldCheck,
+  restart_service: RefreshCcw, create_worktree: GitBranch, switch_folder: Folder, other: ShieldCheck,
 };
 const RISK_TONES: Record<ApprovalRisk, TagTone> = { low: "neutral", medium: "warning", high: "danger" };
 
+/** Display only: retain the original path in the DS title and accessible label. */
+function approvalPathText(text: string, decision: ComposerAuthorityDecision) {
+  const shorten = (path: string) => isAbsolutePath(path) && path.length > 64
+    ? `${path.slice(0, 30)}…${path.slice(-25)}` : path;
+  const display = decision.pathDetails?.includes(text) ? shorten(text)
+    : text === decision.title ? text.replace(/'([^']+)'/gu, (_, path: string) => `'${shorten(path)}'`) : text;
+  return <Typo.Text title={text} aria-label={text}>{display}</Typo.Text>;
+}
+
 export function ComposerAuthorityDecisionSurface({ decision }: { decision: ComposerAuthorityDecision }) {
   useAppLocale();
+  const { handoff } = decision;
+  if (handoff) return <ComposerBrowserHandoffSurface decision={{ ...decision, handoff }} />;
   const Icon = KIND_ICONS[decision.actionKind];
   return <ComposerDecisionPanel
+    media={decision.media}
     icon={<Icon aria-hidden="true" size="lg" />}
     eyebrow={appCopy.composer.permission}
     title={decision.title}
     details={decision.details}
+    renderText={(text) => approvalPathText(text, decision)}
     detailsShowMoreLabel={appCopy.conversation.messageActions.showMore}
     detailsShowLessLabel={appCopy.conversation.messageActions.showLess}
     onOpen={decision.onOpenSource}

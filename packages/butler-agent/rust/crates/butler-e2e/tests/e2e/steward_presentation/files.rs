@@ -30,3 +30,34 @@ pub(super) async fn assert_delegated_files(
     assert_eq!(write["safe_input_label"], "report.html");
     Ok(())
 }
+
+pub(super) async fn assert_readable_request(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    child: &serde_json::Value,
+) -> Result<(), HarnessError> {
+    assert_eq!(
+        child["title"],
+        super::stub::OWNER.chars().take(64).collect::<String>()
+    );
+    let own =
+        s.gw.get(&format!(
+            "/session-view?session_id={}",
+            child["session_id"].as_str().unwrap()
+        ))
+        .await?;
+    let request = own.data()["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "user")
+        .unwrap()["text"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(request.starts_with(super::stub::OWNER));
+    assert!(request.contains("• "));
+    for internal in ["role:", "acceptance_criteria:", "steward", "스튜어드"] {
+        assert!(!request.contains(internal), "{request}");
+    }
+    Ok(())
+}

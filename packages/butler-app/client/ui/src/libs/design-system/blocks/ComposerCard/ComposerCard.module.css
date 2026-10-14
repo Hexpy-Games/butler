@@ -9,7 +9,10 @@
   grid-template-columns: minmax(0, 1fr);
   container-name: composer;
   container-type: inline-size;
-  width: min(100%, var(--conversation-content-width, 760px));
+  width: min(
+    100%,
+    var(--conversation-column-width, var(--conversation-content-width, 760px))
+  );
   max-width: 920px;
   margin: 0 auto;
   transition: translate var(--motion-base) var(--motion-ease-standard);
@@ -27,16 +30,23 @@
   z-index: 12;
   right: auto;
   bottom: calc(22px + var(--safe-area-bottom) + var(--keyboard-inset-bottom));
-  left: 50%;
+  /* Beside a TabRail the column moves left (ConversationShell). */
+  left: calc(50% - var(--conversation-column-shift, 0px));
   width: calc(100% - var(--adaptive-composer-inset) * 2);
-  max-width: var(--conversation-content-width, 760px);
+  max-width: var(
+    --conversation-column-width,
+    var(--conversation-content-width, 760px)
+  );
   margin-inline: 0;
   pointer-events: none;
   transform: translateX(-50%);
 }
 
 .large {
-  max-width: var(--conversation-content-width, 760px);
+  max-width: var(
+    --conversation-column-width,
+    var(--conversation-content-width, 760px)
+  );
 }
 
 .notice {
@@ -114,7 +124,7 @@
   width: 100%;
   min-width: 0;
   min-height: calc(
-    1.5em + var(--composer-inner-padding-block) +
+    1lh + var(--composer-inner-padding-block) +
       var(--composer-inner-padding-block)
   );
   max-height: calc(
@@ -126,7 +136,7 @@
   background: transparent;
   color: var(--text-primary);
   font: inherit;
-  line-height: 1.5;
+  line-height: var(--typo-body-line-height);
   outline: none;
   padding: var(--composer-inner-padding-block)
     var(--composer-inner-padding-inline);
@@ -169,7 +179,7 @@
   padding: var(--composer-inner-padding-block)
     var(--composer-inner-padding-inline);
   color: var(--placeholder);
-  line-height: 1.5;
+  line-height: var(--typo-body-line-height);
   pointer-events: none;
 }
 
@@ -232,6 +242,7 @@
   border-radius: var(--radius-pill);
   color: var(--text-secondary);
   font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height);
   cursor: pointer;
   transition:
     background-color var(--motion-fast) var(--motion-ease-standard),
@@ -291,11 +302,13 @@
   display: none;
 }
 
+/* Narrow composers (a 340–520px conversation column beside the browser
+   pane, a phone) keep the wide row's inset: the + icon starts at the text
+   inset and send stays clear of the card's curve. Only the gaps tighten. */
 @container composer (width <= 520px) {
   .toolbar {
     min-height: var(--control-hit-target);
     gap: 2px;
-    padding: var(--space-xs);
   }
 
   .planToggle {
@@ -321,6 +334,16 @@
   .busyIcon {
     width: 20px;
     height: 20px;
+  }
+}
+
+/* Touch: 44px targets carry their own inset (the + icon lands on the text
+   inset with 4px of padding) and the card's radius follows them. */
+@media (width <= 640px), (pointer: coarse) {
+  @container composer (width <= 520px) {
+    .toolbar:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+      padding: var(--space-xs);
+    }
   }
 }
 

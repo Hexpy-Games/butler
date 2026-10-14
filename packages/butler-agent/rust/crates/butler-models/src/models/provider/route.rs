@@ -24,9 +24,7 @@ pub(in crate::models::provider) fn carrier(
         } else {
             (
                 Carrier::Responses,
-                transport::ResponseMode::Json {
-                    tolerate_invalid: false,
-                },
+                transport::ResponseMode::ResponsesSse,
                 "responses",
             )
         };
@@ -34,16 +32,12 @@ pub(in crate::models::provider) fn carrier(
     match (config.metadata.provider_id.as_str(), config.api_shape) {
         ("anthropic", _) | ("opencode-go", Some(HostedApiShape::AnthropicMessages)) => (
             Carrier::Anthropic,
-            transport::ResponseMode::Json {
-                tolerate_invalid: true,
-            },
+            transport::ResponseMode::AnthropicSse,
             "messages",
         ),
         ("google", _) => (
             Carrier::Gemini,
-            transport::ResponseMode::Json {
-                tolerate_invalid: true,
-            },
+            transport::ResponseMode::GeminiSse { call_round: 0 },
             "generate_content",
         ),
         ("local", _) => (
@@ -55,9 +49,7 @@ pub(in crate::models::provider) fn carrier(
         ),
         (_, Some(HostedApiShape::OpenaiResponses)) => (
             Carrier::Responses,
-            transport::ResponseMode::Json {
-                tolerate_invalid: false,
-            },
+            transport::ResponseMode::ResponsesSse,
             "responses",
         ),
         _ => (
@@ -117,4 +109,26 @@ pub(in crate::models::provider) fn cache_affinity(
     };
     drop(body);
     request
+}
+
+/// Keep configured endpoints usable for probes while selecting Gemini SSE for rounds.
+pub(super) fn stream_endpoint(endpoint: &url::Url, mode: transport::ResponseMode) -> url::Url {
+    let mut endpoint = endpoint.clone();
+    if matches!(mode, transport::ResponseMode::GeminiSse { .. }) {
+        let path = endpoint
+            .path()
+            .replace(":generateContent", ":streamGenerateContent");
+        endpoint.set_path(&path);
+        let query: Vec<_> = endpoint
+            .query_pairs()
+            .filter(|(key, _)| key != "alt")
+            .map(|(key, value)| (key.into_owned(), value.into_owned()))
+            .collect();
+        endpoint.set_query(None);
+        endpoint
+            .query_pairs_mut()
+            .extend_pairs(query)
+            .append_pair("alt", "sse");
+    }
+    endpoint
 }

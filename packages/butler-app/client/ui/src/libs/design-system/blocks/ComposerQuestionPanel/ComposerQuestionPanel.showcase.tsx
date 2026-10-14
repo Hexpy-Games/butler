@@ -24,7 +24,7 @@ function Demo({ context, kind = "single", initial = "open", step = 0 }: {
   const [replied, setReplied] = useState(false);
   const [revision, setRevision] = useState(0);
   return <Stack gap="md">
-    <Typo.Body>{kind === "onboarding" ? (ko ? "안녕하세요, Butler예요. 세 가지만 여쭤볼게요." : "Hello, I’m Butler. Let’s start with three questions.") : (ko ? "준비됐어요. 몇 가지만 정해 주세요." : "Ready. Choose a few details.")}</Typo.Body>
+    <Typo.Body>{kind === "onboarding" ? (ko ? "안녕하세요, 버틀러예요. 세 가지만 여쭤볼게요." : "Hello, I’m Butler. Let’s start with three questions.") : (ko ? "준비됐어요. 몇 가지만 정해 주세요." : "Ready. Choose a few details.")}</Typo.Body>
     {(answers || skipped || replied) ? <>
       <QuestionAnswerCard questions={questions} answers={answers ?? []} variant={replied ? "message" : skipped ? "skipped" : "answered"} message={message}
         labels={ko ? { answered: "답변 완료", skipped: "건너뜀", message: "메시지로 답함" } : undefined} />

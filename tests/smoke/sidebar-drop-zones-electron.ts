@@ -1,3 +1,4 @@
+import { spawnElectron, stopElectronChild } from "../support/electron-child";
 // Space sidebar drop feedback in the real Electron client (DS spec M5).
 //
 // Native drags through CDP: Input.setInterceptDrags + Input.dispatchMouseEvent
@@ -7,7 +8,6 @@
 // boundary never flips it, and that no row moves while the pointer holds
 // still. A stub gateway serves the built UI; no model calls.
 import { strict as assert } from "node:assert";
-import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
@@ -57,7 +57,7 @@ const debugPort = await new Promise<number>((done) => {
     probe.close(() => done(port));
   });
 });
-const electron = spawn(electronPath, [`--remote-debugging-port=${debugPort}`, resolve(root, "packages/butler-app/client/electron")], {
+const electron = spawnElectron(electronPath, [`--remote-debugging-port=${debugPort}`, resolve(root, "packages/butler-app/client/electron")], {
   cwd: dir,
   stdio: "ignore",
   env: {
@@ -230,10 +230,7 @@ try {
   }
 } finally {
   cdp?.close();
-  // The app may keep running after SIGTERM (window lifecycle); make sure it ends.
-  electron.kill("SIGTERM");
-  await wait(1500);
-  if (electron.exitCode === null) electron.kill("SIGKILL");
+  await stopElectronChild(electron);
   proxy.stop(true);
   await server.stop();
   rmSync(dir, { recursive: true, force: true });

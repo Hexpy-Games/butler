@@ -109,13 +109,29 @@ pub(super) async fn approve(
                 .as_array()
                 .unwrap()
                 .iter()
-                .map(|r| r["path"].clone())
-                .collect::<Vec<_>>()
+                .map(|r| butler_platform::tool_paths::parse(
+                    &s.sandbox.data,
+                    r["path"].as_str().unwrap()
+                )
+                .map(|path| s.sandbox.data.join(path)))
+                .collect::<Result<Vec<_>, _>>()?
         )
     } else if matches!(case.tool, "list_files" | "grep_files") {
-        json!([case.args["root"]])
+        json!([s.sandbox.data.join(butler_platform::tool_paths::parse(
+            &s.sandbox.data,
+            case.args["root"].as_str().unwrap()
+        )?)])
     } else {
-        json!([case.args["path"].as_str().unwrap().replace('\\', "/")])
+        let path = case.args["path"].as_str().unwrap().replace('\\', "/");
+        json!([if path.starts_with("../") {
+            s.sandbox
+                .data
+                .join(path)
+                .to_string_lossy()
+                .replace('\\', "/")
+        } else {
+            path
+        }])
     };
     assert_eq!(
         card["approval"]["examples"], paths,
@@ -362,7 +378,10 @@ async fn run(access: Access) -> Result<(), HarnessError> {
         }
     }
     if access == Access::FullAccess {
-        assert!(s.gw.approval_requests("general").await?.is_empty());
+        assert_eq!(
+            s.gw.approval_requests("general").await?,
+            [] as [serde_json::Value; 0]
+        );
     }
     s.finish().await?;
     server.abort();

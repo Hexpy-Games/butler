@@ -83,6 +83,13 @@ pub(super) fn request(
     };
     let mut approval = approval::summarize(facts);
     approval.operation = Some(approval::exact_operation(facts));
+    if record.capability == "create_automation" {
+        approval.schedule = Some(approval::schedule(&input));
+    } else if record.capability == "delete_automation" {
+        approval.schedule = input
+            .get("schedule")
+            .and_then(|value| serde_json::from_value(value.clone()).ok());
+    }
     Ok(AuthorityRequestProjection {
         request_ref: record.request_ref.clone(),
         category: record.category.clone(),

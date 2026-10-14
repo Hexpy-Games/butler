@@ -10,7 +10,7 @@ const byName = new Map(tokenCatalog.map((token) => [token.name, token]));
 
 const DISPLAY_LINES: Record<SampleLocale, string> = {
   en: "Ask Butler anything. It plans, asks, then acts.",
-  ko: "무엇이든 Butler에게. 계획하고, 묻고, 실행합니다.",
+  ko: "무엇이든 버틀러에게. 계획하고, 묻고, 실행합니다.",
 };
 
 const GLYPHS: Array<[string, string, string?]> = [

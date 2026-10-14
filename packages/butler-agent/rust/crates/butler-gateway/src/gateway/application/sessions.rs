@@ -4,8 +4,10 @@ mod clear;
 mod contracts;
 pub(super) mod identity;
 mod mutations;
+pub(super) use mutations::compare_and_set_title;
 mod owner;
 pub(super) mod read;
+mod reads;
 mod write;
 
 #[cfg(test)]
@@ -19,6 +21,7 @@ pub use contracts::{
 };
 pub use mutations::{AppSessionActionResult, AppSessionUpdate};
 pub(super) use owner::SessionCreationOwner;
+pub use reads::AppSessionReadResult;
 
 use super::events::EventSubscribers;
 use super::{AppApplication, AppStorageError, GatewayApplicationError, app_error};

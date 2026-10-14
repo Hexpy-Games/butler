@@ -16,6 +16,8 @@ fn summary(capability: &str, target: &str, input: &Value) -> Value {
 
 /// One summary per action kind, with exact outside paths; then the command-risk table.
 pub(in crate::btcc::authority) fn assert_approval_summaries() {
+    assert_sign_in_wait_summary();
+    assert_wait_for_user_summary();
     let edits = json!({"edits": [
         {"path": "/Users/someone/work/garden/a.txt"}, {"path": "b.txt"}, {"path": "./a.txt"},
         {"path": "notes/../c.txt"}, {"path": "/etc/passwd"}]});
@@ -48,7 +50,7 @@ pub(in crate::btcc::authority) fn assert_approval_summaries() {
                 &json!({"command": "rm -rf build", "cwd": "../..", "state_effect": "mutation"}),
             ),
             json!({"action_kind": "run_command", "count": 1, "examples": ["rm -rf build"], "risk": "high",
-                "targets": [{"kind": "outside", "path": ""}]}),
+                "targets": [{"kind": "outside", "path": "/Users/someone/work/garden/../.."}]}),
         ),
         (
             summary(
@@ -100,6 +102,8 @@ pub(in crate::btcc::authority) fn assert_approval_summaries() {
             "{tool}"
         );
     }
+    assert_eq!(workspace_label("/home/mina/.butler"), "/home/mina/.butler");
+    assert_eq!(workspace_label("/home/mina/projects/garden"), "garden");
     assert_path_and_example_bounds();
     super::command_risk::pinned::assert_command_risks();
 }
@@ -115,12 +119,23 @@ fn assert_path_and_example_bounds() {
         assert_eq!(actual["risk"], "high");
         assert_eq!(
             actual["targets"][1],
-            json!({"kind": "outside", "path": path})
+            json!({"kind": "outside", "path": absolute_target(path, WORKSPACE)})
         );
-        assert_eq!(actual["examples"][0], path);
+        assert_eq!(actual["examples"][0], absolute_target(path, WORKSPACE));
         let command = summary("run_command", "x", &json!({"command": "ls", "cwd": path}));
         assert_eq!(command["risk"], "high");
         assert_eq!(command["targets"][0]["kind"], "outside");
+        assert_eq!(
+            command["targets"][0]["path"],
+            absolute_target(path, WORKSPACE)
+        );
+        let operation = super::operation::exact_operation(ApprovalFacts {
+            capability: "write_file",
+            target: path,
+            input: &json!({"path": path}),
+            workspace: WORKSPACE,
+        });
+        assert_eq!(operation.targets, [absolute_target(path, WORKSPACE)]);
     }
     for line in [
         "x".repeat(200),
@@ -147,4 +162,56 @@ fn assert_path_and_example_bounds() {
     assert_eq!(actual["targets"].as_array().unwrap().len(), 27);
     assert_eq!(actual["targets"][26]["kind"], "outside");
     assert_eq!(actual["risk"], "high");
+}
+
+/// Pins the local decision facts without a tab id or credential in display targets.
+fn assert_sign_in_wait_summary() {
+    for reason in ["mfa", "passkey", "captcha", "secure_keypad", "unknown_form"] {
+        let input = json!({"wait":{"site":"example.test","reason":reason},
+            "tab":"private-tab-id","always_confirm":true});
+        let operation = serde_json::to_value(super::operation::exact_operation(ApprovalFacts {
+            capability: "browser_sign_in",
+            target: "private-tab-id",
+            input: &input,
+            workspace: WORKSPACE,
+        }))
+        .unwrap();
+        assert_eq!(operation["tool"], "browser_sign_in_wait");
+        assert_eq!(operation["targets"], json!(["example.test"]));
+        assert_eq!(operation["sign_in_step"], reason);
+        assert_eq!(operation["allow_conversation"], false);
+        assert_eq!(operation["browser_tab"], "private-tab-id");
+        assert!(!operation["targets"].to_string().contains("private-tab-id"));
+        // The hand-back resumes the request whose stored target is its tab.
+        let stored = summary("browser_sign_in", "private-tab-id", &input);
+        assert_eq!(stored["targets"][0]["path"], "private-tab-id");
+    }
+}
+
+/// The wait-for-user card: the site and why, never the tab id.
+fn assert_wait_for_user_summary() {
+    for reason in [
+        "sign_in",
+        "secure_field",
+        "secure_keypad",
+        "captcha",
+        "other",
+    ] {
+        let input = json!({"tab":"private-tab-id","wait":{"site":"example.test","reason":reason}});
+        let operation = serde_json::to_value(super::operation::exact_operation(ApprovalFacts {
+            capability: "browser_wait_for_user",
+            target: "private-tab-id",
+            input: &input,
+            workspace: WORKSPACE,
+        }))
+        .unwrap();
+        assert_eq!(operation["tool"], "browser_wait_for_user");
+        assert_eq!(operation["targets"], json!(["example.test"]));
+        assert_eq!(operation["wait_reason"], reason);
+        assert_eq!(operation["allow_conversation"], false);
+        assert_eq!(operation["browser_tab"], "private-tab-id");
+        assert!(!operation["targets"].to_string().contains("private-tab-id"));
+        let stored = summary("browser_wait_for_user", "private-tab-id", &input);
+        assert_eq!(stored["targets"][0]["path"], "private-tab-id");
+    }
 }

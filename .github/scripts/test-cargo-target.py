@@ -66,6 +66,7 @@ class TargetSnapshot(unittest.TestCase):
     def test_persistent_target_reuses_complete_local_outputs_and_isolates_refs(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            subprocess.run(['git', 'init', '-q', str(root)], check=True)
             expected = dict(platform='windows-x64', kind='native', profile='ci-fast', lock='old')
             env = dict(BUTLER_PERSISTENT_TARGET=str(root / 'runner-cache'), GITHUB_REF='refs/pull/1/merge',
                        GITHUB_ENV=str(root / 'env'), GITHUB_WORKSPACE=str(root))
@@ -80,10 +81,11 @@ class TargetSnapshot(unittest.TestCase):
                 freshness.assert_called_once()
                 with patch.dict(os.environ, GITHUB_REF='refs/heads/main'):
                     self.assertNotEqual(target, snapshots.persistent_target(expected))
-                self.assertNotEqual(target, snapshots.persistent_target(dict(expected, profile='release')))
                 (target / 'ci-local-sources.json').write_text('tampered')
                 with self.assertRaisesRegex(ValueError, 'digest'):
                     snapshots.restore_local(target, expected)
+                self.assertNotEqual(target, snapshots.persistent_target(dict(expected, profile='release')))
+                self.assertFalse(target.exists())
     # test-category: security
     def test_https_api_without_gh_preserves_pages_and_delete(self):
         def response(value, link=''):
@@ -164,7 +166,7 @@ class TargetSnapshot(unittest.TestCase):
 
     # test-category: pure-logic
     def test_key_changes_for_each_compatibility_input(self):
-        with patch.object(cache, 'output', return_value='rustc 1.91\nhost: x86_64-unknown-linux-gnu'), \
+        with patch.object(cache, 'output', return_value='rustc 1.99\nhost: x86_64-unknown-linux-gnu'), \
                 patch.object(cache, 'digest', return_value='locked'):
             expected = cache.identity('linux-x64', 'prebuilt-ort', 'native')
             for variable in ['RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'CARGO_PROFILE_RELEASE_LTO',

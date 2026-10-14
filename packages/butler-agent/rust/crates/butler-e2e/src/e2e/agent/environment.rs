@@ -10,9 +10,25 @@ pub(super) fn isolated_command(program: &Path, home: &Path) -> Command {
     command
         .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
         .env("HOME", home)
+        .env(
+            "BUTLER_TEST_SECRET_STORE",
+            home.parent()
+                .unwrap_or(home)
+                .join("tmp/test-secrets/store.json"),
+        )
+        // Browser import reads the account folders from the OS, not HOME;
+        // test-support agents read fixture profiles here instead.
+        .env("BUTLER_BROWSER_PROFILES_HOME", home)
+        // Other AI agents' setup files come from the same fixture home.
+        .env(butler_platform::agent_homes::HOME_FIXTURE, home)
         .env("XDG_CONFIG_HOME", home.join(".config"))
         .env("XDG_DATA_HOME", home.join(".local/share"))
         .env("XDG_CACHE_HOME", home.join(".cache"))
-        .env("XDG_STATE_HOME", home.join(".local/state"));
+        .env("XDG_STATE_HOME", home.join(".local/state"))
+        // Only headless-browser scenarios start (and download) Chromium.
+        .env("BUTLER_BROWSER_HEADLESS", "off")
+        // Never the machine's installed App: hidden-host scenarios name the
+        // in-worktree Electron.
+        .env("BUTLER_BROWSER_APP", "off");
     command
 }

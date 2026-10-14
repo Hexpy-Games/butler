@@ -18,13 +18,13 @@ use crate::gateway::application::{
 };
 
 #[derive(Clone, Copy)]
-pub(super) struct FailedProjection<'a> {
+pub(in crate::gateway::application) struct FailedProjection<'a> {
     pub metadata: &'a Map<String, Value>,
     pub message: &'a Map<String, Value>,
     pub retryable: bool,
 }
 
-pub(super) fn project_failed(
+pub(in crate::gateway::application) fn project_failed(
     db: &Connection,
     subscribers: &EventSubscribers,
     chat: &str,
@@ -118,6 +118,38 @@ pub(super) fn project_cancellation_ack(
 ) -> Result<(), AppStorageError> {
     let delivered = metadata.get("outcome").and_then(Value::as_str) == Some("already_delivered");
     db.execute("UPDATE app_turn_cancel_outbox SET state=?1,queue_id=?2,dispatch_claim_id=?3,accepted_at=?4,completed_at=?5,safe_error_code=NULL WHERE turn_id=?6 AND state='pending'",params![if delivered{"completed"}else{"accepted"},token(metadata.get("queueId")),token(metadata.get("dispatchClaimId")),timestamp,delivered.then_some(timestamp),turn]).map_err(AppStorageError::sqlite)?;
+    Ok(())
+}
+
+/// A suspended turn reports progress again only once its answer or decision resumed it:
+/// it no longer waits for the user, so "waiting for your response" ends with the request.
+pub(super) fn project_resumed(
+    db: &Connection,
+    subscribers: &EventSubscribers,
+    chat: &str,
+    turn: &str,
+    now: &str,
+) -> Result<(), AppStorageError> {
+    let resumed = db
+        .execute(
+            "UPDATE turns SET state='thinking',safe_status_label='Thinking',cancellable=1,updated_at=?1 WHERE id=?2 AND state='waiting_for_form'",
+            params![now, turn],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    if resumed == 0 {
+        return Ok(());
+    }
+    events::append(
+        db,
+        subscribers,
+        "turn.state_changed",
+        Some(turn),
+        service::map(&json!({
+            "session_id":chat,"turn_id":turn,"state":"thinking","safe_status_label":"Thinking",
+            "retryable":false,"cancellable":true
+        }))?,
+        now,
+    )?;
     Ok(())
 }
 

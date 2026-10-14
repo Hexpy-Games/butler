@@ -111,7 +111,10 @@ async fn actual_canonical_writer_to_profile_facts_preserves_source_identity() {
         scalar.source_hash,
         format!("{:x}", Sha256::digest(scalar.text.as_bytes()))
     );
-    assert!(projected.parts[1].scalars.is_empty());
+    assert_eq!(
+        projected.parts[1].scalars,
+        [] as [butler_memory::profile::CanonicalProfileScalar; 0]
+    );
 
     let source = ProfileConversationSources::new(path);
     drop(source.open().unwrap());

@@ -6,7 +6,9 @@ mod project;
 mod publication;
 mod steward;
 mod web;
+pub(super) use web::web_provenance;
 mod work;
+mod worker;
 use butler_core::tool_protocol::ToolName;
 pub(super) use publication::publish_work_result;
 
@@ -26,6 +28,9 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    if super::browser::supports(&call.name) {
+        return super::browser::execute(owner, &invocation, call, call_id).await;
+    }
     if super::image::supports(&call.name) {
         return Box::pin(super::image::execute(owner, invocation, call)).await;
     }
@@ -33,7 +38,7 @@ pub(super) async fn execute(
         return super::memory_write::execute(owner, invocation, call, call_id).await;
     }
     if web::supports(&call.name) {
-        return web::execute(owner, invocation, call).await;
+        return web::execute(owner, invocation, call, call_id).await;
     }
     if matches!(
         ToolName::parse(call.name.as_str()),
@@ -66,148 +71,13 @@ pub(super) async fn execute(
         return list_automations(owner, call).await;
     }
     if call.name == ToolName::DelegateToWorker {
-        let required = |key: &str| {
-            call.arguments
-                .get(key)
-                .and_then(Value::as_str)
-                .map(butler_core::public_text::trim_js_whitespace)
-                .filter(|v| !v.is_empty())
-                .map(str::to_owned)
-                .ok_or_else(|| {
-                    ToolExecutionError::Integrity(BtccError::relayed(
-                        "worker_delegation_input_invalid",
-                        format!("{key} is required"),
-                    ))
-                })
-        };
-        let acceptance = call
-            .arguments
-            .get("acceptance_criteria")
-            .and_then(Value::as_array)
-            .ok_or_else(|| {
-                ToolExecutionError::Integrity(BtccError::relayed(
-                    "worker_delegation_input_invalid",
-                    "acceptance_criteria is required",
-                ))
-            })?
-            .iter()
-            .map(|v| {
-                v.as_str().map(str::to_owned).ok_or_else(|| {
-                    ToolExecutionError::Integrity(BtccError::relayed(
-                        "worker_delegation_input_invalid",
-                        "acceptance_criteria is invalid",
-                    ))
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        if acceptance.len() > 8 {
-            return Err(ToolExecutionError::Integrity(BtccError::relayed(
-                "worker_delegation_input_invalid",
-                "acceptance_criteria is too large",
-            )));
-        }
-        let reviewed = owner
-            .work
-            .bound_work()
-            .await
-            .map_err(ToolExecutionError::Integrity)?
-            .ok_or_else(|| {
-                ToolExecutionError::Integrity(BtccError::relayed(
-                    "delegation_reviewed_plan_required",
-                    "Reviewed parent Work is required",
-                ))
-            })?;
-        let result = owner
-            .subsessions
-            .delegate_worker(
-                butler_turn::btcc::WorkerDelegationRequest {
-                    parent_session_id: owner.binding.source_session_id.clone(),
-                    parent_turn_id: owner.binding.turn_id.clone(),
-                    anchor_message_id: invocation.turn.original_message_id.clone(),
-                    source_tool_call_id: call_id.into(),
-                    action_key: required("action_key")?,
-                    objective: required("objective")?,
-                    acceptance_criteria: acceptance,
-                    implementation_brief: required("implementation_brief")?,
-                    safe_title: call
-                        .arguments
-                        .get("safe_title")
-                        .and_then(Value::as_str)
-                        .map(str::to_owned),
-                    profile_id: call
-                        .arguments
-                        .get("profile_id")
-                        .and_then(Value::as_str)
-                        .map(str::to_owned),
-                    access_mode: access_mode(owner),
-                },
-                &reviewed,
-            )
-            .await
-            .map_err(ToolExecutionError::Integrity)?;
-        if let Some(task_id) = result.get("task_id").and_then(Value::as_str) {
-            owner
-                .work_streams
-                .link_worker(
-                    crate::host::guided::work_streams::WorkStreamScope {
-                        session_id: owner.binding.source_session_id.clone(),
-                        origin_chat_id: None,
-                        project_id: owner.binding.memory.project_id.clone(),
-                        turn_id: owner.binding.turn_id.clone(),
-                    },
-                    task_id.to_owned(),
-                )
-                .await
-                .map_err(ToolExecutionError::Integrity)?;
-        }
-        return encoded(&result);
+        return worker::execute(owner, invocation, call, call_id).await;
     }
     if matches!(
         ToolName::parse(call.name.as_str()),
         Some(ToolName::SteerSteward | ToolName::SteerWorker)
     ) {
-        let instruction = call
-            .arguments
-            .get("instruction")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                ToolExecutionError::Integrity(BtccError::relayed(
-                    "steward_direction_instruction_required",
-                    "instruction is required",
-                ))
-            })?;
-        let result = owner
-            .subsessions
-            .steer(butler_turn::btcc::SubsessionDirectionRequest {
-                parent_session_id: owner.binding.source_session_id.clone(),
-                parent_turn_id: owner.binding.turn_id.clone(),
-                source_message_id: invocation.turn.original_message_id.clone(),
-                relation_id: call
-                    .arguments
-                    .get("relation_id")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                work_id: call
-                    .arguments
-                    .get("work_id")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                safe_title: call
-                    .arguments
-                    .get("safe_title")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                instruction: instruction.into(),
-                child_role: if call.name == ToolName::SteerWorker {
-                    butler_turn::workspace::SessionRole::Worker
-                } else {
-                    butler_turn::workspace::SessionRole::Steward
-                },
-                access_mode: access_mode(owner),
-            })
-            .await
-            .map_err(ToolExecutionError::Integrity)?;
-        return encoded(&result);
+        return steward::steer(owner, invocation, call).await;
     }
     if call.name == ToolName::CancelSteward {
         let result = owner
@@ -282,14 +152,14 @@ pub(super) async fn execute(
                 | ToolName::DeleteAutomation
                 | ToolName::RunDueAutomations
         )
-    ) || super::effect::is_managed_project_ledger_effect(&call.name)
+    ) || super::effect::routes_effect(&call.name)
     {
         return super::effect::execute(owner, invocation, call, call_id).await;
     }
     if crate::host::guided::project_tools::GuidedProjectTools::supports(&call.name) {
         return project::execute(owner, call).await;
     }
-    if let Some(result) = workspace_tool(owner, &invocation, call, call_id).await {
+    if let Some(result) = domain_tool(owner, &invocation, call, call_id).await {
         return result;
     }
     let args = Value::Object(call.arguments.clone());
@@ -297,14 +167,7 @@ pub(super) async fn execute(
         ToolName::parse(call.name.as_str()),
         Some(ToolName::ReadToolOutputArtifact | ToolName::ReadToolEvidenceArtifact)
     ) {
-        let result = if call.name == ToolName::ReadToolOutputArtifact {
-            owner.tool_artifacts.read_output(args).await
-        } else {
-            owner.tool_artifacts.read_evidence(args).await
-        };
-        return result.map_err(|error| {
-            ToolExecutionError::Integrity(BtccError::relayed(error.code(), error.message()))
-        });
+        return read_tool_artifact(owner, &call.name, args).await;
     }
     let result = match call.name.as_str() {
         "list_conversation_sessions" => owner
@@ -348,6 +211,21 @@ pub(super) async fn execute(
         }
     };
     encoded(&result.unwrap_or_else(|error| super::message::tool_failure(&call.name, error.code())))
+}
+
+async fn read_tool_artifact(
+    owner: &GuidedTools,
+    name: &str,
+    args: Value,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let result = if name == ToolName::ReadToolOutputArtifact {
+        owner.tool_artifacts.read_output(args).await
+    } else {
+        owner.tool_artifacts.read_evidence(args).await
+    };
+    result.map_err(|error| {
+        ToolExecutionError::Integrity(BtccError::relayed(error.code(), error.message()))
+    })
 }
 
 async fn file_capability(
@@ -414,16 +292,19 @@ pub(super) fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError>
     })
 }
 
-async fn workspace_tool(
+async fn domain_tool(
     owner: &GuidedTools,
     invocation: &GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Option<Result<JsonDocument, ToolExecutionError>> {
-    if !butler_core::product_features::tool_enabled(&call.name) {
-        return None;
+    if super::library::supports(&call.name) {
+        return Some(super::library::execute(owner, call).await);
     }
     match call.name.as_str() {
+        "answer_blocks" => {
+            Some(super::answer_blocks::execute(owner, call, call_id, invocation.progress).await)
+        }
         "output_check" => Some(super::outputs::inspect(owner, invocation, call).await),
         "output_publish" => Some(super::outputs::publish(owner, invocation, call).await),
         "read_file" | "list_files" | "grep_files" => {

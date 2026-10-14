@@ -1,6 +1,5 @@
 import type { ShowcaseGuidance } from "../../showcase";
 import { Sparkles } from "../Icons";
-import { IconTile } from "../IconTile";
 import { Inline } from "../Inline";
 import { Typo } from "../Typo";
 import { ProviderLogo } from "./ProviderLogo";
@@ -9,7 +8,7 @@ import { ProviderLogo } from "./ProviderLogo";
 function ServiceName() {
   return (
     <Inline gap="sm">
-      <IconTile size="sm"><ProviderLogo name="claude" /></IconTile>
+      <ProviderLogo name="claude" />
       <Typo.Label as="span">Claude</Typo.Label>
     </Inline>
   );

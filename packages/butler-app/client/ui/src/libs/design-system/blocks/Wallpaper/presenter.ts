@@ -44,7 +44,7 @@ const NO_LOADER: WallpaperImageLoader = () => Promise.reject(new Error("No image
 export function createWallpaperPresenter(options: WallpaperPresenterOptions): WallpaperPresenter {
   const { canvas, renderer, hasDrawn, show, repaint, bufferSize, onError, decode = decodeWallpaperImage } = options;
   const cache = createWallpaperImageCache(options.imageLoader ?? NO_LOADER);
-  const crossfade = createWallpaperCrossfade(canvas, options.overlay ?? null, repaint);
+  const crossfade = createWallpaperCrossfade(canvas, options.overlay ?? null, repaint, options.driftLayers?.base ?? null);
   const inflight = new Set<string>();
   let state = EMPTY_WALLPAPER_PRESENTATION;
   let disposed = false;

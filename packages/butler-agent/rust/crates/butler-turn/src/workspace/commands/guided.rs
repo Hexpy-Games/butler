@@ -2,13 +2,13 @@ use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
 
-use butler_platform::command_sandbox::{self, ShellAccess};
+use butler_platform::command_sandbox;
 use butler_platform::process_control;
 use tokio::process::{Child, Command};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
-use super::environment::guided_environment;
+use super::environment::{Scratch, scratch_environment};
 use super::process::{
     FORCE_SETTLEMENT_GRACE, GroupSignal, ProcessHost, TERMINATION_GRACE, signal_command,
     signal_name,
@@ -25,7 +25,17 @@ pub(super) async fn dispatch(
     completion: oneshot::Sender<Result<GuidedCommandOutput, CommandError>>,
 ) {
     let mut completion = Some(completion);
-    let outcome = execute(host, input, shutdown, &mut completion).await;
+    let since = match super::secret_sweep::before_run(&input).await {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            if let Some(sender) = completion.take() {
+                send_completion(sender, Err(error)).await;
+            }
+            return;
+        }
+    };
+    let outcome = execute(host, input.clone(), shutdown, &mut completion, &since).await;
+    let outcome = super::secret_sweep::after_run(&input, since, outcome).await;
     // `execute` returns `Ok(None)` only after it settled the completion itself.
     let Some(sender) = completion else {
         return;
@@ -96,8 +106,9 @@ async fn execute(
     input: GuidedCommandInput,
     shutdown: CancellationToken,
     completion: &mut Option<oneshot::Sender<Result<GuidedCommandOutput, CommandError>>>,
+    secrets: &[PathBuf],
 ) -> Result<Option<GuidedCommandOutput>, CommandError> {
-    let (cwd, command) = prepare_command(&input, &shutdown).await?;
+    let (cwd, command) = prepare_command(&input, &shutdown, secrets).await?;
     let spool = Spool::create(&input.butler_data).await?;
     let mut running = spawn_captured(host, command, spool).await?;
     let cause = await_stop(host, &mut running, &input, &shutdown).await;
@@ -111,6 +122,7 @@ async fn execute(
         exit_code,
         signal,
         timed_out,
+        sandbox_violation: Vec::new(),
     };
     let status = match reaped {
         Reaped::Exited(status) => status,
@@ -122,6 +134,12 @@ async fn execute(
                     complete(running.paths, running.capture, summary(None, None, true)).await
                 }
             };
+            if input.access == GuidedAccess::ProjectWrite {
+                // Do not publish containment before cleanup can inspect a
+                // stopped process: a force-settled child may still mutate.
+                let _ = host.wait(&mut running.child).await;
+                return result.map(Some);
+            }
             if let Some(sender) = completion.take() {
                 send_completion(sender, result).await;
             }
@@ -154,6 +172,7 @@ async fn execute(
 async fn prepare_command(
     input: &GuidedCommandInput,
     shutdown: &CancellationToken,
+    secrets: &[PathBuf],
 ) -> Result<(PathBuf, Command), CommandError> {
     if input.command.is_empty() {
         return Err(CommandError::new(
@@ -161,15 +180,30 @@ async fn prepare_command(
             "command must be a string",
         ));
     }
-    let cwd = resolve_guided_cwd(&input.workspace_root, input.cwd.as_deref()).await?;
+    let cwd = resolve_guided_cwd(
+        &input.workspace_root,
+        input.cwd.as_deref(),
+        if matches!(
+            input.access,
+            GuidedAccess::ContainedObservation | GuidedAccess::ProjectWrite
+        ) {
+            crate::workspace::PathForm::Contained
+        } else {
+            crate::workspace::PathForm::RelativeOrAbsolute
+        },
+    )
+    .await?;
     let (invocation, environment, process_cwd) = tokio::task::spawn_blocking({
         let input = input.clone();
         let host = input.host_environment.clone();
         let butler_data = input.butler_data.clone();
         let cwd = cwd.clone();
+        let secrets = secrets.to_vec();
         move || {
-            let invocation = invocation(&input)?;
-            let environment = guided_environment(&host, &butler_data)?;
+            let scratch = Scratch::new(&butler_data, input.access == GuidedAccess::ProjectWrite);
+            let environment = scratch_environment(&host, &butler_data, &scratch)?;
+            std::fs::create_dir_all(&scratch.artifacts).map_err(CommandError::io)?;
+            let invocation = super::guided_invocation::invocation(&input, &secrets)?;
             let process_cwd = command_sandbox::working_directory(&cwd).map_err(CommandError::io)?;
             Ok::<_, CommandError>((invocation, environment, process_cwd))
         }
@@ -186,7 +220,6 @@ async fn prepare_command(
         ));
     }
     let mut command = Command::new(&invocation.program);
-    command_sandbox::add_arguments(command.as_std_mut(), &invocation);
     command
         .current_dir(&process_cwd)
         .env_clear()
@@ -195,6 +228,7 @@ async fn prepare_command(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    command_sandbox::add_arguments(command.as_std_mut(), &invocation);
     process_control::isolate_group(command.as_std_mut());
     Ok((cwd, command))
 }
@@ -329,10 +363,11 @@ async fn send_completion(
 pub(super) async fn resolve_guided_cwd(
     root: &std::path::Path,
     cwd: Option<&str>,
+    path_form: crate::workspace::PathForm,
 ) -> Result<PathBuf, CommandError> {
     let root = root.to_path_buf();
     let cwd = cwd.map(str::to_owned);
-    tokio::task::spawn_blocking(move || guarded_directory(&root, cwd.as_deref()))
+    tokio::task::spawn_blocking(move || guarded_directory(&root, cwd.as_deref(), path_form))
         .await
         .map_err(|error| {
             CommandError::new(CommandCode::CommandCwdFailed, error.to_string()).with_source(error)
@@ -342,6 +377,7 @@ pub(super) async fn resolve_guided_cwd(
 pub(super) fn guarded_directory(
     root: &std::path::Path,
     cwd: Option<&str>,
+    path_form: crate::workspace::PathForm,
 ) -> Result<PathBuf, CommandError> {
     let Some(requested) = cwd.filter(|value| !value.is_empty()) else {
         return Ok(root.to_path_buf());
@@ -364,7 +400,7 @@ pub(super) fn guarded_directory(
     let result = resolve_workspace_path_guard(GuardInput {
         root,
         requested,
-        path_form: crate::workspace::PathForm::RelativeOrAbsolute,
+        path_form,
         allow_directories: true,
         protected_roots: &[],
     })
@@ -372,7 +408,29 @@ pub(super) fn guarded_directory(
     if let Some(reason) = result.reason {
         return Err(CommandError::CwdRejected {
             reason,
-            workspace_root: result.root.to_string_lossy().into_owned(),
+            message: if path_form.contained() {
+                format!(
+                    "{} Workspace root: {}",
+                    result
+                        .public_rejection()
+                        .get("message")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("The requested directory could not be accessed."),
+                    result.root.display()
+                )
+            } else {
+                super::super::path_messages::explanation(reason).0.into()
+            },
+        });
+    }
+    if let Some(path) = result.real.as_deref()
+        && !std::fs::metadata(path).map_err(CommandError::io)?.is_dir()
+    {
+        return Err(CommandError::CwdRejected {
+            reason: "not_a_directory",
+            message: super::super::path_messages::explanation("not_a_directory")
+                .0
+                .into(),
         });
     }
     result.absolute.ok_or_else(|| {
@@ -381,34 +439,6 @@ pub(super) fn guarded_directory(
             "The requested command directory was not resolved",
         )
     })
-}
-
-/// The login-shell invocation of a guided command. Read-only commands run in
-/// the host sandbox; a host without one refuses them.
-fn invocation(input: &GuidedCommandInput) -> Result<command_sandbox::Invocation, CommandError> {
-    let access = match input.access {
-        GuidedAccess::FullAccessContained => ShellAccess::Full,
-        GuidedAccess::ReadOnlyObservation | GuidedAccess::ContainedObservation => {
-            ShellAccess::ReadOnly
-        }
-    };
-    let shell = if input.access == GuidedAccess::ContainedObservation {
-        command_sandbox::login_shell_contained(
-            &input.command,
-            &input.host_environment,
-            &[input.butler_data.as_path()],
-            &[input.workspace_root.as_path()],
-        )
-    } else {
-        command_sandbox::login_shell(&input.command, access, &input.host_environment)
-    };
-    let invocation = shell.map_err(|error| {
-        CommandError::new(
-            CommandCode::CommandObservationIsolationUnavailable,
-            error.to_string(),
-        )
-    })?;
-    Ok(invocation)
 }
 
 pub(super) fn guided_timeout(value: Option<f64>) -> Duration {

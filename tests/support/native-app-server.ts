@@ -14,7 +14,7 @@
 // `devOrigins` (BUTLER_APP_DEV_ORIGIN), or the gateway answers 403
 // origin_not_allowed.
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, openSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -31,6 +31,8 @@ export type NativeAppServerOptions = {
   /** Marks first-chat onboarding complete before launch. Default true. */
   onboardingComplete?: boolean;
   stubReply?: (request: StubModelRequest) => string | Promise<string>;
+  /** Offline provider deltas, paced by the scenario. */
+  stubTextStream?: (request: StubModelRequest) => AsyncIterable<string>;
   /** Deterministic tool response for browser tests of durable forms. */
   stubToolCall?: (request: StubModelRequest) => { name: string; arguments: Record<string, unknown> } | null;
   readyTimeoutMs?: number;
@@ -46,6 +48,7 @@ export type CookieJar = {
 };
 
 export type NativeAppServerHandle = {
+  diagnostics(): string;
   url: string;
   port: number;
   /** Owned gateway PID for native resource measurements. */
@@ -289,6 +292,7 @@ export async function startStubModel(
   reply: NativeAppServerOptions["stubReply"],
   calls: StubModelRequest[],
   toolReply?: NativeAppServerOptions["stubToolCall"],
+  textStream?: NativeAppServerOptions["stubTextStream"],
 ): Promise<{ server: Server; port: number }> {
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
@@ -317,13 +321,27 @@ export async function startStubModel(
     }
     response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
     const base = { id: `stub-${calls.length}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model: "stub" };
-    response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: "assistant", content: text, ...(toolCalls ? { tool_calls: toolCalls.map((tool, index) => ({ ...tool, index })) } : {}) } }] })}\n\n`);
+    if (textStream && !toolCalls) {
+      for await (const content of textStream(call)) {
+        if (response.destroyed) break;
+        response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: "assistant", content } }] })}\n\n`);
+      }
+    } else {
+      response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: "assistant", content: text, ...(toolCalls ? { tool_calls: toolCalls.map((tool, index) => ({ ...tool, index })) } : {}) } }] })}\n\n`);
+    }
     response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: finishReason }], usage })}\n\n`);
     response.end("data: [DONE]\n\n");
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   const address = server.address();
   return { server, port: typeof address === "object" && address ? address.port : 0 };
+}
+
+function spawnLoggedGateway(command: string, args: string[],
+  options: Omit<SpawnOptions, "detached"> & { cleanupPaths: string[] }, logPath: string): TrackedProcess {
+  const log = openSync(logPath, "a");
+  try { return spawnTrackedProcess(command, args, { ...options, stdio: ["pipe", log, log] }); }
+  finally { closeSync(log); }
 }
 
 export async function createNativeAppServer(options: NativeAppServerOptions = {}): Promise<NativeAppServerHandle> {
@@ -344,7 +362,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
   cpSync(uiRoot, join(resources, "app-client/dist"), { recursive: true });
 
   const stubModelCalls: StubModelRequest[] = [];
-  const stub = await startStubModel(options.stubReply, stubModelCalls, options.stubToolCall);
+  const stub = await startStubModel(options.stubReply, stubModelCalls, options.stubToolCall, options.stubTextStream);
   if (options.onboardingComplete !== false) writeOnboardingComplete(butlerData);
   const configPath = join(butlerData, "butler.config.json");
   if (!existsSync(configPath)) {
@@ -361,12 +379,12 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
   }
 
   const port = await freeGatewayPort();
-  const gateway = spawnTrackedProcess(
+  const logPath = join(scratch, "gateway.log");
+  const gateway = spawnLoggedGateway(
     join(installation, "bin/butler-agent"),
     ["--installation-root", installation, "--resource-root", resources],
     {
       cwd: butlerData,
-      stdio: ["pipe", "pipe", "pipe"],
       cleanupPaths: [scratch],
       env: {
         PATH: process.env.PATH ?? "/usr/bin:/bin",
@@ -385,22 +403,23 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
         ...options.env,
       },
     },
+    logPath,
   );
   const child = gateway.child;
+  let finalOutput = "";
+  const output = (): string => existsSync(logPath) ? readFileSync(logPath, "utf8") : finalOutput;
   const stop = async (): Promise<void> => {
+    finalOutput = output();
     await gateway.stop();
     await new Promise<void>((done) => stub.server.close(() => done()));
   };
-  let output = "";
-  child.stdout?.on("data", (chunk) => { output += String(chunk); });
-  child.stderr?.on("data", (chunk) => { output += String(chunk); });
   const url = `http://127.0.0.1:${port}/`;
   const deadline = Date.now() + (options.readyTimeoutMs ?? 60_000);
   let token: string | null = null;
   for (;;) {
     if (child.exitCode !== null) {
       await stop();
-      throw new Error(`Native gateway exited (${child.exitCode}):\n${output.slice(-4000)}`);
+      throw new Error(`Native gateway exited (${child.exitCode}):\n${output().slice(-4000)}`);
     }
     token ??= readLocalAuthToken(butlerData);
     try {
@@ -415,7 +434,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
     } catch { /* not listening yet */ }
     if (Date.now() > deadline) {
       await stop();
-      throw new Error(`Native gateway did not become ready on ${url}:\n${output.slice(-4000)}`);
+      throw new Error(`Native gateway did not become ready on ${url}:\n${output().slice(-4000)}`);
     }
     await new Promise((done) => setTimeout(done, 200));
   }
@@ -432,9 +451,10 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
   };
 
   return {
+    diagnostics() { return output().replaceAll(token ?? "", "[redacted]").replace(/(__o\/)[^/\s]+/gu, "$1[redacted]").slice(-12000); },
     assertRunning() {
       if (child.exitCode !== null || child.signalCode !== null) {
-        const tail = token ? output.slice(-4000).replaceAll(token, "[redacted]") : output.slice(-4000);
+        const tail = token ? output().slice(-4000).replaceAll(token, "[redacted]") : output().slice(-4000);
         throw new Error(`Native gateway exited: code=${child.exitCode}, signal=${child.signalCode}\n${tail}`);
       }
     },

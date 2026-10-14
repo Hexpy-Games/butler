@@ -103,6 +103,8 @@ function freezePhaseActivity(
 ): MessageRecord {
   const rows = (snapshot?.safe_progress_rows ?? []).filter(isRetainedActivityRow);
   if (!snapshot) return message;
+  // A partial live/cache snapshot must not erase the gateway's settled history.
+  if (rows.length === 0 && message.turn_activity_rows?.length) return message;
   if (message.turn_activity_rows && progressRowsEqual(message.turn_activity_rows, rows))
     return message;
   return { ...message, turn_activity_rows: rows };

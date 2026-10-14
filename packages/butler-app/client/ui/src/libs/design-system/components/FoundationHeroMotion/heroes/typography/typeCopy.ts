@@ -59,7 +59,7 @@ export const TYPE_COPY: Record<FoundationHeroLang, TypeCopy> = {
     command: "git log --oneline", meta: "오후 1:25 · 파일 2개",
     dash: "이번 주", metric: "1,284", metricLabel: "완료한 작업", change: "+12%",
     metric2: "96%", metric2Label: "제시간 완료", change2: "+3%",
-    placeholder: "Butler에게 무엇이든 물어보세요", more: "더 보기", send: "보내기",
+    placeholder: "버틀러에게 무엇이든 물어보세요", more: "더 보기", send: "보내기",
     roles: { heading: "제목", body: "본문", label: "레이블", caption: "캡션", code: "코드", dashboard: "대시보드 제목", metric: "지표" },
   },
 };

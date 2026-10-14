@@ -10,16 +10,16 @@ use rusqlite::OpenFlags;
 use serde_json::{Value, json};
 use std::path::Path;
 
-const ASK: &str = "Recall my lock word.";
+pub(super) const ASK: &str = "Recall my lock word.";
 
-fn count(path: &Path, sql: &str) -> i64 {
+pub(super) fn count(path: &Path, sql: &str) -> i64 {
     butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .unwrap()
         .query_row(sql, [], |r| r.get(0))
         .unwrap()
 }
 
-async fn settled(s: &Scenario, turns: u64) -> Result<std::path::PathBuf, HarnessError> {
+pub(super) async fn settled(s: &Scenario, turns: u64) -> Result<std::path::PathBuf, HarnessError> {
     memory_stubs::text_complete(&s.sandbox.data, turns).await?;
     let graph = memory_stubs::graph_path(&s.sandbox.data)?;
     tokio::time::timeout(std::time::Duration::from_secs(90),async {
@@ -33,7 +33,12 @@ async fn settled(s: &Scenario, turns: u64) -> Result<std::path::PathBuf, Harness
     Ok(graph)
 }
 
-async fn recall(s: &Scenario) -> Result<Value, HarnessError> {
+pub(super) async fn recall(s: &Scenario) -> Result<Value, HarnessError> {
+    recall_asking(s, ASK).await
+}
+
+/// One recall turn in a fresh chat; the tool output payload.
+pub(super) async fn recall_asking(s: &Scenario, ask: &str) -> Result<Value, HarnessError> {
     let chat =
         s.gw.post(
             "/sessions",
@@ -42,7 +47,8 @@ async fn recall(s: &Scenario) -> Result<Value, HarnessError> {
         .await?;
     let id = chat.data()["session"]["id"].as_str().unwrap();
     let start = s.provider()?.requests().len();
-    let (_, turn) = s.turn(id, ASK).await?;
+    let started = std::time::Instant::now();
+    let (_, turn) = s.turn(id, ask).await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     let requests = s.provider()?.requests();
     let output = requests[start..]
@@ -53,26 +59,71 @@ async fn recall(s: &Scenario) -> Result<Value, HarnessError> {
         .unwrap()["output"]
         .as_str()
         .unwrap();
-    Ok(serde_json::from_str(output)?)
+    let payload = serde_json::from_str(output)?;
+    eprintln!(
+        "MEM-FTS recall_turn_ms={:.3}",
+        started.elapsed().as_secs_f64() * 1000.0
+    );
+    Ok(payload)
 }
 
 async fn start(word: &str, cue: &str) -> Result<(Scenario, String), HarnessError> {
+    let unavailable = "http://127.0.0.1:1/unavailable";
+    start_with(
+        word,
+        cue,
+        json!(false),
+        ("BUTLER_E2E_EMBED_MANIFEST", unavailable),
+    )
+    .await
+}
+
+/// The remember/recall cassette; `include_vector` null leaves the tool default.
+pub(super) async fn start_with(
+    word: &str,
+    cue: &str,
+    include_vector: Value,
+    model_source: (&str, &str),
+) -> Result<(Scenario, String), HarnessError> {
+    start_corpus(word, &[], &[(ASK, cue)], include_vector, model_source).await
+}
+
+/// The remember turn, `facts` said in turns of their own (each answered with a
+/// short confirmation), and one recall turn per `(ask, cue)`.
+pub(super) async fn start_corpus(
+    word: &str,
+    facts: &[&str],
+    asks: &[(&str, &str)],
+    include_vector: Value,
+    model_source: (&str, &str),
+) -> Result<(Scenario, String), HarnessError> {
     let mut cassette = Cassette::load("MEM-01")?;
     let remember = cassette.exchanges[0].request.key.user_request.clone();
     // Chat learning is the reset subject; do not create a durable explicit record.
     cassette.exchanges[0].response = cassette.exchanges[1].response.clone();
-    let mut call = cassette.exchanges[0].clone();
-    call.request.key.user_request = ASK.into();
-    call.response = memory_response(
-        &json!({"type":"function_call","id":"fc_fts","call_id":"call_fts","name":"recall_memory","status":"completed","arguments":json!({"cue":cue,"include_vector":false,"session_ids":["{{SOURCE_SESSION}}"]}).to_string()}),
-    );
-    let mut answer = cassette.exchanges[1].clone();
-    answer.request.key.user_request = ASK.into();
-    cassette.exchanges.extend([call, answer]);
-    memory_stubs::extraction(&mut cassette, ASK)?;
-    let mut semantic = cassette.exchanges.last().unwrap().clone();
-    semantic.request.key.user_request = json!({"speaker":"user","observed_at":"{{TIME}}","parts":[{"id":0,"text":ASK}],"context":[]}).to_string();
-    cassette.exchanges.push(semantic);
+    for fact in facts {
+        let mut said = cassette.exchanges[0].clone();
+        said.request.key.user_request = (*fact).into();
+        cassette.exchanges.push(said);
+    }
+    for (ask, cue) in asks {
+        let mut arguments = json!({"cue":cue,"session_ids":["{{SOURCE_SESSION}}"]});
+        if !include_vector.is_null() {
+            arguments["include_vector"] = include_vector.clone();
+        }
+        let mut call = cassette.exchanges[0].clone();
+        call.request.key.user_request = (*ask).into();
+        call.response = memory_response(
+            &json!({"type":"function_call","id":"fc_fts","call_id":"call_fts","name":"recall_memory","status":"completed","arguments":arguments.to_string()}),
+        );
+        let mut answer = cassette.exchanges[1].clone();
+        answer.request.key.user_request = (*ask).into();
+        cassette.exchanges.extend([call, answer]);
+        memory_stubs::extraction(&mut cassette, ask)?;
+        let mut semantic = cassette.exchanges.last().unwrap().clone();
+        semantic.request.key.user_request = json!({"speaker":"user","observed_at":"{{TIME}}","parts":[{"id":0,"text":ask}],"context":[]}).to_string();
+        cassette.exchanges.push(semantic);
+    }
     for exchange in &mut cassette.exchanges {
         exchange.request.key.user_request = exchange.request.key.user_request.replace(
             "Saved your bike lock code to explicit memory for future conversations.",
@@ -88,12 +139,10 @@ async fn start(word: &str, cue: &str) -> Result<(Scenario, String), HarnessError
     let setup = Setup::new("MEM-FTS")?
         .fixture(Fixture::Empty)
         .stub_cassette(cassette)
+        .env("BUTLER_METRICS_ENABLED", "1")
         .placeholder("NONCE", word)
         .env("BUTLER_E2E_APP_NOW", "2026-10-02T04:01:00.000Z")
-        .env(
-            "BUTLER_E2E_EMBED_MANIFEST",
-            "http://127.0.0.1:1/unavailable",
-        );
+        .env(model_source.0, model_source.1);
     fixtures::onboarding_complete(&setup.sandbox.data)?;
     fixtures::scheduler_ran_today(&setup.sandbox.data, "2026-10-02T04:01:00.000Z")?;
     Ok((setup.start().await?, remember))
@@ -146,6 +195,7 @@ async fn scenario(word: &str, cue: &str) -> Result<(), HarnessError> {
     // Emulate the prior analyzer's installed projection, then upgrade on the
     // existing consumer path. Startup remains independent of this optional work.
     s.agent.terminate().await?;
+    assert_lexical_metrics(&s.sandbox.data)?;
     let db = butler_platform::sqlite::open(&graph).unwrap();
     db.execute("UPDATE memory_episode_fts_v1 SET summary='legacyneutral',entities='legacyneutral',claims='legacyneutral',source='legacyneutral'", []).unwrap();
     db.execute(
@@ -264,4 +314,31 @@ async fn mem_fts_chinese() -> Result<(), HarnessError> {
 async fn mem_fts_french_diacritics() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     scenario("vélo forêt ÉLÉPHANT", "velo foret elephant").await
+}
+
+/// Inspect actual ranking credit, since public provenance alone used to hide vector weight.
+fn assert_lexical_metrics(data: &Path) -> Result<(), HarnessError> {
+    let events = std::fs::read_to_string(data.join("metrics/operational-events.jsonl"))?;
+    let candidates = events
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .filter(|event| {
+            event["name"] == "recall_v2_ranking"
+                && event["dimensions"]["ranking_stage"] == "candidate"
+        })
+        .collect::<Vec<_>>();
+    assert_ne!(candidates, [] as [serde_json::Value; 0]);
+    assert!(
+        candidates
+            .iter()
+            .any(|event| event["dimensions"]["l_rank"].as_f64().unwrap() > 0.0)
+    );
+    for event in candidates {
+        let dimensions = &event["dimensions"];
+        assert_eq!(dimensions["v_rank"], 0.0);
+        assert_eq!(dimensions["vector_executed"], false);
+        assert_eq!(dimensions["lexical_executed"], true);
+        assert!((0.0..=1.0).contains(&dimensions["l_score"].as_f64().unwrap()));
+    }
+    Ok(())
 }

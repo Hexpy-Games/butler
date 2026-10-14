@@ -1,6 +1,7 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Sparkles } from "../../components/Icons";
 import { ConversationShell } from "../ConversationShell";
+import { SharedBackground } from "../ConversationShell/ConversationShell.demo";
 import type { WallpaperSource } from "../Wallpaper";
 import { PromptSuggestionList } from "./PromptSuggestionList";
 import styles from "./PromptSuggestionList.showcase.module.css";
@@ -66,4 +67,5 @@ function Suggestions({ locale, wallpaper }: ShowcaseRenderContext & { wallpaper:
 export const stories: ShowcaseStory[] = [
   { name: "New chat", widths: ["app", "wide", "375"], render: (context) => <Suggestions {...context} wallpaper /> },
   { name: "Plain background", render: (context) => <Suggestions {...context} wallpaper={false} /> },
+  { name: "External wallpaper (shared with the messages)", widths: ["app", "wide", "375"], render: (context) => <SharedBackground {...context} /> },
 ];

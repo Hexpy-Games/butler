@@ -73,6 +73,33 @@ fn response(item: &Value) -> ResponseRecord {
     }
 }
 
+/// Round 1 sends a text question with options (fed back as invalid); round 2 asks a
+/// free-text question plus a pick whose skip and type-your-own options duplicate the card.
+pub(crate) fn free_text_cassette(invalid: &Value, raw: &Value) -> Result<Cassette, HarnessError> {
+    let mut c = cassette()?;
+    let question = c.exchanges[0].clone();
+    let final_answer = c.exchanges[1].clone();
+    c.exchanges.clear();
+    for (step, arguments) in [Some(invalid), Some(raw), None].into_iter().enumerate() {
+        let mut exchange = if arguments.is_some() {
+            question.clone()
+        } else {
+            final_answer.clone()
+        };
+        exchange.request.key.round = (0..step)
+            .flat_map(|_| ["function_call".into(), "function_call_output".into()])
+            .collect();
+        if let Some(arguments) = arguments {
+            exchange.response = response(
+                &json!({"type":"function_call","id":format!("fc_free_{step}"),
+                "call_id":format!("call_free_{step}"),"name":"ask_user","arguments":arguments.to_string(),"status":"completed"}),
+            );
+        }
+        c.exchanges.push(exchange);
+    }
+    Ok(c)
+}
+
 pub(crate) fn consecutive_cassette() -> Result<Cassette, HarnessError> {
     let mut c = cassette()?;
     let question = c.exchanges[0].clone();

@@ -126,8 +126,8 @@ async fn reconcile_blocker(
     };
     let observed = match observe_prior(context, &blocker, target).await {
         Ok(observed) => observed,
-        Err(Prior::Unconfirmed(outcome)) => return Ok(unconfirmed(outcome)),
-        Err(Prior::Settled(outcome)) => return Ok(Verdict::Settled(outcome)),
+        Err(Prior::Unconfirmed(outcome)) => return Ok(unconfirmed(*outcome)),
+        Err(Prior::Settled(outcome)) => return Ok(Verdict::Settled(*outcome)),
     };
     let result = match observed {
         Err(error) => return Ok(unconfirmed(prior_error(&error))),
@@ -170,9 +170,9 @@ async fn reconcile_blocker(
 /// Why a blocker's prior occurrence could not be observed.
 enum Prior {
     /// Its input could not be normalized.
-    Unconfirmed(EffectOutcome),
+    Unconfirmed(Box<EffectOutcome>),
     /// Its target could not be normalized for a non-custom adapter.
-    Settled(EffectOutcome),
+    Settled(Box<EffectOutcome>),
 }
 
 /// Asks the adapter to reconcile the prior occurrence. A custom adapter
@@ -193,11 +193,11 @@ async fn observe_prior(
     let adapter = &context.input.adapter;
     let prior_input = adapter
         .normalize_input(&blocker.input)
-        .map_err(|error| Prior::Unconfirmed(prior_error(&error)))?;
+        .map_err(|error| Prior::Unconfirmed(Box::new(prior_error(&error))))?;
     let prior_target = match adapter.normalize_target(&blocker.target) {
         Ok(value) => value,
         Err(error) if target == LegacyTarget::Required => {
-            return Err(Prior::Settled(prior_error(&error)));
+            return Err(Prior::Settled(Box::new(prior_error(&error))));
         }
         Err(_) => context.resolved.normalized_target.clone(),
     };

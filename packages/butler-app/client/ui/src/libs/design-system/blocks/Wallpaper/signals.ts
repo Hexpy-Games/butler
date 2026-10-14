@@ -1,4 +1,5 @@
 import { prefersReducedMotion, subscribeReducedMotion } from "../../lib/motion";
+import { watchWallpaperHost, wallpaperHostConstrained, type WallpaperWindowBlur } from "./hostSignals";
 
 /** Browser conditions the scheduler reacts to. */
 export interface WallpaperSignals {
@@ -6,6 +7,10 @@ export interface WallpaperSignals {
   intersecting: boolean;
   reducedMotion: boolean;
   onBattery: boolean;
+  /** Window blur level (drift modules only: half speed after 2 min, paused after 10). */
+  windowBlur: WallpaperWindowBlur;
+  /** Low power or thermal pressure (`setWallpaperHostConstrained`): drift modules hold a static print. */
+  constrained: boolean;
 }
 
 interface BatteryLike extends EventTarget {
@@ -21,18 +26,23 @@ export function readWallpaperSignals(): WallpaperSignals {
     intersecting: true,
     reducedMotion: prefersReducedMotion(),
     onBattery: false,
+    windowBlur: 0,
+    constrained: wallpaperHostConstrained(),
   };
 }
 
 /**
  * Subscribes to document visibility, on-screen state, reduced motion,
- * battery (where `navigator.getBattery` exists) and canvas resizes. Window
- * focus is not watched: a visible window behind another app keeps animating.
+ * battery (where `navigator.getBattery` exists), canvas resizes, window blur
+ * and the host-constrained flag. Only drift modules read the blur: a visible
+ * window behind another app keeps animating. `onReturn`: shown and focused
+ * again after 5 min away.
  */
 export function watchWallpaperSignals(
   canvas: HTMLCanvasElement,
   onChange: (patch: Partial<WallpaperSignals>) => void,
   onResize: () => void,
+  onReturn: () => void = () => undefined,
 ): () => void {
   const cleanups: Array<() => void> = [];
   const listen = (target: EventTarget, type: string, handler: () => void) => {
@@ -42,6 +52,11 @@ export function watchWallpaperSignals(
 
   listen(document, "visibilitychange", () => onChange({ documentHidden: document.visibilityState === "hidden" }));
   cleanups.push(subscribeReducedMotion((reducedMotion) => onChange({ reducedMotion })));
+  cleanups.push(watchWallpaperHost({
+    onBlur: (windowBlur) => onChange({ windowBlur }),
+    onConstrained: (constrained) => onChange({ constrained }),
+    onReturn,
+  }));
 
   if (typeof IntersectionObserver === "function") {
     const intersection = new IntersectionObserver((entries) => {

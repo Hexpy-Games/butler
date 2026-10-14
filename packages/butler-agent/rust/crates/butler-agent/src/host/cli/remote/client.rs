@@ -65,6 +65,6 @@ impl Client {
 fn unavailable() -> CliError {
     CliError::failed(
         "service_not_running",
-        "Butler 서비스에 연결할 수 없습니다. butler start를 실행하세요. / Butler service is not running or unavailable. Run butler start.",
+        "버틀러 서비스에 연결할 수 없습니다. butler start를 실행하세요. / Butler service is not running or unavailable. Run butler start.",
     )
 }

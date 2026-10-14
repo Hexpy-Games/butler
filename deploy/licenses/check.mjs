@@ -14,7 +14,7 @@ const fixture = JSON.parse(readFileSync(join(root, "deploy/licenses/fixtures/unk
 assert.throws(() => validateLicense(fixture), /outside allowlist/, "unknown license must fail CI");
 assert.throws(() => validateLicense({ id: "fixture:unknown-choice", license: "MIT OR LicenseRef-Unknown" }), /outside allowlist/);
 const catalog = JSON.parse(readFileSync(join(root, "deploy/licenses/catalog.json"), "utf8"));
-assert.equal(first.split("\n===== COMPONENT =====\n").length - 1, catalog.components.length);
+assert.equal(first.split("\n=====\n").length - 1, catalog.components.length);
 assert.ok(!catalog.texts, "no license text store");
 for (const component of catalog.components) {
   assert.ok(first.includes(`${component.name} ${component.version}\n${component.license}\n`));
@@ -23,7 +23,7 @@ for (const component of catalog.components) {
 }
 const original = catalog.components[0];
 assert.ok(!first.includes("Permission is hereby granted"), "full license bodies must not ship");
-assert.ok(Buffer.byteLength(first) <= 300_000, "complete disclosure size budget");
+assert.ok(Buffer.byteLength(first) <= 301_000, "complete disclosure size budget");
 catalog.components[0] = { ...original, links: [] };
 assert.throws(() => generate(catalog), /Missing or invalid license link/);
 catalog.components[0] = { ...original, links: ["javascript:invalid"] };

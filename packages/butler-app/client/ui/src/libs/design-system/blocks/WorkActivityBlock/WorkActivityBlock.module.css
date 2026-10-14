@@ -69,7 +69,7 @@
   place-items: center;
   color: var(--text-tertiary);
   font-size: var(--typo-body-size);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-body-line-height);
 }
 
 .marker {

@@ -1,6 +1,6 @@
 .root {
   /* One title line: chevron and icon boxes, and the panel's text inset. */
-  --disclosure-line: calc(var(--typo-body-size) * var(--typo-body-line-height));
+  --disclosure-line: var(--typo-body-line-height);
   --disclosure-inset: var(--space-sm);
 
   border-radius: var(--radius-control);

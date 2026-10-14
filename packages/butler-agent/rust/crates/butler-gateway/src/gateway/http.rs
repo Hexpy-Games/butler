@@ -1,10 +1,15 @@
+mod assets;
 mod authority;
 mod authority_permissions;
+mod body;
 mod browser_host;
 mod content;
+mod library;
 mod start;
 pub(super) use start::serve;
+mod agent_import;
 mod automations;
+mod browser_import;
 mod dashboard;
 mod error;
 mod favicons;
@@ -33,6 +38,8 @@ mod sessions;
 mod settings;
 mod setup;
 mod shell;
+mod signin_secrets;
+mod signins;
 mod skills;
 mod space_mutations;
 mod static_ui;
@@ -44,16 +51,14 @@ mod updates;
 mod wallpaper_modules;
 mod wallpapers;
 
-use axum::http::HeaderValue;
-use std::{error::Error as StdError, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::{
-    body::{Body, Bytes, to_bytes},
+    body::Body,
     extract::{ConnectInfo, State},
     http::{Method, Request, StatusCode, Uri, header},
     response::Response,
 };
-use http_body_util::LengthLimitError;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
@@ -72,10 +77,16 @@ use read_routes::{
 };
 
 const DEFAULT_PAGE_LIMIT: usize = 200;
-const MAX_REQUEST_BODY_SIZE: usize = 128 * 1024 * 1024;
+pub(super) use body::read_body_with_limit;
+use body::{MAX_REQUEST_BODY_SIZE, declared_body_too_large, payload_too_large_response};
 
 struct HttpState {
     browser: browser_host::Hub,
+    headless: Option<Arc<butler_runtime::browser::Headless>>,
+    /// The installed App's Electron as a windowless browser host.
+    app_host: Option<Arc<butler_runtime::browser::AppHost>>,
+    previews: butler_runtime::previews::Previews,
+    preview_lifetime_started: parking_lot::Mutex<bool>,
     devices: security::DeviceRegistry,
     application: Arc<dyn GatewayApplication>,
     security: security::GatewaySecurity,
@@ -88,6 +99,10 @@ struct HttpState {
     uploads: tokio::sync::Semaphore,
     static_ui_root: Option<PathBuf>,
     output_data: Option<PathBuf>,
+    signin_secrets: signin_secrets::SignInSecrets,
+    browser_import: browser_import::ImportSessions,
+    import_dependencies: butler_platform::browser_transfer::ImportDependencies,
+    agent_imports: agent_import::AgentImports,
 }
 
 /// Who sent an authorized request (a request extension for the routes).
@@ -144,9 +159,7 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
             }
         }
     };
-    if butler_core::product_features::BROWSER {
-        content::admit_ui_frames(&state, &mut response);
-    }
+    content::admit_ui_frames(&state, &mut response);
     latency_trace::finish(timing, &mut response);
     security::apply_cors(&mut response, &origin);
     response
@@ -160,7 +173,7 @@ async fn authorized_route(
     if matches!(*request.method(), Method::GET | Method::POST)
         && request.uri().path() == security::CONNECT_PATH
     {
-        return security::connect_request(&state, request).await;
+        return security::connect_request(&state, request, origin).await;
     }
     let grant = match state.security.authorize(
         &request,
@@ -205,16 +218,17 @@ async fn route_for_client(
     client: Client,
 ) -> Result<Response, HttpError> {
     let uri = request.uri().clone();
-    if !butler_core::product_features::BROWSER
-        && (uri.path().starts_with("/internal/browser") || uri.path().starts_with("/outputs/"))
-    {
-        return Err(HttpError::public(404, "not_found", "Route not found."));
+    if let Some(result) = library::dispatch(request.uri().path()) {
+        return result.route(state, request).await;
     }
     if uri.path().starts_with("/internal/browser") {
         return browser_host::route(state, request, &client).await;
     }
     if uri.path().starts_with("/__o/") {
         return Err(HttpError::public(404, "not_found", "Route not found."));
+    }
+    if uri.path().starts_with("/previews/") {
+        return content::preview::view(&state, &request);
     }
     if uri.path().starts_with("/outputs/") {
         return content::view(state, request).await;
@@ -447,45 +461,4 @@ async fn post_message(
             data: result,
         },
     )
-}
-
-fn declared_body_too_large(request: &Request<Body>) -> bool {
-    request
-        .headers()
-        .get_all(header::CONTENT_LENGTH)
-        .iter()
-        .filter_map(|value| value.to_str().ok()?.parse::<u128>().ok())
-        .any(|length| length > MAX_REQUEST_BODY_SIZE as u128)
-}
-
-fn payload_too_large_response() -> Response {
-    let mut response = Response::new(Body::empty());
-    *response.status_mut() = StatusCode::PAYLOAD_TOO_LARGE;
-    response
-        .headers_mut()
-        .insert(header::CONNECTION, HeaderValue::from_static("close"));
-    response
-}
-
-pub(super) async fn read_body_with_limit(body: Body, limit: usize) -> Result<Bytes, HttpError> {
-    to_bytes(body, limit)
-        .await
-        .map_err(classify_body_read_error)
-}
-
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
-fn classify_body_read_error(error: axum::Error) -> HttpError {
-    let mut source: &(dyn StdError + 'static) = &error;
-    loop {
-        if source.is::<LengthLimitError>() {
-            return HttpError::PayloadTooLarge;
-        }
-        let Some(next) = source.source() else {
-            return HttpError::invalid_json();
-        };
-        source = next;
-    }
 }

@@ -11,6 +11,7 @@ name = "butler-agent"
 path = "src/main.rs"
 
 [features]
+e2e-fixtures = ["butler_agent/e2e-fixtures"]
 default = ["prebuilt-ort"]
 prebuilt-ort = ["butler_agent/prebuilt-ort"]
 static-ort = ["butler_agent/static-ort"]
@@ -18,7 +19,6 @@ static-ort = ["butler_agent/static-ort"]
 [dependencies]
 butler_agent = { package = "butler-host", path = "../butler-agent", default-features = false }
 butler-platform = { path = "../butler-platform" }
-tokio.workspace = true
 
 [build-dependencies]
 semver.workspace = true

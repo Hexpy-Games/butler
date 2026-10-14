@@ -41,6 +41,9 @@ struct TypedGatewaySettings {
     content_hosts: Vec<String>,
     /// `remoteAccessEnabled`: also listen on the LAN (Settings → Security).
     remote_access_enabled: bool,
+    /// `headlessBrowser`: Chrome fallback on or off; absent
+    /// means on, including when the App launched the Agent.
+    headless_browser: Option<bool>,
 }
 
 impl TypedGatewaySettings {
@@ -61,6 +64,7 @@ impl TypedGatewaySettings {
                 .get("remoteAccessEnabled")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            headless_browser: config.get("headlessBrowser").and_then(Value::as_bool),
         }
     }
 }
@@ -162,11 +166,15 @@ impl AppServiceConfiguration {
             db_configured,
             enabled,
             folder_selection_secret: folder_secret,
-            gateway: gateway_config(
-                LocalAuthConfig::required(token),
-                TypedGatewaySettings::read(config),
-                admin.ok(),
-            ),
+            gateway: {
+                let settings = TypedGatewaySettings::read(config);
+                let headless =
+                    super::headless_browser::headless_browser(data_root, settings.headless_browser);
+                let mut gateway =
+                    gateway_config(LocalAuthConfig::required(token), settings, admin.ok());
+                gateway.headless_browser = headless;
+                gateway
+            },
             credential_errors,
         }
     }
@@ -209,6 +217,7 @@ impl AppServiceConfiguration {
             allowed_hosts: self.gateway.allowed_hosts.clone(),
             content_hosts: self.gateway.content_hosts.clone(),
             output_data: self.gateway.output_data.clone(),
+            browser_import: self.gateway.browser_import.clone(),
             remote_access_enabled: self.gateway.remote_access_enabled,
             admin_credential: self.gateway.admin_credential.clone(),
             security_store: self.gateway.security_store.clone(),
@@ -217,6 +226,7 @@ impl AppServiceConfiguration {
             message_rate_limit_window: self.gateway.message_rate_limit_window,
             static_ui_root: self.gateway.static_ui_root.clone(),
             favicon_cache_root: self.gateway.favicon_cache_root.clone(),
+            headless_browser: self.gateway.headless_browser.clone(),
         }
     }
 }
@@ -289,6 +299,7 @@ fn gateway_config(
             .collect(),
         content_hosts: settings.content_hosts,
         output_data: None,
+        browser_import: Default::default(),
         remote_access_enabled: settings.remote_access_enabled,
         admin_credential,
         security_store: None,
@@ -305,6 +316,7 @@ fn gateway_config(
         },
         static_ui_root: None,
         favicon_cache_root: None,
+        headless_browser: None,
     }
 }
 

@@ -15,6 +15,7 @@ const UPDATE_KEYS: &[&str] = &[
     "worker_profiles",
     "max_simultaneous_workers",
     "access_mode",
+    "schedule_access_mode",
     "plan_mode_default",
     "follow_up_behavior",
     "multiline_send_behavior",
@@ -26,6 +27,7 @@ const UPDATE_KEYS: &[&str] = &[
     "main_screen_theme_custom_colors",
     "wallpaper",
     "composer_decoration",
+    "conversation_background",
     "translucent_sidebar",
     "diagnostics_enabled",
     "desktop_notifications",
@@ -175,7 +177,7 @@ fn is_web_search(value: &Value) -> bool {
         ),
         "reader_backend" => matches!(
             value.as_str(),
-            Some("lightweight" | "auto" | "lightpanda" | "jina-hosted" | "disabled")
+            Some("browser" | "lightweight" | "auto" | "lightpanda" | "jina-hosted" | "disabled")
         ),
         "api_key" => value.is_string(),
         "planning_enabled" => value.is_boolean(),

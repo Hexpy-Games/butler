@@ -1,25 +1,30 @@
 import { useEffect, useState } from "react";
 import { setAppCopyLanguage } from "@/app/copy.ts";
 import { detectFirstRunLanguage, firstRunCopy, type FirstRunLanguage } from "@/app/firstRunSetup.ts";
-import { PROVIDER_CARDS, connectionCardId, type FirstRunProviderCardId, type LocalModelOption } from "@/app/setupProviders.ts";
+import { connectionCardId, type FirstRunProviderCardId, type LocalModelOption } from "@/app/setupProviders.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { ModelCatalogView } from "@/app/types.ts";
 import { useWelcomeConsent } from "./useWelcomeConsent";
 import { useReplyLanguage } from "./useReplyLanguage";
 import { useConnectionCommit } from "./useConnectionCommit";
 import { useLocalModelServers } from "./useLocalModelServers";
+import { useMemoryChoice } from "./useMemoryChoice";
 import { useOnlineStatus } from "./useOnlineStatus";
 import { useSetupReadiness } from "./useSetupReadiness";
 import { useSignIn } from "./useSignIn";
+import { useFirstRunImports } from "./useFirstRunImports";
+import { useFirstRunStages, connectionActions } from "./useFirstRunStages";
+import type { FirstRunStep } from "./FirstRunSteps";
 
-/** `first-run`: welcome, consent, then pick an AI. `consent`: a newer consent only. `rerun`: from Settings, cancellable. */
+export type AiStage = "pick" | "auth" | "reply";
+
+/** `first-run`: welcome, consent, memory, pick an AI, optional import from other AI tools, then finish. `consent`: a newer consent only. `rerun`: from Settings, cancellable. */
 export type FirstRunMode = "first-run" | "consent" | "rerun";
 
 export type ConnectView =
   | { kind: "list" }
   | { kind: "signin" }
   | { kind: "key"; cardId: FirstRunProviderCardId }
-  | { kind: "local" }
   | { kind: "custom" }
   | { kind: "customModels"; options: LocalModelOption[]; apiKey?: string };
 
@@ -40,12 +45,15 @@ function initialLanguage(mode: FirstRunMode): FirstRunLanguage {
 
 /** Navigation stays local; declining never changes durable onboarding. */
 function useConsentScreen(mode: FirstRunMode) {
-  const [screen, setScreen] = useState<"welcome" | "consent" | "connect">(mode === "consent" ? "consent" : "welcome");
+  const [screen, setScreen] = useState<"welcome" | "consent" | "memory" | "connect">(mode === "consent" ? "consent" : "welcome");
   const [focusStart, setFocusStart] = useState(false);
   return {
     screen, setScreen, focusStart,
     start: () => setScreen("consent"),
+    backToWelcome: () => { setFocusStart(true); setScreen("welcome"); },
     backToConsent: () => setScreen("consent"),
+    /** First run returns to the memory step; renewal and rerun to consent. */
+    backFromConnect: () => setScreen(mode === "first-run" ? "memory" : "consent"),
     decline: (clearAcceptance: () => void) => {
       clearAcceptance();
       setFocusStart(true);
@@ -63,20 +71,34 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   const [language, setLanguage] = useState<FirstRunLanguage>(() => initialLanguage(mode));
   const navigation = useConsentScreen(mode);
   const { screen, setScreen, focusStart } = navigation;
-  const [view, setView] = useState<ConnectView>({ kind: "list" });
+  const stages = useFirstRunStages(mode);
+  const { view, importDone, authDone, replyDone, advanceOnConnect, setAuthDone, setReplyDone, setAdvanceOnConnect } = stages;
   const copy = firstRunCopy[language];
-  const { acceptedAt, savingConsent, agree, clearAcceptance } = useWelcomeConsent({ language, onAgree: () => setScreen("connect") });
+  const { acceptedAt, savingConsent, agree, clearAcceptance } = useWelcomeConsent({
+    language, onAgree: () => setScreen(mode === "first-run" ? "memory" : "connect"),
+  });
   const setup = useSetupReadiness();
+  const memory = useMemoryChoice({ setup, saveFailed: copy.memoryChoice.saveFailed, onSaved: () => setScreen("connect") });
   const online = useOnlineStatus();
   const current = useButlerStore((state) => currentCardId(mode, state.settings.model, state.modelCatalog));
-  const local = useLocalModelServers({ enabled: screen === "connect", agentReady: setup.readiness.status === "ready" });
   const commit = useConnectionCommit({
     readinessStatus: setup.readiness.status,
     acceptedAt,
     language,
     resume: mode === "first-run",
   });
-  const reply = useReplyLanguage({ connected: commit.connected, language, onComplete });
+  const reply = useReplyLanguage({ connected: commit.connected, language, onComplete, onSaved: () => setReplyDone(true) });
+  // A live or saved connection is always on the AI step, also for the render before the effect below moves `screen`.
+  const settled = Boolean(commit.connected) || commit.waitingForReady;
+  const step: FirstRunStep = !replyDone ? settled ? "connect" : screen : mode === "first-run" && !importDone ? "import" : "ready";
+  // A saved connection (resume), a confirmed ② or a model pick that just connected opens ③ (no connected ② frame first).
+  const advanced = authDone || (advanceOnConnect && Boolean(commit.connected));
+  const aiStage: AiStage = advanced || ((commit.connected || commit.savedCardId) && view.kind === "list") ? "reply" : view.kind === "list" ? "pick" : "auth";
+  useEffect(() => {
+    if (advanceOnConnect && commit.connected) { setAdvanceOnConnect(false); setAuthDone(true); }
+  }, [advanceOnConnect, commit.connected]);
+  const imports = useFirstRunImports(mode === "first-run" && replyDone && setup.readiness.status === "ready");
+  const local = useLocalModelServers({ enabled: step === "connect", agentReady: setup.readiness.status === "ready" });
   useEffect(() => {
     if (commit.connected) {
       setLanguage(commit.connected.settings.language);
@@ -93,45 +115,29 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     setAppCopyLanguage(language);
   }, [language]);
 
-  function pick(cardId: FirstRunProviderCardId): void {
-    const kind = PROVIDER_CARDS[cardId].kind;
-    commit.clear();
-    if (kind === "signin") {
-      setView({ kind: "signin" });
-      void signIn.start();
-    } else if (kind === "key") setView({ kind: "key", cardId });
-    else setView({ kind: kind === "local" ? "local" : "custom" });
-  }
+  // Import ①'s result is its own screen after the run (no undo in first run; Settings changes things later).
+  // The result opens once every chosen tool has run, not after the first one answers.
+  const agentsDone = Boolean(imports.agentImport.result) && !imports.agentImport.error && !imports.agentImport.busy;
+  const agentPage = imports.agentPicks.current ? `agents:${imports.agentPicks.current.key}` : "agents";
+  const importKey = agentsDone ? "agents:done" : agentPage;
+  const stageKey = step === "connect" ? `connect:${aiStage}` : step === "import" ? `import:${importKey}` : step;
+  // Only the AI step has substeps; import is a single page.
+  const substep = step === "connect" ? { index: ["pick", "auth", "reply"].indexOf(aiStage) + 1, total: 3 } : undefined;
 
   return {
-    mode, copy, language, setLanguage, online, screen, focusStart, view, savingConsent, local, signIn, commit, reply,
+    mode, copy, language, setLanguage, online, screen, step, focusStart, view, savingConsent, local, signIn, commit, reply, memory,
     currentCardId: commit.connected?.cardId ?? current,
     readiness: setup.readiness,
     retryPreparation: setup.retry,
     repairPreparation: setup.repair,
     agree,
     start: navigation.start,
+    ...connectionActions({ stages, commit, signIn, current, onCancel }),
+    aiStage, agentsDone, stageKey, substep, ...imports,
+    backToWelcome: navigation.backToWelcome,
     decline: () => navigation.decline(clearAcceptance),
-    pick,
-    cancel: () => {
-      signIn.leave();
-      onCancel?.();
-    },
-    backToList: () => {
-      signIn.leave();
-      commit.clear();
-      setView({ kind: "list" });
-    },
     backToConsent: navigation.backToConsent,
-    showCustomModels: (options: LocalModelOption[], apiKey?: string) => setView({ kind: "customModels", options, apiKey }),
-    connectKey: (cardId: FirstRunProviderCardId, credentialId: string) =>
-      commit.submit({
-        kind: "hosted", cardId, providerId: PROVIDER_CARDS[cardId].providerId ?? cardId, authType: "api_key", credentialId,
-        // Routine presets are for a new AI; the AI already in use keeps its model and effort.
-        keepDefaults: current === cardId,
-      }),
-    connectLocal: (cardId: FirstRunProviderCardId, option: LocalModelOption, apiKey?: string) =>
-      commit.submit({ kind: "local", cardId, option, apiKey }),
+    backFromConnect: navigation.backFromConnect,
   };
 }
 

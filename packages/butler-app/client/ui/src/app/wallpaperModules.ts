@@ -165,15 +165,15 @@ export function wallpaperModuleExists(error: unknown): boolean {
   return (error && typeof error === "object" ? (error as { code?: unknown }).code : undefined) === "wallpaper_module_exists";
 }
 
-/** Rejects with `wallpaper_module_in_use` (409) while a setting or project still draws with the module. */
+/** Rejects with `wallpaper_in_use` (409) while a setting or project still draws with the module. */
 export async function deleteWallpaperModule(id: string): Promise<void> {
   await wallpaperGatewayRequest("deleteWallpaperModule", { id }, `/wallpaper-modules/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-/** The gateway's `wallpaper_module_in_use` conflict deleting a module a setting or project still draws with. */
+/** The gateway's `wallpaper_in_use` conflict deleting a module a setting or project still draws with. */
 export function wallpaperModuleInUse(error: unknown): boolean {
   const { code, status } = (error && typeof error === "object" ? error : {}) as { code?: unknown; status?: unknown };
-  return code === "wallpaper_module_in_use" || status === 409;
+  return code === "wallpaper_in_use" || code === "wallpaper_module_in_use" || status === 409;
 }
 
 /**

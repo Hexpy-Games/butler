@@ -29,6 +29,69 @@ The shell supplies the named `conversation` inline-size container for empty-stat
 content. Within AdaptiveShell's `workspace` container, narrow conversation gutters
 and composer insets follow the actual pane width even on desktop.
 
+### Background layer
+
+`background` mounts one layer behind everything in the shell, e.g. a
+`Wallpaper` shared by the new chat and its messages. It paints over the
+shell's `--conversation-bg`, under every child (the shell isolates it), is
+clipped to the shell, is `aria-hidden` and never takes pointer input. It stays
+mounted while the children swap, so the first send neither remounts nor
+recompiles it. Its leading corners follow `--workspace-left-radius`, which is
+0 in a compact conversation (560px or narrower), as on the new chat. Without
+`background` the shell renders exactly as before.
+
+Pair it with `PromptSuggestionList onContentRect` (external-wallpaper mode,
+no `wallpaper`) for the new chat's keep-out, and with
+`MessageListSurface onColumnRect` for the messages'. `onColumnRect` reports
+`{ left, right, top }` in client CSS px: the column's edges (the composer
+shares them) and the conversation's top. It reports once laid out and again
+only when the column or the shell resizes or the window does; never on
+scroll, and never the same value twice.
+
+```tsx
+<ConversationShell composerReserve={reserve} background={<Wallpaper scope="container" source={source} contentRect={keepOut} />}>
+  {empty ? (
+    <ConversationScroll masked={false} scrollable={false}>
+      <PromptSuggestionList title={title} suggestions={suggestions} onContentRect={setPromptRect} />
+    </ConversationScroll>
+  ) : (
+    <ConversationScroll>
+      <MessageListSurface onColumnRect={setColumn}>{rows}</MessageListSurface>
+    </ConversationScroll>
+  )}
+</ConversationShell>
+```
+
+### Tab rail
+
+`rail` mounts a `TabRail` (Butler's live tabs) over the shell. `railView` (the
+conversation id) latches the room the column makes. While the rail shows a tab,
+and for the rest of that view once it has, the shell sets `data-rail="reserved"`:
+
+- Full (960px or wider) and compact (720px or wider): the message column and the
+  floating composer keep their width and centring. They move left only as far
+  as they must to stay `--tab-rail-clearance` (24px) clear of the rail. At
+  1440 with the sidebar open, that is 65px. They narrow only when the move would
+  bring them within 24px of the card's leading edge (`railColumn` in TabRail
+  computes the same numbers).
+- Narrower than 720px: the shelf strip sits on top, and the messages start below
+  it (`--conversation-rail-top`).
+- Cards that come and go later never move the column back. Pass `rail={null}`
+  while the browser area is open. The column then returns, and a later rail
+  reserves room again.
+
+The rail sits 16px into a shell card (`--conversation-top-reserve`), or under the
+title bar in the flat frame. The composer follows through
+`--conversation-column-width` and `--conversation-column-shift`, which
+ComposerCard reads.
+
+```tsx
+<ConversationShell composerReserve={reserve} railView={sessionId}
+  rail={areaOpen ? null : <TabRail view={sessionId} tabs={tabs} labels={labels} onMore={openFirstHidden} />}>
+  …
+</ConversationShell>
+```
+
 ## Who can use this component
 
 Agents building Butler chat, transcript, or conversation preview surfaces.
@@ -39,6 +102,11 @@ Keep message mapping in product containers. Long timelines should use stable
 virtual row keys and identity-preserving cache/server merges so scrolling over
 cached history does not jitter.
 
+The message list reserves room for the title bar that overlays it
+(`--titlebar-safe-area-top`). In a shell card (`AdaptiveShell frame="cards"`)
+no title bar overlaps it, and the card sets `--conversation-top-reserve` to a
+plain inset instead.
+
 ## Wrong use cases
 
 Do not use this for dashboards, settings, or inspector panels. Use app-shell
@@ -46,4 +114,4 @@ blocks such as `ChromeFrame`, `SurfacePanel`, or `InspectorPanel` instead.
 
 ## Tags
 
-conversation, chat, virtual-list, scroll, composer-reserve
+conversation, chat, virtual-list, scroll, composer-reserve, background, wallpaper, rail, tabs

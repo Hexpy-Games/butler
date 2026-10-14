@@ -12,11 +12,13 @@ pub(crate) use memory_management::AppMemoryManagement;
 mod readiness;
 mod runtime_info;
 mod session_progress;
+mod session_title;
 mod session_workspaces;
 mod settings;
 mod settings_mutation;
 mod setup;
 mod topic_branch;
+pub(crate) use session_title::AppSessionTitleGeneratorAdapter;
 
 use std::sync::Arc;
 

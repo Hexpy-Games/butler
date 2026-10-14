@@ -43,6 +43,8 @@ pub(crate) fn tool(name: &str, concurrent: bool) -> ModelRoundTool {
         description: name.into(),
         parameters: Default::default(),
         concurrency_safe: Some(concurrent),
+        transcript_visibility: None,
+        handler_validates_arguments: None,
         tool_contract_version: Some(2),
     }
 }

@@ -10,6 +10,8 @@ mod claims;
 mod common;
 mod context_compactions;
 mod context_documents;
+mod correction;
+pub use correction::{CorrectionOutcome, run_startup_correction};
 mod effects;
 mod error;
 mod hydration;
@@ -19,6 +21,7 @@ mod migration;
 mod model;
 mod operation_input;
 mod operation_results;
+mod payload;
 mod progress;
 mod progress_publication;
 mod project_work_runtime;
@@ -122,6 +125,7 @@ pub struct BtccStorage {
 }
 
 struct StorageInner {
+    payload: payload::PayloadMemo,
     changes: tokio::sync::watch::Sender<()>,
     lane: AsyncMutex<LaneState>,
     readers: Option<Arc<read_pool::ReadPool>>,
@@ -189,6 +193,7 @@ impl BtccStorage {
         let _ = owner;
         Ok(Self {
             inner: Arc::new(StorageInner {
+                payload: Default::default(),
                 changes,
                 readers,
                 lane: AsyncMutex::new(LaneState {

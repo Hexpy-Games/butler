@@ -7,9 +7,12 @@ import {
 } from "@/app/profileMigrationFeedback.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { Button, SettingsField, Stack, Textarea } from "@/butler-ds";
+import { Button, ListRow, SettingsField, Sparkles, Stack, Textarea, Typo } from "@/butler-ds";
 import { useProfileMigrationPrompt } from "./useProfileMigrationPrompt";
 
+const FEEDBACK_TONE = { ok: "success", muted: "secondary", error: "danger" } as const;
+
+/** One row of Settings → Personalization → import from other AIs, below the detected tools. */
 export function PersonalizationProfileMigration() {
   useAppLocale();
   const personalization = useSettingsUIStore((state) => state.personalization);
@@ -66,41 +69,38 @@ export function PersonalizationProfileMigration() {
 
   return (
     <>
-      <SettingsField
-        id="profile-migration-import"
-        settingId="profile-migration"
-        data-test-class="settings-field"
-        label={settingsFields.profileMigrationImport}
-        description={settingsDescriptions.profileMigration}
-        descriptionId="profile-migration-import-description"
-        meta={
-          <span
-            aria-live="polite"
-            data-test-class="profile-migration-status"
-            data-tone={migrationFeedback?.tone ?? "muted"}
-            role={migrationFeedback ? "status" : undefined}
-          >
-            {migrationFeedback?.label ??
-              settingsDescriptions.profileMigrationImmediate}
-          </span>
-        }
-        control={
-          <Button
-            type="button"
-            id="profile-migration-import"
-            aria-describedby="profile-migration-import-description"
-            variant="outline"
-            aria-expanded={migrationExpanded}
-            aria-controls="profile-migration-fields"
-            onClick={() => setMigrationExpanded((current) => !current)}
-            disabled={saving || !personalization}
-          >
-            {migrationExpanded
-              ? settingsCopy.actions.closeProfileMigration
-              : settingsCopy.actions.openProfileMigration}
-          </Button>
-        }
-      />
+      <Stack align="row" cross="center" gap="sm" data-setting-id="profile-migration">
+        <Stack grow minWidth="0">
+          <ListRow icon={<Sparkles size="md" />} title={settingsFields.profileMigrationImport}
+            description={settingsDescriptions.profileMigration} />
+        </Stack>
+        <Button
+          type="button"
+          size="sm"
+          id="profile-migration-import"
+          variant="outline"
+          aria-label={`${settingsCopy.actions.openProfileMigration} · ${settingsFields.profileMigrationImport}`}
+          aria-expanded={migrationExpanded}
+          aria-controls="profile-migration-fields"
+          onClick={() => setMigrationExpanded((current) => !current)}
+          disabled={saving || !personalization}
+        >
+          {migrationExpanded
+            ? settingsCopy.actions.closeProfileMigration
+            : settingsCopy.actions.openProfileMigration}
+        </Button>
+      </Stack>
+      {migrationFeedback ? (
+        <Typo.Caption
+          aria-live="polite"
+          data-test-class="profile-migration-status"
+          data-tone={migrationFeedback.tone}
+          role="status"
+          tone={FEEDBACK_TONE[migrationFeedback.tone]}
+        >
+          {migrationFeedback.label}
+        </Typo.Caption>
+      ) : null}
       {migrationExpanded ? (
         <Stack id="profile-migration-fields" gap="xl">
           <SettingsField

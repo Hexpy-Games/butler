@@ -4,7 +4,7 @@ import type { SecurityView } from "@/app/types.ts";
 import { CopyButton, SettingsField, Stack, Typo } from "@/butler-ds";
 import { SettingsSwitch } from "./SettingsSwitch";
 
-/** The LAN toggle and, while it is on, the addresses other devices open. */
+/** The LAN toggle and addresses other devices open, including tunnel hosts. */
 export function SecurityRemoteAccessFields({
   view,
   disabled,
@@ -25,7 +25,7 @@ export function SecurityRemoteAccessFields({
         disabled={disabled}
         onChange={onChange}
       />
-      {view.remote_access_enabled && (
+      {(view.remote_access_enabled || view.lan_urls.length > 0) && (
         <SettingsField
           settingId="lan-urls"
           label={copy.addresses}

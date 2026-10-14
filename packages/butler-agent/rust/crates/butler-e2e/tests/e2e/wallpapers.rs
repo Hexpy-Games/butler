@@ -23,6 +23,8 @@ use butler_platform::secure_fs::{self, FileMode};
 use serde_json::{Value, json};
 use zip::{ZipWriter, write::SimpleFileOptions};
 
+mod drift;
+
 const FRAGMENT: &str = "void main(){fragColor=vec4(vec3(p_speed),1.);}";
 const IMPORT: &str = "/wallpaper-modules/import";
 
@@ -379,6 +381,10 @@ async fn wall_04_settings_wallpaper_is_validated_and_legacy_patches_yield()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("WALL-04")?.start().await?;
+    assert_eq!(
+        s.gw.settings().await?["wallpaper"]["source"],
+        json!({"kind":"live","module":"butler.riso-print"})
+    );
     let before = s.gw.get("/settings").await?.text;
     for (wallpaper, field) in [
         (json!("bloom"), "wallpaper"),
@@ -426,7 +432,7 @@ async fn wall_04_settings_wallpaper_is_validated_and_legacy_patches_yield()
         .gw
         .patch(
             "/settings",
-            json!({"main_screen_theme_preset": "custom", "main_screen_theme_custom_colors": custom}),
+            json!({"main_screen_theme":"bloom", "main_screen_theme_preset": "custom", "main_screen_theme_custom_colors": custom}),
         )
         .await?;
     assert_eq!(derived.status, 200, "{}", derived.text);

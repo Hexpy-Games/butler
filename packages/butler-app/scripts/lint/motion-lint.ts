@@ -54,6 +54,16 @@ const PAINT_LOOP_KEYFRAMES: Record<string, readonly string[]> = {
   "libs/design-system/blocks/MessageRow/MessageRow.module.css": ["background-position"],
   "libs/design-system/components/Spinner/Spinner.module.css": ["stroke-dasharray"],
 };
+/**
+ * File-exact geometry transitions. The setup card morph (intro spec rev 5)
+ * moves the real edges of one empty, absolutely positioned card surface and
+ * clips the larger card to it for --motion-deliberate, so the hairline border,
+ * the corners and the text never scale (a transform would stretch them).
+ * Owner-approved; no other file may transition layout or clip geometry.
+ */
+const GEOMETRY_MORPH: Record<string, readonly string[]> = {
+  "libs/design-system/blocks/SetupWizardShell/SetupWizardMorph.module.css": ["left", "width", "height", "clip-path"],
+};
 /** Registered paint-only custom properties (the shared scroll-fade mask). */
 const ALLOWED_CUSTOM_PROPERTY = /^--scroll-fade-/u;
 
@@ -151,6 +161,7 @@ function transitionItemProperty(item: string): string | null {
 function propertyAllowed(path: string, property: string, declaration: string, source: string): boolean {
   if (ALLOWED_PROPERTIES.has(property)) return true;
   if (ALLOWED_CUSTOM_PROPERTY.test(property)) return true;
+  if (GEOMETRY_MORPH[path]?.includes(property)) return true;
   if (DISCRETE_PROPERTIES.has(property)) return /allow-discrete/u.test(declaration) || /transition-behavior\s*:\s*allow-discrete/u.test(source);
   if (property === "height" || property === "block-size") {
     return REVEAL_COMPONENTS.some((prefix) => path.startsWith(prefix)) &&
@@ -261,6 +272,11 @@ export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
     constants: {},
   },
   {
+    prefix: "components/media/imageEncode.ts",
+    justification: "One-shot re-encode of a picture the user copies (the clipboard takes PNG) or saves to the library (a scrap keeps JPEG); it never animates.",
+    constants: {},
+  },
+  {
     prefix: "libs/design-system/components/ButlerThinkingMark/",
     justification: "Riso halftone thinking mark: a spring-driven morph and an orbiting-light simulation drawn per frame on a canvas.",
     constants: {
@@ -280,12 +296,32 @@ export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
       WALLPAPER_DAY_PHASE_REFRESH_MS: "How often a still frame of a module that reads u_dayPhase re-renders (15 min) so time-of-day color follows the clock; a refresh budget, not UI timing.",
       WALLPAPER_WATCHDOG_SLOW_RENDER_MS: "Render time above which the frame-time watchdog counts an animated frame as slow (GPU overload detection); a health threshold, not a duration.",
       WALLPAPER_WATCHDOG_RETRY_MS: "Quiet period before a degraded wallpaper retries animating (doubles per retry); a recovery budget, not UI timing.",
+      RESIZE_SETTLE_MS: "Diagnostics only: how long after a window resize the engine must have drawn before one resize=no_redraw line is logged; a health threshold, not motion.",
       WALLPAPER_WATCHDOG_RETRY_MAX_MS: "Cap of the watchdog's growing retry period; a recovery budget, not UI timing.",
       WALLPAPER_MAX_CLOCK_STEP_MS: "Largest step of the shader clock per frame so a stalled or resumed loop never jumps the animation (simulation stability).",
       WALLPAPER_TIME_PERIOD_SECONDS: "Common period (5000*PI s) of the built-in shaders' time terms, used to wrap u_time for mediump precision; not a duration.",
       SECONDS_PER_DAY: "Unit conversion from local time to u_dayPhase (0..1); not a duration.",
       WALLPAPER_SCENE_TONE_CHECK_MS: "How often a real-time wallpaper's scene tone (light/dark by time of day) re-reads the clock; a polling budget for a sunrise/sunset flip, not UI timing.",
+      RAF_SLOT_SLACK_MS: "Vsync jitter tolerance (2 ms) under which an animated module's display frame counts as on its slot, so a frame landing a hair early never costs an extra rAF wake; a scheduling tolerance, not a duration.",
+      RISO_DRIFT_RATE: "Ink-field flow speed of the riso print at rest (0.035 flow/s, ink edges move 2-3 CSS px/s), the approved simulation speed, not UI timing.",
+      RISO_SEGMENT_MS: "Riso print crossfade segment (one pre-rendered keyframe every 8 s at 1x); a render budget of the drift policy (7 keyframes a minute), not UI timing.",
+      RISO_LIVE_FLOOR_FPS: "Lowest live frame rate of a riso event's tail (6 fps); a render budget scaled by the event envelope.",
+      RISO_LIVE_CAP_FPS: "Highest live frame rate of riso events and opacity steps (30 fps); a performance cap, not a duration.",
+      RISO_ENTRY_DISSOLVE_MS: "The riso crossfade layer dissolves out over 250 ms when live event frames take over, hiding a 3-5 px field jump inside a soft print; a simulation hand-off, not a UI transition.",
+      RISO_BLUR_SLOW_MS: "Window blur after which the riso drift halves its speed (2 min); a power policy threshold, not UI timing.",
+      RISO_BLUR_FREEZE_MS: "Window blur after which the riso drift pauses on its current mix (10 min); a power policy threshold, not UI timing.",
+      RISO_FOCUS_AWAY_MS: "Time away (hidden or blurred) after which returning fires the riso focus event (5 min); an event throttle, not UI timing.",
+      RISO_ZONE_EASE_MS: "The riso column keep-out eases over 300 ms (resize, screen switch), shaped in the density shader; a simulation tween, snapped under reduced motion.",
+      RISO_INTRO_TIMELINE_S: "The first-run ink intro reveal (intro spec Concept A rev 5 motion table: drop, bloom, pen, drying key ink, bow tie registration, glide, residue, card keep-out, GL stop at 2.9 s) as one GL timeline; segments with tokens match --motion-intro-*, and the card side reads its cues from here. Played once per install, skipped on a click or key, a still frame under reduced motion.",
+      RISO_INTRO_FRAME_MS: "Caps the intro reveal at 60 fps on high-refresh displays (2 ms vsync slack); a performance budget, not a duration.",
+      RISO_INTRO_BEAT_MS: "The 600 ms print beat of the dried intro print when the setup card changes (plates breathe once, keep-out follows the card); a simulation tween, off under reduced motion.",
+      RISO_INTRO_STIR_DECAY_MS: "Time constant (320 ms) of the decay of the pointer stir on the dried intro print, which then stops by itself; simulation damping, not UI timing.",
     },
+  },
+  {
+    prefix: "libs/design-system/blocks/LiveTabCard/LiveTabFrame.tsx",
+    justification: "Live tab frame: draws the owner's latest screencast ImageBitmap once per new frame (no loop, no timing; frames arrive at the stream's capped rate and swap without a crossfade).",
+    constants: {},
   },
   {
     prefix: "libs/design-system/components/FoundationHeroMotion/heroes/typography/specimenMetrics.ts",

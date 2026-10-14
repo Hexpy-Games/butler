@@ -13,7 +13,8 @@ pub struct OutputSummary {
     pub created_at: String,
 }
 pub(super) fn save(path: &Path, output: &Output) -> std::io::Result<()> {
-    let db = butler_platform::sqlite::open(path).map_err(std::io::Error::other)?;
+    let mut connection = butler_platform::sqlite::open(path).map_err(std::io::Error::other)?;
+    let db = connection.transaction().map_err(std::io::Error::other)?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS outputs(id TEXT PRIMARY KEY, session TEXT NOT NULL, message TEXT NOT NULL, turn TEXT NOT NULL, title TEXT NOT NULL, bytes INTEGER NOT NULL, created TEXT NOT NULL); CREATE INDEX IF NOT EXISTS outputs_session ON outputs(session); CREATE TABLE IF NOT EXISTS output_refs(id TEXT NOT NULL, session TEXT NOT NULL, turn TEXT NOT NULL, message TEXT NOT NULL, PRIMARY KEY(id,turn)); CREATE INDEX IF NOT EXISTS output_refs_turn ON output_refs(session,turn);").map_err(std::io::Error::other)?;
     let r = output
         .revisions
@@ -42,7 +43,7 @@ pub(super) fn save(path: &Path, output: &Output) -> std::io::Result<()> {
         ],
     )
     .map_err(std::io::Error::other)?;
-    Ok(())
+    db.commit().map_err(std::io::Error::other)
 }
 pub(super) fn summaries(path: &Path, session: &str) -> std::io::Result<Vec<OutputSummary>> {
     if !path.exists() {
@@ -50,6 +51,9 @@ pub(super) fn summaries(path: &Path, session: &str) -> std::io::Result<Vec<Outpu
     }
     let db = butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(std::io::Error::other)?;
+    if !ready(&db)? {
+        return Ok(Vec::new());
+    }
     let mut statement = db.prepare("SELECT id,session,message,turn,title,bytes,created FROM outputs WHERE session=?1 ORDER BY id").map_err(std::io::Error::other)?;
     statement
         .query_map([session], |row| {
@@ -88,6 +92,9 @@ pub(super) fn messages(
     }
     let db = butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(std::io::Error::other)?;
+    if !ready(&db)? {
+        return Ok(Vec::new());
+    }
     let placeholders = std::iter::repeat_n("?", turns.len())
         .collect::<Vec<_>>()
         .join(",");
@@ -113,6 +120,17 @@ pub(super) fn messages(
         .map_err(std::io::Error::other)
 }
 
+// First publication creates both tables in one transaction. Until it commits,
+// the file may exist while the index is still logically empty.
+fn ready(db: &rusqlite::Connection) -> std::io::Result<bool> {
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='output_refs')",
+        [],
+        |row| row.get(0),
+    )
+    .map_err(std::io::Error::other)
+}
+
 pub(super) fn transfer(path: &Path, source: &str, target: &str) -> std::io::Result<()> {
     if !path.exists() {
         return Ok(());
@@ -127,4 +145,32 @@ pub(super) fn transfer(path: &Path, source: &str, target: &str) -> std::io::Resu
         .map_err(std::io::Error::other)?;
     }
     tx.commit().map_err(std::io::Error::other)
+}
+
+/// Primary-key pages used only by Library migration, off Tokio workers.
+pub(super) fn library_page(path: &Path, after: &str) -> std::io::Result<Vec<OutputSummary>> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let db = butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(std::io::Error::other)?;
+    if !ready(&db)? {
+        return Ok(Vec::new());
+    }
+    let mut statement = db.prepare("SELECT id,session,message,turn,title,bytes,created FROM outputs WHERE id>?1 ORDER BY id LIMIT 500").map_err(std::io::Error::other)?;
+    statement
+        .query_map([after], |row| {
+            Ok(OutputSummary {
+                output_id: row.get(0)?,
+                session_id: row.get(1)?,
+                message_id: row.get(2)?,
+                turn_id: row.get(3)?,
+                title: row.get(4)?,
+                size_bytes: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })
+        .map_err(std::io::Error::other)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(std::io::Error::other)
 }

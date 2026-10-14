@@ -49,7 +49,7 @@ test("each action kind reads as one question in English and Korean", () => {
     [summary("update_project", { targets: [{ kind: "project", path: "ledger:work" }], risk: "low" }),
       "Update the project records?", "프로젝트 기록을 업데이트할까요?"],
     [summary("start_conversation", { risk: "low" }), "Start a new conversation?", "새 대화를 시작할까요?"],
-    [summary("restart_service", { targets: [{ kind: "service", path: "butler" }] }), "Restart Butler?", "Butler를 다시 시작할까요?"],
+    [summary("restart_service", { targets: [{ kind: "service", path: "butler" }] }), "Restart Butler?", "버틀러를 다시 시작할까요?"],
     [summary("create_worktree", { targets: [folder("garden")], risk: "low" }),
       "Create a worktree for this conversation?", "이 대화용 워크트리를 만들까요?"],
     [summary("other", { targets: [{ kind: "other", path: "thing" }] }), "Allow this action?", "이 작업을 허용할까요?"],
@@ -95,6 +95,9 @@ test("up to three examples show, then a +N more line for the rest", () => {
     examples: ["a.png", "b.png", "c.png", "d.png"] });
   expect(approvalRequestView(card(edits), en).details).toEqual(["a.png", "b.png", "c.png", "+21 more"]);
   expect(approvalRequestView(card(edits), ko).details).toEqual(["a.png", "b.png", "c.png", "외 21개"]);
+  const outside = summary("edit_files", { count: 5, examples: ["a.txt", "b.txt", "c.txt"],
+    targets: [folder("garden"), { kind: "outside", path: "/tmp/d.txt" }] });
+  expect(approvalRequestView(card(outside), en).details).toEqual(["/tmp/d.txt", "a.txt", "b.txt", "c.txt", "+1 more"]);
   const command = summary("run_command", { examples: ["npm test"] });
   expect(approvalRequestView(card(command), en).details).toEqual(["npm test"]);
   // Nothing to count without examples: a connector call is not "+1 more".
@@ -133,24 +136,21 @@ test("the badge shows the risk the agent sent: the App never classifies commands
 });
 
 // test-category: security
-test("#277 folder labels and relative paths read as sent; a stray absolute path never reaches the card", () => {
-  const examples = ["shots/a.png", "/Users/mina/Desktop/shots/b.png", "/private/tmp/elsewhere/c.png"];
-  const absolute = normalizeApprovalSummary({ action_kind: "edit_files", count: 24, risk: "medium", examples,
-    targets: [{ kind: "folder", path: "/Users/mina/Desktop/" }, { kind: "file", path: "/Users/mina/Desktop/shots/a.png" },
-      { kind: "file", path: "/private/tmp/elsewhere/c.png" }] });
-  const labelled = normalizeApprovalSummary({ action_kind: "edit_files", count: 24, risk: "medium",
-    examples: ["shots/a.png", "shots/b.png", "c.png"],
-    targets: [{ kind: "folder", path: "Desktop" }, { kind: "file", path: "shots/a.png" }, { kind: "file", path: "c.png" }] });
-  for (const approval of [labelled, absolute]) {
-    expect(approval!.targets.map(({ kind, path }) => ({ kind, path }))).toEqual([
-      { kind: "folder", path: "" }, { kind: "file", path: "shots/a.png" }, { kind: "file", path: "c.png" }]);
-    for (const copy of [en, ko]) {
-      const view = approvalRequestView(card(approval), copy);
-      expect(view.details.slice(0, 3)).toEqual(["shots/a.png", "shots/b.png", "c.png"]);
-      expect(JSON.stringify(view)).not.toMatch(/\/Users\/|\/private\/|\/tmp\//u);
-    }
-    expect(approvalRequestView(card(approval), en).title).toBe("Edit 24 files in 'Desktop'?");
-    expect(approvalRequestView(card(approval), ko).title).toBe("'Desktop'의 파일 24개를 수정할까요?");
+test("outside paths stay absolute and inside paths remain project-relative", () => {
+  const approval = summary("edit_files", {
+    targets: [folder("/home/mina/.butler"), { kind: "outside", path: "/tmp/reports/a.txt" }],
+    examples: ["/tmp/reports/a.txt"],
+  });
+  expect(approval.targets[0].label).toBe("/home/mina/.butler");
+  expect(approval.targets[1].path).toBe("/tmp/reports/a.txt");
+  for (const copy of [en, ko]) expect(approvalRequestView(card(approval), copy).details).toEqual(["/tmp/reports/a.txt"]);
+  for (const [root, inside, outside] of [
+    ["/work/garden", "/work/garden/src/a.txt", "/work/garden-other/a.txt"],
+    ["C:\\Users\\mina\\garden", "C:\\Users\\mina\\garden\\src\\a.txt", "D:\\reports\\a.txt"],
+  ]) {
+    const paths = summary("edit_files", { targets: [folder(root)], examples: [inside, outside] });
+    expect(paths.examples).toEqual([inside.slice(root.length + 1), outside]);
+    expect(paths.targets[0].label).toBe(root);
   }
   for (const kind of ["edit_files", "run_command", "network_command"]) {
     const outside = summary(kind, { targets: [folder("garden"), { kind: "outside", path: "hosts" }], risk: "high" });
@@ -162,13 +162,6 @@ test("#277 folder labels and relative paths read as sent; a stray absolute path 
       expect(view.conversationScope).toBe(copy.covers.other);
     }
   }
-  const windows = normalizeApprovalSummary({ action_kind: "edit_files", examples: ["C:\\Users\\mina\\Downloads\\a.txt"],
-    targets: [{ kind: "folder", path: "C:\\Users\\mina\\Downloads" }] });
-  const windowsView = approvalRequestView(card(windows), en);
-  expect(windowsView).toMatchObject({ title: "Edit 1 file in 'Downloads'?", details: ["a.txt"] });
-  // An absolute folder shows only its last part.
-  const pathLabel = normalizeApprovalSummary({ action_kind: "run_command", targets: [{ kind: "folder", path: "/Users/mina/My Notes/" }] });
-  expect(approvalRequestView(card(pathLabel), en).title).toBe("Run a command in 'My Notes'?");
 });
 
 // test-category: pure-logic
@@ -180,7 +173,7 @@ test("a request without examples shows what it acts on: its target, else the leg
   const connector = summary("use_connector", { targets: [{ kind: "connector", path: "github/create_issue" }] });
   expect(approvalRequestView(card(connector), en).details).toEqual(["github/create_issue"]);
   const schedule = summary("manage_schedule", { targets: [{ kind: "schedule", path: "automation:delete:daily-news" }] });
-  expect(approvalRequestView(card(schedule), en).details).toEqual(["daily-news"]);
+  expect(approvalRequestView(card(schedule), en).details).toEqual([en.scheduleUnavailable]);
   const topic = summary("start_conversation", { targets: [{ kind: "other", path: "Weekly review" }] });
   expect(approvalRequestView(card(topic), en).details).toEqual(["Weekly review"]);
 });

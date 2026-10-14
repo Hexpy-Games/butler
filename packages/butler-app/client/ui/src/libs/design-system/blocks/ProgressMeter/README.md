@@ -28,6 +28,10 @@ Clamp and label domain units in the caller when the source value is not a percen
 ## Wrong use cases
 Do not use it for indeterminate loading. Use an activity/status row.
 
+## Thin
+`thin` is a 2px track on a clear rail with square ends: a page's load line on
+the PageCard's top edge. It implies `bare`; name it with `ariaLabel`.
+
 ## Tags
 progress, meter, status, inspector
 

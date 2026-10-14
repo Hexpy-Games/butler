@@ -1,0 +1,83 @@
+/* A listbox of one-line rows; the popover (density="list") supplies the 4px inset. */
+.list {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+/* Favicon | title + address | badge. Rows are 34px so the list reads as
+   distinct lines without gaps; the highlight is a flat fill. */
+.row {
+  display: grid;
+  min-width: 0;
+  min-height: var(--control-height-lg);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-sm);
+  padding-inline: var(--space-sm);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height-tight);
+  transition: background-color var(--motion-fast) var(--motion-ease-standard);
+}
+
+.row:hover {
+  background: color-mix(in srgb, var(--selection) 60%, transparent);
+}
+
+.row[data-active],
+.row[data-active]:hover {
+  background: var(--selection-strong);
+}
+
+/* The title keeps up to two thirds of the line; the address takes the rest
+   and truncates first. */
+.text {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-sm);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.title {
+  min-width: 0;
+  max-width: 66%;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.address {
+  min-width: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+}
+
+.term {
+  background: transparent;
+  color: inherit;
+  font-weight: var(--font-weight-semibold);
+}
+
+.address .term {
+  color: var(--text-secondary);
+}
+
+.badge {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  color: var(--accent-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row {
+    transition: none;
+  }
+}

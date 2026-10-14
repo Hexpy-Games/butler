@@ -96,7 +96,7 @@ pub(super) async fn prepare(
     let mut states = HashMap::<String, State>::new();
     let mut actual_targets = HashMap::<PathBuf, String>::new();
     for edit in &mut edits {
-        let (text, before, identity) = read_effect_edit_target(&owner.scope, &edit.path)
+        let (text, before, identity) = read_effect_edit_target(&owner.scope(), &edit.path)
             .await
             .map_err(|error| rejected(error.code(), error.message()))?;
         let canonical = actual_targets
@@ -116,7 +116,7 @@ pub(super) async fn prepare(
         );
     }
     let adapter: Arc<dyn EffectAdapter> = Arc::new(WorkspaceFileEditEffectAdapter::new(
-        owner.scope.clone(),
+        owner.scope(),
         owner.registered_edit.clone(),
     ));
     let normalized = if let Some(prior) = &prior {
@@ -200,7 +200,7 @@ fn decode(args: &Value, owner: &GuidedFileEffects) -> Result<(Vec<Edit>, bool), 
             .get("path")
             .and_then(Value::as_str)
             .ok_or_else(|| rejected("edit_file_invalid_path", "edit_file requires path."))?;
-        let path = normalized_workspace_effect_path(&owner.scope, path)
+        let path = normalized_workspace_effect_path(&owner.scope(), path)
             .map_err(|error| rejected(error.code(), error.message()))?;
         let old_text = row
             .get("old_text")

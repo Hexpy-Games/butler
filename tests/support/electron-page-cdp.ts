@@ -5,9 +5,17 @@ export interface ElectronPage {
   evaluate<T>(fn: () => T): Promise<Awaited<T>>;
   expression<T>(expression: string): Promise<T>;
   frameExpression<T>(origin: string, expression: string): Promise<T>;
-  press(key: "Escape" | "Enter"): Promise<void>;
+  press(key: "Escape" | "Enter" | "Home" | "End" | "ArrowRight" | "ArrowDown" | "ArrowUp" | "Shift+Delete"): Promise<void>;
+  insertText(text: string): Promise<void>;
   screenshot(): Promise<Uint8Array>;
   clickText(text: string, scope: string): Promise<void>;
+  clickSelector(selector: string): Promise<void>;
+  movePointer(x: number, y: number): Promise<void>;
+  rightClick(x: number, y: number): Promise<void>;
+  pointerDown(x: number, y: number): Promise<void>;
+  dragPointer(x: number, y: number): Promise<void>;
+  pointerUp(x: number, y: number): Promise<void>;
+  drag(from: {x:number;y:number}, to: {x:number;y:number}): Promise<void>;
   waitForFunction(fn: () => unknown): Promise<void>;
   reload(): Promise<void>;
   diagnostics(): Promise<unknown>;
@@ -95,11 +103,31 @@ async function connect(url: string): Promise<ElectronPage> {
   }
   return {
     expression, waitForFunction, diagnostics,
-    press: async key => {
-      const windowsVirtualKeyCode = key === "Escape" ? 27 : 13;
-      await send("Input.dispatchKeyEvent", { type: "keyDown", key, code: key, windowsVirtualKeyCode });
-      await send("Input.dispatchKeyEvent", { type: "keyUp", key, code: key, windowsVirtualKeyCode });
+    movePointer: async (x,y) => { await send("Input.dispatchMouseEvent", {type:"mouseMoved",x,y,buttons:0}); },
+    rightClick: async (x, y) => {
+      await send("Input.dispatchMouseEvent", { type:"mouseMoved", x, y, buttons:0 });
+      await send("Input.dispatchMouseEvent", { type:"mousePressed", x, y, button:"right", buttons:2, clickCount:1 });
+      await send("Input.dispatchMouseEvent", { type:"mouseReleased", x, y, button:"right", buttons:0, clickCount:1 });
     },
+    pointerDown: async (x,y) => { await send("Input.dispatchMouseEvent", {type:"mousePressed",x,y,button:"left",buttons:1,clickCount:1}); },
+    dragPointer: async (x,y) => { await send("Input.dispatchMouseEvent", {type:"mouseMoved",x,y,button:"left",buttons:1}); },
+    pointerUp: async (x,y) => { await send("Input.dispatchMouseEvent", {type:"mouseReleased",x,y,button:"left",buttons:0,clickCount:1}); },
+    drag: async (from,to) => {
+      await send("Input.dispatchMouseEvent",{type:"mousePressed",...from,button:"left",buttons:1,clickCount:1});
+      for(let step=1;step<=12;step++) {
+        await send("Input.dispatchMouseEvent",{type:"mouseMoved",x:from.x+(to.x-from.x)*step/12,y:from.y+(to.y-from.y)*step/12,button:"left",buttons:1});
+        await new Promise(done=>setTimeout(done,16));
+      }
+      await send("Input.dispatchMouseEvent",{type:"mouseReleased",...to,button:"left",buttons:0,clickCount:1});
+    },
+    press: async key => {
+      const shifted = key === "Shift+Delete";
+      const actual = shifted ? "Delete" : key;
+      const windowsVirtualKeyCode = { Escape: 27, Enter: 13, Home: 36, End: 35, ArrowRight: 39, ArrowDown: 40, ArrowUp: 38, Delete: 46 }[actual];
+      await send("Input.dispatchKeyEvent", { type: "keyDown", key: actual, code: actual, windowsVirtualKeyCode, modifiers: shifted ? 8 : 0 });
+      await send("Input.dispatchKeyEvent", { type: "keyUp", key: actual, code: actual, windowsVirtualKeyCode, modifiers: shifted ? 8 : 0 });
+    },
+    insertText: async text => { await send("Input.insertText", { text }); },
     frameExpression: (origin, text) => {
       const id = [...contexts].find(([, value]) => value === origin)?.[0];
       if (!id) return Promise.reject(new Error("Electron output context not ready"));
@@ -108,6 +136,18 @@ async function connect(url: string): Promise<ElectronPage> {
     screenshot: async () => {
       const result = await send("Page.captureScreenshot", { format:"png" }) as { data:string };
       return Buffer.from(result.data, "base64");
+    },
+    clickSelector: async selector => {
+      const point = await expression<{x:number;y:number}>(`(() => {
+        const node=document.querySelector(${JSON.stringify(selector)});
+        if(!node || node.disabled || node.getAttribute('aria-disabled')==='true')throw new Error('Click target unavailable');
+        node.scrollIntoView({block:'center'});
+        const box=node.getBoundingClientRect(),x=box.x+box.width/2,y=box.y+box.height/2;
+        if(!box.width || !box.height || !node.contains(document.elementFromPoint(x,y)))throw new Error('Click target not hit-testable');
+        return {x,y};
+      })()`);
+      await send("Input.dispatchMouseEvent", {type:"mousePressed",...point,button:"left",clickCount:1});
+      await send("Input.dispatchMouseEvent", {type:"mouseReleased",...point,button:"left",clickCount:1});
     },
     clickText: async (text, scope) => {
       const point = await expression<{ x:number;y:number }>(`(() => {

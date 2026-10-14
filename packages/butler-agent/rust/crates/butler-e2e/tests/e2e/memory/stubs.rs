@@ -221,6 +221,6 @@ pub(super) async fn assert_daily_briefing(
     assert_eq!(identity.len(), 32);
     assert!(identity.bytes().all(|byte| byte.is_ascii_hexdigit()));
     uuid::Uuid::parse_str(identity).unwrap();
-    assert!(s.provider()?.misses().is_empty());
+    assert_eq!(s.provider()?.misses(), [] as [std::string::String; 0]);
     Ok(())
 }

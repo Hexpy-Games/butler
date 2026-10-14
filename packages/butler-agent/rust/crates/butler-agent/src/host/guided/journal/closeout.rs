@@ -16,6 +16,7 @@ pub(super) async fn collect(
 ) -> Result<JournalCloseout, BtccError> {
     let mut artifacts = artifacts::ArtifactCollector::default();
     let mut changed = changed::ChangedCollector::default();
+    let mut answer_blocks = Vec::new();
     let mut after = 0;
     loop {
         let page = journal
@@ -36,6 +37,20 @@ pub(super) async fn collect(
             if row.status == "completed" {
                 artifacts.add(row)?;
                 changed.add(row)?;
+                if row.tool_name == "answer_blocks"
+                    && row
+                        .result
+                        .as_ref()
+                        .is_some_and(|r| r.field("ok").ok().flatten() == Some("true"))
+                {
+                    let mut spec: serde_json::Value = row.arguments.read().map_err(invalid)?;
+                    butler_runtime::capabilities::answer_blocks::normalize(&mut spec);
+                    butler_runtime::capabilities::answer_blocks::accept(
+                        &mut answer_blocks,
+                        &row.call_id,
+                        spec,
+                    );
+                }
             }
             after = row.rowid;
         }
@@ -49,6 +64,7 @@ pub(super) async fn collect(
     Ok(JournalCloseout {
         artifacts: artifacts::with_changed_files(artifacts.finish(), &changed_files, workspace),
         changed_files,
+        answer_blocks,
     })
 }
 
@@ -77,11 +93,32 @@ fn safe_path(value: &str, artifact: bool) -> Option<String> {
     Some(normalized)
 }
 
+/// An answer that pictures an item in its blocks shows that picture once: a
+/// capture of the same item's page (its own or a delegated result's) is not
+/// attached beside it. Captures of other pages and every other file stay.
+pub(super) fn without_pictured(mut closeout: JournalCloseout) -> JournalCloseout {
+    let pictured =
+        butler_runtime::capabilities::answer_blocks::pictured_sources(&closeout.answer_blocks);
+    if pictured.is_empty() {
+        return closeout;
+    }
+    closeout.artifacts.retain(|artifact| {
+        artifact.kind != butler_turn::btcc::ArtifactKind::Image
+            || artifact
+                .source_url
+                .as_deref()
+                .and_then(butler_runtime::capabilities::answer_blocks::page_identity)
+                .is_none_or(|page| !pictured.contains(&page))
+    });
+    closeout
+}
+
 /// Child results precede local edits; the latest file record wins by path.
 pub(super) fn merge_files(mut child: JournalCloseout, own: JournalCloseout) -> JournalCloseout {
     let mut merged = JournalCloseout {
         artifacts: Vec::new(),
         changed_files: Vec::new(),
+        answer_blocks: own.answer_blocks,
     };
     child.changed_files.extend(own.changed_files);
     child.artifacts.extend(own.artifacts);

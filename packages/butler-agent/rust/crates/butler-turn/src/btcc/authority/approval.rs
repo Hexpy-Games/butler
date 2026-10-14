@@ -6,7 +6,9 @@
 
 mod command_risk;
 mod operation;
+mod schedule;
 pub(super) use operation::exact_operation;
+pub(super) use schedule::schedule;
 
 use std::collections::HashSet;
 use std::path::{Component, Path};
@@ -46,6 +48,9 @@ pub struct AuthorityApproval {
     /// Declared observation intent; OS isolation is unavailable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command_access: Option<String>,
+    /// What a reviewed schedule create sets up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schedule: Option<schedule::ApprovalSchedule>,
 }
 
 /// What kind of action waits for the user.
@@ -58,6 +63,8 @@ pub enum ApprovalActionKind {
     RunCommand,
     /// Run a command that reaches the network.
     NetworkCommand,
+    /// A web URL or search query carrying outside content.
+    WebRequest,
     /// Call a tool of a connected MCP server.
     UseConnector,
     /// Create, delete or run schedules.
@@ -70,6 +77,8 @@ pub enum ApprovalActionKind {
     RestartService,
     /// Give the conversation its own Git worktree.
     CreateWorktree,
+    /// Move the conversation's working folder outside its current folder.
+    SwitchFolder,
     /// Any other reviewed operation.
     Other,
 }
@@ -119,8 +128,14 @@ pub(super) struct ApprovalFacts<'a> {
 
 pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
     match facts.capability {
-        "run_command" => command(facts, ApprovalActionKind::RunCommand),
+        "run_command" | "preview_start" => command(facts, ApprovalActionKind::RunCommand),
         "run_command_remote_observation" => command(facts, ApprovalActionKind::NetworkCommand),
+        "web_read" | "web_search" => single(
+            ApprovalActionKind::WebRequest,
+            ApprovalTargetKind::Other,
+            facts.target,
+            ApprovalRisk::High,
+        ),
         "call_mcp_tool" => single(
             ApprovalActionKind::UseConnector,
             ApprovalTargetKind::Connector,
@@ -144,6 +159,22 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
             ApprovalTargetKind::Folder,
             &workspace_label(facts.workspace),
             ApprovalRisk::Low,
+        ),
+        "switch_folder" => single(
+            ApprovalActionKind::SwitchFolder,
+            ApprovalTargetKind::Outside,
+            facts.target.strip_prefix("folder:").unwrap_or(facts.target),
+            ApprovalRisk::Medium,
+        ),
+        "browser_act" | "browser_close" => single(
+            ApprovalActionKind::Other,
+            ApprovalTargetKind::Other,
+            facts.target,
+            if facts.input["always_confirm"] == true {
+                ApprovalRisk::High
+            } else {
+                ApprovalRisk::Medium
+            },
         ),
         capability => by_tool(facts, ToolName::parse(capability)),
     }
@@ -210,7 +241,7 @@ fn file_edits(facts: ApprovalFacts<'_>) -> AuthorityApproval {
                     } else {
                         ApprovalTargetKind::Outside
                     },
-                    path: relative.unwrap_or_else(|| path.to_owned()),
+                    path: relative.unwrap_or_else(|| absolute_target(path, facts.workspace)),
                 });
             }
         }
@@ -228,6 +259,7 @@ fn file_edits(facts: ApprovalFacts<'_>) -> AuthorityApproval {
     targets.extend(files);
     AuthorityApproval {
         operation: None,
+        schedule: None,
         command_access: None,
         action_kind: ApprovalActionKind::EditFiles,
         targets,
@@ -270,6 +302,7 @@ fn file_reads(facts: ApprovalFacts<'_>) -> AuthorityApproval {
         examples_truncated: vec![false; paths.len()],
         examples: paths,
         risk: ApprovalRisk::Low,
+        schedule: None,
         command_access: None,
     }
 }
@@ -296,7 +329,7 @@ fn command(facts: ApprovalFacts<'_>, kind: ApprovalActionKind) -> AuthorityAppro
         }),
         None => ApprovalTarget {
             kind: ApprovalTargetKind::Outside,
-            path: file_name(Path::new(cwd)),
+            path: absolute_target(cwd, facts.workspace),
         },
     };
     let risk = if target.kind == ApprovalTargetKind::Outside {
@@ -310,7 +343,8 @@ fn command(facts: ApprovalFacts<'_>, kind: ApprovalActionKind) -> AuthorityAppro
         .unzip();
     AuthorityApproval {
         operation: None,
-        command_access: (!butler_platform::command_sandbox::READ_ONLY_SANDBOX
+        schedule: None,
+        command_access: (!butler_platform::command_sandbox::approval_free_reads()
             && matches!(
                 facts.input.get("state_effect").and_then(Value::as_str),
                 Some("read_only" | "validation")
@@ -345,6 +379,7 @@ fn single(
 ) -> AuthorityApproval {
     AuthorityApproval {
         operation: None,
+        schedule: None,
         command_access: None,
         action_kind,
         targets: vec![ApprovalTarget {
@@ -368,6 +403,12 @@ fn folder(path: String) -> ApprovalTarget {
 /// The workspace folder's name without control characters, as project
 /// labels are shown (at most 80 characters).
 fn workspace_label(workspace: &str) -> String {
+    if Path::new(workspace)
+        .file_name()
+        .is_some_and(|name| name == ".butler")
+    {
+        return workspace.to_owned();
+    }
     let name: String = Path::new(workspace)
         .file_name()
         .map(|name| name.to_string_lossy())
@@ -409,10 +450,16 @@ fn inside_workspace(path: &str, workspace: &str) -> Option<String> {
     Some(parts.join("/"))
 }
 
-fn file_name(path: &Path) -> String {
-    path.file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default()
+fn absolute_target(path: &str, workspace: &str) -> String {
+    let path = Path::new(path);
+    if path.is_absolute() {
+        path.to_string_lossy().into_owned()
+    } else {
+        Path::new(workspace)
+            .join(path)
+            .to_string_lossy()
+            .into_owned()
+    }
 }
 
 fn saturating_count(count: usize) -> u32 {

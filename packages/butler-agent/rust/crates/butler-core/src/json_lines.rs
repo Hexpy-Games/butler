@@ -23,10 +23,7 @@ pub fn visit_json_lines(path: &Path, mut visit: impl FnMut(&Value)) -> JsonLineV
     let mut line = Vec::new();
     let mut oversize = false;
     let mut outcome = JsonLineVisit::default();
-    loop {
-        let Ok(buffer) = reader.fill_buf() else {
-            break;
-        };
+    while let Ok(buffer) = reader.fill_buf() {
         if buffer.is_empty() {
             if !line.is_empty()
                 && !oversize

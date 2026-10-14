@@ -27,6 +27,13 @@ The scroller opts into the shared scroll-fade primitive (`useScrollEdges` plus
 at a resting edge and none when content fits. Pass `orientation="x"` for a
 horizontal scroller; the fade follows the scrolling axis.
 
+## Focus Rings
+
+The frame keeps `--focus-ring-room` of paint room on every edge (it bleeds past
+the content's inline start, and across on the block edges, and the content pads
+it back), so a row flush with the content edge shows its whole ring and nothing
+moves. Keyboard focus scrolls a control clear of an active fade, ring included.
+
 ## Boundaries
 
 - Do not use it as the primary page layout shell.

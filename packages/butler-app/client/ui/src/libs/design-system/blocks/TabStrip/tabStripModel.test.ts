@@ -20,6 +20,14 @@ test("strip items list chips then the tabs of open groups, in visual order", () 
 });
 
 // test-category: pure-logic
+test("hideChip drops the chip of a lone group of any kind, never beside other groups", () => {
+  const lone = [groups[1]!];
+  expect(stripItems(lone).map((item) => item.key)).toEqual([chipKey("c1"), tabKey("b1"), tabKey("b2")]);
+  expect(stripItems(lone, true).map((item) => item.key)).toEqual([tabKey("b1"), tabKey("b2")]);
+  expect(stripItems(groups, true).map((item) => item.key)).toEqual(stripItems(groups).map((item) => item.key));
+});
+
+// test-category: pure-logic
 test("arrow keys wrap across groups and Home/End jump to the ends", () => {
   const items = stripItems(groups);
   expect(nextFocusKey(items, tabKey("a2"), "ArrowRight")).toBe(chipKey("c1"));

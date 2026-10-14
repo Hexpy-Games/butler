@@ -229,6 +229,10 @@ pub struct ModelRoundTool {
     pub parameters: Map<String, Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub concurrency_safe: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript_visibility: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handler_validates_arguments: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_contract_version: Option<u8>,
 }
@@ -378,7 +382,8 @@ pub enum ToolOutcome {
 pub enum BatchDisposition {
     /// Ask the model for its next round.
     Continue,
-    /// Execution is settled: ask the model for the final report without tools.
+    /// Execution is settled: ask the model for the final report; only its
+    /// answer blocks may still run.
     FinalReport,
     /// Suspend the turn until a worker finishes.
     Wait,

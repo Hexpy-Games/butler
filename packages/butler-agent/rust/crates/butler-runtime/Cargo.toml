@@ -8,6 +8,11 @@ publish.workspace = true
 
 [dependencies]
 semver.workspace = true
+psl = "2.1"
+roxmltree = "0.20"
+# Codex config.toml for the agent import; already in the lock (no new package).
+toml_edit = { version = "0.25", default-features = false, features = ["parse"] }
+zeroize.workspace = true
 butler-core = { path = "../butler-core" }
 butler-platform = { path = "../butler-platform" }
 butler-turn = { path = "../butler-turn" }
@@ -24,6 +29,8 @@ futures-util.workspace = true
 http.workspace = true
 indexmap.workspace = true
 image.workspace = true
+oxideav-avif.workspace = true
+resvg.workspace = true
 webp.workspace = true
 parking_lot.workspace = true
 lopdf.workspace = true

@@ -63,7 +63,7 @@ async fn project(s: &Scenario, name: &str) -> Result<(String, PathBuf), HarnessE
         .await?;
     assert_eq!(created.status, 201, "{}", created.text);
     let id = created.data()["project"]["id"].as_str().unwrap().to_owned();
-    let folder = s.sandbox.data.join("workspaces/projects").join(name);
+    let folder = s.sandbox.home.join("butler-workspace").join(name);
     assert!(folder.is_dir(), "no project folder at {}", folder.display());
     Ok((id, folder))
 }

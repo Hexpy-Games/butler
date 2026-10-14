@@ -143,6 +143,95 @@
   row-gap: var(--space-lg);
 }
 
+/* anchor="top": intro and step cards share one top edge, so a taller or
+   shorter step never moves the card's header. The edge sits at 20% of the
+   window: never under the titlebar (header + 16px on a phone), and at most
+   240px, reached at a 1200px window. */
+.screen[data-anchor="top"] .focusScrollContent {
+  align-content: start;
+  padding-top: clamp(
+    calc(var(--titlebar-height) + var(--space-lg)),
+    calc(var(--adaptive-viewport-block-size) * 0.2),
+    240px
+  );
+}
+
+/* stepKey: the old card (an inert copy) and the new card share one grid
+   cell. The morph surface paints under both (isolated stacking). */
+.stage {
+  position: relative;
+  display: grid;
+  width: 100%;
+  isolation: isolate;
+}
+
+/* While the card morphs, the surface carries the card paint and the stage
+   takes no pointer input. */
+.stage[data-morph] {
+  pointer-events: none;
+}
+
+.stage[data-morph] .content {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.stageGhosts,
+.stageFrame {
+  min-width: 0;
+  grid-area: 1 / 1;
+}
+
+.stageGhosts {
+  display: grid;
+  pointer-events: none;
+}
+
+/* The old card is a static copy: a CSS animation inside it (a step body that
+   entered, a spinner) would start over in the clone. */
+.stage .stageGhosts > * * {
+  animation: none;
+}
+
+.stageFrame {
+  display: grid;
+  width: 100%;
+  align-content: start;
+  justify-items: center;
+  row-gap: var(--space-lg);
+}
+
+.stageExit {
+  animation: setup-wizard-stage-exit var(--motion-exit-base)
+    var(--motion-ease-accelerate) forwards;
+}
+
+.stageEnter {
+  animation: setup-wizard-stage-enter var(--motion-base)
+    var(--motion-ease-decelerate) backwards;
+}
+
+/* intro="rerun": the card appears with a 4px rise; reduced motion shows it
+   at once (the stage never applies this class then). */
+.stageRerun {
+  animation: setup-wizard-stage-enter var(--motion-slow)
+    var(--motion-ease-decelerate) backwards;
+}
+
+@keyframes setup-wizard-stage-exit {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes setup-wizard-stage-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-distance-sm));
+  }
+}
+
 .screen[data-variant="focus"] .content {
   width: 100%;
   max-width: 420px;
@@ -163,6 +252,7 @@
 
   .productTitle {
     font-size: var(--typo-new-chat-title-size-sm);
+    line-height: var(--typo-new-chat-title-line-height-sm);
   }
 
   .focusScrollContent {
@@ -183,5 +273,6 @@
 @media (width > 560px) and (width <= 920px) {
   .productTitle {
     font-size: var(--typo-new-chat-title-size-md);
+    line-height: var(--typo-new-chat-title-line-height-md);
   }
 }

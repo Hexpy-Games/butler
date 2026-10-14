@@ -7,7 +7,7 @@
 )]
 
 #[path = "project_workspace/stub.rs"]
-mod stub;
+pub(super) mod stub;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use butler_e2e::e2e::{
     HarnessError,
@@ -38,6 +38,36 @@ fn selection(s: &Scenario, path: &Path) -> Result<String, HarnessError> {
         "v1.{payload}.{}",
         URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())
     ))
+}
+
+fn project_path(s: &Scenario, project: &Value) -> String {
+    let db = butler_platform::sqlite::open_with_flags(
+        s.sandbox.data.join("app-server/butler-client.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    db.query_row(
+        "SELECT workspace_path FROM projects WHERE id=?1",
+        [project["id"].as_str().unwrap()],
+        |row| row.get(0),
+    )
+    .unwrap()
+}
+
+fn assert_unset_folder(s: &Scenario) {
+    let db = butler_platform::sqlite::open_with_flags(
+        s.sandbox.data.join("app-server/butler-client.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    let count: u64 = db
+        .query_row(
+            "SELECT COUNT(*) FROM app_settings WHERE key='default-project-workspace-root'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 0, "fallback must never become a saved preference");
 }
 
 pub(super) async fn bind_project(s: &mut Scenario, folder: &Path) -> Result<String, HarnessError> {
@@ -108,8 +138,7 @@ async fn result(s: &Scenario, chat: &str, prompt: &str) -> Result<Value, Harness
         .iter()
         .filter_map(|request| request["input"].as_array())
         .flatten()
-        .filter(|item| item["type"] == "function_call_output")
-        .next_back()
+        .rfind(|item| item["type"] == "function_call_output")
         .expect("model receives tool feedback")["output"]
         .as_str()
         .expect("tool result JSON");
@@ -185,7 +214,20 @@ async fn approve_write(
             .filter(|i| i["type"] == "function_call_output")
             .collect::<Vec<_>>()
     );
-    assert_eq!(fs::read_to_string(file)?.trim_end(), expected);
+    let bytes = fs::read(file)?;
+    let content = if let Some(utf16) = bytes.strip_prefix(&[0xff, 0xfe]) {
+        assert_eq!(utf16.len() % 2, 0, "incomplete UTF-16 marker");
+        let units = utf16
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| u16::from_le_bytes(*pair))
+            .collect::<Vec<_>>();
+        String::from_utf16(&units).unwrap()
+    } else {
+        String::from_utf8(bytes).unwrap()
+    };
+    assert_eq!(content.trim_end(), expected);
     Ok(())
 }
 
@@ -272,11 +314,12 @@ async fn settings_long_project_workspace_tools_and_approval() -> Result<(), Harn
 #[tokio::test]
 async fn normal_chat_default_project_folder_refreshes_next_turn() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (url, server) = stub::default_folder_model().await?;
     let setup = Setup::new("DEFAULT-PROJECT-FOLDER")?
         .access(Access::AskAlways)
-        .stub_cassette(butler_e2e::e2e::cassette::Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .stub_cassette(butler_e2e::e2e::cassette::Cassette::load("TOOL-01")?);
+    let default_folder = setup.sandbox.home.join("butler-workspace");
+    let (url, server, requests) = stub::default_folder_model().await?;
+    let setup = setup.env("BUTLER_CODEX_BASE_URL", url);
     let folders = [
         setup.sandbox.workspace.join("first"),
         setup.sandbox.workspace.join("second"),
@@ -285,9 +328,68 @@ async fn normal_chat_default_project_folder_refreshes_next_turn() -> Result<(), 
         fs::create_dir_all(folder)?;
         fs::write(folder.join("a.txt"), "project marker")?;
     }
-    let s = setup.start().await?;
+    let mut s = setup.start().await?;
+    assert!(
+        !default_folder.exists(),
+        "startup must not create the default folder"
+    );
+    let settings = s.gw.get("/settings").await?;
+    assert_eq!(
+        settings.data()["default_project_workspace_label"],
+        "butler-workspace"
+    );
     let (_, unset) = s.turn("general", "Check the unset default folder.").await?;
     assert_eq!(turn_state(&unset), "delivered", "{unset}");
+    stub::assert_default_folder(&requests, &default_folder, 1);
+    assert!(
+        !default_folder.exists(),
+        "prompt and Settings reads must not create it"
+    );
+    let legacy = s.sandbox.data.join("workspaces/projects/Existing");
+    fs::create_dir_all(&legacy)?;
+    fs::write(legacy.join("marker.txt"), "existing marker")?;
+    let imported =
+        s.gw.post(
+            "/projects",
+            json!({"source":"existing_folder",
+        "folder_selection_token":selection(&s, &legacy)?}),
+        )
+        .await?;
+    assert_eq!(imported.status, 201, "{}", imported.text);
+    let existing = imported.data()["project"].clone();
+    let existing_path = project_path(&s, &existing);
+    assert!(
+        !default_folder.exists(),
+        "import must not create the default folder"
+    );
+    let created =
+        s.gw.post(
+            "/projects",
+            json!({"source":"scratch",
+        "display_name":"Default"}),
+        )
+        .await?;
+    assert_eq!(created.status, 201, "{}", created.text);
+    assert_eq!(
+        project_path(&s, &created.data()["project"]),
+        default_folder.join("Default").to_string_lossy().as_ref()
+    );
+    assert!(default_folder.join("Default").is_dir());
+    let session =
+        s.gw.post(
+            "/sessions",
+            json!({"kind":"project",
+        "project_id":created.data()["project"]["id"], "workspace_mode":"local"}),
+        )
+        .await?;
+    assert_eq!(session.status, 201, "{}", session.text);
+    let chat = session.data()["session"]["id"].as_str().unwrap().to_owned();
+    let (_, first) = s.turn(&chat, "Check the unset default folder.").await?;
+    assert_eq!(turn_state(&first), "delivered", "{first}");
+    stub::assert_default_folder(&requests, &default_folder, 2);
+    assert_unset_folder(&s);
+    s.restart().await?;
+    assert_unset_folder(&s);
     let started = Instant::now();
     for (index, folder) in folders.iter().enumerate() {
         s.patch_settings(
@@ -295,6 +397,12 @@ async fn normal_chat_default_project_folder_refreshes_next_turn() -> Result<(), 
             "default folder",
         )
         .await?;
+        s.restart().await?;
+        let settings = s.gw.get("/settings").await?;
+        assert_eq!(
+            settings.data()["default_project_workspace_label"],
+            folder.file_name().unwrap().to_str().unwrap()
+        );
         let id = accepted_turn_id(
             &s.gw
                 .say(
@@ -340,6 +448,31 @@ async fn normal_chat_default_project_folder_refreshes_next_turn() -> Result<(), 
         assert_eq!(output["ok"], true, "{output}");
         assert_eq!(output["files"].as_array().unwrap().len(), 1, "{output}");
         assert!(output["files"][0].to_string().contains("a.txt"), "{output}");
+        let created =
+            s.gw.post(
+                "/projects",
+                json!({"source":"scratch",
+            "display_name":"Configured"}),
+            )
+            .await?;
+        assert_eq!(created.status, 201, "{}", created.text);
+        assert_eq!(
+            project_path(&s, &created.data()["project"]),
+            folder.join("Configured").to_string_lossy().as_ref()
+        );
+        let listed = s.gw.get("/projects").await?;
+        let listed_data = listed.data();
+        let retained = listed_data["projects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|project| project["id"] == existing["id"])
+            .unwrap();
+        assert_eq!(project_path(&s, retained), existing_path);
+        assert_eq!(
+            fs::read_to_string(legacy.join("marker.txt"))?,
+            "existing marker"
+        );
     }
     eprintln!(
         "default project folder: two approved turns in {} ms",

@@ -11,6 +11,11 @@
 //! Each domain keeps one neutral facade with `unix` and `windows`
 //! implementations beside it:
 //!
+//! - [`browser_process`]: a Chromium process tree driven over the DevTools
+//!   pipe.
+//! - [`app_browser`]: the installed App's Electron, found and run without a
+//!   window as a browser host.
+//! - [`process_priority`]: background scheduling priority for long CPU work.
 //! - [`process_control`]: process groups, group signals, exit signals,
 //!   liveness, detached processes and the stop requests a service receives.
 //! - [`instance`]: the instance lock, host facts, process identity and
@@ -31,14 +36,19 @@
 //!   systemd `--user`, Task Scheduler).
 //! - [`network`]: the machine's own interface addresses.
 //! - [`cpu`]: how many performance cores the machine has.
+//! - [`memory`]: how much physical memory the machine has.
 //! - [`desktop`]: whether a browser can open, and opening a link in it.
 //! - [`sqlite`]: file database opens with the host's path-capable VFS.
 //! - [`stdio`]: this process's stdin and stdout as one async stream.
+//! - [`browser_profiles`]: other browsers' profiles and bookmark files, for import.
+//! - [`agent_homes`]: other AI agents' instruction and configuration files, for import.
+//! - [`user_auth`]: asking the user to verify themselves (Touch ID, Windows
+//!   Hello or the account password) before a secret is shown.
 //!
 //! macOS and Linux implement the behavior Butler shipped with. Windows
 //! implements what the service needs to run and stop (process identity,
 //! Job Object containment, host facts); a capability it does not have yet
-//! has a flag (such as [`command_sandbox::READ_ONLY_SANDBOX`]) and reports
+//! has a probe (such as [`command_sandbox::capabilities`]) and reports
 //! `None` or a typed `Unsupported` error instead of pretending to succeed.
 
 // Production code reads slices and strings with checked accessors.
@@ -46,17 +56,26 @@
 // Every public item says what it is for.
 #![deny(missing_docs)]
 
+pub mod account_dirs;
+pub mod agent_homes;
+pub mod app_browser;
 pub mod app_update;
+pub mod browser_process;
+pub mod browser_profiles;
+pub mod browser_transfer;
 pub mod command_launcher;
 pub mod command_sandbox;
 pub mod cpu;
 pub mod desktop;
+pub mod fs_space;
 pub mod install_link;
 pub mod instance;
 pub mod launcher;
+pub mod memory;
 pub mod network;
 pub mod process_control;
 pub mod process_names;
+pub mod process_priority;
 pub mod secrets;
 pub mod secure_fs;
 pub mod service_registration;
@@ -64,9 +83,13 @@ pub mod sqlite;
 pub mod stdio;
 pub mod storage_size;
 pub mod time_zone;
+pub mod tool_paths;
+pub mod user_auth;
 pub mod user_dirs;
 
 #[cfg(windows)]
 mod process_table;
 
 pub mod hook_process;
+
+pub mod preview_process;

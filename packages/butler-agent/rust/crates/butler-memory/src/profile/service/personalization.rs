@@ -244,7 +244,7 @@ fn prune_backups(directory: &Path, prefix: &str) -> super::super::contracts::Pro
                 .flatten()
         })
         .collect::<Vec<_>>();
-    backups.sort_by(|left, right| right.0.cmp(&left.0));
+    backups.sort_by_key(|item| std::cmp::Reverse(item.0));
     for (_, path) in backups.into_iter().skip(20) {
         fs::remove_file(path).map_err(|source| write_error().with_source(source))?;
     }

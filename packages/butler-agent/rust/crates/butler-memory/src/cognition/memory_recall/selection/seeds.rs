@@ -150,30 +150,14 @@ pub(super) fn expand(
     })
 }
 
-/// At most 16 seeds: semantic seeds (fewer when a time range brings temporal
-/// seeds), then new temporal seeds.
+/// Apply the shared semantic/temporal expansion cap, then record raw coverage.
 fn bound_seeds(
     selected: &mut SemanticSelection,
     input: &RecallRequest,
     temporal: &TemporalSelection,
     raw: &RawSourceSelection,
 ) {
-    let semantic_limit = if input.time.is_some() {
-        16usize.saturating_sub(temporal.seeds.len())
-    } else {
-        16
-    };
-    selected.seeds = selected
-        .all_seeds
-        .iter()
-        .take(semantic_limit)
-        .cloned()
-        .collect();
-    for seed in temporal.seeds.iter().take(16 - selected.seeds.len()) {
-        if !selected.seeds.contains(seed) {
-            selected.seeds.push(seed.clone());
-        }
-    }
+    selected.bound_with_temporal(input.time.is_some(), &temporal.seeds);
     if raw.partial {
         selected.coverage_codes.push("lexical_partial".into());
     }

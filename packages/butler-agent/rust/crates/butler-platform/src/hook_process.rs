@@ -56,12 +56,15 @@ fn error(e: impl std::fmt::Display) -> HookProcessError {
     HookProcessError::Process(e.to_string())
 }
 fn prepare(input: &HookProcess) -> Result<std::process::Command, HookProcessError> {
-    let mut command = if let Some(text) = &input.command {
-        let invocation = command_sandbox::login_shell(text, ShellAccess::Full, &input.environment)
-            .map_err(error)?;
-        let mut command = std::process::Command::new(&invocation.program);
-        command_sandbox::add_arguments(&mut command, &invocation);
-        command
+    let invocation = input
+        .command
+        .as_ref()
+        .map(|text| {
+            command_sandbox::login_shell(text, ShellAccess::Full, &input.environment).map_err(error)
+        })
+        .transpose()?;
+    let mut command = if let Some(invocation) = &invocation {
+        std::process::Command::new(&invocation.program)
     } else {
         let args = input.args.as_ref().ok_or_else(|| error("Missing argv"))?;
         let mut command =
@@ -76,6 +79,9 @@ fn prepare(input: &HookProcess) -> Result<std::process::Command, HookProcessErro
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if let Some(invocation) = &invocation {
+        command_sandbox::add_arguments(&mut command, invocation);
+    }
     process_control::hide_console(&mut command);
     process_control::isolate_group(&mut command);
     Ok(command)

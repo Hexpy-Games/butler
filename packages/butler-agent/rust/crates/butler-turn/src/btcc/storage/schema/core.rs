@@ -176,6 +176,8 @@ CREATE TABLE IF NOT EXISTS btcc_model_round_acceptances (
   normalized_response_json TEXT NOT NULL,
   provider_identity_json TEXT,
   created_at TEXT NOT NULL,
+  payload_state INTEGER NOT NULL DEFAULT 0,
+  continuation_delta_json TEXT,
   UNIQUE(turn_id, round_id, route_digest, candidate_index, model_ref)
 );
 
@@ -264,6 +266,8 @@ CREATE TABLE IF NOT EXISTS btcc_guided_tool_calls (
   result_json TEXT,
   result_sha256 TEXT,
   changed_files_json TEXT,
+  read_source TEXT,
+  read_source_session TEXT,
   error_code TEXT,
   delivery_state TEXT CHECK (
     delivery_state IS NULL OR delivery_state IN (

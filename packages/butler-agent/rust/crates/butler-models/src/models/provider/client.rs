@@ -1,4 +1,5 @@
 mod admission;
+mod dispatch;
 
 use std::sync::Arc;
 
@@ -39,6 +40,7 @@ pub struct ModelProvider {
     sizing_cache: Arc<super::sizing::Cache>,
     visual_capability: Option<Arc<dyn ProviderVisualCapabilityPort>>,
     local_streaming: LocalStreaming,
+    stream_usage: super::stream_usage::StreamUsage,
     pub(super) quota: Option<Arc<dyn crate::models::ProviderQuotaSink>>,
 }
 
@@ -62,6 +64,7 @@ impl ModelProvider {
             sizing_cache: Arc::new(super::sizing::Cache::default()),
             visual_capability: None,
             local_streaming: LocalStreaming::default(),
+            stream_usage: super::stream_usage::StreamUsage::default(),
             quota: None,
         }
     }
@@ -86,84 +89,42 @@ impl ModelProvider {
         &self,
         request: ModelRoundRequest<'_>,
         local_stream: bool,
+        include_usage: bool,
     ) -> Result<ModelRoundResult, ModelRoundError> {
         let config = self.round_config(&request).await?;
         let (carrier, mode, api) =
             self.local_streaming
                 .carrier(&config, carrier(&config), local_stream);
-        let (body, continuation) = serialize::body_with_visual(&request, &config, carrier).await?;
-        let prefix = self.prefix_history.prepare(&body, &config)?.attribute(
-            request.usage_attribution,
-            request
-                .messages
-                .first()
-                .map(|message| message.content.as_ref()),
-        );
-        let serialized = prefix.body_json(&body).map_err(|error| {
-            ModelRoundError::Provider(Box::new(diagnostics::network(
-                &config.metadata.provider_id,
-                api,
-                &error.to_string(),
-            )))
-        })?;
-        let provider_cache_identity =
-            serialize::provider_cache_identity(&body, &serialized, &request, &config)?;
-        let serialized = Bytes::from(serialized);
-        let physical_admission =
-            self.admission(&request, &config, &body, serialized.clone(), carrier)?;
-        let serialized_bytes = serialized.len();
-        let http = self.round_request(&config, mode, carrier, serialized);
-        let http = super::route::cache_affinity(http, &config.auth, body);
-        let trace = super::request_trace::RequestTrace::round(self, prefix, &request).await?;
+        let include_usage = include_usage && self.stream_usage.supported(&config);
+        let prepared = self
+            .prepare_http(&request, &config, (carrier, mode, api), include_usage)
+            .await?;
         let watch = StreamWatch::new(request.stream_observer);
-        let observe_request = || {
-            self.observations.request(ProviderObservation {
-                request_bytes: serialized_bytes,
-            });
-        };
-        let response = transport::execute(transport::RequestExecution {
-            request: http,
-            provider: &config.metadata.provider_id,
-            api,
-            policy: config.policy,
-            external: request.cancellation.clone(),
-            mode,
-            stream_observer: Some(&watch),
-            attempts: request
-                .provider_retry_attempts
-                .unwrap_or(config.retry_attempts),
-            admission: request.provider_body_admission,
-            physical_admission: Some(&physical_admission),
-            serialized_bytes,
-            guard_start: if config.metadata.provider_id == "openai" {
-                transport::GuardStart::AfterAdmission
-            } else {
-                transport::GuardStart::BeforeAdmission
-            },
-            request_observer: &observe_request,
-            trace: &trace,
-            clock: self.clock.as_ref(),
-            quota: self.quota.as_deref(),
-        })
-        .await
-        .inspect_err(|error| watch.discard_after(error));
-        let prefix = trace.latest();
-        let response = match response {
+        let sent = self
+            .dispatch(&request, &config, (carrier, mode, api), &watch, prepared)
+            .await;
+        let prefix = (!sent.prepared.prefix.is_null()).then_some(&sent.prepared.prefix);
+        let response = match sent.response {
             Ok(value) => value,
             Err(ModelRoundError::Provider(error))
-                if local_stream && local_stream::falls_back(carrier, &error, &watch) =>
+                if include_usage && super::stream_usage::rejected(carrier, &error) =>
             {
-                if let Some(prefix) = &prefix {
-                    super::round_usage::record(self, &request, None, &config, prefix)?;
-                }
+                self.stream_usage.refuse(&config);
+                self.record_failed_usage(&request, &config, prefix)?;
+                return Box::pin(self.run(request, local_stream, false)).await;
+            }
+            Err(ModelRoundError::Provider(error))
+                if local_stream
+                    && !super::stream_usage::rejected(carrier, &error)
+                    && local_stream::falls_back(carrier, &error, &watch) =>
+            {
+                self.record_failed_usage(&request, &config, prefix)?;
                 return self
                     .run_without_streaming(request, config.endpoint.clone())
                     .await;
             }
             Err(ModelRoundError::Provider(mut error)) => {
-                if let Some(prefix) = &prefix {
-                    super::round_usage::record(self, &request, None, &config, prefix)?;
-                }
+                self.record_failed_usage(&request, &config, prefix)?;
                 if config.metadata.provider_id == "local"
                     && let ProviderAuth::ApiKey(secret) = &config.auth
                 {
@@ -175,23 +136,25 @@ impl ModelProvider {
                 return Err(ModelRoundError::Provider(error));
             }
             Err(error) => {
-                if let Some(prefix) = &prefix {
-                    super::round_usage::record(self, &request, None, &config, prefix)?;
-                }
+                self.record_failed_usage(&request, &config, prefix)?;
                 return Err(error);
             }
         };
-        self.complete(
-            &request,
-            &config,
-            response,
-            PreparedResponse {
-                carrier,
-                continuation,
-                identity: provider_cache_identity,
-                prefix: prefix.unwrap_or(serde_json::Value::Null),
-            },
-        )
+        let result = self.complete(&request, &config, response, sent.prepared)?;
+        watch.complete_tools(&result);
+        Ok(result)
+    }
+
+    fn record_failed_usage(
+        &self,
+        request: &ModelRoundRequest<'_>,
+        config: &super::ProviderRequestConfig,
+        prefix: Option<&serde_json::Value>,
+    ) -> Result<(), ModelRoundError> {
+        if let Some(prefix) = prefix {
+            super::round_usage::record(self, request, None, config, prefix)?;
+        }
+        Ok(())
     }
 
     fn complete(
@@ -201,20 +164,19 @@ impl ModelProvider {
         response: serde_json::Value,
         mut prepared: PreparedResponse,
     ) -> Result<ModelRoundResult, ModelRoundError> {
-        let round_index = request
-            .usage_attribution
-            .and_then(|value| value.round_index)
-            .unwrap_or(0);
         super::prefix_diagnostics::reported_usage(&mut prepared.prefix, &response);
         let mut result = result::decode(
             response,
             &config.metadata.provider_id,
             &config.metadata.model_ref,
             prepared.carrier,
-            round_index,
+            round_index(request),
             request,
             prepared.continuation,
         );
+        if result.usage.is_none() && matches!(prepared.carrier, serialize::Carrier::Chat { .. }) {
+            result.usage = super::stream_usage::estimate(&result, &prepared.prefix, request.model);
+        }
         if let Some(identity) = prepared.identity {
             let continuation = result
                 .continuation
@@ -253,9 +215,15 @@ impl ModelProvider {
     ) -> reqwest::RequestBuilder {
         let mut http = self
             .client
-            .post(config.endpoint.clone())
+            .post(super::route::stream_endpoint(&config.endpoint, mode))
             .header("content-type", "application/json");
-        if matches!(mode, transport::ResponseMode::HostedChatSse) {
+        if matches!(
+            mode,
+            transport::ResponseMode::HostedChatSse
+                | transport::ResponseMode::ResponsesSse
+                | transport::ResponseMode::AnthropicSse
+                | transport::ResponseMode::GeminiSse { .. }
+        ) {
             http = http.header("accept", "text/event-stream");
         }
         authorize(
@@ -310,13 +278,21 @@ impl ModelProvider {
         endpoint: url::Url,
     ) -> RoundFuture<'a> {
         Box::pin(async move {
-            let result = self.run(request, false).await;
+            let result = self.run(request, false, true).await;
             if result.is_ok() {
                 self.local_streaming.refuse(&endpoint);
             }
             result
         })
     }
+}
+
+/// The round's index within its turn, as decoded call ids name it.
+fn round_index(request: &ModelRoundRequest<'_>) -> u32 {
+    request
+        .usage_attribution
+        .and_then(|value| value.round_index)
+        .unwrap_or(0)
 }
 
 pub(super) fn safe_endpoint(endpoint: &url::Url) -> String {
@@ -433,6 +409,6 @@ impl ModelRoundPort for ModelProvider {
             dyn std::future::Future<Output = Result<ModelRoundResult, ModelRoundError>> + Send + 'a,
         >,
     > {
-        Box::pin(self.run(request, true))
+        Box::pin(self.run(request, true, true))
     }
 }

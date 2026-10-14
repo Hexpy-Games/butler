@@ -54,7 +54,6 @@ pub(crate) async fn open_app(path: &Path) -> AppApplication {
         AppApplicationConfig {
             database_path: path.to_owned(),
             butler_data: path.parent().unwrap().to_owned(),
-            project_workspace_root: path.parent().unwrap().to_owned(),
             folder_selection_secret: None,
         },
         fakes::test_dependencies(),

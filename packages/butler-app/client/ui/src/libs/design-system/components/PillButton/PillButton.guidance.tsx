@@ -15,15 +15,30 @@ function ComposerCapsules() {
 }
 // #endregion
 
+// #region recipe: Group chips
+function GroupChips() {
+  return (
+    <Stack align="row" gap="xs" wrap>
+      <PillButton pressed count={14}>All</PillButton>
+      <PillButton count={5}>Travel</PillButton>
+      <PillButton icon={<Plus size="sm" />}>New group</PillButton>
+    </Stack>
+  );
+}
+// #endregion
+
 export const guidance: ShowcaseGuidance = {
   purpose: "A rounded borderless chip for compact, frequent actions around the composer.",
-  whenToUse: ["A capsule above the composer (progress, report)", "A chip-like action with an icon and a short label"],
+  whenToUse: ["A capsule above the composer (progress, report)", "A chip-like action with an icon and a short label", "A row of chips that picks one group (pressed, count, drop)"],
   whenNotToUse: [
     { when: "A form or dialog action", use: "Button" },
     { when: "A composer toolbar control with label and detail", use: "ComposerControl" },
     { when: "A status label that is not clickable", use: "Tag" },
   ],
-  recipes: [{ name: "Composer capsules", description: "Glass capsules float over the conversation; plain ones sit on surfaces.", render: () => <ComposerCapsules /> }],
+  recipes: [
+    { name: "Composer capsules", description: "Glass capsules float over the conversation; plain ones sit on surfaces.", render: () => <ComposerCapsules /> },
+    { name: "Group chips", description: "The chosen chip is pressed; counts are quiet; a drag over a chip shows the drop ring.", render: () => <GroupChips /> },
+  ],
   doDont: [
     {
       do: { caption: "Intrinsic width; stretch only when the row asks for it.", render: () => <PillButton icon={<Plus size="md" />}>Add context</PillButton> },
@@ -31,6 +46,6 @@ export const guidance: ShowcaseGuidance = {
     },
   ],
   content: ["One to three words; long capsule text truncates (task · activity · progress)."],
-  accessibility: ["Give an aria-label that includes the truncated parts when the label is a composite."],
+  accessibility: ["Give an aria-label that includes the truncated parts when the label is a composite.", "A pressed chip sets aria-pressed; the count is part of its name."],
   tokens: ["--radius-pill", "--tinted-glass-bg", "--control-height-sm"],
 };

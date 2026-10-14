@@ -126,6 +126,7 @@ fn supplied_registered_config_normalizes_without_secrets_or_io() {
 // test-category: pure-logic
 #[test]
 fn refreshed_routine_preset_needs_a_cataloged_newer_model_and_falls_back_to_static() {
+    assert_search_planning_presets();
     let catalog = ModelCatalog::new().unwrap();
     let newer_sol = ["gpt-6.2-sol".to_owned()];
     let routine =
@@ -166,4 +167,39 @@ fn refreshed_routine_preset_needs_a_cataloged_newer_model_and_falls_back_to_stat
         catalog.routine_preset("google").unwrap().model,
         "google/gemini-3.8-flash"
     );
+}
+
+fn assert_search_planning_presets() {
+    let snapshot = baseline(&ModelCatalog::new().unwrap());
+    for provider in &snapshot.view().providers {
+        let Some(presets) = &provider.presets else {
+            continue;
+        };
+        let selected = snapshot
+            .search_planning_preset(&provider.provider_id)
+            .unwrap();
+        let expected = presets.planning.as_ref().unwrap_or(&presets.routine);
+        assert_eq!(&selected, expected);
+        let model = snapshot
+            .find_static_model_metadata(Some(&selected.model))
+            .unwrap();
+        assert_eq!(model.provider_id, provider.provider_id);
+        assert!(model.runtime_supported);
+        assert!(model.reasoning_efforts.contains(&selected.effort));
+        let has_light_model = provider
+            .models
+            .iter()
+            .any(|model| model.runtime_supported && model.tier == Some(ModelTier::Efficient));
+        assert_eq!(
+            presets.planning.is_some(),
+            has_light_model,
+            "{}",
+            provider.provider_id
+        );
+        if presets.planning.is_some() {
+            assert_eq!(model.tier, Some(ModelTier::Efficient));
+        }
+    }
+    assert!(snapshot.search_planning_preset("local").is_none());
+    assert!(snapshot.search_planning_preset("custom").is_none());
 }

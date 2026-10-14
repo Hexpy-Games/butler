@@ -117,11 +117,8 @@ impl AppApplication {
                 // A delegated steward result is model input, never a bubble:
                 // it gets no live message event.
                 if !message_visibility::is_delegated_result(db, &message)? {
-                    let message_view = read_model::list_messages(db, &chat, 0.0, 200)?
-                        .messages
-                        .into_iter()
-                        .find(|row| row.id == message)
-                        .ok_or_else(|| {
+                    let message_view =
+                        read_model::exact_message(db, &chat, &message)?.ok_or_else(|| {
                             AppStorageError::new(
                                 AppStorageCode::AcceptedMessageMissing,
                                 "Accepted message was not found.",
@@ -136,10 +133,8 @@ impl AppApplication {
                         &now,
                     )?;
                 }
-                let turn_view = read_model::list_turns(db, &chat, 0.0)?
-                    .turns
-                    .into_iter()
-                    .find(|row| row.id == turn)
+                let turn_view = read_model::exact_turn(db, &turn)?
+                    .filter(|row| row.chat_id == chat)
                     .ok_or_else(|| {
                         AppStorageError::new(
                             AppStorageCode::AcceptedTurnMissing,
@@ -292,12 +287,25 @@ impl AppApplication {
         let code = code.to_owned();
         let now = self.dependencies.identity_clock.now_iso();
         let subscribers = self.subscribers.clone();
+        let facts = self.dependencies.settings_facts.snapshot()?;
+        let ids = super::projection::ProjectionIds {
+            event_id: format!("turn-event-{}", self.dependencies.identity_clock.new_uuid()),
+            message_id: format!("message-{}", self.dependencies.identity_clock.new_uuid()),
+        };
         self.storage.execute(move|db|{
             let tx=db.savepoint().map_err(AppStorageError::sqlite)?;
             let turn_id=tx.query_row("SELECT turn_id FROM session_queued_messages WHERE id=?1 AND state='dispatching' AND claim_id=?2",params![claim.queued_message_id,claim.claim_id],|row|row.get::<_,Option<String>>(0)).optional().map_err(AppStorageError::sqlite)?.flatten();
             let changed=tx.execute("UPDATE session_queued_messages SET state='failed',safe_error_code=?1,claim_id=NULL,claim_owner=NULL,claimed_at=NULL,lease_expires_at=NULL,updated_at=?2 WHERE id=?3 AND chat_id=?4 AND state='dispatching' AND claim_id=?5",params![code,now,claim.queued_message_id,claim.chat_id,claim.claim_id]).map_err(AppStorageError::sqlite)?;
             if changed!=1{return Err(AppStorageError::new(AppStorageCode::QueuedMessageClaimLost,"Queued message claim was lost."))}
-            if let Some(turn)=turn_id.as_deref(){tx.execute("UPDATE turns SET state='failed',safe_status_label='Failed',safe_error_code=?1,retryable=1,cancellable=0,updated_at=?2 WHERE id=?3",params![code,now,turn]).map_err(AppStorageError::sqlite)?;}
+            if let Some(turn)=turn_id.as_deref(){
+                let label = match settings::ui_language(&tx, &facts)? {
+                    crate::gateway::ui_language::UiLanguage::Korean => "버틀러 응답 실패",
+                    crate::gateway::ui_language::UiLanguage::English => "Butler reply failed.",
+                };
+                super::projection::project_failed(&tx, &subscribers, &claim.chat_id, turn,
+                    super::projection::FailedProjection { metadata: &map(&json!({"safeErrorCode":code}))?,
+                        message: &map(&json!({"text":label}))?, retryable: false }, &now, &ids)?;
+            }
             let payload=map(&json!({"session_id":claim.chat_id,"queued_message_id":claim.queued_message_id,"action":"failed","safe_error_code":code}))?;
             events::append(&tx,&subscribers,"session_queue.changed",turn_id.as_deref(),payload,&now)?;
             tx.commit().map_err(AppStorageError::sqlite)?;Ok(())

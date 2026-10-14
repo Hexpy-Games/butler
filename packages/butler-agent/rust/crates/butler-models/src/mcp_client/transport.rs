@@ -42,6 +42,20 @@ impl McpClient {
         timeout: Duration,
         signal: &CancellationToken,
     ) -> Result<Value, McpClientError> {
+        if !server.enabled {
+            return Err(failure(
+                "mcp_server_disabled",
+                "MCP server is disabled.",
+                false,
+            ));
+        }
+        if server.needs_secret() {
+            return Err(failure(
+                "mcp_secret_required",
+                "MCP server needs a key.",
+                false,
+            ));
+        }
         let timeout = timeout.max(MIN_TIMEOUT);
         match server.transport {
             McpTransportKind::Stdio => {

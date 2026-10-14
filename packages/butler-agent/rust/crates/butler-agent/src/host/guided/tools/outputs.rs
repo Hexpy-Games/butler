@@ -17,7 +17,7 @@ pub(super) async fn publish(
     }
     let args = &call.arguments;
     let request = PublishRequest {
-        workspace: owner.binding.workspace_path.clone(),
+        workspace: owner.active_workspace_path(),
         path: args
             .get("path")
             .and_then(Value::as_str)
@@ -130,15 +130,23 @@ async fn check(owner: &GuidedTools, invocation: &GuidedInvocation<'_>, args: &Va
         .json(&args)
         .timeout(std::time::Duration::from_secs(9))
         .send();
-    tokio::select! {
+    let mut result = tokio::select! {
         () = invocation.cancellation.cancelled() => json!({"status":"unknown","reason":"cancelled"}),
         result = request => match result {
             Ok(response) if response.status().is_success() => response.json::<Value>().await.unwrap_or_else(|_| json!({"status":"unknown","reason":"invalid_result"})),
             _ => json!({"status":"unknown","reason":"browser_host_lost"}),
         }
-    }
+    };
+    // Output checks share the bounded retained browser context budget.
+    let _ = super::browser::images::finish(owner, "output_check", &mut result).await;
+    result
 }
-async fn vision(client: &reqwest::Client, base: &str, bearer: &str, model: &str) -> bool {
+pub(super) async fn vision(
+    client: &reqwest::Client,
+    base: &str,
+    bearer: &str,
+    model: &str,
+) -> bool {
     let Ok(response) = client
         .get(format!("{base}/model-catalog"))
         .bearer_auth(bearer)
@@ -170,11 +178,11 @@ async fn vision(client: &reqwest::Client, base: &str, bearer: &str, model: &str)
         })
 }
 
-pub(super) fn restore_budget(
+/// Restores the per-turn output_check counters from the journal on resume.
+pub(super) fn restore_output_checks(
     owner: &GuidedTools,
     records: &[butler_turn::btcc::ToolJournalSignature],
 ) {
-    let mut state = owner.state.lock();
     for record in records {
         let name = if record.tool_name == "tool_call" {
             record.arguments["id"]
@@ -186,6 +194,7 @@ pub(super) fn restore_budget(
             &record.tool_name
         };
         if name == "output_check" || name == "output_publish" {
+            let mut state = owner.state.lock();
             state.output_checks = state.output_checks.saturating_add(1);
             if record.arguments["include_image"] == true
                 || record.arguments["arguments"]["include_image"] == true

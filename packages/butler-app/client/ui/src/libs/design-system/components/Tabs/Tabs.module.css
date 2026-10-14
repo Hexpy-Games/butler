@@ -118,7 +118,7 @@
   font: inherit;
   font-size: var(--font-size-2);
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-label-line-height);
   white-space: nowrap;
   cursor: pointer;
   outline: none;
@@ -135,6 +135,7 @@
 .trigger:focus-visible {
   background: var(--selection);
   color: var(--text-primary);
+  box-shadow: var(--focus-ring);
 }
 
 .trigger[data-state="active"] {
@@ -194,7 +195,7 @@
   min-width: 0;
   color: var(--text-primary);
   font-size: var(--font-size-3);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-body-line-height);
   outline: none;
 }
 

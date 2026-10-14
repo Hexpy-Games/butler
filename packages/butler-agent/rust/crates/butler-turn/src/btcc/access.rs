@@ -21,6 +21,8 @@ pub enum ApprovalExemptAction {
     MemorySave,
     /// Analyzing an image the user attached to the current message.
     AttachedImageAnalysis,
+    /// Filing, tagging or renaming saved Library items (reversible by another call).
+    LibraryOrganize,
 }
 
 impl ApprovalExemptAction {
@@ -32,6 +34,7 @@ impl ApprovalExemptAction {
             }
             ToolName::UpdateExplicitMemory | ToolName::IngestTaskMemory => Some(Self::MemorySave),
             ToolName::AnalyzeAttachedImage => Some(Self::AttachedImageAnalysis),
+            ToolName::LibraryOrganize => Some(Self::LibraryOrganize),
             _ => None,
         }
     }
@@ -76,6 +79,8 @@ pub fn stored_binding_access_mode(binding: &StoredSessionBinding) -> AccessMode 
 }
 
 mod decision;
+mod web;
+pub use web::{web_read_carries_data, web_search_carries_data};
 mod mode;
 pub use decision::*;
 #[cfg(test)]

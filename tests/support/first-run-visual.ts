@@ -5,7 +5,8 @@ import { contrastRatio, flatten, parseColor, type Rgba } from "../../packages/bu
 export async function settleFirstRun(page: Page) {
   await page.waitForFunction(() => {
     const root = document.querySelector("[data-first-run-screen]");
-    return root && root.getAnimations({ subtree: true }).every((animation) =>
+    return root && !root.querySelector('[data-intro="pending"], [data-intro="play"], [data-morph="run"]')
+      && root.getAnimations({ subtree: true }).every((animation) =>
       animation.effect?.getComputedTiming().iterations === Infinity || animation.playState !== "running");
   });
   await page.evaluate(() => document.fonts.ready);
@@ -62,6 +63,7 @@ export async function assertFirstRunContrast(page: Page) {
 }
 
 export async function assertFirstRunLayout(page: Page) {
+  await settleFirstRun(page);
   const card = page.locator('[data-surface="raised-opaque"]');
   if (await card.count() !== 1) throw new Error("Expected one solid content card");
   const valid = await card.evaluate((node) => {

@@ -49,7 +49,6 @@ pub(super) fn select(
         channels,
         SeedOptions {
             max_seeds: 16,
-            time_bounded: input.time.is_some(),
             context_only: !(admitted.graph
                 || admitted.lexical
                 || admitted.vector

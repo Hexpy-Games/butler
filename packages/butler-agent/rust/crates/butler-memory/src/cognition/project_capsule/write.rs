@@ -25,7 +25,7 @@ use super::{
 };
 use crate::cognition::CognitionCode;
 
-const PROJECT_LOCK_STALE_AFTER: Duration = Duration::from_secs(10 * 60);
+const PROJECT_LOCK_STALE_AFTER: Duration = Duration::from_mins(10);
 
 pub(super) struct ProjectCapsuleLock {
     data_root: PathBuf,

@@ -54,6 +54,8 @@ export function NativeViewSlot({
       root, target, hidden, covered, occluders: occluderSelector, viewport,
       onBounds: (bounds) => callbacks.current.onBoundsChange(bounds),
       onOcclusion: (next) => {
+        // The attribute flips in the same frame as the decision; the state renders the still.
+        root.toggleAttribute("data-occluded", next);
         setOccluded(next);
         callbacks.current.onOcclusion?.(next);
       },

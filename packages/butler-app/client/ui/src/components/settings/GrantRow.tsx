@@ -1,3 +1,4 @@
+import { sessionDisplayTitle } from "@/app/sessionTitle.ts";
 import { useState, type ReactNode } from "react";
 import { appCopy } from "@/app/copy.ts";
 import {
@@ -15,7 +16,8 @@ function where(row: GrantedRow): string {
   if (row.scope === "always") return "";
   if (row.scope === "project") return row.project ?? "";
   if (row.places.size > 1) return copy.conversations(row.places.size);
-  return [...row.places.values()][0] || copy.deletedChat;
+  const [id, title] = [...row.places][0] ?? ["", null];
+  return sessionDisplayTitle({ id, title: title || copy.deletedChat });
 }
 
 export function GrantRow({ row, dateFormatter, busy, onRevoke }: {

@@ -290,6 +290,7 @@ fn authority_error(error: AuthorityError) -> GatewayApplicationError {
         "authority_modify_input_missing" | "authority_modify_input_too_large" => {
             (400, error.code(), "Modify instruction is invalid.")
         }
+        "browser_confirm_once_required" => (400, error.code(), "Allow this browser action once."),
         "question_answer_invalid" => (
             400,
             "question_answer_invalid",

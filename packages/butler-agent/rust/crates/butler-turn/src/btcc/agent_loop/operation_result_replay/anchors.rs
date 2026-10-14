@@ -56,9 +56,7 @@ pub fn latest_work_anchor_indices(messages: &[ModelRoundMessage]) -> BTreeSet<us
 }
 
 fn succeeded(content: &str) -> bool {
-    serde_json::from_str::<Value>(content)
-        .ok()
-        .is_some_and(|value| {
-            value.as_object().and_then(|object| object.get("ok")) == Some(&Value::Bool(true))
-        })
+    serde_json::from_str::<Value>(content).is_ok_and(|value| {
+        value.as_object().and_then(|object| object.get("ok")) == Some(&Value::Bool(true))
+    })
 }

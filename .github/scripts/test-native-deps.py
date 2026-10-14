@@ -225,6 +225,18 @@ class NativeDeps(unittest.TestCase):
     def test_unchanged_build_inputs_keep_published_fingerprints(self):
         compatibility = json.loads((SCRIPTS / 'static-ort-key-compat.json').read_text())
         lock = json.loads(recipe.LOCK.read_text())
+        script_dir = self.root / 'scripts'
+        script_dir.mkdir()
+        for name in ('prepare-static-ort.py', 'static_ort_build.py', 'static_ort_targets.py',
+                     'static-ort-key-compat.json'):
+            (script_dir / name).write_bytes((SCRIPTS / name).read_bytes())
+        # Reproduce the published recipe, rather than equating an upgraded
+        # compiler's current inputs with that immutable historical namespace.
+        historical = ('[toolchain]\nchannel = "1.91.0"\nprofile = "minimal"\n'
+                      'components = ["rustfmt", "clippy"]\n')
+        (self.root / 'rust-toolchain.toml').write_text(historical)
+        self.assertEqual(hashlib.sha256(historical.encode()).hexdigest(),
+                         compatibility['build_recipe']['rust-toolchain.toml'])
         for target in recipe.TARGETS:
             projected = recipe.target_lock(lock, target)
             previous = {'lock': projected, 'target': target,
@@ -232,7 +244,9 @@ class NativeDeps(unittest.TestCase):
             if target == 'windows-x64':
                 previous['msvc'] = self.msvc
             expected = hashlib.sha256(json.dumps(previous, sort_keys=True).encode()).hexdigest()
-            self.assertEqual(sdk.key(recipe.SCRIPT, projected, target), expected)
+            self.assertEqual(sdk.key(script_dir / recipe.SCRIPT.name, projected, target), expected)
+            self.assertNotEqual(sdk.key(recipe.SCRIPT, projected, target), expected,
+                                'the Rust upgrade must invalidate the historical SDK key')
 
     # test-category: security
     def test_windows_key_covers_selected_toolset_stl_and_crt(self):

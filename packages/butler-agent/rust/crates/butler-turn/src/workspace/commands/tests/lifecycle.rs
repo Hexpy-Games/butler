@@ -79,11 +79,11 @@ fn print_variable(name: &str) -> String {
     if command_sandbox::POSIX_SHELL {
         format!("printf %s \"${{{name}-unset}}\"")
     } else {
-        format!("echo %{name}%")
+        format!("if ($null -eq $env:{name}) {{ 'unset' }} else {{ $env:{name} }}")
     }
 }
 
-/// Program files `cmd.exe` needs to start, which the allowlist keeps.
+/// System runtime environment needed to start the native shell.
 fn system_environment(input: &mut HashMap<String, String>) {
     for name in process_control::SYSTEM_ENVIRONMENT {
         if let Some(value) = std::env::var_os(name) {
@@ -104,8 +104,8 @@ async fn guided_environment_excludes_non_allowlisted_host_values() {
     let payload = std::fs::read_to_string(output.payload_source.path)
         .unwrap()
         .replace("\r\n", "\n");
-    let expected = format!("\n--- stdout ---\n{}\n", unset_marker("PRIVATE_TOKEN"));
-    assert!(payload.contains(&expected), "{payload}");
+    let expected = "\n--- stdout ---\nunset\n";
+    assert!(payload.contains(expected), "{payload}");
     assert!(!payload.contains("secret"));
     owner.close().await;
 }
@@ -144,15 +144,14 @@ async fn structured_undefined_environment_entry_removes_inherited_value() {
     owner.close().await;
 }
 
-/// A command containing quotes reaches the shell as written: `cmd.exe` does
-/// not undo the `\"` escaping of `Command::arg`.
+/// A command containing nested quotes reaches the native shell intact.
 async fn guided_quotes_reach_the_shell_intact() {
     let fixture = Fixture::new();
     let owner = Commands::new();
     let (command, printed) = if command_sandbox::POSIX_SHELL {
         ("printf %s \"a b\" 'c d'", "a bc d")
     } else {
-        ("echo \"a b\" \"c d\"", "\"a b\" \"c d\"")
+        (r#"[Console]::Write("a b" + 'c d')"#, "a bc d")
     };
     let mut input = fixture.guided(command);
     system_environment(&mut input.host_environment);
@@ -175,7 +174,7 @@ async fn guided_read_only_uses_actual_sandbox_boundary() {
     let mut input = fixture.guided(&format!("printf x > '{}'", target.display()));
     input.access = GuidedAccess::ReadOnlyObservation;
     let result = owner.submit_guided(input).unwrap().await.unwrap();
-    if command_sandbox::READ_ONLY_SANDBOX {
+    if command_sandbox::capabilities().read_only.is_enforced() {
         let output = result.expect("a host with a sandbox runs read-only commands");
         assert_ne!(output.summary.exit_code, Some(0));
     } else {

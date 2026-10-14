@@ -1,4 +1,4 @@
-import { PromptSuggestionList } from "@/butler-ds";
+import { type WallpaperContentRect, PromptSuggestionList } from "@/butler-ds";
 import { getAppLocale } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
@@ -7,7 +7,6 @@ import { useButlerStore } from "@/app/store.ts";
 import type { ButlerMarkTheme } from "@/butler-ds";
 import butlerMarkDarkSrc from "@/assets/butler-mark-white.png";
 import butlerMarkLightSrc from "@/assets/butler-mark.png";
-import { activeChatWallpaper } from "./mainScreenTheme";
 import { activeProjectId } from "./composerProjectContext";
 import {
   fillComposerWithTemplate,
@@ -16,6 +15,7 @@ import {
 } from "./emptyStateSuggestions";
 
 interface EmptyStateProps {
+  onContentRect: (rect: WallpaperContentRect | undefined) => void;
   activeChat: ActiveChatView;
   isSending: boolean;
   markTheme: ButlerMarkTheme;
@@ -30,6 +30,7 @@ function newChatMomentLabel(): string {
 }
 
 export function EmptyState({
+  onContentRect,
   activeChat,
   isSending,
   markTheme,
@@ -73,7 +74,6 @@ export function EmptyState({
   const titleIconSrc =
     markTheme === "dark" ? butlerMarkDarkSrc : butlerMarkLightSrc;
   const momentLabel = briefing?.moment ?? newChatMomentLabel();
-  const wallpaper = activeChatWallpaper(settings, navigation, activeChatId);
 
   return (
     <PromptSuggestionList
@@ -83,10 +83,7 @@ export function EmptyState({
           : activeChat.title
       }
       description={description}
-      wallpaper={wallpaper.source}
-      wallpaperMotion={wallpaper.motion}
-      wallpaperPauseOnBattery={wallpaper.pauseOnBattery}
-      wallpaperTone={markTheme}
+      onContentRect={onContentRect}
       moment={momentLabel}
       titleIcon={<img alt="" draggable={false} src={titleIconSrc} />}
       suggestions={suggestions.map(({ template, ...suggestion }) => ({

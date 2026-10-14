@@ -48,7 +48,11 @@ export interface WallpaperLabel {
   ko: string;
 }
 
-export type WallpaperModuleMotion = "static" | "animated";
+/**
+ * `static`: drawn once per change. `animated`: a capped frame loop. `drift`: a pre-rendered print that crossfades
+ * slowly between keyframes and moves more on events (bundled modules only; needs `density`).
+ */
+export type WallpaperModuleMotion = "static" | "animated" | "drift";
 export type WallpaperImageInput = "none" | "optional" | "required";
 
 
@@ -71,6 +75,12 @@ export interface WallpaperManifest {
    * and reads it as `u_base`.
    */
   overlay?: boolean;
+  /**
+   * Two-pass print module: `density.frag` renders an ink density field at 1
+   * texel per 4 CSS px, which the main pass samples as `u_density` (bundled
+   * modules only). Needs `image: none`; not with `overlay`.
+   */
+  density?: boolean;
   /** Omitted: `default`. */
   pixelRatio?: WallpaperPixelRatioMode;
   /** Omitted: `auto`. */
@@ -111,6 +121,8 @@ export interface WallpaperModule {
   fragment: string;
   /** The `overlay.frag` body of a two-pass module (`manifest.overlay`). */
   overlay?: string;
+  /** The `density.frag` body of a print module (`manifest.density`); `fragment` is then its print pass. */
+  density?: string;
   /** The `defaultImage` file; without it the module draws with no image. */
   defaultImage?: WallpaperDefaultImage;
   /** Clock (seconds) of its still frames (picker thumbnails); default 0. */

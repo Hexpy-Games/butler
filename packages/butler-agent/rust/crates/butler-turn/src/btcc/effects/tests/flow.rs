@@ -134,12 +134,12 @@ async fn cancellation_before_intent_and_after_claim_preserve_source_dispatch_bou
         matches!(service.execute(invocation(work.clone(),Arc::clone(&adapter),cancelled)).await.unwrap(),
         EffectOutcome::Rejected(error) if error.code=="effect_cancelled")
     );
-    assert!(
+    assert_eq!(
         journal
             .list_for_work(work.work_id.clone(), None)
             .await
-            .unwrap()
-            .is_empty()
+            .unwrap(),
+        [] as [crate::btcc::effects::contracts::EffectRecord; 0]
     );
     let marker = CancellationToken::new();
     let service = EffectService::with_fault_points(

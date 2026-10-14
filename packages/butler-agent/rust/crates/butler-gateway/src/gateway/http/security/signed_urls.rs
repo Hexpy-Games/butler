@@ -25,6 +25,7 @@ const FILE_ROUTE_PREFIX: &str = "/message-files/";
 const SIGNED_URL_FIELD: &str = "signed_url";
 /// Bodies without this byte string have nothing to sign.
 const JSON_MARKER: &[u8] = b"\"/message-files/";
+const ASSET_MARKER: &[u8] = b"\"/message-assets/";
 /// Larger JSON bodies are passed through unsigned.
 const MAX_DECORATED_BODY_BYTES: u64 = 32 * 1024 * 1024;
 
@@ -114,9 +115,9 @@ impl ResourceSigner {
 
     /// The re-serialized JSON when it names a message file, otherwise `None`.
     fn decorate_bytes(&self, json: &[u8], now: u64) -> Option<Vec<u8>> {
-        if !json
-            .windows(JSON_MARKER.len())
-            .any(|window| window == JSON_MARKER)
+        if ![JSON_MARKER, ASSET_MARKER, b"\"img_".as_slice()]
+            .iter()
+            .any(|marker| json.windows(marker.len()).any(|window| window == *marker))
         {
             return None;
         }
@@ -136,6 +137,16 @@ impl ResourceSigner {
                 for child in object.values_mut() {
                     self.decorate_value(child, now);
                 }
+                if let Some(id) = object
+                    .get("img")
+                    .and_then(Value::as_str)
+                    .filter(|id| super::super::assets::valid_id(id))
+                {
+                    object.insert(
+                        "image_url".to_owned(),
+                        Value::String(self.sign(&format!("/message-assets/{id}"), now)),
+                    );
+                }
                 let signed = object
                     .get("url")
                     .and_then(Value::as_str)
@@ -150,8 +161,14 @@ impl ResourceSigner {
     }
 }
 
-/// Whether `path` is exactly `/message-files/file-<uuid>`.
+/// Whether `path` names one message file or collected image.
 pub(in crate::gateway::http) fn is_file_path(path: &str) -> bool {
+    if path
+        .strip_prefix("/message-assets/")
+        .is_some_and(super::super::assets::valid_id)
+    {
+        return true;
+    }
     path.strip_prefix(FILE_ROUTE_PREFIX)
         .and_then(|id| id.strip_prefix("file-"))
         .is_some_and(|uuid| {
@@ -168,6 +185,12 @@ fn message(path: &str, expires: u64) -> String {
 
 /// `(b"id: N\ndata: ", json)` of a live-event chunk.
 fn split_event_chunk(chunk: &[u8]) -> Option<(&[u8], &[u8])> {
+    if let Some(json) = chunk
+        .strip_prefix(b"data: ")
+        .and_then(|body| body.strip_suffix(b"\n\n"))
+    {
+        return Some((b"data: ", json));
+    }
     const DATA: &[u8] = b"\ndata: ";
     let body = chunk.strip_suffix(b"\n\n")?;
     let start = body.windows(DATA.len()).position(|window| window == DATA)? + DATA.len();
@@ -247,5 +270,15 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("\"signed_url\""), "{text}");
+        let draft = Bytes::from_static(b"data: {\"type\":\"answer_blocks.draft\",\"payload\":{\"ops\":[{\"op\":\"item\",\"value\":{\"img\":\"img_0123456789\"}}]}}\n\n");
+        let decorated = signer.decorate_event_chunk(draft, 7);
+        let text = String::from_utf8(decorated.to_vec()).unwrap();
+        assert!(text.starts_with("data: {") && !text.contains("id: "));
+        let value: Value =
+            serde_json::from_str(text.trim().strip_prefix("data: ").unwrap()).unwrap();
+        let signed = value["payload"]["ops"][0]["value"]["image_url"]
+            .as_str()
+            .unwrap();
+        assert!(signer.verify("/message-assets/img_0123456789", Some(query(signed)), 7));
     }
 }

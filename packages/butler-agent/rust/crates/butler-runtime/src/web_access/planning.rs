@@ -1,5 +1,7 @@
 mod normalize;
 mod prompt;
+mod settings;
+mod telemetry;
 
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -14,6 +16,7 @@ pub(super) struct PlanningResult {
     pub used_planner: bool,
     pub attempts: usize,
     pub fallback_reason: Option<String>,
+    pub measurements: Vec<Value>,
 }
 
 #[derive(Clone)]
@@ -58,6 +61,7 @@ pub(super) async fn create_plan(
             plan: None,
             used_planner: false,
             attempts: 0,
+            measurements: Vec::new(),
             fallback_reason: Some(if access.planning_disabled() {
                 "test search planning is disabled".into()
             } else {
@@ -70,6 +74,7 @@ pub(super) async fn create_plan(
             plan: None,
             used_planner: false,
             attempts: 0,
+            measurements: Vec::new(),
             fallback_reason: Some("search planning provider is unavailable".into()),
         });
     };
@@ -78,19 +83,60 @@ pub(super) async fn create_plan(
         Some("deep") => "deep",
         _ => "balanced",
     };
-    let timezone = config["user"]["timezone"]
+    let configured_timezone = config["user"]["timezone"]
         .as_str()
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
-        .or(access.environment_value("TZ")?)
-        .unwrap_or_else(|| "UTC".into());
-    let model = config["webSearch"]["model"]
-        .as_str()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned);
+        .or(access.environment_value("TZ")?);
+    let timezone = match configured_timezone {
+        Some(timezone) => timezone,
+        None => tokio::task::spawn_blocking(butler_platform::instance::system_time_zone_name)
+            .await
+            .ok()
+            .and_then(Result::ok)
+            .unwrap_or_else(|| "UTC".into()),
+    };
+    let (model, effort) = settings::resolve(access, &config).await;
     let original = bounded_original_request(turn_context).unwrap_or_else(|| input.query.clone());
+    plan_attempts(
+        provider.as_ref(),
+        PlanRequest {
+            input,
+            original: &original,
+            depth,
+            timezone: &timezone,
+            model: model.as_deref(),
+            effort,
+        },
+        cancellation,
+    )
+    .await
+}
+
+struct PlanRequest<'a> {
+    input: &'a SearchInput,
+    original: &'a str,
+    depth: &'a str,
+    timezone: &'a str,
+    model: Option<&'a str>,
+    effort: butler_models::models::ReasoningEffort,
+}
+
+async fn plan_attempts(
+    provider: &dyn ProviderPromptPort,
+    request: PlanRequest<'_>,
+    cancellation: &CancellationToken,
+) -> Result<PlanningResult, WebAccessError> {
+    let PlanRequest {
+        input,
+        original,
+        depth,
+        timezone,
+        model,
+        effort,
+    } = request;
+    let mut measurements = Vec::new();
     let instructions = prompt::instructions();
     let mut last_error = None;
     for attempt in 1..=2 {
@@ -99,33 +145,30 @@ pub(super) async fn create_plan(
         }
         let body = prompt::build(
             input,
-            &original,
+            original,
             depth,
-            &timezone,
+            timezone,
             attempt,
             last_error.as_deref(),
         );
-        let result = run_planner(
-            provider.as_ref(),
-            &body,
-            instructions,
-            model.as_deref(),
-            cancellation,
-        )
-        .await;
+        let result = run_planner(provider, &body, instructions, model, &effort, cancellation).await;
         match result {
-            Ok(text) => match normalize::parse_and_normalize(&text, depth) {
-                Ok(mut plan) => {
-                    plan.planner_attempts = attempt;
-                    return Ok(PlanningResult {
-                        plan: Some(plan),
-                        used_planner: true,
-                        attempts: attempt,
-                        fallback_reason: None,
-                    });
+            Ok((text, measurement)) => {
+                measurements.push(measurement);
+                match normalize::parse_and_normalize(&text, depth) {
+                    Ok(mut plan) => {
+                        plan.planner_attempts = attempt;
+                        return Ok(PlanningResult {
+                            plan: Some(plan),
+                            used_planner: true,
+                            attempts: attempt,
+                            measurements,
+                            fallback_reason: None,
+                        });
+                    }
+                    Err(error) => last_error = Some(error.to_string()),
                 }
-                Err(error) => last_error = Some(error.to_string()),
-            },
+            }
             Err(error) if error.code() == "cancelled" || cancellation.is_cancelled() => {
                 return Err(WebAccessError::cancelled());
             }
@@ -136,6 +179,7 @@ pub(super) async fn create_plan(
         plan: None,
         used_planner: true,
         attempts: 2,
+        measurements,
         fallback_reason: Some(last_error.unwrap_or_else(|| "planner returned invalid JSON".into())),
     })
 }
@@ -212,14 +256,16 @@ async fn run_planner(
     prompt: &str,
     instructions: &str,
     model: Option<&str>,
+    effort: &butler_models::models::ReasoningEffort,
     cancellation: &CancellationToken,
-) -> Result<String, WebAccessError> {
+) -> Result<(String, Value), WebAccessError> {
+    let observer = telemetry::PlannerObserver::new();
     let result = provider
         .run_prompt(
             ProviderPromptRequest {
                 prompt,
                 model,
-                reasoning_effort: None,
+                reasoning_effort: Some(effort),
                 instructions: Some(instructions),
                 response_format: None,
                 cache_scope: Some("smart-search-planning"),
@@ -228,7 +274,7 @@ async fn run_planner(
                 attachments: &[],
                 butler_data: None,
                 usage_attribution: None,
-                stream_observer: None,
+                stream_observer: Some(&observer),
                 provider_retry_attempts: None,
             },
             ProviderPromptLifecycle::none(),
@@ -243,7 +289,8 @@ async fn run_planner(
                 "Smart search planning request failed.",
             )
         })?;
-    Ok(result.text)
+    let measurement = observer.finish(prompt, instructions, *effort, &result);
+    Ok((result.text, measurement))
 }
 
 pub(super) fn compact(plan: &SearchPlan) -> Value {

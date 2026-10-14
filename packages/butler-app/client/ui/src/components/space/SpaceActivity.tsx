@@ -1,13 +1,16 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy, interfaceProgressLabel } from "@/app/copy.ts";
-import { CircleAlert, IconSlot, Spinner } from "@/butler-ds";
+import { CircleAlert, IconSlot, Spinner, UnreadDot } from "@/butler-ds";
 import { spaceActivity } from "@/app/space/activity";
+import { useSessionUnread } from "@/app/space/unread";
 import type { SessionSummary } from "@/app/types";
 
+/** The row's one trailing mark at rest: attention, then working, then unread. */
 export function SpaceActivity({ session }: { session?: SessionSummary }) {
   useAppLocale();
+  const unread = useSessionUnread(session);
   const activity = spaceActivity(session);
-  if (!activity) return null;
+  if (!activity) return <UnreadDot label={appCopy.space.unread} present={unread} />;
   return (
     <IconSlot
       size="sidebar"

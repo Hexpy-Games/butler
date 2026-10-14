@@ -1,0 +1,56 @@
+/* First-run ink intro (intro spec Concept A rev 5). Until the reveal starts
+   the card is not shown. While it plays the card takes no pointer input (a
+   click or a key skips) and its own paint stays off: the morph surface
+   carries it and fades in around the mark when the mark lands. */
+.stage[data-intro="pending"] {
+  opacity: 0;
+}
+
+.stage[data-intro="play"] {
+  pointer-events: none;
+}
+
+.stage[data-intro="play"] [data-setup-card] {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Without WebGL2 a still ink wash stands in for the print: the three Butler
+   inks as soft fields on the riso paper. */
+.wash {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  background:
+    radial-gradient(
+      60% 50% at 18% 78%,
+      color-mix(in srgb, var(--butler-ink-blue) 22%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      55% 45% at 84% 22%,
+      color-mix(in srgb, var(--butler-ink-pink) 20%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      50% 40% at 70% 90%,
+      color-mix(in srgb, var(--butler-ink-purple) 18%, transparent),
+      transparent 70%
+    ),
+    var(--riso-paper);
+  pointer-events: none;
+}
+
+/* The plain Butler logo in the 64px slot of the welcome card. */
+.mark {
+  display: block;
+  width: 64px;
+  height: 64px;
+  color: var(--butler-mark-ink);
+}
+
+.mark [data-mark-bow] {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}

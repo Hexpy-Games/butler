@@ -8,7 +8,7 @@ use butler_platform::secure_fs::{
     DIRECTORY_SYNC, ExchangeError, FILE_IDS, FileMode, NO_FOLLOW, OWNER_ONLY, PERMISSION_MODES,
     append_private, create_private_dir_all, exchange_directories, file_mode, identity,
     is_owner_only, is_private, no_follow, open_read_no_follow, owner_only, protect_folder,
-    replace_private, restrict_directory, restrict_file, restrict_open_file, same_file,
+    replace_private, restrict_directory, restrict_file, restrict_open_file, same_metadata,
     set_file_mode, symlink, sync_directory,
 };
 
@@ -44,7 +44,7 @@ fn replace_private_swaps_in_a_complete_owner_only_file() {
     assert_eq!(is_owner_only(&after), OWNER_ONLY.then_some(true));
     // A replaced file is a new file, which readers can tell apart.
     if FILE_IDS {
-        assert!(!same_file(&before, &after));
+        assert!(!same_metadata(&before, &after));
     }
 
     let failed = replace_private(
@@ -192,7 +192,7 @@ fn exchange_directories_swaps_both_trees_atomically() {
     fs::write(left.join("name"), "left").unwrap();
     fs::write(right.join("name"), "right").unwrap();
     match exchange_directories(&left, &right) {
-        Err(ExchangeError::Unsupported) => assert!(cfg!(windows)),
+        Err(ExchangeError::Unsupported) if cfg!(windows) => {}
         result => {
             result.unwrap();
             assert_eq!(fs::read_to_string(left.join("name")).unwrap(), "right");
@@ -213,10 +213,11 @@ fn no_follow_opens_refuse_a_symbolic_link() {
     let target = directory.join("target");
     let link = directory.join("link");
     fs::write(&target, "secret").unwrap();
-    if let Err(error) = symlink(&target, &link) {
+    match symlink(&target, &link) {
+        Ok(()) => {}
         // Windows creates links only with Developer Mode or the privilege.
-        assert!(cfg!(windows), "{error}");
-        return;
+        Err(_) if cfg!(windows) => return,
+        Err(error) => panic!("cannot create fixture link: {error}"),
     }
     assert!(open_read_no_follow(&link).is_err());
     assert_eq!(

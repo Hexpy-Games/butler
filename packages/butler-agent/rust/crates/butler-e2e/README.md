@@ -6,6 +6,11 @@ and an OS-assigned gateway port, and drives it only through gateway HTTP, `/even
 `/events/live`, the CLI and the data dir. Model traffic goes to a local
 record/replay provider reached through the product's own base-URL variables.
 
+Configured fixtures also pin `user.timezone` to `UTC` in `butler.config.json`
+alongside the fixture clock. `TZ` alone does not override the platform's host
+timezone on macOS. Timezone scenarios can change the user's setting through
+`PATCH /settings`; empty-installation fixtures retain the product default.
+
 Spec: `SCENARIOS.md`, `PROVIDER_CONFIG.md` (E2E strategy notes).
 
 ## Run
@@ -31,8 +36,10 @@ BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 cargo test -p butler-e2e --test turn
 Use `scripts/isolated-run.sh` for every local test/check command. It preserves Cargo
 caches, creates private HOME and BUTLER_DATA under TMPDIR, and removes both on exit.
 
-The harness builds `butler-agent` itself (`cargo build -p butler-agent`) unless
-`BUTLER_E2E_BIN` names a binary or `BUTLER_E2E_SKIP_BUILD=1`.
+The harness builds `butler-agent` itself with `butler-agent/e2e-fixtures` unless
+`BUTLER_E2E_BIN` names a binary or `BUTLER_E2E_SKIP_BUILD=1`. Prebuilt agents used
+for browser import scenarios also need this feature to inject isolated profile
+and key sources. Never enable it in shipped agents.
 `BUTLER_E2E_WORKSPACE_ROOT` selects the Rust workspace containing resources,
 fixtures and cassettes when running a compiled harness on a different machine.
 
@@ -466,3 +473,23 @@ Final-tree verification passed three consecutive unprofiled release runs at
 1,508,906-byte request and all correctness assertions above. Format, strict
 Clippy, source-check, touched-crate tests, runtime integration tests and the
 12 existing context/token/tool/branch stub E2Es passed on this tree.
+
+## Model-round continuation storage
+
+`acceptance_payload` drives the dev-only `e2e-round-store` companion through a
+loopback Codex stub. The companion imports the actual provider serializer and
+TurnStore; the harness remains separate from product crates. This qualifies
+legacy `statelessInput` carriers even though the App now uses bounded context.
+It checks crash resend bytes, the Full-loader oracle, invalid chains, duplicate
+acceptance eviction and authority checkpoint boundaries.
+
+`acceptance_payload_perf_1` seeds 400 synthetic accepted rounds through the
+public record port. Set `BUTLER_ACCEPTANCE_PERF_EVIDENCE` to a scratch JSON path
+to opt in. The report includes all round payload sizes, retained WAL frames,
+open/reconstruction timing and cold-memo resend timing. It checks the full wire
+input and serialized result before enforcing the three-second replay budget.
+`BUTLER_E2E_ROUND_STORE_BIN` selects a companion built against another revision;
+`BUTLER_ACCEPTANCE_PERF_BASELINE=1` reports that revision's Full format and gate.
+`BUTLER_ACCEPTANCE_PERF_CACHE` labels an externally dropped cache; by default the
+report says warm. Drop the OS cache only when the host permits it.
+All runs must use the isolated runner or fresh `HOME` and `BUTLER_DATA`.

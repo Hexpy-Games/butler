@@ -150,7 +150,7 @@ try {
       await page.screenshot({ path: join(out, `appearance-${width}-${theme}-ko.png`), fullPage: true });
       assert(await toggle.isVisible(), "Motion row missing at viewport");
       const sections = await page.locator('[data-settings-section-id]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-settings-section-id")));
-      assert(JSON.stringify(sections) === JSON.stringify(["theme", "sidebar", "home-screen", "accessibility"]), "Appearance section order changed");
+      assert(JSON.stringify(sections) === JSON.stringify(["theme", "home-screen", "conversation", "message-box", "accessibility"]), "Appearance section order changed");
       await toggle.scrollIntoViewIfNeeded();
       const fits = await toggle.evaluate((node) => {
         const section = node.closest('[data-settings-section-id="accessibility"]')!.getBoundingClientRect();
@@ -164,7 +164,7 @@ try {
   }
   const options = await page.locator('[data-slot="wallpaper-picker"] [role="radiogroup"]').first().getByRole("radio").count();
   const ordered = await page.locator('[data-slot="wallpaper-picker"] [role="radiogroup"]').first().getByRole("radio").evaluateAll((rows) => rows.map((row) => row.closest("[data-option]")?.getAttribute("data-option")));
-  const expected = ["none", "live:butler.bloom", "live:butler.silk", "live:butler.riso-flow", "live:butler.lamina", "live:butler.diatom", "live:butler.dusk", "live:butler.shoreline", "live:butler.photo-clouds", "live:butler.photo-daisies", "live:butler.stipple"];
+  const expected = ["none", "live:butler.riso-print", "live:butler.bloom", "live:butler.silk", "live:butler.riso-flow", "live:butler.lamina", "live:butler.diatom", "live:butler.dusk", "live:butler.shoreline", "live:butler.photo-clouds", "live:butler.photo-daisies", "live:butler.stipple"];
   assert(JSON.stringify(ordered) === JSON.stringify(expected), "Wallpaper count/order changed");
   assert(await toggle.getAttribute("aria-checked") === "true", "Latest motion setting was lost");
   assert(appearanceMs.every((ms) => ms < 150), `Appearance exceeded 150ms: ${appearanceMs}`);

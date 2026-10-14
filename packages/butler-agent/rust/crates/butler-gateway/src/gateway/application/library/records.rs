@@ -1,0 +1,164 @@
+//! Derived Library rows; callers own the enclosing App transaction.
+use super::super::read_model;
+use super::AppStorageError;
+use super::item::{self, sql};
+use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::{Value, json};
+
+/// Import identity uses the Library's existing normalized folder identity.
+pub(in crate::gateway::application) fn bookmark_in_folder(
+    db: &Connection,
+    url: &str,
+    folder: &str,
+) -> Result<bool, AppStorageError> {
+    let group = if folder.trim().is_empty() {
+        None
+    } else {
+        let Some(group) = item::find_group(db, "bookmark", folder)? else {
+            return Ok(false);
+        };
+        Some(group)
+    };
+    db.query_row(
+        "SELECT 1 FROM browser_library WHERE kind='bookmark' AND url=?1 AND group_id IS ?2 LIMIT 1",
+        params![url, group],
+        |_| Ok(()),
+    )
+    .optional()
+    .map(|found| found.is_some())
+    .map_err(sql)
+}
+
+/// Inserts or replaces a saved item and returns it as stored.
+///
+/// Saving an existing item again keeps its group, tags and user title unless
+/// the item names them: `group` (an id or null), `tags`, or for a bookmark
+/// `folder` (a group name; empty or null for none). The saved `title` is the
+/// item's own title: after a rename it becomes the `autoTitle`.
+pub(in crate::gateway::application) fn save(
+    db: &Connection,
+    item: &Value,
+) -> Result<Value, AppStorageError> {
+    let mut item = item.clone();
+    if let Some(time) = item["capturedAt"]
+        .as_str()
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+    {
+        item["capturedAt"] = json!(
+            time.to_utc()
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        );
+    }
+    let id = item["id"].as_str().unwrap_or_default().to_owned();
+    let kind = item["kind"].as_str().unwrap_or_default().to_owned();
+    let prior: Option<(String, Option<String>)> = db
+        .query_row(
+            "SELECT payload,group_id FROM browser_library WHERE id=?1",
+            [&id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()
+        .map_err(sql)?;
+    let (prior_item, prior_group) = match prior {
+        Some((payload, group)) => (Some(item::parse(&payload)?), group),
+        None => (None, None),
+    };
+    keep_user_title(&mut item, prior_item.as_ref());
+    let group = match requested_group(db, &kind, &item)? {
+        Some(group) => group,
+        None => prior_group,
+    };
+    let tags = item["tags"].as_array().map(|tags| {
+        tags.iter()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    });
+    db.execute("INSERT INTO browser_library(id,kind,title,url,payload,created_at,group_id) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id) DO UPDATE SET title=excluded.title,url=excluded.url,payload=excluded.payload,created_at=excluded.created_at,group_id=excluded.group_id",
+        params![id,kind,item["title"].as_str(),item["url"].as_str(),item.to_string(),item["capturedAt"].as_str(),group]).map_err(sql)?;
+    if let Some(tags) = tags {
+        item::replace_tags(db, &id, &tags)?;
+    }
+    item::refresh(db, &id)
+}
+/// After a rename the user's title stays and the saved title is the new `autoTitle`.
+fn keep_user_title(item: &mut Value, prior: Option<&Value>) {
+    let Some(object) = item.as_object_mut() else {
+        return;
+    };
+    object.remove("autoTitle");
+    let Some(prior) = prior.filter(|prior| prior["autoTitle"].is_string()) else {
+        return;
+    };
+    let saved = object.get("title").cloned().unwrap_or(Value::Null);
+    let auto = if saved == prior["title"] {
+        prior["autoTitle"].clone()
+    } else {
+        saved
+    };
+    object.insert("autoTitle".into(), auto);
+    object.insert("title".into(), prior["title"].clone());
+}
+/// The group the item names, if it names one (`Some(None)` for none).
+fn requested_group(
+    db: &Connection,
+    kind: &str,
+    item: &Value,
+) -> Result<Option<Option<String>>, AppStorageError> {
+    if let Some(group) = item.get("group") {
+        let Some(id) = group.as_str() else {
+            return Ok(Some(None));
+        };
+        item::check_group(db, id, kind)?;
+        return Ok(Some(Some(id.to_owned())));
+    }
+    if kind != "bookmark" {
+        return Ok(None);
+    }
+    let Some(folder) = item.get("folder") else {
+        return Ok(None);
+    };
+    let name = folder.as_str().map(str::trim).unwrap_or_default();
+    if name.is_empty() {
+        return Ok(Some(None));
+    }
+    Ok(Some(Some(item::ensure_group(db, kind, name)?.0)))
+}
+pub(in crate::gateway::application) fn document(
+    db: &Connection,
+    id: &str,
+) -> Result<(), AppStorageError> {
+    let row=db.query_row("SELECT id,owner_session_id,message_id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at FROM message_files WHERE id=?1",[id],|r|Ok(super::super::AppMessageFileSnapshot {
+        id:r.get(0)?,owner_session_id:r.get(1)?,message_id:r.get(2)?,kind:r.get(3)?,mime_type:r.get(4)?,safe_name:r.get(5)?,size_bytes:r.get(6)?,sha256:r.get(7)?,storage_name:r.get(8)?,created_at:r.get(9)?
+    })).map_err(AppStorageError::sqlite)?;
+    let file = read_model::message_file_ref(&row)?;
+    save(
+        db,
+        &json!({"id":format!("document-{}",row.id),"kind":"document","title":row.safe_name,"url":file.url,"file":file,"session":row.owner_session_id,"capturedAt":row.created_at}),
+    )
+    .map(drop)
+}
+pub(in crate::gateway::application) fn output(o: &butler_runtime::outputs::OutputSummary) -> Value {
+    json!({"id":format!("output-{}",o.output_id),"output":o.output_id,"kind":"output","title":o.title,"url":format!("/outputs/{}/view",o.output_id),"session":o.session_id,"capturedAt":o.created_at})
+}
+/// Migration v2: one bookmark group per distinct folder name (case-insensitive),
+/// created in name order so positions follow the names. Rows join them when
+/// the migration saves them again.
+pub(in crate::gateway::application) fn create_folder_groups(
+    db: &Connection,
+) -> Result<(), AppStorageError> {
+    let mut statement = db
+        .prepare("SELECT DISTINCT trim(json_extract(payload,'$.folder')) FROM browser_library WHERE kind='bookmark' AND json_type(payload,'$.folder')='text'")
+        .map_err(sql)?;
+    let mut names = statement
+        .query_map([], |r| r.get::<_, String>(0))
+        .map_err(sql)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql)?;
+    names.retain(|name| !name.is_empty());
+    names.sort_by_key(|name| (item::key(name), name.clone()));
+    for name in names {
+        item::ensure_group(db, "bookmark", &name)?;
+    }
+    Ok(())
+}

@@ -36,7 +36,15 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Scaling the row under the pointer makes the zone flicker.", render: () => <Stack><NavRow label="Growing target (avoid)" /></Stack> },
     },
   ],
-  content: ["Hints are verbs: Group together, Move to space root."],
-  accessibility: ["Offer keyboard alternatives (row menus: Move to…) for every drag action."],
+  content: [
+    "Hints are verbs: Group together, Move to space root.",
+    "A row that opens a screen (서랍) passes onDwell: a drag that rests 600 ms opens it and carries on, so picks reach a group tile there.",
+    "Outside payloads (picked elements, a browser tab) use drop=\"outside\" with a label of what happens (Add to ‘Trip’, Save to Library) or, with invalid, why not (Can't drop here). NavDropScope payload=\"outside\" keeps every row in place: no slot, no reorder, no expand.",
+  ],
+  accessibility: [
+    "Offer keyboard alternatives (row menus: Move to…) for every drag action.",
+    "The outside drop label is a polite status; useNavDropAutoScroll scrolls within 40px of the list edges and NavDropScope autoScroll shows the band.",
+  ],
   tokens: ["--z-drop-indicator", "--z-drop-hint", "--drop-clip-margin", "--motion-base", "--accent"],
+  internalExports: { useDropDwell: "The dwell timer behind onDwell, for other drop targets (group tiles, chips); behavior only, nothing to show." },
 };

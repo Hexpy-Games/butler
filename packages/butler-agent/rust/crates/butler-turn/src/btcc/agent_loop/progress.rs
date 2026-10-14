@@ -54,7 +54,7 @@ pub(super) async fn operation(
     operation_call_id: Option<&str>,
 ) {
     let call_id = &call.id;
-    let tool_name = &call.name;
+    let tool_name = operation_tool_name(call);
     let mut event = RuntimeTurnEventInput::new(status.event_kind());
     let mut payload = butler_core::json::json_object!({
         "safeLabel": tool_name,
@@ -68,7 +68,10 @@ pub(super) async fn operation(
     if let Some(target) = operation_target(call) {
         payload.insert("inputLabel".into(), Value::String(target));
     }
-    let encoded = output.map(butler_core::json::JsonDocument::as_str);
+    let transcript = output.and_then(|output| transcript_body(tool_name, output.as_str()));
+    let encoded = transcript
+        .as_deref()
+        .or_else(|| output.map(butler_core::json::JsonDocument::as_str));
     let result_ref = encoded.map(|body| {
         let sha256 = super::super::identity::digest(body);
         let pending = output
@@ -95,6 +98,19 @@ pub(super) async fn operation(
     {
         emit_output_chunks(progress, call_id, &result_id, &result_sha256, body).await;
     }
+}
+
+/// A browser result whose screenshot was kept as a message file reaches the
+/// transcript naming that file (`image.file`) instead of repeating its base64.
+fn transcript_body(tool_name: &str, body: &str) -> Option<String> {
+    if !tool_name.starts_with("browser_") || !body.contains("\"file\"") {
+        return None;
+    }
+    let mut value: Value = serde_json::from_str(body).ok()?;
+    let image = value.get_mut("image")?.as_object_mut()?;
+    image.get("file")?;
+    image.remove("data")?;
+    Some(value.to_string())
 }
 
 async fn emit_output_chunks(
@@ -160,7 +176,7 @@ impl Status {
 fn operation_target(call: &super::contracts::ModelRoundToolCall) -> Option<String> {
     let keys: &[&str] = match call.name.as_str() {
         "run_command" => &["command"],
-        "write_file" | "edit_file" | "read_file" => &["path"],
+        "write_file" | "edit_file" | "read_file" | "switch_folder" => &["path"],
         "list_files" | "grep_files" => &["path", "directory", "root"],
         _ => return None,
     };
@@ -182,6 +198,37 @@ fn operation_target(call: &super::contracts::ModelRoundToolCall) -> Option<Strin
                 .filter(|value| !value.is_empty())
         })
         .or_else(|| (call.name == "list_files").then(|| ".".into()))
+}
+
+fn operation_tool_name(call: &super::contracts::ModelRoundToolCall) -> &str {
+    if call.name == "tool_call"
+        && let Some(name) = call
+            .arguments
+            .get("id")
+            .and_then(Value::as_str)
+            .and_then(|id| id.strip_prefix("native:"))
+        && matches!(
+            name,
+            "browser_open"
+                | "browser_observe"
+                | "browser_act"
+                | "browser_tabs"
+                | "browser_selection"
+                | "browser_screenshot"
+                | "browser_close"
+                | "browser_wait_for_user"
+                | "browser_sign_in"
+                | "browser_pay_fill"
+                | "browser_autofill_fill"
+                | "browser_history_search"
+                | "library_search"
+                | "library_organize"
+        )
+    {
+        name
+    } else {
+        &call.name
+    }
 }
 
 /// Publish pending rows only after persistence, or fail them when parking fails.

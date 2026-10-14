@@ -1,7 +1,10 @@
 //! Durable application service behind the native App HTTP facade.
 
+mod assets;
+pub use assets::AppAssetCommand;
 mod admission;
 mod admission_identity;
+mod answer_drafts;
 mod authority_permissions;
 mod automations;
 mod briefing_snapshot;
@@ -13,6 +16,7 @@ mod events;
 use crate::gateway::shutdown_trace::measure as measure_shutdown;
 
 use errors::app_error;
+mod browser_stills;
 mod devices;
 mod event_reads;
 #[cfg(debug_assertions)]
@@ -24,6 +28,10 @@ mod gateway_session_controls_impl;
 mod handle;
 mod hooks;
 mod internal_continuation;
+mod library;
+pub use library::{AppLibraryChange, AppLibraryCommand, AppLibraryQuery};
+mod signins;
+pub use signins::*;
 mod mcp_servers;
 mod memory_management;
 mod message_files;
@@ -39,6 +47,7 @@ pub use memory_management::{AppMemoryCommand, AppMemoryPort, MemoryEventSink};
 mod outputs;
 mod plan_decisions;
 mod progress_view;
+pub mod project_folder;
 mod project_sources;
 mod projection;
 mod projects;
@@ -58,22 +67,23 @@ mod session_branches;
 mod session_controls;
 mod session_queue_mutations;
 mod session_relocation;
+mod session_titles;
 mod session_views;
 mod sessions;
-mod settings;
+pub(super) mod settings;
 mod setup;
+mod skill_settings;
 mod subsession_events;
 mod task_graphs;
 pub use task_graphs::{
     project_task_graphs, task_graph_label, task_graph_model_label, task_graph_response,
 };
-mod turn_dispatch;
-pub use settings::{diagnostics_enabled_readonly, stored_ui_language_readonly};
 mod shell;
 mod space;
-mod storage;
+pub(super) mod storage;
 mod transcript_export;
 mod turn_cancellation;
+mod turn_dispatch;
 mod updates;
 mod user_work;
 mod wallpapers;
@@ -145,8 +155,8 @@ pub use session_controls::{AppSessionControlUpdate, AppSessionControlsView};
 use session_queue_mutations::SessionQueueMutationOwner;
 pub use sessions::{
     AppChatKind, AppChatSummary, AppCreateSessionInput, AppCreateSessionRequest,
-    AppCreateSessionResult, AppSessionActionResult, AppSessionBranchQuery, AppSessionSummary,
-    AppSessionUpdate, AppSessionWorkProgress, AppSessionWorkspaceProvisioner,
+    AppCreateSessionResult, AppSessionActionResult, AppSessionBranchQuery, AppSessionReadResult,
+    AppSessionSummary, AppSessionUpdate, AppSessionWorkProgress, AppSessionWorkspaceProvisioner,
     AppSessionWorkspaceSnapshot, AppWorkProgress, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkspaceMode,
 };
@@ -196,26 +206,22 @@ pub struct AppApplication {
     session_creation: sessions::SessionCreationOwner,
     project_creation: projects::ProjectCreationOwner,
     session_branches: session_branches::SessionBranchOwner,
+    session_titles: session_titles::SessionTitleOwner,
     space_mutations: Arc<space::SpaceMutationOwner>,
     transcript_exports: TranscriptExportOwner,
     project_dashboard_briefing: projects::ProjectDashboardBriefingOwner,
     queue_owner: String,
     butler_data: PathBuf,
     wallpapers: AppWallpaperFiles,
+    asset_cache: assets::AssetCache,
     settings_update_lock: Arc<tokio::sync::Mutex<()>>,
     plan_decision_locks: PlanDecisionLocks,
     setup_readiness: setup::ReadinessRelay,
     quota_events: Arc<quota_events::QuotaEventForwarder>,
 }
 
-async fn initial_project_root(
-    storage: &AppStorage,
-    fallback: PathBuf,
-) -> Result<PathBuf, GatewayApplicationError> {
-    match storage
-        .execute(move |db| projects::initial_root(db, &fallback))
-        .await
-    {
+async fn initial_project_root(storage: &AppStorage) -> Result<PathBuf, GatewayApplicationError> {
+    match storage.read(projects::effective_root).await {
         Ok(root) => Ok(root),
         Err(error) => {
             let _ = storage.close().await;
@@ -224,21 +230,27 @@ async fn initial_project_root(
     }
 }
 
+async fn open_storage(
+    config: &AppApplicationConfig,
+    dependencies: &AppApplicationDependencies,
+) -> Result<AppStorage, GatewayApplicationError> {
+    AppStorage::open(
+        config.database_path.clone(),
+        Some(config.butler_data.clone()),
+        dependencies.identity_clock.now_iso(),
+    )
+    .await
+    .map_err(app_error)
+}
+
 impl AppApplication {
     pub async fn open(
         config: AppApplicationConfig,
         dependencies: AppApplicationDependencies,
     ) -> Result<Self, GatewayApplicationError> {
-        let storage = AppStorage::open(
-            config.database_path,
-            Some(config.butler_data.clone()),
-            dependencies.identity_clock.now_iso(),
-        )
-        .await
-        .map_err(app_error)?;
+        let storage = open_storage(&config, &dependencies).await?;
         let queue_owner = queue_owner_id(dependencies.identity_clock.as_ref());
-        let project_root =
-            initial_project_root(&storage, config.project_workspace_root.clone()).await?;
+        let project_root = initial_project_root(&storage).await?;
         let dependencies = Arc::new(dependencies);
         let subscribers = EventSubscribers::default();
         let retention_cursor = latest_event_cursor(&storage).await?;
@@ -291,11 +303,13 @@ impl AppApplication {
                 config.folder_selection_secret,
             ),
             session_branches: session_branches::SessionBranchOwner::new(),
+            session_titles: session_titles::SessionTitleOwner::default(),
             space_mutations: Arc::new(space::SpaceMutationOwner::new()),
             transcript_exports: TranscriptExportOwner::new(),
             project_dashboard_briefing: projects::ProjectDashboardBriefingOwner::new(),
             queue_owner,
             wallpapers: AppWallpaperFiles::new(&config.butler_data),
+            asset_cache: assets::AssetCache::default(),
             butler_data: config.butler_data,
             settings_update_lock: Arc::new(tokio::sync::Mutex::new(())),
             plan_decision_locks: PlanDecisionLocks::default(),
@@ -377,6 +391,7 @@ impl AppApplication {
 
     pub async fn close(&self) -> Result<(), GatewayApplicationError> {
         self.cancel_updates();
+        self.session_titles.close().await;
         measure_shutdown(
             "app_project_dashboard_briefing_join",
             self.project_dashboard_briefing.close(),

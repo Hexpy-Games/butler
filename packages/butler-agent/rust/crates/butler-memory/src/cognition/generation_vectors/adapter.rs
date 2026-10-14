@@ -47,6 +47,13 @@ impl GenerationVectorAdapter {
         request: &RecallRequest,
         deadline: i64,
     ) -> CognitionResult<RecallVectorMatches> {
+        // Without the memory model the text lanes (graph, lexical, episode FTS) serve recall.
+        if !self.embedding.enabled() {
+            return Err(CognitionError::new(
+                CognitionCode::VectorUnavailable,
+                "embedding_disabled",
+            ));
+        }
         let expected = generation.embedding.as_ref();
         if let Some(expected) = expected {
             compatibility::preflight(expected)?;
@@ -107,6 +114,10 @@ impl GenerationVectorAdapter {
 }
 
 impl RecallVectorPort for GenerationVectorAdapter {
+    fn enabled(&self) -> bool {
+        self.embedding.enabled()
+    }
+
     fn warm<'a>(
         &'a self,
         generation: &'a MemoryGenerationHandle,

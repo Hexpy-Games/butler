@@ -12,10 +12,17 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 const SEARCH_ENDPOINT: &str = "https://html.duckduckgo.com/html/";
 
 mod fetch;
+mod registry;
 mod session;
 
 use crate::web_access::WebAccessCode;
 pub(crate) use fetch::{DirectPageRoute, PageRoute};
+pub use registry::{LivePage, SearchResultRef};
+pub(crate) use registry::{page_key, tab_key};
+
+/// Page reader modes. `browser` (the default) reads in Butler's browser: the
+/// App, its hidden host, else the headless browser; `lightweight` fetches.
+pub(crate) const READER_BACKENDS: [&str; 6] = butler_core::configuration::WEB_READER_BACKENDS;
 
 #[derive(Clone)]
 pub struct WebAccess {
@@ -25,6 +32,9 @@ pub struct WebAccess {
 struct WebAccessInner {
     data_root: PathBuf,
     client: Client,
+    /// `web_read` page fetches: behind the browser egress guard.
+    page_client: Client,
+    fixtures: crate::browser::LoopbackFixtures,
     search_endpoint: Url,
     configuration: Option<Arc<butler_models::models::ModelConfiguration>>,
     prompt: Option<Arc<dyn butler_models::models::ProviderPromptPort>>,
@@ -47,6 +57,7 @@ struct WebSessionState {
     original_request: String,
     page_cache: HashMap<String, TemporarySpool>,
     observation_cache: HashMap<String, Value>,
+    registry: registry::Registry,
 }
 
 impl WebAccess {
@@ -63,7 +74,10 @@ impl WebAccess {
             Some(prompt),
             metrics,
             false,
-            Arc::new(DirectPageRoute),
+            (
+                Arc::new(DirectPageRoute),
+                crate::browser::LoopbackFixtures::none(),
+            ),
         )
     }
 
@@ -79,7 +93,10 @@ impl WebAccess {
             None,
             metrics,
             false,
-            Arc::new(DirectPageRoute),
+            (
+                Arc::new(DirectPageRoute),
+                crate::browser::LoopbackFixtures::none(),
+            ),
         )
     }
 
@@ -96,7 +113,10 @@ impl WebAccess {
             None,
             metrics,
             true,
-            Arc::new(DirectPageRoute),
+            (
+                Arc::new(DirectPageRoute),
+                crate::browser::LoopbackFixtures::none(),
+            ),
         )
     }
 
@@ -107,7 +127,7 @@ impl WebAccess {
         prompt: Option<Arc<dyn butler_models::models::ProviderPromptPort>>,
         metrics: Arc<crate::operations::WebSearchMetrics>,
         planning_disabled: bool,
-        page_route: Arc<dyn PageRoute>,
+        (page_route, fixtures): (Arc<dyn PageRoute>, crate::browser::LoopbackFixtures),
     ) -> Result<Self, WebAccessError> {
         let search_endpoint = Url::parse(endpoint).map_err(|source| {
             WebAccessError::new(
@@ -136,10 +156,26 @@ impl WebAccess {
                 )
                 .with_source(source)
             })?;
+        let page_client = crate::browser::guarded_client(
+            Client::builder()
+                .timeout(REQUEST_TIMEOUT)
+                .user_agent("butler-native-web-access/0.1"),
+            fixtures.clone(),
+        )
+        .build()
+        .map_err(|source| {
+            WebAccessError::new(
+                WebAccessCode::WebAccessUnavailable,
+                "Public web client is unavailable.",
+            )
+            .with_source(source)
+        })?;
         Ok(Self {
             inner: Arc::new(WebAccessInner {
                 data_root,
                 client,
+                page_client,
+                fixtures,
                 search_endpoint,
                 configuration,
                 prompt,
@@ -211,6 +247,11 @@ impl WebAccess {
         self.inner.planning_disabled
     }
 
+    /// Whether `web_read` may fetch `url` (the browser egress guard).
+    pub(super) fn page_permitted(&self, url: &Url) -> bool {
+        crate::browser::fetch_permitted(url, &self.inner.fixtures)
+    }
+
     pub(super) fn client(&self) -> &Client {
         &self.inner.client
     }
@@ -236,20 +277,15 @@ impl WebAccess {
         &self,
         explicit: Option<&str>,
     ) -> Result<String, WebAccessError> {
+        use butler_core::configuration::{normalize_web_reader, web_reader_backend};
         if let Some(value) = explicit {
-            return Ok(normalize_reader_backend(value));
+            return Ok(normalize_web_reader(value).into());
         }
         if let Some(value) = self.environment_value("BUTLER_WEB_READER_BACKEND")? {
-            return Ok(normalize_reader_backend(&value));
+            return Ok(normalize_web_reader(&value).into());
         }
         let config = self.config()?;
-        Ok(normalize_reader_backend(
-            config["webSearch"]["readerBackend"]
-                .as_str()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .unwrap_or("lightweight"),
-        ))
+        Ok(web_reader_backend(&config["webSearch"]).into())
     }
 
     pub fn search_status(&self) -> Result<Value, WebAccessError> {
@@ -276,12 +312,4 @@ fn nonempty_env(name: &str) -> Option<String> {
         .ok()
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
-}
-
-fn normalize_reader_backend(value: &str) -> String {
-    let normalized = value.trim().to_ascii_lowercase();
-    match normalized.as_str() {
-        "auto" | "lightpanda" | "lightweight" | "jina-hosted" | "disabled" => normalized,
-        _ => "lightweight".into(),
-    }
 }

@@ -12,6 +12,8 @@ use std::time::Duration;
 
 #[path = "support/paused_transcript.rs"]
 mod paused_transcript;
+#[path = "turn_continuation/text_arguments.rs"]
+mod text_arguments;
 
 pub(super) async fn setup(
     mode: stub::Mode,
@@ -30,7 +32,9 @@ pub(super) async fn setup(
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url);
     *script.file_root.lock().unwrap() = setup.sandbox.data.display().to_string();
-    Ok((setup.start().await?, script, server))
+    let s = setup.start().await?;
+    butler_e2e::e2e::fixtures::default_project_folder(&s).await?;
+    Ok((s, script, server))
 }
 
 pub(super) use stub::Mode;
@@ -296,6 +300,7 @@ mod stub {
         Question,
         Todo,
         Prose,
+        JsonProse,
         ApprovalRecovery,
         FinalTools,
         FinalEmptyTools,
@@ -365,6 +370,9 @@ mod stub {
                 Mode::Prose if step < 5 => {
                     message("<tool_call>call: read_file {requests:[{path:\"source\"}]}</tool_call>")
                 }
+                Mode::JsonProse if step == 0 => {
+                    message("The total follows.\n\n:::read_file\n{\"requests\":[{\"path\":\"source\"}]}\n:::")
+                }
                 Mode::ApprovalRecovery if step == 1 => command(true),
                 Mode::Empty | Mode::ApprovalRecovery if step < 5 => message(""),
                 Mode::Reasoning if step == 0 => {
@@ -385,6 +393,7 @@ mod stub {
                 | Mode::Empty
                 | Mode::ApprovalRecovery
                 | Mode::Prose
+                | Mode::JsonProse
                 | Mode::Approval
                 | Mode::Question
                 | Mode::Reasoning

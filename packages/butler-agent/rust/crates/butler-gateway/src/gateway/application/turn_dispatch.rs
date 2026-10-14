@@ -106,18 +106,18 @@ impl AppApplication {
                     match self.dependencies.native_ingress.find(native).await? {
                         Some(receipt) => receipt,
                         None => {
-                            let error = self.dispatch_error(claim, error).await?;
-                            if matches!(&error, GatewayApplicationError::Public { code, .. } if code == "service_stopping")
+                            let error = if matches!(&error, GatewayApplicationError::Public { code, .. } if code == "service_stopping")
                             {
-                                return Err(error);
-                            }
-                            self.fail_dispatch(claim, "app_transport_enqueue_failed")
-                                .await?;
-                            return Err(public(
-                                503,
-                                "app_transport_enqueue_failed",
-                                "The message could not be queued.",
-                            ));
+                                error
+                            } else {
+                                public(
+                                    503,
+                                    "app_transport_enqueue_failed",
+                                    "The message could not be queued.",
+                                )
+                                .with_source(error)
+                            };
+                            return Err(self.dispatch_error(claim, error).await?);
                         }
                     }
                 } else {
@@ -142,7 +142,15 @@ impl AppApplication {
         turn_id: &str,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
         let messages = self.message_page(chat_id.to_owned(), 0.0, 200).await?;
-        let turns = self.turn_page(chat_id.to_owned(), 0.0).await?;
+        let chat = chat_id.to_owned();
+        let turn = turn_id.to_owned();
+        let turn = self
+            .storage
+            .inspect(move |db| {
+                Ok(read_model::exact_turn(db, &turn)?.filter(|row| row.chat_id == chat))
+            })
+            .await
+            .map_err(app_error)?;
         Ok(MessageSendResult {
             accepted: messages
                 .messages
@@ -151,7 +159,7 @@ impl AppApplication {
             queued: None,
             reply: None,
             replies: Vec::new(),
-            turn: turns.turns.into_iter().find(|item| item.id == turn_id),
+            turn,
             next_cursor: butler_core::json::saturating_u64(messages.next_cursor),
         })
     }
@@ -186,6 +194,11 @@ impl AppApplication {
                 "Service is stopping. Try again.",
             ));
         }
+        let code: &str = match &error {
+            GatewayApplicationError::Public { code, .. } => code,
+            GatewayApplicationError::Internal { .. } => "queued_message_dispatch_failed",
+        };
+        self.fail_dispatch(claim, code).await?;
         Ok(error)
     }
 }

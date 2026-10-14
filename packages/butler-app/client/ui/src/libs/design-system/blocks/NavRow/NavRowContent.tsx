@@ -1,5 +1,7 @@
 import type { NavRowProps } from "./NavRow";
 import { cn } from "../../lib/utils";
+import { dsClass } from "../../lib/internal";
+import { Typo } from "../../components/Typo";
 import styles from "./NavRow.module.css";
 
 /** Row-one controls and full-width row-two metadata have independent tracks. */
@@ -19,7 +21,7 @@ export function NavRowContent({
             {icon}
           </span>
         ) : null}
-        <span className={styles.label} data-slot="nav-row-label">{label}</span>
+        <Typo.Text as="span" className={dsClass(styles.label)} data-slot="nav-row-label">{label}</Typo.Text>
       </span>
       {(badge || actions) && (
         <span className={styles.controlRegion} data-has-hover-actions={hasHoverActions ? "true" : undefined}>

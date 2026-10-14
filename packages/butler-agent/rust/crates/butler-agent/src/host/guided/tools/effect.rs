@@ -7,13 +7,20 @@ mod ledger_input;
 mod mcp;
 mod observation;
 mod restart;
-mod runtime_work;
+pub(super) mod runtime_work;
+pub(super) mod session_folder;
 mod session_worktree;
 mod topic_conversation;
 mod wallpaper;
 
 pub(super) fn is_managed_project_ledger_effect(name: &str) -> bool {
     ledger_input::managed(name)
+}
+
+/// Effects routed by name beyond the fixed tool list: managed ledger writes
+/// and working-folder moves.
+pub(super) fn routes_effect(name: &str) -> bool {
+    ledger_input::managed(name) || name == ToolName::SwitchFolder
 }
 
 use std::sync::Arc;
@@ -36,6 +43,38 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    // A command that adds a worktree moves the session into it afterwards.
+    let worktree_snapshot = if call.name == ToolName::RunCommand
+        && session_folder::adds_worktree(
+            call.arguments
+                .get("command")
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
+        ) {
+        match session_folder::command_directory(owner, &call.arguments) {
+            Some(cwd) => session_folder::worktrees(owner, &cwd)
+                .await
+                .map(|before| (cwd, before)),
+            None => None,
+        }
+    } else {
+        None
+    };
+    let result = Box::pin(execute_effect(owner, invocation, call, occurrence)).await?;
+    Ok(match worktree_snapshot {
+        Some(snapshot) => {
+            session_folder::follow_new_worktree(owner, &invocation, call, snapshot, result).await
+        }
+        None => result,
+    })
+}
+
+async fn execute_effect(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    occurrence: &str,
+) -> Result<JsonDocument, ToolExecutionError> {
     let scope = CommandScope {
         workspace_reference: owner.binding.workspace_reference.as_ref(),
         workspace_path: &owner.binding.workspace_path,
@@ -53,33 +92,15 @@ pub(super) async fn execute(
     if let Some(result) = observation::execute(owner, call, occurrence, &scope).await? {
         return Ok(result);
     }
-    let decision = super::access::for_kind(owner, super::access::kind(call).gated_effect());
-    if decision == butler_turn::btcc::AccessDecision::Deny(butler_turn::btcc::DenyReason::ReadOnly)
-    {
-        return ordinary(
-            "read_only",
-            "This Turn has read-only access; no change was applied.",
-            None,
-        );
-    }
-    if call.name == ToolName::BindSessionGitWorktree
-        && (matches!(decision, butler_turn::btcc::AccessDecision::Deny(_))
-            || owner.binding.project_id.is_none())
-    {
-        return ordinary(
-            "session_workspace_unavailable",
-            "An explicit project Turn with full access is required.",
-            None,
-        );
-    }
-    if call.name == ToolName::RequestServiceRestart
-        && matches!(decision, butler_turn::btcc::AccessDecision::Deny(_))
-    {
-        return ordinary(
-            "restart_full_access_required",
-            "A full-access App Turn is required to request a service restart.",
-            None,
-        );
+    // One decision per call, from the exact requested targets. The adapters
+    // re-check containment when the targets are touched.
+    let kind = super::access::gated_kind(call).await?;
+    let decision =
+        super::access::decision_for_kind(owner, call, &Value::Object(call.arguments.clone()), kind)
+            .await
+            .map_err(ToolExecutionError::Integrity)?;
+    if let Some(refusal) = admission_refusal(owner, call, decision).await? {
+        return Ok(refusal);
     }
     let work = owner
         .work
@@ -87,7 +108,8 @@ pub(super) async fn execute(
         .await
         .map_err(ToolExecutionError::Integrity)?
         .unwrap_or_else(|| runtime_work::untracked(owner));
-    let prepared = prepare(owner, call, occurrence, scope, &work).await;
+    let contained = contained_run(owner, occurrence, decision, kind);
+    let prepared = prepare(owner, call, occurrence, (scope, contained), &work).await;
     let (target, input, adapter) = match prepared {
         Ok(prepared) => prepared,
         Err(error) => return ordinary(error.code(), error.message(), None),
@@ -96,11 +118,43 @@ pub(super) async fn execute(
         owner,
         invocation,
         call,
-        occurrence,
+        (occurrence, decision),
         work,
         (target, input, adapter),
     ))
     .await
+}
+
+/// How an approval-free call outside full access runs: file effects re-check
+/// project containment at use, and an Auto mutation runs in the
+/// project-write sandbox when the decision allowed it because of that sandbox.
+#[derive(Clone, Copy, Default)]
+struct Contained {
+    files: bool,
+    project_write: bool,
+}
+
+fn contained_run(
+    owner: &GuidedTools,
+    occurrence: &str,
+    decision: butler_turn::btcc::AccessDecision,
+    kind: butler_turn::btcc::CapabilityKind,
+) -> Contained {
+    let mode = &owner.binding.access_mode;
+    if decision != butler_turn::btcc::AccessDecision::Allow
+        || *mode == AccessMode::FullAccess
+        || super::access::resumes(owner, occurrence)
+    {
+        return Contained::default();
+    }
+    Contained {
+        files: true,
+        project_write: *mode == AccessMode::Auto
+            && kind
+                == (butler_turn::btcc::CapabilityKind::CommandMutation {
+                    sandbox: butler_turn::btcc::CommandSandbox::ProjectWrite,
+                }),
+    }
 }
 
 /// Approval and journal dispatch share the prepared exact operation.
@@ -108,28 +162,18 @@ async fn execute_prepared(
     owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
-    occurrence: &str,
+    (occurrence, decision): (&str, butler_turn::btcc::AccessDecision),
     work: WorkView,
     prepared: (String, Value, Arc<dyn EffectAdapter>),
 ) -> Result<JsonDocument, ToolExecutionError> {
     let (target, input, adapter) = prepared;
-    let resumes_authority = owner.binding.authority_request_ref.is_some()
-        && owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
-        && !*owner.authority_consumed.lock();
-    let decision = super::access::decision_for_kind(
-        owner,
-        call,
-        &input,
-        super::access::kind(call).gated_effect(),
-    )
-    .await
-    .map_err(ToolExecutionError::Integrity)?;
+    let resumes_authority = super::access::resumes(owner, occurrence);
     let approved =
         if matches!(decision, butler_turn::btcc::AccessDecision::Ask(_)) || resumes_authority {
             match authority::gate(
                 owner,
                 call,
-                occurrence,
+                (occurrence, decision),
                 &work,
                 &target,
                 &input,
@@ -175,15 +219,17 @@ async fn prepare(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
     occurrence: &str,
-    scope: CommandScope<'_>,
+    (scope, contained): (CommandScope<'_>, Contained),
     work: &WorkView,
 ) -> Result<(String, Value, Arc<dyn EffectAdapter>), BtccError> {
     if session_worktree::supports(&call.name) {
         session_worktree::prepare(owner, &call.arguments)
+    } else if call.name == ToolName::SwitchFolder {
+        session_folder::prepare(owner, &call.arguments).await
     } else if mcp::supports(&call.name) {
         mcp::prepare(owner, &call.arguments).map(|prepared| (prepared.0, prepared.1, prepared.2))
     } else if automation::supports(&call.name) {
-        automation::prepare(owner, call, occurrence)
+        automation::prepare(owner, call, occurrence).await
     } else if topic_conversation::supports(&call.name) {
         topic_conversation::prepare(owner, call, occurrence)
     } else if call.name == ToolName::RequestServiceRestart {
@@ -193,14 +239,20 @@ async fn prepare(
     } else if call.name == ToolName::RunCommand {
         owner
             .command
-            .prepare_effect(&call.arguments, scope)
+            .prepare_effect(&call.arguments, scope, contained.project_write)
             .await
             .map(|prepared| (prepared.target, prepared.input, prepared.adapter))
     } else if ledger_input::managed(&call.name) {
         ledger::prepare(owner, &call.name, &call.arguments).await
     } else {
-        owner
-            .file_effects
+        let contained_effects;
+        let effects = if contained.files {
+            contained_effects = owner.file_effects.contained();
+            &contained_effects
+        } else {
+            &owner.file_effects
+        };
+        effects
             .prepare(
                 &call.name,
                 &Value::Object(call.arguments.clone()),
@@ -270,7 +322,7 @@ fn receipt_result(
     JsonDocument::from_encoded(encoded).map_err(wire_error)
 }
 
-fn wire_error(error: butler_core::json::JsonError) -> ToolExecutionError {
+pub(super) fn wire_error(error: butler_core::json::JsonError) -> ToolExecutionError {
     ToolExecutionError::Integrity(
         BtccError::relayed("guided_tool_result_json", error.to_string()).with_source(error),
     )
@@ -323,4 +375,48 @@ fn contract_feedback(
         "required_effect":{"capability":capability,"target":target}}});
     value["error"]["effect_status"] = "rejected".into();
     JsonDocument::from_value(&value).map_err(wire_error)
+}
+
+/// Mode refusal and unattended attention are settled before preparing any effect.
+async fn admission_refusal(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    decision: butler_turn::btcc::AccessDecision,
+) -> Result<Option<JsonDocument>, ToolExecutionError> {
+    if matches!(decision, butler_turn::btcc::AccessDecision::Deny(_)) && owner.unattended() {
+        return super::turn_guard::unattended_denial(owner, call)
+            .await
+            .map(Some);
+    }
+    if decision == butler_turn::btcc::AccessDecision::Deny(butler_turn::btcc::DenyReason::ReadOnly)
+    {
+        return ordinary(
+            "read_only",
+            "This Turn has read-only access; no change was applied.",
+            None,
+        )
+        .map(Some);
+    }
+    if call.name == ToolName::BindSessionGitWorktree
+        && (matches!(decision, butler_turn::btcc::AccessDecision::Deny(_))
+            || owner.binding.project_id.is_none())
+    {
+        return ordinary(
+            "session_workspace_unavailable",
+            "An explicit project Turn with full access is required.",
+            None,
+        )
+        .map(Some);
+    }
+    if call.name == ToolName::RequestServiceRestart
+        && matches!(decision, butler_turn::btcc::AccessDecision::Deny(_))
+    {
+        return ordinary(
+            "restart_full_access_required",
+            "A full-access App Turn is required to request a service restart.",
+            None,
+        )
+        .map(Some);
+    }
+    Ok(None)
 }

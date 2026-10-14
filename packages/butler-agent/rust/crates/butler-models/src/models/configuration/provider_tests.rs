@@ -177,21 +177,24 @@ async fn registered_openai_key_overrides_environment_and_sizing_rereads_files() 
             "secret":"registered-secret"
         }]}),
     );
-    let config = owner
-        .resolve(ProviderConfigRequest {
-            model_ref: "openai/gpt-5.5",
-            butler_data: None,
-        })
-        .await
-        .unwrap();
-    match config.auth {
-        ProviderAuth::ApiKey(value) => assert_eq!(value.as_str(), "registered-secret"),
-        _ => panic!("expected api key"),
+    for model in ["openai/gpt-5.5", "openai/gpt-6-luna"] {
+        let config = owner
+            .resolve(ProviderConfigRequest {
+                model_ref: model,
+                butler_data: None,
+            })
+            .await
+            .unwrap();
+        assert_eq!(config.wire_model, model.strip_prefix("openai/").unwrap());
+        match config.auth {
+            ProviderAuth::ApiKey(value) => assert_eq!(value.as_str(), "registered-secret"),
+            _ => panic!("expected the registered provider key"),
+        }
+        assert_eq!(
+            config.endpoint.as_str(),
+            "https://api.openai.com/v1/responses"
+        );
     }
-    assert_eq!(
-        config.endpoint.as_str(),
-        "https://api.openai.com/v1/responses"
-    );
 
     cache_contract::fresh_secret_with_same_mask(&fixture, &owner).await;
     cache_contract::fresh_observation_time(&owner);

@@ -98,8 +98,6 @@ pub(in crate::cognition) fn rank_lexical(
 pub(in crate::cognition) struct SeedOptions {
     /// Seeds kept before any time filter.
     pub max_seeds: usize,
-    /// A time window applies, so at most eight seeds are used.
-    pub time_bounded: bool,
     /// Only the context lane was admitted.
     pub context_only: bool,
     /// The lexical lane stopped early.
@@ -117,15 +115,7 @@ pub(in crate::cognition) fn select_semantic_seeds(
         .into_iter()
         .take(options.max_seeds)
         .collect::<Vec<_>>();
-    let seeds = all_seeds
-        .iter()
-        .take(if options.time_bounded {
-            8
-        } else {
-            options.max_seeds
-        })
-        .cloned()
-        .collect();
+    let seeds = all_seeds.clone();
     SemanticSelection {
         all_seeds,
         seeds,
@@ -218,4 +208,34 @@ fn fused_order(
             .then_with(|| a.0.as_bytes().cmp(b.0.as_bytes()))
     });
     ranked.into_iter().map(|row| row.0).collect()
+}
+
+impl SemanticSelection {
+    /// Bound expansion once: at most eight semantic seeds with a time window,
+    /// otherwise sixteen. Reserve room for temporal seeds within sixteen total.
+    pub(in crate::cognition) fn bound_with_temporal(
+        &mut self,
+        time_bounded: bool,
+        temporal: &[String],
+    ) {
+        let semantic_limit = if time_bounded {
+            8.min(16usize.saturating_sub(temporal.len()))
+        } else {
+            16
+        };
+        self.seeds = self
+            .all_seeds
+            .iter()
+            .take(semantic_limit)
+            .cloned()
+            .collect();
+        for seed in temporal {
+            if self.seeds.len() == 16 {
+                break;
+            }
+            if !self.seeds.contains(seed) {
+                self.seeds.push(seed.clone());
+            }
+        }
+    }
 }

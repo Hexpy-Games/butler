@@ -108,6 +108,13 @@ impl AppWallpaperFiles {
         })
     }
 
+    pub(crate) fn module_exists(&self, id: String) -> ApplicationFuture<bool> {
+        self.run_module(false, move |root| {
+            Ok(super::wallpaper_modules::is_module_id(&id)
+                && root.join(&id).join("wallpaper.json").is_file())
+        })
+    }
+
     pub(crate) fn user_module(&self, id: String) -> ApplicationFuture<Option<UserModule>> {
         self.run_module(false, move |root| {
             user::read(root, &id).map_err(GatewayApplicationError::internal_from)

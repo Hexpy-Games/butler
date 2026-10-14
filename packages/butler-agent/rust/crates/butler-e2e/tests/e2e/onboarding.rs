@@ -222,7 +222,10 @@ async fn onb_04_gateway_requires_its_token() -> Result<(), HarnessError> {
         before,
         "rejected call changed state"
     );
-    assert!(s.gw.messages("general").await?.is_empty());
+    assert_eq!(
+        s.gw.messages("general").await?,
+        [] as [serde_json::Value; 0]
+    );
 
     let preflight =
         s.gw.raw(

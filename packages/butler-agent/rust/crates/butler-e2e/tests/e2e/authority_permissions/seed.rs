@@ -106,7 +106,7 @@ pub(crate) async fn seed(
         let mut db = sqlite::open(data.join("agent-runtime/btcc.sqlite")).unwrap();
         let tx = db.transaction().unwrap();
         for i in 0..count { source(&tx, i); }
-        if scale { history(&tx, if std::env::var("BUTLER_E2E_PERF").as_deref() == Ok("1") { 700_000 } else { 1024 }); }
+        if scale { history(&tx, if ["BUTLER_E2E_PERF", "BUTLER_E2E_OWNER_SCALE"].iter().any(|key| std::env::var(key).as_deref() == Ok("1")) { 700_000 } else { 1024 }); }
         else { source(&tx, 3001); tx.execute("INSERT INTO btcc_conversation_permissions VALUES('orphan','deleted','/workspace','orphan','Private','Private','2000-01-01T00:00:00Z',NULL)", []).unwrap(); }
         tx.commit().unwrap();
         let app = sqlite::open(data.join("app-server/butler-client.sqlite")).unwrap();

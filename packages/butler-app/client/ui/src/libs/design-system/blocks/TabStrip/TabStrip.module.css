@@ -61,7 +61,7 @@
   gap: var(--space-sm);
   color: var(--text-primary);
   font-size: var(--font-size-2);
-  line-height: var(--line-height-tight);
+  line-height: var(--typo-label-line-height-tight);
   transition:
     background-color var(--motion-fast) var(--motion-ease-standard),
     color var(--motion-fast) var(--motion-ease-standard),
@@ -179,7 +179,7 @@
   border-radius: var(--radius-pill);
   color: var(--text-primary);
   font-size: var(--font-size-2);
-  line-height: var(--line-height-tight);
+  line-height: var(--typo-label-line-height-tight);
   transition:
     background-color var(--motion-fast) var(--motion-ease-standard),
     border-color var(--motion-fast) var(--motion-ease-standard),
@@ -234,4 +234,13 @@
 
 .newTab {
   flex: none;
+}
+
+/* Row-end controls (bring in a tab): pinned to the end, never scrolled away. */
+.trailing {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
 }

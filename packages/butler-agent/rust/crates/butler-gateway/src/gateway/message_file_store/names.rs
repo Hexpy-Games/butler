@@ -22,8 +22,7 @@ pub(super) struct SafeName {
 pub(super) fn safe_name(value: &str) -> SafeName {
     let path_free = value
         .split(['/', '\\'])
-        .filter(|part| !part.is_empty())
-        .next_back()
+        .rfind(|part| !part.is_empty())
         .unwrap_or("attachment");
     let cleaned = UNSAFE.replace_all(path_free, "_");
     let trimmed = trim_js_whitespace(&cleaned);

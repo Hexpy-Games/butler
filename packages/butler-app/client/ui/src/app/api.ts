@@ -50,13 +50,28 @@ export interface AppUpdateState {
   request_id: string | null;
 }
 
+export interface PowerState {
+  onBattery: boolean;
+  constrained: boolean;
+}
+
 interface ButlerAppBridge {
+  writeCachedComposerDraft?: (input: { snapshot: import("./composerDraftCache").ComposerDraftSnapshot }) => Promise<unknown>;
+  history?: (input: { path: string; method: string; body?: unknown }) => Promise<unknown>;
+  organizeLibrary?: (input: { path: string; method: string; body?: unknown }) => Promise<unknown>;
+  listLibrary?: (input: Record<string, string>) => Promise<unknown>;
+  saveLibrary?: (item: unknown) => Promise<unknown>;
+  librarySnapshot?: (id: string) => Promise<unknown>;
+  deleteLibrary?: (id: string) => Promise<unknown>;
   setUpdateProgress?: (value: number | "indeterminate" | null) => Promise<void>;
   recordUiCrash?: (input: unknown) => Promise<unknown>;
+  /** One wallpaper run-state line (`wallpaper_state …`) for the main-process diagnostics log; fire and forget. */
+  recordWallpaperState?: (line: string) => void;
   readUiCrashLog?: () => Promise<import("../../../electron/ui-crash-log.mjs").UiCrashEntry[]>;
   getAppUpdateState?: () => Promise<AppUpdateState>;
   chooseAppUpdate?: (input: { request_id: string | null; action: "now" | "defer" }) => Promise<{ ok: boolean }>;
   onAppUpdateState?: (handler: (state: AppUpdateState) => void) => () => void;
+  onPowerState?: (handler: (state: PowerState) => void) => () => void;
   startupIssue?: "legacy-data" | null;
   recoverLegacyData?: (action: "open-folder" | "restart") => Promise<{ ok: boolean }>;
   protocolVersion?: string;
@@ -280,6 +295,12 @@ function browserRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
 async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: ApiOptions = {}): Promise<T> {
   const method = String(options.method ?? "GET").toUpperCase();
   const url = new URL(path, window.location.origin);
+  if (url.pathname === "/browser-history" || url.pathname.startsWith("/browser-history/")) return callBridge<T>(bridge, "history", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
+  if (url.pathname === "/library" && method === "GET") return callBridge<T>(bridge,"listLibrary",Object.fromEntries(url.searchParams));
+  if (url.pathname === "/library" && method === "POST") return callBridge<T>(bridge,"saveLibrary",parseBody(options.body));
+  if (url.pathname.startsWith("/library/") && url.pathname.endsWith("/snapshot") && method === "GET") return callBridge<T>(bridge,"librarySnapshot",decodeURIComponent(url.pathname.slice(9, -9)));
+  if (/^\/library\/(groups|tags|facets|items)(\/|$)/.test(url.pathname)) return callBridge<T>(bridge, "organizeLibrary", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
+  if (url.pathname.startsWith("/library/") && method === "DELETE") return callBridge<T>(bridge,"deleteLibrary",decodeURIComponent(url.pathname.slice(9)));
   const graph = method === "GET" ? taskGraphBridgeInput(url) : null;
   if (graph) return await callBridge<T>(bridge, graph.method, graph.input);
   if (method === "GET" && url.pathname === "/health") return await callBridge<T>(bridge, "health");
@@ -292,7 +313,10 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getSetupReadiness"));
   }
   if (method === "POST" && url.pathname === "/setup/readiness/retry") {
-    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "retrySetupReadiness"));
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "retrySetupReadiness", parseBody(options.body)));
+  }
+  if (method === "POST" && url.pathname === "/setup/memory-model") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "chooseMemoryModel", parseBody(options.body)));
   }
   if (method === "POST" && url.pathname === "/setup/oauth/start") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "startSetupOAuth", parseBody(options.body)));
@@ -452,6 +476,8 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     const action = method === "GET" ? "listPairedDevices" : "revokeAllPairedDevices";
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, action));
   }
+  const signIns = signInBridgeCall(method, url.pathname, options.body);
+  if (signIns) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, signIns.action, signIns.input));
   const deviceMatch = url.pathname.match(/^\/security\/devices\/([^/]+)$/u);
   if (method === "DELETE" && deviceMatch) {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "revokePairedDevice", {
@@ -624,6 +650,12 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "POST" && sessionArchiveMatch) {
     return await callBridge<T>(bridge, "archiveSession", {
       sessionId: decodeURIComponent(sessionArchiveMatch[1]!),
+    });
+  }
+  const sessionReadMatch = url.pathname.match(/^\/sessions\/([^/]+)\/read$/u);
+  if (method === "POST" && sessionReadMatch) {
+    return await callBridge<T>(bridge, "markSessionRead", {
+      sessionId: decodeURIComponent(sessionReadMatch[1]!),
     });
   }
   if (method === "DELETE" && sessionMatch) {
@@ -996,6 +1028,48 @@ const CODED_SETTINGS_METHODS = new Set([
   "listMcpServers", "createMcpServer", "probeMcpServer", "updateMcpServer", "deleteMcpServer",
   "importSkill", "discoverLocalModels", "registerLocalModel", "updateLocalModel",
 ]);
+
+/** Settings → Browser → Sign-ins and browser import: main adds the admin credential. */
+function signInBridgeCall(method: string, path: string, body: ApiOptions["body"]): { action: string; input?: unknown } | null {
+  const payload = () => parseBody(body);
+  if (path === "/security/signins") return method === "GET" ? { action: "listSignIns" } : method === "POST" ? { action: "addSignIn", input: payload() } : null;
+  if (path === "/security/signins/site" && method === "POST") return { action: "updateSignInSite", input: payload() };
+  const entry = path.match(/^\/security\/signins\/([0-9a-f-]{36})$/u)?.[1];
+  if (entry && method === "PATCH") return { action: "updateSignIn", input: { id: entry, payload: payload() } };
+  if (entry && method === "DELETE") return { action: "deleteSignIn", input: { id: entry } };
+  if (path === "/security/browser-import/sources" && method === "GET") return { action: "listImportSources" };
+  if (path === "/security/browser-import/preview" && method === "POST") return { action: "previewImport", input: payload() };
+  if (path === "/security/browser-import/run" && method === "POST") return { action: "runImport", input: payload() };
+  if (path === "/security/browser-import/start" && method === "POST") return { action: "startBrowserImport", input: payload() };
+  if (path === "/security/browser-import/undo" && method === "POST") return { action: "undoBrowserImport", input: payload() };
+  if (path === "/security/browser-import/folder" && method === "POST") return { action: "pickBrowserImportFolder", input: payload() };
+  if (path === "/security/browser-import/disk-access" && method === "POST") return { action: "openBrowserImportDiskAccess", input: payload() };
+  if (path === "/security/browser-import/export" && method === "POST") return { action: "beginBrowserPasswordExport", input: payload() };
+  if (path === "/security/browser-import/export/poll" && method === "POST") return { action: "pollBrowserPasswordExport", input: payload() };
+  if (path === "/security/browser-import/export/file" && method === "POST") return { action: "chooseBrowserPasswordExport", input: payload() };
+  if (path === "/security/browser-import/export/delete" && method === "POST") return { action: "deleteBrowserPasswordExport", input: payload() };
+  if (path === "/security/browser-import/export/cancel" && method === "POST") return { action: "cancelBrowserPasswordExport", input: payload() };
+  if (path === "/security/agent-import/sources" && method === "GET") return { action: "listAgentImportSources" };
+  if (path === "/security/agent-import/start" && method === "POST") return { action: "startAgentImport", input: payload() };
+  if (path === "/security/agent-import/undo" && method === "POST") return { action: "undoAgentImport", input: payload() };
+  return vaultBridgeCall(method, path, payload);
+}
+
+/** Settings → Browser → Payment methods and Profile details: main adds the admin credential. */
+function vaultBridgeCall(method: string, path: string, payload: () => unknown): { action: string; input?: unknown } | null {
+  if (path === "/security/vault") return method === "GET" ? { action: "listVault" } : null;
+  if (path === "/security/vault/purchase-sites" && method === "POST") return { action: "setPurchaseSite", input: payload() };
+  const match = path.match(/^\/security\/vault\/(cards|profiles)(?:\/([0-9a-f-]{36})(?:\/(reveal|sites))?)?$/u);
+  if (!match) return null;
+  const [, kind, id, suffix] = match;
+  const noun = kind === "cards" ? "Card" : "Profile";
+  if (!id) return method === "POST" ? { action: `add${noun}`, input: payload() } : null;
+  if (!suffix && method === "PATCH") return { action: `update${noun}`, input: { id, payload: payload() } };
+  if (!suffix && method === "DELETE") return { action: `delete${noun}`, input: { id } };
+  if (suffix === "sites" && method === "POST") return { action: `set${noun}Site`, input: { id, payload: payload() } };
+  if (suffix === "reveal" && method === "POST") return { action: `reveal${noun}`, input: { id, payload: payload() } };
+  return null;
+}
 
 async function callBridge<T>(bridge: ButlerAppBridge, method: string, input?: unknown): Promise<T> {
   const fn = bridge[method];

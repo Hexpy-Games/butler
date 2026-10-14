@@ -1,11 +1,14 @@
 //! The shells commands run in and the sandboxes that bound what they can do.
 //!
-//! macOS enforces read-only commands and write-protected roots with the
-//! seatbelt (`sandbox-exec`). Linux and Windows have no sandbox yet: they
-//! refuse read-only commands ([`SandboxError::ReadOnlyUnavailable`]) and
-//! report write protection as [`Protection::Unavailable`]. Linux gets a
-//! Landlock wrapper in a later stage.
+//! macOS uses Seatbelt; Linux uses a single-threaded Landlock/seccomp
+//! trampoline. Unsupported hosts keep exact-action approval behavior.
 
+mod denial;
+pub use denial::{isolation_failure, isolation_failure_exit, sandbox_denial};
+mod credentials;
+mod project_secrets;
+pub use credentials::secret_name;
+pub use project_secrets::{discover_project_secrets, sweep_new_secrets};
 mod environment;
 pub use environment::tool_environment;
 mod operators;
@@ -21,9 +24,9 @@ use std::path::Path;
 mod macos;
 #[cfg(target_os = "macos")]
 use macos as sandbox;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 mod unsandboxed;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 use unsandboxed as sandbox;
 
 #[cfg(unix)]
@@ -35,15 +38,48 @@ mod windows;
 #[cfg(windows)]
 use windows as shell;
 
-/// Whether this host runs [`ShellAccess::ReadOnly`] commands in a sandbox
-/// (otherwise [`login_shell`] refuses them).
-pub const READ_ONLY_SANDBOX: bool = sandbox::ENFORCED;
+#[cfg(feature = "test-support")]
+mod test_support;
+#[cfg(feature = "test-support")]
+pub use test_support::{UnixSocketProbe, linux_syscall_probe, linux_test_host};
 
-/// Whether [`protect_writes`] enforces its root on this host.
-pub const WRITE_PROTECTION: bool = sandbox::ENFORCED;
+mod host_capabilities;
+pub use host_capabilities::{Level, SandboxCapabilities, capabilities};
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+use linux as sandbox;
+
+/// Whether contained observations can run without exact-action approval.
+pub fn approval_free_reads() -> bool {
+    capabilities().approval_free_reads()
+}
+
+/// Whether [`project_write_shell`] can contain a mutating command to its
+/// project (writes inside the project only, no network).
+pub fn project_write_available() -> bool {
+    capabilities().project_write_available()
+}
+
+/// Entry point of the single-threaded trampoline, never called by the agent.
+#[cfg(target_os = "linux")]
+pub fn trampoline() -> Result<(), Box<dyn std::error::Error>> {
+    linux::trampoline()
+}
+
+/// Copies the command helper next to a relocated agent (e.g. isolated E2E installs).
+pub fn copy_command_helper(source: &Path, destination: &Path) -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    std::fs::copy(
+        source.join("butler-sandbox"),
+        destination.join("butler-sandbox"),
+    )?;
+    let _ = (source, destination);
+    Ok(())
+}
 
 /// Whether [`login_shell`] runs commands in a POSIX shell (`sh -c`); Windows
-/// runs them in `cmd.exe`, whose syntax differs.
+/// runs them in Windows PowerShell 5.1, whose syntax differs.
 pub const POSIX_SHELL: bool = shell::POSIX;
 
 /// A program and its arguments.
@@ -70,6 +106,12 @@ pub enum SandboxError {
     /// This host cannot enforce [`ShellAccess::ReadOnly`].
     #[error("this host cannot enforce read-only commands")]
     ReadOnlyUnavailable,
+    /// This host cannot contain a mutating command to its project.
+    #[error("this host cannot contain commands to the project folder")]
+    ProjectWriteUnavailable,
+    /// Filesystem discovery or policy preparation failed; never run uncontained.
+    #[error("sandbox filesystem preparation failed: {0}")]
+    Filesystem(#[from] std::io::Error),
     /// The read-deny paths could not be quoted into the sandbox profile.
     #[error("sandbox profile encoding failed")]
     Profile(#[from] serde_json::Error),
@@ -93,7 +135,8 @@ pub enum Protection {
 }
 
 /// The login-shell invocation of a user command with `access`: `/bin/sh -lc`
-/// on Unix and `%ComSpec% /d /s /c` on Windows (read from `environment`).
+/// on Unix and Windows PowerShell 5.1 on Windows. Explicit `cmd /c` scripts
+/// use `%ComSpec% /d /s /c` (read from `environment`).
 /// Read-only commands run inside the host sandbox, and hosts without one
 /// refuse them.
 pub fn login_shell(
@@ -104,7 +147,7 @@ pub fn login_shell(
     let invocation = shell::login_shell(command, environment);
     match access {
         ShellAccess::Full => Ok(invocation),
-        ShellAccess::ReadOnly => sandbox::read_only(invocation),
+        ShellAccess::ReadOnly => sandbox::read_only_contained(invocation, environment, &[], &[]),
     }
 }
 
@@ -123,11 +166,33 @@ pub fn login_shell_contained(
     )
 }
 
+/// The login shell of a mutating command contained to `root`: it may write
+/// only inside `root` and the `writable` scratch roots, never below `denied`
+/// or to project metadata and secrets, may not read credential stores, and
+/// has no network. Hosts without [`project_write_available`] refuse it.
+pub fn project_write_shell(
+    command: &str,
+    environment: &HashMap<String, String>,
+    root: &Path,
+    writable: &[&Path],
+    denied: &[&Path],
+) -> Result<Invocation, SandboxError> {
+    sandbox::project_write(
+        shell::login_shell(command, environment),
+        environment,
+        root,
+        writable,
+        denied,
+    )
+}
+
 /// Adds the arguments of `invocation` to `command`, which starts its
 /// program. Windows passes the text `cmd.exe /d /s /c` runs verbatim between
 /// one pair of quotes: `cmd` does not undo the `\"` escaping that
 /// `Command::arg` applies, so a command containing quotes would reach it
 /// mangled.
+/// Configure the environment and working directory first; PowerShell also
+/// restores its provider location to that same admitted directory.
 pub fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
     shell::add_arguments(command, invocation);
 }

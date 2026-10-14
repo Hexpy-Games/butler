@@ -1,13 +1,19 @@
 // WebGL context attributes of wallpaper canvases, opaque (the default) and transparent.
 import type { WallpaperDrawFrame } from "./glDraw";
 
+/**
+ * Never `desynchronized`: the low-latency mode exists only on Windows and ChromeOS (Chromium presents such a canvas
+ * through its own D3D11 swap chain, a DirectComposition overlay), so the drawing buffer the drift layers and the
+ * crossfade copy from would follow other rules there than on macOS and Linux. A wallpaper gains nothing from low
+ * latency. No `preserveDrawingBuffer` either (no extra buffer copy per presented frame): every copy out of this canvas
+ * (driftLayers.present, the crossfade snapshot) runs in the same task right after the draw, while the drawing buffer
+ * is defined on every platform.
+ */
 const CONTEXT_ATTRIBUTES: WebGLContextAttributes = {
   alpha: false,
   antialias: false,
   depth: false,
   stencil: false,
-  desynchronized: true,
-  // No copy per frame: the crossfade repaints the frame right before it snapshots it.
   preserveDrawingBuffer: false,
   powerPreference: "low-power",
 };
@@ -20,7 +26,7 @@ const CONTEXT_ATTRIBUTES: WebGLContextAttributes = {
  */
 const TRANSPARENT_CONTEXT_ATTRIBUTES: WebGLContextAttributes = { ...CONTEXT_ATTRIBUTES, alpha: true, premultipliedAlpha: true };
 
-/** Context attributes of a wallpaper canvas; opaque canvases keep the engine's original ones. */
+/** Context attributes of a wallpaper canvas, opaque or transparent. */
 export function wallpaperContextAttributes(transparent: boolean): WebGLContextAttributes {
   return transparent ? TRANSPARENT_CONTEXT_ATTRIBUTES : CONTEXT_ATTRIBUTES;
 }

@@ -3,7 +3,7 @@ import type { TaskGraphCopy } from "./task-graph-copy.ts";
 import type { LifecycleCopy } from "./lifecycle.ts";
 /** Provider cards on the first-run "Pick an AI" screen. */
 export type FirstRunProviderCardId =
-  | "chatgpt" | "claude" | "gemini" | "local" | "openai" | "grok" | "qwen"
+  | "chatgpt" | "claude" | "gemini" | "openai" | "grok" | "qwen"
   | "kimi" | "zaiCoding" | "zaiApi" | "opencodeGo" | "other";
 
 interface FirstRunCopy {
@@ -11,6 +11,7 @@ interface FirstRunCopy {
   welcomeTitle: string;
   welcomeLede: string;
   start: string;
+  steps: { welcome: string; consent: string; memory: string; connect: string; ready: string };
   consentTitle: string;
   consentItems: Array<{ body: string; caption?: string }>;
   consentProviderLink: string;
@@ -33,8 +34,22 @@ interface FirstRunCopy {
   reportUnavailable: string;
   quit: string;
   interfaceLanguage: string;
+  /** First-run step that decides whether the memory model is downloaded. */
+  memoryChoice: {
+    title: string;
+    lede: string;
+    on: string;
+    off: string;
+    offDescription: string;
+    /** Download size beside the memory-model choice. */
+    size: (sizeMB: number) => string;
+    continue: string;
+    saveFailed: string;
+  };
   memoryModel: {
     label: string;
+    /** The model's trade-off; `sizeMB` is omitted while the size is unknown. */
+    description: (sizeMB?: number) => string;
     downloading: string;
     verifying: string;
     failed: string;
@@ -51,14 +66,11 @@ interface FirstRunCopy {
   prepWaitConnect: string;
   providerNames: Record<FirstRunProviderCardId, string>;
   providerDescriptions: Record<FirstRunProviderCardId, string>;
-  tagNoKey: string;
-  tagLocal: string;
   /** Tag on the connected AI when setup runs again. */
   tagCurrent: string;
   localModelCount: (count: number) => string;
   moreProviders: (count: number) => string;
   showLess: string;
-  localOff: string;
   localMissing: string;
   rescan: string;
   checking: string;
@@ -69,15 +81,17 @@ interface FirstRunCopy {
   noModels: string;
   noUsable: string;
   back: string;
-  backToList: string;
-  signInTitle: string;
+  signInTitle: (name: string) => string;
   signInBody: string;
+  signInWaiting: string;
+  signInReopen: string;
   signInCopyLink: string;
   linkCopied: string;
   signInCancelled: string;
   signInCancelledBody: string;
   signInFailed: string;
-  chooseOther: string;
+  signInTimedOut: string;
+  signInTimedOutBody: string;
   keyTitle: (name: string) => string;
   keyLabel: string;
   keyHint: string;
@@ -90,16 +104,53 @@ interface FirstRunCopy {
   getKey: string;
   keyStored: string;
   finishing: string;
+  readyTitle: (name: string) => string;
+  next: string;
+  /** Tooltip on ② Next while it waits for the connection. */
+  connectFirst: string;
+  replyTitle: string;
+  replyBody: string;
+  doneTitle: string;
+  doneBody: string;
+  import: {
+    agentsTitle: string; agentsBody: string; agentsEmpty: string;
+    importAction: string; importing: string; searching: string; skip: string;
+    /** Tooltip on a disabled Next or Import while nothing is picked. */
+    pickOne: string;
+    /** Import after the run: one row per tool with what was added and any follow-up. */
+    agentsDoneTitle: string;
+    agentsAdded: (instructions: number, servers: number) => string;
+    agentsNothing: string;
+    agentsNeedsKey: (count: number) => string;
+    /** Import, one page per chosen tool: its instruction file and servers, each a pick card. */
+    agentItemsTitle: (name: string) => string;
+    agentItemsProgress: (name: string, index: number, total: number) => string;
+    itemInstructions: string;
+    itemServer: string;
+    itemNeedsKey: string;
+    itemFileEmpty: string;
+    itemFileUnreadable: string;
+    itemFileTooLarge: string;
+  };
+  summary: {
+    rowAi: string; rowReply: string; rowAgents: string;
+    /** Only the nonzero counts ("MCP 서버 2개"); the row is hidden when both are zero. */
+    agentCounts: (instructions: number, servers: number) => string;
+  };
+  replyLanguage: string;
+  finish: string;
   finishFailed: string;
-  localTitle: string;
-  localBody: string;
-  localStart: string;
+  /** Other ②: models on this computer and a typed server, on one screen. */
+  otherTitle: string;
+  otherBody: string;
+  /** Other ②: the choice that opens the server address form. */
+  otherServer: string;
   localNote: string;
   customTitle: string;
+  customBody: string;
   customUrl: string;
   customKey: string;
   customConnect: string;
-  connectedToast: (name: string) => string;
   rerunTitle: string;
   rerunDescription: string;
   rerunAction: string;
@@ -122,12 +173,27 @@ type CountFormatter = (count: number) => string;
  * (#235). `workspace` is the workspace label; `null` reads as "this workspace".
  */
 export interface ApprovalRequestCopy {
+  browserMode: { signed_out: string; signed_in: string };
+  signInStep: (reason: string) => string;
+  /** The sign-in hand-off card: a step only the user can do in the tab; nothing to allow. */
+  signInHandoff: { eyebrow: string; title: string; inTab: string; onDesktop: string; openTab: string; stop: string };
+  /** The wait-for-user hand-off card title, by why the user must act. */
+  waitHandoff: (reason: string) => string;
+  /** A saved card or autofill fill's hand-off: the step only the user can do (keypad, card app, OTP, 3-D Secure). */
+  payStep: (reason: string) => string;
+  payHandoff: string;
+  browserStep: (action: string, role: string, name: string, frame: string) => string;
   operation: (tool: string, readOnly: boolean) => string;
   editFiles: (count: number, workspace: string | null) => string;
   editFilesOutside: (count: number) => string;
   runCommandOutside: string;
   readOnlyUnisolated: string;
   networkCommandOutside: string;
+  webRequest: string;
+  webRequestDesc: string;
+  taintReason: string;
+  scheduleMode: (mode: string) => string;
+  scheduleUnavailable: string;
   runCommand: (workspace: string | null) => string;
   networkCommand: (workspace: string | null) => string;
   useConnector: (tool: string | null, server: string | null) => string;
@@ -136,6 +202,7 @@ export interface ApprovalRequestCopy {
   startConversation: string;
   restartService: string;
   createWorktree: string;
+  switchFolder: string;
   /** Any kind this App does not know yet. */
   generic: string;
   /** The line after the examples. */
@@ -167,6 +234,7 @@ interface ConversationWorkCopy {
   collapseHistoryLabel: (primaryLabel: string, count: number) => string;
   viewAllLabel: CountFormatter;
   collapseLabel: string;
+  showDetailsLabel: string;
   toolchainRegionLabel: (label: string) => string;
   detailsRegionLabel: (label: string) => string;
   webSearchSummary: CountFormatter;
@@ -183,6 +251,40 @@ interface ConversationCopy {
     copyCode: string;
     copied: string;
     copyFailed: string;
+  };
+  answerBlocks: {
+    preparing: string;
+    prepared: string;
+    rechecking: string;
+    previousValue: string;
+    showMore: string;
+    showLess: string;
+    showMoreItems: (count: number) => string;
+    saveToLibrary: string;
+    copy: string;
+    copied: string;
+    savedToLibrary: string;
+    actionFailed: string;
+    openImage: string;
+    image: string;
+    chart: string;
+    source: {
+      checkedAt: (time: string, site: string) => string;
+      checkedOn: (date: string, site: string) => string;
+      open: (site: string) => string;
+    };
+  };
+  imageViewer: {
+    viewImage: (name: string) => string;
+    close: string;
+    previous: string;
+    next: string;
+    position: (current: number, total: number) => string;
+    failed: string;
+    openSource: string;
+    copyImage: string;
+    imageCopied: string;
+    checked: (time: string) => string;
   };
   work: ConversationWorkCopy;
   stoppedStatus: string;
@@ -214,11 +316,74 @@ interface ConversationCopy {
   };
 }
 
+export interface BrowserCopy {
+  contextMenu: {
+    openInNewTab: string; openInButler: string; openInBrowser: (name: string) => string; copyLink: string;
+    copy: string; selectAll: string; paste: string;
+  };
+  history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; };
+  tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string;
+  title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
+  reload: string; stop: string; loading: string; crashed: string; empty: string; conversationEmpty: string; updateRequired: string; restartRequired: string; failed: string;
+  openOutput: string; output: string; show: string; hide: string; active: string; openConversation: string; moveToConversation: string;
+  newConversation: string; bringTab: string; resizeChat: string; pick: string; scrap: string; bookmarks: string; bookmarkAdd: string;
+  bookmarked: string; manageBookmarks: string; downloads: string; downloading: string; showInFolder: string; more: string; findInPage: string;
+  zoom: string; print: string; openExternal: string; settings: string; secure: string; notSecure: string; butlerOutput: string; preview: string;
+  signedIn: string; signinRequired: string; captcha: string; signinForm: string; saveSignIn: string; signinSaved: string; later: string;
+  agentUsing: string; takeOver: string; userControl: string; butlerWaits: string; giveBack: string; autoGiveBack: string;
+  stopTask: string; stopped: string; waiting: string; review: string; needYou: string; keypad: string; mfa: string; passkey: string; paymentRequired: string;
+  typeYourself: string; chooseFile: string; printer: string; noPrinters: string; popupBlocked: string; allow: string; popupOpened: string; showPopup: string; newTabOpened: string; downloaded: string;
+  pointerButler: string; pointerLooking: string; pointerTyping: string; pointerWaiting: string; pointerAwaitingApproval: string;
+  pointerNeedInput: string; pickMode: string; pickMulti: string; pickRegion: string; dragToChat: string; finish: string;
+  pickHint: string; pickKeys: (mac: boolean) => string; pickFirst: string; picked: (count: number) => string; attachToChat: string; saveImage: string; downloadSaved: string; downloadFailed: string; downloadFileLimit: string; downloadSessionLimit: string; imagesSaved: (count: number) => string; copyText: string; clearSelection: string; dropToAttach: string;
+  dropAttachTo: (title: string) => string; dropSaveToLibrary: string; dropMoveTabTo: (title: string) => string; dropInvalid: string;
+  attachedTo: (title: string) => string; movedTo: (title: string) => string; library: string; librarySearch: string; recentScraps: string;
+  viewAll: string; scrapped: string; scrapsSaved: (count: number) => string; view: string; all: string; elements: string; views: string;
+  element: string; viewKind: string; document: string; attach: string; openSource: string; openSourcePage: string; remove: string; archivedClosed: (count: number) => string;
+  pageSays: string; authNeeded: string; username: string; password: string; signIn: string; ok: string; cancel: string; leaveTitle: string;
+  stay: string; leave: string; viewInBrowser: string; toolOpen: string; toolAct: string; toolSelection: string; sectionTitle: string; enabled: string;
+  enabledHelp: string; shareSignIn: string; shareSignInHelp: string; signIns: string; signInsHelp: string; addSignIn: string; fillPolicy: string;
+  ask: string; always: string; never: string; standing: string; lastUsed: string; deletePassword: string; signOutSite: string; revoke: string;
+  usedTimes: (count: number) => string; filled: string; askedApproved: string;
+  /** The live tab rail beside the conversation (TabRail, LiveTabCard). */
+  rail: { region: string; openToCheck: string; needsCheck: string; pageError: string; error: string; more: (count: number) => string };
+  /** The titlebar browser toggle while Butler browses in the background (ActivityGlow): label suffixes per state. */
+  glow: { busy: string; attention: string; error: string };
+  scraps: string; documents: string; outputs: string; loadMore: string; emptyLibrary: string; bookmarkFolder: string;
+}
+
+/** Grouped words of the Library's per-kind groups: scraps have groups, bookmarks have folders. */
+export interface LibraryGroupWords {
+  word: string; ungrouped: string; newGroup: string; createGroup: string; groupName: string; renameGroup: string; ungroup: string;
+  moveTo: string; removeFrom: string; search: string; count: (count: number) => string; more: (count: number) => string;
+  ungroupTitle: (name: string) => string; ungroupBody: (count: number) => string;
+}
+
+/** Library (`library.*`): the 서랍 main screen, kind views, groups, tags, filters, the scrap detail and drops. */
+export interface LibraryCopy {
+  title: string; search: string; kinds: { all: string; scrap: string; document: string; bookmark: string; output: string };
+  kindLabel: string; viewAll: string; groups: { scrap: LibraryGroupWords; bookmark: LibraryGroupWords }; empty: string; noItems: string;
+  noMatches: string; clearFilters: string; clearAll: string; loadMore: string; failed: string; open: string; rename: string; editTags: string;
+  name: string; tags: string; addTag: string; createTag: (name: string) => string; removeTag: (name: string) => string; manageTags: string;
+  manageTagsBody: string; noTags: string; merge: string; mergeNote: (from: string, fromCount: number, to: string, toCount: number) => string;
+  deleteTag: string; tagExists: string; groupExists: string; sites: string; date: string; anyDate: string;
+  dates: { today: string; week: string; month: string; year: string }; since: string; until: string; sort: string; sorts: { new: string; old: string; name: string; site: string };
+  filterChip: (label: string, value: string) => string; selected: (count: number) => string; select: string; clearSelection: string;
+  added: (count: number, group: string) => string; undo: string; dropAdd: (group: string) => string; dropScrap: (group: string) => string;
+  savedScraps: (count: number) => string; addToGroup: string; leaveUngrouped: string; back: (title: string) => string; mixedKinds: string;
+  tagsOnAll: (count: number) => string; tagsOnSome: (count: number, total: number) => string; addToAll: string; removeFromAll: string;
+  bulkTagsTitle: (count: number) => string; source: string; saved: string; size: string; none: string; cancel: string; create: string;
+  save: string; move: string; close: string; deleteItem: string; tileLabel: (name: string, meta: string) => string;
+  deleteSelected: (count: number) => string; deleteSelectedBody: string; selectionActions: string;
+}
+
+/** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */
 export interface AppCopy {
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
   taskGraph: TaskGraphCopy;
   lifecycle: LifecycleCopy;
-  browser: { title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string; reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string; openOutput: string; output: string; };
+  browser: BrowserCopy;
+  library: LibraryCopy;
   projectSignpost: {
     evidenceCount: (count: number) => string;
     importantMaterials: string; projectDocuments: string; selectedDay: string; calculation: string;
@@ -538,6 +703,12 @@ export interface AppCopy {
     allFavorites: string;
     working: string;
     attention: string;
+    /** A finished reply the owner has not read; the sidebar dot's name. */
+    unread: string;
+    /** What a waiting browser hand-off needs, in place of `attention`. */
+    signInAttention: string;
+    paymentAttention: string;
+    tabAttention: string;
     newGroup: string;
     saveFailed: string;
     views: string;
@@ -604,6 +775,8 @@ export interface AppCopy {
     generating: string;
     modelWaiting: string;
     approvalWaiting: string;
+    signInWaiting: string;
+    tabWaiting: string;
     answerWaiting: string;
     workerCall: string;
     work: string;
@@ -907,8 +1080,10 @@ export interface AppCopy {
       title: string;
       prompt: string;
     };
-    /** One line under the access selector while Ask first is selected. */
+    /** One line under the access selector while an asking mode is selected. */
     accessHint: string;
+    /** Desktop notification when an unattended run skipped a step for permission. */
+    needsPermissionNotify: string;
     saveFailed: string;
     /** Inline messages for a save the gateway refused (400). */
     errors: {
@@ -925,6 +1100,8 @@ export interface AppCopy {
       failed: string;
       running: string;
       skippedTargetUnavailable: string;
+      /** A run that skipped a step needing permission. */
+      needsPermission: string;
       cancelled: string;
       notRun: string;
     };
@@ -991,6 +1168,9 @@ export interface AppCopy {
     deleteMcpServer: (name: string) => string;
     mcpEnabled: string;
     mcpDisabled: string;
+    /** An imported server still waiting for a key in its settings. */
+    mcpNeedsSecret: string;
+    mcpToolFilterReview: string;
     mcpIdRequired: string;
     mcpIdInvalid: string;
     mcpIdPreview: (id: string) => string;
@@ -1025,6 +1205,7 @@ export interface AppCopy {
       personalization: string;
       memory: string;
       privacy: string;
+      browser: string;
       security: string;
       system: string;
       archives: string;
@@ -1044,6 +1225,7 @@ export interface AppCopy {
       personalization: string;
       memory: string;
       privacy: string;
+      browser: string;
       security: string;
       system: string;
       archives: string;
@@ -1063,6 +1245,7 @@ export interface AppCopy {
       personalization: string[];
       memory: string[];
       privacy: string[];
+      browser: string[];
       security: string[];
       system: string[];
       archives: string[];
@@ -1077,8 +1260,8 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "grants", string>;
-    pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning" | "grants", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
+    pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
       kind: Record<"command" | "fileWrite" | "network" | "tool" | "other", string>;
@@ -1219,6 +1402,7 @@ export interface AppCopy {
       contextLimit: string;
       /** Settings → General → Default permission: the new-chat field. */
       chatAccess: string;
+      scheduleAccess: string;
       planModeDefault: string;
       name: string;
       job: string;
@@ -1230,6 +1414,7 @@ export interface AppCopy {
       model: string;
       reasoning: string;
       theme: string;
+      conversationBackground: string; conversationOverlay: string; conversationPlain: string;
       wallpaper: string;
       wallpaperMotion: string;
       wallpaperPauseOnBattery: string;
@@ -1301,6 +1486,7 @@ export interface AppCopy {
       searchProviderOpenAi: string;
       searchProviderCodex: string;
       searchProviderDisabled: string;
+      searchReaderBrowser: string;
       searchReaderLightweight: string;
       searchReaderAuto: string;
       searchReaderLightpanda: string;
@@ -1317,6 +1503,7 @@ export interface AppCopy {
     descriptions: {
       runtimeSupportedModelsOnly: string;
       chatAccess: string;
+      scheduleAccess: string;
       language: string;
       timezone: string;
       consolidationModel: string;
@@ -1344,7 +1531,6 @@ export interface AppCopy {
       profilingExtractorModel: string;
       profilingExtractorDefault: string;
       profileMigration: string;
-      profileMigrationImmediate: string;
       profileMigrationImporting: string;
       profileMigrationApplied: CountFormatter;
       profileMigrationStored: string;
@@ -1683,15 +1869,169 @@ export interface AppCopy {
       deletedStatus: (name: string) => string;
       errors: { delete: string };
     };
+    /** Settings → Browser → Sign-ins. Passwords are never shown. */
+    signIns: {
+      empty: string;
+      /** Tooltip when only the owner-only file store exists. */
+      unavailable: string;
+      add: string;
+      site: string;
+      sitePlaceholder: string;
+      username: string;
+      password: string;
+      save: string;
+      cancel: string;
+      saved: string;
+      failed: string;
+      policyLabel: string;
+      policy: { always: string; ask: string; never: string };
+      noPassword: string;
+      conversations: (count: number) => string;
+      lastUsed: (when: string) => string;
+      notUsed: string;
+      allConversations: string;
+      deletePassword: string;
+      deleteConfirm: (site: string) => string;
+      signOut: string;
+      signedOut: string;
+      revoke: string;
+      revokeConfirm: (site: string) => string;
+      revoked: string;
+    };
+    /** Settings → Browser → Payment methods and Profile details. Card numbers,
+     * CVCs and identity numbers are never shown; a card number is revealed only
+     * after the operating system verifies the user. */
+    vault: {
+      unavailable: string;
+      emptyCards: string;
+      emptyProfiles: string;
+      emptyPurchaseSites: string;
+      add: string;
+      save: string;
+      cancel: string;
+      edit: string;
+      delete: string;
+      saved: string;
+      failed: string;
+      nickname: string;
+      cardNumber: string;
+      expiry: string;
+      cvc: string;
+      holderName: string;
+      pin2: string;
+      ownerId: string;
+      keepSecret: string;
+      reveal: string;
+      revealUnavailable: string;
+      hide: string;
+      expired: string;
+      deleteConfirm: (name: string) => string;
+      askEveryTime: string;
+      allowedSites: (count: number) => string;
+      site: string;
+      sitePlaceholder: string;
+      addSite: string;
+      removeSite: (site: string) => string;
+      lastUsed: (when: string) => string;
+      notUsed: string;
+      familyName: string;
+      givenName: string;
+      latinName: string;
+      organization: string;
+      country: string;
+      postalCode: string;
+      region: string;
+      city: string;
+      addressLine1: string;
+      addressLine2: string;
+      idSection: string;
+      issuingCountry: string;
+      autofillName: string;
+      latinSurname: string;
+      latinGiven: string;
+      birthDate: string;
+      gender: string;
+      genderOptions: { M: string; F: string };
+      nationality: string;
+      passportNumber: string;
+      passportExpiry: string;
+      rrn: string;
+      phone: string;
+      email: string;
+      profileName: string;
+      nameSection: string;
+      contactSection: string;
+      addressSection: string;
+      otherSection: string;
+      passport: string;
+    };
+    /** Settings → Security → import from another browser (counts only). */
+    browserImport: {
+      chooseItems: string;
+      /** One-line purpose under the import title. */
+      purpose: string;
+      /** Secondary action: import exported bookmark or password files. */
+      fromFile: string;
+      importing: string;
+      history: string;
+      result: (bookmarks: number, passwords: number, updated: number, history?: number, invalid?: number) => string;
+      more: string;
+      pickFolder: string;
+      diskAccess: string;
+      restartAfterAccess: string;
+      closeBrowser: string;
+      retry: string;
+      primaryPassword: string;
+      wrongPrimaryPassword: string;
+      exportPasswords: string;
+      waitingCsv: string;
+      cancel: string;
+      skip: string;
+      continue: string;
+      source: string;
+      noSources: string;
+      bookmarks: string;
+      passwords: string;
+      htmlFile: string;
+      csvFile: string;
+      chooseFile: string;
+      preview: string;
+      bookmarkCount: (count: number, folders: number) => string;
+      passwordCount: (count: number, sites: number) => string;
+      run: string;
+      imported: (count: number, skipped: number) => string;
+      deleteCsv: string;
+      fullDiskAccess: string;
+      failed: string;
+      needsKeychain: string;
+    };
+    /** Import from other AI tools: instructions and MCP servers, never secrets. */
+    agentImport: {
+      /** One-line purpose under the section title. */
+      purpose: string;
+      /** What a detected tool holds (instructions, MCP server count). */
+      found: (instructions: boolean, servers: number) => string;
+      run: string;
+      importing: string;
+      result: (instructions: number, servers: number, needsSecret: number) => string;
+      nothingNew: string;
+      more: string;
+      noSources: string;
+      failed: string;
+      retry: string;
+    };
   };
   titlebar: {
     hideLeftPanel: string;
     showLeftPanel: string;
     resizeLeftPanel: string;
     resizeRightPanel: string;
+    /** Second line of a resize handle's hover hint, under its label. */
+    dragToResize: string;
     commandPalette: string;
     sessionWorktree: (branch?: string) => string;
     localWorkspace: (branch?: string) => string;
+    sessionFolder: (folder: string, branch?: string) => string;
     hideRightPanel: string;
     showRightPanel: string;
     minimizeWindow: string;

@@ -53,7 +53,9 @@ async fn missing_child_capability_returns_structurally_and_parent_completes()
     assert_eq!(schedule["state"], "enabled");
     assert_eq!(schedule["prompt_body"], stub::arguments()["prompt"]);
     assert_eq!(schedule["next_run_at"], "2098-12-31T22:00:00.000Z");
-    assert_eq!(schedule["access_mode"], "ask_first");
+    // D7: an omitted mode takes the schedule default (here derived from the
+    // global full access), not the creating conversation's mode.
+    assert_eq!(schedule["access_mode"], "full_access");
     assert_results(&s, &script, &turn).await?;
     migrate_legacy_results(&mut s).await?;
     s.finish().await?;
@@ -122,7 +124,7 @@ async fn assert_results(
                 .contains("Granted tools in this delegated session")
         })
         .collect();
-    assert!(!child.is_empty());
+    assert_ne!(child, [] as [&serde_json::Value; 0]);
     assert!(
         child
             .iter()

@@ -1,5 +1,15 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+// Capture links before nested message menus; non-web schemes keep their handlers.
+for (const type of ["click", "contextmenu"]) globalThis.window?.addEventListener(type, event => {
+  const link = event.composedPath().find(node => node instanceof HTMLAnchorElement);
+  const value = link?.href ?? (type === "contextmenu" ? event.composedPath()
+    .find(node => node instanceof HTMLElement && node.hasAttribute("data-butler-link"))?.getAttribute("data-butler-link") : null);
+  if (!value || !/^https?:/iu.test(value)) return;
+  event.preventDefault(); event.stopImmediatePropagation();
+  ipcRenderer.send("butler-app:link", type === "click" ? "open" : "menu", value, { x: event.clientX, y: event.clientY });
+}, true);
+
 const port = Number(process.env.BUTLER_APP_SERVER_PORT ?? "18765");
 let cachedServerUrl = normalizeLocalServerUrl(
   process.env.BUTLER_APP_SERVER_URL ??
@@ -9,6 +19,9 @@ const messageCacheSchema = "butler.message-cache.v1";
 const messageCachePrefix = "butler:message-cache:v1:";
 const appUiStateSchema = "butler.app-ui-state.v1";
 const appUiStateKey = "butler:app-ui-state:v1";
+const powerStateChannel = "butler:power-state";
+const powerStateSubscribers = new Set();
+let latestPowerState = null;
 // Sandboxed preloads cannot load arbitrary Node modules or JSON files. The
 // main process validates the shared JSON artifact and passes this typed,
 // bounded value through BrowserWindow.additionalArguments instead.
@@ -25,6 +38,20 @@ const disabledCacheBudget = Object.freeze({
 });
 const bridgeErrorSchema = "butler.app.bridge-error.v1";
 const safeBridgeCodePattern = /^[a-z][a-z0-9_]{1,63}$/u;
+
+function normalizePowerState(value) {
+  if (!value || typeof value !== "object" ||
+      typeof value.onBattery !== "boolean" || typeof value.constrained !== "boolean") return null;
+  return { onBattery: value.onBattery, constrained: value.constrained };
+}
+
+ipcRenderer.on(powerStateChannel, (_event, value) => {
+  const state = normalizePowerState(value);
+  if (!state || (latestPowerState && latestPowerState.onBattery === state.onBattery &&
+      latestPowerState.constrained === state.constrained)) return;
+  latestPowerState = state;
+  for (const handler of powerStateSubscribers) handler(state);
+});
 
 function safeBridgeCode(value) {
   return typeof value === "string" && safeBridgeCodePattern.test(value)
@@ -588,8 +615,23 @@ function writeAppUiStateCache(snapshot) {
 }
 
 const butlerApp = Object.freeze({
+  organizeLibrary: ({ path, method, body }) => {
+    const route = new URL(path, "http://butler.invalid");
+    const allowed = /^\/library\/(groups|tags|facets|items)(\/|$)/.test(route.pathname);
+    if (!allowed || !["GET", "POST", "PATCH", "DELETE"].includes(method)) throw new Error("Invalid Library request.");
+    return requestJson(route.pathname + route.search, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  },
+  history: ({ path, method = "GET", body }) => {
+    if (!/^\/browser-history(?:\/(?:search|suggestions|delete|delete-url|clear))?(?:\?|$)/u.test(path)) throw new Error("invalid_history_route");
+    return requestJson(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  },
+  listLibrary: (input = {}) => requestJson(`/library?${new URLSearchParams(input)}`),
+  saveLibrary: (item) => requestJson("/library", { method: "POST", body: JSON.stringify(item) }),
+  deleteLibrary: (id) => requestJson(`/library/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  librarySnapshot: (id) => requestJson(`/library/${encodeURIComponent(id)}/snapshot`),
   protocolVersion: "butler.app.v1",
   signalStartupReady: () => ipcRenderer.send("butler:renderer-ready"),
+  setupWindowReady: () => ipcRenderer.invoke("butler:setup-window-ready"),
   get serverUrl() {
     return cachedServerUrl;
   },
@@ -597,6 +639,7 @@ const butlerApp = Object.freeze({
   startupIssue: process.argv.includes("--butler-legacy-data") ? "legacy-data" : null,
   recoverLegacyData: (action) => ipcRenderer.invoke("butler:legacy-data-recovery", action),
   recordUiCrash: (input) => ipcRenderer.invoke("butler:ui-crash", input),
+  recordWallpaperState: (line) => ipcRenderer.send("butler:wallpaper-state", line),
   readUiCrashLog: () => ipcRenderer.invoke("butler:ui-crash-log"),
   getAppInfo: () => ipcRenderer.invoke("butler:get-app-info"),
   setDeveloperMode: ({ enabled } = {}) =>
@@ -612,9 +655,13 @@ const butlerApp = Object.freeze({
   // #230 first-run routes served by the agent (#279). Envelopes keep the
   // public error code (invalid_key, no_access, network, ...) across contextBridge.
   getSetupReadiness: () => requestBridgeResult("/setup/readiness"),
-  retrySetupReadiness: () => requestBridgeResult("/setup/readiness/retry", {
+  retrySetupReadiness: (input) => requestBridgeResult("/setup/readiness/retry", {
     method: "POST",
-    body: JSON.stringify({}),
+    body: JSON.stringify(input ?? {}),
+  }),
+  chooseMemoryModel: (input) => requestBridgeResult("/setup/memory-model", {
+    method: "POST",
+    body: JSON.stringify(input ?? {}),
   }),
   startSetupOAuth: (request) => requestBridgeResult("/setup/oauth/start", {
     method: "POST",
@@ -700,6 +747,12 @@ const butlerApp = Object.freeze({
     const listener = (_event, state) => handler(state);
     ipcRenderer.on("butler:app-update-state", listener);
     return () => ipcRenderer.removeListener("butler:app-update-state", listener);
+  },
+  onPowerState: (handler) => {
+    if (typeof handler !== "function") return () => {};
+    powerStateSubscribers.add(handler);
+    if (latestPowerState) handler(latestPowerState);
+    return () => { powerStateSubscribers.delete(handler); };
   },
   getUpdates: () => requestJson("/updates"),
   checkUpdates: (request = {}) => requestJson("/updates/check", {
@@ -820,6 +873,10 @@ const butlerApp = Object.freeze({
     body: JSON.stringify({ title }),
   }),
   archiveSession: ({ sessionId }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/archive`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  }),
+  markSessionRead: ({ sessionId }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/read`, {
     method: "POST",
     body: JSON.stringify({}),
   }),
@@ -1178,6 +1235,47 @@ const butlerApp = Object.freeze({
   listPairedDevices: () => requestSecurity("listPairedDevices"),
   revokePairedDevice: ({ deviceId } = {}) => requestSecurity("revokePairedDevice", { deviceId }),
   revokeAllPairedDevices: () => requestSecurity("revokeAllPairedDevices"),
+  // Sign-ins and browser import (host only). A password typed here goes to main,
+  // then to the Agent's keychain store; no route ever answers one.
+  listSignIns: () => requestSecurity("listSignIns"),
+  addSignIn: (payload) => requestSecurity("addSignIn", { payload }),
+  updateSignIn: ({ id, payload } = {}) => requestSecurity("updateSignIn", { id, payload }),
+  deleteSignIn: ({ id } = {}) => requestSecurity("deleteSignIn", { id }),
+  updateSignInSite: (payload) => requestSecurity("updateSignInSite", { payload }),
+  listImportSources: () => requestSecurity("listImportSources"),
+  previewImport: (payload) => requestSecurity("previewImport", { payload }),
+  runImport: (payload) => requestSecurity("runImport", { payload }),
+  startBrowserImport: (payload) => requestSecurity("startBrowserImport", { payload }),
+  undoBrowserImport: (payload) => requestSecurity("undoBrowserImport", { payload }),
+  pickBrowserImportFolder: (payload) => requestSecurity("pickBrowserImportFolder", { payload }),
+  openBrowserImportDiskAccess: (payload) => requestSecurity("openBrowserImportDiskAccess", { payload }),
+  beginBrowserPasswordExport: (payload) => requestSecurity("beginBrowserPasswordExport", { payload }),
+  pollBrowserPasswordExport: (payload) => requestSecurity("pollBrowserPasswordExport", { payload }),
+  chooseBrowserPasswordExport: (payload) => requestSecurity("chooseBrowserPasswordExport", { payload }),
+  deleteBrowserPasswordExport: (payload) => requestSecurity("deleteBrowserPasswordExport", { payload }),
+  cancelBrowserPasswordExport: (payload) => requestSecurity("cancelBrowserPasswordExport", { payload }),
+  // Import from other AI tools (host only): instructions and MCP servers, never secrets.
+  listAgentImportSources: () => requestSecurity("listAgentImportSources"),
+  startAgentImport: (payload) => requestSecurity("startAgentImport", { payload }),
+  undoAgentImport: (payload) => requestSecurity("undoAgentImport", { payload }),
+  // Payment methods and autofill details (host only). Card and identity numbers
+  // go to main, then to the Agent's keychain store; only a card reveal, after
+  // the operating system verifies the user, answers a number.
+  listVault: () => requestSecurity("listVault"),
+  addCard: (payload) => requestSecurity("addCard", { payload }),
+  addProfile: (payload) => requestSecurity("addProfile", { payload }),
+  updateCard: ({ id, payload } = {}) => requestSecurity("updateCard", { id, payload }),
+  updateProfile: ({ id, payload } = {}) => requestSecurity("updateProfile", { id, payload }),
+  deleteCard: ({ id } = {}) => requestSecurity("deleteCard", { id }),
+  deleteProfile: ({ id } = {}) => requestSecurity("deleteProfile", { id }),
+  setCardSite: ({ id, payload } = {}) => requestSecurity("setCardSite", { id, payload }),
+  setProfileSite: ({ id, payload } = {}) => requestSecurity("setProfileSite", { id, payload }),
+  revealProfile: ({ id, payload } = {}) => requestSecurity("revealProfile", { id, payload }),
+  revealCard: ({ id, payload } = {}) => requestSecurity("revealCard", { id, payload }),
+  setPurchaseSite: (payload) => requestSecurity("setPurchaseSite", { payload }),
+  // The file path is chosen in a native dialog and stays in main and the Agent.
+  pickBrowserFolder: () => ipcRenderer.invoke("butler:pick-browser-folder"),
+  pickImportFile: (kind) => ipcRenderer.invoke("butler:pick-import-file", kind === "bookmarks" ? "bookmarks" : "passwords"),
   // Main re-reads the token after a rotation.
   rotateConnectionCode: () => requestSecurity("rotateConnectionCode"),
   listArchives: ({ limit, offset } = {}) => {
@@ -1373,13 +1471,86 @@ function requestTaskGraph(scope, tail, { id, revision, cursor, limit } = {}) {
   return requestJson(`/${scope}/${encodeURIComponent(id)}/${tail}${suffix}`);
 }
 const browserCall = (op, input) => ipcRenderer.invoke("butler-browser:call", op, input);
-if (!process.argv.includes("--butler-browser-disabled")) contextBridge.exposeInMainWorld("butlerBrowser", {
+const frameSubscriptions = new Map();
+// Last frame per subscribed tab, so a second consumer of a static (or frozen) tab draws at once.
+const lastFrames = new Map();
+ipcRenderer.on("browser:frame", (_event, frame) => { if (frameSubscriptions.has(frame.tab)) lastFrames.set(frame.tab, frame); });
+const pendingFrameTabs = new Set();
+const frameCall = (op, input) => ipcRenderer.invoke("butler-browser:call", op, input).catch(() => {});
+function subscribeFrame(tabId) {
+  const viewers = frameSubscriptions.get(tabId);
+  if (!viewers?.size) return;
+  const widthPx = Math.max(...viewers.values());
+  void ipcRenderer.invoke("butler-browser:call", "frame.subscribe", { id: tabId, widthPx })
+    .then(() => pendingFrameTabs.delete(tabId))
+    .catch(() => { if (frameSubscriptions.has(tabId)) pendingFrameTabs.add(tabId); });
+}
+ipcRenderer.on("butler-browser:state", (_event, state) => {
+  for (const tab of state.tabs ?? []) if (pendingFrameTabs.has(tab.id) && (tab.agent || tab.driven)) subscribeFrame(tab.id);
+});
+let frameVisibilityWatching = false;
+
+contextBridge.exposeInMainWorld("butlerBrowser", {
+  onFrame(tabId, handler, widthPx = 416) {
+    if (!frameVisibilityWatching) {
+      frameVisibilityWatching = true;
+      document.addEventListener("visibilitychange", () => {
+        if (frameSubscriptions.size) void frameCall("frame.visibility", { value: !document.hidden });
+      });
+    }
+    const listener = (_event, frame) => { if (frame.tab === tabId) handler(frame); };
+    ipcRenderer.on("browser:frame", listener);
+    const viewers = frameSubscriptions.get(tabId) ?? new Map();
+    const count = viewers.size, token = Symbol();
+    const width = Number.isFinite(widthPx) ? Math.max(48, Math.min(416, Math.round(widthPx))) : 416;
+    viewers.set(token, width); frameSubscriptions.set(tabId, viewers);
+    let active = true;
+    if (!count) {
+      void frameCall("frame.visibility", { value: !document.hidden });
+    } else if (lastFrames.has(tabId)) {
+      const frame = lastFrames.get(tabId);
+      queueMicrotask(() => { if (active) handler(frame); });
+    }
+    subscribeFrame(tabId);
+    return () => {
+      if (!active) return;
+      active = false;
+      ipcRenderer.removeListener("browser:frame", listener);
+      viewers.delete(token);
+      if (viewers.size) subscribeFrame(tabId);
+      else { frameSubscriptions.delete(tabId); pendingFrameTabs.delete(tabId); lastFrames.delete(tabId); void frameCall("frame.unsubscribe", { id: tabId }); }
+    };
+  },
+  onDownload(handler) {
+    const listener = (_event, value) => handler(value);
+    ipcRenderer.on("butler-browser:download", listener);
+    return () => ipcRenderer.removeListener("butler-browser:download", listener);
+  },
+  onElementDrag(handler) {
+    const listener = (_event, value) => handler(value);
+    ipcRenderer.on("butler-browser:element-drag", listener);
+    return () => ipcRenderer.removeListener("butler-browser:element-drag", listener);
+  },
+  onSelectionAction(handler) {
+    const listener = (_event, value) => handler(value);
+    ipcRenderer.on("butler-browser:selection-action", listener);
+    return () => ipcRenderer.removeListener("butler-browser:selection-action", listener);
+  },
   call: browserCall,
   subscribe: (handler) => {
     const listener = (_event, state) => handler(state);
     ipcRenderer.on("butler-browser:state", listener);
     browserCall("state").then(handler);
     return () => ipcRenderer.removeListener("butler-browser:state", listener);
+  },
+  onPointer: (handler) => {
+    const listener = (_event, point) => handler(point);
+    ipcRenderer.on("butler-browser:pointer", listener);
+    return () => ipcRenderer.removeListener("butler-browser:pointer", listener);
+  },
+  onHistory: (handler) => {
+    const listener = () => handler(); ipcRenderer.on("butler-browser:history", listener);
+    return () => ipcRenderer.removeListener("butler-browser:history", listener);
   },
   onAddress: (handler) => {
     const listener = () => handler();

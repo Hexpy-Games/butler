@@ -1,4 +1,3 @@
-import { browserFeatureEnabled } from "@/app/productFeatures";
 import { securityAuthoritySections } from "./SecurityAuthoritySections";
 import { useShallow } from "zustand/react/shallow";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
@@ -102,14 +101,12 @@ function SecurityAdvancedSection({ security, open, onToggle }: {
         <Stack id={panelId} align="row" gap="none">
           <Stack.Item basis="lg" minWidth="0">
             <Stack gap="md">
-              {browserFeatureEnabled && <Typo.Label>{copy.hosts}</Typo.Label>}
+              <Typo.Label>{copy.hosts}</Typo.Label>
               <Typo.Caption tone="secondary" id={hintId}>{copy.hostsDescription}</Typo.Caption>
               <SecurityAllowedHostsField hosts={view.allowed_hosts} disabled={busy !== null} onSave={security.saveAllowedHosts} describedBy={hintId} />
-              {browserFeatureEnabled && <>
-                <Typo.Label>{copy.contentHosts}</Typo.Label>
-                <Typo.Caption tone="secondary" id={contentHintId}>{copy.contentHostsDescription}</Typo.Caption>
-                <SecurityAllowedHostsField content hosts={view.content_hosts ?? []} disabled={busy !== null} onSave={security.saveContentHosts} describedBy={contentHintId} />
-              </>}
+              <Typo.Label>{copy.contentHosts}</Typo.Label>
+              <Typo.Caption tone="secondary" id={contentHintId}>{copy.contentHostsDescription}</Typo.Caption>
+              <SecurityAllowedHostsField content hosts={view.content_hosts ?? []} disabled={busy !== null} onSave={security.saveContentHosts} describedBy={contentHintId} />
             </Stack>
           </Stack.Item>
         </Stack>

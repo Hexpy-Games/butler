@@ -1,7 +1,7 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { ProviderLogo } from "../ProviderLogo";
 import { Stack } from "../Stack";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./Select";
+import { Select, SelectButton, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./Select";
 
 export const meta: ShowcaseMeta = {
   title: "Select",
@@ -32,7 +32,7 @@ function SelectExample({ locale, value }: ShowcaseRenderContext & { value?: stri
 
 const PROVIDERS = [
   { value: "openai", label: "OpenAI", logo: "openai" },
-  { value: "anthropic", label: "Anthropic", logo: "claude" },
+  { value: "anthropic", label: "Anthropic", logo: "anthropic" },
   { value: "google", label: "Google", logo: "gemini" },
 ] as const;
 
@@ -97,6 +97,17 @@ export const stories: ShowcaseStory[] = [
           <SelectItem value="worktree" disabled>{labels[locale].worktree}</SelectItem>
         </SelectContent>
       </Select>
+    ),
+  },
+  {
+    // Library filter triggers: a count badge when values are chosen.
+    name: "Filter triggers (SelectButton with count)",
+    render: ({ locale }) => (
+      <Stack align="row" gap="sm" wrap>
+        <SelectButton size="sm" count={2}>{locale === "ko-KR" ? "태그" : "Tags"}</SelectButton>
+        <SelectButton size="sm">{locale === "ko-KR" ? "사이트" : "Sites"}</SelectButton>
+        <SelectButton size="sm" count={1}>{locale === "ko-KR" ? "기간" : "Date"}</SelectButton>
+      </Stack>
     ),
   },
 ];

@@ -14,7 +14,7 @@ use crate::gateway::application::storage::AppStorageError;
 use crate::gateway::ui_language::UiLanguage;
 use normalize::{
     enum_value, integer, language, main_colors, main_preset, main_theme, multiline, native_value,
-    notifications, object, timezone, ui_defaults, workspace_label,
+    notifications, object, timezone, ui_defaults,
 };
 
 /// The language the App shows (`language` of the settings view): Settings,
@@ -97,9 +97,9 @@ pub(super) fn read(
     let web_search = json!({
         "provider":provider,
         "reader_backend":enum_value(
-            stored_web.and_then(|value| value.get("reader_backend")).or_else(|| configured_web.get("reader_backend")),
-            &["lightweight", "auto", "lightpanda", "jina-hosted", "disabled"],
-            "lightweight",
+            configured_web.get("reader_backend").or_else(|| stored_web.and_then(|value| value.get("reader_backend"))),
+            &["browser", "lightweight", "auto", "lightpanda", "jina-hosted", "disabled"],
+            "browser",
         ),
         "api_key_configured":api_key_configured,
         "api_key_env_var":api_key_env_var,
@@ -134,10 +134,7 @@ pub(super) fn read(
             .cloned()
             .unwrap_or_else(|| native.get("server_url").cloned().unwrap_or(Value::Null)),
     );
-    output.insert(
-        "default_project_workspace_label".into(),
-        json!(workspace_label(workspace_root)),
-    );
+    super::super::project_folder::project(&mut output, workspace_root);
     output.insert(
         "language".into(),
         json!(language(stored.get("language"), config_user.get("language")).as_str()),
@@ -206,10 +203,7 @@ pub(super) fn read(
             .cloned()
             .unwrap_or(json!(10)),
     );
-    output.insert(
-        "access_mode".into(),
-        json!(super::access_mode_name(&controls.access)),
-    );
+    insert_access(db, &controls.access, &mut output)?;
     output.insert(
         "plan_mode_default".into(),
         json!(
@@ -261,6 +255,21 @@ pub(super) fn read(
     );
     Ok(Value::Object(output))
 }
+/// The resolved conversation access mode and the schedule default (D7).
+fn insert_access(
+    db: &Connection,
+    access: &butler_turn::btcc::AccessMode,
+    output: &mut Map<String, Value>,
+) -> Result<(), AppStorageError> {
+    output.insert("access_mode".into(), json!(super::access_mode_name(access)));
+    let schedule = super::schedule_access_mode(db)?;
+    output.insert(
+        "schedule_access_mode".into(),
+        json!(super::access_mode_name(&schedule)),
+    );
+    Ok(())
+}
+
 /// The legacy main-screen keys, normalized, and the `wallpaper` setting, which
 /// they describe until a PATCH stores one.
 fn appearance(stored: &Map<String, Value>, output: &mut Map<String, Value>) {
@@ -322,6 +331,10 @@ fn main_screen(stored: &Map<String, Value>, output: &mut Map<String, Value>) {
         json!(main_preset(stored.get("main_screen_theme_preset"), &colors)),
     );
     output.insert("main_screen_theme_custom_colors".into(), json!(colors));
+    output.insert(
+        super::conversation_background::KEY.into(),
+        super::conversation_background::view(stored.get(super::conversation_background::KEY)),
+    );
     let setting = wallpaper::view(stored.get(wallpaper::KEY), legacy_source(stored));
     output.insert(wallpaper::KEY.into(), setting);
     output.insert(

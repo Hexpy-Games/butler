@@ -36,11 +36,11 @@ async function screenshot(page: Page, output: string, key: string) {
   await page.screenshot({ path: join(output, `${key}.png`), animations: "disabled" });
 }
 
-export async function captureAllowedHosts(browser: Browser, url: string, output: string, enabled: boolean) {
+export async function captureAllowedHosts(browser: Browser, url: string, output: string) {
   const before = process.env.BUTLER_ALLOWED_HOSTS_BEFORE === "1";
   for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
-    if (process.env.BUTLER_ALLOWED_HOSTS_CELL && process.env.BUTLER_ALLOWED_HOSTS_CELL !== `${enabled}-${locale}-${theme}-${width}`) continue;
-    console.log(`Allowed hosts cell ${enabled} ${locale} ${theme} ${width}`);
+    if (process.env.BUTLER_ALLOWED_HOSTS_CELL && process.env.BUTLER_ALLOWED_HOSTS_CELL !== `${locale}-${theme}-${width}`) continue;
+    console.log(`Allowed hosts cell ${locale} ${theme} ${width}`);
     const page = await browser.newPage({ viewport: { width, height: 900 } });
     const saves: string[][] = [];
     page.on("request", request => {
@@ -52,7 +52,7 @@ export async function captureAllowedHosts(browser: Browser, url: string, output:
     page.on("response", response => { if (new URL(response.url()).pathname === "/settings") console.log("Settings fixture response", response.status()); });
     page.on("crash", () => console.error("Allowed hosts browser page crashed"));
     const copy = getAppCopy(locale === "ko" ? "ko-KR" : "en-US").settings.security;
-    const key = `${before ? "before" : "after"}-${enabled ? "on" : "off"}-${locale}-${theme}-${width}`;
+    const key = `${before ? "before" : "after"}-${locale}-${theme}-${width}`;
     try {
       await page.goto(`${url}/?locale=${locale}&theme=${theme}&state=security`);
       const row = page.locator('[data-test-class="settings-security-advanced"]');
@@ -72,7 +72,7 @@ export async function captureAllowedHosts(browser: Browser, url: string, output:
       await row.getByText(copy.hostCount(1), { exact: true }).waitFor();
       const input = panel.getByRole("textbox", { name: copy.hosts, exact: true });
       assert(await input.getAttribute("aria-describedby"), "input has its description");
-      assert.equal(await panel.getByRole("textbox", { name: copy.contentHosts, exact: true }).count(), enabled ? 1 : 0);
+      assert.equal(await panel.getByRole("textbox", { name: copy.contentHosts, exact: true }).count(), 1);
       await addWhileBusy(panel, input, url);
       await panel.getByText("two.example.com", { exact: true }).waitFor();
       await row.getByText(copy.hostCount(2), { exact: true }).waitFor();
@@ -98,5 +98,5 @@ export async function captureAllowedHosts(browser: Browser, url: string, output:
       throw error;
     } finally { await page.close(); }
   }
-  console.log(`Allowed hosts ${before ? "before captures" : "acceptance"}: browser=${enabled}, ${process.env.BUTLER_ALLOWED_HOSTS_CELL ? 1 : 8} cells`);
+  console.log(`Allowed hosts ${before ? "before captures" : "acceptance"}: ${process.env.BUTLER_ALLOWED_HOSTS_CELL ? 1 : 8} cells`);
 }

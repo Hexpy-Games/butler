@@ -57,6 +57,11 @@ pub trait CognitionEmbeddingPort: Send + Sync {
         true
     }
 
+    /// The user's memory-model choice: false means no model load, query or vector work.
+    fn enabled(&self) -> bool {
+        true
+    }
+
     /// Embeds the request, or fails when cancelled.
     fn embed(
         &self,

@@ -17,7 +17,7 @@ use crate::gateway::InboundQueueCode;
 use crate::gateway::inbound_queue::record::ProcessingLease;
 use crate::gateway::inbound_queue::{ClaimedInboundEvent, InboundQueueError, QueueResult};
 
-const LEASE: Duration = Duration::from_secs(16 * 60);
+const LEASE: Duration = Duration::from_mins(16);
 
 pub(in crate::gateway::inbound_queue) fn claim(
     root: &Path,

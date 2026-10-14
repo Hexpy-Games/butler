@@ -94,6 +94,8 @@ pub struct StewardDelegationRequest {
     pub model_ref: String,
     pub reasoning_effort: String,
     pub access_mode: String,
+    /// The unattended schedule run delegating, if any (D8).
+    pub schedule_run: Option<crate::btcc::ScheduleRunContext>,
 }
 
 /// A steward's request to delegate one plan action to a worker.
@@ -110,6 +112,8 @@ pub struct WorkerDelegationRequest {
     pub safe_title: Option<String>,
     pub profile_id: Option<String>,
     pub access_mode: String,
+    /// The unattended schedule run delegating, if any (D8).
+    pub schedule_run: Option<crate::btcc::ScheduleRunContext>,
 }
 
 /// Orchestrates durable steward and worker subsessions and routes their results.
@@ -236,7 +240,9 @@ impl SubsessionService {
             reasoning: &request.reasoning_effort,
             text: render_steward_input(&packet),
             now: &now,
+            schedule_run: packet.schedule_run.clone(),
         });
+        let title = helpers::delegation_title(request.safe_title.as_deref(), &request.request);
         let intent = DispatchIntent {
             envelope,
             metadata: DispatchMetadata {
@@ -244,21 +250,17 @@ impl SubsessionService {
             },
         };
         let stored = self
-            .create_and_dispatch(
-                ids.create(
-                    delegation::Parent {
-                        session_id: request.parent_session_id,
-                        turn_id: request.parent_turn_id,
-                        anchor_message_id: request.anchor_message_id,
-                    },
-                    request
-                        .safe_title
-                        .unwrap_or_else(|| "Delegated task".into()),
-                    packet,
-                    intent,
-                    now,
-                ),
-            )
+            .create_and_dispatch(ids.create(
+                delegation::Parent {
+                    session_id: request.parent_session_id,
+                    turn_id: request.parent_turn_id,
+                    anchor_message_id: request.anchor_message_id,
+                },
+                title,
+                packet,
+                intent,
+                now,
+            ))
             .await?;
         Ok(delegation_output(&stored))
     }

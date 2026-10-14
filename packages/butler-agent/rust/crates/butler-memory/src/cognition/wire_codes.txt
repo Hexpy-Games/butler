@@ -103,8 +103,6 @@ legacy_clock_unavailable
 legacy_diagnostic_failed
 legacy_embedding_incomplete
 legacy_memory_writer_disabled_for_v2
-legacy_recall_invalid_cue
-legacy_recall_read_failed
 legacy_session_clock_unavailable
 legacy_session_graph_failed
 legacy_session_id_invalid

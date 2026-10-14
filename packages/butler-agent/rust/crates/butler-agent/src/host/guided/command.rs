@@ -9,7 +9,7 @@ mod output;
 mod path_guard;
 mod registered_artifacts;
 mod structured_stdout;
-mod timing;
+pub(in crate::host) mod timing;
 mod validation;
 
 use std::collections::HashMap;
@@ -83,6 +83,7 @@ impl GuidedCommand {
         args: &Map<String, Value>,
         scope: CommandScope<'_>,
     ) -> Result<JsonDocument, BtccError> {
+        let timing = timing::CommandTiming::new("observation");
         let effect = args
             .get("state_effect")
             .and_then(Value::as_str)
@@ -95,17 +96,8 @@ impl GuidedCommand {
             }));
         }
         let registered = scope.execution == CommandExecution::Registered;
-        if registered
-            && scope
-                .allowed_tools_and_effects
-                .is_some_and(|allowed| !allowed.iter().any(|name| name == "run_command:workspace"))
-        {
-            return JsonDocument::from_value(&serde_json::json!({
-                "ok": false, "error": "tool_not_admitted",
-                "message": "Running commands is not allowed for this task.",
-                "recovery_hint": "Use only the changes this task allows."
-            }))
-            .map_err(|source| error("command_result_encoding_failed").with_source(source));
+        if registered && !command_admitted(&scope) {
+            return not_admitted();
         }
         let root = active_root(&scope)?;
         let raw_command = args
@@ -129,14 +121,20 @@ impl GuidedCommand {
             args.get("timeout_ms").and_then(Value::as_f64)
         };
         if registered {
+            timing.mark("before_cwd_job");
             let guarded_root = root.clone();
             let requested = cwd.clone();
             let resolved_cwd = self
                 .jobs
-                .run(move || Commands::guarded_directory(&guarded_root, requested.as_deref()))
+                .run(move || {
+                    let _timing = timing::CommandTiming::new("registered_cwd");
+                    Commands::guarded_directory(&guarded_root, requested.as_deref())
+                })
                 .await?
                 .map_err(BtccError::from)?;
+            timing.mark("before_guard");
             if let Some(rejected) = self.check_paths(args, &scope).await? {
+                timing.mark("refused");
                 return Ok(rejected);
             }
             let before_git = registered_artifacts::snapshot(
@@ -247,12 +245,15 @@ impl GuidedCommand {
         .await
     }
 
+    /// `project_write`: the access decision allowed this mutation only inside
+    /// the project-write sandbox (Auto), so it runs there.
     pub(crate) async fn prepare_effect(
         &self,
         args: &Map<String, Value>,
         scope: CommandScope<'_>,
+        project_write: bool,
     ) -> Result<PreparedCommandEffect, BtccError> {
-        effect::prepare(self, args, scope).await
+        effect::prepare(self, args, scope, project_write).await
     }
 }
 
@@ -284,5 +285,28 @@ fn observation_access(contained: bool) -> GuidedAccess {
         GuidedAccess::ContainedObservation
     } else {
         GuidedAccess::ReadOnlyObservation
+    }
+}
+
+fn command_admitted(scope: &CommandScope<'_>) -> bool {
+    scope
+        .allowed_tools_and_effects
+        .is_none_or(|allowed| allowed.iter().any(|name| name == "run_command:workspace"))
+}
+
+fn not_admitted() -> Result<JsonDocument, BtccError> {
+    JsonDocument::from_value(&serde_json::json!({
+        "ok": false, "error": "tool_not_admitted",
+        "message": "Running commands is not allowed for this task.",
+        "recovery_hint": "Use only the changes this task allows."
+    }))
+    .map_err(|source| error("command_result_encoding_failed").with_source(source))
+}
+
+fn directory_path_form(contained: bool) -> butler_turn::workspace::PathForm {
+    if contained {
+        butler_turn::workspace::PathForm::Contained
+    } else {
+        butler_turn::workspace::PathForm::RelativeOrAbsolute
     }
 }

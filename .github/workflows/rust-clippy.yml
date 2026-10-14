@@ -35,8 +35,3 @@ jobs:
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy -p butler-turn -p butler-models -p butler-runtime -p butler-ledger --lib --locked --keep-going -- -D warnings
       - name: Clippy all targets
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
-      - name: Clippy gate-off production libraries
-        env:
-          BUTLER_FEATURE_BROWSER: "false"
-        run: |
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --locked -p butler-core -p butler-turn -p butler-gateway -p butler-agent --lib -- -D warnings

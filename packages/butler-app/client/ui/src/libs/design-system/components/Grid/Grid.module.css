@@ -136,6 +136,25 @@
   }
 }
 
+/* Compact: a phone-width page (two card columns instead of base). */
+@container page (max-width: 36rem) {
+  .responsive[data-columns-compact="1"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .responsive[data-columns-compact="2"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .responsive[data-columns-compact="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .responsive[data-columns-compact="4"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 /* Gap - Semantic tokens */
 .gap-none {
   gap: var(--space-none);
@@ -163,6 +182,11 @@
 
 .gap-2xl {
   gap: var(--space-2xl);
+}
+
+/* A growing list: each cell keeps its own height (cross="start"). */
+.grid.cross-start {
+  align-items: start;
 }
 
 @media (width <= 960px) {

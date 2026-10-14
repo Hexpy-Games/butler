@@ -1,0 +1,278 @@
+/* A live Butler tab. The card is a quiet raised surface; the state paints
+   only its ring: a faint ink ring while Butler acts, amber when it needs the
+   user, the danger line when it failed. */
+.card {
+  --live-tab-ring: 0 0 0 var(--border-hairline) var(--line);
+  --live-tab-head: 32px;
+
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  box-shadow: var(--live-tab-ring), var(--browser-card-shadow);
+}
+
+.card[data-state="busy"] {
+  --live-tab-ring: 0 0 0 var(--border-hairline)
+    color-mix(in srgb, var(--butler-ink-purple) 38%, transparent);
+}
+
+.card[data-state="attention"] {
+  --live-tab-ring: 0 0 0 1.5px var(--color-warning);
+}
+
+.card[data-state="error"] {
+  --live-tab-ring: 0 0 0 var(--border-hairline) var(--color-danger-border);
+}
+
+/* Keyboard focus on the body takes the card's ring: the card clips its frame,
+   so a ring on the body itself would be cut away. */
+.card:has(> .body:focus-visible) {
+  --live-tab-ring: var(--focus-ring);
+}
+
+.body:focus-visible {
+  box-shadow: none;
+}
+
+/* The body is one Clickable: the title row and the frame. */
+.body {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border-radius: 0;
+  align-items: stretch;
+}
+
+.head {
+  display: flex;
+  min-width: 0;
+  height: var(--live-tab-head);
+  align-items: center;
+  gap: var(--space-sm);
+  /* Room on the end for the × that sits over the row. */
+  padding-inline: var(--space-sm)
+    calc(var(--control-height-xs) + var(--space-xs));
+}
+
+.title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+}
+
+/* A long state word (an English "Waiting for approval") truncates after
+   the title has given way; it never runs under the ×. */
+.state {
+  display: flex;
+  flex: none;
+  min-width: 0;
+  max-width: 55%;
+}
+
+.state > * {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.state > * > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.close {
+  --icon-button-size: var(--control-height-xs);
+
+  position: absolute;
+  top: calc((var(--live-tab-head) - var(--control-height-xs)) / 2);
+  right: var(--space-xs);
+}
+
+.close svg {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+
+/* The frame fills the card's width; the card clips its corners. */
+.frame {
+  width: 100%;
+  border-radius: 0;
+}
+
+.frame[data-dimmed="true"] {
+  filter: grayscale(1) opacity(0.45);
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+/* Needs you: an amber band over the frame's foot with the action. */
+.band {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm);
+  border-top: var(--border-hairline) solid var(--color-warning-border);
+  /* Opaque in both themes: the page under it is always light. */
+  background: color-mix(
+    in srgb,
+    var(--color-warning) 12%,
+    var(--surface-raised)
+  );
+  pointer-events: none;
+}
+
+.bandText {
+  min-width: 0;
+}
+
+.band > button,
+.failurePlate > button {
+  flex: none;
+  pointer-events: auto;
+}
+
+/* Error: the greyed frame carries the label and the recovery action. */
+.failure {
+  position: absolute;
+  inset: var(--live-tab-head) 0 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  pointer-events: none;
+}
+
+/* The label and action sit on a small raised plate, readable over the
+   greyed (always light) page in both themes. */
+.failurePlate {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  box-shadow: var(--browser-card-shadow);
+}
+
+/* Compact: the bare frame; favicon and state sit on its corners. */
+.card[data-variant="compact"] {
+  overflow: visible;
+  gap: var(--space-xs);
+  background: transparent;
+  box-shadow: none;
+}
+
+.card[data-variant="compact"] > [data-slot="clickable"] {
+  overflow: hidden;
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  box-shadow: var(--live-tab-ring), var(--browser-card-shadow);
+}
+
+.card[data-variant="compact"] > [data-slot="clickable"]:focus-visible {
+  --live-tab-ring: var(--focus-ring);
+}
+
+.favicon,
+.corner {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-control);
+  background: var(--favicon-plate);
+  box-shadow: 0 0 0 var(--border-hairline) var(--favicon-plate-line);
+}
+
+.favicon {
+  bottom: var(--space-xs);
+  left: var(--space-xs);
+  padding: 2px;
+}
+
+.corner {
+  top: var(--space-xs);
+  right: var(--space-xs);
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+}
+
+.dot {
+  width: var(--space-sm);
+  height: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-warning);
+}
+
+.dot[data-tone="error"] {
+  background: var(--color-danger);
+}
+
+/* Chip: a 48×30 frame and the site name, in the shelf. */
+.chip {
+  flex: 0 0 auto;
+  height: var(--control-height-lg);
+  max-width: 160px;
+  gap: var(--space-sm);
+  padding-inline: 3px var(--space-sm);
+  border-radius: var(--radius-panel);
+}
+
+.mini {
+  position: relative;
+  flex: none;
+  width: 48px;
+  overflow: hidden;
+  border-radius: calc(var(--radius-control) - 2px);
+  box-shadow: var(--live-tab-ring, 0 0 0 var(--border-hairline) var(--line));
+}
+
+.chip[data-state="busy"] .mini {
+  box-shadow: 0 0 0 var(--border-hairline)
+    color-mix(in srgb, var(--butler-ink-purple) 45%, transparent);
+}
+
+.chip[data-state="attention"] .mini {
+  box-shadow: 0 0 0 1.5px var(--color-warning);
+}
+
+.chip[data-state="error"] .mini {
+  box-shadow: 0 0 0 var(--border-hairline) var(--color-danger-border);
+}
+
+/* The placeholder plate is sized for a full frame; a mini frame shows the favicon alone. */
+.mini [data-slot="media-frame-placeholder"] > span {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+  background: transparent;
+  box-shadow: none;
+}
+
+.chipText {
+  max-width: 84px;
+}

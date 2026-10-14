@@ -127,6 +127,28 @@ test("a panel animating the slot's ancestor occludes it and frames stop once it 
   view.tracker.destroy();
 });
 
+// test-category: race
+test("a rect change landing as a panel motion ends stays covered until it settles", async () => {
+  const view = track();
+  await flush();
+  let playState = "running";
+  const slide = { playState: "", effect: { getKeyframes: () => [{ transform: "translateX(304px)" }, { transform: "none" }] } };
+  Object.defineProperty(slide, "playState", { get: () => playState });
+  view.doc.getElementById("shell")!.getAnimations = () => [slide as unknown as Animation];
+  view.doc.dispatchEvent(new dom.window.Event("scroll"));
+  await flush(2);
+  expect(view.occlusion).toEqual([false, true]);
+  // The slide ends and its track commits in the same moment: the slot grows by the sidebar width.
+  playState = "finished";
+  setRect(view.target, { left: 0, top: 81, width: 1104, height: 600 });
+  await flush(1);
+  expect(view.bounds.at(-1)).toMatchObject({ x: 0, width: 1104 });
+  expect(view.occlusion).toEqual([false, true]);
+  await flush();
+  expect(view.occlusion).toEqual([false, true, false]);
+  view.tracker.destroy();
+});
+
 // test-category: pure-logic
 test("fixed viewports report their scale and keep their aspect", () => {
   expect(nativeViewScale({ width: 1280, height: 800 }, 640)).toBe(0.5);

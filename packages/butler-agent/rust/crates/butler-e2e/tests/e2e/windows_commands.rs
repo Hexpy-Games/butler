@@ -12,16 +12,24 @@ mod capabilities;
 mod capability_stub;
 #[path = "windows_commands/file_paths.rs"]
 mod file_paths;
+#[path = "windows_commands/invalid_batch.rs"]
+mod invalid_batch;
 #[path = "windows_commands/observation.rs"]
 mod observation;
 #[path = "windows_commands/observation_stub.rs"]
 mod observation_stub;
+#[path = "windows_commands/path_contract.rs"]
+mod path_contract;
+#[path = "windows_commands/path_messages.rs"]
+mod path_messages;
 #[path = "windows_commands/private_metadata.rs"]
 mod private_metadata;
 #[path = "windows_commands/profile_files.rs"]
 mod profile_files;
 #[path = "windows_commands/profile_observation.rs"]
 mod profile_observation;
+#[path = "windows_commands/startup.rs"]
+mod startup;
 #[path = "windows_commands/stub.rs"]
 mod stub;
 use butler_e2e::e2e::{
@@ -64,6 +72,9 @@ async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
     std::fs::create_dir_all(&downloads)?;
     std::fs::write(downloads.join("보고서.txt"), "document")?;
     std::fs::write(downloads.join("사진.png"), "image")?;
+    let spaced = setup.sandbox.home.join("Directory with spaces");
+    std::fs::create_dir_all(&spaced)?;
+    std::fs::write(spaced.join("한국어 파일.txt"), "한국어 경로 출력")?;
     let home = setup.sandbox.home.display().to_string();
     let local = setup.sandbox.home.join("AppData/Local");
     let roaming = setup.sandbox.home.join("AppData/Roaming");
@@ -87,6 +98,24 @@ async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
         "{row}"
     );
     let requests = s.provider()?.requests();
+    let definition = requests
+        .iter()
+        .filter_map(|request| request["tools"].as_array())
+        .flatten()
+        .find(|tool| tool["name"] == "run_command")
+        .expect("model receives the command schema");
+    assert!(
+        definition["description"]
+            .as_str()
+            .unwrap()
+            .contains("Windows PowerShell 5.1")
+    );
+    assert!(
+        definition["parameters"]["properties"]["command"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("cmd /c")
+    );
     let text = requests
         .iter()
         .filter_map(|request| request["input"].as_array())
@@ -186,6 +215,31 @@ async fn windows_command_tool_native_matrix() -> Result<(), HarnessError> {
             "보고서.txt",
         ),
         (
+            "WIN-CMD-OUTER",
+            r#"cmd /c "echo 한국어 출력& type "%USERPROFILE%\Directory with spaces\한국어 파일.txt"""#,
+            "한국어 출력\r\n한국어 경로 출력",
+        ),
+        (
+            "WIN-CMD-D",
+            r#"cmd.exe /d /c type "%USERPROFILE%\Directory with spaces\한국어 파일.txt""#,
+            "한국어 경로 출력",
+        ),
+        (
+            "WIN-CMD-D-OUTER",
+            r#"cmd.exe /d /c "echo 한국어 출력& type "%USERPROFILE%\Directory with spaces\한국어 파일.txt"""#,
+            "한국어 출력\r\n한국어 경로 출력",
+        ),
+        (
+            "WIN-CMD-S",
+            r#"cmd /s /c type "%USERPROFILE%\Directory with spaces\한국어 파일.txt""#,
+            "한국어 경로 출력",
+        ),
+        (
+            "WIN-CMD-S-OUTER",
+            r#"cmd /s /c "echo 한국어 출력& type "%USERPROFILE%\Directory with spaces\한국어 파일.txt"""#,
+            "한국어 출력\r\n한국어 경로 출력",
+        ),
+        (
             "WIN-NODE",
             r#"node -e "console.log('안녕하세요'); console.log(require('fs').readdirSync(process.env.USERPROFILE+'/Downloads'))""#,
             "안녕하세요",
@@ -193,6 +247,11 @@ async fn windows_command_tool_native_matrix() -> Result<(), HarnessError> {
         (
             "WIN-PYTHON",
             r#"python -B -c "import os; print('안녕하세요'); print(hex(0 & 0xffffffff)); print(os.listdir(os.path.join(os.environ['USERPROFILE'],'Downloads')))""#,
+            "보고서.txt",
+        ),
+        (
+            "WIN-DIR",
+            r#"dir "$env:USERPROFILE\Downloads" -Name | Sort-Object"#,
             "보고서.txt",
         ),
         (
@@ -262,5 +321,46 @@ async fn windows_ledger_case_alias_is_still_protected() -> Result<(), HarnessErr
     )
     .await?;
     assert_eq!(output["error"], "protected_path", "{output}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn powershell_ledger_cmdlets_and_aliases_stay_protected() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        !butler_platform::command_sandbox::POSIX_SHELL,
+        "Windows native shell"
+    );
+    for command in [
+        "Set-Content -LiteralPath '.PROJECT-LEDGER/records.json' -Value changed",
+        "sc .PROJECT-LEDGER/records.json changed",
+        "copy ordinary.txt .PROJECT-LEDGER/records.json",
+        "ren .PROJECT-LEDGER/records.json changed.json",
+    ] {
+        let output = run("PS-LEDGER-GUARD", command).await?;
+        assert_eq!(output["error"], "protected_path", "{output}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn powershell_file_aliases_preserve_unicode_contents() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        !butler_platform::command_sandbox::POSIX_SHELL,
+        "Windows native shell"
+    );
+    let command = r"$ErrorActionPreference='Stop'; Set-Content -Encoding UTF8 -NoNewline -LiteralPath '새 파일.txt' -Value '안녕하세요'; copy '새 파일.txt' '복사.txt'; ren '복사.txt' '이름 바꾼 파일.txt'; type '이름 바꾼 파일.txt'; dir -Name '*.txt' | Sort-Object";
+    let output = run("PS-FILE-ALIASES", command).await?;
+    successful(&output, "안녕하세요");
+    assert_eq!(
+        output["stdout"]
+            .as_str()
+            .unwrap()
+            .lines()
+            .map(str::trim)
+            .collect::<Vec<_>>(),
+        vec!["안녕하세요", "새 파일.txt", "이름 바꾼 파일.txt"]
+    );
     Ok(())
 }

@@ -1,7 +1,7 @@
 mod project;
 mod sanitize;
 
-use super::super::{composer_decoration, wallpaper};
+use super::super::{composer_decoration, conversation_background, wallpaper};
 
 pub(super) fn project(
     current: &serde_json::Value,
@@ -12,6 +12,7 @@ pub(super) fn project(
     let mut output = project::project(current, patch, facts, workspace_root);
     wallpaper::project(current, patch, &mut output);
     composer_decoration::project(current, patch, &mut output);
+    conversation_background::project(current, patch, &mut output);
     output
 }
 
@@ -30,6 +31,12 @@ pub(super) fn sanitize(
         let value = composer_decoration::sanitize(value)?;
         if let Some(patch) = patch.as_object_mut() {
             patch.insert(composer_decoration::KEY.into(), value);
+        }
+    }
+    if let Some(value) = input.get(conversation_background::KEY) {
+        let value = conversation_background::sanitize(value)?;
+        if let Some(patch) = patch.as_object_mut() {
+            patch.insert(conversation_background::KEY.into(), value);
         }
     }
     Ok(patch)

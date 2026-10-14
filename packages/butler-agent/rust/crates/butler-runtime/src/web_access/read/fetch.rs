@@ -69,12 +69,30 @@ impl WebAccess {
                 "page-reader-disabled",
             ));
         }
-        let mut page =
-            match lightweight(self, url.clone(), requested_url, backend, cancellation).await {
-                Ok(page) => page,
-                Err(error) if error.code() == "cancelled" => return Err(error),
-                Err(_) => failed_page(requested_url),
-            };
+        if !self.page_permitted(&url) {
+            return Ok(PageRead::unavailable(
+                requested_url,
+                requested_url,
+                "butler-lightweight",
+                "Only public pages are read: private, loopback and local addresses are refused.",
+                "page-read-denied",
+            ));
+        }
+        // Butler's browser first; the fetch serves when it renders nothing.
+        let browser = match backend {
+            "browser" => Box::pin(super::headless::browser(&url, requested_url)).await?,
+            _ => None,
+        };
+        let mut page = match browser {
+            Some(page) => page,
+            None => {
+                match lightweight(self, url.clone(), requested_url, backend, cancellation).await {
+                    Ok(page) => page,
+                    Err(error) if error.code() == "cancelled" => return Err(error),
+                    Err(_) => failed_page(requested_url),
+                }
+            }
+        };
         match backend {
             "jina-hosted" => add_warning(&mut page, "jina-hosted-reader-not-yet-enabled"),
             "auto" | "lightpanda" if page.render_recommended => {
@@ -92,9 +110,14 @@ impl WebAccess {
                     Ok(Some(rendered)) => {
                         add_warning(&mut page, &fallback_warning(&rendered));
                     }
-                    Ok(None) => {
-                        add_warning(&mut page, "lightpanda-unavailable-fell-back-to-lightweight");
-                    }
+                    Ok(None) => match super::headless::render(&url, requested_url).await? {
+                        Some(rendered) if should_use_rendered(&page, &rendered) => page = rendered,
+                        Some(_) => add_warning(&mut page, "headless-render-fallback-rejected"),
+                        None => add_warning(
+                            &mut page,
+                            "lightpanda-unavailable-fell-back-to-lightweight",
+                        ),
+                    },
                     Err(error) if error.code() == "cancelled" => return Err(error),
                     Err(_) => add_warning(&mut page, "lightpanda-render-fallback-rejected"),
                 }

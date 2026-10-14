@@ -1,0 +1,120 @@
+/* A sheet whose two top corners use the page card radius (12px). One edge,
+   one hairline: the sheet's leading hairline is the chat | pane divider (the
+   chat column draws none); its trailing and bottom edges meet the window,
+   whose frame (the workspace border) draws them, so the sheet tucks its own
+   trailing border under that frame instead of doubling it. */
+.pane {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin-inline: 0 calc(var(--border-hairline) * -1);
+  padding-top: var(--space-xs);
+  overflow: hidden;
+  border: var(--border-hairline) solid var(--line);
+  border-bottom: 0;
+  border-radius: var(--browser-pane-radius) var(--browser-pane-radius) 0 0;
+  background: var(--browser-pane-bg);
+}
+
+/* Standalone, the sheet's leading edge is the window frame's (the workspace
+   border beside the sidebar) too. */
+.pane[data-placement="standalone"] {
+  margin-inline-start: calc(var(--border-hairline) * -1);
+}
+
+/* AdaptiveShell frame="cards": the sheet is a card of its own (beside the
+   chat card, or the standalone Browser's card): all four corners, its own
+   quiet edge, nothing tucked under a window frame. Its surface comes from
+   the shell (--browser-pane-bg is a faint tint of the card surface there),
+   and the page card's shadow on it is --shell-page-shadow: tight in light,
+   so the strip beside the gap between cards keeps the sheet's surface. */
+[data-panel-layout="docked"] .pane[data-frame="cards"] {
+  --browser-card-shadow: var(--shell-page-shadow);
+
+  margin: 0;
+  padding-top: 0;
+  border: var(--border-hairline) solid var(--shell-card-edge);
+  border-radius: var(--shell-card-radius);
+  box-shadow: var(--shell-card-shadow);
+}
+
+/* The first tab sits --browser-card-inset off the card's top and left edges,
+   level with the page card's edge below it. The tab strip pads itself by the
+   focus ring's width, so the row gives the rest. The toolbar keeps its place. */
+[data-panel-layout="docked"] .pane[data-frame="cards"] .tabRow {
+  height: auto;
+  align-items: flex-start;
+  padding-top: calc(var(--browser-card-inset) - var(--focus-ring-width));
+  padding-bottom: 0;
+  padding-inline-start: calc(
+    var(--browser-card-inset) - var(--focus-ring-width)
+  );
+}
+
+/* At least a menu row tall; it grows with touch-size controls (44px on a
+   phone) so they and their focus rings stay inside the sheet. */
+.tabRow {
+  display: flex;
+  min-width: 0;
+  min-height: calc(var(--menu-item-height) + var(--space-xs));
+  flex: none;
+  align-items: center;
+  padding: 0 var(--browser-card-inset) var(--space-xs);
+}
+
+.tabRow > * {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.toolbar {
+  container-name: browser-toolbar;
+  container-type: inline-size;
+  display: flex;
+  min-width: 0;
+  height: var(--browser-band-height);
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0 var(--browser-card-inset) var(--space-xs);
+}
+
+.group {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.group [data-slot="button-container"] {
+  flex-wrap: nowrap;
+}
+
+.address {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Narrow panes keep the address readable: only the last page action (More,
+   which carries the others) stays. */
+@container browser-toolbar (width < 520px) {
+  .address {
+    min-width: calc(var(--space-4xl) * 3);
+  }
+
+  .group:last-child [data-slot="button-container"] > :not(:last-child) {
+    display: none;
+  }
+}
+
+.stage {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding: 0 var(--browser-card-inset) var(--browser-card-inset);
+}

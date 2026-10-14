@@ -124,6 +124,10 @@ pub struct AuthorityAdmissionInput {
     pub category: Option<String>,
     // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub normalized_input: Value,
+    /// False after external content (D5): a standing permission no longer admits it.
+    pub honor_standing_permission: bool,
+    /// Nobody can answer (D8): report `Unattended` instead of storing a wait.
+    pub unattended: bool,
 }
 
 /// Whether an operation may run, waits for the user, or was answered.
@@ -148,6 +152,8 @@ pub enum AuthorityAdmissionResult {
     Modified {
         request_ref: String,
     },
+    /// It would wait for the user, but the turn is unattended; nothing was stored.
+    Unattended,
 }
 
 /// The user's answer to an authority request (`allow`, `deny` or `modify`).
@@ -486,6 +492,8 @@ pub(crate) trait AuthorityRepository {
 #[derive(Clone)]
 pub struct PrincipalAuthority {
     pub(super) storage: BtccStorage,
+    pub(super) permission_targets:
+        Arc<std::sync::Mutex<super::permission_management::PermissionCache>>,
     pub(super) collation: Arc<LocaleCollation>,
     pub(super) clock: Arc<dyn Fn() -> String + Send + Sync>,
     pub(super) uuid: Arc<dyn Fn() -> String + Send + Sync>,

@@ -27,7 +27,10 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Rendering unknown text as markdown can reflow or hide content.", render: () => <MarkdownContent><Typo.Body># Release notes</Typo.Body></MarkdownContent> },
     },
   ],
-  content: ["Loading and failure captions name the artifact state, not technical errors."],
+  content: [
+    "Loading and failure captions name the artifact state, not technical errors.",
+    "A frame whose content has its own size (a scrap's clipped part) passes intrinsicSize; larger content scrolls inside the preview.",
+  ],
   accessibility: ["Images need alt text (the title); frames need a title."],
   tokens: ["--surface", "--radius-panel", "--typo-code-size"],
 };

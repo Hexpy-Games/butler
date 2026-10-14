@@ -3,6 +3,9 @@ import type { WallpaperSource } from "../Wallpaper";
 /** The picker's value: a wallpaper source, or `inherit` (follow another scope, e.g. a project following the global wallpaper). */
 export type WallpaperPickerValue = WallpaperSource | "inherit";
 
+/** What a picked image starts with instead of the picker's defaults (fill, dim from its luminance, no blur), e.g. `{ dim: 0 }`. */
+export type WallpaperPickerImageDefaults = Partial<Pick<Extract<WallpaperSource, { kind: "image" }>, "fit" | "dim" | "blur">>;
+
 /** An uploaded image the picker offers; its thumbnail loads through the image loader (`thumbnail` variant). */
 export interface WallpaperPickerImage {
   id: string;

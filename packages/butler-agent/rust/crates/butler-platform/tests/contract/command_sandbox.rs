@@ -8,11 +8,15 @@ use std::path::Path;
 use std::process::{Command, ExitStatus};
 
 use butler_platform::command_sandbox::{
-    Invocation, Protection, READ_ONLY_SANDBOX, SandboxError, ShellAccess, WRITE_PROTECTION,
-    legacy_shell, login_shell, protect_writes,
+    Invocation, Protection, SandboxError, ShellAccess, capabilities, legacy_shell, login_shell,
+    protect_writes,
 };
 
 use super::scratch;
+
+// Pin the Windows invocation plan on Linux too; native E2Es verify cmd parsing.
+#[path = "../../src/command_sandbox/windows/cmd.rs"]
+mod cmd;
 
 fn run(invocation: &Invocation) -> ExitStatus {
     Command::new(&invocation.program)
@@ -29,20 +33,39 @@ fn write_command(targets: &[&Path]) -> String {
         .join("; ")
 }
 
+// test-category: security
 #[test]
 fn read_only_commands_run_sandboxed_or_are_refused() {
-    assert_eq!(READ_ONLY_SANDBOX, cfg!(target_os = "macos"));
+    cmd_arguments_remain_verbatim();
+    expected_host_sandbox_is_enforced();
+    assert_eq!(
+        butler_platform::command_sandbox::isolation_failure(
+            Some(125),
+            b"command_observation_isolation_unavailable: fixture",
+        ),
+        cfg!(target_os = "linux")
+    );
+    assert!(!butler_platform::command_sandbox::isolation_failure(
+        Some(125),
+        b"shell error"
+    ));
+    assert!(!butler_platform::command_sandbox::isolation_failure_exit(
+        None
+    ));
+    let read_only = capabilities().read_only.is_enforced();
     let directory = scratch("read-only");
     let target = directory.join("must-not-exist");
     let command = write_command(&[&target]);
     let environment = HashMap::new();
     let sandboxed = login_shell(&command, ShellAccess::ReadOnly, &environment);
-    if !READ_ONLY_SANDBOX {
+    if !read_only {
         assert!(matches!(sandboxed, Err(SandboxError::ReadOnlyUnavailable)));
         return;
     }
     let sandboxed = sandboxed.unwrap();
-    assert_eq!(sandboxed.program, "/usr/bin/sandbox-exec");
+    if cfg!(target_os = "macos") {
+        assert_eq!(sandboxed.program, "/usr/bin/sandbox-exec");
+    }
     assert!(!run(&sandboxed).success());
     assert!(!target.exists(), "the sandbox let the command write");
 
@@ -53,9 +76,43 @@ fn read_only_commands_run_sandboxed_or_are_refused() {
     assert!(target.exists());
 }
 
+fn cmd_arguments_remain_verbatim() {
+    let environment = HashMap::from([("ComSpec".into(), Some("cmd.exe".into()))]);
+    for text in [
+        r#"cmd.exe /d /c "echo 한국어 출력""#,
+        r#"cmd /c dir "%USERPROFILE%\Downloads""#,
+        r#"cmd /s /c "echo 한국어 출력 & dir "%USERPROFILE%\Downloads"""#,
+        r#"cmd /c echo 한국어 출력 & dir "C:\Directory with spaces""#,
+        r#"cmd /s /c echo 한국어 출력 & dir "C:\Directory with spaces""#,
+        r"cmd.exe /d /c echo 한국어 출력",
+        r#"cmd /c ""C:\Program Files\tool.exe" "한국어 인수"""#,
+        r#"cmd /s /c ""C:\Program Files\tool.exe" "%USERPROFILE%\Downloads"""#,
+    ] {
+        assert!(cmd::script(text).is_some(), "{text}");
+        let invocation = cmd::shell(text, &environment);
+        assert_eq!(invocation.program, "cmd.exe");
+        assert_eq!(
+            invocation.arguments,
+            ["/d", "/s", "/c", &format!("chcp 65001>nul & {text}")]
+        );
+        assert_eq!(
+            cmd::raw_argument(&invocation).as_deref(),
+            Some(format!("\"chcp 65001>nul & {text}\"").as_str())
+        );
+    }
+    let native = Invocation {
+        program: "node.exe".into(),
+        arguments: vec!["/d".into(), "/s".into(), "/c".into(), "quoted text".into()],
+    };
+    assert_eq!(cmd::raw_argument(&native), None);
+    assert_eq!(cmd::script("Write-Output '한국어 출력'"), None);
+}
+
+// test-category: security
 #[test]
 fn protected_roots_refuse_writes_by_path_and_real_path() {
-    assert_eq!(WRITE_PROTECTION, cfg!(target_os = "macos"));
+    let write_protection = capabilities().write_protection.is_enforced();
+    assert_eq!(write_protection, cfg!(target_os = "macos"));
     let directory = scratch("protect-writes");
     let root = directory.join("installation");
     let outside = directory.join("outside");
@@ -71,7 +128,7 @@ fn protected_roots_refuse_writes_by_path_and_real_path() {
     let protection = protect_writes(shell.clone(), &root).unwrap();
     assert_eq!(
         matches!(protection, Protection::Enforced(_)),
-        WRITE_PROTECTION
+        write_protection
     );
     match protection {
         Protection::Unavailable(unchanged) => assert_eq!(unchanged, shell),
@@ -84,4 +141,27 @@ fn protected_roots_refuse_writes_by_path_and_real_path() {
             assert!(allowed.exists(), "a write outside the root was refused");
         }
     }
+}
+
+fn expected_host_sandbox_is_enforced() {
+    let Ok(expected) = std::env::var("BUTLER_EXPECT_SANDBOX") else {
+        return;
+    };
+    let caps = capabilities();
+    assert!(
+        matches!(expected.as_str(), "linux" | "macos" | "unavailable"),
+        "unknown BUTLER_EXPECT_SANDBOX contract: {expected}"
+    );
+    match expected.as_str() {
+        "linux" => {
+            assert!(caps.approval_free_reads(), "{caps:?}");
+            assert!(!caps.write_protection.is_enforced(), "P3 is deferred");
+        }
+        "macos" => assert!(
+            caps.approval_free_reads() && caps.write_protection.is_enforced(),
+            "{caps:?}"
+        ),
+        _ => assert!(!caps.read_only.is_enforced(), "{caps:?}"),
+    }
+    eprintln!("sandbox capabilities: {caps:?}");
 }

@@ -49,6 +49,12 @@ pub(super) async fn activate(
         let _ = application.close().await;
         return Err(error);
     }
+    #[cfg(feature = "e2e-fixtures")]
+    let config = {
+        let mut config = config;
+        config.browser_import = butler_test_support::import_sources::dependencies();
+        config
+    };
     // serve_gateway starts both loopback and saved LAN exposure. Only now can
     // requests leave the kernel backlog and reach the initialized application.
     match serve_gateway(listener, application.clone(), config).await {

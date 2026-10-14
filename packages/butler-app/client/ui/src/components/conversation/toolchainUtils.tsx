@@ -8,7 +8,7 @@ import { commandProgram, uniqueFileTargets } from "../../../../../../butler-i18n
 import { publicOperationTitle } from
   "../../../../../../butler-progress-projection/src/index.ts";
 import { activityIcon } from "./toolchainIcons";
-import { WorkerCallCapsule } from "./WorkerCallCapsule";
+import { toolchainAfter } from "./toolchainAfter";
 
 export { activityIcon } from "./toolchainIcons";
 
@@ -51,9 +51,7 @@ export function workActivityToolsFromRows(
     title: toolchainSummaryLabel(row),
     summaryLabel: toolchainGroupLabel(row),
     details: toolDetails(row, turnId),
-    ...(row.safe_tool_name === "delegate_to_worker" && turnId && row.tool_call_id ? {
-      after: <WorkerCallCapsule turnId={turnId} callId={row.tool_call_id} />,
-    } : {}),
+    ...toolchainAfter(row, rows, turnId),
     }));
 }
 

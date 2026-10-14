@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { readProductFeatures } from "../product-features.mjs";
 import { gunzipSync } from "node:zlib";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -76,6 +75,12 @@ rmSync(payloadRoot, { recursive: true, force: true });
 const binaryRoot = join(payloadRoot, "bin");
 mkdirSync(binaryRoot, { recursive: true });
 copyFileSync(sourceBinary, join(binaryRoot, binaryName));
+if (requestedPlatform === "linux") {
+  const helper = join(dirname(sourceBinary), "butler-sandbox");
+  accessSync(helper, constants.X_OK);
+  verifyLinuxDependencyClosure(helper, requestedArch);
+  copyFileSync(helper, join(binaryRoot, "butler-sandbox"));
+}
 run(process.execPath, [join(scriptDir, "prepare-process-links.mjs"), join(binaryRoot, binaryName)], rustRoot);
 const roleLinks = spawnSync(join(binaryRoot, "butler-agent"), ["--prepare-process-links"], { stdio: "inherit" });
 if (roleLinks.status !== 0 && roleLinks.status !== 2) throw new Error("Could not prepare Agent process role links.");
@@ -89,12 +94,6 @@ const uiDistRoot = resolve(
     join(repositoryRoot, "packages", "butler-app", "client", "ui", "dist"),
 );
 requireFile(join(uiDistRoot, "index.html"));
-const productFeatures = readProductFeatures(uiDistRoot);
-if (process.env.BUTLER_FEATURE_BROWSER !== undefined &&
-    productFeatures.browser !== (process.env.BUTLER_FEATURE_BROWSER !== "false")) {
-  throw new Error("Renderer product features do not match this package build.");
-}
-writeFileSync(join(electronRoot, "product-features.json"), `${JSON.stringify(productFeatures)}\n`);
 requireFile(join(uiDistRoot, "THIRD_PARTY_NOTICES.txt.gz"));
 if (!gunzipSync(readFileSync(join(uiDistRoot, "THIRD_PARTY_NOTICES.txt.gz"))).equals(readFileSync(join(repositoryRoot, "deploy/licenses/THIRD_PARTY_NOTICES.txt")))) {
   throw new Error("Renderer notices are stale; rebuild the App renderer.");
@@ -171,7 +170,7 @@ function buildNativeAgent() {
     buildEnv.RUSTFLAGS = `${buildEnv.RUSTFLAGS ?? ""} -C target-feature=+crt-static`.trim();
   }
   run("cargo", [
-    "build", "--release", "--locked", "-p", "butler-agent",
+    "build", "--release", "--locked", "-p", "butler-agent", "-p", "butler-platform", "--bin", "butler-agent", "--bin", "butler-sandbox",
     "--no-default-features", "--features", "static-ort",
   ], rustRoot, buildEnv);
   const targetRoot = process.env.CARGO_TARGET_DIR
@@ -239,7 +238,7 @@ function verifyWindowsDependencyClosure(binary) {
   const imports = run("dumpbin", ["/imports", binary], rustRoot);
   const systemDlls = new Set([
     "advapi32.dll", "bcrypt.dll", "bcryptprimitives.dll", "cfgmgr32.dll",
-    "combase.dll", "crypt32.dll", "dbghelp.dll", "dnsapi.dll", "gdi32.dll", "iphlpapi.dll",
+    "combase.dll", "credui.dll", "crypt32.dll", "dbghelp.dll", "dnsapi.dll", "gdi32.dll", "iphlpapi.dll",
     "kernel32.dll", "mswsock.dll", "ncrypt.dll", "netapi32.dll", "ntdll.dll",
     "ole32.dll", "oleaut32.dll", "pdh.dll", "powrprof.dll", "propsys.dll", "psapi.dll",
     "rpcrt4.dll", "secur32.dll", "setupapi.dll", "shell32.dll", "shlwapi.dll",

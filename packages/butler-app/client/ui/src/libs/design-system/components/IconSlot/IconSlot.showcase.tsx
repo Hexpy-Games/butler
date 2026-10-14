@@ -14,7 +14,7 @@ export const meta: ShowcaseMeta = {
 
 const labels = {
   "en-US": { working: "Working", attention: "Needs attention", project: "Butler site" },
-  "ko-KR": { working: "작업 중", attention: "확인 필요", project: "Butler 사이트" },
+  "ko-KR": { working: "작업 중", attention: "확인 필요", project: "버틀러 사이트" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {

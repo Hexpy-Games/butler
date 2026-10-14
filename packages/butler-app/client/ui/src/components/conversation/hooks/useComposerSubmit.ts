@@ -1,3 +1,4 @@
+import { clearElementDraft, useElementDraft } from "../../browser/browserElements";
 import { useCallback } from "react";
 import type { FormEvent } from "react";
 import type {
@@ -56,8 +57,10 @@ export function useComposerSubmit({
       if (useButlerStore.getState().liveConnectionLost) return;
       const draftText = readText?.() ?? text;
       const value = draftText.trim();
+      const elementDraft = useElementDraft.getState();
+      const elements = elementDraft.session === useComposerStore.getState().draftSessionId ? elementDraft.items : [];
       if (
-        (!value && attachments.length === 0) ||
+        (!value && attachments.length === 0 && elements.length === 0) ||
         useComposerStore.getState().blockedAttachments.size > 0 ||
         (isSending && !activeTurn) ||
         uploadingCount > 0
@@ -79,7 +82,7 @@ export function useComposerSubmit({
         planMode,
         controlsTouched,
         activeTurn,
-        attachments,
+        attachments: [...attachments, ...elements.map(item => ({ file: item.file }))],
       }), contentParts, workspaceMode: submitted.workspaceMode, onRejected: (targetSessionId) => {
         const current = useComposerStore.getState();
         if (targetSessionId === sessionId || current.draftSessionId !== targetSessionId || current.text) return;
@@ -87,6 +90,7 @@ export function useComposerSubmit({
         else current.setText(draftText);
         if (!current.attachments.length) current.setAttachments(attachments);
       }, onAccepted: () => {
+        void clearElementDraft(sessionId, elements);
         const current = useComposerStore.getState();
         if (current.draftSessionId === sessionId && current.draftRevision === revision) {
           current.setWorkspaceMode("local");

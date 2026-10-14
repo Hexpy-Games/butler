@@ -5,6 +5,9 @@ use serde_json::Map;
 // test-category: format-pin
 #[test]
 fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
+    super::sizing::sizing_counts_image_allowance_and_preserves_complete_wire_bytes();
+    super::sizing::long_history_sizing_matches_full_projection();
+    super::sizing::native_carrier_sizing_counts_tool_images_by_allowance();
     let (catalog, snapshot) = catalog();
     drop(catalog);
     let messages = [ModelRoundMessage {
@@ -65,7 +68,24 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     compiled_body_matches(&config);
     assert_eq!(
         encoded,
-        r#"{"model":"gpt-5.5","tool_choice":"auto","reasoning":{"effort":"medium"},"instructions":"PREFIX dynamic","max_output_tokens":64,"store":true,"input":"hello"}"#
+        r#"{"model":"gpt-5.5","tool_choice":"auto","reasoning":{"effort":"medium"},"instructions":"PREFIX dynamic","max_output_tokens":64,"store":true,"input":"hello","stream":true}"#
+    );
+    let previous_auth = std::mem::replace(
+        &mut config.auth,
+        ProviderAuth::Codex {
+            mode: ProviderAuthMode::CodexSubscription,
+            authorization: "Bearer offline".into(),
+            account_id: "offline".into(),
+            user_agent: "offline".into(),
+            originator: "butler".into(),
+        },
+    );
+    let codex = serialize::body(&request, &config, serialize::Carrier::Responses).unwrap();
+    config.auth = previous_auth;
+    assert_eq!(
+        butler_core::json::stringify(&codex).unwrap(),
+        r#"{"model":"gpt-5.5","tool_choice":"auto","reasoning":{"effort":"medium"},"instructions":"PREFIX dynamic","store":false,"input":[{"role":"user","content":[{"type":"input_text","text":"hello"}]}],"stream":true,"text":{"verbosity":"medium"}}"#,
+        "Codex keeps its existing request bytes and field order"
     );
     let identity = serialize::provider_cache_identity(&body, &encoded, &request, &config)
         .unwrap()
@@ -92,6 +112,8 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
         description: "discover".into(),
         parameters: Map::new(),
         concurrency_safe: None,
+        transcript_visibility: None,
+        handler_validates_arguments: None,
         tool_contract_version: None,
     }];
     request.tools = &replacement;
@@ -147,6 +169,8 @@ fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fen
             description: "Search".into(),
             parameters: Map::new(),
             concurrency_safe: None,
+            transcript_visibility: None,
+            handler_validates_arguments: None,
             tool_contract_version: None,
         }];
         let mut request = request(
@@ -210,6 +234,8 @@ fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fen
             description: "Search".into(),
             parameters: Map::new(),
             concurrency_safe: None,
+            transcript_visibility: None,
+            handler_validates_arguments: None,
             tool_contract_version: None,
         }];
         let mut input = request(
@@ -241,7 +267,10 @@ fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fen
             result.text.as_deref(),
             Some("Visible\n\n```text\nanalysis: preserved\n```")
         );
-        assert!(result.tool_calls.is_empty());
+        assert_eq!(
+            result.tool_calls,
+            [] as [butler_turn::btcc::ModelRoundToolCall; 0]
+        );
     }
 }
 
@@ -274,6 +303,8 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
         description: "Search".into(),
         parameters: Map::new(),
         concurrency_safe: None,
+        transcript_visibility: None,
+        handler_validates_arguments: None,
         tool_contract_version: None,
     }];
     let messages = [
@@ -414,7 +445,7 @@ fn compiled_body_matches(config: &ProviderRequestConfig) {
         for _ in 0..2 {
             if let Some(items) = body.get("input").and_then(serde_json::Value::as_array) {
                 assert_eq!(
-                    sizing.array_json(items).unwrap(),
+                    sizing.array_sizing(items).unwrap().0,
                     butler_core::json::stringify(&serde_json::Value::Array(items.clone())).unwrap()
                 );
             }

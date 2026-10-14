@@ -1,6 +1,17 @@
 //! Reporting retains cacheable tool definitions, but has no execution authority.
 use super::super::contracts::{LoopPhase, ToolError};
 use super::*;
+use butler_core::tool_protocol::ToolName;
+
+/// Answer blocks are part of the final reply itself, not further execution:
+/// a reply round that only shows them still runs.
+fn reply_part(reply: &Reply) -> bool {
+    reply.text_call_names.is_empty()
+        && reply
+            .calls
+            .iter()
+            .all(|call| call.name == ToolName::AnswerBlocks)
+}
 
 pub(super) async fn reject_tools(
     input: &Invocation<'_>,
@@ -11,6 +22,7 @@ pub(super) async fn reject_tools(
 ) -> Result<Option<Step>, AgentLoopError> {
     if state.phase != LoopPhase::FinalReport
         || (reply.calls.is_empty() && reply.text_call_names.is_empty())
+        || reply_part(reply)
     {
         return Ok(None);
     }

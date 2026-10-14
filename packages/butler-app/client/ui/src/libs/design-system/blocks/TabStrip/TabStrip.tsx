@@ -1,6 +1,6 @@
 import { closestCenter, DndContext } from "@dnd-kit/core";
 import { horizontalListSortingStrategy, SortableContext } from "@dnd-kit/sortable";
-import { useCallback, useMemo, useState, type HTMLAttributes } from "react";
+import { useCallback, useMemo, useState, type HTMLAttributes, type ReactNode } from "react";
 import { IconButton } from "../../components/IconButton";
 import { Plus } from "../../components/Icons";
 import type { DsBaseProps } from "../../lib/dsProps";
@@ -33,6 +33,10 @@ export interface TabStripProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
   panelId?: string;
   /** Localized copy; English by default. */
   labels?: Partial<TabStripLabels>;
+  /** Drops the chip when the strip shows a single group of any kind (a conversation pane names it in its title bar). */
+  hideChip?: boolean;
+  /** Controls after the new-tab button at the row end (bring in a tab); kept out of the tab focus order. */
+  trailing?: ReactNode;
 }
 
 /**
@@ -41,11 +45,11 @@ export interface TabStripProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
  */
 export function TabStrip({
   groups, activeTabId, onActivate, onClose, onMove, onToggleGroup, onNewTab, panelId,
-  labels: labelOverrides, className, ...props
+  labels: labelOverrides, hideChip = false, trailing, className, ...props
 }: TabStripProps) {
   const labels = useMemo(() => ({ ...TAB_STRIP_LABELS, ...labelOverrides }), [labelOverrides]);
   const [announcement, setAnnouncement] = useState("");
-  const nav = useTabStripNavigation({ groups, activeTabId, labels, onClose, onMove, announce: setAnnouncement });
+  const nav = useTabStripNavigation({ groups, activeTabId, labels, onClose, onMove, announce: setAnnouncement, hideChip });
   const drag = useTabStripDrag({ groups, labels, onMove, announce: setAnnouncement });
   const tabKeys = useMemo(() => nav.items.flatMap((item) => (item.kind === "tab" ? [item.key] : [])), [nav.items]);
   const entering = useEnteringKeys(tabKeys, "tab-strip");
@@ -53,7 +57,7 @@ export function TabStrip({
   const activeNode = useCallback(() => (activeKey ? nav.node(activeKey) : null), [activeKey, nav.node]);
   const scroller = useTabStripScroller(activeNode, activeKey);
   const scope: TabStripScope = {
-    groups, activeTabId, panelId, labels, nav, entering, draggable: Boolean(onMove), onActivate, onClose, onMove, onToggleGroup,
+    groups, activeTabId, panelId, labels, hideChip, nav, entering, draggable: Boolean(onMove), onActivate, onClose, onMove, onToggleGroup,
   };
 
   return (
@@ -70,6 +74,7 @@ export function TabStrip({
           <Plus size="md" />
         </IconButton>
       ) : null}
+      {trailing ? <div className={styles.trailing} data-slot="tab-strip-trailing">{trailing}</div> : null}
       <span className="sr-only" aria-live="polite">{announcement}</span>
     </div>
   );

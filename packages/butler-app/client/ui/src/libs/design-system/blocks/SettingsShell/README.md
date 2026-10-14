@@ -43,6 +43,11 @@ Butler client settings containers and design-system fixtures.
 ## Best practice
 Keep sidebar items presentational and drive selection from the container.
 
+Inside `AdaptiveShell frame="cards"` (docked) the active settings screen puts
+its navigation on the shell surface and its detail pane in a card under the
+48px title row, inset `--shell-card-inset` from the window; the title-row drag
+lane above the card is unchanged.
+
 ## Wrong use cases
 Do not use it for inspector panels or project dashboards. Use InspectorPanel or dashboard blocks instead.
 

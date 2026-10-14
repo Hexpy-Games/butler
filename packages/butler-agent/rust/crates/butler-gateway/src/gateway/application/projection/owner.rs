@@ -1,5 +1,6 @@
 //! Native watcher and bounded projection worker ownership.
 mod append;
+mod diagnostics;
 
 use parking_lot::Mutex;
 use std::{
@@ -345,7 +346,10 @@ impl Work {
                     self.changed_set.remove(&file);
                 }
                 Err(error) => {
-                    eprintln!("[gateway] transcript projection failed: {error}");
+                    eprintln!(
+                        "[gateway] transcript projection failed: {}",
+                        diagnostics::code(&error)
+                    );
                     self.changed.push_back(file);
                     self.retry = (self.retry.max(SETTLE_DELAY) * 2).min(MAX_RETRY_DELAY);
                     tokio::time::sleep(self.retry).await;

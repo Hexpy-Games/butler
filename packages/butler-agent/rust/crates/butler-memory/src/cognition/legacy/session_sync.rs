@@ -249,7 +249,7 @@ mod tests {
             loaded.get("project:session-a"),
         )
         .unwrap();
-        assert!(repeat.is_empty());
+        assert_eq!(repeat, [] as [std::string::String; 0]);
         fs::remove_dir_all(root).unwrap();
     }
 }

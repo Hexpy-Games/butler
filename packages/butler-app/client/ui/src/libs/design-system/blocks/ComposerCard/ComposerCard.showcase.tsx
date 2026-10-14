@@ -42,7 +42,7 @@ const labels = {
     context: "Context 42% used", noImages: "Model doesn't accept images",
   },
   "ko-KR": {
-    placeholder: "Butler에게 무엇이든 물어보세요", followUp: "후속 변경사항 요청", more: "추가 기능", plan: "계획",
+    placeholder: "버틀러에게 무엇이든 물어보세요", followUp: "후속 변경사항 요청", more: "추가 기능", plan: "계획",
     access: "질문", model: "GPT-5.1", send: "전송", stop: "중지", reconnecting: "실시간 연결 복구 중",
     draft: "모션 토큰을 요약하고 아직 자체 전환을 선언하는 컴포넌트를 나열해 주세요.",
     preview: "모션 토큰을 요약하고…", optional: "웹 검색이 꺼져 있습니다. 출처를 인용하려면 설정에서 켜세요.",
@@ -113,6 +113,20 @@ export const stories: ShowcaseStory[] = [
   { name: "New chat (large)", widths: ["375", "app", "wide"], render: (context) => <Composer context={context} large /> },
   { name: "New chat with the shoreline decoration", widths: ["375", "app", "wide"], render: (context) => <DecoratedComposers context={context} scene="shoreline" /> },
   { name: "New chat with the cherry decoration", widths: ["375", "app", "wide"], render: (context) => <DecoratedComposers context={context} scene="cherry" /> },
+  {
+    // Beside the browser pane the conversation column is 340–560px; its composer is 316–536px. The control
+    // row keeps the wide inset: the + icon on the text inset, send clear of the curve.
+    name: "Narrow conversation column (340 and 400px)",
+    states: ["narrow"],
+    widths: ["app", "wide"],
+    render: (context) => (
+      <div className={styles.columns}>
+        {[316, 376].map((width) => (
+          <div className={styles.column} key={width} style={{ maxWidth: width }}><Composer context={context} /></div>
+        ))}
+      </div>
+    ),
+  },
   { name: "Follow-up while a turn runs (stop)", states: ["busy"], render: (context) => <Composer context={context} mode="stop" /> },
   { name: "Reconnecting (busy send)", states: ["loading"], render: (context) => <Composer context={context} busy /> },
   // ComposerToolbar: an attached image the selected model refuses blocks send; the tooltip says why in a few words.

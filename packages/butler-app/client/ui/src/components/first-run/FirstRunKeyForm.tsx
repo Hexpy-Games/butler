@@ -5,18 +5,17 @@ import {
   Field,
   FieldError,
   FieldLabel,
-  IconTile,
   Inline,
   Input,
-  SetupWizardContent,
+  SetupWizardStepAction,
   Spinner,
   Stack,
   InlineReference,
+  Tooltip,
   Typo,
 } from "@/butler-ds";
 import { PROVIDER_CARDS, type FirstRunProviderCardId } from "@/app/setupProviders.ts";
-import { CardGlyph } from "./CardGlyph";
-import { FirstRunBack } from "./FirstRunBack";
+import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { KeyCheckFailure } from "@/app/setupConnection.ts";
 import { RETRYABLE_KEY_FAILURES, useKeyVerification, type KeyStatus } from "./useKeyVerification";
 import type { FirstRunFlow } from "./useFirstRunFlow";
@@ -31,15 +30,15 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
     onVerified: (credentialId) => flow.connectKey(cardId, credentialId),
   });
   const bad = isKeyFailure(key.status);
+  const connected = Boolean(flow.commit.connected);
+  const connecting = Boolean(flow.commit.pending) && !connected;
   return (
-    <SetupWizardContent width="wide">
-      <Inline>
-        <FirstRunBack label={copy.backToList} onClick={flow.backToList} />
-      </Inline>
-      <Inline gap="md">
-        <IconTile size="md"><CardGlyph cardId={cardId} /></IconTile>
-        <Typo.H4 as="h1">{copy.keyTitle(name)}</Typo.H4>
-      </Inline>
+    <FirstRunStepCard flow={flow} contentKey={`key:${cardId}`} title={copy.keyTitle(name)}
+      description={copy.keyHint} onBack={flow.backToList}
+      actions={<Tooltip label={connected ? undefined : copy.connectFirst}>
+        <SetupWizardStepAction forward disabled={!connected} onClick={flow.toReply}>{connecting ? copy.connecting : copy.next}</SetupWizardStepAction>
+      </Tooltip>}
+    >
       <Field data-test-class="first-run-key-field">
         <FieldLabel htmlFor="first-run-api-key">{copy.keyLabel}</FieldLabel>
         <Input
@@ -54,15 +53,13 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
           value={key.value}
           onChange={(event) => key.change(event.target.value)}
         />
-        <KeyStatusLine copy={copy} status={key.status} onRetry={key.retry} />
+        <KeyStatusLine copy={copy} status={connected ? "valid" : connecting ? "checking" : key.status} onRetry={key.retry} />
       </Field>
       <Inline gap="md">
-        {spec.keyUrl ? (
-          <Typo.Body as="span"><InlineReference kind="external" href={spec.keyUrl} iconSrc={faviconSrc(spec.keyUrl)}>{copy.getKey}</InlineReference></Typo.Body>
-        ) : null}
+        {spec.keyUrl ? <Typo.Body as="span"><InlineReference kind="external" href={spec.keyUrl} iconSrc={faviconSrc(spec.keyUrl)}>{copy.getKey}</InlineReference></Typo.Body> : null}
         <Typo.Caption tone="tertiary">{copy.keyStored}</Typo.Caption>
       </Inline>
-    </SetupWizardContent>
+    </FirstRunStepCard>
   );
 }
 

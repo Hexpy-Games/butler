@@ -7,7 +7,7 @@ import { Button, ButtonContainer, Field, FieldLabel, NativeSelect, NativeSelectO
 const copy = {
   ko: {
     title: "이전 데이터 폴더예요",
-    body: "이전 데이터는 그대로 보관돼요. Butler 0.0.20을 삭제한 뒤 .butler 폴더 이름을 바꾸고 다시 시작하세요.",
+    body: "이전 데이터는 그대로 보관돼요. 버틀러 0.0.20을 삭제한 뒤 .butler 폴더 이름을 바꾸고 다시 시작하세요.",
     language: "언어", folder: "폴더 열기", restart: "다시 시작",
   },
   en: {

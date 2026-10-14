@@ -48,4 +48,20 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 layout, responsive, density
 
 ## Responsive columns
-`columns={{ base: "1", wide: "main-aside" }}` applies `base` always and `wide` from `@container page (min-width: 48rem)`, the page container that `PageContainer` (and `ManagementPage`) declares. Outside a PageContainer the grid stays on `base`. `main-aside` is `minmax(0, 2fr) minmax(0, 1fr)`. Every preset's tracks use `minmax(0, …)` and every cell gets `min-width: 0`, so wide content (a truncated path, a scroller) never widens the grid past its container. `auto-fit` and `auto-fill` clamp their 240px minimum to the container width; `label-value` clamps its 7rem label to 40%.
+`columns={{ base: "1", wide: "main-aside" }}` applies `base` always, `wide` from `@container page (min-width: 48rem)` and `compact` below `@container page (max-width: 36rem)` (cards: `{ compact: "2", base: "3", wide: "4" }`), the page container that `PageContainer` (and `ManagementPage`) declares. Outside a PageContainer the grid stays on `base`. `main-aside` is `minmax(0, 2fr) minmax(0, 1fr)`. Every preset's tracks use `minmax(0, …)` and every cell gets `min-width: 0`, so wide content (a truncated path, a scroller) never widens the grid past its container. `auto-fit` and `auto-fill` clamp their 240px minimum to the container width; `label-value` clamps its 7rem label to 40%.
+
+## Growing lists and the settle rule
+`cross` sets how cells meet their row: `stretch` (default) gives every cell
+in a row the row's height; `start` keeps each cell's own height, for a list
+that is still growing (answer cards streaming in), so a taller later cell
+never stretches the cells before it. When the list closes, apply the final
+layout once with `settleGrid(node, apply, { reflow })` from `@/butler-ds`:
+`apply` sets the final `columns` and `cross="stretch"`; with `reflow` (the
+column count changes) a short opacity dip hides the reflow, and the grid's
+height eases to its new size. See `settleGrid` in `lib/gridSettle.ts`.
+
+```tsx
+<Grid ref={gridRef} columns={columns} cross={settled ? "stretch" : "start"} gap="sm">{cards}</Grid>
+// when the list closes (in an effect or a handler):
+settleGrid(gridRef.current, () => setSettled(true), { reflow: finalColumns !== columns });
+```

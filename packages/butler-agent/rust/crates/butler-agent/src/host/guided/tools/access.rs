@@ -1,25 +1,43 @@
 //! Admission decisions and blocking target classification for guided tools.
 use super::GuidedTools;
+use butler_core::tool_protocol::ToolName;
 use butler_turn::btcc::{
     AccessDecision, AccessRequest, ApprovalRisk, BtccError, CapabilityKind, ModelRoundToolCall,
-    TargetScope, TurnTaint, command_access_risk, command_scope_unresolved, decide, needs_scope,
+    TargetScope, ToolExecutionError, command_access_risk, command_scope_unresolved, decide,
+    needs_scope,
 };
-use butler_turn::workspace::{ScopeRoots, classify_targets};
+use butler_turn::workspace::{FolderRelation, ScopeRoots, classify_targets};
 use serde_json::Value;
 
-pub(super) fn kind(call: &ModelRoundToolCall) -> CapabilityKind {
-    CapabilityKind::of_call(
+pub(super) async fn kind(call: &ModelRoundToolCall) -> Result<CapabilityKind, BtccError> {
+    if call.name == "run_command" {
+        // The first probe spawns a helper and waits for it. Cache it from a
+        // blocking worker before synchronous classification touches it.
+        tokio::task::spawn_blocking(butler_platform::command_sandbox::capabilities)
+            .await
+            .map_err(|error| BtccError::relayed("sandbox_probe_failed", error.to_string()))?;
+    }
+    Ok(CapabilityKind::of_call(
         &call.name,
         &call.arguments,
         super::effect::is_managed_project_ledger_effect(&call.name),
-    )
+    ))
 }
+pub(super) async fn gated_kind(
+    call: &ModelRoundToolCall,
+) -> Result<CapabilityKind, ToolExecutionError> {
+    Ok(kind(call)
+        .await
+        .map_err(ToolExecutionError::Integrity)?
+        .gated_effect())
+}
+
 pub(super) async fn decision(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
     args: &Value,
 ) -> Result<AccessDecision, BtccError> {
-    decision_for_kind(owner, call, args, kind(call)).await
+    decision_for_kind(owner, call, args, kind(call).await?).await
 }
 pub(super) async fn decision_for_kind(
     owner: &GuidedTools,
@@ -42,7 +60,7 @@ pub(super) async fn decision_for_kind(
                 ApprovalRisk::Medium
             },
             scope,
-            taint: TurnTaint::Clean,
+            taint: owner.taint(),
         },
     ))
 }
@@ -51,15 +69,12 @@ async fn target_scope(
     call: &ModelRoundToolCall,
     args: &Value,
 ) -> Result<TargetScope, BtccError> {
-    let root = owner
-        .binding
-        .workspace_reference
-        .as_ref()
-        .map(butler_turn::workspace::WorkspaceReference::get)
-        .transpose()
-        .map_err(|e| BtccError::relayed(e.code(), "Workspace unavailable"))?
-        .unwrap_or_else(|| owner.binding.workspace_path.clone());
-    let project = owner.binding.project_folder.as_ref().map(|_| root.clone());
+    if call.name == ToolName::SwitchFolder {
+        return Ok(folder_scope(owner, args).await);
+    }
+    let consented = owner.folder_consented();
+    let root = owner.current_workspace()?;
+    let project = consented.then(|| root.clone());
     let data = owner.binding.butler_data.clone();
     let protected = owner.binding.protected_ledger_roots.clone();
     let installation = owner.binding.installation_root.clone();
@@ -77,7 +92,12 @@ async fn target_scope(
             if command_scope_unresolved(command) {
                 return TargetScope::Outside;
             }
-            let cwd = root.join(args["cwd"].as_str().unwrap_or("."));
+            let Ok(cwd) =
+                butler_platform::tool_paths::parse(&root, args["cwd"].as_str().unwrap_or("."))
+            else {
+                return TargetScope::Outside;
+            };
+            let cwd = root.join(cwd);
             let mut targets = vec![cwd.to_string_lossy().into_owned()];
             targets.extend(
                 butler_platform::command_sandbox::path_tokens(command)
@@ -91,19 +111,42 @@ async fn target_scope(
                 &targets.iter().map(String::as_str).collect::<Vec<_>>(),
             )
         } else {
-            let targets = if name == "read_file" {
-                args["requests"]
+            let paths = |list: &str| -> Vec<&str> {
+                args[list]
                     .as_array()
-                    .map(|requests| requests.iter().filter_map(|r| r["path"].as_str()).collect())
+                    .map(|items| items.iter().filter_map(|r| r["path"].as_str()).collect())
                     .unwrap_or_default()
-            } else {
-                vec![args["root"].as_str().unwrap_or(".")]
+            };
+            let targets = match name.as_str() {
+                "read_file" => paths("requests"),
+                // A missing path cannot be proven inside the project.
+                "write_file" | "edit_file" => {
+                    let mut targets = paths("edits");
+                    targets.extend(args["path"].as_str());
+                    if targets.is_empty() {
+                        return TargetScope::Outside;
+                    }
+                    targets
+                }
+                _ => vec![args["root"].as_str().unwrap_or(".")],
             };
             classify_targets(&roots, &root, &targets)
         }
     })
     .await
     .map_err(|e| BtccError::relayed("scope_classification_failed", e.to_string()))
+}
+/// A folder switch stays in scope within a consented folder or its
+/// repository; a refused folder is outside (its preparation reports why).
+async fn folder_scope(owner: &GuidedTools, args: &Value) -> TargetScope {
+    let contained = super::effect::session_folder::relation(owner, args)
+        .await
+        .is_some_and(FolderRelation::contained);
+    if contained && owner.folder_consented() {
+        TargetScope::ProjectFolder
+    } else {
+        TargetScope::Outside
+    }
 }
 pub(super) fn resumes(owner: &GuidedTools, occurrence: &str) -> bool {
     owner.binding.authority_request_ref.is_some()
@@ -119,7 +162,7 @@ pub(super) fn for_kind(owner: &GuidedTools, kind: CapabilityKind) -> AccessDecis
             kind,
             risk: ApprovalRisk::Medium,
             scope: TargetScope::NoTarget,
-            taint: TurnTaint::Clean,
+            taint: owner.taint(),
         },
     )
 }

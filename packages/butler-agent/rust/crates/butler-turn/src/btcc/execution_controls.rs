@@ -39,6 +39,15 @@ pub struct SubsessionResultContext {
     pub safe_title: String,
 }
 
+/// The schedule run a turn executes. `unattended` runs (started by the
+/// scheduler, not "run now") never wait for an approval (D8).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScheduleRunContext {
+    pub automation_id: String,
+    pub run_id: String,
+    pub unattended: bool,
+}
+
 /// Execution controls after schema and hash verification.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerifiedExecutionControls {
@@ -55,6 +64,7 @@ pub struct VerifiedExecutionControls {
     pub(crate) integrity_hash: String,
     pub(crate) model_fallback: Option<ModelFallback>,
     pub subsession_result: Option<SubsessionResultContext>,
+    pub schedule_run: Option<ScheduleRunContext>,
 }
 
 /// Inputs covered by the integrity hash. App-only authority and Plan bindings
@@ -69,6 +79,7 @@ pub struct ControlResolution {
     pub catalog_generation: String,
     pub model_fallback: Option<ModelFallback>,
     pub subsession_result: Option<SubsessionResultContext>,
+    pub schedule_run: Option<ScheduleRunContext>,
 }
 
 impl ExecutionControls {
@@ -107,6 +118,9 @@ impl ExecutionControls {
         fields.insert("model_fallback".into(), json(&fallback)?);
         if let Some(context) = resolution.subsession_result {
             fields.insert("subsession_result".into(), json(&context.normalized()?)?);
+        }
+        if let Some(run) = resolution.schedule_run {
+            fields.insert("schedule_run".into(), json(&run)?);
         }
         let unsigned = Value::Object(fields);
         let hash = digest(&json_stringify_without(&unsigned, "integrity_hash")?);
@@ -169,6 +183,7 @@ impl ExecutionControls {
             integrity_hash: text(fields, "integrity_hash")?,
             model_fallback,
             subsession_result,
+            schedule_run: optional(fields, "schedule_run")?,
         };
         let expected = digest(&json_stringify_without(&self.0, "integrity_hash")?);
         if expected != verified.integrity_hash {

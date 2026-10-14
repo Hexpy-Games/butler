@@ -38,7 +38,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A spinner for work whose progress is known.", render: () => <Spinner size={16} label="Loading" /> },
     },
   ],
-  content: ["Meta shows the number (62%, 3/5).", "Use indeterminate for an unknown total: a spinner caption with optional received amount, no bar."],
+  content: ["Meta shows the number (62%, 3/5).", "thin is the 2px load line on a page card's top edge (no rail); name it with ariaLabel.", "Use indeterminate for an unknown total: a spinner caption with optional received amount, no bar."],
   accessibility: ["role=progressbar with aria-valuenow; tone never replaces the number.", "Indeterminate is role=status (no aria-valuenow); the Spinner breathes instead of rotating under reduced motion."],
   tokens: ["--accent", "--color-success", "--selection", "--motion-deliberate", "--typo-caption-size", "--typo-caption-line-height"],
 };

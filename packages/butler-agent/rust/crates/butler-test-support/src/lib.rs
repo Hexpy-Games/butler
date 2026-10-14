@@ -22,3 +22,6 @@ pub async fn eventually(what: &str, mut condition: impl FnMut() -> bool) {
         "timed out waiting for {what}"
     );
 }
+
+/// Source fakes for isolated browser import E2Es.
+pub mod import_sources;

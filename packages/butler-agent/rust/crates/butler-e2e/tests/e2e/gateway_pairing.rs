@@ -23,6 +23,12 @@ async fn sec_13_pair_cookie_list_restart_and_revoke_stream() -> Result<(), Harne
     let pin = issue(&app).await?;
     let response = connect(&s.gw, &browser, pin["code"].as_str().unwrap()).await?;
     assert_eq!(response.status().as_u16(), 303);
+    assert!(
+        !response.headers()["set-cookie"]
+            .to_str()
+            .unwrap()
+            .contains("Secure")
+    );
     let cookie = cookie_pair(&response);
     assert!(cookie.contains("=v2."));
     assert!(
@@ -104,11 +110,17 @@ async fn sec_13_pair_cookie_list_restart_and_revoke_stream() -> Result<(), Harne
             .status,
         200
     );
-    assert!(devices(&app).await?.as_array().unwrap().is_empty());
+    assert_eq!(
+        devices(&app).await?.as_array().unwrap().as_slice(),
+        [] as [serde_json::Value; 0]
+    );
     assert_eq!(read(&s.gw, &browser, &other_cookie).await?, 401);
     s.restart().await?;
     assert_eq!(read(&s.gw, &browser, &cookie).await?, 401);
-    assert!(devices(&admin(&s)).await?.as_array().unwrap().is_empty());
+    assert_eq!(
+        devices(&admin(&s)).await?.as_array().unwrap().as_slice(),
+        [] as [serde_json::Value; 0]
+    );
     assert_no_secrets(
         &s,
         &[
@@ -234,6 +246,12 @@ async fn lan_pairing_code_connect_and_list_device() -> Result<(), HarnessError> 
     let pin = issue(&app).await?;
     let response = connect(&remote, &browser, pin["code"].as_str().unwrap()).await?;
     assert_eq!(response.status().as_u16(), 303);
+    assert!(
+        !response.headers()["set-cookie"]
+            .to_str()
+            .unwrap()
+            .contains("Secure")
+    );
     let cookie = cookie_pair(&response);
     assert_eq!(read(&remote, &browser, &cookie).await?, 200);
     let listed = devices(&app).await?;

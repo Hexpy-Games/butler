@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import urllib.request
@@ -20,6 +21,7 @@ sys.dont_write_bytecode = True
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS.parents[1] / 'packages/butler-agent/rust/scripts'))
 import ci_oci
+import runner_cache
 
 spec = importlib.util.spec_from_file_location('cargo_cache', SCRIPTS / 'cargo-artifact-cache.py')
 cache = importlib.util.module_from_spec(spec)
@@ -158,14 +160,31 @@ def restore(expected):
     return True
 
 
+def legacy_refs(base):
+    # Old targets have only a ref hash. Resolve protected release/tag names
+    # once during migration, including refs absent from a shallow checkout.
+    base = runner_cache.namespace(base)
+    if not runner_cache.lexists(base):
+        return []
+    legacy = False
+    for path in runner_cache.children(base):
+        if runner_cache.linked(path):
+            raise ValueError(f'Linked Cargo ref directory: {path}')
+        legacy |= runner_cache.is_directory(path) and not runner_cache.lexists(path / runner_cache.MARKER)
+    if not legacy:
+        return []
+    output = subprocess.check_output(
+        ['git', 'ls-remote', '--refs', 'origin', 'refs/heads/release/*', 'refs/tags/*'],
+        cwd=os.environ.get('GITHUB_WORKSPACE'), text=True)
+    return [line.split()[1] for line in output.splitlines()]
+
+
 def persistent_target(expected):
     base = os.environ.get('BUTLER_PERSISTENT_TARGET')
     if not base:
         return None
-    # Ref isolation prevents a PR's build scripts/outputs entering main or tags.
-    ref = cache.hashlib.sha256(os.environ['GITHUB_REF'].encode()).hexdigest()[:16]
-    target = Path(base) / ref / compatible_tag(expected)
-    target.mkdir(parents=True, exist_ok=True)
+    refs = legacy_refs(Path(base))
+    target = runner_cache.prepare(base, os.environ['GITHUB_REF'], compatible_tag(expected), refs)
     os.environ['CARGO_TARGET_DIR'] = str(target)
     with open(os.environ['GITHUB_ENV'], 'a') as output:
         output.write(f'CARGO_TARGET_DIR={target}\n')
@@ -193,6 +212,8 @@ def save_local(target, expected):
     sources = target / 'ci-local-sources.json'
     sources.write_text(json.dumps(cache.source_times.capture(Path(os.environ['GITHUB_WORKSPACE']))))
     (target / 'ci-local.json').write_text(json.dumps(dict(identity=expected, sources_sha256=cache.digest(sources))))
+    if os.environ.get('BUTLER_PERSISTENT_TARGET'):
+        runner_cache.record_size(os.environ['BUTLER_PERSISTENT_TARGET'], target)
 
 
 def restore_tree(directory, expected, compatible=False):

@@ -25,10 +25,13 @@ const STUB_MODEL_LABEL = /^Stub\b/u;
 const STUB_REASONING_LABEL = "Instant";
 const tempDir = mkdtempSync(join(tmpdir(), "butler-app-layout-smoke-"));
 const uiRoot = resolve(root, process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist");
-const screenshotDir = resolve(root, ".tmp", "app-layout-smoke");
+const screenshotDir = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? join(root, ".tmp", "app-layout-smoke"));
 mkdirSync(screenshotDir, { recursive: true });
 const rightPanelToggleSelector = `[aria-label="${appCopy.titlebar.showRightPanel}"], [aria-label="${appCopy.titlebar.hideRightPanel}"]`;
 const turnActivityTimeoutMs = 5_000;
+// #924 (dcbd58d68): suggestion cards hug their ordinal and copy (no empty art
+// slot); the height of this smoke's first card at the 1440px desktop width.
+const NEW_CHAT_CARD_HEIGHT_PX = 186;
 const testClass = (name: string) => `[data-test-class~="${name}"]`;
 const testClasses = (...names: string[]) => names.map(testClass).join("");
 /**
@@ -54,7 +57,7 @@ async function screenshot(page: Page, name: string): Promise<string> {
   await page.screenshot({ path, fullPage: false });
   const stats = statSync(path);
   assert(stats.size > 8_000, `screenshot is unexpectedly small: ${name}`);
-  return `.tmp/app-layout-smoke/${name}`;
+  return path;
 }
 
 async function expectLocatorCount(
@@ -116,6 +119,18 @@ async function patchSettings(settings: Record<string, unknown>): Promise<void> {
     response.ok,
     `settings patch failed: ${response.status} ${JSON.stringify(body)}`,
   );
+}
+
+async function waitForWallpaperModule(module: string): Promise<void> {
+  let source: { kind?: string; module?: string } | undefined;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const response = await fetch(`${server.url}settings`, { headers: server.authHeaders });
+    const body = await response.json().catch(() => null) as { data?: { wallpaper?: { source?: typeof source } } } | null;
+    source = body?.data?.wallpaper?.source;
+    if (source?.kind === "live" && source.module === module) return;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+  }
+  assert(false, `wallpaper setting should be ${module}: ${JSON.stringify(source)}`);
 }
 
 /**
@@ -1036,8 +1051,9 @@ try {
   // the Space "Create group" dialog instead of a ledger document modal.
   await page
     .locator(testClass("app-sidebar"))
-    .getByRole("button", { name: appCopy.space.createGroup, exact: true })
+    .getByRole("button", { name: appCopy.space.menu, exact: true })
     .click();
+  await page.getByRole("menuitem", { name: appCopy.space.newGroup, exact: true }).click();
   await page.locator("[role='dialog']").waitFor({ state: "visible" });
   const dialogTopState = await page
     .locator("[role='dialog']")
@@ -2478,10 +2494,15 @@ try {
   await wallpaperPicker.waitFor({ state: "visible" });
   const wallpaperTile = (key: string) =>
     wallpaperPicker.locator(`[data-option="${key}"] [role="radio"]`);
-  for (const key of ["none", "live:butler.bloom", "live:butler.silk"]) {
+  for (const key of ["none", "live:butler.riso-print", "live:butler.bloom", "live:butler.silk"]) {
     await wallpaperTile(key).waitFor({ state: "visible" });
   }
   await wallpaperPicker.locator('[data-option="upload"]').waitFor({ state: "visible" });
+  // A fresh profile selects the riso print by default.
+  assert(
+    await wallpaperTile("live:butler.riso-print").getAttribute("aria-checked") === "true",
+    "fresh profile should select the riso print wallpaper",
+  );
   const bloomPalette = wallpaperPicker.locator('[role="radiogroup"][aria-label="Colors"]');
   await wallpaperTile("live:butler.silk").click();
   await bloomPalette.waitFor({ state: "detached" });
@@ -2523,6 +2544,11 @@ try {
       bloomColorState.inputBorder === "0px",
     `settings bloom color controls should render as circular swatches: ${JSON.stringify(bloomColorState)}`,
   );
+  // The picker saves each choice; put the riso print back so the new-chat
+  // checks below paint the default wallpaper, not this custom bloom.
+  await wallpaperTile("live:butler.riso-print").click();
+  await bloomPalette.waitFor({ state: "detached" });
+  await waitForWallpaperModule("butler.riso-print");
   await page
     .getByRole("button", { name: appCopy.settings.sections.models, exact: true })
     .click();
@@ -3013,7 +3039,8 @@ try {
   // widths; measure the settled layout, not the opening transition.
   await page.locator(testClass("app-sidebar")).waitFor({ state: "visible" });
   await page.waitForTimeout(400);
-  await assertWallpaperPaint(page, testClass("new-chat-fluid-gradient"), "butler.bloom");
+  await assertWallpaperPaint(page, testClass("new-chat-fluid-gradient"), "butler.riso-print");
+  assert(await page.locator('[data-slot="conversation-background"] [data-test-class~="conversation-wallpaper"]').count() === 1, "One conversation wallpaper layer");
   const emptyStateLayout = await page
     .locator(testClass("new-chat-empty-state"))
     .evaluate(async (element) => {
@@ -3036,7 +3063,7 @@ try {
       const composer = document.querySelector<HTMLElement>(
         '[data-test-class~="composer-card"]',
       );
-      const fluid = element.querySelector<HTMLElement>(
+      const fluid = element.closest('[data-test-class~="conversation"]')?.querySelector<HTMLElement>(
         '[data-test-class~="new-chat-fluid-gradient"]',
       );
       const railViewport = element.querySelector<HTMLElement>(
@@ -3054,6 +3081,15 @@ try {
       const workspace = document.querySelector<HTMLElement>(
         '[data-test-class~="workspace"]',
       );
+      const cardsFrame = workspace?.closest('[data-frame="cards"]');
+      const contentCard = cardsFrame
+        ? element.closest<HTMLElement>('[data-slot="adaptive-shell-card"]')
+        : null;
+      const contentRect = contentCard?.getBoundingClientRect();
+      // Wallpaper canvases may exceed the card; its overflow clips the visible paint.
+      const radiusStyle = contentCard
+        ? getComputedStyle(contentCard)
+        : workspace ? getComputedStyle(workspace) : null;
       const firstTitle = cards[0]?.querySelector<HTMLElement>(
         '[data-slot="prompt-suggestion-title"]',
       );
@@ -3078,7 +3114,7 @@ try {
       const firstDescriptionRect = firstDescription?.getBoundingClientRect();
       const firstMetaRect = firstMeta?.getBoundingClientRect();
       const scrollStyle = scroll ? getComputedStyle(scroll) : null;
-      const fluidStyle = fluid ? getComputedStyle(fluid) : null;
+      const fluidStyle = radiusStyle ?? (fluid ? getComputedStyle(fluid) : null);
       const titlebarStyle = titlebar ? getComputedStyle(titlebar) : null;
       const workspaceStyle = workspace ? getComputedStyle(workspace) : null;
       return {
@@ -3093,13 +3129,19 @@ try {
         cardHeight: cardRect?.height ?? 0,
         emptyWidth: emptyRect.width,
         fluidCovers: fluidRect
-          ? Math.abs(fluidRect.top) <= 1 &&
-            fluidRect.bottom >= window.innerHeight - 1 &&
+          ? (cardsFrame && contentRect
+              ? Math.abs(fluidRect.top - contentRect.top) <= 1 &&
+                fluidRect.bottom >= contentRect.bottom - 1 &&
+                radiusStyle?.overflow === "hidden" &&
+                Math.abs(contentRect.bottom - (window.innerHeight - 8)) <= 1 &&
+                Math.abs(contentRect.right - (window.innerWidth - 8)) <= 1
+              : Math.abs(fluidRect.top) <= 1 &&
+                fluidRect.bottom >= window.innerHeight - 1) &&
             fluidRect.left <= emptyRect.left + 1 &&
             fluidRect.right >= emptyRect.right - 1
           : false,
         fluidPainted: fluid?.getAttribute("data-wallpaper-state") === "painted"
-          && fluid.getAttribute("data-painted-module") === "butler.bloom"
+          && fluid.getAttribute("data-painted-module") === "butler.riso-print"
           && fluid.getAttribute("data-painted-tone") === fluid.getAttribute("data-tone"),
         fluidTopLeftRadius: Number.parseFloat(
           fluidStyle?.borderTopLeftRadius ?? "0",
@@ -3185,9 +3227,12 @@ try {
         workspaceTransparent: workspaceStyle
           ? workspaceStyle.backgroundColor === "rgba(0, 0, 0, 0)"
           : false,
-        workspaceLeftRadiusPreserved: workspaceStyle
-          ? Number.parseFloat(workspaceStyle.borderTopLeftRadius) > 0 &&
-            Number.parseFloat(workspaceStyle.borderBottomLeftRadius) > 0
+        workspaceLeftRadiusPreserved: radiusStyle
+          ? (cardsFrame
+              ? radiusStyle.borderTopLeftRadius === "12px" &&
+                radiusStyle.borderBottomLeftRadius === "12px"
+              : Number.parseFloat(radiusStyle.borderTopLeftRadius) > 0 &&
+                Number.parseFloat(radiusStyle.borderBottomLeftRadius) > 0)
           : false,
       };
     });
@@ -3208,7 +3253,7 @@ try {
       emptyStateLayout.cardGraphicCount === 0 &&
       emptyStateLayout.cardWidth >= 190 &&
       emptyStateLayout.cardWidth <= 230 &&
-      emptyStateLayout.cardHeight >= 240 &&
+      Math.abs(emptyStateLayout.cardHeight - NEW_CHAT_CARD_HEIGHT_PX) <= 1 &&
       emptyStateLayout.cardDescriptionBelowTitle &&
       emptyStateLayout.cardMetaBeforeTitle &&
       emptyStateLayout.momentAboveTitle &&
@@ -3398,7 +3443,7 @@ try {
       const composer = document.querySelector<HTMLElement>(
         "[data-test-class~='composer-card']",
       );
-      const fluid = element.querySelector<HTMLElement>(
+      const fluid = element.closest('[data-test-class~="conversation"]')?.querySelector<HTMLElement>(
         "[data-test-class~='new-chat-fluid-gradient']",
       );
       const titleBox = title?.getBoundingClientRect();

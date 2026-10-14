@@ -1,0 +1,78 @@
+{
+  "model": "qwen/qwen3.7-max",
+  "shape": "native",
+  "path": "/v1/chat/completions",
+  "expected": {
+    "id": "chat_replay",
+    "model": "qwen3.7-max",
+    "choices": [
+      {
+        "index": 0,
+        "finish_reason": "tool_calls",
+        "message": {
+          "role": "assistant",
+          "content": "Hello 안녕 🌍!",
+          "tool_calls": [
+            {
+              "id": "call_0",
+              "type": "function",
+              "function": {
+                "name": "render",
+                "arguments": "{\"value\":\"안녕 🌍\",\"items\":[1,2]}"
+              }
+            },
+            {
+              "id": "call_1",
+              "type": "function",
+              "function": {
+                "name": "inspect",
+                "arguments": "{\"other\":true}"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 125,
+      "completion_tokens": 10,
+      "total_tokens": 135,
+      "prompt_tokens_details": {
+        "cached_tokens": 100,
+        "cache_write_tokens": 20
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 3
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": [
+      [
+        "content-type",
+        "text/event-stream"
+      ]
+    ],
+    "chunks": [
+      {
+        "delay_ms": 0,
+        "text": "data: {\"id\":\"chat_replay\",\"model\":\"qwen3.7-max\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hello \"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chat_replay\",\"model\":\"qwen3.7-max\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"안녕 🌍!\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chat_replay\",\"model\":\"qwen3.7-max\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_0\",\"type\":\"function\",\"function\":{\"name\":\"render\",\"arguments\":\"{\\\"value\\\":\\\"안녕\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chat_replay\",\"model\":\"qwen3.7-max\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":1,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"inspect\",\"arguments\":\"{\\\"other\\\":tru\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chat_replay\",\"model\":\"qwen3.7-max\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\" 🌍\\\",\\\"items\\\":[1,2]}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chat_replay\",\"model\":\"qwen3.7-max\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":1,\"function\":{\"arguments\":\"e}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chat_replay\",\"model\":\"qwen3.7-max\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: {\"id\":\"chat_replay\",\"model\":\"qwen3.7-max\",\"choices\":[],\"usage\":{\"prompt_tokens\":125,\"completion_tokens\":10,\"total_tokens\":135,\"prompt_tokens_details\":{\"cached_tokens\":100,\"cache_write_tokens\":20},\"completion_tokens_details\":{\"reasoning_tokens\":3}}}\n\ndata: [DONE]\n\n"
+      }
+    ]
+  },
+  "documentation": [
+    "https://developers.openai.com/api/reference/resources/chat/subresources/completions/streaming"
+  ],
+  "expected_text": "Hello 안녕 🌍!",
+  "argument_fragments": {
+    "0": [
+      "{\"value\":\"안녕",
+      " 🌍\",\"items\":[1,2]}"
+    ],
+    "1": [
+      "{\"other\":tru",
+      "e}"
+    ]
+  }
+}

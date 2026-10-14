@@ -69,6 +69,12 @@ pub trait AppSessionWorkspaceProvisioner: Send + Sync + 'static {
         snapshot: AppSessionWorkspaceSnapshot,
         server_shutdown: CancellationToken,
     ) -> ApplicationFuture<()>;
+    fn download_workspace(
+        &self,
+        _query: AppSessionBranchQuery,
+    ) -> ApplicationFuture<Option<String>> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn branch_info(
         &self,
         _query: AppSessionBranchQuery,
@@ -160,7 +166,8 @@ pub struct AppSessionSummary {
     pub safe_status_label_parameters: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub safe_status_content: Option<Value>,
-    pub unread_count: u64,
+    /// A finished reply arrived after the owner last read this chat.
+    pub unread: bool,
     pub pinned: bool,
     pub archived: bool,
     pub automation_target_count: u64,

@@ -1,0 +1,141 @@
+{
+  "v": 1,
+  "blocks": [
+    {
+      "type": "cards",
+      "id": "picks",
+      "media": "1:1",
+      "items": [
+        {
+          "key": "musinsa-blouson-beige",
+          "label": "1 · 깔끔한 데일리 1순위",
+          "title": "코튼 미니멀 블루종 베이지",
+          "sub": "무신사 스탠다드 · 남성용",
+          "img": "img_3kq9v2m7xa",
+          "facts": [
+            "M / L / XL / 2XL"
+          ],
+          "text": "야상은 아니지만 취향에는 가장 가까워요. 장식이 적고 짧은 실루엣이라 청바지와 슬랙스에 두루 어울려요. 겉감 면 100%.",
+          "checked": "2026-10-12T17:41+09:00",
+          "value": {
+            "amount": 76390,
+            "cur": "KRW"
+          },
+          "source": "https://www.musinsa.com/products/4471209"
+        },
+        {
+          "key": "musinsa-m65-khaki",
+          "label": "2 · 야상 느낌을 살리고 싶다면",
+          "title": "M-65 필드 재킷 카키",
+          "sub": "무신사 스탠다드 · 남성용",
+          "img": "img_8hw2c4tq1n",
+          "facts": [
+            "M / L / XL / 2XL"
+          ],
+          "text": "정통 야상에 가장 가까운 선택. 품이 넉넉해 흰 티와 검정 바지처럼 단순하게 입기 좋아요. 겉감 면 100%.",
+          "checked": "2026-10-12T17:44+09:00",
+          "value": {
+            "amount": 159900,
+            "cur": "KRW"
+          },
+          "source": "https://www.musinsa.com/products/3958174"
+        },
+        {
+          "key": "29cm-washed-olive",
+          "label": "3 · 원단과 워싱을 중시한다면",
+          "title": "Washed Cotton Field Jacket Olive",
+          "sub": "아워셀브스 · 남성용",
+          "img": "img_5rd7p0zk3e",
+          "facts": [
+            "1 사이즈",
+            "2·3 품절",
+            "무료배송"
+          ],
+          "text": "세미 와이드 핏에 워싱한 헤링본 원단. 오가닉 면 100%라 단정함에 빈티지 느낌을 더하고 싶을 때 좋아요.",
+          "checked": "2026-10-12T17:47+09:00",
+          "value": {
+            "amount": 294400,
+            "cur": "KRW"
+          },
+          "source": "https://www.29cm.co.kr/products/2810437"
+        },
+        {
+          "key": "29cm-washed-black-w",
+          "label": "4 · 여성용 여유로운 야상",
+          "title": "washed cotton field jacket black",
+          "sub": "르 · 여성용",
+          "img": "img_9tb1m6ys4u",
+          "facts": [
+            "FREE",
+            "10/14 이내 출고",
+            "배송비 3,200원"
+          ],
+          "text": "오버핏이라 니트나 셔츠 위에 걸치기 좋아요. 쿠폰 조건가라 실제 결제 금액은 계정마다 달라요.",
+          "checked": "2026-10-12T17:50+09:00",
+          "value": {
+            "amount": 169580,
+            "cur": "KRW",
+            "was": 368000,
+            "note": "첫 구매 + 중복 쿠폰가"
+          },
+          "source": "https://www.29cm.co.kr/products/4151236"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "한눈에 비교",
+      "columns": [
+        "",
+        "블루종",
+        "M-65",
+        "워싱 필드",
+        "여성 블랙"
+      ],
+      "rows": [
+        [
+          "핏",
+          "레귤러 · 짧음",
+          "넉넉함",
+          "세미 와이드",
+          "오버핏"
+        ],
+        [
+          "야상 느낌",
+          "약함",
+          "강함",
+          "중간",
+          "중간"
+        ],
+        [
+          "소재",
+          "면 100%",
+          "면 100%",
+          "오가닉 면 100%",
+          "면 100%"
+        ],
+        [
+          "출고",
+          "즉시",
+          "즉시",
+          "즉시",
+          "10/14 이내"
+        ]
+      ]
+    },
+    {
+      "type": "actions",
+      "items": [
+        {
+          "ask": "10만 원 이하 후보만 더 찾아줘"
+        },
+        {
+          "ask": "M-65와 블루종 실측 사이즈 비교해줘"
+        },
+        {
+          "ask": "여성용 후보를 3개 더 보여줘"
+        }
+      ]
+    }
+  ]
+}

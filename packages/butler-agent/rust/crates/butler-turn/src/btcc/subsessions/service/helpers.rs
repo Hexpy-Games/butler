@@ -11,6 +11,25 @@ fn criteria(packet: &SubsessionPacket) -> String {
     serde_json::to_string(&packet.acceptance_criteria).unwrap_or_default()
 }
 
+/// A card title: the model's safe title, else the request's first line.
+pub(super) fn delegation_title(safe_title: Option<&str>, request: &str) -> String {
+    use butler_core::public_text::{names_internal_role, public_title};
+    if let Some(title) = safe_title
+        .map(|title| public_title(title, request))
+        .filter(|title| !title.trim().is_empty() && !names_internal_role(title))
+    {
+        return title;
+    }
+    let first = request.lines().find(|line| !line.trim().is_empty());
+    let first = first.unwrap_or("").split_whitespace().collect::<Vec<_>>();
+    let title = first.join(" ");
+    if title.chars().count() > 64 {
+        format!("{}…", title.chars().take(63).collect::<String>())
+    } else {
+        title
+    }
+}
+
 pub(super) fn render_input(packet: &SubsessionPacket, profile_prompt: Option<&str>) -> String {
     let base = format!(
         "role: worker\nassigned_objective: {}\nacceptance_criteria: {}\nimplementation_brief: {}\nReport the bounded result to the Steward.",
@@ -23,12 +42,58 @@ pub(super) fn render_input(packet: &SubsessionPacket, profile_prompt: Option<&st
         None => base,
     }
 }
+/// Reading what pages state is enough evidence; operating a page's controls
+/// or scrolling through its image sections to confirm unrequested details
+/// costs rounds without changing the answer.
+const PAGE_FACTS: &str = "Do not operate page controls or scroll through a page's image sections to verify details the user's request did not ask for; report a detail the page's text does not state as unconfirmed.";
+/// The Runtime State already carries the current time; a shell command for the
+/// clock adds an approval and a round without new information.
+const CLOCK: &str =
+    "Take the current date and time from Runtime State; do not run a command to read the clock.";
+
 pub(super) fn render_steward_input(packet: &SubsessionPacket) -> String {
     format!(
-        "role: steward\nrequest: {}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.",
+        "role: steward\nrequest: {}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.{} {PAGE_FACTS} {CLOCK}",
         packet.objective,
         criteria(packet),
-        packet.prior_context.as_deref().unwrap_or("none")
+        packet.prior_context.as_deref().unwrap_or("none"),
+        planned_presentation(packet)
+    )
+}
+
+/// Prefix of the Plan's internal presentation acceptance line.
+pub(super) const PRESENTATION_LINE: &str = "Presentation:";
+
+/// The parent Plan's presentation decision (its `Presentation:` acceptance
+/// line) tells the steward what the report must carry: blocks other than text
+/// need per-item facts and sources, and cards or a gallery need one collected
+/// image per item.
+fn planned_presentation(packet: &SubsessionPacket) -> String {
+    let Some(blocks) = packet
+        .acceptance_criteria
+        .iter()
+        .find_map(|line| line.strip_prefix(PRESENTATION_LINE))
+        .map(str::trim)
+    else {
+        return String::new();
+    };
+    let planned = blocks.split(',').map(str::trim).collect::<Vec<_>>();
+    if planned
+        .iter()
+        .all(|block| *block == "text" || block.is_empty())
+    {
+        return String::new();
+    }
+    let images = if planned
+        .iter()
+        .any(|block| matches!(*block, "cards" | "gallery"))
+    {
+        " When the items have a visual appearance, collect one representative photo per item with image_collect and name its id with the item. Collect it from the page you read for that item: its main image ref, or that image's URL when the ref is refused. One collected photo per item is enough; do not scroll, click or collect again to find a larger or better one. When no page you used shows one, find one: search for images of that item or open its official or gallery pages, and collect a real photo of it. Never use a screenshot of text as an item's photo, and leave no item without an image."
+    } else {
+        ""
+    };
+    format!(
+        " Butler's Plan presents this result as {blocks}: report per item the facts its source states and that source. Butler builds those blocks from your report, so report plain per-item lines, not tables or a formatted document.{images}"
     )
 }
 pub(super) fn allowed_effects(access: &str) -> Vec<String> {
@@ -137,9 +202,25 @@ pub(super) fn child_metadata(
 
     let metadata = json!({"source":if role=="worker"{"btcc-worker"}else{"btcc-subsession"},"reasoning_effort":packet.reasoning_effort,"subsession":{"relation_id":packet.relation_id,"delegation_id":packet.delegation_id,"task_id":packet.task_id,"parent_session_id":packet.parent_session_id,"execution_mode":packet.execution_mode,"mutation_scope":packet.mutation_scope,"allowed_tools_and_effects":packet.allowed_tools_and_effects},"runtimePolicy":runtime_policy});
     match metadata {
-        Value::Object(metadata) => metadata,
+        Value::Object(metadata) => inherit_folder(metadata, parent),
         _ => Map::new(),
     }
+}
+
+/// The child works in the parent's current folder with the same consent.
+fn inherit_folder(
+    mut metadata: Map<String, Value>,
+    parent: &crate::workspace::StoredSessionBinding,
+) -> Map<String, Value> {
+    if crate::workspace::active_session_folder(parent).is_some()
+        && let Some(folder) = parent
+            .metadata
+            .as_ref()
+            .and_then(|value| value.get(crate::workspace::SESSION_FOLDER_KEY))
+    {
+        metadata.insert(crate::workspace::SESSION_FOLDER_KEY.into(), folder.clone());
+    }
+    metadata
 }
 
 pub(super) fn child_work_scope(
@@ -255,6 +336,7 @@ pub(super) struct ChildEnvelopeInput<'a> {
     pub reasoning: &'a str,
     pub text: String,
     pub now: &'a str,
+    pub schedule_run: Option<crate::btcc::ScheduleRunContext>,
 }
 
 pub(super) fn child_envelope(input: ChildEnvelopeInput<'_>) -> ChildEnvelope {
@@ -269,6 +351,7 @@ pub(super) fn child_envelope(input: ChildEnvelopeInput<'_>) -> ChildEnvelope {
         reasoning,
         text,
         now,
+        schedule_run,
     } = input;
     let worker = role == "worker";
     ChildEnvelope {
@@ -305,6 +388,7 @@ pub(super) fn child_envelope(input: ChildEnvelopeInput<'_>) -> ChildEnvelope {
             workspace_path: parent.workspace_path.clone(),
             model_ref: model.into(),
             reasoning_effort: reasoning.into(),
+            schedule_run,
         },
         raw: EnvelopeRaw {
             source: if worker {

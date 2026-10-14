@@ -1,6 +1,7 @@
 //! Durable subsession state on the existing BTCC SQLite owner.
 
 mod activity;
+mod assets;
 mod completion;
 mod decode;
 mod files;

@@ -155,7 +155,7 @@ fn episode(raw: &Value) -> EpisodeRankInput {
         lexical_rank: rank("lexicalRank"),
         vector_rank: rank("vectorRank"),
         context_rank: rank("contextRank"),
-        query_relevance: rank("queryRelevance"),
+        query_relevance: rank("queryRelevance").unwrap_or(0.0),
         explicit_priority: raw["explicitPriority"].as_bool(),
         salience: match raw["salience"].as_str() {
             Some("high") => Some(Salience::High),
@@ -180,8 +180,9 @@ fn channels(raw: &[RecallResultChannel]) -> Vec<&'static str> {
 }
 
 #[test]
-fn episode_ranking_matches_unchanged_bun_source() {
-    let golden = golden();
+fn episode_ranking_pins_zero_missing_relevance() {
+    let golden: Value =
+        serde_json::from_str(include_str!("fixtures/ranking-zero-relevance.json")).unwrap();
     let dates = golden["dates"]
         .as_object()
         .unwrap()

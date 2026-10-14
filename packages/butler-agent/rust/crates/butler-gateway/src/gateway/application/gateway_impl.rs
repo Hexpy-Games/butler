@@ -1,6 +1,13 @@
 use super::*;
 
 impl GatewayApplication for AppApplication {
+    fn assets(&self, command: AppAssetCommand) -> ApplicationFuture<Value> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.assets_owned(command).await })
+    }
+    fn library(&self, command: AppLibraryCommand) -> ApplicationFuture<Value> {
+        self.library_owned(command)
+    }
     fn hooks(&self) -> Option<std::sync::Arc<dyn butler_core::hooks::HookPort>> {
         self.dependencies.hooks.clone()
     }
@@ -64,21 +71,7 @@ impl GatewayApplication for AppApplication {
         super::updates::cancel(self.dependencies.updates.clone())
     }
     fn list_skills(&self) -> ApplicationFuture<SkillSettingsView> {
-        let this = self.clone_handle();
-        Box::pin(async move {
-            let projects = this
-                .list_projects(false)
-                .await?
-                .projects
-                .into_iter()
-                .map(|project| (project.id, project.display_name))
-                .collect();
-            this.dependencies
-                .skills
-                .settings(projects)
-                .await
-                .map_err(skill_error)
-        })
+        super::skill_settings::read(self.clone_handle())
     }
     fn import_skill(
         &self,

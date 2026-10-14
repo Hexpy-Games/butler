@@ -19,7 +19,6 @@ async fn message_override_stays_per_message_and_replay_reuses_its_resolution() {
         AppApplicationConfig {
             database_path: path.clone(),
             butler_data: path.parent().unwrap().into(),
-            project_workspace_root: path.parent().unwrap().into(),
             folder_selection_secret: None,
         },
         dependencies(native.clone(), 120),
@@ -91,7 +90,6 @@ async fn session_controls_view_inherits_then_patches_validated_controls() {
         AppApplicationConfig {
             database_path: path.clone(),
             butler_data: path.parent().unwrap().into(),
-            project_workspace_root: path.parent().unwrap().into(),
             folder_selection_secret: None,
         },
         dependencies(native, 300),

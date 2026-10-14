@@ -1,4 +1,5 @@
 //! Single-owner SQLite lane for the App database.
+pub(in crate::gateway) mod history;
 
 mod cached;
 mod error;
@@ -27,7 +28,7 @@ use super::event_outbox;
 
 const OPERATION_QUEUE_CAPACITY: usize = 64;
 /// Planner statistics are refreshed this often while the process runs.
-const OPTIMIZE_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+const OPTIMIZE_INTERVAL: Duration = Duration::from_hours(6);
 /// A refresh waits this long for the lane to go idle.
 const OPTIMIZE_RETRY: Duration = Duration::from_secs(60);
 
@@ -433,3 +434,5 @@ async fn open_readers(path: PathBuf) -> StorageResult<read_pool::ReadPool> {
             AppStorageError::new(AppStorageCode::AppSqliteJoinFailed, error.to_string())
         })?
 }
+
+pub(in crate::gateway::application) use schema::create_settings_table;
