@@ -45,16 +45,20 @@ impl AutomationScheduler {
         let cancel = self.cancellation.clone();
         let wake = self.wake.clone();
         *self.task.lock() = Some(tokio::spawn(async move {
+            let mut dispatch_failing = false;
+            let mut read_failing = false;
             // Recovery also dispatches runs queued before a restart.
-            let _ = dispatch(&app).await;
+            let _ = dispatch(&app, &mut dispatch_failing).await;
             loop {
                 #[cfg(debug_assertions)]
                 NEXT_DUE_READS.fetch_add(1, Ordering::Relaxed);
                 let next = match app.next_automation_due().await {
-                    Ok(next) => next,
+                    Ok(next) => {
+                        read_failing = false;
+                        next
+                    }
                     Err(_) => {
-                        app.record_automation_scheduler_error("automation_scheduler_failed")
-                            .await;
+                        record_failure(&app, &mut read_failing).await;
                         None
                     }
                 };
@@ -67,7 +71,7 @@ impl AutomationScheduler {
                         tokio::select! {
                             () = cancel.cancelled() => return,
                             () = &mut notified => {
-                                let _ = dispatch(&app).await;
+                                let _ = dispatch(&app, &mut dispatch_failing).await;
                                 break;
                             },
                             () = tokio::time::sleep(delay) => {
@@ -75,7 +79,7 @@ impl AutomationScheduler {
                                 if !due_delay(&app, &next).is_zero() {
                                     continue;
                                 }
-                                if !dispatch(&app).await {
+                                if !dispatch(&app, &mut dispatch_failing).await {
                                     tokio::select! {
                                         () = cancel.cancelled() => return,
                                         () = &mut notified => {},
@@ -86,9 +90,11 @@ impl AutomationScheduler {
                             },
                         }
                     },
+                    // An empty store stays notify-only; failed lookups retry.
                     None => tokio::select! {
                         () = cancel.cancelled() => break,
-                        () = &mut notified => { let _ = dispatch(&app).await; },
+                        () = &mut notified => { let _ = dispatch(&app, &mut dispatch_failing).await; },
+                        () = tokio::time::sleep(butler_core::wall_clock::MAX_WAIT_SLICE), if read_failing => {},
                     },
                 }
             }
@@ -106,13 +112,21 @@ impl AutomationScheduler {
     }
 }
 
-async fn dispatch(app: &AppApplication) -> bool {
+async fn dispatch(app: &AppApplication, failing: &mut bool) -> bool {
     if app.dispatch_due_owned().await.is_err() {
-        app.record_automation_scheduler_error("automation_scheduler_failed")
-            .await;
+        record_failure(app, failing).await;
         return false;
     }
+    *failing = false;
     true
+}
+
+async fn record_failure(app: &AppApplication, failing: &mut bool) {
+    if !*failing {
+        *failing = true;
+        app.record_automation_scheduler_error("automation_scheduler_failed")
+            .await;
+    }
 }
 
 fn due_delay(app: &AppApplication, next: &str) -> Duration {

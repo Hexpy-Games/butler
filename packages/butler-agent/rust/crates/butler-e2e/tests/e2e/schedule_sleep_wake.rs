@@ -318,29 +318,50 @@ async fn sched_13_late_run_preserves_implicit_grid() -> Result<(), HarnessError>
     s.finish().await
 }
 
-async fn dispatch_fault(data: &std::path::Path, install: bool) -> Result<bool, HarnessError> {
+async fn dispatch_fault(data: &std::path::Path, install: bool) -> Result<(), HarnessError> {
     let path = data.join("app-server/butler-client.sqlite");
-    tokio::task::spawn_blocking(move || -> Result<bool, HarnessError> {
+    tokio::task::spawn_blocking(move || -> Result<(), HarnessError> {
         let db = butler_platform::sqlite::open(path)?;
-        if install {
-            db.execute_batch(
-                "CREATE TRIGGER fail_schedule_run BEFORE INSERT ON app_automation_runs
-                BEGIN SELECT RAISE(ABORT, 'schedule-dispatch-fault'); END;",
-            )?;
-            return Ok(false);
-        }
-        let failed: bool = db.query_row(
-            "SELECT EXISTS(SELECT 1 FROM events WHERE type='automation.scheduler_error')",
-            [],
-            |row| row.get(0),
-        )?;
-        if failed {
-            db.execute_batch("DROP TRIGGER fail_schedule_run")?;
-        }
-        Ok(failed)
+        db.execute_batch(if install {
+            "CREATE TRIGGER fail_schedule_run BEFORE INSERT ON app_automation_runs
+             BEGIN SELECT RAISE(ABORT, 'schedule-dispatch-fault'); END;"
+        } else {
+            "DROP TRIGGER fail_schedule_run"
+        })?;
+        Ok(())
     })
     .await
     .map_err(|error| HarnessError(error.to_string()))?
+}
+
+async fn scheduler_errors(data: &std::path::Path) -> Result<usize, HarnessError> {
+    let path = data.join("app-server/butler-client.sqlite");
+    tokio::task::spawn_blocking(move || -> Result<usize, HarnessError> {
+        let db = butler_platform::sqlite::open(path)?;
+        Ok(db.query_row(
+            "SELECT COUNT(*) FROM events WHERE type='automation.scheduler_error'",
+            [],
+            |row| row.get(0),
+        )?)
+    })
+    .await
+    .map_err(|error| HarnessError(error.to_string()))?
+}
+
+async fn wait_scheduler_reads(s: &Scenario, expected: u64) -> Result<(), HarnessError> {
+    tokio::time::timeout(butler_core::wall_clock::MAX_WAIT_SLICE, async {
+        loop {
+            let reply =
+                s.gw.get("/automations/_test/scheduler-next-due-reads")
+                    .await?;
+            if reply.data().as_u64().unwrap_or(0) >= expected {
+                return Ok::<_, HarnessError>(());
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .map_err(|_| HarnessError("scheduler did not retry the failed dispatch".into()))?
 }
 
 #[tokio::test]
@@ -361,15 +382,22 @@ async fn sched_14_failed_dispatch_retries_without_notification() -> Result<(), H
     }
     tokio::time::sleep(Duration::from_millis(200)).await;
     dispatch_fault(&s.sandbox.data, true).await?;
-    jump(address, "2026-10-13T22:00:00.000Z").await?;
+    jump(address.clone(), "2026-10-13T22:00:00.000Z").await?;
     tokio::time::timeout(butler_core::wall_clock::MAX_WAIT_SLICE, async {
-        while !dispatch_fault(&s.sandbox.data, false).await? {
+        while scheduler_errors(&s.sandbox.data).await? == 0 {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
         Ok::<_, HarnessError>(())
     })
     .await
     .map_err(|_| HarnessError("scheduler did not observe the dispatch failure".into()))??;
+    // Each new lookup follows a failed retry; the first failure is still sleeping.
+    for expected in [3, 4] {
+        wait_scheduler_reads(&s, expected).await?;
+        assert_eq!(scheduler_errors(&s.sandbox.data).await?, 1);
+        assert_eq!(runs(&s).await?, [] as [Value; 0]);
+    }
+    dispatch_fault(&s.sandbox.data, false).await?;
     // Removing the storage fault emits no scheduler notification.
     let started = Instant::now();
     tokio::time::sleep(butler_core::wall_clock::MAX_WAIT_SLICE).await;
@@ -379,5 +407,19 @@ async fn sched_14_failed_dispatch_retries_without_notification() -> Result<(), H
         "SCHED-14 retry_observation_ms={}",
         started.elapsed().as_millis()
     );
+    assert_eq!(scheduler_errors(&s.sandbox.data).await?, 1);
+    dispatch_fault(&s.sandbox.data, true).await?;
+    jump(address, "2026-10-14T22:00:00.000Z").await?;
+    tokio::time::timeout(butler_core::wall_clock::MAX_WAIT_SLICE, async {
+        while scheduler_errors(&s.sandbox.data).await? < 2 {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        Ok::<_, HarnessError>(())
+    })
+    .await
+    .map_err(|_| HarnessError("successful dispatch did not clear the error streak".into()))??;
+    assert_eq!(scheduler_errors(&s.sandbox.data).await?, 2);
+    assert_eq!(runs(&s).await?.len(), 1);
+    eprintln!("SCHED-14 persistent retries=2 streak_errors=1 after_success_errors=2");
     s.finish().await
 }
