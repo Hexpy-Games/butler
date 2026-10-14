@@ -85,6 +85,23 @@
   background: var(--surface);
 }
 
+/* Live dot: the newest activity of running work. Filled, breathing slowly on
+   --motion-live-pulse; --motion-loop-count is 0 under reduced motion, so the
+   dot stays filled and still. Shared by the expanded timeline and the
+   collapsed tail (WorkActivityDisclosure). */
+.marker[data-live="true"] {
+  border-color: var(--text-primary);
+  background: var(--text-primary);
+  animation: work-activity-live-pulse var(--motion-live-pulse)
+    var(--motion-ease-standard) var(--motion-loop-count);
+}
+
+@keyframes work-activity-live-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
 .icon {
   position: absolute;
   top: 0;
@@ -322,5 +339,9 @@ button.toolDetailButton:focus-visible {
   button.tool,
   .toolGroup {
     transition: none;
+  }
+
+  .marker[data-live="true"] {
+    animation: none;
   }
 }

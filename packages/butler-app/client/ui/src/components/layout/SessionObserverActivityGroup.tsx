@@ -20,7 +20,7 @@ export function SessionObserverActivityGroup({ activities, active, state, delega
     : undefined;
   return (
     <Stack gap="md">
-      {activities.length > 0 ? <TurnActivityTimeline delegatedGoal={delegatedGoal} activities={activities} live={Boolean(active)} expandAll={expandAll}
+      {activities.length > 0 ? <TurnActivityTimeline delegatedGoal={delegatedGoal} activities={activities} live={Boolean(active)} pulseLatest={Boolean(active)} expandAll={expandAll}
         currentState={current?.semanticState ?? state} turnId={activities[0]?.turnId} /> : null}
       {active && activities.length === 0 && current?.phaseActivities.length === 0 ? <TurnActivityPanel
         rows={active.progress?.safe_progress_rows ?? []} state={active.state}

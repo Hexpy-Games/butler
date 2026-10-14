@@ -153,8 +153,8 @@ pub fn creation_mode(options: &mut OpenOptions, mode: FileMode) -> Option<&mut O
 
 /// Whether a regular file has other hard links, so its content may also be
 /// reachable under a name outside the folder that holds this one.
-pub fn has_other_links(metadata: &Metadata) -> bool {
-    sys::has_other_links(metadata)
+pub fn has_other_links(path: &Path, metadata: &Metadata) -> bool {
+    sys::has_other_links(path, metadata)
 }
 
 /// The permission mode of a file; `None` without [`PERMISSION_MODES`].
