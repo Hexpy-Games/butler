@@ -28,13 +28,24 @@ pub(super) fn measure(
             .with_source(source)
         })?
     } else {
-        let value = serde_json::to_value(messages).map_err(|source| {
+        let mut value = serde_json::to_value(messages).map_err(|source| {
             BtccError::relayed(
                 "context_serialization_failed",
                 "Context serialization failed.",
             )
             .with_source(source)
         })?;
+        // Native carriers send these tool images as image blocks; count them
+        // by the image allowance, not their base64 as text.
+        let mut images = 0;
+        if let Some(rows) = value.as_array_mut() {
+            for (row, message) in rows.iter_mut().zip(messages) {
+                if let Some((text, _)) = super::output_image::parts(message) {
+                    row["content"] = serde_json::Value::String(text);
+                    images += 1;
+                }
+            }
+        }
         let bytes = butler_core::json::stringify(&value).map_err(|source| {
             BtccError::relayed(
                 "context_serialization_failed",
@@ -42,7 +53,7 @@ pub(super) fn measure(
             )
             .with_source(source)
         })?;
-        (bytes, String::new(), 0)
+        (bytes, String::new(), images)
     };
     let token_input = if model.starts_with("openai/") {
         Cow::Owned(projected)

@@ -22,8 +22,8 @@ const labels = {
   en: ["Two-step verification", "Passkey", "CAPTCHA", "Security keypad", "Check sign-in form"],
 };
 const handoff = {
-  ko: ["탭에서 마친 뒤 버틀러에게 돌려주세요", "데스크톱 앱에서 마무리해 주세요"],
-  en: ["Finish in the tab, then give it back to Butler", "Finish in the desktop app"],
+  ko: ["탭에서 마친 뒤 버틀러에게 돌려주세요", "PC의 버틀러에서 확인해 주세요"],
+  en: ["Finish in the tab, then give it back to Butler", "Finish this on your computer"],
 };
 const reasons = ["mfa", "passkey", "captcha", "secure_keypad", "unknown_form"];
 let checked = 0;

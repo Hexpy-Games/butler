@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""Runner-local cache retention, eviction and Windows long-path checks."""
+import contextlib
+import errno
+import importlib.util
+import io
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+from unittest.mock import patch
+
+spec = importlib.util.spec_from_file_location('snapshots', Path(__file__).with_name('cargo-target-release.py'))
+snapshots = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(snapshots)
+
+MAX_PATH = 260
+PREFIX = '\\\\?\\'
+
+
+@contextlib.contextmanager
+def windows_max_path():
+    """Off Windows, reject plain paths past MAX_PATH the way Win32 does.
+
+    `extended()` gains a marker prefix that the guarded calls strip, so only
+    calls routed through it reach long paths. On Windows the OS enforces this.
+    """
+    if os.name == 'nt':
+        yield
+        return
+
+    def guard(real):
+        def call(path, *args, **kwargs):
+            if isinstance(path, (str, os.PathLike)):
+                value = os.fspath(path)
+                if value.startswith(PREFIX):
+                    path = value[len(PREFIX):]
+                elif len(value) >= MAX_PATH:
+                    raise FileNotFoundError(errno.ENOENT, '[WinError 3] emulated MAX_PATH', value)
+            return real(path, *args, **kwargs)
+        return call
+
+    names = ['stat', 'lstat', 'listdir', 'scandir', 'mkdir', 'rmdir', 'unlink', 'chmod', 'utime', 'open']
+    with contextlib.ExitStack() as stack:
+        for name in names:
+            stack.enter_context(patch.object(os, name, guard(getattr(os, name))))
+        stack.enter_context(patch('builtins.open', guard(open)))
+        stack.enter_context(patch('io.open', guard(io.open)))
+        stack.enter_context(patch.object(snapshots.runner_cache, 'extended', lambda path: PREFIX + str(path)))
+        yield
+
+
+class RunnerEviction(unittest.TestCase):
+    def seed(self, root, ref, used, size=10, identity='compatible-old', legacy=False):
+        directory = root / snapshots.runner_cache.ref_key(ref)
+        target = directory / identity
+        target.mkdir(parents=True, exist_ok=True)
+        (target / 'output').write_bytes(b'x' * size)
+        if not legacy:
+            snapshots.runner_cache.write_marker(directory, dict(ref=ref, bytes=size))
+            os.utime(directory / snapshots.runner_cache.MARKER, (used, used))
+        os.utime(directory, (used, used))
+        return directory
+
+    # test-category: pure-logic
+    def test_retention_preserves_main_release_latest_tag_current_and_three_lru(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            refs = ['refs/heads/main', 'refs/heads/release/1', 'refs/tags/v1', 'refs/tags/v2',
+                    'refs/pull/1/merge', *[f'refs/heads/feature-{i}' for i in range(6)]]
+            directories = [self.seed(root, ref, i + 1, legacy=i < 2) for i, ref in enumerate(refs)]
+            target = snapshots.runner_cache.prepare(root, refs[4], 'compatible-old', refs[:2])
+            kept = [True, True, False, True, True, False, False, False, True, True, True]
+            self.assertEqual([directory.exists() for directory in directories], kept)
+            self.assertTrue(target.is_dir())
+            self.assertGreater((target.parent / snapshots.runner_cache.MARKER).stat().st_mtime, 11)
+
+    # test-category: security
+    def test_legacy_ref_names_recovered_from_remote_only_during_migration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            release = 'refs/heads/release/2'
+            tag = 'refs/tags/v2'
+            self.seed(root, release, 1, legacy=True)
+            self.seed(root, tag, 2, legacy=True)
+            with patch.object(snapshots.subprocess, 'check_output', return_value=f'a {release}\nb {tag}\n') as lookup:
+                refs = snapshots.legacy_refs(root)
+                self.assertEqual(refs, [release, tag])
+                self.assertIn('ls-remote', lookup.call_args.args[0])
+            snapshots.runner_cache.prepare(root, 'refs/heads/current', 'compatible-new', refs)
+            self.assertTrue((root / snapshots.runner_cache.ref_key(release)).exists())
+            self.assertTrue((root / snapshots.runner_cache.ref_key(tag)).exists())
+            with patch.object(snapshots.subprocess, 'check_output', side_effect=AssertionError('warm network')):
+                self.assertEqual(snapshots.legacy_refs(root), [])
+
+    # test-category: pure-logic
+    def test_size_cap_evicts_lru_even_release_but_never_main_or_current(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            refs = ['refs/heads/main', 'refs/heads/current', 'refs/heads/release/old',
+                    'refs/tags/v1', 'refs/heads/newer']
+            directories = [self.seed(root, ref, i + 1, 100) for i, ref in enumerate(refs)]
+            with patch.dict(os.environ, BUTLER_PERSISTENT_TARGET_MAX_GB=str(310 / 1024**3)):
+                snapshots.runner_cache.prepare(root, refs[1], 'compatible-old')
+            self.assertEqual([directory.exists() for directory in directories], [True, True, False, False, True])
+
+    # test-category: pure-logic
+    def test_protected_refs_over_cap_warn_without_deleting_active_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            main = self.seed(root, 'refs/heads/main', 1, 100)
+            current = self.seed(root, 'refs/heads/current', 2, 100)
+            with patch.dict(os.environ, BUTLER_PERSISTENT_TARGET_MAX_GB=str(10 / 1024**3)), \
+                    contextlib.redirect_stderr(io.StringIO()) as messages:
+                snapshots.runner_cache.prepare(root, 'refs/heads/current', 'compatible-old')
+            self.assertTrue(main.exists())
+            self.assertTrue((current / 'compatible-old/output').exists())
+            self.assertIn('Protected main/current', messages.getvalue())
+
+    # test-category: pure-logic
+    def test_prunes_identities_and_uses_estimate_without_walking_warm_cache(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            current = self.seed(root, 'refs/heads/current', 1)
+            other = self.seed(root, 'refs/heads/other', 2)
+            newer = other / 'compatible-new'
+            newer.mkdir()
+            os.utime(other / 'compatible-old', (1, 1))
+            os.utime(newer, (2, 2))
+            target = snapshots.runner_cache.prepare(root, 'refs/heads/current', 'compatible-current')
+            self.assertFalse((current / 'compatible-old').exists())
+            self.assertFalse((other / 'compatible-old').exists())
+            self.assertTrue(newer.exists())
+            snapshots.runner_cache.record_size(root, target)
+            with patch.object(snapshots.runner_cache, 'tree_bytes', side_effect=AssertionError('warm walk')):
+                self.assertEqual(snapshots.runner_cache.prepare(root, 'refs/heads/current', target.name), target)
+
+    # test-category: security
+    def test_outside_namespace_and_namespace_itself_are_refused(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            base = root / 'cache'
+            base.mkdir()
+            sentinel = root / 'outside'
+            sentinel.write_text('keep')
+            for path in [root, sentinel, base, base / '..' / 'outside']:
+                with self.assertRaisesRegex(ValueError, 'outside namespace'):
+                    snapshots.runner_cache.remove_tree(base, path)
+            with self.assertRaisesRegex(ValueError, 'identity'):
+                snapshots.runner_cache.prepare(base, 'refs/heads/current', '../../outside')
+            self.assertEqual(sentinel.read_text(), 'keep')
+
+    # test-category: security
+    def test_link_or_junction_is_never_followed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            base = root / 'cache'
+            base.mkdir()
+            outside = root / 'outside'
+            outside.mkdir()
+            sentinel = outside / 'keep'
+            sentinel.write_text('preserved')
+            link = base / 'linked'
+            if os.name == 'nt':
+                subprocess.run(['cmd', '/d', '/c', 'mklink', '/J', str(link), str(outside)], check=True)
+            else:
+                link.symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'Linked Cargo ref'):
+                snapshots.runner_cache.prepare(base, 'refs/heads/current', 'compatible-new')
+            with self.assertRaisesRegex(ValueError, 'ancestor contains a link'):
+                snapshots.runner_cache.remove_tree(base, link / 'keep')
+            with self.assertRaisesRegex(ValueError, 'namespace contains a link'):
+                snapshots.runner_cache.prepare(link, 'refs/heads/current', 'compatible-new')
+            with self.assertRaisesRegex(ValueError, 'namespace contains a link'):
+                snapshots.runner_cache.remove_tree(link, link / 'keep')
+            self.assertEqual(snapshots.runner_cache.tree_bytes(link), 0)
+            self.assertEqual(snapshots.runner_cache.remove_tree(base, link), 0)
+            self.assertFalse(link.exists())
+            self.assertEqual(sentinel.read_text(), 'preserved')
+
+    # test-category: security
+    def test_nested_read_only_long_paths_deleted_and_freed_bytes_logged(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            directory = base / 'old'
+            deep = directory.joinpath(*(['long-directory-name'] * 18))
+            deep.mkdir(parents=True)
+            output = deep / 'output'
+            output.write_bytes(b'complete outputs')
+            output.chmod(0o444)
+            with contextlib.redirect_stderr(io.StringIO()) as messages:
+                snapshots.runner_cache.evict(base, directory, 'size cap')
+            self.assertFalse(directory.exists())
+            self.assertIn('bytes freed=16', messages.getvalue())
+
+    # test-category: pure-logic
+    def test_dependency_cache_reports_sizes_and_clears_only_oversize(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            for name, size in [('npm', 50), ('bun', 150), ('nuget', 250)]:
+                (base / name).mkdir()
+                (base / name / 'package').write_bytes(b'x' * size)
+            with patch.dict(os.environ, OWNER_CACHE_ROOT=str(base),
+                            BUTLER_DEPENDENCY_CACHE_MAX_GB=str(100 / 1024**3)), \
+                    contextlib.redirect_stderr(io.StringIO()) as messages:
+                snapshots.runner_cache.auxiliary_caches()
+            self.assertTrue((base / 'npm/package').exists())
+            self.assertFalse((base / 'bun').exists())
+            self.assertFalse((base / 'nuget').exists())
+            for name, size in [('npm', 50), ('bun', 150), ('nuget', 250)]:
+                self.assertIn(f'{name} cache measured bytes={size}', messages.getvalue())
+
+    # test-category: security
+    def test_size_and_eviction_reach_paths_past_windows_max_path(self):
+        with tempfile.TemporaryDirectory() as temporary, windows_max_path():
+            base = Path(temporary) / 'cache'
+            target = snapshots.runner_cache.prepare(base, 'refs/heads/current', 'compatible-current')
+            directory = target.parent
+            deep = target.joinpath('debug', '.fingerprint', *(['long-directory-name'] * 14))
+            output = deep / 'dep-lib-long-crate-name'
+            self.assertGreater(len(str(output)), MAX_PATH)
+            os.makedirs(snapshots.runner_cache.extended(deep))
+            with open(snapshots.runner_cache.extended(output), 'wb') as file:
+                file.write(b'complete outputs')
+            if os.name != 'nt':
+                with self.assertRaises(FileNotFoundError):
+                    os.stat(output)
+            marker = os.stat(snapshots.runner_cache.extended(directory / snapshots.runner_cache.MARKER)).st_size
+            with contextlib.redirect_stderr(io.StringIO()) as messages:
+                snapshots.runner_cache.record_size(base, target)
+            self.assertIn(f'measured bytes={marker + 16}', messages.getvalue())
+            self.assertEqual(snapshots.runner_cache.read_marker(directory)['bytes'], marker + 16)
+            with contextlib.redirect_stderr(io.StringIO()) as messages:
+                snapshots.runner_cache.evict(base, directory, 'size cap')
+            self.assertFalse(snapshots.runner_cache.lexists(directory))
+            self.assertIn('bytes freed=', messages.getvalue())
+
+
+if __name__ == '__main__':
+    unittest.main()

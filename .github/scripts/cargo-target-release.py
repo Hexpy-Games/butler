@@ -164,13 +164,13 @@ def legacy_refs(base):
     # Old targets have only a ref hash. Resolve protected release/tag names
     # once during migration, including refs absent from a shallow checkout.
     base = runner_cache.namespace(base)
-    if not base.exists():
+    if not runner_cache.lexists(base):
         return []
     legacy = False
-    for path in base.iterdir():
+    for path in runner_cache.children(base):
         if runner_cache.linked(path):
             raise ValueError(f'Linked Cargo ref directory: {path}')
-        legacy |= path.is_dir() and not (path / runner_cache.MARKER).exists()
+        legacy |= runner_cache.is_directory(path) and not runner_cache.lexists(path / runner_cache.MARKER)
     if not legacy:
         return []
     output = subprocess.check_output(

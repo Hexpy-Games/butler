@@ -56,6 +56,29 @@ pub fn digits_png(text: &str, scale: usize) -> Vec<u8> {
     png
 }
 
+/// An incompressible RGB PNG of `width` x `height` pseudo-random pixels:
+/// megabytes per megapixel, like a detailed photo or Retina screenshot, while
+/// keeping debug-build decode/encode time small.
+pub fn noise_png(width: u32, height: u32) -> Vec<u8> {
+    let mut state = 0x2545_f491_4f6c_dd1d_u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state.to_le_bytes()[0]
+    };
+    let image =
+        image::RgbImage::from_fn(width, height, |_, _| image::Rgb([next(), next(), next()]));
+    let mut bytes = Vec::new();
+    let encoded = image
+        .write_to(
+            &mut std::io::Cursor::new(&mut bytes),
+            image::ImageFormat::Png,
+        )
+        .is_ok();
+    if encoded { bytes } else { Vec::new() }
+}
+
 /// A PNG whose header claims `width` x `height` pixels over a tiny, unrelated
 /// body: an image that is only harmful once decoded.
 pub fn png_claiming(width: u32, height: u32) -> Vec<u8> {
