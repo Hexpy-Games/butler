@@ -8,7 +8,7 @@ const output = process.env.BUTLER_BROWSER_EVIDENCE;
 assert.ok(output, "BUTLER_BROWSER_EVIDENCE required");
 mkdirSync(output, { recursive: true });
 const stage = process.env.BUTLER_SCHEDULE_APPROVAL_STAGE ?? "after";
-const root = resolve("packages/butler-app/client/ui/dist");
+const root = resolve(process.env.BUTLER_SMOKE_RENDERER_DIST ?? "packages/butler-app/client/ui/dist");
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
   const path = new URL(request.url).pathname;
   const file = Bun.file(join(root, path === "/" ? "index.html" : path));
@@ -18,6 +18,8 @@ const browser = await launchSmokeBrowser();
 let checked = 0;
 try {
   const page = await browser.newPage({ reducedMotion: "reduce", timezoneId: "UTC" });
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
   await page.addInitScript(({ stage }) => {
     const params = new URLSearchParams(window.location.search);
     const kind = params.get("kind")!;
@@ -40,6 +42,7 @@ try {
       await page.goto(`http://127.0.0.1:${server.port}/?visual=components&surface=activity-layout&approval=1&state=completed&theme=${theme}&lang=${lang}&kind=${kind}`);
       const card = page.locator('[data-test-class="composer-authority-decision"]');
       await card.waitFor();
+      await page.evaluate(() => document.fonts.ready);
       const text = await card.innerText();
       if (stage === "after") {
         assert.ok(!text.includes("automation:"), text);
@@ -53,10 +56,13 @@ try {
           assert.ok(text.includes(lang === "ko" ? "실행 권한:" : "Run permission:"), text);
           assert.ok(text.includes(lang === "ko" ? "24시간마다 · 다음: 1월 1일 오전 7:00" : "Every 24 hours · Next: Jan 1, 7:00 AM"), text);
         }
+      } else if (kind !== "create") {
+        assert.ok(text.includes("automation:"), "baseline must reproduce the internal target");
       }
       await page.screenshot({ path: join(output, `${stage}-${kind}-${lang}-${theme}-${width}.png`) });
       checked++;
     }
   }
+  assert.deepEqual(errors, [], "no uncaught renderer errors");
   console.log(JSON.stringify({ stage, checked, modelCalls: 0 }));
 } finally { await browser.close(); server.stop(true); }
