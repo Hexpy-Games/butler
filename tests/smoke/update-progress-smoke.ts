@@ -150,7 +150,7 @@ async function assertUnknownAndRecovery(page: Page, row: Locator, copy: Copy, na
       const target = (animation.effect as KeyframeEffect | null)?.target;
       return target instanceof Element && Boolean(target.closest('[data-slot="spinner"]'));
     });
-  }), "only the DS Spinner breathes under reduced motion");
+  }), "only the DS Spinner animates under reduced motion");
   await assertGeometry(page, row);
   await row.scrollIntoViewIfNeeded();
   await row.screenshot({ path: join(output, `unknown-row-${name}.png`) });

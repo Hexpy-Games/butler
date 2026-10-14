@@ -42,7 +42,7 @@ function useSystemReducedMotion(): boolean {
  * Idle is the exact filled logo; working morphs into a lit halftone moon and
  * settles back to the logo when work ends. The frame loop (markLoop.ts) runs
  * only while the mark moves and is on screen. Reduced motion stops the loop and
- * breathes the still logo in CSS on the Spinner's reduced pulse.
+ * breathes the still logo in CSS.
  */
 export function ButlerThinkingMark({
   state = "idle",

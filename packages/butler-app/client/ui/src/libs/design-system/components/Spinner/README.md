@@ -31,8 +31,10 @@ intervals. CSS interpolates them; maximum angular approximation error is below
 0.48 degrees. Rotation belongs to the internal circle, so parent transforms do
 not replace it. No JavaScript animation loop is needed.
 
-Reduced motion disables rotation and retains the open-ring silhouette. Keep
-the status label visible. The caller owns busy state, disabling, completion,
+The Spinner is exempt from reduced motion: it keeps rotating under the OS
+preference and the App's `data-motion="reduced"` scope, because a turning
+spinner is a status signal, not decorative motion. Keep the status label
+visible. The caller owns busy state, disabling, completion,
 failure, and cancellation. Mount only while needed and remove promptly when
 the existing operation leaves that state; do not delay completion to finish a
 revolution or add an unconditional success check. When success replaces the

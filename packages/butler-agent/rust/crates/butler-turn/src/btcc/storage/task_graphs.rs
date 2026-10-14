@@ -1,4 +1,4 @@
-//! Indexed, snapshot-consistent reads of existing plans and delegation groups.
+//! Indexed, snapshot-consistent reads of existing Works and their delegation attempts.
 mod query;
 use super::{SqliteSubsessionRepository, StorageError};
 use serde_json::Value;
@@ -11,11 +11,20 @@ pub enum GraphScope {
 }
 
 pub struct GraphRecords {
-    pub plans: Vec<PlanRecord>,
+    pub works: Vec<WorkRecord>,
     pub children: Vec<ChildRecord>,
+    pub reviews: Vec<ReviewRecord>,
 }
 
-pub struct PlanRecord {
+pub struct WorkRecord {
+    pub source_revision: String,
+    pub session_id: String,
+    pub execution_mode: Option<String>,
+    pub phase: String,
+    pub checkpoint_at: Option<String>,
+    pub next_step: Option<String>,
+    pub delegated_objective: Option<String>,
+    pub has_planned_steward: bool,
     pub id: String,
     pub objective: String,
     pub status: String,
@@ -24,6 +33,15 @@ pub struct PlanRecord {
     pub refs: Value,
     pub progress: Value,
     pub updated_at: String,
+}
+
+pub struct ReviewRecord {
+    pub id: String,
+    pub work_id: String,
+    pub subject: String,
+    pub verdict: String,
+    pub summary: String,
+    pub created_at: String,
 }
 
 pub struct ChildRecord {
@@ -37,6 +55,7 @@ pub struct ChildRecord {
     pub packet: Value,
     pub result_status: Option<String>,
     pub result_at: Option<String>,
+    pub result_summary: Option<String>,
     pub turn_state: Option<String>,
     pub created_at: String,
     pub current_step: Option<String>,
@@ -44,7 +63,7 @@ pub struct ChildRecord {
 }
 
 impl SqliteSubsessionRepository {
-    /// One WAL snapshot; two set-based queries, never one query per node/graph.
+    /// One WAL snapshot; three set-based queries, never one query per node/graph.
     pub async fn graph_records(&self, scope: GraphScope) -> Result<GraphRecords, StorageError> {
         self.storage.read(move |db| query::read(db, scope)).await
     }
