@@ -36,6 +36,8 @@ fn write_command(targets: &[&Path]) -> String {
 // test-category: security
 #[test]
 fn read_only_commands_run_sandboxed_or_are_refused() {
+    super::mxc_policy::verify();
+    super::project_secrets::verify();
     cmd_arguments_remain_verbatim();
     expected_host_sandbox_is_enforced();
     assert_eq!(

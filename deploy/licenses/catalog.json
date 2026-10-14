@@ -4,8 +4,8 @@
     "deploy/licenses/disclosure.py": "f8fc02a9b2784a36865a953654827e6a687ad461d2d33bcf9fd906bcb3a78cb9",
     "deploy/licenses/generate.mjs": "eb413c424649cc6ef3bc734cb1a9479cf8ddffb3af398601a974268c229d7c34",
     "deploy/licenses/inputs.mjs": "da35f54527aa98b6a7ced018b1d0172c5f997d7eb10842ae2914e23c036868e1",
-    "deploy/licenses/refresh.py": "befdba5a52f092871fe94f4a93bed6e2a76c59a9edb3bc9aa8d4e7ce7b79b77d",
-    "packages/butler-agent/rust/Cargo.lock": "bea46e7051c0c45ecc2a2ccc09798267854c6885714d9343c29bd77d84569c7d",
+    "deploy/licenses/refresh.py": "a5a071d68dc8b01eb066be507fdeccf9985e03976964725d439cca9d3b7d094b",
+    "packages/butler-agent/rust/Cargo.lock": "c18ed07af10cd48217a9147f227a51641d282b40249b7d7d9f23d1b77c27db8f",
     "packages/butler-agent/rust/Cargo.toml": "d74d0251e354c1ec916d057d396badfcd600ad811b0e7a06fa8a90407c34a7f5",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "21b121cd6d50f5abc67405bba11d956714d409920c8f0243f5fa94fdf79a56eb",
@@ -19,7 +19,7 @@
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "6823161ebcffd1ab5c100a48c5891a4a754273fce5b7f13b78a10fab1dc9a3d9",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "61762d100435abad4a0426b79721935420588c1a928d6b45b824ae8d149da712",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "725ad0b456fb01f64d14442170403f6cf2f1dca17e54bd0a13d1940457d1a6cb",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "0b1332f0f43eb9296972675176176393546de2e442ce2b72c8dbf141135ec7f8",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "15317b3544cdbcfacc5d46ab5b1cbddb1faa34c50ceca49221fdea0fa35a4592",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "2aef74f12eec60a86d3c8e5047cd56c4bda1efd6ba402d5f456ffec89b46b798",
@@ -13793,6 +13793,28 @@
       ]
     },
     {
+      "id": "rust:cidr@0.3.2",
+      "name": "cidr",
+      "version": "0.3.2",
+      "license": "MIT",
+      "source": "https://github.com/stbuehler/rust-cidr/tree/50f8fa7c51ee39a9ba42df9714a39f42d8679a24",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "c1f40c17f2f407656c9934898e3c40573581346251dba68158742af4275eb66d"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/stbuehler/rust-cidr/blob/50f8fa7c51ee39a9ba42df9714a39f42d8679a24/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2021 Stefan Bühler"
+      ]
+    },
+    {
       "id": "rust:cipher@0.4.4",
       "name": "cipher",
       "version": "0.4.4",
@@ -21116,6 +21138,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "evidenceSha256": [
@@ -21590,6 +21613,28 @@
       ]
     },
     {
+      "id": "rust:mxc-sdk@1.0.0",
+      "name": "mxc-sdk",
+      "version": "1.0.0",
+      "license": "MIT",
+      "source": "https://github.com/microsoft/mxc/tree/2366ee9b1e0bed3a0f950ec49a509f92285239cf/src/mxc-sdk",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "https://github.com/microsoft/mxc/tree/2366ee9b1e0bed3a0f950ec49a509f92285239cf/LICENSE.md"
+      ],
+      "links": [
+        "https://github.com/microsoft/mxc/blob/2366ee9b1e0bed3a0f950ec49a509f92285239cf/LICENSE.md"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
       "id": "rust:ndarray@0.16.1",
       "name": "ndarray",
       "version": "0.16.1",
@@ -21642,6 +21687,28 @@
       ],
       "copyright": [
         "Copyright (c) 2015 Jonathan Reem"
+      ]
+    },
+    {
+      "id": "rust:nix@0.29.0",
+      "name": "nix",
+      "version": "0.29.0",
+      "license": "MIT",
+      "source": "https://github.com/nix-rust/nix/tree/1dad4d8d04a2cd187fae87cb91c4f4e95ff0decd",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "66e3ee1fa7f909ad3c612d556f2a0cdabcd809ad6e66f3b0605015ac64841b70"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/nix-rust/nix/blob/1dad4d8d04a2cd187fae87cb91c4f4e95ff0decd/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2015 Carl Lerche + nix-rust Authors"
       ]
     },
     {
@@ -27905,6 +27972,50 @@
       ]
     },
     {
+      "id": "rust:tracelogging@1.2.4",
+      "name": "tracelogging",
+      "version": "1.2.4",
+      "license": "MIT",
+      "source": "https://github.com/microsoft/tracelogging/tree/bdd914bd827ff6b9d6d65972d622834fdf04518a",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "b73eeaa6c8380f5a8ac918a679ad1e9f57062417752cbf7860c29e7afa00134d"
+      ],
+      "files": [
+        "https://github.com/microsoft/tracelogging/tree/bdd914bd827ff6b9d6d65972d622834fdf04518a/LICENSE"
+      ],
+      "links": [
+        "https://github.com/microsoft/tracelogging/blob/bdd914bd827ff6b9d6d65972d622834fdf04518a/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation. All rights reserved."
+      ]
+    },
+    {
+      "id": "rust:tracelogging_macros@1.2.3",
+      "name": "tracelogging_macros",
+      "version": "1.2.3",
+      "license": "MIT",
+      "source": "https://github.com/microsoft/tracelogging/tree/4d3c8b02da568d34daf977db7052a819ab4b18ec",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "b73eeaa6c8380f5a8ac918a679ad1e9f57062417752cbf7860c29e7afa00134d"
+      ],
+      "files": [
+        "https://github.com/microsoft/tracelogging/tree/4d3c8b02da568d34daf977db7052a819ab4b18ec/LICENSE"
+      ],
+      "links": [
+        "https://github.com/microsoft/tracelogging/blob/4d3c8b02da568d34daf977db7052a819ab4b18ec/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation. All rights reserved."
+      ]
+    },
+    {
       "id": "rust:tracing-attributes@0.1.31",
       "name": "tracing-attributes",
       "version": "0.1.31",
@@ -28153,6 +28264,26 @@
         "This project is copyright 2015, The Servo Project Developers (given in the",
         "Copyright (c) 2015 The Rust Project Developers"
       ]
+    },
+    {
+      "id": "rust:unicode-general-category@1.1.0",
+      "name": "unicode-general-category",
+      "version": "1.1.0",
+      "license": "Apache-2.0",
+      "source": "https://github.com/yeslogic/unicode-general-category/tree/cb2d8a62f035c33d6971b99322aae65f3cea7c88",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "a8ad31b1c3f40dca5a84119351b8fa8ddc868edd77fad8a8ebf6d8f2d16fa4ae"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/yeslogic/unicode-general-category/blob/cb2d8a62f035c33d6971b99322aae65f3cea7c88/LICENSE"
+      ],
+      "copyright": []
     },
     {
       "id": "rust:unicode-ident@1.0.24",
@@ -28819,6 +28950,29 @@
       ]
     },
     {
+      "id": "rust:widestring@1.2.1",
+      "name": "widestring",
+      "version": "1.2.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/VoidStarKat/widestring-rs/tree/66dcd7c05ed7de790a1ab0d340b7f4b8b550aed7",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "bb28c48e3e078166e91cfc2b6db7ffebb8a0973b9e23b3df060561292d8d69ec",
+        "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/VoidStarKat/widestring-rs/blob/66dcd7c05ed7de790a1ab0d340b7f4b8b550aed7/LICENSE-APACHE",
+        "https://github.com/VoidStarKat/widestring-rs/blob/66dcd7c05ed7de790a1ab0d340b7f4b8b550aed7/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
       "id": "rust:win32job@2.0.3",
       "name": "win32job",
       "version": "2.0.3",
@@ -28911,6 +29065,31 @@
       "links": [
         "https://github.com/microsoft/windows-rs/blob/50009500b686f542530515aedba8334dc5b617b0/crates/libs/collections/license-apache-2.0",
         "https://github.com/microsoft/windows-rs/blob/50009500b686f542530515aedba8334dc5b617b0/crates/libs/collections/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-collections@0.3.2",
+      "name": "windows-collections",
+      "version": "0.3.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/32c3144490c016fe496a0aed769bce60987a2e9d",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/collections/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/collections/license-mit"
       ],
       "copyright": [
         "Copyright (c) Microsoft Corporation."
@@ -29037,6 +29216,31 @@
       "links": [
         "https://github.com/microsoft/windows-rs/blob/c65ac17e5c714104dff156578ca54b3c4f92d76c/crates/libs/future/license-apache-2.0",
         "https://github.com/microsoft/windows-rs/blob/c65ac17e5c714104dff156578ca54b3c4f92d76c/crates/libs/future/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-future@0.3.2",
+      "name": "windows-future",
+      "version": "0.3.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/32c3144490c016fe496a0aed769bce60987a2e9d",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/future/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/future/license-mit"
       ],
       "copyright": [
         "Copyright (c) Microsoft Corporation."
@@ -29244,6 +29448,31 @@
       ]
     },
     {
+      "id": "rust:windows-numerics@0.3.1",
+      "name": "windows-numerics",
+      "version": "0.3.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/32c3144490c016fe496a0aed769bce60987a2e9d",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/numerics/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/numerics/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
       "id": "rust:windows-permissions@0.2.4",
       "name": "windows-permissions",
       "version": "0.2.4",
@@ -29418,6 +29647,31 @@
       ]
     },
     {
+      "id": "rust:windows-sys@0.59.0",
+      "name": "windows-sys",
+      "version": "0.59.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/308e08ec259027ebbef11b8ef838923626bf821e",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/308e08ec259027ebbef11b8ef838923626bf821e/crates/libs/sys/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/308e08ec259027ebbef11b8ef838923626bf821e/crates/libs/sys/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
       "id": "rust:windows-sys@0.60.2",
       "name": "windows-sys",
       "version": "0.60.2",
@@ -29543,6 +29797,31 @@
       ]
     },
     {
+      "id": "rust:windows-threading@0.2.1",
+      "name": "windows-threading",
+      "version": "0.2.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238/crates/libs/threading/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238/crates/libs/threading/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
       "id": "rust:windows@0.56.0",
       "name": "windows",
       "version": "0.56.0",
@@ -29587,6 +29866,31 @@
       "links": [
         "https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/windows/license-apache-2.0",
         "https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/windows/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows@0.62.2",
+      "name": "windows",
+      "version": "0.62.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/32c3144490c016fe496a0aed769bce60987a2e9d",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/windows/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/windows/license-mit"
       ],
       "copyright": [
         "Copyright (c) Microsoft Corporation."
@@ -29664,6 +29968,28 @@
         "https://github.com/winnow-rs/winnow/blob/7539ec0fc27144bfdcf9a68b0dbbec48bd0d5bae/LICENSE-MIT"
       ],
       "copyright": []
+    },
+    {
+      "id": "rust:winreg@0.55.0",
+      "name": "winreg",
+      "version": "0.55.0",
+      "license": "MIT",
+      "source": "https://github.com/gentoo90/winreg-rs/tree/9243b238493c90d3b5e8f68f33fad9c77fb9d35e",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "ea021d8c6383c84d19c15ce90d3b1602cf448fdcc0bf3772c98e43c7bf1bf1d1"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/gentoo90/winreg-rs/blob/9243b238493c90d3b5e8f68f33fad9c77fb9d35e/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2015 Igor Shaula"
+      ]
     },
     {
       "id": "rust:winsafe@0.0.29",

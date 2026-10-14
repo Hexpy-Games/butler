@@ -170,8 +170,10 @@ fn permission_modes_are_read_and_set_where_supported() {
     fs::remove_dir_all(directory).unwrap();
 }
 
+// test-category: security
 #[test]
 fn file_ids_are_reported_only_where_the_host_has_them() {
+    hard_link_aliases_are_detected_from_the_file();
     let directory = scratch("identity");
     let path = directory.join("file");
     fs::write(&path, "x").unwrap();
@@ -253,4 +255,25 @@ fn remove_unrelated_explicit_aces(folder: &std::path::Path, file: &std::path::Pa
     restrict_file(file).transpose().unwrap();
     assert_eq!(is_private(folder), Some(true));
     assert_eq!(is_private(file), Some(true));
+}
+
+fn hard_link_aliases_are_detected_from_the_file() {
+    let folder = scratch("hard-links");
+    let original = folder.join("original");
+    let alias = folder.join("alias");
+    fs::write(&original, "content").unwrap();
+    assert!(!butler_platform::secure_fs::has_other_links(
+        &original,
+        &fs::metadata(&original).unwrap()
+    ));
+    fs::hard_link(&original, &alias).unwrap();
+    assert!(butler_platform::secure_fs::has_other_links(
+        &original,
+        &fs::metadata(&original).unwrap()
+    ));
+    assert!(butler_platform::secure_fs::has_other_links(
+        &alias,
+        &fs::metadata(&alias).unwrap()
+    ));
+    fs::remove_dir_all(folder).unwrap();
 }
