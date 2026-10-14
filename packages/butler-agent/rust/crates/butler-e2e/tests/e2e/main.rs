@@ -64,6 +64,7 @@ mod gateway_security;
 mod gateway_tunnel;
 mod general_clear;
 mod harness_hygiene;
+mod hedge_v2_stub;
 mod hooks;
 mod idle_resources;
 mod image_errors;

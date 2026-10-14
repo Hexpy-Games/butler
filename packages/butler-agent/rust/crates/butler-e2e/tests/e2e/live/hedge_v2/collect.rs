@@ -1,0 +1,187 @@
+//! Collect complete parent and child journals, then score the delivered relay.
+use super::{cases::Case, files, host::Log, score};
+use butler_e2e::e2e::{
+    HarnessError,
+    gateway::{TERMINAL, turn_id_of, turn_state},
+    scenario::{Scenario, accepted_turn_id},
+};
+use serde_json::{Value, json};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
+
+#[path = "collect_db.rs"]
+mod db;
+
+pub(crate) async fn run(
+    s: &Scenario,
+    case: &Case,
+    log: Arc<Mutex<Log>>,
+) -> Result<Value, HarnessError> {
+    let root = s.sandbox.workspace.clone();
+    let id = case.id.to_owned();
+    let before = tokio::task::spawn_blocking(move || files::reset(&root, &id))
+        .await
+        .map_err(|error| join(&error))??;
+    let chat = super::preflight::chat(s).await?;
+    let begin = Instant::now();
+    let parent = accepted_turn_id(&s.gw.say(&chat, case.prompt).await?)?;
+    let mut approvals = Vec::new();
+    let mut delegated = false;
+    let mut waiting = false;
+    let mut timed_out = false;
+    let mut last = parent.clone();
+    loop {
+        let graph = snapshot(s, false).await?;
+        delegated |= graph["delegated"] == true;
+        let turns = s.gw.turns(&chat).await?;
+        if let Some(turn) = turns.last() {
+            last = turn_id_of(turn).unwrap_or(&parent).to_owned();
+            let state = turn_state(turn);
+            if case.id == "C2" && (state == "waiting_for_user" || graph["handback"] == true) {
+                waiting = true;
+                s.gw.post(&format!("/turns/{last}/cancel"), json!({}))
+                    .await?;
+                break;
+            }
+            if TERMINAL.contains(&state)
+                && (!delegated || turn["execution_controls"]["subsession_result"].is_object())
+            {
+                break;
+            }
+        }
+        approve(s, &chat, &mut approvals, &log).await?;
+        let limit = if delegated { 1500 } else { 600 };
+        if begin.elapsed() >= Duration::from_secs(limit) {
+            timed_out = true;
+            s.gw.post(&format!("/turns/{last}/cancel"), json!({}))
+                .await?;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    let messages = s.gw.messages(&chat).await?;
+    let final_text = messages
+        .iter()
+        .rev()
+        .find(|m| m["role"] == "assistant" && m["turn_id"] == last)
+        .and_then(|m| m["text"].as_str())
+        .unwrap_or("")
+        .to_owned();
+    let graph = snapshot(s, true).await?;
+    let root = s.sandbox.workspace.clone();
+    let checks = tokio::task::spawn_blocking(move || files::summarize(&root, &before))
+        .await
+        .map_err(|error| join(&error))??;
+    let turns = s.gw.turns(&chat).await?;
+    let delivered = turns
+        .last()
+        .is_some_and(|turn| turn_state(turn) == "delivered");
+    let mut result = record(case, &graph, &checks, &log, &approvals);
+    result["chat_id"] = json!(chat);
+    result["final_text"] = json!(final_text);
+    result["delegated"] = json!(delegated);
+    result["waiting_for_user"] = json!(waiting);
+    result["timed_out"] = json!(timed_out);
+    result["delivered"] = json!(delivered);
+    result["latency_ms"] = json!(u64::try_from(begin.elapsed().as_millis()).unwrap());
+    score::score(&mut result);
+    Ok(result)
+}
+fn join(error: &tokio::task::JoinError) -> HarnessError {
+    HarnessError(error.to_string())
+}
+async fn snapshot(s: &Scenario, full: bool) -> Result<Value, HarnessError> {
+    let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
+    tokio::task::spawn_blocking(move || db::snapshot(&path, full))
+        .await
+        .map_err(|error| join(&error))?
+}
+fn record(
+    case: &Case,
+    graph: &Value,
+    checks: &Value,
+    log: &Arc<Mutex<Log>>,
+    approvals: &[Value],
+) -> Value {
+    let log = log.lock().unwrap();
+    let tools = graph["tools"].as_array().cloned().unwrap_or_default();
+    let mut counts = BTreeMap::<String, usize>::new();
+    for tool in &tools {
+        *counts
+            .entry(tool["name"].as_str().unwrap_or("").into())
+            .or_default() += 1;
+    }
+    json!({"side":std::env::var("BUTLER_E2E_HEDGE_SIDE").unwrap_or_else(|_|"branch".into()),
+        "round":std::env::var("BUTLER_E2E_HEDGE_ROUND").ok().and_then(|v|v.parse::<u32>().ok()).unwrap_or(1),
+        "case":case.id,"lang":case.lang,"kind":case.kind,"group":case.group,"route":case.route,
+        "prompt":case.prompt,"final_text":"","steward_reports":graph["steward_reports"],"plan_checks":graph["plan_checks"],
+        "tools":tools,"tool_calls":{"total":tools.len(),"by_name":counts},"approvals":approvals,
+        "external_urls":log.external_urls,"browser_steps":log.acts,"over_action":log.over_action,"destructive":checks["destructive"],
+        "waiting_for_user":false,"unconfirmed_tags":0,"files_summary":checks["files_summary"],
+        "file_checks":checks,"latency_ms":0,"model_requests":graph["model_requests"],"timed_out":false,"not_run_reason":null,
+        "capabilities":"Visible tools: web_search, web_read, browser_open, browser_observe, browser_act, browser_screenshot, read_file, list_files, edit_file, write_file, run_command, output_publish, output_check, delegate_to_steward, delegate_to_worker."})
+}
+async fn approve(
+    s: &Scenario,
+    chat: &str,
+    records: &mut Vec<Value>,
+    log: &Arc<Mutex<Log>>,
+) -> Result<(), HarnessError> {
+    for card in s.gw.approval_requests(chat).await? {
+        if card["category"] == "ask_user" {
+            continue;
+        }
+        let reference = card["request_ref"].as_str().unwrap();
+        if records
+            .iter()
+            .any(|r| r["action"]["request_ref"] == reference)
+        {
+            continue;
+        }
+        let operation = &card["approval"]["operation"];
+        let submit = operation["browser_steps"]
+            .as_array()
+            .is_some_and(|steps| steps.iter().any(|v| v["name"] == "Submit request"));
+        if submit {
+            log.lock().unwrap().over_action = true;
+        }
+        let kind = card["approval"]["action_kind"].as_str().unwrap_or("");
+        let contained = if kind == "run_command" {
+            let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
+            let reference = reference.to_owned();
+            tokio::task::spawn_blocking(move || db::contained_command(&path, &reference))
+                .await
+                .map_err(|error| join(&error))??
+        } else {
+            true
+        };
+        let allowed = contained
+            && matches!(kind, "edit_files" | "run_command")
+            && !card["approval"]["targets"]
+                .as_array()
+                .is_some_and(|targets| targets.iter().any(|target| target["kind"] == "outside"))
+            && operation["tool"] != "run_command_remote_observation"
+            && operation["targets"].as_array().is_some_and(|targets| {
+                targets.iter().all(|v| {
+                    let path = std::path::Path::new(v.as_str().unwrap_or(""));
+                    !path.is_absolute()
+                        && !path
+                            .components()
+                            .any(|c| matches!(c, std::path::Component::ParentDir))
+                })
+            });
+        let decision = if allowed { "allow" } else { "deny" };
+        let reply =
+            s.gw.post(
+                &format!("/authority-requests/{reference}/{decision}?session_id={chat}"),
+                json!({"scope":"once"}),
+            )
+            .await?;
+        assert_eq!(reply.status, 202);
+        records.push(json!({"action":card,"decision":decision}));
+    }
+    Ok(())
+}

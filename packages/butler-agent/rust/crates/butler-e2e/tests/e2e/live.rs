@@ -22,6 +22,7 @@ use serde_json::{Value, json};
 
 mod drift;
 mod hedge;
+pub(crate) mod hedge_v2;
 pub(super) mod profile;
 
 const IGNORE: &str = "";
