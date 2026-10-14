@@ -348,14 +348,21 @@ async fn scheduler_errors(data: &std::path::Path) -> Result<usize, HarnessError>
     .map_err(|error| HarnessError(error.to_string()))?
 }
 
-async fn wait_scheduler_reads(s: &Scenario, expected: u64) -> Result<(), HarnessError> {
-    tokio::time::timeout(butler_core::wall_clock::MAX_WAIT_SLICE, async {
+async fn wait_scheduler_reads(
+    s: &Scenario,
+    expected: u64,
+    previous_read_observed: Instant,
+) -> Result<Instant, HarnessError> {
+    // The 5s covers failed dispatch run time plus poll jitter and bounds "one retry per slice".
+    let deadline =
+        previous_read_observed + butler_core::wall_clock::MAX_WAIT_SLICE + Duration::from_secs(5);
+    tokio::time::timeout_at(deadline.into(), async {
         loop {
             let reply =
                 s.gw.get("/automations/_test/scheduler-next-due-reads")
                     .await?;
             if reply.data().as_u64().unwrap_or(0) >= expected {
-                return Ok::<_, HarnessError>(());
+                return Ok::<_, HarnessError>(Instant::now());
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
@@ -383,17 +390,18 @@ async fn sched_14_failed_dispatch_retries_without_notification() -> Result<(), H
     tokio::time::sleep(Duration::from_millis(200)).await;
     dispatch_fault(&s.sandbox.data, true).await?;
     jump(address.clone(), "2026-10-13T22:00:00.000Z").await?;
-    tokio::time::timeout(butler_core::wall_clock::MAX_WAIT_SLICE, async {
-        while scheduler_errors(&s.sandbox.data).await? == 0 {
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-        Ok::<_, HarnessError>(())
-    })
-    .await
-    .map_err(|_| HarnessError("scheduler did not observe the dispatch failure".into()))??;
+    let mut previous_read_observed =
+        tokio::time::timeout(butler_core::wall_clock::MAX_WAIT_SLICE, async {
+            while scheduler_errors(&s.sandbox.data).await? == 0 {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            Ok::<_, HarnessError>(Instant::now())
+        })
+        .await
+        .map_err(|_| HarnessError("scheduler did not observe the dispatch failure".into()))??;
     // Each new lookup follows a failed retry; the first failure is still sleeping.
     for expected in [3, 4] {
-        wait_scheduler_reads(&s, expected).await?;
+        previous_read_observed = wait_scheduler_reads(&s, expected, previous_read_observed).await?;
         assert_eq!(scheduler_errors(&s.sandbox.data).await?, 1);
         assert_eq!(runs(&s).await?, [] as [Value; 0]);
     }
