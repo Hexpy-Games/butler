@@ -51,7 +51,8 @@ pub(super) fn run(request: &Value) -> Result<i32, Box<dyn std::error::Error>> {
     err.join().map_err(|_| "stderr relay panicked")??;
     match result? {
         v1::WaitResult::Exited(code) => Ok(code),
-        v1::WaitResult::TimedOut => Err("container_timeout".into()),
+        // An execution timeout is not a failure to install isolation.
+        v1::WaitResult::TimedOut => Ok(124),
     }
 }
 

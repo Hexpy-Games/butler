@@ -30,7 +30,7 @@ pub(in crate::command_sandbox) fn probe() -> SandboxCapabilities {
         Some("partial") => SandboxCapabilities {
             project_write: Level::Partial("new secret names are swept after the run"),
             network_deny: Level::Enforced,
-            process_scoping: Level::Enforced,
+            process_scoping: Level::Unavailable("Windows non-file channels are not qualified"),
             ..unavailable("Windows observations are not contained")
         },
         Some("mxc_disabled") => unavailable("mxc_disabled"),
