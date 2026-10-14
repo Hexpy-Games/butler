@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
-use winsafe::{co, prelude::*};
+use winsafe::co;
 
 #[derive(Serialize, Deserialize)]
 struct Entry {
@@ -126,7 +126,7 @@ fn start_time(pid: u32) -> io::Result<Option<u64>> {
     let (created, exited, _, _) = process.GetProcessTimes().map_err(io::Error::other)?;
     Ok((u64::from(exited) == 0).then(|| u64::from(created)))
 }
-pub(super) fn reconcile(data: &Path) -> io::Result<()> {
+pub(in crate::command_sandbox) fn reconcile(data: &Path) -> io::Result<()> {
     let directory = data.join("sandbox/drives");
     let entries = match fs::read_dir(&directory) {
         Ok(entries) => entries,

@@ -213,7 +213,7 @@ fn environment_redirects_profiles_without_importing_host_credentials() {
     assert_eq!(env["USERPROFILE"], r"c:\scratch\home");
     assert_eq!(env["HOMEDRIVE"], "c:");
     assert_eq!(env["HOMEPATH"], r"\scratch\home");
-    assert_eq!(env["PATH"], r"c:\scratch\bin;c:\node");
+    assert_eq!(env["PATH"], r"c:\scratch\bin;c:\installs\node");
     assert_eq!(env["CARGO_HOME"], host["CARGO_HOME"]);
     assert_eq!(env["BUTLER_COMMAND_CWD"], r"l:\");
     let roots = environment::credential_roots(&host).unwrap();

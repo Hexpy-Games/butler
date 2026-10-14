@@ -10,8 +10,8 @@ use std::{
     path::{Path, PathBuf},
 };
 pub(super) type Error = Box<dyn std::error::Error>;
-pub(super) use drive::reconcile;
-pub(super) use probe::probe;
+pub(in crate::command_sandbox) use drive::reconcile;
+pub(in crate::command_sandbox) use probe::probe;
 
 pub(super) fn helper() -> std::io::Result<PathBuf> {
     #[cfg(feature = "test-support")]
@@ -32,7 +32,7 @@ pub(super) fn helper() -> std::io::Result<PathBuf> {
     };
     Ok(parent.join("butler-sandbox.exe"))
 }
-pub(super) fn read_only_contained(
+pub(in crate::command_sandbox) fn read_only_contained(
     _invocation: Invocation,
     _environment: &HashMap<String, String>,
     _denied: &[&Path],
@@ -40,13 +40,13 @@ pub(super) fn read_only_contained(
 ) -> Result<Invocation, SandboxError> {
     Err(SandboxError::ReadOnlyUnavailable)
 }
-pub(super) fn protect_writes(
+pub(in crate::command_sandbox) fn protect_writes(
     invocation: Invocation,
     _root: &Path,
 ) -> Result<Protection, ProtectError> {
     Ok(Protection::Unavailable(invocation))
 }
-pub(super) fn project_write(
+pub(in crate::command_sandbox) fn project_write(
     invocation: Invocation,
     environment: &HashMap<String, String>,
     root: &Path,

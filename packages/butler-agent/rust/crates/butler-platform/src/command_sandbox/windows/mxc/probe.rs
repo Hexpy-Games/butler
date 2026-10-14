@@ -6,7 +6,7 @@ use crate::command_sandbox::{
 use serde_json::{Value, json};
 use std::process::{Command, Stdio};
 
-pub(super) fn probe() -> SandboxCapabilities {
+pub(in crate::command_sandbox) fn probe() -> SandboxCapabilities {
     if std::env::var("BUTLER_WINDOWS_PROJECT_SANDBOX").as_deref() != Ok("1") {
         return unavailable("mxc_disabled");
     }
