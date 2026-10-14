@@ -97,7 +97,18 @@ fn answer_blocks_stream_byte_splits_and_item_validation() -> Result<(), Box<dyn 
         {"title":"Duplicate key","key":"one"}
     ]}]});
     requests.push(serde_json::json!({"spec":invalid,"images":[],"sources":[],"now":"2026-10-12T12:00:00Z","stream":true}));
-    let results = run_stream_requests(&requests)?;
+    let unread_chart = serde_json::json!({"v":1,"blocks":[{"type":"chart","kind":"line","x":["A"],
+        "series":[{"name":"S","values":[1]}],"source":"https://unread.example/chart","checked":"2026-10-12T11:55:00Z"}]});
+    requests.push(serde_json::json!({"spec":unread_chart,"images":[],"sources":[],"now":"2026-10-12T12:00:00Z","stream":true}));
+    let mut results = run_stream_requests(&requests)?;
+    let chart = results.pop().ok_or("no results")?;
+    let chart_ops = chart["ops"].as_array().ok_or("ops missing")?;
+    assert!(
+        !chart_ops
+            .iter()
+            .any(|op| op["field"] == "source" || op["field"] == "series"),
+        "an unread chart source must never be released: {chart_ops:?}"
+    );
     let prefix_ops = results[results.len() - 2]["prefixOps"]
         .as_array()
         .ok_or("prefix missing")?;

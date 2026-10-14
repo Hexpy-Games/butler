@@ -159,6 +159,11 @@ fn needs_evidence(block: &Block, unit: &AnswerBlocksDraftUnit) -> bool {
     if unit.field.as_deref() == Some("checked") {
         return !block.fields.contains_key("source");
     }
+    // A block-level source is only shown once `checked` proved it was read;
+    // until then it is staged for validation but never released.
+    if unit.index.is_none() && unit.field.as_deref() == Some("source") {
+        return !block.fields.contains_key("checked");
+    }
     unit.field.as_deref() == Some("series")
         && (!block.fields.contains_key("source") || !block.fields.contains_key("checked"))
 }
