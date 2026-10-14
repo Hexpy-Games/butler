@@ -12,6 +12,7 @@ pub(super) async fn operation(
         "Starting Windows capability: access={access:?} tool={} refused={} args={}",
         case.tool, case.refused, case.args
     );
+    let previous_lines = s.agent.logs().lines().count();
     script.select(case.clone());
     let accepted = s.gw.say(chat, provider::PROMPT).await?;
     script.mark("say_returned");
@@ -161,14 +162,15 @@ pub(super) async fn operation(
                 "command_provider_callback step={step} received_us={received} matched_us={matched} logged_us={logged}"
             );
         }
-        for line in s
-            .agent
-            .logs()
-            .lines()
-            .filter(|line| line.starts_with("command_"))
-        {
-            eprintln!("{line}");
-        }
+    }
+    for line in s
+        .agent
+        .logs()
+        .lines()
+        .skip(previous_lines)
+        .filter(|line| line.starts_with("command_"))
+    {
+        eprintln!("{line}");
     }
     let budget = Duration::from_secs(if case.refused { 1 } else { 5 });
     butler_e2e::assert_wall_clock_budget!(elapsed, budget, case.tool);

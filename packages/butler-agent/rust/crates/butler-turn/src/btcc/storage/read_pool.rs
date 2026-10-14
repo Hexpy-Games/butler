@@ -138,6 +138,7 @@ impl ReadPool {
                 .pragma_update(None, name, value)
                 .map_err(StorageError::sqlite)?;
         }
+        super::timing::install(&connection);
         Ok(connection)
     }
     pub(super) fn read<T, F>(
@@ -149,8 +150,12 @@ impl ReadPool {
         F: FnOnce(&Connection) -> StorageResult<T> + Send + 'static,
     {
         let (sender, receiver) = tokio::sync::oneshot::channel();
+        let timing = crate::btcc::agent_loop::command_timing::CommandTiming::new("sqlite_read");
+        timing.mark(std::any::type_name::<F>());
         let operation: ReadOperation = Box::new(move |db| {
+            timing.mark("dequeued");
             let value = operation(db)?;
+            timing.mark("statements_done");
             let _sent = sender.send(value);
             Ok(())
         });
@@ -170,7 +175,10 @@ impl ReadPool {
         })
     }
     async fn dispatch(self: &Arc<Self>, operation: ReadOperation) -> StorageResult<()> {
+        let timing =
+            crate::btcc::agent_loop::command_timing::CommandTiming::new("sqlite_read_admit");
         let guard = self.gate.clone().read_owned().await;
+        timing.mark("gate_acquired");
         let permit = self
             .permits
             .clone()
@@ -179,6 +187,7 @@ impl ReadPool {
             .map_err(|error| {
                 StorageError::new(super::StorageCode::SqliteOwnerClosed, error.to_string())
             })?;
+        timing.mark("permit_acquired");
         let (completed, completion) = tokio::sync::oneshot::channel();
         self.work.state.lock().jobs.push_back(Job {
             operation,
@@ -187,6 +196,7 @@ impl ReadPool {
             guard,
         });
         self.work.changed.notify_one();
+        timing.mark("queued");
         completion.await.map_err(|error| {
             StorageError::new(
                 super::StorageCode::SqliteOperationCompletionLost,

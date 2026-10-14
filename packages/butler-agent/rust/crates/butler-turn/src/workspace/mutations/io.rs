@@ -10,6 +10,8 @@ use uuid::Uuid;
 use super::contracts::{CommitObserver, CommittedFile, GuardedPath, MutationFailure};
 use super::{diff, failure};
 
+mod timing;
+
 pub(super) struct Snapshot {
     pub path: GuardedPath,
     pub exists: bool,
@@ -298,9 +300,12 @@ fn atomic_replace(
     temporary: &Path,
     observer: &dyn CommitObserver,
 ) -> Result<bool, MutationFailure> {
+    let timing = timing::Timing::new();
     write_temporary(prepared, temporary, observer)
         .map_err(|error| mutation_io(prepared, &error))?;
+    timing.mark("temporary_synced");
     verify_unchanged(prepared)?;
+    timing.mark("unchanged_verified");
     publish_temporary(prepared, temporary, observer).map_err(|error| mutation_io(prepared, &error))
 }
 
@@ -314,9 +319,14 @@ fn write_temporary(
     if let Some(mode) = prepared.before.mode {
         secure_fs::creation_mode(&mut options, mode);
     }
+    let timing = timing::Timing::new();
     let mut file = options.open(temporary)?;
+    timing.mark("temporary_opened");
     file.write_all(&prepared.data)?;
-    observer.sync_temporary(&file)
+    timing.mark("temporary_written");
+    let result = observer.sync_temporary(&file);
+    timing.mark("fsync_finished");
+    result
 }
 
 fn publish_temporary(
@@ -355,6 +365,15 @@ fn mutation_io(prepared: &Prepared, error: &std::io::Error) -> MutationFailure {
     } else {
         "io_error"
     };
+    if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+        == Some(std::ffi::OsStr::new("1"))
+    {
+        eprintln!(
+            "command_file_error kind={:?} os_code={:?}",
+            error.kind(),
+            error.raw_os_error()
+        );
+    }
     failure::new(Some(prepared.before.path.public.clone()), code)
 }
 

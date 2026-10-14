@@ -22,6 +22,21 @@ impl CommandTiming {
         timing
     }
 
+    pub(crate) fn report_duration(
+        phase: &'static str,
+        event: &'static str,
+        duration: std::time::Duration,
+    ) {
+        eprintln!(
+            "command_duration_timing phase={phase} event={event} utc_us={} duration_us={}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_micros(),
+            duration.as_micros()
+        );
+    }
+
     pub(crate) fn mark(&self, event: &'static str) {
         if let Some(started) = self.started {
             eprintln!(

@@ -35,6 +35,7 @@ mod subsession_result;
 mod subsessions;
 pub(crate) use subsessions::ChildCompletion;
 mod task_graphs;
+mod timing;
 pub use task_graphs::{
     ChildRecord as TaskGraphChildRecord, GraphRecords as TaskGraphRecords,
     GraphScope as TaskGraphScope, PlanRecord as TaskGraphPlanRecord,
@@ -313,6 +314,7 @@ fn run_connection_lane(
         }
         let mut connection = sqlite::open(path).map_err(StorageError::sqlite)?;
         configure(&connection, profile)?;
+        timing::install(&connection);
         validate_activation(&connection, activation)?;
         bootstrap::migrate_current(&mut connection)?;
         legacy_cutover::apply(&mut connection)?;

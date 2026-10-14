@@ -82,3 +82,29 @@ async fn lexical_refusals_keep_complete_results_without_shell_work() -> Result<(
     }
     Ok(())
 }
+
+/// Health has no model, approval, tool, or storage work: measure the same local HTTP transport.
+#[tokio::test]
+async fn approval_transport_noop_control() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, _, _, server) = setup(Access::AskAlways).await?;
+    let mut samples = Vec::new();
+    for _ in 0..20 {
+        let started = Instant::now();
+        let reply = s.gw.get("/health").await?;
+        let elapsed = started.elapsed();
+        assert_eq!(reply.status, 200, "{}", reply.text);
+        assert_eq!(reply.data()["ok"], true);
+        butler_e2e::assert_wall_clock_budget!(elapsed, Duration::from_secs(1), "health control");
+        samples.push(elapsed.as_micros());
+    }
+    samples.sort_unstable();
+    eprintln!(
+        "REFUSAL-CONTROL n=20 p50_us={} max_us={}",
+        samples[9].midpoint(samples[10]),
+        samples[19]
+    );
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

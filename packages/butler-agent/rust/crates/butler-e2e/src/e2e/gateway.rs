@@ -117,7 +117,9 @@ impl Gateway {
                 .header("content-type", "application/json")
                 .body(body);
         }
-        let observe = path.starts_with("/session-view?");
+        let debug = std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+            == Some(std::ffi::OsStr::new("1"));
+        let observe = path.starts_with("/session-view?") || debug;
         let started = observe.then(Instant::now);
         let response = request.send().await?;
         let headers = started.map(|start| start.elapsed());
@@ -136,6 +138,15 @@ impl Gateway {
             .zip(download)
             .zip(started)
             .map(|((headers, download), start)| [headers, download, start.elapsed()]);
+        if debug && let Some(phases) = &phases {
+            // Routes and identifiers never leave this probe.
+            eprintln!(
+                "command_http_timing status={status} headers_us={} body_us={} parse_us={}",
+                phases[0].as_micros(),
+                phases[1].as_micros(),
+                phases[2].as_micros()
+            );
+        }
         Ok(Reply {
             status,
             body,
@@ -235,7 +246,16 @@ impl Gateway {
                     "turn {turn_id} did not reach {states:?} within {timeout:?}; last: {last}"
                 )));
             }
+            let poll = Instant::now();
             tokio::time::sleep(Duration::from_millis(100)).await;
+            if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+                == Some(std::ffi::OsStr::new("1"))
+            {
+                eprintln!(
+                    "command_poll_timing requested_us=100000 actual_us={}",
+                    poll.elapsed().as_micros()
+                );
+            }
         }
     }
 
