@@ -37,7 +37,7 @@ export const stories: ShowcaseStory[] = [
       <Stack gap="sm">
         <Typo.Caption tone="secondary">{text(context).mono}</Typo.Caption>
         <Inline gap="md">
-          {PROVIDER_LOGO_NAMES.filter((name) => !["claude", "gemini", "qwen"].includes(name)).map((name) => <ProviderLogo key={name} name={name} size="lg" />)}
+          {PROVIDER_LOGO_NAMES.filter((name) => !["claude", "anthropic", "gemini", "qwen"].includes(name)).map((name) => <ProviderLogo key={name} name={name} size="lg" />)}
         </Inline>
         <Typo.Caption tone="secondary">{text(context).color}</Typo.Caption>
         <Inline gap="md">

@@ -43,7 +43,7 @@ export function SavedKeyRow({ credential, name, rule, busy, onReplace, onDelete 
     <Stack gap="sm" data-test-class="saved-key-row">
       <Stack align="row" justify="between" cross="center" gap="md" wrap>
         <Stack align="row" cross="start" gap="md">
-          <IconSlot minHeight="line" size="lg"><ProviderMark providerId={credential.provider_id} /></IconSlot>
+          <IconSlot minHeight="line" size="lg"><ProviderMark providerId={credential.provider_id} besideProviderName /></IconSlot>
           <div>
             <Typo.PanelSectionTitle as="h3">{name}</Typo.PanelSectionTitle>
             <Stack gap="xs">
