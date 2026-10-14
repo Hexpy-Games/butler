@@ -33,9 +33,7 @@ export async function fileElectronApp(input: {
     return {
       evaluate, process: () => child,
       async close() {
-        try { await client.evaluate(`${module}.app.quit()`); }
-        catch { /* The inspector disconnects during normal App exit. */ }
-        finally { client.close(); await stopElectronChild(child); }
+        client.close(); await stopElectronChild(child);
       },
     };
   } catch (error) { main?.close(); await stopElectronChild(child); throw error; }

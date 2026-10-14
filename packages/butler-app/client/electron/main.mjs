@@ -2864,7 +2864,9 @@ app.on("before-quit", (event) => {
   // Visible feedback precedes any I/O. The Agent owns shutdown interruption
   // and FIFO recovery; UI cancellation would pause the queue as a user cancel.
   let feedbackReady;
-  if (app.isReady() && !isMenuBarHelperProcess) {
+  // No owned service means there is no durable shutdown to paint or wait for.
+  // This also lets a crashed-service App quit while its renderer is suspended.
+  if (app.isReady() && !isMenuBarHelperProcess && bundledAgentSupervisor.diagnostics().pid !== null) {
     quitFeedback ??= createQuitFeedback(BrowserWindow, desktopLanguage, () => bundledAgentSupervisor.diagnostics());
     feedbackReady = quitFeedback.begin(mainWindow);
   }

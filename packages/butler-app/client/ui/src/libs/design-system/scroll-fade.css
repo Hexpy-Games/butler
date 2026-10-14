@@ -45,6 +45,15 @@
   mask-repeat: no-repeat;
 }
 
+/* Keyboard focus scrolls a control clear of the fades, ring included. */
+:where([data-scroll-fade="y"]) {
+  scroll-padding-block: calc(var(--scroll-fade-size) + var(--focus-ring-room));
+}
+
+:where([data-scroll-fade="x"]) {
+  scroll-padding-inline: calc(var(--scroll-fade-size) + var(--focus-ring-room));
+}
+
 [data-scroll-fade][data-overflowing="true"]:not([data-at-start="true"]) {
   --scroll-fade-start: var(--scroll-fade-size);
   --scroll-fade-start-guard: var(--scroll-fade-guard);

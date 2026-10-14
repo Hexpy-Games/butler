@@ -4,7 +4,9 @@ import { createRequire } from "node:module";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { _electron as electron } from "playwright";
+import { chromium, type Browser } from "playwright";
+import { fileElectronApp } from "../support/file-electron-app";
+import { freePort } from "../support/native-app-server";
 import { smokeBrowserArgs } from "../support/smoke-browser";
 import { createServer } from "node:http";
 import { once } from "node:events";
@@ -45,8 +47,11 @@ const port = (server.address() as { port: number }).port;
 const stopServer = () => { server.closeAllConnections(); server.close(); };
 
 const executablePath = createRequire(join(directory, "package.json"))("electron") as string;
+const debug = await freePort();
+let browser: Browser | undefined;
+const windows = () => browser?.contexts()[0]?.pages() ?? [];
 const start = performance.now();
-const application = await electron.launch({ executablePath, args: [...smokeBrowserArgs(), directory], env: {
+const application = await fileElectronApp({ executablePath, args: [`--remote-debugging-port=${debug}`, ...smokeBrowserArgs(), directory], env: {
   ...process.env, HOME: join(temporary, "home"), BUTLER_DATA: join(temporary, "data"),
   USERPROFILE: join(temporary, "home"), APPDATA: join(temporary, "appdata"), LOCALAPPDATA: join(temporary, "local"),
   TEMP: join(temporary, "temp"), TMP: join(temporary, "temp"), BUTLER_SECRET_STORE: "file", BUTLER_PLATFORM_SYSTEM_SECRETS: "0",
@@ -54,7 +59,14 @@ const application = await electron.launch({ executablePath, args: [...smokeBrows
   BUTLER_APP_SERVER_URL: `http://127.0.0.1:${port}`, BUTLER_APP_SERVER_PORT: String(port),
 } }).catch((error) => { stopServer(); rmSync(temporary, { recursive: true, force: true }); throw error; });
 try {
-  const splash = await application.firstWindow({ timeout: 30_000 });
+  const cdpDeadline = Date.now() + 30_000;
+  while (!await fetch(`http://127.0.0.1:${debug}/json/version`).then(response => response.ok).catch(() => false)) {
+    assert.ok(Date.now() < cdpDeadline, "Electron renderer CDP available");
+    await new Promise(done => setTimeout(done, 20));
+  }
+  browser = await chromium.connectOverCDP(`http://127.0.0.1:${debug}`);
+  const context = browser.contexts()[0]!;
+  const splash = windows().find(page => page.url().includes("lifecycle.html")) ?? await context.waitForEvent("page", { timeout: 30_000 });
   await splash.getByRole("status").waitFor();
   await splash.locator("html[data-painted=true]").waitFor();
   const splashMs = Math.round(performance.now() - start);
@@ -70,7 +82,7 @@ try {
       await new Promise((done) => setTimeout(done, 20));
     }
   }
-  const main = application.windows().find((page) => page !== splash && !page.isClosed());
+  const main = windows().find((page) => page !== splash && !page.isClosed());
   assert.ok(main, "main window must replace splash");
   assert.deepEqual(await main.evaluate(() => {
     const bridge = window.butlerApp as any;
@@ -94,7 +106,7 @@ try {
   assert.ok(index("splash_shown") < index("runtime_imported"), "splash shown before runtime imports complete");
   assert.ok(index("main_window_ready") < index("splash_hidden"), "main shown before the startup card is parked");
 } catch (error) {
-  const main = application.windows().find((page) => !page.isClosed() && !page.url().includes("lifecycle.html"));
+  const main = windows().find((page) => !page.isClosed() && !page.url().includes("lifecycle.html"));
   console.log(JSON.stringify({ requestedPaths: [...requestedPaths], headings: await main?.getByRole("heading").allTextContents(), diagnostic: await main?.evaluate(async () => {
     const bridge = (window as any).butlerApp;
     const settings = await bridge.getSettings().catch((error: Error) => ({ failure: error.message }));
@@ -105,8 +117,8 @@ try {
   throw error;
 } finally {
   releaseData();
-  await application.evaluate(({ app }) => app.exit(0));
-  await application.close();
-  stopServer();
-  rmSync(temporary, { recursive: true, force: true });
+  try { await application.close(); }
+  finally {
+    await browser?.close(); stopServer(); rmSync(temporary, { recursive: true, force: true });
+  }
 }

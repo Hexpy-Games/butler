@@ -148,11 +148,17 @@
   color: var(--text-secondary);
 }
 
+/* The rail clips vertically; it bleeds the room a lifted, focused card's ring
+   needs above the cards, and the grid pads it back. */
 .railViewport {
+  --prompt-card-lift: 2px;
+  --prompt-ring-room: calc(var(--focus-ring-room) + var(--prompt-card-lift));
+
   position: relative;
   z-index: 2;
   width: 100%;
   min-width: 0;
+  margin-block-start: calc(-1 * var(--prompt-ring-room));
   overflow: auto hidden;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
@@ -170,7 +176,7 @@
   grid-auto-columns: minmax(198px, 224px);
   grid-auto-flow: column;
   gap: var(--space-4);
-  padding-block: 0 var(--space-2);
+  padding-block: var(--prompt-ring-room) var(--space-2);
   padding-inline: max(var(--prompt-content-inset), var(--prompt-edge-gutter));
   scroll-padding-inline: max(
     var(--prompt-content-inset),
@@ -211,7 +217,16 @@
     var(--line)
   );
 
-  transform: translateY(-2px);
+  transform: translateY(calc(-1 * var(--prompt-card-lift)));
+}
+
+/* The glass clips its content, so the card, not its button, draws the ring. */
+.itemFrame:has(.item:focus-visible) {
+  --tinted-glass-shadow: var(--focus-ring);
+}
+
+.item:focus-visible {
+  box-shadow: none;
 }
 
 .itemFrame:has(.item:active) {

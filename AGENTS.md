@@ -66,6 +66,9 @@ This routine requires Ledger access and publication authorization. Codex workers
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
 
+- **2026-10-14: Focus rings must never be clipped.** A container that clips its content (overflow, clip-path, mask or edge fades) must leave `--focus-ring-room` for focus rings, and a card that clips its own content must draw the ring on the card. Run `bun run app:focus-ring:smoke` for any UI change.
+  - What happened: the sidebar "새 대화" ring was cut on its left edge by the scroll frame. The same cut came back each time a new clipping container was added.
+
 - **2026-10-10: Never tailor tool descriptions, prompts or product code to an acceptance scenario (named site, app, task recipe).** Acceptance tests measure general capability; fixes must be general.
   - What happened: browser tool descriptions accumulated Naver Map route and JSPaint drawing recipes while iterating to pass live acceptance runs.
 
