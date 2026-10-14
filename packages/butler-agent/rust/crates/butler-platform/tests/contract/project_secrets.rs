@@ -36,6 +36,8 @@ pub(super) fn verify() {
             sweep_new_secrets(&project, &before, &data).unwrap(),
             [] as [std::path::PathBuf; 0]
         );
+        #[cfg(windows)]
+        win32_trimmed_names_are_swept_as_named(&project, &before, &data);
     } else {
         assert_eq!(before, [] as [std::path::PathBuf; 0]);
         assert_eq!(swept, [] as [std::path::PathBuf; 0]);
@@ -71,4 +73,19 @@ fn remove_alias(link: &std::path::Path) {
 #[cfg(windows)]
 fn remove_alias(link: &std::path::Path) {
     fs::remove_dir(link).unwrap();
+}
+/// `sub.` and `sub` are distinct entries that Win32 path parsing conflates.
+#[cfg(windows)]
+fn win32_trimmed_names_are_swept_as_named(
+    project: &std::path::Path,
+    before: &[std::path::PathBuf],
+    data: &std::path::Path,
+) {
+    let verbatim = fs::canonicalize(project).unwrap().join("sub.");
+    fs::create_dir(&verbatim).unwrap();
+    fs::write(verbatim.join(".env"), "hidden").unwrap();
+    let swept = sweep_new_secrets(project, before, data).unwrap();
+    assert_eq!(swept, [project.join("sub.").join(".env")]);
+    assert!(!verbatim.join(".env").exists());
+    fs::remove_dir(&verbatim).unwrap();
 }
