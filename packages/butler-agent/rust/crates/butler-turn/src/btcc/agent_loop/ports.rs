@@ -169,6 +169,13 @@ pub trait ProviderStreamObserver: Send + Sync {
     /// Observes one stream event (provider passthrough JSON).
     fn event(&self, event: &Value);
 
+    /// Ordered tool identity and arguments, private to the agent relay.
+    fn tool_call(&self, event: &butler_core::tool_protocol::ToolCallStreamEvent) {
+        if let Ok(value) = serde_json::to_value(event) {
+            self.event(&value);
+        }
+    }
+
     /// The text streamed in the latest model round is not the answer: the
     /// round called tools, or its answer candidate was sent back or replaced.
     fn round_text_discarded(&self) {}
