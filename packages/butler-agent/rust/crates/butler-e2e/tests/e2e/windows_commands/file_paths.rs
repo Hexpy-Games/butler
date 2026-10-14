@@ -124,11 +124,7 @@ pub(super) async fn approve(
     } else {
         let path = case.args["path"].as_str().unwrap().replace('\\', "/");
         json!([if path.starts_with("../") {
-            s.sandbox
-                .data
-                .join(path)
-                .to_string_lossy()
-                .replace('\\', "/")
+            s.sandbox.data.join(path).to_string_lossy().into_owned()
         } else {
             path
         }])
