@@ -1,5 +1,5 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
-import { CheckCircle2, CircleAlert, ListChecks } from "../Icons";
+import { CheckCircle2, ChevronRight, CircleAlert, ListChecks } from "../Icons";
 import { Inline } from "../Inline";
 import { Tag, type TagTone } from "./Tag";
 
@@ -47,6 +47,16 @@ export const stories: ShowcaseStory[] = [
         <Tag icon={<ListChecks aria-hidden="true" size="xs" />}>{text(context).accent}</Tag>
         <Tag tone="success" icon={<CheckCircle2 aria-hidden="true" size="xs" />}>{text(context).success}</Tag>
         <Tag tone="danger" icon={<CircleAlert aria-hidden="true" size="xs" />}>{text(context).danger}</Tag>
+      </Inline>
+    ),
+  },
+  {
+    name: "Trailing icon",
+    render: () => (
+      <Inline>
+        <Tag iconEnd={<ChevronRight aria-hidden="true" size="xs" />}>+4</Tag>
+        <Tag iconEnd={<ChevronRight aria-hidden="true" size="xs" />}>+12</Tag>
+        <Tag size="md" iconEnd={<ChevronRight aria-hidden="true" size="xs" />}>+4</Tag>
       </Inline>
     ),
   },

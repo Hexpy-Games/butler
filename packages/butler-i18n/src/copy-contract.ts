@@ -234,7 +234,8 @@ interface ConversationWorkCopy {
   collapseHistoryLabel: (primaryLabel: string, count: number) => string;
   viewAllLabel: CountFormatter;
   collapseLabel: string;
-  showDetailsLabel: string;
+  /** A work block's disclosure: run state, latest activity and the earlier records inside. */
+  disclosureLabel: (status: string, latest: string, earlier: number) => string;
   toolchainRegionLabel: (label: string) => string;
   detailsRegionLabel: (label: string) => string;
   webSearchSummary: CountFormatter;

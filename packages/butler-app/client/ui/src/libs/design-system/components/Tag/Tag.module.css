@@ -14,8 +14,14 @@
   padding-inline: var(--tag-padding-inline-md);
 }
 
-.tag[data-removable="true"] {
+.tag[data-removable="true"],
+.tag[data-icon-end="true"] {
   padding-inline-end: var(--space-xs);
+}
+
+/* The trailing icon sits tight against the label, like the remove button. */
+.tag[data-icon-end="true"] {
+  gap: calc(var(--space-xs) / 2);
 }
 
 .tag[data-tone="accent"] {
@@ -41,13 +47,15 @@
   color: var(--color-danger-text);
 }
 
-.icon {
+.icon,
+.iconEnd {
   display: inline-flex;
   align-items: center;
   color: inherit;
 }
 
-.icon svg {
+.icon svg,
+.iconEnd svg {
   width: var(--icon-size-xs);
   height: var(--icon-size-xs);
 }
