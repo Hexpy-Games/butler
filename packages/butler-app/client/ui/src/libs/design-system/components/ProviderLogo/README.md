@@ -9,7 +9,7 @@ vendored SVG files in `logos/` exactly as shipped.
 
 | Prop | Values |
 | --- | --- |
-| `name` | `openai`, `claude`, `gemini`, `grok`, `qwen`, `kimi`, `zai`, `opencode`, `ollama`, `lmstudio` |
+| `name` | `openai`, `claude`, `anthropic`, `gemini`, `grok`, `qwen`, `kimi`, `zai`, `opencode`, `ollama`, `lmstudio` |
 | `size` | `sm` (14px), `md` (16px, default), `lg` (20px) |
 | `label` | Accessible name; omit when visible text names the service |
 
@@ -22,6 +22,7 @@ import { IconTile, ProviderLogo } from "@/butler-ds";
 ```
 
 ## Source and license
+- `anthropic` (the provider) and `claude` (the product) share `claude-color.svg`.
 - The files come from `@lobehub/icons-static-svg` 1.95.1 (MIT). Only these ten
   files are vendored; the package is not a dependency. `logos/NOTICE` carries
   the license and the trademark note.
@@ -47,8 +48,9 @@ To fit a new logo:
    both centred on the title line.
 
 Optical exceptions live in the logo's `fit` only (never in CSS) and carry a
-one-line comment saying why: Claude's mark is short at the bottom, so its fit
-sits it 1px lower at 14px.
+one-line comment saying why. The only one is the Claude mark under the `claude`
+name (Claude, Claude Code): the mark is short at the bottom, so its fit sits it
+1px lower at 14px. `anthropic` draws the same file on the plain centred fit.
 
 ## Themes
 Monochrome logos paint with `currentColor` (the text color), so they stay

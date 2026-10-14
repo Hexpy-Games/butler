@@ -15,16 +15,43 @@ def log(message):
     print(message, file=sys.stderr)
 
 
-def linked(path):
-    info = os.lstat(extended(path))
+def extended(path):
+    """Every filesystem call takes this form so Windows paths past MAX_PATH resolve."""
+    value = str(path)
+    if os.name == 'nt' and not value.startswith('\\\\?\\'):
+        return '\\\\?\\UNC\\' + value[2:] if value.startswith('\\\\') else '\\\\?\\' + value
+    return value
+
+
+def is_link(info):
     return stat.S_ISLNK(info.st_mode) or bool(
         getattr(info, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def linked(path):
+    return is_link(os.lstat(extended(path)))
+
+
+def lexists(path):
+    return os.path.lexists(extended(path))
+
+
+def is_directory(path):
+    return stat.S_ISDIR(os.stat(extended(path)).st_mode)
+
+
+def children(path):
+    return [path / name for name in os.listdir(extended(path))]
+
+
+def mtime_ns(path):
+    return os.stat(extended(path)).st_mtime_ns
 
 
 def namespace(path):
     path = Path(os.path.abspath(path))
     for part in (path, *path.parents):
-        if os.path.lexists(part) and linked(part):
+        if lexists(part) and linked(part):
             raise ValueError(f'Cache namespace contains a link: {part}')
     return path
 
@@ -35,16 +62,9 @@ def contained(base, path):
         raise ValueError(f'Refusing cache operation outside namespace: {path}')
     for part in path.relative_to(base).parts[:-1]:
         base = base / part
-        if os.path.lexists(base) and linked(base):
+        if lexists(base) and linked(base):
             raise ValueError(f'Cache ancestor contains a link: {base}')
     return path
-
-
-def extended(path):
-    value = str(path)
-    if os.name == 'nt' and not value.startswith('\\\\?\\'):
-        return '\\\\?\\UNC\\' + value[2:] if value.startswith('\\\\') else '\\\\?\\' + value
-    return value
 
 
 def remove_tree(base, path):
@@ -54,10 +74,10 @@ def remove_tree(base, path):
 
 
 def _remove_tree(path):
-    if not os.path.lexists(extended(path)):
+    if not lexists(path):
         return 0
     info = os.lstat(extended(path))
-    if linked(path):
+    if is_link(info):
         # Windows directory junctions require rmdir, not unlink or chmod.
         operation = os.rmdir if stat.S_ISDIR(info.st_mode) else os.unlink
         operation(extended(path))
@@ -65,7 +85,7 @@ def _remove_tree(path):
     if not info.st_mode & stat.S_IWRITE:
         os.chmod(extended(path), info.st_mode | stat.S_IWRITE | stat.S_IREAD)
     if stat.S_ISDIR(info.st_mode):
-        size = sum(_remove_tree(path / child.name) for child in Path(extended(path)).iterdir())
+        size = sum(_remove_tree(child) for child in children(path))
         os.rmdir(extended(path))
         return size
     os.unlink(extended(path))
@@ -74,21 +94,23 @@ def _remove_tree(path):
 
 def tree_bytes(path):
     """Only cold/missing estimates and completed builds need a metadata walk."""
-    if linked(path):
+    info = os.lstat(extended(path))
+    if is_link(info):
         return 0
-    if not path.is_dir():
-        return path.stat().st_size
-    return sum(tree_bytes(path / child.name) for child in Path(extended(path)).iterdir())
+    if not stat.S_ISDIR(info.st_mode):
+        return info.st_size
+    return sum(tree_bytes(child) for child in children(path))
 
 
 def read_marker(directory):
     marker = directory / MARKER
-    if not os.path.lexists(marker):
+    if not lexists(marker):
         return {}
     if linked(marker):
         raise ValueError(f'Linked cache marker: {marker}')
     try:
-        value = json.loads(marker.read_text())
+        with open(extended(marker)) as source:
+            value = json.load(source)
         return value if isinstance(value, dict) else {}
     except (ValueError, OSError):
         return {}
@@ -96,21 +118,26 @@ def read_marker(directory):
 
 def write_marker(directory, value, preserve_time=False):
     marker = directory / MARKER
-    previous = (marker if marker.exists() else directory).stat() if preserve_time else None
-    if os.path.lexists(marker) and linked(marker):
+    previous = os.stat(extended(last_used_path(directory))) if preserve_time else None
+    if lexists(marker) and linked(marker):
         raise ValueError(f'Linked cache marker: {marker}')
-    marker.write_text(json.dumps(value))
+    with open(extended(marker), 'w') as output:
+        json.dump(value, output)
     if previous:
-        os.utime(marker, ns=(previous.st_atime_ns, previous.st_mtime_ns))
+        os.utime(extended(marker), ns=(previous.st_atime_ns, previous.st_mtime_ns))
 
 
 def ref_key(ref):
     return hashlib.sha256(ref.encode()).hexdigest()[:16]
 
 
-def last_used(directory):
+def last_used_path(directory):
     marker = directory / MARKER
-    return (marker if marker.exists() else directory).stat().st_mtime_ns
+    return marker if os.path.exists(extended(marker)) else directory
+
+
+def last_used(directory):
+    return mtime_ns(last_used_path(directory))
 
 
 def evict(base, directory, reason):
@@ -119,15 +146,15 @@ def evict(base, directory, reason):
 
 
 def prune_identities(base, directory, selected=None):
-    children = []
-    for child in directory.iterdir():
+    identities = []
+    for child in children(directory):
         if linked(child):
             raise ValueError(f'Linked Cargo cache entry: {child}')
-        if child.is_dir():
-            children.append(child)
-    keep = selected or (max(children, key=lambda path: path.stat().st_mtime_ns) if children else None)
+        if is_directory(child):
+            identities.append(child)
+    keep = selected or (max(identities, key=mtime_ns) if identities else None)
     changed = False
-    for child in children:
+    for child in identities:
         if child != keep:
             evict(base, child, 'obsolete Cargo identity')
             changed = True
@@ -143,7 +170,7 @@ def budget(variable, default):
 
 def prepare(base, ref, identity, known_refs=()):
     base = namespace(base)
-    base.mkdir(parents=True, exist_ok=True)
+    os.makedirs(extended(base), exist_ok=True)
     if Path(identity).name != identity or identity in ('.', '..'):
         raise ValueError('Invalid Cargo identity directory')
     current = base / ref_key(ref)
@@ -152,10 +179,10 @@ def prepare(base, ref, identity, known_refs=()):
     cap = budget('BUTLER_PERSISTENT_TARGET_MAX_GB', 120)
     names = {ref_key(name): name for name in (*known_refs, 'refs/heads/main', ref)}
     entries = []
-    for directory in base.iterdir():
+    for directory in children(base):
         if linked(directory):
             raise ValueError(f'Linked Cargo ref directory: {directory}')
-        if directory.is_dir():
+        if is_directory(directory):
             metadata = read_marker(directory)
             name = names.get(directory.name, metadata.get('ref', ''))
             entries.append((directory, name, last_used(directory)))
@@ -188,10 +215,10 @@ def prepare(base, ref, identity, known_refs=()):
     log(f'Runner Cargo cache estimated bytes={total}; cap bytes={cap}')
     if total > cap:
         log('::warning::Protected main/current Cargo targets exceed the namespace cap')
-    target.mkdir(parents=True, exist_ok=True)
+    os.makedirs(extended(target), exist_ok=True)
     metadata = read_marker(current)
     write_marker(current, dict(metadata, ref=ref))
-    os.utime(target, None)
+    os.utime(extended(target), None)
     return target
 
 
@@ -212,7 +239,7 @@ def auxiliary_caches():
     cap = budget('BUTLER_DEPENDENCY_CACHE_MAX_GB', 10)
     for name in ('npm', 'bun', 'nuget'):
         directory = base / name
-        if not directory.exists() and not directory.is_symlink():
+        if not lexists(directory):
             continue
         if linked(directory):
             raise ValueError(f'Linked dependency cache: {directory}')

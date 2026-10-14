@@ -362,6 +362,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           python3 .github/scripts/isolated.py python3 .github/scripts/test-cargo-target.py
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-runner-cache.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-native-deps.py
       - name: Validate integration proof and branch policy
         working-directory: ${{ github.workspace }}
