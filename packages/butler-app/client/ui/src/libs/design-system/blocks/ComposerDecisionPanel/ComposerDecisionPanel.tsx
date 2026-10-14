@@ -33,7 +33,8 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   actions: ReactNode | ((complete: (action: () => void) => void) => ReactNode);
   /**
    * A 16:10 page thumbnail at the subject row's end (a `LiveTabFrame` of the tab the decision acts on): 144px wide,
-   * 112px under 600px; under 420px it spans the text column under the details (at most 240px tall). `onOpen` opens the page; `label` names it.
+   * 112px under 600px; under 420px it spans the text column under the details, cropped from the page's top to
+   * `--decision-media-narrow-height` (140px). `onOpen` opens the page; without it the thumbnail is a plain image; `label` names it.
    */
   media?: ComposerDecisionMedia;
 }
