@@ -9,6 +9,7 @@ export function canOpenHandoffTab(): boolean {
 
 /** Opens and focuses the conversation's tab that waits on the user. */
 export async function openHandoffTab(sessionId: string): Promise<void> {
+  if (!canOpenHandoffTab()) return;
   const snapshot = await browserCall("state") as BrowserSnapshot | undefined;
   const tabs = conversationAgentTabs(sessionId, snapshot?.tabs ?? [], useButlerStore.getState().sessionViews);
   const tab = tabs.find(item => item.signinStep || item.payStep) ?? tabs.find(item => item.waiting);
