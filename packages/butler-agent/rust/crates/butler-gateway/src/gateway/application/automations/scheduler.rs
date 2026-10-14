@@ -59,28 +59,36 @@ impl AutomationScheduler {
                     }
                 };
                 let notified = wake.notified();
+                tokio::pin!(notified);
                 match next {
-                    Some(next) => {
+                    Some(next) => loop {
                         let delay =
                             due_delay(&app, &next).min(butler_core::wall_clock::MAX_WAIT_SLICE);
                         tokio::select! {
-                            () = cancel.cancelled() => break,
-                            () = notified => { let _ = dispatch(&app).await; },
+                            () = cancel.cancelled() => return,
+                            () = &mut notified => {
+                                let _ = dispatch(&app).await;
+                                break;
+                            },
                             () = tokio::time::sleep(delay) => {
-                                // A slice only invalidates the wall-clock-derived wait.
-                                // Idle slices do one indexed due read and no writes.
-                                if due_delay(&app, &next).is_zero() && !dispatch(&app).await {
+                                // Clock slices retain the indexed lookup and notification.
+                                if !due_delay(&app, &next).is_zero() {
+                                    continue;
+                                }
+                                if !dispatch(&app).await {
                                     tokio::select! {
-                                        () = cancel.cancelled() => break,
-                                        () = wake.notified() => {},
+                                        () = cancel.cancelled() => return,
+                                        () = &mut notified => {},
+                                        () = tokio::time::sleep(butler_core::wall_clock::MAX_WAIT_SLICE) => {},
                                     }
                                 }
+                                break;
                             },
                         }
-                    }
+                    },
                     None => tokio::select! {
                         () = cancel.cancelled() => break,
-                        () = notified => { let _ = dispatch(&app).await; },
+                        () = &mut notified => { let _ = dispatch(&app).await; },
                     },
                 }
             }

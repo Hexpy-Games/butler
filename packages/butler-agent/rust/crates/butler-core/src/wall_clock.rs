@@ -26,8 +26,19 @@ pub async fn wait_until(deadline_ms: i64, now: impl Fn() -> i64) {
     }
 }
 
-/// Wait a duration of wall-clock time without retaining a suspend-blind sleep.
+/// Finish when either wall time or monotonic time reaches the duration.
+/// Wall-clock slices detect suspend; monotonic time bounds backward clock steps.
 pub async fn wait_for(delay: Duration) {
     let millis = i64::try_from(delay.as_millis()).unwrap_or(i64::MAX);
-    wait_until(now_millis().saturating_add(millis), now_millis).await;
+    let deadline = now_millis().saturating_add(millis);
+    let started = tokio::time::Instant::now();
+    loop {
+        let remaining = deadline.saturating_sub(now_millis());
+        if remaining <= 0 || started.elapsed() >= delay {
+            return;
+        }
+        let wall = Duration::from_millis(u64::try_from(remaining).unwrap_or_default());
+        let monotonic = delay.saturating_sub(started.elapsed());
+        tokio::time::sleep(wall.min(monotonic).min(MAX_WAIT_SLICE)).await;
+    }
 }

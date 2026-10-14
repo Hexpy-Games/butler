@@ -289,11 +289,12 @@ impl AppApplication {
                 .map_err(GatewayApplicationError::internal_from)?
                 .map_err(app_error)?,
             )
-        } else if row.state == "enabled" && row.start_at.is_some() {
+        } else if row.state == "enabled" {
             Some(
                 super::timing::interval_next(
                     row.start_at
                         .as_deref()
+                        .or(row.next.as_deref())
                         .ok_or_else(super::timing::invalid)
                         .map_err(app_error)?,
                     row.interval,
@@ -305,12 +306,6 @@ impl AppApplication {
                     },
                 )
                 .map_err(app_error)?,
-            )
-        } else if row.state == "enabled" {
-            Some(
-                self.dependencies
-                    .identity_clock
-                    .iso_after_millis(u64::try_from(row.interval).unwrap_or_default() * 1000),
             )
         } else {
             row.next.clone()

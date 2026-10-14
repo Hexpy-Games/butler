@@ -151,11 +151,11 @@ async fn sched_06_idle_calendar_scheduler_rechecks_without_writes_in_60_seconds(
     tokio::time::sleep(Duration::from_secs(60)).await;
     assert_eq!(
         scheduler_next_due_reads(&s).await?,
-        3,
-        "scheduler must make one bounded due lookup per idle minute"
+        2,
+        "scheduler must retain its due lookup until a change"
     );
     writes.assert_unchanged();
-    eprintln!("SCHED-06 idle window_s=60 next_due_reads=1 data_writes=0");
+    eprintln!("SCHED-06 idle window_s=60 next_due_reads=0 data_writes=0");
     let after = s.gw.get("/automations").await?.data()["automations"].clone();
     assert_eq!(
         after, before,
