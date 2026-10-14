@@ -1,7 +1,11 @@
 # New-chat visual reference
 
-`reference.json` was captured from the full UI built at tag
+`reference.json` was first captured from the full UI built at tag
 `v0.1.0-preview.6` (`7961a7f0fff72cebe50025111957aef5c302655b`).
+It was re-captured at `main` `8cc9748de8dde155cebb65ceef74d79c68f113df`
+for the owner-approved compact suggestion cards of #924 (`dcbd58d68`: no
+empty art slot, 262 → 142px at 1280 and 240 → 156px at 375); that build also
+carries the integer line-heights of #956 and the card focus ring of #952.
 It is a rendered browser reference, not a source-string assertion.
 
 Run `bun run app:newchat:smoke` with isolated `HOME` / `BUTLER_DATA`.
@@ -21,7 +25,8 @@ are excluded because builds can rename them. A coastal canvas must signal a comp
 wallpaper canvas. Screenshots and `report.json` go to `.tmp/newchat-regression/fix`.
 `BUTLER_SMOKE_UI_ROOT` and `BUTLER_SMOKE_SCREENSHOTS` select a historical build
 and artifact directory without changing assertions. The smoke has no baseline
-update mode: do not regenerate this reference from the current build.
+update mode: re-capture this reference only for an approved change to these
+surfaces, and record the source commit here.
 
 ## Regression origin
 

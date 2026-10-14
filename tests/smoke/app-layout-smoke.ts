@@ -29,6 +29,9 @@ const screenshotDir = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? join(root,
 mkdirSync(screenshotDir, { recursive: true });
 const rightPanelToggleSelector = `[aria-label="${appCopy.titlebar.showRightPanel}"], [aria-label="${appCopy.titlebar.hideRightPanel}"]`;
 const turnActivityTimeoutMs = 5_000;
+// #924 (dcbd58d68): suggestion cards hug their ordinal and copy (no empty art
+// slot); the height of this smoke's first card at the 1440px desktop width.
+const NEW_CHAT_CARD_HEIGHT_PX = 186;
 const testClass = (name: string) => `[data-test-class~="${name}"]`;
 const testClasses = (...names: string[]) => names.map(testClass).join("");
 /**
@@ -3250,7 +3253,7 @@ try {
       emptyStateLayout.cardGraphicCount === 0 &&
       emptyStateLayout.cardWidth >= 190 &&
       emptyStateLayout.cardWidth <= 230 &&
-      emptyStateLayout.cardHeight >= 240 &&
+      Math.abs(emptyStateLayout.cardHeight - NEW_CHAT_CARD_HEIGHT_PX) <= 1 &&
       emptyStateLayout.cardDescriptionBelowTitle &&
       emptyStateLayout.cardMetaBeforeTitle &&
       emptyStateLayout.momentAboveTitle &&
