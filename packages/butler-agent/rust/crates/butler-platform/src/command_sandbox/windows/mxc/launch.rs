@@ -66,8 +66,10 @@ fn files(payload: &PolicyFile, drive: char) -> Result<(), Error> {
         environment::git_config(&payload.git_settings, drive)?,
     )?;
     fs::write(scratch.join("npmrc"), "")?;
-    let env = payload.request["process"]["env"]
-        .as_array()
+    let env = payload
+        .request
+        .pointer("/process/env")
+        .and_then(serde_json::Value::as_array)
         .ok_or("missing env")?;
     let path = env
         .iter()

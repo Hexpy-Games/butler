@@ -22,7 +22,7 @@ pub(super) struct Drive {
     entry: Entry,
 }
 impl Drive {
-    pub fn claim(data: &Path, target: &Path, policy: &Path) -> Result<Self, Error> {
+    pub(super) fn claim(data: &Path, target: &Path, policy: &Path) -> Result<Self, Error> {
         let target = dunce::canonicalize(target)?;
         let text = target.to_str().ok_or("invalid_project_path")?;
         if text.len() > 240 {
@@ -75,7 +75,7 @@ impl Drive {
             Err(e) => Err(e),
         }
     }
-    pub fn cleanup(&self) -> io::Result<()> {
+    pub(super) fn cleanup(&self) -> io::Result<()> {
         if self.matches()? && !subst(&[format!("{}:", self.letter), "/D".into()])?.success() {
             return Err(io::Error::other("subst_remove_failed"));
         }
@@ -138,7 +138,10 @@ pub(in crate::command_sandbox) fn reconcile(data: &Path) -> io::Result<()> {
         let name = item.file_name();
         let name = name.to_string_lossy();
         let bytes = name.as_bytes();
-        if bytes.len() != 6 || !name.ends_with(".json") || !bytes[0].is_ascii_uppercase() {
+        let Some(letter) = bytes.first().copied() else {
+            continue;
+        };
+        if bytes.len() != 6 || !name.ends_with(".json") || !letter.is_ascii_uppercase() {
             continue;
         }
         let entry: Entry =
@@ -147,16 +150,16 @@ pub(in crate::command_sandbox) fn reconcile(data: &Path) -> io::Result<()> {
             continue;
         }
         let drive = Drive {
-            letter: char::from(bytes[0]),
+            letter: char::from(letter),
             journal: item.path(),
             entry,
         };
         drive.cleanup()?;
         let policies = dunce::canonicalize(data.join("sandbox/policies"))?;
-        if let Ok(policy) = dunce::canonicalize(&drive.entry.policy) {
-            if policy.parent() == Some(policies.as_path()) {
-                fs::remove_file(policy)?;
-            }
+        if let Ok(policy) = dunce::canonicalize(&drive.entry.policy)
+            && policy.parent() == Some(policies.as_path())
+        {
+            fs::remove_file(policy)?;
         }
     }
     Ok(())

@@ -5,8 +5,9 @@ use std::io::{self, Read};
 
 pub(super) fn probe(request: &Value) -> Result<Value, &'static str> {
     let mut typed = v1::ContainerRequest::new(
-        request["process"]["commandLine"]
-            .as_str()
+        request
+            .pointer("/process/commandLine")
+            .and_then(Value::as_str)
             .ok_or("probe_failed")?,
     );
     typed.containment =
@@ -29,7 +30,10 @@ pub(super) fn probe(request: &Value) -> Result<Value, &'static str> {
         ..Default::default()
     });
     typed.ui = Some(v1::UiPolicy::default());
-    typed.working_directory = request["process"]["cwd"].as_str().map(str::to_owned);
+    typed.working_directory = request
+        .pointer("/process/cwd")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
     typed.timeout_ms = Some(10000);
     let facts = v1::probe(Some(&typed)).map_err(|_| "mxc_api_missing")?;
     serde_json::to_value(facts).map_err(|_| "probe_failed")
@@ -97,15 +101,17 @@ pub(super) fn child_probe(
     Ok(match status {
         v1::WaitResult::Exited(0) if bytes == format!("{nonce}\n").as_bytes() => "partial",
         v1::WaitResult::Exited(code) => {
-            crate::command_sandbox::mxc_policy::reason_code(code as u32)
+            crate::command_sandbox::mxc_policy::reason_code(code.cast_unsigned())
         }
-        _ => "probe_failed",
+        v1::WaitResult::TimedOut => "probe_failed",
     })
 }
 
 fn paths(request: &Value, field: &str) -> Result<Vec<String>, &'static str> {
-    request["filesystem"][field]
-        .as_array()
+    request
+        .get("filesystem")
+        .and_then(|v| v.get(field))
+        .and_then(Value::as_array)
         .ok_or("probe_failed")?
         .iter()
         .map(|value| value.as_str().map(str::to_owned).ok_or("probe_failed"))

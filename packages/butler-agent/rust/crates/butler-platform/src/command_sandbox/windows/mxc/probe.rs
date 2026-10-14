@@ -69,19 +69,24 @@ pub(super) fn helper_probe() -> Result<&'static str, Error> {
         Ok(facts) => facts,
         Err(reason) => return Ok(reason),
     };
-    if !facts["probes"]["baseContainerApiPresent"]
-        .as_bool()
+    if !facts
+        .pointer("/probes/baseContainerApiPresent")
+        .and_then(Value::as_bool)
         .unwrap_or(false)
     {
         return Ok("mxc_api_missing");
     }
-    if facts["tier"] != "base-container" {
+    if facts.get("tier").and_then(Value::as_str) != Some("base-container") {
         return Ok("base_container_unavailable");
     }
-    if facts["needsDaclAugmentation"] != false {
+    if facts.get("needsDaclAugmentation").and_then(Value::as_bool) != Some(false) {
         return Ok("dacl_fallback_required");
     }
-    if facts["probes"]["baseContainerSupportsDenyPaths"] != true {
+    if facts
+        .pointer("/probes/baseContainerSupportsDenyPaths")
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
         return Ok("native_deny_unsupported");
     }
     sdk::child_probe(&request, &nonce)
@@ -89,9 +94,10 @@ pub(super) fn helper_probe() -> Result<&'static str, Error> {
 
 pub(super) fn rewrite_drive(request: &mut Value, drive: char, relative: &str) -> Result<(), Error> {
     let cwd = format!("{drive}:\\{relative}");
-    request["process"]["cwd"] = cwd.clone().into();
-    let env = request["process"]["env"]
-        .as_array_mut()
+    *request.pointer_mut("/process/cwd").ok_or("missing cwd")? = cwd.clone().into();
+    let env = request
+        .pointer_mut("/process/env")
+        .and_then(Value::as_array_mut)
         .ok_or("missing environment")?;
     for item in env {
         if item

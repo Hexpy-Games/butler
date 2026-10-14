@@ -12,8 +12,10 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
+type ToolCache = Option<(BTreeMap<String, String>, Toolchain)>;
+
 pub(super) fn discover(env: &BTreeMap<String, String>) -> Result<Toolchain, Error> {
-    static CACHE: OnceLock<Mutex<Option<(BTreeMap<String, String>, Toolchain)>>> = OnceLock::new();
+    static CACHE: OnceLock<Mutex<ToolCache>> = OnceLock::new();
     let key: BTreeMap<_, _> = env
         .iter()
         .filter(|(k, _)| !k.starts_with("BUTLER_") && !k.starts_with("CODEX_"))

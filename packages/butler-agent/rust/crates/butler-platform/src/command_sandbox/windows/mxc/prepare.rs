@@ -116,8 +116,10 @@ fn prepare(
 }
 fn canonical_grants(request: &mut Value) -> Result<(), Error> {
     for field in ["readwritePaths", "readonlyPaths", "deniedPaths"] {
-        let paths = request["filesystem"][field]
-            .as_array_mut()
+        let paths = request
+            .get_mut("filesystem")
+            .and_then(|v| v.get_mut(field))
+            .and_then(Value::as_array_mut)
             .ok_or("invalid paths")?;
         let mut resolved = Vec::new();
         for path in paths.iter() {
@@ -133,7 +135,10 @@ fn canonical_grants(request: &mut Value) -> Result<(), Error> {
     Ok(())
 }
 fn redirect_scratch(request: &mut Value, root: &WinPath, scratch: &WinPath) {
-    if let Some(env) = request["process"]["env"].as_array_mut() {
+    if let Some(env) = request
+        .pointer_mut("/process/env")
+        .and_then(Value::as_array_mut)
+    {
         for entry in env {
             if let Some(text) = entry.as_str() {
                 *entry = text.replace(root.as_str(), scratch.as_str()).into();
@@ -157,12 +162,16 @@ fn save_policy(
     );
     let scratch = data.join("tmp/project-write").join(&id);
     fs::create_dir(&scratch)?;
-    redirect_scratch(&mut request, &plan.scratch()?[0], &physical(&scratch)?);
+    redirect_scratch(
+        &mut request,
+        plan.scratch()?.first().ok_or("missing scratch")?,
+        &physical(&scratch)?,
+    );
     let payload = PolicyFile {
-        data: dunce::canonicalize(&data)?,
+        data: dunce::canonicalize(data)?,
         project: dunce::canonicalize(root)?,
         scratch,
-        git_settings: tools::git_settings(&env)?,
+        git_settings: tools::git_settings(env)?,
         request,
     };
     let directory = data.join("sandbox/policies");
