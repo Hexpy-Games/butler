@@ -35,14 +35,17 @@ export const PROVIDER_CARDS: Record<FirstRunProviderCardId, ProviderCardSpec> = 
 };
 
 const PROVIDER_LOGOS: Record<string, ProviderCardLogo> = {
-  openai: "openai", anthropic: "anthropic", google: "gemini", xai: "grok", qwen: "qwen",
+  openai: "openai", anthropic: "claude", google: "gemini", xai: "grok", qwen: "qwen",
   kimi: "kimi", zai: "zai", "zai-api": "zai", "opencode-go": "opencode",
 };
 
+/** Beside the provider's own name ("Anthropic"), not one of its models ("Claude ..."). */
+const PROVIDER_NAME_LOGOS: Record<string, ProviderCardLogo> = { anthropic: "anthropic" };
+
 /** The DS logo of a catalog provider (a local server by its platform), or null for none. */
-export function providerLogoName(providerId: string, platform?: string): ProviderCardLogo | null {
+export function providerLogoName(providerId: string, platform?: string, besideProviderName = false): ProviderCardLogo | null {
   if (providerId === "local") return platform === "ollama" ? "ollama" : platform === "lm_studio" ? "lmstudio" : null;
-  return PROVIDER_LOGOS[providerId] ?? null;
+  return (besideProviderName ? PROVIDER_NAME_LOGOS[providerId] : undefined) ?? PROVIDER_LOGOS[providerId] ?? null;
 }
 
 /** The first-run card a connected model came from ("Run setup again" marks it as current). */
