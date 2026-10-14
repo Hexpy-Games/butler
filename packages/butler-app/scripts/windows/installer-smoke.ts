@@ -238,7 +238,8 @@ async function oneClickLaunch() {
 function prepare() {
   for (const folder of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA, env.TEMP, dirname(shortcuts[1]!)]) mkdirSync(folder, { recursive: true });
   writeFileSync(join(data, "sentinel.txt"), "retained");
-  writeFileSync(join(data, "butler.config.json"), JSON.stringify({ user: { name: "E2E", language: "en" },
+  // Preview builds default to preview updates; this smoke exercises an explicit OFF -> ON choice.
+  writeFileSync(join(data, "butler.config.json"), JSON.stringify({ update: { previews: false }, user: { name: "E2E", language: "en" },
     metrics: { enabled: false }, system: { defaultModel: "openai/gpt-6-luna" } }));
   const now = new Date().toISOString();
   mkdirSync(join(data, "personalization"), { recursive: true });
@@ -352,10 +353,11 @@ async function windowCloseAndRelaunch(sessionId: string) {
 async function settingsUpdate() {
   await click(page!, "Settings"); await click(page!, "Updates");
   const row = "document.querySelector('[data-test-id=\"update-component-app\"] button')";
-  await waitFor(async () => await page!.expression(`Boolean(${row}) && ${row}.disabled`), "preview hidden");
+  const component = "document.querySelector('[data-test-id=\"update-component-app\"]')";
+  await waitFor(async () => await page!.expression(`Boolean(${row}) && ${row}.disabled && !${component}.innerText.includes(${JSON.stringify(to)})`), "preview hidden");
   assert.equal(await page!.expression("document.querySelector('[data-setting-id=\"update-previews\"] [role=\"switch\"]').getAttribute('aria-checked')"), "false");
   await page!.expression("document.querySelector('[data-setting-id=\"update-previews\"] [role=\"switch\"]').click()");
   await waitFor(async () => await page!.expression(`${row} && !${row}.disabled`), "Update enabled");
-  assert.ok((await page!.expression<string>("document.querySelector('[data-test-id=\"update-component-app\"]').innerText")).includes(to));
+  assert.ok((await page!.expression<string>(`${component}.innerText`)).includes(to));
   await page!.expression(`(${row}).click(); true`);
 }
