@@ -3,6 +3,8 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import type { PermissionTone } from "../../lib/permissionTone";
 import { Tooltip } from "../../components/Tooltip";
+import { Typo } from "../../components/Typo";
+import { dsClass } from "../../lib/internal";
 import styles from "./OptionMenu.module.css";
 
 export interface OptionMenuProps extends DsPrivateStyleProps {
@@ -111,9 +113,9 @@ export function OptionMenuItem({
         </span>
       ) : null}
       <span className={styles.copy}>
-        <span className={styles.label} data-slot="option-menu-item-label">
+        <Typo.Text as="span" className={dsClass(styles.label)} data-slot="option-menu-item-label">
           {label}
-        </span>
+        </Typo.Text>
         {description ? (
           <span
             className={styles.description}

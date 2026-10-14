@@ -1,6 +1,5 @@
 import type { ShowcaseGuidance } from "../../showcase";
 import { Button } from "../../components/Button";
-import { CheckIcon } from "../../components/Icons";
 import { NativeSelect, NativeSelectOption } from "../../components/NativeSelect";
 import { ProviderLogo } from "../../components/ProviderLogo";
 import { Tag } from "../../components/Tag";
@@ -13,19 +12,6 @@ function PickService() {
       <ChoiceCard icon={<ProviderLogo name="openai" size="lg" />} title="ChatGPT" tag={<Tag tone="accent">No key needed</Tag>}
         description="Sign in with ChatGPT" onClick={() => undefined} />
       <ChoiceCard icon={<ProviderLogo name="claude" size="lg" />} title="Claude" description="Use an Anthropic API key" onClick={() => undefined} />
-    </ChoiceCardList>
-  );
-}
-// #endregion
-
-// #region recipe: Pick several
-function PickSeveral() {
-  return (
-    <ChoiceCardList aria-label="What should Butler import?" role="group">
-      <ChoiceCard role="checkbox" aria-checked selected chevron={false} meta={<CheckIcon size="md" />}
-        icon={<ProviderLogo name="claude" />} title="Claude Code" description="Instructions · 3 MCP servers" onClick={() => undefined} />
-      <ChoiceCard role="checkbox" aria-checked={false} chevron={false}
-        icon={<ProviderLogo name="openai" />} title="Codex" description="2 MCP servers" onClick={() => undefined} />
     </ChoiceCardList>
   );
 }
@@ -50,10 +36,10 @@ export const guidance: ShowcaseGuidance = {
     { when: "Choosing a value inside a form", use: "Select" },
     { when: "Two to four short text options", use: "SegmentedControl" },
     { when: "A card that shows content, not a choice", use: "Card" },
+    { when: "Picking several items to act on", use: "CheckCard" },
   ],
   recipes: [
     { name: "Pick a service", description: "Rows for the well-known choices; the Tag names the easiest path.", render: () => <PickService /> },
-    { name: "Pick several", description: "Each card toggles; a check on the right marks the picked ones. Not a Switch list.", render: () => <PickSeveral /> },
     { name: "More choices in a grid", description: "Tiles are equal size at every width; a long name wraps to two lines.", render: () => <MoreServices /> },
   ],
   doDont: [
@@ -71,11 +57,15 @@ export const guidance: ShowcaseGuidance = {
   content: [
     "Title: the service name people know (ChatGPT, not OpenAI OAuth). Description: what they need, in a few words.",
     "Tags are two or three words (No key needed, Free · Private).",
+    "The icon is bare: a logo or glyph with no tile or boxed background behind it.",
+    "Leading icon = title text size, centered on the title line; brand logos are fitted to the icon-pack grid, so all leading icons share one rule. Trailing controls vertically centered.",
+    "Selected is a 1px accent border on the info tint; press is the stretched-row pressed fill, never a scale.",
   ],
   accessibility: [
     "Each card is a button; the description is its aria-describedby. Loading sets aria-busy, unavailable sets aria-disabled.",
     "For single choice lists pass role=radiogroup on ChoiceCardList and role=radio with aria-checked on each card.",
-    "For picking several pass role=group on ChoiceCardList and role=checkbox with aria-checked, selected, chevron={false} and a CheckIcon meta on each picked card.",
+    "For picking several items use CheckCard in a CheckCardList, not ChoiceCard.",
   ],
-  tokens: ["--control-bg", "--control-hover-bg", "--line", "--line-strong", "--accent", "--color-info-bg", "--danger-line-strong", "--radius-panel", "--focus-ring"],
+  tokens: ["--control-bg", "--control-hover-bg", "--line", "--line-strong", "--accent", "--color-info-bg", "--danger-line-strong", "--radius-panel", "--focus-ring",
+    "--border-hairline", "--icon-size-sm", "--icon-size-md", "--selection-strong", "--motion-fast", "--motion-ease-standard"],
 };

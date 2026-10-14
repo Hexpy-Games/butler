@@ -138,7 +138,7 @@
   margin: 0;
   color: var(--text-secondary);
   font-size: var(--font-size-3);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-body-line-height);
 }
 
 .close {

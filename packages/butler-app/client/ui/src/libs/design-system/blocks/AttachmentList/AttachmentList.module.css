@@ -30,7 +30,7 @@
   min-width: 0;
   padding: 2px var(--space-1);
   font-size: var(--font-size-2);
-  line-height: var(--line-height-compact);
+  line-height: var(--typo-label-line-height);
 }
 
 /* Element chips (ElementChip kind) wrap in their own row before the files. */
