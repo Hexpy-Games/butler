@@ -8,7 +8,8 @@ export function graphTaskStatus(node: TaskGraphNode): TaskGraphStatus {
 }
 export function graphCounts(graph: TaskGraphSnapshot): string {
   const c = appCopy.taskGraph;
-  return [c.doneCount(graph.counts.completed, graph.counts.total),
+  // A skipped action satisfies its dependents, so it counts toward done.
+  return [c.doneCount(graph.counts.completed + graph.counts.skipped, graph.counts.total),
     graph.counts.failed ? c.failedCount(graph.counts.failed) : null,
     graph.counts.cancelled ? c.cancelledCount(graph.counts.cancelled) : null].filter(Boolean).join(" · ");
 }
@@ -32,5 +33,7 @@ export function graphPhase(graph: TaskGraphSnapshot): string {
 }
 
 export function graphMeta(graph: TaskGraphSnapshot): string {
-  return `${graphCounts(graph)} · ${graphPhase(graph)}`;
+  // A closed Work keeps its last stage; the section status already says it ended.
+  const closed = graph.work_state === "completed" || graph.work_state === "abandoned";
+  return closed ? graphCounts(graph) : `${graphCounts(graph)} · ${graphPhase(graph)}`;
 }
