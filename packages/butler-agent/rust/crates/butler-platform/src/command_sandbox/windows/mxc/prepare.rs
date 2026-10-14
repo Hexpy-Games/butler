@@ -16,6 +16,8 @@ use std::{
 
 #[derive(Serialize, Deserialize)]
 pub(super) struct PolicyFile {
+    pub pid: u32,
+    pub started: u64,
     pub data: PathBuf,
     pub project: PathBuf,
     pub scratch: PathBuf,
@@ -141,7 +143,15 @@ fn redirect_scratch(request: &mut Value, root: &WinPath, scratch: &WinPath) {
     {
         for entry in env {
             if let Some(text) = entry.as_str() {
-                *entry = text.replace(root.as_str(), scratch.as_str()).into();
+                let (from, to) = if text.starts_with("HOMEPATH=") {
+                    (
+                        root.as_str().get(2..).unwrap_or_default(),
+                        scratch.as_str().get(2..).unwrap_or_default(),
+                    )
+                } else {
+                    (root.as_str(), scratch.as_str())
+                };
+                *entry = text.replace(from, to).into();
             }
         }
     }
@@ -156,8 +166,11 @@ fn save_policy(
 ) -> Result<PathBuf, Error> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let id = format!(
-        "{}-{}",
+        "{}-{}-{}",
         std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos(),
         NEXT.fetch_add(1, Ordering::Relaxed)
     );
     let scratch = data.join("tmp/project-write").join(&id);
@@ -167,7 +180,10 @@ fn save_policy(
         plan.scratch()?.first().ok_or("missing scratch")?,
         &physical(&scratch)?,
     );
+    let (pid, started) = super::drive::identity()?;
     let payload = PolicyFile {
+        pid,
+        started,
         data: dunce::canonicalize(data)?,
         project: dunce::canonicalize(root)?,
         scratch,
@@ -184,4 +200,32 @@ fn save_policy(
     serde_json::to_writer(&file, &payload)?;
     file.sync_all()?;
     Ok(path)
+}
+
+pub(super) fn reconcile_policies(data: &Path) -> std::io::Result<()> {
+    let directory = data.join("sandbox/policies");
+    let entries = match fs::read_dir(&directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    let scratch_root = data.join("tmp/project-write");
+    for entry in entries {
+        let entry = entry?;
+        if entry.path().extension().is_none_or(|ext| ext != "json") {
+            continue;
+        }
+        let payload: PolicyFile =
+            serde_json::from_slice(&fs::read(entry.path())?).map_err(std::io::Error::other)?;
+        if super::drive::start_time(payload.pid)? == Some(payload.started) {
+            continue;
+        }
+        if let Ok(scratch) = dunce::canonicalize(&payload.scratch)
+            && scratch.parent() == Some(dunce::canonicalize(&scratch_root)?.as_path())
+        {
+            fs::remove_dir_all(scratch)?;
+        }
+        fs::remove_file(entry.path())?;
+    }
+    Ok(())
 }

@@ -116,7 +116,7 @@ fn persistent() -> io::Result<Vec<char>> {
         })
         .collect()
 }
-fn start_time(pid: u32) -> io::Result<Option<u64>> {
+pub(super) fn start_time(pid: u32) -> io::Result<Option<u64>> {
     let process =
         match winsafe::HPROCESS::OpenProcess(co::PROCESS::QUERY_LIMITED_INFORMATION, false, pid) {
             Ok(process) => process,
@@ -130,7 +130,9 @@ pub(in crate::command_sandbox) fn reconcile(data: &Path) -> io::Result<()> {
     let directory = data.join("sandbox/drives");
     let entries = match fs::read_dir(&directory) {
         Ok(entries) => entries,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            return super::prepare::reconcile_policies(data);
+        }
         Err(e) => return Err(e),
     };
     for item in entries {
@@ -155,12 +157,12 @@ pub(in crate::command_sandbox) fn reconcile(data: &Path) -> io::Result<()> {
             entry,
         };
         drive.cleanup()?;
-        let policies = dunce::canonicalize(data.join("sandbox/policies"))?;
-        if let Ok(policy) = dunce::canonicalize(&drive.entry.policy)
-            && policy.parent() == Some(policies.as_path())
-        {
-            fs::remove_file(policy)?;
-        }
     }
-    Ok(())
+    super::prepare::reconcile_policies(data)
+}
+
+pub(super) fn identity() -> io::Result<(u32, u64)> {
+    let pid = std::process::id();
+    let started = start_time(pid)?.ok_or_else(|| io::Error::other("helper_identity_missing"))?;
+    Ok((pid, started))
 }

@@ -27,6 +27,20 @@ pub(crate) fn main() -> Result<i32, Error> {
 }
 fn run(file: &Path) -> Result<i32, Error> {
     let mut payload: PolicyFile = serde_json::from_slice(&fs::read(file)?)?;
+    let (pid, started) = super::drive::identity()?;
+    payload.pid = pid;
+    payload.started = started;
+    crate::secure_fs::replace_private(
+        file,
+        |file| serde_json::to_writer(file, &payload).map_err(std::io::Error::other),
+        |error| error,
+    )?;
+    let result = execute(file, &mut payload);
+    let cleanup = fs::remove_file(file).and_then(|()| fs::remove_dir_all(&payload.scratch));
+    cleanup?;
+    result
+}
+fn execute(file: &Path, payload: &mut PolicyFile) -> Result<i32, Error> {
     if std::env::var("BUTLER_WINDOWS_PROJECT_SANDBOX").as_deref() != Ok("1") {
         return Err("mxc_disabled".into());
     }
@@ -34,20 +48,14 @@ fn run(file: &Path) -> Result<i32, Error> {
     let relative = cwd
         .strip_prefix(&payload.project)
         .map_err(|_| "cwd_outside_project")?;
+    let relative = relative.to_str().ok_or("invalid cwd")?.to_owned();
     let drive = Drive::claim(&payload.data, &payload.project, file)?;
     let result = (|| {
-        probe::rewrite_drive(
-            &mut payload.request,
-            drive.letter,
-            relative.to_str().ok_or("invalid cwd")?,
-        )?;
-        files(&payload, drive.letter)?;
+        probe::rewrite_drive(&mut payload.request, drive.letter, &relative)?;
+        files(payload, drive.letter)?;
         sdk::run(&payload.request)
     })();
-    // Cleanup failures must not masquerade as successful containment.
     drive.cleanup()?;
-    fs::remove_file(file)?;
-    fs::remove_dir_all(&payload.scratch)?;
     result
 }
 fn files(payload: &PolicyFile, drive: char) -> Result<(), Error> {
