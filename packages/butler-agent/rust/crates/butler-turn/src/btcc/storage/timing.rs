@@ -54,36 +54,30 @@ fn profile(event: TraceEvent<'_>) {
     }
 }
 
-// Each BTCC writer owns one connection on its dedicated thread. Keep SQLite's
-// configured threshold and PASSIVE mode; like its stock hook, ignore checkpoint
-// errors rather than turning an already committed write into a failed operation.
 thread_local! {
-    static CHECKPOINT_PAGES: Cell<i32> = const { Cell::new(0) };
     static COMMIT_STARTED: Cell<Option<Instant>> = const { Cell::new(None) };
     static LAST_WAL_PAGES: Cell<i32> = const { Cell::new(0) };
 }
 
-pub(super) fn install_writer(connection: &Connection) -> rusqlite::Result<()> {
+pub(super) fn install_writer(connection: &Connection) {
     install(connection);
     if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
         != Some(std::ffi::OsStr::new("1"))
     {
-        return Ok(());
+        return;
     }
-    let pages =
-        connection.query_row("PRAGMA wal_autocheckpoint", [], |row| row.get::<_, i32>(0))?;
-    CHECKPOINT_PAGES.set(pages);
     connection.commit_hook(Some(|| {
         COMMIT_STARTED.set(Some(Instant::now()));
         false
     }));
-    if pages > 0 {
-        connection.wal_hook(Some(checkpoint));
-    }
-    Ok(())
 }
 
-fn checkpoint(wal: &rusqlite::hooks::Wal, pages: i32) -> rusqlite::Result<()> {
+pub(super) fn wal_committed(pages: i32) {
+    if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+        != Some(std::ffi::OsStr::new("1"))
+    {
+        return;
+    }
     let prior = LAST_WAL_PAGES.replace(pages);
     if pages < prior {
         eprintln!(
@@ -91,16 +85,6 @@ fn checkpoint(wal: &rusqlite::hooks::Wal, pages: i32) -> rusqlite::Result<()> {
             utc_us()
         );
     }
-    if CHECKPOINT_PAGES.get() > 0 && pages >= CHECKPOINT_PAGES.get() {
-        let timing = CommandTiming::new("sqlite_checkpoint");
-        let result = wal.checkpoint();
-        timing.mark(if result.is_ok() {
-            "passive_finished"
-        } else {
-            "passive_failed"
-        });
-    }
-    Ok(())
 }
 
 fn utc_us() -> u128 {

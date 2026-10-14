@@ -64,6 +64,7 @@ pub(super) fn optimize(connection: &Connection) -> StorageResult<()> {
 
 /// Retention must never wait for foreground readers to release the WAL.
 pub(super) fn passive_checkpoint(connection: &Connection) -> StorageResult<()> {
+    let _timing = crate::gateway::command_timing::CommandTiming::new("app_sqlite_checkpoint");
     connection
         .execute_batch("PRAGMA wal_checkpoint(PASSIVE)")
         .map_err(AppStorageError::sqlite)
