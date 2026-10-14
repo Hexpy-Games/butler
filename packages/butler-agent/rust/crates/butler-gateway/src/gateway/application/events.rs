@@ -25,6 +25,7 @@ pub(super) struct EventSubscribers {
 
 #[derive(Default)]
 struct SubscriberState {
+    drafts: super::answer_drafts::Drafts,
     next_id: u64,
     listeners: HashMap<u64, Listener>,
     cursor_observer: Option<Arc<dyn Fn(u64) + Send + Sync>>,
@@ -38,6 +39,9 @@ impl EventSubscribers {
         let mut state = self.inner.lock();
         state.next_id += 1;
         let id = state.next_id;
+        // Snapshot and registration share the publication lock, so no op can
+        // slip between the snapshot and this listener becoming visible.
+        listener(Arc::new(PublishedEvent::new(state.drafts.snapshot())));
         state.listeners.insert(id, listener);
         drop(state);
         Box::new(Subscription {
@@ -46,10 +50,29 @@ impl EventSubscribers {
         })
     }
 
+    pub(super) fn publish_draft(&self, mut payload: Value) {
+        let mut state = self.inner.lock();
+        state.drafts.sequence_end(&mut payload);
+        state.drafts.apply(&payload);
+        let event = Arc::new(PublishedEvent::new(super::answer_drafts::envelope(
+            "answer_blocks.draft",
+            payload,
+        )));
+        for listener in state.listeners.values() {
+            listener(event.clone());
+        }
+    }
+
     /// Delivers a committed event to every listener; they share its frame.
     pub(super) fn publish(&self, event: &Arc<PublishedEvent>) {
         let (listeners, cursor_observer) = {
-            let state = self.inner.lock();
+            let mut state = self.inner.lock();
+            if let Some(end) = state.drafts.finish(event.envelope()) {
+                let end = Arc::new(PublishedEvent::new(end));
+                for listener in state.listeners.values() {
+                    listener(end.clone());
+                }
+            }
             (
                 state.listeners.values().cloned().collect::<Vec<_>>(),
                 state.cursor_observer.clone(),

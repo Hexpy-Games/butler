@@ -59,4 +59,15 @@ export const stories: ShowcaseStory[] = [
       </Stack>
     ),
   },
+  {
+    // A data-motion="reduced" scope, as the app's reduce-motion setting sets on the shell.
+    name: "Reduced motion: the sheen stops, the fill stays",
+    widths: ["375", "app"],
+    render: (context) => (
+      <Stack gap="sm" data-motion="reduced">
+        <Skeleton lines={3} height="line" label={text(context).turn} />
+        <Skeleton height="row" width="full" />
+      </Stack>
+    ),
+  },
 ];

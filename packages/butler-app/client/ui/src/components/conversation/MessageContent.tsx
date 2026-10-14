@@ -9,6 +9,7 @@ import {
   isAssistantFailureNoticeMessage,
   isRetryableFailureMessage,
 } from "@/app/utils.ts";
+import { AnswerDraftFooter } from "./AnswerDraftFooter";
 import { AssistantResponseFooter } from "./AssistantResponseFooter";
 import { AssistantBranchActions } from "./AssistantBranchActions";
 import {
@@ -71,6 +72,7 @@ function MessageContentComponent({
         <MessageChangedFiles files={message.changed_files ?? []} />
       )}
       {liveActivity}
+      {message.role === "assistant" && running && <AnswerDraftFooter turnId={message.turn_id} />}
       {message.role === "assistant" && !running && onCopyAssistantMessage && (
         <AssistantResponseFooter
           copied={copied}

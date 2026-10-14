@@ -13,6 +13,7 @@ import { appCopy } from "@/app/copy.ts";
 import { invalidateProjectDashboard } from "./projectDashboardInvalidation.ts";
 import { useProjectDashboardState } from "@/app/projectDashboardState.ts";
 import { useEffect, useRef } from "react";
+import { receiveAnswerDraft, abandonAnswerDrafts } from "@/app/answerDrafts";
 import { createLiveEventConnection } from "./liveEventConnection.ts";
 import { subscribeAgentRuntimeState } from "@/app/agentRuntime.ts";
 import { showDesktopNotification } from "@/app/nativeNotifications.ts";
@@ -72,6 +73,7 @@ export function useLiveSessionEvents(): void {
 
     const applyEvent = (event: TimelineEvent) => {
       if (cancelled) return;
+      if (receiveAnswerDraft(event)) return;
       if (event.type === "session.cleared" && typeof event.id === "number") {
         useButlerStore.getState().resetGeneralConversation(event.id);
         navigationReconciliation.requestRefresh();
@@ -182,6 +184,7 @@ export function useLiveSessionEvents(): void {
       cursor: () => eventCursorRef.current,
       onEvent: applyEvent,
       onLostChange: (liveConnectionLost) => {
+        if (liveConnectionLost) abandonAnswerDrafts();
         if (useButlerStore.getState().liveConnectionLost !== liveConnectionLost) {
           useButlerStore.setState({ liveConnectionLost });
           if (!liveConnectionLost && !cancelled) void refreshUpdateProgress();

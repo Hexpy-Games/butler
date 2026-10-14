@@ -92,12 +92,21 @@ fn state_lock(state: &Arc<Mutex<LiveState>>) -> parking_lot::MutexGuard<'_, Live
     state.lock()
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DeliveryState {
+    Open,
+    Resubscribe,
+    Closed,
+}
+
 struct LiveState {
     cursor: f64,
+    high_water: u64,
     /// The stream is closing: events that arrive now are not queued.
-    closed: bool,
+    delivery: DeliveryState,
     replaying: bool,
     replay_overflowed: bool,
+    draft_queue: VecDeque<Bytes>,
     replay_queue: BTreeMap<u64, Arc<PublishedEvent>>,
     output: VecDeque<Bytes>,
     waker: Option<Waker>,
@@ -107,9 +116,11 @@ impl LiveState {
     fn new(cursor: f64) -> Self {
         Self {
             cursor,
-            closed: false,
+            high_water: 0,
+            delivery: DeliveryState::Open,
             replaying: true,
             replay_overflowed: false,
+            draft_queue: VecDeque::new(),
             replay_queue: BTreeMap::new(),
             output: VecDeque::new(),
             waker: None,
@@ -117,7 +128,19 @@ impl LiveState {
     }
 
     fn receive(&mut self, event: Arc<PublishedEvent>, high_water: u64) -> Option<Waker> {
-        if self.closed || event.id() as f64 <= self.cursor {
+        if self.delivery == DeliveryState::Open && event.id() == 0 {
+            if self.replaying {
+                if self.draft_queue.len() >= MAX_BUFFERED_EVENTS {
+                    self.draft_queue.clear();
+                    self.delivery = DeliveryState::Resubscribe;
+                }
+                self.draft_queue.push_back(event.frame());
+            } else {
+                self.push_draft(event.frame());
+            }
+            return self.waker.take();
+        }
+        if self.delivery != DeliveryState::Open || event.id() as f64 <= self.cursor {
             return None;
         }
         if self.replaying {
@@ -134,6 +157,7 @@ impl LiveState {
     }
 
     fn finish_replay(&mut self, current_high_water: u64) {
+        self.high_water = current_high_water;
         if self.replay_overflowed {
             self.push_reconcile(current_high_water);
         } else {
@@ -142,12 +166,25 @@ impl LiveState {
                 self.push_output(event.id(), event.frame(), current_high_water);
             }
         }
+        for frame in std::mem::take(&mut self.draft_queue) {
+            self.push_draft(frame);
+        }
         self.replaying = false;
         self.replay_queue.clear();
         self.replay_overflowed = false;
     }
 
+    fn push_draft(&mut self, frame: Bytes) {
+        // A slow draft reader must resubscribe for a complete snapshot rather
+        // than continue after losing units from the bounded output buffer.
+        if self.output.len() >= MAX_BUFFERED_EVENTS {
+            self.delivery = DeliveryState::Resubscribe;
+        }
+        self.push_chunk(frame, self.high_water);
+    }
+
     fn push_output(&mut self, id: u64, frame: Bytes, high_water: u64) {
+        self.high_water = self.high_water.max(high_water);
         if id as f64 <= self.cursor {
             return;
         }
@@ -204,15 +241,17 @@ impl Stream for LiveEventStream {
     type Item = Result<Bytes, Infallible>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let reconnect = self.state.lock().delivery == DeliveryState::Resubscribe;
         if !self.closing
-            && self
-                .closers
-                .iter_mut()
-                .any(|closer| closer.as_mut().poll(cx).is_ready())
+            && (reconnect
+                || self
+                    .closers
+                    .iter_mut()
+                    .any(|closer| closer.as_mut().poll(cx).is_ready()))
         {
             // Only what is queued now is still delivered.
             self.closing = true;
-            self.state.lock().closed = true;
+            self.state.lock().delivery = DeliveryState::Closed;
             self.subscription = None;
         }
         if self.closing {

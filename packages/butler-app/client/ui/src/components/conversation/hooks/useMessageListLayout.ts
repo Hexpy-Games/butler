@@ -41,7 +41,7 @@ export function useMessageListLayout({ visibleMessages, showTurnActivity, itemCo
     });
 
   const scrollState = useConversationAutoScroll({
-    activeChatId,
+      activeChatId,
     latestMessageVersion,
     itemCount,
     virtualListHeight,

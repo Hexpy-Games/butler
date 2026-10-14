@@ -297,7 +297,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 start.turn.turn_id.clone(),
                 activity,
             ));
-            let stream_relay = butler_turn::btcc::StreamRelay::new();
+            let stream_relay = super::tools::AnswerBlocksStream::relay(tools.clone());
             let inputs = GuidedTurnInputs {
                 semantic,
                 dependencies: GuidedPolicyDependencies {
