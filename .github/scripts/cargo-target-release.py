@@ -253,22 +253,17 @@ def compatible_tag(expected):
     return 'compatible-' + tag_name(cache.compatible_identity(expected))
 
 
-def split(archive, directory, prefix):
-    chunks = []
-    with archive.open('rb') as source:
-        while True:
-            name = f'{prefix}-{len(chunks):04}.zst'
-            destination = directory / name
-            with destination.open('wb') as output:
-                remaining = CHUNK_BYTES
-                while remaining and (block := source.read(min(1024**2, remaining))):
-                    output.write(block)
-                    remaining -= len(block)
-            if destination.stat().st_size == 0:
-                destination.unlink()
-                break
-            chunks.append(name)
-    return chunks
+def recorded_parts(directory, prefix):
+    """Upload parts written by the recorder, numbered consecutively from zero."""
+    names = sorted(path.name for path in directory.glob(prefix + '-*.zst'))
+    if not names or names != [f'{prefix}-{index:04}.zst' for index in range(len(names))]:
+        raise ValueError('Cargo snapshot parts are missing or misnamed')
+    return names
+
+
+def report_free_disk(label):
+    usage = shutil.disk_usage(os.environ['RUNNER_TEMP'])
+    print(f'Free disk {label}: {usage.free / 1024**3:.1f} of {usage.total / 1024**3:.1f} GiB.', flush=True)
 
 
 def prune(tag, prefix):
@@ -299,21 +294,19 @@ def publish(directory, run_id):
     if str(metadata['run_id']) != str(run_id):
         raise ValueError('Cargo snapshot run mismatch')
     trusted(metadata, publishing=True)
-    cache.verify(directory, metadata['identity'])
-    tag = compatible_tag(metadata['identity'])
     prefix = f'{int(run_id)}-{int(metadata["run_attempt"])}'
+    chunks = recorded_parts(directory, prefix)
+    cache.verify(directory, metadata['identity'], parts=chunks)
+    tag = compatible_tag(metadata['identity'])
     reference = f'{ci_oci.REGISTRY}/cargo-target:{tag}--{prefix}'
     committed = ci_oci.manifest(reference, anonymous=False)
     if committed is None:
-        with tempfile.TemporaryDirectory() as temporary:
-            stage = Path(temporary)
-            chunks = split(directory / 'cache.tar.zst', stage, prefix)
-            sources = stage / (prefix + '-sources.json')
-            shutil.copyfile(directory / 'sources.json', sources)
-            manifest = stage / (prefix + '.json')
-            manifest.write_text(json.dumps(dict(metadata=metadata, chunks=chunks)))
-            # OCI commits its manifest only after every complete chunk is stored.
-            ci_oci.push(reference, [*(stage / name for name in chunks), sources, manifest])
+        sources = directory / (prefix + '-sources.json')
+        shutil.copyfile(directory / 'sources.json', sources)
+        manifest = directory / (prefix + '.json')
+        manifest.write_text(json.dumps(dict(metadata=metadata, chunks=chunks)))
+        # OCI commits its manifest only after every complete chunk is stored.
+        ci_oci.push(reference, [*(directory / name for name in chunks), sources, manifest])
     else:
         with tempfile.TemporaryDirectory() as temporary:
             manifest = next(entry for entry in committed['assets'] if entry['name'] == prefix + '.json')
@@ -329,9 +322,16 @@ def publish(directory, run_id):
 
 def publish_lane(platform, mode, kind):
     expected = cache.identity(platform, mode, kind)
-    directory = Path(os.environ['RUNNER_TEMP']) / 'cargo-build-cache'
-    cache.record(directory, expected, target=os.environ.get('CARGO_TARGET_DIR', 'target'))
-    publish(directory, os.environ['GITHUB_RUN_ID'])
+    run_id = os.environ['GITHUB_RUN_ID']
+    prefix = f'{int(run_id)}-{int(os.environ.get("GITHUB_RUN_ATTEMPT", "1"))}'
+    report_free_disk('before snapshot')
+    # The only extra disk is one compressed copy, written directly as upload parts.
+    with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
+        directory = Path(temporary)
+        cache.record(directory, expected, target=os.environ.get('CARGO_TARGET_DIR', 'target'),
+                     part=(prefix, CHUNK_BYTES))
+        report_free_disk('after compression')
+        publish(directory, run_id)
 
 
 if __name__ == '__main__':

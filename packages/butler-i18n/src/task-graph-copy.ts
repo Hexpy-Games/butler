@@ -7,16 +7,21 @@ export interface TaskGraphCopy {
   doneCount: (done: number, total: number) => string;
   failedCount: (count: number) => string;
   cancelledCount: (count: number) => string;
-  status: Record<"pending" | "running" | "review" | "done" | "failed" | "cancelled" | "blocked" | "paused", string>;
+  status: Record<"pending" | "running" | "review" | "done" | "failed" | "cancelled" | "blocked" | "paused" | "skipped", string>;
   /** Assignee shown on a card: "작업자 2". */
   assignee: (ordinal: number) => string;
   unassigned: string;
+  handledDirectly: string;
+  attempts: (count: number) => string;
+  reviewNotice: string;
+  resultReceived: string;
   elapsed: (seconds: number) => string;
   /** Accessible name of a card: title, status, assignee, model, elapsed. */
   cardLabel: (parts: string[]) => string;
   graphLabel: string;
   detail: {
     status: string;
+    attempts: string;
     assignee: string;
     model: string;
     elapsed: string;
@@ -30,7 +35,6 @@ export interface TaskGraphCopy {
     noSession: string;
   };
   document: { goal: string; criteria: string; after: string };
-  blockedByFailure: string;
   /** Several graphs in one conversation. */
   graphsSummary: (total: number, running: number) => string;
   pickGraph: string;
