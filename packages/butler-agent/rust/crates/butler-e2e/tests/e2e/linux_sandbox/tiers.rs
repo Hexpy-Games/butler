@@ -232,9 +232,10 @@ async fn perf_five_thousand_secret_mounts_and_sweep() -> Result<(), HarnessError
             .unwrap();
         let kernel_setup = Duration::from_micros(micros);
         setup_times.push(parent_setup + kernel_setup);
-        teardown_times.push(total.saturating_sub(kernel_setup));
+        let cleanup = Instant::now();
         let moved = command_sandbox::sweep_new_secrets(root, &inventory, &setup.sandbox.data)?;
         assert_eq!(moved, Vec::<PathBuf>::new());
+        teardown_times.push(total.saturating_sub(kernel_setup) + cleanup.elapsed());
     }
     for index in 0..5000 {
         assert_eq!(

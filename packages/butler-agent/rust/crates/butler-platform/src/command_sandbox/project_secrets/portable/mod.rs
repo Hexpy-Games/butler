@@ -1,9 +1,19 @@
 //! Metadata-only project discovery. Never follow symlinks or enter secret dirs.
-mod links;
+#[cfg(unix)]
+#[path = "quarantine_unix.rs"]
 mod quarantine;
-mod tree;
-
-use std::os::unix::fs::PermissionsExt;
+#[cfg(windows)]
+#[path = "quarantine_windows.rs"]
+mod quarantine;
+pub(in crate::command_sandbox) mod tree;
+#[cfg(unix)]
+pub(in crate::command_sandbox) mod unix;
+#[cfg(windows)]
+mod windows;
+#[cfg(unix)]
+use unix as native;
+#[cfg(windows)]
+use windows as native;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -11,9 +21,7 @@ use std::time::SystemTime;
 
 /// Finds protected entries before installing a project-write policy. A bounded
 /// walk fails closed rather than granting an incompletely inspected hierarchy.
-pub(in crate::command_sandbox) fn discover_project_secrets(
-    root: &Path,
-) -> std::io::Result<Vec<PathBuf>> {
+pub(super) fn discover_project_secrets(root: &Path) -> std::io::Result<Vec<PathBuf>> {
     Ok(tree::walk(root, true)?
         .into_iter()
         .map(|relative| root.join(relative))
@@ -25,7 +33,7 @@ pub(in crate::command_sandbox) fn discover_project_secrets(
 /// time by a clock tick, so the inventory is the authority for new names.
 /// Directories the walk cannot inspect are quarantined whole. One failed move
 /// never leaves later entries in place: all are attempted, then it reports.
-pub(in crate::command_sandbox) fn sweep_new_secrets(
+pub(super) fn sweep_new_secrets(
     root: &Path,
     since: &[PathBuf],
     data: &Path,
@@ -37,12 +45,11 @@ pub(in crate::command_sandbox) fn sweep_new_secrets(
         .filter(|path| !existing.contains(path))
         .collect();
     if secrets.is_empty() {
-        super::generated::cleanup(root, data, false)?;
         return Ok(secrets);
     }
     let quarantine = data.join("sandbox-quarantine");
-    std::fs::create_dir_all(&quarantine)?;
-    std::fs::set_permissions(&quarantine, std::fs::Permissions::from_mode(0o700))?;
+    crate::secure_fs::create_private_dir_all(&quarantine)?;
+    crate::secure_fs::restrict_directory(&quarantine).transpose()?;
     let run = quarantine.join(format!(
         "{}-{}",
         std::process::id(),
@@ -51,9 +58,8 @@ pub(in crate::command_sandbox) fn sweep_new_secrets(
             .map_err(std::io::Error::other)?
             .as_nanos()
     ));
-    std::fs::create_dir(&run)?;
-    std::fs::set_permissions(&run, std::fs::Permissions::from_mode(0o700))?;
-    let (source, target) = (tree::open_root(root)?, tree::open_root(&run)?);
+    crate::secure_fs::create_private_dir(&run)?;
+    let (source, target) = (native::open_root(root)?, native::open_root(&run)?);
     let mut failure = None;
     for path in &secrets {
         let relative = path.strip_prefix(root).map_err(std::io::Error::other)?;
@@ -61,12 +67,5 @@ pub(in crate::command_sandbox) fn sweep_new_secrets(
             failure.get_or_insert(error);
         }
     }
-    if let Err(error) = super::generated::cleanup(root, data, false) {
-        failure.get_or_insert(error);
-    }
     failure.map_or(Ok(secrets), Err)
-}
-
-pub(super) fn validate_links(policy: &super::Policy) -> Result<(), super::Error> {
-    links::validate(policy)
 }

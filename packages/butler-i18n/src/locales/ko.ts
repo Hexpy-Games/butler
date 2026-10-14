@@ -423,7 +423,7 @@ export const koKrCopy: AppCopy = {
     document: "문서",
     active: "진행 중", other: "기타", roadmap: "로드맵",
     sourceDetails: "원본 식별 정보", readOnly: "원본 문서를 읽기 전용으로 보고 있습니다.", referenceAction: "대화에 참조하기",
-    statuses: { draft: "초안", proposed: "제안됨", active: "진행 중", in_progress: "진행 중", todo: "할 일", planned: "예정", review: "검토 중", blocked: "진행이 막힘", done: "완료", completed: "완료", cancelled: "취소됨", archived: "보관됨", superseded: "대체됨", deprecated: "사용 중단" },
+    statuses: { draft: "초안", proposed: "제안됨", active: "진행 중", in_progress: "진행 중", todo: "할 일", planned: "예정", review: "검토 중", blocked: "진행이 막힘", done: "완료", completed: "완료", skipped: TASK_GRAPH_COPY["ko-KR"].status.skipped, cancelled: "취소됨", archived: "보관됨", superseded: "대체됨", deprecated: "사용 중단" },
     labels: { id: "ID", kind: "문서 종류", status: "문서 상태", updatedAt: "최근 수정", source: "원본 위치", revision: "리비전", migratedFrom: "이전 위치", parent: "상위 항목", owner: "담당자", priority: "우선순위", acceptance: "수락 기준", validation: "검증", review: "리뷰", report: "보고", implementation: "구현" },
   },
   guided: {
@@ -480,10 +480,6 @@ export const koKrCopy: AppCopy = {
     noContext: "아직 컨텍스트가 없습니다",
     contextUnknown: "컨텍스트 미확인",
     model: "모델",
-    instant: "즉시",
-    extraHigh: "매우 높음",
-    max: "최대",
-    medium: "중간",
     thinking: "생각 중",
     planning: "계획 중",
     inspecting: "확인 중",
@@ -575,7 +571,7 @@ export const koKrCopy: AppCopy = {
     pendingApprovals: count => `허용 대기 ${count}개`, allowedCount: count => `허용 ${count}개`, revoke: title => `${title} — 해제`,
     approvalRequest: {
       browserMode: { signed_out: "로그인 없이", signed_in: "로그인 사용" },
-      signInStep: reason => ({mfa: "2단계 인증", passkey: "패스키", captcha: "보안 문자", secure_keypad: "보안 키패드", unknown_form: "로그인 양식 확인"} as Record<string, string>)[reason] ?? "로그인 양식 확인",
+      signInStep: reason => ({ mfa: "2단계 인증", passkey: "패스키", captcha: "보안 문자", secure_keypad: "보안 키패드", unknown_form: "로그인 양식 확인" } as Record<string, string>)[reason] ?? "로그인 양식 확인",
       waitHandoff: reason => ({ sign_in: "로그인 필요", secure_field: "직접 입력 필요", secure_keypad: "보안 키패드 입력 필요", captcha: "보안 문자 입력 필요" } as Record<string, string>)[reason] ?? "직접 확인 필요",
       payStep: reason => ({ secure_keypad: "보안 키패드", app_auth: "카드사 앱 인증", otp: "인증번호", three_ds: "카드사 본인 인증", captcha: "보안 문자" } as Record<string, string>)[reason] ?? "결제 화면 확인",
       payHandoff: "결제 확인 필요",
@@ -1012,7 +1008,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
           : `${primaryLabel} 외 ${count - 1}개 진행 내역 닫기`,
       viewAllLabel: (count) => `전체 보기 (${count})`,
       collapseLabel: "접기",
-      showDetailsLabel: "자세히 보기",
+      disclosureLabel: (status, latest, earlier) =>
+        earlier > 0 ? `${status}, ${latest}, 이전 기록 ${earlier}개` : `${status}, ${latest}`,
       toolchainRegionLabel: (label) => `${label} 도구 실행 내역`,
       detailsRegionLabel: (label) => `${label} 세부 내역`,
       webSearchSummary: (count) => `웹 검색 ${count}회`,

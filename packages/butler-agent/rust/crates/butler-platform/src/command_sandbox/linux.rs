@@ -1,11 +1,10 @@
 //! Safe Landlock trampoline; never restrict the multithreaded agent itself.
 mod complement;
 mod generated;
+mod links;
 mod mountns;
 mod process;
-mod project_secrets;
 mod seccomp;
-pub(super) use project_secrets::{discover_project_secrets, sweep_new_secrets};
 
 use std::collections::HashMap;
 use std::os::unix::process::CommandExt;
@@ -19,6 +18,7 @@ use landlock::{
 use serde::{Deserialize, Serialize};
 
 use super::host_capabilities::unavailable;
+use super::project_secrets::discover_project_secrets;
 use super::{Invocation, Level, ProtectError, Protection, SandboxCapabilities, SandboxError};
 
 type Error = Box<dyn std::error::Error>;
@@ -385,7 +385,7 @@ pub(super) fn prepare_project_write(
 fn install_policy(policy: &Policy) -> Result<bool, Error> {
     let cwd = std::env::current_dir()?;
     if policy.project.is_some() {
-        project_secrets::validate_links(policy)?;
+        links::validate(policy)?;
     }
     let mounted = policy.mountns && policy.project.is_some() && mountns::mask(policy).is_ok();
     if mounted {
@@ -413,4 +413,12 @@ fn install_policy(policy: &Policy) -> Result<bool, Error> {
 #[cfg(feature = "test-support")]
 pub(super) fn project_mount_aliases(root: &Path) -> std::io::Result<Vec<PathBuf>> {
     mountns::project_aliases(root).map_err(|error| std::io::Error::other(error.to_string()))
+}
+
+pub(super) fn cleanup_generated(root: &Path, data: &Path) -> std::io::Result<()> {
+    generated::cleanup(root, data, false)
+}
+
+pub(super) fn mount_tier_available() -> bool {
+    mountns::available()
 }

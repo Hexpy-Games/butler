@@ -46,7 +46,7 @@
       "definition": {
         "type": "function",
         "name": "answer_blocks",
-        "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked as the Plan's Presentation line decided, or when the answer presents several comparable items: cards for the items (img ids from image_collect when they are visual) and a table comparing them; keep the prose short. Other blocks: gallery, facts, metrics, chart, callout or actions. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
+        "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked as the Plan's Presentation line decided, or when the answer presents several comparable items: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout or actions. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
         "parameters": {
           "$ref": "answer-blocks.schema.json"
         },
@@ -5067,7 +5067,8 @@
                 "type": "string",
                 "minLength": 1
               },
-              "default": []
+              "default": [],
+              "description": "What the result must satisfy. Make each explicit constraint in the request its own check: a requested count, in the unit the request names and each one distinct; dates or ranges; other stated limits. Result and completion reviews test the result against them."
             },
             "presentation": {
               "type": "array",
@@ -5163,7 +5164,7 @@
       "definition": {
         "type": "function",
         "name": "record_work_review",
-        "description": "Optionally record a concise Plan Review, result Review, or whole-Work completion Validation with the current action progress. Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful. The runtime derives the fixed graph transition from subject and verdict; never choose a raw stage. For a revised or partial result/completion, use correction_scope only to say whether correction belongs in planning or execution. When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates. The runtime validates only the fixed semantic mapping, known action keys, and durable bindings; it does not judge the Review or Validation meaning. Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority. Disclosed non-critical limits may still be accepted; partial means a material requested outcome remains unfinished. A review records judgment but never replaces real tool evidence.",
+        "description": "Optionally record a concise Plan Review, result Review, or whole-Work completion Validation with the current action progress. Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful. Result and completion test the result against each Plan check and each explicit constraint in the request: a requested count, in the unit the request names and each one distinct, and its dates or limits. One that fails is revise, or partial when it cannot be met; never accept. The runtime derives the fixed graph transition from subject and verdict; never choose a raw stage. For a revised or partial result/completion, use correction_scope only to say whether correction belongs in planning or execution. When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates. The runtime validates only the fixed semantic mapping, known action keys, and durable bindings; it does not judge the Review or Validation meaning. Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority. Disclosed non-critical limits may still be accepted; partial means a material requested outcome remains unfinished. A review records judgment but never replaces real tool evidence.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -6282,7 +6283,7 @@
       "definition": {
         "type": "function",
         "name": "browser_close",
-        "description": "Close an owned tab.",
+        "description": "Close an owned tab once you have what you need from it; open tabs count against the browser's tab limit.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -6936,7 +6937,7 @@
     "answer_blocks": {
       "type": "function",
       "name": "answer_blocks",
-      "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked as the Plan's Presentation line decided, or when the answer presents several comparable items: cards for the items (img ids from image_collect when they are visual) and a table comparing them; keep the prose short. Other blocks: gallery, facts, metrics, chart, callout or actions. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
+      "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked as the Plan's Presentation line decided, or when the answer presents several comparable items: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout or actions. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
       "parameters": {
         "$ref": "answer-blocks.schema.json"
       },
@@ -7595,7 +7596,8 @@
               "type": "string",
               "minLength": 1
             },
-            "default": []
+            "default": [],
+            "description": "What the result must satisfy. Make each explicit constraint in the request its own check: a requested count, in the unit the request names and each one distinct; dates or ranges; other stated limits. Result and completion reviews test the result against them."
           },
           "presentation": {
             "type": "array",
@@ -8351,7 +8353,7 @@
     "record_work_review": {
       "type": "function",
       "name": "record_work_review",
-      "description": "Optionally record a concise Plan Review, result Review, or whole-Work completion Validation with the current action progress. Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful. The runtime derives the fixed graph transition from subject and verdict; never choose a raw stage. For a revised or partial result/completion, use correction_scope only to say whether correction belongs in planning or execution. When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates. The runtime validates only the fixed semantic mapping, known action keys, and durable bindings; it does not judge the Review or Validation meaning. Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority. Disclosed non-critical limits may still be accepted; partial means a material requested outcome remains unfinished. A review records judgment but never replaces real tool evidence.",
+      "description": "Optionally record a concise Plan Review, result Review, or whole-Work completion Validation with the current action progress. Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful. Result and completion test the result against each Plan check and each explicit constraint in the request: a requested count, in the unit the request names and each one distinct, and its dates or limits. One that fails is revise, or partial when it cannot be met; never accept. The runtime derives the fixed graph transition from subject and verdict; never choose a raw stage. For a revised or partial result/completion, use correction_scope only to say whether correction belongs in planning or execution. When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates. The runtime validates only the fixed semantic mapping, known action keys, and durable bindings; it does not judge the Review or Validation meaning. Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority. Disclosed non-critical limits may still be accepted; partial means a material requested outcome remains unfinished. A review records judgment but never replaces real tool evidence.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -11731,7 +11733,7 @@
     "browser_close": {
       "type": "function",
       "name": "browser_close",
-      "description": "Close an owned tab.",
+      "description": "Close an owned tab once you have what you need from it; open tabs count against the browser's tab limit.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

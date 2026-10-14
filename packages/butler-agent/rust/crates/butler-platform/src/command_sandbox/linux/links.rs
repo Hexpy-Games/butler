@@ -1,6 +1,9 @@
 //! A pathname boundary cannot isolate an inode shared with an unknown alias.
-use super::super::Error;
-use super::tree;
+use super::super::project_secrets::portable::{
+    tree::{MAX_DEPTH, MAX_ENTRIES},
+    unix as tree,
+};
+use super::Error;
 use rustix::fs::{AtFlags, FileType, statat};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::os::fd::OwnedFd;
@@ -14,7 +17,7 @@ struct Group {
     public: bool,
 }
 
-pub(super) fn validate(policy: &super::super::Policy) -> Result<(), Error> {
+pub(super) fn validate(policy: &super::Policy) -> Result<(), Error> {
     let root = policy.project.as_deref().ok_or("missing project")?;
     let strict: BTreeSet<_> = policy
         .credentials
@@ -66,7 +69,7 @@ impl Walk {
         }
         for (name, directory) in tree::entries(dir)? {
             self.visited += 1;
-            if self.visited > tree::MAX_ENTRIES {
+            if self.visited > MAX_ENTRIES {
                 return Err("project link discovery entry limit exceeded".into());
             }
             let child = path.join(&name);
@@ -78,7 +81,7 @@ impl Walk {
                 if private {
                     continue;
                 }
-                if depth >= tree::MAX_DEPTH {
+                if depth >= MAX_DEPTH {
                     return Err("project link discovery depth exceeded".into());
                 }
                 self.visit(&tree::open_child(dir, &name)?, &child, depth + 1)?;

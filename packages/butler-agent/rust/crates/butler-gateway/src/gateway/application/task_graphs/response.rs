@@ -72,7 +72,7 @@ pub fn task_graph_response(
 }
 
 fn summary(graph: &Value, include_nodes: bool) -> Value {
-    let mut value = json!({"graph_id":graph["graph_id"],"title":graph["title"],"state":graph["state"],"counts":graph["counts"],"graph_revision":graph["graph_revision"],"updated_at":graph["updated_at"]});
+    let mut value = json!({"graph_id":graph["graph_id"],"title":graph["title"],"state":graph["state"],"counts":graph["counts"],"phase":graph["phase"],"work_state":graph["work_state"],"graph_revision":graph["graph_revision"],"updated_at":graph["updated_at"]});
     if include_nodes {
         let mut nodes = graph["nodes"].clone();
         if let Some(nodes) = nodes.as_array_mut() {

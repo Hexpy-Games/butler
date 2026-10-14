@@ -6,6 +6,7 @@ import importlib.util
 import io
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -30,21 +31,29 @@ def windows_max_path():
         yield
         return
 
+    def checked(path):
+        if not isinstance(path, (str, os.PathLike)):
+            return path
+        value = os.fspath(path)
+        if value.startswith(PREFIX):
+            return value[len(PREFIX):]
+        if len(value) >= MAX_PATH:
+            raise FileNotFoundError(errno.ENOENT, '[WinError 3] emulated MAX_PATH', value)
+        return path
+
     def guard(real):
-        def call(path, *args, **kwargs):
-            if isinstance(path, (str, os.PathLike)):
-                value = os.fspath(path)
-                if value.startswith(PREFIX):
-                    path = value[len(PREFIX):]
-                elif len(value) >= MAX_PATH:
-                    raise FileNotFoundError(errno.ENOENT, '[WinError 3] emulated MAX_PATH', value)
-            return real(path, *args, **kwargs)
+        def call(*args, **kwargs):
+            return real(*map(checked, args), **kwargs)
         return call
 
-    names = ['stat', 'lstat', 'listdir', 'scandir', 'mkdir', 'rmdir', 'unlink', 'chmod', 'utime', 'open']
+    names = ['stat', 'lstat', 'listdir', 'scandir', 'mkdir', 'rmdir', 'unlink', 'chmod', 'utime', 'open', 'rename']
     with contextlib.ExitStack() as stack:
         for name in names:
             stack.enter_context(patch.object(os, name, guard(getattr(os, name))))
+        # Windows has no dir_fd, so shutil.rmtree walks joined full paths there.
+        stack.enter_context(patch.object(shutil, '_use_fd_functions', False))
+        if hasattr(shutil, '_rmtree_impl'):
+            stack.enter_context(patch.object(shutil, '_rmtree_impl', shutil._rmtree_unsafe))
         stack.enter_context(patch('builtins.open', guard(open)))
         stack.enter_context(patch('io.open', guard(io.open)))
         stack.enter_context(patch.object(snapshots.runner_cache, 'extended', lambda path: PREFIX + str(path)))
@@ -235,6 +244,29 @@ class RunnerEviction(unittest.TestCase):
                 snapshots.runner_cache.evict(base, directory, 'size cap')
             self.assertFalse(snapshots.runner_cache.lexists(directory))
             self.assertIn('bytes freed=', messages.getvalue())
+
+    # test-category: security
+    def test_snapshot_restore_replaces_target_past_windows_max_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            subprocess.run(['git', 'init', '-q', str(root)], check=True)
+            produced = root / 'produced'
+            (produced / 'release').mkdir(parents=True)
+            (produced / 'release' / 'app').write_bytes(b'restored outputs')
+            expected = dict(schema=2, kind='native', platform='windows-x64')
+            target = root / 'runner-cache' / 'compatible-windows-x64'
+            env = dict(CARGO_TARGET_DIR=str(target), GITHUB_WORKSPACE=str(root), GITHUB_OUTPUT=str(root / 'output'))
+            with patch.dict(os.environ, env), patch.object(snapshots.cache, 'output', return_value='a' * 40):
+                snapshots.cache.record(root / 'snapshot', expected, target=produced)
+            stale = target.joinpath('debug', '.fingerprint', *(['long-directory-name'] * 14), 'dep-lib-long-crate-name')
+            self.assertGreater(len(str(stale)), MAX_PATH)
+            with windows_max_path(), patch.dict(os.environ, env), contextlib.redirect_stdout(io.StringIO()):
+                os.makedirs(snapshots.runner_cache.extended(stale.parent))
+                with open(snapshots.runner_cache.extended(stale), 'wb') as file:
+                    file.write(b'stale outputs')
+                snapshots.restore_tree(root / 'snapshot', expected)
+                self.assertFalse(snapshots.runner_cache.lexists(target / 'debug'))
+                self.assertEqual((target / 'release' / 'app').read_bytes(), b'restored outputs')
 
 
 if __name__ == '__main__':
