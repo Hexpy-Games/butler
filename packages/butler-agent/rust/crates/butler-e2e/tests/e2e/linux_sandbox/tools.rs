@@ -43,7 +43,7 @@ async fn host_git_is_independent_of_secret_masks() -> Result<(), HarnessError> {
     );
     std::fs::write(root.join("visible"), "complete")?;
     let before = std::fs::read("/proc/self/mountinfo")?;
-    let invocation = invoke("echo ready; exec sleep 1", root, &setup);
+    let invocation = invoke("echo ready; exec sleep 30", root, &setup);
     let mut child = ChildGuard(
         Command::new(invocation.program)
             .args(invocation.arguments)
@@ -72,7 +72,12 @@ async fn host_git_is_independent_of_secret_masks() -> Result<(), HarnessError> {
             .status()?
             .success()
     );
-    assert!(child.0.wait()?.success());
+    assert!(
+        child.0.try_wait()?.is_none(),
+        "sandbox exited before host checks"
+    );
+    child.0.kill()?;
+    child.0.wait()?;
     assert_eq!(std::fs::read("/proc/self/mountinfo")?, before);
     assert!(std::fs::read_to_string(root.join(".git/config"))?.contains("complete"));
     setup.sandbox.mark_success();
@@ -206,6 +211,40 @@ async fn fresh_git_init_is_quarantined_even_when_metadata_is_denied() -> Result<
     let moved = command_sandbox::sweep_new_secrets(root, &inventory, &setup.sandbox.data)?;
     assert_eq!(moved.len(), usize::from(mounted), "{output:?}");
     assert!(!root.join(".git").exists());
+    setup.sandbox.mark_success();
+    Ok(())
+}
+
+#[tokio::test]
+async fn node_atomic_lockfile_preserves_complete_content() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(command_sandbox::linux_test_host(), "Linux atomic lockfile");
+    let mut setup = Setup::new("LINUX-ATOMIC-LOCKFILE")?;
+    std::fs::create_dir_all(setup.sandbox.data.join("tmp/project-write"))?;
+    let mounted = command_sandbox::capabilities().project_write.is_enforced();
+    for existing in [false, true] {
+        let root = setup.sandbox.workspace.join(format!("atomic-{existing}"));
+        std::fs::create_dir(&root)?;
+        std::fs::write(root.join("package.json"), "{}")?;
+        if existing {
+            std::fs::write(root.join("lockfile"), "original")?;
+        }
+        let command = r#"node -e 'require("write-file-atomic")("lockfile", "complete").catch(() => process.exit(1))'"#;
+        let output = run(invoke(command, &root, &setup), &root, &setup.sandbox.home);
+        assert_eq!(
+            output.status.success(),
+            mounted,
+            "existing={existing}: {output:?}"
+        );
+        if mounted || existing {
+            assert_eq!(
+                std::fs::read_to_string(root.join("lockfile"))?,
+                if mounted { "complete" } else { "original" }
+            );
+        } else {
+            assert!(!root.join("lockfile").exists());
+        }
+    }
     setup.sandbox.mark_success();
     Ok(())
 }
