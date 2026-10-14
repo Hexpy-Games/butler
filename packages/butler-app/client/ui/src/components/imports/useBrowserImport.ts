@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiErrorCode } from "@/app/api";
 import { beginPasswordExport, cancelPasswordExport, choosePasswordExport, deletePasswordExport, listImportSources, pickBrowserFolder, pickImportFile,
-  pollPasswordExport, startBrowserImport, undoBrowserImport, type BrowserImportCounts, type BrowserImportInput, type ImportSource } from "../settings/signInsApi";
+  pollPasswordExport, startBrowserImport, type BrowserImportCounts, type BrowserImportInput, type ImportSource } from "../settings/signInsApi";
 
 /** Component-local state: only counts and opaque receipts survive a request. */
 export function useBrowserImport(onImported: () => void, enabled = true) {
@@ -13,7 +13,6 @@ export function useBrowserImport(onImported: () => void, enabled = true) {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BrowserImportCounts | null>(null);
   const [exportId, setExportId] = useState<string | null>(null);
-  const [undone, setUndone] = useState(false);
   const activeExport = useRef<string | null>(null);
   const mounted = useRef(true);
   const { sources, reload } = useBrowserSources(enabled, setError, mounted);
@@ -23,7 +22,7 @@ export function useBrowserImport(onImported: () => void, enabled = true) {
 
   async function run(source: string, primary?: string) {
     if (busy || exportId) return;
-    setSelected(source); setBusy(true); setError(null); setUndone(false);
+    setSelected(source); setBusy(true); setError(null);
     try {
       const input: BrowserImportInput = { source, bookmarks, history: source !== "file" && history, passwords, primary_password: primary };
       if (source === "file") {
@@ -54,11 +53,7 @@ export function useBrowserImport(onImported: () => void, enabled = true) {
     if (activeExport.current) await cancelPasswordExport(activeExport.current);
     activeExport.current = null; setExportId(null);
   }
-  async function more() { await cancel(); setResult(null); setError(null); setUndone(false); }
-  async function undo() {
-    if (!result) return;
-    await action(async () => { if (exportId) await cancel(); await undoBrowserImport(result.run_id); setUndone(true); imported.current(); });
-  }
+  async function more() { await cancel(); setResult(null); setError(null); }
   async function selectCsv() {
     if (!activeExport.current) return;
     const file = await pickImportFile("passwords"); if (!file) return;
@@ -74,7 +69,7 @@ export function useBrowserImport(onImported: () => void, enabled = true) {
     if (!result?.export_id) return;
     await action(async () => { await deletePasswordExport(result.export_id!); setResult({ ...result, export_id: undefined }); });
   }
-  return { sources, selected, bookmarks, setBookmarks, history, setHistory, passwords, setPasswords, busy, error, result, exportId, undone, run, folder, cancel, more, undo, removeCsv, selectCsv, resumeExport };
+  return { sources, selected, bookmarks, setBookmarks, history, setHistory, passwords, setPasswords, busy, error, result, exportId, run, folder, cancel, more, removeCsv, selectCsv, resumeExport };
 }
 
 type ExportPolling = {

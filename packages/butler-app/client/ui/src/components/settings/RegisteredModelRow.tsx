@@ -2,7 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import {
   Button,
   ButtonContainer,
-  IconTile,
+  IconSlot,
   Pencil,
   Stack,
   Trash2,
@@ -34,7 +34,7 @@ export function RegisteredModelRow({
   return (
       <Stack align="row" justify="between" cross="center" gap="md" wrap>
         <Stack align="row" cross="start" gap="md">
-          <IconTile size="sm"><ProviderMark providerId={model.provider_id} platform={model.platform} /></IconTile>
+          <IconSlot minHeight="line" size="lg"><ProviderMark providerId={model.provider_id} platform={model.platform} /></IconSlot>
           <div>
             <Typo.PanelSectionTitle as="h3">
               {model.provider_label} / {name}

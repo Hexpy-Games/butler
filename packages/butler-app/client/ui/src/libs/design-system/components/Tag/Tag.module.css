@@ -55,7 +55,7 @@
 .label {
   color: inherit;
   font-size: var(--font-size-1);
-  line-height: var(--line-height-tight);
+  line-height: var(--typo-caption-line-height-tight);
 }
 
 .tag[data-size="md"] .label {

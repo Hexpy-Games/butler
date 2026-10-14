@@ -33,5 +33,5 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: ["Present progressive, no trailing period: Reading the settings pages."],
   accessibility: ["aria-live=\"polite\" announces changes without interrupting."],
-  tokens: ["--typo-body-size", "--line-height-body"],
+  tokens: ["--typo-body-size", "--typo-body-line-height"],
 };

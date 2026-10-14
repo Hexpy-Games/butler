@@ -252,6 +252,7 @@
 
   .productTitle {
     font-size: var(--typo-new-chat-title-size-sm);
+    line-height: var(--typo-new-chat-title-line-height-sm);
   }
 
   .focusScrollContent {
@@ -272,5 +273,6 @@
 @media (width > 560px) and (width <= 920px) {
   .productTitle {
     font-size: var(--typo-new-chat-title-size-md);
+    line-height: var(--typo-new-chat-title-line-height-md);
   }
 }
