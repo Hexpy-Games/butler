@@ -25,7 +25,7 @@ impl WinPath {
         Ok(Self(format!(
             "{}:\\{}",
             char::from(*letter).to_ascii_lowercase(),
-            tail.to_lowercase()
+            tail.to_ascii_lowercase()
         )))
     }
     /// The normalized spelling.

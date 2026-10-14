@@ -45,7 +45,7 @@ fn read_only_commands_run_sandboxed_or_are_refused() {
             Some(125),
             b"command_observation_isolation_unavailable: fixture",
         ),
-        cfg!(target_os = "linux")
+        cfg!(any(target_os = "linux", windows))
     );
     assert!(!butler_platform::command_sandbox::isolation_failure(
         Some(125),

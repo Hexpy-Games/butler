@@ -25,9 +25,9 @@ use std::path::Path;
 mod macos;
 #[cfg(target_os = "macos")]
 use macos as sandbox;
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 mod unsandboxed;
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 use unsandboxed as sandbox;
 
 #[cfg(unix)]
@@ -38,6 +38,8 @@ use unix as shell;
 mod windows;
 #[cfg(windows)]
 use windows as shell;
+#[cfg(windows)]
+use windows::mxc as sandbox;
 
 #[cfg(feature = "test-support")]
 mod test_support;
@@ -96,6 +98,11 @@ pub fn copy_command_helper(source: &Path, destination: &Path) -> std::io::Result
     std::fs::copy(
         source.join("butler-sandbox"),
         destination.join("butler-sandbox"),
+    )?;
+    #[cfg(windows)]
+    std::fs::copy(
+        source.join("butler-sandbox.exe"),
+        destination.join("butler-sandbox.exe"),
     )?;
     let _ = (source, destination);
     Ok(())
@@ -259,4 +266,20 @@ pub fn is_registry_path(path: &str) -> bool {
 /// such as a quoted `printf` newline as a filesystem separator.
 pub fn normalize_path_token(path: &str) -> String {
     shell::normalize_path_token(path)
+}
+
+/// Reclaims helper-owned drive mappings after reap or at startup; call off async workers.
+pub fn reconcile_project_write(data: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    return windows::mxc::reconcile(data);
+    #[cfg(not(windows))]
+    {
+        let _ = data;
+        Ok(())
+    }
+}
+/// Windows helper entry point; the agent never calls PSEC directly.
+#[cfg(windows)]
+pub fn windows_sandbox_helper() -> Result<i32, Box<dyn std::error::Error>> {
+    windows::mxc::launch::main()
 }

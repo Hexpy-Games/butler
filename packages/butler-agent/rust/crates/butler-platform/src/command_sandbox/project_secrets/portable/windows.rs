@@ -2,12 +2,11 @@
 use std::{
     ffi::{OsStr, OsString},
     fs, io,
-    os::windows::fs::MetadataExt,
     path::{Path, PathBuf},
 };
 pub(super) type Directory = PathBuf;
 pub(super) fn reparse(metadata: &fs::Metadata) -> bool {
-    metadata.file_attributes() & 0x400 != 0
+    metadata.file_type().is_symlink()
 }
 pub(super) fn open_root(path: &Path) -> io::Result<Directory> {
     // The admitted root may itself have aliases, just as Unix's open_root does.

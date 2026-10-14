@@ -27,6 +27,7 @@ pub(super) async fn after_run(
     let root = input.workspace_root.clone();
     let data = input.butler_data.clone();
     let swept = tokio::task::spawn_blocking(move || {
+        butler_platform::command_sandbox::reconcile_project_write(&data)?;
         butler_platform::command_sandbox::sweep_new_secrets(&root, &since, &data)
     })
     .await

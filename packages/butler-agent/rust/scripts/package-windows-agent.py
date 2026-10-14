@@ -44,12 +44,15 @@ def main():
     parser.add_argument('--channel', default='preview')
     args = parser.parse_args()
     verify_pe(args.binary)
+    helper = args.binary.with_name("butler-sandbox.exe")
+    verify_pe(helper)
     version = binary_version(args.binary)
     args.output.mkdir(parents=True, exist_ok=True)
     archive = args.output / f'butler-agent-{version}-windows-x64.zip'
     with tempfile.TemporaryDirectory() as temp:
         stage = Path(temp)
         shutil.copyfile(args.binary, stage / 'butler-agent.exe')
+        shutil.copyfile(helper, stage / helper.name)
         packager.validate_resource_symlinks(args.resources.resolve())
         shutil.copytree(args.resources, stage / 'resources', symlinks=False)
         renderer = stage / 'resources/app-client/dist'

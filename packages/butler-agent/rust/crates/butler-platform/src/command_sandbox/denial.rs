@@ -37,5 +37,5 @@ pub fn isolation_failure(exit_code: Option<i32>, stderr: &[u8]) -> bool {
 
 /// Whether this host can report a trampoline setup failure at this exit code.
 pub fn isolation_failure_exit(exit_code: Option<i32>) -> bool {
-    cfg!(target_os = "linux") && exit_code == Some(125)
+    cfg!(any(target_os = "linux", windows)) && exit_code == Some(125)
 }

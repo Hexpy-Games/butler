@@ -163,7 +163,7 @@ pub fn credential_roots(env: &BTreeMap<String, String>) -> Result<Vec<WinPath>, 
     if let Some(root) = get(env, "XDG_CONFIG_HOME").filter(|p| !p.is_empty()) {
         roots.push(WinPath::new(root)?.join("gh")?);
     }
-    if let Some(path) = get(env, "CODEX_AUTH_JSON") {
+    if let Some(path) = get(env, "CODEX_AUTH_JSON").filter(|p| !p.is_empty()) {
         roots.push(WinPath::new(path)?);
     }
     if let Some(data) = get(env, "BUTLER_DATA") {

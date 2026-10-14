@@ -126,6 +126,7 @@ fn toolchains_replace_shims_and_keep_trusted_path_order() {
         .into(),
         system_root: Some(path(r"C:\Windows")),
         program_files: vec![path(r"C:\Program Files")],
+        install_roots: vec![path(r"C:\Users\person\nvm\installs")],
         cargo_home: Some(path(r"C:\Users\person\.cargo")),
         rustup_home: Some(path(r"C:\Users\person\.rustup")),
         git_exe: Some(path(r"C:\Program Files\Git\cmd\git.exe")),
@@ -168,6 +169,12 @@ fn toolchains_replace_shims_and_keep_trusted_path_order() {
             .denied
             .contains(&path(r"C:\Users\person\.cargo\credentials.backup"))
     );
+    let mut untrusted = input.clone();
+    untrusted.real_node = Some(path(r"C:\untrusted\node"));
+    assert!(toolchain::discover(&untrusted).is_err());
+    untrusted = input.clone();
+    untrusted.git_exe = Some(path(r"C:\untrusted\cmd\git.exe"));
+    assert!(toolchain::discover(&untrusted).is_err());
     let mut input = input;
     input.msvc = Some(Msvc {
         tools: path(r"C:\VS\VC\Tools\MSVC\14.44"),
@@ -226,7 +233,7 @@ fn drive_picker_and_reconcile_never_remove_other_owners_mapping() {
         drive_pick::subst_listing("L:\\: => C:\\project\r\n"),
         Ok(vec![('L', target.clone())])
     );
-    assert!(drive_pick::subst_listing("invalid output").is_err());
+    assert_eq!(drive_pick::subst_listing("invalid output"), Ok(Vec::new()));
     assert_eq!(
         drive_pick::reconcile(true, &target, Some(&target)),
         Reconcile::Keep
