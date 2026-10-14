@@ -2,7 +2,9 @@ import { useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { Button } from "../../components/Button";
 import { Copy, Library, Popup } from "../../components/Icons";
+import { DoneIconButton } from "../../components/DoneIconButton";
 import { IconButton } from "../../components/IconButton";
+import { fixtureSave } from "../ItemCard/fixtures";
 import { BROKEN_IMAGE, VIEWER_LABELS, viewerImages } from "./fixtures";
 import { ImageViewer } from "./ImageViewer";
 import { ImageViewerSurface } from "./ImageViewerSurface";
@@ -21,7 +23,7 @@ function actions(locale: Locale) {
   return (
     <>
       <IconButton label={labels.open}><Popup size="sm" /></IconButton>
-      <IconButton label={labels.save}><Library size="sm" /></IconButton>
+      <DoneIconButton icon={<Library size="sm" />} label={labels.save} doneLabel={labels.saved} onAction={fixtureSave} />
       <IconButton label={labels.copy}><Copy size="sm" /></IconButton>
     </>
   );

@@ -12,7 +12,8 @@ product, a code library) on a `Card padding="sm"` inside an `article`:
 - `text`: plain text, clamped to four lines on a vertical card; with
   `showMoreLabel` and `showLessLabel` an inline button reveals the rest
 - footer: `source` (favicon, “site · read time”, opens the page) and `actions`
-  (`IconButton`s and `CopyButton`s, set in a `ButtonContainer size="icon-sm"`)
+  (`IconButton`s, a save `DoneIconButton` and a `CopyButton`, set in a
+  `ButtonContainer size="icon-sm"`)
 
 ## Orientation
 The card's own width decides (a container query on the article, not the
@@ -42,7 +43,7 @@ subject (prices, citations, ratings) is built in.
       value={item.value && { amount: format(item.value), was: item.value.was && format(item.value, item.value.was), wasLabel: t("before"), note: item.value.note }}
       facts={item.facts} text={item.text} showMoreLabel={t("more")} showLessLabel={t("less")}
       source={item.url ? { site: host(item.url), checked: checkedLabel(item.checked), label: sourceLabel(item), onOpen: () => openLink(item.url) } : undefined}
-      actions={<><IconButton label={t("save")} onClick={() => save(item)}><Scrap size="sm" /></IconButton><CopyButton label={t("copy")} copiedLabel={t("copied")} text={copyText(item)} /></>}
+      actions={<><DoneIconButton icon={<Scrap size="sm" />} label={t("save")} doneLabel={t("saved")} onAction={() => save(item)} /><CopyButton label={t("copy")} copiedLabel={t("copied")} text={copyText(item)} /></>}
       onOpen={() => openLink(item.url)} />
   ))}
 </Grid>

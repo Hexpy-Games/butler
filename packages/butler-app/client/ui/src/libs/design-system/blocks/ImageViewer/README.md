@@ -22,8 +22,8 @@ or block as `images`, so previous/next walks that set.
 ## Container vs Presenter
 The block owns layout, focus, keys and motion. The container maps records to
 `ImageViewerImage` (`src`, `alt`, `caption`, `source`), passes localized
-`labels` and builds `actions` for the shown index (open the source page, save,
-copy). It owns no data and no commands.
+`labels` and builds `actions` for the shown index (open the source page, save
+as a `DoneIconButton` that confirms on success, copy). It owns no data and no commands.
 
 ## Usage
 
