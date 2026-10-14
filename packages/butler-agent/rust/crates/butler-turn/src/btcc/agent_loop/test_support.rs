@@ -69,7 +69,7 @@ impl Fixture {
         })
     }
 
-    pub(crate) fn agent(self: &Arc<Self>) -> FixtureAgentLoop {
+    pub fn agent(self: &Arc<Self>) -> FixtureAgentLoop {
         FixtureAgentLoop {
             model: self.clone(),
             execution_factory: self.clone(),

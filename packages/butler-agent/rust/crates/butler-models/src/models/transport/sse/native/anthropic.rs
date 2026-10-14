@@ -139,8 +139,13 @@ impl State {
             .get_mut(index)
             .ok_or("provider_stream_malformed_event")?;
         if !self.arguments[index].is_empty() {
-            block["input"] = serde_json::from_str(&self.arguments[index])
-                .map_err(|_| "provider_stream_malformed_event")?;
+            block["input"] = match serde_json::from_str(&self.arguments[index]) {
+                Ok(input) => input,
+                // Keep malformed Butler arguments for the normal tool validation
+                // path. A completed max_tokens response can cut off a tool call.
+                Err(_) if block["type"] == "tool_use" => self.arguments[index].clone().into(),
+                Err(_) => return Err("provider_stream_malformed_event"),
+            };
         }
         self.closed[index] = true;
         Ok(())
