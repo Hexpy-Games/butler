@@ -1,0 +1,44 @@
+//! Post-reap traversal: never enter a junction, symlink or other reparse point.
+use std::{
+    ffi::{OsStr, OsString},
+    fs, io,
+    os::windows::fs::MetadataExt,
+    path::{Path, PathBuf},
+};
+pub(super) type Directory = PathBuf;
+pub(super) fn reparse(metadata: &fs::Metadata) -> bool {
+    metadata.file_attributes() & 0x400 != 0
+}
+pub(super) fn open_root(path: &Path) -> io::Result<Directory> {
+    // The admitted root may itself have aliases, just as Unix's open_root does.
+    let root = crate::secure_fs::canonicalize(path)?;
+    if !fs::symlink_metadata(&root)?.is_dir() {
+        return Err(io::Error::other("project root is not a directory"));
+    }
+    Ok(root)
+}
+pub(super) fn open_child(parent: &Directory, name: &OsStr) -> io::Result<Directory> {
+    let path = parent.join(name);
+    let metadata = fs::symlink_metadata(&path)?;
+    if reparse(&metadata) || !metadata.is_dir() {
+        return Err(io::Error::other(
+            "project directory is a reparse point or not a directory",
+        ));
+    }
+    Ok(path)
+}
+pub(super) fn entries(dir: &Directory) -> io::Result<Vec<(OsString, bool)>> {
+    let metadata = fs::symlink_metadata(dir)?;
+    if reparse(&metadata) || !metadata.is_dir() {
+        return Err(io::Error::other(
+            "project directory is a reparse point or not a directory",
+        ));
+    }
+    fs::read_dir(dir)?
+        .map(|entry| {
+            let entry = entry?;
+            let metadata = fs::symlink_metadata(entry.path())?;
+            Ok((entry.file_name(), metadata.is_dir() && !reparse(&metadata)))
+        })
+        .collect()
+}

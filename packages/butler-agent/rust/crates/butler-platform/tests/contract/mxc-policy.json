@@ -1,0 +1,92 @@
+{
+  "version": "1.0.0",
+  "containment": "processcontainer",
+  "fallback": {
+    "allowDaclMutation": false
+  },
+  "lifecycle": {
+    "destroyOnExit": true,
+    "preservePolicy": false
+  },
+  "telemetry": {
+    "enabled": false
+  },
+  "ui": {
+    "clipboard": "none",
+    "injection": false
+  },
+  "network": {
+    "ingress": {
+      "default": "deny",
+      "hostLoopback": "deny"
+    },
+    "egress": {
+      "default": "deny"
+    }
+  },
+  "process": {
+    "commandLine": "\"C:\\Program Files\\tool.exe\" argument",
+    "cwd": "l:\\",
+    "env": [
+      "APPDATA=c:\\users\\person\\.butler\\tmp\\project-write\\home\\appdata\\roaming",
+      "BUTLER_COMMAND_CWD=l:\\",
+      "CARGO_NET_OFFLINE=true",
+      "GIT_CONFIG_GLOBAL=c:\\users\\person\\.butler\\tmp\\project-write\\gitconfig",
+      "GIT_CONFIG_NOSYSTEM=1",
+      "GIT_TERMINAL_PROMPT=0",
+      "HOME=c:\\users\\person\\.butler\\tmp\\project-write\\home",
+      "HOMEDRIVE=c:",
+      "HOMEPATH=\\users\\person\\.butler\\tmp\\project-write\\home",
+      "LOCALAPPDATA=c:\\users\\person\\.butler\\tmp\\project-write\\home\\appdata\\local",
+      "NPM_CONFIG_CACHE=c:\\users\\person\\.butler\\tmp\\project-write\\npm-cache",
+      "NPM_CONFIG_OFFLINE=true",
+      "NPM_CONFIG_USERCONFIG=c:\\users\\person\\.butler\\tmp\\project-write\\npmrc",
+      "PATH=c:\\users\\person\\.butler\\tmp\\project-write\\bin",
+      "SYSTEMROOT=C:\\Windows",
+      "TEMP=c:\\users\\person\\.butler\\tmp\\project-write\\temp",
+      "TMP=c:\\users\\person\\.butler\\tmp\\project-write\\temp",
+      "USERPROFILE=c:\\users\\person\\.butler\\tmp\\project-write\\home"
+    ],
+    "inheritDefaultEnv": false,
+    "timeout": 1000
+  },
+  "filesystem": {
+    "readwritePaths": [
+      "c:\\work\\project",
+      "c:\\users\\person\\.butler\\tmp\\project-write",
+      "c:\\users\\person\\.butler\\cache\\project-write",
+      "c:\\users\\person\\.butler\\artifacts\\generated"
+    ],
+    "readonlyPaths": [
+      "c:\\windows",
+      "c:\\work\\project\\.git",
+      "c:\\work\\project\\sub\\.git"
+    ],
+    "deniedPaths": [
+      "c:\\users\\person\\.ssh",
+      "c:\\users\\person\\.aws",
+      "c:\\users\\person\\.azure",
+      "c:\\users\\person\\.kube",
+      "c:\\users\\person\\.docker",
+      "c:\\users\\person\\.gnupg",
+      "c:\\users\\person\\.git-credentials",
+      "c:\\users\\person\\.npmrc",
+      "c:\\users\\person\\_netrc",
+      "c:\\users\\person\\.netrc",
+      "c:\\users\\person\\.pypirc",
+      "c:\\users\\person\\.cargo\\credentials",
+      "c:\\users\\person\\.cargo\\credentials.toml",
+      "c:\\users\\person\\.codex\\auth.json",
+      "c:\\users\\person\\.config\\gh",
+      "c:\\users\\person\\.config\\gcloud",
+      "c:\\users\\person\\appdata\\roaming\\microsoft\\credentials",
+      "c:\\users\\person\\appdata\\roaming\\microsoft\\protect",
+      "c:\\users\\person\\appdata\\roaming\\gh",
+      "c:\\users\\person\\appdata\\roaming\\github cli",
+      "c:\\users\\person\\appdata\\roaming\\gcloud",
+      "c:\\users\\person\\appdata\\local\\microsoft\\credentials",
+      "c:\\work\\project\\.project-ledger",
+      "c:\\work\\project\\sub\\.env"
+    ]
+  }
+}
