@@ -53,6 +53,8 @@ struct ChatState {
     finish_reason: Value,
     tool_calls: Vec<Value>,
     done: bool,
+    started: std::collections::HashSet<u64>,
+    pending: std::collections::HashMap<u64, Vec<String>>,
 }
 
 impl ChatState {
@@ -70,6 +72,8 @@ impl ChatState {
             finish_reason: Value::Null,
             tool_calls: Vec::new(),
             done: false,
+            started: std::collections::HashSet::new(),
+            pending: std::collections::HashMap::new(),
         }
     }
 
@@ -144,10 +148,11 @@ impl ChatState {
                 self.text.push_str(value);
                 self.emit_text(value, observer);
             }
-            if let Some(calls) = delta.get("tool_calls").and_then(Value::as_array)
-                && !merge_tool_calls(&mut self.tool_calls, calls)
-            {
-                return false;
+            if let Some(calls) = delta.get("tool_calls").and_then(Value::as_array) {
+                if !merge_tool_calls(&mut self.tool_calls, calls) {
+                    return false;
+                }
+                self.emit_calls(calls, observer);
             }
         }
         if let Some(value) = event.pointer("/choices/0/finish_reason") {
@@ -172,6 +177,63 @@ impl ChatState {
             "textDelta": delta,
             "target": "final_candidate",
         }));
+    }
+
+    fn emit_calls(
+        &mut self,
+        calls: &[Value],
+        observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
+    ) {
+        use butler_core::tool_protocol::ToolCallStreamEvent;
+        let Some(observer) = observer else {
+            return;
+        };
+        for call in calls {
+            let index = call["index"].as_u64().unwrap_or(0);
+            let Some(accumulated) = usize::try_from(index)
+                .ok()
+                .and_then(|i| self.tool_calls.get(i))
+            else {
+                continue;
+            };
+            let name = accumulated["function"]["name"].as_str().unwrap_or("");
+            let fragment = call.pointer("/function/arguments").and_then(Value::as_str);
+            if let Some(fragment) = fragment {
+                self.pending
+                    .entry(index)
+                    .or_default()
+                    .push(fragment.to_owned());
+            }
+            // Name chunks precede arguments; wait for the first argument byte so
+            // fragmented names are complete. Retain exact fragment boundaries.
+            if !self.started.contains(&index)
+                && !name.is_empty()
+                && self
+                    .pending
+                    .get(&index)
+                    .is_some_and(|parts| parts.iter().any(|part| !part.is_empty()))
+            {
+                self.sequence += 1;
+                observer.tool_call(&ToolCallStreamEvent::ToolCallStart {
+                    stream_id: self.stream_id.clone(),
+                    call_index: index,
+                    sequence: self.sequence,
+                    tool_name: name.to_owned(),
+                });
+                self.started.insert(index);
+            }
+            if self.started.contains(&index) {
+                for arguments_delta in self.pending.remove(&index).unwrap_or_default() {
+                    self.sequence += 1;
+                    observer.tool_call(&ToolCallStreamEvent::ToolCallDelta {
+                        stream_id: self.stream_id.clone(),
+                        call_index: index,
+                        sequence: self.sequence,
+                        arguments_delta,
+                    });
+                }
+            }
+        }
     }
 
     fn response(self) -> Value {

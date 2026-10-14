@@ -158,6 +158,17 @@ impl TurnDeveloperLogExecution for NoopTurnDeveloperLogExecution {
 pub trait AgentLoopProgress: Send + Sync {
     /// Publishes one progress event.
     fn emit(&self, event: crate::btcc::RuntimeTurnEventInput) -> PortFuture<'_, ()>;
+
+    /// Ephemeral validated draft ops. Implementations must never append durable events.
+    /// Gateway delivery is composed separately from the durable progress path.
+    fn answer_blocks_draft(
+        &self,
+        _stream_id: String,
+        _call_index: u64,
+        _ops: Vec<serde_json::Value>,
+    ) -> PortFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 /// The agent loop ended with an error.
