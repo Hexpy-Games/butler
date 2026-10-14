@@ -245,7 +245,7 @@ fn anthropic(value: &Value, model: &str) -> Fields {
     (
         nonempty(text),
         calls,
-        Some(Value::Array(content)),
+        Some(Value::Array(anthropic_history::normalize(content))),
         provider_usage(
             model,
             number(value.pointer("/usage/input_tokens")).map(|input| {
@@ -493,3 +493,5 @@ fn call(
     })
 }
 mod local;
+
+mod anthropic_history;
