@@ -29,7 +29,8 @@ export function ImageViewerHost() {
     {/* A 서랍 scrap belongs to a page; a picture without one is copied, not saved. */}
     {current.source ? <DoneIconButton key={index} icon={<Library size="sm" />} label={blocks.saveToLibrary} doneLabel={blocks.savedToLibrary}
       announce={false} onAction={() => saveViewerImage(current)} onError={answerActionFailed} /> : null}
-    <IconButton label={copy.copyImage} onClick={() => runAnswerAction(() => copyViewerImage(current))}><Copy size="sm" /></IconButton>
+    <DoneIconButton key={`copy-${index}`} icon={<Copy size="sm" />} label={copy.copyImage} doneLabel={copy.imageCopied}
+      announce={false} onAction={() => copyViewerImage(current)} onError={answerActionFailed} />
   </> : undefined;
   return <ImageViewer images={shown} index={index} onIndexChange={(next) => useImageViewerState.setState({ index: next })}
     onClose={closeImageViewer} actions={actions}
