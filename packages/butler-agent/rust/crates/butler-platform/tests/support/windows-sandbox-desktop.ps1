@@ -59,11 +59,16 @@ public static class ButlerDesktop {
     $child = $null
     try {
         $child = Start-Process -FilePath (Join-Path $bundle 'butler-sandbox.exe') -ArgumentList @('--probe','--diagnostic',('"' + $diagnostic + '"')) -NoNewWindow -PassThru -RedirectStandardOutput $probeOut -RedirectStandardError $probeErr
+        # Windows PowerShell must retain the handle to populate ExitCode.
+        $null = $child.Handle
         $child.WaitForExit()
         $result.probe = (Get-Content -Raw $probeOut).Trim()
         $result.probeExit = $child.ExitCode
     } finally {
-        if ($null -ne $child -and !$child.HasExited) { Stop-Process -Id $child.Id -Force }
+        if ($null -ne $child) {
+            if (!$child.HasExited) { Stop-Process -Id $child.Id -Force }
+            $child.Dispose()
+        }
     }
     if (Test-Path $diagnostic) {
         $details = Get-Content -Raw $diagnostic | ConvertFrom-Json
@@ -96,11 +101,15 @@ public static class ButlerDesktop {
     Remove-Item -LiteralPath $profile -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force $resultRoot | Out-Null
     $result | ConvertTo-Json -Depth 15 | Set-Content -Encoding UTF8 $resultFile
-    Write-Host $result.status $resultFile
-    if ($result.error) { Write-Host ('Reason: ' + $result.error) }
-    if (Test-Path $diagnostic) {
-        Write-Host ('Diagnostic: ' + $diagnostic)
-        Get-Content -Raw $diagnostic | Write-Host
+    if ($result.probeDetails) {
+        $details = $result.probeDetails
+        Write-Host ('Probe: ' + $details.reason + '; child exit: ' + $details.childExitCode + '; NTSTATUS: ' + $details.childNtstatus)
+        if ($details.mxcError) {
+            Write-Host ('MXC: ' + $details.mxcError.code + ' ' + $details.mxcError.nativeCode + ' ' + $details.mxcError.message)
+        }
     }
+    if ($result.error) { Write-Host ('Reason: ' + $result.error) }
+    if (Test-Path $diagnostic) { Write-Host ('Diagnostic: ' + $diagnostic) }
+    Write-Host $result.status $resultFile
 }
 if ($result.status -ne 'PASS') { exit 1 }
