@@ -22,7 +22,7 @@ export function TypographyChapter({ chapter, locale, anchor, onOpen }: ChapterPr
       <GuideSection spec={s.at("type-scale")} lead="Every --typo-* role, set in its own style. The spec on the right is read from the rendered sample.">
         <TypeLadder locale={locale} />
       </GuideSection>
-      <GuideSection spec={s.at("line-heights")} lead="Every role has an integer px line-height, even and close to its old ratio, so 12/14/16/20px icons centre on whole pixels in every renderer. Before is the old ratio and the height it rendered; after is the token.">
+      <GuideSection spec={s.at("line-heights")} lead="Every role has an integer px line-height, even and close to its old ratio, so 12/14/16/20px icons sit on whole pixels beside them. Before is the old ratio and the height it rendered; after is the token.">
         <LineHeightTable />
         <LineHeightSamples />
       </GuideSection>
