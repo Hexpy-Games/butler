@@ -56,9 +56,11 @@ async function runApp(mode: string) {
       const main = await connectElectronMain(inspector);
       try {
         await page.waitForFunction(() => Boolean(window.butlerApp) && document.readyState === "complete" && Boolean(document.querySelector("[data-first-run-screen]")) && !document.querySelector('[data-test-class="app-boot"]'));
+        const version = await main.evaluate<string>("process.versions.electron");
+        assert.equal(version, "44.5.1", "Pinned App Electron runtime");
         const pids = await main.evaluate<number[]>(`${module}.app.getAppMetrics().map(item=>item.pid)`);
         assert.ok(pids.length > 1, "Real Electron helpers present");
-        writeFileSync(join(evidence!, `${mode}-owned.json`), JSON.stringify({ pid: child.pid, pids, profile, dir }));
+        writeFileSync(join(evidence!, `${mode}-owned.json`), JSON.stringify({ pid: child.pid, pids, profile, dir, version }));
         if (mode === "service-down") writeFileSync(join(evidence!, "service-down-before-quit.png"), await page.screenshot());
         await gateway.stop();
         if (mode === "service-down") {
