@@ -46,6 +46,10 @@ To fit a new logo:
 4. Check it beside a line glyph in a card in the app: equal visual size, and
    both centred on the title line.
 
+Optical exceptions live in the logo's `fit` only (never in CSS) and carry a
+one-line comment saying why: Claude's mark is short at the bottom, so its fit
+sits it 1px lower at 14px.
+
 ## Themes
 Monochrome logos paint with `currentColor` (the text color), so they stay
 visible in light and dark. Color logos (Claude, Gemini, Qwen) keep their fills,
