@@ -126,6 +126,10 @@ async fn browser_usage_stub_turn_releases_each_completed_call() -> Result<(), Ha
     let finished = host.next().await?;
     assert_eq!(finished["op"], "use.finished");
     assert_eq!(finished["turn_id"], turn);
+    assert_eq!(
+        finished["args"]["close_read_tabs"], false,
+        "the conversation's own turn keeps the tabs it opened for the user"
+    );
     eprintln!("3 browser calls: dispatch -> native result -> exact release; turn delivered");
     s.finish().await
 }

@@ -121,7 +121,7 @@ export async function executeBrowser(browser, frame) {
     return;
   }
   if (frame.op === "use.signin_revoked") { if (typeof frame.args?.site === "string") revokeSignedInSite(browser, frame.args.site, controlTab); return; }
-  if (frame.op === "use.finished") { finishUse(browser, frame.session, frame.turn_id); return; }
+  if (frame.op === "use.finished") { finishUse(browser, frame.session, frame.turn_id, frame.args?.close_read_tabs === true); return; }
   const tracked = ["tab.open", "tab.observe", "tab.read", "tab.zoom", "tab.screenshot", "tab.image_collect", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill", "pay.inspect", "pay.fill", "autofill.fill"].includes(frame.op);
   // Direct main-only harness calls have no gateway id, but use the same lifetime.
   if (tracked && !frame.id) { frame = { ...frame, id: randomUUID() }; startUse(browser, frame); }
@@ -151,6 +151,7 @@ async function executeFrame(browser, frame) {
   if (op === "tab.open") return openAgent(browser, frame);
   const tab = browser.tabs.get(frame.tab);
   if (!tab || tab.owner !== owner) return { status: "refused", reason: "not_your_tab" };
+  if (INTERACTIONS.has(op)) tab.acted = true;
   if (op === "tab.selection") return browser.selection.result(tab, session);
   if (tab.profile === "signed_in" && !["tab.cancel", "tab.wait", "tab.waiting"].includes(op) && !applySignedInPolicy(tab, args.policy))
     return { status: "not_dispatched", reason: args.policy?.mode === "signed_in" ? "navigation_denied" : "signed_in_unavailable" };
@@ -206,15 +207,18 @@ function parsed(contents, url) {
   void loading.catch(() => {});
   return Promise.race([loading, ready]);
 }
-async function openAgent(browser, { session, args, id: callId }, source) {
+/** Ops that act in a page or hand it to the user; a tab with none was only read. */
+const INTERACTIONS = new Set(["tab.act", "tab.dialog", "tab.wait", "signin.fill", "pay.inspect", "pay.fill", "autofill.fill"]);
+async function openAgent(browser, { session, args, id: callId, turn_id: turn }, source) {
   const signedIn = args.profile === "signed_in" || args.signed_in === true;
   if (signedIn && (args.policy?.mode !== "signed_in" || signedInPlace(args.url, args.policy) !== "granted")) return { status: "refused", reason: "signed_in_unavailable" };
   if (!makeAgentRoom(browser)) return { status: "refused", reason: "tab_budget_exhausted" };
-  return openTab(browser, { session, args, callId, signedIn, source });
+  return openTab(browser, { session, args, callId, signedIn, source, turn });
 }
-async function openTab(browser, { session, args, callId, signedIn, source }) {
+async function openTab(browser, { session, args, callId, signedIn, source, turn }) {
   const id = browser.create({ owner: `conversation:${session}`, url: args.url, preview_id: args.preview_id, agent: true, policy: args.policy, partition: source?.partition, profile: source?.profile ?? (signedIn ? "signed_in" : undefined) }, false);
   const tab = browser.tabs.get(id);
+  tab.openedTurn = typeof turn === "string" ? turn : null;
   tab.onPointer=(step,target)=>browser.pointer.step(tab,step,target);
   const use = browser.uses.get(callId);
   bindUse(browser, use, tab);

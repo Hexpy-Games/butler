@@ -121,7 +121,7 @@ pub(super) fn finish_turn(state: &HttpState, payload: &Map<String, Value>) {
     let (Some(session), Some(turn_id)) = (session, id) else {
         return;
     };
-    finish_owner_turn(state, session, turn_id);
+    finish_owner_turn(state, session, turn_id, false);
 }
 pub(super) fn finish_child(
     state: std::sync::Weak<HttpState>,
@@ -157,11 +157,14 @@ pub(super) fn finish_child(
                 .map(|(owner, _)| owner.clone())
         });
         if let Some(session) = session {
-            finish_owner_turn(&state, &session, id);
+            finish_owner_turn(&state, &session, id, true);
         }
     });
 }
-fn finish_owner_turn(state: &HttpState, session: &str, turn_id: &str) {
+/// Ends a turn's browser use. A delegated child's turn also closes the tabs it
+/// opened and only read: its report carries what it found, and the parent
+/// conversation keeps only tabs someone acted in, viewed or still uses.
+fn finish_owner_turn(state: &HttpState, session: &str, turn_id: &str, delegated: bool) {
     if let Ok(mut hub) = state.browser.0.lock() {
         if !hub.turns.remove(&(session.into(), turn_id.into())) {
             return;
@@ -177,7 +180,7 @@ fn finish_owner_turn(state: &HttpState, session: &str, turn_id: &str) {
         }
         send(
             &mut hub,
-            json!({"op":"use.finished","session":session,"turn_id":turn_id,"args":{}}),
+            json!({"op":"use.finished","session":session,"turn_id":turn_id,"args":{"close_read_tabs":delegated}}),
         );
         super::hidden::hand_over(state, &mut hub);
     }
