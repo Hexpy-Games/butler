@@ -7,6 +7,7 @@ use crate::command_sandbox::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::os::windows::fs::OpenOptionsExt;
 use std::{
     collections::{BTreeMap, HashMap},
     fs,
@@ -200,6 +201,7 @@ fn save_policy(
     let file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
+        .share_mode(0)
         .open(&path)?;
     serde_json::to_writer(&file, &payload)?;
     file.sync_all()?;
@@ -219,17 +221,39 @@ pub(super) fn reconcile_policies(data: &Path) -> std::io::Result<()> {
         if entry.path().extension().is_none_or(|ext| ext != "json") {
             continue;
         }
-        let payload: PolicyFile =
-            serde_json::from_slice(&fs::read(entry.path())?).map_err(std::io::Error::other)?;
+        let bytes = match fs::read(entry.path()) {
+            Ok(bytes) => bytes,
+            Err(error)
+                if error.kind() == std::io::ErrorKind::NotFound
+                    || error.raw_os_error() == Some(32) =>
+            {
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
+        let payload: PolicyFile = match serde_json::from_slice(&bytes) {
+            Ok(payload) => payload,
+            Err(_) => {
+                ignore_missing(fs::remove_file(entry.path()))?;
+                continue;
+            }
+        };
         if super::drive::start_time(payload.pid)? == Some(payload.started) {
             continue;
         }
         if let Ok(scratch) = dunce::canonicalize(&payload.scratch)
             && scratch.parent() == Some(dunce::canonicalize(&scratch_root)?.as_path())
         {
-            fs::remove_dir_all(scratch)?;
+            ignore_missing(fs::remove_dir_all(scratch))?;
         }
-        fs::remove_file(entry.path())?;
+        ignore_missing(fs::remove_file(entry.path()))?;
     }
     Ok(())
+}
+
+fn ignore_missing(result: std::io::Result<()>) -> std::io::Result<()> {
+    match result {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        result => result,
+    }
 }

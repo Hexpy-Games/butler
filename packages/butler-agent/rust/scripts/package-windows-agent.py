@@ -71,6 +71,7 @@ def main():
                         platform='win32', architecture='x64', binary='butler-agent.exe',
                         resources='resources', launcher='butler.cmd',
                         binarySha256=packager.sha256_file(stage / 'butler-agent.exe'),
+                        sandboxSha256=packager.sha256_file(stage / 'butler-sandbox.exe'),
                         resourcesSha256=packager.sha256_tree(stage / 'resources'))
         (stage / 'native-agent-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
         with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as target:

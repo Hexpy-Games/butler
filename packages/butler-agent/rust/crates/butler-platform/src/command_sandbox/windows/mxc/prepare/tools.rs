@@ -26,11 +26,11 @@ pub(super) fn discover(env: &BTreeMap<String, String>) -> Result<Toolchain, Erro
         .lock()
         .map_err(|_| "toolchain_cache_poisoned")?;
     if let Some((_, tools)) = cache.as_ref().filter(|(cached, _)| cached == &key) {
-        return Ok(tools.clone());
+        return refresh_credentials(tools.clone());
     }
     let tools = collect(env)?;
     *cache = Some((key, tools.clone()));
-    Ok(tools)
+    refresh_credentials(tools)
 }
 fn root(env: &BTreeMap<String, String>, key: &str) -> Result<Option<WinPath>, Error> {
     environment::get(env, key)
@@ -74,26 +74,6 @@ fn collect(env: &BTreeMap<String, String>) -> Result<Toolchain, Error> {
         }
     }
     add_path(env, &mut input)?;
-    if let Some(cargo) = &input.cargo_home {
-        input.cargo_entries = fs::read_dir(cargo.as_str())?
-            .map(|entry| -> Result<String, Error> {
-                let entry = entry?;
-                let name = entry.file_name().to_string_lossy().into_owned();
-                if name.to_ascii_lowercase().starts_with("credentials") {
-                    physical(&entry.path())?;
-                }
-                Ok(name)
-            })
-            .collect::<Result<_, _>>()?;
-        for name in ["config", "config.toml"] {
-            let path = Path::new(cargo.as_str()).join(name);
-            if path.exists() {
-                input.cargo_config_has_token |= fs::read_to_string(path)?
-                    .to_ascii_lowercase()
-                    .contains("token");
-            }
-        }
-    }
     super::tools::msvc::discover(env, &mut input)?;
     let mut tools = toolchain::discover(&input)?;
     for (key, path) in [
@@ -212,4 +192,40 @@ fn add_path(env: &BTreeMap<String, String>, input: &mut Discovery) -> Result<(),
         input.path.push(canonical);
     }
     Ok(())
+}
+
+// Installation discovery is cached; credential names and token-bearing
+// configuration are current at each admission, with no idle polling.
+fn refresh_credentials(mut tools: Toolchain) -> Result<Toolchain, Error> {
+    let Some(cargo) = tools.environment.get("CARGO_HOME").cloned() else {
+        return Ok(tools);
+    };
+    let cargo = Path::new(&cargo);
+    let config = physical(cargo)?.join("config")?;
+    let toml = physical(cargo)?.join("config.toml")?;
+    tools.denied.retain(|p| p != &config && p != &toml);
+    for entry in fs::read_dir(cargo)? {
+        let entry = entry?;
+        if entry
+            .file_name()
+            .to_string_lossy()
+            .to_ascii_lowercase()
+            .starts_with("credentials")
+        {
+            let path = physical(&entry.path())?;
+            if !tools.denied.contains(&path) {
+                tools.denied.push(path);
+            }
+        }
+    }
+    for path in [config, toml] {
+        if Path::new(path.as_str()).exists()
+            && fs::read_to_string(path.as_str())?
+                .to_ascii_lowercase()
+                .contains("token")
+        {
+            tools.denied.push(path);
+        }
+    }
+    Ok(tools)
 }

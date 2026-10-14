@@ -2,12 +2,14 @@
 use super::Error;
 use crate::command_sandbox::mxc_policy::drive_pick;
 use serde::{Deserialize, Serialize};
+use std::os::windows::fs::OpenOptionsExt;
 use std::{
     fs, io,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 use winsafe::co;
+const MAX_SUBST_TARGET_UNITS: usize = 240;
 
 #[derive(Serialize, Deserialize)]
 struct Entry {
@@ -25,7 +27,7 @@ impl Drive {
     pub(super) fn claim(data: &Path, target: &Path, policy: &Path) -> Result<Self, Error> {
         let target = dunce::canonicalize(target)?;
         let text = target.to_str().ok_or("invalid_project_path")?;
-        if text.len() > 240 {
+        if text.encode_utf16().count() > MAX_SUBST_TARGET_UNITS {
             return Err("subst_target_too_long".into());
         }
         let root = text.get(..3).ok_or("non_fixed_drive")?;
@@ -41,6 +43,7 @@ impl Drive {
             let file = match fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
+                .share_mode(0)
                 .open(&journal)
             {
                 Ok(file) => file,
@@ -55,6 +58,7 @@ impl Drive {
             };
             serde_json::to_writer(&file, &entry)?;
             file.sync_all()?;
+            drop(file);
             let drive = Self {
                 letter,
                 journal,
@@ -76,10 +80,16 @@ impl Drive {
         }
     }
     pub(super) fn cleanup(&self) -> io::Result<()> {
-        if self.matches()? && !subst(&[format!("{}:", self.letter), "/D".into()])?.success() {
+        if self.matches()?
+            && !subst(&[format!("{}:", self.letter), "/D".into()])?.success()
+            && self.matches()?
+        {
             return Err(io::Error::other("subst_remove_failed"));
         }
-        fs::remove_file(&self.journal)
+        match fs::remove_file(&self.journal) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            result => result,
+        }
     }
 }
 fn subst(args: &[String]) -> io::Result<std::process::ExitStatus> {
@@ -143,11 +153,27 @@ pub(in crate::command_sandbox) fn reconcile(data: &Path) -> io::Result<()> {
         let Some(letter) = bytes.first().copied() else {
             continue;
         };
-        if bytes.len() != 6 || !name.ends_with(".json") || !letter.is_ascii_uppercase() {
+        if bytes.len() != 6 || !name.ends_with(".json") || !(b'D'..=b'Z').contains(&letter) {
             continue;
         }
-        let entry: Entry =
-            serde_json::from_slice(&fs::read(item.path())?).map_err(io::Error::other)?;
+        let bytes = match fs::read(item.path()) {
+            Ok(bytes) => bytes,
+            Err(error)
+                if error.raw_os_error() == Some(32) || error.kind() == io::ErrorKind::NotFound =>
+            {
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
+        let entry: Entry = match serde_json::from_slice(&bytes) {
+            Ok(entry) => entry,
+            Err(_) => {
+                // An exclusive writer cannot be read mid-claim. A torn claim
+                // never reached subst; forget it without touching any mapping.
+                fs::remove_file(item.path())?;
+                continue;
+            }
+        };
         if start_time(entry.pid)? == Some(entry.started) {
             continue;
         }

@@ -79,9 +79,13 @@ async fn desktop_project_write_cleans_drive_journal() -> Result<(), HarnessError
         "cmd /c echo complete > made.txt",
         &env,
         &root,
-        &dirs.iter().map(|p| p.as_path()).collect::<Vec<_>>(),
+        &dirs
+            .iter()
+            .map(std::path::PathBuf::as_path)
+            .collect::<Vec<_>>(),
         &[],
-    ).map_err(|error| std::io::Error::other(error.to_string()))?;
+    )
+    .map_err(|error| std::io::Error::other(error.to_string()))?;
     let mut cmd = std::process::Command::new(&invocation.program);
     command_sandbox::add_arguments(&mut cmd, &invocation);
     let output = cmd.current_dir(&root).output()?;

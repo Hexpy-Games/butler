@@ -54,9 +54,16 @@ public static class ButlerDesktop {
     $probe = & (Join-Path $bundle 'butler-sandbox.exe') --probe
     $result.probe = ($probe | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or $result.probe -ne 'partial') { throw 'desktop_probe_not_partial' }
-    & (Join-Path $bundle 'e2e.exe') 'windows_project_sandbox::desktop_project_write_cleans_drive_journal' --exact --nocapture --test-threads=1 *> (Join-Path $bundle 'desktop-test.log')
+    $case = 'windows_project_sandbox::desktop_project_write_cleans_drive_journal'
+    $listed = & (Join-Path $bundle 'e2e.exe') $case --exact --list
+    if ($LASTEXITCODE -ne 0 -or ($listed | Out-String) -notmatch '1 test, 0 benchmarks') { throw 'desktop_test_not_found' }
+    & (Join-Path $bundle 'e2e.exe') $case --exact --nocapture --test-threads=1 *> (Join-Path $bundle 'desktop-test.log')
     $result.testExit = $LASTEXITCODE
-    if ($LASTEXITCODE -ne 0) { throw 'desktop_project_write_failed' }
+    $output = Get-Content -Raw (Join-Path $bundle 'desktop-test.log')
+    if ($LASTEXITCODE -ne 0 -or $output -notmatch 'test result: ok\. 1 passed; 0 failed') { throw 'desktop_project_write_failed' }
+    $result.projectWrite = $true
+    $result.journalEmpty = $true
+    $result.substUnchanged = $true
     $result.status = 'PASS'
 } catch {
     $result.error = $_.Exception.Message
