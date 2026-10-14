@@ -714,6 +714,7 @@ export interface AppCopy {
     running: string;
     createGroup: string;
     menu: string;
+    newChatAction: string;
     newProject: string;
     automations: string;
     archives: string;
@@ -740,6 +741,7 @@ export interface AppCopy {
     relocationDescription: (source: string, target: string) => string;
   };
   interfaceStatus: {
+    generalCategory: string;
     countSummary: (kind: "filesRead" | "files" | "matches" | "documents" | "results", count: string | number, truncated?: boolean) => string;
     bytes: (count: number) => string;
     lines: (range: string | number) => string;

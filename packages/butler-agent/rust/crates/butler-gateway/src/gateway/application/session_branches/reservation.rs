@@ -116,6 +116,7 @@ impl AppApplication {
                         title: Some(request.title.clone()),
                         project_id,
                         session_hint: None,
+                        group_id: None,
                     },
                     clock.as_ref(),
                 )?;

@@ -26,6 +26,9 @@ pub struct AppCreateSessionInput {
     pub title: Option<String>,
     pub project_id: Option<String>,
     pub session_hint: Option<String>,
+    /// The sidebar group the new session is placed in (first child); the
+    /// group's project scope must match `project_id`.
+    pub group_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

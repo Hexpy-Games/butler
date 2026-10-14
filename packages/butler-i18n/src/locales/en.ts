@@ -711,9 +711,9 @@ export const enUsCopy: AppCopy = {
     success: "Successes",
     failures: "Failures",
   },
-  clearChat: { archiveCount: (count: number) => `Archive (${count})`, title: "Clear chat", description: "This chat moves to Archive and you start fresh. Instructions and memories stay.", memory: "", manageMemory: "Manage memory ›", clear: "Clear", busy: "Wait for pending work to finish.", failed: "Could not clear chat.", archivedTitle: (date: string) => `General · ${date}` },
+  clearChat: { archiveCount: (count: number) => `Archive (${count})`, title: "Clear chat", description: "This chat moves to Archive and you start fresh. Instructions and memories stay.", memory: "", manageMemory: "Manage memory ›", clear: "Clear", busy: "Wait for pending work to finish.", failed: "Could not clear chat.", archivedTitle: (date: string) => `Chats · ${date}` },
   space: {
-    general: "General",
+    general: "Chats",
     space: "Space",
     reference: "Reference in message",
     dashboard: "Project dashboard",
@@ -749,6 +749,7 @@ export const enUsCopy: AppCopy = {
     running: "Running",
     createGroup: "Create group",
     menu: "Space menu",
+    newChatAction: "New chat",
     newProject: "New project",
     automations: "Schedules",
     archives: "Archive",
@@ -773,6 +774,7 @@ export const enUsCopy: AppCopy = {
 rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${title}.`, relocationDescription: (source, target) => `Move ${source} to ${target}. Conversation history and existing files are preserved. Future work will use the new workspace and project knowledge. Active work must finish before moving.`,
   },
   interfaceStatus: {
+    generalCategory: "General",
     countSummary: (kind, count, truncated) => `${({ filesRead: "Files read", files: "Files", matches: "Matches", documents: "Documents", results: "Results" })[kind]} · ${count}${truncated ? " · Partial results" : ""}`,
     bytes: (count) => `${count.toLocaleString("en-US")} bytes`,
     lines: (range) => `line ${range}`,
