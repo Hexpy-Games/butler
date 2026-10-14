@@ -69,6 +69,19 @@ fn home_and_discovery_roots_are_preserved() -> Result<(), butler_e2e::e2e::Harne
     ] {
         assert_eq!(discovery_root(input), expected);
     }
+    // Approval targets: the real path in native separators, `..` resolved.
+    let root = std::env::temp_dir().join("data");
+    let parent = root.parent().unwrap();
+    for (requested, expected) in [
+        ("../Downloads/a.txt", parent.join("Downloads").join("a.txt")),
+        ("./x/../y.txt", root.join("y.txt")),
+        ("a/./b", root.join("a").join("b")),
+    ] {
+        let resolved = resolve(&root, requested)?;
+        assert_eq!(resolved.to_string_lossy(), expected.to_string_lossy());
+    }
+    assert_eq!(lexical(Path::new("/../a")), Path::new("/a"));
+    assert_eq!(lexical(Path::new("../../a/./b")), Path::new("../../a/b"));
     Ok(())
 }
 
