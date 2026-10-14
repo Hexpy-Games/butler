@@ -49,7 +49,8 @@ lints below enforce most of this; the rest is review.
 7. **Bare icons in cards and rows.** ChoiceCard, ChoiceTile, CheckCard,
    ListRow and any card or list-item row show their glyph alone in an
    `IconSlot` (`minHeight="line"`), never on an `IconTile` or other boxed
-   background. Leading icon = title text size, centered on the title line;
+   background. Leading icon = title text size, centered on the title line's
+   letters (the title box is trimmed to cap height and baseline);
    brand logos are fitted to the icon-pack grid, so all leading icons share one
    rule. Trailing controls (chevron, size, spinner, check) vertically centered on
    the card. The description starts at the title's left edge. Borders stay

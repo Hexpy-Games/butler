@@ -45,7 +45,8 @@ import { CheckCard, CheckCardList, ProviderLogo } from "@/butler-ds";
 Leading icon = title text size, centered on the title line; brand logos are fitted to the icon-pack grid, so all leading icons share one rule. Trailing controls vertically centered.
 
 - The glyph is bare (no IconTile or boxed background), the title's text size,
-  and centers on the title's line in one-line and two-line cards alike.
+  and centers on the title's letters (cap height to baseline, ChoiceCard's
+  trimmed title box) in one-line and two-line cards alike.
   Brand logos are fitted to the icon-pack grid, so they follow the same rule.
 - The check indicator centers vertically on the card.
 - The description starts at the title's left edge. Line heights come from the

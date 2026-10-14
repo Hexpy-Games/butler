@@ -24,7 +24,11 @@ Leading icon = title text size, centered on the title line; brand logos are fitt
 - Leading icon: the glyph is the title's text size, whatever size it was
   given (`--icon-size-sm` beside 13px titles, `--icon-size-md` beside the 15px
   titles at 640px and below), and centers on the title's line in one-line and
-  two-line cards alike, with no per-icon offset. Brand logos are fitted to
+  two-line cards alike, with no per-icon offset. "Centered" means on the
+  letters, not the line box: the title is trimmed to cap height and baseline
+  (`text-box: trim-both cap alphabetic`) and padded back to one line, so the
+  glyph meets the letters' centre in every renderer (browsers round the
+  baseline inside the line box differently, up to 1px). Brand logos are fitted to
   the icon-pack grid by `ProviderLogo`, so a logo and a line glyph at the same
   size look equally large and equally centered. Mixed one-line and two-line
   lists look the same on every card.
