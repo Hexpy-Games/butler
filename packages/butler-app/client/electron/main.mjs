@@ -145,9 +145,11 @@ const repoRoot = resolve(__dirname, "../../../..");
 const userHome = homedir();
 let storageCorrectionWatch = null;
 const butlerDataRoot = process.env.BUTLER_DATA || join(userHome, ".butler");
-const uiCrashStore = createUiCrashStore(butlerDataRoot, () => appInfoView().version);
-const wallpaperStateLog = createWallpaperStateLog(butlerDataRoot);
 const legacyDataBlocked = unsupportedLegacyData(butlerDataRoot);
+/** App-owned logs and drafts live under the data folder only once the App accepts it; a refused folder stays untouched. */
+const appWritableDataRoot = legacyDataBlocked ? null : butlerDataRoot;
+const uiCrashStore = createUiCrashStore(appWritableDataRoot, () => appInfoView().version);
+const wallpaperStateLog = createWallpaperStateLog(appWritableDataRoot);
 const preloadPath = resolve(__dirname, "preload.cjs");
 const appCacheBudget = readCacheBudgetArtifact(
   resolve(__dirname, "../shared/cache-budget.json"),
@@ -163,11 +165,7 @@ const macAppIconPath = resolve(__dirname, "assets/butler.icns");
 const macAppDockIconPath = resolve(__dirname, "assets/butler-mac.png");
 const appRepositoryUrl = "https://github.com/Hexpy-Games/butler";
 const appProtocolVersion = "butler.app.v1";
-const composerDraftDirectory = join(
-  butlerDataRoot,
-  "app",
-  "composer-drafts",
-);
+const composerDraftDirectory = appWritableDataRoot && join(appWritableDataRoot, "app", "composer-drafts");
 const appServerProbeTimeoutMs = 2000;
 const nativeServiceGatewayReadyPollAttempts = 120;
 const nativeServiceGatewayReadyPollDelayMs = 250;
@@ -2396,18 +2394,18 @@ ipcMain.handle("butler:open-session-folder", async (_event, input = {}) =>
   }));
 
 ipcMain.handle("butler:composer-draft-read", (_event, input = {}) =>
-  readComposerDraftFile(composerDraftDirectory, input.sessionId, {
+  composerDraftDirectory && readComposerDraftFile(composerDraftDirectory, input.sessionId, {
     maxBytes: appCacheBudget.maxComposerDraftBytes,
     maxEntries: appCacheBudget.maxComposerDraftEntries,
     maxAggregateBytes: appCacheBudget.maxComposerDraftAggregateBytes,
   }));
 
 ipcMain.handle("butler:composer-draft-write", (_event, input = {}) =>
-  writeComposerDraftFile(composerDraftDirectory, input.snapshot, {
+  composerDraftDirectory ? writeComposerDraftFile(composerDraftDirectory, input.snapshot, {
     maxBytes: appCacheBudget.maxComposerDraftBytes,
     maxEntries: appCacheBudget.maxComposerDraftEntries,
     maxAggregateBytes: appCacheBudget.maxComposerDraftAggregateBytes,
-  }));
+  }) : { ok: false });
 
 ipcMain.handle("butler:set-developer-mode", async (_event, input) => {
   return await setDeveloperMode(input?.enabled === true);
