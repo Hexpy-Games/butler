@@ -77,10 +77,23 @@ pub(super) fn guard(guard: GuardResult) -> MutationFailure {
 }
 
 pub(super) fn io(path: Option<String>, error: &std::io::Error) -> MutationFailure {
+    record_io("filesystem", error);
     let kind = match error.kind() {
         std::io::ErrorKind::NotFound => "not_found",
         std::io::ErrorKind::PermissionDenied => "permission_denied",
         _ => "io_error",
     };
     new(path, kind)
+}
+
+pub(super) fn record_io(phase: &'static str, error: &std::io::Error) {
+    if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+        == Some(std::ffi::OsStr::new("1"))
+    {
+        eprintln!(
+            "command_file_error phase={phase} kind={:?} os_code={:?}",
+            error.kind(),
+            error.raw_os_error()
+        );
+    }
 }

@@ -365,15 +365,7 @@ fn mutation_io(prepared: &Prepared, error: &std::io::Error) -> MutationFailure {
     } else {
         "io_error"
     };
-    if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
-        == Some(std::ffi::OsStr::new("1"))
-    {
-        eprintln!(
-            "command_file_error kind={:?} os_code={:?}",
-            error.kind(),
-            error.raw_os_error()
-        );
-    }
+    failure::record_io("publication", error);
     failure::new(Some(prepared.before.path.public.clone()), code)
 }
 
