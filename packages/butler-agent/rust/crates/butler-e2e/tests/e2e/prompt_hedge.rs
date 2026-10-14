@@ -20,7 +20,10 @@ async fn model_facing_prompts_carry_no_handback_rules() -> Result<(), HarnessErr
                 "phase_minimal|butler|execution" | "phase_minimal|butler|read_only"
             )
         {
-            assert!(text.contains("else best judgment and why"), "{key} lacks judgment");
+            assert!(
+                text.contains("else best judgment and why"),
+                "{key} lacks judgment"
+            );
             assert!(
                 text.contains("find out what tools can reach rather than guess or disclaim"),
                 "{key} lacks the proactivity principle"
@@ -50,6 +53,7 @@ async fn model_facing_prompts_carry_no_handback_rules() -> Result<(), HarnessErr
     assert_no_handback("eol.template.md", &eol);
     assert!(eol.contains("give your best judgment, why, and what would change it"));
     assert!(eol.contains("before relying on something the principal told you, look it up"));
+    assert_no_limits_persona(&root.join("../resources/personas/templates"))?;
     Ok(())
 }
 
@@ -93,4 +97,30 @@ fn assert_no_handback(source: &str, text: &str) {
     ] {
         assert!(!text.contains(forbidden), "{source} contains {forbidden}");
     }
+}
+
+fn assert_no_limits_persona(directory: &std::path::Path) -> Result<(), HarnessError> {
+    for entry in std::fs::read_dir(directory)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            assert_no_limits_persona(&path)?;
+        } else if path.extension().is_some_and(|ext| ext == "md") {
+            let text = std::fs::read_to_string(&path)?.to_lowercase();
+            for forbidden in [
+                "limits clear",
+                "state uncertainty openly",
+                "do not hide uncertainty",
+                "근거와 한계",
+                "사실과 한계",
+                "불확실성을 숨기지",
+            ] {
+                assert!(
+                    !text.contains(forbidden),
+                    "{} contains {forbidden}",
+                    path.display()
+                );
+            }
+        }
+    }
+    Ok(())
 }
