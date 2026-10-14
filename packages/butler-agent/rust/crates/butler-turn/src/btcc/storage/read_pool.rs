@@ -16,6 +16,7 @@ const SPARE_RETENTION: Duration = Duration::from_secs(10);
 type ReadOperation = Box<dyn FnOnce(&Connection) -> StorageResult<()> + Send>;
 
 struct Job {
+    timing: crate::btcc::agent_loop::command_timing::CommandTiming,
     operation: ReadOperation,
     completed: tokio::sync::oneshot::Sender<StorageResult<()>>,
     permit: OwnedSemaphorePermit,
@@ -122,6 +123,8 @@ impl ReadPool {
         })
     }
     fn connection(path: &Path) -> StorageResult<butler_platform::sqlite::Connection> {
+        let _timing =
+            crate::btcc::agent_loop::command_timing::CommandTiming::new("sqlite_read_connection");
         let connection =
             butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
                 .map_err(StorageError::sqlite)?;
@@ -153,7 +156,7 @@ impl ReadPool {
         let timing = crate::btcc::agent_loop::command_timing::CommandTiming::new("sqlite_read");
         timing.mark(std::any::type_name::<F>());
         let operation: ReadOperation = Box::new(move |db| {
-            timing.mark("dequeued");
+            timing.mark("operation_started");
             let value = operation(db)?;
             timing.mark("statements_done");
             let _sent = sender.send(value);
@@ -189,14 +192,18 @@ impl ReadPool {
             })?;
         timing.mark("permit_acquired");
         let (completed, completion) = tokio::sync::oneshot::channel();
-        self.work.state.lock().jobs.push_back(Job {
-            operation,
-            completed,
-            permit,
-            guard,
-        });
+        timing.mark("before_enqueue");
+        {
+            let mut queue = self.work.state.lock();
+            queue.jobs.push_back(Job {
+                timing,
+                operation,
+                completed,
+                permit,
+                guard,
+            });
+        }
         self.work.changed.notify_one();
-        timing.mark("queued");
         completion.await.map_err(|error| {
             StorageError::new(
                 super::StorageCode::SqliteOperationCompletionLost,
@@ -224,12 +231,15 @@ impl ReadPool {
                     work.reader_closed();
                 }
                 Work::Read(Job {
+                    timing,
                     operation,
                     completed,
                     permit,
                     guard,
                 }) => {
+                    timing.mark("dequeued");
                     let result = Self::run_read(path, work, &mut connection, operation);
+                    timing.mark("read_finished");
                     last_used = Instant::now();
                     // Admission belongs to the queued job even if its caller
                     // disappears. Close waits for all transactions to finish.
@@ -246,6 +256,8 @@ impl ReadPool {
         connection: &mut Option<butler_platform::sqlite::Connection>,
         operation: ReadOperation,
     ) -> StorageResult<()> {
+        let timing =
+            crate::btcc::agent_loop::command_timing::CommandTiming::new("sqlite_read_execution");
         if connection.is_none() {
             *connection = Some(Self::connection(path)?);
             work.reader_opened();
@@ -256,14 +268,18 @@ impl ReadPool {
                 "Reader unavailable",
             ));
         };
+        timing.mark("connection_ready");
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             // Every request still starts a fresh WAL snapshot. Reuse only the
             // owned thread/descriptor, never a transaction or response value.
             let transaction = connection
                 .unchecked_transaction()
                 .map_err(StorageError::sqlite)?;
+            timing.mark("transaction_started");
             operation(&transaction)?;
+            timing.mark("operation_finished");
             transaction.commit().map_err(StorageError::sqlite)?;
+            timing.mark("committed");
             butler_platform::sqlite::sync_wal_index(connection).map_err(|error| {
                 StorageError::new(super::StorageCode::SqliteWalSyncFailed, error.to_string())
                     .with_source(error)

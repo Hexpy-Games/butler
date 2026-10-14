@@ -314,7 +314,7 @@ fn run_connection_lane(
         }
         let mut connection = sqlite::open(path).map_err(StorageError::sqlite)?;
         configure(&connection, profile)?;
-        timing::install(&connection);
+        timing::install_writer(&connection).map_err(StorageError::sqlite)?;
         validate_activation(&connection, activation)?;
         bootstrap::migrate_current(&mut connection)?;
         legacy_cutover::apply(&mut connection)?;

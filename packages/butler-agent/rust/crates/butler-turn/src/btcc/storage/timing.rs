@@ -4,6 +4,7 @@ use rusqlite::{
     Connection,
     trace::{TraceEvent, TraceEventCodes},
 };
+use std::cell::Cell;
 
 pub(super) fn install(connection: &Connection) {
     if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
@@ -36,4 +37,40 @@ fn profile(event: TraceEvent<'_>) {
         };
         CommandTiming::report_duration("sqlite_statement", class, duration);
     }
+}
+
+// Each BTCC writer owns one connection on its dedicated thread. Keep SQLite's
+// configured threshold and PASSIVE mode; like its stock hook, ignore checkpoint
+// errors rather than turning an already committed write into a failed operation.
+thread_local! {
+    static CHECKPOINT_PAGES: Cell<i32> = const { Cell::new(0) };
+}
+
+pub(super) fn install_writer(connection: &Connection) -> rusqlite::Result<()> {
+    install(connection);
+    if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+        != Some(std::ffi::OsStr::new("1"))
+    {
+        return Ok(());
+    }
+    let pages =
+        connection.query_row("PRAGMA wal_autocheckpoint", [], |row| row.get::<_, i32>(0))?;
+    CHECKPOINT_PAGES.set(pages);
+    if pages > 0 {
+        connection.wal_hook(Some(checkpoint));
+    }
+    Ok(())
+}
+
+fn checkpoint(wal: &rusqlite::hooks::Wal, pages: i32) -> rusqlite::Result<()> {
+    if CHECKPOINT_PAGES.get() > 0 && pages >= CHECKPOINT_PAGES.get() {
+        let timing = CommandTiming::new("sqlite_checkpoint");
+        let result = wal.checkpoint();
+        timing.mark(if result.is_ok() {
+            "passive_finished"
+        } else {
+            "passive_failed"
+        });
+    }
+    Ok(())
 }
