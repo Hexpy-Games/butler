@@ -53,11 +53,14 @@ const ITEMS: Record<Locale, FixtureItem[]> = {
 };
 
 export const LABELS = {
-  "en-US": { checked: "Checked 5:41 PM", open: "checked at 5:41 PM, open the page", save: "Save to library", copy: "Copy", copied: "Copied",
+  "en-US": { checked: "Checked 5:41 PM", open: "checked at 5:41 PM, open the page", save: "Save to library", saved: "Saved to library", copy: "Copy", copied: "Copied",
     before: "Before", more: "Show more", less: "Show less" },
-  "ko-KR": { checked: "오후 5:41 확인", open: "오후 5:41에 확인한 페이지 열기", save: "서랍에 저장", copy: "복사", copied: "복사했어요",
+  "ko-KR": { checked: "오후 5:41 확인", open: "오후 5:41에 확인한 페이지 열기", save: "서랍에 저장", saved: "서랍에 저장했어요", copy: "복사", copied: "복사했어요",
     before: "이전", more: "더 보기", less: "접기" },
 } as const;
+
+/** A stand-in for the container's save: it settles after a short round trip, then the button confirms. */
+export const fixtureSave = () => new Promise<void>((resolve) => setTimeout(resolve, 300));
 
 export function fixtureItems(locale: Locale): FixtureItem[] {
   return ITEMS[locale];

@@ -18,6 +18,7 @@ export const guidance: ShowcaseGuidance = {
   purpose: "Copies text to the clipboard and confirms with an icon morph and a live announcement.",
   whenToUse: ["Copy a message, code block or identifier", "Offer a copy action in a footer or code frame header"],
   whenNotToUse: [
+    { when: "Saving or another one-shot action that confirms on the button", use: "DoneIconButton" },
     { when: "Any other icon-only action", use: "IconButton" },
     { when: "Copy a design token name in the viewer", use: "Button" },
   ],
