@@ -143,7 +143,10 @@ async fn probe_emits_loader_diagnostics() -> Result<(), HarnessError> {
     assert!(paths.iter().all(|v| v.as_str().unwrap().contains("<dir>")));
     assert!(report.get("stderr").is_some());
     assert!(report.get("mxcError").is_some());
-    if report["mxcError"].is_null() {
+    let reason = report["reason"].as_str().unwrap();
+    assert_ne!(reason, "probe_failed");
+    assert_ne!(reason, "non_interactive_desktop");
+    if reason == "partial" || reason.starts_with("child_") {
         assert!(report["childExitCode"].is_i64() || report["reason"] == "child_timed_out");
         if report["childExitCode"].as_i64().is_some_and(|n| n < 0) {
             assert!(report["childNtstatus"].as_str().unwrap().starts_with("0xC"));
