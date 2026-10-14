@@ -2,19 +2,22 @@
 import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { installNotificationReplay } from "../support/notification-replay.ts";
 import { installWorkReplay } from "../support/delegated-work-replay.ts";
-import { smokeBrowserArgs } from "../support/smoke-browser.ts";
+import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
+import { installSmokeUiAssets } from "../support/smoke-ui-assets";
 import { HARNESS_SS03_OBSERVER_VIEW, HARNESS_SS03_SUMMARY } from "../../packages/butler-app/client/ui/src/app/fixtures.ts";
 import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import type { NavigationView, SessionView, SessionViewTurn } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
+const cells = [1280, 375].flatMap(width => ["light", "dark"].flatMap(theme =>
+  [false, true].map(wallpaper => `${width}-${theme}-${wallpaper}`)));
+if (await runSmokeCases(cells, "BUTLER_DELEGATED_WORK_CELL", import.meta.path)) process.exit(0);
 const output = process.env.BUTLER_SMOKE_SCREENSHOTS;
 if (output) mkdirSync(output, { recursive: true });
 const server = await createNativeAppServer({ uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist") });
-const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
+const browser = await launchSmokeBrowser();
 const context = await browser.newContext();
 const baseline = process.env.BUTLER_SMOKE_BASELINE === "1";
 const navigation = await server.api<NavigationView>("/navigation");
@@ -53,6 +56,7 @@ function views(): { parent: SessionView; observer: SessionView } {
 
 try {
   for (const width of [1280, 375]) for (const theme of ["light", "dark"]) for (const wallpaper of [false, true]) {
+    if (process.env.BUTLER_DELEGATED_WORK_CELL && process.env.BUTLER_DELEGATED_WORK_CELL !== `${width}-${theme}-${wallpaper}`) continue;
     const page = await context.newPage();
     const pageErrors: string[] = [];
     page.on("pageerror", error => { pageErrors.push(error.message); console.error("pageerror", error.message); });
@@ -66,6 +70,7 @@ try {
       wallpaper: { source: wallpaper ? { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } } : { kind: "none" } } }) });
     await server.signIn(page);
     await installWorkReplay(page);
+    await installSmokeUiAssets(page, process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist");
     await installNotificationReplay(page, server.url, wallpaper);
     await page.route("**/authority-requests?**", route => route.fulfill({ json: { protocol_version: "butler.app.v1", data: { session_id: "general", requests: [], permissions: [...grants, grants[0]] } } }));
     await page.route("**/navigation", route => route.fulfill({ json: { protocol_version: "butler.app.v1", data: { ...navigation,
