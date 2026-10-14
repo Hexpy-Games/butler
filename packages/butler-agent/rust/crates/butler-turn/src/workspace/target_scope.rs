@@ -75,7 +75,7 @@ fn classify(
         // A hard link may alias a file outside the project (for example a
         // key linked in by a command); treat it like the outside original.
         || std::fs::symlink_metadata(&real)
-            .is_ok_and(|metadata| butler_platform::secure_fs::has_other_links(&metadata))
+            .is_ok_and(|metadata| butler_platform::secure_fs::has_other_links(&real, &metadata))
     {
         TargetScope::Protected
     } else {
