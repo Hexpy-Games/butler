@@ -3,6 +3,7 @@ import { Grid } from "../Grid";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
 import { BROKEN_PICTURE, fixturePicture } from "./fixtures";
+import { ImageLoadDemo } from "./MediaFrame.demo";
 import { MediaFrame, type MediaFrameAspect } from "./MediaFrame";
 
 export const meta: ShowcaseMeta = {
@@ -72,4 +73,10 @@ export const stories: ShowcaseStory[] = [
   { name: "Shapes: 1:1, 4:5, 3:4, 16:10, 16:9", render: (context) => <Shapes {...context} /> },
   { name: "Fit: typical pictures span, extreme ones sit inset", render: (context) => <Fit {...context} /> },
   { name: "Empty and failed: the matte keeps the shape", render: (context) => <Missing {...context} /> },
+  { name: "Image load: the picture fades in over the matte", widths: ["375", "app"], render: (context) => <ImageLoadDemo {...context} /> },
+  {
+    name: "Reduced motion: the picture appears at once",
+    widths: ["375", "app"],
+    render: (context) => <ImageLoadDemo {...context} reducedMotion />,
+  },
 ];

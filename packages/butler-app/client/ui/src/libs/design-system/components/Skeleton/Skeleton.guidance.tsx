@@ -46,6 +46,6 @@ export const guidance: ShowcaseGuidance = {
     },
   ],
   content: ["Size with width (full, 3/4, 2/3, 1/2, 2/5, 1/3, 1/4 or a number of characters), height (line, title, control, row) and shape; lines renders a paragraph.", "The label says what loads: Loading settings.", "Settings sections get SkeletonRows through SettingsSection state=\"loading\"; use SkeletonRows directly only outside settings."],
-  accessibility: ["Unlabelled skeletons are aria-hidden; one labelled skeleton uses role=\"status\"."],
-  tokens: ["--surface-raised", "--shimmer-duration", "--radius-control"],
+  accessibility: ["Unlabelled skeletons are aria-hidden; one labelled skeleton uses role=\"status\".", "Reduced motion (the OS or the app's setting) stops the sheen; the static fill stays."],
+  tokens: ["--surface-raised", "--shimmer-duration", "--motion-loop-count", "--radius-control"],
 };
