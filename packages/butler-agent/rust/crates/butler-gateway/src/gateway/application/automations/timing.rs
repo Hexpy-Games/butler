@@ -22,6 +22,11 @@ pub(super) fn interval_next(
     occurrence: Option<&str>,
 ) -> Result<String, AppStorageError> {
     let anchor = DateTime::parse_from_rfc3339(anchor).map_err(|_| invalid())?;
+    // Match the store's canonical millisecond precision before grid arithmetic.
+    // Otherwise formatting can turn a future grid point into the handled point.
+    let anchor = anchor
+        .with_nanosecond(anchor.nanosecond() / 1_000_000 * 1_000_000)
+        .ok_or_else(invalid)?;
     let mut cutoff = DateTime::parse_from_rfc3339(now).map_err(|_| invalid())?;
     if let Some(occurrence) = occurrence {
         cutoff = cutoff.max(DateTime::parse_from_rfc3339(occurrence).map_err(|_| invalid())?);

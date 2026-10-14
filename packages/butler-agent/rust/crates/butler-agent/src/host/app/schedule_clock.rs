@@ -44,14 +44,20 @@ fn start_control(clock: Arc<FixedClock>, address: &str) {
                 let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(1)));
                 let mut reader = BufReader::new(stream);
                 let mut value = String::new();
-                if reader.read_line(&mut value).is_ok()
-                    && let Ok(time) = chrono::DateTime::parse_from_rfc3339(value.trim())
-                {
+                if reader.read_line(&mut value).is_err() {
+                    continue;
+                }
+                if let Ok(time) = chrono::DateTime::parse_from_rfc3339(value.trim()) {
                     *clock.0.write() = time
                         .with_timezone(&chrono::Utc)
                         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-                    let _ = reader.get_mut().write_all(b"ok\n");
                 }
+                // An empty line observes clocks without updating or waking anything.
+                let (context_reads, context_now_ms) =
+                    crate::host::memory_jobs::context_maintenance::clock_probe();
+                let state = serde_json::json!({"now":clock.now_iso(),
+                    "context_reads":context_reads, "context_now_ms":context_now_ms});
+                let _ = writeln!(reader.get_mut(), "{state}");
             }
         });
 }

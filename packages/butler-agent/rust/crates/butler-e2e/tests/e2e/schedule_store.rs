@@ -101,12 +101,12 @@ async fn scheduler_next_due_reads(s: &Scenario) -> Result<usize, HarnessError> {
 async fn sched_06_idle_calendar_scheduler_rechecks_without_writes_in_60_seconds()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let s = Setup::new("SCHED-06")?
+    let setup = Setup::new("SCHED-06")?
         .env("BUTLER_E2E_SCHEDULER_INSTRUMENTATION", "1")
         .env("BUTLER_E2E_APP_NOW", "2026-03-07T00:00:00.000Z")
-        .env("BUTLER_E2E_TIER", "stub")
-        .start()
-        .await?;
+        .env("BUTLER_E2E_TIER", "stub");
+    super::memory_fixture::initialize_empty(&setup.sandbox.data)?;
+    let s = setup.start().await?;
     let schedules = s.gw.get("/automations").await?;
     assert!(
         schedules.data()["automations"]
@@ -145,6 +145,7 @@ async fn sched_06_idle_calendar_scheduler_rechecks_without_writes_in_60_seconds(
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     assert_eq!(scheduler_next_due_reads(&s).await?, 2);
+    super::memory_fixture::settle(&s.sandbox.data).await?;
     let mut writes =
         super::idle_resources::writes::Watch::open_after_quiet(&s.sandbox.data).await?;
     tokio::time::sleep(Duration::from_secs(60)).await;

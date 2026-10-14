@@ -24,6 +24,30 @@ const INTERVAL: Duration = Duration::from_secs(60);
 const DUE_MINUTE: u16 = 3 * 60 + 30;
 const DAY_MS: f64 = 24.0 * 60.0 * 60.0 * 1_000.0;
 
+#[cfg(feature = "e2e-fixtures")]
+static CLOCK_CHECKS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+#[cfg(feature = "e2e-fixtures")]
+static LAST_CLOCK_MS: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+#[cfg(feature = "e2e-fixtures")]
+pub(in crate::host) fn clock_probe() -> (usize, i64) {
+    use std::sync::atomic::Ordering;
+    (
+        CLOCK_CHECKS.load(Ordering::Acquire),
+        LAST_CLOCK_MS.load(Ordering::Relaxed),
+    )
+}
+
+fn observed_clock(now_ms: i64) -> i64 {
+    #[cfg(feature = "e2e-fixtures")]
+    {
+        use std::sync::atomic::Ordering;
+        LAST_CLOCK_MS.store(now_ms, Ordering::Relaxed);
+        CLOCK_CHECKS.fetch_add(1, Ordering::Release);
+    }
+    now_ms
+}
+
 pub(crate) struct ContextMaintenance {
     data_root: PathBuf,
     tool_output: ToolOutput,
@@ -282,13 +306,15 @@ fn current_epoch_millis() -> i64 {
             &crate::host::app::schedule_clock::clock().now_iso(),
         )
     {
-        return now.timestamp_millis();
+        return observed_clock(now.timestamp_millis());
     }
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |time| {
-            i64::try_from(time.as_millis()).unwrap_or(i64::MAX)
-        })
+    observed_clock(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |time| {
+                i64::try_from(time.as_millis()).unwrap_or(i64::MAX)
+            }),
+    )
 }
 
 fn iso_at(now_ms: i64) -> String {

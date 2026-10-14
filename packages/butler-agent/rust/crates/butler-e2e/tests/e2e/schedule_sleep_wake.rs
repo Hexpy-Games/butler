@@ -22,29 +22,32 @@ async fn setup(id: &str) -> Result<(Scenario, String), HarnessError> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let address = listener.local_addr()?.to_string();
     drop(listener);
-    let s = Setup::new(id)?
+    let setup = Setup::new(id)?
         .cassette("TURN-01")
         .replay_only()
         .env("BUTLER_E2E_APP_NOW", "2026-10-13T21:55:00.000Z")
         .env("BUTLER_E2E_APP_CLOCK_ADDRESS", &address)
-        .env("BUTLER_E2E_SCHEDULER_INSTRUMENTATION", "1")
-        .start()
-        .await?;
+        .env("BUTLER_E2E_SCHEDULER_INSTRUMENTATION", "1");
+    super::memory_fixture::initialize_empty(&setup.sandbox.data)?;
+    let s = setup.start().await?;
     Ok((s, address))
 }
 
-async fn jump(address: String, now: &'static str) -> Result<(), HarnessError> {
-    tokio::task::spawn_blocking(move || -> std::io::Result<()> {
+async fn clock_control(address: String, value: String) -> Result<Value, HarnessError> {
+    tokio::task::spawn_blocking(move || -> Result<Value, HarnessError> {
         let mut stream = TcpStream::connect(address)?;
         stream.set_read_timeout(Some(Duration::from_secs(1)))?;
-        writeln!(stream, "{now}")?;
+        writeln!(stream, "{value}")?;
         let mut reply = String::new();
         BufReader::new(stream).read_line(&mut reply)?;
-        assert_eq!(reply, "ok\n");
-        Ok(())
+        Ok(serde_json::from_str(&reply)?)
     })
     .await
-    .map_err(|e| HarnessError(e.to_string()))??;
+    .map_err(|e| HarnessError(e.to_string()))?
+}
+
+async fn jump(address: String, now: &'static str) -> Result<(), HarnessError> {
+    assert_eq!(clock_control(address, now.into()).await?["now"], now);
     Ok(())
 }
 
@@ -102,45 +105,48 @@ async fn sched_07_suspend_dispatches_once_and_restores_grid() -> Result<(), Harn
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     assert_eq!(runs(&s).await?, [] as [Value; 0]);
-    // Daily jobs must also have settled into their wait before suspending.
-    while !s
-        .sandbox
-        .data
-        .join("state/scheduler/consolidation-cycle.json")
-        .exists()
+    // Two checks mean the initial tick completed and its wall-clock wait began.
+    while clock_control(address.clone(), String::new()).await?["context_reads"]
+        .as_u64()
+        .unwrap()
+        < 2
     {
-        assert!(Instant::now() < deadline, "daily jobs did not settle");
+        assert!(
+            Instant::now() < deadline,
+            "daily jobs did not enter their wait"
+        );
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     tokio::time::sleep(Duration::from_millis(200)).await;
-    jump(address, "2026-10-16T22:04:22.000Z").await?;
+    jump(address.clone(), "2026-10-16T22:04:22.000Z").await?;
+    let expected_ms = chrono::DateTime::parse_from_rfc3339("2026-10-16T22:04:22.000Z")
+        .unwrap()
+        .timestamp_millis();
     let start = Instant::now();
-    let marker = s
-        .sandbox
-        .data
-        .join("state/scheduler/context-maintenance.json");
-    while start.elapsed() < Duration::from_secs(60) {
-        let maintenance: Value = serde_json::from_slice(&tokio::fs::read(&marker).await?)?;
-        if !runs(&s).await?.is_empty() && maintenance["lastRunAt"] == "2026-10-16T22:04:22.000Z" {
-            break;
+    let observed_ms = tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            let state = clock_control(address.clone(), String::new()).await?;
+            if !runs(&s).await?.is_empty() && state["context_now_ms"] == expected_ms {
+                return Ok::<_, HarnessError>(start.elapsed().as_millis());
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
+    })
+    .await
+    .map_err(|_| {
+        HarnessError("wall-clock deadlines were not rechecked within the wait slice".into())
+    })??;
     let records = runs(&s).await?;
     assert_eq!(records.len(), 1, "{records:?}");
     assert_eq!(records[0]["trigger"], "scheduled");
-    let maintenance: Value = serde_json::from_slice(&std::fs::read(marker)?)?;
     assert_eq!(
-        maintenance["lastRunAt"], "2026-10-16T22:04:22.000Z",
-        "{maintenance}"
+        clock_control(address, String::new()).await?["context_now_ms"],
+        expected_ms
     );
     assert_next(&s, "2026-10-17T22:00:00.000Z").await?;
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert_eq!(runs(&s).await?.len(), 1);
-    eprintln!(
-        "SCHED-07 simulated suspend dispatch_ms={}",
-        start.elapsed().as_millis()
-    );
+    eprintln!("SCHED-07 simulated suspend wake_ms={observed_ms}");
     s.finish().await
 }
 
@@ -194,5 +200,27 @@ async fn sched_10_late_run_now_skips_missed_grid_points() -> Result<(), HarnessE
     let records = runs(&s).await?;
     assert_eq!(records.len(), 1, "{records:?}");
     assert_eq!(records[0]["trigger"], "run_now");
+    s.finish().await
+}
+
+#[tokio::test]
+async fn sched_11_interval_anchor_uses_store_timestamp_precision() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, address) = setup("SCHED-11").await?;
+    let reply =
+        s.gw.post(
+            "/automations",
+            json!({"id":"anchored", "title":"Daily",
+        "target_session_id":"general", "prompt_body":NUMBERS,
+        "schedule_type":"interval", "interval_seconds":86400,
+        "start_at":"2026-10-13T22:00:00.000123456Z"}),
+        )
+        .await?;
+    assert_eq!(reply.status, 201, "{}", reply.text);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    jump(address, "2026-10-16T22:00:00.000Z").await?;
+    let reply = s.gw.post("/automations/anchored/run", json!({})).await?;
+    assert_eq!(reply.status, 202, "{}", reply.text);
+    assert_next(&s, "2026-10-17T22:00:00.000Z").await?;
     s.finish().await
 }
