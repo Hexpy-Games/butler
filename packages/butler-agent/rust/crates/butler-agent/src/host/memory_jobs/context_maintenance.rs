@@ -96,48 +96,27 @@ impl ContextMaintenance {
                         {
                             butler_core::diagnostic!("[context-maintenance] {error}");
                         }
-                        {
-                            if cancellation.is_cancelled() {
-                                break;
-                            }
-                            if let Err(error) = Box::pin(daily_schedule::run_due(
-                                &data_root,
-                                "session-sync",
-                                &day,
-                                minute,
-                                now_ms,
-                                &cancellation,
-                                daily_cognition.session_sync(&cancellation),
-                            ))
-                            .await
-                            {
-                                butler_core::diagnostic!("[session-sync] {error}");
-                            }
-                            if cancellation.is_cancelled() {
-                                break;
-                            }
-                            if let Err(error) = daily_schedule::run_due(
-                                &data_root,
-                                "consolidation-cycle",
-                                &day,
-                                minute,
-                                now_ms,
-                                &cancellation,
-                                daily_cognition.consolidation_cycle(&cancellation),
-                            )
-                            .await
-                            {
-                                butler_core::diagnostic!("[consolidation-cycle] {error}");
-                            }
-                        }
+                        run_daily_jobs(
+                            &data_root,
+                            &daily_cognition,
+                            &day,
+                            minute,
+                            now_ms,
+                            &cancellation,
+                        )
+                        .await;
                     }
                     Err(error) => {
                         butler_core::diagnostic!("[context-maintenance] {}", error.code());
                     }
                 }
+                let deadline = now_ms.saturating_add(
+                    i64::try_from(next_tick_delay(&timezone, now_ms).as_millis())
+                        .unwrap_or(i64::MAX),
+                );
                 tokio::select! {
                     () = cancellation.cancelled() => break,
-                    () = tokio::time::sleep(next_tick_delay(&timezone, current_epoch_millis())) => {}
+                    () = butler_core::wall_clock::wait_until(deadline, current_epoch_millis) => {}
                 }
             }
         }));
@@ -149,6 +128,48 @@ impl ContextMaintenance {
         if let Some(task) = task {
             let _ = task.await;
         }
+    }
+}
+
+async fn run_daily_jobs(
+    data_root: &std::path::Path,
+    daily: &DailyCognitionJobs,
+    day: &str,
+    minute: u16,
+    now_ms: i64,
+    cancellation: &CancellationToken,
+) {
+    if cancellation.is_cancelled() {
+        return;
+    }
+    if let Err(error) = Box::pin(daily_schedule::run_due(
+        data_root,
+        "session-sync",
+        day,
+        minute,
+        now_ms,
+        cancellation,
+        daily.session_sync(cancellation),
+    ))
+    .await
+    {
+        butler_core::diagnostic!("[session-sync] {error}");
+    }
+    if cancellation.is_cancelled() {
+        return;
+    }
+    if let Err(error) = daily_schedule::run_due(
+        data_root,
+        "consolidation-cycle",
+        day,
+        minute,
+        now_ms,
+        cancellation,
+        daily.consolidation_cycle(cancellation),
+    )
+    .await
+    {
+        butler_core::diagnostic!("[consolidation-cycle] {error}");
     }
 }
 

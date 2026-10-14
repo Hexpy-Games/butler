@@ -289,6 +289,23 @@ impl AppApplication {
                 .map_err(GatewayApplicationError::internal_from)?
                 .map_err(app_error)?,
             )
+        } else if row.state == "enabled" && row.start_at.is_some() {
+            Some(
+                super::timing::interval_next(
+                    row.start_at
+                        .as_deref()
+                        .ok_or_else(super::timing::invalid)
+                        .map_err(app_error)?,
+                    row.interval,
+                    &completed,
+                    if trigger == "scheduled" {
+                        row.next.as_deref()
+                    } else {
+                        None
+                    },
+                )
+                .map_err(app_error)?,
+            )
         } else if row.state == "enabled" {
             Some(
                 self.dependencies

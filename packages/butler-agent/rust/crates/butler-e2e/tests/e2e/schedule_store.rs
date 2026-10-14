@@ -98,7 +98,7 @@ async fn scheduler_next_due_reads(s: &Scenario) -> Result<usize, HarnessError> {
 }
 
 #[tokio::test]
-async fn sched_06_idle_calendar_scheduler_reads_only_on_change_in_60_seconds()
+async fn sched_06_idle_calendar_scheduler_rechecks_without_writes_in_60_seconds()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("SCHED-06")?
@@ -145,12 +145,16 @@ async fn sched_06_idle_calendar_scheduler_reads_only_on_change_in_60_seconds()
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     assert_eq!(scheduler_next_due_reads(&s).await?, 2);
+    let mut writes =
+        super::idle_resources::writes::Watch::open_after_quiet(&s.sandbox.data).await?;
     tokio::time::sleep(Duration::from_secs(60)).await;
     assert_eq!(
         scheduler_next_due_reads(&s).await?,
-        2,
-        "scheduler repeated the due lookup during the idle window"
+        3,
+        "scheduler must make one bounded due lookup per idle minute"
     );
+    writes.assert_unchanged();
+    eprintln!("SCHED-06 idle window_s=60 next_due_reads=1 data_writes=0");
     let after = s.gw.get("/automations").await?.data()["automations"].clone();
     assert_eq!(
         after, before,

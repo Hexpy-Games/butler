@@ -61,12 +61,15 @@ impl AutomationScheduler {
                 let notified = wake.notified();
                 match next {
                     Some(next) => {
-                        let delay = due_delay(&app, &next);
+                        let delay =
+                            due_delay(&app, &next).min(butler_core::wall_clock::MAX_WAIT_SLICE);
                         tokio::select! {
                             () = cancel.cancelled() => break,
                             () = notified => { let _ = dispatch(&app).await; },
                             () = tokio::time::sleep(delay) => {
-                                if !dispatch(&app).await {
+                                // A slice only invalidates the wall-clock-derived wait.
+                                // Idle slices do one indexed due read and no writes.
+                                if due_delay(&app, &next).is_zero() && !dispatch(&app).await {
                                     tokio::select! {
                                         () = cancel.cancelled() => break,
                                         () = wake.notified() => {},

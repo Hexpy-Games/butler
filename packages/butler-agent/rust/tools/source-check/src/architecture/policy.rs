@@ -15,7 +15,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "import_sources" => &[],
         // butler-core: leaf codecs and mirrors; JSON sanitizes public text.
         "configuration" | "js_date" | "json_lines" | "locale" | "public_text" | "segmentation"
-        | "tool_protocol" | "tool_catalog" => &[],
+        | "tool_protocol" | "tool_catalog" | "wall_clock" => &[],
         "json" => &["public_text"],
         // Typed hook envelopes preserve complete tool JSON.
         "hooks" => &["json"],

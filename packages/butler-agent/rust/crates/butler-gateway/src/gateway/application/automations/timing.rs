@@ -13,6 +13,39 @@ pub(super) fn invalid() -> AppStorageError {
     )
 }
 
+/// Advance directly to the first anchor grid point strictly after the cutoff.
+/// Future anchors remain due at the anchor, including after an attended run.
+pub(super) fn interval_next(
+    anchor: &str,
+    seconds: i64,
+    now: &str,
+    occurrence: Option<&str>,
+) -> Result<String, AppStorageError> {
+    let anchor = DateTime::parse_from_rfc3339(anchor).map_err(|_| invalid())?;
+    let mut cutoff = DateTime::parse_from_rfc3339(now).map_err(|_| invalid())?;
+    if let Some(occurrence) = occurrence {
+        cutoff = cutoff.max(DateTime::parse_from_rfc3339(occurrence).map_err(|_| invalid())?);
+    }
+    let step = seconds
+        .checked_mul(1000)
+        .filter(|step| *step > 0)
+        .ok_or_else(invalid)?;
+    let elapsed = (cutoff - anchor).num_milliseconds();
+    let count = if cutoff < anchor {
+        0
+    } else {
+        elapsed.div_euclid(step) + 1
+    };
+    let offset = count.checked_mul(step).ok_or_else(invalid)?;
+    anchor
+        .checked_add_signed(Duration::milliseconds(offset))
+        .map(|next| {
+            next.with_timezone(&Utc)
+                .to_rfc3339_opts(SecondsFormat::Millis, true)
+        })
+        .ok_or_else(invalid)
+}
+
 pub(super) fn next(rule: &CalendarSchedule, now: &str) -> Result<String, AppStorageError> {
     let path = Path::new(&rule.tz);
     if rule.tz.is_empty()
