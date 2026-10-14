@@ -8,6 +8,7 @@ use butler_turn::btcc::ProviderRequestError;
 
 use super::super::super::{diagnostics, request_guard::RequestProgress};
 use super::consume;
+use crate::models::stream_event::StreamProjection;
 
 const HOSTED_FRAME_LIMIT: usize = 8 * 1024 * 1024;
 /// Most tool calls one streamed answer may carry.
@@ -43,8 +44,8 @@ pub(in crate::models::transport) async fn hosted_chat(
 
 /// Accumulated chat completion chunks of one streamed response.
 struct ChatState {
-    stream_id: String,
-    sequence: u64,
+    projection: StreamProjection,
+    emitted_arguments: Vec<Option<usize>>,
     text: String,
     id: String,
     model: Option<Value>,
@@ -58,10 +59,8 @@ struct ChatState {
 impl ChatState {
     fn new() -> Self {
         Self {
-            // One id per response: providers may reuse chunk ids across
-            // requests, and the App keys streamed text by stream id.
-            stream_id: format!("chat-stream-{}", uuid::Uuid::new_v4().simple()),
-            sequence: 0,
+            projection: StreamProjection::new(),
+            emitted_arguments: Vec::new(),
             text: String::new(),
             id: String::new(),
             model: None,
@@ -144,10 +143,14 @@ impl ChatState {
                 self.text.push_str(value);
                 self.emit_text(value, observer);
             }
-            if let Some(calls) = delta.get("tool_calls").and_then(Value::as_array)
-                && !merge_tool_calls(&mut self.tool_calls, calls)
-            {
-                return false;
+            if let Some(calls) = delta.get("tool_calls").and_then(Value::as_array) {
+                for call in calls {
+                    let delta = std::slice::from_ref(call);
+                    if !merge_tool_calls(&mut self.tool_calls, delta) {
+                        return false;
+                    }
+                    self.emit_calls(delta, observer);
+                }
             }
         }
         if let Some(value) = event.pointer("/choices/0/finish_reason") {
@@ -161,17 +164,39 @@ impl ChatState {
         delta: &str,
         observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
     ) {
-        let Some(observer) = observer.filter(|_| !delta.is_empty()) else {
-            return;
-        };
-        self.sequence += 1;
-        observer.event(&serde_json::json!({
-            "type": "text_delta",
-            "streamId": self.stream_id,
-            "sequence": self.sequence,
-            "textDelta": delta,
-            "target": "final_candidate",
-        }));
+        self.projection.text(observer, delta, false);
+    }
+
+    fn emit_calls(
+        &mut self,
+        deltas: &[Value],
+        observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
+    ) {
+        self.emitted_arguments.resize(self.tool_calls.len(), None);
+        for delta in deltas {
+            let Ok(index) = usize::try_from(delta["index"].as_u64().unwrap_or(0)) else {
+                continue;
+            };
+            let call = &self.tool_calls[index];
+            let id = call["id"].as_str().unwrap_or("");
+            let name = call["function"]["name"].as_str().unwrap_or("");
+            if id.is_empty() || name.is_empty() || delta.pointer("/function/arguments").is_none() {
+                continue;
+            }
+            let arguments = call["function"]["arguments"].as_str().unwrap_or("");
+            let emitted = &mut self.emitted_arguments[index];
+            if emitted.is_none() {
+                self.projection.call(observer, index as u64, name, None);
+            }
+            let offset = emitted.unwrap_or(0);
+            if arguments.len() > offset
+                || delta.pointer("/function/arguments").and_then(Value::as_str) == Some("")
+            {
+                self.projection
+                    .call(observer, index as u64, name, Some(&arguments[offset..]));
+            }
+            *emitted = Some(arguments.len());
+        }
     }
 
     fn response(self) -> Value {

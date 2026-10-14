@@ -253,9 +253,15 @@ impl ModelProvider {
     ) -> reqwest::RequestBuilder {
         let mut http = self
             .client
-            .post(config.endpoint.clone())
+            .post(super::route::stream_endpoint(&config.endpoint, mode))
             .header("content-type", "application/json");
-        if matches!(mode, transport::ResponseMode::HostedChatSse) {
+        if matches!(
+            mode,
+            transport::ResponseMode::HostedChatSse
+                | transport::ResponseMode::ResponsesSse
+                | transport::ResponseMode::AnthropicSse
+                | transport::ResponseMode::GeminiSse
+        ) {
             http = http.header("accept", "text/event-stream");
         }
         authorize(

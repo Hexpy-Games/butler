@@ -80,6 +80,7 @@ pub(super) fn falls_back(
 pub(super) struct StreamWatch<'a> {
     inner: Option<&'a dyn ProviderStreamObserver>,
     streamed: AtomicBool,
+    tools_streamed: AtomicBool,
 }
 
 impl<'a> StreamWatch<'a> {
@@ -87,6 +88,7 @@ impl<'a> StreamWatch<'a> {
         Self {
             inner,
             streamed: AtomicBool::new(false),
+            tools_streamed: AtomicBool::new(false),
         }
     }
 
@@ -106,7 +108,7 @@ impl<'a> StreamWatch<'a> {
             ModelRoundError::Provider(error) => error.code == "provider_cancelled",
             _ => false,
         };
-        if self.streamed() && !stopped {
+        if (self.streamed() || self.tools_streamed.load(Ordering::Acquire)) && !stopped {
             self.round_text_discarded();
         }
     }
@@ -119,6 +121,13 @@ impl ProviderStreamObserver for StreamWatch<'_> {
         }
         if let Some(inner) = self.inner {
             inner.event(event);
+        }
+    }
+
+    fn tool_call(&self, event: &butler_core::tool_protocol::ToolCallStreamEvent) {
+        self.tools_streamed.store(true, Ordering::Release);
+        if let Some(inner) = self.inner {
+            inner.tool_call(event);
         }
     }
 
