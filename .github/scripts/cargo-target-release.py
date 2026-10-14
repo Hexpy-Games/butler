@@ -191,14 +191,19 @@ def persistent_target(expected):
     return target
 
 
+def target_path(path):
+    """Cargo target trees exceed Windows MAX_PATH, so their paths take the extended form."""
+    return Path(runner_cache.extended(path))
+
+
 def restore_local(target, expected):
-    marker = target / 'ci-local.json'
+    marker = target_path(target / 'ci-local.json')
     if not marker.is_file():
         return False
     metadata = json.loads(marker.read_text())
     if not cache.matches(metadata['identity'], expected, compatible=True):
         raise ValueError('Local Cargo target identity mismatch')
-    sources = target / 'ci-local-sources.json'
+    sources = target_path(target / 'ci-local-sources.json')
     if cache.digest(sources) != metadata['sources_sha256']:
         raise ValueError('Local Cargo source digest mismatch')
     cache.source_times.restore(Path(os.environ['GITHUB_WORKSPACE']), json.loads(sources.read_text()))
@@ -209,9 +214,10 @@ def restore_local(target, expected):
 def save_local(target, expected):
     # Capture only after a successful build. A failed compile must retain the
     # previous digest so changed sources stay dirty on the next checkout.
-    sources = target / 'ci-local-sources.json'
+    sources = target_path(target / 'ci-local-sources.json')
     sources.write_text(json.dumps(cache.source_times.capture(Path(os.environ['GITHUB_WORKSPACE']))))
-    (target / 'ci-local.json').write_text(json.dumps(dict(identity=expected, sources_sha256=cache.digest(sources))))
+    marker = dict(identity=expected, sources_sha256=cache.digest(sources))
+    target_path(target / 'ci-local.json').write_text(json.dumps(marker))
     if os.environ.get('BUTLER_PERSISTENT_TARGET'):
         runner_cache.record_size(os.environ['BUTLER_PERSISTENT_TARGET'], target)
 
@@ -219,13 +225,13 @@ def save_local(target, expected):
 def restore_tree(directory, expected, compatible=False):
     cache.verify(directory, expected, compatible)
     directory = directory.resolve()
-    target = Path(os.environ.get('CARGO_TARGET_DIR', 'target')).absolute()
+    # Extended paths skip normalization, so collapse separators and `..` first.
+    target = Path(os.path.abspath(os.environ.get('CARGO_TARGET_DIR', 'target')))
     # Do not merge newer/foreign fingerprints or executables into the snapshot.
-    if target.is_symlink():
+    if runner_cache.lexists(target) and runner_cache.linked(target):
         raise ValueError('Symlink Cargo target directory')
-    if target.exists():
-        shutil.rmtree(target)
-    target.parent.mkdir(parents=True, exist_ok=True)
+    runner_cache.delete_tree(target)
+    os.makedirs(runner_cache.extended(target.parent), exist_ok=True)
     with tempfile.TemporaryDirectory(dir=target.parent) as stage:
         previous = Path.cwd()
         try:
@@ -233,7 +239,7 @@ def restore_tree(directory, expected, compatible=False):
             cache.extract(directory.resolve())
         finally:
             os.chdir(previous)
-        (Path(stage) / 'target').rename(target)
+        os.rename(runner_cache.extended(Path(stage) / 'target'), runner_cache.extended(target))
     cache.source_times.restore(Path(os.environ['GITHUB_WORKSPACE']),
                               json.loads((directory / 'sources.json').read_text()))
     print(f'Restored verified CI Cargo snapshot at {json.loads((directory / "cache.json").read_text())["sha"]}.')
