@@ -1002,7 +1002,9 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       collapseHistoryLabel: (label, count) => count <= 1 ? `Collapse ${label} details` : `Collapse ${label} and ${count - 1} more activities`,
       viewAllLabel: (count) => `View all (${count})`,
       collapseLabel: "Collapse",
-      showDetailsLabel: "Show details",
+      disclosureLabel: (status, latest, earlier) => earlier > 0
+        ? `${status}, ${latest}, ${earlier} earlier ${earlier === 1 ? "record" : "records"}`
+        : `${status}, ${latest}`,
       webSearchSummary: (count) => `Web search ${count} queries`,
       toolStepsSummary: (name, count) => `${name} ${count} steps`,
       webSearchDetail: (value) => `Web search: ${value}`,
