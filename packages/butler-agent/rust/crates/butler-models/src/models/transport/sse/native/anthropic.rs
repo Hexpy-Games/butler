@@ -96,7 +96,11 @@ impl State {
                 .as_str()
                 .ok_or("provider_stream_malformed_event")?;
             self.arguments[index].push_str(fragment);
-            self.projection.delta(observer, index as u64, fragment);
+            // Server tools (web search, MCP) also stream input but are not
+            // Butler calls: only a started `tool_use` has argument fragments.
+            if block["type"] == "tool_use" {
+                self.projection.delta(observer, index as u64, fragment);
+            }
         } else if kind == "citations_delta" {
             if block.get("citations").is_none() {
                 block["citations"] = json!([]);

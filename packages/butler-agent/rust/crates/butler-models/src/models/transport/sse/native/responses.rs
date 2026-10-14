@@ -5,6 +5,8 @@ use std::collections::HashSet;
 
 pub(super) struct State {
     calls: HashSet<u64>,
+    /// Completed output items, for a terminal Response that omits `output`.
+    output: Vec<Value>,
     projection: StreamProjection,
 }
 
@@ -12,6 +14,7 @@ impl State {
     pub(super) fn new() -> Self {
         Self {
             calls: HashSet::new(),
+            output: Vec::new(),
             projection: StreamProjection::new(),
         }
     }
@@ -43,6 +46,11 @@ impl State {
                     .ok_or("provider_stream_malformed_event")?;
                 self.projection.delta(observer, index, fragment);
             }
+            "response.output_item.done" => {
+                if event["item"].is_object() {
+                    self.output.push(event["item"].clone());
+                }
+            }
             "response.output_text.delta" => {
                 if let Some(text) = event["delta"].as_str() {
                     self.projection.text(observer, text, false);
@@ -54,12 +62,18 @@ impl State {
                 }
             }
             "response.completed" | "response.incomplete" | "response.failed" => {
-                let response = &event["response"];
+                let mut response = event["response"].clone();
                 if !response.is_object() {
                     return Err("provider_stream_malformed_event");
                 }
-                // The terminal Response is authoritative, including status and full usage.
-                return Ok(Some(response.clone()));
+                // The terminal Response is authoritative, including status and
+                // full usage; some servers leave its output to the item events.
+                if response["output"].as_array().is_none_or(Vec::is_empty)
+                    && !self.output.is_empty()
+                {
+                    response["output"] = Value::Array(std::mem::take(&mut self.output));
+                }
+                return Ok(Some(response));
             }
             _ => {}
         }

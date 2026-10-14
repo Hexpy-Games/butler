@@ -98,8 +98,12 @@ fn stream_error(event: &Value, provider: &str, api: &str) -> Result<(), Box<Prov
     )))
 }
 
+/// Merges a cumulative update; a null field (Anthropic `message_delta` usage
+/// may send one) keeps the value the stream reported earlier.
 fn extend(target: &mut Value, source: &Value) {
     if let (Some(target), Some(source)) = (target.as_object_mut(), source.as_object()) {
-        target.extend(source.clone());
+        for (key, value) in source.iter().filter(|(_, value)| !value.is_null()) {
+            target.insert(key.clone(), value.clone());
+        }
     }
 }

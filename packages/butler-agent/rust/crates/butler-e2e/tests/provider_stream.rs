@@ -108,11 +108,12 @@ fn carriers(args: &str, fragments: &[&str]) -> Result<Vec<Value>, serde_json::Er
         json!({"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":9}}),
         json!({"type":"message_stop"}),
     ]);
+    // A terminal Response may leave its output to the item events.
     let responses: Vec<_> = codex
         .iter()
         .take(codex.len() - 1)
         .cloned()
-        .chain([json!({"type":"response.completed","response":{"id":"response-0","status":"completed","output":[answer,other]}})])
+        .chain([json!({"type":"response.completed","response":{"id":"response-0","status":"completed","output":[]}})])
         .collect();
     let gemini_stream = [
         json!({"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"answer_blocks","args":input}}]}}]}),
