@@ -367,7 +367,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     const resources = ["groups", "moves", "group-sessions", "undo", "pins", "relocations", "branches", "branch-source"];
     const resource = url.pathname.slice("/space/".length);
     if (method === "POST" && resources.includes(resource)) {
-      return await callBridge<T>(bridge, "mutateSpace", { resource, body: parseBody(options.body) });
+      return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "mutateSpace", { resource, body: parseBody(options.body) }));
     }
   }
   if (method === "GET" && url.pathname === "/work-status") return await callBridge<T>(bridge, "getWorkStatus");
