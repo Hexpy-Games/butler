@@ -113,7 +113,7 @@ async fn desktop_project_write_cleans_drive_journal() -> Result<(), HarnessError
 async fn probe_emits_loader_diagnostics() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows probe diagnostics");
-    let setup = Setup::new("WINDOWS-PROBE-DIAGNOSTICS")?;
+    let mut setup = Setup::new("WINDOWS-PROBE-DIAGNOSTICS")?;
     let agent = butler_e2e::e2e::binary::agent_binary()?;
     let helper = agent.with_file_name("butler-sandbox.exe");
     let diagnostic = setup.sandbox.home.join("probe.json");
@@ -153,5 +153,6 @@ async fn probe_emits_loader_diagnostics() -> Result<(), HarnessError> {
             assert_ne!(report["reason"], "non_interactive_desktop");
         }
     }
+    setup.sandbox.mark_success();
     Ok(())
 }
