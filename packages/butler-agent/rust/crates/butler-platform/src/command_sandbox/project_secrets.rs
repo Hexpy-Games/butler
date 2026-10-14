@@ -2,7 +2,7 @@
 use std::path::{Path, PathBuf};
 #[cfg(any(target_os = "linux", windows))]
 #[path = "project_secrets/portable/mod.rs"]
-mod portable;
+pub(in crate::command_sandbox) mod portable;
 
 /// Finds existing protected names with a bounded metadata-only walk.
 pub fn discover_project_secrets(root: &Path) -> std::io::Result<Vec<PathBuf>> {
@@ -22,7 +22,13 @@ pub fn sweep_new_secrets(
     since: &[PathBuf],
     data: &Path,
 ) -> std::io::Result<Vec<PathBuf>> {
-    #[cfg(any(target_os = "linux", windows))]
+    #[cfg(target_os = "linux")]
+    {
+        let result = portable::sweep_new_secrets(root, since, data);
+        let cleaned = super::linux::cleanup_generated(root, data);
+        result.and_then(|paths| cleaned.map(|()| paths))
+    }
+    #[cfg(windows)]
     return portable::sweep_new_secrets(root, since, data);
     #[cfg(not(any(target_os = "linux", windows)))]
     {

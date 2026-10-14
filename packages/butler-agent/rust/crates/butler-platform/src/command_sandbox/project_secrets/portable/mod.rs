@@ -5,9 +5,9 @@ mod quarantine;
 #[cfg(windows)]
 #[path = "quarantine_windows.rs"]
 mod quarantine;
-mod tree;
+pub(in crate::command_sandbox) mod tree;
 #[cfg(unix)]
-mod unix;
+pub(in crate::command_sandbox) mod unix;
 #[cfg(windows)]
 mod windows;
 #[cfg(unix)]
