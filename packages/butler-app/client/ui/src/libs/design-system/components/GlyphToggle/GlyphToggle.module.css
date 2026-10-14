@@ -18,6 +18,22 @@
   translate: -50% -50%;
 }
 
+/* The hit target is wider than the glyph column and overhangs the row's
+   inline start, so the ring rings the visible surface (the sidebar's icon
+   surface circle) inside the target instead of the target's edge. */
+.slot > .toggle:focus-visible {
+  border-radius: var(--radius-pill);
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(
+    (
+        var(--sidebar-icon-surface-size, var(--control-hit-target)) -
+          var(--control-hit-target)
+      ) /
+      2 + var(--focus-ring-room) - var(--focus-ring-width)
+  );
+  box-shadow: none;
+}
+
 .glyph,
 .toggleGlyph {
   display: inline-grid;

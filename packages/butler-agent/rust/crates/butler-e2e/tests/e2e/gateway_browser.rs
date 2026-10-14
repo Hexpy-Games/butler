@@ -351,6 +351,50 @@ async fn sec_07_message_files_never_run_as_gateway_pages() -> Result<(), Harness
     s.finish().await
 }
 
+/// `/assets/` belongs to the installed UI bundle: a browser loads its
+/// scripts and styles without a token, under their own types. Collected
+/// images live under `/message-assets/` and stay behind the gateway's auth.
+#[tokio::test]
+async fn ui_bundle_assets_stay_public_and_collected_images_stay_private() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    let s = Setup::new("GW-ASSETS-PATH")?.start().await?;
+    let bundle = s.agent.launch.resources.join("app-client/dist/assets");
+    std::fs::create_dir_all(&bundle)?;
+    let files = [
+        (
+            "app-Cc_p3V-M.js",
+            "text/javascript; charset=utf-8",
+            "export {};",
+        ),
+        ("tokens-BYQ2w4Rg.css", "text/css; charset=utf-8", ":root{}"),
+    ];
+    for (name, content_type, body) in files {
+        std::fs::write(bundle.join(name), body)?;
+        let served =
+            s.gw.http()
+                .get(url(&s.gw, &format!("/assets/{name}")))
+                .send()
+                .await?;
+        assert_eq!(served.status().as_u16(), 200, "{name}");
+        assert_eq!(header(served.headers(), "content-type"), content_type);
+        assert_eq!(served.text().await?, body, "{name}");
+    }
+
+    let image = "/message-assets/img_0123456789";
+    let tokenless = s.gw.http().get(url(&s.gw, image)).send().await?;
+    assert_eq!(
+        tokenless.status().as_u16(),
+        401,
+        "image served without auth"
+    );
+    let missing = s.gw.get(image).await?;
+    assert_eq!(missing.status, 404, "{}", missing.text);
+    // The image store's answer for an unknown id, not the UI's `not_found`.
+    assert_eq!(missing.error_code(), Some("message_file_not_found"));
+    s.finish().await
+}
+
 async fn assert_sandboxed(
     response: reqwest::Response,
     content_type: &str,

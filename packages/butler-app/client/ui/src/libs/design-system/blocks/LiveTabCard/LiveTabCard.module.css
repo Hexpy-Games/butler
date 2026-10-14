@@ -28,6 +28,16 @@
   --live-tab-ring: 0 0 0 var(--border-hairline) var(--color-danger-border);
 }
 
+/* Keyboard focus on the body takes the card's ring: the card clips its frame,
+   so a ring on the body itself would be cut away. */
+.card:has(> .body:focus-visible) {
+  --live-tab-ring: var(--focus-ring);
+}
+
+.body:focus-visible {
+  box-shadow: none;
+}
+
 /* The body is one Clickable: the title row and the frame. */
 .body {
   position: relative;
@@ -182,6 +192,10 @@
   border-radius: var(--radius-panel);
   background: var(--surface-raised);
   box-shadow: var(--live-tab-ring), var(--browser-card-shadow);
+}
+
+.card[data-variant="compact"] > [data-slot="clickable"]:focus-visible {
+  --live-tab-ring: var(--focus-ring);
 }
 
 .favicon,

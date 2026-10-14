@@ -23,7 +23,11 @@ The shell clips the child paint/hit-test area below the transparent sticky
 header, including nested CollapsibleNavGroup branches. One passive scroll/RAF
 measurement updates CSS variables, without React state or a second scrollbar.
 Resize/structural changes refresh the boundaries; keyboard focus reveals a
-clipped row through the same scrollbar. Native sticky owns branch push-off.
+clipped row, focus ring included, through the same scrollbar. Native sticky
+owns branch push-off. The scroll frame keeps `--focus-ring-room` of paint room
+on its inline start and block edges (content pads it back, rows keep their
+place), and the sticky clips leave the same room on their other edges, so a
+row's focus ring is never cut by the shell, its fades or a folder clip.
 
 ## What is this component
 

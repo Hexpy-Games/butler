@@ -40,6 +40,11 @@
   --scroll-fade-size: 14px;
   --textarea-max-lines: 6;
   --focus-ring-width: 2px;
+  /* Room a focus ring needs outside its control: the 2px ring plus the 1px
+     outline offset. Clipping containers (scrollers, folds, clip-paths) keep
+     this much paint room around their content. A plain length: Chromium
+     ignores calc() in overflow-clip-margin. */
+  --focus-ring-room: 3px;
   /* Layering scale: tooltips and popovers opened inside dialogs stay above them. */
   --z-sticky: 50;
   --z-drawer: 60;
@@ -1383,7 +1388,7 @@ textarea::placeholder {
 
 :where(:focus-visible) {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
-  outline-offset: 1px;
+  outline-offset: calc(var(--focus-ring-room) - var(--focus-ring-width));
 }
 
 .sr-only {

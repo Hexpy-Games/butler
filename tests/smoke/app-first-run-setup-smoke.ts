@@ -1,5 +1,5 @@
 import { connectToElectronPage, waitForExpression, evaluateBoolean, evaluateString, clickButton, fillInput, waitForHeading, waitForText, type CdpClient } from "../support/first-run-cdp";
-import { spawnElectron } from "../support/electron-child";
+import { spawnElectron, stopElectronChild } from "../support/electron-child";
 import { smokeElectronArgs } from "../support/smoke-browser.ts";
 import { freeGatewayPort } from "../support/native-app-server.ts";
 import { spawnSync, type ChildProcess } from "node:child_process";
@@ -130,15 +130,6 @@ async function cleanupOwnedPort(
   await waitForPortClear(port);
 }
 
-function stopElectron(): void {
-  if (!electronProcess || electronProcess.exitCode !== null) return;
-  electronProcess.kill("SIGTERM");
-  const child = electronProcess;
-  setTimeout(() => {
-    if (child.exitCode === null) child.kill("SIGKILL");
-  }, 1500).unref();
-}
-
 async function expectNoForbiddenCopy(
   client: CdpClient,
   allowed = new Set<string>(),
@@ -255,6 +246,7 @@ async function main(): Promise<void> {
       electronAppRoot,
     ],
     {
+      cleanupPaths: [electronProfileDir],
       cwd: root,
       env,
       onOutput: bytes => output.push(String(bytes)),
@@ -453,11 +445,8 @@ try {
   throw new Error(details ? `${message}\n${details}` : message, { cause: error });
 } finally {
   (cdp as CdpClient | null)?.close();
-  stopElectron();
+  if (electronProcess) await stopElectronChild(electronProcess);
   (stubModelServer as HttpServer | null)?.close();
-  if (electronProcess) {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-  }
   if (appServerPort !== null) await cleanupOwnedPort(appServerPort, ownedListenerPids);
   rmSync(tempDir, { recursive: true, force: true });
 }
