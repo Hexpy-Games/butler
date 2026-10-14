@@ -38,6 +38,23 @@ async function decode(src: string): Promise<ImageBitmap> {
   return createImageBitmap(image, { resizeWidth: 416, resizeHeight: 260 });
 }
 
+/** One page decoded once into an ImageBitmap (a decision's static tab frame); the still until it decodes. */
+export function useDemoFrame(page: string): LiveTabFrameSource {
+  const [frame, setFrame] = useState<ImageBitmap | null>(null);
+  useEffect(() => {
+    if (typeof createImageBitmap !== "function") return undefined;
+    let alive = true;
+    let shown: ImageBitmap | null = null;
+    void decode(page).then((bitmap) => {
+      if (!alive) { bitmap.close(); return; }
+      shown = bitmap;
+      setFrame(bitmap);
+    }).catch(() => undefined);
+    return () => { alive = false; shown?.close(); };
+  }, [page]);
+  return frame ?? page;
+}
+
 /**
  * A stand-in screencast: alternates two pages as ImageBitmaps every `everyMs`
  * and closes each bitmap once the next one is shown (the App's frame rule).

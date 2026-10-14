@@ -658,6 +658,7 @@
 | Whenever the background comes from settings or an agent as a WallpaperSource | `Wallpaper` |  |
 | Work in progress | `Spinner` | `UnreadDot` |
 | Work that can also fail or be cancelled with no success | `Spinner` | `LoadingIndicator` |
+| WorkActivityDisclosure: a work card whose full timeline opens in place, collapsed to the latest activity | `WorkActivityBlock` |  |
 | Worker activity | `WorkerActivityPanel` | `ComposerAdjunctPanel` |
 | Worker sub-sessions | `WorkerActivityRow` | `WorkActivityBlock` |
 | Workers | `WorkerActivityPanel` | `TodoProgressPanel` |
@@ -1420,7 +1421,7 @@ A small pill for a status, category or removable filter value.
 - Use for: A removable filter chip
 - Not for: A clickable action → `PillButton`
 - Not for: An inline error or result message → `Notice`
-- Tokens: `--radius-pill`, `--tag-height-sm`, `--tag-padding-inline-sm`, `--tag-padding-inline-md`, `--color-success-bg`, `--color-warning-bg`, `--color-danger-bg`, `--line`
+- Tokens: `--radius-pill`, `--tag-height-sm`, `--tag-padding-inline-sm`, `--tag-padding-inline-md`, `--icon-size-xs`, `--color-success-bg`, `--color-warning-bg`, `--color-danger-bg`, `--line`
 
 ### Typo
 
@@ -1945,7 +1946,7 @@ The composer's decision state: what is being decided, optional detail lines, an 
 - Use for: A plan waiting for acceptance or an authority request that replaces the composer input
 - Not for: A notice inside the conversation → `Notice`
 - Not for: A modal confirmation → `Dialog`
-- Tokens: `--adaptive-composer-radius`, `--space-xs`, `--space-sm`, `--space-md`, `--space-lg`, `--icon-size-sm`, `--text-secondary`
+- Tokens: `--adaptive-composer-radius`, `--space-xs`, `--space-sm`, `--space-md`, `--space-lg`, `--icon-size-sm`, `--text-secondary`, `--decision-media-narrow-height`
 
 ### ComposerQuestionPanel
 
@@ -2146,12 +2147,13 @@ The composer-attached plan checklist with a state and label per step.
 
 `import { WorkActivityBlock } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/WorkActivityBlock`
 
-The backgroundless timeline of a turn's work: title, description, tool rows (grouped) and safe output.
+The backgroundless timeline of a turn's work: title, description, tool rows (grouped) and safe output. WorkActivityDisclosure folds a long timeline to its tail.
 
 - Use for: Show what the assistant did or is doing inside a turn
+- Use for: WorkActivityDisclosure: a work card whose full timeline opens in place, collapsed to the latest activity
 - Not for: Worker sub-sessions → `WorkerActivityRow`
 - Not for: A one-line live status → `RollingStatusLine`
-- Tokens: `--line`, `--icon-size-md`, `--motion-base`
+- Tokens: `--line`, `--line-strong`, `--icon-size-md`, `--motion-base`, `--motion-exit-base`, `--motion-live-pulse`, `--motion-loop-count`, `--control-hit-target`, `--tag-height-sm`
 
 ### WorkerActivityPanel
 

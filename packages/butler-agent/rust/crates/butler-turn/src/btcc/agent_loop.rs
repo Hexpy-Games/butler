@@ -1,5 +1,6 @@
 //! BTCC-owned semantic model/tool loop.
 
+mod answer_prose;
 mod browser_context;
 pub(crate) mod command_timing;
 mod completion;

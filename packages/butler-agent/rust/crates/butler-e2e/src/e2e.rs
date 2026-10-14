@@ -22,6 +22,7 @@ pub mod sanitize;
 pub mod scenario;
 pub mod security;
 pub mod stop_intent;
+pub mod task_graph;
 
 use sha2::{Digest, Sha256};
 

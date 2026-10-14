@@ -136,7 +136,8 @@ pub(super) async fn execute(
 }
 
 /// What a result (fresh or replayed) tells the turn: described catalog ids,
-/// and whether it brought in external content (D5).
+/// whether it brought in external content (D5), and where the browser went
+/// (R5 provenance).
 fn observe(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
@@ -144,6 +145,7 @@ fn observe(
     output: &JsonDocument,
 ) -> Result<(), ToolExecutionError> {
     owner.observe_result(effective_name, args);
+    super::browser::discover_reached(owner, effective_name, output);
     super::discovery::remember_described(owner, call, output)
 }
 

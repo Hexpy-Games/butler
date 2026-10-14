@@ -24,7 +24,7 @@ try {
     throw new Error("Bundled Agent does not match the exact App version");
   }
   const source = stageElectronPackageSource(root, join(work, "source"));
-  const pkg = JSON.parse(readFileSync(join(source, "package.json"), "utf8"));
+  const pkg = JSON.parse(readFileSync(join(electron, "package.json"), "utf8"));
   const renderer = join(work, "app-client");
   cpSync(process.env.BUTLER_NATIVE_UI_DIST ?? join(root, "packages/butler-app/client/ui/dist"), renderer, { recursive: true });
   run("node", [join(electron, "node_modules/@electron/packager/bin/electron-packager.mjs"), source, "Butler",

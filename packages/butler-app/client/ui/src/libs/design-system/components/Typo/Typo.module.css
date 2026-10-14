@@ -290,22 +290,27 @@
    just above cap height and sits on the baseline, so mixed Hangul and Latin
    centre the same way. Applies to block-level Typo (flex and grid items are
    block-level); inline Typo inside running text is unaffected.
+   Only text is trimmed (data-trim, set by Typo.tsx): a box child such as
+   an icon or a flex row keeps its full height, so the padding would be added
+   on top of it. A Typo must stay a block container for the same reason (the
+   trim does not reach into a flex or grid container); flex or grid layout
+   goes on a wrapper (design-system rules lint).
    Excluded: line-clamped text, because the trim cuts the last formatted line,
    which a clamp hides, and the next line would show below the clamp. */
 @supports (text-box: trim-both cap alphabetic) {
-  .typo:not([data-line-clamp]) {
+  .typo[data-trim]:not([data-line-clamp]) {
     padding-block: calc((1lh - 1cap) / 2);
     text-box: trim-both cap alphabetic;
   }
 
-  .typo[data-align-with="control"]:not([data-line-clamp]) {
+  .typo[data-align-with="control"][data-trim]:not([data-line-clamp]) {
     padding-block: calc(
       max(0px, calc((var(--control-height-md) - 1lh) / 2)) + (1lh - 1cap) / 2
     );
   }
 
   @media (width <= 640px) {
-    .typo[data-align-with="control"]:not(
+    .typo[data-align-with="control"][data-trim]:not(
         [data-line-clamp],
         [data-viewport="desktop"],
         [data-viewport="desktop"] *
@@ -317,7 +322,7 @@
   }
 
   @media (pointer: coarse) {
-    .typo[data-align-with="control"]:not([data-line-clamp]) {
+    .typo[data-align-with="control"][data-trim]:not([data-line-clamp]) {
       padding-block: calc(
         max(0px, calc((var(--control-hit-target) - 1lh) / 2)) + (1lh - 1cap) / 2
       );

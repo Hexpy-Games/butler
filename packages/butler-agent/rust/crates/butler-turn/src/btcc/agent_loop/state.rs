@@ -204,11 +204,19 @@ pub(super) fn assistant_message(
     }
 }
 
-pub(super) fn begin_final_report(state: &mut State) {
+/// The final report presents in answer blocks only where they are offered;
+/// a child without them reports plain per-item facts its recipient presents.
+pub(super) fn begin_final_report(state: &mut State, offers_blocks: bool) {
     state.phase = LoopPhase::FinalReport;
+    let presentation = if offers_blocks {
+        "No reporting tool or further tool call is needed, except answer_blocks: when your Plan's Presentation line names blocks, present the result with them as planned (cards carry the collected image ids); without that line, use it when the report presents several comparable items. Call it before writing the report, never as text. The blocks are the only copy of what they show: never repeat their rows, cards or values as a table or list; the prose adds only what they don't say."
+    } else {
+        "No reporting tool or further tool call is needed. When a Presentation line names blocks, the recipient builds them from your report: give plain per-item lines, each fact with its source, not a table."
+    };
     state.messages.push(ModelRoundMessage::user(
-        "Execution is settled. Write the final report as your normal assistant response now; the runtime delivers it to the recipient automatically. No reporting tool or further tool call is needed, except answer_blocks when it is offered: when your Plan's Presentation line names blocks, present the result with them as planned (cards carry the collected image ids); without that line, use it when the report presents several comparable items. Call it before writing the report, never as text, then keep the prose short. Lead with the result, stating only what the results already received support. Add one line on an assumption, gap or remaining work only when it would change the recipient's next decision: what you did or assumed and how to change it. Never ask the recipient to check what a tool could check."
-            .into(),
+        format!(
+            "Execution is settled. Write the final report as your normal assistant response now; the runtime delivers it to the recipient automatically. {presentation} Lead with the result, stating only what the results already received support. Add one line on an assumption, gap or remaining work only when it would change the recipient's next decision: what you did or assumed and how to change it. Never ask the recipient to check what a tool could check."
+        ),
         None,
     ));
 }

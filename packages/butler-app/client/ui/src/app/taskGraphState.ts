@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { getPlanTaskGraph, getSessionTaskGraphs, type TaskGraphSnapshot, type TaskGraphSummary } from "./taskGraphApi.ts";
+import { getPlanTaskGraph, getSessionTaskGraphs, type TaskGraphSnapshot, type TaskGraphChanged, type TaskGraphSummary } from "./taskGraphApi.ts";
+import { patchTaskGraph } from "./taskGraphPatch.ts";
 import type { TimelineEvent } from "./types.ts";
 
 export interface TaskGraphViewState {
@@ -90,7 +91,12 @@ async function loadSessionGraphs(sessionId: string) {
       cursor = page.cursor;
     }
     if (summaries.length !== first.total) throw new Error("Incomplete task graph list");
-    update(sessionId, { summaries });
+    const present = new Set(summaries.map(g => g.graph_id));
+    for (const id of known) if (!present.has(id)) {
+      const key = `${sessionId}/${id}`;
+      revisions.set(key, (revisions.get(key) ?? 0) + 1);
+    }
+    update(sessionId, { summaries, graphs: view(sessionId).graphs.filter(g => !known.has(g.graph_id) || present.has(g.graph_id)) });
     await Promise.all(summaries.map(summary => {
       const cached = view(sessionId).graphs.find(g => g.graph_id === summary.graph_id);
       return cached?.graph_revision === summary.graph_revision ? undefined : refreshGraph(sessionId, summary.graph_id);
@@ -123,12 +129,28 @@ export function receiveTaskGraphEvent(event: TimelineEvent): void {
   const planId = payload?.plan_id;
   if (typeof sessionId !== "string" || typeof planId !== "string" || !viewers.has(sessionId)) return;
   const current = view(sessionId).graphs.find(g => g.graph_id === planId);
-  if (current?.graph_revision === payload?.graph_revision) return;
-  void refreshGraph(sessionId, planId).then(() => {
+  if (payload?.removed) {
+    const key = `${sessionId}/${planId}`;
+    revisions.set(key, (revisions.get(key) ?? 0) + 1);
     const state = view(sessionId);
-    const selectedExists = state.graphs.some(g => g.nodes.some(n => n.task_id === state.selected));
-    if (!state.selectionExplicit || !selectedExists) update(sessionId, { selected: defaultTask(state.graphs), selectionExplicit: false });
-  });
+    update(sessionId, { graphs: state.graphs.filter(g => g.graph_id !== planId), summaries: state.summaries.filter(g => g.graph_id !== planId) });
+    reconcileSelection(sessionId);
+    return;
+  }
+  if (!current) {
+    // A newly planned Work can replace its parent even with a cold event cache.
+    const pending = loads.get(sessionId);
+    if (pending) void pending.then(() => loadTaskGraphs(sessionId));
+    else void loadTaskGraphs(sessionId);
+    return;
+  }
+  if (current.graph_revision === payload?.graph_revision) return;
+  const patched = current ? patchTaskGraph(current, payload as unknown as TaskGraphChanged) : null;
+  if (patched) {
+    revisions.set(`${sessionId}/${planId}`, (revisions.get(`${sessionId}/${planId}`) ?? 0) + 1);
+    acceptGraph(sessionId, patched);
+    reconcileSelection(sessionId);
+  } else void refreshGraph(sessionId, planId).then(() => reconcileSelection(sessionId));
 }
 
 export function refreshVisibleTaskGraphs(): void {
@@ -141,7 +163,13 @@ function defaultTask(graphs: TaskGraphSnapshot[]): string | null {
     const node = nodes.find(n => n.status === status);
     if (node) return node.task_id;
   }
-  const finished = nodes.filter(n => n.status === "completed" || n.status === "cancelled")
+  const finished = nodes.filter(n => n.status === "done" || n.status === "skipped" || n.status === "cancelled")
     .sort((a, b) => Date.parse(a.finished_at ?? "1970-01-01") - Date.parse(b.finished_at ?? "1970-01-01"));
   return finished.at(-1)?.task_id ?? nodes[0]?.task_id ?? null;
+}
+
+function reconcileSelection(sessionId: string): void {
+  const state = view(sessionId);
+  const selectedExists = state.graphs.some(g => g.nodes.some(n => n.task_id === state.selected));
+  if (!state.selectionExplicit || !selectedExists) update(sessionId, { selected: defaultTask(state.graphs), selectionExplicit: false });
 }

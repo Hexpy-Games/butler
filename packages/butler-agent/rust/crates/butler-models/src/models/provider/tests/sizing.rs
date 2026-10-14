@@ -63,6 +63,52 @@ pub(super) fn sizing_counts_image_allowance_and_preserves_complete_wire_bytes() 
     assert_eq!(measured.stateless_bytes, Some(wire.len()));
 }
 
+/// Anthropic and Gemini send browser images as native image blocks; their
+/// pre-round pressure counts each by the image allowance, as OpenAI does.
+pub(super) fn native_carrier_sizing_counts_tool_images_by_allowance() {
+    let (catalog, snapshot) = catalog();
+    let pixels = STANDARD.encode(
+        [0xff, 0xd8]
+            .into_iter()
+            .chain(vec![0x42; 100_000])
+            .collect::<Vec<_>>(),
+    );
+    let content = json!({"output":{"schema":"butler.browser-observation.v1","status":"ok",
+        "obs":"o1","untrusted_content":{"text":"complete latest state"},
+        "image":{"mime_type":"image/jpeg","data":pixels}}})
+    .to_string();
+    let message: ModelRoundMessage = serde_json::from_value(
+        json!({"role":"tool", "name":"browser_observe", "toolCallId":"call", "content":content}),
+    )
+    .unwrap();
+    let (text, _) = super::super::output_image::parts(&message).unwrap();
+    assert!(text.contains("complete latest state") && !text.contains(&pixels));
+    let mut projected = serde_json::to_value(std::slice::from_ref(&message)).unwrap();
+    projected[0]["content"] = text.into();
+    let projected = butler_core::json::stringify(&projected).unwrap();
+    for model in ["anthropic/claude-opus-5-5", "google/gemini-3.5-flash"] {
+        let expected = catalog
+            .estimate_tokens(
+                &snapshot,
+                crate::models::TokenEstimateInput::Text(&projected),
+                Some(model),
+            )
+            .unwrap()
+            .tokens
+            + crate::models::request_admission::IMAGE_TOKEN_ALLOWANCE;
+        let measured = super::super::sizing::measure(
+            &catalog,
+            &snapshot,
+            model,
+            std::slice::from_ref(&message),
+            &super::super::sizing::Cache::default(),
+        )
+        .unwrap();
+        assert_eq!(measured.pressure_bytes, expected * 2.0, "{model}");
+        assert_eq!(measured.stateless_bytes, None, "{model}");
+    }
+}
+
 pub(super) fn long_history_sizing_matches_full_projection() {
     for sample in 0..5 {
         long_history_sizing_sample(sample);

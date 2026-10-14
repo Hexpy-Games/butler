@@ -18,6 +18,12 @@ export interface WorkActivityBlockProps
   description?: ReactNode;
   icon?: ReactNode;
   running?: boolean;
+  /**
+   * The newest activity of work that is still running: its dot fills and
+   * pulses slowly. Set it on one row only (the last). Reduced motion keeps
+   * the filled dot without the pulse. No effect with `icon`.
+   */
+  live?: boolean;
   connected?: boolean;
   density?: "normal" | "compact";
   tools?: WorkActivityToolItem[];
@@ -28,6 +34,7 @@ export function WorkActivityBlock({
   description,
   icon,
   running = false,
+  live = false,
   connected = false,
   density = "normal",
   tools = [],
@@ -51,6 +58,7 @@ export function WorkActivityBlock({
           ) : (
             <span
               className={styles.marker}
+              data-live={live || undefined}
               data-slot="work-activity-marker"
               aria-hidden="true"
             />

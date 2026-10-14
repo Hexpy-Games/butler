@@ -55,7 +55,11 @@ pub(in crate::gateway::application) fn start_events(app: &AppApplication) {
                     continue;
                 }
             };
-            let mut payloads = Vec::new();
+            let mut payloads = deltas::remove_missing(
+                view["graphs"].as_array().map_or(&[][..], Vec::as_slice),
+                &session,
+                &mut snapshots,
+            );
             for graph in view["graphs"].as_array().into_iter().flatten() {
                 if let Some(payload) = deltas::changes(graph, &session, &mut snapshots) {
                     payloads.push(payload);

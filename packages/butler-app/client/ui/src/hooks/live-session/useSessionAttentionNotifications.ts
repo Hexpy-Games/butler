@@ -1,3 +1,4 @@
+import { canOpenHandoffTab } from "@/components/browser/browserHandoff";
 import { sessionDisplayTitle } from "@/app/sessionTitle.ts";
 import { useEffect, useRef } from "react";
 import { useButlerStore } from "@/app/store.ts";
@@ -11,6 +12,8 @@ async function attentionLabel(sessionId: string): Promise<string> {
   const view = await api<{ requests?: unknown }>(`/authority-requests?session_id=${encodeURIComponent(sessionId)}`).catch(() => undefined);
   const requests = Array.isArray(view?.requests) ? view.requests as Array<{ approval?: { operation?: { tool?: unknown } } }> : [];
   const tool = requests[0]?.approval?.operation?.tool;
+  const handoff = ["browser_sign_in_wait", "browser_pay_wait", "browser_wait_for_user"].includes(String(tool));
+  if (handoff && !canOpenHandoffTab()) return appCopy.interfaceTemplates.approvalRequest.signInHandoff.onDesktop;
   return tool === "browser_sign_in_wait" ? appCopy.space.signInAttention
     : tool === "browser_pay_wait" ? appCopy.space.paymentAttention
     : tool === "browser_wait_for_user" ? appCopy.space.tabAttention : appCopy.space.attention;

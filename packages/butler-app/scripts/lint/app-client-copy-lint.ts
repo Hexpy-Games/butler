@@ -160,11 +160,11 @@ function collectStrings(value: unknown, key = ""): CopyString[] {
     ? Object.entries(value).flatMap(([name, child]) => collectStrings(child, key ? `${key}.${name}` : name)) : [];
 }
 for (const { key, text } of [...collectStrings(getAppCopy("ko-KR")), ...collectStrings(lifecycleCopy.ko, "lifecycle")]) {
-  const badGlossary = /워커|작업자|타임존|보관함|Butler App|자동화/u.test(text);
+  const badGlossary = /워커|타임존|보관함|Butler App|자동화/u.test(text);
   const badProductName = /Butler/u.test(text) && !(KOREAN_WORDMARK_KEYS.has(key) && text === "Butler");
   if (!badGlossary && !badProductName) continue;
   localizedFindings.push({ path: "packages/butler-i18n/src/locales/ko.ts", line: 1, text,
-    reason: `${key}: use the approved Korean glossary (버틀러, Worker, 시간대, 아카이브, 예약 작업); Butler is reserved for wordmarks` });
+    reason: `${key}: use the approved Korean glossary (버틀러, 작업자/Worker, 시간대, 아카이브, 예약 작업); Butler is reserved for wordmarks` });
 }
 for (const { text } of collectStrings(getAppCopy("en-US"))) {
   if (!/\bautomations?\b|\bscheduled tasks?\b/iu.test(text)) continue;

@@ -28,7 +28,10 @@ mod project_plan;
 pub mod storage;
 mod subsessions;
 mod task_graph_identity;
-pub use storage::{TaskGraphChildRecord, TaskGraphPlanRecord, TaskGraphRecords, TaskGraphScope};
+pub use storage::{
+    TaskGraphChildRecord, TaskGraphRecords, TaskGraphReviewRecord, TaskGraphScope,
+    TaskGraphWorkRecord,
+};
 pub use task_graph_identity::{decode as decode_task_graph_id, encode as encode_task_graph_id};
 mod turn;
 mod work;

@@ -21,7 +21,10 @@ export function TurnActivityTimeline({
   turnId,
   delegatedGoal,
   expandAll = false,
+  pulseLatest = false,
 }: {
+  /** The newest activity belongs to running work: its timeline dot pulses. */
+  pulseLatest?: boolean;
   delegatedGoal?: string;
   /** Always list every activity, without this timeline's own disclosure (its owner already opened it). */
   expandAll?: boolean;
@@ -71,6 +74,7 @@ export function TurnActivityTimeline({
                     activity={activity}
                     delegatedGoal={index === 0 ? delegatedGoal : undefined}
                     connected={index < activities.length - 1}
+                    live={pulseLatest && index === activities.length - 1}
                     turnId={activity.turnId ?? turnId}
                   />
                 </li>
@@ -78,7 +82,7 @@ export function TurnActivityTimeline({
             </Stack>
           ) : live ? (
             <RollingSwap itemKey={latest.id} motion={live}>
-              <ActivityBlock activity={latest} delegatedGoal={activities.length === 1 ? delegatedGoal : undefined} turnId={latest.turnId ?? turnId} />
+              <ActivityBlock activity={latest} delegatedGoal={activities.length === 1 ? delegatedGoal : undefined} live={pulseLatest} turnId={latest.turnId ?? turnId} />
             </RollingSwap>
           ) : null}
           {expanded && !expandAll ? (

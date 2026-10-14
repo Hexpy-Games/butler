@@ -6,6 +6,7 @@ import { Lock, ShieldCheck, Square } from "../../components/Icons";
 import { Tag } from "../../components/Tag";
 import { LIVE_PAGES, demoTabs } from "../LiveTabCard/fixtures";
 import { LiveTabFrame } from "../LiveTabCard/LiveTabFrame";
+import { useDemoFrame } from "../LiveTabCard/liveTabDemo";
 import { SplitButton } from "../SplitButton";
 import { ComposerDecisionPanel } from "./ComposerDecisionPanel";
 
@@ -16,14 +17,15 @@ const words = {
     deny: "거절", once: "이번만 허용", scope: "허용 범위", conversation: "이 대화에서 계속 허용", open: "탭 열기" },
 } as const;
 
-/** A browser-action approval with the tab's frame as `media` (the page is static while the decision waits). */
+/** A browser-action approval with the tab's frame as `media`: one decoded ImageBitmap, as the App draws it (static while the decision waits). */
 export function BrowserApproval({ locale }: ShowcaseRenderContext) {
   const text = words[locale];
   const tab = demoTabs(locale)[0]!;
+  const frame = useDemoFrame(LIVE_PAGES.bookingApproval);
   return (
     <ComposerDecisionPanel icon={<ShieldCheck aria-hidden="true" size="lg" />} eyebrow={text.eyebrow} title={text.click} onOpen={() => undefined}
       details={[text.detail]} aside={<Tag tone="warning">{text.medium}</Tag>}
-      media={{ content: <LiveTabFrame frame={LIVE_PAGES.bookingApproval} favicon={tab.favicon} />, label: `${text.open} · ${tab.title}`, onOpen: () => undefined }}
+      media={{ content: <LiveTabFrame frame={frame} favicon={tab.favicon} />, label: `${text.open} · ${tab.title}`, onOpen: () => undefined }}
       actions={<ButtonContainer size="sm" justify="end">
         <Button type="button" size="sm" variant="secondary">{text.deny}</Button>
         <SplitButton size="sm" text={text.once} onClick={() => undefined} menuLabel={text.scope} menuSide="top"

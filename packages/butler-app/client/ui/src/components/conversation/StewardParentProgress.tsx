@@ -1,19 +1,17 @@
 import { useSessionViewSubscription } from "@/components/layout/hooks/useSessionViewSubscription.ts";
 import { useAppLocale } from "@/app/copy.ts";
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import {
-  Button,
   ButtonContainer,
-  ChevronDown,
-  ChevronRight,
   Eye,
   IconButton,
   Play,
   Stack,
   SurfacePanel,
   Typo,
+  WorkActivityDisclosure,
 } from "@/butler-ds";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection.ts";
 import {
@@ -25,6 +23,7 @@ import { workerActivityTitle } from "./workerActivityTitle.ts";
 import { WorkBlockDetails } from "./WorkBlockDetails.tsx";
 import { useWorkBlockExpanded } from "./workBlockExpansion.ts";
 import { workBlockLatestStatus } from "./workBlockLatestStatus.ts";
+import { workBlockTail } from "./workBlockTail.ts";
 
 export function StewardParentProgress({
   progress,
@@ -55,6 +54,8 @@ export function StewardParentProgress({
     child.title,
   );
   const latestStatus = workBlockLatestStatus(rows, turn?.id, live, effectiveStewardStatus(child)) ?? activityLabel;
+  const tail = useMemo(() => workBlockTail(view, rows, turn?.id), [view, rows, turn?.id]);
+  const status = stewardProgressStatus(child);
   return (
     <SurfacePanel
       aria-label={child.title}
@@ -93,34 +94,21 @@ export function StewardParentProgress({
             </IconButton>
           </ButtonContainer>
         </Stack>
-        <Typo.Caption data-test-class="steward-progress-status">
-          {stewardProgressStatus(child)}
-        </Typo.Caption>
-        <Stack align="row" cross="center" gap="sm" justify="between">
-          <Typo.Caption
-            aria-label={latestStatus}
-            data-test-class="steward-tool-summary"
-            grow
-            minWidth="0"
-            title={latestStatus}
-            tone="secondary"
-            truncate
-          >
-            {latestStatus}
-          </Typo.Caption>
-          <Button
-            aria-controls={detailsOpen ? detailsId : undefined}
-            aria-expanded={detailsOpen}
-            data-test-class="work-block-details-toggle"
-            iconEnd={detailsOpen ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}
-            onClick={toggleDetails}
-            text={appCopy.conversation.work.showDetailsLabel}
-            type="button"
-            variant="inline"
-          />
-        </Stack>
-        <WorkBlockDetails id={detailsId} live={live}
-          open={detailsOpen} sessionId={child.session_id} title={child.title} view={view} />
+        <WorkActivityDisclosure
+          data-test-class="work-block-disclosure"
+          detailsId={detailsId}
+          detailsLabel={appCopy.conversation.work.detailsRegionLabel(child.title)}
+          expanded={detailsOpen}
+          hiddenCount={tail.earlier}
+          label={appCopy.conversation.work.disclosureLabel(status, latestStatus, tail.earlier)}
+          latest={latestStatus}
+          live={live}
+          onToggle={toggleDetails}
+          previous={tail.previous}
+          status={status}
+        >
+          <WorkBlockDetails live={live} sessionId={child.session_id} view={view} />
+        </WorkActivityDisclosure>
       </Stack>
     </SurfacePanel>
   );

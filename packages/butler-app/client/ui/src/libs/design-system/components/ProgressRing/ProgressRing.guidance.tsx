@@ -58,7 +58,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   accessibility: [
     "role=\"progressbar\" with aria-valuenow 0-100; name it with aria-label (aria-valuetext for richer text such as 12 of 40 MB).",
-    "Indeterminate omits aria-valuenow and draws the DS Spinner in the same square, so motion and reduced motion are the Spinner's.",
+    "Indeterminate omits aria-valuenow and draws the DS Spinner in the same square, so motion is the Spinner's and it keeps turning under reduced motion.",
     "Inside a control or row that already says the percent, pass aria-hidden so it is not announced twice.",
   ],
   tokens: ["--context-track-bg", "--accent", "--color-success", "--color-danger", "--icon-size-md", "--sidebar-icon-size", "--motion-fast", "--spinner-duration"],

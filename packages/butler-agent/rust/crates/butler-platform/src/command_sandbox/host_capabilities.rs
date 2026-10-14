@@ -40,7 +40,6 @@ impl SandboxCapabilities {
     /// Whether project mutations can run without exact-action approval.
     pub fn project_write_available(&self) -> bool {
         matches!(self.project_write, Level::Enforced | Level::Partial(_))
-            && self.read_only.is_enforced()
             && self.network_deny.is_enforced()
     }
 

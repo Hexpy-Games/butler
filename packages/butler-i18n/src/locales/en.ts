@@ -425,7 +425,7 @@ export const enUsCopy: AppCopy = {
     document: "Document",
     active: "Active", other: "Other", roadmap: "Roadmap",
     sourceDetails: "Source details", readOnly: "Read-only view of the original document.", referenceAction: "Reference in conversation",
-    statuses: { draft: "Draft", proposed: "Proposed", active: "Active", in_progress: "In progress", todo: "To do", planned: "Planned", review: "In review", blocked: "Blocked", done: "Done", completed: "Completed", cancelled: "Cancelled", archived: "Archived", superseded: "Superseded", deprecated: "Deprecated" },
+    statuses: { draft: "Draft", proposed: "Proposed", active: "Active", in_progress: "In progress", todo: "To do", planned: "Planned", review: "In review", blocked: "Blocked", done: "Done", completed: "Completed", skipped: TASK_GRAPH_COPY["en-US"].status.skipped, cancelled: "Cancelled", archived: "Archived", superseded: "Superseded", deprecated: "Deprecated" },
     labels: { id: "ID", kind: "Document type", status: "Document status", updatedAt: "Last updated", source: "Source location", revision: "Revision", migratedFrom: "Migrated from", parent: "Parent", owner: "Owner", priority: "Priority", acceptance: "Acceptance", validation: "Validation", review: "Review", report: "Report", implementation: "Implementation" },
   },
   guided: {
@@ -482,10 +482,6 @@ export const enUsCopy: AppCopy = {
     noContext: "No context yet",
     contextUnknown: "context unknown",
     model: "Model",
-    instant: "Instant",
-    extraHigh: "Extra High",
-    max: "Max",
-    medium: "Medium",
     thinking: "Thinking",
     planning: "Planning",
     inspecting: "Inspecting",
@@ -577,11 +573,11 @@ export const enUsCopy: AppCopy = {
     pendingApprovals: count => `${count} pending ${count === 1 ? "approval" : "approvals"}`, allowedCount: count => `${count} allowed`, revoke: title => `${title} — Revoke`,
     approvalRequest: {
       browserMode: { signed_out: "Without signing in", signed_in: "Signed in" },
-      signInStep: reason => ({mfa: "Two-step verification", passkey: "Passkey", captcha: "CAPTCHA", secure_keypad: "Security keypad", unknown_form: "Check sign-in form"} as Record<string, string>)[reason] ?? "Check sign-in form",
+      signInStep: reason => ({ mfa: "Two-step verification", passkey: "Passkey", captcha: "CAPTCHA", secure_keypad: "Security keypad", unknown_form: "Check sign-in form" } as Record<string, string>)[reason] ?? "Check sign-in form",
       waitHandoff: reason => ({ sign_in: "Sign-in needed", secure_field: "Your input needed", secure_keypad: "Security keypad needs you", captcha: "CAPTCHA needs you" } as Record<string, string>)[reason] ?? "Needs you in the tab",
       payStep: reason => ({ secure_keypad: "Security keypad", app_auth: "Card app approval", otp: "Verification code", three_ds: "Card issuer check", captcha: "CAPTCHA" } as Record<string, string>)[reason] ?? "Check the payment page",
       payHandoff: "Payment needs you",
-      signInHandoff: { eyebrow: "Browser", title: "Sign-in needs you", inTab: "Finish in the tab, then give it back to Butler", onDesktop: "Finish in the desktop app", openTab: "Open to check", stop: "Stop task" },
+      signInHandoff: { eyebrow: "Browser", title: "Sign-in needs you", inTab: "Finish in the tab, then give it back to Butler", onDesktop: "Finish this on your computer", openTab: "Open to check", stop: "Stop task" },
       browserStep: (action, role, name, frame) => {
         const actions: Record<string, string> = { click: "Click", fill: "Fill", select: "Select", hover: "Hover over", scroll: "Scroll", drag: "Drag", press: "Press a key in", type: "Type into", wait: "Wait" };
         const target = role === "wait" ? "" : role === "focus" ? "the focused element" : name ? `the ‘${name}’ ${role}` : `the ${role}`;
@@ -596,6 +592,7 @@ export const enUsCopy: AppCopy = {
       webRequest: "Send this web request?",
       webRequestDesc: "This request may carry outside content.",
       taintReason: "Asking again because this turn read outside content.",
+      scheduleUnavailable: "Schedule details unavailable.",
       scheduleMode: mode => `Run permission: ${mode}`,
       networkCommandOutside: "Run a command that uses the internet outside the project folder?",
       runCommand: workspace => `Run a command ${inWorkspace(workspace)}?`,
@@ -1005,7 +1002,9 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       collapseHistoryLabel: (label, count) => count <= 1 ? `Collapse ${label} details` : `Collapse ${label} and ${count - 1} more activities`,
       viewAllLabel: (count) => `View all (${count})`,
       collapseLabel: "Collapse",
-      showDetailsLabel: "Show details",
+      disclosureLabel: (status, latest, earlier) => earlier > 0
+        ? `${status}, ${latest}, ${earlier} earlier ${earlier === 1 ? "record" : "records"}`
+        : `${status}, ${latest}`,
       webSearchSummary: (count) => `Web search ${count} queries`,
       toolStepsSummary: (name, count) => `${name} ${count} steps`,
       webSearchDetail: (value) => `Web search: ${value}`,

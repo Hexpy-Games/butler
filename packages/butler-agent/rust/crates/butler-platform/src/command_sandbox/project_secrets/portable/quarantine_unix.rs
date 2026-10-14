@@ -8,7 +8,7 @@ use std::path::{Component, Path};
 use rustix::fs::{AtFlags, FileType, Mode, OFlags, mkdirat, openat, readlinkat, symlinkat};
 use rustix::fs::{renameat, unlinkat};
 
-use super::tree::{entries, kind, open_child};
+use super::unix::{entries, kind, open_child};
 
 /// Cross-mount copies recurse; a deeper entry fails instead of exhausting fds.
 const MAX_COPY_DEPTH: usize = 128;

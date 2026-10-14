@@ -169,6 +169,9 @@
   --spinner-duration: 1320ms;
   --spinner-rotate-duration: 2000ms;
   --pulse-duration: 1250ms;
+  /* One slow breath of a live timeline dot (the newest activity of running
+     work). Runs on --motion-loop-count, so reduced motion shows it static. */
+  --motion-live-pulse: 1600ms;
   --shimmer-duration: 1400ms;
   /* ActivityGlow (the titlebar browser toggle while Butler browses): one turn
      of the busy ink ring, one breath of its opacity, one entry pulse of the
@@ -235,6 +238,10 @@
   --tab-rail-shelf-height: 46px;
   --tab-rail-inset: var(--space-lg);
   --tab-rail-clearance: var(--space-2xl);
+  /* ComposerDecisionPanel media in a composer under 420px: the page
+     thumbnail spans the text column, cropped from the page's top to this
+     height. */
+  --decision-media-narrow-height: 140px;
   /* Marks Butler draws over web pages (pointer, pick badges): one shadow
      that separates them from any page, light or dark. */
   --browser-overlay-shadow: 0 1px 4px rgba(0, 0, 0, 0.32);
