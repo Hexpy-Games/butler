@@ -127,9 +127,11 @@ async fn turn_01_reply_is_delivered_persisted_and_survives_restart() -> Result<(
             .await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
 
-    let created = live
+    let delivered = live
         .wait_for(Duration::from_secs(10), |event| {
-            event["type"] == "message.created" && event["payload"]["message"]["role"] == "assistant"
+            (event["type"] == "message.created" || event["type"] == "message.updated")
+                && event["payload"]["message"]["role"] == "assistant"
+                && event["payload"]["message"]["status"] == "delivered"
         })
         .await?;
     live.wait_for(Duration::from_secs(10), |event| {
@@ -152,7 +154,7 @@ async fn turn_01_reply_is_delivered_persisted_and_survives_restart() -> Result<(
         .to_owned();
     assert_ne!(answer.trim(), "");
     assert_eq!(
-        created["payload"]["message"]["text"],
+        delivered["payload"]["message"]["text"],
         answer.as_str(),
         "live text != persisted text"
     );
