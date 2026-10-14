@@ -1,3 +1,4 @@
+import { canOpenHandoffTab } from "./browserHandoff";
 import { useLayoutEffect, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { TabRail, tabRailCap, tabRailMode } from "@/butler-ds";
@@ -30,6 +31,7 @@ export function AgentTabRail({ session }: { session: string }) {
   const cap = box ? tabRailCap(box.height) : 0;
   const mode = box ? tabRailMode(box.width) : "full";
   const frames = useLiveFrames(tabs.slice(0, cap).map(tab => tab.id), mode === "full" ? 416 : mode === "compact" ? 256 : 96, !visible);
+  if (!canOpenHandoffTab()) return null;
   const copy = appCopy.browser;
   return <TabRail view={session} labels={{ region: copy.rail.region, close: copy.closeTab, more: copy.rail.more }}
     onMore={id => void openConversationBrowser(session, id)} tabs={tabs.map(tab => {
