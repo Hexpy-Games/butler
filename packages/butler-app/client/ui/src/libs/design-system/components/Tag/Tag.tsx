@@ -14,6 +14,12 @@ export interface TagProps {
   children: ReactNode;
   /** Leading icon; sized to --icon-size-xs. */
   icon?: ReactNode;
+  /**
+   * Trailing icon, sized to --icon-size-xs: a chevron when the Tag is the
+   * visible cue of a larger target that opens more ("+4 ›"). The Tag itself
+   * stays non-interactive; the surrounding control acts.
+   */
+  iconEnd?: ReactNode;
   tone?: TagTone;
   size?: TagSize;
   ariaLabel?: string;
@@ -27,6 +33,7 @@ export interface TagProps {
 export function Tag({
   children,
   icon,
+  iconEnd,
   tone = "neutral",
   size = "sm",
   ariaLabel,
@@ -43,11 +50,13 @@ export function Tag({
       data-tone={tone}
       data-size={size}
       data-removable={onRemove ? "true" : undefined}
+      data-icon-end={iconEnd && !onRemove ? "true" : undefined}
       data-test-class={dataTestClass}
       aria-label={ariaLabel}
     >
       {icon ? <span className={styles.icon}>{icon}</span> : null}
       <Typo.Caption className={dsClass(styles.label)} wrap="nowrap">{children}</Typo.Caption>
+      {iconEnd && !onRemove ? <span className={styles.iconEnd} data-slot="tag-icon-end">{iconEnd}</span> : null}
       {onRemove ? (
         <Button aria-label={removeLabel} className={dsClass(styles.remove)} type="button" variant="inline" onClick={onRemove}>
           <X size="xs" />

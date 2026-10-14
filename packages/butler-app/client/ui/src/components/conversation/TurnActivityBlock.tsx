@@ -9,11 +9,14 @@ export function ActivityBlock({
   activity,
   connected = false,
   delegatedGoal,
+  live = false,
   turnId,
 }: {
   activity: PhaseActivity;
   delegatedGoal?: string;
   connected?: boolean;
+  /** The newest activity of running work: its dot pulses. */
+  live?: boolean;
   turnId?: string;
 }) {
   useAppLocale();
@@ -25,6 +28,7 @@ export function ActivityBlock({
     <WorkActivityBlock
       density="compact"
       connected={connected}
+      live={live}
       data-work-stage={activity.phase}
       title={activityDisplayTitle(activity)}
       description={

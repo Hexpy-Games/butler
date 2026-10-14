@@ -7,6 +7,8 @@ CREATE INDEX IF NOT EXISTS idx_btcc_graph_bindings_session
 ON btcc_guided_turn_work_bindings(session_id,work_id) WHERE is_current=1;
 CREATE INDEX IF NOT EXISTS idx_btcc_graph_bindings_work
 ON btcc_guided_turn_work_bindings(work_id,session_id) WHERE is_current=1;
+CREATE INDEX IF NOT EXISTS idx_btcc_graph_work
+ON btcc_subsession_delegations(json_extract(packet_json,'$.parent_work_ref.work_id'));
 CREATE TABLE IF NOT EXISTS agent_task_graph_changes (
     seq INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL UNIQUE

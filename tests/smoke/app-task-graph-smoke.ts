@@ -7,7 +7,7 @@ import { installTaskSessionReplay } from "../support/task-graph-session-replay.t
 import type { SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import { installWorkReplay } from "../support/delegated-work-replay.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
-import { verifyGraphFades, verifyGraphRevision, verifyPendingSelection, verifyStoppedGraphs } from "../support/task-graph-behavior.ts";
+import { verifyStewardHandoff, verifyAttemptHistory, verifyGraphFades, verifyGraphRevision, verifyPendingSelection, verifyStoppedGraphs } from "../support/task-graph-behavior.ts";
 import { assertTaskGraphClocks, installGraphActivityCounters } from "../support/task-graph-idle.ts";
 import { seedTaskGraphs, type SeedState } from "../support/task-graph-seed.ts";
 import type { TaskGraphSnapshot, TaskGraphsPage } from "../../packages/butler-app/client/shared/task-graph-contracts.ts";
@@ -32,11 +32,11 @@ try {
     try {
       const { session } = await server.api<{ session: { id: string; session_hint: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "Release conversation" }) });
       const parent = await server.api<SessionView>(`/session-view?session_id=${session.id}`);
-      seedTaskGraphs(server.butlerData, states, tasks, session.session_hint);
+      await seedTaskGraphs(server.butlerData, states, tasks, session.session_hint);
       const list = await server.api<TaskGraphsPage>(`/sessions/${session.id}/task-graphs`);
       assert.equal(list.total, states.length);
       const snapshots = await Promise.all(list.graphs.map(g => server.api<TaskGraphSnapshot>(`/plans/${g.graph_id}/task-graph`)));
-      for (const width of matrix ? [1280, 375] : [1280]) for (const theme of matrix ? ["light", "dark"] : ["light"]) for (const language of matrix ? ["ko", "en"] : ["en"]) {
+      for (const width of matrix ? [1280, 390] : [1280]) for (const theme of matrix ? ["light", "dark"] : ["light"]) for (const language of matrix ? ["ko", "en"] : ["en"]) {
         const page = await context.newPage();
         await page.setViewportSize({ width, height: 900 });
         page.on("pageerror", error => { pageErrors.push(error.message); console.error("task graph page error:", error.message); });
@@ -59,7 +59,7 @@ try {
             if (output) await page.screenshot({ path: `${output}/before-${states.length}-${width}-${theme}-${language}.png`, animations: "disabled" });
             continue;
           }
-          const labels = await inspector.locator('button[aria-current], button').allTextContents();
+          const labels = await inspector.locator("button[aria-current], button").allTextContents();
           assert.equal(labels[0], language === "ko" ? "요약" : "Summary");
           assert.equal(labels[1], language === "ko" ? "작업" : "Tasks");
           assert.equal(await inspector.locator('[data-test-class="task-graph-card"]').count(), 0);
@@ -79,13 +79,20 @@ try {
           for (let i = 0; i < ordered.length; i++) {
             assert.equal(await groups.nth(i).getAttribute("data-open"), String(states.length === 1 || ["running", "failed"].includes(ordered[i]!.state)));
           }
-          if (states.length === 1) assert.equal(await groups.locator('[aria-expanded]').count(), 0);
+          if (states.length === 1) assert.equal(await groups.locator("[aria-expanded]").count(), 0);
           const open = snapshots.filter(g => g.state === "running" || g.state === "failed" || states.length === 1);
           assert.equal(await page.locator('[data-test-class="task-graph-card"]').count(), open.reduce((n, g) => n + g.totals.nodes, 0));
-          await page.waitForFunction(count => document.querySelectorAll('path[data-edge]').length === count, open.reduce((n, g) => n + g.totals.edges, 0));
-          if (width === 375) {
+          await page.waitForFunction(count => document.querySelectorAll("path[data-edge]").length === count, open.reduce((n, g) => n + g.totals.edges, 0));
+          if (width === 390) {
             assert.equal(await page.locator('[data-test-class="task-graph-canvas"]').count(), 0);
             assert.equal(await page.locator('[data-test-class="task-graph-group"] svg circle[data-status]').count(), open.reduce((n, g) => n + g.totals.nodes, 0));
+          }
+          for (const node of snapshots.flatMap(g => g.nodes).filter(n => n.status==="skipped")) {
+            const card=page.locator(`[data-task-id="${node.task_id}"]`);
+            if (await card.count()) {
+              assert.equal(await card.getAttribute("data-task-status"), "done");
+              assert((await card.innerText()).includes(language==="ko" ? "건너뜀" : "Skipped"));
+            }
           }
           // The shared Spinner is exempt from reduced motion and keeps turning; the
           // activity ring rests, and no other graph animation may rotate or move geometry.
@@ -117,7 +124,7 @@ try {
           const owner = snapshots.find(g => g.nodes.some(n => n.task_id === expected.task_id))!;
           const last = owner.nodes.at(-1)?.task_id === expected.task_id;
           const first = owner.nodes[0]?.task_id === expected.task_id;
-          await page.keyboard.press(width === 375 ? last ? "ArrowUp" : "ArrowDown" : first ? "ArrowRight" : "ArrowLeft");
+          await page.keyboard.press(width === 390 ? last ? "ArrowUp" : "ArrowDown" : first ? "ArrowRight" : "ArrowLeft");
           assert.equal(await page.locator('[data-test-class="steward-observer-dialog"]').count(), 0);
           const selectedId = await selected.getAttribute("data-task-id");
           if (owner.nodes.length > 1) assert.notEqual(selectedId, expected.task_id, "arrow keys move selection");
@@ -159,11 +166,16 @@ try {
           }
           assert(!/\bWork\b|Steward|스튜어드|위임|delegate_to_/u.test(await page.locator('[data-test-class="task-graph-section"]').innerText()));
           if (matrix && width === 1280 && theme === "light" && language === "en") await assertTaskGraphClocks(page, snapshots.filter(g => g.counts.running > 0).length);
-          if (width === 375 && theme === "dark" && language === "en") {
+          if (width === 390 && theme === "dark" && language === "en") {
+            await verifyAttemptHistory(page, open[0]!);
+            if (explicitSelection) await page.locator(`[data-task-id="${explicitSelection}"]`).click();
             await verifyGraphRevision(page, server, open[0]!.graph_id, session.session_hint);
             await verifyStoppedGraphs(page, server, snapshots, session.session_hint);
             if (explicitSelection) assert.equal(await page.locator('[data-test-class="task-graph-card"][aria-pressed="true"]').getAttribute("data-task-id"), explicitSelection,
               "an explicit user selection survives later graph revisions");
+          }
+          if (!matrix && states.length === 1 && states[0] === "waiting") {
+            await verifyStewardHandoff(page, server, snapshots[0]!, session.id, session.session_hint);
           }
           console.log(JSON.stringify({ graphs: states.length, width, theme, language, cards: open.reduce((n, g) => n + g.totals.nodes, 0), edges: open.reduce((n, g) => n + g.totals.edges, 0) }));
         } finally { await page.close(); }
@@ -171,6 +183,9 @@ try {
     } finally { await server.stop(); }
   }
   assert.deepEqual(pageErrors, [], "the graph and its dialogs must render without page errors");
+} catch (error) {
+  console.error("Task graph smoke failure:", error);
+  throw error;
 } finally { await context.close(); await browser.close(); }
 
 function expectedDefaultCandidates(graphs: TaskGraphSnapshot[]): TaskGraphSnapshot["nodes"] {
@@ -179,7 +194,7 @@ function expectedDefaultCandidates(graphs: TaskGraphSnapshot[]): TaskGraphSnapsh
     const candidates = nodes.filter(node => node.status === status);
     if (candidates.length) return candidates;
   }
-  const finished = nodes.filter(node => node.status === "completed" || node.status === "cancelled");
+  const finished = nodes.filter(node => node.status === "done" || node.status === "skipped" || node.status === "cancelled");
   if (!finished.length) return [nodes[0]!];
   const latest = Math.max(...finished.map(node => finishedTime(node.finished_at)));
   return finished.filter(node => finishedTime(node.finished_at) === latest);

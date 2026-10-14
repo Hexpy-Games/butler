@@ -1,6 +1,6 @@
 import type { ProjectDashboardDocument } from "./dashboard-space-contracts.ts";
 
-export type TaskGraphStatus = "pending" | "running" | "in_review" | "completed" | "failed" | "blocked" | "paused" | "cancelled";
+export type TaskGraphStatus = "pending" | "running" | "review" | "done" | "skipped" | "failed" | "blocked" | "paused" | "cancelled";
 export type TaskGraphState = "running" | "failed" | "waiting" | "done" | "cancelled";
 export interface TaskGraphCounts {
   total: number;
@@ -9,6 +9,7 @@ export interface TaskGraphCounts {
   failed: number;
   blocked: number;
   cancelled: number;
+  skipped: number;
 }
 export interface TaskDocumentRef {
   id: string;
@@ -16,6 +17,23 @@ export interface TaskDocumentRef {
   title: string;
   status: TaskGraphStatus;
   source_label: string;
+}
+export type TaskGraphPhase = "conception" | "planning" | "execution" | "review" | "validation" | "reporting";
+export interface TaskGraphReview {
+  subject: "plan" | "result" | "completion";
+  verdict: "accept" | "revise" | "partial";
+  summary: string;
+  created_at: string;
+}
+export interface TaskGraphAttempt {
+  task_id: string;
+  session_id: string;
+  ordinal: number;
+  status: "running" | "success" | "blocked" | "failed" | "cancelled" | "pending";
+  summary: string | null;
+  model_display_name: string | null;
+  started_at: string | null;
+  finished_at: string | null;
 }
 export interface TaskGraphNode {
   task_id: string;
@@ -30,10 +48,16 @@ export interface TaskGraphNode {
   finished_at: string | null;
   current_step: string | null;
   blocked_reason: string | null;
+  reason_code: "action_blocked" | "attempt_failed" | "result_received" | "review_revised" | "work_abandoned" | null;
+  handled_directly: boolean;
+  attempts: TaskGraphAttempt[];
+  review?: TaskGraphReview;
   document: TaskDocumentRef;
 }
 export interface TaskGraphSummary {
   graph_id: string;
+  phase: TaskGraphPhase;
+  work_state: "open" | "blocked" | "completed" | "abandoned";
   title: string;
   state: TaskGraphState;
   counts: TaskGraphCounts;
@@ -60,7 +84,7 @@ export interface TaskGraphReadOptions {
   cursor?: string;
   limit?: number;
 }
-export interface TaskGraphChanged {
+export interface TaskGraphPatch {
   session_id: string;
   plan_id: string;
   graph_revision: string;
@@ -77,7 +101,21 @@ export interface TaskGraphChanged {
   event_seq: number;
   /** First snapshot or reconciliation; otherwise patch when previous revision matches. */
   refetch: boolean;
+  phase: TaskGraphPhase;
+  work_state: TaskGraphSummary["work_state"];
+  node_order: string[];
+  removed?: false;
 }
+export interface TaskGraphRemoved {
+  session_id: string;
+  plan_id: string;
+  graph_revision: string;
+  previous_graph_revision: string;
+  event_seq: number;
+  removed: true;
+  refetch: false;
+}
+export type TaskGraphChanged = TaskGraphPatch | TaskGraphRemoved;
 export interface TaskGraphDocument extends ProjectDashboardDocument {
   kind: "plan";
   document_type: "task";

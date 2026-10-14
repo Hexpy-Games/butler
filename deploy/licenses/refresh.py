@@ -95,6 +95,11 @@ def crate_evidence(package):
     vcs = directory / ".cargo_vcs_info.json"
     if source.startswith("https://github.com/"):
         revision = json.loads(vcs.read_text())["git"]["sha1"] if vcs.exists() else package["version"]
+        # Git checkouts do not contain Cargo's packaged VCS metadata. Use the
+        # resolved source commit, never a crate version as a repository ref.
+        cargo_source = package.get("source") or ""
+        if cargo_source.startswith("git+"):
+            revision = cargo_source.rsplit("#", 1)[-1]
         repository = source.removesuffix(".git").rstrip("/")
         repository = "/".join(repository.split("/")[:5])
         raw = repository.replace("https://github.com/", "https://raw.githubusercontent.com/")
@@ -144,6 +149,10 @@ def crate_evidence(package):
         source = "https://crates.io/crates/windows-permissions/0.2.4"
         files = [("Upstream MIT declaration (no copyright notice supplied)", (directory / "Cargo.toml.orig").read_text()),
                  ("Full MIT license (upstream omits text)", fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt"))]
+    if (package.get("source") or "").startswith("git+"):
+        checkout = next((parent for parent in directory.parents if (parent / ".git").exists()), None)
+        if checkout:
+            source += "/" + directory.relative_to(checkout).as_posix()
     return package, license_id, source, files
 
 

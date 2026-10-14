@@ -6,6 +6,7 @@
 mod denial;
 pub use denial::{isolation_failure, isolation_failure_exit, sandbox_denial};
 mod credentials;
+pub mod mxc_policy;
 mod project_secrets;
 pub use credentials::secret_name;
 pub use project_secrets::{discover_project_secrets, sweep_new_secrets};
@@ -59,6 +60,28 @@ pub fn approval_free_reads() -> bool {
 /// project (writes inside the project only, no network).
 pub fn project_write_available() -> bool {
     capabilities().project_write_available()
+}
+
+/// Mechanism used by project-write containment; availability is probed separately.
+pub const fn project_write_mechanism() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "seatbelt"
+    } else if cfg!(target_os = "linux") {
+        "landlock"
+    } else if cfg!(windows) {
+        "mxc_base_container"
+    } else {
+        "unavailable"
+    }
+}
+
+/// Host-specific limits reported after a failed contained command.
+pub const fn project_write_limits() -> &'static str {
+    if cfg!(target_os = "linux") || cfg!(target_os = "macos") {
+        "This command ran contained to the project folder: no writes elsewhere (including .git and existing secrets) and no network. Creating, deleting or renaming top-level project entries is also blocked. If it needs those, run it again with sandbox \"none\"; the user will be asked."
+    } else {
+        "This command ran contained to the project folder: no writes elsewhere (including .git and existing secrets) and no network. New secret names are swept after the run. If it needs more access, run it again with sandbox \"none\"; the user will be asked."
+    }
 }
 
 /// Entry point of the single-threaded trampoline, never called by the agent.
