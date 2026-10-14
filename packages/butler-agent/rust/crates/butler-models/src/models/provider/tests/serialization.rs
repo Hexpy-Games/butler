@@ -7,6 +7,7 @@ use serde_json::Map;
 fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     super::sizing::sizing_counts_image_allowance_and_preserves_complete_wire_bytes();
     super::sizing::long_history_sizing_matches_full_projection();
+    super::sizing::native_carrier_sizing_counts_tool_images_by_allowance();
     let (catalog, snapshot) = catalog();
     drop(catalog);
     let messages = [ModelRoundMessage {
