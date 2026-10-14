@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createServer } from "../../packages/butler-app/client/ui/node_modules/vite/dist/node/index.js";
-import { launchSmokeBrowser } from "../support/smoke-browser";
+import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser";
 
+const cases = [false, true].flatMap(reduced => [1440, 390].flatMap(width => ["light", "dark"].map(theme => `${width}-${theme}-${reduced ? "reduced" : "motion"}`)));
+if (await runSmokeCases(cases, "BUTLER_DRAFT_CASE", import.meta.path)) process.exit(0);
 const root = process.cwd();
 const evidence = process.env.BUTLER_ANSWER_EVIDENCE;
 assert(evidence, "BUTLER_ANSWER_EVIDENCE required");
@@ -13,6 +15,7 @@ process.chdir(join(root, "packages/butler-app/client/ui"));
 const vite = await createServer({ server: { host: "127.0.0.1", port: 0 }, logLevel: "error", plugins: [{
   name: "draft-render-probe", enforce: "pre",
   transform(code, id) {
+    if (id.endsWith("/gridSettle.ts")) return code.replace("  const current = runs.get(grid);", "  globalThis.__gridSettles = (globalThis.__gridSettles ?? 0) + 1;\n  const current = runs.get(grid);");
     if (id.endsWith("/MessageContent.tsx")) return code.replace("}: MessageContentProps) {", "}: MessageContentProps) {\nglobalThis.__messageContentRenders = (globalThis.__messageContentRenders ?? 0) + 1;");
     if (id.endsWith("/AnswerCards.tsx")) return code.split("\n").map(line => line.includes("function AnswerCard(") && line.endsWith("{")
       ? `${line}\nglobalThis.__draftCardRenders = (globalThis.__draftCardRenders ?? 0) + 1;` : line).join("\n");
@@ -24,8 +27,17 @@ const browser = await launchSmokeBrowser();
 const errors: string[] = [];
 const results: unknown[] = [];
 try {
-  const page = await browser.newPage({ reducedMotion: "reduce" });
+  const page = await browser.newPage({ reducedMotion: "no-preference" });
   page.on("pageerror", error => errors.push(error.message));
+  await page.addInitScript(() => {
+    const original = Element.prototype.animate;
+    const calls: unknown[] = [];
+    Object.assign(window, { gridMotionCalls: calls });
+    Element.prototype.animate = function (frames, options) {
+      if (this.matches('[data-test-class="answer-cards"]')) calls.push(frames);
+      return original.call(this, frames, options);
+    };
+  });
   let captureSuffix = "";
   await page.exposeFunction("captureAnswerDraft", async () => {
     await page.waitForFunction(() => {
@@ -50,17 +62,20 @@ try {
     if (["/session-view", "/summary", "/navigation", "/events/live", "/health"].includes(url.pathname)) return route.fulfill({ json: { ok: true, data: {} } });
     return route.continue();
   });
-  for (const width of [1440, 390]) for (const theme of ["light", "dark"]) {
-    captureSuffix = `${width}-${theme}`;
+  for (const reducedMotion of [false, true]) for (const width of [1440, 390]) for (const theme of ["light", "dark"]) {
+    captureSuffix = `${width}-${theme}-${reducedMotion ? "reduced" : "motion"}`;
+    if (process.env.BUTLER_DRAFT_CASE && process.env.BUTLER_DRAFT_CASE !== captureSuffix) continue;
     await page.setViewportSize({ width, height: 1000 });
     await page.goto(`${base}?visual=components&theme=${theme}&locale=ko`);
     await page.locator('[data-test-class~="message"]').first().waitFor();
     await page.evaluate(() => document.fonts.ready);
-    await page.screenshot({ path: join(evidence, `draft-before-${width}-${theme}.png`) });
-    const result = await page.evaluate(async () => {
+    await page.screenshot({ path: join(evidence, `draft-before-${captureSuffix}.png`) });
+    const result = await page.evaluate(async (reducedMotion) => {
       const draftPath = "/src/app/answerDrafts.ts", storePath = "/src/app/store.ts";
       const { receiveAnswerDraft, useAnswerDrafts } = await import(/* @vite-ignore */ draftPath);
       const { useButlerStore } = await import(/* @vite-ignore */ storePath);
+      useButlerStore.setState((state: { settings: object }) => ({ settings: { ...state.settings, reduce_motion: reducedMotion } }));
+      Object.assign(globalThis, { __gridSettles: 0 });
       const paint = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const frame = async (ops: unknown[], stream = "first", turn = "draft-turn") => {
         receiveAnswerDraft({ type: "answer_blocks.draft", payload: { session_id: "butler-client", turn_id: turn, stream_id: stream, call_index: 0, ops } });
@@ -73,8 +88,13 @@ try {
         { seq: 2, op: "item", bi: 0, list: "items", index: 0, value: cards[0] }]);
       const first = document.querySelector('[data-slot="item-card"]')!;
       if (!first) throw new Error("first draft card missing");
-      const rect = first.getBoundingClientRect().toJSON();
       await (window as unknown as { captureAnswerDraft: () => Promise<void> }).captureAnswerDraft();
+      const rect = first.getBoundingClientRect().toJSON();
+      const skeleton = document.querySelector('[data-slot="item-card-skeleton"]');
+      if (!skeleton) throw new Error("next card skeleton missing");
+      if (reducedMotion && skeleton.getAnimations({ subtree: true }).length) throw new Error("reduced skeleton must not shimmer");
+      if (reducedMotion && first.querySelector('[data-slot="media-frame"]')?.getAttribute("data-reduced") !== "true") throw new Error("media must follow app reduced motion");
+      const openCross = getComputedStyle(document.querySelector('[data-test-class="answer-cards"]')!).alignItems;
       const rects = [rect];
       const probe = globalThis as typeof globalThis & { __messageContentRenders: number; __draftCardRenders: number };
       probe.__messageContentRenders = 0; probe.__draftCardRenders = 0;
@@ -87,6 +107,15 @@ try {
       const before = [...document.querySelectorAll('[data-slot="item-card"]')];
       const messagesStable = useButlerStore.getState().messages === messageReferences;
       await frame([{ seq: 5, op: "list_end", bi: 0, list: "items" }, { seq: 6, op: "block_end", bi: 0 }]);
+      await new Promise<void>((resolve, reject) => {
+        const start = performance.now();
+        const check = () => {
+          const grid = document.querySelector('[data-test-class="answer-cards"]')!;
+          if (getComputedStyle(grid).alignItems !== "start" && grid.getAnimations().every(a => a.playState === "finished")) resolve();
+          else if (performance.now() - start > 2000) reject(new Error("grid did not settle"));
+          else requestAnimationFrame(check);
+        }; check();
+      });
       await frame([{ op: "end", outcome: "accepted" }], "");
       useButlerStore.getState().applyTimelineEvents([{ type: "message.updated", payload: { message: {
         id: "final-answer", role: "assistant", chat_id: "butler-client", turn_id: "draft-turn", status: "delivered", text: "준비했습니다.",
@@ -94,10 +123,17 @@ try {
       } } }]);
       await paint();
       const after = [...document.querySelectorAll('[data-slot="item-card"]')];
-      return { contentRenders, newCardRenders, rects, kept: before.every((node, index) => node === after[index]), count: after.length, messagesStable,
-        draftsCleared: !useAnswerDrafts.getState().answerDrafts["draft-turn"] };
-    });
+      const heights = after.map(node => node.getBoundingClientRect().height);
+      const gridFrames = (window as unknown as Window & { gridMotionCalls: Record<string, unknown>[][] }).gridMotionCalls;
+      return { contentRenders, newCardRenders, rects, heights, gridFrames, kept: before.every((node, index) => node === after[index]), count: after.length, messagesStable,
+        draftsCleared: !useAnswerDrafts.getState().answerDrafts["draft-turn"], openCross,
+        settles: (globalThis as typeof globalThis & { __gridSettles: number }).__gridSettles };
+    }, reducedMotion);
     assert.equal(result.count, 3);
+    assert.equal(result.openCross, "start");
+    if (width === 1440) assert(result.heights.every(height => height === result.heights[0]), "closed row heights are equal");
+    if (reducedMotion) assert(result.gridFrames.flat().every(frame => !("height" in frame) && !("transform" in frame)), "reduced settle has fades only");
+    assert.equal(result.settles, 1, "one settle at close and none at handoff");
     assert.equal(result.contentRenders, 0, "draft ops must not rerender the message body");
     assert.equal(result.newCardRenders, 2, "only the two arriving cards should render");
     assert(result.kept, "handoff must keep draft DOM nodes");
@@ -105,7 +141,7 @@ try {
     assert(result.draftsCleared);
     for (const rect of result.rects.slice(1)) assert.deepEqual(rect, result.rects[0], "earlier card rect changed");
     await page.locator('[data-test-class~="conversation-scroll"]').evaluate(node => { node.scrollTop = 0; });
-    await page.screenshot({ path: join(evidence, `draft-final-${width}-${theme}.png`) });
+    await page.screenshot({ path: join(evidence, `draft-final-${captureSuffix}.png`) });
     const rejected = await page.evaluate(async () => {
       const path = "/src/app/answerDrafts.ts";
       const { receiveAnswerDraft, abandonAnswerDrafts, useAnswerDrafts } = await import(/* @vite-ignore */ path);
@@ -119,8 +155,11 @@ try {
       const node = document.querySelectorAll('[data-slot="item-card"]')[3];
       await send([{ op: "end", outcome: "rejected" }], "");
       await send(initial.slice(0, 1), "retry");
+      const stale = document.querySelector('[data-answer-superseded="true"]');
+      if (!stale || Math.abs(Number(getComputedStyle(stale).opacity) - 0.45) > 0.001) throw new Error("retry must dim superseded item to 45%");
       if (node !== document.querySelectorAll('[data-slot="item-card"]')[3]) throw new Error("retry type must retain earlier card");
       await send([{ ...initial[1], value: { key: "stable", title: "확인했습니다." } }], "retry");
+      if (document.querySelector('[data-answer-superseded="true"]')) throw new Error("replacement must restore opacity");
       const retryKept = node === document.querySelectorAll('[data-slot="item-card"]')[3];
       await send([{ op: "end", outcome: "rejected" }], "");
       await send([{ op: "end", outcome: "delivered" }], "");
@@ -148,9 +187,9 @@ try {
     console.log(JSON.stringify(rejected));
     assert(rejected.retryKept && rejected.rejectedGone && rejected.abandonedGone);
     assert.equal(rejected.count, 3);
-    results.push({ width, theme, ...result, ...rejected });
+    results.push({ width, theme, reducedMotion, ...result, ...rejected });
   }
   assert.deepEqual(errors, []);
-  writeFileSync(join(evidence, "draft-results.json"), JSON.stringify({ modelCalls: 0, results }, null, 2));
+  writeFileSync(join(evidence, `draft-results-${process.env.BUTLER_DRAFT_CASE ?? "all"}.json`), JSON.stringify({ modelCalls: 0, results }, null, 2));
   console.log(JSON.stringify({ modelCalls: 0, results }));
 } finally { await browser.close(); await vite.close(); }
