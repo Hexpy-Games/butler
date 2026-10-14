@@ -80,7 +80,7 @@
   margin: var(--space-sm);
   color: var(--text-primary);
   font-size: var(--font-size-1);
-  line-height: var(--line-height-tight);
+  line-height: var(--typo-caption-line-height-tight);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }

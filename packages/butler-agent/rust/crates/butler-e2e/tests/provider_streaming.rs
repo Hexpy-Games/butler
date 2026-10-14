@@ -404,3 +404,6 @@ async fn invoke(
     assert!(status.success(), "{}", std::fs::read_to_string(&stderr)?);
     serde_json::from_slice(&std::fs::read(&stdout)?).map_err(Into::into)
 }
+
+#[path = "provider_streaming/followups.rs"]
+mod followups;

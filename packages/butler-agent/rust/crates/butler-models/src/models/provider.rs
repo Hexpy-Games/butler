@@ -14,6 +14,7 @@ mod round_usage;
 mod route;
 mod serialize;
 mod sizing;
+mod stream_usage;
 mod visual;
 mod visual_capability;
 

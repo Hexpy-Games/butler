@@ -31,7 +31,7 @@
   height: 1lh;
   place-items: center;
   color: var(--text-tertiary);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-body-line-height);
 }
 
 .body,
@@ -153,7 +153,7 @@
 .phaseLabel {
   overflow: hidden;
   font-size: var(--font-size-1);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-caption-line-height);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

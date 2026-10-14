@@ -19,7 +19,7 @@
   color: var(--text-primary);
   cursor: pointer;
   font-size: var(--font-size-2);
-  line-height: var(--line-height-tight);
+  line-height: var(--typo-label-line-height-tight);
   transition: background-color var(--motion-fast) var(--motion-ease-standard);
 }
 

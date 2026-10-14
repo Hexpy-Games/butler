@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { apiErrorCode } from "@/app/api";
-import { listAgentImportSources, startAgentImport, undoAgentImport, type AgentImportCounts, type AgentImportRequest, type AgentImportSource } from "../settings/agentImportApi";
+import { listAgentImportSources, startAgentImport, type AgentImportCounts, type AgentImportRequest, type AgentImportSource } from "../settings/agentImportApi";
 
 /** Per-source item choice; a source without one imports everything it holds. */
 export type AgentImportSelection = Omit<AgentImportRequest, "source">;
@@ -11,12 +11,10 @@ export function useAgentImport(enabled = true) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AgentImportCounts | null>(null);
-  const [undone, setUndone] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   /** The latest counts of each imported source, for a per-tool result. */
   const [bySource, setBySource] = useState<Record<string, AgentImportCounts>>({});
   const mounted = useRef(true);
-  const receipts = useRef<AgentImportCounts[]>([]);
   useEffect(() => {
     mounted.current = true;
     if (!enabled) return () => { mounted.current = false; };
@@ -32,13 +30,11 @@ export function useAgentImport(enabled = true) {
   }
   const run = (keys: string | string[], selections?: Record<string, AgentImportSelection>) => work(async () => {
     const sources = typeof keys === "string" ? [keys] : keys;
-    setSelected(sources[0] ?? null); setUndone(false);
-    if (undone) receipts.current = [];
+    setSelected(sources[0] ?? null);
     const total: AgentImportCounts = { run_id: "", instructions: 0, servers: 0, needs_secret: 0, instructions_existing: 0, servers_existing: 0, skipped: 0 };
-    if (result && !undone) Object.assign(total, result, { error: undefined });
+    if (result) Object.assign(total, result, { error: undefined });
     for (const key of sources) {
       const counts = await startAgentImport(key, selections?.[key]);
-      receipts.current.push(counts);
       if (mounted.current) setBySource(prior => ({ ...prior, [key]: counts }));
       total.run_id = counts.run_id;
       total.instructions += counts.instructions; total.servers += counts.servers; total.needs_secret += counts.needs_secret;
@@ -49,18 +45,6 @@ export function useAgentImport(enabled = true) {
       if (counts.error) break;
     }
   });
-  const undo = () => work(async () => {
-    while (receipts.current.length) {
-      const receipt = receipts.current[0]!;
-      await undoAgentImport(receipt.run_id);
-      receipts.current.shift();
-      if (mounted.current) setResult(prior => prior && ({ ...prior,
-        instructions: prior.instructions - receipt.instructions, servers: prior.servers - receipt.servers,
-        needs_secret: prior.needs_secret - receipt.needs_secret,
-      }));
-    }
-    if (mounted.current) { setResult(result); setUndone(true); }
-  });
-  const more = () => { receipts.current = []; setResult(null); setBySource({}); setError(null); setUndone(false); };
-  return { sources, busy, error, result, bySource, undone, selected, run, undo, more };
+  const more = () => { setResult(null); setBySource({}); setError(null); };
+  return { sources, busy, error, result, bySource, selected, run, more };
 }

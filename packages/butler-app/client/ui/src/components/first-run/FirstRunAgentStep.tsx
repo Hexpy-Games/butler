@@ -1,10 +1,9 @@
 import { appCopy } from "@/app/copy";
-import { ChoiceCardList, EmptyLine, Inline, SetupWizardStepAction, Spinner, Tooltip, Typo } from "@/butler-ds";
+import { CheckCard, CheckCardList, EmptyLine, Inline, SetupWizardStepAction, Spinner, Tooltip, Typo } from "@/butler-ds";
 import { AgentGlyph } from "./AgentGlyph";
 import { FirstRunAgentItems } from "./FirstRunAgentItems";
 import { FirstRunAgentResult } from "./FirstRunAgentResult";
 import { FirstRunStepCard } from "./FirstRunStepCard";
-import { PickCard } from "./PickCard";
 import { importable } from "./useAgentPicks";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
@@ -32,13 +31,14 @@ export function FirstRunAgentStep({ flow }: { flow: FirstRunFlow }) {
       {pick.sources === null ? (
         <Inline role="status"><Spinner size={14} /><Typo.Caption tone="secondary">{text.searching}</Typo.Caption></Inline>
       ) : empty ? <EmptyLine message={text.agentsEmpty} /> : (
-        <ChoiceCardList role="group" aria-labelledby="first-run-agents-title">
+        <CheckCardList aria-labelledby="first-run-agents-title">
           {pick.sources.map((source) => (
-            <PickCard key={source.key} data-agent-import-source={source.key} on={chosen.includes(source.key)}
-              blocked={!importable(source)} busy={pick.busy} icon={<AgentGlyph sourceKey={source.key} />} title={source.name}
-              description={appCopy.settings.agentImport.found(source.instructions, source.servers)} onToggle={() => picks.toggleTool(source.key)} />
+            <CheckCard key={source.key} data-agent-import-source={source.key} checked={importable(source) && chosen.includes(source.key)}
+              disabled={pick.busy} disabledReason={importable(source) ? undefined : appCopy.settings.agentImport.found(false, 0)}
+              icon={<AgentGlyph sourceKey={source.key} />} title={source.name}
+              description={appCopy.settings.agentImport.found(source.instructions, source.servers)} onCheckedChange={() => picks.toggleTool(source.key)} />
           ))}
-        </ChoiceCardList>
+        </CheckCardList>
       )}
       {pick.error ? <Typo.Caption role="alert" tone="danger">{appCopy.settings.agentImport.failed}</Typo.Caption> : null}
     </FirstRunStepCard>
