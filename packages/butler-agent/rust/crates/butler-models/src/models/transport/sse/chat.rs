@@ -8,7 +8,6 @@ use butler_turn::btcc::ProviderRequestError;
 
 use super::super::super::{diagnostics, request_guard::RequestProgress};
 use super::consume;
-use crate::models::stream_event::StreamProjection;
 
 const HOSTED_FRAME_LIMIT: usize = 8 * 1024 * 1024;
 /// Most tool calls one streamed answer may carry.
@@ -44,8 +43,8 @@ pub(in crate::models::transport) async fn hosted_chat(
 
 /// Accumulated chat completion chunks of one streamed response.
 struct ChatState {
-    projection: StreamProjection,
-    emitted_arguments: Vec<Option<usize>>,
+    stream_id: String,
+    sequence: u64,
     text: String,
     id: String,
     model: Option<Value>,
@@ -54,13 +53,17 @@ struct ChatState {
     finish_reason: Value,
     tool_calls: Vec<Value>,
     done: bool,
+    started: std::collections::HashSet<u64>,
+    pending: std::collections::HashMap<u64, Vec<String>>,
 }
 
 impl ChatState {
     fn new() -> Self {
         Self {
-            projection: StreamProjection::new(),
-            emitted_arguments: Vec::new(),
+            // One id per response: providers may reuse chunk ids across
+            // requests, and the App keys streamed text by stream id.
+            stream_id: format!("chat-stream-{}", uuid::Uuid::new_v4().simple()),
+            sequence: 0,
             text: String::new(),
             id: String::new(),
             model: None,
@@ -69,6 +72,8 @@ impl ChatState {
             finish_reason: Value::Null,
             tool_calls: Vec::new(),
             done: false,
+            started: std::collections::HashSet::new(),
+            pending: std::collections::HashMap::new(),
         }
     }
 
@@ -144,13 +149,10 @@ impl ChatState {
                 self.emit_text(value, observer);
             }
             if let Some(calls) = delta.get("tool_calls").and_then(Value::as_array) {
-                for call in calls {
-                    let delta = std::slice::from_ref(call);
-                    if !merge_tool_calls(&mut self.tool_calls, delta) {
-                        return false;
-                    }
-                    self.emit_calls(delta, observer);
+                if !merge_tool_calls(&mut self.tool_calls, calls) {
+                    return false;
                 }
+                self.emit_calls(calls, observer);
             }
         }
         if let Some(value) = event.pointer("/choices/0/finish_reason") {
@@ -164,38 +166,77 @@ impl ChatState {
         delta: &str,
         observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
     ) {
-        self.projection.text(observer, delta, false);
+        let Some(observer) = observer.filter(|_| !delta.is_empty()) else {
+            return;
+        };
+        self.sequence += 1;
+        observer.event(&serde_json::json!({
+            "type": "text_delta",
+            "streamId": self.stream_id,
+            "sequence": self.sequence,
+            "textDelta": delta,
+            "target": "final_candidate",
+        }));
     }
 
     fn emit_calls(
         &mut self,
-        deltas: &[Value],
+        calls: &[Value],
         observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
     ) {
-        self.emitted_arguments.resize(self.tool_calls.len(), None);
-        for delta in deltas {
-            let Ok(index) = usize::try_from(delta["index"].as_u64().unwrap_or(0)) else {
+        use butler_core::tool_protocol::ToolCallStreamEvent;
+        let Some(observer) = observer else {
+            return;
+        };
+        for call in calls {
+            let index = call["index"].as_u64().unwrap_or(0);
+            let Some(accumulated) = usize::try_from(index)
+                .ok()
+                .and_then(|i| self.tool_calls.get(i))
+            else {
                 continue;
             };
-            let call = &self.tool_calls[index];
-            let id = call["id"].as_str().unwrap_or("");
-            let name = call["function"]["name"].as_str().unwrap_or("");
-            if id.is_empty() || name.is_empty() || delta.pointer("/function/arguments").is_none() {
-                continue;
+            let name = accumulated["function"]["name"].as_str().unwrap_or("");
+            let fragment = call.pointer("/function/arguments").and_then(Value::as_str);
+            if let Some(fragment) = fragment {
+                self.pending
+                    .entry(index)
+                    .or_default()
+                    .push(fragment.to_owned());
             }
-            let arguments = call["function"]["arguments"].as_str().unwrap_or("");
-            let emitted = &mut self.emitted_arguments[index];
-            if emitted.is_none() {
-                self.projection.call(observer, index as u64, name, None);
-            }
-            let offset = emitted.unwrap_or(0);
-            if arguments.len() > offset
-                || delta.pointer("/function/arguments").and_then(Value::as_str) == Some("")
+            // Name chunks precede arguments; wait for the first argument byte so
+            // fragmented names are complete. Retain exact fragment boundaries.
+            if !self.started.contains(&index)
+                && !name.is_empty()
+                && self
+                    .pending
+                    .get(&index)
+                    .is_some_and(|parts| parts.iter().any(|part| !part.is_empty()))
             {
-                self.projection
-                    .call(observer, index as u64, name, Some(&arguments[offset..]));
+                self.sequence += 1;
+                observer.tool_call(&ToolCallStreamEvent::ToolCallStart {
+                    stream_id: self.stream_id.clone(),
+                    call_index: index,
+                    sequence: self.sequence,
+                    tool_name: name.to_owned(),
+                    call_id: accumulated["id"]
+                        .as_str()
+                        .filter(|id| !id.is_empty())
+                        .map(str::to_owned),
+                });
+                self.started.insert(index);
             }
-            *emitted = Some(arguments.len());
+            if self.started.contains(&index) {
+                for arguments_delta in self.pending.remove(&index).unwrap_or_default() {
+                    self.sequence += 1;
+                    observer.tool_call(&ToolCallStreamEvent::ToolCallDelta {
+                        stream_id: self.stream_id.clone(),
+                        call_index: index,
+                        sequence: self.sequence,
+                        arguments_delta,
+                    });
+                }
+            }
         }
     }
 

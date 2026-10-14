@@ -231,11 +231,14 @@ async fn provider_streaming_in_band_errors_preserve_retry_decisions() -> Result<
     Ok(())
 }
 
+/// Checks the streamed round's events (the last stream; an earlier JSON round
+/// declares its calls after the fact under its own stream id).
 fn verify_events(events: &Value, result: &Value, fixture: &Value) {
     let mut calls = std::collections::BTreeMap::new();
     let mut sequence = 0;
-    for event in events.as_array().unwrap() {
-        assert_eq!(event["streamId"], events[0]["streamId"]);
+    let all = events.as_array().unwrap();
+    let stream = &all.last().unwrap()["streamId"];
+    for event in all.iter().filter(|event| &event["streamId"] == stream) {
         let current = event["sequence"].as_u64().unwrap();
         assert!(current > sequence);
         sequence = current;
@@ -243,6 +246,9 @@ fn verify_events(events: &Value, result: &Value, fixture: &Value) {
         match event["type"].as_str().unwrap() {
             "tool_call_start" => {
                 assert_ne!(event["toolName"].as_str().unwrap(), "");
+                let call = &result["toolCalls"][calls.len()];
+                // The start names the same id the executed call carries.
+                assert_eq!(event["callId"], call["id"], "{}", fixture["model"]);
                 assert!(
                     calls
                         .insert(

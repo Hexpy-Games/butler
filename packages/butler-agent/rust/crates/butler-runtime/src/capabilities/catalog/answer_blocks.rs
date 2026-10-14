@@ -7,10 +7,15 @@ use serde::Serialize;
 use serde_json::Value;
 use url::Url;
 
+#[path = "answer_blocks_draft.rs"]
+mod draft;
+#[path = "answer_blocks_scanner.rs"]
+mod scanner;
 #[path = "answer_blocks_schema.rs"]
 mod schema;
 #[path = "answer_blocks_sets.rs"]
 mod sets;
+pub use draft::{AnswerBlocksDraftOp, AnswerBlocksDraftUnit, AnswerBlocksParser};
 pub use sets::{accept, normalize, pictured_sources, shown, sources};
 
 pub const ANSWER_BLOCKS_SCHEMA: &str = include_str!("answer-blocks.schema.json");
@@ -278,4 +283,70 @@ fn unique(items: &[Value], key: &str, path: &str, problems: &mut Vec<AnswerBlock
             );
         }
     }
+}
+
+/// Applies the exact final normalization to one closed field or item.
+pub fn normalize_unit(value: &mut Value) {
+    sets::trim(value);
+}
+
+/// Checks a closed field/item against its block's schema and final evidence rules.
+pub fn validate_draft_unit(
+    block: &Value,
+    field: &str,
+    index: Option<usize>,
+    value: &Value,
+    context: &AnswerBlocksContext<'_>,
+) -> bool {
+    let Ok(contract) = CONTRACT.as_ref() else {
+        return false;
+    };
+    let Some(variant) = contract["$defs"]["block"]["oneOf"]
+        .as_array()
+        .and_then(|variants| {
+            variants
+                .iter()
+                .find(|v| v["properties"]["type"]["const"] == block["type"])
+        })
+    else {
+        return false;
+    };
+    let Some(mut rule) = variant["properties"].get(field) else {
+        return false;
+    };
+    if let Some(index) = index {
+        if rule["maxItems"]
+            .as_u64()
+            .is_some_and(|max| index as u64 >= max)
+        {
+            return false;
+        }
+        let Some(item_rule) = rule.get("items") else {
+            return false;
+        };
+        rule = item_rule;
+    }
+    let mut problems = Vec::new();
+    schema::validate(value, rule, contract, "", &mut problems);
+    let read = context
+        .read_sources
+        .iter()
+        .filter_map(|s| source_identity(s))
+        .collect();
+    if index.is_some() {
+        semantic(value, "", context, &read, &mut problems);
+    } else {
+        let mut combined = block.clone();
+        combined[field] = value.clone();
+        semantic(&combined, "", context, &read, &mut problems);
+    }
+    if field == "rows" && index.is_some() {
+        let columns = block["columns"].as_array().map_or(0, Vec::len);
+        dimensions(
+            &serde_json::json!({"columns": vec![Value::Null; columns], "rows": [value]}),
+            "",
+            &mut problems,
+        );
+    }
+    problems.is_empty()
 }

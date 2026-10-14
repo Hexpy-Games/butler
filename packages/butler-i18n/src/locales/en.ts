@@ -929,6 +929,9 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       copyFailed: "Could not copy.",
     },
     answerBlocks: {
+      preparing: "Preparing answer cards",
+      prepared: "Answer cards ready",
+      rechecking: "Butler is checking again",
       previousValue: "Was",
       showMore: "Show more",
       showLess: "Show less",

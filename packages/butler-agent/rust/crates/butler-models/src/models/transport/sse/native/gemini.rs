@@ -1,4 +1,4 @@
-use crate::models::stream_event::StreamProjection;
+use crate::models::stream_event::{StreamProjection, gemini_call_id};
 use butler_turn::btcc::ProviderStreamObserver;
 use serde_json::{Value, json};
 
@@ -6,14 +6,16 @@ pub(super) struct State {
     response: Value,
     projection: StreamProjection,
     finished: bool,
+    round: u32,
 }
 
 impl State {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(round: u32) -> Self {
         Self {
             response: json!({"candidates":[]}),
             projection: StreamProjection::new(),
             finished: false,
+            round,
         }
     }
 
@@ -77,7 +79,7 @@ impl State {
                     part,
                     if index == 0 { observer } else { None },
                     &mut self.projection,
-                    part_index == 0,
+                    (part_index == 0, self.round),
                 );
             }
         }
@@ -94,7 +96,7 @@ fn absorb_part(
     part: &Value,
     observer: Option<&dyn ProviderStreamObserver>,
     projection: &mut StreamProjection,
-    continuing: bool,
+    (continuing, round): (bool, u32),
 ) {
     if let Some(text) = part["text"].as_str() {
         projection.text(observer, text, part["thought"] == true);
@@ -120,14 +122,16 @@ fn absorb_part(
         }
     }
     if let Some(call) = part.get("functionCall") {
-        let index = parts.len() as u64;
+        let index = parts.len();
         let name = call["name"].as_str().unwrap_or("");
-        projection.call(observer, index, name, None);
+        // Gemini names no call id; the executed call gets this one.
+        let id = gemini_call_id(round, index, name);
+        projection.start(observer, index as u64, name, Some(&id));
         // GenerateContent emits complete function-call parts rather than raw JSON tokens.
         let empty = json!({});
         let arguments = call.get("args").unwrap_or(&empty);
         if let Ok(arguments) = butler_core::json::stringify(arguments) {
-            projection.call(observer, index, name, Some(&arguments));
+            projection.delta(observer, index as u64, &arguments);
         }
     }
     parts.push(part.clone());

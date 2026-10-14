@@ -1,17 +1,17 @@
 use crate::models::stream_event::StreamProjection;
 use butler_turn::btcc::ProviderStreamObserver;
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 pub(super) struct State {
-    calls: HashMap<u64, Value>,
+    calls: HashSet<u64>,
     projection: StreamProjection,
 }
 
 impl State {
     pub(super) fn new() -> Self {
         Self {
-            calls: HashMap::new(),
+            calls: HashSet::new(),
             projection: StreamProjection::new(),
         }
     }
@@ -23,31 +23,25 @@ impl State {
     ) -> Result<Option<Value>, &'static str> {
         match event["type"].as_str().unwrap_or("") {
             "response.output_item.added" if event["item"]["type"] == "function_call" => {
-                let index = event["output_index"]
-                    .as_u64()
-                    .ok_or("provider_stream_malformed_event")?;
+                let index = output_index(event)?;
                 let item = &event["item"];
-                self.projection
-                    .call(observer, index, item["name"].as_str().unwrap_or(""), None);
-                self.calls.insert(index, item.clone());
-            }
-            "response.function_call_arguments.delta" => {
-                let index = event["output_index"]
-                    .as_u64()
-                    .ok_or("provider_stream_malformed_event")?;
-                let item = self
-                    .calls
-                    .get(&index)
-                    .ok_or("provider_stream_malformed_event")?;
-                let fragment = event["delta"]
-                    .as_str()
-                    .ok_or("provider_stream_malformed_event")?;
-                self.projection.call(
+                self.projection.start(
                     observer,
                     index,
                     item["name"].as_str().unwrap_or(""),
-                    Some(fragment),
+                    item["call_id"].as_str(),
                 );
+                self.calls.insert(index);
+            }
+            "response.function_call_arguments.delta" => {
+                let index = output_index(event)?;
+                if !self.calls.contains(&index) {
+                    return Err("provider_stream_malformed_event");
+                }
+                let fragment = event["delta"]
+                    .as_str()
+                    .ok_or("provider_stream_malformed_event")?;
+                self.projection.delta(observer, index, fragment);
             }
             "response.output_text.delta" => {
                 if let Some(text) = event["delta"].as_str() {
@@ -71,4 +65,10 @@ impl State {
         }
         Ok(None)
     }
+}
+
+fn output_index(event: &Value) -> Result<u64, &'static str> {
+    event["output_index"]
+        .as_u64()
+        .ok_or("provider_stream_malformed_event")
 }

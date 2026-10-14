@@ -31,7 +31,8 @@ export function useMessageVirtualizer({
         ? `queued-${queuedKeys[index - queuedStart] ?? index}`
         : showTurnActivity && index === visibleMessages.length
         ? "active-turn-activity"
-        : (visibleMessages[index]?.id ?? `message-${index}`),
+        : (visibleMessages[index]?.role === "assistant" && visibleMessages[index]?.turn_id
+          ? `answer-${visibleMessages[index].turn_id}:${index}` : visibleMessages[index]?.id ?? `message-${index}`),
     [queuedKeys, queuedStart, showTurnActivity, visibleMessages],
   );
   const estimateSize = useCallback(
@@ -58,10 +59,11 @@ export function useMessageVirtualizer({
   const virtualContentHeight = Math.max(headerHeight, rowVirtualizer.getTotalSize());
   const viewportHeight =
     rowVirtualizer.scrollRect?.height ?? scrollRef.current?.clientHeight ?? 0;
-  const topOffset = Math.max(
+  const naturalTopOffset = Math.max(
     MESSAGE_LIST_TOP_PADDING,
     viewportHeight - virtualContentHeight - bottomReserve,
   );
+  const topOffset = naturalTopOffset;
   const virtualListHeight = Math.max(
     viewportHeight,
     virtualContentHeight + topOffset + bottomReserve,

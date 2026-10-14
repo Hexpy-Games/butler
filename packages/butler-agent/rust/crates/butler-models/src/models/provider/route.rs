@@ -37,7 +37,7 @@ pub(in crate::models::provider) fn carrier(
         ),
         ("google", _) => (
             Carrier::Gemini,
-            transport::ResponseMode::GeminiSse,
+            transport::ResponseMode::GeminiSse { call_round: 0 },
             "generate_content",
         ),
         ("local", _) => (
@@ -114,7 +114,7 @@ pub(in crate::models::provider) fn cache_affinity(
 /// Keep configured endpoints usable for probes while selecting Gemini SSE for rounds.
 pub(super) fn stream_endpoint(endpoint: &url::Url, mode: transport::ResponseMode) -> url::Url {
     let mut endpoint = endpoint.clone();
-    if matches!(mode, transport::ResponseMode::GeminiSse) {
+    if matches!(mode, transport::ResponseMode::GeminiSse { .. }) {
         let path = endpoint
             .path()
             .replace(":generateContent", ":streamGenerateContent");

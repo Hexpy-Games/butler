@@ -44,6 +44,7 @@ struct CodexState {
     fallback_text: String,
     sequence: u64,
     fallback_stream_id: String,
+    tool_stream_id: String,
 }
 
 impl CodexState {
@@ -53,6 +54,7 @@ impl CodexState {
             fallback_text: String::new(),
             sequence: 0,
             fallback_stream_id: format!("codex-stream-{now}"),
+            tool_stream_id: format!("tool-stream-{}", uuid::Uuid::new_v4().simple()),
         }
     }
     fn event(
@@ -64,33 +66,7 @@ impl CodexState {
     ) -> Result<Option<Value>, Box<ProviderRequestError>> {
         let kind = event.get("type").and_then(Value::as_str).unwrap_or("");
         if kind == "error" || kind == "response.failed" {
-            let error = event
-                .get("error")
-                .or_else(|| event.pointer("/response/error"))
-                .unwrap_or(event);
-            let code = error.get("code").and_then(Value::as_str).unwrap_or("");
-            let kind = error.get("type").and_then(Value::as_str).unwrap_or("");
-            let identity = format!("{kind}:{code}").to_ascii_lowercase();
-            let status = if identity.contains("rate") || identity.contains("too_many_requests") {
-                429
-            } else if identity.contains("unauthorized") || identity.contains("auth") {
-                401
-            } else if identity.contains("permission") || identity.contains("forbidden") {
-                403
-            } else if identity.contains("invalid") || identity.contains("bad_request") {
-                400
-            } else if identity.contains("service_unavailable") || identity.contains("overload") {
-                503
-            } else {
-                502
-            };
-            return Err(Box::new(diagnostics::http(
-                provider,
-                api,
-                status,
-                Some(error),
-                None,
-            )));
+            return Err(stream_error(event, provider, api));
         }
         if kind == "response.output_text.delta" {
             if let Some(delta) = event.get("delta").and_then(Value::as_str) {
@@ -103,19 +79,40 @@ impl CodexState {
                 let sequence = self.next();
                 self.emit(observer, &serde_json::json!({"type":"reasoning_delta","streamId":self.stream_id(event),"sequence":sequence,"textDelta":delta,"charCount":delta.encode_utf16().count(),"raw":event}));
             }
+        } else if kind == "response.output_item.added" {
+            if let Some(item) = event.get("item")
+                && item["type"] == "function_call"
+                && let Some(name) = item["name"].as_str()
+                && let Some(observer) = observer
+            {
+                let sequence = self.next();
+                observer.tool_call(
+                    &butler_core::tool_protocol::ToolCallStreamEvent::ToolCallStart {
+                        stream_id: self.tool_stream_id.clone(),
+                        call_index: event["output_index"].as_u64().unwrap_or(0),
+                        sequence,
+                        tool_name: name.to_owned(),
+                        call_id: item["call_id"].as_str().map(str::to_owned),
+                    },
+                );
+            }
         } else if kind == "response.function_call_arguments.delta" {
             if let Some(delta) = event.get("delta").and_then(Value::as_str) {
                 let sequence = self.next();
-                self.emit(observer, &serde_json::json!({"type":"tool_call_delta","streamId":self.stream_id(event),"callIndex":event.get("output_index").and_then(Value::as_u64).unwrap_or(0),"sequence":sequence,"toolCallId":event.get("call_id").or_else(||event.get("item_id")),"argumentsDelta":delta,"argumentCharCount":delta.encode_utf16().count(),"publicState":"generating","raw":event}));
+                if let Some(observer) = observer {
+                    observer.tool_call(
+                        &butler_core::tool_protocol::ToolCallStreamEvent::ToolCallDelta {
+                            stream_id: self.tool_stream_id.clone(),
+                            call_index: event["output_index"].as_u64().unwrap_or(0),
+                            sequence,
+                            arguments_delta: delta.to_owned(),
+                        },
+                    );
+                }
             }
         } else if kind == "response.output_item.done" {
             if let Some(item) = event.get("item").filter(|value| value.is_object()) {
                 self.output.push(item.clone());
-                if item.get("type").and_then(Value::as_str) == Some("function_call") {
-                    let arguments = item.get("arguments").and_then(Value::as_str).unwrap_or("");
-                    let sequence = self.next();
-                    self.emit(observer, &serde_json::json!({"type":"tool_call_delta","streamId":self.stream_id(event),"callIndex":event.get("output_index").and_then(Value::as_u64).unwrap_or(0),"sequence":sequence,"toolCallId":item.get("call_id"),"toolName":item.get("name"),"argumentCharCount":arguments.encode_utf16().count(),"publicState":"ready","raw":event}));
-                }
             }
         } else if kind == "response.completed"
             && let Some(response) = event.get("response").filter(|value| value.is_object())
@@ -292,4 +289,28 @@ fn data(frame: &str) -> Option<String> {
         .join("\n");
     let data = butler_core::public_text::trim_js_whitespace(&data);
     (!data.is_empty()).then(|| data.to_owned())
+}
+
+fn stream_error(event: &Value, provider: &str, api: &str) -> Box<ProviderRequestError> {
+    let error = event
+        .get("error")
+        .or_else(|| event.pointer("/response/error"))
+        .unwrap_or(event);
+    let code = error.get("code").and_then(Value::as_str).unwrap_or("");
+    let kind = error.get("type").and_then(Value::as_str).unwrap_or("");
+    let identity = format!("{kind}:{code}").to_ascii_lowercase();
+    let status = if identity.contains("rate") || identity.contains("too_many_requests") {
+        429
+    } else if identity.contains("unauthorized") || identity.contains("auth") {
+        401
+    } else if identity.contains("permission") || identity.contains("forbidden") {
+        403
+    } else if identity.contains("invalid") || identity.contains("bad_request") {
+        400
+    } else if identity.contains("service_unavailable") || identity.contains("overload") {
+        503
+    } else {
+        502
+    };
+    Box::new(diagnostics::http(provider, api, status, Some(error), None))
 }

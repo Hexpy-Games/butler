@@ -1,5 +1,12 @@
 //! Internal provider projections. Raw argument fragments are never public events.
 use butler_core::tool_protocol::ToolCallStreamEvent;
+use butler_turn::btcc::ProviderStreamObserver;
+
+/// The id Butler gives a Gemini function call (Gemini names none): its
+/// round, its part position and its tool name.
+pub(super) fn gemini_call_id(round: u32, index: usize, name: &str) -> String {
+    format!("gemini_call_{round}_{index}_{name}")
+}
 
 pub(super) struct StreamProjection {
     id: String,
@@ -14,35 +21,46 @@ impl StreamProjection {
         }
     }
 
-    pub(super) fn call(
+    /// Declares a call's identity (and the id its executed call carries)
+    /// before any of its argument fragments.
+    pub(super) fn start(
         &mut self,
-        observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
+        observer: Option<&dyn ProviderStreamObserver>,
         index: u64,
         name: &str,
-        arguments: Option<&str>,
+        call_id: Option<&str>,
     ) {
         let Some(observer) = observer else { return };
         self.sequence += 1;
-        let event = match arguments {
-            None => ToolCallStreamEvent::ToolCallStart {
-                stream_id: self.id.clone(),
-                sequence: self.sequence,
-                call_index: index,
-                tool_name: name.into(),
-            },
-            Some(delta) => ToolCallStreamEvent::ToolCallDelta {
-                stream_id: self.id.clone(),
-                sequence: self.sequence,
-                call_index: index,
-                arguments_delta: delta.into(),
-            },
-        };
-        observer.tool_call(&event);
+        observer.tool_call(&ToolCallStreamEvent::ToolCallStart {
+            stream_id: self.id.clone(),
+            call_index: index,
+            sequence: self.sequence,
+            tool_name: name.into(),
+            call_id: call_id.filter(|id| !id.is_empty()).map(str::to_owned),
+        });
+    }
+
+    /// One exact argument fragment of a started call.
+    pub(super) fn delta(
+        &mut self,
+        observer: Option<&dyn ProviderStreamObserver>,
+        index: u64,
+        fragment: &str,
+    ) {
+        let Some(observer) = observer else { return };
+        self.sequence += 1;
+        observer.tool_call(&ToolCallStreamEvent::ToolCallDelta {
+            stream_id: self.id.clone(),
+            call_index: index,
+            sequence: self.sequence,
+            arguments_delta: fragment.into(),
+        });
     }
 
     pub(super) fn text(
         &mut self,
-        observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
+        observer: Option<&dyn ProviderStreamObserver>,
         text: &str,
         reasoning: bool,
     ) {

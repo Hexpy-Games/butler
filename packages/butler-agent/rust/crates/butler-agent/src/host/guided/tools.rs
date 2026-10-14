@@ -3,6 +3,8 @@
 
 mod access;
 mod answer_blocks;
+mod answer_blocks_stream;
+pub(in crate::host::guided) use answer_blocks_stream::AnswerBlocksStream;
 mod discovery;
 mod dispatch;
 mod effect;

@@ -13,12 +13,27 @@ use super::request_guard::{GuardError, RequestPolicy, run_guarded};
 
 #[derive(Clone, Copy)]
 pub(super) enum ResponseMode {
-    Json { tolerate_invalid: bool },
+    Json {
+        tolerate_invalid: bool,
+    },
     HostedChatSse,
     CodexSse,
     ResponsesSse,
     AnthropicSse,
-    GeminiSse,
+    /// `call_round` names streamed calls as the decoded result does.
+    GeminiSse {
+        call_round: u32,
+    },
+}
+
+impl ResponseMode {
+    /// This mode for the round `round` (Gemini call ids name their round).
+    pub(super) fn for_round(self, round: u32) -> Self {
+        match self {
+            Self::GeminiSse { .. } => Self::GeminiSse { call_round: round },
+            other => other,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -273,7 +288,9 @@ impl Reading<'_> {
             ResponseMode::HostedChatSse => {
                 hosted_chat(response, provider, api, progress, stream_observer).await
             }
-            ResponseMode::ResponsesSse | ResponseMode::AnthropicSse | ResponseMode::GeminiSse => {
+            ResponseMode::ResponsesSse
+            | ResponseMode::AnthropicSse
+            | ResponseMode::GeminiSse { .. } => {
                 if !is_sse(&response) {
                     return json(
                         response,

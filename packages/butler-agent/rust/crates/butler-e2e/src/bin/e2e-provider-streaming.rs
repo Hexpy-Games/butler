@@ -19,6 +19,11 @@ impl ProviderStreamObserver for Events {
             events.push(value.clone());
         }
     }
+    fn tool_call(&self, event: &butler_core::tool_protocol::ToolCallStreamEvent) {
+        if let Ok(value) = serde_json::to_value(event) {
+            self.event(&value);
+        }
+    }
     fn round_text_discarded(&self) {
         self.event(&json!({"type":"discarded"}));
     }

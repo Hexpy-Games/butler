@@ -66,11 +66,11 @@ impl State {
             return Err("provider_stream_malformed_event");
         }
         if block["type"] == "tool_use" {
-            self.projection.call(
+            self.projection.start(
                 observer,
                 index as u64,
                 block["name"].as_str().unwrap_or(""),
-                None,
+                block["id"].as_str(),
             );
         }
         self.blocks.push(block.clone());
@@ -96,12 +96,7 @@ impl State {
                 .as_str()
                 .ok_or("provider_stream_malformed_event")?;
             self.arguments[index].push_str(fragment);
-            self.projection.call(
-                observer,
-                index as u64,
-                block["name"].as_str().unwrap_or(""),
-                Some(fragment),
-            );
+            self.projection.delta(observer, index as u64, fragment);
         } else if kind == "citations_delta" {
             if block.get("citations").is_none() {
                 block["citations"] = json!([]);

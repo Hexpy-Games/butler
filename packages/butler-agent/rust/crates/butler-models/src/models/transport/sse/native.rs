@@ -20,7 +20,7 @@ pub(in crate::models::transport) async fn read(
 ) -> Result<Value, Box<ProviderRequestError>> {
     let mut state = match mode {
         ResponseMode::AnthropicSse => State::Anthropic(anthropic::State::new()),
-        ResponseMode::GeminiSse => State::Gemini(gemini::State::new()),
+        ResponseMode::GeminiSse { call_round } => State::Gemini(gemini::State::new(call_round)),
         _ => State::Responses(responses::State::new()),
     };
     let completed = super::consume(response, provider, api, None, |frame| {
