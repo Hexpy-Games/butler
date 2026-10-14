@@ -15,12 +15,13 @@ async fn main() -> Result<(), Error> {
             let [parent, states, count] = rest else {
                 return Err("expected parent states count".into());
             };
-            let ids = Box::pin(builder.seed(
-                parent,
-                &serde_json::from_str::<Vec<String>>(states)?,
-                count.parse()?,
-            ))
-            .await?;
+            let ids = builder
+                .seed(
+                    parent,
+                    &serde_json::from_str::<Vec<String>>(states)?,
+                    count.parse()?,
+                )
+                .await?;
             println!("{}", serde_json::to_string(&ids)?);
         }
         "phase" => {
