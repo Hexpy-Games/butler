@@ -117,7 +117,9 @@ async fn sched_07_suspend_dispatches_once_and_restores_grid() -> Result<(), Harn
         );
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    // Jump halfway through the established slice, leaving time for dispatch
+    // and API observation inside the unchanged one-slice timeout.
+    tokio::time::sleep(butler_core::wall_clock::MAX_WAIT_SLICE / 2).await;
     jump(address.clone(), "2026-10-16T22:04:22.000Z").await?;
     let expected_ms = chrono::DateTime::parse_from_rfc3339("2026-10-16T22:04:22.000Z")
         .unwrap()
