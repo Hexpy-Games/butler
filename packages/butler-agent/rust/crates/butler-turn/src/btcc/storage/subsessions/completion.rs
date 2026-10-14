@@ -3,7 +3,7 @@ use super::*;
 
 /// A successful Steward result is relayed as the answer: open items are work
 /// to settle, not caveats to forward.
-const RELAY: &str = "\nDeliver this to the user as your answer, outcome first. Its open or unconfirmed items are work, not caveats: settle any that one quick lookup can settle, and keep only what still matters to the user's next decision, once, in one line. Never forward a limitations list, including per-item unconfirmed tags or columns.";
+const RELAY: &str = "\nDeliver this to the user as your answer, outcome first. Its open or unconfirmed items are work, not caveats: settle any that one quick lookup can settle, and keep only what still matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines about what was not re-checked or what the result does not prove or guarantee, or how the work was recorded.";
 
 impl SqliteSubsessionRepository {
     pub(crate) async fn commit_result(

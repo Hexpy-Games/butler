@@ -20,10 +20,17 @@ async fn model_facing_prompts_carry_no_handback_rules() -> Result<(), HarnessErr
                 "phase_minimal|butler|execution" | "phase_minimal|butler|read_only"
             )
         {
+            assert!(text.contains("else best judgment and why"), "{key} lacks judgment");
             assert!(
                 text.contains("find out what tools can reach rather than guess or disclaim"),
                 "{key} lacks the proactivity principle"
             );
+        }
+        if key.starts_with("legacy|") {
+            assert!(text.contains("Look up what the user said earlier"));
+        }
+        if key == "phase_minimal|butler|direct" {
+            assert!(text.contains("including what the user said earlier"));
         }
     }
     let catalog: Value = serde_json::from_str(&std::fs::read_to_string(
@@ -39,10 +46,10 @@ async fn model_facing_prompts_carry_no_handback_rules() -> Result<(), HarnessErr
             );
         }
     }
-    assert_no_handback(
-        "eol.template.md",
-        &std::fs::read_to_string(root.join("../resources/templates/eol.template.md"))?,
-    );
+    let eol = std::fs::read_to_string(root.join("../resources/templates/eol.template.md"))?;
+    assert_no_handback("eol.template.md", &eol);
+    assert!(eol.contains("give your best judgment, why, and what would change it"));
+    assert!(eol.contains("before relying on something the principal told you, look it up"));
     Ok(())
 }
 
@@ -66,6 +73,7 @@ fn descriptions(value: &Value) {
 fn assert_no_handback(source: &str, text: &str) {
     let text = text.to_lowercase();
     for forbidden in [
+        "claim only what evidence or tool results support",
         "verification limits",
         "residual risk",
         "non-critical gaps",

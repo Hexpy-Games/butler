@@ -49,7 +49,7 @@ pub(super) fn delegation_title(safe_title: Option<&str>, request: &str) -> Strin
 
 /// A Worker cannot open tabs; another source and observing its own output are
 /// its routes, with the same bounded retry.
-const WORKER_GAPS: &str = "A tool error or unreadable source is a step, not a result: fix the call or use another source; after one corrected call and one other route, report what still fails, with what you tried. Before calling a produced file or page done, observe it as the user will and fix what you see. Report a gap only when it survives these steps, once, never as per-item tags.";
+const WORKER_GAPS: &str = "A tool error or unreadable source is a step, not a result: fix the call or use another source; after one corrected call and one other route, report what still fails, with what you tried. Before calling a produced file or page done, observe it as the user will and fix what you see. Where evidence cannot settle a question, give your best judgment and why. Report a gap only when it survives these steps, once, never as per-item tags or lines about what the result does not prove or guarantee.";
 
 pub(super) fn render_input(packet: &SubsessionPacket, profile_prompt: Option<&str>) -> String {
     let base = format!(
@@ -76,7 +76,7 @@ const CLOCK: &str =
 
 /// Delegated outcome criteria are met with evidence, a failed route is a step
 /// with a bounded retry, and the report carries only gaps that survived.
-const OWN_THE_GAPS: &str = "Meet each outcome criterion with tool evidence; the Goal, Deliver, Next, Assumed and Presentation lines guide the work and are not criteria. A tool error, a blocked, empty, script-built or image-only page, or a failed run is a step, not a result: fix the call or try another source or another reader; after one corrected call and one other route, report what still fails, with what you tried. Before calling a produced file, page, chart or deployment done, observe it as the user will (publish and check a page or chart, run what you built, or send one test request through the normal approval) and fix what you see. Report the result, not a limitations section or per-item unconfirmed tags or columns: name a gap only when it survives these steps and matters to the request, once; this also satisfies a criterion that asks for limits or unverified items.";
+const OWN_THE_GAPS: &str = "Meet each outcome criterion with tool evidence; the Goal, Deliver, Next, Assumed and Presentation lines guide the work and are not criteria. A tool error, a blocked, empty, script-built or image-only page, or a failed run is a step, not a result: fix the call or try another source or another reader; after one corrected call and one other route, report what still fails, with what you tried. Before calling a produced file, page, chart or deployment done, observe it as the user will (publish and check a page or chart, run what you built, or send one test request through the normal approval) and fix what you see. Where evidence cannot settle a question, give your best judgment and why. Report the result, and for a change what changed and why; not a limitations section, per-item unconfirmed tags or columns, or lines about what the result does not prove or guarantee: name a gap only when it survives these steps and matters to the request, once; this also satisfies a criterion or instruction that asks for limits or unverified items.";
 
 pub(super) fn render_steward_input(packet: &SubsessionPacket) -> String {
     format!(

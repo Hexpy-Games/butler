@@ -131,7 +131,7 @@
       "definition": {
         "type": "function",
         "name": "web_read",
-        "description": "Get a page's text as bounded evidence. Pass tab to read an open tab as it shows now, or url: a page already open in a tab is read from that tab, any other through Butler's page reader. Each page is read once per turn. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. If a page fails, is blocked, or returns little or no text (script-built or image-only), open it in a tab and read or observe it there when browser tools are available, or read another source for the same fact; call it unreadable only after that.",
+        "description": "Get a page's text as bounded evidence. Pass tab to read an open tab as it shows now, or url: a page already open in a tab is read from that tab, any other through Butler's page reader. Each page is read once per turn. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. If a page fails, is blocked, or returns little or no text (script-built or image-only), open it in a tab and read or observe it there when browser tools are available, or read another source for the same fact; after one corrected call and one other route, report what still fails and what you tried.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -9782,7 +9782,7 @@
     "web_read": {
       "type": "function",
       "name": "web_read",
-      "description": "Get a page's text as bounded evidence. Pass tab to read an open tab as it shows now, or url: a page already open in a tab is read from that tab, any other through Butler's page reader. Each page is read once per turn. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. If a page fails, is blocked, or returns little or no text (script-built or image-only), open it in a tab and read or observe it there when browser tools are available, or read another source for the same fact; call it unreadable only after that.",
+      "description": "Get a page's text as bounded evidence. Pass tab to read an open tab as it shows now, or url: a page already open in a tab is read from that tab, any other through Butler's page reader. Each page is read once per turn. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. If a page fails, is blocked, or returns little or no text (script-built or image-only), open it in a tab and read or observe it there when browser tools are available, or read another source for the same fact; after one corrected call and one other route, report what still fails and what you tried.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
