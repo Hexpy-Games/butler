@@ -1,6 +1,6 @@
 //! The provisional assistant message of a streaming turn: `message.updated`
 //! with status `streaming` under one id per uninterrupted segment, which the
-//! final answer later reuses (`message.created` with the same id).
+//! final answer later reuses (`message.updated` with status `delivered` and the same id).
 //!
 //! The message shows one provider stream at a time (`turn_stream_drafts`):
 //! deltas of the current stream are appended, the first delta of a new stream
