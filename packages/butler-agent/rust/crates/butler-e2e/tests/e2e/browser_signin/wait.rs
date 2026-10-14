@@ -1,5 +1,5 @@
 //! `browser_wait_for_user` with a stub model: the user holds the tab for a
-//! secure field; the hand-off card names the site and why (never the tab id),
+//! secure field; the hand-off text names the site and why (never the tab id),
 //! another tab's changes never resume it, and the hand-back does.
 use super::host::{admin, attach, snapshot, tab};
 use super::tool::waiting_card;
@@ -50,9 +50,13 @@ async fn wait_for_user_card_names_the_site_and_resumes_on_hand_back() -> Result<
     assert_eq!(operation["targets"], json!(["fixture-shop.test"]), "{card}");
     assert_eq!(operation["wait_reason"], "secure_field", "{card}");
     assert_eq!(operation["allow_conversation"], false);
+    assert_eq!(operation["browser_tab"], "t1", "exact hand-off tab binding");
+    // browserHandoffView displays the site and localized reason; browser_tab
+    // is internal metadata for the App's thumbnail/open action.
+    let shown = json!([operation["targets"], operation["wait_reason"]]);
     assert!(
-        !operation.to_string().contains("\"t1\""),
-        "no tab id on the card: {card}"
+        !shown.to_string().contains("t1"),
+        "no tab id in visible hand-off text: {card}"
     );
     assert!(host.ops().contains(&"tab.wait".to_owned()));
 
