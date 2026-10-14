@@ -12,6 +12,7 @@
     "enabled": false
   },
   "ui": {
+    "disable": false,
     "clipboard": "none",
     "injection": false
   },

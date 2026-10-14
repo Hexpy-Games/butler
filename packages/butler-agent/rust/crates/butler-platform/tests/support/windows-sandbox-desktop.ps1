@@ -5,7 +5,8 @@ $bundle = Split-Path -Parent $Manifest
 $pins = Get-Content -Raw $Manifest | ConvertFrom-Json
 $resultRoot = Join-Path $env:LOCALAPPDATA 'Butler\e2e-results'
 $resultFile = Join-Path $resultRoot ($pins.revision + '.json')
-$result = @{ revision=$pins.revision; status='FAIL'; probe=$null; desktop=$null; testExit=$null }
+$diagnostic = Join-Path $resultRoot ($pins.revision + '.diagnostic.json')
+$result = @{ diagnostic=$diagnostic; revision=$pins.revision; status='FAIL'; probe=$null; desktop=$null; testExit=$null }
 $profile = Join-Path $bundle ('tmp-' + [guid]::NewGuid().ToString('N').Substring(0,8))
 $before = (& reg query HKCU\Software\Classes\butler /s | Out-String)
 try {
@@ -52,9 +53,26 @@ public static class ButlerDesktop {
     $env:BUTLER_E2E_WINDOWS_SANDBOX_DESKTOP = '1'
     $env:BUTLER_E2E_SKIP_BUILD = '1'
     $env:BUTLER_E2E_BIN = Join-Path $bundle 'butler-agent.exe'
-    $probe = & (Join-Path $bundle 'butler-sandbox.exe') --probe
-    $result.probe = ($probe | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or $result.probe -ne 'partial') { throw 'desktop_probe_not_partial' }
+    New-Item -ItemType Directory -Force $resultRoot | Out-Null
+    $probeOut = Join-Path $profile 'probe.stdout'
+    $probeErr = Join-Path $profile 'probe.stderr'
+    $child = $null
+    try {
+        $child = Start-Process -FilePath (Join-Path $bundle 'butler-sandbox.exe') -ArgumentList @('--probe','--diagnostic',('"' + $diagnostic + '"')) -NoNewWindow -PassThru -RedirectStandardOutput $probeOut -RedirectStandardError $probeErr
+        $child.WaitForExit()
+        $result.probe = (Get-Content -Raw $probeOut).Trim()
+        $result.probeExit = $child.ExitCode
+    } finally {
+        if ($null -ne $child -and !$child.HasExited) { Stop-Process -Id $child.Id -Force }
+    }
+    if (Test-Path $diagnostic) {
+        $details = Get-Content -Raw $diagnostic | ConvertFrom-Json
+        $result.probeDetails = $details
+    } else {
+        $details = @{reason='probe_diagnostic_missing';stderr=(Get-Content -Raw $probeErr)}
+        $details | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $diagnostic
+    }
+    if ($result.probeExit -ne 0 -or $result.probe -ne 'partial') { throw ('desktop_probe_failed: ' + $details.reason) }
     $case = 'windows_project_sandbox::desktop_project_write_cleans_drive_journal'
     $listed = & (Join-Path $bundle 'e2e.exe') $case --exact --list
     if ($LASTEXITCODE -ne 0 -or ($listed | Out-String) -notmatch '1 test, 0 benchmarks') { throw 'desktop_test_not_found' }
@@ -77,7 +95,12 @@ public static class ButlerDesktop {
     if (!$result.registryUnchanged) { $result.status='FAIL'; $result.error='registry_changed' }
     Remove-Item -LiteralPath $profile -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force $resultRoot | Out-Null
-    $result | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 $resultFile
+    $result | ConvertTo-Json -Depth 15 | Set-Content -Encoding UTF8 $resultFile
     Write-Host $result.status $resultFile
+    if ($result.error) { Write-Host ('Reason: ' + $result.error) }
+    if (Test-Path $diagnostic) {
+        Write-Host ('Diagnostic: ' + $diagnostic)
+        Get-Content -Raw $diagnostic | Write-Host
+    }
 }
 if ($result.status -ne 'PASS') { exit 1 }

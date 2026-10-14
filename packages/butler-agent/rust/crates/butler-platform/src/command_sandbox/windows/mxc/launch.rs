@@ -7,7 +7,15 @@ pub(crate) fn main() -> Result<i32, Error> {
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
         Some("--probe") => {
-            println!("{}", probe::helper_probe()?);
+            let diagnostic = match args.next().as_deref() {
+                None => None,
+                Some("--diagnostic") => Some(args.next().ok_or("missing diagnostic path")?),
+                _ => return Err("invalid probe argument".into()),
+            };
+            println!(
+                "{}",
+                probe::helper_probe(diagnostic.as_deref().map(Path::new))?
+            );
             Ok(0)
         }
         Some("--probe-child") => {

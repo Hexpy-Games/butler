@@ -3,7 +3,7 @@ use mxc_sdk::{__ffi, v1};
 use serde_json::Value;
 use std::io::{self, Read};
 
-pub(super) fn probe(request: &Value) -> Result<Value, &'static str> {
+pub(super) fn probe(request: &Value) -> Result<Value, Box<dyn std::error::Error>> {
     let mut typed = v1::ContainerRequest::new(
         request
             .pointer("/process/commandLine")
@@ -29,14 +29,17 @@ pub(super) fn probe(request: &Value) -> Result<Value, &'static str> {
         }),
         ..Default::default()
     });
-    typed.ui = Some(v1::UiPolicy::default());
+    typed.ui = Some(v1::UiPolicy {
+        disable: false,
+        ..Default::default()
+    });
     typed.working_directory = request
         .pointer("/process/cwd")
         .and_then(Value::as_str)
         .map(str::to_owned);
     typed.timeout_ms = Some(10000);
-    let facts = v1::probe(Some(&typed)).map_err(|_| "mxc_api_missing")?;
-    serde_json::to_value(facts).map_err(|_| "probe_failed")
+    let facts = v1::probe(Some(&typed))?;
+    Ok(serde_json::to_value(facts)?)
 }
 
 pub(super) fn run(request: &Value) -> Result<i32, Box<dyn std::error::Error>> {
@@ -70,42 +73,39 @@ fn relay(
     })
 }
 
-pub(super) fn child_probe(
-    request: &Value,
-    nonce: &str,
-) -> Result<&'static str, Box<dyn std::error::Error>> {
-    let mut child = match __ffi::spawn_container_json(&serde_json::to_string(request)?, false) {
-        Ok(child) => child,
-        Err(error) => {
-            let text = error.native_code.as_deref().unwrap_or_default();
-            return Ok(
-                if text.contains("1314") || text.eq_ignore_ascii_case("0x80070522") {
-                    "privilege_not_held"
-                } else if text.to_ascii_uppercase().contains("C0000142")
-                    || text.contains("3221225794")
-                {
-                    "non_interactive_desktop"
-                } else {
-                    "probe_failed"
-                },
-            );
+pub(super) fn child_probe(request: &Value, nonce: &str) -> Value {
+    let result = __ffi::run_json(&request.to_string(), false);
+    match result {
+        Err(error) => error_report(&error, "mxc_spawn_failed"),
+        Ok(output) => {
+            let (reason, code) = match output.outcome {
+                v1::WaitResult::Exited(code) => {
+                    let reason = if code == 0 && output.stdout == format!("{nonce}\n").as_bytes() {
+                        "partial"
+                    } else {
+                        crate::command_sandbox::mxc_policy::reason_code(code.cast_unsigned())
+                    };
+                    (reason, Some(code))
+                }
+                v1::WaitResult::TimedOut => ("child_timed_out", None),
+            };
+            serde_json::json!({"reason":reason,"childExitCode":code,
+                "childNtstatus":code.filter(|n| *n < 0).map(|n| format!("0x{:08X}", n.cast_unsigned())),
+                "stderr":String::from_utf8_lossy(&output.stderr),"mxcError":null})
         }
+    }
+}
+
+pub(super) fn error_report(error: &v1::Error, fallback: &str) -> Value {
+    let native = error.native_code.as_deref().unwrap_or_default();
+    let reason = if native == "1314" || native.eq_ignore_ascii_case("0x80070522") {
+        "privilege_not_held"
+    } else {
+        fallback
     };
-    drop(child.take_stdin());
-    let stdout = child.take_stdout().ok_or("missing probe stdout")?;
-    let out = std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stdout.take(256).read_to_end(&mut bytes).map(|_| bytes)
-    });
-    let status = child.wait()?;
-    let bytes = out.join().map_err(|_| "probe relay panicked")??;
-    Ok(match status {
-        v1::WaitResult::Exited(0) if bytes == format!("{nonce}\n").as_bytes() => "partial",
-        v1::WaitResult::Exited(code) => {
-            crate::command_sandbox::mxc_policy::reason_code(code.cast_unsigned())
-        }
-        v1::WaitResult::TimedOut => "probe_failed",
-    })
+    serde_json::json!({"reason":reason,"childExitCode":null,"childNtstatus":null,"stderr":"",
+        "mxcError":{"code":error.code.to_string(),"operation":error.operation,
+        "nativeCode":error.native_code,"message":error.message}})
 }
 
 fn paths(request: &Value, field: &str) -> Result<Vec<String>, &'static str> {

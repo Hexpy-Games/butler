@@ -83,7 +83,7 @@ impl Plan {
             "version":"1.0.0", "containment":"processcontainer",
             "fallback":{"allowDaclMutation":false},
             "lifecycle":{"destroyOnExit":true,"preservePolicy":false},
-            "telemetry":{"enabled":false}, "ui":{"clipboard":"none","injection":false},
+            "telemetry":{"enabled":false}, "ui":{"disable":false,"clipboard":"none","injection":false},
             "network":{"ingress":{"default":"deny","hostLoopback":"deny"},"egress":{"default":"deny"}},
             "process":{"commandLine":command_line(invocation)?,"cwd":cwd,"env":env,"inheritDefaultEnv":false,"timeout":timeout},
             "filesystem":{"readwritePaths":write,"readonlyPaths":read,"deniedPaths":deny}

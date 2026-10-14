@@ -108,3 +108,47 @@ async fn desktop_project_write_cleans_drive_journal() -> Result<(), HarnessError
     assert_eq!(before.stdout, after.stdout);
     Ok(())
 }
+
+#[tokio::test]
+async fn probe_emits_loader_diagnostics() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows probe diagnostics");
+    let setup = Setup::new("WINDOWS-PROBE-DIAGNOSTICS")?;
+    let agent = butler_e2e::e2e::binary::agent_binary()?;
+    let helper = agent.with_file_name("butler-sandbox.exe");
+    let diagnostic = setup.sandbox.home.join("probe.json");
+    let out = std::process::Command::new(helper)
+        .args(["--probe", "--diagnostic"])
+        .arg(&diagnostic)
+        .env("BUTLER_WINDOWS_PROJECT_SANDBOX", "1")
+        .env("HOME", &setup.sandbox.home)
+        .env("BUTLER_DATA", &setup.sandbox.data)
+        .output()?;
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&std::fs::read(diagnostic)?)?;
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim(),
+        report["reason"].as_str().unwrap()
+    );
+    assert_eq!(report["policy"]["ui"]["disable"], false);
+    assert_eq!(report["policy"]["process"]["inheritDefaultEnv"], false);
+    let paths = report["policy"]["filesystem"]["readonlyPaths"]
+        .as_array()
+        .unwrap();
+    assert_eq!(paths.len(), 2);
+    assert!(paths.iter().all(|v| v.as_str().unwrap().contains("<dir>")));
+    assert!(report.get("stderr").is_some());
+    assert!(report.get("mxcError").is_some());
+    if report["mxcError"].is_null() {
+        assert!(report["childExitCode"].is_i64() || report["reason"] == "child_timed_out");
+        if report["childExitCode"].as_i64().is_some_and(|n| n < 0) {
+            assert!(report["childNtstatus"].as_str().unwrap().starts_with("0xC"));
+            assert_ne!(report["reason"], "non_interactive_desktop");
+        }
+    }
+    Ok(())
+}

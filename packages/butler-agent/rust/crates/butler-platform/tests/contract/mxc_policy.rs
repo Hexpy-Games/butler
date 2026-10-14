@@ -13,6 +13,7 @@ use butler_platform::command_sandbox::{
 use std::collections::BTreeMap;
 /// Policy planning and admission invariants of the command sandbox contract.
 pub(super) fn verify() {
+    probe_policy_keeps_loader_grants_and_redacts_paths();
     golden_policy_has_no_implicit_environment_network_or_fallback();
     policy_rejects_broad_and_overriding_grants();
     toolchains_replace_shims_and_keep_trusted_path_order();
@@ -254,11 +255,14 @@ fn drive_picker_and_reconcile_never_remove_other_owners_mapping() {
         Reconcile::Forget
     );
     for (code, reason) in [
-        (0xC000_0142, "non_interactive_desktop"),
+        (0xC000_0142, "child_dll_initialization_failed"),
+        (0xC000_0135, "child_dll_not_found"),
+        (0xC000_007B, "child_invalid_image"),
+        (0, "child_output_mismatch"),
         (1314, "privilege_not_held"),
         (126, "mxc_api_missing"),
         (127, "mxc_api_missing"),
-        (1, "probe_failed"),
+        (1, "child_exit_failed"),
     ] {
         assert_eq!(mxc_policy::reason_code(code), reason);
     }
@@ -373,4 +377,30 @@ fn mutation_predicate_requires_project_boundary_and_network_only() {
             && caps.read_only.is_enforced();
         assert_eq!(caps.project_write_available(), old);
     }
+}
+
+fn probe_policy_keeps_loader_grants_and_redacts_paths() {
+    use mxc_policy::probe;
+    let dir = path(r"C:\private\bundle");
+    let system = path(r"C:\Windows");
+    let request = probe::request(&dir.join("helper.exe").unwrap(), &dir, &system, "nonce").unwrap();
+    assert_eq!(request["ui"]["disable"], false);
+    assert_eq!(
+        request["filesystem"]["readonlyPaths"],
+        serde_json::json!([dir, system])
+    );
+    assert_eq!(request["process"]["inheritDefaultEnv"], false);
+    let env = request["process"]["env"].as_array().unwrap();
+    for key in ["SYSTEMROOT=", "WINDIR=", "PATH="] {
+        assert!(env.iter().any(|v| v.as_str().unwrap().starts_with(key)));
+    }
+    let projected = probe::redacted(&request);
+    let text = projected.to_string();
+    for private in ["private", "bundle", "windows", "nonce\""] {
+        assert!(!text.contains(private));
+    }
+    assert_eq!(
+        projected["filesystem"]["readonlyPaths"][0],
+        r"c:\<dir>\<dir>"
+    );
 }
