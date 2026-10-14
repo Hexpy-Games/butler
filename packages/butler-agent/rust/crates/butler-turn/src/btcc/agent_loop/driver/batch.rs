@@ -1,6 +1,7 @@
 //! Tool batch execution of one loop iteration: concurrent or sequential calls, refusals, authority parking and the policy's settlement.
 
 use super::*;
+use butler_core::tool_protocol::ToolName;
 
 mod concurrent;
 use super::super::tool_batch::ExecutedCall;
@@ -428,7 +429,11 @@ pub(super) async fn settle_batch(
     match after_batch(input, batch.calls, results, batch.iteration).await? {
         BatchDisposition::Continue => Ok(Step::Continue),
         BatchDisposition::FinalReport => {
-            begin_final_report(state);
+            let offers_blocks = batch
+                .tools
+                .iter()
+                .any(|tool| tool.name == ToolName::AnswerBlocks);
+            begin_final_report(state, offers_blocks);
             Ok(Step::Continue)
         }
         BatchDisposition::Wait => finish(

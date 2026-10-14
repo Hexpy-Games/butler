@@ -2,6 +2,12 @@
 use super::*;
 use std::sync::Arc;
 
+/// A Markdown table naming the same rows as the answer's table block.
+const REPEATED_TABLE: &str =
+    "| Image | Count |\n|---|---:|\n| **First** | 1 |\n| [Second](https://example.com/) | 1 |";
+/// A Markdown table of other rows, which no block shows.
+const OTHER_TABLE: &str = "| Step | Result |\n|---|---|\n| Collect | Done |";
+
 pub(crate) fn parent_item(body: &Value, step: &mut usize) -> Value {
     let current = *step;
     *step += 1;
@@ -28,7 +34,9 @@ pub(crate) fn parent_item(body: &Value, step: &mut usize) -> Value {
             )
         }
         _ => {
-            return json!({"type":"message","id":"answer","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Two images compared.","annotations":[]}]});
+            // The prose repeats the table block row for row; the reply keeps
+            // the block and drops the repeated Markdown table.
+            return json!({"type":"message","id":"answer","role":"assistant","status":"completed","content":[{"type":"output_text","text":format!("Two images compared.\n\n{REPEATED_TABLE}\n\n{OTHER_TABLE}\n\nBoth were checked."),"annotations":[]}]});
         }
     };
     json!({"type":"function_call","id":format!("parent-{current}"),"call_id":format!("parent-{current}"),"name":name,"arguments":args.to_string(),"status":"completed"})
@@ -80,6 +88,11 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
         "the pictured page capture is removed and the other page capture stays: {attachments:?}"
     );
     assert_remaining_capture_source(&s, &session)?;
+    assert_eq!(
+        message["text"],
+        format!("Two images compared.\n\n{OTHER_TABLE}\n\nBoth were checked."),
+        "a table shown as a block is not repeated in the prose"
+    );
     let sets = &message["answer_blocks"];
     assert_eq!(sets[0]["spec"]["blocks"].as_array().unwrap().len(), 3);
     assert!(
@@ -228,11 +241,20 @@ fn assert_presentation_contract(requests: &[Value]) {
             && task.contains("collect one representative photo per item with image_collect"),
         "the planned presentation drives the delegated task: {task}"
     );
+    // The steward reports without answer blocks: its final-report round
+    // neither offers nor names them, so it never searches for them.
+    let report = requests
+        .iter()
+        .filter(|r| r.to_string().contains("You run one delegated Work"))
+        .find_map(|r| {
+            let input = r["input"].to_string();
+            input.contains("Execution is settled").then_some(input)
+        })
+        .expect("a steward final-report round");
     assert!(
-        requests.iter().any(|r| r
-            .to_string()
-            .contains("when your Plan's Presentation line names blocks, present the result with them as planned")),
-        "the final-report round presents as planned"
+        report.contains("the recipient builds them from your report")
+            && !report.contains("except answer_blocks"),
+        "steward final report: {report}"
     );
     let result = requests
         .iter()
@@ -259,9 +281,54 @@ fn assert_presentation_contract(requests: &[Value]) {
         blocks["description"]
             .as_str()
             .unwrap()
-            .contains("Use it unasked as the Plan's Presentation line decided"),
+            .contains("Use it unasked as the Plan's Presentation line decided")
+            && blocks["description"]
+                .as_str()
+                .unwrap()
+                .contains("The blocks are the only copy of what they show"),
         "{blocks}"
     );
+    assert_acceptance_contract(result, steward);
+}
+
+/// Explicit constraints of the request (counts in the unit it names, each
+/// distinct, dates, limits) become Plan checks, travel to the steward as its
+/// acceptance criteria, and are what result and completion reviews test.
+fn assert_acceptance_contract(parent: &Value, steward: &Value) {
+    let tool = |request: &Value, name: &str| {
+        request["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == name)
+            .unwrap_or_else(|| panic!("{name} offered"))
+            .clone()
+    };
+    let checks =
+        tool(parent, "replace_work_plan")["parameters"]["properties"]["checks"]["description"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+    assert!(
+        checks.contains("Make each explicit constraint in the request its own check")
+            && checks.contains("in the unit the request names and each one distinct"),
+        "{checks}"
+    );
+    assert!(
+        steward["input"].to_string().contains("Approach verified"),
+        "the Plan's checks reach the steward as acceptance criteria"
+    );
+    for request in [parent, steward] {
+        let review = tool(request, "record_work_review")["description"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        assert!(
+            review.contains("test the result against each Plan check and each explicit constraint in the request")
+                && review.contains("never accept"),
+            "{review}"
+        );
+    }
 }
 
 fn strip_signatures(value: &mut Value) {
