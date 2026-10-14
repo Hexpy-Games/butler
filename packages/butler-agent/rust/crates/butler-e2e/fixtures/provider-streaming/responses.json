@@ -1,0 +1,82 @@
+{
+  "model": "openai/gpt-6-luna",
+  "shape": "native",
+  "path": "/v1/responses",
+  "expected": {
+    "id": "resp_replay",
+    "model": "gpt-6-luna",
+    "status": "completed",
+    "output": [
+      {
+        "type": "function_call",
+        "id": "fc_0",
+        "call_id": "call_0",
+        "name": "render",
+        "arguments": "{\"value\":\"안녕 🌍\",\"items\":[1,2]}",
+        "status": "completed"
+      },
+      {
+        "type": "function_call",
+        "id": "fc_1",
+        "call_id": "call_1",
+        "name": "inspect",
+        "arguments": "{\"other\":true}",
+        "status": "completed"
+      },
+      {
+        "type": "message",
+        "id": "msg",
+        "role": "assistant",
+        "status": "completed",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "Hello 안녕 🌍!",
+            "annotations": []
+          }
+        ]
+      }
+    ],
+    "usage": {
+      "input_tokens": 125,
+      "output_tokens": 10,
+      "total_tokens": 135,
+      "input_tokens_details": {
+        "cached_tokens": 100,
+        "cache_write_tokens": 20
+      },
+      "output_tokens_details": {
+        "reasoning_tokens": 3
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": [
+      [
+        "content-type",
+        "text/event-stream"
+      ]
+    ],
+    "chunks": [
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_replay\",\"model\":\"gpt-6-luna\",\"status\":\"in_progress\",\"output\":[],\"usage\":{\"input_tokens\":125,\"output_tokens\":10,\"total_tokens\":135,\"input_tokens_details\":{\"cached_tokens\":100,\"cache_write_tokens\":20},\"output_tokens_details\":{\"reasoning_tokens\":3}}}}\n\ndata: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"type\":\"function_call\",\"id\":\"fc_0\",\"call_id\":\"call_0\",\"name\":\"render\",\"arguments\":\"\",\"status\":\"in_progress\"}}\n\ndata: {\"type\":\"response.output_item.added\",\"output_index\":1,\"item\":{\"type\":\"function_call\",\"id\":\"fc_1\",\"call_id\":\"call_1\",\"name\":\"inspect\",\"arguments\":\"\",\"status\":\"in_progress\"}}\n\ndata: {\"type\":\"response.function_call_arguments.delta\",\"output_index\":0,\"item_id\":\"fc_0\",\"delta\":\"{\\\"value\\\":\\\"안녕\"}\n\ndata: {\"type\":\"response.function_call_arguments.delta\",\"output_index\":1,\"item_id\":\"fc_1\",\"delta\":\"{\\\"other\\\":tru\"}\n\ndata: {\"type\":\"response.function_call_arguments.delta\",\"output_index\":0,\"item_id\":\"fc_0\",\"delta\":\" 🌍\\\",\\\"items\\\":[1,2]}\"}\n\ndata: {\"type\":\"response.function_call_arguments.delta\",\"output_index\":1,\"item_id\":\"fc_1\",\"delta\":\"e}\"}\n\ndata: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"type\":\"function_call\",\"id\":\"fc_0\",\"call_id\":\"call_0\",\"name\":\"render\",\"arguments\":\"{\\\"value\\\":\\\"안녕 🌍\\\",\\\"items\\\":[1,2]}\",\"status\":\"completed\"}}\n\ndata: {\"type\":\"response.output_item.done\",\"output_index\":1,\"item\":{\"type\":\"function_call\",\"id\":\"fc_1\",\"call_id\":\"call_1\",\"name\":\"inspect\",\"arguments\":\"{\\\"other\\\":true}\",\"status\":\"completed\"}}\n\ndata: {\"type\":\"response.output_item.done\",\"output_index\":2,\"item\":{\"type\":\"message\",\"id\":\"msg\",\"role\":\"assistant\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"text\":\"Hello 안녕 🌍!\",\"annotations\":[]}]}}\n\ndata: {\"type\":\"response.output_text.delta\",\"output_index\":2,\"delta\":\"Hello \"}\n\ndata: {\"type\":\"response.output_text.delta\",\"output_index\":2,\"delta\":\"안녕 🌍!\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_replay\",\"model\":\"gpt-6-luna\",\"status\":\"completed\",\"output\":[{\"type\":\"function_call\",\"id\":\"fc_0\",\"call_id\":\"call_0\",\"name\":\"render\",\"arguments\":\"{\\\"value\\\":\\\"안녕 🌍\\\",\\\"items\\\":[1,2]}\",\"status\":\"completed\"},{\"type\":\"function_call\",\"id\":\"fc_1\",\"call_id\":\"call_1\",\"name\":\"inspect\",\"arguments\":\"{\\\"other\\\":true}\",\"status\":\"completed\"},{\"type\":\"message\",\"id\":\"msg\",\"role\":\"assistant\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"text\":\"Hello 안녕 🌍!\",\"annotations\":[]}]}],\"usage\":{\"input_tokens\":125,\"output_tokens\":10,\"total_tokens\":135,\"input_tokens_details\":{\"cached_tokens\":100,\"cache_write_tokens\":20},\"output_tokens_details\":{\"reasoning_tokens\":3}}}}\n\n"
+      }
+    ]
+  },
+  "documentation": [
+    "https://developers.openai.com/api/reference/resources/responses/streaming-events"
+  ],
+  "expected_text": "Hello 안녕 🌍!",
+  "argument_fragments": {
+    "0": [
+      "{\"value\":\"안녕",
+      " 🌍\",\"items\":[1,2]}"
+    ],
+    "1": [
+      "{\"other\":tru",
+      "e}"
+    ]
+  }
+}
