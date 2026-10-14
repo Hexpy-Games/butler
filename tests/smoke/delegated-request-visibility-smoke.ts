@@ -88,7 +88,7 @@ try {
       }
       const hideSidebar = page.getByRole("button", { name: copy.titlebar.hideLeftPanel, exact: true }).last();
       if (width < 640 && await hideSidebar.isVisible()) await hideSidebar.click();
-      await card.getByRole("button", { name: copy.conversation.work.showDetailsLabel, exact: true }).click();
+      await card.locator('[data-test-class="work-activity-disclosure-toggle"]').click();
       const scroll = card.locator('[data-test-class="work-block-details-scroll"]');
       await scroll.getByText("대화 기억 찾기", { exact: true }).waitFor();
       await page.evaluate(() => document.fonts.ready);

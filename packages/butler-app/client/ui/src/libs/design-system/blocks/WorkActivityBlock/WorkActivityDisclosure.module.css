@@ -1,0 +1,140 @@
+/* WorkActivityDisclosure: a work timeline folded to its tail. Geometry
+   matches WorkActivityBlock density="compact" so the tail's dot and line sit
+   where the expanded timeline draws them. */
+.root {
+  --work-activity-line-x: 9px;
+  --work-activity-content-x: 28px;
+
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+/* The status line and the tail are one text-variant Clickable. */
+.toggle {
+  position: relative;
+  width: 100%;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* Expanded, the toggle is only the status line: an invisible strip keeps the
+   hit target at --control-hit-target (30px, 44px on touch) without moving
+   the line. It covers the gap down to the details and grows upward into the
+   gap below the card header, never into the timeline. The focus ring still
+   hugs the text. */
+.root[data-expanded] .toggle::before {
+  position: absolute;
+  right: 0;
+  bottom: calc(-1 * var(--space-sm));
+  left: 0;
+  height: var(--control-hit-target);
+  content: "";
+}
+
+.statusRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
+}
+
+/* The way back: a collapse chevron at the trailing edge, only while open. */
+.collapseIcon {
+  display: inline-grid;
+  width: 1lh;
+  height: 1lh;
+  flex: none;
+  place-items: center;
+  color: var(--text-secondary);
+  opacity: 0;
+  translate: 0 var(--motion-distance-xs);
+  transition:
+    opacity var(--motion-exit-base) var(--motion-ease-accelerate),
+    translate var(--motion-exit-base) var(--motion-ease-accelerate);
+}
+
+.root[data-expanded] .collapseIcon {
+  opacity: 1;
+  translate: 0 0;
+  transition:
+    opacity var(--motion-base) var(--motion-ease-standard),
+    translate var(--motion-base) var(--motion-ease-standard);
+}
+
+/* The tail's top padding is the gap to the status line, so it folds away
+   with the tail instead of snapping out after the fold. */
+.tail {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-top: var(--space-sm);
+}
+
+/* The timeline line: it rises out of nothing above the previous row and
+   ends at the latest dot. */
+.tail[data-has-previous]::before {
+  position: absolute;
+  top: calc(var(--space-xs) / 2);
+  bottom: calc(var(--tag-height-sm) / 2);
+  left: var(--work-activity-line-x);
+  width: 1px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--line-strong) 90%, transparent) 70%
+  );
+  content: "";
+}
+
+.row {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-sm);
+  padding-inline-start: var(--work-activity-content-x);
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
+}
+
+.row[data-row="latest"] {
+  min-height: var(--tag-height-sm);
+}
+
+/* Top fade: the previous activity is a receding hint, not a second summary. */
+.row[data-row="previous"] {
+  mask-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--text-primary) 20%, transparent),
+    color-mix(in srgb, var(--text-primary) 75%, transparent)
+  );
+}
+
+.row > .dot {
+  top: calc(50% - 3.5px);
+  left: calc(var(--work-activity-line-x) - 3px);
+}
+
+.count {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+.details {
+  padding-top: var(--space-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapseIcon,
+  .root[data-expanded] .collapseIcon {
+    translate: none;
+  }
+}
