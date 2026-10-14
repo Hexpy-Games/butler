@@ -11,13 +11,16 @@ pub(super) type Directory = OwnedFd;
 use rustix::fs::{AtFlags, CWD, Dir, FileType, Mode, OFlags, openat, statat};
 
 /// Opens the walk root itself; aliases in the root path were admitted already.
-pub(super) fn open_root(root: &Path) -> io::Result<OwnedFd> {
+pub(in crate::command_sandbox) fn open_root(root: &Path) -> io::Result<OwnedFd> {
     let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC;
     Ok(openat(CWD, root, flags, Mode::empty())?)
 }
 
 /// Opens the directory `name` directly below `parent`, never through a symlink.
-pub(super) fn open_child(parent: impl AsFd, name: &OsStr) -> io::Result<OwnedFd> {
+pub(in crate::command_sandbox) fn open_child(
+    parent: impl AsFd,
+    name: &OsStr,
+) -> io::Result<OwnedFd> {
     let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC;
     Ok(openat(parent, name, flags, Mode::empty())?)
 }
@@ -29,7 +32,7 @@ pub(super) fn kind(parent: impl AsFd, name: &OsStr) -> io::Result<FileType> {
 }
 
 /// Names and directory flags of one directory, read before any is changed.
-pub(super) fn entries(dir: &OwnedFd) -> io::Result<Vec<(OsString, bool)>> {
+pub(in crate::command_sandbox) fn entries(dir: &OwnedFd) -> io::Result<Vec<(OsString, bool)>> {
     let mut entries = Vec::new();
     for entry in Dir::read_from(dir)? {
         let entry = entry?;

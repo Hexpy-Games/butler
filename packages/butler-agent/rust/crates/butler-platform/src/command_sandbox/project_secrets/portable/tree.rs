@@ -5,8 +5,8 @@ use std::{
     io,
     path::{Path, PathBuf},
 };
-const MAX_ENTRIES: usize = 200_000;
-const MAX_DEPTH: usize = 128;
+pub(in crate::command_sandbox) const MAX_ENTRIES: usize = 200_000;
+pub(in crate::command_sandbox) const MAX_DEPTH: usize = 128;
 
 trait Walker {
     type Directory;
