@@ -53,10 +53,16 @@ pub fn path_shape(path: &str) -> String {
 /// Redact every path-bearing field; environment values are deliberately omitted.
 pub fn redacted(request: &Value) -> Value {
     let mut value = request.clone();
-    value["process"]["commandLine"] = "<helper.exe> --probe-child <nonce>".into();
-    value["process"]["cwd"] =
-        path_shape(request["process"]["cwd"].as_str().unwrap_or_default()).into();
-    if let Some(env) = value["process"]["env"].as_array_mut() {
+    if let Some(command) = value.pointer_mut("/process/commandLine") {
+        *command = "<helper.exe> --probe-child <nonce>".into();
+    }
+    if let Some(cwd) = value.pointer_mut("/process/cwd") {
+        *cwd = path_shape(cwd.as_str().unwrap_or_default()).into();
+    }
+    if let Some(env) = value
+        .pointer_mut("/process/env")
+        .and_then(Value::as_array_mut)
+    {
         for entry in env {
             let key = entry
                 .as_str()
@@ -68,7 +74,11 @@ pub fn redacted(request: &Value) -> Value {
         }
     }
     for field in ["readonlyPaths", "readwritePaths", "deniedPaths"] {
-        if let Some(paths) = value["filesystem"][field].as_array_mut() {
+        if let Some(paths) = value
+            .get_mut("filesystem")
+            .and_then(|fs| fs.get_mut(field))
+            .and_then(Value::as_array_mut)
+        {
             for path in paths {
                 *path = path_shape(path.as_str().unwrap_or_default()).into();
             }

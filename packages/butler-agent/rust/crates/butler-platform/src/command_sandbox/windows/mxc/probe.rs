@@ -56,10 +56,15 @@ pub(super) fn helper_probe(diagnostic: Option<&Path>) -> Result<String, Error> {
     let mut report = json!({"reason":"probe_setup_failed","policy":null,
         "childExitCode":null,"childNtstatus":null,"stderr":"","mxcError":null});
     if let Err(error) = execute_probe(&mut report) {
-        report["setupError"] = error.to_string().into();
+        set(
+            report.as_object_mut(),
+            "setupError",
+            error.to_string().into(),
+        );
     }
-    let reason = report["reason"]
-        .as_str()
+    let reason = report
+        .get("reason")
+        .and_then(Value::as_str)
         .unwrap_or("probe_setup_failed")
         .to_owned();
     if let Some(path) = diagnostic {
@@ -69,9 +74,15 @@ pub(super) fn helper_probe(diagnostic: Option<&Path>) -> Result<String, Error> {
     Ok(reason)
 }
 
+fn set(object: Option<&mut serde_json::Map<String, Value>>, key: &str, value: Value) {
+    if let Some(object) = object {
+        object.insert(key.into(), value);
+    }
+}
+
 fn execute_probe(report: &mut Value) -> Result<(), Error> {
     if std::env::var("BUTLER_WINDOWS_PROJECT_SANDBOX").as_deref() != Ok("1") {
-        report["reason"] = "mxc_disabled".into();
+        set(report.as_object_mut(), "reason", "mxc_disabled".into());
         return Ok(());
     }
     let exe = dunce::canonicalize(std::env::current_exe()?)?;
@@ -84,7 +95,11 @@ fn execute_probe(report: &mut Value) -> Result<(), Error> {
         &super::prepare::physical(&system)?,
         &nonce,
     )?;
-    report["policy"] = mxc_policy::probe::redacted(&request);
+    set(
+        report.as_object_mut(),
+        "policy",
+        mxc_policy::probe::redacted(&request),
+    );
     let facts = match sdk::probe(&request) {
         Ok(facts) => facts,
         Err(error) => {
@@ -101,10 +116,10 @@ fn execute_probe(report: &mut Value) -> Result<(), Error> {
             return Ok(());
         }
     };
-    report["capabilities"] = facts.clone();
+    set(report.as_object_mut(), "capabilities", facts.clone());
     let reason = capability_reason(&facts);
     if let Some(reason) = reason {
-        report["reason"] = reason.into();
+        set(report.as_object_mut(), "reason", reason.into());
     } else {
         let details = sdk::child_probe(&request, &nonce);
         report
@@ -146,7 +161,11 @@ fn redact_details(report: &mut Value, request: &Value) {
             .unwrap_or_default(),
     ];
     for field in ["readonlyPaths", "readwritePaths", "deniedPaths"] {
-        if let Some(values) = request["filesystem"][field].as_array() {
+        if let Some(values) = request
+            .get("filesystem")
+            .and_then(|fs| fs.get(field))
+            .and_then(Value::as_array)
+        {
             paths.extend(values.iter().filter_map(Value::as_str).map(str::to_owned));
         }
     }
