@@ -127,7 +127,7 @@ impl ModelProvider {
             api,
             policy: config.policy,
             external: request.cancellation.clone(),
-            mode,
+            mode: mode.for_round(round_index(&request)),
             stream_observer: Some(&watch),
             attempts: request
                 .provider_retry_attempts
@@ -209,17 +209,13 @@ impl ModelProvider {
         response: serde_json::Value,
         mut prepared: PreparedResponse,
     ) -> Result<ModelRoundResult, ModelRoundError> {
-        let round_index = request
-            .usage_attribution
-            .and_then(|value| value.round_index)
-            .unwrap_or(0);
         super::prefix_diagnostics::reported_usage(&mut prepared.prefix, &response);
         let mut result = result::decode(
             response,
             &config.metadata.provider_id,
             &config.metadata.model_ref,
             prepared.carrier,
-            round_index,
+            round_index(request),
             request,
             prepared.continuation,
         );
@@ -261,9 +257,15 @@ impl ModelProvider {
     ) -> reqwest::RequestBuilder {
         let mut http = self
             .client
-            .post(config.endpoint.clone())
+            .post(super::route::stream_endpoint(&config.endpoint, mode))
             .header("content-type", "application/json");
-        if matches!(mode, transport::ResponseMode::HostedChatSse) {
+        if matches!(
+            mode,
+            transport::ResponseMode::HostedChatSse
+                | transport::ResponseMode::ResponsesSse
+                | transport::ResponseMode::AnthropicSse
+                | transport::ResponseMode::GeminiSse { .. }
+        ) {
             http = http.header("accept", "text/event-stream");
         }
         authorize(
@@ -325,6 +327,14 @@ impl ModelProvider {
             result
         })
     }
+}
+
+/// The round's index within its turn, as decoded call ids name it.
+fn round_index(request: &ModelRoundRequest<'_>) -> u32 {
+    request
+        .usage_attribution
+        .and_then(|value| value.round_index)
+        .unwrap_or(0)
 }
 
 pub(super) fn safe_endpoint(endpoint: &url::Url) -> String {

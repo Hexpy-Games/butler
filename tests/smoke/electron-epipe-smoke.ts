@@ -21,11 +21,11 @@ const entry = resolve("packages/butler-app/client/electron");
 const executable = process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE ?? createRequire(join(entry, "package.json"))("electron") as string;
 const child = trackElectronChild(spawn(executable, [`--inspect=${inspector}`, `--remote-debugging-port=${debug}`, ...smokeElectronArgs(), entry], {
   // Deliberate exception to file-backed stdio: close the readers to reproduce EPIPE.
-  stdio: ["ignore", "pipe", "pipe"], env: { ...process.env,
+  detached: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env,
     BUTLER_DATA: server.butlerData, BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"),
     BUTLER_APP_SERVER_URL: server.url, BUTLER_APP_SERVER_PORT: String(server.port),
     BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1", BUTLER_E2E_TIER: "stub" },
-}));
+}), [dir]);
 child.stdout!.resume(); child.stderr!.resume();
 let main: Awaited<ReturnType<typeof connectElectronMain>> | undefined;
 let page: Awaited<ReturnType<typeof electronPage>> | undefined;

@@ -67,7 +67,24 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     compiled_body_matches(&config);
     assert_eq!(
         encoded,
-        r#"{"model":"gpt-5.5","tool_choice":"auto","reasoning":{"effort":"medium"},"instructions":"PREFIX dynamic","max_output_tokens":64,"store":true,"input":"hello"}"#
+        r#"{"model":"gpt-5.5","tool_choice":"auto","reasoning":{"effort":"medium"},"instructions":"PREFIX dynamic","max_output_tokens":64,"store":true,"input":"hello","stream":true}"#
+    );
+    let previous_auth = std::mem::replace(
+        &mut config.auth,
+        ProviderAuth::Codex {
+            mode: ProviderAuthMode::CodexSubscription,
+            authorization: "Bearer offline".into(),
+            account_id: "offline".into(),
+            user_agent: "offline".into(),
+            originator: "butler".into(),
+        },
+    );
+    let codex = serialize::body(&request, &config, serialize::Carrier::Responses).unwrap();
+    config.auth = previous_auth;
+    assert_eq!(
+        butler_core::json::stringify(&codex).unwrap(),
+        r#"{"model":"gpt-5.5","tool_choice":"auto","reasoning":{"effort":"medium"},"instructions":"PREFIX dynamic","store":false,"input":[{"role":"user","content":[{"type":"input_text","text":"hello"}]}],"stream":true,"text":{"verbosity":"medium"}}"#,
+        "Codex keeps its existing request bytes and field order"
     );
     let identity = serialize::provider_cache_identity(&body, &encoded, &request, &config)
         .unwrap()
