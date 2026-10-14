@@ -61,7 +61,7 @@ impl ProviderClock for Clock {
         0
     }
 }
-pub(super) struct Metrics;
+pub(super) struct Metrics(pub std::sync::Mutex<Vec<serde_json::Value>>);
 impl PromptUsageMetricSink for Metrics {
     fn append_request_diagnostic(
         &self,
@@ -70,7 +70,15 @@ impl PromptUsageMetricSink for Metrics {
     ) -> Result<(), butler_turn::btcc::ModelRoundError> {
         Ok(())
     }
-    fn append(&self, _: PromptUsageMetricInput<'_>) -> Result<(), ModelRoundError> {
+    fn append(&self, input: PromptUsageMetricInput<'_>) -> Result<(), ModelRoundError> {
+        self.0
+            .lock()
+            .map_err(|_| ModelRoundError::InvocationFailure {
+                code: None,
+                message: "metrics poisoned".into(),
+            })?
+            .push(serde_json::json!({"promptTokens":input.prompt_tokens,
+            "totalTokens":input.total_tokens,"cachedTokens":input.cached_tokens}));
         Ok(())
     }
 }
