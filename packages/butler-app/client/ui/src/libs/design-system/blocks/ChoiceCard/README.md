@@ -19,13 +19,14 @@ one-line description). `ChoiceCardList` and `ChoiceTileGrid` lay them out.
 and description), `disabled` (dimmed, `aria-disabled`; clicks are ignored).
 
 ## Alignment
-Leading icon = title text size, aligned to the title line; trailing controls vertically centered.
+Leading icon = title text size, aligned to the title line with a 1px optical drop; trailing controls vertically centered.
 
 - Leading icon: the glyph is the title's text size, whatever size it was
   given (`--icon-size-sm` beside 13px titles, `--icon-size-md` beside the 15px
   titles at 640px and below), and centers on the title's line in one-line and
-  two-line cards alike: the glyph's ink centre meets the letters' ink centre.
-  Mixed one-line and two-line lists therefore look the same on every card.
+  two-line cards alike, then drops 1px (`--card-icon-optical-offset`, an
+  optical correction applied as a transform, the same for logos and outline
+  glyphs). Mixed one-line and two-line lists look the same on every card.
 - Trailing controls (chevron, meta such as a size, the loading spinner, the
   error mark, a tile's corner glyph) center vertically on the card, never
   top-right.

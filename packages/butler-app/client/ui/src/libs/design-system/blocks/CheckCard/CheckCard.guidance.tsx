@@ -57,7 +57,7 @@ export const guidance: ShowcaseGuidance = {
     "Title: the item's own name (Codex, linear, Bookmarks). Description: what it holds or what it needs, in a few words (MCP server · Needs a key).",
     "Start items checked when they are what people usually want; let the action button carry the verb (Import, Next).",
     "The icon is bare: a logo or glyph with no tile or boxed background behind it.",
-    "Leading icon = title text size, aligned to the title line; trailing controls vertically centered.",
+    "Leading icon = title text size, aligned to the title line with a 1px optical drop; trailing controls vertically centered.",
   ],
   accessibility: [
     "Each card is a button with role=checkbox and aria-checked; click or Space toggles it. The description is its aria-describedby.",

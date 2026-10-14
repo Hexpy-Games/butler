@@ -18,6 +18,10 @@
 .card,
 .tile {
   --choice-card-glyph-size: var(--icon-size-sm);
+  /* Optical: a glyph centred on the title line reads slightly high next to
+     the letters, so it drops 1px. Same for logos and outline glyphs; a
+     transform, so layout does not move. */
+  --card-icon-optical-offset: 1px;
 
   position: relative;
   isolation: isolate;
@@ -121,9 +125,8 @@
 /* The slot's line box is the title's (Label) line box; the glyph inside is
    the icon step just above the title's text size, whatever size it was
    given: --icon-size-sm beside 13px titles, --icon-size-md beside the 15px
-   titles of the 640px-and-below type ramp. The glyph's ink centre meets the
-   letters' ink centre (both centre in the line box), so no offset is added.
-   (--choice-card-glyph-size is set on .card and .tile at the top.) */
+   titles of the 640px-and-below type ramp. It centres on the title line and
+   then drops by --card-icon-optical-offset (see the top of this file). */
 @media (width <= 640px) {
   .card:not([data-viewport="desktop"], [data-viewport="desktop"] *),
   .tile:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
@@ -145,6 +148,7 @@
 .card .icon > :is(svg, img, span) {
   width: var(--choice-card-glyph-size);
   height: var(--choice-card-glyph-size);
+  transform: translateY(var(--card-icon-optical-offset));
 }
 
 .text {
@@ -237,6 +241,7 @@
 .tile .tileIcon > :is(svg, img, span) {
   width: var(--choice-card-glyph-size);
   height: var(--choice-card-glyph-size);
+  transform: translateY(var(--card-icon-optical-offset));
 }
 
 .tileTitle {

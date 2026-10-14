@@ -19,14 +19,14 @@ const labels = {
     instructions: "Instructions", server: "MCP server", needsKey: "MCP server · Needs a key", empty: "Empty file",
     holds: "Instructions · 3 MCP servers", servers: "2 MCP servers",
     motion: "Click, tap or press Space. Check: the ring fills from the centre and the check draws in (220 ms). Uncheck: the check undraws, then the fill clears (170 ms). Press: the pressed fill of a wide row fades in under the content (120 ms); the card never shrinks. Interrupting a toggle reverses it from where it is. Reduced motion: fades only, no scale or stroke draw.",
-    mixed: "One-line and two-line cards mixed: the glyph is the title's text size on the title line; the check circle is centered on each card.",
+    mixed: "One-line and two-line cards mixed: the glyph is the title's text size on the title line (1px optical drop); the check circle is centered on each card.",
   },
   "ko-KR": {
     group: "가져올 항목", bookmarks: "북마크", passwords: "비밀번호", history: "방문 기록", keychain: "키체인 접근 필요",
     instructions: "지침", server: "MCP 서버", needsKey: "MCP 서버 · 키 입력 필요", empty: "비어 있는 파일",
     holds: "지침 · MCP 서버 3개", servers: "MCP 서버 2개",
     motion: "누르거나 탭하거나 Space를 눌러 보세요. 체크: 원이 가운데서 채워지고 체크가 그려집니다(220ms). 해제: 체크가 지워진 뒤 채움이 빠집니다(170ms). 누를 때: 넓은 행의 눌림 색이 내용 아래에 옅게 깔립니다(120ms). 카드는 줄어들지 않습니다. 도중에 다시 누르면 그 자리에서 되돌아갑니다. 동작 줄이기: 크기 변화와 선 그리기 없이 페이드만 남습니다.",
-    mixed: "한 줄과 두 줄 카드를 섞은 목록: 아이콘은 제목 글자 크기로 제목 줄에 맞추고, 체크 원은 카드마다 세로 가운데에 둡니다.",
+    mixed: "한 줄과 두 줄 카드를 섞은 목록: 아이콘은 제목 글자 크기로 제목 줄에 맞추고(1px 아래로 시각 보정), 체크 원은 카드마다 세로 가운데에 둡니다.",
   },
 } as const;
 
