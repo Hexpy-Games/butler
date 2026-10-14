@@ -1,11 +1,13 @@
+import { largestRendition } from "./image-renditions.mjs";
+
 /** Read only the observed element's media source and accompanying page text. */
 export async function imageSource({ ref, obs, epoch, url }) {
   const state = globalThis.__butlerObservation;
   if (ref && (!state || state.obs !== obs || state.epoch !== epoch)) return { reason: "stale_ref" };
-  const requestContext = element => {
+  const requestContext = (element, source = url) => {
     const policy = element?.referrerPolicy || document.referrerPolicy;
     let referer = policy === "no-referrer" ? "" : /^(origin|strict-origin)$/u.test(policy) ? `${location.origin}/` : location.href;
-    try { if (policy === "same-origin" && new URL(url, location.href).origin !== location.origin) referer = ""; }
+    try { if (policy === "same-origin" && new URL(source, location.href).origin !== location.origin) referer = ""; }
     catch { referer = ""; }
     return { referer, user_agent: navigator.userAgent };
   };
@@ -18,7 +20,7 @@ export async function imageSource({ ref, obs, epoch, url }) {
   const result = { source_url: url ?? (image?.currentSrc || image?.src || background || ""),
     alt: image?.alt || element.getAttribute("aria-label") || element.textContent?.trim() || "",
     nearby_text: element.parentElement?.innerText || "" };
-  if (url) return { ...result, ...requestContext(image || element) };
+  if (url && !image) return { ...result, ...requestContext(element) };
   let pixels = image;
   if (!pixels && background) {
     pixels = new Image();
@@ -30,6 +32,9 @@ export async function imageSource({ ref, obs, epoch, url }) {
     result.source_url = pixels.src;
   }
   if (!pixels) return { ...result, capture_element: true };
+  const selected = await largestRendition(image, pixels);
+  if (selected !== pixels) result.source_url = selected.src;
+  pixels = selected;
   let timer;
   try {
     if (!pixels.complete || !pixels.naturalWidth) {
@@ -37,6 +42,7 @@ export async function imageSource({ ref, obs, epoch, url }) {
     }
   } catch { return { reason: "image_not_loaded", recovery: "Wait for the image to load, observe again, then collect its ref or a visible region." }; }
   finally { clearTimeout(timer); }
+  result.width = pixels.naturalWidth; result.height = pixels.naturalHeight;
   // Keep embedded raster bytes without a CSP-controlled fetch.
   const embedded = result.source_url.match(/^data:image\/(?:jpeg|png|gif|webp);base64,(.*)$/su);
   if (embedded && embedded[1].length <= 8 * 1024 * 1024 * 4 / 3
@@ -55,6 +61,18 @@ export async function imageSource({ ref, obs, epoch, url }) {
   } catch {
     // Cross-origin pixels can be captured by the host without relaxing CORS.
     result.capture_element = true;
+    // A photo element's own file is the full original, whatever covers or shrinks
+    // it on the page; the host downloads it with this page's request context and
+    // keeps the rendered crop for when that download is unusable. A background
+    // may be a sprite, so only its rendered crop represents it.
+    if (image && /^https?:/u.test(result.source_url)) {
+      Object.assign(result, { fetch_source: true }, requestContext(image, result.source_url));
+    }
   }
   return result;
+}
+
+/** Isolated-world script shared by Electron and browser smokes. */
+export function imageSourceScript(args) {
+  return `(() => { const largestRendition = ${largestRendition.toString()}; return (${imageSource.toString()})(${JSON.stringify(args)}); })()`;
 }

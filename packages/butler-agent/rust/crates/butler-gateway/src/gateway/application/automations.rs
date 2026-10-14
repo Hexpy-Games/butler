@@ -1,5 +1,6 @@
 //! Persisted App automations, dispatch, and bounded lifecycle ownership.
 
+mod attention;
 mod contracts;
 mod dispatch;
 mod owner;

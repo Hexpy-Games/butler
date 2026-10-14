@@ -1,6 +1,6 @@
 // test-category: race
 /** Sign-in hand-off through the real gateway and UI; stub model, a scripted browser host and a
- * throwaway keychain (BUTLER_E2E_KEYCHAINS, never the user's). MFA → hand-off card → Open tab →
+ * throwaway keychain (BUTLER_E2E_KEYCHAINS, never the user's). MFA → hand-off card → Open to check →
  * Give back to Butler → the call resumes; Stop task cancels. Desktop pages get a recording
  * browser bridge; the phone page has none. */
 import { strict as assert } from "node:assert";
@@ -134,8 +134,8 @@ const card = (page: Page) => page.locator('[data-test-class="composer-browser-ha
 async function settle(page: Page) { await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(150); }
 async function shoot(page: Page, name: string) { await settle(page); const path = join(evidence!, `${name}.png`); await page.screenshot({ path }); shots.push(path); }
 const copy = {
-  ko: { title: "로그인 확인 필요", detail: "fixture-shop.test · 2단계 인증", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "데스크톱 앱에서 마무리해 주세요", open: "탭 열기", stop: "작업 중지", giveBack: "버틀러에게 돌려주기" },
-  en: { title: "Sign-in needs you", detail: "fixture-shop.test · Two-step verification", inTab: "Finish in the tab, then give it back to Butler", onDesktop: "Finish in the desktop app", open: "Open tab", stop: "Stop task", giveBack: "Give back to Butler" },
+  ko: { title: "로그인 확인 필요", detail: "fixture-shop.test · 2단계 인증", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "PC의 버틀러에서 확인해 주세요", open: "열어서 확인", stop: "작업 중지", giveBack: "버틀러에게 돌려주기" },
+  en: { title: "Sign-in needs you", detail: "fixture-shop.test · Two-step verification", inTab: "Finish in the tab, then give it back to Butler", onDesktop: "Finish this on your computer", open: "Open to check", stop: "Stop task", giveBack: "Give back to Butler" },
 };
 async function checkCard(page: Page, lang: "ko" | "en", desktop: boolean) {
   const panel = card(page); await panel.waitFor({ timeout: 30_000 });
@@ -188,9 +188,9 @@ try {
   }
   await settings("ko", "light"); await desk.setViewportSize({ width: 1440, height: 900 }); await desk.reload(); await checkCard(desk, "ko", true);
 
-  // 3. 탭 열기 opens and focuses the waiting tab; the tab band offers the hand-back.
+  // 3. 열어서 확인 opens and focuses the waiting tab; the tab band offers the hand-back.
   bridgeCalls.length = 0;
-  await card(desk).getByRole("button", { name: copy.ko.open, exact: true }).click();
+  await card(desk).locator("button").filter({ hasText: new RegExp(`^${copy.ko.open}$`, "u") }).click();
   for (let i = 0; !bridgeCalls.some(c => c.op === "activate") && i < 50; i++) await desk.waitForTimeout(100);
   assert.ok(bridgeCalls.some(c => c.op === "activate" && (c.input as { id?: string }).id === TAB), `activate ${TAB}: ${JSON.stringify(bridgeCalls)}`);
   const giveBack = desk.getByRole("button", { name: copy.ko.giveBack, exact: true });

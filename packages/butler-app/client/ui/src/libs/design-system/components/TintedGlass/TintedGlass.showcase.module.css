@@ -23,7 +23,7 @@
   overflow: hidden;
   color: color-mix(in srgb, var(--text-primary) 60%, transparent);
   font-size: var(--font-size-3);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-body-line-height);
   overflow-wrap: anywhere;
 }
 

@@ -10,6 +10,7 @@ publish.workspace = true
 # leaf: it depends on no other workspace crate, so every crate can use it.
 [dependencies]
 # Quotes paths inside macOS sandbox profiles.
+iana-time-zone.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 sysinfo = { workspace = true, features = ["disk"] }
@@ -49,9 +50,10 @@ zip.workspace = true
 # contain command trees, paths without a needless `\\?\` prefix, and the
 # system time zone's IANA name.
 [target.'cfg(windows)'.dependencies]
+windows-dpapi = "=0.2.0"
+aes-gcm = { version = "0.10", features = ["zeroize"] }
 dunce.workspace = true
 winsafe = { workspace = true, features = ["advapi", "shell"] }
-iana-time-zone.workspace = true
 if-addrs.workspace = true
 sysinfo.workspace = true
 win32job.workspace = true

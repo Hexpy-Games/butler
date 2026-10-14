@@ -1,6 +1,16 @@
 .shell {
   container-name: conversation;
   container-type: inline-size;
+  /* A TabRail in the rail slot sits under the title bar, or 16px into a
+     shell card; its shelf 8px into the card (see the rail rules below). */
+  --tab-rail-top: var(
+    --conversation-top-reserve,
+    calc(var(--titlebar-safe-area-top) + var(--space-sm))
+  );
+  --tab-rail-shelf-top: var(
+    --conversation-rail-shelf-top,
+    var(--titlebar-safe-area-top)
+  );
   --conversation-shell-content-gutter: 7%;
   --conversation-content-width: min(
     760px,
@@ -84,7 +94,71 @@
   margin: 0 auto;
   /* Room for the title bar that overlays the conversation; a shell card
      (AdaptiveShell frame="cards") sets a plain inset, no title bar overlaps. */
-  padding: var(--conversation-top-reserve, var(--titlebar-safe-area-top)) 0 0;
+  padding: calc(
+      var(--conversation-top-reserve, var(--titlebar-safe-area-top)) +
+        var(--conversation-rail-top, 0px)
+    )
+    0 0;
+}
+
+/* Room for a TabRail in the rail slot. The breakpoints are the rail's modes
+   (TabRail tabRailLayout.ts). Beside a full (960+) or compact (720+) rail the
+   column and the composer keep their width and centring and move left only
+   as far as they must to stay --tab-rail-clearance clear of the rail; they
+   narrow only when that would bring them within the clearance of the card's
+   leading edge. Above a shelf (narrower) the messages start below it. */
+@container conversation (width >= 720px) {
+  .railed > * {
+    --conversation-rail-keep-out: calc(
+      var(--tab-rail-inset) + var(--tab-rail-compact-width) +
+        var(--tab-rail-clearance)
+    );
+  }
+}
+
+@container conversation (width >= 960px) {
+  .railed > * {
+    --conversation-rail-keep-out: calc(
+      var(--tab-rail-inset) + var(--tab-rail-width) + var(--tab-rail-clearance)
+    );
+  }
+}
+
+@container conversation (width >= 720px) {
+  .railed > * {
+    --conversation-column-width: min(
+      var(--conversation-content-width),
+      calc(
+        100cqw - var(--conversation-rail-keep-out) - var(--tab-rail-clearance)
+      )
+    );
+    --conversation-column-shift: max(
+      0px,
+      calc(
+        var(--conversation-rail-keep-out) -
+          (100cqw - var(--conversation-column-width)) / 2
+      )
+    );
+  }
+
+  /* A margin, not a translate: percentages in the shift then resolve against
+     the scroll area, as the column's own width does. */
+  .railed .messageList {
+    width: var(--conversation-column-width);
+    margin-inline: calc(
+        (100% - var(--conversation-column-width)) / 2 -
+          var(--conversation-column-shift)
+      )
+      auto;
+  }
+}
+
+@container conversation (width < 720px) {
+  .railed > * {
+    --conversation-rail-top: calc(
+      var(--tab-rail-shelf-height) + var(--space-sm)
+    );
+  }
 }
 
 @media (width <= 560px) {
@@ -129,7 +203,7 @@
 .scrollToBottomButton {
   position: absolute;
   z-index: 11;
-  right: 50%;
+  right: calc(50% + var(--conversation-column-shift, 0px));
   bottom: max(96px, calc(var(--composer-reserve) - 12px));
   max-width: calc(100% - 32px);
   transform: translateX(50%);

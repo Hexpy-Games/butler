@@ -1,4 +1,4 @@
-import { spawnElectron } from "../support/electron-child";
+import { spawnElectron, stopElectronChild } from "../support/electron-child";
 /** P1b acceptance through the real App-owned native Agent, using only a local stub. */
 import assert from "node:assert/strict";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
@@ -123,10 +123,7 @@ async function launch() {
   await main(`(() => {globalThis.quitSeen=false;${electronModule}.app.once('quit',()=>process.getBuiltinModule('node:fs').writeFileSync(${JSON.stringify(join(dir, "quit.json"))},JSON.stringify({windows:${electronModule}.BrowserWindow.getAllWindows().length})))})()`);
 }
 async function stopApp() {
-  if (!child || child.exitCode !== null || child.signalCode !== null) return;
-  child.kill("SIGTERM");
-  await waitUntil(async () => child!.exitCode !== null || child!.signalCode !== null, "owned Electron exit", 5000)
-    .catch(() => { child!.kill("SIGKILL"); });
+  if (child) await stopElectronChild(child);
 }
 async function quitApp() {
   await page!.expression("window.butlerApp.quitApp({confirmed:true})");

@@ -153,16 +153,18 @@ pub(super) async fn finish(
         .await
         .map_err(propagated)?;
     let route = route(&state.used_tools, &closeout);
+    let content =
+        super::answer_prose::without_block_tables(&closeout.content, &closeout.answer_blocks);
     let terminal_outcome = (suspension.is_none()
         && closeout.runtime_failure.is_none()
-        && closeout.content.trim().is_empty()
+        && content.trim().is_empty()
         && closeout.answer_blocks.is_empty()
         && input.semantic.context.empty_response_policy
             == Some(super::contracts::EmptyResponsePolicy::TypedTerminal))
     .then_some(TerminalOutcome::NoVisible);
     Ok(AgentLoopResult {
         route,
-        content: closeout.content,
+        content,
         terminal_outcome,
         suspension,
         authority_continuation,

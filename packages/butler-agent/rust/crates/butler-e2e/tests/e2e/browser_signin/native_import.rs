@@ -122,6 +122,10 @@ async fn firefox_nss_with_and_without_primary_password() -> Result<(), HarnessEr
 async fn chromium_mac_injected_safe_storage_skips_invalid_rows() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
+        butler_platform::browser_transfer::chromium_safe_storage_fixture_supported(),
+        "Safe Storage fixture requires macOS"
+    );
+    butler_e2e::skip_unless!(
         keychain_opt_in(),
         "isolated system-store test opt-in required"
     );
@@ -281,4 +285,95 @@ pub(super) async fn assert_password(
     );
     drop(host);
     Ok(())
+}
+
+#[tokio::test]
+async fn chromium_dpapi_import_reports_csv_and_undoes_v10() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("BROWSER-IMPORT-DPAPI")?.env("BUTLER_SECRET_STORE", "");
+    let roots = profile_roots(&setup.sandbox.home);
+    for browser in ["chrome", "edge", "brave"] {
+        let root = &roots
+            .chromium
+            .iter()
+            .find(|(b, _)| *b == browser)
+            .unwrap()
+            .1;
+        butler_e2e::skip_unless!(
+            butler_platform::browser_transfer::chromium_password_fixture(root, CANARY)?,
+            "current-user DPAPI fixture requires Windows"
+        );
+    }
+    let s = setup.start().await?;
+    std::fs::write(
+        s.sandbox.data.join("butler.config.json"),
+        br#"{"secrets":{"store":"system"}}"#,
+    )?;
+    let a = admin(&s);
+    let mut cleanup = Cleanup::new(&a);
+    for browser in ["chrome", "edge", "brave"] {
+        let run = a
+            .send(
+                Method::POST,
+                "/security/browser-import/start",
+                Some(
+                    json!({"source":format!("{browser}:Work"),"bookmarks":false,"passwords":true}),
+                ),
+                &[],
+            )
+            .await?;
+        assert_eq!(run.status, 200, "{}", run.text);
+        assert_eq!(run.data()["passwords"], 1);
+        assert_eq!(run.data()["invalid"], 3);
+        assert_eq!(run.data()["csv_required"], 1);
+        assert_eq!(run.data()["needs_csv"], true);
+        let view = a.send(Method::GET, "/security/signins", None, &[]).await?;
+        let entry = &view.data()["sites"][0]["entry"];
+        cleanup.track(entry["id"].as_str().unwrap());
+        assert_imported_password(&s, entry).await?;
+        let undo = a
+            .send(
+                Method::POST,
+                "/security/browser-import/undo",
+                Some(json!({"run_id":run.data()["run_id"]})),
+                &[],
+            )
+            .await?;
+        assert_eq!(undo.data()["passwords"], 1);
+        // App-bound-only profiles must still return a CSV fallback without a legacy key.
+        let root = &roots
+            .chromium
+            .iter()
+            .find(|(b, _)| *b == browser)
+            .unwrap()
+            .1;
+        let db = rusqlite::Connection::open(root.join("Work/Login Data"))?;
+        db.execute(
+            "DELETE FROM logins WHERE password_value IS NULL OR substr(password_value,1,3) != X'763230'",
+            [],
+        )?;
+        drop(db);
+        let path = root.join("Local State");
+        let mut state: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+        state["os_crypt"] = json!({});
+        std::fs::write(path, serde_json::to_vec(&state)?)?;
+        let only_bound = a
+            .send(
+                Method::POST,
+                "/security/browser-import/start",
+                Some(
+                    json!({"source":format!("{browser}:Work"),"bookmarks":false,"passwords":true}),
+                ),
+                &[],
+            )
+            .await?;
+        assert_eq!(only_bound.status, 200);
+        assert_eq!(only_bound.data()["passwords"], 0);
+        assert_eq!(only_bound.data()["invalid"], 0);
+        assert_eq!(only_bound.data()["csv_required"], 1);
+        assert_eq!(only_bound.data()["needs_csv"], true);
+    }
+    super::canary_absent(&s.sandbox.data, CANARY, &s.agent.logs());
+    drop(cleanup);
+    s.finish().await
 }

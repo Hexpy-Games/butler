@@ -162,6 +162,10 @@ pub(super) fn legacy_authorized<'a>(
     } else {
         names.remove("read_project_source");
     }
+    // Moving the working folder goes wherever commands may run.
+    if names.contains("run_command") {
+        names.insert("switch_folder".into());
+    }
     let tracked = policy.tracking_mode != "none";
     if tracked {
         names.extend(
@@ -375,7 +379,7 @@ pub(super) fn legacy_visible<'a>(
     }
     match policy.access_mode {
         AccessMode::ReadOnly => {}
-        AccessMode::AskAlways | AccessMode::AskExceptReads => {
+        AccessMode::AskAlways | AccessMode::AskExceptReads | AccessMode::Auto => {
             names.extend([
                 "run_command",
                 "read_tool_output_artifact",
@@ -408,6 +412,9 @@ pub(super) fn legacy_visible<'a>(
                 names.insert("analyze_attached_image");
             }
         }
+    }
+    if names.contains("run_command") {
+        names.insert("switch_folder");
     }
     authorized
         .iter()

@@ -62,6 +62,8 @@ async fn start(
     let app = Router::new()
         .route("/v1/messages", post(reply))
         .route("/v1/models", get(|| async { Json(json!({"data":[]})) }))
+        // Image requests exceed axum's 2 MB default; the API accepts 32 MB.
+        .layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024))
         .with_state(stub.clone());
     let server = tokio::spawn(async move {
         let _ = axum::serve(listener, app).await;
@@ -459,3 +461,6 @@ mod idle;
 
 #[path = "anthropic_cache_append.rs"]
 mod append;
+
+#[path = "anthropic_cache_photo.rs"]
+mod photo;

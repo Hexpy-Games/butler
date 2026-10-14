@@ -2,6 +2,19 @@ use super::*;
 use crate::gateway::GatewayMutationCommands;
 
 impl GatewayMutationCommands for AppApplication {
+    fn automation_run_attention(
+        &self,
+        id: String,
+        run_id: String,
+        code: String,
+        tainted: bool,
+    ) -> ApplicationFuture<crate::gateway::AutomationRunSummary> {
+        let this = self.clone_handle();
+        Box::pin(async move {
+            this.automation_run_attention_owned(id, run_id, code, tainted)
+                .await
+        })
+    }
     fn preview_session_open(&self, id: String) -> ApplicationFuture<bool> {
         let this = self.clone_handle();
         Box::pin(async move {
@@ -69,6 +82,10 @@ impl GatewayMutationCommands for AppApplication {
     fn clear_general(&self, title: String) -> ApplicationFuture<serde_json::Value> {
         let this = self.clone_handle();
         Box::pin(async move { this.clear_general_owned(title).await })
+    }
+    fn mark_session_read(&self, id: String) -> ApplicationFuture<AppSessionReadResult> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.mark_session_read_owned(id).await })
     }
     fn delete_session(
         &self,

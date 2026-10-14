@@ -43,6 +43,27 @@ async fn invalid_blocks_corrected_and_reopened() -> Result<(), HarnessError> {
         })
         .await?;
     assert_eq!(updated["payload"]["message"]["answer_blocks"], sets);
+    for outcome in ["rejected", "accepted"] {
+        live.wait_for(std::time::Duration::from_secs(10), |event| {
+            event["type"] == "answer_blocks.draft"
+                && event["payload"]["ops"].as_array().is_some_and(|ops| {
+                    ops.iter()
+                        .any(|op| op["op"] == "end" && op["outcome"] == outcome)
+                })
+        })
+        .await?;
+    }
+    for frame in live
+        .snapshot()
+        .iter()
+        .filter(|frame| frame["type"] == "answer_blocks.draft")
+    {
+        assert!(frame.get("id").is_none());
+        for op in frame["payload"]["ops"].as_array().unwrap() {
+            assert!(op["seq"].is_u64());
+            assert!(op.get("arguments").is_none());
+        }
+    }
     drop(live);
     assert_feedback(&s, &id)?;
     s.restart().await?;
@@ -86,6 +107,17 @@ fn assert_feedback(
             .any(|p| p["path"] == "/blocks/0/items/0/source"
                 && p["fix"].as_str().unwrap().contains("not opened"))
     );
+    assert!(
+        problems.iter().any(|p| p["path"] == "/blocks/1/rows/0/0"
+            && p["fix"].as_str().unwrap().contains("at most 60"))
+    );
+    assert!(
+        s.provider()?
+            .requests()
+            .iter()
+            .any(|request| request.to_string().contains("at most 60")),
+        "cell correction must reach the model"
+    );
     let accepted: Value = serde_json::from_str(&results[1])?;
     assert_eq!(accepted, json!({"ok":true,"shown":{"cards":2}}));
     Ok(())
@@ -105,6 +137,12 @@ fn cassette() -> Result<Cassette, HarnessError> {
     invalid["blocks"][0]["items"][0]["value"] = json!({"amount":2,"unit":"steps"});
     invalid["blocks"][0]["items"][0]["source"] = json!("https://example.org/methods");
     invalid["blocks"][0]["items"][0]["checked"] = json!(chrono::Utc::now().to_rfc3339());
+    invalid["blocks"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"type":"table",
+        "columns":["Method","Notes"],"rows":[["x".repeat(61),"Complete input"]]}));
+
     for (step, spec) in [Some(invalid), Some(corrected()), None]
         .into_iter()
         .enumerate()
@@ -159,4 +197,136 @@ fn response(item: &Value) -> ResponseRecord {
             })
             .collect(),
     }
+}
+
+#[tokio::test]
+async fn draft_is_ephemeral_and_reconnects_once() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut recording = cassette()?;
+    // Start with the accepted spec and hold the provider between its closed items.
+    recording.exchanges.remove(0);
+    recording.exchanges[0].request.key.round.clear();
+    recording.exchanges[1].request.key.round =
+        vec!["function_call".into(), "function_call_output".into()];
+    let chunks = &mut recording.exchanges[0].response.chunks;
+    let delta = chunks[2].text.clone();
+    let data = delta
+        .lines()
+        .find_map(|line| line.strip_prefix("data: "))
+        .unwrap();
+    let event: Value = serde_json::from_str(data)?;
+    let spec: Value = serde_json::from_str(event["delta"].as_str().unwrap())?;
+    let items = &spec["blocks"][0]["items"];
+    let arguments = format!(
+        "{{\"v\":1,\"blocks\":[{{\"type\":\"cards\",\"id\":\"methods\",\"items\":[{},{}]}}]}}",
+        items[0], items[1]
+    );
+    let split = arguments.find("},{").unwrap() + 1;
+    let mut first = event.clone();
+    first["delta"] = json!(&arguments[..split]);
+    let mut second = event;
+    second["delta"] = json!(&arguments[split..]);
+    chunks[2].text = format!("data: {first}\n\n");
+    chunks[2].delay_ms = 300;
+    chunks.insert(
+        3,
+        Chunk {
+            delay_ms: 1500,
+            text: format!("data: {second}\n\n"),
+        },
+    );
+    chunks[4].delay_ms = 1500;
+    let s = Setup::new("ANSWER-DRAFT-EPHEMERAL")?
+        .stub_cassette(recording)
+        .start()
+        .await?;
+    s.provider()?.set_pacing(butler_e2e::e2e::provider::Pacing {
+        scale: 1.0,
+        cap_ms: 1500,
+        min_ms: 0,
+    });
+    let live = LiveEvents::subscribe(&s.gw, 0).await?;
+    s.gw.say("general", PROMPT).await?;
+    let first = live
+        .wait_for(std::time::Duration::from_secs(20), |event| {
+            event["type"] == "answer_blocks.draft"
+                && event["payload"]["ops"]
+                    .as_array()
+                    .is_some_and(|ops| ops.iter().any(|op| op["op"] == "item" && op["index"] == 0))
+        })
+        .await?;
+    assert!(first.get("id").is_none());
+    let before = draft_row_counts(&s)?;
+    let reconnect = LiveEvents::subscribe(&s.gw, 0).await?;
+    let snapshot = reconnect
+        .wait_for(std::time::Duration::from_secs(10), |event| {
+            event["type"] == "answer_blocks.snapshot"
+        })
+        .await?;
+    assert!(snapshot.get("id").is_none());
+    let drafts = snapshot["payload"]["drafts"].as_array().unwrap();
+    assert_eq!(drafts.len(), 1);
+    assert!(
+        drafts[0]["ops"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|op| op["op"] == "item" && op["index"] == 0)
+    );
+    let second = live
+        .wait_for(std::time::Duration::from_secs(10), |event| {
+            event["type"] == "answer_blocks.draft"
+                && event["payload"]["ops"]
+                    .as_array()
+                    .is_some_and(|ops| ops.iter().any(|op| op["op"] == "item" && op["index"] == 1))
+        })
+        .await?;
+    assert!(second.get("id").is_none());
+    let after = draft_row_counts(&s)?;
+    assert_eq!(before, after, "draft units must not write rows");
+    eprintln!("draft row counts before={before:?} after={after:?}; reconnect snapshots=1");
+    assert_eq!(
+        reconnect
+            .snapshot()
+            .iter()
+            .filter(|event| event["type"] == "answer_blocks.snapshot")
+            .count(),
+        1
+    );
+    let turn = first["payload"]["turn_id"].as_str().unwrap();
+    s.gw.wait_turn(
+        "general",
+        turn,
+        &["delivered"],
+        std::time::Duration::from_secs(20),
+    )
+    .await?;
+    let final_messages = s.gw.messages("general").await?;
+    assert!(
+        final_messages
+            .iter()
+            .any(|message| message["answer_blocks"].is_array())
+    );
+    let ended = LiveEvents::subscribe(&s.gw, 0).await?;
+    let snapshot = ended
+        .wait_for(std::time::Duration::from_secs(10), |event| {
+            event["type"] == "answer_blocks.snapshot"
+        })
+        .await?;
+    assert_eq!(snapshot["payload"]["drafts"], json!([]));
+    drop((live, reconnect, ended));
+    s.finish().await
+}
+
+fn draft_row_counts(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(i64, i64), HarnessError> {
+    let db = rusqlite::Connection::open_with_flags(
+        s.sandbox.data.join("app-server/butler-client.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    Ok((
+        db.query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))?,
+        db.query_row("SELECT COUNT(*) FROM app_owned_messages", [], |row| {
+            row.get(0)
+        })?,
+    ))
 }

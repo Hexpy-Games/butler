@@ -1,0 +1,29 @@
+/* DS Viewer stages: a positioned box the rail fills, like the conversation
+   card; tall enough for three full cards and "+N". */
+.stage {
+  position: relative;
+  height: 620px;
+  overflow: hidden;
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-popover);
+  background: var(--conversation-bg);
+}
+
+.stage[data-height="short"] {
+  height: 420px;
+}
+
+.stage[data-height="strip"] {
+  height: 120px;
+}
+
+/* A conversation card: the shell fills it; the rail picks its mode from
+   the card's width. */
+.conversation {
+  position: relative;
+  height: 640px;
+  overflow: hidden;
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-popover);
+  contain: layout paint;
+}

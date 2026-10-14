@@ -30,7 +30,7 @@
 }
 
 .control-label {
-  font: var(--font-size-2)/var(--line-height-body) var(--font-body);
+  font: var(--typo-label-size)/var(--typo-label-line-height) var(--font-body);
   font-weight: var(--font-weight-semibold);
   letter-spacing: 0;
 }
@@ -56,7 +56,8 @@
   border: 0;
   border-radius: 6px;
   color: var(--text-primary);
-  font: var(--font-size-1)/var(--line-height-body) var(--font-body);
+  font: var(--typo-caption-size)/var(--typo-caption-line-height)
+    var(--font-body);
   font-weight: var(--font-weight-semibold);
   letter-spacing: 0;
   background: transparent;
@@ -110,7 +111,7 @@
 }
 
 .label {
-  font: var(--font-size-2)/var(--line-height-body) var(--font-body);
+  font: var(--typo-label-size)/var(--typo-label-line-height) var(--font-body);
   font-weight: var(--font-weight-semibold);
   letter-spacing: 0;
 }

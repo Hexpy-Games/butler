@@ -3,6 +3,23 @@ use super::{capture, collect_crop, page::Page, scripts::scripts};
 use serde_json::{Value, json};
 const SOURCE: &str =
     include_str!("../../../../../../../butler-app/client/electron/browser/page/collect-image.mjs");
+const RENDITIONS: &str = include_str!(
+    "../../../../../../../butler-app/client/electron/browser/page/image-renditions.mjs"
+);
+
+fn source_script(args: &Value) -> String {
+    let source = SOURCE
+        .split("/** Isolated-world script")
+        .next()
+        .unwrap_or(SOURCE)
+        .lines()
+        .filter(|line| !line.starts_with("import "))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .replace("export ", "");
+    let renditions = RENDITIONS.replace("export ", "");
+    format!("(() => {{ {renditions} {source} return imageSource({args}); }})()")
+}
 
 pub(crate) async fn collect(page: &Page, args: &Value) -> Result<Value, String> {
     let epoch = page.epoch().ok_or("tab_closed")?;
@@ -29,17 +46,12 @@ pub(crate) async fn collect(page: &Page, args: &Value) -> Result<Value, String> 
     } else {
         observation.frames.first().ok_or("frame_unavailable")?
     };
-    if let Some(refused) = check_ref(page, frame, &args, epoch).await? {
-        return Ok(refused);
-    }
-    let function = SOURCE.replacen("export ", "", 1);
+    // An image's own pixels or file do not depend on what covers it on the page;
+    // only a rendered crop needs the element to be the unobstructed target.
     let source = page
         .evaluate(
             frame,
-            &format!(
-                "({function})({})",
-                json!({"ref":args["ref"],"url":args["url"],"obs":args["observation"],"epoch":epoch})
-            ),
+            &source_script(&json!({"ref":args["ref"],"url":args["url"],"obs":args["observation"],"epoch":epoch})),
         )
         .await?;
     if source["reason"].is_string() {
@@ -55,11 +67,40 @@ pub(crate) async fn collect(page: &Page, args: &Value) -> Result<Value, String> 
         result["status"] = json!("ok");
         return Ok(result);
     }
-    let mut crop = capture::screenshot(page, &args).await?;
-    crop["alt"] = source["alt"].clone();
-    crop["nearby_text"] = source["nearby_text"].clone();
-    crop["source_url"] = source["source_url"].clone();
-    Ok(crop)
+    fallback_capture(page, frame, &args, epoch, source).await
+}
+
+async fn fallback_capture(
+    page: &Page,
+    frame: &super::state::Frame,
+    args: &Value,
+    epoch: u64,
+    source: Value,
+) -> Result<Value, String> {
+    let original = source["fetch_source"] == true;
+    let described = |mut result: Value| {
+        for key in ["alt", "nearby_text", "source_url"] {
+            result[key] = source[key].clone();
+        }
+        if original {
+            for key in ["fetch_source", "referer", "user_agent"] {
+                result[key] = source[key].clone();
+            }
+        }
+        result
+    };
+    if let Some(refused) = check_ref(page, frame, args, epoch).await? {
+        return Ok(if original {
+            described(json!({"status":"ok"}))
+        } else {
+            refused
+        });
+    }
+    let crop = capture::screenshot(page, args).await?;
+    if crop["status"] != "ok" && original {
+        return Ok(described(json!({"status":"ok"})));
+    }
+    Ok(described(crop))
 }
 
 async fn check_ref(
@@ -89,12 +130,8 @@ async fn check_ref(
 async fn url_source(page: &Page, args: &Value, epoch: u64) -> Result<Value, String> {
     let frames = page.frame_worlds().await?;
     let frame = frames.first().ok_or("frame_unavailable")?;
-    let function = SOURCE.replacen("export ", "", 1);
     let mut source = page
-        .evaluate(
-            frame,
-            &format!("({function})({})", json!({"url":args["url"]})),
-        )
+        .evaluate(frame, &source_script(&json!({"url":args["url"]})))
         .await?;
     if page.epoch() != Some(epoch) {
         return Err("control_changed".into());

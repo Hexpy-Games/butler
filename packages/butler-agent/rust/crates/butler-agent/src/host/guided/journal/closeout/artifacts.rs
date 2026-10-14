@@ -23,6 +23,7 @@ impl ArtifactCollector {
         if result.field("ok").map_err(invalid)? == Some("false") {
             return Ok(());
         }
+        let page = page_url(result)?;
         for key in ["artifacts", "verified_output_files"] {
             let Some(raw) = result.field(key).map_err(invalid)? else {
                 continue;
@@ -35,9 +36,10 @@ impl ArtifactCollector {
                     return Ok(());
                 }
                 if let Ok(value) = serde_json::from_str::<Value>(candidate)
-                    && let Some(artifact) = final_artifact(&value)
+                    && let Some(mut artifact) = final_artifact(&value)
                     && self.seen.insert(artifact.safe_path_label.clone())
                 {
+                    artifact.source_url.clone_from(&page);
                     self.items.push(artifact);
                 }
                 Ok(())
@@ -50,6 +52,17 @@ impl ArtifactCollector {
     pub(super) fn finish(self) -> Vec<FinalArtifact> {
         self.items
     }
+}
+
+/// A browser capture names the page it was taken from; its artifacts show that page.
+fn page_url(result: &butler_core::json::JsonDocument) -> Result<Option<String>, BtccError> {
+    let Some(raw) = result.field("untrusted_content").map_err(invalid)? else {
+        return Ok(None);
+    };
+    Ok(serde_json::from_str::<Value>(raw)
+        .ok()
+        .and_then(|content| content.get("url")?.as_str().map(str::to_owned))
+        .filter(|url| butler_runtime::capabilities::answer_blocks::source_identity(url).is_some()))
 }
 
 fn final_artifact(value: &Value) -> Option<FinalArtifact> {
@@ -106,6 +119,7 @@ fn final_artifact(value: &Value) -> Option<FinalArtifact> {
         mime_type: Some(mime),
         size_bytes,
         created_at: created,
+        source_url: None,
     })
 }
 
@@ -198,6 +212,7 @@ pub(super) fn with_changed_files(
                 .into_owned(),
             size_bytes: None,
             created_at: None,
+            source_url: None,
         });
     }
     artifacts

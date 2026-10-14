@@ -16,6 +16,9 @@ pub struct EffectFileScope {
     pub butler_data: PathBuf,
     pub protected_roots: Vec<PathBuf>,
     pub installation_root: Option<PathBuf>,
+    /// The write runs without approval because its target is inside the
+    /// project: re-check containment, secrets and symlink escapes at use.
+    pub contained: bool,
 }
 
 /// Failures to resolve or observe the target of a write/edit file effect.
@@ -125,7 +128,11 @@ pub async fn guard_effect_file(
         let guarded = resolve_workspace_mutation_guard(MutationGuardInput {
             root: &scope.workspace,
             requested: &path,
-            path_form: super::path_guard::PathForm::RelativeOrAbsolute,
+            path_form: if scope.contained {
+                super::path_guard::PathForm::Contained
+            } else {
+                super::path_guard::PathForm::RelativeOrAbsolute
+            },
             leaf: super::path_guard::Leaf::MayBeMissing,
             installation_root: scope.installation_root.as_deref(),
             protected_roots: &protected,

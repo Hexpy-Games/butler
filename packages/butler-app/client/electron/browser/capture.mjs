@@ -1,8 +1,8 @@
 import { BrowserWindow, nativeImage } from "electron";
 import { evaluateWorld, framePoint } from "./frame-worlds.mjs";
 import { resolveSource } from "./page/snapshot.mjs";
-import { imageSource } from "./page/collect-image.mjs";
-import { secureBoxes } from "./capture-security.mjs";
+import { imageSourceScript } from "./page/collect-image.mjs";
+import { secureBoxes, captureViewport } from "./capture-security.mjs";
 
 /** Compose on a Butler-owned bitmap, never modify the page or capture the pointer. */
 async function markedImage(image, marks) {
@@ -83,10 +83,10 @@ function encode(image, max = 1024) {
 }
 
 /** Paints every secure field (saved-item fills included) black on a page capture. */
-export async function maskSecure(tab, image) {
-  const marks = await secureBoxes(tab);
+export async function maskSecure(tab, image, marks) {
+  marks ??= await secureBoxes(tab);
   if (!marks.length) return image;
-  const viewport = await tab.view.webContents.executeJavaScriptInIsolatedWorld(9001, [{ code: "({width:innerWidth,height:innerHeight})" }]);
+  const viewport = await captureViewport(tab);
   const size = image.getSize(), scale = tab.bounds?.scale ?? 1;
   const sx = size.width / (viewport.width * scale), sy = size.height / (viewport.height * scale);
   return markedImage(image, marks.map(mark => ({ ...mark, rect: { x: mark.rect.x * sx, y: mark.rect.y * sy, width: mark.rect.width * sx, height: mark.rect.height * sy } })));
@@ -95,6 +95,7 @@ export async function maskSecure(tab, image) {
 export async function observationImage(tab) {
   const epoch = tab.epoch;
   const image = await tab.view.webContents.capturePage(undefined, { stayHidden: true });
+  tab.afterCapture?.(image);
   // A tiny unmarked thumbnail lets progress notes tell a pixel-only change from none.
   if (!image.isEmpty()) tab.observation.thumb = image.resize({ width: 160, height: 100 }).toBitmap();
   const captured = encode(await markedImage(image, await bitmapMarks(tab, image, await boxes(tab))));
@@ -155,7 +156,7 @@ export async function collectImage(tab, args) {
   const epoch = tab.epoch;
   if (args.url != null) {
     const source = await tab.view.webContents.executeJavaScriptInIsolatedWorld(9001,
-      [{ code: `(${imageSource.toString()})(${JSON.stringify({ url: args.url })})` }]);
+      [{ code: imageSourceScript({ url: args.url }) }]);
     if (epoch !== tab.epoch || tab.holder !== "agent") return { status: "not_dispatched", reason: "control_changed" };
     return { status: "ok", ...source };
   }
@@ -176,15 +177,20 @@ export async function collectImage(tab, args) {
   }
   const frame = args.ref ? observation.bindings.get(args.ref) : observation.main;
   if (!frame) return { status: "refused", reason: "stale_ref" };
-  if (args.ref) {
-    const target = await evaluateWorld(frame, resolveSource({ ref:args.ref, obs:observationId, epoch }));
-    if (target.reason) return { status: "refused", reason: target.reason };
-  }
-  const source = await evaluateWorld(frame, `(${imageSource.toString()})(${JSON.stringify({ ref:args.ref, url:args.url, obs:observationId, epoch })})`);
+  // An image's own pixels or file do not depend on what covers it on the page;
+  // only a rendered crop needs the element to be the unobstructed target.
+  const source = await evaluateWorld(frame, imageSourceScript({ ref:args.ref, url:args.url, obs:observationId, epoch }));
   if (source.reason) return { status: "refused", reason: source.reason, recovery: source.recovery };
   if (source.image) return collectedPixels(tab, epoch, Buffer.from(source.image.data, "base64"), source);
+  const described = { alt: source.alt, nearby_text: source.nearby_text, source_url: source.source_url || tab.url };
+  const original = source.fetch_source ? { fetch_source: true, referer: source.referer, user_agent: source.user_agent } : {};
+  if (args.ref) {
+    const target = await evaluateWorld(frame, resolveSource({ ref:args.ref, obs:observationId, epoch }));
+    if (target.reason) return source.fetch_source ? { status: "ok", ...described, ...original } : { status: "refused", reason: target.reason };
+  }
   const crop = await screenshotTab(tab, { ...args, observation:observationId });
-  return { ...crop, alt: source.alt, nearby_text: source.nearby_text, source_url: source.source_url || tab.url };
+  if (crop.status !== "ok" && source.fetch_source) return { status: "ok", ...described, ...original };
+  return { ...crop, ...described, ...original };
 }
 function collectedPixels(tab, epoch, bytes, source) {
   if (epoch !== tab.epoch || tab.holder !== "agent") return { status:"not_dispatched", reason:"control_changed" };

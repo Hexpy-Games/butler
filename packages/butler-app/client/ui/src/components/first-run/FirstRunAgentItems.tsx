@@ -1,8 +1,7 @@
 import { appCopy } from "@/app/copy";
-import { ChoiceCardList, FileText, Server, SetupWizardStepAction, Typo } from "@/butler-ds";
+import { CheckCard, CheckCardList, FileText, Server, SetupWizardStepAction, Typo } from "@/butler-ds";
 import type { AgentImportSource } from "../settings/agentImportApi";
 import { FirstRunStepCard } from "./FirstRunStepCard";
-import { PickCard } from "./PickCard";
 import { agentItems } from "./useAgentPicks";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
@@ -30,18 +29,18 @@ export function FirstRunAgentItems({ flow, source }: { flow: FirstRunFlow; sourc
       titleId="first-run-agent-items-title" description={text.agentItemsProgress(source.name, index + 1, total)}
       onBack={() => picks.open(index - 1)} actions={action}
     >
-      <ChoiceCardList role="group" aria-labelledby="first-run-agent-items-title">
+      <CheckCardList aria-labelledby="first-run-agent-items-title">
         {file ? (
-          <PickCard data-agent-import-item="instructions" icon={<FileText size="md" />} title={text.itemInstructions}
-            description={items.instructions[0] ? file : `${file} · ${fileReason}`} on={choice.instructions}
-            blocked={!items.instructions[0]} busy={imp.busy} onToggle={() => picks.toggleInstructions(source)} />
+          <CheckCard data-agent-import-item="instructions" icon={<FileText size="md" />} title={text.itemInstructions}
+            description={items.instructions[0] ? file : `${file} · ${fileReason}`} checked={Boolean(items.instructions[0]) && choice.instructions}
+            disabled={imp.busy} disabledReason={items.instructions[0] ? undefined : fileReason} onCheckedChange={() => picks.toggleInstructions(source)} />
         ) : null}
         {items.servers.map((server) => (
-          <PickCard key={server.name} data-agent-import-item={server.name} icon={<Server size="md" />} title={server.name}
+          <CheckCard key={server.name} data-agent-import-item={server.name} icon={<Server size="md" />} title={server.name}
             description={server.needs_secret ? `${text.itemServer} · ${text.itemNeedsKey}` : text.itemServer}
-            on={choice.servers.includes(server.name)} busy={imp.busy} onToggle={() => picks.toggleServer(source, server.name)} />
+            checked={choice.servers.includes(server.name)} disabled={imp.busy} onCheckedChange={() => picks.toggleServer(source, server.name)} />
         ))}
-      </ChoiceCardList>
+      </CheckCardList>
       {imp.error ? <Typo.Caption role="alert" tone="danger">{appCopy.settings.agentImport.failed}</Typo.Caption> : null}
     </FirstRunStepCard>
   );

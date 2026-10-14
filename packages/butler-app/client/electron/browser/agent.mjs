@@ -88,6 +88,9 @@ export function backgroundTab(browser, tab) {
     browser.agentWindow = new BrowserWindow({ show: false, width: 1280, height: 800, webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true } });
   }
   browser.agentWindow.contentView.addChildView(tab.view); tab.attached = browser.agentWindow;
+  // Hidden agent pages use the full logical viewport, not the last pane's
+  // scale (which can be zero while its slot unmounts). Tools and frames share it.
+  if (tab.agent) tab.bounds = { x: 0, y: 0, width: 1280, height: 800, scale: 1, visible: false };
   tab.view.setBounds({ x: 0, y: 0, width: tab.agent ? 1280 : Math.round(tab.bounds?.width ?? 1280), height: tab.agent ? 800 : Math.round(tab.bounds?.height ?? 800) }); emulation(tab);
 }
 function armExpiry(browser, tab) {
@@ -118,7 +121,7 @@ export async function executeBrowser(browser, frame) {
     return;
   }
   if (frame.op === "use.signin_revoked") { if (typeof frame.args?.site === "string") revokeSignedInSite(browser, frame.args.site, controlTab); return; }
-  if (frame.op === "use.finished") { finishUse(browser, frame.session, frame.turn_id); return; }
+  if (frame.op === "use.finished") { finishUse(browser, frame.session, frame.turn_id, frame.args?.close_read_tabs === true); return; }
   const tracked = ["tab.open", "tab.observe", "tab.read", "tab.zoom", "tab.screenshot", "tab.image_collect", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill", "pay.inspect", "pay.fill", "autofill.fill"].includes(frame.op);
   // Direct main-only harness calls have no gateway id, but use the same lifetime.
   if (tracked && !frame.id) { frame = { ...frame, id: randomUUID() }; startUse(browser, frame); }
@@ -140,7 +143,7 @@ async function executeFrame(browser, frame) {
   const { op, session, args = {} } = frame;
   if (!/^[a-zA-Z0-9_-]{1,128}$/u.test(session ?? "")) return { status: "refused", reason: "invalid_session" };
   const owner = `conversation:${session}`;
-  if (op === "tabs.list") return { tabs: browser.snapshot().tabs.filter(tab => tab.owner === owner).map(({ saveOffer: _offer, ...tab }) => tab) };
+  if (op === "tabs.list") return { tabs: browser.snapshot().tabs.filter(tab => tab.owner === owner).map(({ saveOffer: _offer, agentAt: _at, ...tab }) => tab) };
   if (op === "owner.closed") {
     for (const tab of [...browser.tabs.values()]) if (tab.owner === owner) browser.close(tab.id);
     browser.events?.delete(owner); return { status: "ok" };
@@ -148,6 +151,7 @@ async function executeFrame(browser, frame) {
   if (op === "tab.open") return openAgent(browser, frame);
   const tab = browser.tabs.get(frame.tab);
   if (!tab || tab.owner !== owner) return { status: "refused", reason: "not_your_tab" };
+  if (INTERACTIONS.has(op)) tab.acted = true;
   if (op === "tab.selection") return browser.selection.result(tab, session);
   if (tab.profile === "signed_in" && !["tab.cancel", "tab.wait", "tab.waiting"].includes(op) && !applySignedInPolicy(tab, args.policy))
     return { status: "not_dispatched", reason: args.policy?.mode === "signed_in" ? "navigation_denied" : "signed_in_unavailable" };
@@ -203,25 +207,18 @@ function parsed(contents, url) {
   void loading.catch(() => {});
   return Promise.race([loading, ready]);
 }
-async function openAgent(browser, { session, args, id: callId }, source) {
+/** Ops that act in a page or hand it to the user; a tab with none was only read. */
+const INTERACTIONS = new Set(["tab.act", "tab.dialog", "tab.wait", "signin.fill", "pay.inspect", "pay.fill", "autofill.fill"]);
+async function openAgent(browser, { session, args, id: callId, turn_id: turn }, source) {
   const signedIn = args.profile === "signed_in" || args.signed_in === true;
   if (signedIn && (args.policy?.mode !== "signed_in" || signedInPlace(args.url, args.policy) !== "granted")) return { status: "refused", reason: "signed_in_unavailable" };
   if (!makeAgentRoom(browser)) return { status: "refused", reason: "tab_budget_exhausted" };
-  const opening = openingBurst(browser, `conversation:${session}`);
-  try { return await openTab(browser, { session, args, callId, signedIn, source, opening }); }
-  finally { if (--opening.count === 0) browser.opening.delete(`conversation:${session}`); }
+  return openTab(browser, { session, args, callId, signedIn, source, turn });
 }
-// Opens that overlap form one burst: its first page to arrive is shown, the
-// rest stay in the background, so parallel tabs never flip the visible one.
-function openingBurst(browser, owner) {
-  browser.opening ??= new Map();
-  const burst = browser.opening.get(owner) ?? { count: 0, shown: false };
-  burst.count++; browser.opening.set(owner, burst);
-  return burst;
-}
-async function openTab(browser, { session, args, callId, signedIn, source, opening }) {
+async function openTab(browser, { session, args, callId, signedIn, source, turn }) {
   const id = browser.create({ owner: `conversation:${session}`, url: args.url, preview_id: args.preview_id, agent: true, policy: args.policy, partition: source?.partition, profile: source?.profile ?? (signedIn ? "signed_in" : undefined) }, false);
   const tab = browser.tabs.get(id);
+  tab.openedTurn = typeof turn === "string" ? turn : null;
   tab.onPointer=(step,target)=>browser.pointer.step(tab,step,target);
   const use = browser.uses.get(callId);
   bindUse(browser, use, tab);
@@ -235,9 +232,6 @@ async function openTab(browser, { session, args, callId, signedIn, source, openi
   catch { browser.close(id); return { status: "unknown", reason: "navigation_failed" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
   touch(browser, tab);
-  // The renderer activates through the normal detach/attach path only for its visible owner.
-  // Search results open as background tabs: the user stays where they are.
-  if (!source && args.background !== true && !opening.shown) { opening.shown = true; browser.focusRequest = id; }
   browser.publish();
   return { status: "ok", tab: id, url: tab.url, title: tab.title, epoch: tab.epoch, profile: tab.profile };
 }

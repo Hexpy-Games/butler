@@ -277,6 +277,8 @@ async fn partly_embedded(s: &mut Scenario, graph: &Path) -> Result<(), HarnessEr
     let waiting = db.execute("UPDATE memory_vector_units SET state='pending',receipt_json=NULL,next_attempt_at='2999-01-01T00:00:00.000Z' WHERE job_id IN (SELECT j.job_id FROM memory_projection_jobs j JOIN memory_chunk_sources s ON s.episode_id=j.episode_id AND s.revision=j.revision JOIN memory_source_text t ON t.source_id=s.source_id WHERE t.text LIKE '%Nîmes%')", []).unwrap();
     drop(db);
     assert!(waiting > 0 && count(graph, COMPLETE) > 0, "a mixed corpus");
+    let deferred = deferred_units(graph);
+    assert_eq!(deferred.len(), waiting, "every delayed unit is tracked");
     let loads = s.agent.logs().matches("[embedding-worker] ready").count();
     s.gw = s.agent.start_again().await?;
     // The first recall loads the model; its vector lane may miss the deadline.
@@ -294,12 +296,23 @@ async fn partly_embedded(s: &mut Scenario, graph: &Path) -> Result<(), HarnessEr
     );
     assert!(vectors["candidates"].as_u64().unwrap() > 0, "{mixed}");
     assert_eq!(
-        count(graph, PENDING),
-        i64::try_from(waiting).unwrap(),
-        "the wait holds"
+        deferred_units(graph),
+        deferred,
+        "the delayed units retain their identities, pending state and retry time"
     );
     eprintln!("MEM-ON mixed corpus: fts+vectors=pass waiting_units={waiting}");
     Ok(())
+}
+
+fn deferred_units(graph: &Path) -> Vec<(String, String, String)> {
+    let db =
+        butler_platform::sqlite::open_with_flags(graph, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+    db.prepare("SELECT unit_id,state,next_attempt_at FROM memory_vector_units WHERE next_attempt_at='2999-01-01T00:00:00.000Z' ORDER BY unit_id")
+        .unwrap()
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
 }
 
 /// The real pinned model files, as CI supplies them; required for a true backfill.

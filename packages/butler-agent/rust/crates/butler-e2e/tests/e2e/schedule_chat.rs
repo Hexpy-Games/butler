@@ -95,7 +95,16 @@ async fn ordinary_chat_creates_schedule_only_after_approval() -> Result<(), Harn
         .as_str()
         .or_else(|| request["ref"].as_str())
         .unwrap();
+    let schedule = &request["approval"]["schedule"];
+    assert_eq!(schedule["access_mode"], "full_access");
+    assert_eq!(schedule["title"], "아침 브리핑");
+    assert_eq!(schedule["interval_seconds"], 1440 * 60);
+    assert_eq!(schedule["start_at"], START);
     assert_eq!(s.gw.get("/automations/morning-briefing").await?.status, 404);
+    let changed =
+        s.gw.patch("/settings", json!({"schedule_access_mode":"read_only"}))
+            .await?;
+    assert_eq!(changed.status, 200);
     let allowed =
         s.gw.post(
             &format!("/authority-requests/{reference}/allow?session_id=general"),
@@ -125,7 +134,9 @@ async fn ordinary_chat_creates_schedule_only_after_approval() -> Result<(), Harn
     assert_eq!(schedule["prompt_body"], PROMPT);
     assert_eq!(schedule["interval_seconds"], 86400);
     assert_eq!(schedule["next_run_at"], "2098-12-31T22:00:00.000Z");
-    assert_eq!(schedule["access_mode"], "ask_first");
+    // D7: an omitted mode takes the schedule default (here derived from the
+    // global full access), not the creating conversation's mode.
+    assert_eq!(schedule["access_mode"], "full_access");
     assert_eq!(s.provider()?.misses(), [] as [std::string::String; 0]);
     assert_authority(&s, &turn_id, "create_automation")?;
     let requests = s.provider()?.requests();
@@ -197,6 +208,9 @@ async fn manage_schedule(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), 
             },
             "schedule changed before approval: {before}"
         );
+        if expected == "deleted" {
+            assert_delete_schedule(s, &id, &before).await?;
+        }
         allow(s, &id).await?;
         let turn =
             s.gw.wait_terminal("general", &id, Duration::from_secs(turn_timeout()))
@@ -293,6 +307,92 @@ fn assert_discovery(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), Harne
             "{}: {}",
             entry["id"], entry["disabled_reason"]
         );
+    }
+    Ok(())
+}
+
+async fn assert_delete_schedule(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    turn_id: &str,
+    stored: &serde_json::Value,
+) -> Result<(), HarnessError> {
+    let requests = s.gw.approval_requests("general").await?;
+    let request = requests
+        .iter()
+        .find(|r| r["source_turn_id"] == turn_id)
+        .unwrap();
+    let schedule = &request["approval"]["schedule"];
+    for field in [
+        "title",
+        "schedule_type",
+        "start_at",
+        "interval_seconds",
+        "access_mode",
+    ] {
+        assert_eq!(schedule[field], stored[field], "{request}");
+    }
+    assert!(schedule.get("id").is_none(), "{schedule}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn delete_approval_resolves_once_and_missing_schedules() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    for exists in [true, false] {
+        let ask = "Delete my reminder schedule.";
+        let s = Setup::new("SCHED-DELETE")?
+            .stub_cassette(discovery_cassette(
+                ask,
+                "delete_automation",
+                &json!({"id":"reminder"}),
+                1,
+            )?)
+            .start()
+            .await?;
+        if exists {
+            let created =
+                s.gw.post(
+                    "/automations",
+                    json!({
+                        "id":"reminder", "title":"Reminder", "prompt_body":"Remind me.",
+                        "target_session_id":"general", "schedule_type":"once", "run_at":START,
+                        "access_mode":"read_only"
+                    }),
+                )
+                .await?;
+            assert_eq!(created.status, 201, "{}", created.text);
+        }
+        let controls =
+            s.gw.patch(
+                "/sessions/general/controls",
+                json!({"access_mode":"ask_first"}),
+            )
+            .await?;
+        assert_eq!(controls.status, 200, "{}", controls.text);
+        let id = accepted_turn_id(&s.gw.say("general", ask).await?)?;
+        let turn =
+            s.gw.wait_turn(
+                "general",
+                &id,
+                &["waiting_for_form", "delivered", "failed"],
+                Duration::from_secs(turn_timeout()),
+            )
+            .await?;
+        assert_eq!(turn_state(&turn), "waiting_for_form", "{turn}");
+        let requests = s.gw.approval_requests("general").await?;
+        let request = requests.iter().find(|r| r["source_turn_id"] == id).unwrap();
+        let schedule = &request["approval"]["schedule"];
+        if exists {
+            assert_eq!(schedule["title"], "Reminder");
+            assert_eq!(schedule["schedule_type"], "once");
+            assert_eq!(schedule["run_at"], START);
+            assert_eq!(schedule["access_mode"], "read_only");
+            assert!(schedule.get("id").is_none(), "{schedule}");
+        } else {
+            assert!(schedule.is_null(), "{request}");
+        }
+        assert_eq!(s.provider()?.misses(), [] as [String; 0]);
+        s.finish().await?;
     }
     Ok(())
 }

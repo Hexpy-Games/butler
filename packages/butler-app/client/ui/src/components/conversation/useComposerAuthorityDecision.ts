@@ -1,3 +1,5 @@
+import type { ComposerDecisionMedia } from "@/butler-ds";
+import { useBrowserDecisionMedia } from "./useBrowserDecisionMedia";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useRef, useState } from "react";
 import { approvalRequestView, browserHandoffView, type ApprovalRequestView } from "@/app/approvalRequest.ts";
@@ -7,6 +9,7 @@ import type { AuthorityApprovalCard } from "@/app/types.ts";
 
 export interface ComposerAuthorityDecision {
   /** The plain-language question, also shown on the pending attachment. */
+  media?: ComposerDecisionMedia;
   pathDetails?: string[];
   title: string; details: string[]; risk: ApprovalRequestView["risk"]; actionKind: ApprovalRequestView["actionKind"];
   /** What "Always allow in this conversation" covers; the grant needs the legacy `scope`. */
@@ -23,6 +26,7 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
   useAppLocale();
   const requests = useButlerStore(selectActiveAuthorityApprovals);
   const request = requests[0];
+  const media = useBrowserDecisionMedia(request);
   const sessionId = useButlerStore((state) => state.activeChatId);
   const [collapsed, setCollapsed] = useState<string>();
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
@@ -43,8 +47,9 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
   const canOpenTab = canOpenHandoffTab();
   const handoff = browserHandoffView(request, appCopy.interfaceTemplates.approvalRequest, canOpenTab);
   return {
+    media,
     ...(handoff ? { handoff: { canOpenTab, signIn: handoff.signIn,
-      onOpenTab: () => void openHandoffTab(sessionId),
+      onOpenTab: () => media?.onOpen ? media.onOpen() : void openHandoffTab(sessionId),
       onStop: () => void useButlerStore.getState().cancelActiveTurn() } } : {}),
     title: handoff?.title ?? view.title, details: handoff?.details ?? view.details, risk: view.risk, actionKind: view.actionKind,
     pathDetails: view.pathDetails,

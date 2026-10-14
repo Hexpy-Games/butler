@@ -2,16 +2,19 @@
 use super::*;
 use std::sync::Arc;
 
+/// A Markdown table naming the same rows as the answer's table block.
+const REPEATED_TABLE: &str =
+    "| Image | Count |\n|---|---:|\n| **First** | 1 |\n| [Second](https://example.com/) | 1 |";
+/// A Markdown table of other rows, which no block shows.
+const OTHER_TABLE: &str = "| Step | Result |\n|---|---|\n| Collect | Done |";
+
 pub(crate) fn parent_item(body: &Value, step: &mut usize) -> Value {
     let current = *step;
     *step += 1;
+    // The parent cites the page only its steward read: delegated reads are
+    // this conversation's provenance.
     let (name, args) = match current {
-        0 => ("tool_describe", json!({"ids":["native:browser_open"]})),
-        1 => (
-            "tool_call",
-            json!({"id":"native:browser_open","arguments":{"url":"https://example.com/"}}),
-        ),
-        2 => {
+        0 => {
             let pattern = regex::Regex::new(r"img_[a-z0-9]{10,12}").unwrap();
             let mut ids = pattern
                 .find_iter(&body.to_string())
@@ -24,14 +27,16 @@ pub(crate) fn parent_item(body: &Value, step: &mut usize) -> Value {
                 "answer_blocks",
                 json!({"v":1,"blocks":[
                 {"type":"cards","items":[
-                    {"title":"First image","img":ids[0],"source":"https://example.com/","checked":chrono::Utc::now().to_rfc3339(),"value":{"amount":2,"unit":"items"}},
+                    {"title":"First image","img":ids[0],"source":"https://example.com/","checked":chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(5 * 3600 + 45 * 60).unwrap()).to_rfc3339(),"value":{"amount":2,"unit":"items"}},
                     {"title":"Second image","img":ids[1]}]},
                 {"type":"gallery","items":[{"img":ids[0],"caption":"First image"},{"img":ids[1],"caption":"Second image"}]},
                 {"type":"table","columns":["Image","Count"],"rows":[["First",1],["Second",1]]}]}),
             )
         }
         _ => {
-            return json!({"type":"message","id":"answer","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Two images compared.","annotations":[]}]});
+            // The prose repeats the table block row for row; the reply keeps
+            // the block and drops the repeated Markdown table.
+            return json!({"type":"message","id":"answer","role":"assistant","status":"completed","content":[{"type":"output_text","text":format!("Two images compared.\n\n{REPEATED_TABLE}\n\n{OTHER_TABLE}\n\nBoth were checked."),"annotations":[]}]});
         }
     };
     json!({"type":"function_call","id":format!("parent-{current}"),"call_id":format!("parent-{current}"),"name":name,"arguments":args.to_string(),"status":"completed"})
@@ -74,8 +79,28 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
         .unwrap()
         .unwrap()?;
     let message = wait_answer(&s, &script, &session).await?;
+    let attachments = message["attachments"]
+        .as_array()
+        .expect("final reply attachments");
+    assert_eq!(
+        attachments.len(),
+        1,
+        "the pictured page capture is removed and the other page capture stays: {attachments:?}"
+    );
+    assert_remaining_capture_source(&s, &session)?;
+    assert_eq!(
+        message["text"],
+        format!("Two images compared.\n\n{OTHER_TABLE}\n\nBoth were checked."),
+        "a table shown as a block is not repeated in the prose"
+    );
     let sets = &message["answer_blocks"];
     assert_eq!(sets[0]["spec"]["blocks"].as_array().unwrap().len(), 3);
+    assert!(
+        sets[0]["spec"]["blocks"][0]["items"][0]["checked"]
+            .as_str()
+            .unwrap()
+            .ends_with("+05:45")
+    );
     for (index, item) in sets[0]["spec"]["blocks"][0]["items"]
         .as_array()
         .unwrap()
@@ -102,6 +127,7 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
         }
     }
     assert_stored_ids(&s)?;
+    assert_request_view_hides_presentation(&s, &session).await?;
     s.restart().await?;
     let view =
         s.gw.get(&format!("/session-view?session_id={session}"))
@@ -132,6 +158,37 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
     verify_asset_sweep(&s, &session, &reopened).await?;
     s.finish().await?;
     server.abort();
+    Ok(())
+}
+
+/// The delegated request view shows the objective and real checks; the
+/// planned `Presentation:` line reaches only the model.
+async fn assert_request_view_hides_presentation(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    session: &str,
+) -> Result<(), HarnessError> {
+    let view =
+        s.gw.get(&format!("/session-view?session_id={session}"))
+            .await?;
+    let child = view.data()["steward_children"][0]["session_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let view =
+        s.gw.get(&format!("/session-view?session_id={child}"))
+            .await?;
+    let request = view.data()["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "user")
+        .and_then(|message| message["text"].as_str())
+        .unwrap_or_default()
+        .to_owned();
+    assert!(
+        request.contains("• Approach verified") && !request.contains("Presentation:"),
+        "delegated request view: {request}"
+    );
     Ok(())
 }
 
@@ -168,21 +225,36 @@ fn assert_presentation_contract(requests: &[Value]) {
         .find(|r| {
             r["instructions"]
                 .as_str()
-                .is_some_and(|text| text.contains("Steward role"))
+                .is_some_and(|text| text.contains("You run one delegated Work"))
         })
         .expect("a steward request");
     let task = steward["input"].to_string();
+    assert!(
+        steward
+            .to_string()
+            .contains("This Turn is already bound to this Work"),
+        "a steward starts on its runtime-bound child Work, without a continue_work round"
+    );
     assert!(
         task.contains("Presentation: cards, table")
             && task.contains("Butler's Plan presents this result as cards, table")
             && task.contains("collect one representative photo per item with image_collect"),
         "the planned presentation drives the delegated task: {task}"
     );
+    // The steward reports without answer blocks: its final-report round
+    // neither offers nor names them, so it never searches for them.
+    let report = requests
+        .iter()
+        .filter(|r| r.to_string().contains("You run one delegated Work"))
+        .find_map(|r| {
+            let input = r["input"].to_string();
+            input.contains("Execution is settled").then_some(input)
+        })
+        .expect("a steward final-report round");
     assert!(
-        requests.iter().any(|r| r
-            .to_string()
-            .contains("when your Plan's Presentation line names blocks, present the result with them as planned")),
-        "the final-report round presents as planned"
+        report.contains("the recipient builds them from your report")
+            && !report.contains("except answer_blocks"),
+        "steward final report: {report}"
     );
     let result = requests
         .iter()
@@ -200,13 +272,63 @@ fn assert_presentation_contract(requests: &[Value]) {
         .iter()
         .find(|tool| tool["name"] == "answer_blocks")
         .expect("parent is offered answer_blocks");
+    let catalog = butler_core::tool_catalog::load().unwrap();
+    assert_eq!(
+        blocks["parameters"], catalog["rawDefinitions"]["answer_blocks"]["parameters"],
+        "the parent receives the complete resolved answer schema"
+    );
     assert!(
         blocks["description"]
             .as_str()
             .unwrap()
-            .contains("Use it unasked as the Plan's Presentation line decided"),
+            .contains("Use it unasked as the Plan's Presentation line decided")
+            && blocks["description"]
+                .as_str()
+                .unwrap()
+                .contains("The blocks are the only copy of what they show"),
         "{blocks}"
     );
+    assert_acceptance_contract(result, steward);
+}
+
+/// Explicit constraints of the request (counts in the unit it names, each
+/// distinct, dates, limits) become Plan checks, travel to the steward as its
+/// acceptance criteria, and are what result and completion reviews test.
+fn assert_acceptance_contract(parent: &Value, steward: &Value) {
+    let tool = |request: &Value, name: &str| {
+        request["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == name)
+            .unwrap_or_else(|| panic!("{name} offered"))
+            .clone()
+    };
+    let checks =
+        tool(parent, "replace_work_plan")["parameters"]["properties"]["checks"]["description"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+    assert!(
+        checks.contains("Make each explicit constraint in the request its own check")
+            && checks.contains("in the unit the request names and each one distinct"),
+        "{checks}"
+    );
+    assert!(
+        steward["input"].to_string().contains("Approach verified"),
+        "the Plan's checks reach the steward as acceptance criteria"
+    );
+    for request in [parent, steward] {
+        let review = tool(request, "record_work_review")["description"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        assert!(
+            review.contains("test the result against each Plan check and each explicit constraint in the request")
+                && review.contains("never accept"),
+            "{review}"
+        );
+    }
 }
 
 fn strip_signatures(value: &mut Value) {
@@ -257,6 +379,29 @@ fn assert_stored_ids(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), Harn
     assert!(spec.contains("img_"));
     assert!(!spec.contains("image_url"), "Signed URLs are HTTP metadata");
     assert!(!spec.contains("/assets/"));
+    Ok(())
+}
+
+fn assert_remaining_capture_source(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    session: &str,
+) -> Result<(), HarnessError> {
+    let db = butler_platform::sqlite::open_with_flags(
+        s.sandbox.data.join("agent-runtime/btcc.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    let session_suffix = format!("%{session}");
+    let raw: String = db.query_row(
+        "SELECT final_payload_json FROM btcc_turns WHERE session_id LIKE ?1 AND final_payload_json IS NOT NULL",
+        [session_suffix],
+        |row| row.get(0),
+    )?;
+    let payload: Value = serde_json::from_str(&raw)?;
+    let artifacts = payload["artifacts"]
+        .as_array()
+        .expect("parent final payload artifacts");
+    assert_eq!(artifacts.len(), 1, "only the unpictured page capture stays");
+    assert_eq!(artifacts[0]["sourceUrl"], "https://example.org/");
     Ok(())
 }
 

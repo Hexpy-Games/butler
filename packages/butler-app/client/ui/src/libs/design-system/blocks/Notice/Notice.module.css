@@ -49,6 +49,7 @@
   flex: 1;
   min-width: 0;
   font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height);
 }
 
 /* The action centers on the first line, like the icon: a one-line notice

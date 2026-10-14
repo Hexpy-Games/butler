@@ -11,7 +11,7 @@
    the title whether or not a description wraps below. */
 .icon {
   display: inline-grid;
-  height: calc(var(--typo-body-size) * var(--typo-body-line-height));
+  height: var(--typo-body-line-height);
   place-items: center;
   color: var(--text-tertiary);
 }

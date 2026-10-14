@@ -19,8 +19,8 @@ pub(super) fn measure(
     } else {
         Vec::new()
     };
-    let bytes = if model.starts_with("openai/") {
-        cache.0.lock().array_json(&items).map_err(|source| {
+    let (bytes, projected, images) = if model.starts_with("openai/") {
+        cache.0.lock().array_sizing(&items).map_err(|source| {
             BtccError::relayed(
                 "context_serialization_failed",
                 "Context serialization failed.",
@@ -28,35 +28,37 @@ pub(super) fn measure(
             .with_source(source)
         })?
     } else {
-        let value = serde_json::to_value(messages).map_err(|source| {
+        let mut value = serde_json::to_value(messages).map_err(|source| {
             BtccError::relayed(
                 "context_serialization_failed",
                 "Context serialization failed.",
             )
             .with_source(source)
         })?;
-        butler_core::json::stringify(&value).map_err(|source| {
+        // Native carriers send these tool images as image blocks; count them
+        // by the image allowance, not their base64 as text.
+        let mut images = 0;
+        if let Some(rows) = value.as_array_mut() {
+            for (row, message) in rows.iter_mut().zip(messages) {
+                if let Some((text, _)) = super::output_image::parts(message) {
+                    row["content"] = serde_json::Value::String(text);
+                    images += 1;
+                }
+            }
+        }
+        let bytes = butler_core::json::stringify(&value).map_err(|source| {
             BtccError::relayed(
                 "context_serialization_failed",
                 "Context serialization failed.",
             )
             .with_source(source)
-        })?
+        })?;
+        (bytes, String::new(), images)
     };
-    let (token_input, images) = if model.starts_with("openai/") {
-        let (text, count) = crate::models::request_admission::image_token_projection(
-            &serde_json::Value::Array(items),
-        )
-        .map_err(|source| {
-            BtccError::relayed(
-                "context_serialization_failed",
-                "Context serialization failed.",
-            )
-            .with_source(source)
-        })?;
-        (Cow::Owned(text), count)
+    let token_input = if model.starts_with("openai/") {
+        Cow::Owned(projected)
     } else {
-        (Cow::Borrowed(bytes.as_str()), 0)
+        Cow::Borrowed(bytes.as_str())
     };
     let tokens = catalog
         .estimate_tokens(

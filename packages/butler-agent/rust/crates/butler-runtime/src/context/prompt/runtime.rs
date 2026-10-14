@@ -30,9 +30,9 @@ pub(super) fn runtime_state(input: RuntimeStateInput<'_>) -> ContextResult<Conte
     let user = input.config.get("user").and_then(Value::as_object);
     let timezone = safe_config_text(user.and_then(|value| value.get("timezone")));
     let timezone = if timezone.is_empty() {
-        "UTC"
+        input.clock.default_timezone()
     } else {
-        &timezone
+        timezone
     };
     let language = safe_config_text(user.and_then(|value| value.get("language")));
     let language = if language.is_empty() {
@@ -44,9 +44,13 @@ pub(super) fn runtime_state(input: RuntimeStateInput<'_>) -> ContextResult<Conte
     let utc = input.clock.iso_from_epoch_millis(timestamp)?;
     let local = input
         .clock
-        .format_local_time(timestamp, timezone)
+        .format_local_time(timestamp, &timezone)
         .unwrap_or_else(|_| utc.clone());
-    let geo = best_geo_hint(user, input.environment.user_geo.as_deref(), timezone);
+    let local_rfc3339 = input
+        .clock
+        .local_timestamp(timestamp, &timezone)
+        .unwrap_or_else(|_| utc.clone());
+    let geo = best_geo_hint(user, input.environment.user_geo.as_deref(), &timezone);
     let mut lines = vec![
         format!("Live Configuration Hash: {}", input.live_config_hash),
         format!("Session ID: {}", input.binding.session_id),
@@ -55,6 +59,7 @@ pub(super) fn runtime_state(input: RuntimeStateInput<'_>) -> ContextResult<Conte
         format!("Current Time UTC: {utc}"),
         format!("Current Local Time: {local}"),
         format!("User Timezone: {timezone}"),
+        format!("Current Local Timestamp: {local_rfc3339}"),
         format!("Interface Language (app labels only): {language}"),
         format!("Assistant Response Language: {}", input.response_language),
     ];

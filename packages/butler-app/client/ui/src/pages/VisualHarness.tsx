@@ -1,3 +1,4 @@
+import { useSessionAttentionNotifications } from "@/hooks/live-session/useSessionAttentionNotifications";
 import { useEffect, useMemo } from "react";
 import { stewardHarnessSummary } from "./stewardHarnessSummary.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -9,6 +10,7 @@ import {
   AdaptiveShellScrim,
   AdaptiveShellSidebar,
   AdaptiveShellWorkspace,
+  Stack,
 } from "@/butler-ds";
 import { WindowChromeLayer } from "@/components/layout/Chrome.tsx";
 import { RightPanelOverlayTitlebar } from "@/components/layout/RightPanelOverlayTitlebar.tsx";
@@ -18,8 +20,12 @@ import { Conversation } from "@/components/conversation/Conversation.tsx";
 import { Inspector } from "@/components/inspector/Inspector.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
 import { AppToaster } from "@/components/common/AppToaster.tsx";
+import { ImageViewerHost } from "@/components/media/ImageViewerHost";
 import { SettingsView } from "@/components/settings/SettingsView.tsx";
 import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog.tsx";
+import { CommandPalette } from "@/components/command/CommandPalette.tsx";
+import { BrowserArea } from "@/components/browser/BrowserArea";
+import { connectBrowser } from "@/components/browser/browserBridge";
 import { useComposerStore } from "@/components/conversation/composerStore.ts";
 import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
 import { EMPTY_SETTINGS } from "@/app/constants.ts";
@@ -63,12 +69,13 @@ function harnessModelCatalog(auth: string | null): ModelCatalogView {
 }
 
 export function VisualHarness() {
-  const fixture = (window as Window & { butlerConversationFixture?: { messages: import("@/app/types").MessageRecord[]; background?: string } }).butlerConversationFixture;
+  const fixture = (window as Window & { butlerConversationFixture?: { messages: import("@/app/types").MessageRecord[]; background?: string; sessionView?: import("@/app/types").SessionView; navigation?: import("@/app/types").NavigationView } }).butlerConversationFixture;
   const leftOpen = useButlerStore((state) => state.leftOpen);
   const setLeftOpen = useButlerStore((state) => state.setLeftOpen);
   const rightOpen = useButlerStore((state) => state.rightOpen);
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const view = useButlerStore((state) => state.view);
+  const commandOpen = useButlerStore((state) => state.commandOpen);
   const setView = useButlerStore((state) => state.setView);
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const setActiveChatId = useButlerStore((state) => state.setActiveChatId);
@@ -99,9 +106,9 @@ export function VisualHarness() {
   // `developer=1` turns on developer mode (context and worker tabs, Git details).
   const developerMode =
     new URLSearchParams(window.location.search).get("developer") === "1";
-  const harnessNavigation = ss03Surface
+  const harnessNavigation = fixture?.navigation ?? (ss03Surface
     ? HARNESS_SS03_NAVIGATION
-    : HARNESS_NAVIGATION;
+    : HARNESS_NAVIGATION);
   const harnessSummary = useMemo(
     () => ss03Surface
       // `steward=finalizing|delivered` swaps in that #307 Steward child state.
@@ -192,6 +199,7 @@ export function VisualHarness() {
     setSettings(harnessSettings);
     setModelCatalog(harnessCatalog);
     setSummary(harnessSummary);
+    if (fixture?.sessionView) setSessionView(fixture.sessionView);
     if (ss03Surface) {
       setSessionView(HARNESS_SS03_OBSERVER_VIEW);
       openSessionObserver(HARNESS_SS03_OBSERVER_VIEW.session_id);
@@ -228,6 +236,11 @@ export function VisualHarness() {
     harnessNavigation,
     ss03Surface,
   ]);
+  useSessionAttentionNotifications();
+  // The desktop bridge, when present, feeds the browser and the agent tab rail (as the app bootstrap does).
+  useEffect(() => {
+    if (window.butlerBrowser) connectBrowser();
+  }, []);
   useEffect(() => {
     if (!ss03Surface) return;
     const timer = window.setTimeout(() => {
@@ -277,7 +290,9 @@ export function VisualHarness() {
             data-test-class="workspace"
           >
             <Titlebar />
-            {view.kind === "project-dashboard" ? (
+            {view.kind === "browser" ? (
+              <Stack fill gap="none"><BrowserArea /></Stack>
+            ) : view.kind === "project-dashboard" ? (
               <ProjectDashboardView
                 initialDashboard={HARNESS_PROJECT_DASHBOARD}
                 project={harnessNavigation.projects.find(
@@ -346,7 +361,9 @@ export function VisualHarness() {
         />
       )}
       {(isSettingsView || fixture) && <AppToaster />}
+      {fixture && <ImageViewerHost />}
       {ss03Surface && <SessionObserverDialog />}
+      <CommandPalette open={commandOpen} />
     </AdaptiveShell>
   );
 }

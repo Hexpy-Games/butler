@@ -10,6 +10,7 @@ mod project_ledger_bindings;
 mod schedule_access;
 mod schedule_legacy;
 mod security;
+mod session_reads;
 mod signins;
 mod space;
 mod supporting;
@@ -85,6 +86,7 @@ pub(super) fn migrate(
     signins::create(connection)?;
     vault::create(connection)?;
     message_ownership::migrate(connection)?;
+    session_reads::create(connection)?;
     monitoring::migrate(connection)?;
     library::recover(connection, butler_data)?;
     Ok(())

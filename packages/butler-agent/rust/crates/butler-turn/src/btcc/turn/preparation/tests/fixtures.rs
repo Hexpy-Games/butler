@@ -117,6 +117,7 @@ pub(super) fn subsession_request(request: &TurnRequest) -> TurnRequest {
                     models: vec![" backup/model ".into()],
                 }),
                 subsession_result: None,
+                schedule_run: None,
             },
             "2026-09-14T00:00:00.000Z",
         )

@@ -1,9 +1,12 @@
 import type {
   ChatKind,
+  ComposerControls,
   MessageRecord,
   NavigationView,
+  SessionControlState,
   SessionSummary,
   SessionSummaryView,
+  SettingsView,
 } from "./types.ts";
 
 const OPTIMISTIC_SESSION_PREFIX = "optimistic:session:";
@@ -15,6 +18,19 @@ export interface OptimisticSessionStart {
   title: string;
   statusLabel: string;
   startedAt: string;
+  /** The draft composer's model choice: the new conversation's own controls. */
+  controls?: SessionControlState;
+}
+
+/** Controls a draft send chose explicitly (a model pick); none when the draft kept the defaults. */
+export function draftSessionControls(controls: ComposerControls, settings: SettingsView): SessionControlState | undefined {
+  if (!controls.model) return undefined;
+  return {
+    model: controls.model,
+    reasoning_effort: controls.reasoningEffort ?? settings.reasoning_effort,
+    access_mode: controls.accessMode ?? settings.access_mode,
+    plan_mode: controls.planMode ?? false,
+  };
 }
 
 export function optimisticSessionId(clientMessageId: string): string {

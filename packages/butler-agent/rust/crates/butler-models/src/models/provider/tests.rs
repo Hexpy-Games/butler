@@ -19,6 +19,7 @@ mod prompt;
 mod serialization;
 mod sizing;
 mod transport;
+mod visual_admission;
 use crate::models::{
     ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProviderMetadata,
 };

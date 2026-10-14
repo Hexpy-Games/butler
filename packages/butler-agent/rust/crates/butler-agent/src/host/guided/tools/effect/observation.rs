@@ -63,6 +63,10 @@ pub(super) async fn execute(
         .execute_observation(&call.arguments, approved_scope)
         .await
         .map(Some);
+    if needs_approval {
+        // An approved observation may have read beyond the project (D5).
+        owner.mark_external();
+    }
     record_outcome(owner, approval, result.is_ok()).await?;
     match result {
         Ok(result) => Ok(result),

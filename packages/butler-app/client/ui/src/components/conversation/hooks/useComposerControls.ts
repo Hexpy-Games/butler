@@ -46,7 +46,8 @@ export function useComposerControls(
   );
 
   useEffect(() => {
-    composerSelectionTouchedRef.current = false;
+    // A draft that just sent keeps its choice while its conversation is created.
+    if (useButlerStore.getState().optimisticSessionStart?.id !== activeChatId) composerSelectionTouchedRef.current = false;
     refreshedGenerationRef.current = null;
   }, [activeChatId]);
 

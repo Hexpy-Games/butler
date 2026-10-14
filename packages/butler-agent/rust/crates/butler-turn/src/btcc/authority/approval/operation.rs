@@ -13,6 +13,9 @@ pub struct ApprovalOperation {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allow_conversation: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// In-memory desktop media binding, never a display target.
+    pub browser_tab: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub browser_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub browser_steps: Vec<BrowserApprovalStep>,
@@ -89,7 +92,9 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
         access: if read_only { "read_only" } else { "change" }.into(),
         targets,
         command,
-        allow_conversation: None,
+        // R5 web requests are never covered by a standing permission.
+        allow_conversation: matches!(facts.capability, "web_read" | "web_search").then_some(false),
+        browser_tab: None,
         browser_mode: None,
         browser_steps: Vec::new(),
         sign_in_step: None,
@@ -156,6 +161,7 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
         targets,
         command: None,
         allow_conversation: Some(facts.input["always_confirm"] != true),
+        browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: facts.input["mode"].as_str().map(str::to_owned),
         browser_steps,
         sign_in_step: None,
@@ -189,6 +195,7 @@ fn signed_in_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
         targets,
         command: None,
         allow_conversation: Some(false),
+        browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: (access == "change").then(|| "signed_in".into()),
         sign_in_step: (tool == "browser_sign_in_wait")
             .then(|| text(input.pointer("/wait/reason").unwrap_or(&Value::Null))),
@@ -247,6 +254,7 @@ fn pay_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
         targets,
         command: None,
         allow_conversation: Some(false),
+        browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: None,
         browser_steps: Vec::new(),
         sign_in_step: None,
@@ -269,6 +277,7 @@ fn wait_operation(facts: &ApprovalFacts<'_>) -> ApprovalOperation {
             .collect(),
         command: None,
         allow_conversation: Some(false),
+        browser_tab: facts.input["tab"].as_str().map(str::to_owned),
         browser_mode: None,
         browser_steps: Vec::new(),
         sign_in_step: None,

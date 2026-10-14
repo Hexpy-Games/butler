@@ -44,4 +44,3 @@ const action = <T>(op: string, body: unknown) =>
 export const listAgentImportSources = () => api<{ sources: AgentImportSource[] }>("/security/agent-import/sources");
 export const startAgentImport = (source: string, selection?: Omit<AgentImportRequest, "source">) =>
   action<AgentImportCounts>("start", { ...selection, source });
-export const undoAgentImport = (run_id: string) => action<{ instructions: number; servers: number }>("undo", { run_id });

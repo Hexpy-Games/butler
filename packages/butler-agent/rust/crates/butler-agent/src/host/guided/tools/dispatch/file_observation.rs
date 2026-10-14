@@ -33,6 +33,10 @@ pub(super) async fn execute(
         !gated && owner.binding.access_mode.reviews_effects(),
     )
     .await;
+    if gated {
+        // An approved read reached beyond the project: external content (D5).
+        owner.mark_external();
+    }
     if let Some(request_ref) = approval {
         owner
             .authority
@@ -103,24 +107,19 @@ pub(in crate::host::guided::tools) async fn gate(
             source_turn_id: owner.binding.turn_id.clone(),
             operation_occurrence_id: Some(occurrence.into()),
             source_work_id: String::new(),
-            workspace_path: owner.binding.workspace_path.to_string_lossy().into_owned(),
+            workspace_path: owner.active_workspace_path().to_string_lossy().into_owned(),
             plan_revision_id: String::new(),
             action_key: occurrence.into(),
             authority_generation: 1,
             capability: call.name.clone(),
-            target: format!("observation:{}", call.name),
+            target: request_target(call, args),
             normalized_input: args.clone(),
             model_ref: owner.binding.model_ref.clone(),
             reasoning_effort: owner.binding.reasoning_effort.clone(),
-            category: Some(
-                if call.name == "run_command" {
-                    "command_observation"
-                } else {
-                    "file_observation"
-                }
-                .into(),
-            ),
-            public_action_title: Some(call.name.clone()),
+            category: Some(category(call).into()),
+            public_action_title: Some(approval_reason(call)),
+            honor_standing_permission: !matches!(call.name.as_str(), "web_read" | "web_search"),
+            unattended: owner.unattended(),
         })
         .await
         .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
@@ -135,7 +134,51 @@ pub(in crate::host::guided::tools) async fn gate(
         AuthorityAdmissionResult::Modified { .. } => {
             Gate::Pending(json!({"ok":false,"error":"authority_request_modified"}))
         }
+        AuthorityAdmissionResult::Unattended => Gate::Pending(
+            super::super::turn_guard::unattended_feedback(owner, &call.name, &observed(call, args))
+                .await,
+        ),
     })
+}
+
+fn category(call: &ModelRoundToolCall) -> &'static str {
+    if matches!(call.name.as_str(), "web_read" | "web_search") {
+        "reviewed_effect"
+    } else if call.name == "run_command" {
+        "command_observation"
+    } else {
+        "file_observation"
+    }
+}
+
+/// What an observation reads, for an unattended run's report.
+fn observed(call: &ModelRoundToolCall, args: &Value) -> String {
+    let paths: Vec<&str> = if matches!(call.name.as_str(), "web_read" | "web_search") {
+        args[if call.name == "web_read" {
+            "url"
+        } else {
+            "query"
+        }]
+        .as_str()
+        .into_iter()
+        .collect()
+    } else if call.name == "run_command" {
+        args["command"]
+            .as_str()
+            .and_then(|command| command.split_whitespace().next())
+            .into_iter()
+            .collect()
+    } else if call.name == "read_file" {
+        args["requests"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|request| request["path"].as_str())
+            .collect()
+    } else {
+        args["root"].as_str().into_iter().collect()
+    };
+    paths.join(", ")
 }
 
 fn normalized(owner: &GuidedTools, call: &ModelRoundToolCall) -> Result<Value, ToolExecutionError> {
@@ -167,4 +210,19 @@ fn normalized(owner: &GuidedTools, call: &ModelRoundToolCall) -> Result<Value, T
         args["root"] = json!(absolute(args["root"].as_str().unwrap_or(".")));
     }
     Ok(args)
+}
+
+fn request_target(call: &ModelRoundToolCall, args: &Value) -> String {
+    if matches!(call.name.as_str(), "web_read" | "web_search") {
+        observed(call, args)
+    } else {
+        format!("observation:{}", call.name)
+    }
+}
+fn approval_reason(call: &ModelRoundToolCall) -> String {
+    if matches!(call.name.as_str(), "web_read" | "web_search") {
+        "authority.taintReason".into()
+    } else {
+        call.name.clone()
+    }
 }

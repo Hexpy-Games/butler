@@ -41,7 +41,8 @@ console.log("entry");void app.whenReady().then(async()=>{try{console.log("ready"
  writeFileSync(${JSON.stringify(results)},JSON.stringify(out));shell.destroy();app.exit(0);
 }catch(error){writeFileSync(${JSON.stringify(results)},JSON.stringify({error:String(error.stack)}));app.exit(1)}});`);
 let logs = "";
-const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
+const env = { ...process.env };
+  env.BUTLER_APP_ELECTRON_USER_DATA_DIR = join(dir, "profile"); delete env.ELECTRON_RUN_AS_NODE;
 // As the windowless browser host runs: hidden and occluded test windows must
 // not have their renderers deprioritized by the OS (see browser-host.mjs).
 const child = spawnElectron(executable, ["--disable-renderer-backgrounding", dir], { env, onOutput: bytes => { logs += String(bytes); } });

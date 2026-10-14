@@ -113,6 +113,7 @@ tool_names! {
     SteerSteward = "steer_steward",
     SteerWorker = "steer_worker",
     SummarizeUserProfile = "summarize_user_profile",
+    SwitchFolder = "switch_folder",
     ToolCall = "tool_call",
     ToolDescribe = "tool_describe",
     ToolSearch = "tool_search",

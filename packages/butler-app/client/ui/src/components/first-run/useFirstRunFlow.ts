@@ -116,7 +116,8 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   }, [language]);
 
   // Import ①'s result is its own screen after the run (no undo in first run; Settings changes things later).
-  const agentsDone = Boolean(imports.agentImport.result) && !imports.agentImport.error;
+  // The result opens once every chosen tool has run, not after the first one answers.
+  const agentsDone = Boolean(imports.agentImport.result) && !imports.agentImport.error && !imports.agentImport.busy;
   const agentPage = imports.agentPicks.current ? `agents:${imports.agentPicks.current.key}` : "agents";
   const importKey = agentsDone ? "agents:done" : agentPage;
   const stageKey = step === "connect" ? `connect:${aiStage}` : step === "import" ? `import:${importKey}` : step;

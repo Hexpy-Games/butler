@@ -46,6 +46,25 @@ lints below enforce most of this; the rest is review.
 6. **Motion only via the DS.** Product code never declares transitions,
    animations, keyframes or `element.animate()`; DS components own motion on
    `--motion-*` tokens and honor reduced motion.
+7. **Bare icons in cards and rows.** ChoiceCard, ChoiceTile, CheckCard,
+   ListRow and any card or list-item row show their glyph alone in an
+   `IconSlot` (`minHeight="line"`), never on an `IconTile` or other boxed
+   background. Leading icon = title text size, centered on the title line's
+   letters (Typo's text box, rule 8);
+   brand logos are fitted to the icon-pack grid, so all leading icons share one
+   rule. Trailing controls (chevron, size, spinner, check) vertically centered on
+   the card. The description starts at the title's left edge. Borders stay
+   1px; wide cards and rows never scale on press. `lint:design` fails on an
+   IconTile inside those blocks or passed as their `icon`.
+8. **Integer line-heights.** Every text role has an integer px line-height
+   token (`--typo-*-line-height`, even values: body 14/20, label 13/18,
+   caption 12/16), so 12/14/16/20px icons centre on whole pixels. Never set a
+   unitless ratio or `--line-height-tight/snug/body/document` on UI text;
+   `lint:design` fails on it. Those ratios are for display art only.
+   Typo trims every text role to cap height and baseline and pads it back to
+   the line height (`text-box`, under `@supports`), so an icon centred on a
+   text row centres on its letters in every renderer. Put row text in Typo
+   (`Typo.Text` inherits the row's size) rather than a bare span.
 
 ## First Principles
 

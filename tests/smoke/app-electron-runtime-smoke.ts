@@ -1,4 +1,4 @@
-import { spawnElectron } from "../support/electron-child";
+import { spawnElectron, stopElectronChild } from "../support/electron-child";
 /** Real packaged App: runtime, sandbox, stub chat, PDF artifact and tray quit. */
 import { strict as assert } from "node:assert";
 import { type ChildProcess } from "node:child_process";
@@ -169,10 +169,8 @@ try {
   throw error;
 } finally {
   page?.close();
-  if (child && child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+  if (child) await stopElectronChild(child);
   for (const pid of [agentPid]) if (running(pid)) process.kill(pid, "SIGTERM");
   provider.stop(true);
-  await new Promise(done => setTimeout(done, 1500));
-  if (child && child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
   rmSync(dir, { recursive: true, force: true });
 }

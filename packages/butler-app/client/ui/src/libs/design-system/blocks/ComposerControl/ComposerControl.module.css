@@ -67,10 +67,11 @@
   min-width: 0;
 }
 
+/* Block, not flex: a Typo stays a block container so its text trim applies
+   (the row centres them). */
 .label,
 .detail {
-  display: inline-flex;
-  align-items: center;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1;

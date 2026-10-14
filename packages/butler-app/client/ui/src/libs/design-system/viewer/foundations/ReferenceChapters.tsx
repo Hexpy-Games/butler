@@ -116,7 +116,7 @@ export function FocusChapter({ chapter, anchor, locale, onOpen }: ChapterProps) 
   return (
     <ChapterLayout anchor={anchor} chapter={chapter} locale={locale} onOpen={onOpen} sections={s.list}
       lead="A 2px accent ring, drawn as a box-shadow so it follows the control's radius. It appears for the keyboard (:focus-visible), not for the mouse.">
-      <GuideSection spec={s.at("ring")} lead="--focus-ring = 0 0 0 --focus-ring-width --focus-ring-color. Shape-specific indicators may use a bottom line (underline Input), retaining the 2px focus token thickness and at least 3:1 contrast against adjacent surfaces. Reserve space inside clipping containers.">
+      <GuideSection spec={s.at("ring")} lead="--focus-ring = 0 0 0 --focus-ring-width --focus-ring-color. Shape-specific indicators may use a bottom line (underline Input), retaining the 2px focus token thickness and at least 3:1 contrast against adjacent surfaces. Clipping containers keep --focus-ring-room (3px) of paint room: ScrollArea, SidebarShell, Collapsible and the sticky clips already do; a card that clips its own content draws the ring itself.">
         <div className={f.ringSpec}>
           <span className={f.ringSample} aria-hidden="true" />
           <Stack gap="xs" minWidth="0">

@@ -10,6 +10,7 @@ mod quota;
 mod request_admission;
 mod request_guard;
 mod status;
+mod stream_event;
 mod tokenizer;
 mod transport;
 mod visual_admission;
@@ -22,6 +23,7 @@ pub use visual_admission::{
 };
 pub use visual_manifest::VisualAttachmentManifest;
 
+pub use butler_core::tool_protocol::ToolCallStreamEvent;
 pub use transport::provider_http_client;
 
 pub use local_servers::{

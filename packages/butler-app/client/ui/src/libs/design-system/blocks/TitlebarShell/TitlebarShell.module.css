@@ -54,8 +54,8 @@
 
 .leading {
   display: inline-grid;
-  width: calc(var(--typo-app-title-size) * var(--typo-app-title-line-height));
-  height: calc(var(--typo-app-title-size) * var(--typo-app-title-line-height));
+  width: var(--typo-app-title-line-height);
+  height: var(--typo-app-title-line-height);
   place-items: center;
   color: var(--text-tertiary);
   app-region: no-drag;
