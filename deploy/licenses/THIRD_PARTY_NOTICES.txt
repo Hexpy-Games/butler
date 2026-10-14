@@ -3224,6 +3224,12 @@ Apache 2.0 License [2]. Copyright (c) 2014--2026, Kang Seonghoon and
 Copyright (c) 2014, Kang Seonghoon.
 
 =====
+cidr 0.3.2
+MIT
+License: https://github.com/stbuehler/rust-cidr/blob/50f8fa7c51ee39a9ba42df9714a39f42d8679a24/LICENSE
+Copyright (c) 2021 Stefan Bühler
+
+=====
 cipher 0.4.4
 MIT OR Apache-2.0
 License: https://github.com/RustCrypto/traits/blob/0af93f6076a76757c65cb2ef6f6abd9756440478/cipher/LICENSE-APACHE
@@ -5222,6 +5228,12 @@ License: https://github.com/quickwit-inc/murmurhash32/blob/93b82f2ff10570d8d631b
 Copyright (c) 2024 by Quickwit Inc.
 
 =====
+mxc-sdk 1.0.0
+MIT
+License: https://github.com/microsoft/mxc/blob/2366ee9b1e0bed3a0f950ec49a509f92285239cf/LICENSE.md
+Copyright (c) Microsoft Corporation.
+
+=====
 ndarray 0.16.1
 MIT OR Apache-2.0
 License: https://github.com/rust-ndarray/ndarray/blob/6f77377d7d508550bf516e54c142cee3ab243aeb/LICENSE-APACHE
@@ -5235,6 +5247,12 @@ new_debug_unreachable 1.0.6
 MIT
 License: https://github.com/mbrubeck/rust-debug-unreachable/blob/4b3fa6e0b6d728ed2018690e087a440dd29e7d06/LICENSE-MIT
 Copyright (c) 2015 Jonathan Reem
+
+=====
+nix 0.29.0
+MIT
+License: https://github.com/nix-rust/nix/blob/1dad4d8d04a2cd187fae87cb91c4f4e95ff0decd/LICENSE
+Copyright (c) 2015 Carl Lerche + nix-rust Authors
 
 =====
 nix 0.31.3
@@ -6815,6 +6833,18 @@ License: https://github.com/tower-rs/tower/blob/4b0a6b0e688bd177eb2c9c97f5268dd9
 Copyright (c) 2019 Tower Contributors
 
 =====
+tracelogging 1.2.4
+MIT
+License: https://github.com/microsoft/tracelogging/blob/bdd914bd827ff6b9d6d65972d622834fdf04518a/LICENSE
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+=====
+tracelogging_macros 1.2.3
+MIT
+License: https://github.com/microsoft/tracelogging/blob/4d3c8b02da568d34daf977db7052a819ab4b18ec/LICENSE
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+=====
 tracing-attributes 0.1.31
 MIT
 License: https://github.com/tokio-rs/tracing/blob/55086231ec4aaeffcaab9932e696f40278f06bd1/tracing-attributes/LICENSE
@@ -6878,6 +6908,11 @@ License: https://github.com/servo/unicode-bidi/blob/580b9c6c68fdb689916017e61d50
 License: https://github.com/servo/unicode-bidi/blob/580b9c6c68fdb689916017e61d5052be3ed349b5/LICENSE-MIT
 This project is copyright 2015, The Servo Project Developers (given in the
 Copyright (c) 2015 The Rust Project Developers
+
+=====
+unicode-general-category 1.1.0
+Apache-2.0
+License: https://github.com/yeslogic/unicode-general-category/blob/cb2d8a62f035c33d6971b99322aae65f3cea7c88/LICENSE
 
 =====
 unicode-ident 1.0.24
@@ -7050,6 +7085,12 @@ License: https://github.com/image-rs/weezl/blob/dd369670cdaefaa3f04f55cac547ca7c
 Copyright (c) HeroicKatora 2020
 
 =====
+widestring 1.2.1
+MIT OR Apache-2.0
+License: https://github.com/VoidStarKat/widestring-rs/blob/66dcd7c05ed7de790a1ab0d340b7f4b8b550aed7/LICENSE-APACHE
+License: https://github.com/VoidStarKat/widestring-rs/blob/66dcd7c05ed7de790a1ab0d340b7f4b8b550aed7/LICENSE-MIT
+
+=====
 win32job 2.0.3
 MIT OR Apache-2.0
 License: https://github.com/ohadravid/win32job-rs/blob/29913d5f6acd47a491f73819ff6d54b63fb851b2/LICENSE-APACHE
@@ -7074,6 +7115,13 @@ windows-collections 0.2.0
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/50009500b686f542530515aedba8334dc5b617b0/crates/libs/collections/license-apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/50009500b686f542530515aedba8334dc5b617b0/crates/libs/collections/license-mit
+Copyright (c) Microsoft Corporation.
+
+=====
+windows-collections 0.3.2
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/collections/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/collections/license-mit
 Copyright (c) Microsoft Corporation.
 
 =====
@@ -7110,6 +7158,13 @@ windows-future 0.2.1
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/c65ac17e5c714104dff156578ca54b3c4f92d76c/crates/libs/future/license-apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/c65ac17e5c714104dff156578ca54b3c4f92d76c/crates/libs/future/license-mit
+Copyright (c) Microsoft Corporation.
+
+=====
+windows-future 0.3.2
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/future/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/future/license-mit
 Copyright (c) Microsoft Corporation.
 
 =====
@@ -7170,6 +7225,13 @@ License: https://github.com/microsoft/windows-rs/blob/79c2c3917cac805aeb0d000ae9
 Copyright (c) Microsoft Corporation.
 
 =====
+windows-numerics 0.3.1
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/numerics/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/numerics/license-mit
+Copyright (c) Microsoft Corporation.
+
+=====
 windows-permissions 0.2.4
 MIT
 License: https://crates.io/crates/windows-permissions/0.2.4
@@ -7218,6 +7280,13 @@ License: https://github.com/microsoft/windows-rs/blob/3a605cba064b26f2a198ac5808
 Copyright (c) Microsoft Corporation.
 
 =====
+windows-sys 0.59.0
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/308e08ec259027ebbef11b8ef838923626bf821e/crates/libs/sys/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/308e08ec259027ebbef11b8ef838923626bf821e/crates/libs/sys/license-mit
+Copyright (c) Microsoft Corporation.
+
+=====
 windows-sys 0.60.2
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/sys/license-apache-2.0
@@ -7253,6 +7322,13 @@ License: https://github.com/microsoft/windows-rs/blob/c65ac17e5c714104dff156578c
 Copyright (c) Microsoft Corporation.
 
 =====
+windows-threading 0.2.1
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238/crates/libs/threading/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238/crates/libs/threading/license-mit
+Copyright (c) Microsoft Corporation.
+
+=====
 windows 0.56.0
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/windows/license-apache-2.0
@@ -7264,6 +7340,13 @@ windows 0.61.3
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/windows/license-apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/windows/license-mit
+Copyright (c) Microsoft Corporation.
+
+=====
+windows 0.62.2
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/windows/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/windows/license-mit
 Copyright (c) Microsoft Corporation.
 
 =====
@@ -7284,6 +7367,12 @@ Copyright (c) Microsoft Corporation.
 winnow 1.0.4
 MIT
 License: https://github.com/winnow-rs/winnow/blob/7539ec0fc27144bfdcf9a68b0dbbec48bd0d5bae/LICENSE-MIT
+
+=====
+winreg 0.55.0
+MIT
+License: https://github.com/gentoo90/winreg-rs/blob/9243b238493c90d3b5e8f68f33fad9c77fb9d35e/LICENSE
+Copyright (c) 2015 Igor Shaula
 
 =====
 winsafe 0.0.29
