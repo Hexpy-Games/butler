@@ -28,6 +28,17 @@ export function scheduleFrequency(value: Pick<AutomationSummary, "schedule" | "s
   return copy.everySeconds(seconds);
 }
 
+/** When a schedule a request would create runs: its frequency, then its first run time. */
+export function scheduleTiming(value: { scheduleType: string; runAt?: string; startAt?: string; intervalSeconds?: number }): string {
+  const frequency = scheduleFrequency({ schedule: null, schedule_type: value.scheduleType, interval_seconds: value.intervalSeconds });
+  const once = value.scheduleType === "once";
+  const at = once ? value.runAt : value.startAt;
+  if (!at || Number.isNaN(Date.parse(at))) return frequency;
+  const time = new Intl.DateTimeFormat(getAppLocale(), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+    .format(new Date(at));
+  return `${frequency} · ${once ? time : appCopy.automations.next(time)}`;
+}
+
 export function scheduleNextRun(value: Pick<AutomationSummary, "schedule" | "next_run_at" | "state">): string {
   if (!value.next_run_at || value.state !== "enabled") return "";
   return appCopy.automations.next(new Intl.DateTimeFormat(getAppLocale(), {

@@ -85,6 +85,7 @@ fn app_envelope(turn_id: &str, turn_access: &AccessMode, conversation: &AccessMo
             catalog_generation: "catalog-1".into(),
             model_fallback: None,
             subsession_result: None,
+            schedule_run: None,
         },
         "2026-09-28T00:00:00.000Z",
     )

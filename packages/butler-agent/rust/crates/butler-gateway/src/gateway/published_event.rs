@@ -44,5 +44,14 @@ impl PublishedEvent {
 pub(super) fn event_frame(event: &AppEventEnvelope) -> Bytes {
     // An envelope of strings, an integer and a JSON map always serializes.
     let data = serde_json::to_string(event).unwrap_or_default();
-    Bytes::from(format!("id: {}\ndata: {data}\n\n", event.id))
+    if event.id == 0 {
+        // Drafts have no durable cursor, including inside their JSON envelope.
+        let mut value = serde_json::to_value(event).unwrap_or_default();
+        if let Some(object) = value.as_object_mut() {
+            object.remove("id");
+        }
+        Bytes::from(format!("data: {value}\n\n"))
+    } else {
+        Bytes::from(format!("id: {}\ndata: {data}\n\n", event.id))
+    }
 }

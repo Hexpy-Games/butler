@@ -272,6 +272,11 @@ export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
     constants: {},
   },
   {
+    prefix: "components/media/imageEncode.ts",
+    justification: "One-shot re-encode of a picture the user copies (the clipboard takes PNG) or saves to the library (a scrap keeps JPEG); it never animates.",
+    constants: {},
+  },
+  {
     prefix: "libs/design-system/components/ButlerThinkingMark/",
     justification: "Riso halftone thinking mark: a spring-driven morph and an orbiting-light simulation drawn per frame on a canvas.",
     constants: {
@@ -312,6 +317,11 @@ export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
       RISO_INTRO_BEAT_MS: "The 600 ms print beat of the dried intro print when the setup card changes (plates breathe once, keep-out follows the card); a simulation tween, off under reduced motion.",
       RISO_INTRO_STIR_DECAY_MS: "Time constant (320 ms) of the decay of the pointer stir on the dried intro print, which then stops by itself; simulation damping, not UI timing.",
     },
+  },
+  {
+    prefix: "libs/design-system/blocks/LiveTabCard/LiveTabFrame.tsx",
+    justification: "Live tab frame: draws the owner's latest screencast ImageBitmap once per new frame (no loop, no timing; frames arrive at the stream's capped rate and swap without a crossfade).",
+    constants: {},
   },
   {
     prefix: "libs/design-system/components/FoundationHeroMotion/heroes/typography/specimenMetrics.ts",

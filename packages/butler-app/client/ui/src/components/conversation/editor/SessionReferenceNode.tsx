@@ -1,3 +1,5 @@
+import { sessionDisplayTitle } from "@/app/sessionTitle.ts";
+import { useAppLocale } from "@/app/copy.ts";
 import { $applyNodeReplacement, DecoratorNode, type NodeKey, type SerializedLexicalNode } from "lexical";
 import type { ReactNode } from "react";
 import { InlineReference, MessageSquare, Notebook } from "@/butler-ds";
@@ -28,7 +30,8 @@ export function $createSessionReferenceNode(sessionId: string, titleSnapshot: st
 }
 
 function ReferenceLabel({ sessionId, titleSnapshot }: { sessionId: string; titleSnapshot: string }) {
+  useAppLocale();
   const node = useButlerStore(state => state.navigation.space.nodes.find(node => node.kind === "session" && node.entityId === sessionId));
   return <InlineReference unavailable={!node && sessionId !== "general"}
-    icon={node?.scopeProjectId ? <Notebook /> : <MessageSquare />}>{titleSnapshot}</InlineReference>;
+    icon={node?.scopeProjectId ? <Notebook /> : <MessageSquare />}>{sessionDisplayTitle({ id: sessionId, title: titleSnapshot })}</InlineReference>;
 }

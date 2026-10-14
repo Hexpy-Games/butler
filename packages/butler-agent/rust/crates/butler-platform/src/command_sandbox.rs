@@ -6,7 +6,9 @@
 mod denial;
 pub use denial::{isolation_failure, isolation_failure_exit, sandbox_denial};
 mod credentials;
+mod project_secrets;
 pub use credentials::secret_name;
+pub use project_secrets::{discover_project_secrets, sweep_new_secrets};
 mod environment;
 pub use environment::tool_environment;
 mod operators;
@@ -51,6 +53,12 @@ use linux as sandbox;
 /// Whether contained observations can run without exact-action approval.
 pub fn approval_free_reads() -> bool {
     capabilities().approval_free_reads()
+}
+
+/// Whether [`project_write_shell`] can contain a mutating command to its
+/// project (writes inside the project only, no network).
+pub fn project_write_available() -> bool {
+    capabilities().project_write_available()
 }
 
 /// Entry point of the single-threaded trampoline, never called by the agent.
@@ -98,6 +106,12 @@ pub enum SandboxError {
     /// This host cannot enforce [`ShellAccess::ReadOnly`].
     #[error("this host cannot enforce read-only commands")]
     ReadOnlyUnavailable,
+    /// This host cannot contain a mutating command to its project.
+    #[error("this host cannot contain commands to the project folder")]
+    ProjectWriteUnavailable,
+    /// Filesystem discovery or policy preparation failed; never run uncontained.
+    #[error("sandbox filesystem preparation failed: {0}")]
+    Filesystem(#[from] std::io::Error),
     /// The read-deny paths could not be quoted into the sandbox profile.
     #[error("sandbox profile encoding failed")]
     Profile(#[from] serde_json::Error),
@@ -149,6 +163,26 @@ pub fn login_shell_contained(
         environment,
         deny_reads,
         allow_reads,
+    )
+}
+
+/// The login shell of a mutating command contained to `root`: it may write
+/// only inside `root` and the `writable` scratch roots, never below `denied`
+/// or to project metadata and secrets, may not read credential stores, and
+/// has no network. Hosts without [`project_write_available`] refuse it.
+pub fn project_write_shell(
+    command: &str,
+    environment: &HashMap<String, String>,
+    root: &Path,
+    writable: &[&Path],
+    denied: &[&Path],
+) -> Result<Invocation, SandboxError> {
+    sandbox::project_write(
+        shell::login_shell(command, environment),
+        environment,
+        root,
+        writable,
+        denied,
     )
 }
 

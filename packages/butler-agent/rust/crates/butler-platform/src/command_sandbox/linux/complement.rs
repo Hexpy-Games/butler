@@ -4,7 +4,9 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
-use landlock::{AccessFs, BitFlags, PathBeneath, PathFd, RulesetCreated, RulesetCreatedAttr};
+use landlock::{
+    ABI, Access, AccessFs, BitFlags, PathBeneath, PathFd, RulesetCreated, RulesetCreatedAttr,
+};
 
 use super::Error;
 
@@ -34,17 +36,7 @@ pub(super) fn apply(
     // hide directory entries without also preventing ordinary parent listings.
     grant(rules, Path::new("/"), AccessFs::ReadDir.into())?;
     let read = AccessFs::ReadFile | AccessFs::Execute;
-    let wsl = Path::new("/proc/sys/fs/binfmt_misc/WSLInterop").exists()
-        || std::fs::read_to_string("/proc/sys/kernel/osrelease")?
-            .to_ascii_lowercase()
-            .contains("microsoft");
-    // Withhold execution on interop entry points even if a project lives on
-    // a Windows mount. Read permissions there remain unchanged.
-    let deny_execute = if wsl {
-        aliases(&[PathBuf::from("/mnt"), PathBuf::from("/init")])?
-    } else {
-        Vec::new()
-    };
+    let deny_execute = execution_denials()?;
     grant_complement(rules, Path::new("/"), &blocked, &deny_execute, read)?;
     for (real, secrets) in &projects {
         // Disjoint workspaces already received exactly these grants above.
@@ -57,7 +49,7 @@ pub(super) fn apply(
         }
         let mut excluded: Vec<_> = private
             .iter()
-            .filter(|path| !real.starts_with(path) && !path.starts_with(real))
+            .filter(|path| !real.starts_with(path))
             .cloned()
             .collect();
         excluded.extend(credentials.iter().cloned());
@@ -195,6 +187,9 @@ fn grant_child(
         OFlag::O_PATH | OFlag::O_CLOEXEC | OFlag::O_NOFOLLOW,
         Mode::empty(),
     )?;
+    let directory = !directory_only(rights)
+        || nix::sys::stat::fstat(&fd)?.st_mode & nix::libc::S_IFMT == nix::libc::S_IFDIR;
+    let rights = file_rights(rights, directory);
     rules.add_rule(PathBeneath::new(fd, rights))?;
     Ok(())
 }
@@ -216,13 +211,87 @@ fn split_children(parent: &Path, denied: &[PathBuf], execute: &[PathBuf]) -> Has
 }
 
 fn grant(rules: &mut RulesetCreated, path: &Path, rights: BitFlags<AccessFs>) -> Result<(), Error> {
-    let rights = if rights.contains(AccessFs::ReadDir) && !path.is_dir() {
-        rights & !AccessFs::ReadDir
-    } else {
-        rights
-    };
+    let rights = file_rights(rights, !directory_only(rights) || path.is_dir());
     if !rights.is_empty() {
         rules.add_rule(PathBeneath::new(PathFd::new(path)?, rights))?;
     }
     Ok(())
+}
+
+fn directory_only(rights: BitFlags<AccessFs>) -> bool {
+    !(rights
+        & !(AccessFs::ReadFile
+            | AccessFs::Execute
+            | AccessFs::WriteFile
+            | AccessFs::Truncate
+            | AccessFs::IoctlDev))
+        .is_empty()
+}
+
+fn file_rights(rights: BitFlags<AccessFs>, directory: bool) -> BitFlags<AccessFs> {
+    if directory {
+        rights
+    } else {
+        rights
+            & (AccessFs::ReadFile
+                | AccessFs::Execute
+                | AccessFs::WriteFile
+                | AccessFs::Truncate
+                | AccessFs::IoctlDev)
+    }
+}
+
+pub(super) fn project_write(
+    rules: &mut RulesetCreated,
+    root: &Path,
+    writable: &[PathBuf],
+    denied: &[PathBuf],
+    credentials: &[PathBuf],
+    protected: &[PathBuf],
+) -> Result<(), Error> {
+    let mut blocked = aliases(denied)?;
+    blocked.extend(aliases(credentials)?);
+    blocked.extend(project_secrets(root)?);
+    let rights = AccessFs::from_all(ABI::V3);
+    let deny_execute = execution_denials()?;
+    // Never grant the project root: create/remove/rename rights on it would
+    // allow changing top-level protected names. Split ancestors of secrets.
+    for entry in std::fs::read_dir(root)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        if kind.is_dir() || kind.is_file() {
+            grant_complement(rules, &entry.path(), &blocked, &deny_execute, rights)?;
+        }
+    }
+    // Scratch is an explicit exception to private data-root exclusion, but
+    // never to credential roots or existing project secret targets.
+    // REFER is withheld everywhere else.
+    let mut scratch_denied = aliases(credentials)?;
+    let secrets: Vec<_> = protected
+        .iter()
+        .filter(|path| {
+            path.file_name()
+                .is_some_and(|name| super::super::secret_name(&name.to_string_lossy()))
+        })
+        .cloned()
+        .collect();
+    scratch_denied.extend(aliases(&secrets)?);
+    for path in writable {
+        grant_complement(rules, path, &scratch_denied, &deny_execute, rights)?;
+    }
+    Ok(())
+}
+
+fn execution_denials() -> Result<Vec<PathBuf>, Error> {
+    let wsl = Path::new("/proc/sys/fs/binfmt_misc/WSLInterop").exists()
+        || std::fs::read_to_string("/proc/sys/kernel/osrelease")?
+            .to_ascii_lowercase()
+            .contains("microsoft");
+    // Withhold execution on interop entry points even if a project lives on
+    // a Windows mount. Read permissions there remain unchanged.
+    if wsl {
+        aliases(&[PathBuf::from("/mnt"), PathBuf::from("/init")])
+    } else {
+        Ok(Vec::new())
+    }
 }

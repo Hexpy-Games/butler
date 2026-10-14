@@ -3,6 +3,8 @@
 //! Gateway and host composition may run or stop a Turn. Durable state, model
 //! execution, delivery, and supervision remain private children of this module.
 
+mod answer_drafts;
+pub use answer_drafts::AnswerDraftPublisher;
 mod access;
 pub mod agent_loop;
 mod authority;
@@ -37,6 +39,7 @@ pub use access::{
     AccessDecision, AccessRequest, ApprovalExemptAction, CapabilityKind, CommandSandbox,
     DenyReason, FullOnlyAction, GrantUse, TargetScope, TurnTaint, command_access_risk,
     command_scope_unresolved, decide, needs_scope, stored_binding_access_mode,
+    web_read_carries_data, web_search_carries_data,
 };
 pub use contracts::{
     AcceptedWorkResult, AcceptedWorkStatus, AccessMode, AdmissionKind, AlreadyDeliveredOutcome,
@@ -74,23 +77,23 @@ pub use agent_loop::NOOP_MODEL_ROUND_OBSERVER;
 #[cfg(any(test, feature = "test-support"))]
 pub use agent_loop::OperationResultReference;
 pub use agent_loop::{
-    ActivityGroup, AuthorityDecision, AuthorityLoopContinuation, AuthorityPort, BatchDisposition,
-    BoundGuidedTurn, BoundedContinuationEnvelope, BoundedEnvelopeV1, CandidateDisposition,
-    ContextMessages, ContextPort, ContextProjection, ContextProjectionError,
-    ContextProjectionInput, ContextProjectionRebaseIdentity, ContextProjectionRebaseV1,
-    ContextRebase, ExactResultReplaySelection, FinalSynthesis, GuidedActivityBinding,
-    GuidedActivitySnapshot, GuidedHookBinding, GuidedInvocation, GuidedPolicyDependencies,
-    GuidedPresentation, GuidedTurnFactory, GuidedTurnInputs, GuidedTurnStart, JournalCloseout,
-    JournalPort, LoopPhase, ModelRoundError, ModelRoundMessage, ModelRoundObserver, ModelRoundPort,
-    ModelRoundRequest, ModelRoundResult, ModelRoundRole, ModelRoundTool, ModelRoundToolCall,
-    OperationResultMessageReferences, OperationResultReplayFactory, OperationResultRuntime,
-    OperationResultRuntimeFactory, OperationResultScope, PendingTool, ProductionAgentLoop,
-    PromptImages, PromptPort, ProviderBodyAdmissionPort, ProviderIdentity, ProviderStreamObserver,
-    RenderedGuidedPrompt, ReplayMode, RollingContextV1, RoundRequestOptions, SemanticTurn,
-    SteeringObservation, StreamRelay, TextCallDisposition, ToolCallOrigin, ToolChoice,
-    ToolExecutionError, ToolOutcome, ToolPort, ToolResult, ToolSurface, TurnContextProjection,
-    TurnSteeringPort, UsageAttribution, VerifiedImagePayloadPort, WorkFinalState, WorkPort,
-    latest_work_anchor_indices,
+    ActivityGroup, AnswerBlocksStreamPort, AuthorityDecision, AuthorityLoopContinuation,
+    AuthorityPort, BatchDisposition, BoundGuidedTurn, BoundedContinuationEnvelope,
+    BoundedEnvelopeV1, CandidateDisposition, ContextMessages, ContextPort, ContextProjection,
+    ContextProjectionError, ContextProjectionInput, ContextProjectionRebaseIdentity,
+    ContextProjectionRebaseV1, ContextRebase, ExactResultReplaySelection, FinalSynthesis,
+    GuidedActivityBinding, GuidedActivitySnapshot, GuidedHookBinding, GuidedInvocation,
+    GuidedPolicyDependencies, GuidedPresentation, GuidedTurnFactory, GuidedTurnInputs,
+    GuidedTurnStart, JournalCloseout, JournalPort, LoopPhase, ModelRoundError, ModelRoundMessage,
+    ModelRoundObserver, ModelRoundPort, ModelRoundRequest, ModelRoundResult, ModelRoundRole,
+    ModelRoundTool, ModelRoundToolCall, OperationResultMessageReferences,
+    OperationResultReplayFactory, OperationResultRuntime, OperationResultRuntimeFactory,
+    OperationResultScope, PendingTool, ProductionAgentLoop, PromptImages, PromptPort,
+    ProviderBodyAdmissionPort, ProviderIdentity, ProviderStreamObserver, RenderedGuidedPrompt,
+    ReplayMode, RollingContextV1, RoundRequestOptions, SemanticTurn, SteeringObservation,
+    StreamRelay, TextCallDisposition, ToolCallOrigin, ToolChoice, ToolExecutionError, ToolOutcome,
+    ToolPort, ToolResult, ToolSurface, TurnContextProjection, TurnSteeringPort, UsageAttribution,
+    VerifiedImagePayloadPort, WorkFinalState, WorkPort, latest_work_anchor_indices,
 };
 pub use agent_loop::{
     AdmittedModelSelection, ButlerContext, EmptyResponsePolicy, ExecutionPolicy, TrackingMode,
@@ -121,8 +124,8 @@ pub use effects::workspace_edit::{
 pub use effects::workspace_file::{WorkspaceFileEffectAdapter, normalized_workspace_effect_path};
 pub use effects::{EffectService, accepted_plan_effect_id};
 pub use execution_controls::{
-    ControlResolution, ControlSource, ExecutionControls, ModelFallback, SubsessionResultContext,
-    VerifiedExecutionControls,
+    ControlResolution, ControlSource, ExecutionControls, ModelFallback, ScheduleRunContext,
+    SubsessionResultContext, VerifiedExecutionControls,
 };
 pub use guided_budget::{GuidedContinuationBudgetFactory, TurnContinuationBudgetPort};
 pub use guided_turn::{

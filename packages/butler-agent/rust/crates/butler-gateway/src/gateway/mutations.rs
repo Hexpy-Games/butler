@@ -3,6 +3,16 @@
 use super::*;
 
 pub trait GatewayMutationCommands: Send + Sync + 'static {
+    /// An unattended schedule run skipped a step that needs permission (D8).
+    fn automation_run_attention(
+        &self,
+        _id: String,
+        _run_id: String,
+        _code: String,
+        _tainted: bool,
+    ) -> ApplicationFuture<AutomationRunSummary> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     /// Admission for a preview effect, including sessions closed before its
     /// change-driven lifetime observer was installed.
     fn preview_session_open(&self, _id: String) -> ApplicationFuture<bool> {
@@ -35,6 +45,10 @@ pub trait GatewayMutationCommands: Send + Sync + 'static {
         title: Option<String>,
     ) -> ApplicationFuture<AppSessionActionResult>;
     fn clear_general(&self, title: String) -> ApplicationFuture<serde_json::Value>;
+    /// Moves the chat's read marker to its latest finished reply.
+    fn mark_session_read(&self, _id: String) -> ApplicationFuture<AppSessionReadResult> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn delete_session(
         &self,
         id: String,

@@ -12,9 +12,9 @@ import { ComposerBrowserHandoffSurface } from "./ComposerBrowserHandoffSurface";
 
 /** What the request touches, at a glance: a folder for file edits (as in the README demo), a terminal for commands. */
 const KIND_ICONS: Record<ApprovalActionKind, typeof ShieldCheck> = {
-  edit_files: Folder, run_command: Terminal, network_command: Globe2, use_connector: McpServer,
+  edit_files: Folder, run_command: Terminal, network_command: Globe2, web_request: Globe2, use_connector: McpServer,
   manage_schedule: Clock3, update_project: ListChecks, start_conversation: MessageSquarePlus,
-  restart_service: RefreshCcw, create_worktree: GitBranch, other: ShieldCheck,
+  restart_service: RefreshCcw, create_worktree: GitBranch, switch_folder: Folder, other: ShieldCheck,
 };
 const RISK_TONES: Record<ApprovalRisk, TagTone> = { low: "neutral", medium: "warning", high: "danger" };
 
@@ -33,6 +33,7 @@ export function ComposerAuthorityDecisionSurface({ decision }: { decision: Compo
   if (handoff) return <ComposerBrowserHandoffSurface decision={{ ...decision, handoff }} />;
   const Icon = KIND_ICONS[decision.actionKind];
   return <ComposerDecisionPanel
+    media={decision.media}
     icon={<Icon aria-hidden="true" size="lg" />}
     eyebrow={appCopy.composer.permission}
     title={decision.title}

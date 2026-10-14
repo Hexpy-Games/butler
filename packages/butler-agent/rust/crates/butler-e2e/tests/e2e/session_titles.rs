@@ -412,3 +412,15 @@ async fn title_10_emoji_cap_keeps_the_code_point_intact() -> Result<(), HarnessE
     wait_title(&s, &chat, &expected).await?;
     s.finish().await
 }
+
+#[tokio::test]
+async fn title_11_protocol_markers_never_reach_titles() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, prompt) =
+        start_with_title("TITLE-11", "Planning a Simple Reply…SEARCH_DONE", None).await?;
+    let chat = chat(&s, &provisional(&prompt), &prompt).await?;
+    let (_, turn) = s.turn(&chat, &prompt).await?;
+    assert_eq!(turn["state"], "delivered");
+    wait_title(&s, &chat, TITLE).await?;
+    s.finish().await
+}

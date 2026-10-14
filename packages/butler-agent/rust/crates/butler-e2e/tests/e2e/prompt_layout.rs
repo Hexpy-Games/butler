@@ -180,3 +180,79 @@ async fn request_layout_diagnostics_are_complete_and_request_driven() -> Result<
     );
     s.finish().await
 }
+
+#[tokio::test]
+async fn prompt_uses_local_timezone_and_rfc3339_offset() -> Result<(), HarnessError> {
+    use serde_json::json;
+    butler_e2e::gate!();
+    let host = butler_platform::instance::system_time_zone_name()?;
+    let s = Setup::new("PROMPT-LOCAL-TIME")?
+        .env("TZ", "Pacific/Honolulu")
+        .synthetic(Script {
+            rounds: 1,
+            path_for: Box::new(|_| "Cargo.toml".into()),
+            final_text: "once".into(),
+        })
+        .start()
+        .await?;
+    let settings = s.gw.get("/settings").await?;
+    assert_eq!(settings.data()["timezone"], "UTC");
+    let config: Value =
+        serde_json::from_slice(&std::fs::read(s.sandbox.data.join("butler.config.json"))?)?;
+    assert_eq!(config["user"]["timezone"], "UTC");
+    s.turn("general", "Reply in the pinned timezone").await?;
+    // Bootstrap calls can precede the parent turn; inspect its runtime state.
+    let pinned = parent_prompt(&s.provider()?.requests())?;
+    assert!(pinned.contains("User Timezone: UTC"));
+    s.gw.patch("/settings", json!({"timezone":host})).await?;
+    s.turn("general", "Reply once").await?;
+    let first = parent_prompt(&s.provider()?.requests())?;
+    assert!(
+        first.contains(&format!("User Timezone: {host}")),
+        "host timezone missing"
+    );
+    s.gw.patch("/settings", json!({"timezone":"Pacific/Kiritimati"}))
+        .await?;
+    s.turn("general", "Reply once again").await?;
+    let requests = s.provider()?.requests();
+    let local = requests
+        .iter()
+        .map(Value::to_string)
+        .find(|request| request.contains("User Timezone: Pacific/Kiritimati"))
+        .unwrap();
+    assert!(local.contains("+14:00"));
+    assert!(local.contains("Current Local Timestamp:"));
+    let text = requests
+        .iter()
+        .filter_map(|request| request["input"][0]["content"][0]["text"].as_str())
+        .find(|text| text.contains("User Timezone: Pacific/Kiritimati"))
+        .unwrap();
+    let timestamp = |prefix: &str| {
+        chrono::DateTime::parse_from_rfc3339(
+            text.lines()
+                .find_map(|line| line.strip_prefix(prefix))
+                .unwrap(),
+        )
+        .unwrap()
+    };
+    let local_time = timestamp("Current Local Timestamp: ");
+    let utc_time = timestamp("Current Time UTC: ");
+    assert_eq!(local_time.offset().local_minus_utc(), 14 * 3600);
+    assert_eq!(local_time.timestamp(), utc_time.timestamp());
+    assert_eq!(
+        local_time.date_naive(),
+        utc_time.with_timezone(local_time.offset()).date_naive()
+    );
+
+    s.finish().await
+}
+
+fn parent_prompt(requests: &[Value]) -> Result<String, HarnessError> {
+    requests
+        .iter()
+        .rev()
+        .filter_map(|request| request["input"][0]["content"][0]["text"].as_str())
+        .find(|text| text.contains("Session ID: butler/app-general"))
+        .map(str::to_owned)
+        .ok_or_else(|| std::io::Error::other("parent turn runtime state missing").into())
+}

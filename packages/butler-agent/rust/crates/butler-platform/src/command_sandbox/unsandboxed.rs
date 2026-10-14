@@ -17,6 +17,17 @@ pub(super) fn protect_writes(
     Ok(Protection::Unavailable(invocation))
 }
 
+pub(super) fn project_write(
+    invocation: Invocation,
+    _environment: &std::collections::HashMap<String, String>,
+    _root: &Path,
+    _writable: &[&Path],
+    _denied: &[&Path],
+) -> Result<Invocation, SandboxError> {
+    drop(invocation);
+    Err(SandboxError::ProjectWriteUnavailable)
+}
+
 pub(super) fn read_only_contained(
     invocation: Invocation,
     _environment: &std::collections::HashMap<String, String>,

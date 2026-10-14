@@ -24,6 +24,7 @@ fn app_final_projects_bounded_rich_result_then_source_ordered_cancellation() {
         mime_type: Some("text/markdown".into()),
         size_bytes: Some(28),
         created_at: None,
+        source_url: None,
     };
     let files = (0..41)
         .map(|index| butler_turn::btcc::ChangedFileSummary {

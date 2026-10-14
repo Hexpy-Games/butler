@@ -83,9 +83,9 @@ pub fn system_secret_present_for_test(home: &Path, key: &SecretKey) -> std::io::
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = home;
-        SecretStore::system()
-            .and_then(|store| store.get(key))
+        let store = test_store(home)?;
+        store
+            .get(key)
             .map(|value| value.is_some())
             .map_err(|_| std::io::Error::other("test keychain lookup failed"))
     }
@@ -118,9 +118,9 @@ pub fn delete_system_secret_for_test(home: &Path, key: &SecretKey) -> std::io::R
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = home;
-        SecretStore::system()
-            .and_then(|store| store.delete(key))
+        let store = test_store(home)?;
+        store
+            .delete(key)
             .map(|_| ())
             .map_err(|_| std::io::Error::other("test keychain cleanup failed"))
     }
@@ -169,4 +169,16 @@ fn require_test_service(key: &SecretKey) -> std::io::Result<()> {
     } else {
         Err(std::io::Error::other("a suffixed test service is required"))
     }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(super) fn test_store(home: &Path) -> std::io::Result<SecretStore> {
+    #[cfg(windows)]
+    let store = super::test_file::for_home(home);
+    #[cfg(not(windows))]
+    let store = {
+        let _ = home;
+        SecretStore::system()
+    };
+    store.map_err(|_| std::io::Error::other("test secret store open failed"))
 }

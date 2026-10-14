@@ -54,6 +54,47 @@
   text-align: start;
 }
 
+/* The whole card opens the item: the title's target stretches over the card
+   (its one tab stop). The picture viewer, Show more and the footer sit above
+   it and keep their own actions. */
+.card[data-interactive="true"] {
+  position: relative;
+}
+
+.body .open::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: "";
+}
+
+.card [data-item-card-media="viewer"],
+.textBlock button,
+.footer {
+  position: relative;
+  z-index: 1;
+}
+
+/* The card's hover means "open the item"; a part with its own action
+   drops it while the pointer is on that part. */
+.card[data-interactive="true"]:has(
+    [data-item-card-media="viewer"]:hover,
+    .textBlock button:hover,
+    .footer [data-slot="clickable"]:hover,
+    .footer button:hover
+  ):hover {
+  background: var(--surface-raised);
+}
+
+/* Above the app-wide pointer cursor of [role="button"]. */
+.card [data-item-card-media="viewer"][role="button"] {
+  cursor: zoom-in;
+}
+
+.card [data-item-card-media="viewer"]:hover [data-slot="media-frame"] {
+  filter: brightness(0.94);
+}
+
 .title {
   font-size: var(--font-size-3);
   line-height: var(--line-height-body);
@@ -193,4 +234,56 @@
   .site {
     display: inline;
   }
+}
+
+/* ItemCardSkeleton: the same card, tracks and container query as a card,
+   so a skeleton that becomes a card shifts nothing. The picture box takes
+   MediaFrame's aspect; each text line is a box of its role's line height
+   with the bar centred in it. */
+.media .skeletonMedia {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 16 / 10;
+}
+
+.media .skeletonMedia[data-aspect="1:1"] {
+  aspect-ratio: 1;
+}
+
+.media .skeletonMedia[data-aspect="4:5"] {
+  aspect-ratio: 4 / 5;
+}
+
+.media .skeletonMedia[data-aspect="3:4"] {
+  aspect-ratio: 3 / 4;
+}
+
+.media .skeletonMedia[data-aspect="16:9"] {
+  aspect-ratio: 16 / 9;
+}
+
+.skeletonLine {
+  display: flex;
+  min-width: 0;
+  height: calc(var(--typo-caption-size) * var(--typo-caption-line-height));
+  align-items: center;
+}
+
+.skeletonLine[data-role="title"] {
+  height: calc(var(--font-size-3) * var(--line-height-body));
+}
+
+.skeletonLine[data-role="facts"] {
+  height: calc(var(--font-size-1) * var(--line-height-body));
+}
+
+/* The bar is shorter than the line box and never taller than it. */
+.skeletonBar {
+  max-height: 100%;
+}
+
+/* Holds the footer at the actions' height on every pointer and viewport. */
+.skeletonAction {
+  visibility: hidden;
 }

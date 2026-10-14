@@ -10,6 +10,7 @@
 )]
 mod host;
 mod model;
+mod resume;
 
 use butler_e2e::e2e::{
     HarnessError, fixtures,

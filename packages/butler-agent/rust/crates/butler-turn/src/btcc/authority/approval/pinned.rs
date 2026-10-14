@@ -180,7 +180,8 @@ fn assert_sign_in_wait_summary() {
         assert_eq!(operation["targets"], json!(["example.test"]));
         assert_eq!(operation["sign_in_step"], reason);
         assert_eq!(operation["allow_conversation"], false);
-        assert!(!operation.to_string().contains("private-tab-id"));
+        assert_eq!(operation["browser_tab"], "private-tab-id");
+        assert!(!operation["targets"].to_string().contains("private-tab-id"));
         // The hand-back resumes the request whose stored target is its tab.
         let stored = summary("browser_sign_in", "private-tab-id", &input);
         assert_eq!(stored["targets"][0]["path"], "private-tab-id");
@@ -208,7 +209,8 @@ fn assert_wait_for_user_summary() {
         assert_eq!(operation["targets"], json!(["example.test"]));
         assert_eq!(operation["wait_reason"], reason);
         assert_eq!(operation["allow_conversation"], false);
-        assert!(!operation.to_string().contains("private-tab-id"));
+        assert_eq!(operation["browser_tab"], "private-tab-id");
+        assert!(!operation["targets"].to_string().contains("private-tab-id"));
         let stored = summary("browser_wait_for_user", "private-tab-id", &input);
         assert_eq!(stored["targets"][0]["path"], "private-tab-id");
     }

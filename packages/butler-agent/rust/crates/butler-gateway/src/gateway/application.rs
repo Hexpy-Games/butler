@@ -4,6 +4,7 @@ mod assets;
 pub use assets::AppAssetCommand;
 mod admission;
 mod admission_identity;
+mod answer_drafts;
 mod authority_permissions;
 mod automations;
 mod briefing_snapshot;
@@ -154,8 +155,8 @@ pub use session_controls::{AppSessionControlUpdate, AppSessionControlsView};
 use session_queue_mutations::SessionQueueMutationOwner;
 pub use sessions::{
     AppChatKind, AppChatSummary, AppCreateSessionInput, AppCreateSessionRequest,
-    AppCreateSessionResult, AppSessionActionResult, AppSessionBranchQuery, AppSessionSummary,
-    AppSessionUpdate, AppSessionWorkProgress, AppSessionWorkspaceProvisioner,
+    AppCreateSessionResult, AppSessionActionResult, AppSessionBranchQuery, AppSessionReadResult,
+    AppSessionSummary, AppSessionUpdate, AppSessionWorkProgress, AppSessionWorkspaceProvisioner,
     AppSessionWorkspaceSnapshot, AppWorkProgress, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkspaceMode,
 };

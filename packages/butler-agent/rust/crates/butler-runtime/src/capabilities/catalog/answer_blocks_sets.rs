@@ -22,7 +22,7 @@ pub fn normalize(spec: &mut Value) {
     }
 }
 
-fn trim(value: &mut Value) {
+pub(super) fn trim(value: &mut Value) {
     match value {
         Value::String(text) => {
             *text = butler_core::public_text::trim_js_whitespace(text).to_owned();
@@ -65,6 +65,38 @@ pub fn sources(spec: &Value) -> Vec<String> {
     let mut found = BTreeSet::new();
     visit(spec, &mut found);
     found.into_iter().collect()
+}
+
+/// Source identities of the items an answer pictures (an item with both `img` and `source`).
+pub fn pictured_sources(sets: &[Value]) -> BTreeSet<String> {
+    fn visit(value: &Value, found: &mut BTreeSet<String>) {
+        match value {
+            Value::Object(fields) => {
+                if fields.get("img").and_then(Value::as_str).is_some()
+                    && let Some(id) = fields
+                        .get("source")
+                        .and_then(Value::as_str)
+                        .and_then(super::page_identity)
+                {
+                    found.insert(id);
+                }
+                for field in fields.values() {
+                    visit(field, found);
+                }
+            }
+            Value::Array(items) => {
+                for item in items {
+                    visit(item, found);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut found = BTreeSet::new();
+    for set in sets {
+        visit(&set["spec"], &mut found);
+    }
+    found
 }
 
 pub fn shown(spec: &Value) -> Map<String, Value> {

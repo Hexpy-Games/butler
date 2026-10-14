@@ -6,6 +6,11 @@ and an OS-assigned gateway port, and drives it only through gateway HTTP, `/even
 `/events/live`, the CLI and the data dir. Model traffic goes to a local
 record/replay provider reached through the product's own base-URL variables.
 
+Configured fixtures also pin `user.timezone` to `UTC` in `butler.config.json`
+alongside the fixture clock. `TZ` alone does not override the platform's host
+timezone on macOS. Timezone scenarios can change the user's setting through
+`PATCH /settings`; empty-installation fixtures retain the product default.
+
 Spec: `SCENARIOS.md`, `PROVIDER_CONFIG.md` (E2E strategy notes).
 
 ## Run

@@ -1,3 +1,4 @@
+import { conversationAgentTabs } from "./conversationAgentTabs";
 import type { PageDialog } from "./BrowserDialog";
 import { create } from "zustand";
 import { useButlerStore } from "@/app/store";
@@ -5,16 +6,19 @@ import { notifyStatus } from "@/app/notifications";
 import { appCopy } from "@/app/copy";
 import type { PickedElement } from "./browserElements";
 import { connectElementDrag, type ElementDragEvent } from "./elementDrag";
-import { publicBrowserOwner } from "./browserOwnership";
+import { publicBrowserOwner, relevantConversationTab } from "./browserOwnership";
 import { useBrowserShellState } from "./browserShellState";
 
 export interface BrowserTab {
   popup?: { id: string; url: string }; dialog?: PageDialog | null; blockedPopup?: { url: string; site: string; reason: string } | null; opener?: string;
+  privacyFrozen?: boolean;
   id: string; owner: string; url: string; title: string; favicon: string;
   preview?: string; picking?: boolean; selectionCount?: number;
   stills?: boolean; agent?: boolean; driven?: boolean; profile?: "signed_out" | "signed_in"; epoch?: number; holder?: "agent" | "user"; sticky?: boolean; waiting?: boolean; busy?: boolean; inUse?: boolean;
   /** You took the tab over while a Butler turn held it; clears when that turn ends. */
   paused?: boolean;
+  /** When Butler last worked in this tab (ms since epoch); absent if it never has. */
+  agentAt?: number;
   status: "idle" | "loading" | "crashed"; canBack: boolean; canForward: boolean;
   /** A sign-in step only the user can do (mfa, passkey, captcha, secure_keypad, unknown_form). */
   signinStep?: string;
@@ -25,7 +29,9 @@ export interface BrowserTab {
 export interface BrowserSnapshot {
   enabled: boolean; blocked: boolean; activeId: string | null; nativeCovered: boolean; focusRequest?: string; tabs: BrowserTab[];
 }
+export interface BrowserFrame { tab: string; seq: number; bytes: Uint8Array; masked: boolean }
 interface BrowserBridge {
+  onFrame: (tabId: string, handler: (frame: BrowserFrame) => void, widthPx?: number) => () => void;
   call: (op: string, input?: unknown) => Promise<unknown>;
   subscribe: (handler: (state: BrowserSnapshot) => void) => () => void;
   onPointer: (handler: (point: { x: number; y: number } | null) => void) => () => void;
@@ -105,14 +111,17 @@ export async function openConversationBrowser(session: string, requestedTab?: st
   connectBrowser();
   const store = useButlerStore.getState();
   store.setRightOpen(false);
-  store.openSession(session);
+  // A link from the open conversation keeps its view; only another conversation is opened.
+  if (store.activeChatId !== session || store.view.kind !== "session") store.openSession(session);
   const shell = useBrowserShellState.getState();
   shell.setOpen(session, true);
   const snapshot = await browserCall("open") as BrowserSnapshot | undefined;
-  const tabs = snapshot?.tabs.filter((tab) => tab.owner === `conversation:${session}`) ?? [];
-  const remembered = requestedTab ?? shell.conversations[session]?.lastTab;
-  const target = tabs.find((tab) => tab.id === remembered)?.id ?? tabs[0]?.id
-    ?? await browserCall("create", { owner: `conversation:${session}`, profile: "signed_out" });
+  const all = snapshot?.tabs ?? [];
+  const rolled = conversationAgentTabs(session, all, store.sessionViews);
+  const tabs = all.filter(tab => tab.owner === `conversation:${session}` || rolled.includes(tab));
+  const target = tabs.find(tab => tab.id === requestedTab)?.id
+    ?? relevantConversationTab(tabs, shell.conversations[session]?.lastTab)?.id;
+
   // Switching away while opening must not steal another conversation's native view.
   const current = useButlerStore.getState();
   if (typeof target === "string" && current.activeChatId === session && current.view.kind === "session") {
@@ -125,6 +134,17 @@ export async function focusBrowserTab(id: string, sessionId: string, fallback: s
   const state = await browserCall("state") as BrowserSnapshot | undefined;
   if (state?.tabs.some((tab) => tab.id === id)) await openConversationBrowser(sessionId, id);
   else void openLink(fallback);
+}
+
+/**
+ * A link a conversation's message shows (answer cards, source lines, actions, the image viewer) opens in
+ * that conversation's browser, grouped with its tabs, like the agent's own tabs. Without a public
+ * conversation it is an ordinary link.
+ */
+export async function openConversationLink(url: string, sessionId: string | undefined) {
+  const owned = sessionId && publicBrowserOwner(`conversation:${sessionId}`, useButlerStore.getState().navigation);
+  if (window.butlerBrowser && owned && /^https?:/iu.test(url)) await openBrowser({ url, sessionId: owned });
+  else await openLink(url);
 }
 
 /** Desktop links share the main-process opener; remote clients keep web navigation. */

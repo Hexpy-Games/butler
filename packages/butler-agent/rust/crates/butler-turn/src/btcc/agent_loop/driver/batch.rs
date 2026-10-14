@@ -373,7 +373,8 @@ pub(super) async fn suspend_for_authority(
         .await
         .map_err(propagated)?
         .or_else(|| state.presentation.take());
-    let mut extensions = serde_json::Map::new();
+    // Rides on the continuation row the suspension writes anyway.
+    let mut extensions = input.policy.continuation_extensions();
     if let Some(diagnostics) = prepared
         .request
         .usage_attribution

@@ -54,7 +54,8 @@ function views(): { parent: SessionView; observer: SessionView } {
 try {
   for (const width of [1280, 375]) for (const theme of ["light", "dark"]) for (const wallpaper of [false, true]) {
     const page = await context.newPage();
-    page.on("pageerror", error => console.error("pageerror", error.message));
+    const pageErrors: string[] = [];
+    page.on("pageerror", error => { pageErrors.push(error.message); console.error("pageerror", error.message); });
     await page.setViewportSize({ width, height: 800 });
     phase = "running";
     stopRequested = false;
@@ -65,7 +66,7 @@ try {
       wallpaper: { source: wallpaper ? { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } } : { kind: "none" } } }) });
     await server.signIn(page);
     await installWorkReplay(page);
-    await installNotificationReplay(page, server.url);
+    await installNotificationReplay(page, server.url, wallpaper);
     await page.route("**/authority-requests?**", route => route.fulfill({ json: { protocol_version: "butler.app.v1", data: { session_id: "general", requests: [], permissions: [...grants, grants[0]] } } }));
     await page.route("**/navigation", route => route.fulfill({ json: { protocol_version: "butler.app.v1", data: { ...navigation,
       chats: navigation.chats.map(s => ({ ...s, active_turn_state: ownState, running_delegated_work: phase === "running", attention_required: awaiting && s.id === "general" })) } } }));
@@ -90,7 +91,8 @@ try {
     };
     await page.goto(server.url);
     try { await pill.waitFor(); } catch (error) {
-      console.error(JSON.stringify({ width, theme, requests, body: await page.locator("body").innerText() }));
+      console.error(JSON.stringify({ width, theme, requests, body: await page.locator("body").innerText(),
+        crashes: await page.evaluate(() => (window as unknown as { __uiCrashes: unknown[] }).__uiCrashes) }));
       await capture("failure"); throw error;
     }
     if (!await row.isVisible()) await page.getByRole("button", { name: appCopy.titlebar.showLeftPanel, exact: true }).click();
@@ -100,6 +102,7 @@ try {
       assert(animation.includes("spinner-rotate"), "the existing DS working animation is active");
     }
     await capture("running");
+    if (wallpaper) assert(await page.evaluate(() => (window as unknown as { __wallpaperLogFailures: number }).__wallpaperLogFailures > 0), "unavailable wallpaper log sink was exercised");
     awaiting = true;
     await page.evaluate(childId => (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent({
       id: 90, type: "subsession.changed", created_at: new Date().toISOString(),
@@ -131,7 +134,11 @@ try {
     await capture("grants-collapsed");
     if (!baseline) {
       assert.equal(await page.locator('[data-test-class="granted-permission"]').count(), 0);
-      assert.equal(await page.locator('[data-slot="option-menu-item"]').count(), 3, "only the original access modes");
+      const options = page.locator('[data-slot="option-menu-item"]');
+      const labels = [appCopy.permissions.auto, appCopy.permissions.readOnly, appCopy.permissions.askAlways,
+        appCopy.permissions.askFirst, appCopy.permissions.fullAccess];
+      assert.equal(await options.count(), labels.length, "only access modes, no grant rows");
+      for (let index = 0; index < labels.length; index++) assert((await options.nth(index).innerText()).includes(labels[index]!), "access mode order and labels");
       assert.equal(await access.getAttribute("aria-label"), `${appCopy.composer.permission}: ${appCopy.permissions.askFirst}`, "grants do not add a count");
       assert(!(await page.locator('[data-test-class="composer-menu"]').innerText()).includes("Allowed"), "no grants section");
     }
@@ -198,10 +205,12 @@ try {
         assert.equal(await spinner.count(), 0, `${terminal} clears the row`);
       }
     }
+    assert.deepEqual(pageErrors, [], "no uncaught bridge errors");
+    assert.deepEqual(await page.evaluate(() => (window as unknown as { __uiCrashes: unknown[] }).__uiCrashes), [], "no contained view crashes");
     await page.close();
   }
   console.log(JSON.stringify({ ok: true, baseline, timingsMs: timings, maxMs: Math.max(...timings), requests,
-    checks: baseline ? ["before-snapshots"] : ["parent-ended-child-running", "reload", "stop-accepted-still-running", "confirmed-stop-all-surfaces-500ms", "collapsed-summary", "complete", "fail", "no-idle-polling", "attention-notification-and-clear", "original-permission-menu-with-existing-grants"] }));
+    checks: baseline ? ["before-snapshots"] : ["parent-ended-child-running", "reload", "stop-accepted-still-running", "confirmed-stop-all-surfaces-500ms", "collapsed-summary", "complete", "fail", "no-idle-polling", "attention-notification-and-clear", "access-modes-with-existing-grants", "unavailable-wallpaper-log", "no-ui-crashes"] }));
 } finally {
   await browser.close();
   await server.stop();

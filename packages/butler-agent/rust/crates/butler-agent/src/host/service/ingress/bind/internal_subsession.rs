@@ -9,6 +9,55 @@ pub(super) async fn bind(
     session_id: &str,
     turn_id: &str,
 ) -> Result<TurnRequest, IngressError> {
+    let (binding, turn_role) = validated_binding(envelope, bindings, context, session_id).await?;
+    let content = super::user_message(envelope)?;
+    let mut app_context =
+        json!({"session":{"id":session_id},"contentParts":[{"type":"text","text":content}]});
+    // A child of an unattended schedule run cannot wait for the user (D8).
+    if let Some(run) = context.get("scheduleRun").filter(|run| run.is_object()) {
+        app_context["scheduleRun"] = run.clone();
+    }
+    Ok(TurnRequest {
+        turn_id: turn_id.into(),
+        recovery_attempt: None,
+        session_id: binding.session_id,
+        event_id: envelope.event_id.clone(),
+        transport: envelope.transport.clone(),
+        account_id: envelope.account_id.clone(),
+        peer: envelope.peer.clone(),
+        sender: envelope.sender.clone(),
+        message: TurnMessage {
+            id: envelope.message.id.clone(),
+            content: content.clone(),
+            timestamp: envelope.message.timestamp.clone(),
+            attachments: envelope.message.attachments.clone(),
+            image_admission: envelope.message.image_admission.clone(),
+        },
+        trigger: TurnTrigger::UserMessage,
+        route: TurnRoute {
+            role: turn_role,
+            workspace_path: binding.workspace_path,
+            project_id: binding.project_id,
+            reason: Some("native-subsession".into()),
+        },
+        progress_destination: None,
+        execution_controls: None,
+        empty_response_policy: Some("safe_fallback".into()),
+        app_turn_context: Some(app_context),
+        authority_request_ref: None,
+        authority_client_message_id: None,
+        app_queue_claim_id: None,
+        resume: false,
+        preparation_cancellation: CancellationToken::new(),
+    })
+}
+
+async fn validated_binding(
+    envelope: &Envelope,
+    bindings: &SessionBindingStore,
+    context: &Value,
+    session_id: &str,
+) -> Result<(StoredSessionBinding, TurnRole), IngressError> {
     let object = context
         .as_object()
         .ok_or_else(|| invalid("Invalid native subsession context"))?;
@@ -47,45 +96,10 @@ pub(super) async fn bind(
     {
         return Err(invalid("Native subsession binding mismatch"));
     }
-    let content = super::user_message(envelope)?;
     let turn_role = if expected_role == SessionRole::Steward {
         TurnRole::Steward
     } else {
         TurnRole::Worker
     };
-    Ok(TurnRequest {
-        turn_id: turn_id.into(),
-        recovery_attempt: None,
-        session_id: binding.session_id,
-        event_id: envelope.event_id.clone(),
-        transport: envelope.transport.clone(),
-        account_id: envelope.account_id.clone(),
-        peer: envelope.peer.clone(),
-        sender: envelope.sender.clone(),
-        message: TurnMessage {
-            id: envelope.message.id.clone(),
-            content: content.clone(),
-            timestamp: envelope.message.timestamp.clone(),
-            attachments: envelope.message.attachments.clone(),
-            image_admission: envelope.message.image_admission.clone(),
-        },
-        trigger: TurnTrigger::UserMessage,
-        route: TurnRoute {
-            role: turn_role,
-            workspace_path: binding.workspace_path,
-            project_id: binding.project_id,
-            reason: Some("native-subsession".into()),
-        },
-        progress_destination: None,
-        execution_controls: None,
-        empty_response_policy: Some("safe_fallback".into()),
-        app_turn_context: Some(
-            json!({"session":{"id":session_id},"contentParts":[{"type":"text","text":content}]}),
-        ),
-        authority_request_ref: None,
-        authority_client_message_id: None,
-        app_queue_claim_id: None,
-        resume: false,
-        preparation_cancellation: CancellationToken::new(),
-    })
+    Ok((binding, turn_role))
 }

@@ -40,14 +40,56 @@ pub(super) fn read_only_contained(
     for root in allowed {
         let real = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
         for path in [*root, real.as_path()] {
-            deny_project_secrets(&mut profile, path)?;
+            deny_project_secrets(&mut profile, path, "file-read*")?;
         }
     }
     Ok(sandboxed(profile, invocation))
 }
 
+/// Writes only inside `root` and the `writable` scratch roots, never below
+/// `denied`, project metadata or secrets; no network. Seatbelt rules are
+/// ordered and the last match wins, so each exclusion follows its allow.
+pub(super) fn project_write(
+    invocation: Invocation,
+    environment: &std::collections::HashMap<String, String>,
+    root: &Path,
+    writable: &[&Path],
+    denied: &[&Path],
+) -> Result<Invocation, SandboxError> {
+    let mut profile = ["(version 1)", "(allow default)", "(deny file-write*)"].join("\n");
+    let rule = |profile: &mut String, rule: &str, paths: &[&Path]| {
+        for path in paths {
+            let real = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+            for path in [*path, real.as_path()] {
+                let quoted = serde_json::to_string(&path.to_string_lossy())?;
+                profile.push_str(&format!("\n({rule} (subpath {quoted}))"));
+            }
+        }
+        Ok::<_, SandboxError>(())
+    };
+    rule(&mut profile, "allow file-write*", &[root])?;
+    rule(&mut profile, "deny file-write*", denied)?;
+    rule(&mut profile, "allow file-write*", writable)?;
+    profile.push_str("\n(allow file-write-data (literal \"/dev/null\"))");
+    let real = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    for path in [root, real.as_path()] {
+        deny_project_secrets(&mut profile, path, "file-write*")?;
+        deny_project_secrets(&mut profile, path, "file-read*")?;
+    }
+    for credential in super::credentials::roots(environment) {
+        rule(&mut profile, "deny file-read*", &[credential.as_path()])?;
+        rule(&mut profile, "deny file-write*", &[credential.as_path()])?;
+    }
+    profile.push_str("\n(deny network*)");
+    Ok(sandboxed(profile, invocation))
+}
+
 // Seatbelt rules are ordered: these exclusions must follow the project allow.
-fn deny_project_secrets(profile: &mut String, root: &Path) -> Result<(), SandboxError> {
+fn deny_project_secrets(
+    profile: &mut String,
+    root: &Path,
+    operation: &str,
+) -> Result<(), SandboxError> {
     let root = root
         .to_string_lossy()
         .chars()
@@ -71,7 +113,7 @@ fn deny_project_secrets(profile: &mut String, root: &Path) -> Result<(), Sandbox
         .collect::<String>();
     let pattern = format!("^{root}/(.*/)?{names}(/|$)");
     let quoted = serde_json::to_string(&pattern)?;
-    profile.push_str(&format!("\n(deny file-read* (regex {quoted}))"));
+    profile.push_str(&format!("\n(deny {operation} (regex {quoted}))"));
     Ok(())
 }
 

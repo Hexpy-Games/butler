@@ -44,6 +44,7 @@ import { ProjectCreateDialog } from "@/components/layout/ProjectCreateDialog.tsx
 import { SessionRenameDialog } from "@/components/layout/SessionRenameDialog.tsx";
 import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog.tsx";
 import { AppToaster } from "@/components/common/AppToaster.tsx";
+import { ImageViewerHost } from "@/components/media/ImageViewerHost";
 import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
 import { nativePlatform } from "@/app/nativeNotifications.ts";
 import { appShellTheme, isDraftChatId } from "@/app/utils.ts";
@@ -69,7 +70,6 @@ import {
 import { useNarrowRightPanelAutoCollapse } from "@/hooks/useNarrowRightPanelAutoCollapse.ts";
 import { useBrowserChromeThemeColor } from "@/hooks/useBrowserChromeThemeColor.ts";
 import { FirstRunSetup } from "@/components/first-run/FirstRunSetup.tsx";
-import { notifyStatus } from "@/app/notifications.ts";
 import { useOnboardingGate } from "@/hooks/useOnboardingGate.ts";
 import { useOnboardingStore } from "@/stores/onboardingStore.ts";
 import { LegacyDataRecovery } from "@/components/first-run/LegacyDataRecovery.tsx";
@@ -124,17 +124,13 @@ function AppBootState() {
   );
 }
 
-/** After a first run, open a new chat and say which AI is connected (once). */
+/** After a first run, open a new chat. The connect step already showed the connection. */
 function useFirstRunLanding() {
   const connectedCardId = useOnboardingStore((state) => state.connectedCardId);
   useEffect(() => {
     if (!connectedCardId) return;
     useOnboardingStore.getState().setConnected(null);
     useButlerStore.getState().openNewChat();
-    notifyStatus(appCopy.firstRun.connectedToast(appCopy.firstRun.providerNames[connectedCardId]), {
-      id: "first-run-connected",
-      tone: "ok",
-    });
   }, [connectedCardId]);
 }
 
@@ -298,6 +294,7 @@ function AppWorkspaceDialogs() {
     <ElementDragPreview />
     <CardDragPreview />
     <LibraryDialogHost />
+    <ImageViewerHost />
     <AppToaster />
   </>;
 }

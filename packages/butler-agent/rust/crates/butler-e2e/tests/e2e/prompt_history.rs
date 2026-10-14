@@ -111,6 +111,7 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
     )?;
     let placeholders = setup.placeholders.clone();
     let s = setup.start().await?;
+    butler_e2e::e2e::fixtures::default_project_folder(&s).await?;
     let mut previous = Vec::new();
     let mut previous_history = String::new();
     let mut asks = Vec::new();
@@ -313,6 +314,7 @@ async fn direct_case(verify: bool) -> Result<(), HarnessError> {
         .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1");
     let placeholders = setup.placeholders.clone();
     let mut s = setup.start().await?;
+    butler_e2e::e2e::fixtures::default_project_folder(&s).await?;
     s.turn("general", "warm direct fixture").await?;
     s.agent.terminate().await?;
     Connection::open(s.sandbox.data.join("runtime/session-store.sqlite"))?.execute(

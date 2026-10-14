@@ -11,6 +11,7 @@ pub(in crate::models::provider) struct Component {
     source: Option<Value>,
     pub(in crate::models::provider) encoded: String,
     pub(in crate::models::provider) hash: Option<String>,
+    projection: Option<(String, u32)>,
     bytes: usize,
 }
 
@@ -21,19 +22,28 @@ pub(in crate::models::provider) struct Cache {
 }
 
 impl Cache {
-    pub(in crate::models::provider) fn array_json(
+    pub(in crate::models::provider) fn array_sizing(
         &mut self,
         items: &[Value],
-    ) -> Result<String, ModelRoundError> {
-        let mut output = String::from("[");
+    ) -> Result<(String, String, u32), ModelRoundError> {
+        let mut wire = String::from("[");
+        let mut text = String::from("[");
+        let mut images = 0;
         for (index, value) in items.iter().enumerate() {
             if index > 0 {
-                output.push(',');
+                wire.push(',');
+                text.push(',');
             }
-            output.push_str(&self.component(index, value, false)?.encoded);
+            let item = self.cached_component(index, value, false, true)?;
+            wire.push_str(&item.encoded);
+            if let Some((projected, count)) = &item.projection {
+                text.push_str(projected);
+                images += count;
+            }
         }
-        output.push(']');
-        Ok(output)
+        wire.push(']');
+        text.push(']');
+        Ok((wire, text, images))
     }
 
     pub(in crate::models::provider) fn component(
@@ -42,7 +52,18 @@ impl Cache {
         value: &Value,
         include_hash: bool,
     ) -> Result<Arc<Component>, ModelRoundError> {
+        self.cached_component(index, value, include_hash, false)
+    }
+
+    fn cached_component(
+        &mut self,
+        index: usize,
+        value: &Value,
+        include_hash: bool,
+        include_projection: bool,
+    ) -> Result<Arc<Component>, ModelRoundError> {
         if let Some(Some(item)) = self.items.get(index)
+            && (!include_projection || item.projection.is_some())
             && item
                 .source
                 .as_ref()
@@ -53,12 +74,19 @@ impl Cache {
         let encoded = butler_core::json::stringify(value).map_err(|_| {
             ModelRoundError::StablePrefix("prefix_diagnostic_serialization_failed".into())
         })?;
-        let bytes = source_bytes(value) + encoded.capacity() + 64;
+        let projection = include_projection
+            .then(|| crate::models::request_admission::image_token_projection(value))
+            .transpose()?;
+        let bytes = source_bytes(value)
+            + encoded.capacity()
+            + projection.as_ref().map_or(0, |(text, _)| text.capacity())
+            + std::mem::size_of::<Component>();
         let retained = bytes <= CACHE_BYTES && index < CACHE_ITEMS;
         let item = Arc::new(Component {
             source: retained.then(|| value.clone()),
             hash: include_hash.then(|| super::hash(&encoded)),
             encoded,
+            projection,
             bytes,
         });
         if retained {

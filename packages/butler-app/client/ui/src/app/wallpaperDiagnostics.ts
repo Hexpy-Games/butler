@@ -21,7 +21,8 @@ export function installWallpaperDiagnostics(): void {
     last.set(signal, performance.now());
     if (sent >= SESSION_CAP) return;
     sent += 1;
-    record(line);
+    // Diagnostics are best-effort: an unavailable log bridge must not break a view.
+    try { record(line); } catch { /* Keep rendering when the log sink is unavailable. */ }
   };
   setWallpaperDiagnostics((event) => {
     const step = document.querySelector("[data-first-run-screen]")?.getAttribute("data-first-run-screen");

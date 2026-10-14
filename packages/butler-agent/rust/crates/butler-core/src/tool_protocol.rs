@@ -8,8 +8,13 @@ pub use tool_name::ToolName;
 use serde_json::{Map, Value};
 
 /// Stored access modes in increasing permission order.
-pub const ACCESS_MODE_WIRE_NAMES: [&str; 4] =
-    ["read_only", "ask_first", "ask_except_reads", "full_access"];
+pub const ACCESS_MODE_WIRE_NAMES: [&str; 5] = [
+    "read_only",
+    "ask_first",
+    "ask_except_reads",
+    "auto",
+    "full_access",
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ToolCatalogProvider {
@@ -122,3 +127,6 @@ fn hex(byte: u8) -> Option<u8> {
 
 #[cfg(test)]
 mod tests;
+
+mod stream;
+pub use stream::ToolCallStreamEvent;

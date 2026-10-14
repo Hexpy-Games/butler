@@ -80,6 +80,7 @@ pub(super) fn falls_back(
 pub(super) struct StreamWatch<'a> {
     inner: Option<&'a dyn ProviderStreamObserver>,
     streamed: AtomicBool,
+    tools_observed: AtomicBool,
 }
 
 impl<'a> StreamWatch<'a> {
@@ -87,6 +88,36 @@ impl<'a> StreamWatch<'a> {
         Self {
             inner,
             streamed: AtomicBool::new(false),
+            tools_observed: AtomicBool::new(false),
+        }
+    }
+
+    /// JSON-only carriers still declare identity before their one complete argument fragment.
+    pub(super) fn complete_tools(&self, result: &butler_turn::btcc::ModelRoundResult) {
+        use butler_core::tool_protocol::ToolCallStreamEvent;
+        if self.tools_observed.load(Ordering::Acquire) {
+            return;
+        }
+        let stream_id = format!("tool-stream-{}", uuid::Uuid::new_v4().simple());
+        let mut sequence = 0;
+        for (index, call) in result.tool_calls.iter().enumerate() {
+            sequence += 1;
+            self.tool_call(&ToolCallStreamEvent::ToolCallStart {
+                stream_id: stream_id.clone(),
+                call_index: index as u64,
+                sequence,
+                tool_name: call.name.clone(),
+                call_id: Some(call.id.clone()),
+            });
+            if let Ok(arguments_delta) = serde_json::to_string(&call.arguments) {
+                sequence += 1;
+                self.tool_call(&ToolCallStreamEvent::ToolCallDelta {
+                    stream_id: stream_id.clone(),
+                    call_index: index as u64,
+                    sequence,
+                    arguments_delta,
+                });
+            }
         }
     }
 
@@ -106,7 +137,7 @@ impl<'a> StreamWatch<'a> {
             ModelRoundError::Provider(error) => error.code == "provider_cancelled",
             _ => false,
         };
-        if self.streamed() && !stopped {
+        if (self.streamed() || self.tools_observed.load(Ordering::Acquire)) && !stopped {
             self.round_text_discarded();
         }
     }
@@ -114,11 +145,28 @@ impl<'a> StreamWatch<'a> {
 
 impl ProviderStreamObserver for StreamWatch<'_> {
     fn event(&self, event: &Value) {
+        if matches!(
+            event["type"].as_str(),
+            Some("tool_call_start" | "tool_call_delta")
+        ) && let Ok(tool) = serde_json::from_value(event.clone())
+        {
+            self.tool_call(&tool);
+            return;
+        }
         if event.get("type").and_then(Value::as_str) == Some("text_delta") {
             self.streamed.store(true, Ordering::Release);
         }
         if let Some(inner) = self.inner {
             inner.event(event);
+        }
+    }
+
+    fn tool_call(&self, event: &butler_core::tool_protocol::ToolCallStreamEvent) {
+        // Tool arguments are not answer text: a refused local stream still
+        // falls back without streaming, as it did before arguments streamed.
+        self.tools_observed.store(true, Ordering::Release);
+        if let Some(inner) = self.inner {
+            inner.tool_call(event);
         }
     }
 

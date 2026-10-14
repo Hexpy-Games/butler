@@ -164,6 +164,9 @@ impl AppSessionWorkspaceProvisioner for AppSessionWorkspaces {
                 .map_err(GatewayApplicationError::internal_from)?;
             match recovered.authority {
                 SessionWorkspaceAuthority::Project { workspace_path } => Ok(workspace_path),
+                SessionWorkspaceAuthority::SessionFolder { workspace_path, .. } => {
+                    Ok(Some(workspace_path))
+                }
                 SessionWorkspaceAuthority::SessionWorktree { workspace_path, .. }
                     if matches!(
                         recovered.validation,
@@ -220,35 +223,20 @@ impl AppSessionWorkspaceProvisioner for AppSessionWorkspaces {
                         "workspace_status":"unavailable"
                     }),
                 },
+                SessionWorkspaceAuthority::SessionFolder { workspace_path, .. } => {
+                    let mut value =
+                        folder_info(&recovery, &workspace_path, "session_folder", cancellation)
+                            .await?;
+                    value["workspace_path"] = workspace_path.into();
+                    value
+                }
                 SessionWorkspaceAuthority::Project { .. } => {
                     let Some(path) = query.project_workspace_path.as_deref() else {
                         return Ok(serde_json::json!({
                             "available":false,"workspace_mode":"none","safe_status":"No project workspace"
                         }));
                     };
-                    let label = safe_basename(path);
-                    match recovery
-                        .inspect_project(path, cancellation)
-                        .await
-                        .map_err(GatewayApplicationError::internal_from)?
-                    {
-                        ProjectWorkspaceInspection::Folder => serde_json::json!({
-                            "available":false,"workspace_mode":"folder","safe_status":"Project workspace",
-                            "workspace_binding":"project","workspace_label":label,"workspace_status":"available"
-                        }),
-                        ProjectWorkspaceInspection::Git { branch, dirty } => serde_json::json!({
-                            "available":true,"workspace_mode":"git","branch_name":branch,
-                            "safe_status":branch.as_ref().map(|name|format!("Git branch {name}")).unwrap_or_else(||"Detached HEAD".into()),
-                            "workspace_binding":"project","workspace_label":label,
-                            "workspace_status":"available","dirty":dirty
-                        }),
-                        ProjectWorkspaceInspection::Unavailable { code } => serde_json::json!({
-                            "available":false,"workspace_mode":"unknown",
-                            "safe_status":if code == "git_not_installed" {"Git is not installed"} else {"Git workspace unavailable"},
-                            "safe_error_code":code,"workspace_binding":"project",
-                            "workspace_label":label,"workspace_status":"unavailable"
-                        }),
-                    }
+                    folder_info(&recovery, path, "project", cancellation).await?
                 }
             };
             Ok(value)
@@ -275,6 +263,40 @@ impl AppSessionWorkspaceProvisioner for AppSessionWorkspaces {
             }))
         })
     }
+}
+
+/// A project or moved working folder: its name and Git state.
+async fn folder_info(
+    recovery: &SessionWorkspaceRecovery,
+    path: &str,
+    binding: &str,
+    cancellation: tokio_util::sync::CancellationToken,
+) -> Result<Value, GatewayApplicationError> {
+    let label = safe_basename(path);
+    Ok(
+        match recovery
+            .inspect_project(path, cancellation)
+            .await
+            .map_err(GatewayApplicationError::internal_from)?
+        {
+            ProjectWorkspaceInspection::Folder => serde_json::json!({
+                "available":false,"workspace_mode":"folder","safe_status":"Project workspace",
+                "workspace_binding":binding,"workspace_label":label,"workspace_status":"available"
+            }),
+            ProjectWorkspaceInspection::Git { branch, dirty } => serde_json::json!({
+                "available":true,"workspace_mode":"git","branch_name":branch,
+                "safe_status":branch.as_ref().map(|name|format!("Git branch {name}")).unwrap_or_else(||"Detached HEAD".into()),
+                "workspace_binding":binding,"workspace_label":label,
+                "workspace_status":"available","dirty":dirty
+            }),
+            ProjectWorkspaceInspection::Unavailable { code } => serde_json::json!({
+                "available":false,"workspace_mode":"unknown",
+                "safe_status":if code == "git_not_installed" {"Git is not installed"} else {"Git workspace unavailable"},
+                "safe_error_code":code,"workspace_binding":binding,
+                "workspace_label":label,"workspace_status":"unavailable"
+            }),
+        },
+    )
 }
 
 fn safe_basename(path: &str) -> String {

@@ -1,0 +1,100 @@
+{
+  "model": "anthropic/claude-haiku-4-5",
+  "shape": "native",
+  "path": "/v1/messages",
+  "expected": {
+    "id": "msg_replay",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-haiku-4-5",
+    "content": [
+      {
+        "type": "thinking",
+        "thinking": "Reason it out.",
+        "signature": "signed"
+      },
+      {
+        "type": "text",
+        "text": "Hello 안녕 🌍!",
+        "citations": [
+          {
+            "type": "web_search_result_location",
+            "url": "https://example.org",
+            "title": "Source",
+            "encrypted_index": "signed-citation",
+            "cited_text": "Hello"
+          }
+        ]
+      },
+      {
+        "type": "tool_use",
+        "id": "call_0",
+        "name": "render",
+        "input": {
+          "value": "안녕 🌍",
+          "items": [
+            1,
+            2
+          ]
+        }
+      },
+      {
+        "type": "tool_use",
+        "id": "call_1",
+        "name": "inspect",
+        "input": {
+          "other": true
+        }
+      },
+      {
+        "type": "server_tool_use",
+        "id": "srvtoolu_0",
+        "name": "web_search",
+        "input": {
+          "query": "weather"
+        }
+      }
+    ],
+    "stop_reason": "tool_use",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 25,
+      "output_tokens": 10,
+      "cache_read_input_tokens": 100,
+      "cache_creation_input_tokens": 20,
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 20,
+        "ephemeral_5m_input_tokens": 0
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": [
+      [
+        "content-type",
+        "text/event-stream"
+      ]
+    ],
+    "chunks": [
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_replay\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-haiku-4-5\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":25,\"output_tokens\":1,\"cache_read_input_tokens\":100,\"cache_creation_input_tokens\":20,\"cache_creation\":{\"ephemeral_1h_input_tokens\":20,\"ephemeral_5m_input_tokens\":0}}}}\n\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"Reason \"}}\n\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"it out.\"}}\n\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"signed\"}}\n\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello 안\"}}\n\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"녕 🌍!\"}}\n\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"web_search_result_location\",\"url\":\"https://example.org\",\"title\":\"Source\",\"encrypted_index\":\"signed-citation\",\"cited_text\":\"Hello\"}}}\n\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\ndata: {\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_0\",\"name\":\"render\",\"input\":{}}}\n\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"value\\\":\\\"안녕\"}}\n\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" 🌍\\\",\\\"items\\\":[1,2]}\"}}\n\ndata: {\"type\":\"content_block_stop\",\"index\":2}\n\ndata: {\"type\":\"content_block_start\",\"index\":3,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"inspect\",\"input\":{}}}\n\ndata: {\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"other\\\":tru\"}}\n\ndata: {\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"e}\"}}\n\ndata: {\"type\":\"content_block_stop\",\"index\":3}\n\ndata: {\"type\":\"content_block_start\",\"index\":4,\"content_block\":{\"type\":\"server_tool_use\",\"id\":\"srvtoolu_0\",\"name\":\"web_search\",\"input\":{}}}\n\ndata: {\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"query\\\":\\\"weather\\\"}\"}}\n\ndata: {\"type\":\"content_block_stop\",\"index\":4}\n\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null},\"usage\":{\"output_tokens\":10,\"input_tokens\":null,\"cache_read_input_tokens\":null,\"cache_creation_input_tokens\":null}}\n\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    ]
+  },
+  "documentation": [
+    "https://platform.claude.com/docs/en/build-with-claude/streaming"
+  ],
+  "expected_text": "Hello 안녕 🌍!",
+  "argument_fragments": {
+    "2": [
+      "{\"value\":\"안녕",
+      " 🌍\",\"items\":[1,2]}"
+    ],
+    "3": [
+      "{\"other\":tru",
+      "e}"
+    ]
+  }
+}

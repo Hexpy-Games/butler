@@ -5,8 +5,11 @@ import { IconButton } from "../../components/IconButton";
 import { Scrap } from "../../components/Icons";
 import { MediaFrame } from "../../components/MediaFrame";
 import { BROKEN_PICTURE, fixturePicture } from "../../components/MediaFrame/fixtures";
+import { Stack } from "../../components/Stack";
 import { fixtureItems, LABELS, type FixtureItem } from "./fixtures";
 import { ItemCard, type ItemCardProps } from "./ItemCard";
+import { SkeletonPair, StreamSettleDemo } from "./ItemCard.demo";
+import { ItemCardSkeleton } from "./ItemCardSkeleton";
 
 export const meta: ShowcaseMeta = {
   title: "ItemCard",
@@ -33,6 +36,8 @@ function props(locale: Locale, item: FixtureItem, src: string | undefined = fixt
       </>
     ),
     onOpen: () => undefined,
+    onMediaOpen: () => undefined,
+    mediaLabel: item.title,
   };
 }
 
@@ -78,6 +83,25 @@ export const stories: ShowcaseStory[] = [
     render: ({ locale }) => <Grid columns="1" gap="md">{cards(locale, 5)}</Grid>,
   },
   { name: "States: no picture, failed picture, minimal, no footer, long text", widths: ["app", "wide"], render: (context) => <States {...context} /> },
+  {
+    name: "Loading: skeletons hold the next slots",
+    widths: ["app", "wide"],
+    render: ({ locale }) => (
+      <Grid columns={{ base: "4", compact: "1" }} gap="sm" cross="start">
+        {cards(locale, 2)}
+        <ItemCardSkeleton media="4:5" />
+        <ItemCardSkeleton media="4:5" />
+      </Grid>
+    ),
+  },
+  { name: "Loading: the skeleton is the box of the card it becomes", widths: ["375", "app", "wide"], render: (context) => <SkeletonPair {...context} /> },
+  { name: "Loading: without a picture", widths: ["375", "app"], render: (context) => <SkeletonPair {...context} media={null} /> },
+  { name: "Settle: cards stream in, the grid settles once at close", widths: ["375", "app", "wide"], render: (context) => <StreamSettleDemo {...context} /> },
+  {
+    name: "Reduced motion: fades only, a static skeleton, the height at once",
+    widths: ["375", "app"],
+    render: (context) => <Stack data-motion="reduced"><StreamSettleDemo {...context} reducedMotion /></Stack>,
+  },
 ];
 
 export const stateMatrix: ShowcaseStateMatrix = {

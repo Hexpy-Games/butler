@@ -5,6 +5,7 @@ export const additionalToolLabels = {
   search: "Search",
   transform_public_data_table: "Transform public data",
   bind_session_git_worktree: "Bind Git workspace",
+  switch_folder: "Move working folder",
   project_ledger_index: "Index project",
   project_ledger_status: "Check project status",
   project_ledger_list: "List project records",
