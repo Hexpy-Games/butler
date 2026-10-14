@@ -73,13 +73,6 @@ impl AgentRuntime {
         let mut startup = startup_trace::Trace::new();
         stores::check_startup(stop)?;
         validate_data_installation_boundary(&paths.data_root, &paths.installation_root)?;
-        let data = paths.data_root.clone();
-        tokio::task::spawn_blocking(move || {
-            butler_platform::command_sandbox::reconcile_project_write(&data)
-        })
-        .await
-        .map_err(setup)?
-        .map_err(setup)?;
         // All fallible in-memory setup precedes the first store owner.
         let collation = Arc::new(LocaleCollation::new(locale).map_err(setup)?);
         let writes = Arc::new(ConfigurationWrites::new());

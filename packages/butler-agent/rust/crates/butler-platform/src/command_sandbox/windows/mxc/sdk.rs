@@ -4,8 +4,33 @@ use serde_json::Value;
 use std::io::{self, Read};
 
 pub(super) fn probe(request: &Value) -> Result<Value, &'static str> {
-    let typed: v1::ContainerRequest =
-        serde_json::from_value(request.clone()).map_err(|_| "probe_failed")?;
+    let mut typed = v1::ContainerRequest::new(
+        request["process"]["commandLine"]
+            .as_str()
+            .ok_or("probe_failed")?,
+    );
+    typed.containment =
+        v1::Containment::ProcessContainer(v1::configs::ProcessContainerConfig::default());
+    typed.filesystem = Some(v1::FilesystemPolicy {
+        readonly_paths: paths(request, "readonlyPaths")?,
+        readwrite_paths: paths(request, "readwritePaths")?,
+        denied_paths: paths(request, "deniedPaths")?,
+        ..Default::default()
+    });
+    typed.network = Some(v1::NetworkPolicy {
+        ingress: Some(v1::NetworkIngressPolicy {
+            default: Some(v1::NetworkAction::Deny),
+            host_loopback: Some(v1::NetworkAction::Deny),
+        }),
+        egress: Some(v1::NetworkEgressPolicy {
+            default: Some(v1::NetworkAction::Deny),
+            ..Default::default()
+        }),
+        ..Default::default()
+    });
+    typed.ui = Some(v1::UiPolicy::default());
+    typed.working_directory = request["process"]["cwd"].as_str().map(str::to_owned);
+    typed.timeout_ms = Some(10000);
     let facts = v1::probe(Some(&typed)).map_err(|_| "mxc_api_missing")?;
     serde_json::to_value(facts).map_err(|_| "probe_failed")
 }
@@ -47,14 +72,18 @@ pub(super) fn child_probe(
     let mut child = match __ffi::spawn_container_json(&serde_json::to_string(request)?, false) {
         Ok(child) => child,
         Err(error) => {
-            let text = error.to_string();
-            return Ok(if text.contains("1314") {
-                "privilege_not_held"
-            } else if text.contains("C0000142") || text.contains("3221225794") {
-                "non_interactive_desktop"
-            } else {
-                "probe_failed"
-            });
+            let text = error.native_code.as_deref().unwrap_or_default();
+            return Ok(
+                if text.contains("1314") || text.eq_ignore_ascii_case("0x80070522") {
+                    "privilege_not_held"
+                } else if text.to_ascii_uppercase().contains("C0000142")
+                    || text.contains("3221225794")
+                {
+                    "non_interactive_desktop"
+                } else {
+                    "probe_failed"
+                },
+            );
         }
     };
     drop(child.take_stdin());
@@ -72,4 +101,13 @@ pub(super) fn child_probe(
         }
         _ => "probe_failed",
     })
+}
+
+fn paths(request: &Value, field: &str) -> Result<Vec<String>, &'static str> {
+    request["filesystem"][field]
+        .as_array()
+        .ok_or("probe_failed")?
+        .iter()
+        .map(|value| value.as_str().map(str::to_owned).ok_or("probe_failed"))
+        .collect()
 }

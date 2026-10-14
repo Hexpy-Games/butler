@@ -100,31 +100,7 @@ fn prepare(
         .parse()?;
     let mut request = plan.build(&invocation, 'Z', timeout)?;
     canonical_grants(&mut request)?;
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let id = format!(
-        "{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    );
-    let scratch = data.join("tmp/project-write").join(&id);
-    fs::create_dir(&scratch)?;
-    redirect_scratch(&mut request, &plan.scratch()?[0], &physical(&scratch)?);
-    let payload = PolicyFile {
-        data: dunce::canonicalize(&data)?,
-        project: dunce::canonicalize(root)?,
-        scratch,
-        git_settings: tools::git_settings(&env)?,
-        request,
-    };
-    let directory = data.join("sandbox/policies");
-    fs::create_dir_all(&directory)?;
-    let path = directory.join(format!("{id}.json"));
-    let file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&path)?;
-    serde_json::to_writer(&file, &payload)?;
-    file.sync_all()?;
+    let path = save_policy(&data, root, &env, &plan, request)?;
     Ok(Invocation {
         program: helper()?.to_string_lossy().into(),
         arguments: vec![
@@ -164,4 +140,39 @@ fn redirect_scratch(request: &mut Value, root: &WinPath, scratch: &WinPath) {
             }
         }
     }
+}
+
+fn save_policy(
+    data: &Path,
+    root: &Path,
+    env: &BTreeMap<String, String>,
+    plan: &Plan,
+    mut request: Value,
+) -> Result<PathBuf, Error> {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let id = format!(
+        "{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    );
+    let scratch = data.join("tmp/project-write").join(&id);
+    fs::create_dir(&scratch)?;
+    redirect_scratch(&mut request, &plan.scratch()?[0], &physical(&scratch)?);
+    let payload = PolicyFile {
+        data: dunce::canonicalize(&data)?,
+        project: dunce::canonicalize(root)?,
+        scratch,
+        git_settings: tools::git_settings(&env)?,
+        request,
+    };
+    let directory = data.join("sandbox/policies");
+    fs::create_dir_all(&directory)?;
+    let path = directory.join(format!("{id}.json"));
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)?;
+    serde_json::to_writer(&file, &payload)?;
+    file.sync_all()?;
+    Ok(path)
 }

@@ -72,41 +72,7 @@ fn collect(env: &BTreeMap<String, String>) -> Result<Toolchain, Error> {
             }
         }
     }
-    for dir in environment::get(env, "PATH")
-        .unwrap_or("")
-        .split(';')
-        .filter(|s| !s.is_empty())
-    {
-        let path = Path::new(dir);
-        if !path.is_dir() {
-            continue;
-        }
-        let lexical = WinPath::new(dir)?;
-        let canonical = physical(path)?;
-        if lexical.as_str().ends_with("\\windowsapps") || lexical.as_str().ends_with("\\.nodejs") {
-            input.shim_dirs.push(canonical.clone());
-        }
-        if path.join("node.exe").is_file() && input.real_node.is_none() {
-            let node = physical(&path.join("node.exe"))?
-                .parent()
-                .ok_or("node parent")?;
-            if input
-                .program_files
-                .iter()
-                .chain(&input.install_roots)
-                .any(|r| node.is_within(r))
-            {
-                input.real_node = Some(node);
-            }
-        }
-        if path.join("git.exe").is_file()
-            && canonical.as_str().ends_with("\\cmd")
-            && input.git_exe.is_none()
-        {
-            input.git_exe = Some(physical(&path.join("git.exe"))?);
-        }
-        input.path.push(canonical);
-    }
+    add_path(env, &mut input)?;
     if let Some(cargo) = &input.cargo_home {
         input.cargo_entries = fs::read_dir(cargo.as_str())?
             .map(|e| e.map(|e| e.file_name().to_string_lossy().into()))
@@ -121,7 +87,16 @@ fn collect(env: &BTreeMap<String, String>) -> Result<Toolchain, Error> {
         }
     }
     super::tools::msvc::discover(env, &mut input)?;
-    Ok(toolchain::discover(&input)?)
+    let mut tools = toolchain::discover(&input)?;
+    for (key, path) in [
+        ("CARGO_HOME", input.cargo_home),
+        ("RUSTUP_HOME", input.rustup_home),
+    ] {
+        if let Some(path) = path {
+            tools.environment.insert(key.into(), path.as_str().into());
+        }
+    }
+    Ok(tools)
 }
 fn existing(path: &WinPath) -> Option<WinPath> {
     physical(Path::new(path.as_str())).ok()
@@ -160,3 +135,42 @@ pub(super) fn git_settings(
     Ok(settings)
 }
 mod msvc;
+
+fn add_path(env: &BTreeMap<String, String>, input: &mut Discovery) -> Result<(), Error> {
+    for dir in environment::get(env, "PATH")
+        .unwrap_or("")
+        .split(';')
+        .filter(|s| !s.is_empty())
+    {
+        let path = Path::new(dir);
+        if !path.is_dir() {
+            continue;
+        }
+        let lexical = WinPath::new(dir)?;
+        let canonical = physical(path)?;
+        if lexical.as_str().ends_with("\\windowsapps") || lexical.as_str().ends_with("\\.nodejs") {
+            input.shim_dirs.push(canonical.clone());
+        }
+        if path.join("node.exe").is_file() && input.real_node.is_none() {
+            let node = physical(&path.join("node.exe"))?
+                .parent()
+                .ok_or("node parent")?;
+            if input
+                .program_files
+                .iter()
+                .chain(&input.install_roots)
+                .any(|r| node.is_within(r))
+            {
+                input.real_node = Some(node);
+            }
+        }
+        if path.join("git.exe").is_file()
+            && canonical.as_str().ends_with("\\cmd")
+            && input.git_exe.is_none()
+        {
+            input.git_exe = Some(physical(&path.join("git.exe"))?);
+        }
+        input.path.push(canonical);
+    }
+    Ok(())
+}

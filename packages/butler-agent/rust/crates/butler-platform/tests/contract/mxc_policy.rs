@@ -194,12 +194,15 @@ fn toolchains_replace_shims_and_keep_trusted_path_order() {
 }
 fn environment_redirects_profiles_without_importing_host_credentials() {
     let mut host = host();
+    host.insert("CODEX_AUTH_JSON".into(), "".into());
+    assert!(environment::credential_roots(&host).is_ok());
     host.insert("TOKEN".into(), "private".into());
     host.insert("NODE_OPTIONS".into(), "--preserve-symlinks".into());
     host.insert("RUSTUP_TOOLCHAIN".into(), "nightly".into());
     host.insert("CARGO_HOME".into(), r"C:\Users\person\.cargo".into());
     let tools = toolchain::discover(&Discovery {
-        real_node: Some(path(r"C:\node")),
+        real_node: Some(path(r"C:\installs\node")),
+        install_roots: vec![path(r"C:\installs")],
         ..Discovery::default()
     })
     .unwrap();

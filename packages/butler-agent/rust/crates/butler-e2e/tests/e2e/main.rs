@@ -80,7 +80,6 @@ mod legacy_import;
 mod lifecycle;
 mod lifecycle_intent;
 mod linux_sandbox;
-mod windows_project_sandbox;
 mod live;
 mod long_paths;
 mod mcp;
@@ -165,6 +164,7 @@ mod wall_clock_budget;
 mod wallpaper_writes;
 mod wallpapers;
 mod windows_commands;
+mod windows_project_sandbox;
 mod windows_startup_xml;
 mod workspace;
 
