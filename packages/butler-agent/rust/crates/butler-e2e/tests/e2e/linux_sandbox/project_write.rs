@@ -115,11 +115,20 @@ async fn auto_project_writes_sweep_and_retry_asks() -> Result<(), HarnessError> 
     let outputs = super::super::access_tiers::outputs(&s, &chat, &id, &script, prompt).await?;
     let text = outputs.join("\n");
     assert!(text.contains("project_write_contained"), "{text}");
-    assert!(
-        text.contains("top-level project entries") && text.contains("the user will be asked"),
-        "{text}"
-    );
-    assert!(!project.join("top-output").exists());
+    let mounted = command_sandbox::capabilities().project_write.is_enforced();
+    if mounted {
+        assert_eq!(
+            std::fs::read_to_string(project.join("top-output"))?,
+            "top\n"
+        );
+        assert!(!text.contains("the user will be asked"), "{text}");
+    } else {
+        assert!(
+            text.contains("top-level project entries") && text.contains("the user will be asked"),
+            "{text}"
+        );
+        assert!(!project.join("top-output").exists());
+    }
     let prompt = "Retry with requested access.";
     script.rounds.lock().unwrap().insert(prompt.into(), vec![stub::call(
         "retry", "run_command", &json!({"command":command, "summary":"Create output", "state_effect":"mutation", "sandbox":"none"}),
@@ -133,8 +142,15 @@ async fn auto_project_writes_sweep_and_retry_asks() -> Result<(), HarnessError> 
     );
     super::super::access_tiers::approve(&s, &chat, "deny").await?;
     super::super::access_tiers::delivered(&s, &chat, &id).await?;
-    assert!(!project.join("top-output").exists());
-    eprintln!("L1 Auto: src write=complete approvals=0 secrets=quarantined retry=asked");
+    if mounted {
+        assert_eq!(
+            std::fs::read_to_string(project.join("top-output"))?,
+            "top\n"
+        );
+    } else {
+        assert!(!project.join("top-output").exists());
+    }
+    eprintln!("Linux Auto: src write=complete approvals=0 secrets=quarantined retry=asked");
     s.finish().await?;
     server.abort();
     Ok(())

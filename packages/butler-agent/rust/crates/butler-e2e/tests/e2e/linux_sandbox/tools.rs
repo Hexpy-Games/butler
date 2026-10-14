@@ -1,0 +1,211 @@
+//! Offline toolchain behavior and host Git independence during a private mount.
+use super::*;
+use std::io::BufRead;
+
+fn invoke(command: &str, root: &Path, setup: &Setup) -> Invocation {
+    command_sandbox::project_write_shell(
+        command,
+        &HashMap::from([("HOME".into(), setup.sandbox.home.display().to_string())]),
+        root,
+        &[&setup.sandbox.data.join("tmp/project-write")],
+        &[&setup.sandbox.data],
+    )
+    .unwrap()
+}
+
+struct ChildGuard(std::process::Child);
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        if self.0.try_wait().ok().flatten().is_none() {
+            let _ = self.0.kill();
+        }
+        let _ = self.0.wait();
+    }
+}
+
+#[tokio::test]
+async fn host_git_is_independent_of_secret_masks() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        command_sandbox::linux_test_host(),
+        "Linux host Git independence"
+    );
+    let mut setup = Setup::new("LINUX-HOST-GIT")?;
+    let root = &setup.sandbox.workspace;
+    std::fs::create_dir_all(setup.sandbox.data.join("tmp/project-write"))?;
+    assert!(
+        Command::new("git")
+            .arg("init")
+            .arg("--quiet")
+            .arg(root)
+            .status()?
+            .success()
+    );
+    std::fs::write(root.join("visible"), "complete")?;
+    let before = std::fs::read("/proc/self/mountinfo")?;
+    let invocation = invoke("echo ready; exec sleep 1", root, &setup);
+    let mut child = ChildGuard(
+        Command::new(invocation.program)
+            .args(invocation.arguments)
+            .current_dir(root)
+            .env("HOME", &setup.sandbox.home)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?,
+    );
+    let mut ready = String::new();
+    std::io::BufReader::new(child.0.stdout.take().unwrap()).read_line(&mut ready)?;
+    assert_eq!(ready, "ready\n");
+    let git = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["status", "--porcelain"])
+        .output()?;
+    assert!(git.status.success(), "{git:?}");
+    assert_eq!(git.stdout, b"?? visible\n");
+    assert!(
+        Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(["config", "butler.fixture", "complete"])
+            .status()?
+            .success()
+    );
+    assert!(child.0.wait()?.success());
+    assert_eq!(std::fs::read("/proc/self/mountinfo")?, before);
+    assert!(std::fs::read_to_string(root.join(".git/config"))?.contains("complete"));
+    setup.sandbox.mark_success();
+    Ok(())
+}
+
+#[tokio::test]
+async fn offline_generated_toolchains() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        command_sandbox::linux_test_host(),
+        "Linux offline toolchains"
+    );
+    let mut setup = Setup::new("LINUX-OFFLINE-TOOLCHAINS")?;
+    std::fs::create_dir_all(setup.sandbox.data.join("tmp/project-write"))?;
+    let mounted = command_sandbox::capabilities().project_write.is_enforced();
+    let mut failures = Vec::new();
+    for declared in [false, true] {
+        for tool in ["npm", "cargo", "python"] {
+            let root = setup.sandbox.workspace.join(format!("{tool}-{declared}"));
+            std::fs::create_dir_all(&root)?;
+            if declared {
+                std::fs::write(root.join(".gitignore"), "node_modules\ntarget\n.venv\n")?;
+            }
+            let command = fixture(tool, &root, &setup)?;
+            let preparation = command_sandbox::prepare_project_write(&root, &setup.sandbox.data)?;
+            let inventory = command_sandbox::discover_project_secrets(&root)?;
+            let output = run(invoke(&command, &root, &setup), &root, &setup.sandbox.home);
+            eprintln!(
+                "toolchain {tool} declared={declared} exit={} stderr={}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let moved = command_sandbox::sweep_new_secrets(&root, &inventory, &setup.sandbox.data)?;
+            eprintln!("toolchain {tool} quarantined={}", moved.len());
+            for path in moved {
+                assert!(!path.exists(), "new secret remained in project");
+            }
+            drop(preparation);
+            // A refused command must still leave its source inputs intact.
+            if tool == "cargo" {
+                assert_eq!(
+                    std::fs::read_to_string(root.join("src/main.rs"))?,
+                    "fn main() {}\n"
+                );
+            }
+            if !declared && !command_sandbox::capabilities().project_write.is_enforced() {
+                assert!(!output.status.success(), "undeclared {tool}: {output:?}");
+            }
+            if (mounted || declared) && !output.status.success() {
+                failures.push(format!("{tool} declared={declared}: {}", output.status));
+            }
+            if output.status.success() {
+                let generated = match tool {
+                    "npm" => "node_modules/local",
+                    "cargo" => "target/debug/minimal",
+                    _ => ".venv/bin/python",
+                };
+                assert!(
+                    root.join(generated).exists(),
+                    "missing complete {tool} output"
+                );
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "required toolchains failed: {failures:?}"
+    );
+    setup.sandbox.mark_success();
+    Ok(())
+}
+
+fn fixture(tool: &str, root: &Path, setup: &Setup) -> Result<String, HarnessError> {
+    match tool {
+        "npm" => {
+            std::fs::create_dir(root.join("local"))?;
+            std::fs::write(
+                root.join("local/package.json"),
+                r#"{"name":"local","version":"1.0.0"}"#,
+            )?;
+            std::fs::write(
+                root.join("package.json"),
+                r#"{"name":"minimal","version":"1.0.0","dependencies":{"local":"file:./local"}}"#,
+            )?;
+            Ok(format!(
+                "npm install --offline --package-lock=false --cache '{}'",
+                setup
+                    .sandbox
+                    .data
+                    .join("tmp/project-write/npm-cache")
+                    .display()
+            ))
+        }
+        "cargo" => {
+            std::fs::create_dir(root.join("src"))?;
+            std::fs::write(root.join("src/main.rs"), "fn main() {}\n")?;
+            std::fs::write(
+                root.join("Cargo.toml"),
+                "[package]\nname=\"minimal\"\nversion=\"0.1.0\"\nedition=\"2024\"\n",
+            )?;
+            // An existing lock file separates generated-directory support from
+            // the deliberately withheld Tier L top-level creation right.
+            std::fs::write(
+                root.join("Cargo.lock"),
+                "version = 4\n[[package]]\nname = \"minimal\"\nversion = \"0.1.0\"\n",
+            )?;
+            Ok("RUSTC_WRAPPER= CARGO_TARGET_DIR=target cargo build --offline -j 1".into())
+        }
+        _ => Ok("python3 -m venv .venv".into()),
+    }
+}
+
+#[tokio::test]
+async fn fresh_git_init_is_quarantined_even_when_metadata_is_denied() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        command_sandbox::linux_test_host(),
+        "Linux fresh Git containment"
+    );
+    let mut setup = Setup::new("LINUX-FRESH-GIT")?;
+    let root = &setup.sandbox.workspace;
+    std::fs::create_dir_all(setup.sandbox.data.join("tmp/project-write"))?;
+    let inventory = command_sandbox::discover_project_secrets(root)?;
+    let output = run(
+        invoke("git init --quiet", root, &setup),
+        root,
+        &setup.sandbox.home,
+    );
+    let mounted = command_sandbox::capabilities().project_write.is_enforced();
+    let moved = command_sandbox::sweep_new_secrets(root, &inventory, &setup.sandbox.data)?;
+    assert_eq!(moved.len(), usize::from(mounted), "{output:?}");
+    assert!(!root.join(".git").exists());
+    setup.sandbox.mark_success();
+    Ok(())
+}

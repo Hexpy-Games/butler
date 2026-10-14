@@ -1,6 +1,6 @@
 //! Landlock cannot subtract paths. Grant siblings along denied ancestor chains,
 //! traversing only those chains, never the workspace tree.
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
@@ -15,8 +15,15 @@ pub(super) fn apply(
     denied: &[PathBuf],
     allowed: &[PathBuf],
     credentials: &[PathBuf],
+    masked: &[PathBuf],
 ) -> Result<(), Error> {
-    let private = aliases(denied)?;
+    let masked: HashSet<_> = masked.iter().collect();
+    let denied: Vec<_> = denied
+        .iter()
+        .filter(|path| !masked.contains(path))
+        .cloned()
+        .collect();
+    let private = aliases(&denied)?;
     let credentials = aliases(credentials)?;
     let projects = allowed
         .iter()
@@ -31,6 +38,7 @@ pub(super) fn apply(
     for (_, secrets) in &projects {
         blocked.extend(secrets.iter().cloned());
     }
+    let blocked: BTreeSet<_> = blocked.into_iter().collect();
     // READ_DIR grants recurse too: permit directory names, while withholding
     // READ_FILE/EXECUTE prevents access to denied contents. Landlock cannot
     // hide directory entries without also preventing ordinary parent listings.
@@ -54,17 +62,19 @@ pub(super) fn apply(
             .collect();
         excluded.extend(credentials.iter().cloned());
         excluded.extend(secrets.iter().cloned());
+        let excluded = excluded.into_iter().collect();
         grant_complement(rules, real, &excluded, &deny_execute, read)?;
     }
     grant(rules, Path::new("/dev/null"), AccessFs::WriteFile.into())
 }
 
-fn aliases(paths: &[PathBuf]) -> Result<Vec<PathBuf>, Error> {
+pub(super) fn aliases(paths: &[PathBuf]) -> Result<Vec<PathBuf>, Error> {
     let mut result = paths.to_vec();
+    let mut seen: HashSet<_> = paths.iter().cloned().collect();
     let mut resolved = HashMap::new();
     for path in paths {
         let real = canonical_or_missing(path, &mut resolved)?;
-        if !result.contains(&real) {
+        if seen.insert(real.clone()) {
             result.push(real);
         }
     }
@@ -106,7 +116,7 @@ fn resolved_path(path: &Path) -> std::io::Result<PathBuf> {
     std::fs::read_link(format!("/proc/self/fd/{}", fd.as_raw_fd())).or_else(|_| path.canonicalize())
 }
 
-fn project_secrets(root: &Path) -> Result<Vec<PathBuf>, Error> {
+pub(super) fn project_secrets(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let mut secrets = Vec::new();
     for entry in std::fs::read_dir(root)? {
         let entry = entry?;
@@ -124,7 +134,7 @@ fn project_secrets(root: &Path) -> Result<Vec<PathBuf>, Error> {
 fn grant_complement(
     rules: &mut RulesetCreated,
     path: &Path,
-    denied: &[PathBuf],
+    denied: &BTreeSet<PathBuf>,
     deny_execute: &[PathBuf],
     rights: BitFlags<AccessFs>,
 ) -> Result<(), Error> {
@@ -132,7 +142,7 @@ fn grant_complement(
     // accesses through aliases; adding symlink rules would duplicate grants
     // and could accidentally re-grant a denied target.
     let real = path;
-    if denied.iter().any(|root| real.starts_with(root)) {
+    if real.ancestors().any(|ancestor| denied.contains(ancestor)) {
         return Ok(());
     }
     let rights = if deny_execute.iter().any(|root| real.starts_with(root)) {
@@ -144,7 +154,11 @@ fn grant_complement(
         return Ok(());
     }
     let mut child_rights = rights;
-    if !denied.iter().any(|root| root.starts_with(real)) {
+    if !denied
+        .range(real.to_path_buf()..)
+        .next()
+        .is_some_and(|root| root.starts_with(real))
+    {
         if !rights.contains(AccessFs::Execute)
             || !deny_execute.iter().any(|root| root.starts_with(real))
         {
@@ -196,9 +210,14 @@ fn grant_child(
 
 // Select exceptional branches once per directory. Ordinary siblings cannot
 // contain a denied descendant; aliases receive their physical target's rights.
-fn split_children(parent: &Path, denied: &[PathBuf], execute: &[PathBuf]) -> HashSet<OsString> {
+fn split_children(
+    parent: &Path,
+    denied: &BTreeSet<PathBuf>,
+    execute: &[PathBuf],
+) -> HashSet<OsString> {
     denied
-        .iter()
+        .range(parent.to_path_buf()..)
+        .take_while(|root| root.starts_with(parent))
         .chain(execute)
         .filter_map(|root| {
             root.strip_prefix(parent)
@@ -243,32 +262,37 @@ fn file_rights(rights: BitFlags<AccessFs>, directory: bool) -> BitFlags<AccessFs
 
 pub(super) fn project_write(
     rules: &mut RulesetCreated,
-    root: &Path,
-    writable: &[PathBuf],
-    denied: &[PathBuf],
-    credentials: &[PathBuf],
-    protected: &[PathBuf],
+    policy: &super::Policy,
+    mounted: bool,
 ) -> Result<(), Error> {
-    let mut blocked = aliases(denied)?;
-    blocked.extend(aliases(credentials)?);
-    blocked.extend(project_secrets(root)?);
-    let rights = AccessFs::from_all(ABI::V3);
+    let root = policy.project.as_deref().ok_or("missing project")?;
+    let rights = AccessFs::from_all(ABI::V3) & !(AccessFs::MakeChar | AccessFs::MakeBlock);
     let deny_execute = execution_denials()?;
-    // Never grant the project root: create/remove/rename rights on it would
+    // Tier L never grants the project root: create/remove/rename rights on it would
     // allow changing top-level protected names. Split ancestors of secrets.
-    for entry in std::fs::read_dir(root)? {
-        let entry = entry?;
-        let kind = entry.file_type()?;
-        if kind.is_dir() || kind.is_file() {
-            grant_complement(rules, &entry.path(), &blocked, &deny_execute, rights)?;
+    if mounted {
+        grant_complement(rules, root, &BTreeSet::new(), &deny_execute, rights)?;
+    } else {
+        let mut blocked = aliases(&policy.write_denied)?;
+        blocked.extend(aliases(&policy.credentials)?);
+        blocked.extend(project_secrets(root)?);
+        let blocked = blocked.into_iter().collect();
+        for entry in std::fs::read_dir(root)? {
+            let entry = entry?;
+            let kind = entry.file_type()?;
+            if kind.is_dir() || kind.is_file() {
+                grant_complement(rules, &entry.path(), &blocked, &deny_execute, rights)?;
+            }
         }
     }
     // Scratch is an explicit exception to private data-root exclusion, but
     // never to credential roots or existing project secret targets.
     // REFER is withheld everywhere else.
-    let mut scratch_denied = aliases(credentials)?;
-    let secrets: Vec<_> = protected
+    let mut scratch_denied = aliases(&policy.credentials)?;
+    let secrets: Vec<_> = policy
+        .denied
         .iter()
+        .filter(|path| !mounted || !path.starts_with(root))
         .filter(|path| {
             path.file_name()
                 .is_some_and(|name| super::super::secret_name(&name.to_string_lossy()))
@@ -276,7 +300,8 @@ pub(super) fn project_write(
         .cloned()
         .collect();
     scratch_denied.extend(aliases(&secrets)?);
-    for path in writable {
+    let scratch_denied = scratch_denied.into_iter().collect();
+    for path in &policy.writable {
         grant_complement(rules, path, &scratch_denied, &deny_execute, rights)?;
     }
     Ok(())

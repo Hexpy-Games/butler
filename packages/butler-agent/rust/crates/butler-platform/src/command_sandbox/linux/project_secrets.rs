@@ -1,4 +1,5 @@
 //! Metadata-only project discovery. Never follow symlinks or enter secret dirs.
+mod links;
 mod quarantine;
 mod tree;
 
@@ -36,6 +37,7 @@ pub(in crate::command_sandbox) fn sweep_new_secrets(
         .filter(|path| !existing.contains(path))
         .collect();
     if secrets.is_empty() {
+        super::generated::cleanup(root, data, false)?;
         return Ok(secrets);
     }
     let quarantine = data.join("sandbox-quarantine");
@@ -59,5 +61,12 @@ pub(in crate::command_sandbox) fn sweep_new_secrets(
             failure.get_or_insert(error);
         }
     }
+    if let Err(error) = super::generated::cleanup(root, data, false) {
+        failure.get_or_insert(error);
+    }
     failure.map_or(Ok(secrets), Err)
+}
+
+pub(super) fn validate_links(policy: &super::Policy) -> Result<(), super::Error> {
+    links::validate(policy)
 }

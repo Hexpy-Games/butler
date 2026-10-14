@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 use rustix::fs::{AtFlags, CWD, Dir, FileType, Mode, OFlags, openat, statat};
 
-const MAX_ENTRIES: usize = 200_000;
-const MAX_DEPTH: usize = 128;
+pub(super) const MAX_ENTRIES: usize = 200_000;
+pub(super) const MAX_DEPTH: usize = 128;
 
 /// Opens the walk root itself; aliases in the root path were admitted already.
 pub(super) fn open_root(root: &Path) -> io::Result<OwnedFd> {

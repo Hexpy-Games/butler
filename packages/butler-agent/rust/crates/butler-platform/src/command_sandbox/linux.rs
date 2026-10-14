@@ -1,5 +1,7 @@
 //! Safe Landlock trampoline; never restrict the multithreaded agent itself.
 mod complement;
+mod generated;
+mod mountns;
 mod process;
 mod project_secrets;
 mod seccomp;
@@ -30,6 +32,12 @@ struct Policy {
     project: Option<PathBuf>,
     writable: Vec<PathBuf>,
     write_denied: Vec<PathBuf>,
+    #[serde(default)]
+    mountns: bool,
+    #[serde(skip)]
+    secrets: Vec<PathBuf>,
+    #[serde(skip)]
+    mask_scopes: Vec<PathBuf>,
 }
 
 fn helper() -> std::io::Result<PathBuf> {
@@ -113,7 +121,11 @@ pub(super) fn probe() -> SandboxCapabilities {
         ),
         write_protection: Level::Unavailable("Linux protected roots are deferred"),
         project_write: if seccomp && scopes_available() && ioctl_available() {
-            Level::Partial("new secret names below top level are swept after the run")
+            if mountns::available() {
+                Level::Enforced
+            } else {
+                Level::Partial(mountns::reason())
+            }
         } else {
             Level::Unavailable("project writes require Landlock ABI v6 and network denial")
         },
@@ -201,6 +213,9 @@ pub(super) fn read_only_contained(
         project: None,
         writable: Vec::new(),
         write_denied: Vec::new(),
+        mountns: false,
+        secrets: Vec::new(),
+        mask_scopes: Vec::new(),
     };
     let mut arguments = vec![
         "--policy".into(),
@@ -236,6 +251,30 @@ pub(super) fn project_write(
         return Err(SandboxError::ProjectWriteUnavailable);
     }
     let real = root.canonicalize()?;
+    // The helper inventories project secrets immediately before containment.
+    // Do not repeat a potentially huge inventory in the exec argument block.
+    let denied: Vec<_> = denied
+        .iter()
+        .copied()
+        .filter(|path| {
+            let relative = path
+                .strip_prefix(root)
+                .or_else(|_| path.strip_prefix(&real));
+            let secret = relative.is_ok_and(|relative| {
+                relative
+                    .components()
+                    .any(|component| super::secret_name(&component.as_os_str().to_string_lossy()))
+            });
+            let inventoried = path.canonicalize().is_ok_and(|path| {
+                path.strip_prefix(&real).is_ok_and(|relative| {
+                    relative.components().any(|component| {
+                        super::secret_name(&component.as_os_str().to_string_lossy())
+                    })
+                })
+            });
+            !secret || !inventoried
+        })
+        .collect();
     let policy = Policy {
         // Outside reads match ReadOnly. Denials of existing project secrets
         // retain both their lexical path and resolved aliases in complement.
@@ -249,6 +288,9 @@ pub(super) fn project_write(
         allowed: vec![real.clone()],
         tcp: tcp_available(),
         project: Some(real),
+        mountns: mountns::available(),
+        secrets: Vec::new(),
+        mask_scopes: Vec::new(),
         writable: writable
             .iter()
             .map(|path| path.canonicalize())
@@ -271,43 +313,104 @@ pub(super) fn project_write(
 }
 
 pub(super) fn trampoline() -> Result<(), Error> {
+    #[cfg(feature = "test-support")]
+    let started = std::time::Instant::now();
     let mut arguments = std::env::args().skip(1);
     match arguments.next().as_deref() {
         Some("--probe-seccomp") => return seccomp::apply(),
+        Some("--probe-mountns-child") => return mountns::probe_child(),
+        Some("--probe-mountns") => {
+            if mountns::available() {
+                println!("M");
+            } else {
+                println!("L {}", mountns::reason());
+            }
+            return Ok(());
+        }
         Some("--policy") => {}
         _ => return Err("expected --policy".into()),
     }
-    let policy: Policy = serde_json::from_str(&arguments.next().ok_or("missing policy")?)?;
+    let mut policy: Policy = serde_json::from_str(&arguments.next().ok_or("missing policy")?)?;
     if arguments.next().as_deref() != Some("--") {
         return Err("missing command separator".into());
     }
     let program = arguments.next().ok_or("missing program")?;
+    if let Some(root) = &policy.project {
+        let secrets = discover_project_secrets(root)?;
+        policy.denied.extend(secrets.iter().cloned());
+        policy.write_denied.extend(secrets.iter().cloned());
+        policy.secrets = secrets;
+        policy.denied = complement::aliases(&policy.denied)?;
+        policy.write_denied = complement::aliases(&policy.write_denied)?;
+        policy.credentials = complement::aliases(&policy.credentials)?;
+    } else {
+        for root in &policy.allowed {
+            policy.denied.extend(complement::project_secrets(root)?);
+        }
+        policy.denied = complement::aliases(&policy.denied)?;
+        policy.credentials = complement::aliases(&policy.credentials)?;
+    }
+    mountns::expand_views(&mut policy)?;
+    #[cfg(feature = "test-support")]
+    let mounted = install_policy(&policy)?;
+    #[cfg(not(feature = "test-support"))]
+    install_policy(&policy)?;
+    #[cfg(feature = "test-support")]
+    if std::env::var_os("BUTLER_TEST_SANDBOX_TIMINGS").is_some() {
+        eprintln!(
+            "butler_sandbox_setup_us={} tier={}",
+            started.elapsed().as_micros(),
+            if mounted { "M" } else { "L" }
+        );
+    }
+    // Dropped already by tool_environment; also remove it for direct invocations.
+    let mut command = Command::new(program);
+    if let Some(root) = &policy.project {
+        command.env(
+            "GIT_CEILING_DIRECTORIES",
+            root.parent().ok_or("project has no parent")?,
+        );
+    }
+    let error = command.args(arguments).env_remove("WSL_INTEROP").exec();
+    Err(error.into())
+}
+
+pub(super) fn prepare_project_write(
+    root: &Path,
+    data: &Path,
+) -> std::io::Result<super::ProjectWritePreparation> {
+    generated::prepare(root, data)
+}
+
+fn install_policy(policy: &Policy) -> Result<bool, Error> {
+    let cwd = std::env::current_dir()?;
+    if policy.project.is_some() {
+        project_secrets::validate_links(policy)?;
+    }
+    let mounted = policy.mountns && policy.project.is_some() && mountns::mask(policy).is_ok();
+    if mounted {
+        nix::unistd::chdir(&cwd)?;
+    }
     let mut rules = ruleset(policy.tcp)?;
     complement::apply(
         &mut rules,
         &policy.denied,
         &policy.allowed,
         &policy.credentials,
+        if mounted { &policy.secrets } else { &[] },
     )?;
-    if let Some(project) = &policy.project {
-        complement::project_write(
-            &mut rules,
-            project,
-            &policy.writable,
-            &policy.write_denied,
-            &policy.credentials,
-            &policy.denied,
-        )?;
+    if policy.project.is_some() {
+        complement::project_write(&mut rules, policy, mounted)?;
     }
     let status = rules.restrict_self()?;
     if status.ruleset != RulesetStatus::FullyEnforced || !status.no_new_privs {
         return Err("Landlock was not fully enforced".into());
     }
     seccomp::apply()?;
-    // Dropped already by tool_environment; also remove it for direct invocations.
-    let error = Command::new(program)
-        .args(arguments)
-        .env_remove("WSL_INTEROP")
-        .exec();
-    Err(error.into())
+    Ok(mounted)
+}
+
+#[cfg(feature = "test-support")]
+pub(super) fn project_mount_aliases(root: &Path) -> std::io::Result<Vec<PathBuf>> {
+    mountns::project_aliases(root).map_err(|error| std::io::Error::other(error.to_string()))
 }

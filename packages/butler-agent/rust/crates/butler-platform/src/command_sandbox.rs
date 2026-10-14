@@ -237,3 +237,29 @@ pub fn is_registry_path(path: &str) -> bool {
 pub fn normalize_path_token(path: &str) -> String {
     shell::normalize_path_token(path)
 }
+
+/// Holds a project-write setup/cleanup lease across the command lifetime.
+pub struct ProjectWritePreparation {
+    #[cfg(target_os = "linux")]
+    _lease: nix::fcntl::Flock<std::fs::File>,
+}
+
+/// Prepares declared generated directories where the project root is withheld.
+pub fn prepare_project_write(root: &Path, data: &Path) -> std::io::Result<ProjectWritePreparation> {
+    #[cfg(target_os = "linux")]
+    return linux::prepare_project_write(root, data);
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (root, data);
+        Ok(ProjectWritePreparation {})
+    }
+}
+
+/// Namespace aliases for kernel-boundary E2E checks.
+#[cfg(feature = "test-support")]
+pub fn project_mount_aliases(root: &Path) -> std::io::Result<Vec<std::path::PathBuf>> {
+    #[cfg(target_os = "linux")]
+    return linux::project_mount_aliases(root);
+    #[cfg(not(target_os = "linux"))]
+    Ok(vec![root.to_path_buf()])
+}
