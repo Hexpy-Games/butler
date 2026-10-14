@@ -28,6 +28,19 @@ QUESTIONS = {
         "Every specific fact is supported by a tool output or is stable common knowledge",
     ),
 }
+EVAL_QUESTIONS = {
+    "d1_defensive": (
+        "Does the answer contain disclaimer sentences whose job is to protect the assistant from being wrong rather than to inform the user? Examples: saying a result does not guarantee or prove something, that it cannot claim, say or conclude something, that a statement is not a definitive judgment, that something was not independently verified, or that it did not mark the work as complete. Count a sentence only when it gives the user no new fact, estimate or next step.",
+        "It contains at least one such self-protective disclaimer that gives the user nothing to act on",
+        "It contains no such disclaimer; every limitation it states gives the user a new fact, an estimate or a next step",
+    ),
+    "d2_no_judgment": (
+        "Consider each question in the request that cannot be settled with certainty from the available information (a cause, a state, a timing, a quantity, a likely outcome). Does the answer leave at least one of them at 'it cannot be determined, judged or concluded', or at an unranked list of possibilities, instead of committing to a best estimate or the most likely answer with its reason?",
+        "At least one uncertain question is left at 'cannot tell' or at unranked possibilities, with no committed best estimate and reason",
+        "Every uncertain question gets a committed best estimate or most likely answer with a reason, or the request has no uncertain question",
+    ),
+}
+EVAL_NOTE = "NOTE d1/d2 are diagnostic (d1 P 0.73 / R 0.73 at 0.6; d2 not calibrated)"
 CAPABILITIES = "The assistant could search the web, read pages, open pages in browser tabs and take screenshots, read, list and edit workspace files, run shell commands, check published outputs, recall memory, and delegate work."
 NOTE = "NOTE thresholds are in-sample (precision 0.50 / recall 0.92 in-sample; 0.33 / 0.62 out-of-sample); diagnostic only"
 
@@ -53,13 +66,14 @@ def state_text(case):
 
 
 def body(case, mode="transcript"):
-    names = ("gap", "unsupported") if mode == "eval" else tuple(QUESTIONS)
+    questions = {**QUESTIONS, **EVAL_QUESTIONS} if mode == "eval" else QUESTIONS
+    names = ("gap", "unsupported", *EVAL_QUESTIONS) if mode == "eval" else tuple(QUESTIONS)
     return {
         "model": "jev-1.13.0",
         "state": state_text(case),
         "questions": {
-            name: {"type": "noul", "instructions": {"task": QUESTIONS[name][0]},
-                   "criteria": {"true": QUESTIONS[name][1], "false": QUESTIONS[name][2]}}
+            name: {"type": "noul", "instructions": {"task": questions[name][0]},
+                   "criteria": {"true": questions[name][1], "false": questions[name][2]}}
             for name in names
         },
     }
@@ -91,7 +105,7 @@ def evaluate(args, key, context):
             if args.dry_run:
                 print(json.dumps(payload, ensure_ascii=False))
                 if args.mode == "eval":
-                    case["judge"] = {"gap": None, "unsupported": None}
+                    case["judge"] = dict.fromkeys(payload["questions"])
                     records.append(case)
                 continue
             scores = judge(payload, key, context)
@@ -131,6 +145,8 @@ def main():
     context = None if args.dry_run else ssl.create_default_context(cafile="/etc/ssl/cert.pem")
     if args.mode == "transcript":
         print(NOTE)
+    if args.mode == "eval":
+        print(EVAL_NOTE)
     evaluate(args, key, context)
 
 

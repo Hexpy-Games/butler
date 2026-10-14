@@ -57,7 +57,9 @@ pub(super) fn tools(db: &Connection) -> Result<Vec<Value>, HarnessError> {
         let ok = p["operationStatus"] == "completed" && result["ok"] != false
             && !matches!(result["status"].as_str(),Some("refused"|"failed"))
             && result["exit_code"].as_i64().is_none_or(|code|code==0);
-        Some(json!({"name":p["toolName"],"ok":ok,"output_id":result["output_id"],
+        let invocation = args.get(&key).and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+        let catalog_id = invocation.as_ref().and_then(|v| v["id"].as_str());
+        Some(json!({"name":p["toolName"],"catalog_id":catalog_id,"ok":ok,"output_id":result["output_id"],
             "turn_id":key.0,"call_id":key.1,"result_id":p["resultId"],
             "args":args.get(&key).cloned().unwrap_or_default().chars().take(300).collect::<String>(),
             "output":output.chars().take(2000).collect::<String>()}))

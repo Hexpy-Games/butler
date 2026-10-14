@@ -25,6 +25,9 @@ use butler_e2e::e2e::{
     HarnessError, live,
     scenario::{Access, Setup},
 };
+pub(crate) const EVAL_ACCESS: Access = Access::AskExceptReads;
+pub(crate) const EVAL_ACCESS_MODE: &str = "ask_except_reads";
+
 use cases::{CASES, Case};
 use serde_json::{Value, json};
 use std::{
@@ -51,7 +54,7 @@ async fn live_12_hedge_v2() -> Result<(), HarnessError> {
             std::env::var("BUTLER_E2E_BROWSER_CACHE").map_err(|e| HarnessError(e.to_string()))?;
         let setup = Setup::new(&format!("HEDGE-V2-{}", case.id))?
             .live(provider.clone())
-            .access(Access::AskAlways)
+            .access(EVAL_ACCESS)
             .env("BUTLER_E2E_APP_NOW", "2026-10-14T00:00:00Z")
             .env("BUTLER_WEB_READER_BACKEND", "disabled")
             .env("BUTLER_BRAVE_SEARCH_API_KEY", "offline-fixture-key")
@@ -86,7 +89,6 @@ async fn live_12_hedge_v2() -> Result<(), HarnessError> {
                 } else {
                     (Arc::new(Mutex::new(host::Log::default())), None)
                 };
-                live::spend_turn()?;
                 let result = collect::run(&s, case, log).await;
                 if let Some(served) = served {
                     served.abort();
@@ -122,7 +124,7 @@ pub(crate) async fn configure(
 fn not_run(case: &Case, reason: &str) -> Value {
     json!({"side":std::env::var("BUTLER_E2E_HEDGE_SIDE").unwrap_or_else(|_|"branch".into()),
         "round":std::env::var("BUTLER_E2E_HEDGE_ROUND").ok().and_then(|v|v.parse::<u32>().ok()).unwrap_or(1),
-        "case":case.id,"lang":case.lang,"kind":case.kind,"group":case.group,"route":case.route,
+        "access_mode":EVAL_ACCESS_MODE,"case":case.id,"lang":case.lang,"kind":case.kind,"group":case.group,"route":case.route,
         "delegated":false,"prompt":case.prompt,"final_text":"","steward_reports":[],"plan_checks":[],
         "tools":[],"tool_calls":{"total":0,"by_name":{}},"approvals":[],"external_urls":[],
         "over_action":false,"destructive":false,"waiting_for_user":false,"unconfirmed_tags":0,

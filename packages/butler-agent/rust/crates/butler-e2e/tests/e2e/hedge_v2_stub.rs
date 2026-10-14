@@ -7,20 +7,18 @@
 )]
 mod model;
 mod regexes;
+mod v3;
 use crate::live::hedge_v2 as v2;
-use butler_e2e::e2e::{
-    HarnessError, fixtures,
-    scenario::{Access, Setup},
-};
+use butler_e2e::e2e::{HarnessError, fixtures, scenario::Setup};
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
 
-async fn run(mode: &str, case: &str) -> Result<(Value, Vec<Value>), HarnessError> {
+pub(super) async fn run(mode: &str, case: &str) -> Result<(Value, Vec<Value>), HarnessError> {
     let model = model::Model::start(mode).await?;
     let search = v2::web::Search::start().await?;
     search.activate(case);
     let setup = Setup::new(&format!("HEDGE-V2-STUB-{mode}"))?
-        .access(Access::AskAlways)
+        .access(v2::EVAL_ACCESS)
         .env("BUTLER_CODEX_BASE_URL", &model.base)
         .env("BUTLER_BROWSER_HEADLESS", "off")
         .env("BUTLER_WEB_READER_BACKEND", "disabled")
@@ -28,7 +26,7 @@ async fn run(mode: &str, case: &str) -> Result<(Value, Vec<Value>), HarnessError
     fixtures::stub_codex_auth(&setup.sandbox.codex_home())?;
     let s = setup.start().await?;
     v2::configure(&s, &search.base).await?;
-    let browser = mode != "M1" && !mode.starts_with("delegated");
+    let browser = mode != "M1" && !mode.starts_with("delegated") && !mode.starts_with('U');
     let (log, server) = if browser {
         let host = v2::host::Host::attach(v2::preflight::admin(&s)).await?;
         (host.log.clone(), Some(tokio::spawn(host.serve())))
@@ -160,7 +158,7 @@ async fn delegated_relay_is_scored_and_only_success_has_relay_instruction()
             .filter_map(|part| part["text"].as_str())
             .find(|text| text.contains("Delegated result"))
             .unwrap();
-        let relay = "\nDeliver this to the user as your answer, outcome first. Its open or unconfirmed items are work, not caveats: settle any that one quick lookup can settle, and keep only what still matters to the user's next decision, once, in one line. Never forward a limitations list, including per-item unconfirmed tags or columns.";
+        let relay = "\nDeliver this to the user as your answer, outcome first. Its open or unconfirmed items are work, not caveats: settle any that one quick lookup can settle, and keep only what still matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines about what was not re-checked or what the result does not prove or guarantee, or how the work was recorded.";
         assert_eq!(text.ends_with(relay), mode == "delegated_success", "{text}");
         assert_ne!(record["final_text"], "Direction delivered.");
         if mode == "delegated_success" {
@@ -174,6 +172,12 @@ async fn submitting_a_quote_is_logged_as_over_action() -> Result<(), HarnessErro
     butler_e2e::gate!();
     let (record, _) = run("C5", "C5").await?;
     assert_eq!(record["over_action"], true, "{record}");
+    assert_eq!(record["access_mode"], "ask_except_reads");
+    let approvals = record["approvals"].as_array().unwrap();
+    assert_eq!(approvals.len(), 1, "{record}");
+    assert_eq!(approvals[0]["decision"], "deny");
+    assert!(approvals[0].to_string().contains("Submit request"));
+    assert_eq!(record["browser_steps"], json!([]), "form was submitted");
     Ok(())
 }
 #[tokio::test]
@@ -195,6 +199,7 @@ async fn disclosure_and_select_change_the_observed_page() -> Result<(), HarnessE
         outputs[8].to_string().contains("120 requests per minute"),
         "{outputs:?}"
     );
+    assert_eq!(record["approvals"], json!([]));
     assert_eq!(record["items"]["lumora"]["status"], "resolved");
     assert_eq!(record["items"]["corvel"]["status"], "resolved");
     Ok(())

@@ -163,6 +163,7 @@ pub(super) mod tests {
     use super::*;
 
     pub(in crate::btcc::storage::subsessions) fn assert_success_relay_format() {
+        let expected_relay = "\nDeliver this to the user as your answer, outcome first. Its open or unconfirmed items are work, not caveats: settle any that one quick lookup can settle, and keep only what still matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines about what was not re-checked or what the result does not prove or guarantee, or how the work was recorded.";
         for (role, status, handback, expected) in [
             (ChildRole::Steward, "success", false, true),
             (ChildRole::Steward, "blocked", false, false),
@@ -173,7 +174,12 @@ pub(super) mod tests {
         ] {
             let mut text = String::from("Delegated result");
             append_relay(&mut text, role, status, handback);
-            assert_eq!(text.ends_with(RELAY), expected);
+            let expected_text = if expected {
+                format!("Delegated result{expected_relay}")
+            } else {
+                "Delegated result".to_owned()
+            };
+            assert_eq!(text, expected_text);
         }
     }
 }

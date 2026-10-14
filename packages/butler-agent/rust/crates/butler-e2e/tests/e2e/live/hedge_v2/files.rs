@@ -58,10 +58,15 @@ pub(crate) fn reset(root: &Path, case: &str) -> Result<BTreeMap<String, Vec<u8>>
             }
         }
     }
-    if matches!(case, "M1" | "M1D") {
+    if matches!(case, "M1" | "M1D" | "R1") {
+        let script = if case == "R1" {
+            "tools/eval.sh"
+        } else {
+            "tools/summarize.sh"
+        };
         std::fs::set_permissions(
-            root.join("tools/summarize.sh"),
-            std::fs::metadata(source.join("tools/summarize.sh"))?.permissions(),
+            root.join(script),
+            std::fs::metadata(source.join(script))?.permissions(),
         )?;
     }
     tree(root)

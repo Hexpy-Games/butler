@@ -43,6 +43,25 @@ def quantile(values, p):
     return values[lo] + (values[min(lo + 1, len(values) - 1)] - values[lo]) * (at - lo)
 
 
+def diagnostic_stats(rows):
+    answers = [r for r in rows if delivered(r) and r["kind"] != "control"]
+    counts = [len(r.get("defensive_hits", [])) for r in answers]
+    judges = {name: [r["judge"][name] for r in rows if r.get("judge", {}).get(name) is not None]
+              for name in ("d1_defensive", "d2_no_judgment")}
+    u1 = [r for r in rows if r["case"] == "U1"]
+    return {
+        "defensive_share": sum(n > 0 for n in counts) / max(1, len(counts)),
+        "defensive_mean": statistics.mean(counts) if counts else None,
+        "reasked": sum(bool(r.get("reasked")) for r in rows),
+        "u1_memory_tool_use_rate": sum(bool(r.get("memory_tool_calls")) for r in u1) / max(1, len(u1)),
+        "judge_diagnostic_means": {name: statistics.mean(v) if v else None for name, v in judges.items()},
+    }
+
+
+def access_modes(rows):
+    return {r.get("access_mode") for r in rows}
+
+
 def case_stats(rows):
     result = {}
     grouped = defaultdict(list)
@@ -52,6 +71,7 @@ def case_stats(rows):
         tools = [row["tool_calls"]["total"] for row in runs if not row.get("not_run_reason")]
         latency = [row["latency_ms"] for row in runs if not row.get("not_run_reason")]
         result[case] = {
+            **diagnostic_stats(runs),
             "runs": len(runs),
             "resolved": sum(bool(item_values(row)) and all(v["status"] == "resolved" for v in item_values(row)) for row in runs),
             "correct": sum(row.get("control_correct", False) for row in runs),
@@ -77,6 +97,8 @@ def side_stats(rows):
     plans = [str(check) for row in rows for plan in row.get("plan_checks", [])
              for check in (plan if isinstance(plan, list) else [plan])]
     return {
+        **diagnostic_stats(rows),
+        "access_mode": sorted(access_modes(rows), key=str),
         "pooled_trap_resolved_rate": rate(traps),
         "confident_error_runs": sum(row.get("confident_error", False) for row in rows),
         "hedge_rate": sum(bool(row.get("hedge_lint")) or (row.get("judge", {}).get("gap") or 0) > .5 for row in answers) / max(1, len(answers)),
@@ -146,6 +168,17 @@ def report(main, branch, verdicts=None, owner=None, key=None):
                  and bc[c]["timed_out"] <= mc[c]["timed_out"] for c in common)
     result = {"main": m, "branch": b, "splits": splits(main, branch),
               "bootstrap": bootstrap(main, branch), "gates": {"primary": primary, "controls": safe, "effort": effort}}
+    judgment = ("J1", "J2", "U1", "U2")
+    complete = all(c in mc and c in bc for c in judgment)
+    result["gates"]["access_mode"] = access_modes(main) == access_modes(branch) == {"ask_except_reads"}
+    result["gates"]["judgment_recall"] = complete and (
+        rate([r for r in branch if r["case"] in judgment]) -
+        rate([r for r in main if r["case"] in judgment]) >= .15 - 1e-12
+        and all(bc[c]["resolved"] > mc[c]["resolved"] - 2 for c in judgment))
+    result["gates"]["defensive"] = b["defensive_share"] <= m["defensive_share"] - .10 + 1e-12
+    result["gates"]["confident_error_controls"] = all(
+        c in mc and c in bc and bc[c]["confident_error"] <= mc[c]["confident_error"]
+        for c in ("U3", "C1", "C4"))
     if verdicts is not None:
         p = pair_stats(verdicts, key)
         gate = p["non_tie_branch_rate"] >= .55 and all(v["main"] < 4 for v in p["cases"].values())
@@ -230,10 +263,13 @@ def main():
     Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
     for side in ("main", "branch"):
         print(side, json.dumps(result[side], ensure_ascii=False))
+    print("NOTE d1/d2 are diagnostic (d1 P 0.73 / R 0.73 at 0.6; d2 not calibrated)")
     print("SPLITS", json.dumps(result["splits"]))
     print("BOOTSTRAP", json.dumps(result["bootstrap"]))
     for name, passed in result["gates"].items():
         print(f"{name}: {'PASS' if passed else 'FAIL'}")
+    if not result["gates"]["access_mode"]:
+        raise SystemExit("eval access modes differ or are missing")
 
 
 if __name__ == "__main__":

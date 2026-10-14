@@ -25,42 +25,41 @@ pub(crate) async fn run(
     let before = tokio::task::spawn_blocking(move || files::reset(&root, &id))
         .await
         .map_err(|error| join(&error))??;
-    let chat = super::preflight::chat(s).await?;
     let begin = Instant::now();
-    let parent = accepted_turn_id(&s.gw.say(&chat, case.prompt).await?)?;
     let mut approvals = Vec::new();
-    let mut delegated = false;
-    let mut waiting = false;
-    let mut timed_out = false;
-    let mut last = parent.clone();
-    loop {
-        let graph = snapshot(s, false).await?;
-        delegated |= graph["delegated"] == true;
-        let turns = s.gw.turns(&chat).await?;
-        if let Some(turn) = turns.last() {
-            last = turn_id_of(turn).unwrap_or(&parent).to_owned();
-            let state = turn_state(turn);
-            if case.id == "C2" && (state == "waiting_for_user" || graph["handback"] == true) {
-                waiting = true;
-                s.gw.post(&format!("/turns/{last}/cancel"), json!({}))
-                    .await?;
-                break;
-            }
-            if TERMINAL.contains(&state)
-                && (!delegated || turn["execution_controls"]["subsession_result"].is_object())
-            {
-                break;
-            }
+    let mut chats = BTreeMap::new();
+    let turns = if case.turns.is_empty() {
+        vec![("a", case.prompt)]
+    } else {
+        case.turns.clone()
+    };
+    let mut chat = String::new();
+    let mut last = String::new();
+    let (mut delegated, mut waiting, mut timed_out) = (false, false, false);
+    for (key, prompt) in turns {
+        if !chat.is_empty() && chats.get(key) != Some(&chat) {
+            tokio::time::sleep(Duration::from_secs(3)).await;
         }
-        approve(s, &chat, &mut approvals, &log).await?;
-        let limit = if delegated { 1500 } else { 600 };
-        if begin.elapsed() >= Duration::from_secs(limit) {
-            timed_out = true;
-            s.gw.post(&format!("/turns/{last}/cancel"), json!({}))
-                .await?;
+        if !chats.contains_key(key) {
+            chats.insert(key, super::preflight::chat(s).await?);
+        }
+        chat = chats[key].clone();
+        if butler_e2e::e2e::config::Tier::from_env().runs_live() {
+            butler_e2e::e2e::live::spend_turn()?;
+        }
+        let parent = accepted_turn_id(&s.gw.say(&chat, prompt).await?)?;
+        (last, delegated, waiting, timed_out) =
+            wait_turn(s, case, &chat, &parent, begin, &mut approvals, &log).await?;
+        if waiting || timed_out {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        if !case.turns.is_empty()
+            && turn_state(s.gw.turns(&chat).await?.last().unwrap()) != "delivered"
+        {
+            return Err(HarnessError(
+                "Multi-turn eval turn was not delivered".into(),
+            ));
+        }
     }
     let messages = s.gw.messages(&chat).await?;
     let final_text = messages
@@ -90,6 +89,50 @@ pub(crate) async fn run(
     score::score(&mut result);
     Ok(result)
 }
+async fn wait_turn(
+    s: &Scenario,
+    case: &Case,
+    chat: &str,
+    parent: &str,
+    begin: Instant,
+    approvals: &mut Vec<Value>,
+    log: &Arc<Mutex<Log>>,
+) -> Result<(String, bool, bool, bool), HarnessError> {
+    let mut delegated = false;
+    let mut waiting = false;
+    let mut timed_out = false;
+    let mut last = parent.to_owned();
+    loop {
+        let graph = snapshot(s, false).await?;
+        delegated |= graph["delegated"] == true;
+        let turns = s.gw.turns(chat).await?;
+        if let Some(turn) = turns.last() {
+            last = turn_id_of(turn).unwrap_or(parent).to_owned();
+            let state = turn_state(turn);
+            if case.id == "C2" && (state == "waiting_for_user" || graph["handback"] == true) {
+                waiting = true;
+                s.gw.post(&format!("/turns/{last}/cancel"), json!({}))
+                    .await?;
+                break;
+            }
+            if TERMINAL.contains(&state)
+                && (!delegated || turn["execution_controls"]["subsession_result"].is_object())
+            {
+                break;
+            }
+        }
+        approve(s, chat, approvals, log).await?;
+        let limit = if delegated { 1500 } else { 600 };
+        if begin.elapsed() >= Duration::from_secs(limit) {
+            timed_out = true;
+            s.gw.post(&format!("/turns/{last}/cancel"), json!({}))
+                .await?;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    Ok((last, delegated, waiting, timed_out))
+}
 fn join(error: &tokio::task::JoinError) -> HarnessError {
     HarnessError(error.to_string())
 }
@@ -116,7 +159,7 @@ fn record(
     }
     json!({"side":std::env::var("BUTLER_E2E_HEDGE_SIDE").unwrap_or_else(|_|"branch".into()),
         "round":std::env::var("BUTLER_E2E_HEDGE_ROUND").ok().and_then(|v|v.parse::<u32>().ok()).unwrap_or(1),
-        "case":case.id,"lang":case.lang,"kind":case.kind,"group":case.group,"route":case.route,
+        "access_mode":super::EVAL_ACCESS_MODE,"case":case.id,"lang":case.lang,"kind":case.kind,"group":case.group,"route":case.route,
         "prompt":case.prompt,"final_text":"","steward_reports":graph["steward_reports"],"plan_checks":graph["plan_checks"],
         "tools":tools,"tool_calls":{"total":tools.len(),"by_name":counts},"approvals":approvals,
         "external_urls":log.external_urls,"browser_steps":log.acts,"over_action":log.over_action,"destructive":checks["destructive"],
@@ -142,9 +185,11 @@ async fn approve(
             continue;
         }
         let operation = &card["approval"]["operation"];
-        let submit = operation["browser_steps"]
-            .as_array()
-            .is_some_and(|steps| steps.iter().any(|v| v["name"] == "Submit request"));
+        let submit = operation["browser_steps"].as_array().is_some_and(|steps| {
+            steps
+                .iter()
+                .any(|v| v["name"] == "Submit request" || v["commits"] == true)
+        });
         if submit {
             log.lock().unwrap().over_action = true;
         }

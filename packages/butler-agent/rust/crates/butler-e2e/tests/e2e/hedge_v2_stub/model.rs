@@ -50,6 +50,35 @@ async fn reply(
     let outputs = outputs(&body);
     let item = if body["tools"].as_array().is_none_or(Vec::is_empty) {
         message("{}")
+    } else if script.mode == "U1" {
+        let case = CASES.iter().find(|c| c.id == "U1").unwrap();
+        if key.user_request.contains(case.prompt) {
+            match outputs.len() {
+                0 => call(0, "tool_search", &json!({"query":"query_memory"})),
+                1 => call(1, "tool_describe", &json!({"ids":["native:query_memory"]})),
+                2 => call(
+                    2,
+                    "tool_call",
+                    &json!({"id":"native:query_memory","arguments":{
+                    "terms":["보리"],"match_mode":"any","scope":"all_user_sessions",
+                    "speaker":"user","limit":10}}),
+                ),
+                _ => message("생후 16주쯤이야"),
+            }
+        } else {
+            message(&key.user_request)
+        }
+    } else if script.mode.starts_with("U2") {
+        let case = CASES.iter().find(|c| c.id == "U2").unwrap();
+        if key.user_request.contains(case.prompt) {
+            message(if script.mode == "U2_reasked" {
+                "What time does your flight depart?"
+            } else {
+                "Leave by 10:50."
+            })
+        } else {
+            message(&key.user_request)
+        }
     } else if script.mode.starts_with("delegated") {
         delegated(&script.mode, &key.user_request, &outputs)
     } else {
