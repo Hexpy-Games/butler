@@ -4,12 +4,13 @@
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { PROVIDER_LOGO_NAMES } from "./ProviderLogo";
-import { PROVIDER_LOGO_SVGS } from "./providerLogoSvgs";
+import { PROVIDER_LOGO_SVGS, VENDORED_VIEWBOX } from "./providerLogoSvgs";
 
 const logosDir = new URL("./logos/", import.meta.url);
 test("each logo string is a byte-for-byte copy of its vendored SVG file", () => {
   for (const [name, logo] of Object.entries(PROVIDER_LOGO_SVGS)) {
     expect({ name, svg: logo.svg }).toEqual({ name, svg: readFileSync(new URL(logo.file, logosDir), "utf8") });
+    expect({ name, framed: logo.svg.includes(VENDORED_VIEWBOX), fit: /^-?[\d.]+ -?[\d.]+ ([\d.]+) \1$/u.test(logo.fit) }).toEqual({ name, framed: true, fit: true });
   }
 });
 

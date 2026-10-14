@@ -156,7 +156,7 @@
   color: var(--accent-text);
   font-size: var(--typo-caption-size);
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-caption-line-height);
   font-variant-numeric: tabular-nums;
 }
 
@@ -216,7 +216,7 @@
   left: var(--space-lg);
   color: var(--text-tertiary);
   font-size: var(--typo-caption-size);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-caption-line-height);
 }
 
 .specimen {
@@ -274,7 +274,7 @@
 .weightSample {
   font-size: var(--typo-h2-size);
   font-weight: var(--sample-weight);
-  line-height: var(--line-height-tight);
+  line-height: var(--typo-h2-line-height);
 }
 
 .axis {
@@ -317,7 +317,7 @@
 .glyphs {
   min-width: 0;
   font-size: var(--typo-h3-size);
-  line-height: var(--line-height-snug);
+  line-height: var(--typo-h3-line-height);
   overflow-wrap: anywhere;
 }
 
@@ -389,7 +389,7 @@
 .tokenRole {
   font-size: var(--role-size);
   font-weight: var(--role-weight, var(--font-weight-regular));
-  line-height: var(--role-line-height, var(--line-height-body));
+  line-height: var(--role-line-height, var(--typo-body-line-height));
   letter-spacing: var(--role-letter-spacing, 0);
   text-wrap: balance;
 }
@@ -556,13 +556,13 @@
 .bandStep {
   font-size: var(--typo-caption-size);
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-caption-line-height);
   font-variant-numeric: tabular-nums;
 }
 
 .bandHex {
   font-size: var(--typo-caption-size);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-caption-line-height);
   opacity: 0.8;
 }
 
@@ -628,7 +628,7 @@
   color: var(--role-fg);
   font-size: var(--typo-h4-size);
   font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-tight);
+  line-height: var(--typo-h4-line-height);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1271,7 +1271,7 @@
   color: var(--text-tertiary);
   font-size: var(--typo-h3-size);
   font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-tight);
+  line-height: var(--typo-h3-line-height);
   font-variant-numeric: tabular-nums;
 }
 

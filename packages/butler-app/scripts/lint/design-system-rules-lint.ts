@@ -146,8 +146,6 @@ export const OFF_SCALE_ALLOWLIST: Record<string, readonly string[]> = {
   // The queued bubble must match the MessageRow user bubble box so a delivered message resolves in place.
   "libs/design-system/blocks/QueuedMessage/QueuedMessage.module.css": ["radius:14", "spacing:10", "spacing:6"],
   "libs/design-system/blocks/WorkActivityBlock/WorkActivityBlock.module.css": ["spacing:5"],
-  // The 36px is the IconTile md logo tile: the description pulls up by half of (tile - title line) so the tile centers on the title line.
-  "libs/design-system/blocks/ChoiceCard/ChoiceCard.module.css": ["spacing:36"],
   // Visual harness layout, not product UI.
   "pages/ThinkingMarkHarness.module.css": ["radius:6", "spacing:10", "spacing:14", "spacing:18", "spacing:28", "spacing:44", "spacing:48"],
 };
@@ -182,8 +180,21 @@ function rawScaleFindings(
     }));
 }
 
+/** Text takes an integer px line-height role token; unitless ratios are for display art only. */
+const RATIO_LINE_HEIGHT = /(?:^|;|\s)line-height\s*:\s*(\d*\.\d+|var\(--line-height-(?:tight|snug|body|document)\))\s*(?:;|$)/u;
+const RATIO_FONT_SHORTHAND = /(?:^|;|\s)font\s*:[^;]*\/\s*(\d*\.\d+|var\(--line-height-(?:tight|snug|body|document)\))/u;
+const RATIO_ALLOWED = /libs\/design-system\/components\/FoundationHeroMotion\//u;
+
+function ratioLineHeightFindings(path: string, rule: CssRule): DesignSystemRuleFinding[] {
+  if (RATIO_ALLOWED.test(path.replaceAll("\\", "/"))) return [];
+  const match = RATIO_LINE_HEIGHT.exec(rule.body) ?? RATIO_FONT_SHORTHAND.exec(rule.body);
+  if (!match) return [];
+  return [{ path, line: rule.line, reason: "line-height must be an integer px role token (--typo-*-line-height), not a ratio", text: `${rule.selector} { ${match[1]} }` }];
+}
+
 export function lintDesignSystemRules(path: string, source: string): DesignSystemRuleFinding[] {
   return cssRules(source).flatMap((rule) => [
+    ...ratioLineHeightFindings(path, rule),
     ...focusRingFindings(path, rule),
     ...zIndexFindings(path, rule),
     ...rawHeightFindings(path, rule),
@@ -193,15 +204,33 @@ export function lintDesignSystemRules(path: string, source: string): DesignSyste
   ]);
 }
 
-function walkCss(dir: string): string[] {
+/** Cards and list items show their glyph bare: no IconTile inside the card blocks or passed as their icon. */
+const CARD_BLOCK = /libs\/design-system\/blocks\/(ChoiceCard|CheckCard|ListRow)\/[^/]+(?<!\.guidance)\.tsx$/;
+const TILE_AS_CARD_ICON = /<(ChoiceCard|ChoiceTile|CheckCard|ListRow)\b[^>]*?\bicon=\{\s*<IconTile\b/gs;
+
+export function lintCardIcons(path: string, source: string): DesignSystemRuleFinding[] {
+  const findings: DesignSystemRuleFinding[] = [];
+  const lineOf = (index: number) => source.slice(0, index).split("\n").length;
+  if (CARD_BLOCK.test(path.replaceAll("\\", "/")) && /\bIconTile\b/.test(source)) {
+    findings.push({ path, line: lineOf(source.search(/\bIconTile\b/)), reason: "card blocks show their glyph bare; no IconTile", text: "IconTile" });
+  }
+  for (const match of source.matchAll(TILE_AS_CARD_ICON)) {
+    findings.push({ path, line: lineOf(match.index ?? 0), reason: `no IconTile behind a ${match[1]} icon; pass the glyph alone`, text: `<${match[1]} icon={<IconTile` });
+  }
+  return findings;
+}
+
+function walk(dir: string, extension: string): string[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir).flatMap((entry) => {
     const path = join(dir, entry);
     if (entry === "dist" || entry === "node_modules") return [];
-    if (statSync(path).isDirectory()) return walkCss(path);
-    return entry.endsWith(".css") ? [path] : [];
+    if (statSync(path).isDirectory()) return walk(path, extension);
+    return entry.endsWith(extension) ? [path] : [];
   });
 }
+
+const walkCss = (dir: string) => walk(dir, ".css");
 
 if (import.meta.main) {
   const root = process.cwd();
@@ -209,9 +238,10 @@ if (import.meta.main) {
   const verbose = (process.env.BUTLER_VALIDATE_VERBOSE === "1" || process.argv.includes("--verbose")) &&
     !process.argv.includes("--silent");
   const files = walkCss(sourceRoot);
-  const findings = files.flatMap((path) =>
-    lintDesignSystemRules(relative(root, path), readFileSync(path, "utf8")),
-  );
+  const findings = [
+    ...files.flatMap((path) => lintDesignSystemRules(relative(root, path), readFileSync(path, "utf8"))),
+    ...walk(sourceRoot, ".tsx").flatMap((path) => lintCardIcons(relative(root, path), readFileSync(path, "utf8"))),
+  ];
   if (findings.length > 0) {
     console.error("Design-system rules lint failed:");
     for (const finding of findings) {

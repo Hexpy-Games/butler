@@ -1,6 +1,6 @@
 .slot {
   display: flex;
-  height: calc(var(--font-size-3) * var(--line-height-body));
+  height: var(--typo-body-line-height);
   min-width: 0;
   align-items: center;
   overflow: hidden;

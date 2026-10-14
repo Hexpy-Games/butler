@@ -90,5 +90,5 @@ export const guidance: ShowcaseGuidance = {
     "wasLabel is read before the struck-through amount. Show more carries aria-expanded and aria-controls.",
     "ItemCardSkeleton is aria-hidden unless it gets a label; label one skeleton (role status) so loading is announced once.",
   ],
-  tokens: ["--surface-raised", "--line", "--text-secondary", "--text-tertiary", "--space-sm", "--space-md", "--line-height-body"],
+  tokens: ["--surface-raised", "--line", "--text-secondary", "--text-tertiary", "--space-sm", "--space-md", "--typo-body-line-height", "--typo-label-line-height", "--typo-caption-line-height"],
 };

@@ -124,7 +124,7 @@
   width: 100%;
   min-width: 0;
   min-height: calc(
-    1.5em + var(--composer-inner-padding-block) +
+    1lh + var(--composer-inner-padding-block) +
       var(--composer-inner-padding-block)
   );
   max-height: calc(
@@ -136,7 +136,7 @@
   background: transparent;
   color: var(--text-primary);
   font: inherit;
-  line-height: 1.5;
+  line-height: var(--typo-body-line-height);
   outline: none;
   padding: var(--composer-inner-padding-block)
     var(--composer-inner-padding-inline);
@@ -179,7 +179,7 @@
   padding: var(--composer-inner-padding-block)
     var(--composer-inner-padding-inline);
   color: var(--placeholder);
-  line-height: 1.5;
+  line-height: var(--typo-body-line-height);
   pointer-events: none;
 }
 
