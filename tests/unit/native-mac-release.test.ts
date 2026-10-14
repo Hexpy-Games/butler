@@ -39,7 +39,10 @@ test("native mac release validates inputs and stages the runtime shell", () => {
     writeFileSync(join(packageDir, name, "fixture"), name);
   }
   writeFileSync(join(packageDir, "main.mjs"), "import { app } from 'electron';");
+  writeFileSync(join(packageDir, "package.json"), JSON.stringify({ version: "1.2.3", devDependencies: { electron: "1" } }));
   const staged = stageElectronPackageSource(root, join(root, "electron-source"));
+  // Dev tooling is not staged, so the staged manifest must not list it for the packager's prune walk.
+  expect(JSON.parse(readFileSync(join(staged, "package.json"), "utf8")).devDependencies).toBeUndefined();
   expect(readFileSync(join(staged, "main.mjs"), "utf8")).toBe("import { app } from 'electron';");
   expect(readFileSync(join(staged, "assets/fixture"), "utf8")).toBe("assets");
   for (const name of ["node_modules", "dist", ".native-agent-payload"]) {
