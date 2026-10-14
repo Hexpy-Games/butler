@@ -19,6 +19,8 @@ use crate::btcc::StorageCode;
 #[derive(Clone)]
 pub struct BtccRepositories {
     pub(super) storage: BtccStorage,
+    /// Ephemeral draft delivery shared by repository clones.
+    pub answer_drafts: crate::btcc::AnswerDraftPublisher,
     pub(super) continuation_limits: Option<TurnContinuationBudgetLimits>,
 }
 
@@ -201,6 +203,9 @@ impl CanonicalMessageStore for BtccRepositories {
     }
 }
 impl ProgressEventRepository for BtccRepositories {
+    fn answer_blocks_draft(&self, payload: serde_json::Value) {
+        self.answer_drafts.publish(payload);
+    }
     fn append(&self, write: ProgressWrite) -> PortFuture<'_, ()> {
         let storage = self.storage.clone();
         Box::pin(async move {
@@ -242,6 +247,7 @@ impl BtccRepositories {
         Self {
             storage,
             continuation_limits,
+            answer_drafts: Default::default(),
         }
     }
 

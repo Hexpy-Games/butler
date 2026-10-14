@@ -1,5 +1,6 @@
 import { useCallback, useState, type HTMLAttributes, type ReactNode } from "react";
 import type { DsBaseProps } from "../../lib/dsProps";
+import { useReducedMotion } from "../../lib/useReducedMotion";
 import { cn } from "../../lib/utils";
 import { ImageIcon } from "../Icons";
 import styles from "./MediaFrame.module.css";
@@ -28,6 +29,8 @@ export interface MediaFrameProps extends DsBaseProps<HTMLAttributes<HTMLSpanElem
   placeholderIcon?: string;
   /** A matted picture keeps the top clear of an overlay on the frame's top corner (a kind Tag). */
   clearTop?: boolean;
+  /** Forces reduced motion (the picture appears without its load fade) on or off; defaults to the OS and app setting. */
+  reducedMotion?: boolean;
   /** Overlays on the frame's corners (a Tag, a checkbox); the owner positions them. */
   children?: ReactNode;
 }
@@ -67,9 +70,11 @@ function Placeholder({ icon }: { icon?: string }) {
  * typical one spans the frame, an extreme one (a wide strip, a tall column) sits inset with a hairline.
  * Hidden until its shape is known, so it never shows the wrong fit. `fit="cover"` fills the frame from the
  * center instead. A missing or broken picture is the empty matte, or the tinted placeholder when asked.
+ * The matte holds the shape while the picture loads; the picture then fades in over it
+ * (`--motion-slow`, at once under reduced motion), and a failed one's placeholder fades in.
  */
 export function MediaFrame({
-  src, alt, aspect = "16:10", fit: fitMode = "contain", placeholder = false, placeholderIcon, clearTop = false, children, className, ...props
+  src, alt, aspect = "16:10", fit: fitMode = "contain", placeholder = false, placeholderIcon, clearTop = false, reducedMotion, children, className, ...props
 }: MediaFrameProps) {
   const [fit, setFit] = useState<{ src: string; fit: "fill" | "matte" | "failed" } | null>(null);
   const measure = useCallback((image: HTMLImageElement | null) => {
@@ -78,9 +83,14 @@ export function MediaFrame({
   const known = fit && fit.src === src ? fit.fit : undefined;
   const state: MediaFrameState = !src ? "empty" : known === "failed" ? "failed" : fitMode === "cover" ? "cover" : known ?? "pending";
   const missing = placeholder && (state === "empty" || state === "failed");
+  // A picture already decoded when it mounts (a cached one) is known before the first paint and shows at once.
+  const loaded = known === "fill" || known === "matte";
+  const systemReduced = useReducedMotion();
+  const reduced = reducedMotion ?? systemReduced;
   return (
     <span className={cn(styles.frame, className)} data-slot="media-frame" data-aspect={aspect} data-fit={state}
-      data-placeholder={missing ? "true" : undefined} data-clear-top={clearTop ? "true" : undefined} {...props}>
+      data-loaded={loaded ? "true" : undefined} data-reduced={reduced ? "true" : undefined} data-placeholder={missing ? "true" : undefined}
+      data-clear-top={clearTop ? "true" : undefined} {...props}>
       {src && state !== "failed" ? (
         <span className={styles.picture}>
           <img ref={measure} className={styles.image} src={src} alt={alt ?? ""} draggable={false}

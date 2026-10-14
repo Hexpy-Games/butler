@@ -926,6 +926,9 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       copyFailed: "복사하지 못했습니다.",
     },
     answerBlocks: {
+      preparing: "답변 카드 준비 중",
+      prepared: "답변 카드 준비",
+      rechecking: "버틀러가 다시 확인하는 중",
       previousValue: "이전",
       showMore: "더 보기",
       showLess: "접기",

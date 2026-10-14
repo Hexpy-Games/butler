@@ -153,17 +153,13 @@ impl ModelProvider {
             Err(ModelRoundError::Provider(error))
                 if local_stream && local_stream::falls_back(carrier, &error, &watch) =>
             {
-                if let Some(prefix) = &prefix {
-                    super::round_usage::record(self, &request, None, &config, prefix)?;
-                }
+                self.record_failed_usage(&request, &config, prefix.as_ref())?;
                 return self
                     .run_without_streaming(request, config.endpoint.clone())
                     .await;
             }
             Err(ModelRoundError::Provider(mut error)) => {
-                if let Some(prefix) = &prefix {
-                    super::round_usage::record(self, &request, None, &config, prefix)?;
-                }
+                self.record_failed_usage(&request, &config, prefix.as_ref())?;
                 if config.metadata.provider_id == "local"
                     && let ProviderAuth::ApiKey(secret) = &config.auth
                 {
@@ -175,13 +171,11 @@ impl ModelProvider {
                 return Err(ModelRoundError::Provider(error));
             }
             Err(error) => {
-                if let Some(prefix) = &prefix {
-                    super::round_usage::record(self, &request, None, &config, prefix)?;
-                }
+                self.record_failed_usage(&request, &config, prefix.as_ref())?;
                 return Err(error);
             }
         };
-        self.complete(
+        let result = self.complete(
             &request,
             &config,
             response,
@@ -191,7 +185,21 @@ impl ModelProvider {
                 identity: provider_cache_identity,
                 prefix: prefix.unwrap_or(serde_json::Value::Null),
             },
-        )
+        )?;
+        watch.complete_tools(&result);
+        Ok(result)
+    }
+
+    fn record_failed_usage(
+        &self,
+        request: &ModelRoundRequest<'_>,
+        config: &super::ProviderRequestConfig,
+        prefix: Option<&serde_json::Value>,
+    ) -> Result<(), ModelRoundError> {
+        if let Some(prefix) = prefix {
+            super::round_usage::record(self, request, None, config, prefix)?;
+        }
+        Ok(())
     }
 
     fn complete(
