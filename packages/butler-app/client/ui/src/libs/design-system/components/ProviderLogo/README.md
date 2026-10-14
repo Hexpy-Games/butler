@@ -30,6 +30,22 @@ Vendored SVG bytes and license notices are verified by the asset tests; rendered
 - Kimi uses the monochrome file: the color file has white lettering that
   disappears on light surfaces.
 
+## Fitting a logo
+The vendored files are full-bleed (the mark touches the 24-unit box), but the
+icon pack (Hugeicons) draws on a keyline: a 24 grid whose marks span 20 units
+(2 to 22), centred on (12, 12) by their bounding box. So that a logo and a line
+glyph at the same size look equally large and equally centred, each logo has a
+`fit` viewBox in `providerLogoSvgs.ts`, and `ProviderLogo` renders with it. The
+shipped drawing is never edited; the viewBox only moves and scales it.
+
+To fit a new logo:
+1. Rasterise the vendored SVG at 40px per unit and take its ink box (alpha above
+   0.5): `x, y, w, h` in grid units.
+2. `s = max(w, h) / 20`, centre `cx = x + w / 2`, `cy = y + h / 2`.
+3. `fit = "${cx - 12s} ${cy - 12s} ${24s} ${24s}"` (three decimals).
+4. Check it beside a line glyph in a card in the app: equal visual size, and
+   both centred on the title line.
+
 ## Themes
 Monochrome logos paint with `currentColor` (the text color), so they stay
 visible in light and dark. Color logos (Claude, Gemini, Qwen) keep their fills,
