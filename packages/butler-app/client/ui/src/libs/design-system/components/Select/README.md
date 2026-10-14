@@ -34,10 +34,10 @@ text as `children`. Give every option an icon or none.
 
 ```tsx
 <SelectTrigger aria-label="Provider">
-  <SelectValue icon={<ProviderLogo name="claude" />}>Anthropic</SelectValue>
+  <SelectValue icon={<ProviderLogo name="anthropic" />}>Anthropic</SelectValue>
 </SelectTrigger>
 <SelectContent>
-  <SelectItem value="anthropic" icon={<ProviderLogo name="claude" />}>Anthropic</SelectItem>
+  <SelectItem value="anthropic" icon={<ProviderLogo name="anthropic" />}>Anthropic</SelectItem>
 </SelectContent>
 ```
 
