@@ -135,6 +135,7 @@
 .trigger:focus-visible {
   background: var(--selection);
   color: var(--text-primary);
+  box-shadow: var(--focus-ring);
 }
 
 .trigger[data-state="active"] {

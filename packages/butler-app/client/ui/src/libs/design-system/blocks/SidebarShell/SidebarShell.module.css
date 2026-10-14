@@ -144,13 +144,20 @@
   flex: none;
 }
 
+/* The frame bleeds --focus-ring-room past the content on the inline start and
+   both block edges, and the content pads it back, so rows keep their place
+   while a row's focus ring paints inside the clip (and the edge fades). */
 .scrollFrame {
   position: relative;
-  width: calc(100% + var(--sidebar-scrollbar-offset));
-  max-width: calc(100% + var(--sidebar-scrollbar-offset));
+  width: calc(100% + var(--sidebar-scrollbar-offset) + var(--focus-ring-room));
+  max-width: calc(
+    100% + var(--sidebar-scrollbar-offset) + var(--focus-ring-room)
+  );
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
+  margin-block: calc(-1 * var(--focus-ring-room));
+  margin-inline-start: calc(-1 * var(--focus-ring-room));
   overflow: hidden;
 }
 
@@ -170,6 +177,7 @@
 }
 
 .scrollContent {
+  box-sizing: border-box;
   display: flex;
   width: calc(100% - var(--sidebar-scrollbar-offset));
   max-width: calc(100% - var(--sidebar-scrollbar-offset));
@@ -178,31 +186,42 @@
   flex: 1 1 auto;
   flex-direction: column;
   gap: 18px;
-  padding-block: var(--sidebar-scroll-edge-padding);
+  padding-block: calc(
+    var(--sidebar-scroll-edge-padding) + var(--focus-ring-room)
+  );
+  padding-inline-start: var(--focus-ring-room);
 }
 
 .scrollContent[data-sticky-header] {
   gap: 0;
   --nav-sticky-offset: calc(
-    var(--sidebar-scroll-fade-size) + var(--sidebar-sticky-header-height, 0px)
+    var(--sidebar-scroll-fade-size) + var(--focus-ring-room) +
+      var(--sidebar-sticky-header-height, 0px)
   );
 }
 
 .stickyHeader {
   container-type: scroll-state;
   position: sticky;
-  top: var(--sidebar-scroll-fade-size);
+  top: calc(var(--sidebar-scroll-fade-size) + var(--focus-ring-room));
   z-index: 30;
   flex: none;
   background: var(--nav-sticky-surface, var(--color-surface-base));
-  padding-bottom: var(--space-sm);
+  padding-bottom: calc(var(--space-sm) - var(--focus-ring-room));
   backdrop-filter: var(--nav-sticky-filter, none);
 }
 
+/* Rows under the stuck header clip at its bottom edge; every other edge
+   leaves --focus-ring-room, and the padding keeps the first row's ring below
+   the clip line. */
 .clippedContent {
   min-width: 0;
   flex: 1 0 auto;
-  clip-path: inset(var(--sticky-clip-top, 0) 0 0);
+  padding-top: var(--focus-ring-room);
+  clip-path: inset(
+    var(--sticky-clip-top, 0) calc(-1 * var(--focus-ring-room))
+      calc(-1 * var(--focus-ring-room))
+  );
 }
 
 /* Covers rows that scroll under the top fade while the header is stuck. At
@@ -212,7 +231,7 @@
   position: absolute;
   inset-inline: 0;
   bottom: 100%;
-  height: var(--sidebar-scroll-fade-size);
+  height: calc(var(--sidebar-scroll-fade-size) + var(--focus-ring-room));
   background: var(--nav-sticky-surface, var(--color-surface-base));
   pointer-events: none;
   visibility: hidden;
