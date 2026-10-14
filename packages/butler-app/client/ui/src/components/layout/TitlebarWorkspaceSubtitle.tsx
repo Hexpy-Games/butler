@@ -1,5 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { GitBranch, IconSlot, Stack, Typo } from "@/butler-ds";
+import { Folder, GitBranch, IconSlot, Stack, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { SessionSummaryView } from "@/app/types.ts";
 
@@ -14,11 +14,17 @@ export function TitlebarWorkspaceSubtitle({
 }: TitlebarWorkspaceSubtitleProps) {
   useAppLocale();
   const branch = branchInfo?.branch_name?.trim() || undefined;
-  const workspaceLabel = branchInfo?.workspace_binding === "session_worktree"
-    ? appCopy.titlebar.sessionWorktree(branch)
-    : branchInfo?.workspace_binding === "project"
-      ? appCopy.titlebar.localWorkspace(branch)
-      : undefined;
+  const movedFolder = branchInfo?.workspace_binding === "session_folder"
+    ? branchInfo.workspace_label?.trim() || undefined
+    : undefined;
+  const workspaceLabel = movedFolder
+    ? appCopy.titlebar.sessionFolder(movedFolder, branch)
+    : branchInfo?.workspace_binding === "session_worktree"
+      ? appCopy.titlebar.sessionWorktree(branch)
+      : branchInfo?.workspace_binding === "project"
+        ? appCopy.titlebar.localWorkspace(branch)
+        : undefined;
+  const WorkspaceIcon = movedFolder ? Folder : GitBranch;
   return (
     <Stack as="span" inline align="row" cross="center" gap="sm" minWidth="0" data-test-class="titlebar-subtitle">
       {projectLabel ? (
@@ -34,10 +40,10 @@ export function TitlebarWorkspaceSubtitle({
           minWidth="0"
           aria-label={workspaceLabel}
           data-test-class="titlebar-workspace"
-          title={workspaceLabel}
+          title={movedFolder ? branchInfo?.workspace_path ?? workspaceLabel : workspaceLabel}
         >
           <IconSlot size="xs" tone="secondary">
-            <GitBranch size="xs" aria-hidden="true" />
+            <WorkspaceIcon size="xs" aria-hidden="true" />
           </IconSlot>
           <Typo.Text tone="secondary" truncate>{workspaceLabel}</Typo.Text>
         </Stack>

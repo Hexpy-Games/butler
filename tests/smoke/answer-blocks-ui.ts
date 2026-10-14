@@ -276,7 +276,7 @@ async function checkLeniencyAndExpand(page: Page) {
 
   const card = neutral.blocks[0]; assert(card.type === "cards");
   for (const count of [5, 6, 11]) {
-    const items = Array.from({ length: count }, (_, i) => ({ ...card.items[0], title: `Record ${i}`, img: undefined }));
+    const items = Array.from({ length: count }, (_, i) => ({ ...card.items[0], key: `record-${i}`, title: `Record ${i}`, img: undefined }));
     const spec = { v: 1, blocks: [{ type: "unknown", text: "Invisible" }, { type: "cards", items: [...items, { title: 3 }, { text: "unfinished" }] }] };
     await open(page, spec, 1280, "dark");
     const expected = Math.min(6, count);

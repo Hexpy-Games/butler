@@ -126,6 +126,7 @@ mod service_diagnostics;
 mod service_stop;
 mod service_supervision;
 mod session_branches;
+mod session_reads;
 mod settings;
 mod setup_keys;
 mod setup_local_models;
@@ -188,6 +189,7 @@ mod project_artifacts;
 mod project_instructions;
 mod project_workspace;
 mod schedule_handoff;
+mod session_folder;
 mod storage_concurrency;
 mod supervisor_ownership;
 

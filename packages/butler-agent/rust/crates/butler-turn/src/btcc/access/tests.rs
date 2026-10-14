@@ -1,12 +1,13 @@
 #![allow(clippy::unwrap_used, reason = "security boundary assertions")]
+mod web;
 use super::*;
 use crate::btcc::ApprovalRisk;
 use AccessDecision::{Allow, Ask, Deny};
-use AccessMode::{AskAlways, AskExceptReads, FullAccess, ReadOnly};
+use AccessMode::{AskAlways, AskExceptReads, Auto, FullAccess, ReadOnly};
 use CapabilityKind::{
     ButlerOutput, CommandMutation, CommandObservation, Connector, CrossConversation, Exempt,
-    FileEdit, FileRead, FullOnly, InternalRead, Network, OtherEffect, ProjectRecord, Schedule,
-    SettingsWrite,
+    FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, OtherEffect, ProjectRecord,
+    Schedule, SettingsWrite, WebRequest,
 };
 use TargetScope::{NoTarget, Outside, ProjectFolder, Protected};
 use butler_core::tool_protocol::ToolName;
@@ -66,6 +67,45 @@ const ALLOW: &[(
         Some(ProjectFolder),
         Some(ApprovalRisk::Low),
     ),
+    // A folder switch within the consented folder or its repository.
+    (AskAlways, FolderSwitch, Some(ProjectFolder), None),
+    (AskExceptReads, FolderSwitch, Some(ProjectFolder), None),
+    (Auto, FolderSwitch, Some(ProjectFolder), None),
+    // Auto (알아서 진행): Ask first plus project edits, project-sandboxed
+    // commands and Butler's own ledger records.
+    (Auto, InternalRead, None, None),
+    (Auto, ButlerOutput, None, None),
+    (Auto, FileRead, Some(ProjectFolder), None),
+    (
+        Auto,
+        CommandObservation { sandboxed: true },
+        Some(ProjectFolder),
+        None,
+    ),
+    (
+        Auto,
+        CommandObservation { sandboxed: false },
+        Some(ProjectFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        Auto,
+        CommandMutation {
+            sandbox: CommandSandbox::None,
+        },
+        Some(ProjectFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        Auto,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectWrite,
+        },
+        Some(ProjectFolder),
+        None,
+    ),
+    (Auto, FileEdit, Some(ProjectFolder), None),
+    (Auto, ProjectRecord, None, None),
 ];
 const KINDS: &[CapabilityKind] = &[
     Exempt(ApprovalExemptAction::FirstConversationOnboarding),
@@ -73,6 +113,10 @@ const KINDS: &[CapabilityKind] = &[
     Exempt(ApprovalExemptAction::AttachedImageAnalysis),
     Exempt(ApprovalExemptAction::LibraryOrganize),
     InternalRead,
+    WebRequest {
+        carries_data: false,
+    },
+    WebRequest { carries_data: true },
     FileRead,
     CommandObservation { sandboxed: true },
     CommandObservation { sandboxed: false },
@@ -93,11 +137,19 @@ const KINDS: &[CapabilityKind] = &[
     FullOnly(FullOnlyAction::ServiceRestart),
     FullOnly(FullOnlyAction::GitWorktree),
     FullOnly(FullOnlyAction::MemoryForget),
+    FolderSwitch,
     OtherEffect,
 ];
 fn expected(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     if *mode == FullAccess {
         return Allow;
+    }
+    if let WebRequest { carries_data } = request.kind {
+        return match (mode, request.taint, carries_data) {
+            (_, TurnTaint::Clean, _) | (_, _, false) => Allow,
+            (ReadOnly, _, true) => Deny(DenyReason::ReadOnly),
+            _ => Ask(GrantUse::Ignore),
+        };
     }
     if [
         FullOnly(FullOnlyAction::ServiceRestart),
@@ -121,6 +173,9 @@ fn expected(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     }
     if *mode == ReadOnly {
         Deny(DenyReason::ReadOnly)
+    } else if matches!(request.kind, Network | Connector) && request.taint == TurnTaint::External {
+        // D5: after external content, standing permissions no longer apply.
+        Ask(GrantUse::Ignore)
     } else {
         Ask(GrantUse::Honor)
     }
@@ -137,6 +192,7 @@ fn order(decision: AccessDecision) -> u8 {
 #[test]
 fn access_boundary_matches_the_owner_table() {
     contained_read_rechecks_swapped_secret();
+    web::boundaries();
     assert_eq!(
         AccessMode::ALL.map(|mode| mode.as_str()),
         butler_core::tool_protocol::ACCESS_MODE_WIRE_NAMES,
@@ -169,7 +225,7 @@ fn access_boundary_matches_the_owner_table() {
                                 )
                             );
                         }
-                        let chain = [AskAlways, AskExceptReads, FullAccess]
+                        let chain = [AskAlways, AskExceptReads, Auto, FullAccess]
                             .map(|m| order(decide(&m, request)));
                         assert!(chain.windows(2).all(|pair| pair[0] <= pair[1]));
                     }
@@ -177,7 +233,7 @@ fn access_boundary_matches_the_owner_table() {
             }
         }
     }
-    for mode in [AskAlways, AskExceptReads] {
+    for mode in [AskAlways, AskExceptReads, Auto] {
         let exempt: Vec<_> = ToolName::ALL
             .iter()
             .map(|t| t.as_str())
@@ -228,6 +284,7 @@ fn access_boundary_matches_the_owner_table() {
             "forget_explicit_memory",
             FullOnly(FullOnlyAction::MemoryForget),
         ),
+        ("switch_folder", FolderSwitch),
         ("mcp__x__y", OtherEffect),
     ] {
         assert_eq!(
@@ -248,6 +305,16 @@ fn access_boundary_matches_the_owner_table() {
         ),
         (
             serde_json::json!({"state_effect":"mutation"}),
+            CommandMutation {
+                sandbox: if butler_platform::command_sandbox::project_write_available() {
+                    CommandSandbox::ProjectWrite
+                } else {
+                    CommandSandbox::None
+                },
+            },
+        ),
+        (
+            serde_json::json!({"state_effect":"mutation","sandbox":"none"}),
             CommandMutation {
                 sandbox: CommandSandbox::None,
             },
@@ -347,6 +414,17 @@ fn access_boundary_matches_the_owner_table() {
             !butler_platform::secure_fs::windows_ambiguous_spelling(spelling),
             "{spelling}"
         );
+    }
+    // D7: the derived schedule default never widens a read-only choice and
+    // never narrows full access; every asking default becomes Auto.
+    for (conversation, schedule) in [
+        (ReadOnly, ReadOnly),
+        (AskAlways, Auto),
+        (AskExceptReads, Auto),
+        (Auto, Auto),
+        (FullAccess, FullAccess),
+    ] {
+        assert_eq!(AccessMode::schedule_default_for(&conversation), schedule);
     }
     for mode in AccessMode::ALL {
         assert_eq!(AccessMode::parse(mode.as_str()), Some(mode.clone()));

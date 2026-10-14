@@ -49,7 +49,7 @@ pub(super) async fn gate(
             source_turn_id: owner.binding.turn_id.clone(),
             operation_occurrence_id: Some(occurrence.into()),
             source_work_id: String::new(),
-            workspace_path: owner.binding.workspace_path.to_string_lossy().into_owned(),
+            workspace_path: owner.active_workspace_path().to_string_lossy().into_owned(),
             plan_revision_id: String::new(),
             action_key: action_key(occurrence, input),
             authority_generation: 1,
@@ -60,6 +60,8 @@ pub(super) async fn gate(
             reasoning_effort: owner.binding.reasoning_effort.clone(),
             category: Some("reviewed_effect".into()),
             public_action_title: Some(call.name.clone()),
+            honor_standing_permission: true,
+            unattended: owner.unattended(),
         })
         .await
         .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
@@ -68,6 +70,10 @@ pub(super) async fn gate(
         AuthorityAdmissionResult::Pending { request_ref, .. }
         | AuthorityAdmissionResult::Allowed { request_ref, .. } => Gate::Pending(
             json!({"ok":true,"authority_pending":true,"request_ref":request_ref,"status":"awaiting_allow"}),
+        ),
+        // Nobody can answer a payment, sign-in, upload or commit card here.
+        AuthorityAdmissionResult::Unattended => Gate::Pending(
+            super::super::turn_guard::unattended_feedback(owner, &call.name, target).await,
         ),
         _ => Gate::Pending(json!({"ok":false,"error":"authority_request_denied"})),
     })
@@ -136,21 +142,22 @@ pub(super) async fn act_gate(
 }
 
 /// Which batches a tier asks about: payment and upload steps on every tier,
-/// every batch under ask-always, and under ask-first only a batch that
-/// commits something on the user's behalf. Browsing never asks there.
+/// every batch under ask-always, and under ask-first and Auto only a batch
+/// that commits something on the user's behalf (the risky browser step).
+/// Browsing never asks there.
 fn reviews(mode: &AccessMode, input: &Value) -> bool {
     input["always_confirm"] == true
         || match mode {
             AccessMode::AskAlways => true,
-            AccessMode::AskExceptReads => input["commit"] == true,
+            AccessMode::AskExceptReads | AccessMode::Auto => input["commit"] == true,
             AccessMode::FullAccess | AccessMode::ReadOnly => false,
         }
 }
 
 /// Whether a focus-dependent step may still land on a signed-in commit: only
-/// when ask-first did not review this batch as one.
+/// when ask-first or Auto did not review this batch as one.
 pub(super) fn commit_cleared(mode: &AccessMode, input: &Value) -> bool {
-    input["commit"] == true || *mode != AccessMode::AskExceptReads
+    input["commit"] == true || !matches!(mode, AccessMode::AskExceptReads | AccessMode::Auto)
 }
 
 /// A batch commits when the model declares a step as committing, or when a

@@ -124,6 +124,10 @@ pub struct AuthorityAdmissionInput {
     pub category: Option<String>,
     // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub normalized_input: Value,
+    /// False after external content (D5): a standing permission no longer admits it.
+    pub honor_standing_permission: bool,
+    /// Nobody can answer (D8): report `Unattended` instead of storing a wait.
+    pub unattended: bool,
 }
 
 /// Whether an operation may run, waits for the user, or was answered.
@@ -148,6 +152,8 @@ pub enum AuthorityAdmissionResult {
     Modified {
         request_ref: String,
     },
+    /// It would wait for the user, but the turn is unattended; nothing was stored.
+    Unattended,
 }
 
 /// The user's answer to an authority request (`allow`, `deny` or `modify`).

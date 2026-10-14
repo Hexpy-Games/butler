@@ -2,7 +2,9 @@ mod decode;
 mod environment;
 mod error;
 mod guided;
+mod guided_invocation;
 mod process;
+mod secret_sweep;
 mod spool;
 mod structured;
 
@@ -26,6 +28,9 @@ pub enum GuidedAccess {
     FullAccessContained,
     ReadOnlyObservation,
     ContainedObservation,
+    /// A mutation contained to the project folder (Auto access): writes only
+    /// inside the workspace root and command scratch folders, no network.
+    ProjectWrite,
 }
 
 /// A guided shell command with its workspace, timeout and access.
@@ -50,6 +55,8 @@ pub struct GuidedSummary {
     pub exit_code: Option<i32>,
     pub signal: Option<String>,
     pub timed_out: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub sandbox_violation: Vec<PathBuf>,
 }
 
 #[derive(Clone, Debug)]

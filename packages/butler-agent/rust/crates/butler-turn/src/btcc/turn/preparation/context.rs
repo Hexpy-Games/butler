@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::{ContextAssembly, ContextSection, js_truthy, object};
 use crate::btcc::BtccCode;
@@ -75,7 +75,11 @@ pub(super) async fn snapshot(
     );
     insert_request_refs(&mut context, binding, request);
     insert_rule_snapshot(&mut context, assembly);
-    insert_result_ref(&mut context, controls)?;
+    insert_result_ref(
+        &mut context,
+        controls,
+        (&request.transport, request.app_turn_context.as_ref()),
+    )?;
     if !request.message.attachments.is_empty() {
         context.insert(
             "attachments".into(),
@@ -451,13 +455,32 @@ fn insert_rule_snapshot(context: &mut Map<String, Value>, assembly: &ContextAsse
 fn insert_result_ref(
     context: &mut Map<String, Value>,
     controls: Option<&VerifiedExecutionControls>,
+    (transport, app_turn_context): (&str, Option<&Value>),
 ) -> Result<(), BtccError> {
+    // A schedule the agent itself dispatches has nobody to ask either, nor
+    // does a delegated child of an unattended run (its App context says so;
+    // the mark can only make a turn stricter).
+    if transport == "automation" {
+        context.insert("scheduleRun".into(), json!({"unattended": true}));
+    } else if let Some(run) = app_turn_context
+        .and_then(|value| value.get("scheduleRun"))
+        .filter(|run| run.get("unattended") == Some(&Value::Bool(true)))
+    {
+        context.insert("scheduleRun".into(), run.clone());
+    }
     if let Some(result) = controls.and_then(|value| value.subsession_result.as_ref()) {
         context.insert(
             "subsessionResult".into(),
             serde_json::to_value(result).map_err(|error| {
                 BtccError::relayed("subsession_result_invalid", error.to_string())
             })?,
+        );
+    }
+    if let Some(run) = controls.and_then(|value| value.schedule_run.as_ref()) {
+        context.insert(
+            "scheduleRun".into(),
+            serde_json::to_value(run)
+                .map_err(|error| BtccError::relayed("schedule_run_invalid", error.to_string()))?,
         );
     }
     Ok(())

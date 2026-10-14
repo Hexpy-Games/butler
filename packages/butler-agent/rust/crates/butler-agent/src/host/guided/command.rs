@@ -245,12 +245,15 @@ impl GuidedCommand {
         .await
     }
 
+    /// `project_write`: the access decision allowed this mutation only inside
+    /// the project-write sandbox (Auto), so it runs there.
     pub(crate) async fn prepare_effect(
         &self,
         args: &Map<String, Value>,
         scope: CommandScope<'_>,
+        project_write: bool,
     ) -> Result<PreparedCommandEffect, BtccError> {
-        effect::prepare(self, args, scope).await
+        effect::prepare(self, args, scope, project_write).await
     }
 }
 

@@ -126,6 +126,7 @@ pub(super) async fn registered_result(
         exit_code: result.exit_code,
         signal: None,
         timed_out: result.timed_out,
+        sandbox_violation: Vec::new(),
     };
     from_streams(
         resources,

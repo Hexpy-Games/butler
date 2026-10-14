@@ -35,6 +35,7 @@ pub(crate) async fn edit_input_prepared_edit_and_receipt_are_byte_stable() {
             butler_data: root.join("data"),
             protected_roots: vec![],
             installation_root: None,
+            contained: false,
         },
         Arc::new(Unused),
     );

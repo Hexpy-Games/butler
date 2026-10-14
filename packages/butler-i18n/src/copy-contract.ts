@@ -151,7 +151,6 @@ interface FirstRunCopy {
   customUrl: string;
   customKey: string;
   customConnect: string;
-  connectedToast: (name: string) => string;
   rerunTitle: string;
   rerunDescription: string;
   rerunAction: string;
@@ -190,6 +189,10 @@ export interface ApprovalRequestCopy {
   runCommandOutside: string;
   readOnlyUnisolated: string;
   networkCommandOutside: string;
+  webRequest: string;
+  webRequestDesc: string;
+  taintReason: string;
+  scheduleMode: (mode: string) => string;
   runCommand: (workspace: string | null) => string;
   networkCommand: (workspace: string | null) => string;
   useConnector: (tool: string | null, server: string | null) => string;
@@ -198,6 +201,7 @@ export interface ApprovalRequestCopy {
   startConversation: string;
   restartService: string;
   createWorktree: string;
+  switchFolder: string;
   /** Any kind this App does not know yet. */
   generic: string;
   /** The line after the examples. */
@@ -316,7 +320,7 @@ export interface BrowserCopy {
   history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; };
   tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
-  reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string;
+  reload: string; stop: string; loading: string; crashed: string; empty: string; conversationEmpty: string; updateRequired: string; restartRequired: string; failed: string;
   openOutput: string; output: string; show: string; hide: string; active: string; openConversation: string; moveToConversation: string;
   newConversation: string; bringTab: string; resizeChat: string; pick: string; scrap: string; bookmarks: string; bookmarkAdd: string;
   bookmarked: string; manageBookmarks: string; downloads: string; downloading: string; showInFolder: string; more: string; findInPage: string;
@@ -337,6 +341,10 @@ export interface BrowserCopy {
   enabledHelp: string; shareSignIn: string; shareSignInHelp: string; signIns: string; signInsHelp: string; addSignIn: string; fillPolicy: string;
   ask: string; always: string; never: string; standing: string; lastUsed: string; deletePassword: string; signOutSite: string; revoke: string;
   usedTimes: (count: number) => string; filled: string; askedApproved: string;
+  /** The live tab rail beside the conversation (TabRail, LiveTabCard). */
+  rail: { region: string; openToCheck: string; needsCheck: string; pageError: string; error: string; more: (count: number) => string };
+  /** The titlebar browser toggle while Butler browses in the background (ActivityGlow): label suffixes per state. */
+  glow: { busy: string; attention: string; error: string };
   scraps: string; documents: string; outputs: string; loadMore: string; emptyLibrary: string; bookmarkFolder: string;
 }
 
@@ -691,6 +699,8 @@ export interface AppCopy {
     allFavorites: string;
     working: string;
     attention: string;
+    /** A finished reply the owner has not read; the sidebar dot's name. */
+    unread: string;
     /** What a waiting browser hand-off needs, in place of `attention`. */
     signInAttention: string;
     paymentAttention: string;
@@ -1066,8 +1076,10 @@ export interface AppCopy {
       title: string;
       prompt: string;
     };
-    /** One line under the access selector while Ask first is selected. */
+    /** One line under the access selector while an asking mode is selected. */
     accessHint: string;
+    /** Desktop notification when an unattended run skipped a step for permission. */
+    needsPermissionNotify: string;
     saveFailed: string;
     /** Inline messages for a save the gateway refused (400). */
     errors: {
@@ -1084,6 +1096,8 @@ export interface AppCopy {
       failed: string;
       running: string;
       skippedTargetUnavailable: string;
+      /** A run that skipped a step needing permission. */
+      needsPermission: string;
       cancelled: string;
       notRun: string;
     };
@@ -1384,6 +1398,7 @@ export interface AppCopy {
       contextLimit: string;
       /** Settings → General → Default permission: the new-chat field. */
       chatAccess: string;
+      scheduleAccess: string;
       planModeDefault: string;
       name: string;
       job: string;
@@ -1484,6 +1499,7 @@ export interface AppCopy {
     descriptions: {
       runtimeSupportedModelsOnly: string;
       chatAccess: string;
+      scheduleAccess: string;
       language: string;
       timezone: string;
       consolidationModel: string;
@@ -2010,6 +2026,7 @@ export interface AppCopy {
     commandPalette: string;
     sessionWorktree: (branch?: string) => string;
     localWorkspace: (branch?: string) => string;
+    sessionFolder: (folder: string, branch?: string) => string;
     hideRightPanel: string;
     showRightPanel: string;
     minimizeWindow: string;

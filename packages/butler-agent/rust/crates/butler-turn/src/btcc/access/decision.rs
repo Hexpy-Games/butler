@@ -7,9 +7,16 @@ use serde_json::{Map, Value};
 pub enum CapabilityKind {
     Exempt(ApprovalExemptAction),
     InternalRead,
+    WebRequest {
+        carries_data: bool,
+    },
     FileRead,
-    CommandObservation { sandboxed: bool },
-    CommandMutation { sandbox: CommandSandbox },
+    CommandObservation {
+        sandboxed: bool,
+    },
+    CommandMutation {
+        sandbox: CommandSandbox,
+    },
     Network,
     Connector,
     FileEdit,
@@ -19,6 +26,9 @@ pub enum CapabilityKind {
     CrossConversation,
     ButlerOutput,
     FullOnly(FullOnlyAction),
+    /// Moving the session's working folder; its scope says whether the
+    /// target stays within the consented folder or its repository.
+    FolderSwitch,
     OtherEffect,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,14 +72,29 @@ pub enum AccessDecision {
     Deny(DenyReason),
 }
 
-/// PR1 boundary: taint and ProjectWrite are reserved for PR2.
+/// The one access decision (spec-permission-tiers §1.2). Pure and O(1).
+///
+/// Auto ("ask only for risky actions") extends Ask first: project edits,
+/// project-sandboxed commands and Butler's own ledger records run without a
+/// card. Network and connector calls always ask; once the turn read external
+/// content, a standing conversation permission no longer covers them (D5).
 pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     use AccessDecision::{Allow, Ask, Deny};
     use CapabilityKind::{
-        ButlerOutput, CommandMutation, CommandObservation, Exempt, FileRead, FullOnly, InternalRead,
+        ButlerOutput, CommandMutation, CommandObservation, Connector, Exempt, FileEdit, FileRead,
+        FolderSwitch, FullOnly, InternalRead, Network, ProjectRecord,
     };
     if *mode == AccessMode::FullAccess {
         return Allow;
+    }
+    if let CapabilityKind::WebRequest { carries_data } = request.kind {
+        return if request.taint != TurnTaint::External || !carries_data {
+            Allow
+        } else if *mode == AccessMode::ReadOnly {
+            Deny(DenyReason::ReadOnly)
+        } else {
+            Ask(GrantUse::Ignore)
+        };
     }
     if matches!(request.kind, FullOnly(_)) {
         return Deny(DenyReason::FullAccessRequired);
@@ -85,27 +110,42 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
         };
     }
     let project = request.scope == TargetScope::ProjectFolder;
-    let first = *mode == AccessMode::AskExceptReads;
+    let auto = *mode == AccessMode::Auto;
+    let first = auto || *mode == AccessMode::AskExceptReads;
     match request.kind {
         Exempt(_) | InternalRead | ButlerOutput => Allow,
         FileRead if first && project => Allow,
-        CommandObservation { sandboxed: true } if project => Allow,
+        // A folder switch within the consented folder or its repository.
+        FolderSwitch | CommandObservation { sandboxed: true } if project => Allow,
         CommandObservation { sandboxed: false } | CommandMutation { .. }
             if first && project && request.risk == ApprovalRisk::Low =>
         {
             Allow
         }
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectWrite,
+        }
+        | FileEdit
+            if auto && project =>
+        {
+            Allow
+        }
+        ProjectRecord if auto => Allow,
+        Network | Connector if request.taint == TurnTaint::External => Ask(GrantUse::Ignore),
         _ => Ask(GrantUse::Honor),
     }
 }
+/// Whether `decide` reads the target scope of `kind` under `mode`; callers
+/// classify the filesystem only then.
 pub fn needs_scope(mode: &AccessMode, kind: CapabilityKind) -> bool {
+    let first = matches!(mode, AccessMode::AskExceptReads | AccessMode::Auto);
     match kind {
-        CapabilityKind::FileRead | CapabilityKind::CommandMutation { .. } => {
-            *mode == AccessMode::AskExceptReads
-        }
+        CapabilityKind::FileRead | CapabilityKind::CommandMutation { .. } => first,
         CapabilityKind::CommandObservation { sandboxed } => {
-            *mode == AccessMode::AskExceptReads || sandboxed && *mode == AccessMode::AskAlways
+            first || sandboxed && *mode == AccessMode::AskAlways
         }
+        CapabilityKind::FileEdit => *mode == AccessMode::Auto,
+        CapabilityKind::FolderSwitch => *mode != AccessMode::FullAccess,
         _ => false,
     }
 }
@@ -122,7 +162,7 @@ impl CapabilityKind {
             BindSessionGitWorktree, CallMcpTool, CreateAutomation, DeleteAutomation, EditFile,
             ForgetExplicitMemory, GrepFiles, ListFiles, OutputPublish, PreviewStart, PreviewStop,
             ReadFile, RequestServiceRestart, RunCommand, RunDueAutomations, SaveWallpaperModule,
-            SetWallpaper, StartTopicConversation, UpdateAutomation, WriteFile,
+            SetWallpaper, StartTopicConversation, SwitchFolder, UpdateAutomation, WriteFile,
         };
         let Some(tool) = ToolName::parse(name) else {
             return Self::OtherEffect;
@@ -134,6 +174,17 @@ impl CapabilityKind {
             return Self::ProjectRecord;
         }
         match tool {
+            ToolName::WebRead => Self::WebRequest {
+                carries_data: super::web_read_carries_data(
+                    arguments.get("url").and_then(Value::as_str).unwrap_or(""),
+                    false,
+                ),
+            },
+            ToolName::WebSearch => Self::WebRequest {
+                carries_data: super::web_search_carries_data(
+                    arguments.get("query").and_then(Value::as_str).unwrap_or(""),
+                ),
+            },
             ForgetExplicitMemory => Self::FullOnly(FullOnlyAction::MemoryForget),
             RequestServiceRestart => Self::FullOnly(FullOnlyAction::ServiceRestart),
             BindSessionGitWorktree => Self::FullOnly(FullOnlyAction::GitWorktree),
@@ -144,7 +195,7 @@ impl CapabilityKind {
                 },
                 Some("remote_observation") => Self::Network,
                 Some("mutation") => Self::CommandMutation {
-                    sandbox: CommandSandbox::None,
+                    sandbox: mutation_sandbox(arguments),
                 },
                 _ => Self::OtherEffect,
             },
@@ -159,8 +210,21 @@ impl CapabilityKind {
             SetWallpaper | SaveWallpaperModule => Self::SettingsWrite,
             StartTopicConversation => Self::CrossConversation,
             OutputPublish => Self::ButlerOutput,
+            SwitchFolder => Self::FolderSwitch,
             _ => Self::InternalRead,
         }
+    }
+}
+/// A mutating command can run in the project-write sandbox when this host
+/// enforces one and the call did not opt out with `sandbox: "none"`.
+fn mutation_sandbox(arguments: &Map<String, Value>) -> CommandSandbox {
+    let requested = arguments.get("sandbox").and_then(Value::as_str);
+    if butler_platform::command_sandbox::project_write_available()
+        && matches!(requested, None | Some("project"))
+    {
+        CommandSandbox::ProjectWrite
+    } else {
+        CommandSandbox::None
     }
 }
 /// Unresolved shell evaluation must never inherit a project classification.

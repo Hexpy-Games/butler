@@ -14,6 +14,7 @@ pub(super) struct SelectedData {
     pub(super) passwords: Vec<import::PasswordRow>,
     pub(super) history: Vec<Value>,
     pub(super) invalid: usize,
+    pub(super) csv_required: usize,
 }
 pub(super) struct Selection {
     pub(super) profile: Option<BrowserProfile>,
@@ -31,11 +32,12 @@ impl Drop for Selection {
 }
 impl Selection {
     pub(super) fn read(&self) -> Result<SelectedData, HttpError> {
-        let (passwords, invalid) = self.read_passwords()?;
+        let (passwords, invalid, csv_required) = self.read_passwords()?;
         Ok(SelectedData {
             bookmarks: self.read_bookmarks()?,
             passwords,
             invalid,
+            csv_required,
             history: self.read_history()?,
         })
     }
@@ -67,9 +69,9 @@ impl Selection {
             .and_then(import::finish)
             .map_err(|e| super::import_error(&e))
     }
-    fn read_passwords(&self) -> Result<(Vec<import::PasswordRow>, usize), HttpError> {
+    fn read_passwords(&self) -> Result<(Vec<import::PasswordRow>, usize, usize), HttpError> {
         if !self.items.passwords || self.csv {
-            return Ok((Vec::new(), 0));
+            return Ok((Vec::new(), 0, 0));
         }
         if let Some(profile) = &self.profile {
             return butler_platform::browser_transfer::passwords(
@@ -82,7 +84,7 @@ impl Selection {
                 let count = batch.logins.len();
                 let rows = import::native_passwords(batch.logins);
                 let invalid = batch.invalid + count - rows.len();
-                (rows, invalid)
+                (rows, invalid, batch.csv_required)
             })
             .map_err(native_error);
         }
@@ -92,6 +94,8 @@ impl Selection {
         )?;
         let bytes = butler_platform::browser_transfer::read(&file, import::MAX_CSV_BYTES)
             .map_err(native_error)?;
-        import::parse_password_csv(&bytes).map_err(|e| super::import_error(&e))
+        import::parse_password_csv(&bytes)
+            .map(|(rows, invalid)| (rows, invalid, 0))
+            .map_err(|e| super::import_error(&e))
     }
 }

@@ -5,7 +5,7 @@
     "deploy/licenses/generate.mjs": "eb413c424649cc6ef3bc734cb1a9479cf8ddffb3af398601a974268c229d7c34",
     "deploy/licenses/inputs.mjs": "da35f54527aa98b6a7ced018b1d0172c5f997d7eb10842ae2914e23c036868e1",
     "deploy/licenses/refresh.py": "befdba5a52f092871fe94f4a93bed6e2a76c59a9edb3bc9aa8d4e7ce7b79b77d",
-    "packages/butler-agent/rust/Cargo.lock": "1b43f832b85d2d8689606ace7ce4359382d8029dc0f35b8651c371e6c95c6c0e",
+    "packages/butler-agent/rust/Cargo.lock": "bea46e7051c0c45ecc2a2ccc09798267854c6885714d9343c29bd77d84569c7d",
     "packages/butler-agent/rust/Cargo.toml": "d74d0251e354c1ec916d057d396badfcd600ad811b0e7a06fa8a90407c34a7f5",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "21b121cd6d50f5abc67405bba11d956714d409920c8f0243f5fa94fdf79a56eb",
@@ -19,7 +19,7 @@
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "6823161ebcffd1ab5c100a48c5891a4a754273fce5b7f13b78a10fab1dc9a3d9",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "fac3484ef1bedf7cd5c6408dfa910d8f39dd15ab91da7514b35203b9180b543c",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "61762d100435abad4a0426b79721935420588c1a928d6b45b824ae8d149da712",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "0b1332f0f43eb9296972675176176393546de2e442ce2b72c8dbf141135ec7f8",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "15317b3544cdbcfacc5d46ab5b1cbddb1faa34c50ceca49221fdea0fa35a4592",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "2aef74f12eec60a86d3c8e5047cd56c4bda1efd6ba402d5f456ffec89b46b798",
@@ -11381,6 +11381,57 @@
       ]
     },
     {
+      "id": "rust:aead@0.5.2",
+      "name": "aead",
+      "version": "0.5.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/traits/tree/1ae238c527c204dd9590e3abc406cfbb342d46ea",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "949ab7b3e7140fee216f06fe3a2bd67d68dd511f8ea73c1e01c98cb348e9c8ae"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/traits/blob/1ae238c527c204dd9590e3abc406cfbb342d46ea/aead/LICENSE-APACHE",
+        "https://github.com/RustCrypto/traits/blob/1ae238c527c204dd9590e3abc406cfbb342d46ea/aead/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2019 The RustCrypto Project Developers",
+        "Copyright (c) 2019 MobileCoin, LLC"
+      ]
+    },
+    {
+      "id": "rust:aes-gcm@0.10.3",
+      "name": "aes-gcm",
+      "version": "0.10.3",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/AEADs/tree/fa8197f11d79a079fcb1f6ef67fa9119ce6939b9",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "3c0dfa33fd2e6976038555b52095699452653b1fcabe113074f14e0848a6b11e"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/AEADs/blob/fa8197f11d79a079fcb1f6ef67fa9119ce6939b9/aes-gcm/LICENSE-APACHE",
+        "https://github.com/RustCrypto/AEADs/blob/fa8197f11d79a079fcb1f6ef67fa9119ce6939b9/aes-gcm/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2019 The RustCrypto Project Developers"
+      ]
+    },
+    {
       "id": "rust:aes@0.8.4",
       "name": "aes",
       "version": "0.8.4",
@@ -14582,6 +14633,32 @@
       ]
     },
     {
+      "id": "rust:ctr@0.9.2",
+      "name": "ctr",
+      "version": "0.9.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/block-modes/tree/65320945adb1b6f7290e61b033f9e04ccdb2581b",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "63af4bea227c94d021e99427f6ca3a4b8efddadcca93ab6130f708cf6138cf68"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/block-modes/blob/65320945adb1b6f7290e61b033f9e04ccdb2581b/ctr/LICENSE-APACHE",
+        "https://github.com/RustCrypto/block-modes/blob/65320945adb1b6f7290e61b033f9e04ccdb2581b/ctr/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2018-2022 RustCrypto Developers",
+        "Copyright (c) 2018 Artyom Pavlov"
+      ]
+    },
+    {
       "id": "rust:ctutils@0.4.2",
       "name": "ctutils",
       "version": "0.4.2",
@@ -17606,6 +17683,31 @@
       "copyright": [
         "Copyright (c) 2018-2026 The rust-random Project Developers",
         "Copyright (c) 2014 The Rust Project Developers"
+      ]
+    },
+    {
+      "id": "rust:ghash@0.5.1",
+      "name": "ghash",
+      "version": "0.5.1",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/universal-hashes/tree/655c6cbef85b0faa7ff24c0686986cf2c27b2c6d",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "c0fabcc308b450cb6fe62c9f56fae6abbeb9768eb80d992484c857d744846c2e"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/universal-hashes/blob/655c6cbef85b0faa7ff24c0686986cf2c27b2c6d/ghash/LICENSE-APACHE",
+        "https://github.com/RustCrypto/universal-hashes/blob/655c6cbef85b0faa7ff24c0686986cf2c27b2c6d/ghash/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2019 RustCrypto Developers"
       ]
     },
     {
@@ -22204,6 +22306,31 @@
       ]
     },
     {
+      "id": "rust:opaque-debug@0.3.1",
+      "name": "opaque-debug",
+      "version": "0.3.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/utils/tree/dd4adddf8b716bb51eb8ccb8c73e47bff1e358aa",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "f59f5a78193597e04fd932ee9af86254d14d08be5c9d0e003ab888feccce2161"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/utils/blob/dd4adddf8b716bb51eb8ccb8c73e47bff1e358aa/opaque-debug/LICENSE-APACHE",
+        "https://github.com/RustCrypto/utils/blob/dd4adddf8b716bb51eb8ccb8c73e47bff1e358aa/opaque-debug/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2018-2024 The RustCrypto Project Developers"
+      ]
+    },
+    {
       "id": "rust:openssl-probe@0.2.1",
       "name": "openssl-probe",
       "version": "0.2.1",
@@ -23127,6 +23254,31 @@
       ],
       "copyright": [
         "Copyright (c) 2018 Raph Levien"
+      ]
+    },
+    {
+      "id": "rust:polyval@0.6.2",
+      "name": "polyval",
+      "version": "0.6.2",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/universal-hashes/tree/4e7d04f7c8e44f634ada8c673c8cb1672a64d374",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "a291b6910744d262a9e953c3b5868d74510e20161359f649a11e1791fde84fcd"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/universal-hashes/blob/4e7d04f7c8e44f634ada8c673c8cb1672a64d374/polyval/LICENSE-APACHE",
+        "https://github.com/RustCrypto/universal-hashes/blob/4e7d04f7c8e44f634ada8c673c8cb1672a64d374/polyval/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2019-2023 RustCrypto Developers"
       ]
     },
     {
@@ -28273,6 +28425,31 @@
       ]
     },
     {
+      "id": "rust:universal-hash@0.5.1",
+      "name": "universal-hash",
+      "version": "0.5.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/traits/tree/742af86f821d7f79e76962d302c819b14622a485",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "6b50510a0400c72172355cc5d2ba0f2c5c2eb33149b8f96539dc345fdc484920"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/traits/blob/742af86f821d7f79e76962d302c819b14622a485/universal-hash/LICENSE-APACHE",
+        "https://github.com/RustCrypto/traits/blob/742af86f821d7f79e76962d302c819b14622a485/universal-hash/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2019-2020 RustCrypto Developers"
+      ]
+    },
+    {
       "id": "rust:untrusted@0.9.0",
       "name": "untrusted",
       "version": "0.9.0",
@@ -28812,6 +28989,32 @@
       ],
       "copyright": [
         "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-dpapi@0.2.0",
+      "name": "windows-dpapi",
+      "version": "0.2.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/sheridans/windows-dpapi/tree/4ac261cc789ab046dd8bac3e914f49b26b8b7d77",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "d818d7b81bcd3c9a2f823266d12b529f45fb86137b6e639efadaed713dc2adc9",
+        "db5b57b23de1a9e33a52aa52685258c163b279d36ab707f185fa04202b105010"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/sheridans/windows-dpapi/blob/4ac261cc789ab046dd8bac3e914f49b26b8b7d77/LICENSE-APACHE",
+        "https://github.com/sheridans/windows-dpapi/blob/4ac261cc789ab046dd8bac3e914f49b26b8b7d77/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright 2025 Sam Sheridan",
+        "Copyright (c) 2025 Sam Sheridan"
       ]
     },
     {

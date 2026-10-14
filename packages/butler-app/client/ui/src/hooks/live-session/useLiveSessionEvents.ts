@@ -6,6 +6,8 @@ import { publishMemoryEvent } from "@/app/memoryEvents.ts";
 import { publishLibraryEvent } from "@/app/libraryEvents";
 import { refreshSessionViewSubscriptions } from "@/components/layout/hooks/useSessionViewSubscription.ts";
 import { useSessionAttentionNotifications } from "./useSessionAttentionNotifications";
+import { useSessionReadMarker } from "./useSessionReadMarker.ts";
+import { applySessionRead } from "@/app/sessionReads.ts";
 import { pairedDevicesChanged } from "@/app/securityDeviceEvents.ts";
 import { appCopy } from "@/app/copy.ts";
 import { invalidateProjectDashboard } from "./projectDashboardInvalidation.ts";
@@ -36,6 +38,7 @@ const TERMINAL_TURN_STATES = new Set(["delivered", "failed", "cancelled"]);
 
 export function useLiveSessionEvents(): void {
   useSessionAttentionNotifications();
+  useSessionReadMarker();
   useEffect(subscribeNativeUpdateProgress, []);
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const projectedEventCursor = useButlerStore(
@@ -80,6 +83,11 @@ export function useLiveSessionEvents(): void {
       if (event.type.startsWith("authority.")) authorityPermissionsChanged();
       receiveTaskGraphEvent(event);
       if (event.type === "security.device_paired") pairedDevicesChanged();
+      // Read on any device: clear the dot here and drop navigation loads from before the read.
+      if (event.type === "session.read" && typeof event.payload?.session_id === "string") {
+        applySessionRead(event.payload.session_id);
+        navigationReconciliation.noteLiveNavigationEvent();
+      }
       const dashboardState = useButlerStore.getState();
       if (dashboardState.view.kind === "project-dashboard") invalidateProjectDashboard(event, dashboardState.view.projectId, dashboardState.navigation);
       if (event.type === "stream.reconcile_required") {
@@ -235,6 +243,20 @@ function notifyDesktopEvent(
 ): void {
   const settings = useButlerStore.getState().settings.desktop_notifications;
   if (!settings.enabled || !isRecentEvent(event)) return;
+  if (
+    event.type === "automation.run" &&
+    event.payload?.safe_error_code === "schedule_permission_required"
+  ) {
+    void showDesktopNotification({
+      kind: "task_completion",
+      title: appCopy.firstRun.product,
+      body: event.payload?.tainted === true
+        ? `${appCopy.automations.needsPermissionNotify} ${appCopy.interfaceTemplates.approvalRequest.taintReason}`
+        : appCopy.automations.needsPermissionNotify,
+      sessionId: event.payload.target_session_id,
+    });
+    return;
+  }
   const message = event.payload?.message;
   if (
     settings.assistant_messages &&

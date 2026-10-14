@@ -22,11 +22,15 @@ import { ConversationScroll, ConversationShell } from "@/butler-ds";
 import { useSessionViewSubscription } from
   "@/components/layout/hooks/useSessionViewSubscription.ts";
 
+import { AgentTabRail } from "../browser/AgentTabRail";
+import { useBrowserShellState } from "../browser/browserShellState";
+
 void appCopy;
 
 export function Conversation() {
   const locale = useAppLocale();
   const activeChatId = useButlerStore((state) => state.activeChatId);
+  const browserOpen = useBrowserShellState(state => Boolean(state.conversations[activeChatId]?.open));
   const branchProjectId = useButlerStore((state) => {
     if (activeChatId === "general") return null;
     const view = state.sessionViews[activeChatId] ??
@@ -96,6 +100,8 @@ export function Conversation() {
   const markTheme = resolveButlerMarkTheme(appearanceTheme);
   return (
     <ConversationShell
+      railView={activeChatId}
+      rail={window.butlerBrowser && !browserOpen ? <AgentTabRail session={activeChatId} /> : undefined}
       background={wallpaper.background}
       composerReserve={composerReserve}
       contentGutter={newChatTitleIconGutter}

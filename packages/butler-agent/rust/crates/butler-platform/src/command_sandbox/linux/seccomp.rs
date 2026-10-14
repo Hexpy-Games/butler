@@ -71,6 +71,11 @@ pub(super) fn filter() -> Result<BpfProgram, Error> {
     // No socket() family is required for filesystem observations. In
     // particular, NETLINK is not read-only: it can mutate kernel state.
     rules.extend([
+        (libc::SYS_setsid, vec![]),
+        (libc::SYS_setpgid, vec![]),
+        (libc::SYS_unshare, vec![]),
+        (libc::SYS_setns, vec![]),
+        (libc::SYS_clone, super::process::clone_denials()?),
         (libc::SYS_socket, vec![]),
         // Anonymous pairs need no connect(). Deny it even on inherited fds.
         (libc::SYS_connect, vec![]),
@@ -140,6 +145,7 @@ fn metadata_syscalls() -> Vec<i64> {
 }
 
 pub(super) fn apply() -> Result<(), Error> {
+    super::process::apply()?;
     seccompiler::apply_filter(&filter()?)?;
     Ok(())
 }
