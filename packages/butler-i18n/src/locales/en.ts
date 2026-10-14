@@ -425,7 +425,7 @@ export const enUsCopy: AppCopy = {
     document: "Document",
     active: "Active", other: "Other", roadmap: "Roadmap",
     sourceDetails: "Source details", readOnly: "Read-only view of the original document.", referenceAction: "Reference in conversation",
-    statuses: { draft: "Draft", proposed: "Proposed", active: "Active", in_progress: "In progress", todo: "To do", planned: "Planned", review: "In review", blocked: "Blocked", done: "Done", completed: "Completed", cancelled: "Cancelled", archived: "Archived", superseded: "Superseded", deprecated: "Deprecated" },
+    statuses: { draft: "Draft", proposed: "Proposed", active: "Active", in_progress: "In progress", todo: "To do", planned: "Planned", review: "In review", blocked: "Blocked", done: "Done", completed: "Completed", skipped: TASK_GRAPH_COPY["en-US"].status.skipped, cancelled: "Cancelled", archived: "Archived", superseded: "Superseded", deprecated: "Deprecated" },
     labels: { id: "ID", kind: "Document type", status: "Document status", updatedAt: "Last updated", source: "Source location", revision: "Revision", migratedFrom: "Migrated from", parent: "Parent", owner: "Owner", priority: "Priority", acceptance: "Acceptance", validation: "Validation", review: "Review", report: "Report", implementation: "Implementation" },
   },
   guided: {
@@ -577,7 +577,7 @@ export const enUsCopy: AppCopy = {
     pendingApprovals: count => `${count} pending ${count === 1 ? "approval" : "approvals"}`, allowedCount: count => `${count} allowed`, revoke: title => `${title} — Revoke`,
     approvalRequest: {
       browserMode: { signed_out: "Without signing in", signed_in: "Signed in" },
-      signInStep: reason => ({mfa: "Two-step verification", passkey: "Passkey", captcha: "CAPTCHA", secure_keypad: "Security keypad", unknown_form: "Check sign-in form"} as Record<string, string>)[reason] ?? "Check sign-in form",
+      signInStep: reason => ({ mfa: "Two-step verification", passkey: "Passkey", captcha: "CAPTCHA", secure_keypad: "Security keypad", unknown_form: "Check sign-in form" } as Record<string, string>)[reason] ?? "Check sign-in form",
       waitHandoff: reason => ({ sign_in: "Sign-in needed", secure_field: "Your input needed", secure_keypad: "Security keypad needs you", captcha: "CAPTCHA needs you" } as Record<string, string>)[reason] ?? "Needs you in the tab",
       payStep: reason => ({ secure_keypad: "Security keypad", app_auth: "Card app approval", otp: "Verification code", three_ds: "Card issuer check", captcha: "CAPTCHA" } as Record<string, string>)[reason] ?? "Check the payment page",
       payHandoff: "Payment needs you",
