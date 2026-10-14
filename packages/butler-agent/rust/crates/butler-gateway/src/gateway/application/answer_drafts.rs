@@ -3,20 +3,31 @@ use crate::gateway::{AppEventEnvelope, protocol::APP_PROTOCOL_VERSION};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
+/// Per turn, the draft payloads in arrival order. Consecutive payloads of one
+/// call share an entry, so a reconnect replays every call (parallel calls,
+/// later calls and retries) in the order the App saw them.
 #[derive(Default)]
-pub(super) struct Drafts(HashMap<String, Value>);
+pub(super) struct Drafts(HashMap<String, Vec<Value>>);
+
+fn same_call(a: &Value, b: &Value) -> bool {
+    ["stream_id", "call_index", "call_id"]
+        .iter()
+        .all(|key| a.get(*key) == b.get(*key))
+}
+
+fn next_seq(entries: &[Value]) -> u64 {
+    entries
+        .last()
+        .and_then(|entry| entry["ops"].as_array())
+        .and_then(|ops| ops.iter().rev().find_map(|op| op["seq"].as_u64()))
+        .unwrap_or(0)
+        + 1
+}
 
 impl Drafts {
     pub(super) fn sequence_end(&self, payload: &mut Value) {
         let turn = payload["turn_id"].as_str().unwrap_or_default();
-        let seq = self
-            .0
-            .get(turn)
-            .and_then(|draft| draft["ops"].as_array())
-            .and_then(|ops| ops.last())
-            .and_then(|op| op["seq"].as_u64())
-            .unwrap_or(0)
-            + 1;
+        let seq = self.0.get(turn).map_or(1, |entries| next_seq(entries));
         if let Some(ops) = payload["ops"].as_array_mut() {
             for op in ops {
                 if op["op"] == "end" {
@@ -26,33 +37,24 @@ impl Drafts {
         }
     }
     pub(super) fn apply(&mut self, payload: &Value) {
-        let Some(turn) = payload["turn_id"].as_str() else {
+        let (Some(turn), Some(ops)) = (payload["turn_id"].as_str(), payload["ops"].as_array())
+        else {
             return;
         };
-        let Some(ops) = payload["ops"].as_array() else {
-            return;
-        };
-        match self.0.entry(turn.to_owned()) {
-            std::collections::hash_map::Entry::Vacant(entry) => {
-                entry.insert(payload.clone());
-            }
-            std::collections::hash_map::Entry::Occupied(mut entry) => {
-                let draft = entry.get_mut();
-                if !payload["stream_id"].as_str().unwrap_or_default().is_empty()
-                    && (draft["stream_id"] != payload["stream_id"]
-                        || draft["call_index"] != payload["call_index"])
-                {
-                    *draft = payload.clone();
-                } else if let Some(previous) = draft["ops"].as_array_mut() {
-                    previous.extend(ops.iter().cloned());
-                }
-            }
+        let entries = self.0.entry(turn.to_owned()).or_default();
+        if let Some(last) = entries.last_mut()
+            && same_call(last, payload)
+            && let Some(previous) = last["ops"].as_array_mut()
+        {
+            previous.extend(ops.iter().cloned());
+        } else {
+            entries.push(payload.clone());
         }
     }
     pub(super) fn snapshot(&self) -> AppEventEnvelope {
         envelope(
             "answer_blocks.snapshot",
-            json!({"drafts":self.0.values().collect::<Vec<_>>() }),
+            json!({"drafts":self.0.values().flatten().collect::<Vec<_>>() }),
         )
     }
     pub(super) fn finish(&mut self, event: &AppEventEnvelope) -> Option<AppEventEnvelope> {
@@ -75,12 +77,12 @@ impl Drafts {
             .get("turn_id")
             .or_else(|| view.get("id"))
             .and_then(Value::as_str)?;
-        let draft = self.0.remove(turn)?;
+        let entries = self.0.remove(turn)?;
         Some(envelope(
             "answer_blocks.draft",
             json!({
-                "turn_id":turn, "session_id":draft["session_id"],
-                "ops":[{"seq":draft["ops"].as_array().and_then(|ops| ops.last()).and_then(|op| op["seq"].as_u64()).unwrap_or(0) + 1,"op":"end", "outcome":state}]
+                "turn_id":turn, "session_id":entries.first().map(|entry| entry["session_id"].clone()),
+                "ops":[{"seq":next_seq(&entries),"op":"end", "outcome":state}]
             }),
         ))
     }

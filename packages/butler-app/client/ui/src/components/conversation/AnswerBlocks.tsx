@@ -5,7 +5,7 @@ import { parseAnswerBlocks } from "../../../../shared/answer-blocks-parse";
 import { Button, Popup, Inline, KeyValueRow, MetricCard, MetricGrid, Notice, PillButton, Presence, usePresence, Reply, ItemCardSkeleton, Skeleton, Stack, Typo } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
-import { useAnswerDrafts, forgetAnswerDraft } from "@/app/answerDrafts";
+import { useAnswerDrafts, forgetAnswerDraft, draftBlocks, draftStatus } from "@/app/answerDrafts";
 import { openConversationLink } from "../browser/browserBridge";
 import { AnswerItem } from "./AnswerItem";
 import { AnswerCards } from "./AnswerCards";
@@ -48,16 +48,17 @@ export const AnswerBlocks = memo(function AnswerBlocks({ sets, sessionId, turnId
   const final = parsed.length > 0;
   const present = final || draft?.present === true;
   const presence = usePresence(present, { onExitComplete: () => { if (turnId) forgetAnswerDraft(turnId); } });
-  const rendered = final ? parsed : draft?.raw.map((raw, index) => draft.blocks[index] ?? raw) ?? [];
+  const entries = useMemo(() => draft ? draftBlocks(draft) : [], [draft]);
+  const rendered = final ? parsed : entries.map(entry => entry.view ?? entry.raw);
   if (!rendered.length) return null;
   return <AnswerSessionContext.Provider value={sessionId}><Presence present={present} motion="fade"><div ref={presence.ref} data-test-class="answer-blocks" data-motion={reducedMotion ? "reduced" : undefined}><Stack gap="md">
-    {!final && draft ? <Typo.Caption tone="secondary" role="status">{draft.outcome === "rejected" ? copy.rechecking
-      : draft.outcome === "accepted" ? copy.prepared : copy.preparing}</Typo.Caption> : null}
+    {!final && draft ? <Typo.Caption tone="secondary" role="status">{copy[draftStatus(draft)]}</Typo.Caption> : null}
     {rendered.map((raw, index) => {
       const block = raw as AnswerBlockView;
-      const ready = final || Boolean(draft?.blocks[index]);
-      const streaming = !final && draft?.open[index];
-      const incoming = !final && draft?.outcome === "streaming" ? draft.incoming[`${index}:${block.type === "table" ? "rows" : "items"}`] ?? [] : undefined;
+      const entry = final ? undefined : entries[index];
+      const ready = final || Boolean(entry?.view);
+      const streaming = entry?.open === true;
+      const incoming = entry?.incoming;
       return <Stack key={block.id ?? `${index}:${block.type}`} gap="sm" data-answer-block={block.type}>
         {block.title ? <Typo.SectionTitle>{block.title}</Typo.SectionTitle> : null}
         {ready ? <Block block={block} streaming={streaming} incoming={incoming} /> : block.type === "cards" ? <ItemCardSkeleton media={block.media} /> : <Skeleton height="row" width="full" />}

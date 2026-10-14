@@ -187,7 +187,39 @@ try {
     console.log(JSON.stringify(rejected));
     assert(rejected.retryKept && rejected.rejectedGone && rejected.abandonedGone);
     assert.equal(rejected.count, 3);
-    results.push({ width, theme, reducedMotion, ...result, ...rejected });
+    const calls = await page.evaluate(async () => {
+      const path = "/src/app/answerDrafts.ts";
+      const { receiveAnswerDraft, forgetAnswerDraft } = await import(/* @vite-ignore */ path);
+      const paint = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const send = async (ops: unknown[], stream: string, index: number, callId: string) => {
+        receiveAnswerDraft({ type: "answer_blocks.draft", payload: { session_id: "butler-client", turn_id: "calls-turn", stream_id: stream, call_index: index, call_id: callId, ops } });
+        await paint();
+      };
+      const cards = (id: string, title: string) => [{ seq: 1, op: "block", bi: 0, value: { type: "cards", media: "1:1", id } },
+        { seq: 2, op: "item", bi: 0, list: "items", index: 0, value: { key: title, title } }, { seq: 3, op: "list_end", bi: 0, list: "items" }, { seq: 4, op: "block_end", bi: 0 }];
+      const shown = () => {
+        const blocks = [...document.querySelectorAll('[data-test-class="answer-blocks"]')].at(-1)!;
+        return { titles: [...blocks.querySelectorAll('[data-slot="item-card"]')].map(node => document.getElementById(node.getAttribute("aria-labelledby") ?? "")?.textContent ?? ""),
+          dimmed: blocks.querySelectorAll('[data-answer-superseded="true"]').length, status: blocks.querySelector('[role="status"]')?.textContent };
+      };
+      // Two calls of one round, then a later round's call whose outcome arrives before its units and replaces block "a".
+      await send(cards("a", "Alpha"), "round-1", 0, "call-a");
+      await send(cards("b", "Beta"), "round-1", 1, "call-b");
+      const parallel = shown();
+      await send([{ op: "end", outcome: "accepted" }], "", 0, "call-b");
+      await send([{ op: "end", outcome: "accepted" }], "", 0, "call-a");
+      await send([{ op: "end", outcome: "accepted" }], "", 0, "call-c");
+      await send(cards("a", "Alpha 2"), "round-2", 0, "call-c");
+      const later = shown();
+      forgetAnswerDraft("calls-turn"); await paint();
+      return { parallel, later };
+    });
+    console.log(JSON.stringify(calls));
+    assert.deepEqual(calls.parallel.titles, ["Alpha", "Beta"], "parallel calls keep their own blocks");
+    assert.equal(calls.parallel.dimmed, 0, "a parallel call never dims another call");
+    assert.deepEqual(calls.later.titles, ["Beta", "Alpha 2"], "a later call replaces only its block id");
+    assert.equal(calls.later.dimmed, 0);
+    results.push({ width, theme, reducedMotion, ...result, ...rejected, calls });
   }
   assert.deepEqual(errors, []);
   writeFileSync(join(evidence, `draft-results-${process.env.BUTLER_DRAFT_CASE ?? "all"}.json`), JSON.stringify({ modelCalls: 0, results }, null, 2));

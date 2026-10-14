@@ -19,6 +19,10 @@ pub enum ToolCallStreamEvent {
         sequence: u64,
         /// Tool name, before any arguments are forwarded.
         tool_name: String,
+        /// The provider's tool call id when the stream has named it, the same
+        /// id the executed call carries; consumers correlate on it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        call_id: Option<String>,
     },
     /// An exact, ordered fragment of the call's JSON arguments.
     ToolCallDelta {

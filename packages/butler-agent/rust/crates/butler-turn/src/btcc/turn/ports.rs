@@ -161,10 +161,13 @@ pub trait AgentLoopProgress: Send + Sync {
 
     /// Ephemeral validated draft ops. Implementations must never append durable events.
     /// Gateway delivery is composed separately from the durable progress path.
+    /// `call_id` is the provider's tool call id when known; an `end` op names
+    /// its call only by it (with an empty `stream_id`).
     fn answer_blocks_draft(
         &self,
         _stream_id: String,
         _call_index: u64,
+        _call_id: Option<String>,
         _ops: Vec<serde_json::Value>,
     ) -> PortFuture<'_, ()> {
         Box::pin(async { Ok(()) })

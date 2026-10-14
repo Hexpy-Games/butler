@@ -219,6 +219,10 @@ impl ChatState {
                     call_index: index,
                     sequence: self.sequence,
                     tool_name: name.to_owned(),
+                    call_id: accumulated["id"]
+                        .as_str()
+                        .filter(|id| !id.is_empty())
+                        .map(str::to_owned),
                 });
                 self.started.insert(index);
             }

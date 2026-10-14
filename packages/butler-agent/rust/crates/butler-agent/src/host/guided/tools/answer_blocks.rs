@@ -17,14 +17,18 @@ pub(super) async fn execute(
         } else {
             "rejected"
         };
-        progress
+        // The draft is display only: a failed delivery never fails the call.
+        if let Err(error) = progress
             .answer_blocks_draft(
                 String::new(),
                 0,
+                Some(call.id.clone()),
                 vec![json!({"op":"end", "outcome":outcome})],
             )
             .await
-            .map_err(ToolExecutionError::Integrity)?;
+        {
+            butler_core::diagnostic!("[answer-blocks] draft end failed code={}", error.code());
+        }
     }
     result
 }

@@ -4,28 +4,25 @@ import type { AnswerBlockView } from "../../../shared/answer-blocks-view";
 import type { TimelineEvent, MessageRecord } from "./types";
 
 type Unit = Record<string, unknown>;
-export type AnswerDraft = {
-  sessionId: string; turnId: string; call: string; seq: number;
-  incoming: Record<string, unknown[]>; raw: Unit[]; blocks: (AnswerBlockView | null)[]; open: boolean[];
-  lastBlock: number; outcome: string; present: boolean;
+type Outcome = "streaming" | "accepted" | "rejected";
+/** One answer_blocks call's validated units, positioned by the call's own block index. */
+export type AnswerDraftCall = {
+  id: string; stream: string; callId?: string; seq: number; outcome: Outcome;
+  incoming: Record<string, unknown[]>; raw: Unit[]; blocks: (AnswerBlockView | null)[]; open: boolean[]; lastBlock: number;
 };
+/** A turn's calls in arrival order; `early` holds outcomes that arrived before their call's first unit. */
+export type AnswerDraft = { sessionId: string; turnId: string; calls: AnswerDraftCall[]; early: Record<string, Outcome>; present: boolean };
+export type AnswerDraftBlock = { raw: Unit; view: AnswerBlockView | null; open: boolean; incoming?: unknown[] };
 type State = { answerDrafts: Record<string, AnswerDraft>; sessions: Record<string, string[]> };
 export const useAnswerDrafts = create<State>(() => ({ answerDrafts: {}, sessions: {} }));
 const emptyTurns: string[] = [];
 export const draftTurns = (state: State, session: string) => state.sessions[session] ?? emptyTurns;
 
-function operation(draft: AnswerDraft, op: Unit): AnswerDraft {
-  if (op.op === "end") {
-    const accepted = op.outcome === "accepted";
-    return { ...draft, outcome: String(op.outcome),
-      raw: accepted ? draft.raw.slice(0, draft.lastBlock + 1) : draft.raw,
-      blocks: accepted ? draft.blocks.slice(0, draft.lastBlock + 1) : draft.blocks,
-      present: !(op.outcome === "delivered" && draft.outcome !== "accepted") && !["failed", "cancelled", "runtime_fault"].includes(String(op.outcome)) };
-  }
+function unit(call: AnswerDraftCall, op: Unit): AnswerDraftCall {
   const seq = Number(op.seq), bi = Number(op.bi);
-  if (!Number.isInteger(seq) || seq <= draft.seq || !Number.isInteger(bi) || bi < 0 || bi >= 8) return draft;
-  const raw = [...draft.raw], blocks = [...draft.blocks], open = [...draft.open];
-  const incoming = { ...draft.incoming };
+  if (!Number.isInteger(seq) || seq <= call.seq || !Number.isInteger(bi) || bi < 0 || bi >= 8) return call;
+  const raw = [...call.raw], blocks = [...call.blocks], open = [...call.open];
+  const incoming = { ...call.incoming };
   let block = { ...raw[bi] };
   if (op.op === "block") {
     const value = op.value as Unit;
@@ -57,18 +54,84 @@ function operation(draft: AnswerDraft, op: Unit): AnswerDraft {
     : block.type === "callout" && typeof block.text === "string";
   if (block.type === "table" && !Array.isArray(block.rows)) block = { ...block, rows: [] };
   blocks[bi] = ready ? block as unknown as AnswerBlockView : null;
-  return { ...draft, seq, raw, blocks, open, incoming, lastBlock: Math.max(draft.lastBlock, bi) };
+  return { ...call, seq, raw, blocks, open, incoming, lastBlock: Math.max(call.lastBlock, bi) };
+}
+
+function settle(call: AnswerDraftCall, outcome: Outcome): AnswerDraftCall {
+  return outcome === "accepted"
+    ? { ...call, outcome, raw: call.raw.slice(0, call.lastBlock + 1), blocks: call.blocks.slice(0, call.lastBlock + 1) }
+    : { ...call, outcome };
+}
+
+/** An outcome names its call by provider call id; without one it settles the oldest open call. */
+function end(draft: AnswerDraft, op: Unit, callId?: string): AnswerDraft {
+  const outcome = String(op.outcome);
+  if (outcome !== "accepted" && outcome !== "rejected") {
+    if (!["delivered", "failed", "cancelled", "runtime_fault"].includes(outcome)) return draft;
+    return { ...draft, present: outcome === "delivered" && draft.calls.some(call => call.outcome === "accepted") };
+  }
+  const named = callId ? draft.calls.findIndex(call => call.callId === callId) : -1;
+  const index = named >= 0 ? named : draft.calls.findIndex(call => call.outcome === "streaming" && !(callId && call.callId));
+  if (index < 0) return callId ? { ...draft, early: { ...draft.early, [callId]: outcome } } : draft;
+  const calls = [...draft.calls];
+  calls[index] = settle(calls[index], outcome);
+  return { ...draft, calls };
+}
+
+/** A new round after a call that was not accepted is its retry and reconciles on its blocks; any other call is added. */
+function callFor(draft: AnswerDraft, payload: Unit): [AnswerDraft, number] {
+  const stream = String(payload.stream_id), id = `${stream}:${String(payload.call_index)}`;
+  const found = draft.calls.findIndex(call => call.id === id);
+  if (found >= 0) return [draft, found];
+  const callId = typeof payload.call_id === "string" && payload.call_id ? payload.call_id : undefined;
+  const calls = [...draft.calls], last = calls.at(-1);
+  const retry = last !== undefined && last.stream !== stream && last.outcome !== "accepted";
+  let call: AnswerDraftCall = { id, stream, callId, seq: 0, outcome: "streaming", incoming: {}, open: [], lastBlock: -1,
+    raw: retry ? last.raw : [], blocks: retry ? last.blocks : [] };
+  const early = callId ? draft.early[callId] : undefined;
+  if (early) call = settle(call, early);
+  if (retry) calls[calls.length - 1] = call;
+  else calls.push(call);
+  return [{ ...draft, calls }, calls.length - 1];
 }
 
 function apply(payload: Unit, previous?: AnswerDraft): AnswerDraft | undefined {
   if (typeof payload.turn_id !== "string" || typeof payload.session_id !== "string" || !Array.isArray(payload.ops)) return previous;
-  if (!previous && payload.ops.every(op => (op as Unit).op === "end")) return undefined;
-  const call = payload.stream_id ? `${payload.stream_id}:${payload.call_index}` : previous?.call ?? "";
-  let draft: AnswerDraft = previous ?? { sessionId: payload.session_id, turnId: payload.turn_id,
-    call, seq: 0, incoming: {}, raw: [], blocks: [], open: [], lastBlock: -1, outcome: "streaming", present: true };
-  if (call !== draft.call) draft = { ...draft, call, seq: 0, incoming: {}, open: [], lastBlock: -1, outcome: "streaming", present: true };
-  for (const op of payload.ops) draft = operation(draft, op as Unit);
+  let draft: AnswerDraft = previous ?? { sessionId: payload.session_id, turnId: payload.turn_id, calls: [], early: {}, present: true };
+  const callId = typeof payload.call_id === "string" && payload.call_id ? payload.call_id : undefined;
+  let index = -1;
+  for (const op of payload.ops as Unit[]) {
+    if (op.op === "end") { draft = end(draft, op, callId); continue; }
+    if (!payload.stream_id) continue;
+    if (index < 0) [draft, index] = callFor(draft, payload);
+    const calls = [...draft.calls];
+    calls[index] = unit(calls[index], op);
+    draft = { ...draft, calls };
+  }
   return draft;
+}
+
+/** The blocks a draft shows: a later call's block replaces an earlier one with the same id, as acceptance does. */
+export function draftBlocks(draft: AnswerDraft): AnswerDraftBlock[] {
+  const shown: AnswerDraftBlock[] = [];
+  draft.calls.forEach((call, index) => {
+    if (call.outcome === "rejected" && index < draft.calls.length - 1) return;
+    call.raw.forEach((raw, bi) => {
+      if (typeof raw.id === "string") {
+        const previous = shown.findIndex(entry => entry.raw.id === raw.id);
+        if (previous >= 0) shown.splice(previous, 1);
+      }
+      shown.push({ raw, view: call.blocks[bi] ?? null, open: call.open[bi] === true,
+        incoming: call.outcome === "streaming" ? call.incoming[`${bi}:${raw.type === "table" ? "rows" : "items"}`] ?? [] : undefined });
+    });
+  });
+  return shown;
+}
+
+export function draftStatus(draft: AnswerDraft): "preparing" | "prepared" | "rechecking" {
+  const last = draft.calls.at(-1)?.outcome;
+  if (last === "rejected") return "rechecking";
+  return last === "accepted" && draft.calls.every(call => call.outcome !== "streaming") ? "prepared" : "preparing";
 }
 
 let pending: TimelineEvent[] = [];
@@ -87,9 +150,10 @@ function flush() {
     let drafts = { ...state.answerDrafts };
     for (const event of events) {
       if (event.type === "answer_blocks.snapshot") {
+        // The snapshot replays each turn's calls in the order they arrived.
         drafts = {};
         for (const payload of ((event.payload as Unit)?.drafts ?? []) as Unit[]) {
-          const draft = apply(payload); if (draft) drafts[draft.turnId] = draft;
+          const draft = apply(payload, drafts[String(payload.turn_id)]); if (draft) drafts[draft.turnId] = draft;
         }
       } else {
         const payload = event.payload as Unit;
@@ -97,8 +161,10 @@ function flush() {
         const draft = apply(payload, drafts[turn]); if (draft) drafts[turn] = draft;
       }
     }
+    // An outcome that arrived before any unit shows nothing; it is dropped once its turn ends.
+    for (const [turn, draft] of Object.entries(drafts)) if (!draft.calls.length && !draft.present) delete drafts[turn];
     const sessions: State["sessions"] = {};
-    for (const draft of Object.values(drafts)) (sessions[draft.sessionId] ??= []).push(draft.turnId);
+    for (const draft of Object.values(drafts)) if (draft.calls.length) (sessions[draft.sessionId] ??= []).push(draft.turnId);
     for (const [id, turns] of Object.entries(sessions)) {
       if (JSON.stringify(turns) === JSON.stringify(state.sessions[id])) sessions[id] = state.sessions[id];
     }

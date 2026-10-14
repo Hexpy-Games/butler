@@ -16,13 +16,15 @@ impl AgentLoopProgress for TurnProgressScope<'_> {
         &self,
         stream_id: String,
         call_index: u64,
+        call_id: Option<String>,
         ops: Vec<serde_json::Value>,
     ) -> PortFuture<'_, ()> {
         Box::pin(async move {
             if self.destination.transport == "app" {
                 self.repository.answer_blocks_draft(serde_json::json!({
                     "session_id": self.destination.peer.id, "turn_id": self.turn_id,
-                    "stream_id": stream_id, "call_index": call_index, "ops": ops
+                    "stream_id": stream_id, "call_index": call_index, "call_id": call_id,
+                    "ops": ops
                 }));
             }
             Ok(())

@@ -107,6 +107,7 @@ impl<'a> StreamWatch<'a> {
                 call_index: index as u64,
                 sequence,
                 tool_name: call.name.clone(),
+                call_id: Some(call.id.clone()),
             });
             if let Ok(arguments_delta) = serde_json::to_string(&call.arguments) {
                 sequence += 1;
@@ -136,7 +137,7 @@ impl<'a> StreamWatch<'a> {
             ModelRoundError::Provider(error) => error.code == "provider_cancelled",
             _ => false,
         };
-        if self.streamed() && !stopped {
+        if (self.streamed() || self.tools_observed.load(Ordering::Acquire)) && !stopped {
             self.round_text_discarded();
         }
     }
@@ -161,8 +162,9 @@ impl ProviderStreamObserver for StreamWatch<'_> {
     }
 
     fn tool_call(&self, event: &butler_core::tool_protocol::ToolCallStreamEvent) {
+        // Tool arguments are not answer text: a refused local stream still
+        // falls back without streaming, as it did before arguments streamed.
         self.tools_observed.store(true, Ordering::Release);
-        self.streamed.store(true, Ordering::Release);
         if let Some(inner) = self.inner {
             inner.tool_call(event);
         }

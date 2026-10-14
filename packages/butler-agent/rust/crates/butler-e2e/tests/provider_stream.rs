@@ -1,6 +1,6 @@
 //! Stub carrier replay through the real provider adapter and agent relay.
 use serde_json::{Value, json};
-use std::{io::Write, process::Command};
+use std::{fmt::Write as _, io::Write, process::Command};
 
 #[test]
 fn provider_tool_names_precede_every_ordered_argument_delta()
@@ -9,7 +9,7 @@ fn provider_tool_names_precede_every_ordered_argument_delta()
     let args = json!({"v":1,"blocks":[{"type":"cards","items":[{"title":"한국어"}]}]}).to_string();
     let split = args.find("한국어").ok_or("title missing")?;
     let fragments = [&args[..split], &args[split..split + 3], &args[split + 3..]];
-    let cases = carriers(&args, &fragments);
+    let cases = carriers(&args, &fragments)?;
     let path = std::path::PathBuf::from(std::env::var("BUTLER_DATA")?).join("provider-stream.json");
     std::fs::File::create(&path)?.write_all(&serde_json::to_vec(&cases)?)?;
     let output = Command::new(env!("CARGO_BIN_EXE_e2e-provider-stream"))
@@ -27,6 +27,8 @@ fn provider_tool_names_precede_every_ordered_argument_delta()
         let events = result["relayed"].as_array().ok_or("relay missing")?;
         assert_eq!(events[0]["type"], "tool_call_start");
         assert_eq!(events[0]["toolName"], "answer_blocks");
+        // The start names the same id the executed call carries.
+        assert_eq!(events[0]["callId"], result["calls"][0]["id"], "case {i}");
         let actual: Vec<_> = events
             .iter()
             .skip(1)
@@ -56,7 +58,8 @@ fn provider_tool_names_precede_every_ordered_argument_delta()
     Ok(())
 }
 
-fn carriers(args: &str, fragments: &[&str]) -> Vec<Value> {
+fn carriers(args: &str, fragments: &[&str]) -> Result<Vec<Value>, serde_json::Error> {
+    let input = serde_json::from_str::<Value>(args)?;
     let answer = json!({"type":"function_call","id":"item-0","call_id":"call-0","name":"answer_blocks","arguments":args});
     let other = json!({"type":"function_call","id":"item-1","call_id":"call-1","name":"read_file","arguments":"{}"});
     let mut codex =
@@ -76,20 +79,20 @@ fn carriers(args: &str, fragments: &[&str]) -> Vec<Value> {
     chat.extend(fragments.iter().map(|delta|json!({"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":delta}}]}}]})));
     chat.push(json!({"choices":[{"finish_reason":"tool_calls","delta":{"tool_calls":[{"index":1,"id":"call-1","function":{"name":"read_file","arguments":"{}"}}]}}]}));
     let response = json!({"output":[answer,other]}).to_string();
-    let anthropic = json!({"content":[{"type":"tool_use","id":"call-0","name":"answer_blocks","input":serde_json::from_str::<Value>(args).unwrap()},{"type":"tool_use","id":"call-1","name":"read_file","input":{}}]}).to_string();
-    let gemini = json!({"candidates":[{"content":{"parts":[{"functionCall":{"name":"answer_blocks","args":serde_json::from_str::<Value>(args).unwrap()}},{"functionCall":{"name":"read_file","args":{}}}]}}]}).to_string();
-    vec![
+    let anthropic = json!({"content":[{"type":"tool_use","id":"call-0","name":"answer_blocks","input":input},{"type":"tool_use","id":"call-1","name":"read_file","input":{}}]}).to_string();
+    let gemini = json!({"candidates":[{"content":{"parts":[{"functionCall":{"name":"answer_blocks","args":input}},{"functionCall":{"name":"read_file","args":{}}}]}}]}).to_string();
+    Ok(vec![
         json!({"provider":"openai","codex":true,"sse":true,"body":sse(&codex)}),
         json!({"provider":"qwen","chat":true,"sse":true,"body":format!("{}data: [DONE]\n\n",sse(&chat))}),
         json!({"provider":"openai","body":response}),
         json!({"provider":"anthropic","body":anthropic}),
         json!({"provider":"google","body":gemini}),
-    ]
+    ])
 }
 
 fn sse(events: &[Value]) -> String {
-    events
-        .iter()
-        .map(|event| format!("data: {event}\n\n"))
-        .collect()
+    events.iter().fold(String::new(), |mut body, event| {
+        let _ = write!(body, "data: {event}\n\n");
+        body
+    })
 }

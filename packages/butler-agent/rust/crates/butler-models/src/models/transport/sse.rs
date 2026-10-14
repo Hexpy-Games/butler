@@ -91,6 +91,7 @@ impl CodexState {
                         call_index: event["output_index"].as_u64().unwrap_or(0),
                         sequence,
                         tool_name: name.to_owned(),
+                        call_id: item["call_id"].as_str().map(str::to_owned),
                     },
                 );
             }

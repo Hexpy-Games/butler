@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use std::{collections::HashMap, sync::Arc};
 
 struct Call {
+    call_id: Option<String>,
     parser: AnswerBlocksParser,
     sources: Vec<String>,
     images: std::collections::HashSet<String>,
@@ -79,6 +80,7 @@ impl AnswerBlocksStream {
             call.images
                 .extend(super::browser::lookup_assets(&self.tools, ids).await);
         }
+        let call_id = call.call_id.clone();
         let ops: Vec<Value> = {
             let context = AnswerBlocksContext {
                 now: chrono::Utc::now(),
@@ -93,7 +95,9 @@ impl AnswerBlocksStream {
         };
         self.calls.lock().insert(key, call);
         if !ops.is_empty() {
-            progress.answer_blocks_draft(stream_id, index, ops).await?;
+            progress
+                .answer_blocks_draft(stream_id, index, call_id, ops)
+                .await?;
         }
         Ok(())
     }
@@ -110,11 +114,13 @@ impl AnswerBlocksStreamPort for AnswerBlocksStream {
                 ToolCallStreamEvent::ToolCallStart {
                     stream_id,
                     call_index,
+                    call_id,
                     ..
                 } => {
                     self.calls.lock().insert(
                         (stream_id, call_index),
                         Call {
+                            call_id,
                             parser: AnswerBlocksParser::default(),
                             sources: Vec::new(),
                             images: Default::default(),
