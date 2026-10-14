@@ -1,150 +1,122 @@
-//! Node identity, dependency mapping and safe lifecycle projection.
+//! Stable Work/action identity. Attempt outcomes never finish owning actions.
 use super::*;
-use butler_turn::btcc::TaskGraphPlanRecord as PlanRecord;
+use butler_turn::btcc::{TaskGraphReviewRecord as ReviewRecord, TaskGraphWorkRecord as WorkRecord};
 use std::collections::{HashMap, VecDeque};
 
-pub(super) fn plan_nodes(
-    plan: &PlanRecord,
+pub(super) fn work_nodes(
+    work: &WorkRecord,
     children: &[ChildRecord],
+    review: Option<&ReviewRecord>,
     times: &Value,
     facts: &AppSettingsFacts,
 ) -> Vec<Value> {
-    let assigned: HashMap<&str, &ChildRecord> = children
-        .iter()
-        .filter_map(|c| Some((c.packet.pointer("/plan_action/action_key")?.as_str()?, c)))
-        .collect();
-    let progress: HashMap<&str, &str> = plan
+    let mut attempts: HashMap<&str, Vec<&ChildRecord>> = HashMap::new();
+    for child in children {
+        if let Some(key) = child
+            .packet
+            .pointer("/plan_action/action_key")
+            .and_then(Value::as_str)
+        {
+            attempts.entry(key).or_default().push(child);
+        }
+    }
+    let progress: HashMap<&str, &Value> = work
         .progress
         .as_array()
         .into_iter()
         .flatten()
-        .filter_map(|p| {
-            Some((
-                p.get("actionKey").or(p.get("action_key"))?.as_str()?,
-                p["status"].as_str()?,
-            ))
-        })
+        .filter_map(|p| Some((p["actionKey"].as_str()?, p)))
         .collect();
-    plan.actions
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(|action| {
-            let key = action
-                .get("actionKey")
-                .or(action.get("action_key"))
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            let child = assigned.get(key).copied();
-            let id = child.map_or_else(|| encode("task:", &plan.id, key), |c| c.task_id.clone());
-            let mut node = base_node(
-                &id,
-                action["description"].as_str().unwrap_or("Task"),
-                child,
-                times,
-                facts,
-            );
-            node["_key"] = json!(key);
-            node["_deps"] = action
-                .get("dependencyKeys")
-                .or(action.get("dependency_keys"))
-                .cloned()
-                .unwrap_or(json!([]));
-            node["_checks"] = child
-                .and_then(|c| c.packet.get("acceptance_criteria"))
-                .filter(|criteria| criteria.as_array().is_some_and(|items| !items.is_empty()))
-                .cloned()
-                .unwrap_or_else(|| plan.checks.clone());
-            node["_refs"] = plan.refs.clone();
-            if child.is_none() {
-                node["status"] = json!(match progress.get(key).copied() {
-                    _ if plan.status == "abandoned" => "cancelled",
-                    Some("done") => "completed",
-                    Some("active" | "in_progress") => "running",
-                    Some("blocked") => "blocked",
-                    Some("skipped") => "cancelled",
-                    _ if plan.status == "completed" => "completed",
-                    _ => "pending",
-                });
-            }
-            node["document"]["status"] = node["status"].clone();
-            node
-        })
-        .collect()
+    let review_view = review.map(public_review);
+    let checks = safe_strings(&work.checks);
+    let refs = safe_strings(&work.refs);
+    work.actions.as_array().into_iter().flatten().map(|action| {
+        let key = action["actionKey"].as_str().unwrap_or("");
+        let assigned = attempts.get(key).map_or(&[][..], Vec::as_slice);
+        let direct = work.execution_mode.as_deref()==Some("direct");
+        let child = if direct { None } else { assigned.last().copied() };
+        let state = progress.get(key).copied().unwrap_or(&Value::Null);
+        let (status, reason) = status(work,state,child,review,times);
+        let id = encode("task:",&work.id,key);
+        let title = task_graph_label(action["description"].as_str().unwrap_or(""));
+        let history: Vec<Value> = assigned.iter().map(|c| attempt(c,times,facts)).collect();
+        let latest = if direct { &Value::Null } else { history.last().unwrap_or(&Value::Null) };
+        let note = match reason { Some("action_blocked") => state["note"].as_str(),
+            Some("attempt_failed") => child.and_then(|c| c.result_summary.as_deref()), _ => None };
+        let mut node = json!({"task_id":id,"title":title,"status":status,"kind":"task","rank":0,
+            "assignee_ordinal":child.map(|c|c.ordinal),"handled_directly":direct,
+            "model_display_name":latest["model_display_name"],"session_id":child.map(|c|c.session_id.as_str()).or(direct.then_some(work.session_id.as_str())),
+            "started_at":latest["started_at"],"finished_at":latest["finished_at"],
+            "current_step":if matches!(status,"running"|"review") {child.and_then(|c| c.current_step.as_deref()).or(direct.then_some(work.next_step.as_deref()).flatten()).map(task_graph_label)}else{None},
+            "blocked_reason":note.map(task_graph_label),"reason_code":reason,"attempts":history,
+            "document":{"id":id,"revision":null,"title":title,"status":status,"source_label":"Task document"},
+            "_key":key,"_deps":action["dependencyKeys"],"_goal":title,"_checks":checks,"_refs":refs});
+        if let Some(review) = &review_view { node["review"] = review.clone(); }
+        node
+    }).collect()
 }
 
-pub(super) fn group_nodes(
-    children: &[ChildRecord],
-    times: &Value,
-    facts: &AppSettingsFacts,
-) -> Vec<Value> {
-    children
-        .iter()
-        .map(|child| {
-            let mut node = base_node(&child.task_id, &child.title, Some(child), times, facts);
-            node["_goal"] = child
-                .packet
-                .get("objective")
-                .cloned()
-                .unwrap_or(json!(child.title));
-            node["_key"] = child
-                .packet
-                .pointer("/plan_action/action_key")
-                .cloned()
-                .unwrap_or(json!(child.task_id));
-            node["_deps"] = child
-                .packet
-                .pointer("/plan_action/dependency_keys")
-                .cloned()
-                .unwrap_or(json!([]));
-            node["_checks"] = child
-                .packet
-                .get("acceptance_criteria")
-                .cloned()
-                .unwrap_or(json!([]));
-            node["_refs"] = child
-                .packet
-                .get("task_or_plan_refs")
-                .cloned()
-                .unwrap_or(json!([]));
-            node
-        })
-        .collect()
-}
-
-fn base_node(
-    id: &str,
-    title: &str,
+fn status(
+    work: &WorkRecord,
+    progress: &Value,
     child: Option<&ChildRecord>,
+    review: Option<&ReviewRecord>,
     times: &Value,
-    facts: &AppSettingsFacts,
-) -> Value {
-    let goal = title;
-    let title = task_graph_label(title);
-    let lifecycle = child.map(|c| &times[&c.turn_id]).unwrap_or(&Value::Null);
-    let status = match child.and_then(|c| c.result_status.as_deref()) {
-        Some("success") => "completed",
-        Some("failed") => "failed",
-        Some("cancelled") => "cancelled",
-        Some("blocked") => "blocked",
-        _ if lifecycle["status"] == "cancelled" => "cancelled",
-        _ if lifecycle["status"] == "failed" || lifecycle["status"] == "runtime_fault" => "failed",
-        _ if child.is_some_and(|c| c.turn_state.as_deref() == Some("admitted"))
-            || lifecycle["status"] == "running" =>
-        {
-            "running"
-        }
-        _ => "pending",
+) -> (&'static str, Option<&'static str>) {
+    match progress["status"].as_str() {
+        Some("done") => return ("done", None),
+        _ if work.status == "abandoned" => return ("cancelled", Some("work_abandoned")),
+        Some("skipped") => return ("skipped", None),
+        Some("blocked") => return ("blocked", Some("action_blocked")),
+        Some("active") => {}
+        _ => return ("pending", None),
+    }
+    let Some(child) = child else {
+        return ("running", None);
     };
-    let status =
-        if status == "running" && child.is_some_and(|c| c.stage.as_deref() == Some("review")) {
-            "in_review"
+    let revised = review.is_some_and(|r| {
+        r.subject != "plan"
+            && matches!(r.verdict.as_str(), "revise" | "partial")
+            && child.result_status.is_some()
+            && newer(Some(&r.created_at), child.result_at.as_deref())
+    });
+    if revised {
+        return ("pending", Some("review_revised"));
+    }
+    let handled = newer(work.checkpoint_at.as_deref(), child.result_at.as_deref())
+        || review.is_some_and(|r| newer(Some(&r.created_at), child.result_at.as_deref()));
+    if child.result_status.is_some() && !handled {
+        return if matches!(child.result_status.as_deref(), Some("failed" | "cancelled")) {
+            ("failed", Some("attempt_failed"))
         } else {
-            status
+            ("review", Some("result_received"))
         };
-    let model = child
-        .and_then(|c| c.packet.get("model_ref"))
-        .and_then(Value::as_str)
+    }
+    let lifecycle = &times[&child.turn_id];
+    if child.result_status.is_none()
+        && (matches!(child.turn_state.as_deref(), Some("failed" | "cancelled"))
+            || matches!(
+                lifecycle["status"].as_str(),
+                Some("failed" | "cancelled" | "runtime_fault")
+            ))
+    {
+        return ("failed", Some("attempt_failed"));
+    }
+    ("running", None)
+}
+
+fn newer(left: Option<&str>, right: Option<&str>) -> bool {
+    left.zip(right).is_some_and(|(a, b)| {
+        chrono::DateTime::parse_from_rfc3339(a)
+            .ok()
+            .zip(chrono::DateTime::parse_from_rfc3339(b).ok())
+            .is_some_and(|(a, b)| a > b)
+    })
+}
+fn attempt(child: &ChildRecord, times: &Value, facts: &AppSettingsFacts) -> Value {
+    let lifecycle = &times[&child.turn_id];
+    let model = child.packet["model_ref"]
+        .as_str()
         .and_then(|id| {
             facts
                 .native_settings
@@ -153,18 +125,35 @@ fn base_node(
                 .as_str()
         })
         .map(task_graph_model_label);
-    let finished = lifecycle["finished_at"]
-        .as_str()
-        .or(child.and_then(|c| c.result_at.as_deref()));
-    json!({"task_id":id,"_goal":goal,"title":title,"status":status,"kind":"task","rank":0,
-        "assignee_ordinal":child.map(|c|c.ordinal),"model_display_name":model,
-        "session_id":child.map(|c|&c.session_id),"started_at":lifecycle["started_at"],
-        "finished_at":finished,"current_step":child.and_then(|c|c.current_step.as_deref()).filter(|_|matches!(status,"running"|"in_review")).map(task_graph_label),
-        "blocked_reason":match status {"failed"=>Some("Task failed."),"blocked"=>Some("Task is blocked."),_=>None},
-        "document":{"id":id,"revision":null,"title":title,"status":status,"source_label":"Task document"}})
+    let status = child.result_status.as_deref().unwrap_or_else(|| {
+        if child.turn_state.as_deref() == Some("admitted") || lifecycle["status"] == "running" {
+            "running"
+        } else {
+            "pending"
+        }
+    });
+    json!({"task_id":child.task_id,"session_id":child.session_id,"ordinal":child.ordinal,"status":status,
+        "summary":child.result_summary.as_deref().map(task_graph_label),"model_display_name":model,
+        "started_at":lifecycle["started_at"].as_str().unwrap_or(&child.created_at),
+        "finished_at":lifecycle["finished_at"].as_str().or(child.result_at.as_deref())})
+}
+pub(super) fn public_review(review: &ReviewRecord) -> Value {
+    json!({"subject":review.subject,"verdict":review.verdict,"summary":task_graph_label(&review.summary),"created_at":review.created_at})
+}
+fn safe_strings(value: &Value) -> Value {
+    json!(
+        value
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(task_graph_label)
+            .collect::<Vec<_>>()
+    )
 }
 
-pub(super) fn propagate_blocked(nodes: &mut [Value], edges: &[Value]) {
+/// Longest-path rank only. Dependency failure never mutates a BTCC action.
+pub(super) fn rank_nodes(nodes: &mut [Value], edges: &[Value]) {
     let ids: HashMap<String, usize> = nodes
         .iter()
         .enumerate()
@@ -188,28 +177,16 @@ pub(super) fn propagate_blocked(nodes: &mut [Value], edges: &[Value]) {
         .collect();
     while let Some(a) = queue.pop_front() {
         for &b in &next[a] {
-            let rank = nodes[a]["rank"].as_u64().unwrap_or(0) + 1;
-            nodes[b]["rank"] = json!(nodes[b]["rank"].as_u64().unwrap_or(0).max(rank));
-            if matches!(
-                nodes[a]["status"].as_str(),
-                Some("failed" | "cancelled" | "blocked")
-            ) && nodes[b]["status"] == "pending"
-            {
-                nodes[b]["status"] = json!("blocked");
-                nodes[b]["blocked_reason"] = json!("A prerequisite did not finish.");
-                nodes[b]["document"]["status"] = json!("blocked");
-            }
+            nodes[b]["rank"] = json!(
+                nodes[b]["rank"]
+                    .as_u64()
+                    .unwrap_or(0)
+                    .max(nodes[a]["rank"].as_u64().unwrap_or(0) + 1)
+            );
             remaining[b] -= 1;
             if remaining[b] == 0 {
                 queue.push_back(b);
             }
-        }
-    }
-    for (i, left) in remaining.into_iter().enumerate() {
-        if left > 0 && nodes[i]["status"] == "pending" {
-            nodes[i]["status"] = json!("blocked");
-            nodes[i]["blocked_reason"] = json!("Task dependencies need review.");
-            nodes[i]["document"]["status"] = json!("blocked");
         }
     }
 }

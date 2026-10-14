@@ -12,52 +12,17 @@ pub use response::task_graph_response;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
-/// Removes internal orchestration/tool vocabulary from user-visible copy.
+/// Shared public-text policy; preserve the author's words and language.
 pub fn task_graph_label(raw: &str) -> String {
-    label(raw, true)
+    butler_core::public_text::sanitize_public_text(raw, "")
 }
-/// Catalog names are public labels, including names with underscores.
 pub fn task_graph_model_label(raw: &str) -> String {
-    label(raw, false)
+    task_graph_label(raw)
 }
-fn label(raw: &str, scrub_tool_ids: bool) -> String {
-    raw.split_whitespace()
-        .map(|word| {
-            let clean = word
-                .trim_matches(|c: char| !c.is_alphanumeric() && c != '_')
-                .to_lowercase();
-            if [
-                "work",
-                "steward",
-                "delegated",
-                "delegation",
-                "스튜어드",
-                "위임",
-            ]
-            .iter()
-            .any(|name| {
-                clean
-                    .split(|c: char| !c.is_alphanumeric())
-                    .any(|part| part == *name)
-            }) || ["Work", "Steward"].iter().any(|role| {
-                word.match_indices(*role).any(|(at, _)| {
-                    word[at + role.len()..]
-                        .chars()
-                        .next()
-                        .is_none_or(char::is_uppercase)
-                })
-            }) || word.contains("스튜어드")
-                || (scrub_tool_ids
-                    && clean.contains('_')
-                    && (word.contains('(') || !word.contains(['.', '/'])))
-            {
-                "Task"
-            } else {
-                word
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+
+/// One delegated objective is represented by its executing child's graph.
+fn represented_by_steward_child(work: &butler_turn::btcc::TaskGraphWorkRecord) -> bool {
+    work.execution_mode.as_deref() == Some("steward") && work.has_planned_steward
 }
 
 pub fn project_task_graphs(
@@ -67,44 +32,41 @@ pub fn project_task_graphs(
 ) -> Vec<Value> {
     let mut children: BTreeMap<String, Vec<ChildRecord>> = BTreeMap::new();
     for child in records.children {
-        let id = child
+        if let Some(work) = child
             .packet
-            .pointer("/parent_work_ref/plan_revision_id")
+            .pointer("/parent_work_ref/work_id")
             .and_then(Value::as_str)
-            .map(str::to_owned)
-            .unwrap_or_else(|| encode("group:", &child.parent_session, &child.parent_turn));
-        children.entry(id).or_default().push(child);
+        {
+            children.entry(work.to_owned()).or_default().push(child);
+        }
     }
+    let reviews: BTreeMap<_, _> = records
+        .reviews
+        .into_iter()
+        .map(|r| (r.work_id.clone(), r))
+        .collect();
     let mut graphs = Vec::new();
-    for plan in records.plans {
-        let assigned = children.remove(&plan.id).unwrap_or_default();
-        let nodes = nodes::plan_nodes(&plan, &assigned, times, facts);
-        graphs.push(finish(&plan.id, &plan.objective, nodes, &plan.updated_at));
+    for work in records.works {
+        if represented_by_steward_child(&work) {
+            continue;
+        }
+        let assigned = children.remove(&work.id).unwrap_or_default();
+        let review = reviews.get(&work.id);
+        let nodes = nodes::work_nodes(&work, &assigned, review, times, facts);
+        graphs.push(finish(&work, nodes, review));
     }
-    for (id, children) in children {
-        let updated = children
-            .iter()
-            .map(|c| c.result_at.as_deref().unwrap_or(&c.created_at))
-            .max()
-            .unwrap_or("");
-        let title = children.first().map_or("Tasks", |c| {
-            c.packet
-                .get("objective")
-                .and_then(Value::as_str)
-                .unwrap_or(&c.title)
-        });
-        let nodes = nodes::group_nodes(&children, times, facts);
-        graphs.push(finish(&id, title, nodes, updated));
-    }
-    // Stable creation order within each state, even as progress timestamps change.
     graphs.sort_by_key(|graph| state_order(&graph["state"]));
     graphs
 }
 
-fn finish(id: &str, title: &str, mut nodes: Vec<Value>, updated: &str) -> Value {
-    let keys: BTreeMap<String, String> = nodes
+fn finish(
+    work: &butler_turn::btcc::TaskGraphWorkRecord,
+    mut nodes: Vec<Value>,
+    review: Option<&butler_turn::btcc::TaskGraphReviewRecord>,
+) -> Value {
+    let keys: BTreeMap<&str, &str> = nodes
         .iter()
-        .filter_map(|n| Some((n["_key"].as_str()?.into(), n["task_id"].as_str()?.into())))
+        .filter_map(|n| Some((n["_key"].as_str()?, n["task_id"].as_str()?)))
         .collect();
     let mut edges = Vec::new();
     for node in &nodes {
@@ -119,42 +81,23 @@ fn finish(id: &str, title: &str, mut nodes: Vec<Value>, updated: &str) -> Value 
             }
         }
     }
-    nodes::propagate_blocked(&mut nodes, &edges);
-    let mut counts =
-        json!({"total":nodes.len(),"completed":0,"running":0,"failed":0,"blocked":0,"cancelled":0});
-    for node in &nodes {
-        if let Some(status) = node["status"].as_str() {
-            let status = if status == "in_review" {
-                "running"
-            } else {
-                status
-            };
-            if let Some(value) = counts.get_mut(status) {
-                *value = json!(value.as_u64().unwrap_or(0) + 1);
-            }
-        }
-    }
-    let state = if counts["running"].as_u64().unwrap_or(0) > 0 {
-        "running"
-    } else if counts["failed"].as_u64().unwrap_or(0) > 0 {
-        "failed"
-    } else if counts["cancelled"] == counts["total"] && !nodes.is_empty() {
-        "cancelled"
-    } else if counts["completed"].as_u64().unwrap_or(0) + counts["cancelled"].as_u64().unwrap_or(0)
-        == counts["total"].as_u64().unwrap_or(0)
-    {
-        "done"
-    } else {
-        "waiting"
-    };
+    nodes::rank_nodes(&mut nodes, &edges);
+    let counts = counts(&nodes);
+    let state = graph_state(&work.status, &counts);
     let updated = nodes
         .iter()
-        .filter_map(|n| n["finished_at"].as_str().or(n["started_at"].as_str()))
-        .chain([updated])
+        .flat_map(|n| n["attempts"].as_array().into_iter().flatten())
+        .filter_map(|a| a["finished_at"].as_str().or(a["started_at"].as_str()))
+        .chain([work.updated_at.as_str()])
         .max()
-        .unwrap_or(updated);
-    let mut graph = json!({"graph_id":id,"title":task_graph_label(title),"state":state,"counts":counts,"nodes":nodes,"edges":edges,"updated_at":updated});
-    let revision = digest(&graph.to_string());
+        .unwrap_or(&work.updated_at);
+    let title = work
+        .delegated_objective
+        .as_deref()
+        .unwrap_or(&work.objective);
+    let mut graph = json!({"graph_id":encode("work:",&work.id,""),"title":task_graph_label(title),"state":state,
+        "phase":work.phase,"work_state":work.status,"counts":counts,"nodes":nodes,"edges":edges,"updated_at":updated});
+    let revision = digest(&json!([graph, work.source_revision, review.map(|r| &r.id)]).to_string());
     graph["graph_revision"] = json!(revision);
     if let Some(nodes) = graph["nodes"].as_array_mut() {
         for node in nodes {
@@ -162,6 +105,37 @@ fn finish(id: &str, title: &str, mut nodes: Vec<Value>, updated: &str) -> Value 
         }
     }
     graph
+}
+
+fn counts(nodes: &[Value]) -> Value {
+    let mut counts = json!({"total":nodes.len(),"completed":0,"skipped":0,"running":0,"failed":0,"blocked":0,"cancelled":0});
+    for node in nodes {
+        let key = match node["status"].as_str().unwrap_or("") {
+            "done" => "completed",
+            "review" => "running",
+            key => key,
+        };
+        if let Some(value) = counts.get_mut(key) {
+            *value = json!(value.as_u64().unwrap_or(0) + 1);
+        }
+    }
+    counts
+}
+fn graph_state(work_state: &str, counts: &Value) -> &'static str {
+    match work_state {
+        "completed" => "done",
+        "abandoned" => "cancelled",
+        "blocked" => "waiting",
+        _ if counts["running"].as_u64().unwrap_or(0) > 0 => "running",
+        _ if counts["failed"].as_u64().unwrap_or(0) > 0 => "failed",
+        _ if counts["completed"].as_u64().unwrap_or(0)
+            + counts["skipped"].as_u64().unwrap_or(0)
+            == counts["total"].as_u64().unwrap_or(0) =>
+        {
+            "done"
+        }
+        _ => "waiting",
+    }
 }
 
 fn state_order(state: &Value) -> u8 {

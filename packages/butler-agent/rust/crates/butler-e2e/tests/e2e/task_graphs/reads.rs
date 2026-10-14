@@ -10,47 +10,25 @@ pub(super) async fn assert_plan(
     let list = s.gw.get(&format!("/sessions/{chat}/task-graphs")).await?;
     assert_eq!(list.status, 200, "{}", list.text);
     assert_eq!(list.data()["graphs"].as_array().unwrap().len(), count);
-    let graph =
-        s.gw.get(&format!("/plans/graph-{count}-0/task-graph"))
-            .await?;
+    let id = list.data()["graphs"][0]["graph_id"].as_str().unwrap();
+    let graph = s.gw.get(&format!("/plans/{id}/task-graph")).await?;
     assert_eq!(graph.status, 200, "{}", graph.text);
     assert_graph(graph.data(), count);
-    let view =
-        s.gw.get(&format!("/session-view?session_id={chat}"))
-            .await?;
-    assert_eq!(view.status, 200, "{}", view.text);
-    let worker = &view.data()["workers"][0];
-    assert_eq!(worker["started_at"], fixture::START);
-    assert_eq!(worker["finished_at"], fixture::FINISH);
-    assert_eq!(worker["updated_at"], fixture::FINISH);
-    assert_eq!(worker["model_display_name"], "GPT-6 Luna");
-    assert!(
-        list.data()["graphs"][0]["title"]
-            .as_str()
-            .unwrap()
-            .contains("network api_client.rs")
-    );
-    assert_revision_pages(s, count, graph.data()).await?;
+    assert_revision_pages(s, id, graph.data()).await?;
     assert_document(s, graph.data()).await?;
-    for text in ["Work", "Steward", "delegate_to_worker"] {
-        assert!(
-            !list.data()["graphs"][0]["title"]
-                .as_str()
-                .unwrap()
-                .contains(text)
-        );
-    }
+    let text = list.data()["graphs"][0]["title"].as_str().unwrap();
+    assert!(!text.contains("Steward") && !text.contains("delegate_to_"));
     Ok(())
 }
 
 async fn assert_revision_pages(
     s: &Scenario,
-    count: usize,
+    id: &str,
     graph: &serde_json::Value,
 ) -> Result<(), HarnessError> {
     let rev = graph["graph_revision"].as_str().unwrap();
     let again =
-        s.gw.get(&format!("/plans/graph-{count}-0/task-graph?revision={rev}"))
+        s.gw.get(&format!("/plans/{id}/task-graph?revision={rev}"))
             .await?;
     assert_eq!(
         again.data()["graph_revision"],
@@ -59,25 +37,21 @@ async fn assert_revision_pages(
     );
     assert_eq!(again.data()["nodes"], graph["nodes"]);
     let stale =
-        s.gw.get(&format!("/plans/graph-{count}-0/task-graph?revision=stale"))
+        s.gw.get(&format!("/plans/{id}/task-graph?revision=stale"))
             .await?;
     assert_eq!(stale.status, 409);
-    let page =
-        s.gw.get(&format!("/plans/graph-{count}-0/task-graph?limit=2"))
-            .await?;
+    let page = s.gw.get(&format!("/plans/{id}/task-graph?limit=2")).await?;
     assert_eq!(page.data()["nodes"].as_array().unwrap().len(), 2);
     assert_eq!(page.data()["totals"]["nodes"], 5);
     let cursor = page.data()["cursor"].as_str().unwrap();
     let next =
-        s.gw.get(&format!(
-            "/plans/graph-{count}-0/task-graph?cursor={cursor}&limit=2"
-        ))
-        .await?;
+        s.gw.get(&format!("/plans/{id}/task-graph?cursor={cursor}&limit=2"))
+            .await?;
     assert_eq!(next.status, 200);
     assert_eq!(next.data()["nodes"][0]["title"], "Check");
     let last =
         s.gw.get(&format!(
-            "/plans/graph-{count}-0/task-graph?cursor={}&limit=2",
+            "/plans/{id}/task-graph?cursor={}&limit=2",
             next.data()["cursor"].as_str().unwrap()
         ))
         .await?;

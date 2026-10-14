@@ -38,7 +38,8 @@ mod task_graphs;
 mod timing;
 pub use task_graphs::{
     ChildRecord as TaskGraphChildRecord, GraphRecords as TaskGraphRecords,
-    GraphScope as TaskGraphScope, PlanRecord as TaskGraphPlanRecord,
+    GraphScope as TaskGraphScope, ReviewRecord as TaskGraphReviewRecord,
+    WorkRecord as TaskGraphWorkRecord,
 };
 mod tool_journal;
 mod transitions;
