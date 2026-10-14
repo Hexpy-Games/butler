@@ -383,7 +383,14 @@ fn probe_policy_keeps_loader_grants_and_redacts_paths() {
     use mxc_policy::probe;
     let dir = path(r"C:\private\bundle");
     let system = path(r"C:\Windows");
-    let request = probe::request(&dir.join("helper.exe").unwrap(), &dir, &system, "nonce").unwrap();
+    let request = probe::request(
+        &dir.join("helper.exe").unwrap(),
+        &dir,
+        &system,
+        &path(r"C:\scratch\local"),
+        "nonce",
+    )
+    .unwrap();
     assert_eq!(request["ui"]["disable"], false);
     assert_eq!(
         request["filesystem"]["readonlyPaths"],
@@ -391,7 +398,7 @@ fn probe_policy_keeps_loader_grants_and_redacts_paths() {
     );
     assert_eq!(request["process"]["inheritDefaultEnv"], false);
     let env = request["process"]["env"].as_array().unwrap();
-    for key in ["SYSTEMROOT=", "WINDIR=", "PATH="] {
+    for key in ["LOCALAPPDATA=", "SYSTEMROOT=", "WINDIR=", "PATH="] {
         assert!(env.iter().any(|v| v.as_str().unwrap().starts_with(key)));
     }
     let projected = probe::redacted(&request);

@@ -100,6 +100,8 @@ pub(super) fn error_report(error: &v1::Error, fallback: &str) -> Value {
     let native = error.native_code.as_deref().unwrap_or_default();
     let reason = if native == "1314" || native.eq_ignore_ascii_case("0x80070522") {
         "privilege_not_held"
+    } else if error.code == v1::ErrorCode::PolicyValidation {
+        "mxc_policy_invalid"
     } else {
         fallback
     };

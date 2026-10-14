@@ -45,6 +45,7 @@ pub(in crate::command_sandbox) fn probe() -> SandboxCapabilities {
         Some("child_exit_failed") => unavailable("child_exit_failed"),
         Some("child_output_mismatch") => unavailable("child_output_mismatch"),
         Some("child_timed_out") => unavailable("child_timed_out"),
+        Some("mxc_policy_invalid") => unavailable("mxc_policy_invalid"),
         Some("mxc_spawn_failed") => unavailable("mxc_spawn_failed"),
         Some("mxc_probe_failed") => unavailable("mxc_probe_failed"),
         Some("probe_setup_failed") => unavailable("probe_setup_failed"),
@@ -88,11 +89,13 @@ fn execute_probe(report: &mut Value) -> Result<(), Error> {
     let exe = dunce::canonicalize(std::env::current_exe()?)?;
     let directory = exe.parent().ok_or("missing helper directory")?;
     let system = dunce::canonicalize(std::env::var("SYSTEMROOT")?)?;
+    let local = dunce::canonicalize(std::env::var("LOCALAPPDATA")?)?;
     let nonce = format!("butler-probe-{}", std::process::id());
     let request = mxc_policy::probe::request(
         &super::prepare::physical(&exe)?,
         &super::prepare::physical(directory)?,
         &super::prepare::physical(&system)?,
+        &super::prepare::physical(&local)?,
         &nonce,
     )?;
     set(
@@ -167,6 +170,13 @@ fn redact_details(report: &mut Value, request: &Value) {
             .and_then(Value::as_array)
         {
             paths.extend(values.iter().filter_map(Value::as_str).map(str::to_owned));
+        }
+    }
+    if let Some(env) = request.pointer("/process/env").and_then(Value::as_array) {
+        for entry in env.iter().filter_map(Value::as_str) {
+            if let Some((_, value)) = entry.split_once('=') {
+                paths.extend(value.split(';').map(str::to_owned));
+            }
         }
     }
     paths.sort_by_key(|path| std::cmp::Reverse(path.len()));
