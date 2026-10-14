@@ -86,6 +86,30 @@ async fn final_report_preserves_schemas_and_blocks_repeated_native_calls()
     Ok(())
 }
 
+/// Butler's final report presents with answer_blocks already on its surface
+/// from the first round, so reporting needs no tool search, and its prose
+/// never repeats what the blocks show.
+fn assert_final_presentation(requests: &[Value]) {
+    assert!(
+        requests[0]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "answer_blocks"),
+        "answer_blocks is offered before the final report"
+    );
+    let report = requests
+        .iter()
+        .map(|request| request["input"].to_string())
+        .find(|input| input.contains("Execution is settled"))
+        .expect("a final-report round");
+    assert!(
+        report.contains("except answer_blocks")
+            && report.contains("The blocks are the only copy of what they show"),
+        "{report}"
+    );
+}
+
 async fn final_guard(mode: Mode, blocked_count: usize) -> Result<(), HarnessError> {
     let (s, script, server) = setup(mode, Access::FullAccess).await?;
     let (id, turn) = s
@@ -97,6 +121,7 @@ async fn final_guard(mode: Mode, blocked_count: usize) -> Result<(), HarnessErro
     for request in &requests {
         assert_eq!(request["tools"], requests[0]["tools"]);
     }
+    assert_final_presentation(&requests);
     let metrics = super::token_metrics::report(&s, &requests, "Final execution policy")?;
     assert!(
         metrics

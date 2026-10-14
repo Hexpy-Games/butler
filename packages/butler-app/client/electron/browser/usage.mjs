@@ -53,7 +53,7 @@ export function endUse(browser, id, abort = false) {
   }
   browser.publish();
 }
-export function finishUse(browser, session, turn) {
+export function finishUse(browser, session, turn, closeReadTabs = false) {
   releaseTurnEvents(browser, session, turn);
   const affected = new Set();
   for (const [id, holds] of browser.holds) {
@@ -69,7 +69,15 @@ export function finishUse(browser, session, turn) {
     if (tab.pausedTurns?.delete(turn) && !tab.pausedTurns.size) tab.pausedTurns = null;
     if (affected.has(tab.id) && !tabInUse(browser, tab)) tab.pointer = null;
   }
+  if (closeReadTabs) for (const tab of [...browser.tabs.values()]) if (readOnlyTab(browser, tab, session, turn)) browser.close(tab.id);
   browser.publish();
+}
+/** An agent tab the finished turn opened and only read: no step acted in it or
+ * handed it over, nobody has viewed it, and nothing else holds it. */
+function readOnlyTab(browser, tab, session, turn) {
+  return tab.owner === `conversation:${session}` && tab.openedTurn === turn && tab.agent && tab.holder === "agent" && !tab.acted
+    && !tab.viewed && !tab.userViewed && !tab.sticky && !tab.preview && tab.profile !== "signed_in" && !tab.dialog && !tab.waiting
+    && !tab.pausedTurns && !tab.busy && !tab.closing && !tabInUse(browser, tab);
 }
 export function resetUse(browser) {
   browser.holds.clear();

@@ -579,7 +579,7 @@ export const koKrCopy: AppCopy = {
       waitHandoff: reason => ({ sign_in: "로그인 필요", secure_field: "직접 입력 필요", secure_keypad: "보안 키패드 입력 필요", captcha: "보안 문자 입력 필요" } as Record<string, string>)[reason] ?? "직접 확인 필요",
       payStep: reason => ({ secure_keypad: "보안 키패드", app_auth: "카드사 앱 인증", otp: "인증번호", three_ds: "카드사 본인 인증", captcha: "보안 문자" } as Record<string, string>)[reason] ?? "결제 화면 확인",
       payHandoff: "결제 확인 필요",
-      signInHandoff: { eyebrow: "브라우저", title: "로그인 확인 필요", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "데스크톱 앱에서 마무리해 주세요", openTab: "열어서 확인", stop: "작업 중지" },
+      signInHandoff: { eyebrow: "브라우저", title: "로그인 확인 필요", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "PC의 버틀러에서 확인해 주세요", openTab: "열어서 확인", stop: "작업 중지" },
       browserStep: (action, role, name, frame) => {
         const actions: Record<string, string> = { click: "클릭", fill: "입력", select: "선택", hover: "가리키기", scroll: "스크롤", drag: "끌기", press: "키 누르기", type: "입력", wait: "기다리기" };
         const roles: Record<string, string> = { button: "버튼", link: "링크", textbox: "입력란", combobox: "선택란", focus: "현재 포커스에", document: "페이지에", wait: "" };
@@ -593,6 +593,7 @@ export const koKrCopy: AppCopy = {
       webRequest: "웹 요청을 보낼까요?",
       webRequestDesc: "외부에서 읽은 내용이 포함될 수 있습니다.",
       taintReason: "방금 외부에서 가져온 내용을 읽어서 다시 확인합니다.",
+      scheduleUnavailable: "예약 작업 정보를 확인할 수 없어요.",
       scheduleMode: mode => `실행 권한: ${mode}`,
       networkCommandOutside: "작업 폴더 밖에서 인터넷을 쓰는 명령을 실행할까요?",
       runCommand: workspace => `${workspaceName(workspace)}에서 명령을 실행할까요?`,

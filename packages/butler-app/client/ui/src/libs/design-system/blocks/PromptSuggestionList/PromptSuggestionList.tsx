@@ -95,12 +95,11 @@ export function PromptSuggestionList({
               </span>
             ) : null}
             {moment ? (
-              <Typo.Caption
-                className={dsClass(styles.moment)}
-                data-slot="prompt-suggestion-moment"
-              >
-                {moment}
-              </Typo.Caption>
+              // The row of dots and text is a wrapper: a Typo stays a block
+              // container so its cap/baseline trim applies.
+              <span className={styles.moment} data-slot="prompt-suggestion-moment">
+                <Typo.Caption className={dsClass(styles.momentText)}>{moment}</Typo.Caption>
+              </span>
             ) : null}
           </div>
         ) : null}

@@ -97,6 +97,7 @@
   margin-top: var(--space-3);
   color: var(--text-tertiary);
   font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height);
 }
 
 .rowFooter {

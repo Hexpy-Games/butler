@@ -89,6 +89,7 @@
   background: var(--accent);
   color: var(--neutral-white);
   font-size: var(--font-size-1);
+  line-height: var(--typo-caption-line-height);
   font-weight: var(--font-weight-strong);
   font-variant-numeric: tabular-nums;
 }
@@ -112,6 +113,7 @@
   box-shadow: var(--shadow-drag-lift);
   color: var(--text-primary);
   font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height);
   rotate: -1.5deg;
 }
 

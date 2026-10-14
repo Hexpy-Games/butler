@@ -235,6 +235,10 @@ async fn serve_host(
     let finished = next_frame(&mut stream, &mut buffer).await?;
     assert_eq!(finished["op"], "use.finished");
     assert_eq!(finished["session"], session);
+    assert_eq!(
+        finished["args"]["close_read_tabs"], true,
+        "a delegated turn's end closes the tabs it only read: {finished}"
+    );
     assert!(
         finished["turn_id"]
             .as_str()

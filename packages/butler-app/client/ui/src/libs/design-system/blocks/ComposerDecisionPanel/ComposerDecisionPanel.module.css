@@ -30,7 +30,8 @@
    at the row's end (144px; 112px in a composer under 600px). The subject and
    the details keep the first column; the error and the actions span both. A
    narrow composer (under 420px) puts it under the details in the text
-   column, as wide as that column (at most 240px tall). */
+   column, as wide as that column and cropped from the page's top to
+   --decision-media-narrow-height. */
 .withMedia {
   grid-template-columns: minmax(0, 1fr) auto;
 }
@@ -88,13 +89,34 @@
   }
 
   .withMedia > .media {
-    --decision-media-width: min(100%, calc(240px * 16 / 10));
+    --decision-media-width: 100%;
 
     grid-row: auto;
     grid-column: 1;
     justify-content: flex-start;
     padding: 0 var(--space-lg) var(--space-md)
       calc(var(--space-lg) + var(--icon-size-sm) + var(--space-sm));
+  }
+
+  /* The thumbnail keeps the column's width and shows the top of the page:
+     16:10 up to --decision-media-narrow-height, then cropped from the top
+     (the canvas and still cover the frame from the top, never stretched or
+     letterboxed). */
+  .withMedia > .media > .mediaTarget {
+    display: grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+    place-items: stretch;
+    aspect-ratio: 16 / 10;
+    max-height: var(--decision-media-narrow-height);
+  }
+
+  .withMedia > .media > .mediaTarget > [data-slot="media-frame"] {
+    min-height: 0;
+    aspect-ratio: auto;
+  }
+
+  .withMedia > .media [data-slot="media-frame"][data-fit="cover"] img {
+    object-position: top;
   }
 
   /* Under details, their scroll edge, inner and detail insets (fade size +

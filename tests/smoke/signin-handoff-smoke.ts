@@ -134,8 +134,8 @@ const card = (page: Page) => page.locator('[data-test-class="composer-browser-ha
 async function settle(page: Page) { await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(150); }
 async function shoot(page: Page, name: string) { await settle(page); const path = join(evidence!, `${name}.png`); await page.screenshot({ path }); shots.push(path); }
 const copy = {
-  ko: { title: "로그인 확인 필요", detail: "fixture-shop.test · 2단계 인증", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "데스크톱 앱에서 마무리해 주세요", open: "열어서 확인", stop: "작업 중지", giveBack: "버틀러에게 돌려주기" },
-  en: { title: "Sign-in needs you", detail: "fixture-shop.test · Two-step verification", inTab: "Finish in the tab, then give it back to Butler", onDesktop: "Finish in the desktop app", open: "Open to check", stop: "Stop task", giveBack: "Give back to Butler" },
+  ko: { title: "로그인 확인 필요", detail: "fixture-shop.test · 2단계 인증", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "PC의 버틀러에서 확인해 주세요", open: "열어서 확인", stop: "작업 중지", giveBack: "버틀러에게 돌려주기" },
+  en: { title: "Sign-in needs you", detail: "fixture-shop.test · Two-step verification", inTab: "Finish in the tab, then give it back to Butler", onDesktop: "Finish this on your computer", open: "Open to check", stop: "Stop task", giveBack: "Give back to Butler" },
 };
 async function checkCard(page: Page, lang: "ko" | "en", desktop: boolean) {
   const panel = card(page); await panel.waitFor({ timeout: 30_000 });

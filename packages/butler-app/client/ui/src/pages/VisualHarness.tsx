@@ -1,3 +1,4 @@
+import { useSessionAttentionNotifications } from "@/hooks/live-session/useSessionAttentionNotifications";
 import { useEffect, useMemo } from "react";
 import { stewardHarnessSummary } from "./stewardHarnessSummary.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -68,7 +69,7 @@ function harnessModelCatalog(auth: string | null): ModelCatalogView {
 }
 
 export function VisualHarness() {
-  const fixture = (window as Window & { butlerConversationFixture?: { messages: import("@/app/types").MessageRecord[]; background?: string } }).butlerConversationFixture;
+  const fixture = (window as Window & { butlerConversationFixture?: { messages: import("@/app/types").MessageRecord[]; background?: string; sessionView?: import("@/app/types").SessionView; navigation?: import("@/app/types").NavigationView } }).butlerConversationFixture;
   const leftOpen = useButlerStore((state) => state.leftOpen);
   const setLeftOpen = useButlerStore((state) => state.setLeftOpen);
   const rightOpen = useButlerStore((state) => state.rightOpen);
@@ -105,9 +106,9 @@ export function VisualHarness() {
   // `developer=1` turns on developer mode (context and worker tabs, Git details).
   const developerMode =
     new URLSearchParams(window.location.search).get("developer") === "1";
-  const harnessNavigation = ss03Surface
+  const harnessNavigation = fixture?.navigation ?? (ss03Surface
     ? HARNESS_SS03_NAVIGATION
-    : HARNESS_NAVIGATION;
+    : HARNESS_NAVIGATION);
   const harnessSummary = useMemo(
     () => ss03Surface
       // `steward=finalizing|delivered` swaps in that #307 Steward child state.
@@ -198,6 +199,7 @@ export function VisualHarness() {
     setSettings(harnessSettings);
     setModelCatalog(harnessCatalog);
     setSummary(harnessSummary);
+    if (fixture?.sessionView) setSessionView(fixture.sessionView);
     if (ss03Surface) {
       setSessionView(HARNESS_SS03_OBSERVER_VIEW);
       openSessionObserver(HARNESS_SS03_OBSERVER_VIEW.session_id);
@@ -234,6 +236,7 @@ export function VisualHarness() {
     harnessNavigation,
     ss03Surface,
   ]);
+  useSessionAttentionNotifications();
   // The desktop bridge, when present, feeds the browser and the agent tab rail (as the app bootstrap does).
   useEffect(() => {
     if (window.butlerBrowser) connectBrowser();

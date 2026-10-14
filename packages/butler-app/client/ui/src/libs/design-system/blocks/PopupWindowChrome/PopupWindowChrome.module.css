@@ -34,6 +34,7 @@
   gap: var(--space-sm);
   padding-inline: var(--space-md) var(--space-sm);
   font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height);
   user-select: none;
 }
 
