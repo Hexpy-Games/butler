@@ -11,7 +11,7 @@ pub(crate) fn snapshot(path: &Path, full: bool) -> Result<Value, HarnessError> {
     let delegated: u64 = db.query_row("SELECT count(*) FROM btcc_subsession_delegations WHERE json_extract(packet_json,'$.child_role')='steward'", [], |r|r.get(0))?;
     let handback: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM btcc_guided_tool_calls WHERE tool_name='browser_wait_for_user' AND status='completed')", [], |r|r.get(0))?;
     if !full {
-        return Ok(json!({"delegated":delegated>0,"handback":handback}));
+        return Ok(json!({"delegated":delegated>0,"delegations":delegated,"handback":handback}));
     }
     let mut stmt = db.prepare("SELECT c.arguments_json FROM btcc_guided_tool_calls c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE c.tool_name='replace_work_plan' AND COALESCE(json_extract(t.context_json,'$.executionPolicy.role'),'butler')!='worker' ORDER BY c.rowid")?;
     let mut plans = Vec::new();
@@ -29,7 +29,7 @@ pub(crate) fn snapshot(path: &Path, full: bool) -> Result<Value, HarnessError> {
         |r| r.get(0),
     )?;
     Ok(
-        json!({"model_requests":model_requests,"tools":operations::tools(&db)?,"plan_checks":plans,"steward_reports":reports,"delegated":delegated>0,"handback":handback}),
+        json!({"model_requests":model_requests,"tools":operations::tools(&db)?,"plan_checks":plans,"steward_reports":reports,"delegated":delegated>0,"delegations":delegated,"handback":handback}),
     )
 }
 

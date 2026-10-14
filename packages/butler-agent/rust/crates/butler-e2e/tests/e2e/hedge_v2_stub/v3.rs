@@ -127,3 +127,18 @@ async fn report_gates_accept_improvements_and_reject_regressions() -> Result<(),
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn outbound_urls_exclude_fixture_and_loopback_hosts() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let tools = vec![
+        json!({"args": {"url": "https://example.org/a"}}),
+        json!({"args": {"url": "https://lumora.test/pricing"}}),
+        json!({"args": {"url": "http://127.0.0.1:4100/__o/x"}}),
+    ];
+    assert_eq!(
+        v2::collect::external_urls(&[], &tools),
+        ["https://example.org/a"]
+    );
+    Ok(())
+}

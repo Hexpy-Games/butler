@@ -99,6 +99,8 @@ def side_stats(rows):
     return {
         **diagnostic_stats(rows),
         "access_mode": sorted(access_modes(rows), key=str),
+        "external_url_runs": {group: sum(bool(r.get("external_urls")) for r in rows if r.get("group") == group)
+                              for group in ("web", "workspace")},
         "pooled_trap_resolved_rate": rate(traps),
         "confident_error_runs": sum(row.get("confident_error", False) for row in rows),
         "hedge_rate": sum(bool(row.get("hedge_lint")) or (row.get("judge", {}).get("gap") or 0) > .5 for row in answers) / max(1, len(answers)),

@@ -37,7 +37,11 @@ def gates(main, branch):
 def check(directory):
     main, branch = rows("main"), rows("branch")
     assert len(main) + len(branch) == 240
+    main[0].update(group="web", external_urls=["https://example.org/main"])
+    branch[0].update(group="workspace", external_urls=["https://example.org/branch"])
     result = report.report(main, branch)
+    assert result["main"]["external_url_runs"] == {"web": 1, "workspace": 0}
+    assert result["branch"]["external_url_runs"] == {"web": 0, "workspace": 1}
     for name in ("judgment_recall", "defensive", "confident_error_controls", "access_mode"):
         assert result["gates"][name], name
     assert result["branch"]["u1_memory_tool_use_rate"] == 1
@@ -72,6 +76,9 @@ def check(directory):
         report.write_jsonl(directory / f"{side}.jsonl", data)
     subprocess.run([sys.executable, str(script), str(directory / "main.jsonl"),
                     str(directory / "branch.jsonl"), "--out", str(directory / "report.json")], check=True)
+    saved = json.loads((directory / "report.json").read_text())
+    for side in ("main", "branch"):
+        assert saved[side]["external_url_runs"] == result[side]["external_url_runs"]
     print("D5v3 report: gates 5–7 PASS and FAIL variants verified; 240 synthetic rows")
 
 

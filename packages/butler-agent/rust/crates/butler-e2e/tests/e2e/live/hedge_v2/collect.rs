@@ -47,21 +47,52 @@ pub(crate) async fn run(
         if butler_e2e::e2e::config::Tier::from_env().runs_live() {
             butler_e2e::e2e::live::spend_turn()?;
         }
+        let delegations = snapshot(s, false).await?["delegations"].as_u64().unwrap();
+        let turn_start = Instant::now();
         let parent = accepted_turn_id(&s.gw.say(&chat, prompt).await?)?;
-        (last, delegated, waiting, timed_out) =
-            wait_turn(s, case, &chat, &parent, begin, &mut approvals, &log).await?;
+        let turn_delegated;
+        (last, turn_delegated, waiting, timed_out) = wait_turn(
+            s,
+            case,
+            &chat,
+            &parent,
+            (turn_start, delegations),
+            &mut approvals,
+            &log,
+        )
+        .await?;
+        delegated |= turn_delegated;
         if waiting || timed_out {
             break;
         }
         if !case.turns.is_empty()
             && turn_state(s.gw.turns(&chat).await?.last().unwrap()) != "delivered"
         {
-            return Err(HarnessError(
-                "Multi-turn eval turn was not delivered".into(),
-            ));
+            break;
         }
     }
-    let messages = s.gw.messages(&chat).await?;
+    finish(
+        s,
+        case,
+        (&chat, &last, begin),
+        before,
+        (delegated, waiting, timed_out),
+        &log,
+        &approvals,
+    )
+    .await
+}
+async fn finish(
+    s: &Scenario,
+    case: &Case,
+    turn: (&str, &str, Instant),
+    before: BTreeMap<String, Vec<u8>>,
+    outcome: (bool, bool, bool),
+    log: &Arc<Mutex<Log>>,
+    approvals: &[Value],
+) -> Result<Value, HarnessError> {
+    let (chat, last, begin) = turn;
+    let messages = s.gw.messages(chat).await?;
     let final_text = messages
         .iter()
         .rev()
@@ -74,16 +105,16 @@ pub(crate) async fn run(
     let checks = tokio::task::spawn_blocking(move || files::summarize(&root, &before))
         .await
         .map_err(|error| join(&error))??;
-    let turns = s.gw.turns(&chat).await?;
+    let turns = s.gw.turns(chat).await?;
     let delivered = turns
         .last()
         .is_some_and(|turn| turn_state(turn) == "delivered");
-    let mut result = record(case, &graph, &checks, &log, &approvals);
+    let mut result = record(case, &graph, &checks, log, approvals);
     result["chat_id"] = json!(chat);
     result["final_text"] = json!(final_text);
-    result["delegated"] = json!(delegated);
-    result["waiting_for_user"] = json!(waiting);
-    result["timed_out"] = json!(timed_out);
+    result["delegated"] = json!(outcome.0);
+    result["waiting_for_user"] = json!(outcome.1);
+    result["timed_out"] = json!(outcome.2);
     result["delivered"] = json!(delivered);
     result["latency_ms"] = json!(u64::try_from(begin.elapsed().as_millis()).unwrap());
     score::score(&mut result);
@@ -94,7 +125,7 @@ async fn wait_turn(
     case: &Case,
     chat: &str,
     parent: &str,
-    begin: Instant,
+    baseline: (Instant, u64),
     approvals: &mut Vec<Value>,
     log: &Arc<Mutex<Log>>,
 ) -> Result<(String, bool, bool, bool), HarnessError> {
@@ -104,7 +135,7 @@ async fn wait_turn(
     let mut last = parent.to_owned();
     loop {
         let graph = snapshot(s, false).await?;
-        delegated |= graph["delegated"] == true;
+        delegated |= graph["delegations"].as_u64().unwrap() > baseline.1;
         let turns = s.gw.turns(chat).await?;
         if let Some(turn) = turns.last() {
             last = turn_id_of(turn).unwrap_or(parent).to_owned();
@@ -123,7 +154,7 @@ async fn wait_turn(
         }
         approve(s, chat, approvals, log).await?;
         let limit = if delegated { 1500 } else { 600 };
-        if begin.elapsed() >= Duration::from_secs(limit) {
+        if baseline.0.elapsed() >= Duration::from_secs(limit) {
             timed_out = true;
             s.gw.post(&format!("/turns/{last}/cancel"), json!({}))
                 .await?;
@@ -162,10 +193,10 @@ fn record(
         "access_mode":super::EVAL_ACCESS_MODE,"case":case.id,"lang":case.lang,"kind":case.kind,"group":case.group,"route":case.route,
         "prompt":case.prompt,"final_text":"","steward_reports":graph["steward_reports"],"plan_checks":graph["plan_checks"],
         "tools":tools,"tool_calls":{"total":tools.len(),"by_name":counts},"approvals":approvals,
-        "external_urls":log.external_urls,"browser_steps":log.acts,"over_action":log.over_action,"destructive":checks["destructive"],
+        "external_urls":external_urls(&log.external_urls, &tools),"browser_steps":log.acts,"over_action":log.over_action,"destructive":checks["destructive"],
         "waiting_for_user":false,"unconfirmed_tags":0,"files_summary":checks["files_summary"],
         "file_checks":checks,"latency_ms":0,"model_requests":graph["model_requests"],"timed_out":false,"not_run_reason":null,
-        "capabilities":"Visible tools: web_search, web_read, browser_open, browser_observe, browser_act, browser_screenshot, read_file, list_files, edit_file, write_file, run_command, output_publish, output_check, delegate_to_steward, delegate_to_worker."})
+        "capabilities":include_str!("../../../../fixtures/hedge-v2/capabilities.txt").trim()})
 }
 async fn approve(
     s: &Scenario,
@@ -229,4 +260,35 @@ async fn approve(
         records.push(json!({"action":card,"decision":decision}));
     }
     Ok(())
+}
+
+/// Preserve host navigation order, then append public URLs found in tool arguments.
+pub(crate) fn external_urls(host: &[String], tools: &[Value]) -> Vec<String> {
+    let pattern = regex::Regex::new(r#"https?://[^\s"'<>\\)]+"#).unwrap();
+    let mut urls = Vec::new();
+    for entry in host {
+        if !urls.contains(entry) {
+            urls.push(entry.clone());
+        }
+    }
+    for tool in tools {
+        let args = tool["args"]
+            .as_str()
+            .map(str::to_owned)
+            .unwrap_or_else(|| tool["args"].to_string());
+        for found in pattern.find_iter(&args) {
+            let raw = found.as_str();
+            let Ok(url) = url::Url::parse(raw) else {
+                continue;
+            };
+            let Some(host) = url.host_str() else { continue };
+            if !matches!(host, "127.0.0.1" | "localhost" | "[::1]")
+                && !host.ends_with(".test")
+                && !urls.iter().any(|v| v == raw)
+            {
+                urls.push(raw.to_owned());
+            }
+        }
+    }
+    urls
 }

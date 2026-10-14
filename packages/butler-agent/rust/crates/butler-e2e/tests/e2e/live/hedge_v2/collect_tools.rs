@@ -61,7 +61,7 @@ pub(super) fn tools(db: &Connection) -> Result<Vec<Value>, HarnessError> {
         let catalog_id = invocation.as_ref().and_then(|v| v["id"].as_str());
         Some(json!({"name":p["toolName"],"catalog_id":catalog_id,"ok":ok,"output_id":result["output_id"],
             "turn_id":key.0,"call_id":key.1,"result_id":p["resultId"],
-            "args":args.get(&key).cloned().unwrap_or_default().chars().take(300).collect::<String>(),
+            "args":args.get(&key).cloned().unwrap_or_default(),
             "output":output.chars().take(2000).collect::<String>()}))
     }).collect())
 }

@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+from pathlib import Path
 import ssl
 import urllib.request
 
@@ -41,7 +42,7 @@ EVAL_QUESTIONS = {
     ),
 }
 EVAL_NOTE = "NOTE d1/d2 are diagnostic (d1 P 0.73 / R 0.73 at 0.6; d2 not calibrated)"
-CAPABILITIES = "The assistant could search the web, read pages, open pages in browser tabs and take screenshots, read, list and edit workspace files, run shell commands, check published outputs, recall memory, and delegate work."
+CAPABILITIES = (Path(__file__).parent.parent / "fixtures/hedge-v2/capabilities.txt").read_text().strip()
 NOTE = "NOTE thresholds are in-sample (precision 0.50 / recall 0.92 in-sample; 0.33 / 0.62 out-of-sample); diagnostic only"
 
 
