@@ -6,7 +6,7 @@ export type { FirstRunProviderCardId };
 /** How a card connects: browser sign-in, one API key, or Other (a model on this computer or a server address). */
 export type ProviderCardKind = "signin" | "key" | "custom";
 /** ProviderLogo names used by the cards (a subset of the DS logo set). */
-export type ProviderCardLogo = "openai" | "claude" | "gemini" | "grok" | "qwen" | "kimi" | "zai" | "opencode" | "ollama" | "lmstudio";
+export type ProviderCardLogo = "openai" | "claude" | "anthropic" | "gemini" | "grok" | "qwen" | "kimi" | "zai" | "opencode" | "ollama" | "lmstudio";
 
 export interface ProviderCardSpec {
   id: FirstRunProviderCardId;
@@ -35,7 +35,7 @@ export const PROVIDER_CARDS: Record<FirstRunProviderCardId, ProviderCardSpec> = 
 };
 
 const PROVIDER_LOGOS: Record<string, ProviderCardLogo> = {
-  openai: "openai", anthropic: "claude", google: "gemini", xai: "grok", qwen: "qwen",
+  openai: "openai", anthropic: "anthropic", google: "gemini", xai: "grok", qwen: "qwen",
   kimi: "kimi", zai: "zai", "zai-api": "zai", "opencode-go": "opencode",
 };
 
