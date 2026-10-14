@@ -37,6 +37,9 @@ export function stageElectronPackageSource(root: string, destination: string): s
   stageElectronRuntimeDependencies(root, source, destination);
   checkElectronImports(destination);
   manifest.version = readAppComponentVersions(root).app;
+  // The staged tree holds only the production closure, so the staged manifest must not name dev tooling:
+  // electron-packager's prune walk resolves every listed devDependency from the staged node_modules.
+  delete manifest.devDependencies;
   writeFileSync(join(destination, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   return destination;
 }

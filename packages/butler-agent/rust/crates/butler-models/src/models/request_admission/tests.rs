@@ -55,7 +55,7 @@ fn prepare<'a>(
     PreparedRequestAdmission::new(&PrepareAdmissionInput {
         catalog,
         config,
-        provider: "openai",
+        provider: model_ref.split_once('/').unwrap().0,
         model_ref,
         butler_data: None,
         requested_output_tokens: Some(output),
@@ -91,5 +91,71 @@ fn exact_token_counts_image_projection_and_output_overflow() {
                     plan.admission == RequestContextAdmission::CannotFitRequired
                     && plan.compiled_input_tokens == 5.0
                     && plan.input_capacity_tokens == 0.0)
+    ));
+    every_carrier_image_shape_is_projected_and_other_text_is_not();
+}
+
+/// Inline images on every carrier cost the image allowance wherever the
+/// carrier places them (user content, tool results, Gemini parts); base64
+/// outside an image position remains text.
+fn every_carrier_image_shape_is_projected_and_other_text_is_not() {
+    let (catalog, config) = source();
+    // 4 MB of base64: about 1.05M estimated tokens if counted as text.
+    let data = "QUJD".repeat(1_000_000);
+    let anthropic = json!({"model":"claude-opus-5-5","messages":[
+        {"role":"user","content":[
+            {"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":data}},
+            {"type":"text","text":"What is this?"}]},
+        {"role":"assistant","content":[{"type":"tool_use","id":"t","name":"x",
+            "input":{"type":"base64","media_type":"image/png","data":"QUJD"}}]},
+        {"role":"user","content":[{"type":"tool_result","tool_use_id":"t","content":[
+            {"type":"text","text":"observed"},
+            {"type":"image","source":{"type":"base64","media_type":"IMAGE/PNG","data":data}}]}]}]});
+    let gemini = json!({"contents":[
+        {"role":"user","parts":[{"inline_data":{"mime_type":"image/png","data":data}},{"text":"hi"}]},
+        {"role":"user","parts":[{"functionResponse":{"name":"x","response":{}}},
+            {"inlineData":{"mimeType":"image/jpeg","data":data}}]}]});
+    for (model, body) in [
+        ("anthropic/claude-opus-5-5", &anthropic),
+        ("google/gemini-3.5-flash", &gemini),
+    ] {
+        let (text, count) = image_token_projection(body).unwrap();
+        assert_eq!(count, 2, "{model}");
+        assert!(!text.contains(&data), "{model}");
+        let placeholder = format!("[image input bytes={}]", data.len());
+        assert_eq!(text.matches(&placeholder).count(), 2, "{model}");
+        let estimated = catalog
+            .estimate_tokens(&config.0, TokenEstimateInput::Text(&text), Some(model))
+            .unwrap()
+            .tokens;
+        let admitted = prepare(&catalog, &config, model, body, 64.0)
+            .admit()
+            .unwrap();
+        assert_eq!(
+            admitted.plan.compiled_input_tokens,
+            estimated + 2.0 * IMAGE_TOKEN_ALLOWANCE,
+            "{model}"
+        );
+    }
+    // A tool input that merely resembles a source block is model text.
+    assert!(
+        image_token_projection(&anthropic)
+            .unwrap()
+            .0
+            .contains(r#""data":"QUJD""#)
+    );
+    let text = json!({"messages":[{"role":"user","content":[{"type":"text","text":data},
+        {"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"QUJD"}}]}]});
+    assert_eq!(image_token_projection(&text).unwrap().1, 0);
+    let Err(error) = prepare(&catalog, &config, "anthropic/claude-opus-5-5", &text, 64.0)
+        .admit()
+        .map(|_| ())
+    else {
+        panic!("4 MB of text was admitted as an image")
+    };
+    assert!(matches!(
+        error,
+        ModelRoundError::RequestAdmission(error)
+            if error.code == ModelRequestAdmissionCode::ContextCapacityExceeded
     ));
 }
