@@ -128,13 +128,7 @@ jobs:
           if [[ "$version" != v[0-9]* && "$version" != 0.1.0-preview.99 ]]; then version=0.1.0-dev; fi
           version="${version#v}"
           python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" record "$RUNNER_TEMP/rust-archive" "$PLATFORM" "$ORT_MODE" dev "$version"
-      - uses: ./.github/actions/publish-cargo-target
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
-        with:
-          platform: ${{ inputs.platform }}
-          mode: ${{ inputs.ort-mode }}
-          kind: dev
-          producer: Build archives (${{ inputs.platform }})
+      # Test jobs need this bundle even when the later snapshot publish fails.
       - uses: actions/upload-artifact@v4
         with:
           name: rust-${{ inputs.platform }}
@@ -142,3 +136,13 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
           compression-level: 1
+      - name: Free the uploaded test bundle before the snapshot
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+        run: rm -rf "$RUNNER_TEMP/rust-archive"
+      - uses: ./.github/actions/publish-cargo-target
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+        with:
+          platform: ${{ inputs.platform }}
+          mode: ${{ inputs.ort-mode }}
+          kind: dev
+          producer: Build archives (${{ inputs.platform }})
