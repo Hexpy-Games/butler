@@ -1,9 +1,9 @@
 import { strict as assert } from "node:assert";
 import type { Page } from "playwright";
-import type { TaskGraphSnapshot } from "../../packages/butler-app/client/shared/task-graph-contracts.ts";
+import type { TaskGraphSnapshot, TaskGraphsPage } from "../../packages/butler-app/client/shared/task-graph-contracts.ts";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
 import { assertTaskGraphIdle } from "./task-graph-idle.ts";
-import { finishGraphWorkers, reviseTaskGraph, advanceGraphPhase } from "./task-graph-seed.ts";
+import { finishGraphWorkers, reviseTaskGraph, advanceGraphPhase, planChildGraph } from "./task-graph-seed.ts";
 
 export async function verifyGraphFades(page: Page) {
   const canvases = page.locator('[data-test-class="task-graph-canvas"]');
@@ -52,7 +52,7 @@ export async function verifyGraphRevision(page: Page, server: NativeAppServerHan
   await emitGraph(page, latest, runtimeId, before.graph_revision);
   await page.waitForTimeout(100);
   assert.equal(requests.length, 0, "duplicate revisions cause no refetch");
-  const recovery = page.waitForResponse(response => new URL(response.url()).pathname === `/plans/${graphId}/task-graph`);
+  const recovery = page.waitForResponse(response => decodeURIComponent(new URL(response.url()).pathname) === `/plans/${graphId}/task-graph`);
   await emitGraph(page, { ...latest, graph_revision: `gap:${latest.graph_revision}` }, runtimeId, "missing");
   await recovery;
   assert.equal(requests.length, 1, "a revision gap refetches only the changed graph");
@@ -83,10 +83,10 @@ export async function verifyStoppedGraphs(page: Page, server: NativeAppServerHan
 }
 
 let changeSequence = 10_000;
-async function emitGraph(page: Page, graph: TaskGraphSnapshot, runtimeId: string, previous: string) {
+async function emitGraph(page: Page, graph: TaskGraphSnapshot, runtimeId: string, previous: string | null) {
   const sequence = ++changeSequence;
   await page.evaluate(({ graph, runtimeId, previous, sequence }) => (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent({
-    id: sequence, type: "work_model.changed", payload: { ...graph, session_id: runtimeId, plan_id: graph.graph_id, previous_graph_revision: previous, refetch: false, node_order: graph.nodes.map(n => n.task_id), entity_changes: graph.nodes.map(node => ({ type: "upsert", task_id: node.task_id, node })) },
+    id: sequence, type: "work_model.changed", payload: { ...graph, session_id: runtimeId, plan_id: graph.graph_id, previous_graph_revision: previous, refetch: previous === null, node_order: graph.nodes.map(n => n.task_id), entity_changes: graph.nodes.map(node => ({ type: "upsert", task_id: node.task_id, node })) },
   }), { graph, runtimeId, previous, sequence });
 }
 
@@ -104,7 +104,37 @@ export async function verifyAttemptHistory(page: Page, graph: TaskGraphSnapshot)
   const node = graph.nodes.find(n => n.attempts.length>1);
   if (!node) return;
   await page.locator(`[data-task-id="${node.task_id}"]`).click();
+  if (node.session_id) {
+    const dialog = page.locator('[data-test-class="steward-observer-dialog"]');
+    await dialog.waitFor();
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden" });
+  }
   const detail=page.locator('[data-test-class="task-graph-detail"]');
   await detail.getByText("attempt 2", { exact:true }).waitFor();
   await detail.getByText(node.attempts[0]!.summary!, { exact:true }).waitFor();
+}
+
+export async function verifyStewardHandoff(page: Page, server: NativeAppServerHandle, graph: TaskGraphSnapshot, sessionId: string, runtimeId: string) {
+  await planChildGraph(server.butlerData, graph.graph_id);
+  const list = await server.api<TaskGraphsPage>(`/sessions/${sessionId}/task-graphs`);
+  assert.equal(list.total, 1);
+  const child = await server.api<TaskGraphSnapshot>(`/plans/${list.graphs[0]!.graph_id}/task-graph`);
+  assert.notEqual(child.graph_id, graph.graph_id);
+  const requests: string[] = [];
+  const record = (request: { url(): string }) => {
+    const path = decodeURIComponent(new URL(request.url()).pathname);
+    if (/task-graphs?|\/plans\//u.test(path)) requests.push(path);
+  };
+  page.on("request", record);
+  // No parent tombstone: the server's event cache may not have seen its graph.
+  await emitGraph(page, child, runtimeId, null);
+  await page.waitForFunction(id => {
+    const groups = document.querySelectorAll('[data-test-class="task-graph-group"]');
+    return groups.length === 1 && groups[0]?.getAttribute("data-graph-id") === id;
+  }, child.graph_id);
+  await page.locator(`[data-graph-id="${child.graph_id}"] [data-test-class="task-graph-card"]`).first().waitFor();
+  page.off("request", record);
+  assert.deepEqual(requests.sort(), [`/sessions/${sessionId}/task-graphs`, `/plans/${child.graph_id}/task-graph`].sort());
+  console.log(JSON.stringify({ handoffGraphs: 1, membershipListReads: 1, newGraphReads: 1 }));
 }

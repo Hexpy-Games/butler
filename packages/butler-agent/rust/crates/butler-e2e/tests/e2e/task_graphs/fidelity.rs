@@ -23,9 +23,26 @@ async fn task_graphs_btcc_main_path() -> Result<(), Error> {
     butler_e2e::gate!();
     let s = Setup::new("TASK-GRAPH-MAIN")?.start().await?;
     let mut builder = GraphBuilder::open(&s.sandbox.data).await?;
-    let mut work = builder
-        .graph("butler/app-general", 4, "Release objective")
+    let (owner, mut work) = builder
+        .unplanned("butler/app-general", 1, "Release objective")
         .await?;
+    let parent = graph(&s, &owner).await?;
+    let list = s.gw.get("/sessions/general/task-graphs").await?;
+    assert_eq!(list.data()["total"], 1);
+    assert_eq!(list.data()["graphs"][0]["graph_id"], parent["graph_id"]);
+    builder.plan(&mut work, "workers", actions(4)).await?;
+    builder
+        .review(&mut work, "plan", "accept", json!([]))
+        .await?;
+    assert_eq!(
+        s.gw.get(&format!(
+            "/plans/{}/task-graph",
+            parent["graph_id"].as_str().unwrap()
+        ))
+        .await?
+        .status,
+        404
+    );
     only_graph(&s, "general").await?;
     let initial = graph(&s, &work).await?;
     let ids: Vec<_> = initial["nodes"]

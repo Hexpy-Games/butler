@@ -32,6 +32,12 @@ async fn main() -> Result<(), Error> {
             builder.complete_pending_attempts(data, &work).await?;
             builder.advance_phase(&mut work, phase).await?;
         }
+        "plan-child" => {
+            let [id] = rest else {
+                return Err("expected parent Work graph id".into());
+            };
+            builder.plan_child(data, id).await?;
+        }
         "finish" => {
             builder.finish_all(data).await?;
         }

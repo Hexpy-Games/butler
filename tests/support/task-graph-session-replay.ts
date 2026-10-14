@@ -3,7 +3,7 @@ import type { SessionView } from "../../packages/butler-app/client/ui/src/app/ty
 import type { TaskGraphSnapshot } from "../../packages/butler-app/client/shared/task-graph-contracts.ts";
 import { HARNESS_SS03_OBSERVER_VIEW } from "../../packages/butler-app/client/ui/src/app/fixtures.ts";
 
-/** The graph fixture seeds records, not executable turn admission/context data.
+/** The service builder admits turns into a controlled queue without running models.
  * Replay canonical session views for the shell/dialog while graph/document GETs
  * and the selected child session id still travel through the real product paths.
  */

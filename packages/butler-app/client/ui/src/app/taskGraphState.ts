@@ -91,7 +91,12 @@ async function loadSessionGraphs(sessionId: string) {
       cursor = page.cursor;
     }
     if (summaries.length !== first.total) throw new Error("Incomplete task graph list");
-    update(sessionId, { summaries });
+    const present = new Set(summaries.map(g => g.graph_id));
+    for (const id of known) if (!present.has(id)) {
+      const key = `${sessionId}/${id}`;
+      revisions.set(key, (revisions.get(key) ?? 0) + 1);
+    }
+    update(sessionId, { summaries, graphs: view(sessionId).graphs.filter(g => !known.has(g.graph_id) || present.has(g.graph_id)) });
     await Promise.all(summaries.map(summary => {
       const cached = view(sessionId).graphs.find(g => g.graph_id === summary.graph_id);
       return cached?.graph_revision === summary.graph_revision ? undefined : refreshGraph(sessionId, summary.graph_id);
@@ -125,12 +130,21 @@ export function receiveTaskGraphEvent(event: TimelineEvent): void {
   if (typeof sessionId !== "string" || typeof planId !== "string" || !viewers.has(sessionId)) return;
   const current = view(sessionId).graphs.find(g => g.graph_id === planId);
   if (payload?.removed) {
+    const key = `${sessionId}/${planId}`;
+    revisions.set(key, (revisions.get(key) ?? 0) + 1);
     const state = view(sessionId);
     update(sessionId, { graphs: state.graphs.filter(g => g.graph_id !== planId), summaries: state.summaries.filter(g => g.graph_id !== planId) });
     reconcileSelection(sessionId);
     return;
   }
-  if (current?.graph_revision === payload?.graph_revision) return;
+  if (!current) {
+    // A newly planned Work can replace its parent even with a cold event cache.
+    const pending = loads.get(sessionId);
+    if (pending) void pending.then(() => loadTaskGraphs(sessionId));
+    else void loadTaskGraphs(sessionId);
+    return;
+  }
+  if (current.graph_revision === payload?.graph_revision) return;
   const patched = current ? patchTaskGraph(current, payload as unknown as TaskGraphChanged) : null;
   if (patched) {
     revisions.set(`${sessionId}/${planId}`, (revisions.get(`${sessionId}/${planId}`) ?? 0) + 1);

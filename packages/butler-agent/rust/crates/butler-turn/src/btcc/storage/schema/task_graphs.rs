@@ -9,10 +9,6 @@ CREATE INDEX IF NOT EXISTS idx_btcc_graph_bindings_work
 ON btcc_guided_turn_work_bindings(work_id,session_id) WHERE is_current=1;
 CREATE INDEX IF NOT EXISTS idx_btcc_graph_work
 ON btcc_subsession_delegations(json_extract(packet_json,'$.parent_work_ref.work_id'));
-CREATE TRIGGER IF NOT EXISTS task_graph_review_insert AFTER INSERT ON btcc_guided_work_review_revisions BEGIN
-    INSERT INTO agent_task_graph_changes(session_id) SELECT session_id FROM btcc_guided_works WHERE work_id=NEW.work_id
-    ON CONFLICT(session_id) DO UPDATE SET seq=excluded.seq;
-END;
 CREATE TABLE IF NOT EXISTS agent_task_graph_changes (
     seq INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL UNIQUE

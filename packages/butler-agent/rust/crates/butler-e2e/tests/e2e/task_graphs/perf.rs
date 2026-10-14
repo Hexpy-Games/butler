@@ -17,9 +17,9 @@ async fn perf_task_graph_endpoints_owner_scale() -> Result<(), HarnessError> {
         .as_str()
         .unwrap()
         .to_owned();
-    let ids = fixture::seed(&s.sandbox.data, &hint, 6).await?;
+    let ids = Box::pin(fixture::seed(&s.sandbox.data, &hint, 6)).await?;
     let graph_id = &ids[0];
-    let bytes = super::scale::seed(&s.sandbox.data).await?;
+    let bytes = Box::pin(super::scale::seed(&s.sandbox.data)).await?;
     tokio::time::sleep(Duration::from_secs(10)).await;
     super::scale::assert_indexes(&s.sandbox.data)?;
     let pins = [

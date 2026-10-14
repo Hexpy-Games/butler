@@ -35,7 +35,7 @@ async fn task_graphs_existing_plans_documents_and_dependencies() -> Result<(), H
     assert_eq!(empty.status, 200);
     assert_eq!(empty.data()["total"], 0);
     for (count, _, hint) in &chats {
-        fixture::seed(&s.sandbox.data, hint, *count).await?;
+        Box::pin(fixture::seed(&s.sandbox.data, hint, *count)).await?;
     }
     for (count, chat, _) in chats {
         reads::assert_plan(&s, count, &chat).await?;

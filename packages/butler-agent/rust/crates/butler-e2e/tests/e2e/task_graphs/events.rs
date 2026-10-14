@@ -16,7 +16,7 @@ async fn task_graphs_revision_event_and_reconnect() -> Result<(), HarnessError> 
         .as_str()
         .unwrap()
         .to_owned();
-    let ids = fixture::seed(&s.sandbox.data, &hint, 1).await?;
+    let ids = Box::pin(fixture::seed(&s.sandbox.data, &hint, 1)).await?;
     let id = &ids[0];
     let graph = s.gw.get(&format!("/plans/{id}/task-graph")).await?;
     let seq = graph.data()["event_seq"].as_u64().unwrap();

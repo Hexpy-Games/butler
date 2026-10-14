@@ -20,13 +20,49 @@ impl GraphBuilder {
         count: usize,
         title: &str,
     ) -> Result<GraphWork, Error> {
-        let mut owner = self.parent(parent).await?;
-        self.plan(&mut owner, "steward", actions(1)).await?;
-        self.review(&mut owner, "plan", "accept", json!([])).await?;
-        let mut work = self.steward(&owner, title).await?;
+        let (_, mut work) = self.unplanned(parent, 1, title).await?;
         self.plan(&mut work, "workers", actions(count)).await?;
         self.review(&mut work, "plan", "accept", json!([])).await?;
         Ok(work)
+    }
+
+    pub async fn unplanned(
+        &mut self,
+        parent: &str,
+        count: usize,
+        title: &str,
+    ) -> Result<(GraphWork, GraphWork), Error> {
+        let mut owner = self.parent(parent).await?;
+        self.plan(&mut owner, "steward", actions(count)).await?;
+        self.review(&mut owner, "plan", "accept", json!([])).await?;
+        let child = self.steward(&owner, title).await?;
+        Ok((owner, child))
+    }
+
+    pub async fn plan_child(&mut self, data: &Path, id: &str) -> Result<(), Error> {
+        let owner = self.existing(data, id).await?;
+        let children = SqliteSubsessionRepository::new(self.storage.clone())
+            .relations_for_parent(owner.scope.session_id.clone())
+            .await?;
+        let child = children
+            .into_iter()
+            .find(|c| {
+                c.packet
+                    .parent_work_ref
+                    .as_ref()
+                    .is_some_and(|r| r.work_id == owner.view.work_id)
+            })
+            .ok_or("missing delegated child")?;
+        let mut work = self.existing(data, &child.root_work_id).await?;
+        let count = owner
+            .view
+            .current_plan
+            .ok_or("missing parent plan")?
+            .actions
+            .len();
+        self.plan(&mut work, "workers", actions(count)).await?;
+        self.review(&mut work, "plan", "accept", json!([])).await?;
+        Ok(())
     }
 
     pub async fn seed(
@@ -37,9 +73,12 @@ impl GraphBuilder {
     ) -> Result<Vec<String>, Error> {
         let mut graphs = Vec::new();
         for (i, state) in states.iter().enumerate() {
-            let mut work = self
-                .graph(parent, count, &format!("Release {}", i + 1))
-                .await?;
+            let title = format!("Release {}", i + 1);
+            let mut work = if state == "waiting" {
+                self.unplanned(parent, count, &title).await?.0
+            } else {
+                self.graph(parent, count, &title).await?
+            };
             self.seed_state(&mut work, state, count).await?;
             graphs.push(encode_task_graph_id("work:", &work.view.work_id, ""));
         }

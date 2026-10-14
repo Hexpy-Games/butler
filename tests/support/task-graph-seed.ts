@@ -25,3 +25,5 @@ export function finishGraphWorkers(data: string): Promise<void> { return build(d
 export function reviseTaskGraph(data: string, id: string): Promise<void> { return build(data, "revise", [id]); }
 
 export function advanceGraphPhase(data: string, id: string, phase: string): Promise<void> { return build(data, "phase", [id, phase]); }
+
+export function planChildGraph(data: string, id: string): Promise<void> { return build(data, "plan-child", [id]); }

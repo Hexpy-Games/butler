@@ -7,7 +7,7 @@ import { installTaskSessionReplay } from "../support/task-graph-session-replay.t
 import type { SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import { installWorkReplay } from "../support/delegated-work-replay.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
-import { verifyAttemptHistory, verifyGraphFades, verifyGraphRevision, verifyPendingSelection, verifyStoppedGraphs } from "../support/task-graph-behavior.ts";
+import { verifyStewardHandoff, verifyAttemptHistory, verifyGraphFades, verifyGraphRevision, verifyPendingSelection, verifyStoppedGraphs } from "../support/task-graph-behavior.ts";
 import { assertTaskGraphClocks, installGraphActivityCounters } from "../support/task-graph-idle.ts";
 import { seedTaskGraphs, type SeedState } from "../support/task-graph-seed.ts";
 import type { TaskGraphSnapshot, TaskGraphsPage } from "../../packages/butler-app/client/shared/task-graph-contracts.ts";
@@ -172,6 +172,9 @@ try {
             await verifyStoppedGraphs(page, server, snapshots, session.session_hint);
             if (explicitSelection) assert.equal(await page.locator('[data-test-class="task-graph-card"][aria-pressed="true"]').getAttribute("data-task-id"), explicitSelection,
               "an explicit user selection survives later graph revisions");
+          }
+          if (!matrix && states.length === 1 && states[0] === "waiting") {
+            await verifyStewardHandoff(page, server, snapshots[0]!, session.id, session.session_hint);
           }
           console.log(JSON.stringify({ graphs: states.length, width, theme, language, cards: open.reduce((n, g) => n + g.totals.nodes, 0), edges: open.reduce((n, g) => n + g.totals.edges, 0) }));
         } finally { await page.close(); }
