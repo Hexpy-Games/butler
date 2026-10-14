@@ -22,6 +22,7 @@ pub use visual_admission::{
 };
 pub use visual_manifest::VisualAttachmentManifest;
 
+pub use butler_core::tool_protocol::ToolCallStreamEvent;
 pub use transport::provider_http_client;
 
 pub use local_servers::{
