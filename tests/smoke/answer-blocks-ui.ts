@@ -1,5 +1,6 @@
 // UI behavior E2E: product conversation, offline HTTP/desktop bridge stubs, no model calls.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createServer } from "../../packages/butler-app/client/ui/node_modules/vite/dist/node/index.js";
@@ -30,7 +31,18 @@ const message = (spec: unknown): MessageRecord => ({ id: "answer", chat_id: "but
   text: "조건에 맞는 후보를 비교했습니다.", created_at: "2026-10-12T08:51:00Z", answer_blocks: [{ call_id: "blocks", set_ids: [], spec: spec as AnswerBlocks }] });
 const calls: { path: string; body: Record<string, unknown> }[] = [];
 process.chdir(join(root, "packages/butler-app/client/ui"));
-const vite = await createServer({ server: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
+const baseline = process.env.BUTLER_ANSWER_BASELINE;
+const baselineSources = new Map<string, string>();
+if (baseline) {
+  assert.equal(stage, "before", "baseline mode is for before captures only");
+  for (const name of ["AnswerBlocks", "AnswerCards", "AnswerDataBlocks"]) {
+    const file = `packages/butler-app/client/ui/src/components/conversation/${name}.tsx`;
+    baselineSources.set(resolve(root, file), execFileSync("git", ["show", `${baseline}:${file}`], { cwd: root, encoding: "utf8" }));
+  }
+}
+const vite = await createServer({ server: { host: "127.0.0.1", port: 0 }, logLevel: "error",
+  plugins: [{ name: "answer-baseline", enforce: "pre", load(id) { return baselineSources.get(id.split("?")[0]); } }],
+});
 await vite.listen();
 const base = vite.resolvedUrls!.local[0];
 const browser = await launchSmokeBrowser();
@@ -81,7 +93,7 @@ async function open(page: Page, spec: unknown, width: number, theme: string, bac
 async function checkMock(page: Page, width: number, theme: string, background: string) {
   await open(page, mock, width, theme, background);
   const cards = page.locator('[data-slot="item-card"]');
-  if (stage === "after") {
+  if (stage === "after" || baseline) {
     await cards.first().waitFor();
     assert.equal(await cards.count(), 4);
     const grid = page.locator('[data-test-class="answer-cards"]');
@@ -116,9 +128,10 @@ async function checkMock(page: Page, width: number, theme: string, background: s
     geometry.push({ width, theme, background, ...state });
   } else assert.equal(await cards.count(), 0, "baseline has no block renderer");
   assert.equal(await page.locator('[data-sonner-toast][data-type="error"]').count(), 0, "offline conversation fixtures are complete");
+  await page.locator('[data-test-class~="conversation-scroll"]').evaluate(node => { node.scrollTop = 0; });
   await page.screenshot({ path: join(evidence, `${locale}-${stage}-${width}-${theme}-${background}.png`) });
-  if (locale === "en" && width === 1280 && theme === "light" && background === "plain") {
-    await page.screenshot({ path: join(evidence, "en-1280-light.png") });
+  if (locale === "en" && width === 1440 && theme === "light" && background === "plain") {
+    await page.screenshot({ path: join(evidence, "en-1440-light.png") });
   }
   if (stage === "after") {
     await page.locator('[data-test-class~="conversation-scroll"]').evaluate(node => { node.scrollTop = node.scrollHeight; });
@@ -127,7 +140,7 @@ async function checkMock(page: Page, width: number, theme: string, background: s
 }
 
 async function checkInteractions(page: Page) {
-  await open(page, neutral, 1280, "light");
+  await open(page, neutral, 1440, "light");
   await page.locator('[data-answer-block="chart"] svg').first().waitFor();
   assert.equal(await page.locator("[data-answer-block]").count(), 8);
   assert((await page.locator('[data-slot="item-card"]').innerText()).includes("-12.5 units"));
@@ -236,6 +249,8 @@ async function checkCardTargetsAndViewer(page: Page, width: number, theme: strin
   assert(String(calls.filter(call => call.path === "/library").at(-1)?.body.crop).startsWith("data:image/jpeg"), "the saved scrap keeps the picture");
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "detached" });
+  // Radix FocusScope restores focus in its deferred unmount callback, after the dialog detaches.
+  await page.waitForFunction(() => document.activeElement?.getAttribute("data-item-card-media") === "viewer");
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("data-item-card-media")), "viewer", "focus returns to the picture");
   await page.keyboard.press("Enter");
   await dialog.waitFor();
@@ -278,7 +293,7 @@ async function checkLeniencyAndExpand(page: Page) {
   for (const count of [5, 6, 11]) {
     const items = Array.from({ length: count }, (_, i) => ({ ...card.items[0], key: `record-${i}`, title: `Record ${i}`, img: undefined }));
     const spec = { v: 1, blocks: [{ type: "unknown", text: "Invisible" }, { type: "cards", items: [...items, { title: 3 }, { text: "unfinished" }] }] };
-    await open(page, spec, 1280, "dark");
+    await open(page, spec, 1440, "dark");
     const expected = Math.min(6, count);
     await page.waitForFunction(n => document.querySelectorAll('[data-slot="item-card"]').length === n, expected);
     assert.equal(await page.locator('[data-test-class="answer-cards"]').getAttribute("data-columns"), count === 5 ? "3" : "4");
@@ -324,10 +339,10 @@ try {
     if (["/session-view", "/summary", "/navigation", "/events/live", "/health"].includes(url.pathname)) return route.fulfill({ json: { ok: true, data: {} } });
     return route.continue();
   });
-  for (const width of [1280, 390]) for (const theme of ["light", "dark"]) for (const background of ["plain", "wallpaper"]) await checkMock(page, width, theme, background);
+  for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const background of ["plain", "wallpaper"]) await checkMock(page, width, theme, background);
   if (stage === "after") {
     await checkInteractions(page);
-    await checkCardTargetsAndViewer(page, 1280, "light");
+    await checkCardTargetsAndViewer(page, 1440, "light");
     await checkCardTargetsAndViewer(page, 390, "dark");
     await checkLeniencyAndExpand(page);
   }

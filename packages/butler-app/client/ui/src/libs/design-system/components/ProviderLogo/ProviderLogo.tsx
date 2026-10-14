@@ -2,7 +2,7 @@ import { useId, type HTMLAttributes } from "react";
 import type { DsBaseProps } from "../../lib/dsProps";
 import { cn } from "../../lib/utils";
 import styles from "./ProviderLogo.module.css";
-import { PROVIDER_LOGO_SVGS } from "./providerLogoSvgs";
+import { PROVIDER_LOGO_SVGS, VENDORED_VIEWBOX } from "./providerLogoSvgs";
 
 export type ProviderLogoName = keyof typeof PROVIDER_LOGO_SVGS;
 export type ProviderLogoSize = "sm" | "md" | "lg";
@@ -25,8 +25,9 @@ const VENDORED_ID_SUFFIX = /_R_0_/gu;
 
 /**
  * A service logo (ChatGPT, Claude, Ollama, ...) drawn from the vendored SVG
- * files exactly as shipped: never recolored or stretched. Monochrome logos
- * paint with currentColor, so they follow the text color in light and dark.
+ * files as shipped, never recolored or stretched, and fitted to the icon-pack
+ * grid (README). Monochrome logos paint with currentColor, so they follow the
+ * text color in light and dark.
  */
 export function ProviderLogo({ name, size = "md", label, className, ...props }: ProviderLogoProps) {
   const instance = useId().replace(/[^A-Za-z0-9_-]/gu, "-");
@@ -37,7 +38,7 @@ export function ProviderLogo({ name, size = "md", label, className, ...props }: 
       aria-hidden={label ? undefined : true}
       aria-label={label}
       className={cn(styles.logo, className)}
-      dangerouslySetInnerHTML={{ __html: logo.svg.replace(VENDORED_ID_SUFFIX, instance) }}
+      dangerouslySetInnerHTML={{ __html: logo.svg.replace(VENDORED_ID_SUFFIX, instance).replace(VENDORED_VIEWBOX, `viewBox="${logo.fit}"`) }}
       data-name={name}
       data-size={size}
       data-slot="provider-logo"

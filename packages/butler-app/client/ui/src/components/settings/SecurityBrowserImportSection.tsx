@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import { appCopy } from "@/app/copy";
 import { Button, ButtonContainer, Input, SettingsSection, Spinner, Stack, Typo } from "@/butler-ds";
-import { BrowserImportItems, BrowserImportSources } from "./BrowserImportSources";
+import { BrowserImportItems, BrowserImportSources, ImportedProfile } from "./BrowserImportSources";
 import { openImportDiskAccess } from "./signInsApi";
 import { useBrowserImport } from "./useBrowserImport";
 
@@ -29,9 +29,8 @@ export function SecurityBrowserImportSection({ keychain, onImported, showTitle =
       </> : null}
       {flow.busy ? <Stack align="row" gap="sm" cross="center" role="status" data-test-class="import-progress"><Spinner /><Typo.Text>{copy.importing}</Typo.Text></Stack> : null}
       {flow.result ? <Stack gap="sm" role="status" data-test-class="import-result">
-        <Typo.Text>{flow.undone ? copy.undone : copy.result(flow.result.bookmarks, flow.result.passwords, flow.result.updated, flow.result.history ?? 0, flow.result.invalid ?? 0)}</Typo.Text>
+        <ImportedProfile flow={flow} />
         <ButtonContainer size="sm">
-          <Button size="sm" variant="outline" disabled={flow.busy || flow.undone} onClick={() => void flow.undo()}>{copy.undo}</Button>
           <Button size="sm" variant="ghost" disabled={flow.busy} onClick={() => void flow.more()}>{copy.more}</Button>
           {flow.result.needs_csv && !flow.exportId && !flow.result.export_id ? <Button size="sm" variant="outline" disabled={flow.busy} onClick={() => void flow.resumeExport()}>{copy.exportPasswords}</Button> : null}
           {flow.result.export_id ? <Button size="sm" variant="outline" disabled={flow.busy} onClick={() => void flow.removeCsv()}>{copy.deleteCsv}</Button> : null}

@@ -41,7 +41,7 @@
   margin: var(--space-md);
   color: var(--text-primary);
   font-size: var(--font-size-2);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-label-line-height);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
 }

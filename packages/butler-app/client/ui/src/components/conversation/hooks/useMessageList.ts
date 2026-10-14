@@ -55,11 +55,8 @@ export function useMessageList(
       (summary?.turn_state && ACTIVE_TURN_STATES.has(summary.turn_state)),
   );
 
-  const progressRows = visibleProgressRows(
-    activeSnapshot?.safe_progress_rows ??
-    summary?.latest_progress?.safe_progress_rows ??
-    [],
-  );
+  const progressSource = activeSnapshot?.safe_progress_rows ?? summary?.latest_progress?.safe_progress_rows;
+  const progressRows = useMemo(() => visibleProgressRows(progressSource ?? []), [progressSource]);
   const timelineProgressRows = progressRows.filter((row) => row.kind !== "todo");
   const hasTodoProgress = progressRows.length !== timelineProgressRows.length;
   const turnState =

@@ -13,7 +13,7 @@
   color: var(--text-primary);
   font-size: var(--font-size-2);
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-label-line-height);
   text-align: center;
   white-space: nowrap;
   pointer-events: none;

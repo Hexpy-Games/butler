@@ -34,7 +34,7 @@ function ProviderSelect() {
   const [value, setValue] = useState("anthropic");
   const options = [
     { value: "openai", label: "OpenAI", logo: "openai" },
-    { value: "anthropic", label: "Anthropic", logo: "claude" },
+    { value: "anthropic", label: "Anthropic", logo: "anthropic" },
   ] as const;
   const selected = options.find((option) => option.value === value) ?? options[0];
   return (

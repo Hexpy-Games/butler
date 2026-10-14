@@ -62,6 +62,7 @@ const logs: string[] = [];
 let child: ReturnType<typeof spawnElectron> | undefined;
 try {
   const env = { ...process.env };
+  env.BUTLER_APP_ELECTRON_USER_DATA_DIR = join(dir, "profile");
   delete env.ELECTRON_RUN_AS_NODE;
   child = spawnElectron(executable, [...smokeBrowserArgs(), dir], { onOutput: bytes => logs.push(String(bytes)), env });
   await new Promise<void>((done, fail) => {

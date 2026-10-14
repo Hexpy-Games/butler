@@ -11,6 +11,13 @@ try {
         throw "Owner protocol registration changed: before=$before after=$after"
     }
 } finally {
-    Remove-JobTree $env:OWNER_JOB_ROOT
+    try {
+        $ErrorActionPreference = 'Continue'
+        python "$env:GITHUB_WORKSPACE/.github/scripts/runner_cache.py"
+        $ErrorActionPreference = 'Stop'
+        if ($LASTEXITCODE -ne 0) { throw 'Dependency cache cleanup failed' }
+    } finally {
+        Remove-JobTree $env:OWNER_JOB_ROOT
+    }
 }
 exit 0

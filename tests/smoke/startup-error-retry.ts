@@ -1,4 +1,5 @@
-import { spawnElectron } from "../support/electron-child";
+import { killOwnedProcessGroup } from "../../packages/butler-app/client/electron/butler-platform/process-group.mjs";
+import { spawnElectron, stopElectronChild } from "../support/electron-child";
 /** Native failure, Open log and real Retry relaunch; no inspector injection or live models. */
 import assert from "node:assert/strict";
 import { type ChildProcess } from "node:child_process";
@@ -32,7 +33,7 @@ let browser: Browser | undefined;
 let successorPid: number | undefined;
 let phase = "launch";
 process.once("exit", () => {
-  if (successorPid) { try { process.kill(successorPid, "SIGKILL"); } catch { /* already exited */ } }
+  if (successorPid) { try { killOwnedProcessGroup(successorPid); } catch { /* already exited */ } }
 });
 async function waitFor<T>(read: () => T | Promise<T>, label: string): Promise<NonNullable<T>> {
   const deadline = performance.now() + 30_000;
@@ -128,19 +129,14 @@ try {
 } finally {
   await browser?.close().catch(() => undefined);
   if (successorPid) {
-    const quit = spawnElectron(executable, [...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory]), "--butler-quit-main-ui"], { env, stdio: "ignore" });
-    const force = setTimeout(() => { try { process.kill(successorPid!, "SIGKILL"); } catch { /* already exited */ } }, 10_000);
+    const quit = spawnElectron(executable, [...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory]), "--butler-quit-main-ui"], { env, stdio: "ignore", cleanupPaths: [] });
+    const force = setTimeout(() => { try { killOwnedProcessGroup(successorPid!); } catch { /* already exited */ } }, 10_000);
     try {
       await once(quit, "exit");
       await waitFor(() => { try { process.kill(successorPid!, 0); return false; } catch { return true; } }, "Retry cleanup did not exit the successor");
     } finally { clearTimeout(force); }
     successorPid = undefined;
   }
-  if (original?.exitCode === null && original.signalCode === null) {
-    const exited = once(original, "exit");
-    original.kill("SIGTERM");
-    const kill = setTimeout(() => original?.kill("SIGKILL"), 10_000);
-    try { await exited; } finally { clearTimeout(kill); }
-  }
+  if (original) await stopElectronChild(original);
   fixture.cleanup();
 }

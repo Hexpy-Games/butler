@@ -24,6 +24,12 @@ export interface GridProps extends DsBaseProps<HTMLAttributes<HTMLElement>> {
   as?: LayoutElement;
   columns?: GridColumnPreset | GridResponsiveColumns;
   gap?: GapToken;
+  /**
+   * How cells meet their row. `stretch` (default): cells in a row share its height. `start`: each cell keeps
+   * its own height, for a list that is still growing (an answer card never grows because a later cell is
+   * taller). Switch back with `settleGrid` when the list closes.
+   */
+  cross?: "stretch" | "start";
   /** DOM ref (e.g. a scroll-edge observer on a scrolling grid). */
   ref?: Ref<HTMLElement>;
 }
@@ -33,6 +39,7 @@ function GridRoot({
   children,
   columns = "auto-fit",
   gap = "md",
+  cross = "stretch",
   className,
   ref,
   ...props
@@ -43,6 +50,7 @@ function GridRoot({
     styles.grid,
     responsive ? styles.responsive : styles[`columns-${base}`],
     styles[`gap-${gap}`],
+    cross === "start" && styles["cross-start"],
     className,
   ]
     .filter(Boolean)

@@ -134,7 +134,7 @@ async function wizardFlow(copy: AppCopy) {
   await page.getByRole("button", { name: text.finish, exact: true }).click();
   await page.locator("[data-test-class=\"first-run-setup\"]").waitFor({ state: "detached" });
 }
-/** Settings → Personalization: other AI tools as rows, one import, its result and undo. */
+/** Settings → Personalization: other AI tools as rows, one import, then its result row (no undo) and Import more. */
 async function agentSettings(copy: AppCopy) {
   await page.goto("app://butler/?settings=personalization");
   const section = page.locator("[data-settings-section-id=\"agent-import\"]");
@@ -146,9 +146,13 @@ async function agentSettings(copy: AppCopy) {
   await section.locator("[data-agent-import-source=\"codex\"] button").click();
   await section.getByText(copy.settings.agentImport.result(1, 3, 1), { exact: true }).waitFor();
   await section.scrollIntoViewIfNeeded(); await capture("agent-import-result");
-  await section.getByRole("button", { name: copy.settings.agentImport.undo, exact: true }).click();
-  await section.getByText(copy.settings.agentImport.undone, { exact: true }).waitFor();
+  await page.setViewportSize({ width: 390, height: 1000 }); await section.scrollIntoViewIfNeeded(); await capture("agent-import-result-390");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  assert.equal(await section.locator('[data-test-class="agent-import-result"]').getByText("Codex", { exact: true }).count(), 1, "the result names the tool");
+  assert.equal(await section.getByRole("button", { name: /되돌리기|Undo/u }).count(), 0, "no undo in Settings");
   assert.equal(agentRuns.at(-1), "codex");
+  await section.getByRole("button", { name: copy.settings.agentImport.more, exact: true }).click();
+  await section.locator("[data-agent-import-source]").nth(3).waitFor();
 }
 // Pin the existing renderer override: baseline captures must never swap shared build assets.
 process.env.BUTLER_APP_RENDERER_DIST = resolve(before ?? "packages/butler-app/client/ui/dist");
@@ -220,7 +224,7 @@ try {
     }
     assert.equal(await section.locator("[data-import-source]").count(), 4);
     await section.getByText(copy.settings.browserImport.chooseItems, { exact: true }).waitFor();
-    for (const label of [copy.settings.browserImport.bookmarks, copy.settings.browserImport.passwords, copy.settings.browserImport.history]) assert.equal(await section.getByRole("switch", { name: label, exact: true }).getAttribute("aria-checked"), "true");
+    for (const label of [copy.settings.browserImport.bookmarks, copy.settings.browserImport.passwords, copy.settings.browserImport.history]) assert.equal(await section.getByRole("checkbox", { name: label, exact: true }).getAttribute("aria-checked"), "true");
     fixtureSources = [];
     await page.reload();
     await section.getByText(copy.settings.browserImport.noSources, { exact: true }).waitFor();
@@ -231,9 +235,8 @@ try {
     await section.locator('[data-import-source="chrome:work"] button').click();
     await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240, 2), { exact: true }).waitFor();
     await capture("result");
-    await section.getByRole("button", { name: copy.settings.browserImport.undo, exact: true }).click();
-    await section.getByText(copy.settings.browserImport.undone).waitFor();
-    await capture("undone");
+    assert.equal(await section.getByRole("button", { name: /되돌리기|Undo/u }).count(), 0, "no undo in Settings");
+    assert.equal(await section.locator('[data-test-class="import-result"]').getByText("Chrome · Work", { exact: true }).count(), 1, "the result names the profile");
     await section.getByRole("button", { name: copy.settings.browserImport.more, exact: true }).click();
     mode = "permission"; await section.locator('[data-import-source="chrome:work"] button').click();
     await section.locator('[data-test-class="import-permission"]').waitFor();
@@ -254,8 +257,7 @@ try {
     await capture("csv-waiting");
     csvReady = true;
     await section.getByText(copy.settings.browserImport.result(120, 34, 5, 240, 2), { exact: true }).waitFor();
-    await section.getByRole("button", { name: copy.settings.browserImport.undo, exact: true }).click();
-    await section.getByText(copy.settings.browserImport.undone, { exact: true }).waitFor();
+    await capture("csv-result");
     await section.getByRole("button", { name: copy.settings.browserImport.deleteCsv, exact: true }).click();
     await section.getByRole("button", { name: copy.settings.browserImport.deleteCsv, exact: true }).waitFor({ state: "detached" });
     assert.equal(csvDeleted, true, "CSV deletion needs the owner's click");

@@ -38,7 +38,7 @@ export function HostedModelSelectFields({
           options={providers.map((provider) => ({
             value: provider.provider_id,
             label: provider.provider_label,
-            icon: <ProviderMark providerId={provider.provider_id} />,
+            icon: <ProviderMark providerId={provider.provider_id} besideProviderName />,
           }))}
         />
       )}

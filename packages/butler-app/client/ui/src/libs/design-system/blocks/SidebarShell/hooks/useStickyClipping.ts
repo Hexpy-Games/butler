@@ -58,7 +58,9 @@ export function useStickyClipping(
           (Number.parseFloat(getComputedStyle(header).top) || 0) +
           header.getBoundingClientRect().height);
       }
-      const top = target.getBoundingClientRect().top;
+      // Reveal the focus ring too, not only the row.
+      const ringRoom = Number.parseFloat(getComputedStyle(scroll).getPropertyValue("--focus-ring-room")) || 0;
+      const top = target.getBoundingClientRect().top - ringRoom;
       if (top < boundary) scroll.scrollTop -= boundary - top;
       cancelAnimationFrame(frame);
       update();

@@ -37,6 +37,9 @@ This is shared by Electron and browser builds (CSS `@scope` support required);
 `matchMedia` continues to report the OS and DS helpers report the effective preference.
 Product code never declares
 transitions, animations or keyframes (`bun run lint:motion`).
+A grid that grew while open (streaming answer cards) applies its final
+layout once with `settleGrid()` from `lib/gridSettle.ts`: a column change
+hides behind a short opacity dip and the height eases to its new size.
 
 ## Product Code Constraints
 

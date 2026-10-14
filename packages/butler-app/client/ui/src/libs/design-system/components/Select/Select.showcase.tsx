@@ -32,7 +32,7 @@ function SelectExample({ locale, value }: ShowcaseRenderContext & { value?: stri
 
 const PROVIDERS = [
   { value: "openai", label: "OpenAI", logo: "openai" },
-  { value: "anthropic", label: "Anthropic", logo: "claude" },
+  { value: "anthropic", label: "Anthropic", logo: "anthropic" },
   { value: "google", label: "Google", logo: "gemini" },
 ] as const;
 

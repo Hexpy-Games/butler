@@ -54,10 +54,12 @@
   );
 }
 
+/* At least a menu row tall; it grows with touch-size controls (44px on a
+   phone) so they and their focus rings stay inside the sheet. */
 .tabRow {
   display: flex;
   min-width: 0;
-  height: calc(var(--menu-item-height) + var(--space-xs));
+  min-height: calc(var(--menu-item-height) + var(--space-xs));
   flex: none;
   align-items: center;
   padding: 0 var(--browser-card-inset) var(--space-xs);

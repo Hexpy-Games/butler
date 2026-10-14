@@ -9,6 +9,7 @@ import {
   AdaptiveShellScrim,
   AdaptiveShellSidebar,
   AdaptiveShellWorkspace,
+  Stack,
 } from "@/butler-ds";
 import { WindowChromeLayer } from "@/components/layout/Chrome.tsx";
 import { RightPanelOverlayTitlebar } from "@/components/layout/RightPanelOverlayTitlebar.tsx";
@@ -21,6 +22,9 @@ import { AppToaster } from "@/components/common/AppToaster.tsx";
 import { ImageViewerHost } from "@/components/media/ImageViewerHost";
 import { SettingsView } from "@/components/settings/SettingsView.tsx";
 import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog.tsx";
+import { CommandPalette } from "@/components/command/CommandPalette.tsx";
+import { BrowserArea } from "@/components/browser/BrowserArea";
+import { connectBrowser } from "@/components/browser/browserBridge";
 import { useComposerStore } from "@/components/conversation/composerStore.ts";
 import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
 import { EMPTY_SETTINGS } from "@/app/constants.ts";
@@ -70,6 +74,7 @@ export function VisualHarness() {
   const rightOpen = useButlerStore((state) => state.rightOpen);
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const view = useButlerStore((state) => state.view);
+  const commandOpen = useButlerStore((state) => state.commandOpen);
   const setView = useButlerStore((state) => state.setView);
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const setActiveChatId = useButlerStore((state) => state.setActiveChatId);
@@ -229,6 +234,10 @@ export function VisualHarness() {
     harnessNavigation,
     ss03Surface,
   ]);
+  // The desktop bridge, when present, feeds the browser and the agent tab rail (as the app bootstrap does).
+  useEffect(() => {
+    if (window.butlerBrowser) connectBrowser();
+  }, []);
   useEffect(() => {
     if (!ss03Surface) return;
     const timer = window.setTimeout(() => {
@@ -278,7 +287,9 @@ export function VisualHarness() {
             data-test-class="workspace"
           >
             <Titlebar />
-            {view.kind === "project-dashboard" ? (
+            {view.kind === "browser" ? (
+              <Stack fill gap="none"><BrowserArea /></Stack>
+            ) : view.kind === "project-dashboard" ? (
               <ProjectDashboardView
                 initialDashboard={HARNESS_PROJECT_DASHBOARD}
                 project={harnessNavigation.projects.find(
@@ -349,6 +360,7 @@ export function VisualHarness() {
       {(isSettingsView || fixture) && <AppToaster />}
       {fixture && <ImageViewerHost />}
       {ss03Surface && <SessionObserverDialog />}
+      <CommandPalette open={commandOpen} />
     </AdaptiveShell>
   );
 }

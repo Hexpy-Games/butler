@@ -85,7 +85,7 @@
 .title,
 .detail {
   font-size: var(--font-size-2);
-  line-height: var(--line-height-snug);
+  line-height: var(--typo-label-line-height);
   white-space: nowrap;
 }
 

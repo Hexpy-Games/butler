@@ -6,13 +6,16 @@
   background: color-mix(in srgb, var(--surface-raised) 82%, var(--line));
 }
 
+/* The sheen loops --motion-loop-count times: reduced motion (the OS setting
+   or the app's data-motion scope) sets 0, so the sheen rests off the edge and
+   only the static fill shows. */
 .skeleton::after {
   position: absolute;
   inset: 0;
   content: "";
   transform: translateX(-100%);
   animation: skeleton-shimmer var(--shimmer-duration) var(--motion-ease-linear)
-    infinite;
+    var(--motion-loop-count);
   background: linear-gradient(
     90deg,
     transparent,

@@ -252,6 +252,9 @@ interface ConversationCopy {
     copyFailed: string;
   };
   answerBlocks: {
+    preparing: string;
+    prepared: string;
+    rechecking: string;
     previousValue: string;
     showMore: string;
     showLess: string;
@@ -1970,9 +1973,7 @@ export interface AppCopy {
       importing: string;
       history: string;
       result: (bookmarks: number, passwords: number, updated: number, history?: number, invalid?: number) => string;
-      undo: string;
       more: string;
-      undone: string;
       pickFolder: string;
       diskAccess: string;
       restartAfterAccess: string;
@@ -2012,9 +2013,7 @@ export interface AppCopy {
       importing: string;
       result: (instructions: number, servers: number, needsSecret: number) => string;
       nothingNew: string;
-      undo: string;
       more: string;
-      undone: string;
       noSources: string;
       failed: string;
       retry: string;

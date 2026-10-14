@@ -22,7 +22,7 @@ pub fn normalize(spec: &mut Value) {
     }
 }
 
-fn trim(value: &mut Value) {
+pub(super) fn trim(value: &mut Value) {
     match value {
         Value::String(text) => {
             *text = butler_core::public_text::trim_js_whitespace(text).to_owned();
