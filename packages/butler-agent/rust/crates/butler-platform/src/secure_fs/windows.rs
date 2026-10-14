@@ -94,10 +94,28 @@ pub(super) fn creation_mode(
     None
 }
 
-// Commands are never sandboxed (always asked) here, so no auto-allowed
-// command can create a hard link to read later.
-pub(super) fn has_other_links(_metadata: &Metadata) -> bool {
-    false
+// A failed handle query cannot establish that the file has no outside alias.
+pub(super) fn has_other_links(path: &Path, metadata: &Metadata) -> bool {
+    if !metadata.is_file() {
+        return false;
+    }
+    link_count(path).is_none_or(|count| count > 1)
+}
+fn link_count(path: &Path) -> Option<u32> {
+    use winsafe::{HFILE, co};
+    let (handle, _) = HFILE::CreateFile(
+        path.to_str()?,
+        co::GENERIC::default(),
+        Some(co::FILE_SHARE::READ | co::FILE_SHARE::WRITE | co::FILE_SHARE::DELETE),
+        None,
+        co::DISPOSITION::OPEN_EXISTING,
+        co::FILE_ATTRIBUTE::NORMAL,
+        Some(co::FILE_FLAG::OPEN_REPARSE_POINT),
+        None,
+        None,
+    )
+    .ok()?;
+    Some(handle.GetFileInformationByHandle().ok()?.nNumberOfLinks)
 }
 
 pub(super) fn file_mode(_metadata: &Metadata) -> Option<FileMode> {
