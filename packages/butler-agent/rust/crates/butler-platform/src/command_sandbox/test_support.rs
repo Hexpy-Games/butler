@@ -26,6 +26,15 @@ pub fn linux_test_host() -> bool {
     cfg!(target_os = "linux")
 }
 
+/// Whether this Linux test host runs under Windows Subsystem for Linux.
+pub fn wsl_test_host() -> bool {
+    linux_test_host()
+        && (Path::new("/proc/sys/fs/binfmt_misc/WSLInterop").exists()
+            || std::env::var_os("WSL_DISTRO_NAME").is_some()
+            || std::fs::read_to_string("/proc/sys/kernel/osrelease")
+                .is_ok_and(|release| release.to_ascii_lowercase().contains("microsoft")))
+}
+
 /// A nonblocking pathname unix socket used to detect sandbox escapes.
 #[derive(Debug)]
 pub struct UnixSocketProbe {

@@ -4,7 +4,8 @@
 CopyButton is the icon-only copy action. It writes text to the clipboard,
 morphs the copy icon into a check for 1.5s (crossfade with a slight scale),
 switches its tooltip/accessible name to the copied label, and announces the
-result through a polite `role="status"` live region.
+result through a polite `role="status"` live region. It is `DoneIconButton`
+with the copy action, so save actions confirm with the same morph.
 
 ## Props
 
