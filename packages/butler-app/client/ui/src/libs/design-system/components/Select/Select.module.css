@@ -41,7 +41,7 @@
   max-width: 100%;
   overflow: hidden;
   font-weight: var(--font-weight-regular);
-  line-height: 1.2;
+  line-height: var(--typo-label-line-height-tight);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -52,7 +52,7 @@
   overflow: hidden;
   color: var(--text-secondary);
   font-size: var(--font-size-1);
-  line-height: 1.25;
+  line-height: var(--typo-caption-line-height-tight);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

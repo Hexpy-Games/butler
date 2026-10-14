@@ -256,7 +256,7 @@
 
 .tileTitle {
   display: flex;
-  height: calc(var(--typo-label-size) * var(--typo-label-line-height) * 2);
+  height: calc(var(--typo-label-line-height) * 2);
   min-width: 0;
   align-items: center;
   grid-row: 1;

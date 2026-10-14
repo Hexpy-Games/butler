@@ -1201,7 +1201,7 @@ A one-line live status that truncates long text and keeps its height stable.
 - Use for: Show what the assistant is doing right now in one line
 - Not for: Replacing the status with an animated swap → `RollingSwap`
 - Not for: A list of finished steps → `ActivityFeed`
-- Tokens: `--typo-body-size`, `--line-height-body`
+- Tokens: `--typo-body-size`, `--typo-body-line-height`
 
 ### RollingSwap
 
@@ -2086,7 +2086,7 @@ One found item of any subject (a paper, a place, a recipe, a product, a library)
 - Not for: A saved library (서랍) item → `LibraryCard`
 - Not for: One number with a trend → `MetricCard`
 - Not for: Many attributes compared side by side → `MarkdownContent`
-- Tokens: `--surface-raised`, `--line`, `--text-secondary`, `--text-tertiary`, `--space-sm`, `--space-md`, `--line-height-body`
+- Tokens: `--surface-raised`, `--line`, `--text-secondary`, `--text-tertiary`, `--space-sm`, `--space-md`, `--typo-body-line-height`, `--typo-label-line-height`, `--typo-caption-line-height`
 
 ### MessageAvatarBlock
 
@@ -2669,7 +2669,7 @@ One library (서랍) item on a Card with a media slot: an image, quote or docume
 - Use for: Any grid of saved page pieces (elements, views, outputs)
 - Not for: A file or output in the inspector → `ArtifactList`
 - Not for: A document with status and dates → `DocumentTile`
-- Tokens: `--radius-control`, `--muted`, `--line-height-body`, `--text-tertiary`, `--browser-card-shadow`
+- Tokens: `--radius-control`, `--muted`, `--typo-label-line-height`, `--text-tertiary`, `--browser-card-shadow`
 
 ### MarkdownContent
 
@@ -2680,7 +2680,7 @@ Document typography for rendered markdown: headings, lists, code frames, tables,
 - Use for: Assistant answers, READMEs and project documents rendered from markdown
 - Not for: UI text → `Typo`
 - Not for: Raw file contents → `ArtifactPreviewPre`
-- Tokens: `--line-height-document`, `--typo-code-size`, `--syntax-keyword`, `--radius-panel`, `--accent-text`, `--favicon-plate`
+- Tokens: `--typo-body-line-height-document`, `--typo-code-size`, `--syntax-keyword`, `--radius-panel`, `--accent-text`, `--favicon-plate`
 
 ### SplitBrowser
 

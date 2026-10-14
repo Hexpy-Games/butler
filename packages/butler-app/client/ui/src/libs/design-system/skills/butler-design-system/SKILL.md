@@ -56,6 +56,11 @@ lints below enforce most of this; the rest is review.
    the card. The description starts at the title's left edge. Borders stay
    1px; wide cards and rows never scale on press. `lint:design` fails on an
    IconTile inside those blocks or passed as their `icon`.
+8. **Integer line-heights.** Every text role has an integer px line-height
+   token (`--typo-*-line-height`, even values: body 14/20, label 13/18,
+   caption 12/16), so 12/14/16/20px icons centre on whole pixels. Never set a
+   unitless ratio or `--line-height-tight/snug/body/document` on UI text;
+   `lint:design` fails on it. Those ratios are for display art only.
 
 ## First Principles
 

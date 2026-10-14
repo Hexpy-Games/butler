@@ -3,12 +3,13 @@ import { ChapterLayout, chapterSections, GuideSection } from "./Chapter";
 import type { ChapterProps } from "./chapterProps";
 import { TypeInContext } from "./TypeInContext";
 import { TypeLadder } from "./TypeLadder";
+import { LineHeightSamples, LineHeightTable } from "./TypeLineHeights";
 import { KoreanRules, MeasureAndLeading, Numerals, Truncation } from "./TypeRules";
 import { TypeFace } from "./TypeFace";
 
 export function TypographyChapter({ chapter, locale, anchor, onOpen }: ChapterProps) {
   const s = chapterSections(chapter, [
-    ["typeface", "Typeface"], ["type-scale", "Type scale"], ["hierarchy", "Hierarchy in context"], ["korean", "Korean typography"],
+    ["typeface", "Typeface"], ["type-scale", "Type scale"], ["line-heights", "Line heights"], ["hierarchy", "Hierarchy in context"], ["korean", "Korean typography"],
     ["measure", "Measure and leading"], ["truncation", "Truncation"], ["numerals", "Numerals"],
   ]);
   return (
@@ -20,6 +21,10 @@ export function TypographyChapter({ chapter, locale, anchor, onOpen }: ChapterPr
       </GuideSection>
       <GuideSection spec={s.at("type-scale")} lead="Every --typo-* role, set in its own style. The spec on the right is read from the rendered sample.">
         <TypeLadder locale={locale} />
+      </GuideSection>
+      <GuideSection spec={s.at("line-heights")} lead="Every role has an integer px line-height, even and close to its old ratio, so 12/14/16/20px icons centre on whole pixels in every renderer. Before is the old ratio and the height it rendered; after is the token.">
+        <LineHeightTable />
+        <LineHeightSamples />
       </GuideSection>
       <GuideSection spec={s.at("hierarchy")} lead="Real Butler surfaces. Each number is the role that text is set in; sizes are measured.">
         <TypeInContext locale={locale} />

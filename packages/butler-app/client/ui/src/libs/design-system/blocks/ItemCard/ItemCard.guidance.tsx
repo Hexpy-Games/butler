@@ -60,5 +60,5 @@ export const guidance: ShowcaseGuidance = {
     "The source line is a button named by source.label (site and read time). Actions are labelled IconButtons.",
     "wasLabel is read before the struck-through amount. Show more carries aria-expanded and aria-controls.",
   ],
-  tokens: ["--surface-raised", "--line", "--text-secondary", "--text-tertiary", "--space-sm", "--space-md", "--line-height-body"],
+  tokens: ["--surface-raised", "--line", "--text-secondary", "--text-tertiary", "--space-sm", "--space-md", "--typo-body-line-height", "--typo-label-line-height", "--typo-caption-line-height"],
 };

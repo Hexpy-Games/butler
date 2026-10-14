@@ -50,7 +50,7 @@
   font-size: var(--font-size-1);
   font-variant-numeric: tabular-nums;
   font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-tight);
+  line-height: var(--typo-caption-line-height-tight);
   white-space: nowrap;
 }
 

@@ -65,7 +65,7 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
-  line-height: 1.35;
+  line-height: var(--typo-label-line-height);
 }
 
 .label {
@@ -75,7 +75,7 @@
   min-width: 0;
   align-items: center;
   gap: var(--space-2);
-  line-height: 1.35;
+  line-height: var(--typo-label-line-height);
 }
 
 /* Long tokens also shrink the anonymous text flex item inside Label. */
@@ -96,7 +96,7 @@
 .error {
   margin: 0;
   font-size: var(--font-size-3);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-body-line-height);
 }
 
 .description {

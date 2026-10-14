@@ -180,8 +180,21 @@ function rawScaleFindings(
     }));
 }
 
+/** Text takes an integer px line-height role token; unitless ratios are for display art only. */
+const RATIO_LINE_HEIGHT = /(?:^|;|\s)line-height\s*:\s*(\d*\.\d+|var\(--line-height-(?:tight|snug|body|document)\))\s*(?:;|$)/u;
+const RATIO_FONT_SHORTHAND = /(?:^|;|\s)font\s*:[^;]*\/\s*(\d*\.\d+|var\(--line-height-(?:tight|snug|body|document)\))/u;
+const RATIO_ALLOWED = /libs\/design-system\/components\/FoundationHeroMotion\//u;
+
+function ratioLineHeightFindings(path: string, rule: CssRule): DesignSystemRuleFinding[] {
+  if (RATIO_ALLOWED.test(path.replaceAll("\\", "/"))) return [];
+  const match = RATIO_LINE_HEIGHT.exec(rule.body) ?? RATIO_FONT_SHORTHAND.exec(rule.body);
+  if (!match) return [];
+  return [{ path, line: rule.line, reason: "line-height must be an integer px role token (--typo-*-line-height), not a ratio", text: `${rule.selector} { ${match[1]} }` }];
+}
+
 export function lintDesignSystemRules(path: string, source: string): DesignSystemRuleFinding[] {
   return cssRules(source).flatMap((rule) => [
+    ...ratioLineHeightFindings(path, rule),
     ...focusRingFindings(path, rule),
     ...zIndexFindings(path, rule),
     ...rawHeightFindings(path, rule),

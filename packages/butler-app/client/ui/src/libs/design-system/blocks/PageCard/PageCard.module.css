@@ -40,7 +40,7 @@
    at the sides instead. */
 .card[data-fixed-page] {
   --page-card-note: calc(
-    var(--space-sm) + var(--font-size-1) * var(--line-height-tight)
+    var(--space-sm) + var(--typo-caption-line-height-tight)
   );
 
   flex: 0 1 auto;
@@ -218,7 +218,7 @@
   color: var(--text-tertiary);
   font-size: var(--font-size-1);
   font-variant-numeric: tabular-nums;
-  line-height: var(--line-height-tight);
+  line-height: var(--typo-caption-line-height-tight);
   pointer-events: none;
   transform: translateX(-50%);
 }
