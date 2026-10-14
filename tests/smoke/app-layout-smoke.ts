@@ -118,6 +118,18 @@ async function patchSettings(settings: Record<string, unknown>): Promise<void> {
   );
 }
 
+async function waitForWallpaperModule(module: string): Promise<void> {
+  let source: { kind?: string; module?: string } | undefined;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const response = await fetch(`${server.url}settings`, { headers: server.authHeaders });
+    const body = await response.json().catch(() => null) as { data?: { wallpaper?: { source?: typeof source } } } | null;
+    source = body?.data?.wallpaper?.source;
+    if (source?.kind === "live" && source.module === module) return;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+  }
+  assert(false, `wallpaper setting should be ${module}: ${JSON.stringify(source)}`);
+}
+
 /**
  * Closing the model menu by an outside click folds the composer and unmounts
  * the anchor mid-exit; the closing popover must keep shrinking toward the
@@ -2483,6 +2495,11 @@ try {
     await wallpaperTile(key).waitFor({ state: "visible" });
   }
   await wallpaperPicker.locator('[data-option="upload"]').waitFor({ state: "visible" });
+  // A fresh profile selects the riso print by default.
+  assert(
+    await wallpaperTile("live:butler.riso-print").getAttribute("aria-checked") === "true",
+    "fresh profile should select the riso print wallpaper",
+  );
   const bloomPalette = wallpaperPicker.locator('[role="radiogroup"][aria-label="Colors"]');
   await wallpaperTile("live:butler.silk").click();
   await bloomPalette.waitFor({ state: "detached" });
@@ -2524,6 +2541,11 @@ try {
       bloomColorState.inputBorder === "0px",
     `settings bloom color controls should render as circular swatches: ${JSON.stringify(bloomColorState)}`,
   );
+  // The picker saves each choice; put the riso print back so the new-chat
+  // checks below paint the default wallpaper, not this custom bloom.
+  await wallpaperTile("live:butler.riso-print").click();
+  await bloomPalette.waitFor({ state: "detached" });
+  await waitForWallpaperModule("butler.riso-print");
   await page
     .getByRole("button", { name: appCopy.settings.sections.models, exact: true })
     .click();
