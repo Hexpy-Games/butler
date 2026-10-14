@@ -76,7 +76,15 @@ pub const fn project_write_mechanism() -> &'static str {
 }
 
 /// Host-specific limits reported after a failed contained command.
-pub const fn project_write_limits() -> &'static str {
+pub fn project_write_limits() -> &'static str {
+    #[cfg(target_os = "linux")]
+    if linux::metadata_tier_available() {
+        return "This command ran contained to the project folder: no writes elsewhere, no network, and existing secrets are masked. New secret names are swept after the run. If it needs more access, run it again with sandbox \"none\"; the user will be asked.";
+    }
+    #[cfg(target_os = "linux")]
+    if linux::mount_tier_available() {
+        return "This command ran contained to the project folder: no writes elsewhere, no network, and existing secrets are masked. New secret names are swept after the run. Metadata changes are blocked. If it needs more access, run it again with sandbox \"none\"; the user will be asked.";
+    }
     if cfg!(target_os = "linux") || cfg!(target_os = "macos") {
         "This command ran contained to the project folder: no writes elsewhere (including .git and existing secrets) and no network. Creating, deleting or renaming top-level project entries is also blocked. If it needs those, run it again with sandbox \"none\"; the user will be asked."
     } else {
@@ -259,4 +267,30 @@ pub fn is_registry_path(path: &str) -> bool {
 /// such as a quoted `printf` newline as a filesystem separator.
 pub fn normalize_path_token(path: &str) -> String {
     shell::normalize_path_token(path)
+}
+
+/// Holds a project-write setup/cleanup lease across the command lifetime.
+pub struct ProjectWritePreparation {
+    #[cfg(target_os = "linux")]
+    _lease: nix::fcntl::Flock<std::fs::File>,
+}
+
+/// Prepares declared generated directories where the project root is withheld.
+pub fn prepare_project_write(root: &Path, data: &Path) -> std::io::Result<ProjectWritePreparation> {
+    #[cfg(target_os = "linux")]
+    return linux::prepare_project_write(root, data);
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (root, data);
+        Ok(ProjectWritePreparation {})
+    }
+}
+
+/// Namespace aliases for kernel-boundary E2E checks.
+#[cfg(feature = "test-support")]
+pub fn project_mount_aliases(root: &Path) -> std::io::Result<Vec<std::path::PathBuf>> {
+    #[cfg(target_os = "linux")]
+    return linux::project_mount_aliases(root);
+    #[cfg(not(target_os = "linux"))]
+    Ok(vec![root.to_path_buf()])
 }

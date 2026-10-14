@@ -3,13 +3,34 @@ use std::path::PathBuf;
 
 use super::{CommandError, GuidedAccess, GuidedCommandInput, GuidedCommandOutput};
 
-pub(super) async fn before_run(input: &GuidedCommandInput) -> Result<Vec<PathBuf>, CommandError> {
+pub(super) struct Prepared {
+    paths: Vec<PathBuf>,
+    lease: Option<butler_platform::command_sandbox::ProjectWritePreparation>,
+}
+
+impl std::ops::Deref for Prepared {
+    type Target = [PathBuf];
+    fn deref(&self) -> &Self::Target {
+        &self.paths
+    }
+}
+
+pub(super) async fn before_run(input: &GuidedCommandInput) -> Result<Prepared, CommandError> {
     if input.access != GuidedAccess::ProjectWrite {
-        return Ok(Vec::new());
+        return Ok(Prepared {
+            paths: Vec::new(),
+            lease: None,
+        });
     }
     let root = input.workspace_root.clone();
+    let data = input.butler_data.clone();
     tokio::task::spawn_blocking(move || {
-        butler_platform::command_sandbox::discover_project_secrets(&root)
+        let lease = butler_platform::command_sandbox::prepare_project_write(&root, &data)?;
+        let paths = butler_platform::command_sandbox::discover_project_secrets(&root)?;
+        Ok(Prepared {
+            paths,
+            lease: Some(lease),
+        })
     })
     .await
     .map_err(|error| CommandError::io(std::io::Error::other(error)))?
@@ -18,7 +39,7 @@ pub(super) async fn before_run(input: &GuidedCommandInput) -> Result<Vec<PathBuf
 
 pub(super) async fn after_run(
     input: &GuidedCommandInput,
-    since: Vec<PathBuf>,
+    since: Prepared,
     outcome: Result<Option<GuidedCommandOutput>, CommandError>,
 ) -> Result<Option<GuidedCommandOutput>, CommandError> {
     if input.access != GuidedAccess::ProjectWrite {
@@ -27,7 +48,8 @@ pub(super) async fn after_run(
     let root = input.workspace_root.clone();
     let data = input.butler_data.clone();
     let swept = tokio::task::spawn_blocking(move || {
-        butler_platform::command_sandbox::sweep_new_secrets(&root, &since, &data)
+        let _lease = since.lease;
+        butler_platform::command_sandbox::sweep_new_secrets(&root, &since.paths, &data)
     })
     .await
     .map_err(|error| CommandError::io(std::io::Error::other(error)))

@@ -11,6 +11,7 @@ pub fn sandbox_denial(stderr: &str) -> Option<(&'static str, &'static str)> {
             "permission denied",
             "operation not permitted",
             "read-only file system",
+            "device or resource busy",
         ]
         .iter()
         .any(|signature| text.contains(signature))
