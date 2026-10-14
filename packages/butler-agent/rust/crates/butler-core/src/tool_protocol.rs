@@ -127,3 +127,6 @@ fn hex(byte: u8) -> Option<u8> {
 
 #[cfg(test)]
 mod tests;
+
+mod stream;
+pub use stream::ToolCallStreamEvent;
