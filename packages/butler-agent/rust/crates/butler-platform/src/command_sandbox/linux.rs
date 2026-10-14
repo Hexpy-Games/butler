@@ -1,9 +1,7 @@
 //! Safe Landlock trampoline; never restrict the multithreaded agent itself.
 mod complement;
 mod process;
-mod project_secrets;
 mod seccomp;
-pub(super) use project_secrets::{discover_project_secrets, sweep_new_secrets};
 
 use std::collections::HashMap;
 use std::os::unix::process::CommandExt;
