@@ -49,6 +49,10 @@ async fn auto_mutation_waits_for_approval_without_running() -> Result<(), Harnes
 async fn desktop_project_write_cleans_drive_journal() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows desktop sandbox");
+    butler_e2e::skip_unless!(
+        std::env::var("BUTLER_E2E_WINDOWS_SANDBOX_DESKTOP").as_deref() == Ok("1"),
+        "owner desktop harness required"
+    );
     let caps = command_sandbox::capabilities();
     assert!(matches!(caps.project_write, Level::Partial(_)), "{caps:?}");
     assert!(caps.network_deny.is_enforced());

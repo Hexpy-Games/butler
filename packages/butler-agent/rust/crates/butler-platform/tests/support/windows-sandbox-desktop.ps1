@@ -6,7 +6,7 @@ $pins = Get-Content -Raw $Manifest | ConvertFrom-Json
 $resultRoot = Join-Path $env:LOCALAPPDATA 'Butler\e2e-results'
 $resultFile = Join-Path $resultRoot ($pins.revision + '.json')
 $result = @{ revision=$pins.revision; status='FAIL'; probe=$null; desktop=$null; testExit=$null }
-$profile = Join-Path $env:TEMP ('butler-windows-sandbox-' + [guid]::NewGuid())
+$profile = Join-Path $bundle ('tmp-' + [guid]::NewGuid().ToString('N').Substring(0,8))
 $before = (& reg query HKCU\Software\Classes\butler /s | Out-String)
 try {
     foreach ($pin in $pins.binaries) {
@@ -49,6 +49,7 @@ public static class ButlerDesktop {
     New-Item -ItemType Directory -Force $env:HOME,$env:BUTLER_DATA,$env:APPDATA,$env:LOCALAPPDATA,$env:TEMP | Out-Null
     $env:BUTLER_WINDOWS_PROJECT_SANDBOX = '1'
     $env:BUTLER_E2E_TIER = 'stub'
+    $env:BUTLER_E2E_WINDOWS_SANDBOX_DESKTOP = '1'
     $env:BUTLER_E2E_SKIP_BUILD = '1'
     $env:BUTLER_E2E_BIN = Join-Path $bundle 'butler-agent.exe'
     $probe = & (Join-Path $bundle 'butler-sandbox.exe') --probe

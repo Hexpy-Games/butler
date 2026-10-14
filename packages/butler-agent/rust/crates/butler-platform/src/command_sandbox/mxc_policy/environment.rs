@@ -55,6 +55,8 @@ pub fn build(
         ("GIT_CONFIG_NOSYSTEM", "1"),
         ("GIT_TERMINAL_PROMPT", "0"),
         ("NPM_CONFIG_OFFLINE", "true"),
+        ("PYTHONIOENCODING", "utf-8"),
+        ("PYTHONUTF8", "1"),
     ] {
         env.insert(key.into(), value.into());
     }

@@ -42,6 +42,8 @@
       "NPM_CONFIG_OFFLINE=true",
       "NPM_CONFIG_USERCONFIG=c:\\users\\person\\.butler\\tmp\\project-write\\npmrc",
       "PATH=c:\\users\\person\\.butler\\tmp\\project-write\\bin",
+      "PYTHONIOENCODING=utf-8",
+      "PYTHONUTF8=1",
       "SYSTEMROOT=C:\\Windows",
       "TEMP=c:\\users\\person\\.butler\\tmp\\project-write\\temp",
       "TMP=c:\\users\\person\\.butler\\tmp\\project-write\\temp",
