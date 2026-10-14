@@ -192,9 +192,52 @@ function ratioLineHeightFindings(path: string, rule: CssRule): DesignSystemRuleF
   return [{ path, line: rule.line, reason: "line-height must be an integer px role token (--typo-*-line-height), not a ratio", text: `${rule.selector} { ${match[1]} }` }];
 }
 
+/**
+ * A px line-height inherits as px, not as a ratio of the new size, so a rule
+ * that sets a font-size token sets its line-height too. Ratchet: these
+ * existing rules are not yet paired (icon boxes and mobile-only rules that
+ * need their own check); the list may only shrink.
+ */
+const FONT_SIZE_TOKEN = /(?:^|;|\s)font-size\s*:\s*var\((--(?:typo-[a-z-]+-size(?:-md|-sm)?|font-size-\d))\)\s*(?:;|$)/u;
+const LINE_HEIGHT_SET = /(?:^|;|\s)(?:line-height|font)\s*:/u;
+const UNPAIRED_FONT_SIZE_RATCHET: Record<string, string[]> = {
+  "blocks/ElementChip/ElementChip.module.css": [".title", ".site"],
+  "blocks/WorkActivityBlock/WorkActivityBlock.module.css": [".compact .marker, .compact .icon, .compact .toolIcon"],
+  "blocks/MetricCard/MetricCard.module.css": [".change"],
+  "blocks/TagField/TagField.module.css": [".option", ".count"],
+  "blocks/NavRow/NavRow.module.css": [".multiline .icon", ".multiline .icon:not([data-viewport=\"desktop\"], [data-viewport=\"desktop\"] *)"],
+  "blocks/MarkdownContent/MarkdownContent.module.css": [".markdown h4, .markdown h5, .markdown h6"],
+  "blocks/ListRow/ListRow.module.css": [".meta"],
+  "blocks/KeyValueRow/KeyValueRow.module.css": [".valueBody"],
+  "components/DropdownMenu/DropdownMenu.module.css": [".shortcut"],
+  "components/Field/Field.module.css": [".title", ".separator"],
+  "components/Popover/Popover.module.css": [".header"],
+  "components/SegmentedControl/SegmentedControl.module.css": [".group[data-size=\"default\"] .item"],
+  "components/Select/Select.module.css": [".label"],
+  "components/Breadcrumb/Breadcrumb.module.css": [".list"],
+  "viewer/DesignSystemViewer.module.css": [".heroTitle"],
+  "viewer/foundations/Foundations.module.css": [
+    ".chapterTitle:not([data-viewport=\"desktop\"], [data-viewport=\"desktop\"] *), .voiceLine:not([data-viewport=\"desktop\"], [data-viewport=\"desktop\"] *)",
+    ".roleInk:not([data-viewport=\"desktop\"], [data-viewport=\"desktop\"] *)",
+  ],
+};
+
+function unpairedFontSizeFindings(path: string, rule: CssRule): DesignSystemRuleFinding[] {
+  const normalized = path.replaceAll("\\", "/");
+  if (RATIO_ALLOWED.test(normalized)) return [];
+  const match = FONT_SIZE_TOKEN.exec(rule.body);
+  if (!match || LINE_HEIGHT_SET.test(rule.body)) return [];
+  const selector = rule.selector.replace(/\s+/gu, " ");
+  const ratchet = Object.entries(UNPAIRED_FONT_SIZE_RATCHET).some(([file, selectors]) =>
+    normalized.endsWith(`libs/design-system/${file}`) && selectors.includes(selector));
+  if (ratchet) return [];
+  return [{ path, line: rule.line, reason: `font-size var(${match[1]}) needs its --typo-*-line-height token in the same rule`, text: selector }];
+}
+
 export function lintDesignSystemRules(path: string, source: string): DesignSystemRuleFinding[] {
   return cssRules(source).flatMap((rule) => [
     ...ratioLineHeightFindings(path, rule),
+    ...unpairedFontSizeFindings(path, rule),
     ...focusRingFindings(path, rule),
     ...zIndexFindings(path, rule),
     ...rawHeightFindings(path, rule),

@@ -150,6 +150,15 @@ describe("design-system rules lint", () => {
     );
     expect(findings.map((finding) => finding.line)).toEqual([1]);
   });
+
+  // test-category: pure-logic
+  test("flags a font-size token without its line-height in the same rule", () => {
+    const findings = lintDesignSystemRules(
+      "sample.module.css",
+      ".a { font-size: var(--font-size-1); }\n.b { font-size: var(--typo-new-chat-title-size-sm); line-height: var(--typo-new-chat-title-line-height-sm); }\n.c { font-size: inherit; }",
+    );
+    expect(findings.map((finding) => finding.line)).toEqual([1]);
+  });
 });
 
 describe("design-system layering", () => {

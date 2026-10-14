@@ -162,6 +162,7 @@
   box-shadow: var(--browser-overlay-shadow);
   color: var(--neutral-white);
   font-size: var(--font-size-1);
+  line-height: var(--typo-caption-line-height);
   font-weight: var(--font-weight-strong);
   font-variant-numeric: tabular-nums;
   animation: fade-in var(--motion-fast) var(--motion-ease-decelerate);

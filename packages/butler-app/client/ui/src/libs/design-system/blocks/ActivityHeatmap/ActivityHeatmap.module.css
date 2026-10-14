@@ -19,6 +19,7 @@
   display: grid;
   color: var(--text-secondary);
   font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
 }
 .months > span {
   overflow: hidden;
@@ -29,6 +30,7 @@
   margin-top: var(--space-md);
   color: var(--text-secondary);
   font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
 }
 .legendTitle {
   display: block;
@@ -59,6 +61,7 @@
   flex: none;
   color: var(--text-tertiary);
   font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
 }
 .day.day {
   display: grid;

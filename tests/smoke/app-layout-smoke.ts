@@ -29,6 +29,9 @@ const screenshotDir = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? join(root,
 mkdirSync(screenshotDir, { recursive: true });
 const rightPanelToggleSelector = `[aria-label="${appCopy.titlebar.showRightPanel}"], [aria-label="${appCopy.titlebar.hideRightPanel}"]`;
 const turnActivityTimeoutMs = 5_000;
+// #924 (dcbd58d68): suggestion cards hug their ordinal and copy (no empty art
+// slot); the height of this smoke's first card at the 1440px desktop width.
+const NEW_CHAT_CARD_HEIGHT_PX = 186;
 const testClass = (name: string) => `[data-test-class~="${name}"]`;
 const testClasses = (...names: string[]) => names.map(testClass).join("");
 /**
@@ -116,6 +119,18 @@ async function patchSettings(settings: Record<string, unknown>): Promise<void> {
     response.ok,
     `settings patch failed: ${response.status} ${JSON.stringify(body)}`,
   );
+}
+
+async function waitForWallpaperModule(module: string): Promise<void> {
+  let source: { kind?: string; module?: string } | undefined;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const response = await fetch(`${server.url}settings`, { headers: server.authHeaders });
+    const body = await response.json().catch(() => null) as { data?: { wallpaper?: { source?: typeof source } } } | null;
+    source = body?.data?.wallpaper?.source;
+    if (source?.kind === "live" && source.module === module) return;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+  }
+  assert(false, `wallpaper setting should be ${module}: ${JSON.stringify(source)}`);
 }
 
 /**
@@ -2483,6 +2498,11 @@ try {
     await wallpaperTile(key).waitFor({ state: "visible" });
   }
   await wallpaperPicker.locator('[data-option="upload"]').waitFor({ state: "visible" });
+  // A fresh profile selects the riso print by default.
+  assert(
+    await wallpaperTile("live:butler.riso-print").getAttribute("aria-checked") === "true",
+    "fresh profile should select the riso print wallpaper",
+  );
   const bloomPalette = wallpaperPicker.locator('[role="radiogroup"][aria-label="Colors"]');
   await wallpaperTile("live:butler.silk").click();
   await bloomPalette.waitFor({ state: "detached" });
@@ -2524,6 +2544,11 @@ try {
       bloomColorState.inputBorder === "0px",
     `settings bloom color controls should render as circular swatches: ${JSON.stringify(bloomColorState)}`,
   );
+  // The picker saves each choice; put the riso print back so the new-chat
+  // checks below paint the default wallpaper, not this custom bloom.
+  await wallpaperTile("live:butler.riso-print").click();
+  await bloomPalette.waitFor({ state: "detached" });
+  await waitForWallpaperModule("butler.riso-print");
   await page
     .getByRole("button", { name: appCopy.settings.sections.models, exact: true })
     .click();
@@ -3228,7 +3253,7 @@ try {
       emptyStateLayout.cardGraphicCount === 0 &&
       emptyStateLayout.cardWidth >= 190 &&
       emptyStateLayout.cardWidth <= 230 &&
-      emptyStateLayout.cardHeight >= 240 &&
+      Math.abs(emptyStateLayout.cardHeight - NEW_CHAT_CARD_HEIGHT_PX) <= 1 &&
       emptyStateLayout.cardDescriptionBelowTitle &&
       emptyStateLayout.cardMetaBeforeTitle &&
       emptyStateLayout.momentAboveTitle &&

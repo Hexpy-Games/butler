@@ -88,12 +88,14 @@
 .title {
   color: var(--text-primary);
   font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height);
   font-weight: var(--font-weight-medium);
 }
 
 .meta {
   color: var(--text-tertiary);
   font-size: var(--font-size-1);
+  line-height: var(--typo-caption-line-height);
 }
 
 /* The menu sits on the title row, beside the title (never over the media). */

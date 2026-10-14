@@ -58,6 +58,9 @@
   align-items: center;
   gap: var(--space-sm);
   color: var(--text-secondary);
+}
+
+.momentText {
   font-weight: var(--typo-label-weight);
   letter-spacing: 0;
   text-transform: uppercase;
@@ -278,6 +281,7 @@
 @container conversation (width <= 900px) {
   .title {
     font-size: var(--typo-new-chat-title-size-md);
+    line-height: var(--typo-new-chat-title-line-height-md);
   }
 
   .grid {
@@ -319,6 +323,7 @@
 
   .title {
     font-size: var(--typo-new-chat-title-size-sm);
+    line-height: var(--typo-new-chat-title-line-height-sm);
   }
 
   .titleRow {
