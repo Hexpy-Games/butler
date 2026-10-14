@@ -13,9 +13,27 @@ use super::request_guard::{GuardError, RequestPolicy, run_guarded};
 
 #[derive(Clone, Copy)]
 pub(super) enum ResponseMode {
-    Json { tolerate_invalid: bool },
+    Json {
+        tolerate_invalid: bool,
+    },
     HostedChatSse,
     CodexSse,
+    ResponsesSse,
+    AnthropicSse,
+    /// `call_round` names streamed calls as the decoded result does.
+    GeminiSse {
+        call_round: u32,
+    },
+}
+
+impl ResponseMode {
+    /// This mode for the round `round` (Gemini call ids name their round).
+    pub(super) fn for_round(self, round: u32) -> Self {
+        match self {
+            Self::GeminiSse { .. } => Self::GeminiSse { call_round: round },
+            other => other,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -233,12 +251,7 @@ async fn hosted_chat(
     progress: super::request_guard::RequestProgress,
     observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
 ) -> Result<Value, Box<ProviderRequestError>> {
-    let is_sse = response
-        .headers()
-        .get("content-type")
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| value.to_ascii_lowercase().contains("text/event-stream"));
-    if is_sse {
+    if is_sse(&response) {
         sse::hosted_chat(response, provider, api, progress, observer).await
     } else {
         json(response, provider, api, true).await
@@ -274,6 +287,20 @@ impl Reading<'_> {
             }
             ResponseMode::HostedChatSse => {
                 hosted_chat(response, provider, api, progress, stream_observer).await
+            }
+            ResponseMode::ResponsesSse
+            | ResponseMode::AnthropicSse
+            | ResponseMode::GeminiSse { .. } => {
+                if !is_sse(&response) {
+                    return json(
+                        response,
+                        provider,
+                        api,
+                        !matches!(mode, ResponseMode::ResponsesSse),
+                    )
+                    .await;
+                }
+                sse::native::read(response, mode, provider, api, progress, stream_observer).await
             }
             ResponseMode::CodexSse => {
                 sse::codex(response, provider, api, progress, stream_observer, clock).await
@@ -395,3 +422,11 @@ pub fn provider_http_client() -> Result<Client, reqwest::Error> {
 
 #[cfg(test)]
 pub(in crate::models) use sse::frame_size::verify as verify_sse_frame_size;
+
+fn is_sse(response: &Response) -> bool {
+    response
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.to_ascii_lowercase().contains("text/event-stream"))
+}

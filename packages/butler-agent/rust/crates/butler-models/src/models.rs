@@ -10,6 +10,7 @@ mod quota;
 mod request_admission;
 mod request_guard;
 mod status;
+mod stream_event;
 mod tokenizer;
 mod transport;
 mod visual_admission;
