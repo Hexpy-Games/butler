@@ -59,7 +59,7 @@ export const guidance: ShowcaseGuidance = {
   recipes: [
     { name: "Plan waiting for acceptance", description: "Icon, clickable title, then a ButtonContainer justify=\"end\" of decisions.", render: () => <PlanDecision /> },
     { name: "Approval request with examples and risk", description: "A one-sentence question, up to three examples and a \"+N more\" line as details, a risk Tag in the aside.", render: () => <ApprovalRequest /> },
-    { name: "Browser approval with the page", description: "media: the tab's 16:10 frame at the subject row's end; clicking it opens the tab.", render: () => <BrowserApproval /> },
+    { name: "Browser approval with the page", description: "media: the tab's 16:10 frame at the subject row's end; under 420px it spans the text column, cropped from the page's top to 140px. Clicking it opens the tab.", render: () => <BrowserApproval /> },
   ],
   doDont: [
     {
@@ -80,5 +80,5 @@ export const guidance: ShowcaseGuidance = {
     "media label names the target page (Open tab · Pine Grove Campground); a browser hand-off's primary action is 열어서 확인 / Open to check (butler-i18n browser.rail.openToCheck).",
   ],
   accessibility: ["The icon is decorative (aria-hidden); the title is a button that opens the source; details are plain text and the Show more button carries aria-expanded and aria-controls; errors are announced with role=\"alert\"."],
-  tokens: ["--adaptive-composer-radius", "--space-xs", "--space-sm", "--space-md", "--space-lg", "--icon-size-sm", "--text-secondary"],
+  tokens: ["--adaptive-composer-radius", "--space-xs", "--space-sm", "--space-md", "--space-lg", "--icon-size-sm", "--text-secondary", "--decision-media-narrow-height"],
 };

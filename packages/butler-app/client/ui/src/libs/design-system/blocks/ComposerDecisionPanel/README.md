@@ -22,7 +22,7 @@ shape.
 | `aside` | Trailing subject-row content: a status `Tag`, a pending count, non-interactive metadata |
 | `error` | A failed decision, announced with `role="alert"` |
 | `actions` | Decision buttons, or `(complete) => buttons` to run a decision after the shared exit motion |
-| `media` | `{ content, label, onOpen? }`: a 16:10 page thumbnail (a `LiveTabFrame` of the tab the decision acts on) beside the title and details, top-aligned at the row's end, 144px wide, 112px in a composer under 600px. In a composer under 420px it sits under the details in the text column (the title's inset), as wide as that column and at most 240px tall, 12px under the text. `onOpen` opens the tab and `label` names the target |
+| `media` | `{ content, label, onOpen? }`: a 16:10 page thumbnail (a `LiveTabFrame` of the tab the decision acts on) beside the title and details, top-aligned at the row's end, 144px wide, 112px in a composer under 600px. In a composer under 420px it sits under the details in the text column (the title's inset), as wide as that column, 12px under the text, and shows the top of the page: 16:10 up to `--decision-media-narrow-height` (140px), then cropped from the top (never letterboxed or stretched). `onOpen` opens the tab; without it (no in-app browser) the thumbnail is a plain image with no open affordance. `label` names the target |
 
 ## When to use this component
 Use it when a pending decision replaces the composer input: a plan waiting
