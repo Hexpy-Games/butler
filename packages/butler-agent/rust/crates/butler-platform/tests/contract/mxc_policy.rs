@@ -92,6 +92,8 @@ fn policy_rejects_broad_and_overriding_grants() {
         r"C:\work\trailing.",
         r"C:\work\NUL",
         r"C:\work\\child",
+        r"C:\PROGRA~1\Tools",
+        r"C:\Users\PERSON~1.ABC",
     ] {
         assert!(WinPath::new(value).is_err(), "{value}");
     }
@@ -154,6 +156,12 @@ fn toolchains_replace_shims_and_keep_trusted_path_order() {
             .denied
             .contains(&path(r"C:\Users\person\.cargo\config.toml"))
     );
+    assert!(
+        tools
+            .denied
+            .contains(&path(r"C:\Users\person\.cargo\config"))
+    );
+    assert!(WinPath::new(r"C:\work\name~v2").is_ok());
     assert!(!tools.readonly.contains(&path(r"C:\Program Files")));
     assert!(
         tools

@@ -191,7 +191,10 @@ fn add_cargo(result: &mut Toolchain, input: &Discovery) -> Result<(), &'static s
         }
     }
     if input.cargo_config_has_token {
-        result.denied.push(cargo.join("config.toml")?);
+        // Cargo also reads, and prefers, the legacy extensionless name.
+        result
+            .denied
+            .extend([cargo.join("config")?, cargo.join("config.toml")?]);
     }
     Ok(())
 }

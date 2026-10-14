@@ -65,6 +65,7 @@ fn invalid_component(name: &str) -> bool {
         .to_ascii_uppercase();
     name.is_empty()
         || name.ends_with(['.', ' '])
+        || short_alias(name)
         || name
             .chars()
             .any(|c| c.is_control() || "<>:\"|?*".contains(c))
@@ -73,4 +74,14 @@ fn invalid_component(name: &str) -> bool {
             stem.strip_prefix(prefix)
                 .is_some_and(|n| matches!(n, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"))
         })
+}
+/// An 8.3 alias such as `PROGRA~1` names the same entry as its long name,
+/// so a lexical comparison could not tell that it is at or above a root.
+fn short_alias(name: &str) -> bool {
+    let (stem, extension) = name.rsplit_once('.').unwrap_or((name, ""));
+    stem.len() <= 8
+        && extension.len() <= 3
+        && stem
+            .rsplit_once('~')
+            .is_some_and(|(_, n)| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
