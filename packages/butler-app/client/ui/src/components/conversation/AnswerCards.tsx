@@ -1,10 +1,10 @@
 import { memo, useMemo, useRef, useState } from "react";
 import type { AnswerCardsView, AnswerCardView } from "../../../../shared/answer-blocks-view";
-import { Button, Collapsible, CopyButton, Grid, IconButton, ItemCard, Library, MediaFrame, ItemCardSkeleton, Stack } from "@/butler-ds";
+import { Button, Collapsible, CopyButton, DoneIconButton, Grid, ItemCard, Library, MediaFrame, ItemCardSkeleton, Stack } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { openConversationLink } from "../browser/browserBridge";
 import { openImageViewer, type ViewerImage } from "../media/imageViewerState";
-import { answerCardCopy, answerImages, answerPart, answerSource, runAnswerAction, saveAnswerItem, useAnswerSession } from "./answerBlockActions";
+import { answerActionFailed, answerCardCopy, answerImages, answerPart, answerSource, runAnswerAction, saveAnswerItem, useAnswerSession } from "./answerBlockActions";
 import { useButlerStore } from "@/app/store";
 import { useAnswerCardGrid } from "./useAnswerCardGrid";
 import { AnswerItem } from "./AnswerItem";
@@ -26,7 +26,8 @@ const AnswerCard = memo(function AnswerCard({ item, media, images, picture, inde
     value={item.value ? { amount: formatAnswerValue(item.value, locale), was: item.value.was === undefined ? undefined : formatAnswerValue(item.value, locale, item.value.was), wasLabel: copy.previousValue, note: item.value.note } : undefined}
     facts={item.facts} text={item.text} showMoreLabel={copy.showMore} showLessLabel={copy.showLess} source={source}
     onOpen={item.source ? () => runAnswerAction(() => openConversationLink(item.source!, sessionId)) : undefined}
-    actions={<><IconButton label={copy.saveToLibrary} onClick={(event) => { const part = answerPart(event.currentTarget); runAnswerAction(() => saveAnswerItem(item, sessionId, part)); }}><Library size="sm" /></IconButton>
+    actions={<><DoneIconButton icon={<Library size="sm" />} label={copy.saveToLibrary} doneLabel={copy.savedToLibrary} announce={false}
+      onAction={(event) => saveAnswerItem(item, sessionId, answerPart(event.currentTarget))} onError={answerActionFailed} />
       <CopyButton label={copy.copy} copiedLabel={copy.copied} text={answerCardCopy(item)} /></>} />;
 });
 

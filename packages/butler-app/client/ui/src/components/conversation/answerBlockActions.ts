@@ -26,8 +26,12 @@ export function answerSource(item: { source?: string; checked?: string }, sessio
   return { site, checked, icon: faviconSrc(url), label, onOpen: () => runAnswerAction(() => openConversationLink(url, sessionId)) };
 }
 
+export function answerActionFailed(error: unknown) {
+  notifyError(error, getAppCopy(getAppLocale()).conversation.answerBlocks.actionFailed);
+}
+
 export function runAnswerAction(action: () => Promise<unknown>) {
-  void action().catch(error => notifyError(error, getAppCopy(getAppLocale()).conversation.answerBlocks.actionFailed));
+  void action().catch(answerActionFailed);
 }
 
 export function answerCardCopy(item: AnswerCardView): string {

@@ -1,7 +1,7 @@
-/* Copy -> check morph (DS spec Motion Contract): both icons share one grid
+/* Icon -> check morph (DS spec Motion Contract): both icons share one grid
    cell and crossfade with a slight scale; the check is a SuccessCheck that
-   draws in on each copy. Reduced motion keeps the fade because the scale is
-   a token. */
+   draws in on each success. Reduced motion keeps the fade because the scale
+   is a token. CopyButton and every save action share this one morph. */
 .icons {
   display: inline-grid;
   place-items: center;
@@ -15,16 +15,16 @@
     transform var(--motion-fast) var(--motion-ease-standard);
 }
 
-.button[data-copied="true"] .copyIcon {
+.button[data-done="true"] .actionIcon {
   opacity: 0;
   transform: scale(var(--motion-scale-menu));
 }
 
-.button[data-copied="false"] .checkIcon {
+.button[data-done="false"] .checkIcon {
   opacity: 0;
   transform: scale(var(--motion-scale-menu));
 }
 
-.button[data-copied="true"] .checkIcon {
+.button[data-done="true"] .checkIcon {
   color: var(--text-primary);
 }

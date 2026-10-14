@@ -1,12 +1,12 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { CopyButton } from "../../components/CopyButton";
 import { Grid } from "../../components/Grid";
-import { IconButton } from "../../components/IconButton";
+import { DoneIconButton } from "../../components/DoneIconButton";
 import { Scrap } from "../../components/Icons";
 import { MediaFrame } from "../../components/MediaFrame";
 import { BROKEN_PICTURE, fixturePicture } from "../../components/MediaFrame/fixtures";
 import { Stack } from "../../components/Stack";
-import { fixtureItems, LABELS, type FixtureItem } from "./fixtures";
+import { fixtureItems, fixtureSave, LABELS, type FixtureItem } from "./fixtures";
 import { ItemCard, type ItemCardProps } from "./ItemCard";
 import { SkeletonPair, StreamSettleDemo } from "./ItemCard.demo";
 import { ItemCardSkeleton } from "./ItemCardSkeleton";
@@ -31,7 +31,7 @@ function props(locale: Locale, item: FixtureItem, src: string | undefined = fixt
     source: { site: item.site, checked: labels.checked, label: `${item.site}, ${labels.open}`, onOpen: () => undefined },
     actions: (
       <>
-        <IconButton label={labels.save}><Scrap size="sm" /></IconButton>
+        <DoneIconButton icon={<Scrap size="sm" />} label={labels.save} doneLabel={labels.saved} onAction={fixtureSave} />
         <CopyButton label={labels.copy} copiedLabel={labels.copied} text={`${item.title} · ${item.value.amount}`} />
       </>
     ),
