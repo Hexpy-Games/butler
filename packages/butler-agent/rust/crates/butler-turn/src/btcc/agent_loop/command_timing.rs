@@ -27,6 +27,7 @@ impl CommandTiming {
         event: &'static str,
         duration: std::time::Duration,
     ) {
+        let output_started = Instant::now();
         eprintln!(
             "command_duration_timing phase={phase} event={event} utc_us={} duration_us={}",
             SystemTime::now()
@@ -35,10 +36,12 @@ impl CommandTiming {
                 .as_micros(),
             duration.as_micros()
         );
+        report_output_wait(phase, output_started);
     }
 
     pub(crate) fn mark(&self, event: &'static str) {
         if let Some(started) = self.started {
+            let output_started = Instant::now();
             eprintln!(
                 "command_phase_timing phase={} id={} event={} utc_us={} elapsed_us={}",
                 self.phase,
@@ -50,6 +53,7 @@ impl CommandTiming {
                     .as_micros(),
                 started.elapsed().as_micros()
             );
+            report_output_wait(self.phase, output_started);
         }
     }
 }
@@ -57,5 +61,17 @@ impl CommandTiming {
 impl Drop for CommandTiming {
     fn drop(&mut self) {
         self.mark("returned");
+    }
+}
+
+// A slow diagnostic write must not be mistaken for database or queue work.
+// Emit only slow writes to avoid doubling ordinary statement diagnostics.
+fn report_output_wait(phase: &'static str, started: Instant) {
+    let duration = started.elapsed();
+    if duration >= std::time::Duration::from_millis(1) {
+        eprintln!(
+            "command_output_timing phase={phase} duration_us={}",
+            duration.as_micros()
+        );
     }
 }
