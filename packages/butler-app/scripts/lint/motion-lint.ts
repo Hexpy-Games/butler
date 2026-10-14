@@ -55,6 +55,14 @@ const PAINT_LOOP_KEYFRAMES: Record<string, readonly string[]> = {
   "libs/design-system/components/Spinner/Spinner.module.css": ["stroke-dasharray"],
 };
 /**
+ * File-exact reduced-motion exemptions. The Spinner's turn is a status signal,
+ * not decorative motion: it keeps rotating under the OS preference and the
+ * App's data-motion="reduced" scope (owner decision 2026-10-14), so its file
+ * carries no prefers-reduced-motion rule. ProgressRing's indeterminate state
+ * renders the Spinner and inherits this. No other file may skip the rule.
+ */
+const REDUCED_MOTION_EXEMPT = new Set(["libs/design-system/components/Spinner/Spinner.module.css"]);
+/**
  * File-exact geometry transitions. The setup card morph (intro spec rev 5)
  * moves the real edges of one empty, absolutely positioned card surface and
  * clips the larger card to it for --motion-deliberate, so the hairline border,
@@ -386,7 +394,7 @@ export function collectMotionFindings(repoRoot: string): MotionFinding[] {
     if (path.endsWith(".css")) {
       const source = readFileSync(absolute, "utf8");
       const audit = motionAudit(source);
-      const reduced: MotionFinding[] = path.startsWith(DS_PREFIX) && audit.moves && !audit.reducedRule && !audit.tokenOnly
+      const reduced: MotionFinding[] = path.startsWith(DS_PREFIX) && audit.moves && !audit.reducedRule && !audit.tokenOnly && !REDUCED_MOTION_EXEMPT.has(path)
         ? [{ rule: "reduced-motion", path, line: 1, message: "moving styles need reduced motion or token-only transforms" }] : [];
       return [...lintMotionCss(path, source), ...reduced];
     }

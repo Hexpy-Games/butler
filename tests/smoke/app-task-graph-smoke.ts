@@ -87,11 +87,12 @@ try {
             assert.equal(await page.locator('[data-test-class="task-graph-canvas"]').count(), 0);
             assert.equal(await page.locator('[data-test-class="task-graph-group"] svg circle[data-status]').count(), open.reduce((n, g) => n + g.totals.nodes, 0));
           }
-          // The shared spinner intentionally fades under reduced motion; the activity
-          // ring rests, and no remaining graph animation may rotate or move geometry.
+          // The shared Spinner is exempt from reduced motion and keeps turning; the
+          // activity ring rests, and no other graph animation may rotate or move geometry.
           assert(await page.locator('[data-test-class="task-graph-section"]').evaluate(el =>
             [...el.querySelectorAll('[data-activity="running"]')].every(card => getComputedStyle(card, "::after").animationIterationCount === "0") &&
-            el.getAnimations({ subtree: true }).filter(a => a.playState === "running").every(a =>
+            el.getAnimations({ subtree: true }).filter(a => a.playState === "running" &&
+              !((a.effect as KeyframeEffect).target as Element | null)?.closest('[data-slot="spinner"]')).every(a =>
               (a.effect as KeyframeEffect).getKeyframes().every(frame => !("transform" in frame)))), "reduced motion kept a graph ring or geometry moving");
           if (width === 1280 && tasks > 1) await verifyGraphFades(page);
           const selected = page.locator('[data-test-class="task-graph-card"][aria-pressed="true"]');
