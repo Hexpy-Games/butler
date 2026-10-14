@@ -1,10 +1,12 @@
 //! Deterministic subsession packets and host envelopes.
 
 use super::*;
+mod identity;
 use crate::btcc::{
     BtccCode, ChildEnvelope, ChildRole, EnvelopeMessage, EnvelopePeer, EnvelopeRaw,
     EnvelopeRouting, EnvelopeSender, NativeStewardContext, SubsessionPacket,
 };
+pub(super) use identity::{StewardIdentity, WorkerIdentity, parent_work_ref};
 
 /// The acceptance criteria as the rendered JSON array.
 fn criteria(packet: &SubsessionPacket) -> String {
@@ -45,9 +47,13 @@ pub(super) fn delegation_title(safe_title: Option<&str>, request: &str) -> Strin
     }
 }
 
+/// A Worker cannot open tabs; another source and observing its own output are
+/// its routes, with the same bounded retry.
+const WORKER_GAPS: &str = "A tool error or unreadable source is a step, not a result: fix the call or use another source; after one corrected call and one other route, report what still fails, with what you tried. Before calling a produced file or page done, observe it as the user will and fix what you see. Report a gap only when it survives these steps, once, never as per-item tags.";
+
 pub(super) fn render_input(packet: &SubsessionPacket, profile_prompt: Option<&str>) -> String {
     let base = format!(
-        "role: worker\nassigned_objective: {}\nacceptance_criteria: {}\nimplementation_brief: {}\nReport the bounded result to the Steward.",
+        "role: worker\nassigned_objective: {}\nacceptance_criteria: {}\nimplementation_brief: {}\nReport the bounded result to the Steward. {WORKER_GAPS}",
         packet.objective,
         criteria(packet),
         packet.implementation_brief.as_deref().unwrap_or("")
@@ -68,9 +74,13 @@ const NEEDED_FACTS: &str = "Get the facts the goal needs, operating a page contr
 const CLOCK: &str =
     "Take the current date and time from Runtime State; do not run a command to read the clock.";
 
+/// Delegated outcome criteria are met with evidence, a failed route is a step
+/// with a bounded retry, and the report carries only gaps that survived.
+const OWN_THE_GAPS: &str = "Meet each outcome criterion with tool evidence; the Goal, Deliver, Next, Assumed and Presentation lines guide the work and are not criteria. A tool error, a blocked, empty, script-built or image-only page, or a failed run is a step, not a result: fix the call or try another source or another reader; after one corrected call and one other route, report what still fails, with what you tried. Before calling a produced file, page, chart or deployment done, observe it as the user will (publish and check a page or chart, run what you built, or send one test request through the normal approval) and fix what you see. Report the result, not a limitations section or per-item unconfirmed tags or columns: name a gap only when it survives these steps and matters to the request, once; this also satisfies a criterion that asks for limits or unverified items.";
+
 pub(super) fn render_steward_input(packet: &SubsessionPacket) -> String {
     format!(
-        "role: steward\nrequest: {}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.{}{} {NEEDED_FACTS} {CLOCK}",
+        "role: steward\nrequest: {}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.{}{} {NEEDED_FACTS} {CLOCK} {OWN_THE_GAPS}",
         packet.objective,
         criteria(packet),
         packet.prior_context.as_deref().unwrap_or("none"),
@@ -454,46 +464,4 @@ pub(super) fn delegation_output(stored: &crate::btcc::StoredSubsessionDelegation
 }
 pub(super) fn error(code: BtccCode) -> BtccError {
     BtccError::detected(code, code.as_str())
-}
-
-/// The request identity a steward delegation id is derived from (persisted
-/// through the id, so its field order is part of the format).
-#[derive(serde::Serialize)]
-pub(super) struct StewardIdentity<'a> {
-    pub(super) parent_session_id: &'a str,
-    pub(super) parent_turn_id: &'a str,
-    pub(super) request: &'a str,
-    pub(super) work_id: &'a str,
-    pub(super) plan_revision_id: &'a str,
-    pub(super) review_revision_id: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) previous_relation_id: Option<&'a str>,
-}
-
-/// The request identity a worker delegation id is derived from.
-#[derive(serde::Serialize)]
-pub(super) struct WorkerIdentity<'a> {
-    pub(super) parent_session_id: &'a str,
-    pub(super) parent_turn_id: &'a str,
-    pub(super) action_key: &'a str,
-    pub(super) objective: &'a str,
-    pub(super) acceptance_criteria: &'a [String],
-    pub(super) implementation_brief: &'a str,
-    pub(super) profile_id: &'a str,
-}
-
-/// The reviewed parent Work a delegation executes.
-pub(super) fn parent_work_ref(
-    reviewed: &WorkView,
-    parent_turn_id: &str,
-    plan: &crate::btcc::WorkPlan,
-    review: &crate::btcc::WorkReview,
-) -> crate::btcc::ParentWorkRef {
-    crate::btcc::ParentWorkRef {
-        work_id: reviewed.work_id.clone(),
-        session_id: reviewed.session_id.clone(),
-        turn_id: parent_turn_id.into(),
-        plan_revision_id: plan.plan_revision_id.clone(),
-        review_revision_id: review.review_revision_id.clone(),
-    }
 }

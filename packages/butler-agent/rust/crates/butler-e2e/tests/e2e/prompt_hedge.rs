@@ -66,6 +66,9 @@ fn descriptions(value: &Value) {
 fn assert_no_handback(source: &str, text: &str) {
     let text = text.to_lowercase();
     for forbidden in [
+        "verification limits",
+        "residual risk",
+        "non-critical gaps",
         "as unconfirmed",
         "verify it yourself",
         "smallest evidence set",

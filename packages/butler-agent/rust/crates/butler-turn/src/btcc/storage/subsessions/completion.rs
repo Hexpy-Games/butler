@@ -1,6 +1,10 @@
 //! Child result and parent feedback committed atomically.
 use super::*;
 
+/// A successful Steward result is relayed as the answer: open items are work
+/// to settle, not caveats to forward.
+const RELAY: &str = "\nDeliver this to the user as your answer, outcome first. Its open or unconfirmed items are work, not caveats: settle any that one quick lookup can settle, and keep only what still matters to the user's next decision, once, in one line. Never forward a limitations list, including per-item unconfirmed tags or columns.";
+
 impl SqliteSubsessionRepository {
     pub(crate) async fn commit_result(
         &self,
@@ -36,10 +40,12 @@ impl SqliteSubsessionRepository {
             text.push_str(&super::assets::delivery_assets(&tx, &child_turn)?);
             text.push_str(&delivery_artifacts(&tx, &child_turn, &status)?);
             if let Some(code) = failure_code.as_deref().or(code) { text.push_str(&format!("\ncode: {code}")); }
+            let has_handoff = handoff.is_some();
             if let Some(handoff) = handoff {
                 let encoded = serde_json::to_string(&handoff).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;
                 text.push_str(&format!("\ncapability_handoff: {encoded}\nContinue the requested action in this result Turn using your own granted tools and normal approval. Do not report this model/runtime-solvable issue to the user as an unfinished job. Reuse and revise the parent Plan to direct execution; the child is terminal."));
             }
+            append_relay(&mut text, packet.child_role, &status, has_handoff);
             let input = match packet.child_role {
                 ChildRole::Worker => ParentResultInput::StewardQueue(WorkerResultInput {
                     text: text.clone(), model_ref: model.into(),
@@ -144,4 +150,30 @@ fn delegation_feedback(
     Ok(format!(
         "\nreason: {reason}{repeated}\nResolve this blocker or revise the Plan/implementation approach before delegating again. Continue directly with your granted tools if possible; ask the user only for a decision or input they alone can supply."
     ))
+}
+
+fn append_relay(text: &mut String, role: ChildRole, status: &str, has_handoff: bool) {
+    if role == ChildRole::Steward && status == "success" && !has_handoff {
+        text.push_str(RELAY);
+    }
+}
+
+#[cfg(test)]
+pub(super) mod tests {
+    use super::*;
+
+    pub(in crate::btcc::storage::subsessions) fn assert_success_relay_format() {
+        for (role, status, handback, expected) in [
+            (ChildRole::Steward, "success", false, true),
+            (ChildRole::Steward, "blocked", false, false),
+            (ChildRole::Steward, "failed", false, false),
+            (ChildRole::Steward, "cancelled", false, false),
+            (ChildRole::Steward, "success", true, false),
+            (ChildRole::Worker, "success", false, false),
+        ] {
+            let mut text = String::from("Delegated result");
+            append_relay(&mut text, role, status, handback);
+            assert_eq!(text.ends_with(RELAY), expected);
+        }
+    }
 }
