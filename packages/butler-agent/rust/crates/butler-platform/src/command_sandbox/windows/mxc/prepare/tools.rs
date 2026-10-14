@@ -25,8 +25,7 @@ pub(super) fn discover(env: &BTreeMap<String, String>) -> Result<Toolchain, Erro
         .get_or_init(|| Mutex::new(None))
         .lock()
         .map_err(|_| "toolchain_cache_poisoned")?;
-    if let Some((key, tools)) = cache.as_ref().filter(|(cached, _)| cached == &key) {
-        let _ = key;
+    if let Some((_, tools)) = cache.as_ref().filter(|(cached, _)| cached == &key) {
         return Ok(tools.clone());
     }
     let tools = collect(env)?;
@@ -104,38 +103,66 @@ fn existing(path: &WinPath) -> Option<WinPath> {
     physical(Path::new(path.as_str())).ok()
 }
 
+type SettingsCache = Option<(String, BTreeMap<String, String>)>;
 pub(super) fn git_settings(
     env: &BTreeMap<String, String>,
 ) -> Result<BTreeMap<String, String>, Error> {
+    static CACHE: OnceLock<Mutex<SettingsCache>> = OnceLock::new();
     let tools = discover(env)?;
     let Some(cmd) = tools.path.iter().find(|p| p.as_str().ends_with("\\cmd")) else {
         return Ok(BTreeMap::new());
     };
     let git = cmd.join("git.exe")?;
-    let mut settings = BTreeMap::new();
-    for key in [
-        "user.name",
-        "user.email",
-        "core.autocrlf",
-        "core.eol",
-        "init.defaultBranch",
-    ] {
-        let result = Command::new(git.as_str())
-            .args(["config", "--global", "--get", key])
-            .env_clear()
-            .envs(env)
-            .output()?;
-        if result.status.success() {
-            settings.insert(
-                key.into(),
-                String::from_utf8(result.stdout)?
-                    .trim_end_matches(['\r', '\n'])
-                    .into(),
-            );
-        }
+    let key = format!(
+        "{};{}",
+        git.as_str(),
+        environment::get(env, "USERPROFILE").unwrap_or_default()
+    );
+    let mut cache = CACHE
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .map_err(|_| "git_cache_poisoned")?;
+    if let Some((_, settings)) = cache.as_ref().filter(|(cached, _)| cached == &key) {
+        return Ok(settings.clone());
     }
+    let result = Command::new(git.as_str())
+        .args([
+            "config",
+            "--global",
+            "--get-regexp",
+            "^(user\\.(name|email)|core\\.(autocrlf|eol)|init\\.defaultBranch)$",
+        ])
+        .env_clear()
+        .envs(env)
+        .output()?;
+    let mut settings = BTreeMap::new();
+    if result.status.success() {
+        for line in String::from_utf8(result.stdout)?.lines() {
+            let (name, value) = line.split_once(' ').ok_or("invalid_git_setting")?;
+            if [
+                "user.name",
+                "user.email",
+                "core.autocrlf",
+                "core.eol",
+                "init.defaultbranch",
+            ]
+            .contains(&name)
+            {
+                let name = if name == "init.defaultbranch" {
+                    "init.defaultBranch"
+                } else {
+                    name
+                };
+                settings.insert(name.into(), value.into());
+            }
+        }
+    } else if result.status.code() != Some(1) {
+        return Err("git_config_failed".into());
+    }
+    *cache = Some((key, settings.clone()));
     Ok(settings)
 }
+
 mod msvc;
 
 fn add_path(env: &BTreeMap<String, String>, input: &mut Discovery) -> Result<(), Error> {
@@ -149,6 +176,9 @@ fn add_path(env: &BTreeMap<String, String>, input: &mut Discovery) -> Result<(),
             continue;
         }
         let lexical = WinPath::new(dir)?;
+        if lexical.as_str().ends_with("\\windowsapps") {
+            continue;
+        }
         let canonical = physical(path)?;
         if lexical.as_str().ends_with("\\windowsapps") || lexical.as_str().ends_with("\\.nodejs") {
             input.shim_dirs.push(canonical.clone());
