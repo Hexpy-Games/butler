@@ -64,7 +64,19 @@ impl Drive {
                 journal,
                 entry,
             };
-            if subst(&[format!("{letter}:"), text.into()])?.success() && drive.matches()? {
+            let status = subst(&[format!("{letter}:"), text.into()]);
+            match status {
+                Ok(status) if status.success() => {}
+                Ok(_) => {
+                    fs::remove_file(&drive.journal)?;
+                    continue;
+                }
+                Err(error) => {
+                    fs::remove_file(&drive.journal)?;
+                    return Err(error.into());
+                }
+            }
+            if drive.matches()? {
                 return Ok(drive);
             }
             drive.cleanup()?;
