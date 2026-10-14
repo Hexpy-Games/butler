@@ -20,6 +20,17 @@ empty draw the same matte, so a row of cards keeps its rhythm. With
 `placeholder`, they draw a soft tinted surface with one centered mark
 instead: the `placeholderIcon` favicon on a light plate, or an image glyph.
 
+## Loading
+The frame's aspect box is reserved from the first render, so a loading
+picture never shifts the layout. While it loads the matte shows; once it has
+loaded (`data-loaded`) the picture fades in over the matte (`--motion-slow`,
+decelerate). It is a transition, so a new `src` fades from wherever the last
+one was. A picture already decoded when the frame mounts (a cached one)
+shows at once. A picture that fails while loading shows the placeholder (or
+the matte), the placeholder fading in. Under reduced motion (the OS, the
+app's setting, or `reducedMotion`, which also forces it off) pictures and
+placeholders appear at once.
+
 ## When to use this component
 The picture slot of `ItemCard` and `LibraryCard`, gallery rails and thumbnails
 of collected pictures.

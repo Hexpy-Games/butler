@@ -13,6 +13,12 @@ animation, and sizes through props (never `className` or `style`):
 - `lines`: a paragraph of N lines with the DS width ramp (86%, 68%, short
   last line); one `label` announces the group.
 
+## Reduced motion
+The sheen loops `--motion-loop-count` times. Reduced motion, from the OS or
+the app's setting (`data-motion="reduced"` on the shell, which also sets the
+token at `:root`, so skeletons in portals stop too), sets it to 0: the sheen
+rests off the edge and only the static fill shows.
+
 ## SkeletonRows
 
 `SkeletonRows` stacks placeholder rows while a list or form loads (`shape`

@@ -55,6 +55,31 @@ own target (a zoom-in cursor) that opens the image viewer. The source line,
 Show more and the actions sit above the card target and keep their own
 actions; the card's hover drops while the pointer is on one of them.
 
+## Loading: ItemCardSkeleton
+`ItemCardSkeleton` is the loading shape of a card, built on the same `Card`,
+grid tracks and container query: the picture box at the set's aspect
+(`media`, default `1:1`; `null` for cards without a picture), three text lines
+(subtitle, title, facts, each exactly its role's line height) and the footer
+line, held at the actions' height by one invisible `IconButton`, so it
+follows the hit-target sizes on phones and coarse pointers. It is the exact
+box of a card with a subtitle, a one-line title, facts and a footer, in the
+vertical and the row orientation: swapping it for that card shifts nothing.
+The sheen stops under reduced motion. It is `aria-hidden`; `label` makes it
+a `role="status"` that announces loading once.
+
+```tsx
+<Grid ref={gridRef} columns={columns} cross={settled ? "stretch" : "start"} gap="sm">
+  {items.map((item) => <AnswerCard key={item.key} item={item} />)}
+  {open ? <ItemCardSkeleton media={block.media} /> : null}
+</Grid>
+```
+
+While a list streams in, one skeleton holds the next slot and the grid uses
+`cross="start"`, so a taller new card never stretches earlier ones. When the
+list closes, `settleGrid` (see `Grid`) applies the final columns and
+`cross="stretch"` once: a column change dips the grid's opacity briefly and
+the height eases to its new size.
+
 ## Accessibility
 The article is labelled by the title. The title is the card's one tab stop
 that opens the item. With `onMediaOpen` the picture is a second tab stop named
