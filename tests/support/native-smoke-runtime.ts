@@ -17,7 +17,16 @@ export async function nativeSmokeRuntime(entry: string): Promise<number | null> 
     await Bun.write(output, build.outputs[0]!);
     const env = { ...process.env, BUTLER_SMOKE_REPOSITORY_ROOT: fileURLToPath(new URL("../../", import.meta.url)) };
     const child = spawn("node", [output, ...process.argv.slice(2)], { stdio: "inherit", env });
-    const [code] = await once(child, "exit") as [number | null];
-    return code ?? 1;
+    const stop = () => { if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM"); };
+    const interrupt = () => child.kill("SIGINT");
+    process.once("exit", stop);
+    process.once("SIGINT", interrupt);
+    process.once("SIGTERM", stop);
+    try {
+      const [code] = await once(child, "exit") as [number | null];
+      return code ?? 1;
+    } finally {
+      process.off("exit", stop); process.off("SIGINT", interrupt); process.off("SIGTERM", stop);
+    }
   } finally { rmSync(temporary, { recursive: true, force: true }); }
 }
