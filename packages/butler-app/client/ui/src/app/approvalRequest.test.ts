@@ -173,7 +173,7 @@ test("a request without examples shows what it acts on: its target, else the leg
   const connector = summary("use_connector", { targets: [{ kind: "connector", path: "github/create_issue" }] });
   expect(approvalRequestView(card(connector), en).details).toEqual(["github/create_issue"]);
   const schedule = summary("manage_schedule", { targets: [{ kind: "schedule", path: "automation:delete:daily-news" }] });
-  expect(approvalRequestView(card(schedule), en).details).toEqual(["daily-news"]);
+  expect(approvalRequestView(card(schedule), en).details).toEqual([en.scheduleUnavailable]);
   const topic = summary("start_conversation", { targets: [{ kind: "other", path: "Weekly review" }] });
   expect(approvalRequestView(card(topic), en).details).toEqual(["Weekly review"]);
 });
