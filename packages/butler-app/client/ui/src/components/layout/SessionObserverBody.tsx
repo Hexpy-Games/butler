@@ -23,7 +23,7 @@ export function SessionObserverBody({ view, inline = false }: {
         delegatedGoal={view?.relation?.safe_title}
         expandActivities={inline}
         showReplies={!inline}
-        messages={view?.messages ?? []}
+        messages={(view?.messages ?? []).filter(message => !view?.relation || message.role !== "user")}
         activityHistory={view?.activity_history}
         activeTurn={view?.active_turn}
         latestTurn={view?.latest_turn}
