@@ -7,7 +7,7 @@ import { captureNewChatMatrix, compareNewChatCase, type NewChatVisualCase } from
 const reference = JSON.parse(readFileSync(new URL("../fixtures/newchat-preview6/reference.json", import.meta.url), "utf8")) as {
   revision: string; cases: Record<string, NewChatVisualCase>;
 };
-assert.equal(reference.revision, "8cc9748de8dde155cebb65ceef74d79c68f113df");
+assert.equal(reference.revision, "de0b33bce93b4816759f1e255d0bb39b5c13cfcc");
 // #924 (dcbd58d68): suggestion cards hug their ordinal and copy, with no empty
 // art slot, and every card in the row shares one height (CSS px, per width).
 const CARD_HEIGHT_PX: Record<string, number> = { 1280: 142, 375: 156 };

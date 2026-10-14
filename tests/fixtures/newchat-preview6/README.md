@@ -2,10 +2,13 @@
 
 `reference.json` was first captured from the full UI built at tag
 `v0.1.0-preview.6` (`7961a7f0fff72cebe50025111957aef5c302655b`).
-It was re-captured at `main` `8cc9748de8dde155cebb65ceef74d79c68f113df`
-for the owner-approved compact suggestion cards of #924 (`dcbd58d68`: no
-empty art slot, 262 → 142px at 1280 and 240 → 156px at 375); that build also
-carries the integer line-heights of #956 and the card focus ring of #952.
+It was re-captured at `de0b33bce93b4816759f1e255d0bb39b5c13cfcc` for the
+owner-approved compact suggestion cards of #924 (`dcbd58d68`: no empty art
+slot, 262 → 142px at 1280 and 240 → 156px at 375). That build also carries
+the card focus ring of #952 and the integer line-heights of #956, with the
+#966 fixes: hero, moment pill and title match pre-#956 main (`79eacc1ee`)
+within 0.35px at 375; at 1280 the hero is 1.4px shorter because the 12px
+caption role is 16px (was 17.4px) and the 48px title is 52px (was 50.88px).
 It is a rendered browser reference, not a source-string assertion.
 
 Run `bun run app:newchat:smoke` with isolated `HOME` / `BUTLER_DATA`.
