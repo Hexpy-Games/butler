@@ -36,10 +36,12 @@ export const guidance: ShowcaseGuidance = {
     "One aspect per set of pictures (a block of cards, a gallery). 4:5 suits objects and people, 1:1 logos and dishes, 3:4 pages, 16:10 and 16:9 views and places.",
     "Pass pictures as captured: never pre-crop, pad or tint them. Dark mode changes only the matte.",
     "alt is the picture's own description; leave it empty when a title beside the frame names the item.",
+    "Loading is built in: the matte holds the shape, the picture fades in once it loads and a failed one's placeholder fades in. Never add a spinner or a second placeholder.",
   ],
   accessibility: [
     "The frame has no role or click behavior; the owner makes it a target.",
     "alt defaults to empty (decorative); pass the picture's description when nothing beside it names the item.",
+    "Reduced motion (the OS, the app's setting or reducedMotion): pictures and placeholders appear without a fade.",
   ],
-  tokens: ["--muted", "--radius-control", "--space-md", "--line", "--browser-card-shadow", "--tag-height-sm"],
+  tokens: ["--muted", "--radius-control", "--space-md", "--line", "--browser-card-shadow", "--tag-height-sm", "--motion-slow", "--motion-ease-decelerate"],
 };
