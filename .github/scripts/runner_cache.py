@@ -70,10 +70,11 @@ def contained(base, path):
 def remove_tree(base, path):
     """Validate the boundary once, then inspect every entry without following it."""
     base = namespace(base)
-    return _remove_tree(contained(base, path))
+    return delete_tree(contained(base, path))
 
 
-def _remove_tree(path):
+def delete_tree(path):
+    """Remove a tree without following links; callers own its boundary."""
     if not lexists(path):
         return 0
     info = os.lstat(extended(path))
@@ -85,7 +86,7 @@ def _remove_tree(path):
     if not info.st_mode & stat.S_IWRITE:
         os.chmod(extended(path), info.st_mode | stat.S_IWRITE | stat.S_IREAD)
     if stat.S_ISDIR(info.st_mode):
-        size = sum(_remove_tree(child) for child in children(path))
+        size = sum(delete_tree(child) for child in children(path))
         os.rmdir(extended(path))
         return size
     os.unlink(extended(path))
