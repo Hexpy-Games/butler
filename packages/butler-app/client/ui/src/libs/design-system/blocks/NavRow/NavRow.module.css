@@ -124,6 +124,7 @@
   white-space: nowrap;
   font-weight: var(--font-weight-regular);
   font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height);
 }
 
 .controlRegion {
@@ -157,6 +158,7 @@
   max-width: 7ch;
   color: var(--text-tertiary);
   font-size: var(--font-size-1);
+  line-height: var(--typo-caption-line-height);
   font-weight: var(--font-weight-regular);
   opacity: 1;
   text-align: right;
@@ -226,6 +228,7 @@
 
   .label:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     font-size: var(--font-size-4);
+    line-height: var(--typo-app-title-line-height);
   }
 }
 

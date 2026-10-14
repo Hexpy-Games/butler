@@ -196,6 +196,7 @@
   border-bottom: 1px solid var(--line);
   color: var(--text-tertiary);
   font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height);
 }
 
 .codeHeader > div {

@@ -58,6 +58,14 @@ renderer, so icons beside text line up without per-component offsets.
 Inline Typo inside running text is unaffected. Renderers without `text-box`
 keep plain line boxes.
 
+Only text is trimmed: Typo sets `data-trim` when its children are
+strings and text-level elements (`strong`, `a`, `code`, …). A Typo that holds a
+box (an icon, a Tag, an `Inline` row) keeps a plain line box, because the trim
+cannot cut the box and its padding would be added on top. For the same reason
+a Typo must stay a block container: never give it `display: flex` or `grid`
+through a class (the trim does not reach a flex container's text). Put the row
+on a wrapper and the Typo inside it.
+
 Not trimmed: line-clamped Typo (`lineClamp`), because the trim cuts the last
 formatted line, which the clamp hides, and the next line would show below the
 clamp. Inputs, textareas, the composer editor and Markdown/code blocks are

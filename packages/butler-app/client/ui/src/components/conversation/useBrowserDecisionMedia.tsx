@@ -1,3 +1,4 @@
+import { canOpenHandoffTab } from "../browser/browserHandoff";
 import { appCopy } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import type { AuthorityApprovalCard } from "@/app/types";
@@ -27,7 +28,7 @@ export function useBrowserDecisionMedia(request: AuthorityApprovalCard | undefin
   const target = (tabs: Parameters<typeof familyAgentTabs>[1]) => id ? familyAgentTabs(family, tabs.filter(tab => tab.id === id))[0] : undefined;
   const favicon = useBrowserState(state => target(state.tabs)?.favicon);
   const title = useBrowserState(state => target(state.tabs)?.title);
-  if (!id || title === undefined) return undefined;
+  if (!canOpenHandoffTab() || !id || title === undefined) return undefined;
   const copy = appCopy.browser;
   return { content: <DecisionTabFrame session={session} tab={id} favicon={favicon ?? ""} />,
     label: `${copy.rail.openToCheck} · ${title || copy.newTab}`, onOpen: () => void openConversationBrowser(session, id) };
