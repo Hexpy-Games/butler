@@ -15,7 +15,9 @@ pub(in crate::command_sandbox) use probe::probe;
 
 pub(super) fn helper() -> std::io::Result<PathBuf> {
     #[cfg(feature = "test-support")]
-    if let Some(path) = std::env::var_os("NEXTEST_BIN_EXE_butler-sandbox") {
+    if let Some(path) = std::env::var_os("NEXTEST_BIN_EXE_butler-sandbox")
+        .or_else(|| std::env::var_os("NEXTEST_BIN_EXE_butler_sandbox"))
+    {
         return Ok(path.into());
     }
     let exe = std::env::current_exe()?;

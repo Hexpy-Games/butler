@@ -44,7 +44,7 @@ def verify(directory, expected):
         raise ValueError('Matching Agent artifact has invalid binary/digest')
     if expected['platform'].startswith(('linux-', 'windows-')):
         helper = directory / ('butler-sandbox.exe' if expected['platform'].startswith('windows-') else 'butler-sandbox')
-        if 'sandbox_sha256' not in metadata:
+        if expected['platform'].startswith('windows-') and 'sandbox_sha256' not in metadata:
             return False
         if not helper.is_file() or digest(helper) != metadata.get('sandbox_sha256'):
             raise ValueError('Matching native artifact has invalid sandbox helper/digest')

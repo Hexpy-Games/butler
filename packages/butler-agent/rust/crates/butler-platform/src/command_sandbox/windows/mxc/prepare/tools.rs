@@ -93,9 +93,9 @@ fn existing(path: &WinPath) -> Option<WinPath> {
 type SettingsCache = Option<(String, BTreeMap<String, String>)>;
 pub(super) fn git_settings(
     env: &BTreeMap<String, String>,
+    tools: &Toolchain,
 ) -> Result<BTreeMap<String, String>, Error> {
     static CACHE: OnceLock<Mutex<SettingsCache>> = OnceLock::new();
-    let tools = discover(env)?;
     let Some(cmd) = tools.path.iter().find(|p| p.as_str().ends_with("\\cmd")) else {
         return Ok(BTreeMap::new());
     };

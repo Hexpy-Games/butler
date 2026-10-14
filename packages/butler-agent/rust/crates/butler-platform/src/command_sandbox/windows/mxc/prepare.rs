@@ -76,6 +76,11 @@ fn prepare(
     }
     let project = physical(root)?;
     let tools = tools::discover(&env)?;
+    for key in ["CARGO_HOME", "RUSTUP_HOME"] {
+        if let Some(value) = tools.environment.get(key) {
+            env.insert(key.into(), value.clone());
+        }
+    }
     let credentials = environment::credential_roots(&env)?
         .into_iter()
         .filter(|p| Path::new(p.as_str()).exists())
@@ -192,7 +197,7 @@ fn save_policy(
         data: dunce::canonicalize(data)?,
         project: dunce::canonicalize(root)?,
         scratch,
-        git_settings: tools::git_settings(env)?,
+        git_settings: tools::git_settings(env, &plan.tools)?,
         request,
     };
     let directory = data.join("sandbox/policies");
