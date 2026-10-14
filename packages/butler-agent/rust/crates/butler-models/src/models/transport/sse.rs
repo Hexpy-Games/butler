@@ -9,6 +9,7 @@ use super::super::{diagnostics, request_guard::RequestProgress};
 
 mod chat;
 pub(super) mod frame_size;
+pub(super) mod native;
 pub(super) use chat::hosted_chat;
 
 pub(super) async fn codex(

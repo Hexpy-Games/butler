@@ -122,6 +122,7 @@ fn responses(
         body = stable::order(body, stable, request.instructions)?;
     }
     apply_codex_controls(&mut body, request, config);
+    body.insert("stream".into(), true.into());
     Ok(Value::Object(body))
 }
 
@@ -232,6 +233,7 @@ fn anthropic(request: &ModelRoundRequest<'_>, config: &ProviderRequestConfig) ->
     let model = config.wire_model.as_str();
     let mut body = Map::new();
     body.insert("model".into(), model.into());
+    body.insert("stream".into(), true.into());
     if let Some(value) = request
         .instructions
         .map(butler_core::public_text::trim_js_whitespace)
@@ -333,6 +335,12 @@ fn chat(
     }
     body.insert("tool_choice".into(), choice(request.tool_choice).into());
     body.insert("stream".into(), stream.into());
+    if stream {
+        body.insert(
+            "stream_options".into(),
+            serde_json::json!({"include_usage":true}),
+        );
+    }
     if let Some(reasoning) = reasoning::effort(request) {
         match metadata.provider_id.as_str() {
             "xai" | "zai" | "zai-api" => {

@@ -282,7 +282,9 @@ fn gemini(value: &Value, model: &str, round: u32) -> Fields {
         .filter_map(|(index, item)| {
             let function = item.get("functionCall")?;
             let name = function.get("name")?.as_str()?;
-            let id = Value::String(format!("gemini_call_{round}_{index}_{name}"));
+            let id = Value::String(crate::models::stream_event::gemini_call_id(
+                round, index, name,
+            ));
             call(
                 Some(&id),
                 Some(&Value::String(name.into())),

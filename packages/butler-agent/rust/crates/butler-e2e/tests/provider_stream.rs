@@ -21,7 +21,7 @@ fn provider_tool_names_precede_every_ordered_argument_delta()
         String::from_utf8_lossy(&output.stderr)
     );
     let results: Vec<Value> = serde_json::from_slice(&output.stdout)?;
-    assert_eq!(results.len(), 5);
+    assert_eq!(results.len(), 8);
     for (i, result) in results.iter().enumerate() {
         assert_eq!(result["durableFrames"], 0);
         assert_eq!(result["defaultToolFrames"], 0);
@@ -44,7 +44,7 @@ fn provider_tool_names_precede_every_ordered_argument_delta()
             .collect();
         assert_eq!(
             actual,
-            if i == 0 {
+            if matches!(i, 0 | 5 | 6) {
                 fragments.to_vec()
             } else if i == 1 {
                 [vec!["", ""], fragments.to_vec()].concat()
@@ -53,6 +53,12 @@ fn provider_tool_names_precede_every_ordered_argument_delta()
             }
         );
         let stream = &events[0]["streamId"];
+        // Native SSE cases are read as streams, not declared after the round.
+        assert_eq!(
+            i >= 5,
+            stream.as_str().unwrap().starts_with("provider-stream-"),
+            "case {i}"
+        );
         for pair in events.windows(2) {
             assert_eq!(&pair[1]["streamId"], stream);
             assert!(pair[0]["sequence"].as_u64() < pair[1]["sequence"].as_u64());
@@ -89,12 +95,39 @@ fn carriers(args: &str, fragments: &[&str]) -> Result<Vec<Value>, serde_json::Er
     let response = json!({"output":[answer,other]}).to_string();
     let anthropic = json!({"content":[{"type":"tool_use","id":"call-0","name":"answer_blocks","input":input},{"type":"tool_use","id":"call-1","name":"read_file","input":{}}]}).to_string();
     let gemini = json!({"candidates":[{"content":{"parts":[{"functionCall":{"name":"answer_blocks","args":input}},{"functionCall":{"name":"read_file","args":{}}}]}}]}).to_string();
+    // Native streams (Anthropic Messages, Responses with an API key, Gemini SSE).
+    let mut messages = vec![
+        json!({"type":"message_start","message":{"id":"msg-0","type":"message","role":"assistant","content":[],"usage":{"input_tokens":1,"output_tokens":1}}}),
+        json!({"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"call-0","name":"answer_blocks","input":{}}}),
+    ];
+    messages.extend(fragments.iter().map(|delta|json!({"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":delta}})));
+    messages.extend([
+        json!({"type":"content_block_stop","index":0}),
+        json!({"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"call-1","name":"read_file","input":{}}}),
+        json!({"type":"content_block_stop","index":1}),
+        json!({"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":9}}),
+        json!({"type":"message_stop"}),
+    ]);
+    // A terminal Response may leave its output to the item events.
+    let responses: Vec<_> = codex
+        .iter()
+        .take(codex.len() - 1)
+        .cloned()
+        .chain([json!({"type":"response.completed","response":{"id":"response-0","status":"completed","output":[]}})])
+        .collect();
+    let gemini_stream = [
+        json!({"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"answer_blocks","args":input}}]}}]}),
+        json!({"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"read_file","args":{}}}]},"finishReason":"STOP"}]}),
+    ];
     Ok(vec![
         json!({"provider":"openai","codex":true,"sse":true,"body":sse(&codex)}),
         json!({"provider":"qwen","chat":true,"sse":true,"body":format!("{}data: [DONE]\n\n",sse(&chat))}),
         json!({"provider":"openai","body":response}),
         json!({"provider":"anthropic","body":anthropic}),
         json!({"provider":"google","body":gemini}),
+        json!({"provider":"anthropic","sse":true,"body":sse(&messages)}),
+        json!({"provider":"openai","sse":true,"body":sse(&responses)}),
+        json!({"provider":"google","sse":true,"body":sse(&gemini_stream)}),
     ])
 }
 

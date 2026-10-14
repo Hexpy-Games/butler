@@ -1,4 +1,4 @@
-import { spawnElectron } from "../support/electron-child";
+import { spawnElectron, stopElectronChild } from "../support/electron-child";
 /** Real packaged macOS update, update choices and quit with isolated DATA. */
 import { strict as assert } from "node:assert";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
@@ -306,14 +306,13 @@ async function cleanup() {
     const instance = JSON.parse(readFileSync(join(data, "app/runtime/foreground/instance.json"), "utf8"));
     ownedPids.add(instance.app_pid); ownedPids.add(instance.agent_host_pid);
   } catch { /* App never started. */ }
-  if (child && child.exitCode === null) child.kill("SIGTERM");
+  if (child) await stopElectronChild(child);
   for (const pid of ownedPids) {
     try { process.kill(pid, "SIGTERM"); } catch { /* Already exited. */ }
   }
   server?.stop(true);
   // Allow the App's confirmed graceful quit to finish before removing its DATA.
   await new Promise(done => setTimeout(done, 1500));
-  if (child && child.exitCode === null) child.kill("SIGKILL");
   for (const pid of ownedPids) {
     try { process.kill(pid, "SIGKILL"); } catch { /* Already exited. */ }
   }
