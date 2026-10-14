@@ -148,14 +148,10 @@ async fn turn_01_reply_is_delivered_persisted_and_survives_restart() -> Result<(
     assert_eq!(users.len(), 1);
     assert_eq!(assistants.len(), 1);
     assert_eq!(users[0]["text"], NUMBERS);
-    let answer = assistants[0]["text"]
-        .as_str()
-        .unwrap_or_default()
-        .to_owned();
+    let answer = assistants[0]["text"].as_str().unwrap_or_default();
     assert_ne!(answer.trim(), "");
     assert_eq!(
-        delivered["payload"]["message"]["text"],
-        answer.as_str(),
+        delivered["payload"]["message"]["text"], answer,
         "live text != persisted text"
     );
     for message in &messages {
