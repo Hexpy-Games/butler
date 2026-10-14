@@ -30,7 +30,7 @@ pub use contracts::{
     AdmittedModelSelection, ButlerContext, EmptyResponsePolicy, ExecutionPolicy, SemanticTurn,
     TrackingMode,
 };
-pub use stream_relay::StreamRelay;
+pub use stream_relay::{AnswerBlocksStreamPort, StreamRelay};
 pub use turn_binding::{BoundGuidedTurn, GuidedTurnFactory, GuidedTurnInputs, GuidedTurnStart};
 
 #[cfg(test)]

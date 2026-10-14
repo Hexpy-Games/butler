@@ -127,7 +127,7 @@ impl ModelProvider {
             api,
             policy: config.policy,
             external: request.cancellation.clone(),
-            mode,
+            mode: mode.for_round(round_index(&request)),
             stream_observer: Some(&watch),
             attempts: request
                 .provider_retry_attempts
@@ -153,17 +153,13 @@ impl ModelProvider {
             Err(ModelRoundError::Provider(error))
                 if local_stream && local_stream::falls_back(carrier, &error, &watch) =>
             {
-                if let Some(prefix) = &prefix {
-                    super::round_usage::record(self, &request, None, &config, prefix)?;
-                }
+                self.record_failed_usage(&request, &config, prefix.as_ref())?;
                 return self
                     .run_without_streaming(request, config.endpoint.clone())
                     .await;
             }
             Err(ModelRoundError::Provider(mut error)) => {
-                if let Some(prefix) = &prefix {
-                    super::round_usage::record(self, &request, None, &config, prefix)?;
-                }
+                self.record_failed_usage(&request, &config, prefix.as_ref())?;
                 if config.metadata.provider_id == "local"
                     && let ProviderAuth::ApiKey(secret) = &config.auth
                 {
@@ -175,13 +171,11 @@ impl ModelProvider {
                 return Err(ModelRoundError::Provider(error));
             }
             Err(error) => {
-                if let Some(prefix) = &prefix {
-                    super::round_usage::record(self, &request, None, &config, prefix)?;
-                }
+                self.record_failed_usage(&request, &config, prefix.as_ref())?;
                 return Err(error);
             }
         };
-        self.complete(
+        let result = self.complete(
             &request,
             &config,
             response,
@@ -191,7 +185,21 @@ impl ModelProvider {
                 identity: provider_cache_identity,
                 prefix: prefix.unwrap_or(serde_json::Value::Null),
             },
-        )
+        )?;
+        watch.complete_tools(&result);
+        Ok(result)
+    }
+
+    fn record_failed_usage(
+        &self,
+        request: &ModelRoundRequest<'_>,
+        config: &super::ProviderRequestConfig,
+        prefix: Option<&serde_json::Value>,
+    ) -> Result<(), ModelRoundError> {
+        if let Some(prefix) = prefix {
+            super::round_usage::record(self, request, None, config, prefix)?;
+        }
+        Ok(())
     }
 
     fn complete(
@@ -201,17 +209,13 @@ impl ModelProvider {
         response: serde_json::Value,
         mut prepared: PreparedResponse,
     ) -> Result<ModelRoundResult, ModelRoundError> {
-        let round_index = request
-            .usage_attribution
-            .and_then(|value| value.round_index)
-            .unwrap_or(0);
         super::prefix_diagnostics::reported_usage(&mut prepared.prefix, &response);
         let mut result = result::decode(
             response,
             &config.metadata.provider_id,
             &config.metadata.model_ref,
             prepared.carrier,
-            round_index,
+            round_index(request),
             request,
             prepared.continuation,
         );
@@ -253,9 +257,15 @@ impl ModelProvider {
     ) -> reqwest::RequestBuilder {
         let mut http = self
             .client
-            .post(config.endpoint.clone())
+            .post(super::route::stream_endpoint(&config.endpoint, mode))
             .header("content-type", "application/json");
-        if matches!(mode, transport::ResponseMode::HostedChatSse) {
+        if matches!(
+            mode,
+            transport::ResponseMode::HostedChatSse
+                | transport::ResponseMode::ResponsesSse
+                | transport::ResponseMode::AnthropicSse
+                | transport::ResponseMode::GeminiSse { .. }
+        ) {
             http = http.header("accept", "text/event-stream");
         }
         authorize(
@@ -317,6 +327,14 @@ impl ModelProvider {
             result
         })
     }
+}
+
+/// The round's index within its turn, as decoded call ids name it.
+fn round_index(request: &ModelRoundRequest<'_>) -> u32 {
+    request
+        .usage_attribution
+        .and_then(|value| value.round_index)
+        .unwrap_or(0)
 }
 
 pub(super) fn safe_endpoint(endpoint: &url::Url) -> String {

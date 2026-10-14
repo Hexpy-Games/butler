@@ -1,0 +1,85 @@
+{
+  "model": "google/gemini-3.8-flash",
+  "shape": "native",
+  "path": "/v1beta/models/gemini-3.8-flash:generateContent",
+  "expected": {
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "gemini_replay",
+    "candidates": [
+      {
+        "index": 0,
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Reason it out.",
+              "thought": true,
+              "thoughtSignature": "signed"
+            },
+            {
+              "text": "Hello 안녕 🌍!"
+            },
+            {
+              "functionCall": {
+                "name": "render",
+                "args": {
+                  "value": "안녕 🌍",
+                  "items": [
+                    1,
+                    2
+                  ]
+                }
+              },
+              "thoughtSignature": "call-signed-0"
+            },
+            {
+              "functionCall": {
+                "name": "inspect",
+                "args": {
+                  "other": true
+                }
+              },
+              "thoughtSignature": "call-signed-1"
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "safetyRatings": []
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 125,
+      "cachedContentTokenCount": 100,
+      "candidatesTokenCount": 10,
+      "thoughtsTokenCount": 3,
+      "totalTokenCount": 138
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": [
+      [
+        "content-type",
+        "text/event-stream"
+      ]
+    ],
+    "chunks": [
+      {
+        "delay_ms": 0,
+        "text": "data: {\"modelVersion\":\"gemini-3.8-flash\",\"responseId\":\"gemini_replay\",\"candidates\":[{\"index\":0,\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"Reason \",\"thought\":true,\"thoughtSignature\":\"\"}]}}]}\n\ndata: {\"modelVersion\":\"gemini-3.8-flash\",\"responseId\":\"gemini_replay\",\"candidates\":[{\"index\":0,\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"it out.\",\"thought\":true,\"thoughtSignature\":\"signed\"}]}}]}\n\ndata: {\"modelVersion\":\"gemini-3.8-flash\",\"responseId\":\"gemini_replay\",\"candidates\":[{\"index\":0,\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"Hello \"}]}}]}\n\ndata: {\"modelVersion\":\"gemini-3.8-flash\",\"responseId\":\"gemini_replay\",\"candidates\":[{\"index\":0,\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"안녕 🌍!\"}]}}]}\n\ndata: {\"modelVersion\":\"gemini-3.8-flash\",\"responseId\":\"gemini_replay\",\"candidates\":[{\"index\":0,\"content\":{\"role\":\"model\",\"parts\":[{\"functionCall\":{\"name\":\"render\",\"args\":{\"value\":\"안녕 🌍\",\"items\":[1,2]}},\"thoughtSignature\":\"call-signed-0\"},{\"functionCall\":{\"name\":\"inspect\",\"args\":{\"other\":true}},\"thoughtSignature\":\"call-signed-1\"}]}}]}\n\ndata: {\"modelVersion\":\"gemini-3.8-flash\",\"responseId\":\"gemini_replay\",\"candidates\":[{\"index\":0,\"content\":{\"role\":\"model\",\"parts\":[]},\"finishReason\":\"STOP\",\"safetyRatings\":[]}],\"usageMetadata\":{\"promptTokenCount\":125,\"cachedContentTokenCount\":100,\"candidatesTokenCount\":10,\"thoughtsTokenCount\":3,\"totalTokenCount\":138}}\n\n"
+      }
+    ]
+  },
+  "documentation": [
+    "https://ai.google.dev/api/generate-content"
+  ],
+  "expected_text": "Hello 안녕 🌍!",
+  "argument_fragments": {
+    "2": [
+      "{\"value\":\"안녕 🌍\",\"items\":[1,2]}"
+    ],
+    "3": [
+      "{\"other\":true}"
+    ]
+  }
+}
