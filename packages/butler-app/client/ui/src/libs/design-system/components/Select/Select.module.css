@@ -239,6 +239,7 @@
   background: var(--accent);
   color: var(--neutral-white);
   font-size: var(--font-size-1);
+  line-height: var(--typo-caption-line-height);
   font-variant-numeric: tabular-nums;
   font-weight: var(--font-weight-medium);
   place-items: center;

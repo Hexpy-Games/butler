@@ -1,6 +1,7 @@
 import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode, Ref } from "react";
 import { layoutItemAttributes, splitLayoutItemProps, type LayoutItemProps } from "../Layout/itemProps";
+import { isTextContent } from "./textContent";
 import styles from "./Typo.module.css";
 
 type TypoElement =
@@ -92,6 +93,7 @@ function createTypo(defaultAs: TypoElement, variantClassName: string) {
         data-wrap={wrap}
         data-numeric={numeric}
         data-align-with={alignWith}
+        data-trim={isTextContent(children) ? "" : undefined}
         {...itemAttributes}
         {...props}
         // One ref type for every element the variant can render as.
