@@ -45,7 +45,8 @@ export async function captureAllowedHosts(browser: Browser, url: string, output:
     const saves: string[][] = [];
     page.on("request", request => {
       if (request.method() === "PATCH" && new URL(request.url()).pathname === "/settings") {
-        saves.push(request.postDataJSON().security.allowed_hosts);
+        const hosts = request.postDataJSON().security.allowed_hosts;
+        if (hosts) saves.push(hosts);
       }
     });
     page.on("pageerror", error => console.error(error.message));
@@ -77,6 +78,7 @@ export async function captureAllowedHosts(browser: Browser, url: string, output:
       await panel.getByText("two.example.com", { exact: true }).waitFor();
       await row.getByText(copy.hostCount(2), { exact: true }).waitFor();
       await settledInput(input);
+      assert(await input.evaluate(node => document.activeElement === node), "Enter save restores input focus");
       await input.fill("two.example.com"); await panel.getByRole("button", { name: copy.addHost, exact: true }).first().click();
       assert.equal(await input.inputValue(), "", "duplicate clears the draft");
       await panel.getByRole("button", { name: copy.removeHost("two.example.com"), exact: true }).click();
@@ -88,8 +90,26 @@ export async function captureAllowedHosts(browser: Browser, url: string, output:
       await input.fill("one.example.com"); await panel.getByRole("button", { name: copy.addHost, exact: true }).first().click();
       await row.getByText(copy.hostCount(1), { exact: true }).waitFor();
       await settledInput(input);
+      assert.equal(await input.evaluate(node => document.activeElement === node), false, "button save does not move focus to input");
       assert.equal(await panel.evaluate(node => node.scrollWidth > node.clientWidth + 1), false, key);
       assert.deepEqual(saves, [["one.example.com", "two.example.com"], ["one.example.com"], [], ["one.example.com"]], "whole lists saved; duplicate does not save");
+      const contentInput = panel.getByRole("textbox", { name: copy.contentHosts, exact: true });
+      await contentInput.fill("content.example.com");
+      await contentInput.press("Enter");
+      await settledInput(contentInput);
+      assert(await contentInput.evaluate(node => document.activeElement === node), "content host save restores focus");
+      await row.getByText(copy.hostCount(2), { exact: true }).waitFor();
+      await panel.getByRole("button", { name: copy.removeHost("one.example.com"), exact: true }).click();
+      await row.getByText(copy.hostCount(1), { exact: true }).waitFor();
+      await toggle.click();
+      await row.getByText(copy.hostCount(1), { exact: true }).waitFor();
+      await screenshot(page, output, `${key}-content-only-collapsed`);
+      await toggle.click();
+      await panel.getByRole("button", { name: copy.removeHost("content.example.com"), exact: true }).click();
+      await row.getByText(copy.hostCount(0), { exact: true }).waitFor();
+      await input.fill("one.example.com");
+      await input.press("Enter");
+      await settledInput(input);
       await toggle.click(); assert.equal(await toggle.getAttribute("aria-expanded"), "false");
       await page.reload(); assert.equal(await toggle.getAttribute("aria-expanded"), "false", "open state is not persisted");
     } catch (error) {

@@ -1901,7 +1901,6 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       contentHostsDescription: "Tunnel hostname for opening outputs remotely.",
       hostsDescription: "Names a tunnel or proxy uses.",
       hostCount: (n) => n === 0 ? "None" : n === 1 ? "1 host" : `${n} hosts`,
-      noHosts: "None",
       hostPlaceholder: "butler.example.com",
       addHost: "Add",
       removeHost: (host) => `Remove ${host}`,

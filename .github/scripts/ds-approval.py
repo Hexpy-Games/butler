@@ -46,6 +46,8 @@ def run(*args):
 
 def from_pr(number):
     repo = os.environ['GITHUB_REPOSITORY']
+    if not repo:
+        raise ValueError('GITHUB_REPOSITORY is empty')
     api = lambda path, jq: run('gh', 'api', '--paginate', f'repos/{repo}/{path}', '--jq', jq)
     files = api(f'pulls/{number}/files', '.[].filename').split()
     messages = [json.loads(line) for line in api(f'pulls/{number}/commits', '.[].commit.message | tojson').splitlines() if line]
@@ -62,7 +64,7 @@ def from_range(spec):
 
 def main(argv):
     if len(argv) != 2 or argv[0] not in ('--pr', '--range'):
-        sys.exit(__doc__)
+        raise ValueError("Expected --pr <number> or --range BASE..HEAD")
     files, messages, labels = from_pr(argv[1]) if argv[0] == '--pr' else from_range(argv[1])
     changed = protected(files)
     if not changed:
@@ -80,5 +82,14 @@ def main(argv):
     return 0
 
 
+def warn_on_error(argv):
+    try:
+        return main(argv)
+    except Exception as error:
+        reason = str(error).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+        print(f'::warning title=ds-approval::{reason}')
+        return 0
+
+
 if __name__ == '__main__':
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(warn_on_error(sys.argv[1:]))

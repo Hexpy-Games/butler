@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { Button, FieldError, IconButton, Input, Plus, Stack, Trash2, Typo } from "@/butler-ds";
 import { normalizeAllowedHost } from "./allowedHostName";
@@ -20,8 +20,22 @@ export function SecurityAllowedHostsField({
   const copy = appCopy.settings.security;
   const inputId = useId();
   const errorId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const restoreFocus = useRef(false);
   const [draft, setDraft] = useState("");
   const [invalid, setInvalid] = useState(false);
+
+  useEffect(() => {
+    if (!disabled && restoreFocus.current) {
+      restoreFocus.current = false;
+      inputRef.current?.focus();
+    }
+  }, [disabled]);
+
+  async function save(nextHosts: string[]) {
+    restoreFocus.current = document.activeElement === inputRef.current;
+    return onSave(nextHosts);
+  }
 
   async function add() {
     const host = normalizeAllowedHost(draft);
@@ -29,7 +43,7 @@ export function SecurityAllowedHostsField({
       setInvalid(true);
       return;
     }
-    if (hosts.includes(host) || await onSave([...hosts, host])) setDraft("");
+    if (hosts.includes(host) || await save([...hosts, host])) setDraft("");
   }
 
   return (
@@ -40,7 +54,7 @@ export function SecurityAllowedHostsField({
             <Stack key={host} align="row" gap="sm" cross="center" justify="between">
               <Typo.Code wrap="anywhere">{host}</Typo.Code>
               <IconButton label={copy.removeHost(host)} disabled={disabled}
-                onClick={() => void onSave(hosts.filter((item) => item !== host))}>
+                onClick={() => void save(hosts.filter((item) => item !== host))}>
                 <Trash2 size="sm" />
               </IconButton>
             </Stack>
@@ -60,6 +74,7 @@ export function SecurityAllowedHostsField({
               value={draft}
               aria-invalid={invalid ? true : undefined}
               aria-describedby={[describedBy, invalid ? errorId : undefined].filter(Boolean).join(" ")}
+              onFocus={(event) => { inputRef.current = event.currentTarget; }}
               onChange={(event) => {
                 setDraft(event.target.value);
                 setInvalid(false);

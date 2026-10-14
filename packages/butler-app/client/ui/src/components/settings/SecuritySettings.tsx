@@ -93,7 +93,7 @@ function SecurityAdvancedSection({ security, open, onToggle }: {
         data-test-class="settings-security-advanced"
         data-setting-id="allowed-hosts"
         title={copy.advancedContents}
-        meta={copy.hostCount(view.allowed_hosts.length)}
+        meta={copy.hostCount(view.allowed_hosts.length + (view.content_hosts?.length ?? 0))}
         controlsId={panelId}
         open={open}
         onToggle={onToggle}
