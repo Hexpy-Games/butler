@@ -75,6 +75,7 @@ pub(super) async fn get_session_queue(
 }
 
 pub(super) async fn get_turns(state: Arc<HttpState>, uri: &Uri) -> Result<Response, HttpError> {
+    let timing = crate::gateway::command_timing::CommandTiming::new("turns_http");
     let query = query(uri);
     let chat_id = query
         .get("chat_id")
@@ -85,7 +86,9 @@ pub(super) async fn get_turns(state: Arc<HttpState>, uri: &Uri) -> Result<Respon
         .application
         .refresh_message_projection(chat_id.clone())
         .await?;
+    timing.mark("projection_refreshed");
     let turns = state.application.list_turns(chat_id, cursor).await?;
+    timing.mark("turns_read");
     json(
         StatusCode::OK,
         ApiEnvelope {

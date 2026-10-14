@@ -6,6 +6,19 @@ use serde_json::{Value, json};
 
 use super::{HarnessError, harness_error};
 
+fn timing_route(path: &str) -> &'static str {
+    match path.split('?').next().unwrap_or("") {
+        "/health" => "health",
+        "/runtime-readiness" => "readiness",
+        "/settings" => "settings",
+        "/turns" => "turns",
+        "/messages" => "messages",
+        "/authority-requests" => "authority_list",
+        p if p.starts_with("/authority-requests/") => "authority_decision",
+        _ => "other",
+    }
+}
+
 #[derive(Clone)]
 pub struct Gateway {
     pub base: String,
@@ -105,7 +118,9 @@ impl Gateway {
         token: Option<&str>,
         headers: &[(&str, &str)],
     ) -> Result<Reply, HarnessError> {
-        let mut request = self.client.request(method, format!("{}{path}", self.base));
+        let mut request = self
+            .client
+            .request(method.clone(), format!("{}{path}", self.base));
         if let Some(token) = token {
             request = request.bearer_auth(token);
         }
@@ -139,9 +154,10 @@ impl Gateway {
             .zip(started)
             .map(|((headers, download), start)| [headers, download, start.elapsed()]);
         if debug && let Some(phases) = &phases {
-            // Routes and identifiers never leave this probe.
+            // Fixed route classes disambiguate requests without exposing identifiers.
+            let route = timing_route(path);
             eprintln!(
-                "command_http_timing status={status} headers_us={} body_us={} parse_us={}",
+                "command_http_timing method={method} route={route} status={status} headers_us={} body_us={} parse_us={}",
                 phases[0].as_micros(),
                 phases[1].as_micros(),
                 phases[2].as_micros()

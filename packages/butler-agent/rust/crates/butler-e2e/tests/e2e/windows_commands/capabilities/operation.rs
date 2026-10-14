@@ -13,11 +13,13 @@ pub(super) async fn operation(
         case.tool, case.refused, case.args
     );
     script.select(case.clone());
+    let live = butler_e2e::e2e::events::LiveEvents::subscribe(&s.gw, 0).await?;
     let accepted = s.gw.say(chat, provider::PROMPT).await?;
     script.mark("say_returned");
     let id = accepted_turn_id(&accepted)?;
-    let turn =
-        s.gw.wait_turn(
+    let turn = live
+        .wait_turn(
+            &s.gw,
             chat,
             &id,
             &["waiting_for_form", "delivered", "failed"],
@@ -139,7 +141,15 @@ pub(super) async fn operation(
             script.result.lock().unwrap()
         );
     }
-    let terminal = s.gw.wait_terminal(chat, &id, Duration::from_secs(15)).await;
+    let terminal = live
+        .wait_turn(
+            &s.gw,
+            chat,
+            &id,
+            butler_e2e::e2e::gateway::TERMINAL,
+            Duration::from_secs(15),
+        )
+        .await;
     if terminal.is_err() {
         super::super::log_approval_timeout_diagnostics(s, chat, &id).await?;
     }

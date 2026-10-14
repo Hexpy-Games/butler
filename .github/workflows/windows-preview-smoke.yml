@@ -418,6 +418,7 @@ jobs:
     timeout-minutes: 30
     env:
       BUTLER_E2E_TIER: stub
+      BUTLER_DEBUG_COMMAND_TIMINGS: ${{ matrix.shard == 'basics' && '1' || '' }}
       RUST_TEST_THREADS: 8
     strategy:
       fail-fast: false

@@ -40,12 +40,16 @@ impl InboundQueue {
         &self,
         operation: impl FnOnce(Self) -> QueueResult<T> + Send + 'static,
     ) -> QueueResult<T> {
+        let timing = super::command_timing::CommandTiming::new("inbound_blocking");
         let queue = self.clone();
-        tokio::task::spawn_blocking(move || operation(queue))
-            .await
-            .map_err(|error| {
-                InboundQueueError::new(InboundQueueCode::InboundQueueIoFailed, error.to_string())
-            })?
+        tokio::task::spawn_blocking(move || {
+            timing.mark("dequeued");
+            operation(queue)
+        })
+        .await
+        .map_err(|error| {
+            InboundQueueError::new(InboundQueueCode::InboundQueueIoFailed, error.to_string())
+        })?
     }
 
     pub async fn enqueue_async(&self, envelope: JsonDocument) -> QueueResult<QueuedInboundEvent> {
@@ -135,8 +139,11 @@ impl InboundQueue {
         envelope: JsonDocument,
         metadata: Map<String, Value>,
     ) -> QueueResult<QueuedInboundEvent> {
+        let timing = super::command_timing::CommandTiming::new("inbound_enqueue");
         let _guard = self.lane.lock();
+        timing.mark("lock_acquired");
         let result = storage::enqueue_idempotent(&self.root, envelope, metadata);
+        timing.mark("record_published");
         if result.is_ok() {
             // The durable queue write precedes this coalesced in-process wake.
             self.enqueue_wake.notify_one();

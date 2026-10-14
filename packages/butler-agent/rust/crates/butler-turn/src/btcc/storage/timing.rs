@@ -5,6 +5,7 @@ use rusqlite::{
     trace::{TraceEvent, TraceEventCodes},
 };
 use std::cell::Cell;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 pub(super) fn install(connection: &Connection) {
     if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
@@ -16,6 +17,7 @@ pub(super) fn install(connection: &Connection) {
 
 fn profile(event: TraceEvent<'_>) {
     if let TraceEvent::Profile(statement, duration) = event {
+        let commit = COMMIT_STARTED.take().map(|started| started.elapsed());
         let sql = statement.sql();
         // Only a fixed vocabulary leaves this callback, including on errors.
         let class = match sql
@@ -36,6 +38,19 @@ fn profile(event: TraceEvent<'_>) {
             _ => "other",
         };
         CommandTiming::report_duration("sqlite_statement", class, duration);
+        if let Some(commit) = commit {
+            CommandTiming::report_duration("sqlite_commit", "hook_to_profile", commit);
+        }
+        if duration.as_millis() >= 20 {
+            eprintln!(
+                "command_sql_work class={class} utc_us={} vm_steps_total={} fullscan_steps_total={} sorts_total={} mem_bytes={}",
+                utc_us(),
+                statement.get_status(rusqlite::StatementStatus::VmStep),
+                statement.get_status(rusqlite::StatementStatus::FullscanStep),
+                statement.get_status(rusqlite::StatementStatus::Sort),
+                statement.get_status(rusqlite::StatementStatus::MemUsed),
+            );
+        }
     }
 }
 
@@ -44,6 +59,8 @@ fn profile(event: TraceEvent<'_>) {
 // errors rather than turning an already committed write into a failed operation.
 thread_local! {
     static CHECKPOINT_PAGES: Cell<i32> = const { Cell::new(0) };
+    static COMMIT_STARTED: Cell<Option<Instant>> = const { Cell::new(None) };
+    static LAST_WAL_PAGES: Cell<i32> = const { Cell::new(0) };
 }
 
 pub(super) fn install_writer(connection: &Connection) -> rusqlite::Result<()> {
@@ -56,6 +73,10 @@ pub(super) fn install_writer(connection: &Connection) -> rusqlite::Result<()> {
     let pages =
         connection.query_row("PRAGMA wal_autocheckpoint", [], |row| row.get::<_, i32>(0))?;
     CHECKPOINT_PAGES.set(pages);
+    connection.commit_hook(Some(|| {
+        COMMIT_STARTED.set(Some(Instant::now()));
+        false
+    }));
     if pages > 0 {
         connection.wal_hook(Some(checkpoint));
     }
@@ -63,6 +84,13 @@ pub(super) fn install_writer(connection: &Connection) -> rusqlite::Result<()> {
 }
 
 fn checkpoint(wal: &rusqlite::hooks::Wal, pages: i32) -> rusqlite::Result<()> {
+    let prior = LAST_WAL_PAGES.replace(pages);
+    if pages < prior {
+        eprintln!(
+            "command_wal_timing event=restarted utc_us={} pages={pages} prior_pages={prior}",
+            utc_us()
+        );
+    }
     if CHECKPOINT_PAGES.get() > 0 && pages >= CHECKPOINT_PAGES.get() {
         let timing = CommandTiming::new("sqlite_checkpoint");
         let result = wal.checkpoint();
@@ -73,4 +101,11 @@ fn checkpoint(wal: &rusqlite::hooks::Wal, pages: i32) -> rusqlite::Result<()> {
         });
     }
     Ok(())
+}
+
+fn utc_us() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_micros()
 }
