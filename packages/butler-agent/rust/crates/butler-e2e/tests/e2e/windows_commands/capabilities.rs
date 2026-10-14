@@ -303,14 +303,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
         "WINDOWS-BASIC {access:?}: 16 complete cases in {:?}",
         started.elapsed()
     );
-    for line in s
-        .agent
-        .logs()
-        .lines()
-        .filter(|line| line.starts_with("command_"))
-    {
-        eprintln!("{line}");
-    }
+    operation::diagnostic_logs(&s, &script);
     s.finish().await?;
     server.abort();
     Ok(())

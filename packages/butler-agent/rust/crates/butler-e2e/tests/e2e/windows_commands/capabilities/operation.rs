@@ -12,7 +12,6 @@ pub(super) async fn operation(
         "Starting Windows capability: access={access:?} tool={} refused={} args={}",
         case.tool, case.refused, case.args
     );
-    let previous_lines = s.agent.logs().lines().count();
     script.select(case.clone());
     let accepted = s.gw.say(chat, provider::PROMPT).await?;
     script.mark("say_returned");
@@ -163,15 +162,7 @@ pub(super) async fn operation(
             );
         }
     }
-    for line in s
-        .agent
-        .logs()
-        .lines()
-        .skip(previous_lines)
-        .filter(|line| line.starts_with("command_"))
-    {
-        eprintln!("{line}");
-    }
+    diagnostic_logs(s, script);
     let budget = Duration::from_secs(if case.refused { 1 } else { 5 });
     butler_e2e::assert_wall_clock_budget!(elapsed, budget, case.tool);
     if case.refused {
@@ -192,4 +183,19 @@ pub(super) async fn operation(
         elapsed.as_secs_f64() * 1000.
     );
     Ok((output, elapsed))
+}
+
+// Emit each captured diagnostic once; preserve complete source logs in the harness.
+pub(super) fn diagnostic_logs(s: &Scenario, script: &provider::Script) {
+    use std::sync::atomic::Ordering;
+    let logs = s.agent.logs();
+    let lines = logs.lines().count();
+    let previous = script.diagnostic_log_lines.swap(lines, Ordering::Relaxed);
+    for line in logs
+        .lines()
+        .skip(previous)
+        .filter(|line| line.starts_with("command_"))
+    {
+        eprintln!("{line}");
+    }
 }
