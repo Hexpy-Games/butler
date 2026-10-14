@@ -88,7 +88,7 @@ impl StorageProgressPublication {
     ) -> StorageResult<Vec<CommittedProgressEvent>> {
         let limit = i64::try_from(limit.clamp(1, 64)).unwrap_or(64);
         self.storage
-            .execute(move |connection| pending_page(connection, after, limit))
+            .read(move |connection| pending_page(connection, after, limit))
             .await
     }
 
@@ -105,6 +105,32 @@ impl StorageProgressPublication {
                     )
                     .map_err(StorageError::sqlite)?;
                 Ok(())
+            })
+            .await
+    }
+
+    /// Acknowledge a bounded, already durable transcript page in one commit.
+    pub async fn mark_published_batch(&self, event_ids: Vec<String>) -> StorageResult<()> {
+        if event_ids.is_empty() {
+            return Ok(());
+        }
+        self.storage
+            .execute(move |connection| {
+                let transaction = connection.transaction().map_err(StorageError::sqlite)?;
+                {
+                    let mut statement = transaction
+                        .prepare_cached(
+                            "UPDATE btcc_progress_events SET status='published' \
+                     WHERE event_id=?1 AND status='pending'",
+                        )
+                        .map_err(StorageError::sqlite)?;
+                    for event_id in event_ids {
+                        statement
+                            .execute([event_id])
+                            .map_err(StorageError::sqlite)?;
+                    }
+                }
+                transaction.commit().map_err(StorageError::sqlite)
             })
             .await
     }
