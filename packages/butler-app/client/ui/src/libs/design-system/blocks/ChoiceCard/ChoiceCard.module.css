@@ -122,8 +122,9 @@
    the icon step just above the title's text size, whatever size it was
    given: --icon-size-sm beside 13px titles, --icon-size-md beside the 15px
    titles of the 640px-and-below type ramp. Every glyph, logos included,
-   centres on the title's letters (the trimmed title box below): ProviderLogo
-   fits brand logos to the icon-pack grid, so no per-kind offset is needed. */
+   centres on the title's letters (Typo trims every text box to cap height and
+   baseline): ProviderLogo fits brand logos to the icon-pack grid, so no
+   per-kind offset is needed. */
 @media (width <= 640px) {
   .card:not([data-viewport="desktop"], [data-viewport="desktop"] *),
   .tile:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
@@ -167,21 +168,6 @@
 .titleRow > :first-child {
   flex: 0 1 auto;
   min-width: 0;
-}
-
-/* The glyph centres on the letters, not on the line box: the title's box is
-   trimmed to its cap height and alphabetic baseline, then padded back to one
-   line on both sides. Its centre is then the centre of the capitals in every
-   renderer (engines round the baseline inside the line box differently), and
-   the layout keeps its one-line height. Cap/alphabetic suits mixed Hangul and
-   Latin titles: Hangul syllables sit on the baseline and reach just above the
-   capitals, so their ink centre is within a few tenths of a pixel of it. */
-@supports (text-box: trim-both cap alphabetic) {
-  .titleRow > :first-child,
-  .tileTitle > * {
-    padding-block: calc((1lh - 1cap) / 2);
-    text-box: trim-both cap alphabetic;
-  }
 }
 
 .description {

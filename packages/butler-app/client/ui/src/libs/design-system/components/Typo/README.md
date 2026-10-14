@@ -48,6 +48,22 @@ the type scale (NavRow labels, message footers, pill buttons):
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 
+## Text box (cap to baseline)
+Every block-level Typo (paragraphs, headings, and any Typo that is a flex or
+grid item) is trimmed to cap height and the alphabetic baseline and padded
+back by `(1lh - 1cap) / 2` on both sides (`text-box: trim-both cap
+alphabetic`, under `@supports`). Each line keeps the role's integer
+line-height, and the box centre is the centre of the letters in every
+renderer, so icons beside text line up without per-component offsets.
+Inline Typo inside running text is unaffected. Renderers without `text-box`
+keep plain line boxes.
+
+Not trimmed: line-clamped Typo (`lineClamp`), because the trim cuts the last
+formatted line, which the clamp hides, and the next line would show below the
+clamp. Inputs, textareas, the composer editor and Markdown/code blocks are
+not Typo and keep plain line boxes, so caret placement and code layout do not
+change.
+
 ## Programmatic heading focus
 
 Headings with `tabIndex={-1}` may receive focus to announce a screen change.
