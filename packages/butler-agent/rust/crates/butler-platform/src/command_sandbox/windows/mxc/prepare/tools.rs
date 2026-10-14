@@ -76,7 +76,14 @@ fn collect(env: &BTreeMap<String, String>) -> Result<Toolchain, Error> {
     add_path(env, &mut input)?;
     if let Some(cargo) = &input.cargo_home {
         input.cargo_entries = fs::read_dir(cargo.as_str())?
-            .map(|e| e.map(|e| e.file_name().to_string_lossy().into()))
+            .map(|entry| -> Result<String, Error> {
+                let entry = entry?;
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if name.to_ascii_lowercase().starts_with("credentials") {
+                    physical(&entry.path())?;
+                }
+                Ok(name)
+            })
             .collect::<Result<_, _>>()?;
         for name in ["config", "config.toml"] {
             let path = Path::new(cargo.as_str()).join(name);

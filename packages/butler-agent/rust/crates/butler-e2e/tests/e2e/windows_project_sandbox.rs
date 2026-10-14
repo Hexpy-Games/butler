@@ -70,7 +70,7 @@ async fn desktop_project_write_cleans_drive_journal() -> Result<(), HarnessError
     let system = env
         .iter()
         .find(|(k, _)| k.eq_ignore_ascii_case("SYSTEMROOT"))
-        .ok_or("SYSTEMROOT missing")?
+        .ok_or_else(|| std::io::Error::other("SYSTEMROOT missing"))?
         .1;
     let subst = std::path::Path::new(system).join("System32/subst.exe");
     let before = std::process::Command::new(&subst).output()?;
@@ -81,7 +81,7 @@ async fn desktop_project_write_cleans_drive_journal() -> Result<(), HarnessError
         &root,
         &dirs.iter().map(|p| p.as_path()).collect::<Vec<_>>(),
         &[],
-    )?;
+    ).map_err(|error| std::io::Error::other(error.to_string()))?;
     let mut cmd = std::process::Command::new(&invocation.program);
     command_sandbox::add_arguments(&mut cmd, &invocation);
     let output = cmd.current_dir(&root).output()?;

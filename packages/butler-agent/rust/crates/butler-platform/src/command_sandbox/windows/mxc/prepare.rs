@@ -25,12 +25,16 @@ pub(super) struct PolicyFile {
     pub request: Value,
 }
 pub(super) fn physical(path: &Path) -> Result<WinPath, Error> {
-    Ok(WinPath::new(
-        dunce::canonicalize(path)?
-            .to_str()
-            .ok_or("non_unicode_path")?,
-    )?)
+    let final_path = dunce::canonicalize(path)?;
+    let normalized = WinPath::new(final_path.to_str().ok_or("non_unicode_path")?)?;
+    // Case-sensitive Windows directories must never turn a grant or denial
+    // into another entry when the portable comparison spelling is normalized.
+    if !same_file::is_same_file(&final_path, normalized.as_str())? {
+        return Err("ambiguous_final_path".into());
+    }
+    Ok(normalized)
 }
+
 pub(super) fn invocation(
     invocation: Invocation,
     host: &HashMap<String, String>,
