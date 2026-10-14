@@ -85,7 +85,9 @@ try {
   prepare();
   await oneClickLaunch();
   phase = "silent install";
+  const silentStarted = Date.now();
   run(join(release, `ButlerSetup-${from}-x64.exe`), ["--silent"]);
+  console.log(JSON.stringify({ phase, setupDurationMs: Date.now() - silentStarted }));
   await waitFor(() => existsSync(stub) && existsSync(updater), "per-user install");
   await waitFor(() => shortcuts.every(path => existsSync(path)), "Start Menu and Desktop shortcuts");
   assertShortcuts(shortcuts, true);
@@ -220,6 +222,8 @@ async function oneClickLaunch() {
     resolve("packages/butler-agent/rust/crates/butler-platform/scripts/capture-installer.ps1"),
     "-Setup", join(release, `ButlerSetup-${from}-x64.exe`),
     "-Output", resolve("dist/startup-installer-evidence/install")]);
+  const setup = readJson(resolve("dist/startup-installer-evidence/install/capture-process.json"));
+  console.log(JSON.stringify({ phase, setupDurationMs: setup?.duration_ms, setupExitCode: setup?.exit_code }));
   await waitFor(() => Boolean(readJson(join(data, "app/runtime/foreground/instance.json"))?.app_pid), "normal Setup auto-launch");
   page = await electronPage(debugPort);
   await proof(from);
