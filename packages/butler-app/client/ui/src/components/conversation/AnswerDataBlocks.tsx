@@ -3,11 +3,11 @@ import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "rec
 import type { ChartBlock, TableBlock } from "../../../../shared/app-contracts";
 import type { AnswerGalleryView } from "../../../../shared/answer-blocks-view";
 import { Button, ButtonContainer, ChartContainer, ChartLegend, ChartTooltip, ChartTooltipContent, CHART_COLORS, chartColor,
-  animateMotion, motionDuration, Clickable, Collapsible, CopyButton, IconButton, Library, MarkdownContent, MarkdownTable, MediaFrame, ScrollArea, Skeleton, Stack, Typo } from "@/butler-ds";
+  animateMotion, motionDuration, Clickable, Collapsible, CopyButton, DoneIconButton, Library, MarkdownContent, MarkdownTable, MediaFrame, ScrollArea, Skeleton, Stack, Typo } from "@/butler-ds";
 import { AnswerItem, useAnswerItemRef } from "./AnswerItem";
 import { faviconSrc } from "@/app/favicons";
 import { openImageViewer } from "../media/imageViewerState";
-import { answerImages, answerPart, answerSource, runAnswerAction, saveAnswerItem, useAnswerSession } from "./answerBlockActions";
+import { answerActionFailed, answerImages, answerPart, answerSource, saveAnswerItem, useAnswerSession } from "./answerBlockActions";
 import { appCopy, useAppLocale } from "@/app/copy";
 
 export const AnswerSourceLine = memo(function AnswerSourceLine({ item }: { item: { source?: string; checked?: string } }) {
@@ -66,7 +66,8 @@ export const AnswerGallery = memo(function AnswerGallery({ block, incoming }: { 
       </Clickable>
       {item.caption ? <Typo.Caption>{item.caption}</Typo.Caption> : null}
       <ButtonContainer size="icon-sm">
-        <IconButton label={copy.saveToLibrary} onClick={(event) => { const part = answerPart(event.currentTarget); runAnswerAction(() => saveAnswerItem({ ...item, title: item.caption ?? copy.image }, sessionId, part)); }}><Library size="sm" /></IconButton>
+        <DoneIconButton icon={<Library size="sm" />} label={copy.saveToLibrary} doneLabel={copy.savedToLibrary} announce={false} onError={answerActionFailed}
+          onAction={(event) => saveAnswerItem({ ...item, title: item.caption ?? copy.image }, sessionId, answerPart(event.currentTarget))} />
         <CopyButton label={copy.copy} copiedLabel={copy.copied} text={item.caption ?? item.source ?? item.img} />
       </ButtonContainer>
     </Stack></AnswerItem></Stack>)}
