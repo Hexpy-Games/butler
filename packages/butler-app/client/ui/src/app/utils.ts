@@ -1,7 +1,8 @@
 import { retainAnswerBlocks } from "./stableAnswerBlocks";
 import { sessionDisplayTitle } from "./sessionTitle.ts";
 import { ACTIVE_TURN_STATES } from "./constants.ts";
-import { appCopy, interfaceText } from "./copy.ts";
+import { reasoningEffortLabel } from "../../../../../butler-i18n/src/index.ts";
+import { appCopy, getAppLocale, interfaceText } from "./copy.ts";
 import {
   adaptiveShellThemeClasses,
   type AdaptiveShellTheme,
@@ -1908,10 +1909,7 @@ export function tokenWindowLabel(tokens?: number): string {
 }
 
 export function reasoningLabel(value: ReasoningEffort | string): string {
-  if (value === "none") return appCopy.interfaceFeedback.instant;
-  if (value === "xhigh") return appCopy.interfaceFeedback.extraHigh;
-  if (value === "max") return appCopy.interfaceFeedback.max;
-  return value ? value[0].toUpperCase() + value.slice(1) : appCopy.interfaceFeedback.medium;
+  return reasoningEffortLabel(value, getAppLocale());
 }
 
 export function reasoningOptionLabel(
@@ -1935,7 +1933,7 @@ export function reasoningBudgetSummary(
   model: AppModelSummary | undefined,
   value: ReasoningEffort,
 ): string {
-  if (value === "none") return appCopy.interfaceFeedback.instant;
+  if (value === "none") return reasoningLabel(value);
   if (model?.provider_id === "local") return reasoningOptionLabel(model, value);
   const budget = model?.reasoning_budget_tokens?.[value];
   if (typeof budget === "number" && Number.isFinite(budget) && budget > 0) {
