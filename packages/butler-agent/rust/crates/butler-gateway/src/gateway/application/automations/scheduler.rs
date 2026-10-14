@@ -52,7 +52,9 @@ impl AutomationScheduler {
             loop {
                 #[cfg(debug_assertions)]
                 NEXT_DUE_READS.fetch_add(1, Ordering::Relaxed);
-                let next = match app.next_automation_due().await {
+                let lookup = app.next_automation_due().await;
+                let read_failed = lookup.is_err();
+                let next = match lookup {
                     Ok(next) => {
                         read_failing = false;
                         next
@@ -94,7 +96,7 @@ impl AutomationScheduler {
                     None => tokio::select! {
                         () = cancel.cancelled() => break,
                         () = &mut notified => { let _ = dispatch(&app, &mut dispatch_failing).await; },
-                        () = tokio::time::sleep(butler_core::wall_clock::MAX_WAIT_SLICE), if read_failing => {},
+                        () = tokio::time::sleep(butler_core::wall_clock::MAX_WAIT_SLICE), if read_failed => {},
                     },
                 }
             }
@@ -123,8 +125,8 @@ async fn dispatch(app: &AppApplication, failing: &mut bool) -> bool {
 
 async fn record_failure(app: &AppApplication, failing: &mut bool) {
     if !*failing {
-        *failing = true;
-        app.record_automation_scheduler_error("automation_scheduler_failed")
+        *failing = app
+            .record_automation_scheduler_error("automation_scheduler_failed")
             .await;
     }
 }
