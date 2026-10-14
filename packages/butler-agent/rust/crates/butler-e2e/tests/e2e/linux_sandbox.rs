@@ -6,6 +6,7 @@ mod project_boundaries;
 mod project_write;
 mod tiers;
 mod tools;
+mod windows_drive;
 use super::access_tiers::stub;
 
 use butler_e2e::e2e::{

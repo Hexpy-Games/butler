@@ -4,6 +4,7 @@ mod generated;
 mod links;
 mod mountns;
 mod process;
+mod rediscovery;
 mod seccomp;
 
 use std::collections::HashMap;
@@ -34,10 +35,18 @@ struct Policy {
     write_denied: Vec<PathBuf>,
     #[serde(default)]
     mountns: bool,
+    #[serde(default)]
+    mountns_plus: bool,
     #[serde(skip)]
     secrets: Vec<PathBuf>,
     #[serde(skip)]
     mask_scopes: Vec<PathBuf>,
+    /// Other mount views of the writable roots, withheld as a whole.
+    #[serde(skip)]
+    views: Vec<PathBuf>,
+    /// Device of each mount target, read before any mask is mounted.
+    #[serde(skip)]
+    mounts: HashMap<PathBuf, u64>,
 }
 
 fn helper() -> std::io::Result<PathBuf> {
@@ -214,8 +223,11 @@ pub(super) fn read_only_contained(
         writable: Vec::new(),
         write_denied: Vec::new(),
         mountns: false,
+        mountns_plus: false,
         secrets: Vec::new(),
         mask_scopes: Vec::new(),
+        views: Vec::new(),
+        mounts: HashMap::new(),
     };
     let mut arguments = vec![
         "--policy".into(),
@@ -253,27 +265,11 @@ pub(super) fn project_write(
     let real = root.canonicalize()?;
     // The helper inventories project secrets immediately before containment.
     // Do not repeat a potentially huge inventory in the exec argument block.
+    let mut walk = rediscovery::Rediscovery::new(root, &real)?;
     let denied: Vec<_> = denied
         .iter()
         .copied()
-        .filter(|path| {
-            let relative = path
-                .strip_prefix(root)
-                .or_else(|_| path.strip_prefix(&real));
-            let secret = relative.is_ok_and(|relative| {
-                relative
-                    .components()
-                    .any(|component| super::secret_name(&component.as_os_str().to_string_lossy()))
-            });
-            let inventoried = path.canonicalize().is_ok_and(|path| {
-                path.strip_prefix(&real).is_ok_and(|relative| {
-                    relative.components().any(|component| {
-                        super::secret_name(&component.as_os_str().to_string_lossy())
-                    })
-                })
-            });
-            !secret || !inventoried
-        })
+        .filter(|path| !walk.reaches(path))
         .collect();
     let policy = Policy {
         // Outside reads match ReadOnly. Denials of existing project secrets
@@ -289,8 +285,11 @@ pub(super) fn project_write(
         tcp: tcp_available(),
         project: Some(real),
         mountns: mountns::available(),
+        mountns_plus: mountns::tier() == mountns::Tier::MPlus,
         secrets: Vec::new(),
         mask_scopes: Vec::new(),
+        views: Vec::new(),
+        mounts: HashMap::new(),
         writable: writable
             .iter()
             .map(|path| path.canonicalize())
@@ -317,13 +316,13 @@ pub(super) fn trampoline() -> Result<(), Error> {
     let started = std::time::Instant::now();
     let mut arguments = std::env::args().skip(1);
     match arguments.next().as_deref() {
-        Some("--probe-seccomp") => return seccomp::apply(),
+        Some("--probe-seccomp") => return seccomp::apply(false),
         Some("--probe-mountns-child") => return mountns::probe_child(),
         Some("--probe-mountns") => {
-            if mountns::available() {
-                println!("M");
-            } else {
-                println!("L {}", mountns::reason());
+            match mountns::tier() {
+                mountns::Tier::MPlus => println!("M+"),
+                mountns::Tier::M => println!("M"),
+                mountns::Tier::L => println!("L {}", mountns::reason()),
             }
             return Ok(());
         }
@@ -336,13 +335,15 @@ pub(super) fn trampoline() -> Result<(), Error> {
     }
     let program = arguments.next().ok_or("missing program")?;
     if let Some(root) = &policy.project {
-        let secrets = discover_project_secrets(root)?;
-        policy.denied.extend(secrets.iter().cloned());
-        policy.write_denied.extend(secrets.iter().cloned());
-        policy.secrets = secrets;
+        // The parent sends only denials the walk cannot rediscover; resolve
+        // those fully, and discovered entries only where they are symlinks.
+        let secrets = complement::entry_aliases(discover_project_secrets(root)?)?;
         policy.denied = complement::aliases(&policy.denied)?;
         policy.write_denied = complement::aliases(&policy.write_denied)?;
         policy.credentials = complement::aliases(&policy.credentials)?;
+        policy.denied.extend(secrets.iter().cloned());
+        policy.write_denied.extend(secrets.iter().cloned());
+        policy.secrets = secrets;
     } else {
         for root in &policy.allowed {
             policy.denied.extend(complement::project_secrets(root)?);
@@ -352,7 +353,7 @@ pub(super) fn trampoline() -> Result<(), Error> {
     }
     mountns::expand_views(&mut policy)?;
     #[cfg(feature = "test-support")]
-    let mounted = install_policy(&policy)?;
+    let tier = install_policy(&policy)?;
     #[cfg(not(feature = "test-support"))]
     install_policy(&policy)?;
     #[cfg(feature = "test-support")]
@@ -360,7 +361,11 @@ pub(super) fn trampoline() -> Result<(), Error> {
         eprintln!(
             "butler_sandbox_setup_us={} tier={}",
             started.elapsed().as_micros(),
-            if mounted { "M" } else { "L" }
+            match tier {
+                mountns::Tier::MPlus => "M+",
+                mountns::Tier::M => "M",
+                mountns::Tier::L => "L",
+            }
         );
     }
     // Dropped already by tool_environment; also remove it for direct invocations.
@@ -382,32 +387,58 @@ pub(super) fn prepare_project_write(
     generated::prepare(root, data)
 }
 
-fn install_policy(policy: &Policy) -> Result<bool, Error> {
+fn install_policy(policy: &Policy) -> Result<mountns::Tier, Error> {
     let cwd = std::env::current_dir()?;
     if policy.project.is_some() {
         links::validate(policy)?;
     }
-    let mounted = policy.mountns && policy.project.is_some() && mountns::mask(policy).is_ok();
-    if mounted {
+    let masked = if policy.mountns && policy.project.is_some() {
+        mountns::mask(policy).ok()
+    } else {
+        None
+    };
+    let mounted = masked.is_some();
+    // M+ only adds read-only mounts; a failure keeps M's metadata denial.
+    let sealed = masked
+        .flatten()
+        .is_some_and(|sealing| sealing.seal(&policy.views).is_ok());
+    if policy.mountns {
+        // The old cwd may name the unmasked mount below new ones, even after
+        // a partial mask that fell back to Tier L.
         nix::unistd::chdir(&cwd)?;
     }
     let mut rules = ruleset(policy.tcp)?;
+    let hidden: Vec<_> = if mounted {
+        policy
+            .secrets
+            .iter()
+            .chain(&policy.views)
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
+    };
     complement::apply(
         &mut rules,
         &policy.denied,
         &policy.allowed,
         &policy.credentials,
-        if mounted { &policy.secrets } else { &[] },
+        &hidden,
+        &policy.mounts,
     )?;
     if policy.project.is_some() {
-        complement::project_write(&mut rules, policy, mounted)?;
+        complement::project_write(&mut rules, policy, mounted, &policy.mounts)?;
     }
     let status = rules.restrict_self()?;
     if status.ruleset != RulesetStatus::FullyEnforced || !status.no_new_privs {
         return Err("Landlock was not fully enforced".into());
     }
-    seccomp::apply()?;
-    Ok(mounted)
+    seccomp::apply(sealed)?;
+    Ok(match (mounted, sealed) {
+        (true, true) => mountns::Tier::MPlus,
+        (true, false) => mountns::Tier::M,
+        _ => mountns::Tier::L,
+    })
 }
 
 #[cfg(feature = "test-support")]
@@ -421,4 +452,8 @@ pub(super) fn cleanup_generated(root: &Path, data: &Path) -> std::io::Result<()>
 
 pub(super) fn mount_tier_available() -> bool {
     mountns::available()
+}
+
+pub(super) fn metadata_tier_available() -> bool {
+    mountns::tier() == mountns::Tier::MPlus
 }

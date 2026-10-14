@@ -78,6 +78,10 @@ pub const fn project_write_mechanism() -> &'static str {
 /// Host-specific limits reported after a failed contained command.
 pub fn project_write_limits() -> &'static str {
     #[cfg(target_os = "linux")]
+    if linux::metadata_tier_available() {
+        return "This command ran contained to the project folder: no writes elsewhere, no network, and existing secrets are masked. New secret names are swept after the run. If it needs more access, run it again with sandbox \"none\"; the user will be asked.";
+    }
+    #[cfg(target_os = "linux")]
     if linux::mount_tier_available() {
         return "This command ran contained to the project folder: no writes elsewhere, no network, and existing secrets are masked. New secret names are swept after the run. Metadata changes are blocked. If it needs more access, run it again with sandbox \"none\"; the user will be asked.";
     }

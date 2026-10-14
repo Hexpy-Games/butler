@@ -64,6 +64,7 @@ fn run_probe(helper: &Path) -> Tier {
         .ok()
         .filter(|output| output.status.success())
         .map_or(Tier::L, |output| match output.stdout.as_slice() {
+            b"M+\n" => Tier::MPlus,
             b"M\n" => Tier::M,
             _ => Tier::L,
         })

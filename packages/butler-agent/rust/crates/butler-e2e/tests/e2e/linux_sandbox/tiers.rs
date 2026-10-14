@@ -55,11 +55,13 @@ async fn uniform_project_write_tier_matrix() -> Result<(), HarnessError> {
             "mount alias exposed secret: {output:?}"
         );
     }
-    let mut directory_listing_leaked = false;
     for command in ["cat .env", "head config/.env", "cat .git/config", "ls .git"] {
         let output = run(invoke(command, &root, &setup), &root, &setup.sandbox.home);
         if command == "ls .git" && !mounted {
-            directory_listing_leaked = !output.stdout.is_empty();
+            // Landlock cannot withhold READ_DIR below a listable parent, so
+            // Tier L shows names only (as ReadOnly does); `.git` targets are
+            // Protected in admission and ask first. Contents stay denied.
+            assert_eq!(output.stdout, b"config\nhooks\n", "{output:?}");
         } else {
             assert!(output.stdout.is_empty(), "{command}: {output:?}");
         }
@@ -138,10 +140,6 @@ async fn uniform_project_write_tier_matrix() -> Result<(), HarnessError> {
         std::fs::read_to_string(root.join("sub/alias-output"))?,
         "alias\n"
     );
-    assert!(
-        !directory_listing_leaked,
-        "Tier L1 READ_DIR exposes secret directory names; the specification also requires retaining its read complement"
-    );
     setup.sandbox.mark_success();
     Ok(())
 }
@@ -157,29 +155,28 @@ async fn generated_directory_crash_recovery_and_top_level_sweep() -> Result<(), 
     let root = &setup.sandbox.workspace;
     std::fs::write(root.join(".gitignore"), "empty\nkept\n")?;
     command_sandbox::prepare_project_write(root, &setup.sandbox.data)?;
-    if !command_sandbox::capabilities().project_write.is_enforced() {
-        std::fs::write(root.join("kept/output"), "complete")?;
-        let journals = setup.sandbox.data.join("sandbox-generated");
-        let dir = std::fs::read_dir(journals)?.next().unwrap()?.path();
-        let journal = std::fs::read_dir(&dir)?
-            .filter_map(Result::ok)
-            .find(|entry| {
-                entry
-                    .path()
-                    .extension()
-                    .is_some_and(|extension| extension == "json")
-            })
-            .unwrap()
-            .path();
-        std::fs::rename(journal, dir.join("2147483647.json"))?;
-        std::fs::write(root.join(".gitignore"), "")?;
-        command_sandbox::prepare_project_write(root, &setup.sandbox.data)?;
-        assert!(!root.join("empty").exists());
-        assert_eq!(
-            std::fs::read_to_string(root.join("kept/output"))?,
-            "complete"
-        );
-    }
+    // Every tier prepares: a project-specific mask failure falls back to L.
+    std::fs::write(root.join("kept/output"), "complete")?;
+    let journals = setup.sandbox.data.join("sandbox-generated");
+    let dir = std::fs::read_dir(journals)?.next().unwrap()?.path();
+    let journal = std::fs::read_dir(&dir)?
+        .filter_map(Result::ok)
+        .find(|entry| {
+            entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "json")
+        })
+        .unwrap()
+        .path();
+    std::fs::rename(journal, dir.join("2147483647.json"))?;
+    std::fs::write(root.join(".gitignore"), "")?;
+    command_sandbox::prepare_project_write(root, &setup.sandbox.data)?;
+    assert!(!root.join("empty").exists());
+    assert_eq!(
+        std::fs::read_to_string(root.join("kept/output"))?,
+        "complete"
+    );
     let before = command_sandbox::discover_project_secrets(root)?;
     // Cleanup must include depth zero even on L (e.g. externally planted names).
     std::fs::write(root.join(".env"), "top")?;
@@ -193,6 +190,45 @@ async fn generated_directory_crash_recovery_and_top_level_sweep() -> Result<(), 
 }
 
 #[tokio::test]
+async fn project_fallback_to_l_keeps_declared_directories() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(command_sandbox::linux_test_host(), "Linux tier fallback");
+    let mut setup = Setup::new("LINUX-TIER-FALLBACK")?;
+    let root = setup.sandbox.workspace.clone();
+    std::fs::create_dir_all(setup.sandbox.data.join("tmp/project-write"))?;
+    std::fs::write(root.join(".gitignore"), "target\n")?;
+    std::fs::write(root.join("visible.txt"), "public")?;
+    // A mount follows symlinks, so a secret-named symlink cannot be masked
+    // by name: this project falls back to Tier L even on an M host.
+    butler_platform::secure_fs::symlink(&root.join("visible.txt"), &root.join(".env.link"))?;
+    let preparation = command_sandbox::prepare_project_write(&root, &setup.sandbox.data)?;
+    let inventory = command_sandbox::discover_project_secrets(&root)?;
+    let invocation = invoke(
+        "echo complete > target/output; cat .env.link",
+        &root,
+        &setup,
+    );
+    let output = Command::new(invocation.program)
+        .args(invocation.arguments)
+        .current_dir(&root)
+        .env("HOME", &setup.sandbox.home)
+        .env("BUTLER_TEST_SANDBOX_TIMINGS", "1")
+        .output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("tier=L"), "{output:?}");
+    assert_eq!(output.stdout, b"", "secret symlink readable: {output:?}");
+    assert_eq!(
+        std::fs::read_to_string(root.join("target/output"))?,
+        "complete\n"
+    );
+    command_sandbox::sweep_new_secrets(&root, &inventory, &setup.sandbox.data)?;
+    drop(preparation);
+    assert_eq!(std::fs::read_to_string(root.join("visible.txt"))?, "public");
+    setup.sandbox.mark_success();
+    Ok(())
+}
+
+#[tokio::test]
 async fn perf_five_thousand_secret_mounts_and_sweep() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
@@ -200,19 +236,50 @@ async fn perf_five_thousand_secret_mounts_and_sweep() -> Result<(), HarnessError
         "Linux secret mount latency"
     );
     let mut setup = Setup::new("LINUX-SECRET-MOUNTS")?;
-    let root = &setup.sandbox.workspace;
-    std::fs::create_dir_all(root.join("node_modules"))?;
     std::fs::create_dir_all(setup.sandbox.data.join("tmp/project-write"))?;
-    for index in 0..5000 {
-        std::fs::write(root.join(format!("node_modules/{index}.pem")), "protected")?;
+    // "flat": one directory of secrets only (one collapsed mask on M).
+    // "mixed": every secret beside a public file (one mask per secret).
+    for layout in ["flat", "mixed"] {
+        let root = setup.sandbox.workspace.join(layout);
+        let secrets: Vec<_> = (0..5000)
+            .map(|index| match layout {
+                "flat" => root.join(format!("node_modules/{index}.pem")),
+                _ => root.join(format!("node_modules/p{index}/key.pem")),
+            })
+            .collect();
+        for secret in &secrets {
+            std::fs::create_dir_all(secret.parent().unwrap())?;
+            std::fs::write(secret, "protected")?;
+            if layout == "mixed" {
+                std::fs::write(secret.with_file_name("index.js"), "public")?;
+            }
+        }
+        measure_secret_project(&setup, &root, layout)?;
+        for secret in &secrets {
+            assert_eq!(std::fs::read_to_string(secret)?, "protected");
+        }
     }
-    let mut setup_times = Vec::new();
-    let mut teardown_times = Vec::new();
+    setup.sandbox.mark_success();
+    Ok(())
+}
+
+fn measure_secret_project(setup: &Setup, root: &Path, layout: &str) -> Result<(), HarnessError> {
+    let (mut setup_times, mut teardown_times, mut tier) = (Vec::new(), Vec::new(), String::new());
     for _ in 0..5 {
         let start = Instant::now();
         let inventory = command_sandbox::discover_project_secrets(root)?;
         assert_eq!(inventory.len(), 5000);
-        let invocation = invoke("true", root, &setup);
+        // Like guided commands, deny the data folder and the inventory too.
+        let mut denied = vec![setup.sandbox.data.as_path()];
+        denied.extend(inventory.iter().map(PathBuf::as_path));
+        let invocation = command_sandbox::project_write_shell(
+            "cat node_modules/*.pem node_modules/*/key.pem 2>/dev/null; echo complete",
+            &HashMap::from([("HOME".into(), setup.sandbox.home.display().to_string())]),
+            root,
+            &[&setup.sandbox.data.join("tmp/project-write")],
+            &denied,
+        )
+        .unwrap();
         let parent_setup = start.elapsed();
         let command_started = Instant::now();
         let output = Command::new(invocation.program)
@@ -223,34 +290,32 @@ async fn perf_five_thousand_secret_mounts_and_sweep() -> Result<(), HarnessError
             .output()?;
         let total = command_started.elapsed();
         assert!(output.status.success(), "{output:?}");
+        // Complete, and no secret content: every read is masked or denied.
+        assert_eq!(output.stdout, b"complete\n");
         let timing = String::from_utf8(output.stderr).unwrap();
-        let micros = timing
-            .split_whitespace()
-            .find_map(|field| field.strip_prefix("butler_sandbox_setup_us="))
-            .unwrap()
-            .parse::<u64>()
-            .unwrap();
-        let kernel_setup = Duration::from_micros(micros);
+        let field = |name: &str| {
+            timing
+                .split_whitespace()
+                .find_map(|field| field.strip_prefix(name))
+                .unwrap()
+                .to_owned()
+        };
+        let kernel_setup =
+            Duration::from_micros(field("butler_sandbox_setup_us=").parse().unwrap());
+        tier = field("tier=");
         setup_times.push(parent_setup + kernel_setup);
         let cleanup = Instant::now();
         let moved = command_sandbox::sweep_new_secrets(root, &inventory, &setup.sandbox.data)?;
         assert_eq!(moved, Vec::<PathBuf>::new());
         teardown_times.push(total.saturating_sub(kernel_setup) + cleanup.elapsed());
     }
-    for index in 0..5000 {
-        assert_eq!(
-            std::fs::read_to_string(root.join(format!("node_modules/{index}.pem")))?,
-            "protected"
-        );
-    }
     setup_times.sort();
     teardown_times.sort();
     eprintln!(
-        "5k pem: setup p50={:.3} ms, teardown+exec p50={:.3} ms",
+        "5k pem {layout} tier={tier}: setup p50={:.3} ms, teardown+exec p50={:.3} ms",
         setup_times[2].as_secs_f64() * 1000.0,
         teardown_times[2].as_secs_f64() * 1000.0
     );
-    setup.sandbox.mark_success();
     Ok(())
 }
 

@@ -1,4 +1,4 @@
-//! Literal .gitignore directory declarations for the root-withheld tier.
+//! Literal .gitignore directory declarations, pre-created for Tier L.
 use rustix::fs::{AtFlags, CWD, Mode, OFlags, mkdirat, openat, unlinkat};
 use sha2::{Digest, Sha256};
 use std::io;
@@ -80,9 +80,9 @@ pub(super) fn prepare(
         .map_err(|(_, error)| io::Error::from(error))?;
     let prepared = super::super::ProjectWritePreparation { _lease: lease };
     cleanup(root, data, true)?;
-    if super::mountns::available() {
-        return Ok(prepared);
-    }
+    // Prepare on every tier: a project-specific mask failure falls back to
+    // Tier L inside the helper, after this point. Tier M simply finds the
+    // directories present, and empty ones are removed after the run.
     let fd = openat(
         CWD,
         root,

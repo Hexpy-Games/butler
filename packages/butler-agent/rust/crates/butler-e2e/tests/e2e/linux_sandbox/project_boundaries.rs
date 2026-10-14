@@ -55,9 +55,23 @@ async fn project_write_kernel_boundaries_and_quarantine() -> Result<(), HarnessE
     butler_platform::secure_fs::symlink(&outside, &root.join("src/outward"))?;
     let network = std::net::TcpListener::bind("127.0.0.1:0")?;
     network.set_nonblocking(true)?;
+    // Tier M masks secrets (reads are empty) and grants the project root;
+    // Tier L denies those reads and top-level creation or rewrites.
+    let mounted = command_sandbox::capabilities().project_write.is_enforced();
+    let root_writes: [String; 5] = [
+        "cat .env".into(),
+        "echo new > new-top.txt".into(),
+        "mkdir new-dir".into(),
+        open_pipe.into(),
+        "sed -i s/original/changed/ top.txt".into(),
+    ];
+    for command in root_writes {
+        let output = run(invoke(&command, &setup), root, &setup.sandbox.home);
+        assert_eq!(output.status.success(), mounted, "{command}: {output:?}");
+        assert!(output.stdout.is_empty(), "protected contents escaped");
+    }
     let commands = [
         "echo changed > .git/config".into(),
-        "cat .env".into(),
         "rm .env".into(),
         "mv .git sub/git-copy".into(),
         format!("ln '{}' src/outside-link", outside.display()),
@@ -66,12 +80,8 @@ async fn project_write_kernel_boundaries_and_quarantine() -> Result<(), HarnessE
         "cat apps/x/private.pem".into(),
         "echo changed > apps/x/.env".into(),
         "rm apps/x/.env".into(),
-        "echo new > new-top.txt".into(),
-        "mkdir new-dir".into(),
-        open_pipe.into(),
         "python3 -c 'import os; os.setsid()'".into(),
         "python3 -c 'import os; os.setpgid(0, 0)'".into(),
-        "sed -i s/original/changed/ top.txt".into(),
         format!(
             "python3 -c \"import socket; socket.create_connection(('127.0.0.1', {}))\"",
             network.local_addr()?.port()
@@ -89,8 +99,11 @@ async fn project_write_kernel_boundaries_and_quarantine() -> Result<(), HarnessE
         );
     }
     assert_eq!(std::fs::read_to_string(&outside)?, "outside-marker");
-    assert_eq!(std::fs::read_to_string(root.join("top.txt"))?, "original");
-    assert!(!root.join("new-top.txt").exists());
+    assert_eq!(
+        std::fs::read_to_string(root.join("top.txt"))?,
+        if mounted { "changed" } else { "original" }
+    );
+    assert_eq!(root.join("new-top.txt").exists(), mounted);
     assert!(!root.join("src/outside-link").exists());
     assert_eq!(
         network.accept().unwrap_err().kind(),

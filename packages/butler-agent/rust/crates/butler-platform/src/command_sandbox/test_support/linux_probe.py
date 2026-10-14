@@ -38,7 +38,7 @@ for encoding in encodings:
         denied(sockets | encoding, family, socket.SOCK_STREAM, 0)
         if family != socket.AF_UNIX:
             denied(pairs | encoding, family, socket.SOCK_STREAM, 0, 0)
-    for kind in (socket.SOCK_DGRAM, socket.SOCK_SEQPACKET, socket.SOCK_RAW):
+    for kind in (socket.SOCK_DGRAM, socket.SOCK_RAW):
         denied(pairs | encoding, socket.AF_UNIX, kind, 0, 0)
     for protocol in (1, 3, -1):
         denied(pairs | encoding, socket.AF_UNIX, socket.SOCK_STREAM, protocol, 0)
@@ -51,10 +51,16 @@ for encoding in encodings:
         # Invalid arguments would yield EFAULT/EBADF/ENOSYS without seccomp.
         denied(number | encoding, -1, 0, 0, 0, 0, 0)
 
-# Allowed anonymous streams remain local, including both permitted flags.
-for flags in (0, socket.SOCK_CLOEXEC, socket.SOCK_NONBLOCK,
-              socket.SOCK_CLOEXEC | socket.SOCK_NONBLOCK):
-    a, b = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM | flags)
+# Allowed anonymous connected pairs remain local, including both permitted
+# flags. A connected seqpacket socket ignores a sendto address.
+for kind, flags in [(kind, flags)
+                    for kind in (socket.SOCK_STREAM, socket.SOCK_SEQPACKET)
+                    for flags in (0, socket.SOCK_CLOEXEC, socket.SOCK_NONBLOCK,
+                                  socket.SOCK_CLOEXEC | socket.SOCK_NONBLOCK)]:
+    a, b = socket.socketpair(socket.AF_UNIX, kind | flags)
+    if kind == socket.SOCK_SEQPACKET:
+        a.sendto(b'addressed', '/missing-external-peer')
+        assert b.recv(100) == b'addressed'
     a.setblocking(False)
     assert not a.getblocking()
     a.setblocking(True)

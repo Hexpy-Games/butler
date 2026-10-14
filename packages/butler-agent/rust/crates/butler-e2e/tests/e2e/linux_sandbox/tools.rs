@@ -93,7 +93,6 @@ async fn offline_generated_toolchains() -> Result<(), HarnessError> {
     );
     let mut setup = Setup::new("LINUX-OFFLINE-TOOLCHAINS")?;
     std::fs::create_dir_all(setup.sandbox.data.join("tmp/project-write"))?;
-    let mounted = command_sandbox::capabilities().project_write.is_enforced();
     let mut failures = Vec::new();
     for declared in [false, true] {
         for tool in ["npm", "cargo", "python"] {
@@ -105,14 +104,15 @@ async fn offline_generated_toolchains() -> Result<(), HarnessError> {
             let command = fixture(tool, &root, &setup)?;
             let preparation = command_sandbox::prepare_project_write(&root, &setup.sandbox.data)?;
             let inventory = command_sandbox::discover_project_secrets(&root)?;
-            let output = run(invoke(&command, &root, &setup), &root, &setup.sandbox.home);
+            let invocation = invoke(&command, &root, &setup);
+            let policy: Value = serde_json::from_str(&invocation.arguments[1])?;
+            let output = run(invocation, &root, &setup.sandbox.home);
+            let stderr = String::from_utf8_lossy(&output.stderr);
             eprintln!(
-                "toolchain {tool} declared={declared} exit={} stderr={}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr)
+                "toolchain {tool} declared={declared} exit={} stderr={stderr}",
+                output.status
             );
             let moved = command_sandbox::sweep_new_secrets(&root, &inventory, &setup.sandbox.data)?;
-            eprintln!("toolchain {tool} quarantined={}", moved.len());
             for path in moved {
                 assert!(!path.exists(), "new secret remained in project");
             }
@@ -124,29 +124,32 @@ async fn offline_generated_toolchains() -> Result<(), HarnessError> {
                     "fn main() {}\n"
                 );
             }
-            if !declared && !command_sandbox::capabilities().project_write.is_enforced() {
-                assert!(!output.status.success(), "undeclared {tool}: {output:?}");
-            }
-            if (mounted || declared) && !output.status.success() {
+            // M+ runs every tool. Tier L creates no top-level names; declared
+            // directories admit Cargo, while npm's cache and venv need chmod,
+            // which only M+ can scope to the project. Those must ask.
+            let expected = policy["mountns_plus"] == true
+                || (policy["mountns"] == true && tool == "cargo")
+                || (declared && tool == "cargo");
+            if output.status.success() != expected {
                 failures.push(format!("{tool} declared={declared}: {}", output.status));
             }
-            if output.status.success() {
-                let generated = match tool {
-                    "npm" => "node_modules/local",
-                    "cargo" => "target/debug/minimal",
-                    _ => ".venv/bin/python",
-                };
-                assert!(
-                    root.join(generated).exists(),
-                    "missing complete {tool} output"
-                );
+            // Any contained failure carries the approval retry hint
+            // (project_write_limits); a refusal needs no stderr signature.
+            if !output.status.success() {
+                continue;
             }
+            let generated = match tool {
+                "npm" => "node_modules/local/package.json",
+                "cargo" => "target/debug/minimal",
+                _ => ".venv/bin/pip",
+            };
+            assert!(
+                root.join(generated).exists(),
+                "missing complete {tool} output"
+            );
         }
     }
-    assert!(
-        failures.is_empty(),
-        "required toolchains failed: {failures:?}"
-    );
+    assert!(failures.is_empty(), "toolchain tier mismatch: {failures:?}");
     setup.sandbox.mark_success();
     Ok(())
 }
@@ -185,7 +188,15 @@ fn fixture(tool: &str, root: &Path, setup: &Setup) -> Result<String, HarnessErro
                 root.join("Cargo.lock"),
                 "version = 4\n[[package]]\nname = \"minimal\"\nversion = \"0.1.0\"\n",
             )?;
-            Ok("RUSTC_WRAPPER= CARGO_TARGET_DIR=target cargo build --offline -j 1".into())
+            // The default system linker, with guided commands' scratch TMPDIR;
+            // a build host's own linker override (e.g. mold, which aborts when
+            // Tier L denies fchmod) is not the toolchain under test.
+            Ok(format!(
+                "env -u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER \
+                 -u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS TMPDIR='{}' \
+                 RUSTC_WRAPPER= CARGO_TARGET_DIR=target cargo build --offline -j 1",
+                setup.sandbox.data.join("tmp/project-write").display()
+            ))
         }
         _ => Ok("python3 -m venv .venv".into()),
     }

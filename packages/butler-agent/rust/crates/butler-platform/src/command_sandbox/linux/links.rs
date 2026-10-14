@@ -5,7 +5,7 @@ use super::super::project_secrets::portable::{
 };
 use super::Error;
 use rustix::fs::{AtFlags, FileType, statat};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 
@@ -19,28 +19,32 @@ struct Group {
 
 pub(super) fn validate(policy: &super::Policy) -> Result<(), Error> {
     let root = policy.project.as_deref().ok_or("missing project")?;
-    let strict: BTreeSet<_> = policy
+    let strict: HashSet<_> = policy
         .credentials
         .iter()
         .chain(&policy.secrets)
         .cloned()
         .collect();
+    let mut protected = strict.clone();
+    protected.extend(policy.write_denied.iter().cloned());
     let mut walk = Walk {
-        protected: BTreeSet::new(),
+        protected,
         groups: HashMap::new(),
         directories: HashSet::new(),
         visited: 0,
     };
     for path in std::iter::once(root).chain(policy.writable.iter().map(PathBuf::as_path)) {
-        walk.protected = strict.clone();
-        walk.protected.extend(
-            policy
-                .write_denied
-                .iter()
-                .filter(|denied| path == root || !path.starts_with(denied))
-                .cloned(),
-        );
-        walk.visit(&tree::open_root(path)?, path, 0)?;
+        // Inside the walk only the entry itself can be protected: protected
+        // directories are not entered. Ancestors above the root count once;
+        // a scratch root below a denied data folder is an explicit exception.
+        let inherited = path.ancestors().any(|ancestor| {
+            if path == root {
+                walk.protected.contains(ancestor)
+            } else {
+                strict.contains(ancestor)
+            }
+        });
+        walk.visit(&tree::open_root(path)?, path, 0, inherited)?;
     }
     if walk
         .groups
@@ -55,14 +59,20 @@ pub(super) fn validate(policy: &super::Policy) -> Result<(), Error> {
 }
 
 struct Walk {
-    protected: BTreeSet<PathBuf>,
+    protected: HashSet<PathBuf>,
     groups: HashMap<(u64, u64), Group>,
     directories: HashSet<(u64, u64)>,
     visited: usize,
 }
 
 impl Walk {
-    fn visit(&mut self, dir: &OwnedFd, path: &Path, depth: usize) -> Result<(), Error> {
+    fn visit(
+        &mut self,
+        dir: &OwnedFd,
+        path: &Path,
+        depth: usize,
+        inherited: bool,
+    ) -> Result<(), Error> {
         let stat = rustix::fs::fstat(dir)?;
         if !self.directories.insert((stat.st_dev, stat.st_ino)) {
             return Ok(());
@@ -73,10 +83,9 @@ impl Walk {
                 return Err("project link discovery entry limit exceeded".into());
             }
             let child = path.join(&name);
-            let private = crate::command_sandbox::secret_name(&name.to_string_lossy())
-                || child
-                    .ancestors()
-                    .any(|ancestor| self.protected.contains(ancestor));
+            let private = inherited
+                || crate::command_sandbox::secret_name(&name.to_string_lossy())
+                || self.protected.contains(&child);
             if directory {
                 if private {
                     continue;
@@ -84,7 +93,7 @@ impl Walk {
                 if depth >= MAX_DEPTH {
                     return Err("project link discovery depth exceeded".into());
                 }
-                self.visit(&tree::open_child(dir, &name)?, &child, depth + 1)?;
+                self.visit(&tree::open_child(dir, &name)?, &child, depth + 1, false)?;
             } else {
                 let stat = statat(dir, name.as_os_str(), AtFlags::SYMLINK_NOFOLLOW)?;
                 if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile
