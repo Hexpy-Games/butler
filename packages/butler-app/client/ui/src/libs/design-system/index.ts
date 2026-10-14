@@ -22,6 +22,7 @@ export * from "./components/Chart";
 export * from "./components/Clickable";
 export * from "./components/Collapsible";
 export * from "./components/CopyButton";
+export * from "./components/DoneIconButton";
 export * from "./components/InlineReference";
 export * from "./components/ColorSwatchInput";
 export * from "./components/ContextMenu";
