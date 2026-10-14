@@ -593,6 +593,7 @@ export const koKrCopy: AppCopy = {
       webRequest: "웹 요청을 보낼까요?",
       webRequestDesc: "외부에서 읽은 내용이 포함될 수 있습니다.",
       taintReason: "방금 외부에서 가져온 내용을 읽어서 다시 확인합니다.",
+      scheduleUnavailable: "예약 작업 정보를 확인할 수 없어요.",
       scheduleMode: mode => `실행 권한: ${mode}`,
       networkCommandOutside: "작업 폴더 밖에서 인터넷을 쓰는 명령을 실행할까요?",
       runCommand: workspace => `${workspaceName(workspace)}에서 명령을 실행할까요?`,

@@ -148,7 +148,8 @@ export function approvalRequestView(
     details: [...(card.reason === "authority.taintReason" ? [copy.taintReason] : []),
       ...(actionKind === "web_request" ? [copy.webRequestDesc] : []),
       ...(schedule ? [schedule.title, scheduleTiming(schedule), ...(schedule.accessMode ? [copy.scheduleMode(accessLabel(schedule.accessMode))] : [])].filter(Boolean)
-        : operation ? operationDetails(operation, copy) : details(approval, actionKind, card, copy))],
+        : actionKind === "manage_schedule" ? [copy.scheduleUnavailable]
+          : operation ? operationDetails(operation, copy) : details(approval, actionKind, card, copy))],
     pathDetails: operation?.targets ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
       ...approval.targets.filter(target => target.kind === "outside").map(target => target.path)],
     risk: approval.risk ?? "high",
@@ -202,14 +203,13 @@ function workspaceLabel(approval: ApprovalSummary): string | null {
 }
 
 /** `automation:create:<id>`, `automation:delete_automation:<id>` or `automation:due:<now>` (the agent's schedule target). */
-function scheduleOperation(approval: ApprovalSummary): { operation: "create" | "delete" | "run" | "change"; id: string } {
+function scheduleOperation(approval: ApprovalSummary): { operation: "create" | "delete" | "run" | "change" } {
   const path = approval.targets.find((target) => target.kind === "schedule")?.path ?? "";
-  const [, operation = "", ...rest] = path.split(":");
-  const id = rest.join(":");
-  if (operation === "create") return { operation: "create", id };
-  if (operation === "delete" || operation === "delete_automation") return { operation: "delete", id };
-  if (operation === "due") return { operation: "run", id: "" };
-  return { operation: "change", id: path };
+  const [, operation = ""] = path.split(":");
+  if (operation === "create") return { operation: "create" };
+  if (operation === "delete" || operation === "delete_automation") return { operation: "delete" };
+  if (operation === "due") return { operation: "run" };
+  return { operation: "change" };
 }
 
 function details(
@@ -228,9 +228,7 @@ function details(
     return [...notice, ...additionalOutside, ...shown, ...(rest > 0 ? [copy.more(rest)] : [])];
   }
   // Without examples, say what the request acts on: its targets, else the reason.
-  const targets = kind === "manage_schedule"
-    ? [scheduleOperation(approval).id]
-    : approval.targets.filter((target) => DETAIL_TARGET_KINDS.has(target.kind)).map((target) => target.path);
+  const targets = approval.targets.filter((target) => DETAIL_TARGET_KINDS.has(target.kind)).map((target) => target.path);
   const lines = targets.map((line) => line.trim()).filter(Boolean);
   if (lines.length || kind !== "other") return lines;
   const fallback = (card.scope?.description ?? card.reason).trim();

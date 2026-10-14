@@ -95,6 +95,17 @@ impl ScheduleClient {
         body.get("data").cloned().ok_or_else(unavailable)
     }
 
+    pub(crate) async fn read(&self, id: &str) -> Result<Value, ScheduleError> {
+        if !safe_id(id) {
+            return Err(ScheduleError {
+                code: "schedule_id_invalid".into(),
+                message: "Schedule id is invalid.".into(),
+            });
+        }
+        self.request(Method::GET, &format!("/automations/{id}"), None)
+            .await
+    }
+
     pub(crate) async fn tool(
         &self,
         name: &str,
