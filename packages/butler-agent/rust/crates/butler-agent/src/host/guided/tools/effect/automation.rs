@@ -80,6 +80,8 @@ pub(super) async fn prepare(
     let mut input = Value::Object(call.arguments.clone());
     if call.name == ToolName::CreateAutomation {
         resolve_default(owner, occurrence, &mut input).await?;
+    } else if call.name == ToolName::DeleteAutomation {
+        resolve_delete(owner, occurrence, &mut input).await?;
     }
     let adapter = AutomationEffect {
         endpoint: owner.app_endpoint.clone(),
@@ -204,24 +206,7 @@ async fn resolve_default(
     occurrence: &str,
     input: &mut Value,
 ) -> Result<(), BtccError> {
-    // Reuse the exact reviewed mode on resume, even if Settings changed while parked.
-    if super::super::access::resumes(owner, occurrence) {
-        let stored = owner
-            .authority
-            .execution(butler_turn::btcc::AuthorityExecutionInput {
-                owner_session_id: owner.binding.owner_session_id.clone(),
-                request_ref: owner
-                    .binding
-                    .authority_request_ref
-                    .clone()
-                    .unwrap_or_default(),
-                source_session_id: Some(owner.binding.source_session_id.clone()),
-                client_message_id: None,
-                turn_id: owner.binding.turn_id.clone(),
-            })
-            .await
-            .map_err(BtccError::from)?;
-        *input = stored.normalized_input;
+    if restore_reviewed_input(owner, occurrence, input).await? {
         return Ok(());
     }
     let client = ScheduleClient::active(&owner.app_endpoint)
@@ -241,4 +226,66 @@ async fn resolve_default(
         })?;
     input["access_mode"] = Value::String(mode.as_str().into());
     Ok(())
+}
+
+async fn restore_reviewed_input(
+    owner: &GuidedTools,
+    occurrence: &str,
+    input: &mut Value,
+) -> Result<bool, BtccError> {
+    // Keep the reviewed schedule facts on resume, even if the schedule or Settings changed.
+    if super::super::access::resumes(owner, occurrence) {
+        let stored = owner
+            .authority
+            .execution(butler_turn::btcc::AuthorityExecutionInput {
+                owner_session_id: owner.binding.owner_session_id.clone(),
+                request_ref: owner
+                    .binding
+                    .authority_request_ref
+                    .clone()
+                    .unwrap_or_default(),
+                source_session_id: Some(owner.binding.source_session_id.clone()),
+                client_message_id: None,
+                turn_id: owner.binding.turn_id.clone(),
+            })
+            .await
+            .map_err(BtccError::from)?;
+        *input = stored.normalized_input;
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+async fn resolve_delete(
+    owner: &GuidedTools,
+    occurrence: &str,
+    input: &mut Value,
+) -> Result<(), BtccError> {
+    if restore_reviewed_input(owner, occurrence, input).await? {
+        return Ok(());
+    }
+    // Schedule facts come from App storage, never model-supplied arguments.
+    if let Some(args) = input.as_object_mut() {
+        args.remove("schedule");
+    }
+    let id = input["id"].as_str().unwrap_or("");
+    let client = ScheduleClient::active(&owner.app_endpoint)
+        .map_err(|e| BtccError::relayed(e.code().to_owned(), e.message().to_owned()))?;
+    let result = client.read(id).await;
+    match result {
+        Ok(data) => {
+            let stored = &data["automation"];
+            input["schedule"] = serde_json::json!({
+                "title": stored["title"], "schedule_type": stored["schedule_type"],
+                "run_at": stored["run_at"], "start_at": stored["start_at"],
+                "interval_seconds": stored["interval_seconds"], "access_mode": stored["access_mode"],
+            });
+            Ok(())
+        }
+        Err(error) if error.code() == "automation_not_found" => Ok(()),
+        Err(error) => Err(BtccError::relayed(
+            error.code().to_owned(),
+            error.message().to_owned(),
+        )),
+    }
 }
