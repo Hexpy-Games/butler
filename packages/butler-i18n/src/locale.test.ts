@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { getAppCopy, getInterfaceProgressLabel } from "./index.ts";
+import { getAppCopy, getInterfaceProgressLabel, reasoningEffortLabel } from "./index.ts";
 
 // test-category: pure-logic
 test("native browser context menu labels follow the App locale", () => {
@@ -148,4 +148,13 @@ test("settings titles never use the A / B style in either locale", () => {
 test("security host counts use native singular and plural copy", () => {
   expect([0, 1, 3].map(getAppCopy("ko-KR").settings.security.hostCount)).toEqual(["없음", "1개", "3개"]);
   expect([0, 1, 3].map(getAppCopy("en-US").settings.security.hostCount)).toEqual(["None", "1 host", "3 hosts"]);
+});
+
+// test-category: pure-logic
+test("reasoning effort labels localize provider levels and safely title-case future values", () => {
+  const levels = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "", "ultra high", "toString"];
+  expect(levels.map((value) => reasoningEffortLabel(value, "ko-KR")))
+    .toEqual(["없음", "최소", "낮음", "보통", "높음", "매우 높음", "최대", "보통", "Ultra High", "ToString"]);
+  expect(levels.map((value) => reasoningEffortLabel(value, "en-US")))
+    .toEqual(["None", "Minimal", "Low", "Medium", "High", "Very high", "Max", "Medium", "Ultra High", "ToString"]);
 });

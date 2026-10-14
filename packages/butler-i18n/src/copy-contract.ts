@@ -468,10 +468,6 @@ export interface AppCopy {
     noContext: string;
     contextUnknown: string;
     model: string;
-    instant: string;
-    extraHigh: string;
-    max: string;
-    medium: string;
     thinking: string;
     planning: string;
     inspecting: string;
