@@ -161,8 +161,8 @@ function flush() {
         const draft = apply(payload, drafts[turn]); if (draft) drafts[turn] = draft;
       }
     }
-    // An outcome that arrived before any unit shows nothing; it is dropped once its turn ends.
-    for (const [turn, draft] of Object.entries(drafts)) if (!draft.calls.length && !draft.present) delete drafts[turn];
+    // Terminal drafts are removed here, independently of virtualized reply rows.
+    for (const [turn, draft] of Object.entries(drafts)) if (!draft.present) delete drafts[turn];
     const sessions: State["sessions"] = {};
     for (const draft of Object.values(drafts)) if (draft.calls.length) (sessions[draft.sessionId] ??= []).push(draft.turnId);
     for (const [id, turns] of Object.entries(sessions)) {
@@ -174,8 +174,19 @@ function flush() {
 export function abandonAnswerDrafts() {
   if (frame !== undefined) cancelAnimationFrame(frame);
   frame = undefined; pending = [];
-  useAnswerDrafts.setState(state => ({ answerDrafts: Object.fromEntries(Object.entries(state.answerDrafts)
-    .map(([id, draft]) => [id, { ...draft, present: false }])) }));
+  useAnswerDrafts.setState({ answerDrafts: {}, sessions: {} });
+}
+/** Canonical arrival owns handoff cleanup even when the reply row is offscreen. */
+export function reconcileAnswerDrafts(events: TimelineEvent[]) {
+  if (pending.length) {
+    if (frame !== undefined) cancelAnimationFrame(frame);
+    flush();
+  }
+  for (const event of events) {
+    if (event.type !== "message.updated" && event.type !== "message.created") continue;
+    const message = (event.payload as { message?: MessageRecord })?.message;
+    if (message?.role === "assistant" && message.turn_id && (message.answer_blocks?.length || ["delivered", "failed", "cancelled"].includes(message.status ?? ""))) forgetAnswerDraft(message.turn_id);
+  }
 }
 export function forgetAnswerDraft(turn: string) {
   useAnswerDrafts.setState(state => {

@@ -1,11 +1,11 @@
-import { memo, useEffect, useMemo } from "react";
+import { memo, useMemo } from "react";
 import type { AnswerBlockSet } from "../../../../shared/app-contracts";
 import type { AnswerBlockView } from "../../../../shared/answer-blocks-view";
 import { parseAnswerBlocks } from "../../../../shared/answer-blocks-parse";
 import { Button, Popup, Inline, KeyValueRow, MetricCard, MetricGrid, Notice, PillButton, Presence, usePresence, Reply, ItemCardSkeleton, Skeleton, Stack, Typo } from "@/butler-ds";
-import { appCopy, useAppLocale } from "@/app/copy";
+import { useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
-import { useAnswerDrafts, forgetAnswerDraft, draftBlocks, draftStatus } from "@/app/answerDrafts";
+import { useAnswerDrafts, draftBlocks } from "@/app/answerDrafts";
 import { openConversationLink } from "../browser/browserBridge";
 import { AnswerItem } from "./AnswerItem";
 import { AnswerCards } from "./AnswerCards";
@@ -41,18 +41,15 @@ export const AnswerBlocks = memo(function AnswerBlocks({ sets, sessionId, turnId
     return spec ? spec.blocks : [];
   }) ?? [], [sets]);
   useAppLocale();
-  const copy = appCopy.conversation.answerBlocks;
   const reducedMotion = useButlerStore(state => state.settings.reduce_motion);
   const draft = useAnswerDrafts(state => turnId ? state.answerDrafts[turnId] : undefined);
-  useEffect(() => { if (parsed.length && turnId) forgetAnswerDraft(turnId); }, [parsed, turnId]);
   const final = parsed.length > 0;
   const present = final || draft?.present === true;
-  const presence = usePresence(present, { onExitComplete: () => { if (turnId) forgetAnswerDraft(turnId); } });
+  const presence = usePresence(present);
   const entries = useMemo(() => draft ? draftBlocks(draft) : [], [draft]);
   const rendered = final ? parsed : entries.map(entry => entry.view ?? entry.raw);
   if (!rendered.length) return null;
   return <AnswerSessionContext.Provider value={sessionId}><Presence present={present} motion="fade"><div ref={presence.ref} data-test-class="answer-blocks" data-motion={reducedMotion ? "reduced" : undefined}><Stack gap="md">
-    {!final && draft ? <Typo.Caption tone="secondary" role="status">{copy[draftStatus(draft)]}</Typo.Caption> : null}
     {rendered.map((raw, index) => {
       const block = raw as AnswerBlockView;
       const entry = final ? undefined : entries[index];

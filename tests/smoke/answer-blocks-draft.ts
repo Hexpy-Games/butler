@@ -89,7 +89,13 @@ try {
       const first = document.querySelector('[data-slot="item-card"]')!;
       if (!first) throw new Error("first draft card missing");
       await (window as unknown as { captureAnswerDraft: () => Promise<void> }).captureAnswerDraft();
-      const rect = first.getBoundingClientRect().toJSON();
+      // The conversation follows growth. Card geometry stays fixed relative to its reply row.
+      const cardRect = () => {
+        const rect = first.getBoundingClientRect().toJSON();
+        const offset = first.closest('[data-test-class~="message"]')!.getBoundingClientRect().top;
+        return { ...rect, y: rect.y - offset, top: rect.top - offset, bottom: rect.bottom - offset };
+      };
+      const rect = cardRect();
       const skeleton = document.querySelector('[data-slot="item-card-skeleton"]');
       if (!skeleton) throw new Error("next card skeleton missing");
       if (reducedMotion && skeleton.getAnimations({ subtree: true }).length) throw new Error("reduced skeleton must not shimmer");
@@ -101,7 +107,7 @@ try {
       for (let index = 1; index < cards.length; index++) {
         await frame([{ seq: index + 2, op: "item", bi: 0, list: "items", index, value: cards[index] }]);
         if (document.querySelectorAll('[data-slot="item-card"]').length !== index + 1) throw new Error("cards must arrive one by one");
-        rects.push(first.getBoundingClientRect().toJSON());
+        rects.push(cardRect());
       }
       const contentRenders = probe.__messageContentRenders, newCardRenders = probe.__draftCardRenders;
       const before = [...document.querySelectorAll('[data-slot="item-card"]')];

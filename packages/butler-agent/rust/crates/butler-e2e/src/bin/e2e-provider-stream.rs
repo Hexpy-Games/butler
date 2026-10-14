@@ -32,11 +32,23 @@ impl AnswerBlocksStreamPort for Captured {
     }
     fn clear(&self) {}
 }
+#[derive(Default)]
+struct DefaultObserver(Mutex<Vec<Value>>);
+impl ProviderStreamObserver for DefaultObserver {
+    fn event(&self, event: &Value) {
+        self.0.lock().unwrap().push(event.clone());
+    }
+}
 struct Tap {
     relay: Arc<dyn ProviderStreamObserver>,
     events: Mutex<Vec<Value>>,
+    default_observer: DefaultObserver,
 }
 impl ProviderStreamObserver for Tap {
+    fn tool_call(&self, event: &ToolCallStreamEvent) {
+        self.default_observer.tool_call(event);
+        self.relay.tool_call(event);
+    }
     fn event(&self, event: &Value) {
         self.events.lock().unwrap().push(event.clone());
         self.relay.event(event);
@@ -127,6 +139,7 @@ async fn invoke(case: &Value, endpoint: url::Url) -> Result<Value, Box<dyn std::
     let tap = Tap {
         relay: relay.observer(),
         events: Mutex::default(),
+        default_observer: DefaultObserver::default(),
     };
     let messages = [ModelRoundMessage::user(
         "Build structured records.".into(),
@@ -148,6 +161,6 @@ async fn invoke(case: &Value, endpoint: url::Url) -> Result<Value, Box<dyn std::
     let events = tap.events.lock().unwrap();
     let relayed = captured.0.lock().unwrap();
     Ok(
-        json!({"events":*events,"relayed":*relayed,"calls":result.tool_calls,"durableFrames":progress.0.lock().unwrap().len()}),
+        json!({"defaultToolFrames":tap.default_observer.0.lock().unwrap().len(),"events":*events,"relayed":*relayed,"calls":result.tool_calls,"durableFrames":progress.0.lock().unwrap().len()}),
     )
 }

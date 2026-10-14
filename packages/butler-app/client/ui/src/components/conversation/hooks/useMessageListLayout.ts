@@ -5,8 +5,7 @@ import { useMessageVirtualizer } from "./useMessageVirtualizer";
 import { useConversationAutoScroll } from "./useConversationAutoScroll";
 
 export function useMessageListLayout({ visibleMessages, showTurnActivity, itemCount,
-  bottomReserve, activeChatId, isSending, queuedKeys, branchSeed, answerAnchor }: {
-  answerAnchor?: string;
+  bottomReserve, activeChatId, isSending, queuedKeys, branchSeed }: {
   visibleMessages: MessageRecord[];
   showTurnActivity: boolean;
   itemCount: number;
@@ -32,7 +31,6 @@ export function useMessageListLayout({ visibleMessages, showTurnActivity, itemCo
 
   const { rowVirtualizer, topOffset, virtualListHeight, latestMessageVersion } =
     useMessageVirtualizer({
-      answerAnchor,
       visibleMessages,
       showTurnActivity,
       itemCount,
@@ -43,8 +41,7 @@ export function useMessageListLayout({ visibleMessages, showTurnActivity, itemCo
     });
 
   const scrollState = useConversationAutoScroll({
-    answerAnchor,
-    activeChatId,
+      activeChatId,
     latestMessageVersion,
     itemCount,
     virtualListHeight,

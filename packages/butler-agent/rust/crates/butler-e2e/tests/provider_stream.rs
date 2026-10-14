@@ -24,6 +24,14 @@ fn provider_tool_names_precede_every_ordered_argument_delta()
     assert_eq!(results.len(), 5);
     for (i, result) in results.iter().enumerate() {
         assert_eq!(result["durableFrames"], 0);
+        assert_eq!(result["defaultToolFrames"], 0);
+        assert!(
+            result["events"]
+                .as_array()
+                .ok_or("events missing")?
+                .iter()
+                .all(|event| event["argumentsDelta"].is_null())
+        );
         let events = result["relayed"].as_array().ok_or("relay missing")?;
         assert_eq!(events[0]["type"], "tool_call_start");
         assert_eq!(events[0]["toolName"], "answer_blocks");

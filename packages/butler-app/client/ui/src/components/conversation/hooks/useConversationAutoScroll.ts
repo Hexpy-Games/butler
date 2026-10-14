@@ -28,7 +28,6 @@ const SCROLL_NAVIGATION_KEYS = new Set([
 ]);
 
 interface UseConversationAutoScrollOptions {
-  answerAnchor?: string;
   activeChatId: string;
   itemCount: number;
   latestMessageVersion: string;
@@ -46,7 +45,6 @@ export interface ConversationScrollState {
 }
 
 export function useConversationAutoScroll({
-  answerAnchor,
   activeChatId,
   latestMessageVersion,
   virtualListHeight,
@@ -214,7 +212,6 @@ export function useConversationAutoScroll({
   }, [itemCount, latestMessageVersion]);
 
   useLayoutEffect(() => {
-    if (answerAnchor) { cancelScheduledScrolls(); return; }
     if (itemCount <= 0) return;
     const enteringChat = lastAutoScrolledChatRef.current !== activeChatId;
     if (enteringChat) {
@@ -246,7 +243,6 @@ export function useConversationAutoScroll({
       enteringChat ? 120 : 48,
     );
   }, [
-    answerAnchor,
     activeChatId,
     isSending,
     itemCount,

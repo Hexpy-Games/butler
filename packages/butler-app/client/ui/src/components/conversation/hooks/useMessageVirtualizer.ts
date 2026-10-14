@@ -1,10 +1,9 @@
-import { useCallback, useRef, type RefObject } from "react";
+import { useCallback, type RefObject } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { MessageRecord } from "@/app/types.ts";
 import { MESSAGE_LIST_TOP_PADDING } from "../conversationUtils";
 
 interface UseMessageVirtualizerOptions {
-  answerAnchor?: string;
   visibleMessages: MessageRecord[];
   showTurnActivity: boolean;
   itemCount: number;
@@ -16,7 +15,6 @@ interface UseMessageVirtualizerOptions {
 }
 
 export function useMessageVirtualizer({
-  answerAnchor,
   visibleMessages,
   showTurnActivity,
   itemCount,
@@ -33,7 +31,8 @@ export function useMessageVirtualizer({
         ? `queued-${queuedKeys[index - queuedStart] ?? index}`
         : showTurnActivity && index === visibleMessages.length
         ? "active-turn-activity"
-        : (visibleMessages[index]?.id ?? `message-${index}`),
+        : (visibleMessages[index]?.role === "assistant" && visibleMessages[index]?.turn_id
+          ? `answer-${visibleMessages[index].turn_id}:${index}` : visibleMessages[index]?.id ?? `message-${index}`),
     [queuedKeys, queuedStart, showTurnActivity, visibleMessages],
   );
   const estimateSize = useCallback(
@@ -64,10 +63,7 @@ export function useMessageVirtualizer({
     MESSAGE_LIST_TOP_PADDING,
     viewportHeight - virtualContentHeight - bottomReserve,
   );
-  const anchor = useRef<{ key: string; offset: number } | null>(null);
-  if (!answerAnchor) anchor.current = null;
-  else if (anchor.current?.key !== answerAnchor) anchor.current = { key: answerAnchor, offset: MESSAGE_LIST_TOP_PADDING };
-  const topOffset = anchor.current?.offset ?? naturalTopOffset;
+  const topOffset = naturalTopOffset;
   const virtualListHeight = Math.max(
     viewportHeight,
     virtualContentHeight + topOffset + bottomReserve,

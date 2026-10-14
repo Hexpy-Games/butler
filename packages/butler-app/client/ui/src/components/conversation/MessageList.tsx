@@ -47,7 +47,7 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
   const itemCount = messageItemCount + queue.items.length;
   const { parentRef, seedRef, rowVirtualizer, topOffset, virtualListHeight, scrollState } = useMessageListLayout({
     visibleMessages, showTurnActivity, itemCount, bottomReserve, activeChatId, isSending,
-    answerAnchor: turns[0], queuedKeys: queue.keys, branchSeed: summary?.branch_seed,
+    queuedKeys: queue.keys, branchSeed: summary?.branch_seed,
   });
 
   return (
@@ -77,7 +77,7 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
             if (!message) return null;
             return (
               <MessageItem
-                key={message.role === "assistant" && message.turn_id ? `answer-${message.turn_id}` : message.id ?? `${message.role}-${message.text}`}
+                key={message.role === "assistant" && message.turn_id ? `answer-${message.turn_id}:${virtualRow.index}` : message.id ?? `${message.role}-${message.text}`}
                 message={message}
                 virtualRow={virtualRow}
                 topOffset={topOffset}
