@@ -40,7 +40,8 @@
   -webkit-touch-callout: none;
 }
 
-/* Icons in the sidebar share the density icon size and optical offset. */
+/* Icons in the sidebar share the density icon size. The optical offset is 0:
+   Typo trims row text to its letters, so icon and text centre without it. */
 .shell svg {
   width: var(--sidebar-icon-size);
   height: var(--sidebar-icon-size);

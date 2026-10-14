@@ -850,7 +850,7 @@
   --sidebar-row-spacing: var(--space-sm);
   --sidebar-action-size: var(--touch-target);
   --sidebar-icon-surface-size: var(--control-height-xs);
-  --sidebar-icon-optical-offset: calc(var(--font-size-4) * -0.03);
+  --sidebar-icon-optical-offset: 0px;
 }
 
 /* Comfortable is the touch density on phones and coarse pointers. */
@@ -862,7 +862,7 @@
     --sidebar-row-spacing: var(--space-sm);
     --sidebar-action-size: var(--touch-target);
     --sidebar-icon-surface-size: var(--control-height-xs);
-    --sidebar-icon-optical-offset: calc(var(--font-size-4) * -0.03);
+    --sidebar-icon-optical-offset: 0px;
   }
 }
 
