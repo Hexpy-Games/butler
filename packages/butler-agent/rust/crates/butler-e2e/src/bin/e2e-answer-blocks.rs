@@ -1,4 +1,6 @@
 //! Dev-only process adapter for the runtime's standalone answer contract.
+#[path = "answer_blocks/stream.rs"]
+mod stream;
 use std::{collections::HashSet, io::Read};
 
 use butler_runtime::capabilities::answer_blocks::{AnswerBlocksContext, validate_answer_blocks};
@@ -12,6 +14,14 @@ struct Request {
     now: String,
     images: HashSet<String>,
     sources: Vec<String>,
+    #[serde(default)]
+    stream: bool,
+    #[serde(default)]
+    perf: bool,
+    #[serde(default)]
+    raw: Option<String>,
+    #[serde(default)]
+    prefix: usize,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,6 +37,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 image_exists: &exists,
                 read_sources: &request.sources,
             };
+            if request.perf {
+                return Ok(stream::perf(&context));
+            }
+            if request.stream {
+                return Ok(stream::verify(
+                    &request.spec,
+                    request.raw.as_deref(),
+                    request.prefix,
+                    &context,
+                ));
+            }
             Ok(match validate_answer_blocks(&request.spec, &context) {
                 Ok(()) => json!({"ok": true}),
                 Err(problems) => json!({"ok": false, "problems": problems}),

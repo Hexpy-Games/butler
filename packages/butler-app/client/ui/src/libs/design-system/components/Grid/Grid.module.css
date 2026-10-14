@@ -184,6 +184,11 @@
   gap: var(--space-2xl);
 }
 
+/* A growing list: each cell keeps its own height (cross="start"). */
+.grid.cross-start {
+  align-items: start;
+}
+
 @media (width <= 960px) {
   .columns-4 {
     grid-template-columns: repeat(2, minmax(0, 1fr));

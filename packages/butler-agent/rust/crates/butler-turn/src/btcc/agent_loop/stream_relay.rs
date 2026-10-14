@@ -6,6 +6,9 @@
 //! publishes `model.stream.completed` with status `discarded` for that stream,
 //! after its deltas.
 
+use butler_core::tool_protocol::ToolCallStreamEvent;
+use parking_lot::Mutex;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -28,8 +31,11 @@ enum Relayed {
         sequence: u64,
         text: String,
     },
+    Tool(ToolCallStreamEvent),
     /// The latest round's text is not the answer.
-    Discard { rejected: bool },
+    Discard {
+        rejected: bool,
+    },
 }
 
 /// One published event.
@@ -51,14 +57,24 @@ enum Frame {
 pub struct StreamRelay {
     observer: Arc<RelayObserver>,
     receiver: mpsc::UnboundedReceiver<Relayed>,
+    answer_blocks: Option<Arc<dyn AnswerBlocksStreamPort>>,
 }
 
 struct RelayObserver {
     sender: mpsc::UnboundedSender<Relayed>,
+    calls: Mutex<HashSet<(String, u64)>>,
 }
 
 impl ProviderStreamObserver for RelayObserver {
     fn event(&self, event: &Value) {
+        if matches!(
+            event["type"].as_str(),
+            Some("tool_call_start" | "tool_call_delta")
+        ) && let Ok(tool) = serde_json::from_value::<ToolCallStreamEvent>(event.clone())
+        {
+            self.tool_call(&tool);
+            return;
+        }
         if event.get("type").and_then(Value::as_str) != Some("text_delta")
             || event.get("target").and_then(Value::as_str) != Some("final_candidate")
         {
@@ -83,11 +99,37 @@ impl ProviderStreamObserver for RelayObserver {
         });
     }
 
+    fn tool_call(&self, event: &ToolCallStreamEvent) {
+        let mut calls = self.calls.lock();
+        let accepted = match event {
+            ToolCallStreamEvent::ToolCallStart {
+                stream_id,
+                call_index,
+                tool_name,
+                ..
+            } => {
+                let key = (stream_id.clone(), *call_index);
+                calls.remove(&key);
+                tool_name == "answer_blocks" && calls.insert(key)
+            }
+            ToolCallStreamEvent::ToolCallDelta {
+                stream_id,
+                call_index,
+                ..
+            } => calls.contains(&(stream_id.clone(), *call_index)),
+        };
+        if accepted {
+            let _ = self.sender.send(Relayed::Tool(event.clone()));
+        }
+    }
+
     fn round_text_discarded(&self) {
+        self.calls.lock().clear();
         let _ = self.sender.send(Relayed::Discard { rejected: false });
     }
 
     fn round_text_rejected(&self) {
+        self.calls.lock().clear();
         let _ = self.sender.send(Relayed::Discard { rejected: true });
     }
 }
@@ -103,9 +145,19 @@ impl StreamRelay {
     pub fn new() -> Self {
         let (sender, receiver) = mpsc::unbounded_channel();
         Self {
-            observer: Arc::new(RelayObserver { sender }),
+            observer: Arc::new(RelayObserver {
+                sender,
+                calls: Mutex::default(),
+            }),
             receiver,
+            answer_blocks: None,
         }
+    }
+
+    /// Binds the agent's private argument consumer; no durable progress events are used.
+    pub fn with_answer_blocks(mut self, port: Arc<dyn AnswerBlocksStreamPort>) -> Self {
+        self.answer_blocks = Some(port);
+        self
     }
 
     /// The observer to give the provider transport and the loop.
@@ -115,10 +167,11 @@ impl StreamRelay {
 
     /// Publishes queued observations until `done` is cancelled, then flushes
     /// the rest. Publication failures never veto the turn.
-    pub(crate) async fn publish(self, progress: &dyn AgentLoopProgress, done: CancellationToken) {
+    pub async fn publish(self, progress: &dyn AgentLoopProgress, done: CancellationToken) {
         let Self {
             observer,
             mut receiver,
+            answer_blocks,
         } = self;
         drop(observer);
         // The stream whose text the App shows, until a discard closes it.
@@ -144,12 +197,14 @@ impl StreamRelay {
                     () = done.cancelled() => break,
                 }
             }
+            let batch = forward_tools(batch, answer_blocks.as_deref(), progress).await;
             emit(progress, frames(&mut open, batch)).await;
         }
         let mut rest = Vec::new();
         while let Ok(item) = receiver.try_recv() {
             rest.push(item);
         }
+        let rest = forward_tools(rest, answer_blocks.as_deref(), progress).await;
         emit(progress, frames(&mut open, rest)).await;
     }
 }
@@ -160,6 +215,7 @@ fn frames(open: &mut Option<String>, batch: Vec<Relayed>) -> Vec<Frame> {
     let mut frames: Vec<Frame> = Vec::new();
     for item in batch {
         match item {
+            Relayed::Tool(_) => {}
             Relayed::Delta {
                 stream_id,
                 sequence,
@@ -241,4 +297,47 @@ fn uncoalesced() -> bool {
         std::env::var("BUTLER_E2E_TIER").as_deref(),
         Ok("stub" | "perf")
     ) && std::env::var_os("BUTLER_E2E_STREAM_UNCOALESCED").is_some()
+}
+
+/// Agent-owned incremental argument processing, outside the durable event path.
+pub trait AnswerBlocksStreamPort: Send + Sync {
+    /// Receives an answer_blocks start or exact argument fragment in provider order.
+    fn tool_call<'a>(
+        &'a self,
+        event: ToolCallStreamEvent,
+        progress: &'a dyn AgentLoopProgress,
+    ) -> crate::btcc::PortFuture<'a, ()>;
+    /// Drops per-round private parser state.
+    fn clear(&self);
+}
+
+async fn forward_tools(
+    batch: Vec<Relayed>,
+    port: Option<&dyn AnswerBlocksStreamPort>,
+    progress: &dyn AgentLoopProgress,
+) -> Vec<Relayed> {
+    let mut text = Vec::new();
+    for item in batch {
+        match item {
+            Relayed::Tool(event) => {
+                if let Some(port) = port
+                    && let Err(error) = port.tool_call(event, progress).await
+                {
+                    butler_core::diagnostic!(
+                        "[native-btcc] draft relay failed code={}",
+                        error.code()
+                    );
+                }
+            }
+            item => {
+                if matches!(item, Relayed::Discard { .. })
+                    && let Some(port) = port
+                {
+                    port.clear();
+                }
+                text.push(item);
+            }
+        }
+    }
+    text
 }

@@ -1223,7 +1223,7 @@ A shimmering placeholder in the shape of content that is still loading.
 - Use for: The layout of the coming content is known (rows, lines, cards)
 - Not for: Loading has no known shape or is inside a control → `Spinner`
 - Not for: Loading failed → `Notice`
-- Tokens: `--surface-raised`, `--shimmer-duration`, `--radius-control`
+- Tokens: `--surface-raised`, `--shimmer-duration`, `--motion-loop-count`, `--radius-control`
 
 ### Spinner
 
@@ -1386,7 +1386,7 @@ A picture in a fixed-shape frame on the neutral matte: whole, never cropped, hid
 - Use for: A gallery rail or thumbnail of a collected picture
 - Not for: A square canvas or animated mark → `AspectFrame`
 - Not for: A file or output preview with its own viewer → `ArtifactPreviewImage`
-- Tokens: `--muted`, `--radius-control`, `--space-md`, `--line`, `--browser-card-shadow`, `--tag-height-sm`
+- Tokens: `--muted`, `--radius-control`, `--space-md`, `--line`, `--browser-card-shadow`, `--tag-height-sm`, `--motion-slow`, `--motion-ease-decelerate`
 
 ### MetaList
 

@@ -1,3 +1,4 @@
+import { reconcileAnswerDrafts } from "./answerDrafts";
 import { retainAnswerBlocks } from "./stableAnswerBlocks";
 import { generalChatCleared } from "./generalChatEvents";
 import { create } from "zustand";
@@ -1202,7 +1203,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         ? state
         : { turnProgress: resolvedTurnProgress, messages };
     }),
-  applyTimelineEvents: (events) =>
+  applyTimelineEvents: (events) => {
     set((state) => {
       const next = applyTimelineEventsToViewState(events, state.activeChatId, {
         messages: state.messages,
@@ -1227,7 +1228,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         ...next,
         ...(completedSendState ?? {}),
       };
-    }),
+    });
+    reconcileAnswerDrafts(events);
+  },
   setSettings: (settings) =>
     set((state) => {
       const nextSettings = settingsWithDefaults(settings);

@@ -252,6 +252,9 @@ interface ConversationCopy {
     copyFailed: string;
   };
   answerBlocks: {
+    preparing: string;
+    prepared: string;
+    rechecking: string;
     previousValue: string;
     showMore: string;
     showLess: string;

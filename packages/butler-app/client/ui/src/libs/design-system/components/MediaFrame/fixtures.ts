@@ -42,3 +42,6 @@ export function fixturePicture(kind: FixturePicture): string {
 
 /** A URL that never loads, for the failed state. */
 export const BROKEN_PICTURE = "data:image/png;base64,broken";
+
+/** A favicon for placeholder demos: a plain mark, no brand. */
+export const FIXTURE_FAVICON = enc("<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><rect width='32' height='32' rx='7' fill='#3b6fd8'/><circle cx='16' cy='16' r='7' fill='#ffffff'/></svg>");

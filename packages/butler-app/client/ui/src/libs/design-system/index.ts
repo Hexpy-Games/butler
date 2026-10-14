@@ -8,6 +8,7 @@ export type { WindowDrag } from "./lib/windowDrag";
 export * from "./lib/floatingConstraints";
 export { useScrollEdges, type ScrollEdgeAxis } from "./lib/useScrollEdges";
 export * from "./lib/motion";
+export * from "./lib/gridSettle";
 export * from "./lib/dropZones";
 export * from "./lib/useHotkey";
 export { useEnteringKeys, ENTER_WINDOW_MS } from "./lib/useEnteringKeys";

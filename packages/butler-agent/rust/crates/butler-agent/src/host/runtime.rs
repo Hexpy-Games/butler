@@ -235,7 +235,6 @@ impl AgentRuntime {
             conversation_context,
         ));
         let documents = BtccRepositories::new(stores.btcc.clone(), continuation_limits);
-        let context_compactions = documents.context_compactions();
         let repositories = Arc::new(documents.clone());
         let now: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
         let memory_writes =
@@ -412,7 +411,7 @@ impl AgentRuntime {
             agent,
             messages: repositories.clone(),
             progress: repositories.clone(),
-            readiness: repositories,
+            readiness: repositories.clone(),
             developer_log_capture,
             host: owner,
         });
@@ -428,9 +427,10 @@ impl AgentRuntime {
             bindings,
             models,
             context_budget,
-            context_compactions,
+            context_compactions: repositories.context_compactions(),
             collation,
             progress,
+            answer_drafts: repositories.answer_drafts.clone(),
             conversations,
             image_files,
             authority,
