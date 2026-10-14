@@ -185,6 +185,12 @@ fn message(path: &str, expires: u64) -> String {
 
 /// `(b"id: N\ndata: ", json)` of a live-event chunk.
 fn split_event_chunk(chunk: &[u8]) -> Option<(&[u8], &[u8])> {
+    if let Some(json) = chunk
+        .strip_prefix(b"data: ")
+        .and_then(|body| body.strip_suffix(b"\n\n"))
+    {
+        return Some((b"data: ", json));
+    }
     const DATA: &[u8] = b"\ndata: ";
     let body = chunk.strip_suffix(b"\n\n")?;
     let start = body.windows(DATA.len()).position(|window| window == DATA)? + DATA.len();
@@ -264,5 +270,15 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("\"signed_url\""), "{text}");
+        let draft = Bytes::from_static(b"data: {\"type\":\"answer_blocks.draft\",\"payload\":{\"ops\":[{\"op\":\"item\",\"value\":{\"img\":\"img_0123456789\"}}]}}\n\n");
+        let decorated = signer.decorate_event_chunk(draft, 7);
+        let text = String::from_utf8(decorated.to_vec()).unwrap();
+        assert!(text.starts_with("data: {") && !text.contains("id: "));
+        let value: Value =
+            serde_json::from_str(text.trim().strip_prefix("data: ").unwrap()).unwrap();
+        let signed = value["payload"]["ops"][0]["value"]["image_url"]
+            .as_str()
+            .unwrap();
+        assert!(signer.verify("/message-assets/img_0123456789", Some(query(signed)), 7));
     }
 }

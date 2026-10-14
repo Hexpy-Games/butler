@@ -8,6 +8,31 @@ pub(super) async fn execute(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
     call_id: &str,
+    progress: &dyn butler_turn::btcc::AgentLoopProgress,
+) -> Result<butler_core::json::JsonDocument, ToolExecutionError> {
+    let result = execute_spec(owner, call, call_id).await;
+    if let Ok(value) = &result {
+        let outcome = if value.field("ok").ok().flatten() == Some("true") {
+            "accepted"
+        } else {
+            "rejected"
+        };
+        progress
+            .answer_blocks_draft(
+                String::new(),
+                0,
+                vec![json!({"op":"end", "outcome":outcome})],
+            )
+            .await
+            .map_err(ToolExecutionError::Integrity)?;
+    }
+    result
+}
+
+async fn execute_spec(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    call_id: &str,
 ) -> Result<butler_core::json::JsonDocument, ToolExecutionError> {
     let mut spec = Value::Object(call.arguments.clone());
     answer_blocks::normalize(&mut spec);

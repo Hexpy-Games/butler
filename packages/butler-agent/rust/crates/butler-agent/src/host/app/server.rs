@@ -146,6 +146,12 @@ impl AppServer {
         )
         .await?;
         let application = open_application(app_config, data_root, dependencies, &owners).await?;
+        let draft_application = Arc::downgrade(&application);
+        runtime.answer_drafts.set_sink(Arc::new(move |payload| {
+            if let Some(application) = draft_application.upgrade() {
+                application.publish_answer_draft(payload);
+            }
+        }));
         let gateway_config = gateway_config(app_config, data_root, installation, owners.local_auth);
         Self::activate_listener(
             listener,

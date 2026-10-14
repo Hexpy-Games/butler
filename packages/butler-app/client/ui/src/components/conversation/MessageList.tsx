@@ -1,4 +1,5 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
+import { useAnswerDrafts, draftTurns, withDraftMessages } from "@/app/answerDrafts";
 import { SessionBranchSeed } from "./SessionBranchSeed";
 import type { MessageRecord, TurnProgressSnapshot } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -24,6 +25,8 @@ interface MessageListProps {
 function MessageListComponent({ messages, turnProgress, bottomReserve, isSending, onColumnRect }: MessageListProps) {
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const summary = useButlerStore((state) => state.summary);
+  const turns = useAnswerDrafts(state => draftTurns(state, activeChatId));
+  const displayMessages = useMemo(() => withDraftMessages(messages, turns, activeChatId), [messages, turns, activeChatId]);
   const {
     visibleMessages,
     progressRows,
@@ -35,14 +38,16 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
     copyContextMenuText,
     assistantFooterMetaById,
     anchoredStewardProgress,
-  } = useMessageList(messages, summary, turnProgress, isSending);
+  } = useMessageList(displayMessages, summary, turnProgress, isSending);
 
+  const liveActivity = useMemo(() => <TurnActivityPanel rows={progressRows} state={turnState}
+    startedAt={turnStartedAt} turnId={turnId} />, [progressRows, turnState, turnStartedAt, turnId]);
   const enteringIds = useEnteringMessageIds(visibleMessages, activeChatId);
   const queue = useQueuedConversation(visibleMessages, activeChatId);
   const itemCount = messageItemCount + queue.items.length;
   const { parentRef, seedRef, rowVirtualizer, topOffset, virtualListHeight, scrollState } = useMessageListLayout({
     visibleMessages, showTurnActivity, itemCount, bottomReserve, activeChatId, isSending,
-    queuedKeys: queue.keys, branchSeed: summary?.branch_seed,
+    answerAnchor: turns[0], queuedKeys: queue.keys, branchSeed: summary?.branch_seed,
   });
 
   return (
@@ -72,7 +77,7 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
             if (!message) return null;
             return (
               <MessageItem
-                key={message.id ?? `${message.role}-${message.text}`}
+                key={message.role === "assistant" && message.turn_id ? `answer-${message.turn_id}` : message.id ?? `${message.role}-${message.text}`}
                 message={message}
                 virtualRow={virtualRow}
                 topOffset={topOffset}
@@ -83,8 +88,7 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
                 onCopyContextMenuText={copyContextMenuText}
                 rowVirtualizer={rowVirtualizer}
                 stewardProgress={anchoredStewardProgress.get(message.id)}
-                liveActivity={message.id === liveMessageId ? <TurnActivityPanel
-                  rows={progressRows} state={turnState} startedAt={turnStartedAt} turnId={turnId} /> : undefined}
+                liveActivity={message.id === liveMessageId ? liveActivity : undefined}
               />
             );
           })}

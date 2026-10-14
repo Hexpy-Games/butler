@@ -3,7 +3,7 @@ import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "rec
 import type { ChartBlock, TableBlock } from "../../../../shared/app-contracts";
 import type { AnswerGalleryView } from "../../../../shared/answer-blocks-view";
 import { Button, ButtonContainer, ChartContainer, ChartLegend, ChartTooltip, ChartTooltipContent, CHART_COLORS, chartColor,
-  Clickable, Collapsible, CopyButton, IconButton, Library, MarkdownContent, MarkdownTable, MediaFrame, ScrollArea, Stack, Typo } from "@/butler-ds";
+  Clickable, Collapsible, CopyButton, IconButton, Library, MarkdownContent, MarkdownTable, MediaFrame, ScrollArea, Skeleton, Stack, Typo } from "@/butler-ds";
 import { faviconSrc } from "@/app/favicons";
 import { openImageViewer } from "../media/imageViewerState";
 import { answerImages, answerPart, answerSource, runAnswerAction, saveAnswerItem, useAnswerSession } from "./answerBlockActions";
@@ -17,7 +17,7 @@ export const AnswerSourceLine = memo(function AnswerSourceLine({ item }: { item:
   </Clickable> : null;
 });
 
-export const AnswerTable = memo(function AnswerTable({ block }: { block: TableBlock }) {
+export const AnswerTable = memo(function AnswerTable({ block, streaming = false }: { block: TableBlock; streaming?: boolean }) {
   useAppLocale();
   const copy = appCopy.conversation.answerBlocks;
   const [expanded, setExpanded] = useState(false);
@@ -25,7 +25,7 @@ export const AnswerTable = memo(function AnswerTable({ block }: { block: TableBl
     {row.map((cell, column) => column === 0 ? <th key={column} scope="row"><Typo.Text as="div" wrap="normal" maxWidth="full">{cell}</Typo.Text></th> : <td key={column}><Typo.Text as="div" wrap="anywhere" maxWidth="full">{cell}</Typo.Text></td>)}</tr>);
   const table = (start: number, end?: number) => <MarkdownContent><MarkdownTable>
     <thead><tr>{block.columns.map((column, index) => <th key={index} scope="col"><Typo.Text as="div" wrap="normal" weight="medium" maxWidth="full">{column}</Typo.Text></th>)}</tr></thead>
-    <tbody>{rows(start, end)}</tbody>
+    <tbody>{rows(start, end)}{streaming && start === 0 ? <tr><td colSpan={block.columns.length}><Skeleton height="row" width="full" /></td></tr> : null}</tbody>
   </MarkdownTable></MarkdownContent>;
   return <Stack gap="sm">{table(0, 10)}
     <Collapsible open={expanded}>{table(10)}</Collapsible>

@@ -190,6 +190,8 @@ pub trait CanonicalMessageStore: Send + Sync {
 
 /// Durable progress events of turns.
 pub trait ProgressEventRepository: Send + Sync {
+    /// Publishes a validated ephemeral draft, bypassing durable progress.
+    fn answer_blocks_draft(&self, _payload: serde_json::Value) {}
     /// Appends one progress event.
     fn append(&self, write: ProgressWrite) -> PortFuture<'_, ()>;
     /// Where the turn's progress was first published, if anywhere.

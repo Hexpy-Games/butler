@@ -3,6 +3,8 @@
 //! Gateway and host composition may run or stop a Turn. Durable state, model
 //! execution, delivery, and supervision remain private children of this module.
 
+mod answer_drafts;
+pub use answer_drafts::AnswerDraftPublisher;
 mod access;
 pub mod agent_loop;
 mod authority;

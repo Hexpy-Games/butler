@@ -4,6 +4,7 @@ mod assets;
 pub use assets::AppAssetCommand;
 mod admission;
 mod admission_identity;
+mod answer_drafts;
 mod authority_permissions;
 mod automations;
 mod briefing_snapshot;

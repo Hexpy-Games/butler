@@ -302,7 +302,9 @@ async fn domain_tool(
         return Some(super::library::execute(owner, call).await);
     }
     match call.name.as_str() {
-        "answer_blocks" => Some(super::answer_blocks::execute(owner, call, call_id).await),
+        "answer_blocks" => {
+            Some(super::answer_blocks::execute(owner, call, call_id, invocation.progress).await)
+        }
         "output_check" => Some(super::outputs::inspect(owner, invocation, call).await),
         "output_publish" => Some(super::outputs::publish(owner, invocation, call).await),
         "read_file" | "list_files" | "grep_files" => {

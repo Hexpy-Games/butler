@@ -1,9 +1,10 @@
-import { useCallback, type RefObject } from "react";
+import { useCallback, useRef, type RefObject } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { MessageRecord } from "@/app/types.ts";
 import { MESSAGE_LIST_TOP_PADDING } from "../conversationUtils";
 
 interface UseMessageVirtualizerOptions {
+  answerAnchor?: string;
   visibleMessages: MessageRecord[];
   showTurnActivity: boolean;
   itemCount: number;
@@ -15,6 +16,7 @@ interface UseMessageVirtualizerOptions {
 }
 
 export function useMessageVirtualizer({
+  answerAnchor,
   visibleMessages,
   showTurnActivity,
   itemCount,
@@ -58,10 +60,14 @@ export function useMessageVirtualizer({
   const virtualContentHeight = Math.max(headerHeight, rowVirtualizer.getTotalSize());
   const viewportHeight =
     rowVirtualizer.scrollRect?.height ?? scrollRef.current?.clientHeight ?? 0;
-  const topOffset = Math.max(
+  const naturalTopOffset = Math.max(
     MESSAGE_LIST_TOP_PADDING,
     viewportHeight - virtualContentHeight - bottomReserve,
   );
+  const anchor = useRef<{ key: string; offset: number } | null>(null);
+  if (!answerAnchor) anchor.current = null;
+  else if (anchor.current?.key !== answerAnchor) anchor.current = { key: answerAnchor, offset: MESSAGE_LIST_TOP_PADDING };
+  const topOffset = anchor.current?.offset ?? naturalTopOffset;
   const virtualListHeight = Math.max(
     viewportHeight,
     virtualContentHeight + topOffset + bottomReserve,
