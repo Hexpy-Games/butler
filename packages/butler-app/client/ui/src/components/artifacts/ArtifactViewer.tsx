@@ -28,6 +28,7 @@ import {
   artifactMeta,
   artifactPreviewMode,
 } from "./artifactDisplay";
+import { HtmlFileFrame } from "./HtmlFileFrame";
 import { OutputFrame } from "./OutputFrame";
 import { useArtifactText, type ArtifactTextState } from "./useArtifactText";
 
@@ -54,7 +55,7 @@ export function ArtifactViewer({
     path: file.path,
     refreshFileUrls,
   });
-  useFreshFrameSource(file, mode === "pdf" || mode === "html", refreshFileUrls);
+  useFreshFrameSource(file, mode === "pdf", refreshFileUrls);
 
   const meta = [artifactDescription(artifact), artifactMeta(artifact)]
     .filter(Boolean)
@@ -76,7 +77,7 @@ export function ArtifactViewer({
         title={artifact.title}
       />}
       <ArtifactPreview data-test-class="artifact-viewer">
-        {mode === "web" ? <OutputFrame key={artifact.id} outputId={artifact.id} title={artifact.title} preview={artifact.url?.startsWith("/previews/")} /> : renderPreview({ mode, state, text, title: artifact.title, file })}
+        {mode === "web" ? <OutputFrame key={artifact.id} outputId={artifact.id} title={artifact.title} preview={artifact.url?.startsWith("/previews/")} /> : mode === "html" ? <HtmlFileFrame key={file.path} path={file.path} title={artifact.title} /> : renderPreview({ mode, state, text, title: artifact.title, file })}
       </ArtifactPreview>
     </Stack>
   );
@@ -102,11 +103,6 @@ function renderPreview(input: {
         onLoad={file.onLoad}
       />
     );
-  }
-  if (input.mode === "html") {
-    const url = new URL(file.src, window.location.href);
-    url.searchParams.set("render", "html");
-    return <ArtifactPreviewFrame src={url.href} title={input.title} sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" />;
   }
   if (input.mode === "pdf") {
     return <ArtifactPreviewFrame src={file.src} title={input.title} />;

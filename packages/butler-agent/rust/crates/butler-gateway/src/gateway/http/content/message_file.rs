@@ -7,28 +7,26 @@ pub(in crate::gateway::http) fn is_html(file: &MessageFileRef) -> bool {
     name.ends_with(".html") || name.ends_with(".htm") || file.mime_type == "text/html"
 }
 
-pub(in crate::gateway::http) fn redirect(
+pub(in crate::gateway::http) fn view(
     state: &HttpState,
     request: &Request<Body>,
-    id: &str,
+    file: &MessageFileRef,
 ) -> Result<Response, HttpError> {
+    let id = &file.file_id;
+    if !is_html(file) {
+        return Err(refused());
+    }
     let origin = view_origin(state, request)?;
     let token = state.security.token().ok_or_else(refused)?;
-    // Domain-separate file capabilities from published output identifiers.
-    let cap = capability::sign(&token, &format!("message-file-{id}"), 0, now());
-    let mut response = Response::new(Body::empty());
-    *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
-    response.headers_mut().insert(
-        header::LOCATION,
-        format!("{origin}/__o/{cap}/index.html")
-            .parse()
-            .map_err(|_| refused())?,
-    );
-    response.headers_mut().insert(
-        header::CACHE_CONTROL,
-        axum::http::HeaderValue::from_static("no-store"),
-    );
-    Ok(response)
+    let issued = now();
+    let cap = capability::sign(&token, &format!("message-file-{id}"), 0, issued);
+    super::super::json(
+        StatusCode::OK,
+        crate::gateway::protocol::ApiEnvelope {
+            protocol_version: crate::gateway::protocol::APP_PROTOCOL_VERSION,
+            data: serde_json::json!({"url": format!("{origin}/__o/{cap}/index.html"), "expires_at": issued + capability::TTL_SECONDS}),
+        },
+    )
 }
 
 #[derive(Clone)]

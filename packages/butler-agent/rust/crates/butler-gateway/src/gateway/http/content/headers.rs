@@ -58,20 +58,25 @@ pub(super) fn ui_frames(state: &HttpState) -> String {
 }
 
 /// Top-level previews retain the content origin sandbox, without gateway privileges.
-pub(super) fn sandbox_file(response: &mut axum::response::Response) {
-    if let Some(policy) = response
+pub(super) fn sandbox_file(state: &HttpState, response: &mut axum::response::Response) {
+    let fallback = build(state);
+    let policy = response
         .headers()
         .get("content-security-policy")
         .and_then(|value| value.to_str().ok())
-        .and_then(|policy| {
-            HeaderValue::from_str(&format!(
-                "{policy}; sandbox allow-scripts allow-same-origin"
-            ))
-            .ok()
+        .or_else(|| {
+            fallback
+                .get("content-security-policy")
+                .and_then(|value| value.to_str().ok())
         })
-    {
-        response
-            .headers_mut()
-            .insert("content-security-policy", policy);
-    }
+        .unwrap_or("frame-ancestors 'none'");
+    let policy = HeaderValue::from_str(&format!(
+        "{policy}; sandbox allow-scripts allow-same-origin"
+    ))
+    .unwrap_or_else(|_| {
+        HeaderValue::from_static("frame-ancestors 'none'; sandbox allow-scripts allow-same-origin")
+    });
+    response
+        .headers_mut()
+        .insert("content-security-policy", policy);
 }

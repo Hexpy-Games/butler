@@ -1,9 +1,10 @@
 // Real stub Turn → output store → isolated listener → the shared App UI.
+import { verifyElectronHtml, verifyBrowserHtmlRefresh } from "../support/html-artifact-client-smoke";
 import { htmlArtifactSmoke, htmlArtifactFixture } from "../support/html-artifact-smoke.ts";
 import { strict as assert } from "node:assert";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { type Page } from "playwright";
+import { type Browser, type Page } from "playwright";
 import { createNativeAppServer, freePort, type NativeAppServerHandle } from "../support/native-app-server.ts";
 import { spawnElectron, stopElectronChild } from "../support/electron-child.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
@@ -13,6 +14,7 @@ import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui
 
 const screenshots = process.env.BUTLER_SMOKE_SCREENSHOTS;
 const electronOnly = process.env.BUTLER_SMOKE_ELECTRON_ONLY === "1";
+const remoteOnly = process.env.BUTLER_SMOKE_OUTPUT_CASE === "remote";
 const baseline = process.env.BUTLER_SMOKE_BASELINE === "1";
 if (screenshots) mkdirSync(screenshots, { recursive: true });
 const marker = "Publish browser output";
@@ -20,7 +22,8 @@ const sessionTitle = "Output task";
 let sessionId = "";
 // The virtual HTTPS fixture has no public certificate. Restricted Chromium
 // uses a certificate exception and DNS mapping only for these local fixtures.
-const browser = await launchSmokeBrowser(["--ignore-certificate-errors", "--host-resolver-rules=MAP butler.example.info 127.0.0.1, MAP outputs.example.info 127.0.0.1"]);
+let browser!: Browser;
+if (!electronOnly) browser = await launchSmokeBrowser(["--ignore-certificate-errors", "--host-resolver-rules=MAP butler.example.info 127.0.0.1, MAP outputs.example.info 127.0.0.1"]);
 
 async function waitForOutput(server: NativeAppServerHandle): Promise<{ id: string }> {
   const deadline = Date.now() + 30_000;
@@ -83,13 +86,31 @@ async function remoteClients(server: NativeAppServerHandle, language: string, ad
   try {
     await page.route(`${lan}**`, route=>route.continue({ headers:{ ...route.request().headers(), ...server.authHeaders } }));
     await openViewer(page, { ...server, url:lan });
+    await capture(page, `lan-output-${language}-390`);
+    await page.locator('[data-test-class="right-panel-overlay-close"]').click();
+    await page.locator('[data-test-class="message-artifact-list"]').getByText("standalone.HTML", { exact: true }).click();
+    await page.frameLocator('[data-test-class="artifact-viewer"] iframe').locator("#html-output").waitFor();
+    await page.frameLocator('[data-test-class="artifact-viewer"] iframe').getByRole("button", { name: "Interactive", exact: true }).click();
+    await verifyBrowserHtmlRefresh(page, server, sessionId);
     await capture(page, `lan-${language}-390`);
   } finally { await page.close(); }
   const proxy = outputTunnel(server);
   const tunnel = await browser.newPage({ viewport:{ width:390, height:1000 }, reducedMotion:"reduce", ignoreHTTPSErrors:true });
   try {
     await server.api("/settings", { method:"PATCH", headers:adminHeaders, body:JSON.stringify({ security:{ remote_access_enabled:true, allowed_hosts:[proxy.apiHost], content_hosts:[proxy.contentHost] } }) });
+    const { artifacts } = await server.api<{ artifacts: Array<{ title: string; url: string }> }>(`/artifacts?session_id=${sessionId}`);
+    const file = artifacts.find(artifact => artifact.title === "standalone.HTML")!;
+    const forwarded = await server.api<{ url: string }>(`${file.url}/view`, { headers: { "x-forwarded-proto": "https" } });
+    assert.equal(new URL(forwarded.url).origin, `https://${proxy.contentHost}`);
     await openViewer(tunnel, { ...server, url:`https://${proxy.apiHost}/` });
+    await capture(tunnel, `tunnel-output-${language}-390`);
+    await tunnel.locator('[data-test-class="right-panel-overlay-close"]').click();
+    await tunnel.locator('[data-test-class="message-artifact-list"]').getByText("standalone.HTML", { exact: true }).click();
+    await tunnel.frameLocator('[data-test-class="artifact-viewer"] iframe').locator("#html-output").waitFor();
+    const src = await tunnel.locator('[data-test-class="artifact-viewer"] iframe').getAttribute("src");
+    assert.equal(new URL(src!).origin, `https://${proxy.contentHost}`);
+    await tunnel.frameLocator('[data-test-class="artifact-viewer"] iframe').getByRole("button", { name: "Interactive", exact: true }).click();
+    await verifyBrowserHtmlRefresh(tunnel, server, sessionId);
     await capture(tunnel, `tunnel-${language}-390`);
   } finally { try { await tunnel.close(); } finally { proxy.stop(); } }
 
@@ -153,7 +174,8 @@ async function electronClient(server: NativeAppServerHandle, language: string) {
     await page.waitForFunction(()=>document.readyState === "complete" && Boolean((window as unknown as { butlerApp?:unknown }).butlerApp));
     await page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="app-sidebar"]')));
     await page.waitForFunction(()=>Array.from(document.querySelectorAll('[data-test-class="app-sidebar"] *')).some(e=>e.textContent?.trim() === "Output task"));
-    await page.clickText(sessionTitle, '[data-test-class="app-sidebar"] *');
+    await page.expression(`document.querySelector('[data-test-class="app-sidebar"] [aria-label="${sessionTitle}"]').focus()`);
+    await page.press("Enter");
     await page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="message-artifact-list"] [aria-label="Output"]')));
     await page.clickText("Output", '[data-test-class="message-artifact-list"] *');
     await page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="artifact-viewer"] iframe')));
@@ -168,6 +190,8 @@ async function electronClient(server: NativeAppServerHandle, language: string) {
     }
     assert.deepEqual(facts, { title:"Ready", storage:"ready", api:"blocked", preload:"undefined" });
     if (screenshots) writeFileSync(join(screenshots, `after-electron-viewer-${language}-desktop.png`), await page.screenshot());
+    child?.close(); child = null;
+    await verifyElectronHtml(page, port, server, sessionId, language);
     console.log(`Electron app://butler viewer ${language}: passed`);
   } catch (error) {
     if (page) {
@@ -216,17 +240,17 @@ try {
         await htmlArtifactSmoke(server, browser, baseline, sessionId, sessionTitle);
         break;
       }
-      if (!baseline && !electronOnly && language === "en") await htmlArtifactSmoke(server, browser, false, sessionId, sessionTitle);
+      if (!baseline && !electronOnly && !remoteOnly && language === "en") await htmlArtifactSmoke(server, browser, false, sessionId, sessionTitle);
       const { secret } = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8"));
-      if (!electronOnly) {
+      if (!electronOnly && !remoteOnly) {
         for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const wallpaper of [false, true]) {
           await captureCell(server, secret, language, width, theme, wallpaper);
         }
       }
-      if (!baseline) await electronClient(server, language);
+      if (!baseline && !remoteOnly) await electronClient(server, language);
       if (!baseline && !electronOnly) await remoteClients(server, language, { ...server.authHeaders, "x-butler-admin":secret });
     } finally { await server.stop(); }
   }
-  console.log(process.env.BUTLER_SMOKE_OUTPUT_CASE === "html-file" ? `HTML file ${baseline ? "source reproduced" : "rendering and isolation passed"}` : baseline ? "Baseline viewer/settings matrix captured (KO/EN, desktop/390px, themes/wallpaper)" : electronOnly ? "Electron output viewer: KO/EN passed" : "Output viewer: JS, localStorage, API isolation, message chips, reload/revision, settings, desktop/390px, KO/EN, LAN/HTTPS fixture passed");
+  console.log(process.env.BUTLER_SMOKE_OUTPUT_CASE === "html-file" ? `HTML file ${baseline ? "source reproduced" : "rendering and isolation passed"}` : baseline ? "Baseline viewer/settings matrix captured (KO/EN, desktop/390px, themes/wallpaper)" : remoteOnly ? "Remote output/HTML viewers: KO/EN, LAN/HTTPS and forwarded content host passed" : electronOnly ? "Electron output viewer: KO/EN passed" : "Output viewer: JS, localStorage, API isolation, message chips, reload/revision, settings, desktop/390px, KO/EN, LAN/HTTPS fixture passed");
 } catch (error) { console.error(error); throw error; }
-finally { await browser.close(); }
+finally { await browser?.close(); }

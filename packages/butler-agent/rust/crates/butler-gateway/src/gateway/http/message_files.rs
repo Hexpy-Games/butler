@@ -26,9 +26,10 @@ pub(super) fn handles(method: &Method, path: &str) -> bool {
     (method == Method::GET && path.starts_with("/message-assets/"))
         || (method == Method::POST && path == "/message-files")
         || (method == Method::GET
-            && path
-                .strip_prefix("/message-files/")
-                .is_some_and(|id| !id.is_empty() && !id.contains('/')))
+            && path.strip_prefix("/message-files/").is_some_and(|id| {
+                let id = id.strip_suffix("/view").unwrap_or(id);
+                !id.is_empty() && !id.contains('/')
+            }))
 }
 
 pub(super) async fn route(
@@ -54,6 +55,16 @@ pub(super) async fn route(
             },
         );
     }
+    if let Some(encoded) = request
+        .uri()
+        .path()
+        .strip_prefix("/message-files/")
+        .and_then(|id| id.strip_suffix("/view"))
+    {
+        let id = decode_file_id(encoded)?;
+        let file = state.application.message_file_metadata(id).await?;
+        return super::content::message_file::view(&state, &request, &file);
+    }
     let encoded = request
         .uri()
         .path()
@@ -62,14 +73,6 @@ pub(super) async fn route(
         .ok_or_else(not_found)?;
     let id = decode_file_id(encoded)?;
     let download = state.application.download_message_file(id).await?;
-    if super::query(request.uri())
-        .get("render")
-        .map(String::as_str)
-        == Some("html")
-        && super::content::message_file::is_html(&download.file)
-    {
-        return super::content::message_file::redirect(&state, &request, &download.file.file_id);
-    }
     let size = download.bytes.len();
     let rendering = FileRendering::of(&download.file.mime_type);
     let mut response = Response::new(Body::from(download.bytes));

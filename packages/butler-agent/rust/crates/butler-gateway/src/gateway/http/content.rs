@@ -92,7 +92,7 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
         .remove::<message_file::Preview>()
         .is_some()
     {
-        headers::sandbox_file(&mut response);
+        headers::sandbox_file(&state, &mut response);
     }
     response
 }

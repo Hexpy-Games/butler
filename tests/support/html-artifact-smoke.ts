@@ -3,6 +3,8 @@ import { strict as assert } from "node:assert";
 import { join } from "node:path";
 import { mkdirSync, writeFileSync } from "node:fs";
 import type { Browser, Page } from "playwright";
+import { verifyBrowserHtmlRefresh } from "./html-artifact-client-smoke";
+import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import type { NativeAppServerHandle } from "./native-app-server";
 
 export async function htmlArtifactSmoke(server: NativeAppServerHandle, browser: Browser, baseline: boolean, sessionId: string, sessionTitle: string) {
@@ -15,20 +17,27 @@ export async function htmlArtifactSmoke(server: NativeAppServerHandle, browser: 
   const original = await fetch(new URL(file.signed_url, server.url));
   const headers = Object.fromEntries(original.headers);
   assert.equal(await original.text(), html, "source bytes retained");
+  if (!baseline) {
+    const legacy = new URL(file.signed_url, server.url); legacy.searchParams.set("render", "html");
+    const inert = await fetch(legacy, { redirect: "manual" });
+    assert.equal(inert.status, 200, "legacy render query never redirects a frame through the gateway");
+    assert.equal(inert.headers.get("content-security-policy"), "sandbox; default-src 'none'");
+    assert.equal(await fetch(new URL(`${file.url}/view`, server.url)).then(response => response.status), 401);
+  }
   if (evidence) writeFileSync(join(evidence, `${baseline ? "before" : "after"}-headers.json`), JSON.stringify(headers, null, 2));
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   try {
     await server.signIn(page); await page.goto(server.url);
-    const showSidebar = page.getByRole("button", { name: "Show sidebar", exact: true });
-    await showSidebar.or(page.getByRole("button", { name: "Hide sidebar", exact: true })).waitFor();
+    const showSidebar = page.getByRole("button", { name: appCopy.titlebar.showLeftPanel, exact: true });
+    await showSidebar.or(page.getByRole("button", { name: appCopy.titlebar.hideLeftPanel, exact: true })).waitFor();
     if (await showSidebar.isVisible()) await showSidebar.click();
     await page.locator('[data-test-class="app-sidebar"]').getByText(sessionTitle, { exact: true }).click();
     await page.locator('[data-test-class="message-artifact-list"]').getByText("standalone.HTML", { exact: true }).click();
     await verify(page, "file-card");
-    await page.getByRole("button", { name: "Artifact list", exact: true }).click();
+    await page.getByRole("button", { name: appCopy.artifacts.backToList, exact: true }).click();
     await page.locator('[data-slot="document-tile"]').getByText("standalone.HTML", { exact: true }).click();
     await verify(page, "preview-panel");
-    await page.getByRole("button", { name: "Library", exact: true }).click();
+    await page.getByRole("button", { name: appCopy.library.title, exact: true }).click();
     await page.locator('[data-library-kind="document"]').getByText("standalone.HTML", { exact: true }).click();
     await verify(page, "library");
     if (!baseline) {
@@ -67,6 +76,7 @@ export async function htmlArtifactSmoke(server: NativeAppServerHandle, browser: 
       await frame.getByRole("button", { name: "Interactive", exact: true }).click();
       await frame.getByRole("button", { name: "Clicked", exact: true }).waitFor();
       const child = page.frames().find(frame => frame.url().includes("/__o/"))!;
+      if (entry === "file-card") await verifyBrowserHtmlRefresh(page, server, sessionId);
       assert.equal(await child.evaluate(() => localStorage.getItem("html-preview")), "ready");
       assert.deepEqual(await child.evaluate(() => ({ node: typeof (globalThis as unknown as { require?: unknown }).require, ipc: typeof (window as unknown as { butlerApp?: unknown }).butlerApp, parent: (() => { try { return Boolean(parent.document); } catch { return false; } })() })), { node: "undefined", ipc: "undefined", parent: false });
     }

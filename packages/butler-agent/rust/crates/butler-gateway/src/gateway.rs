@@ -299,6 +299,7 @@ pub trait GatewayApplication:
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn upload_message_file(&self, input: AppFileUpload) -> ApplicationFuture<MessageFileRef>;
+    fn message_file_metadata(&self, id: String) -> ApplicationFuture<MessageFileRef>;
     fn download_message_file(&self, id: String) -> ApplicationFuture<AppFileDownload>;
     fn runtime_readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError>;
     /// First-run setup (#230); an application without it answers 404.
