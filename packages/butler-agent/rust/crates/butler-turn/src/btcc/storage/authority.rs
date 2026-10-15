@@ -4,6 +4,8 @@ use rusqlite::Connection;
 
 mod close;
 mod query;
+mod reader;
+pub(crate) use reader::SqliteAuthorityReader;
 mod write;
 
 pub(super) use close::{close_pending_self_session_requests, close_pending_source_work_requests};

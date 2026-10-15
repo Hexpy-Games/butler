@@ -14,7 +14,9 @@ use crate::btcc::{SuspensionReason, TurnStore, TurnTransition};
 use butler_core::locale::LocaleCollation;
 
 mod bun_oracle;
+mod durability;
 mod policy_tests;
+mod reader;
 
 fn clock() -> Arc<dyn Fn() -> String + Send + Sync> {
     Arc::new(|| "2026-09-19T00:00:00.000Z".into())
@@ -63,6 +65,7 @@ fn input(work: &str, plan: &str) -> AuthorityAdmissionInput {
     }
 }
 
+// test-category: security
 #[tokio::test]
 async fn real_turn_work_journal_authority_resume_outcome_and_reopen() {
     super::question_validation::schema_and_answer_validation();
@@ -70,6 +73,7 @@ async fn real_turn_work_journal_authority_resume_outcome_and_reopen() {
     let storage = BtccStorage::open(fixture.config("authority-real"))
         .await
         .unwrap();
+    durability::assert_scoped_sync(&storage).await;
     let turns = BtccRepositories::new(storage.clone(), None);
     let (turn, fresh) = turns
         .load_or_admit(&crate::btcc::storage::testing::prepared())

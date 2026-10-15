@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 
 use super::{
     STATES,
-    io::{atomic_write, read},
+    io::{publish, read},
     record_path,
 };
 use crate::gateway::InboundQueueCode;
@@ -115,6 +115,7 @@ pub(in crate::gateway::inbound_queue) fn enqueue_idempotent(
     root: &Path,
     envelope: JsonDocument,
     metadata: Map<String, Value>,
+    durable: bool,
 ) -> QueueResult<QueuedInboundEvent> {
     let id = identity(&envelope)?;
     let claim = id.routing_hints.and_then(|hints| hints.app_queue_claim_id);
@@ -130,7 +131,7 @@ pub(in crate::gateway::inbound_queue) fn enqueue_idempotent(
             if state == "pending" {
                 existing.envelope =
                     patch_envelope(&existing.envelope, None, Some(next_claim), None)?;
-                atomic_write(&record_path(root, "pending", &queue_id), &existing)?;
+                publish(&record_path(root, "pending", &queue_id), &existing, durable)?;
                 return Ok(existing);
             }
             let new_id = reconciliation_id(&id.event_id, next_claim);
@@ -148,13 +149,21 @@ pub(in crate::gateway::inbound_queue) fn enqueue_idempotent(
             record
                 .metadata
                 .insert("reconciliationOfEventId".into(), id.event_id.into());
-            atomic_write(&record_path(root, "pending", &record.queue_id), &record)?;
+            publish(
+                &record_path(root, "pending", &record.queue_id),
+                &record,
+                durable,
+            )?;
             return Ok(record);
         }
         return Ok(existing);
     }
     let record = fresh(queue_id, envelope, metadata);
-    atomic_write(&record_path(root, "pending", &record.queue_id), &record)?;
+    publish(
+        &record_path(root, "pending", &record.queue_id),
+        &record,
+        durable,
+    )?;
     Ok(record)
 }
 

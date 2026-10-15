@@ -57,6 +57,17 @@ impl InboundQueue {
             .await
     }
 
+    /// Publish work already committed by a durable owner which reconstructs
+    /// missing queue entries on restart. Claiming still syncs the execution
+    /// lease before dispatch. Ordinary message acceptance must use enqueue_async.
+    pub async fn enqueue_reconstructible_async(
+        &self,
+        envelope: JsonDocument,
+    ) -> QueueResult<QueuedInboundEvent> {
+        self.blocking(move |queue| queue.publish(envelope, Map::new(), false))
+            .await
+    }
+
     pub async fn find_async(
         &self,
         envelope: JsonDocument,
@@ -139,13 +150,22 @@ impl InboundQueue {
         envelope: JsonDocument,
         metadata: Map<String, Value>,
     ) -> QueueResult<QueuedInboundEvent> {
+        self.publish(envelope, metadata, true)
+    }
+
+    fn publish(
+        &self,
+        envelope: JsonDocument,
+        metadata: Map<String, Value>,
+        durable: bool,
+    ) -> QueueResult<QueuedInboundEvent> {
         let timing = super::command_timing::CommandTiming::new("inbound_enqueue");
         let _guard = self.lane.lock();
         timing.mark("lock_acquired");
-        let result = storage::enqueue_idempotent(&self.root, envelope, metadata);
+        let result = storage::enqueue_idempotent(&self.root, envelope, metadata, durable);
         timing.mark("record_published");
         if result.is_ok() {
-            // The durable queue write precedes this coalesced in-process wake.
+            // Either this write or its reconstructing owner is already durable.
             self.enqueue_wake.notify_one();
         }
         result

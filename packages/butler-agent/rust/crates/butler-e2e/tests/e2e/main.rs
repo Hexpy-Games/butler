@@ -180,6 +180,8 @@ mod memory_stubs;
 mod schedule_cassette;
 
 mod btcc_cutover;
+#[path = "support/btcc_scale.rs"]
+mod btcc_scale;
 mod btcc_startup_integrity;
 mod btcc_startup_scale;
 mod cli_project_folder;
@@ -200,6 +202,9 @@ mod schedule_handoff;
 mod session_folder;
 mod storage_concurrency;
 mod supervisor_ownership;
+#[path = "support/transcript_scale.rs"]
+#[allow(clippy::unwrap_used, reason = "test fixture assertions")]
+mod transcript_scale;
 
 #[path = "support/memory_reset_support.rs"]
 mod memory_reset_support;
