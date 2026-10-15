@@ -30,8 +30,13 @@ pub(super) fn isolated_command(program: &Path, home: &Path) -> Command {
         // Never the machine's installed App: hidden-host scenarios name the
         // in-worktree Electron.
         .env("BUTLER_BROWSER_APP", "off");
-    if let Some(value) = std::env::var_os("BUTLER_TEST_SANDBOX_FORCE_L") {
-        command.env("BUTLER_TEST_SANDBOX_FORCE_L", value);
+    for name in [
+        "BUTLER_TEST_SANDBOX_FORCE_L",
+        "BUTLER_DEBUG_COMMAND_TIMINGS",
+    ] {
+        if let Some(value) = std::env::var_os(name) {
+            command.env(name, value);
+        }
     }
     command
 }

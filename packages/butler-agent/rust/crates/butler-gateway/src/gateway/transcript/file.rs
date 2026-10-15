@@ -13,6 +13,7 @@ pub(super) fn append(
     session_id: &str,
     events: &[TranscriptEvent],
 ) -> TranscriptResult<String> {
+    let timing = crate::gateway::command_timing::CommandTiming::new("transcript_append");
     let directory = root.join("transcripts");
     butler_platform::secure_fs::create_private_dir_all(&directory).map_err(io_error)?;
     let mut name: String = session_id
@@ -43,11 +44,15 @@ pub(super) fn append(
     butler_platform::secure_fs::owner_only(&mut options);
     butler_platform::secure_fs::no_follow(&mut options);
     let mut file = options.open(&path).map_err(io_error)?;
+    timing.mark("opened");
     butler_platform::secure_fs::restrict_open_file(&file)
         .unwrap_or(Ok(()))
         .map_err(io_error)?;
+    timing.mark("permissions_checked");
     file.write_all(&bytes).map_err(io_error)?;
+    timing.mark("written");
     file.sync_data().map_err(io_error)?;
+    timing.mark("synced");
     if !existed {
         butler_platform::secure_fs::sync_directory(&directory)
             .unwrap_or(Ok(()))
