@@ -2,8 +2,8 @@ use rusqlite::Connection;
 
 use crate::btcc::AuthorityError;
 use crate::btcc::authority::contracts::{
-    AuthorityAdmissionInput, AuthorityRecord, AuthorityRepository, AuthorityResult,
-    AuthorityResumeSource, ConversationPermission, DecisionWrite, OutcomeWrite, PermissionSource,
+    AuthorityAdmissionInput, AuthorityRecord, AuthorityRepository, AuthorityResult, DecisionWrite,
+    OutcomeWrite,
 };
 
 use super::{close, query, write};
@@ -17,17 +17,8 @@ impl<'a> SqliteAuthorityRepository<'a> {
     }
 }
 impl AuthorityRepository for SqliteAuthorityRepository<'_> {
-    fn retains_approval_claim(&mut self, turn_id: &str) -> AuthorityResult<bool> {
-        query::retains_approval_claim(self.db, turn_id)
-    }
     fn has_permission(&mut self, grant_ref: &str) -> AuthorityResult<bool> {
         query::has_permission(self.db, grant_ref)
-    }
-    fn list_permissions(&mut self, owner: &str) -> AuthorityResult<Vec<ConversationPermission>> {
-        query::list_permissions(self.db, owner)
-    }
-    fn list_all_permissions(&mut self) -> AuthorityResult<Vec<ConversationPermission>> {
-        query::list_all_permissions(self.db)
     }
     fn revoke_permissions(
         &mut self,
@@ -36,16 +27,6 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
     ) -> AuthorityResult<()> {
         write::revoke_permissions(self.db, grants, now)
     }
-    fn permission_projection_records(
-        &mut self,
-        owners: &[String],
-        visit: &mut dyn FnMut(PermissionSource<'_>) -> AuthorityResult<()>,
-    ) -> AuthorityResult<()> {
-        query::permission_projection_records(self.db, owners, visit)
-    }
-    fn permission_records(&mut self, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
-        query::permission_records(self.db, owner)
-    }
     fn revoke_permission(
         &mut self,
         owner: &str,
@@ -53,18 +34,6 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
         now: &str,
     ) -> AuthorityResult<()> {
         write::revoke_permission(self.db, owner, grant_ref, now)
-    }
-    fn resume_source(
-        &mut self,
-        request_ref: &str,
-    ) -> AuthorityResult<Option<AuthorityResumeSource>> {
-        query::resume_source(self.db, request_ref)
-    }
-    fn attention_owners(&mut self, owners: &[String]) -> AuthorityResult<Vec<String>> {
-        query::attention_owners(self.db, owners)
-    }
-    fn waiting_source_sessions(&mut self) -> AuthorityResult<Vec<String>> {
-        query::waiting_source_sessions(self.db)
     }
     fn find_identity(&mut self, sha: &str) -> AuthorityResult<Option<AuthorityRecord>> {
         query::find(self.db, "identity_sha256", sha)
@@ -82,14 +51,28 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
     fn find_ref(&mut self, request_ref: &str) -> AuthorityResult<Option<AuthorityRecord>> {
         query::find(self.db, "request_ref", request_ref)
     }
-    fn list_pending(&mut self, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
-        query::list_pending(self.db, owner)
-    }
-    fn list_decided(&mut self) -> AuthorityResult<Vec<AuthorityRecord>> {
-        query::list_decided(self.db)
-    }
     fn decide(&mut self, write: DecisionWrite) -> AuthorityResult<Option<AuthorityRecord>> {
-        write::decide(self.db, write)
+        // A decision is the recovery source for its reconstructible resume
+        // queue entry. FULL syncs this commit (including the earlier message
+        // and continuation) before either the HTTP reply or execution wake.
+        // Keep this on the serialized writer and restore its normal policy on
+        // every error path; no checkpoint or unrelated file sync is needed.
+        let synchronous: i64 = self
+            .db
+            .pragma_query_value(None, "synchronous", |row| row.get(0))
+            .map_err(query::sql)?;
+        self.db
+            .pragma_update(None, "synchronous", synchronous.max(2))
+            .map_err(query::sql)?;
+        let result =
+            butler_platform::sqlite::with_fullfsync(self.db, |db| write::decide(db, write))
+                .map_err(query::sql);
+        let restored = self
+            .db
+            .pragma_update(None, "synchronous", synchronous)
+            .map_err(query::sql);
+        restored?;
+        result?
     }
     fn settle_question_followup(&mut self, request_ref: &str) -> AuthorityResult<()> {
         write::settle_question_followup(self.db, request_ref)

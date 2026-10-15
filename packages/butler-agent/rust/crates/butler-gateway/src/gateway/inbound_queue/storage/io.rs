@@ -23,6 +23,10 @@ pub(super) fn read(path: &Path) -> QueueResult<Option<QueuedInboundEvent>> {
 }
 
 pub(super) fn atomic_write(path: &Path, record: &QueuedInboundEvent) -> QueueResult<()> {
+    publish(path, record, true)
+}
+
+pub(super) fn publish(path: &Path, record: &QueuedInboundEvent, durable: bool) -> QueueResult<()> {
     let parent = path.parent().ok_or_else(|| {
         InboundQueueError::new(
             InboundQueueCode::InboundQueuePathInvalid,
@@ -38,11 +42,12 @@ pub(super) fn atomic_write(path: &Path, record: &QueuedInboundEvent) -> QueueRes
         .with_source(error)
     })?;
     bytes.push(b'\n');
-    secure_fs::replace_private(
-        path,
-        |file| file.write_all(&bytes).map_err(io_error),
-        io_error,
-    )
+    let write = |file: &mut fs::File| file.write_all(&bytes).map_err(io_error);
+    if durable {
+        secure_fs::replace_private(path, write, io_error)
+    } else {
+        secure_fs::replace_private_reconstructible(path, write, io_error)
+    }
 }
 
 pub(super) fn file_names(path: &Path) -> QueueResult<Vec<String>> {

@@ -228,6 +228,7 @@ fn fast_path(
 pub(super) fn writer(path: &Path) -> StorageResult<sqlite::Connection> {
     let db = sqlite::open(path).map_err(StorageError::sqlite)?;
     configure(&db, StorageProfile::Durable)?;
+    super::timing::install_writer(&db);
     // Overflow pages must be freed without rewriting their former contents.
     db.pragma_update(None, "secure_delete", false)
         .map_err(StorageError::sqlite)?;

@@ -31,10 +31,14 @@ pub(super) fn drain(db: &mut rusqlite::Connection, run: &mut Run<'_>) -> Storage
         let tx = db
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(StorageError::sqlite)?;
+        // Correlate the terminal-state lookup to the bounded chunk. An ordinary
+        // join can choose a scan of the complete historical turns table before
+        // probing the temporary table, even when only one turn is queued.
         tx.execute_batch("CREATE TEMP TABLE IF NOT EXISTS chunk(turn_id TEXT PRIMARY KEY); DELETE FROM chunk;
           INSERT INTO chunk SELECT turn_id FROM agent_acceptance_reclaims LIMIT 64;
           UPDATE btcc_model_round_acceptances SET normalized_response_json='{}',continuation_delta_json=NULL,payload_state=2
-          WHERE turn_id IN (SELECT c.turn_id FROM chunk c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE t.semantic_state <> 'admitted');") .map_err(StorageError::sqlite)?;
+          WHERE turn_id IN (SELECT c.turn_id FROM chunk c WHERE EXISTS
+            (SELECT 1 FROM btcc_turns t WHERE t.turn_id=c.turn_id AND t.semantic_state <> 'admitted'));") .map_err(StorageError::sqlite)?;
         let count = tx.execute("DELETE FROM agent_acceptance_reclaims WHERE turn_id IN (SELECT turn_id FROM chunk)",[]).map_err(StorageError::sqlite)?;
         if count == 0 {
             return Ok(true);

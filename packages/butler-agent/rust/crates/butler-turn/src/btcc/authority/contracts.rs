@@ -442,30 +442,11 @@ pub(crate) struct OutcomeWrite {
 }
 
 pub(crate) trait AuthorityRepository {
-    fn retains_approval_claim(&mut self, turn_id: &str) -> AuthorityResult<bool>;
     fn has_permission(&mut self, grant_ref: &str) -> AuthorityResult<bool>;
-    fn list_permissions(&mut self, owner: &str) -> AuthorityResult<Vec<ConversationPermission>>;
-    fn list_all_permissions(&mut self) -> AuthorityResult<Vec<ConversationPermission>>;
     fn revoke_permissions(&mut self, grants: &[(String, String)], now: &str)
     -> AuthorityResult<()>;
-    fn permission_records(&mut self, _owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
-        Ok(Vec::new())
-    }
-    fn permission_projection_records(
-        &mut self,
-        owners: &[String],
-        visit: &mut dyn FnMut(PermissionSource<'_>) -> AuthorityResult<()>,
-    ) -> AuthorityResult<()>;
     fn revoke_permission(&mut self, owner: &str, grant_ref: &str, now: &str)
     -> AuthorityResult<()>;
-    fn resume_source(
-        &mut self,
-        request_ref: &str,
-    ) -> AuthorityResult<Option<AuthorityResumeSource>>;
-    fn attention_owners(&mut self, _owners: &[String]) -> AuthorityResult<Vec<String>> {
-        Ok(Vec::new())
-    }
-    fn waiting_source_sessions(&mut self) -> AuthorityResult<Vec<String>>;
     fn find_identity(&mut self, sha: &str) -> AuthorityResult<Option<AuthorityRecord>>;
     fn find_slot(
         &mut self,
@@ -474,8 +455,6 @@ pub(crate) trait AuthorityRepository {
     ) -> AuthorityResult<Option<AuthorityRecord>>;
     fn insert(&mut self, record: &AuthorityRecord) -> AuthorityResult<()>;
     fn find_ref(&mut self, request_ref: &str) -> AuthorityResult<Option<AuthorityRecord>>;
-    fn list_pending(&mut self, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>>;
-    fn list_decided(&mut self) -> AuthorityResult<Vec<AuthorityRecord>>;
     fn decide(&mut self, write: DecisionWrite) -> AuthorityResult<Option<AuthorityRecord>>;
     fn settle_question_followup(&mut self, request_ref: &str) -> AuthorityResult<()>;
     fn record_question_followup(

@@ -6,6 +6,7 @@ mod admission;
 mod admission_identity;
 mod answer_drafts;
 mod authority_permissions;
+mod authority_recovery;
 mod automations;
 mod briefing_snapshot;
 mod context_details;
@@ -348,13 +349,7 @@ impl AppApplication {
         automation_scheduler.initialize(self.clone_handle())?;
         self.recover_turn_cancellations().await?;
         self.watch_wallpaper_modules().await;
-        // Failed authority retries remain durable for the next startup.
-        if let Ok(followups) = self.dependencies.authority_handoff.retry_decided().await {
-            for (owner, request_ref, input) in followups {
-                let session = self.owner_chat(owner).await?;
-                let _ = question_followup::send(self, &session, &request_ref, &input).await;
-            }
-        }
+        authority_recovery::retry(self).await;
         self.setup_readiness.start(
             self.dependencies.setup.readiness(),
             self.storage.clone(),
