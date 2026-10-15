@@ -1,5 +1,6 @@
 //! Documented wire-format replay cassettes; public provider API in a subprocess.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "replay assertions")]
+use butler_e2e::e2e::binary::fixture_binary;
 use butler_e2e::e2e::{HarnessError, cassette::ResponseRecord};
 use serde_json::{Value, json};
 use std::{
@@ -388,7 +389,7 @@ async fn invoke(
     let stdout = dir.join("stdout.json");
     let stderr = dir.join("stderr.log");
     let endpoint = format!("{}{}", server.endpoint, fixture["path"].as_str().unwrap());
-    let mut child = Command::new(env!("CARGO_BIN_EXE_e2e-provider-streaming"))
+    let mut child = Command::new(fixture_binary("e2e-provider-streaming")?)
         .args([
             endpoint.as_str(),
             fixture["model"].as_str().unwrap(),
