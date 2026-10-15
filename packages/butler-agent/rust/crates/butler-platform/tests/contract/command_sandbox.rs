@@ -36,6 +36,8 @@ fn write_command(targets: &[&Path]) -> String {
 // test-category: security
 #[test]
 fn read_only_commands_run_sandboxed_or_are_refused() {
+    #[cfg(windows)]
+    super::windows_language::verify();
     super::mxc_policy::verify();
     #[cfg(feature = "test-support")]
     butler_platform::command_sandbox::windows_recovery_contract();

@@ -110,6 +110,8 @@ fn prepare(
     super::drive::reconcile(&data)?;
     let (path, lease) = save_policy(&data, root, &env, &plan, &invocation, timeout)?;
     Ok(Invocation {
+        shell_program: None,
+        shell_script: None,
         lease: Some(lease),
         program: helper.to_string_lossy().into(),
         arguments: vec![

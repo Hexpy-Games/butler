@@ -15,6 +15,10 @@
 //! them to stop through their control endpoint instead (see
 //! `instance::request_stop`).
 
+#[cfg(feature = "test-support")]
+mod test_support;
+#[cfg(feature = "test-support")]
+pub use test_support::fixture_profile_environment;
 pub mod usage;
 pub use usage::{ProcessUsage, sample as sample_usage};
 

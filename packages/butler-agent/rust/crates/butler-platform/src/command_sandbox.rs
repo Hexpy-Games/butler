@@ -134,6 +134,11 @@ pub struct Invocation {
     pub program: String,
     /// Its arguments, in order.
     pub arguments: Vec<String>,
+    /// Inner shell path when the platform needs a process startup wrapper.
+    /// Passed through the environment, never interpolated into shell syntax.
+    pub shell_program: Option<String>,
+    /// Script carried outside the startup wrapper's command line length limit.
+    pub shell_script: Option<String>,
     /// Keeps per-command preparation live until dispatch and execution finish.
     pub lease: Option<std::sync::Arc<InvocationLease>>,
 }

@@ -244,15 +244,14 @@ async fn probe_emits_loader_diagnostics() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows probe diagnostics");
     let mut setup = Setup::new("WINDOWS-PROBE-DIAGNOSTICS")?;
-    let agent = butler_e2e::e2e::binary::agent_binary()?;
-    let helper = agent.with_file_name("butler-sandbox.exe");
+    let helper = setup.sandbox.binary.with_file_name("butler-sandbox.exe");
+    let launch = butler_e2e::e2e::agent::Launch::new(&setup.sandbox)?;
     let diagnostic = setup.sandbox.home.join("probe.json");
-    let out = std::process::Command::new(helper)
+    let out = launch
+        .env_command(&helper)
         .args(["--probe", "--diagnostic"])
         .arg(&diagnostic)
         .env("BUTLER_WINDOWS_PROJECT_SANDBOX", "1")
-        .env("HOME", &setup.sandbox.home)
-        .env("BUTLER_DATA", &setup.sandbox.data)
         .output()?;
     assert!(
         out.status.success(),
@@ -275,6 +274,7 @@ async fn probe_emits_loader_diagnostics() -> Result<(), HarnessError> {
     assert!(report.get("mxcError").is_some());
     let reason = report["reason"].as_str().unwrap();
     assert_ne!(reason, "probe_failed");
+    assert_ne!(reason, "probe_setup_failed", "{report}");
 
     if reason == "partial" || reason.starts_with("child_") {
         assert!(report["childExitCode"].is_i64() || report["reason"] == "child_timed_out");

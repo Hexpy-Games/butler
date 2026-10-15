@@ -38,8 +38,11 @@ function SameMap($a,$b) {
     foreach ($key in $a.Keys) { if ($a[$key] -ne $b[$key]) { return $false } }
     return $true
 }
+function RegistryDiff($a,$b) {
+    return @(@($a.Keys) + @($b.Keys) | Sort-Object -Unique | Where-Object { $a[$_] -ne $b[$_] })
+}
 $before = $null
-$result.rows = @(1..16 | ForEach-Object {
+$result.rows = @(0..16 | ForEach-Object {
     if ($_ -eq 13) { @{row=$_;status='MANUAL_REQUIRED';reason='admin_wfp_diff'} }
     else { @{row=$_;status='FAIL';reason='not_run'} }
 })
@@ -66,6 +69,9 @@ try {
     $env:TMP = $env:TEMP
     New-Item -ItemType Directory -Force $env:HOME,$env:BUTLER_DATA,$env:APPDATA,$env:LOCALAPPDATA,$env:TEMP | Out-Null
     Remove-Item Env:BUTLER_WINDOWS_PROJECT_SANDBOX -ErrorAction SilentlyContinue
+    $env:BUTLER_APP_DISABLE_SHELL_REGISTRATION = '1'
+    $env:BUTLER_E2E_WINDOWS_POLICY_PROBE = Join-Path $profile 'windows-policy-probe.exe'
+    Add-Type -TypeDefinition (Get-Content -Raw (Join-Path $bundle 'windows-policy-probe.cs')) -OutputAssembly $env:BUTLER_E2E_WINDOWS_POLICY_PROBE -OutputType ConsoleApplication
     $env:BUTLER_E2E_TIER = 'stub'
     $env:BUTLER_E2E_RECORD = '0'
     $env:BUTLER_E2E_WINDOWS_SANDBOX_DESKTOP = '1'
@@ -116,6 +122,7 @@ public static class ButlerDesktop {
     if ($result.probeExit -ne 0 -or $result.probe -ne 'partial') { throw ('desktop_probe_failed: ' + $details.reason) }
     $before = HostSnapshot
     $cases = @(
+        @(0,'language::language_policy_probe'),
         @(1,'project_boundaries::row01_project_and_scratch'),
         @(2,'project_boundaries::row02_outside_writes'),
         @(3,'project_boundaries::row03_secret_contents_ads_and_parent_delete'),
@@ -135,7 +142,8 @@ public static class ButlerDesktop {
         $case = if ($row -eq 15) { $entry[1] } else { 'windows_sandbox::' + $entry[1] }
         $env:BUTLER_E2E_PERF = if ($row -eq 14) { '1' } else { '0' }
         $log = Join-Path $resultRoot ($pins.revision + $suffix + '.row-' + $row + '.log')
-        $item = @{row=$row;status='FAIL';test=$case;log=$log}
+        $rowBefore = HostSnapshot
+        $item = @{row=$row;status='FAIL';test=$case;log=$log;startedUtc=[DateTime]::UtcNow.ToString('o')}
         try {
             $listed = & (Join-Path $bundle 'e2e.exe') $case --exact --list
             if ($LASTEXITCODE -ne 0 -or ($listed | Out-String) -notmatch '1 test, 0 benchmarks') { throw 'test_not_found' }
@@ -161,6 +169,16 @@ public static class ButlerDesktop {
                 }
             }
         } catch { $item.error = $_.Exception.Message }
+        $rowAfter = HostSnapshot
+        $item.finishedUtc = [DateTime]::UtcNow.ToString('o')
+        $item.registryBefore = $rowBefore.registry
+        $item.registryAfter = $rowAfter.registry
+        $item.registryChangedKeys = @(RegistryDiff $rowBefore.registry $rowAfter.registry)
+        $item.scheduledTasksUnchanged = SameMap $rowBefore.tasks $rowAfter.tasks
+        if ($item.registryChangedKeys.Count -gt 0 -or !$item.scheduledTasksUnchanged) {
+            $item.testStatus = $item.status
+            $item.status='FAIL'; $item.error='host_state_changed_during_row'
+        }
         $result.rows = @($result.rows | Where-Object { $_.row -ne $row }) + @($item)
         Write-Host ('Row ' + $row + ': ' + $item.status)
     }
@@ -189,11 +207,14 @@ public static class ButlerDesktop {
     if ($null -ne $before) {
         try {
             $after = HostSnapshot
+            $result.registryBefore = $before.registry
+            $result.registryAfter = $after.registry
+            $result.registryChangedKeys = @(RegistryDiff $before.registry $after.registry)
             $result.registryUnchanged = SameMap $before.registry $after.registry
             $result.scheduledTasksUnchanged = SameMap $before.tasks $after.tasks
             if (!$result.registryUnchanged -or !$result.scheduledTasksUnchanged) {
                 $result.status='FAIL'; $result.error='host_state_changed'
-                foreach ($item in $result.rows | Where-Object { $_.row -eq 6 }) { $item.status='FAIL'; $item.error='host_state_changed' }
+                # Preserve row results: a global interval does not identify its writer.
             }
         } catch { $result.status='FAIL'; $result.error='host_snapshot_failed: ' + $_.Exception.Message }
     }

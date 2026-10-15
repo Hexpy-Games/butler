@@ -44,11 +44,13 @@ pub(super) fn shell(text: &str, environment: &HashMap<String, Option<String>>) -
 
 /// The /s quote envelope is command text, never a CRT-escaped argument.
 pub(super) fn raw_argument(invocation: &Invocation) -> Option<String> {
-    let [d, s, c, text] = invocation.arguments.as_slice() else {
-        return None;
+    let text = match invocation.arguments.as_slice() {
+        [d, s, c, text] if [d, s, c] == ["/d", "/s", "/c"] => text,
+        [d, v, s, c, text] if [d, v, s, c] == ["/d", "/v:off", "/s", "/c"] => text,
+        _ => return None,
     };
     let is_cmd = std::path::Path::new(&invocation.program)
         .file_stem()
         .is_some_and(|name| name.eq_ignore_ascii_case("cmd"));
-    (is_cmd && [d, s, c] == ["/d", "/s", "/c"]).then(|| format!("\"{text}\""))
+    is_cmd.then(|| format!("\"{text}\""))
 }

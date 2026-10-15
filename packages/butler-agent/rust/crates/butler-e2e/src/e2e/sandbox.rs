@@ -74,6 +74,11 @@ impl Sandbox {
         ] {
             fs::create_dir_all(dir)?;
         }
+        for (_, path) in
+            butler_platform::process_control::fixture_profile_environment(&sandbox.home)
+        {
+            fs::create_dir_all(path)?;
+        }
         Ok(sandbox)
     }
 

@@ -51,12 +51,21 @@ impl Plan {
         }
         *temporary = command_scratch.clone();
         let cwd = WinPath::new(&format!("{drive}:\\"))?;
-        let env = environment::build(
+        let mut env = environment::build(
             &self.host_environment,
             scratch.first().ok_or("scratch root missing")?,
             &self.tools,
             &cwd,
         )?;
+        if let Some(shell) = &invocation.shell_program {
+            if shell.contains(['\0', '"', '\r', '\n']) {
+                return Err("invalid shell program");
+            }
+            env.insert("BUTLER_COMMAND_SHELL".into(), shell.clone());
+            if let Some(script) = &invocation.shell_script {
+                env.insert("BUTLER_COMMAND_SCRIPT".into(), script.clone());
+            }
+        }
         let system = WinPath::new(
             environment::get(&self.host_environment, "SYSTEMROOT").ok_or("SYSTEMROOT required")?,
         )?;

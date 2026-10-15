@@ -1,6 +1,7 @@
 //! MXC acceptance matrix, executed by the pinned Medium-IL desktop bundle.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
 mod boundaries;
+mod language;
 mod latency;
 mod project_boundaries;
 mod project_write;
@@ -98,6 +99,8 @@ impl Fixture {
         assert!(
             ![
                 "command_observation_isolation_unavailable",
+                "PowerShell language policy blocks this operation",
+                "ConstrainedLanguage",
                 command_sandbox::EXECUTION_FAILURE_MARKER,
                 command_sandbox::EXECUTION_TIMEOUT_MARKER,
             ]

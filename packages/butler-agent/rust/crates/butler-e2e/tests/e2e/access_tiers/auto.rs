@@ -6,6 +6,7 @@
 //! would ask about fails fast with a reason, and the run is flagged; "run
 //! now" is attended and asks as usual.
 mod unattended;
+use unattended::run_where;
 
 use super::stub::{self, Script, call};
 use super::{approve, assert_counts, delivered, outputs, paused};
@@ -474,31 +475,4 @@ async fn unattended_schedule(
     assert_eq!(std::fs::read_to_string(outside)?, "outside-marker");
     eprintln!("PERM-02 run-now: attended=asked authority_count=1");
     Ok(())
-}
-
-async fn run_where(
-    s: &Scenario,
-    schedule: &str,
-    matches: impl Fn(&Value) -> bool,
-) -> Result<Value, HarnessError> {
-    let deadline = Instant::now() + Duration::from_secs(20);
-    loop {
-        let reply = s.gw.get(&format!("/automations/{schedule}/runs")).await?;
-        assert_eq!(reply.status, 200, "{}", reply.text);
-        if let Some(run) = reply.data()["runs"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|run| matches(run))
-        {
-            return Ok(run.clone());
-        }
-        assert!(
-            Instant::now() < deadline,
-            "no matching run: {}\n{}",
-            reply.text,
-            s.agent.logs()
-        );
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
 }
