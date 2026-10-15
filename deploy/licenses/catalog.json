@@ -32,7 +32,7 @@
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",
     "packages/butler-npm/package.json": "5436bca586a3f28ad67b715bc34fd2d66a4dfac9577d7415442b88f1f085fdb4",
     "third_party/notify-windows-ledger/Cargo.toml": "ed8cf9c984e39d9dac375d35bbb0346e6757d7c8c6c303f641fdfda0f9da94a1",
-    "third_party/notify-windows-ledger/LICENSE": "e0456cbab4f7b5e7203e678faff37eadbdfef02e822db3b7a52a1dd9d3dc514a"
+    "third_party/notify-windows-ledger/LICENSE": "29f359024dacaa3361dcddf5a9316e8458028ff062b63105a61e04a16566f968"
   },
   "components": [
     {
