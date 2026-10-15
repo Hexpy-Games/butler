@@ -150,6 +150,13 @@ async fn offline_generated_toolchains() -> Result<(), HarnessError> {
                 root.join(generated).exists(),
                 "missing complete {tool} output"
             );
+            if tool == "npm" {
+                // A `file:` dependency is linked, not copied, so it needs no
+                // chmod; the link stays inside the project.
+                let link = root.join("node_modules/local");
+                assert!(std::fs::symlink_metadata(&link)?.file_type().is_symlink());
+                assert_eq!(link.canonicalize()?, root.join("local").canonicalize()?);
+            }
         }
     }
     assert!(failures.is_empty(), "toolchain tier mismatch: {failures:?}");
