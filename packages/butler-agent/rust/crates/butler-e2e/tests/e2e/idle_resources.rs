@@ -62,6 +62,20 @@ async fn perf_idle_owner_scale_reads_and_footprint() -> Result<(), HarnessError>
     );
     s.gw = s.agent.start_again().await?;
     let live = connect_and_refresh(&s).await?;
+    let created =
+        s.gw.post(
+            "/automations",
+            serde_json::json!({
+                "title":"Future schedule", "target_session_id":"general", "prompt_body":"Brief me",
+                "schedule_type":"interval", "interval_seconds":86400,
+                "start_at":"9999-12-30T07:00:00.000Z"
+            }),
+        )
+        .await?;
+    assert_eq!(created.status, 201, "{}", created.text);
+    let schedules = s.gw.get("/automations").await?.data()["automations"].clone();
+    assert_eq!(schedules.as_array().unwrap().len(), 1);
+    assert_eq!(schedules[0]["next_run_at"], "9999-12-30T07:00:00.000Z");
     // Keep the existing startup grace, then prove committed memory readiness.
     tokio::time::sleep(Duration::from_secs(120)).await;
     memory_fixture::settle(&s.sandbox.data).await?;
@@ -74,7 +88,7 @@ async fn perf_idle_owner_scale_reads_and_footprint() -> Result<(), HarnessError>
         opens > 0,
         "source-open instrumentation must observe startup reads"
     );
-    let samples = measure(&s, &expected).await?;
+    let samples = measure(&s, &expected, &schedules).await?;
     let final_opens = transcript_opens(&s).await?;
     eprintln!(
         "PERF-IDLE transcript_opens={} quota_requests={} elapsed_ms={}",
@@ -127,7 +141,11 @@ struct Samples {
     windows: Vec<(process_usage::ProcessUsage, process_usage::ProcessUsage)>,
 }
 
-async fn measure(s: &Scenario, expected: &seed::Expected) -> Result<Samples, HarnessError> {
+async fn measure(
+    s: &Scenario,
+    expected: &seed::Expected,
+    schedules: &serde_json::Value,
+) -> Result<Samples, HarnessError> {
     let pid = s.agent.pid().unwrap();
     let mut before = process_usage::sample(pid)?.unwrap();
     let started = std::time::Instant::now();
@@ -151,6 +169,11 @@ async fn measure(s: &Scenario, expected: &seed::Expected) -> Result<Samples, Har
             process_usage::load_average()?
         );
         seed::assert_complete(&s.sandbox.data, expected)?;
+        assert_eq!(
+            &s.gw.get("/automations").await?.data()["automations"],
+            schedules,
+            "idle schedule content changed"
+        );
         windows.push((before, after));
         before = after;
     }

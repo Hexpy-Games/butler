@@ -118,6 +118,7 @@ mod recovery;
 mod reduce_motion;
 mod schedule_calendar;
 mod schedule_chat;
+mod schedule_sleep_wake;
 mod schedule_store;
 mod schedules;
 mod search_browser;
