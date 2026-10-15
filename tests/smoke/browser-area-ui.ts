@@ -2,11 +2,17 @@
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { strict as assert } from "node:assert";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { launchSmokeBrowser } from "../support/smoke-browser";
+import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser";
+import { captureAllowedHosts } from "../support/allowed-hosts-acceptance";
 import { createNativeAppServer } from "../support/native-app-server";
+
+const securityOnly = process.env.BUTLER_BROWSER_UI_SECURITY_ONLY === "1";
+const securityCells = ["ko", "en"].flatMap(locale =>
+  ["light", "dark"].flatMap(theme => [1440, 375].map(width => `${locale}-${theme}-${width}`)));
+if (securityOnly && await runSmokeCases(securityCells, "BUTLER_ALLOWED_HOSTS_CELL", import.meta.filename)) process.exit(0);
 
 const root = process.cwd();
 // The sandbox preload always exposes Browser IPC.
@@ -34,11 +40,20 @@ await build({ configFile: false, root: scratch, logLevel: "error",
   build: { outDir: join(scratch, "dist"), rollupOptions: { input: entry } } });
 }
 await buildHarness();
+let allowedHosts = ["one.example.com"];
+let contentHosts: string[] = [];
 const server = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(request) {
   const path = new URL(request.url).pathname;
   if (path === "/security") return Response.json({ protocol_version: "butler.app.v1", data: {
-    remote_access_enabled: false, bind_addresses: [], lan_urls: [], allowed_hosts: [], content_hosts: [],
+    remote_access_enabled: false, bind_addresses: [], lan_urls: [], allowed_hosts: allowedHosts, content_hosts: contentHosts,
   } });
+  if (path === "/settings" && request.method === "PATCH") {
+    const { security } = await request.json();
+    if (securityOnly) console.log("Security fixture save", JSON.stringify(security));
+    if (security.allowed_hosts) allowedHosts = security.allowed_hosts;
+    if (security.content_hosts) contentHosts = security.content_hosts;
+    return Response.json({ protocol_version: "butler.app.v1", data: {} });
+  }
   if (path === "/authority-requests") return Response.json({ protocol_version: "butler.app.v1", data: { session_id: "general", requests: [], items: [], permissions: [] } });
   if (path.startsWith("/outputs/")) return Response.json({ protocol_version: "butler.app.v1", data: { url: "https://example.org/output.html", revision: 1, revisions: [1] } });
   const file = Bun.file(join(scratch, "dist", path === "/" ? "index.html" : path));
@@ -54,12 +69,15 @@ async function captureSecurity() {
       await page.locator('[data-test-class="settings-security-advanced"]').click();
       await page.getByPlaceholder("content.example.com").waitFor();
       assert.equal(await page.getByPlaceholder("content.example.com").count(), 1);
-      await page.screenshot({ path: join(evidence!, `gate-on-${locale}-${theme}-${width}-security.png`) });
+      await page.screenshot({ path: join(evidence!, `browser-${locale}-${theme}-${width}-security.png`) });
     } finally { await page.close(); }
   }
 }
 
 try {
+  if (securityOnly) {
+    await captureAllowedHosts(browser, `http://127.0.0.1:${server.port}`, evidence);
+  } else {
   for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     for (const state of ["empty", "idle", "crash", "disabled"]) {
@@ -125,6 +143,7 @@ try {
   await output.screenshot({ path: join(evidence, "harness-ko-light-output-open.png") });
   await output.close();
   await captureSecurity();
+  await captureAllowedHosts(browser, `http://127.0.0.1:${server.port}`, evidence);
   console.log("Browser UI: entry, area, output and security checks passed");
   if (process.env.BUTLER_BROWSER_UI_HARNESS_ONLY !== "1") {
   gateway = await createNativeAppServer({ uiRoot: resolve(uiRoot, "dist") });
@@ -137,7 +156,8 @@ try {
   await mobile.screenshot({ path: join(evidence, "web-390-no-browser.png") });
   await mobile.close();
   }
-  writeFileSync(join(evidence, "ui-result.json"), JSON.stringify({ ok: true, screenshotCount: 30, native: false, viewport: 1440, webWidth: 390 }));
+  writeFileSync(join(evidence, "ui-result.json"), JSON.stringify({ ok: true, screenshotCount: readdirSync(evidence).filter(name => name.endsWith(".png")).length, native: false, viewport: 1440, webWidth: 390 }));
+  }
 } finally {
   await browser.close(); server.stop(true); await gateway?.stop(); rmSync(scratch, { recursive: true, force: true });
 }

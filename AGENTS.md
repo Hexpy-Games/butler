@@ -75,6 +75,9 @@ Newest first. The coordinator adds an entry whenever a mistake repeats. Each ent
 - **2026-10-09: Spawned test Apps must not outlive the harness: stdio to a file, kill the child PID on every exit path.**
   - What happened: an orphaned smoke Electron (ppid 1) logged to a closed pipe and raised an EPIPE error dialog on the owner's screen.
 
+- **2026-10-09: Never change DS components or blocks inside a product commit.** A change under `libs/design-system/{components,blocks,shadcn}` or the root DS CSS needs owner approval and a `DS-Approved: <who, when, where>` commit trailer (the `ds-approval` check warns when it is missing). Fix a DS bug in the DS, never with a product-side workaround, and never edit a test only to match new CSS.
+  - What happened: plain `DisclosureRow` titles sat at the top of the hover fill three times. The block was rewritten inside unrelated commits (`2278cb00b`, `92775d8cf`), the source-string test was edited to match, and an earlier fix (`12ada184c`) worked around it in one screen only.
+
 - **2026-10-07: Owner-PC runners: never use installer/setup actions or registry/PATH writes; use the existing toolchain.**
   - What happened: `actions/setup-python` tried to rewrite Python registry registrations on the owner PC, logged a permission error and hung until the 90-minute job timeout (run 37560002889).
 

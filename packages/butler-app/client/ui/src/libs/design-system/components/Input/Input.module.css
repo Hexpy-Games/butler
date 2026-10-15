@@ -1,6 +1,6 @@
 .input {
   width: 100%;
-  min-height: 34px;
+  min-height: var(--control-height-lg);
   padding: 7px 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
@@ -8,6 +8,14 @@
   color: var(--text-primary);
   font: inherit;
   outline: none;
+}
+
+/* The default field is exactly --control-height-lg, the height of Button
+   "lg": a fixed block size with no block padding (the inherited line height
+   would otherwise add 2.3px). Phone hit-target minimums below still win. */
+.input:not([data-compact], [data-variant="underline"]) {
+  block-size: var(--control-height-lg);
+  padding-block: 0;
 }
 
 .input[data-compact] {
