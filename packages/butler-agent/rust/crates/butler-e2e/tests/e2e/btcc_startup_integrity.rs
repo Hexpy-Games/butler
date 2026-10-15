@@ -319,17 +319,22 @@ async fn btcc_verdict_recheck_preserves_reference_failure_and_repair() -> Result
     );
     assert!(!log.contains("storage_bootstrap_failed"), "{log}");
     assert!(log.contains("[native-butler] ready"), "{log}");
-    assert!(std::fs::read_to_string(&verdict)?.contains("rule=turn_inbox orphan_count=1"));
+    assert!(!verdict.exists());
+    let findings = path.with_extension("sqlite.findings");
+    assert!(std::fs::read_to_string(&findings)?.contains("rule=turn_inbox orphan_count=1"));
     s.agent.terminate().await?;
-    let db = Connection::open(path)?;
+    let db = Connection::open(&path)?;
     db.execute_batch(
         "INSERT INTO btcc_inbound_inbox(inbox_id,session_id,trigger_key,turn_id,
         admission_input_hash,command_json,status)
         VALUES('missing','fixture','reference','reference','fixture','{}','constructed')",
     )?;
     drop(db);
+    std::fs::remove_file(path.with_extension("sqlite.verified"))?;
     s.gw = s.agent.start_again().await?;
+    effects::wait_scan(&s, &path).await?;
     assert!(s.gw.healthy().await);
     assert!(!verdict.exists());
+    assert!(!findings.exists());
     s.finish().await
 }

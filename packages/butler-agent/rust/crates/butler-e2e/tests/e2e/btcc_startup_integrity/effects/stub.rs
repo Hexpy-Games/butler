@@ -7,19 +7,24 @@ pub(super) const REQUEST: &str =
 
 pub(super) async fn start(
     path: String,
+    planned: bool,
+    tracked: bool,
 ) -> Result<(String, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let url = format!("http://{}/codex", listener.local_addr()?);
     let app = Router::new()
         .route("/codex/responses", post(reply))
-        .with_state(path);
+        .with_state((path, planned, tracked));
     let server = tokio::spawn(async move {
         let _ = axum::serve(listener, app).await;
     });
     Ok((url, server))
 }
 
-async fn reply(State(path): State<String>, Json(body): Json<Value>) -> axum::response::Response {
+async fn reply(
+    State((path, planned, tracked)): State<(String, bool, bool)>,
+    Json(body): Json<Value>,
+) -> axum::response::Response {
     let key = matching::key("/codex/responses", &body, &Placeholders::default());
     let n = body["input"]
         .as_array()
@@ -33,24 +38,30 @@ async fn reply(State(path): State<String>, Json(body): Json<Value>) -> axum::res
         })
         .count();
     let item = if key.user_request == REQUEST {
-        match n {
-            0 => call(n, "start_work", &json!({"objective":REQUEST})),
-            1 => call(n, "write_file", &json!({"path":path,"content":"alpha"})),
-            2 => call(
+        if planned && n == 1 {
+            call(
                 n,
-                "edit_file",
-                &json!({"path":path,"old_text":"alpha","new_text":"beta"}),
-            ),
-            3 => call(
+                "replace_work_plan",
+                &json!({"objective":REQUEST,"execution_mode":"direct",
+                "actions":[{"action_key":"edit","description":"Write and edit the file"}],
+                "checks":["File contains beta"]}),
+            )
+        } else if planned && n == 2 {
+            call(
                 n,
-                "record_work_disposition",
-                &json!({
-                    "work_id": work_id(&body).expect("start_work returned its bound Work"),
-                    "disposition":"completed", "summary":"Wrote and edited the file.",
-                    "action_updates":[], "remaining_actions":[], "followups":[]
-                }),
-            ),
-            _ => message("Done."),
+                "record_work_review",
+                &json!({"subject":"plan","verdict":"accept",
+                "summary":"Plan covers the requested edit"}),
+            )
+        } else {
+            let step = if !tracked {
+                n + 1
+            } else if planned && n > 2 {
+                n - 2
+            } else {
+                n
+            };
+            effect(step, n, &path, &body, tracked, planned)
         }
     } else {
         message("{}")
@@ -61,6 +72,29 @@ async fn reply(State(path): State<String>, Json(body): Json<Value>) -> axum::res
     )
         .into_response()
 }
+fn effect(step: usize, n: usize, path: &str, body: &Value, tracked: bool, planned: bool) -> Value {
+    match step {
+        0 => call(n, "start_work", &json!({"objective":REQUEST})),
+        1 => call(n, "write_file", &json!({"path":path,"content":"alpha"})),
+        2 => call(
+            n,
+            "edit_file",
+            &json!({"path":path,"old_text":"alpha","new_text":"beta"}),
+        ),
+        3 if tracked => call(
+            n,
+            "record_work_disposition",
+            &json!({
+                "work_id": work_id(body).expect("start_work returned its bound Work"),
+                "disposition":"completed", "summary":"Wrote and edited the file.",
+                "action_updates":if planned { json!([{"action_key":"edit","status":"done"}]) } else { json!([]) },
+                "remaining_actions":[], "followups":[]
+            }),
+        ),
+        _ => message("Done."),
+    }
+}
+
 fn call(n: usize, name: &str, args: &Value) -> Value {
     json!({"type":"function_call","id":format!("fc_integrity-{n}"),"call_id":format!("integrity-{n}"),"name":name,"arguments":args.to_string(),"status":"completed"})
 }

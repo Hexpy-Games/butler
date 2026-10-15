@@ -442,9 +442,11 @@ pub(super) const RULES: &[Rule] = &[
         from_column: "plan_revision_id",
         to_table: "btcc_guided_work_plan_revisions",
         to_column: "plan_revision_id",
-        // Empty means no plan, independent of the work's scope or identity.
-        // The correlated target also enforces ownership of non-empty revisions.
-        filter: Some("source.plan_revision_id <> ''"),
+        // Project plans live in the Ledger; BTCC only projects their Work metadata.
+        // For BTCC-owned plans, empty means no plan; non-empty requires the same Work.
+        filter: Some(
+            "source.plan_revision_id <> '' AND NOT EXISTS (SELECT 1 FROM btcc_guided_works AS work WHERE work.work_id = source.work_id AND work.scope_kind = 'project')",
+        ),
     },
     Rule {
         ownership: false,
