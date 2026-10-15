@@ -5,8 +5,11 @@ use std::time::Duration;
 use butler_platform::command_sandbox;
 use butler_platform::process_control::{self, Liveness, liveness};
 
-use super::{CommandStep, Commands, Fixture, GuidedAccess, ScriptedProcesses};
+use super::{
+    CommandStep, Commands, Fixture, GuidedAccess, ScriptedProcesses, command_fixtures, shell_step,
+};
 
+// test-category: race
 #[tokio::test]
 async fn capture_write_failure_terminates_child_and_discards_owned_files() {
     let fixture = Fixture::new();
@@ -14,7 +17,7 @@ async fn capture_write_failure_terminates_child_and_discards_owned_files() {
         failing_capture: true,
         ..ScriptedProcesses::default()
     }));
-    let input = fixture.guided("printf x; sleep 5");
+    let input = fixture.guided(command_fixtures::write_then_wait());
     let failure = tokio::time::timeout(std::time::Duration::from_secs(2), async {
         owner
             .submit_guided(input)
@@ -32,11 +35,14 @@ async fn capture_write_failure_terminates_child_and_discards_owned_files() {
     assert_eq!(std::fs::read_dir(spool).unwrap().count(), 0);
 }
 
+// test-category: race
 #[tokio::test]
 async fn close_cancels_running_command_and_rejects_admission() {
     let fixture = Fixture::new();
     let owner = Commands::new();
-    let receiver = owner.submit_guided(fixture.guided("sleep 10")).unwrap();
+    let receiver = owner
+        .submit_guided(fixture.guided(command_fixtures::wait()))
+        .unwrap();
     tokio::time::timeout(std::time::Duration::from_secs(3), owner.close())
         .await
         .unwrap();
@@ -45,7 +51,7 @@ async fn close_cancels_running_command_and_rejects_admission() {
     assert_eq!(owner.active_count(), 0);
     assert_eq!(
         owner
-            .submit_guided(fixture.guided("true"))
+            .submit_guided(fixture.guided(command_fixtures::wait()))
             .err()
             .unwrap()
             .code(),
@@ -168,12 +174,13 @@ async fn guided_quotes_reach_the_shell_intact() {
 
 /// A read-only command cannot write. A host with a sandbox must run it
 /// there, where the write fails; a host without one must refuse it.
+// test-category: security
 #[tokio::test]
 async fn guided_read_only_uses_actual_sandbox_boundary() {
     let fixture = Fixture::new();
     let owner = Commands::new();
     let target = fixture.0.join("must-not-write");
-    let mut input = fixture.guided(&format!("printf x > '{}'", target.display()));
+    let mut input = fixture.guided(&command_fixtures::delayed_marker(&target));
     input.access = GuidedAccess::ReadOnlyObservation;
     let result = owner.submit_guided(input).unwrap().await.unwrap();
     if command_sandbox::capabilities().read_only.is_enforced() {
@@ -187,12 +194,13 @@ async fn guided_read_only_uses_actual_sandbox_boundary() {
     owner.close().await;
 }
 
+// test-category: race
 #[tokio::test]
 async fn guided_forced_public_settlement_precedes_owned_reap() {
     let fixture = Fixture::new();
     let (host, release) = ScriptedProcesses::reaped_on_release();
     let owner = Commands::with_host(Arc::new(host));
-    let mut input = fixture.guided("while :; do sleep 1; done");
+    let mut input = fixture.guided(command_fixtures::wait());
     input.timeout_ms = Some(10.0);
     let receiver = owner.submit_guided(input).unwrap();
     let output = tokio::time::timeout(Duration::from_secs(10), receiver)
@@ -223,15 +231,13 @@ async fn assert_close_waits_for_reap(owner: &Commands, release: tokio::sync::wat
     assert_eq!(owner.active_count(), 0);
 }
 
+// test-category: race
 #[tokio::test]
 async fn structured_forced_public_settlement_precedes_owned_reap() {
     let fixture = Fixture::new();
     let (host, release) = ScriptedProcesses::reaped_on_release();
     let owner = Commands::with_host(Arc::new(host));
-    let mut input = fixture.structured(vec![CommandStep {
-        executable: "/bin/sh".into(),
-        arguments: vec!["-c".into(), "while :; do sleep 1; done".into()],
-    }]);
+    let mut input = fixture.structured(vec![shell_step(command_fixtures::wait())]);
     input.timeout_ms = Some(10.0);
     let receiver = owner.submit_structured(input).unwrap();
     let output = tokio::time::timeout(Duration::from_secs(10), receiver)
@@ -243,6 +249,7 @@ async fn structured_forced_public_settlement_precedes_owned_reap() {
     assert_close_waits_for_reap(&owner, release).await;
 }
 
+// test-category: race
 #[tokio::test]
 async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
     let fixture = Fixture::new();
@@ -252,18 +259,9 @@ async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
         ..ScriptedProcesses::default()
     }));
     let pid_path = fixture.0.join("partial-child.pid");
-    // The descendant reports its pid only after it ignores SIGTERM; the file
-    // appears atomically so the test never reads a partial write.
-    let first = format!(
-        "sh -c 'trap \"\" TERM; echo $$ > \"$0.tmp\"; mv \"$0.tmp\" \"$0\"; exec sleep 10' '{}' & \
-         trap 'exit 0' TERM; wait",
-        pid_path.display()
-    );
+    let first = command_fixtures::descendant(&pid_path);
     let mut input = fixture.structured(vec![
-        CommandStep {
-            executable: "/bin/sh".into(),
-            arguments: vec!["-c".into(), first],
-        },
+        shell_step(&first),
         CommandStep {
             executable: "/definitely/missing/butler-command".into(),
             arguments: vec![],
@@ -272,7 +270,7 @@ async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
     input.timeout_ms = Some(60_000.0);
     let receiver = owner.submit_structured(input).unwrap();
     let mut pid = None;
-    butler_test_support::eventually("the TERM-ignoring descendant", || {
+    butler_test_support::eventually("the contained descendant to be ready", || {
         pid = std::fs::read_to_string(&pid_path)
             .ok()
             .and_then(|pid| pid.trim().parse::<u32>().ok());
