@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: race
 /** browser_wait_for_user hand-off through the real gateway and UI; stub model and a scripted
  * browser host. The user holds the tab for a secure field → hand-off card (no permission ask) →
@@ -206,7 +207,7 @@ try {
   await shoot(desk, "wait-stopped-ko-light-1440");
   await desk.keyboard.press("ControlOrMeta+k");
   await desk.getByRole("combobox").fill("General");
-  const general = desk.getByRole("option").filter({ has: desk.locator("small", { hasText: /^대화$/u }), hasText: /^일반/u });
+  const general = desk.getByRole("option").filter({ has: desk.locator("small", { hasText: /^대화$/u }), hasText: new RegExp(`^${RegExp.escape(getAppCopy("ko-KR").space.general)}`, "u") });
   await general.waitFor();
   await general.scrollIntoViewIfNeeded();
   assert.ok(!(await general.innerText()).includes("General"), "search uses the sidebar's localized channel title");

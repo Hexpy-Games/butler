@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: race
 /** Real spawn + CDP: internal tool ownership and foreground conversation isolation. */
 import { Database } from "bun:sqlite";
@@ -33,7 +34,7 @@ try {
   const other = await app.gateway.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "Current conversation" }) });
   await app.page.reload(); await shellReady(app, "en");
   if (await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open') === 'false'")) await app.click("Show sidebar");
-  await app.click(foreground ? "General" : "Current conversation");
+  await app.click(foreground ? getAppCopy("en-US").space.general : "Current conversation");
   const currentId = foreground ? "general" : other.session.id;
   const priorTab = await app.call<string>("create", { owner: `conversation:${currentId}`, profile: "signed_out", url: view.url });
   await app.shot("light-before-open");
@@ -61,12 +62,12 @@ try {
   assert.ok(!JSON.stringify(state).includes(childId) && !/steward|스튜어드/iu.test(JSON.stringify(state)));
   assert.equal(state.activeId, priorTab, "agent open never activates the tab");
   // The route's title and pane are public UI proof; no test-only store mutation.
-  assert.equal(await app.page.expression(`document.querySelector('[data-test-class=custom-titlebar]').textContent.includes(${JSON.stringify(foreground ? "General" : "Current conversation")})`), true);
+  assert.equal(await app.page.expression(`document.querySelector('[data-test-class=custom-titlebar]').textContent.includes(${JSON.stringify(foreground ? getAppCopy("en-US").space.general : "Current conversation")})`), true);
   const text = await app.page.expression<string>("document.body.innerText");
   assert.ok(!text.includes(childId) && !/steward|스튜어드/iu.test(text), text);
   await app.shot("after-open");
   assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))"), false);
-  if (!foreground) await app.click("General");
+  if (!foreground) await app.click(getAppCopy("en-US").space.general);
   await togglePane(app, true);
   await app.call("activate", { id: tab.id });
   await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))"), "parent conversation docking");

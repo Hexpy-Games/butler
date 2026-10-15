@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: race
 /** Offline real App: production rail, live IPC, focus/close, decisions, and visual matrix. */
 import { strict as assert } from "node:assert";
@@ -57,14 +58,14 @@ async function matrix(screen: string) {
     await app.main(`${app.win}.setContentSize(${width},900)`);
     await app.page.reload(); await shellReady(app, "ko");
     if (await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='false'")) await clickVisible('[data-test-class="chrome-floating-toggle-layer"] button');
-    await app.page.clickText(screen === "new-chat" ? "Empty capture" : "일반", "[data-test-class=app-sidebar] button,[data-test-class=app-sidebar] [role=button]");
+    await app.page.clickText(screen === "new-chat" ? "Empty capture" : getAppCopy("ko-KR").space.general, "[data-test-class=app-sidebar] button,[data-test-class=app-sidebar] [role=button]");
     await settleSidebar();
     const inspector = "[data-test-class=titlebar-right-panel-toggle]";
     if (await app.page.expression(`document.querySelector('${inspector}')?.getAttribute('aria-pressed')==='true'`)) await app.page.clickSelector(inspector);
     if (width === 390 && await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='true'")) await clickVisible('[data-test-class="chrome-floating-toggle-layer"] button');
     await settleSidebar();
     if (width === 390) await waitBrowser(() => app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open')==='false'"), "mobile sidebar closed");
-    await waitBrowser(() => app.page.expression(screen === "new-chat" ? "Boolean(document.querySelector('[data-test-class=new-chat-empty-state]'))" : "document.querySelector('[data-test-class=custom-titlebar]').textContent.includes('일반')"), "expected conversation visible");
+    await waitBrowser(() => app.page.expression(screen === "new-chat" ? "Boolean(document.querySelector('[data-test-class=new-chat-empty-state]'))" : `document.querySelector('[data-test-class=custom-titlebar]').textContent.includes(${JSON.stringify(getAppCopy("ko-KR").space.general)})`), "expected conversation visible");
     if (!baseline && screen === "rail") await waitBrowser(() => app.page.expression(`document.querySelectorAll('${rail} [data-slot=live-tab-canvas]').length === 3`), "matrix frames");
     if (!baseline && (screen === "approval" || screen === "handoff")) await waitBrowser(() => app.page.expression(`Boolean(document.querySelector('${media} [data-slot=live-tab-canvas]'))`), "matrix approval frame");
     if (!baseline && (screen === "approval" || screen === "handoff")) await checkDecisionFrame(`${screen}-${theme}-${width}-${wallpaper ? "wallpaper" : "plain"}`);
@@ -80,7 +81,7 @@ try {
     assert.equal(result.status, "ok"); ids.push(result.tab);
   }
   await app.main(`(()=>{for(const [n,id] of ${JSON.stringify(ids)}.entries()){const tab=${browser}.tabs.get(id);tab.title='Page '+(n+1);tab.busy=true;tab.lastAgentCall=Date.now()-n;} ${browser}.publish()})()`);
-  await app.click("General");
+  await app.click(getAppCopy("en-US").space.general);
   assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))"), false, "no automatic area open");
   if (!baseline) {
     await waitBrowser(() => app.page.expression(`document.querySelectorAll('${rail} [data-slot=live-tab-canvas]').length===3`), "three parallel frames");
@@ -129,7 +130,7 @@ try {
     const cards = await app.gateway.api<{ requests: Array<{ approval: { operation: { browser_tab: string } } }> }>("/authority-requests?session_id=general");
     assert.equal(cards.requests[0]!.approval.operation.browser_tab, tab);
   }
-  if (!baseline) await waitBrowser(() => app.page.expression("[...document.querySelectorAll('[data-sonner-toast]')].some(node=>node.textContent.includes('일반 · 확인 필요'))"), "localized attention toast");
+  if (!baseline) await waitBrowser(() => app.page.expression(`[...document.querySelectorAll('[data-sonner-toast]')].some(node=>node.textContent.includes(${JSON.stringify(`${getAppCopy("ko-KR").space.general} · 확인 필요`)}))`), "localized attention toast");
   await matrix("approval");
   if (!baseline) {
     await clickVisible(`${media} [role="button"]`);

@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 // Real gateway and DS surfaces with an isolated stub provider; no owner data.
 import { strict as assert } from "node:assert";
@@ -13,9 +14,9 @@ try {
   await server.signIn(page);
   await page.goto(server.url);
   await page.locator('[data-test-class="new-chat-suggestion"]').first().waitFor();
-  const general = page.getByRole("button", { name: "일반", exact: true });
+  const general = page.getByRole("button", { name: getAppCopy("ko-KR").space.general, exact: true });
   await general.click();
-  assert.equal(await page.locator('[data-test-class="titlebar-title"]').innerText(), "일반", "header shares the sidebar's localized General title");
+  assert.equal(await page.locator('[data-test-class="titlebar-title"]').innerText(), getAppCopy("ko-KR").space.general, "header shares the sidebar's localized General title");
   await page.getByText("버틀러와 알아가기", { exact: true }).waitFor();
   assert.equal(await page.locator('[data-slot="prompt-suggestion-title"]').first().innerText(), "버틀러와 알아가기");
   writeOnboardingComplete(server.butlerData);

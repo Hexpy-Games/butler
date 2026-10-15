@@ -47,6 +47,8 @@ jobs:
         run: |
           chmod +x "$RUNNER_TEMP/rust-archive/butler-agent"
           python3 .github/scripts/isolated.py bun install --frozen-lockfile
+          # Keep Electron's first-install stdout out of the executable path below.
+          python3 .github/scripts/isolated.py node packages/butler-app/client/electron/node_modules/electron/install.js
           python3 .github/scripts/isolated.py bun run app:ui:build
       - name: Run canvas and route fixtures with stub model responses
         env:
