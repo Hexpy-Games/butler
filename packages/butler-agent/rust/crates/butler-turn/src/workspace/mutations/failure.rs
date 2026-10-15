@@ -76,8 +76,12 @@ pub(super) fn guard(guard: GuardResult) -> MutationFailure {
     failure
 }
 
-pub(super) fn io(path: Option<String>, error: &std::io::Error) -> MutationFailure {
-    record_io("filesystem", error);
+pub(super) fn io(
+    phase: &'static str,
+    path: Option<String>,
+    error: &std::io::Error,
+) -> MutationFailure {
+    record_io(phase, error);
     let kind = match error.kind() {
         std::io::ErrorKind::NotFound => "not_found",
         std::io::ErrorKind::PermissionDenied => "permission_denied",
@@ -91,9 +95,38 @@ pub(super) fn record_io(phase: &'static str, error: &std::io::Error) {
         == Some(std::ffi::OsStr::new("1"))
     {
         eprintln!(
-            "command_file_error phase={phase} kind={:?} os_code={:?}",
+            "command_file_error phase={phase} kind={:?} os_code={:?} utc_us={}",
             error.kind(),
-            error.raw_os_error()
+            error.raw_os_error(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_micros()
         );
+    }
+}
+
+/// Preserve the original error while recording the exact syscall boundary.
+pub(super) fn inspect_io(phase: &'static str, error: std::io::Error) -> std::io::Error {
+    record_io(phase, &error);
+    error
+}
+
+/// Sample attributes only after failure and only with diagnostics enabled.
+/// Never include file names, contents, or ACL identities in the trace.
+pub(super) fn attributes(role: &'static str, path: &std::path::Path) {
+    if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+        != Some(std::ffi::OsStr::new("1"))
+    {
+        return;
+    }
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) => eprintln!(
+            "command_file_attributes role={role} readonly={} regular={} symlink={}",
+            metadata.permissions().readonly(),
+            metadata.is_file(),
+            metadata.is_symlink()
+        ),
+        Err(error) => record_io(role, &error),
     }
 }
