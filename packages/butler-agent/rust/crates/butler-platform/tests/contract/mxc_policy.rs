@@ -178,14 +178,16 @@ fn policy_rejects_broad_and_overriding_grants() {
 fn toolchains_replace_shims_and_keep_host_path_order() {
     let input = Discovery {
         path: [
-            r"D:\Tools\bin",
+            r"C:\bad",
             r"C:\Users\person\.nodejs",
             r"C:\Users\person\AppData\Local\Microsoft\WindowsApps",
             r"C:\Windows\System32",
             r"C:\Program Files\other",
             r"C:\Users\person\AppData\Roaming\npm",
             r"C:\Users\person\AppData\Local\Programs\Python\Python312",
-            r"C:\Users\person\AppData\Local\Programs\Python\CustomPython",
+            r"C:\Users\person\AppData\Local\Programs\Python\untrusted",
+            r"C:\Users\person",
+            r"C:\Users\person\src",
         ]
         .map(path)
         .into(),
@@ -195,6 +197,7 @@ fn toolchains_replace_shims_and_keep_host_path_order() {
         cargo_home: Some(path(r"C:\Users\person\.cargo")),
         rustup_home: Some(path(r"C:\Users\person\.rustup")),
         git_exe: Some(path(r"C:\Program Files\Git\cmd\git.exe")),
+        user_profile: Some(path(r"C:\Users\person")),
         app_data: Some(path(r"C:\Users\person\AppData\Roaming")),
         local_app_data: Some(path(r"C:\Users\person\AppData\Local")),
         shim_dirs: vec![path(r"C:\Users\person\.nodejs")],
@@ -210,12 +213,11 @@ fn toolchains_replace_shims_and_keep_host_path_order() {
             r"C:\Users\person\nvm\installs\v24",
             r"C:\Users\person\.cargo\bin",
             r"C:\Program Files\Git\cmd",
-            r"D:\Tools\bin",
+            r"C:\Users\person\AppData\Local\Microsoft\WindowsApps",
             r"C:\Windows\System32",
             r"C:\Program Files\other",
             r"C:\Users\person\AppData\Roaming\npm",
             r"C:\Users\person\AppData\Local\Programs\Python\Python312",
-            r"C:\Users\person\AppData\Local\Programs\Python\CustomPython"
         ]
         .map(path)
     );
@@ -237,6 +239,9 @@ fn toolchains_replace_shims_and_keep_host_path_order() {
             .contains(&path(r"C:\Users\person\.cargo\credentials.backup"))
     );
     let mut untrusted = input.clone();
+    untrusted.cargo_home = input.user_profile.clone();
+    assert!(toolchain::discover(&untrusted).is_err());
+    untrusted = input.clone();
     untrusted.real_node = Some(path(r"C:\untrusted\node"));
     assert!(toolchain::discover(&untrusted).is_err());
     untrusted = input.clone();

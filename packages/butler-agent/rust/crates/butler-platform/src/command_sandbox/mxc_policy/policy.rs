@@ -118,6 +118,9 @@ impl Plan {
             )?);
         }
         for grant in write.iter().chain(read) {
+            if self.project.is_within(grant) && grant != &self.project {
+                return Err("project ancestor grant");
+            }
             if grant.is_drive_root() {
                 return Err("drive root grant");
             }

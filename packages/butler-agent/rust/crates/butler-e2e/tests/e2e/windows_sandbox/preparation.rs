@@ -153,3 +153,66 @@ fn admission_phase_profile() -> Result<(), HarnessError> {
     f.finish();
     Ok(())
 }
+
+#[test]
+fn admission_large_generated_tree_keeps_alias_protection() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows link inventory");
+    let f = Fixture::new("WIN-LINK-SCALE")?;
+    let target = f.root.join("target");
+    for directory in 0..100 {
+        let root = target.join(directory.to_string());
+        std::fs::create_dir_all(&root)?;
+        for file in 0..1000 {
+            std::fs::write(root.join(format!("{file}.o")), "complete")?;
+        }
+    }
+    let count: usize = std::fs::read_dir(&target)?
+        .map(|entry| std::fs::read_dir(entry.unwrap().path()).unwrap().count())
+        .sum();
+    assert_eq!(count, 100_000);
+    let mut samples = Vec::new();
+    for _ in 0..3 {
+        let start = std::time::Instant::now();
+        let invocation = f.prepare("cmd /c echo complete");
+        samples.push(start.elapsed().as_secs_f64() * 1000.0);
+        let policy: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&invocation.arguments[1])?)?;
+        assert_eq!(
+            policy["request"]["filesystem"]["readwritePaths"]
+                .as_array()
+                .unwrap()
+                .len(),
+            4
+        );
+        command_sandbox::cleanup_prepared_invocation(&invocation)?;
+    }
+    let outside = f.setup.sandbox.home.join("outside.txt");
+    std::fs::write(&outside, "preserved")?;
+    let alias = target.join("99/late-alias.o");
+    std::fs::hard_link(&outside, &alias)?;
+    let rejected = command_sandbox::windows_prepare_project_write(
+        "cmd /c echo overwritten > target/99/late-alias.o",
+        &f.env,
+        &f.root,
+        &f.scratch.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
+        &[],
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(
+        rejected.contains("project_write_link_aliases"),
+        "{rejected}"
+    );
+    assert_eq!(std::fs::read_to_string(&outside)?, "preserved");
+    std::fs::remove_file(alias)?;
+    assert_eq!(
+        std::fs::read_to_string(target.join("99/999.o"))?,
+        "complete"
+    );
+    eprintln!(
+        "WINDOWS-LINK-SCALE files={count} samples_ms={samples:?} generated_alias_rejected=true"
+    );
+    f.finish();
+    Ok(())
+}

@@ -1,12 +1,5 @@
 $ProgressPreference = 'SilentlyContinue'
 # Respect the host application-control policy; never override language mode.
-trap {
-    if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage' -and $_.FullyQualifiedErrorId -match 'ConstrainedLanguage|RestrictedLanguage|CannotDefineNewType|CannotCreateType') {
-        Write-Error -Message 'PowerShell language policy blocks this operation. Use built-in cmdlets or a native executable inside the same sandbox; do not retry .NET/COM/Add-Type or request weaker containment.' -ErrorAction Continue
-        exit 1
-    }
-    throw $_
-}
 if ($ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage') {
     [Console]::InputEncoding = [Text.UTF8Encoding]::new()
     [Console]::OutputEncoding = [Text.UTF8Encoding]::new()

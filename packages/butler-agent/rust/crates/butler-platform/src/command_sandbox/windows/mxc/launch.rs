@@ -43,7 +43,7 @@ pub(crate) fn main() -> Result<i32, Error> {
     }
 }
 fn run(file: &Path) -> Result<i32, Error> {
-    let _phase = super::timing::Phase::start("helper");
+    let phase = super::timing::Phase::start("helper");
     let ownership = super::timing::Phase::start("policy_ownership");
     let mut payload: PolicyFile = serde_json::from_slice(&fs::read(file)?)?;
     let (pid, started) = super::drive::identity()?;
@@ -63,6 +63,7 @@ fn run(file: &Path) -> Result<i32, Error> {
     let mut drives = Vec::new();
     let result = execute(file, &mut payload, &mut drives);
     cleanup(file, &payload.scratch, &drives);
+    drop(phase);
     result.map(sdk::RunOutcome::report)
 }
 fn execute(

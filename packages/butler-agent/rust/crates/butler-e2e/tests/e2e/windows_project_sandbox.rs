@@ -50,7 +50,16 @@ async fn filesystem_preparation_normalizes_search_separators() -> Result<(), Har
         env.insert(key.into(), value.display().to_string());
     }
     env.insert("BUTLER_COMMAND_TIMEOUT_MS".into(), "30000".into());
-    let repeated = format!("{}\\\\tools", home.display());
+    std::fs::write(
+        tools.join("node.exe"),
+        "untrusted executable must never run",
+    )?;
+    let repeated = format!(
+        "{};{};{}\\\\tools",
+        home.display(),
+        root.parent().unwrap().display(),
+        home.display()
+    );
     env.insert("PATH".into(), repeated);
     let prepare = |env: &std::collections::HashMap<String, String>| {
         command_sandbox::windows_prepare_project_write(
@@ -80,12 +89,8 @@ async fn filesystem_preparation_normalizes_search_separators() -> Result<(), Har
     assert!(!orphan.exists());
     command_sandbox::cleanup_prepared_invocation(&next)?;
     env.insert("PATH".into(), format!("{}.", tools.display()));
-    let error = prepare(&env).unwrap_err().to_string();
-    assert!(
-        error.contains("PATH entry") && error.contains("trailing dot or space"),
-        "{error}"
-    );
-    assert!(!error.contains(&home.display().to_string()));
+    let filtered = prepare(&env).map_err(|e| std::io::Error::other(e.to_string()))?;
+    command_sandbox::cleanup_prepared_invocation(&filtered)?;
     env.insert("PATH".into(), tools.display().to_string());
     env.insert(
         "GH_CONFIG_DIR".into(),
@@ -97,6 +102,17 @@ async fn filesystem_preparation_normalizes_search_separators() -> Result<(), Har
         "{error}"
     );
     assert!(!error.contains(&home.display().to_string()));
+    env.remove("GH_CONFIG_DIR");
+    let outside = home.join("outside.txt");
+    std::fs::write(&outside, "preserved")?;
+    for dir in dirs.iter().skip(1) {
+        let alias = dir.join("alias.txt");
+        std::fs::hard_link(&outside, &alias)?;
+        let error = prepare(&env).unwrap_err().to_string();
+        assert!(error.contains("project_write_link_aliases"), "{error}");
+        assert_eq!(std::fs::read_to_string(&outside)?, "preserved");
+        std::fs::remove_file(alias)?;
+    }
     setup.sandbox.mark_success();
     Ok(())
 }

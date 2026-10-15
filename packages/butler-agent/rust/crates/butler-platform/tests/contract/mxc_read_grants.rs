@@ -9,7 +9,6 @@ pub(super) fn verify() {
         r"C:\Tools",
         r"C:\ToolsOther",
         r"C:\Windows\System32",
-        r"C:\work",
     ]
     .map(path)
     .to_vec();
@@ -22,13 +21,12 @@ pub(super) fn verify() {
         serde_json::json!([
             "c:\\tools",
             "c:\\toolsother",
-            "c:\\work",
             "c:\\windows",
             "c:\\work\\project\\.git",
             "c:\\work\\project\\sub\\.git"
         ])
     );
-    // The project is writable below C:\work; its .git boundaries must survive.
+    // The project remains writable; its .git boundaries must survive.
     assert_eq!(
         result["filesystem"]["readwritePaths"][0],
         "c:\\work\\project"
@@ -51,6 +49,15 @@ pub(super) fn verify() {
                     .is_some_and(|entry| entry.ends_with(";c:\\tools\\bin;c:\\toolsother"))
             })
     );
+    for ancestor in [r"C:\work", r"C:\Users\person"] {
+        let mut invalid = plan();
+        invalid.tools.readonly.push(path(ancestor));
+        assert!(
+            invalid
+                .build(&invocation(&[]), 'L', 1500, &command_scratch())
+                .is_err()
+        );
+    }
     // Invalid grants remain invalid even if an ancestor could subsume them.
     p.tools
         .readonly

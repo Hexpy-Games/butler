@@ -39,10 +39,17 @@ fn root(env: &BTreeMap<String, String>, key: &str) -> Result<Option<WinPath>, Er
         .transpose()
 }
 fn collect(env: &BTreeMap<String, String>) -> Result<Toolchain, Error> {
+    let account = crate::account_dirs::account_dirs();
     let mut input = Discovery {
         system_root: root(env, "SYSTEMROOT")?,
-        app_data: root(env, "APPDATA")?,
-        local_app_data: root(env, "LOCALAPPDATA")?,
+        app_data: account
+            .as_ref()
+            .and_then(|a| physical(&a.app_data).ok())
+            .or(root(env, "APPDATA")?),
+        local_app_data: account
+            .as_ref()
+            .and_then(|a| physical(&a.local_app_data).ok())
+            .or(root(env, "LOCALAPPDATA")?),
         cargo_home: root(env, "CARGO_HOME")?,
         rustup_home: root(env, "RUSTUP_HOME")?,
         ..Discovery::default()
@@ -52,7 +59,12 @@ fn collect(env: &BTreeMap<String, String>) -> Result<Toolchain, Error> {
             input.program_files.push(root);
         }
     }
-    let home = root(env, "USERPROFILE")?.ok_or("profile required")?;
+    let home = account
+        .as_ref()
+        .and_then(|a| physical(&a.home).ok())
+        .or(root(env, "USERPROFILE")?)
+        .ok_or("profile required")?;
+    input.user_profile = Some(home.clone());
     if input.cargo_home.is_none() {
         input.cargo_home = existing(&home.join(".cargo")?);
     }
@@ -67,9 +79,16 @@ fn collect(env: &BTreeMap<String, String>) -> Result<Toolchain, Error> {
     .into_iter()
     .flatten()
     {
-        for relative in ["scoop\\apps", "nvm\\installs", ".nvm\\installs"] {
-            if let Some(root) = existing(&base.join(relative)?) {
-                input.install_roots.push(root);
+        for relative in [
+            "scoop\\apps",
+            "nvm",
+            ".nvm",
+            "Author Software\\nvm",
+            "Microsoft\\WinGet\\Packages",
+        ] {
+            let expected = base.join(relative)?;
+            if existing(&expected).as_ref() == Some(&expected) {
+                input.install_roots.push(expected);
             }
         }
     }

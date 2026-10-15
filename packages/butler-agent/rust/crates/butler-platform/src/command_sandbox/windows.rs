@@ -99,7 +99,11 @@ pub(super) fn legacy_shell(
     // Enter the admitted short CWD with process-local .NET path compatibility.
     // Long folders retain an extended provider root and real parent traversal.
     let paths = include_str!("windows/paths.ps1");
-    let script = format!("{language}{shell_started}{modules}{modules_ready}{paths}{command}");
+    // Invoke-Expression otherwise resets $? after non-terminating errors.
+    // Preserve the direct -EncodedCommand transport's final-status behavior.
+    let script = format!(
+        "{language}{shell_started}{modules}{modules_ready}{paths}{command}\nif (!$?) {{ exit 1 }}\n"
+    );
     let encoded = STANDARD.encode(
         script
             .encode_utf16()

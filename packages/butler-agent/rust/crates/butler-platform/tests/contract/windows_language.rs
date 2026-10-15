@@ -32,7 +32,7 @@ pub(super) fn verify() {
     assert!(!root.join("blocked.txt").exists());
     assert!(
         String::from_utf8_lossy(&blocked.stderr)
-            .contains("PowerShell language policy blocks this operation"),
+            .contains("MethodInvocationNotSupportedInConstrainedLanguage"),
         "{blocked:?}"
     );
     std::fs::remove_dir_all(root).unwrap();

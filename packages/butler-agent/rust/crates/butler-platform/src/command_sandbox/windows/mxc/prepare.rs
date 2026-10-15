@@ -75,7 +75,9 @@ fn prepare(
     normalize_host_roots(&mut env)?;
     let project = physical_for(root, "project")?;
     let discovery = super::timing::Phase::start("tool_discovery");
-    let tools = tools::discover(&env)?;
+    let mut tools = tools::discover(&env)?;
+    tools.path.retain(|path| !project.is_within(path));
+    tools.readonly.retain(|path| !project.is_within(path));
     drop(discovery);
     for key in ["CARGO_HOME", "RUSTUP_HOME"] {
         if let Some(value) = tools.environment.get(key) {
@@ -201,8 +203,15 @@ fn save_policy(
     fs::create_dir(&scratch)?;
     let mut scratch_guard = ScratchGuard(Some(scratch.clone()));
     let mut request = plan.build(invocation, 'Z', timeout, &physical(&scratch)?)?;
+    let mut link_roots = vec![root.to_path_buf()];
+    link_roots.extend(
+        plan.scratch()?
+            .iter()
+            .skip(1)
+            .map(|p| PathBuf::from(p.as_str())),
+    );
     super::links::validate(
-        root,
+        &link_roots,
         &plan
             .secrets
             .iter()

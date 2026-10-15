@@ -19,6 +19,8 @@ pub struct Discovery {
     pub rustup_home: Option<WinPath>,
     /// Resolved Git executable under its cmd directory.
     pub git_exe: Option<WinPath>,
+    /// Original user profile, never itself a grant.
+    pub user_profile: Option<WinPath>,
     /// Original roaming app-data directory.
     pub app_data: Option<WinPath>,
     /// Original local app-data directory.
@@ -75,14 +77,19 @@ pub fn discover(input: &Discovery) -> Result<Toolchain, &'static str> {
     }
     for dir in &input.path {
         if input.shim_dirs.iter().any(|shim| dir.is_within(shim))
-            || dir.as_str().ends_with("\\windowsapps")
             || dir.as_str().ends_with("\\.nodejs")
         {
             continue;
         }
-        // The host search path is explicit tool access, granted read-only.
-        // Physical resolution and credential denials still apply.
-        push(&mut result.path, dir.clone());
+        if trusted_path(dir, input) {
+            push(&mut result.path, dir.clone());
+        }
+    }
+    if let Some(home) = &input.user_profile
+        && result.path.contains(&home.join(r"scoop\shims")?)
+        && input.install_roots.contains(&home.join(r"scoop\apps")?)
+    {
+        push(&mut result.readonly, home.join(r"scoop\apps")?);
     }
     // Search directories are exact grants, never their ancestors.
     // Cargo, rustup and Git also need their complete install homes.
@@ -96,6 +103,13 @@ pub fn discover(input: &Discovery) -> Result<Toolchain, &'static str> {
     }
     if let Some(msvc) = &input.msvc {
         add_msvc(&mut result, msvc)?;
+    }
+    if result
+        .readonly
+        .iter()
+        .any(|grant| profile_ancestor(grant, input))
+    {
+        return Err("tool install is a profile ancestor");
     }
     Ok(result)
 }
@@ -167,7 +181,7 @@ fn add_cargo(result: &mut Toolchain, input: &Discovery) -> Result<(), &'static s
     Ok(())
 }
 
-fn known_install(path: &WinPath, input: &Discovery) -> bool {
+pub(crate) fn known_install(path: &WinPath, input: &Discovery) -> bool {
     input
         .program_files
         .iter()
@@ -184,4 +198,67 @@ fn vetted_git(input: &Discovery) -> Result<Option<WinPath>, &'static str> {
         return Err("Git outside known install root");
     }
     Ok(Some(cmd))
+}
+
+/// PATH membership alone is never authority to read a host directory.
+pub(crate) fn trusted_path(path: &WinPath, input: &Discovery) -> bool {
+    if profile_ancestor(path, input) {
+        return false;
+    }
+    if known_install(path, input)
+        || input
+            .system_root
+            .as_ref()
+            .is_some_and(|root| path.is_within(root))
+        || input
+            .cargo_home
+            .as_ref()
+            .is_some_and(|root| root.join("bin").as_ref() == Ok(path))
+        || input
+            .rustup_home
+            .as_ref()
+            .is_some_and(|root| path.is_within(root))
+    {
+        return true;
+    }
+    let exact = |base: &Option<WinPath>, relative: &str| {
+        base.as_ref()
+            .is_some_and(|root| root.join(relative).as_ref() == Ok(path))
+    };
+    if exact(&input.user_profile, r"scoop\shims")
+        || exact(&input.app_data, "npm")
+        || exact(&input.local_app_data, r"Microsoft\WinGet\Links")
+        || exact(&input.local_app_data, r"Microsoft\WindowsApps")
+    {
+        return true;
+    }
+    let Some(python) = input
+        .local_app_data
+        .as_ref()
+        .and_then(|base| base.join(r"Programs\Python").ok())
+    else {
+        return false;
+    };
+    let Some(relative) = path
+        .as_str()
+        .strip_prefix(&format!("{}\\", python.as_str()))
+    else {
+        return false;
+    };
+    let mut parts = relative.split('\\');
+    let version = parts
+        .next()
+        .unwrap_or_default()
+        .strip_prefix("python")
+        .unwrap_or_default();
+    (3..=4).contains(&version.len())
+        && version.bytes().all(|c| c.is_ascii_digit())
+        && matches!((parts.next(), parts.next()), (None | Some("scripts"), None))
+}
+
+fn profile_ancestor(path: &WinPath, input: &Discovery) -> bool {
+    [&input.user_profile, &input.app_data, &input.local_app_data]
+        .into_iter()
+        .flatten()
+        .any(|root| root.is_within(path))
 }

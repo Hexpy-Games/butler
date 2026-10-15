@@ -7,7 +7,7 @@ use crate::command_sandbox::{
 use std::{
     collections::{HashMap, HashSet},
     fs,
-    path::Path,
+    path::{Path, PathBuf},
 };
 use winsafe::{HFILE, co};
 
@@ -23,13 +23,15 @@ struct Walk {
     groups: HashMap<(u32, u64), Group>,
     visited: usize,
 }
-pub(super) fn validate(root: &Path, protected: &[WinPath]) -> Result<(), Error> {
+pub(super) fn validate(roots: &[PathBuf], protected: &[WinPath]) -> Result<(), Error> {
     let mut walk = Walk {
         protected: protected.iter().cloned().collect(),
         groups: HashMap::new(),
         visited: 0,
     };
-    walk.visit(&fs::canonicalize(root)?, 0)?;
+    for root in roots {
+        walk.visit(&fs::canonicalize(root)?, 0)?;
+    }
     if walk
         .groups
         .values()
@@ -46,15 +48,27 @@ impl Walk {
         if depth > MAX_DEPTH {
             return Err("project link discovery depth exceeded".into());
         }
-        for entry in fs::read_dir(root)? {
-            let entry = entry?;
+        let entries = if depth == 0 {
+            fs::read_dir(root)?
+        } else {
+            let Some(entries) = surviving(fs::read_dir(root))? else {
+                return Ok(());
+            };
+            entries
+        };
+        for entry in entries {
+            let Some(entry) = surviving(entry)? else {
+                continue;
+            };
             self.visited += 1;
             if self.visited > MAX_ENTRIES {
                 return Err("project link discovery entry limit exceeded".into());
             }
             let path = entry.path();
-            let metadata = fs::symlink_metadata(&path)?;
-            if metadata.file_type().is_symlink() {
+            let Some(kind) = surviving(entry.file_type())? else {
+                continue;
+            };
+            if kind.is_symlink() {
                 continue;
             }
             // Native no-follow opens retain the canonical long-path prefix;
@@ -63,14 +77,14 @@ impl Walk {
             let comparable = text.strip_prefix(r"\\?\").unwrap_or(text);
             let private = crate::command_sandbox::secret_name(&entry.file_name().to_string_lossy())
                 || self.protected.contains(&WinPath::new(comparable)?);
-            if metadata.is_dir() {
+            if kind.is_dir() {
                 // Aliases into skipped protected trees remain unaccounted for,
                 // so their public counterpart will fail the count check.
                 if !private {
                     self.visit(&path, depth + 1)?;
                 }
-            } else if metadata.is_file() {
-                self.file(&path, private)?;
+            } else if kind.is_file() {
+                surviving(self.file(&path, private))?;
             }
         }
         Ok(())
@@ -103,5 +117,24 @@ impl Walk {
         group.private |= private;
         group.public |= !private;
         Ok(())
+    }
+}
+
+// A concurrent build or cleanup may unlink an entry after enumeration.
+fn surviving<T>(result: Result<T, impl Into<Error>>) -> Result<Option<T>, Error> {
+    match result.map_err(Into::into) {
+        Ok(value) => Ok(Some(value)),
+        Err(error)
+            if error.downcast_ref::<std::io::Error>().is_some_and(|e| {
+                e.kind() == std::io::ErrorKind::NotFound || e.raw_os_error() == Some(303)
+            }) || error.downcast_ref::<co::ERROR>().is_some_and(|e| {
+                *e == co::ERROR::FILE_NOT_FOUND
+                    || *e == co::ERROR::PATH_NOT_FOUND
+                    || *e == co::ERROR::DELETE_PENDING
+            }) =>
+        {
+            Ok(None)
+        }
+        Err(error) => Err(error),
     }
 }

@@ -73,6 +73,7 @@ async fn row12_timeout_and_agent_kill() -> Result<(), HarnessError> {
 async fn interrupted(kill: bool) -> Result<(), HarnessError> {
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("WIN-12")?
+        .env("BUTLER_DEBUG_SANDBOX_TIMINGS", "1")
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url);
