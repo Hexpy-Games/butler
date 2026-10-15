@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { ContextDetailsView } from "@/app/types.ts";
 import { Button, formatUsageTokens, Inline, ProgressMeter, Stack, Typo, UsageSummaryRows, Separator, UsageBars } from "@/butler-ds";
@@ -9,6 +9,8 @@ import type { UsageAuthMode } from "./usageAuthMode";
 import { useConversationUsage, type QuotaLoader, type UsageLoader } from "./useConversationUsage";
 
 interface ContextUsagePopoverProps {
+  selected: number | null;
+  onSelect: (index: number | null) => void;
   context?: ContextDetailsView | null;
   mode: UsageAuthMode;
   sessionId: string | null;
@@ -22,7 +24,7 @@ function contextRevision(context: ContextDetailsView): string {
 }
 
 /** Context meter, this conversation's usage for the model's auth mode, and Details. */
-export function ContextUsagePopover({ context, mode, sessionId, onDetails, load, loadQuota }: ContextUsagePopoverProps) {
+export function ContextUsagePopover({ context, mode, sessionId, onDetails, load, loadQuota, selected, onSelect }: ContextUsagePopoverProps) {
   const locale = useAppLocale();
   const tracked = mode === "subscription" || mode === "api_key";
   const usage = useConversationUsage({
@@ -33,7 +35,6 @@ export function ContextUsagePopover({ context, mode, sessionId, onDetails, load,
     providerId: mode === "subscription" ? context?.provider_id ?? null : null,
     loadQuota,
   });
-  const [selected, setSelected] = useState<number | null>(null);
   const timeline = useMemo(() => usageTimeline(usage.view, 24), [usage.view, locale]);
   if (!context) return null;
   const percent = Math.round(Math.max(0, Math.min(1, context.ratio)) * 100);
@@ -42,9 +43,7 @@ export function ContextUsagePopover({ context, mode, sessionId, onDetails, load,
   const bucket = selected === null ? undefined : timeline.buckets[selected];
   const copy = appCopy.composer.usage;
   return (
-    <Stack gap="lg" data-test-class="context-usage" onKeyDownCapture={(event) => {
-      if (event.key === "Escape" && selected !== null) { event.preventDefault(); event.stopPropagation(); setSelected(null); }
-    }}>
+    <Stack gap="lg" data-test-class="context-usage">
       <Stack gap="xs">
         <ProgressMeter
           label={appCopy.interfacePanels.contextWindow}
@@ -58,11 +57,11 @@ export function ContextUsagePopover({ context, mode, sessionId, onDetails, load,
       </Stack>
       {tracked ? <>
         <Separator />
-        {!usage.view && usage.status === "failed" ? <Typo.Caption>{copy.unavailable}</Typo.Caption> :
+        {!usage.view && usage.status === "failed" ? <Stack gap="sm"><Typo.Caption>{copy.thisChat}</Typo.Caption><Typo.Caption>{copy.unavailable}</Typo.Caption></Stack> :
           <UsageReadout view={usage.view} values={usageReadout(usage.view, bucket)} label={bucket?.label ?? copy.thisChat}
             unit={timeline.stepHours > 1 ? copy.bucketUnit(timeline.stepHours) : undefined}
-            selected={Boolean(bucket)} showCost={mode === "api_key"}>
-            <UsageBars {...timeline} series={usageSeries()} size="popover" selectedIndex={selected} onSelect={setSelected}
+            selected={Boolean(bucket)} showCost={mode === "api_key"} stale={usage.status === "failed"}>
+            <UsageBars {...timeline} series={usageSeries()} size="popover" selectedIndex={selected} onSelect={onSelect}
               state={!usage.view ? "loading" : "ready"} emptyLabel={copy.noUsage} loadingLabel={copy.loading}
               note={timeline.buckets.length === 1 ? copy.justStarted : undefined} ariaLabel={copy.chartLabel} />
           </UsageReadout>}

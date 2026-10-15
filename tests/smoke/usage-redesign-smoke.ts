@@ -16,6 +16,7 @@ const browser = await launchSmokeBrowser();
 const types: Record<string, string> = { ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".svg": "image/svg+xml", ".png": "image/png", ".html": "text/html" };
 let state = "ready";
 let reads = 0;
+let allReads = 0;
 let cells = 0;
 let releaseLoading: (() => void)[] = [];
 function monitor(url: URL) {
@@ -27,6 +28,7 @@ function monitor(url: URL) {
   view.timeline.slots = state === "empty" ? [] : [[now - 3600000, 1, 20000, 10000, 1000], [now - 600000, 2, 28200, 21900, 2420]];
   view.topSessions = [{ sessionId: "s1", title: "Login form refactor", kind: "chat", totalTokens: 51620, requests: 3, lastUsedMs: now },
     { sessionId: "s2", title: "Daily review", kind: "schedule", totalTokens: 1200, requests: 1, lastUsedMs: now - 3600000 }];
+  if (state !== "empty") view.topSessions.push(...Array.from({ length: 6 }, (_, i) => ({ sessionId: `s${i + 3}`, title: `Review ${i + 3}`, kind: "chat" as const, totalTokens: 1000 - i * 100, requests: 1, lastUsedMs: now })));
   view.previousPeriod = { totalTokens: 40000 };
   view.model.byModel = { "openai/gpt-6-luna": { ...view.model } };
   view.tools = { calls: 3, results: 3, successes: 2, failures: 1, byTool: { read_file: { calls: 3, results: 3, successes: 2, failures: 1 } } };
@@ -46,6 +48,7 @@ try {
     if (file.startsWith(dist + sep) && existsSync(file)) return route.fulfill({ contentType: types[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
     if (url.pathname === "/usage-monitor") {
       reads += 1;
+      if (url.searchParams.has("since_hours") && !url.searchParams.has("session_id")) allReads += 1;
       if (state === "loading") await new Promise<void>(resolve => releaseLoading.push(resolve));
       return route.fulfill({ json: { ok: true, data: monitor(url) } });
     }
@@ -82,6 +85,16 @@ try {
     if (!before && scenario === "ready") {
       const chart = popover.locator('[data-slot="usage-bars"]');
       assert.match(await popover.innerText(), /요청 3회/u);
+      // Hover with focus still on the pinned donut: first Esc clears, second closes.
+      assert(await trigger.evaluate(element => element === document.activeElement));
+      await chart.locator(":scope > div").first().hover({ position: { x: 5, y: 5 } });
+      assert.equal(await chart.getAttribute("data-selected"), "true");
+      await page.keyboard.press("Escape");
+      assert(await popover.isVisible());
+      assert.equal(await chart.getAttribute("data-selected"), null);
+      await page.keyboard.press("Escape");
+      await popover.waitFor({ state: "hidden" });
+      await trigger.click(); await popover.waitFor();
       await chart.focus(); await page.keyboard.press("End");
       assert.deepEqual((await probeFocusRing(page))?.clips, [], "popover chart focus ring");
       assert.match(await popover.innerText(), /요청 2회/u);
@@ -106,12 +119,27 @@ try {
       await page.getByRole("tab", { name: "도구", exact: true }).click();
       await page.getByText("파일 읽기", { exact: true }).waitFor();
       await page.getByRole("tab", { name: "대화", exact: true }).click();
+      assert.equal(await page.getByRole("tabpanel").getByRole("button", { name: /Review 8/u }).count(), 0);
+      await page.getByRole("button", { name: "모두 보기 8개", exact: true }).click();
+      const fullPicker = page.locator('[data-slot="filtered-select-popover"]');
+      await fullPicker.getByRole("textbox", { name: "대화 검색" }).fill("Review 8");
+      await Promise.all([page.waitForResponse(r => new URL(r.url()).searchParams.get("session_id") === "s8"), fullPicker.getByRole("button", { name: /Review 8/u }).click()]);
+      await page.getByRole("tabpanel").getByRole("button", { name: /Review 8/u }).waitFor();
+      const cachedReads = allReads;
+      await page.getByRole("tabpanel").getByRole("button", { name: /Review 8/u }).click();
+      await page.waitForTimeout(200); assert.equal(allReads, cachedReads, "returning to all uses the cached revision");
       await Promise.all([page.waitForResponse(r => new URL(r.url()).searchParams.get("session_id") === "s1"),
         page.getByRole("button", { name: /Login form refactor/u }).click()]);
-      await Promise.all([page.waitForResponse(r => new URL(r.url()).pathname === "/usage-monitor" && !new URL(r.url()).searchParams.has("session_id")),
-        page.getByRole("button", { name: /Login form refactor/u }).click()]);
+      assert.equal(allReads, cachedReads, "chat switches reuse all-chat totals");
+      await page.getByRole("tabpanel").getByRole("button", { name: /Login form refactor/u }).click();
       await page.getByRole("button", { name: "대화", exact: true }).click();
       const picker = page.locator('[data-slot="filtered-select-popover"]');
+      await picker.getByRole("textbox", { name: "대화 검색" }).fill("");
+      await page.waitForTimeout(400);
+      if (shots) await page.screenshot({ path: join(shots, `after${auth === "subscription" ? "-subscription" : ""}-picker-${theme}-${width}.png`) });
+      await picker.getByRole("textbox", { name: "대화 검색" }).fill("no matching title");
+      await picker.getByText("일치하는 대화가 없습니다", { exact: true }).waitFor();
+      await picker.getByRole("textbox", { name: "대화 검색" }).fill("");
       await picker.getByRole("button", { name: "예약 작업", exact: true }).click();
       assert.equal(await picker.getByRole("button", { name: /Login form refactor/u }).count(), 0);
       await picker.getByRole("textbox", { name: "대화 검색" }).fill("Daily");
@@ -120,5 +148,10 @@ try {
     }
   }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, cells, reads, before }));
-} finally { await browser.close(); }
+  console.log(JSON.stringify({ ok: true, cells, reads, allReads, before }));
+} finally {
+  // The last loading cell deliberately holds a route. Settle it before teardown.
+  releaseLoading.forEach(resolve => resolve());
+  await Promise.all(browser.contexts().flatMap(context => context.pages().map(page => page.unrouteAll({ behavior: "wait" }))));
+  await browser.close();
+}

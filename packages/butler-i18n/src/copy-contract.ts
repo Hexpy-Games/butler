@@ -572,7 +572,6 @@ export interface AppCopy {
     valueSource: (title: string) => string;
     deleteRow: (title: string) => string;
     elapsed: (minutes: number, seconds: number) => string;
-    activeProvider: (id: string) => string;
     homeTitle: string;
     projectHomeTitle: (name: string) => string;
     notificationNewMessage: string;
@@ -646,26 +645,15 @@ export interface AppCopy {
     applyAllSources: string;
     unarchive: string;
     delete: string;
-    apiProviderUsage: string;
     contextEstimates: string;
     addEnvironment: string;
-    day: string;
-    week: string;
     all: string;
-    scopeTokens: string;
-    modelTokens: string;
     smartGroups: string;
     smartGroupsDescription: string;
-    callsByTool: string;
     addHeader: string;
-    requestsLabel: string;
     inputLabel: string;
     outputLabel: string;
-    quotaLabel: string;
-    billingLabel: string;
     planLabel: string;
-    sourceLabel: string;
-    fetchedLabel: string;
     input: string;
     cache: string;
     requests: string;
@@ -879,10 +867,6 @@ export interface AppCopy {
     notExecuted: string;
     toolFailed: string;
     failureReason: string;
-    providerAdapter: string;
-    localTelemetry: string;
-    staleQuota: string;
-    confirmed: string;
   };
   conversation: ConversationCopy;
   sessionActions: {
@@ -989,6 +973,7 @@ export interface AppCopy {
     queuedPosition: (position: number, total: number) => string;
     contextDetails: string;
     usage: {
+      codexProvider: string;
       thisChat: string;
       bucketUnit: (hours: number) => string;
       requests: (count: string) => string;
@@ -1015,8 +1000,19 @@ export interface AppCopy {
       estimatedCost: string;
       share: string;
       remaining: string;
-      previousEmpty: string;
-      delta: (percent: string) => string;
+      previousPeriod: (hours: number) => string;
+      previousEmpty: (previous: string) => string;
+      delta: (previous: string, percent: string, higher: boolean) => string;
+      similar: string;
+      emptyRange: string;
+      noRecords: string;
+      recent: (range: string) => string;
+      tinyCost: string;
+      tinyShare: string;
+      noMatches: string;
+      pickerFooter: (range: string) => string;
+      viewAll: (count: number) => string;
+      bucketHours: (start: number, end: number, single: boolean) => string;
       checked: (time: string) => string;
       failures: (count: string) => string;
       details: string;
@@ -1288,7 +1284,7 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
     pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
@@ -1570,8 +1566,6 @@ export interface AppCopy {
       mcpServers: string;
       mcpSecrets: string;
       skills: string;
-      usageMonitor: string;
-      usageMonitorEmpty: string;
       developerLogs: string;
       developerLogsEmpty: string;
       searchSettings: string;

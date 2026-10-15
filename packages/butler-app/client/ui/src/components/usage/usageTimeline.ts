@@ -21,8 +21,11 @@ export function usageClock(value: number): string {
 
 export function usageBucketLabel(start: number, end: number, now: number, stepHours: number): string {
   const date = new Intl.DateTimeFormat(getAppLocale(), { month: "short", day: "numeric" }).format(start);
-  const time = stepHours < 24 ? `${usageClock(start)}–${usageClock(end)}` : "";
-  return [date, time, start <= now && now < end ? appCopy.composer.usage.now : ""].filter(Boolean).join(" · ");
+  const sameDay = new Date(start).toDateString() === new Date(now).toDateString();
+  const hour = (value: number) => new Date(value).getHours();
+  const time = stepHours < 24 ? appCopy.composer.usage.bucketHours(hour(start), hour(end) || 24, sameDay && stepHours === 1) : "";
+  const label = [!sameDay || stepHours >= 24 ? date : "", time].filter(Boolean).join(" ");
+  return [label, start <= now && now < end ? appCopy.composer.usage.now : ""].filter(Boolean).join(" · ");
 }
 
 export function usageTimeline(view: UsageMonitorView | null, maxBars: number) {
@@ -57,4 +60,9 @@ export function usageReadout(view: UsageMonitorView | null, bucket?: ReturnType<
     output: Math.max(0, (view?.model.totalTokens ?? 0) - (view?.model.promptTokens ?? 0)),
     total: view?.model.totalTokens ?? 0,
   };
+}
+
+export function usageShare(value: number): string {
+  if (value > 0 && value < 0.01) return appCopy.composer.usage.tinyShare;
+  return new Intl.NumberFormat(getAppLocale(), { style: "percent", maximumFractionDigits: 1 }).format(value);
 }
