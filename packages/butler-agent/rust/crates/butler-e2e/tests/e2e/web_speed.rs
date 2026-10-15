@@ -155,9 +155,20 @@ async fn web_read_streaming_document_keeps_all_content() -> Result<(), HarnessEr
     Ok(())
 }
 
+/// The prebuilt probe named by `BUTLER_E2E_WEB_PROBE_BIN` (CI ships it with
+/// the test archive), else this workspace's build of the example.
 async fn build_probe(
     sandbox: &butler_e2e::e2e::sandbox::Sandbox,
 ) -> Result<std::path::PathBuf, HarnessError> {
+    if let Some(path) = std::env::var_os("BUTLER_E2E_WEB_PROBE_BIN") {
+        let path = std::path::PathBuf::from(path);
+        assert!(
+            path.is_file(),
+            "BUTLER_E2E_WEB_PROBE_BIN does not exist: {}",
+            path.display()
+        );
+        return Ok(path);
+    }
     let root = std::env::var_os("CARGO_TARGET_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| butler_e2e::e2e::binary::workspace_root().join("target"));
