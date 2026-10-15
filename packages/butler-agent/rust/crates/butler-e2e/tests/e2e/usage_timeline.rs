@@ -395,6 +395,22 @@ async fn usage_schedule_kind_uses_recorded_runs() -> Result<(), HarnessError> {
     assert_eq!(reply.data()["topSessions"][0]["requests"], 2);
     let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
     assert_eq!(reply.data()["topSessions"][0]["kind"], "schedule");
+    // Both runtime scope spellings belong to the same session. Missing turn
+    // provenance in either one prevents schedule classification, without losing usage.
+    let mut log = fs::OpenOptions::new().append(true).open(&path)?;
+    writeln!(
+        log,
+        "{}",
+        json!({"ts":now.timestamp_millis()-1000,"scope":"opaque-runtime-id",
+        "model":"m","promptTokens":10,"cachedTokens":3,"totalTokens":12})
+    )?;
+    drop(log);
+    let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
+    let entry = &reply.data()["topSessions"][0];
+    assert_eq!(entry["kind"], "chat");
+    assert_eq!(entry["requests"], 2);
+    assert_eq!(entry["totalTokens"], 24.0);
+    assert_timeline(reply.data());
     // Deleted chats retain conversation provenance without inventing Butler work.
     db.execute("DELETE FROM app_automation_runs", []).unwrap();
     db.execute("DELETE FROM app_automations", []).unwrap();

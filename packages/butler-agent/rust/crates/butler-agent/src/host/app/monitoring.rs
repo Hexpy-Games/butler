@@ -60,7 +60,7 @@ impl AppMonitoring {
 fn usage_monitor_view(
     root: &Path,
     query: &AppUsageMonitorQuery,
-    monitor: &UsageMonitor,
+    monitor: &Arc<UsageMonitor>,
     catalog: &ModelCatalog,
     quota: &ProviderQuotaStore,
 ) -> butler_gateway::gateway::AppUsageMonitorView {
@@ -85,10 +85,9 @@ fn usage_monitor_view(
     if let (Some(filters), Some(session_id)) = (view.get_mut("filters"), &query.session_id) {
         filters["sessionId"] = json!(session_id);
     }
-    let session_turns = monitor.session_turns(&view);
     butler_gateway::gateway::AppUsageMonitorView {
         view,
-        session_turns,
+        monitor: monitor.clone(),
     }
 }
 

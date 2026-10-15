@@ -44,13 +44,15 @@ pub struct UsageMonitor {
 }
 
 impl UsageMonitor {
-    /// Windowed usage turn provenance for the returned sessions. The App owner
-    /// resolves these against indexed schedule bindings, independently of dispatch time.
-    pub fn session_turns(
+    /// Classify returned sessions from their windowed usage turns. The App
+    /// supplies indexed schedule lookups; each session stops at its first
+    /// non-schedule turn, without copying or serializing the log's turn ids.
+    pub fn scheduled_sessions<E>(
         &self,
         view: &Value,
-    ) -> std::collections::HashMap<String, std::collections::HashSet<String>> {
-        self.log.lock().session_turns(view)
+        is_scheduled: impl FnMut(&str) -> Result<bool, E>,
+    ) -> Result<std::collections::HashSet<String>, E> {
+        self.log.lock().scheduled_sessions(view, is_scheduled)
     }
 
     /// The usage view of `session_id` (a runtime session id; all sessions

@@ -1,7 +1,7 @@
 //! Global session totals reuse complete slots; exact boundaries stay request-local.
 use super::{SLOT_MS, SessionUsage, UsageLogIndex, Window, complete, slot_start};
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 const TOP_SESSIONS_LIMIT: usize = 200;
 
@@ -12,34 +12,47 @@ pub(super) struct SessionCache {
 }
 
 impl UsageLogIndex {
-    pub(in super::super) fn session_turns(
+    pub(in super::super) fn scheduled_sessions<E>(
         &self,
         view: &Value,
-    ) -> HashMap<String, std::collections::HashSet<String>> {
+        mut is_scheduled: impl FnMut(&str) -> Result<bool, E>,
+    ) -> Result<HashSet<String>, E> {
         let window = Window {
             scope: None,
             since_ts: view["filters"]["sinceTs"].as_f64(),
             until_ts: view["filters"]["untilTs"].as_f64(),
         };
-        view["topSessions"]
+        let mut scheduled = HashSet::new();
+        for id in view["topSessions"]
             .as_array()
             .into_iter()
             .flatten()
             .filter_map(|item| item["sessionId"].as_str())
-            .filter_map(|id| {
-                let guided = format!("btcc-guided:{id}");
-                let mut rows = [id, guided.as_str()]
-                    .into_iter()
-                    .flat_map(|scope| self.scope_slots(scope, window))
-                    .flat_map(|(_, slot)| self.matching_rows(&slot.rows, window));
-                // Missing turn provenance prevents schedule classification.
-                let turns = rows.try_fold(std::collections::HashSet::new(), |mut ids, row| {
-                    ids.insert(row.turn_id.as_ref()?.to_string());
-                    Some(ids)
-                })?;
-                (!turns.is_empty()).then(|| (id.to_owned(), turns))
-            })
-            .collect()
+        {
+            let guided = format!("btcc-guided:{id}");
+            let rows = [id, guided.as_str()]
+                .into_iter()
+                .flat_map(|scope| self.scope_slots(scope, window))
+                .flat_map(|(_, slot)| self.matching_rows(&slot.rows, window));
+            let mut turns = HashSet::new();
+            let mut all_scheduled = true;
+            for row in rows {
+                // Borrow interned ids and stop as soon as this session cannot
+                // be a schedule. Missing provenance is also non-schedule.
+                let Some(turn) = row.turn_id.as_deref() else {
+                    all_scheduled = false;
+                    break;
+                };
+                if turns.insert(turn) && !is_scheduled(turn)? {
+                    all_scheduled = false;
+                    break;
+                }
+            }
+            if all_scheduled && !turns.is_empty() {
+                scheduled.insert(id.to_owned());
+            }
+        }
+        Ok(scheduled)
     }
     pub(in super::super) fn top_sessions(&mut self, window: Window<'_>) -> Value {
         // The selector remains global when the chart is filtered to a session.

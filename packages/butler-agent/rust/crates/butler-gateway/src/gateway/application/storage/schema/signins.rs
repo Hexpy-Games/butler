@@ -62,8 +62,6 @@ CREATE INDEX IF NOT EXISTS session_queued_messages_turn_idx ON session_queued_me
 CREATE INDEX IF NOT EXISTS automation_runs_message_idx ON app_automation_runs(queued_message_id);
 CREATE INDEX IF NOT EXISTS automation_runs_turn_idx ON app_automation_runs(turn_id);
 DROP INDEX IF EXISTS automation_runs_started_idx;
-DROP INDEX IF EXISTS automation_runs_pending_idx;
-DROP INDEX IF EXISTS automation_runs_completed_idx;
 CREATE INDEX IF NOT EXISTS browser_library_import_url ON browser_library(kind,url,group_id);
 CREATE TABLE IF NOT EXISTS browser_import_schema(version INTEGER PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS browser_signin_identity(

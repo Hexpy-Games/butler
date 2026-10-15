@@ -34,10 +34,10 @@ pub struct AppUsageMonitorQuery {
     pub usage_scope: Option<String>,
 }
 
-/// Native usage projection plus windowed turn provenance used by App metadata.
+/// Native usage projection and its index for lazy App schedule classification.
 pub struct AppUsageMonitorView {
     pub view: Value,
-    pub session_turns: std::collections::HashMap<String, std::collections::HashSet<String>>,
+    pub monitor: std::sync::Arc<butler_runtime::operations::UsageMonitor>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -478,7 +478,7 @@ impl super::AppApplication {
             let mut view = this.dependencies.monitoring.usage_monitor(query).await?;
             this.storage
                 .read(move |db| {
-                    let scheduled = usage::scheduled_sessions(db, &view.session_turns)?;
+                    let scheduled = usage::scheduled_sessions(db, &view)?;
                     usage::enrich(db, &mut view.view, &scheduled)?;
                     Ok(view.view)
                 })

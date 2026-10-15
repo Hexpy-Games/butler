@@ -66,38 +66,29 @@ fn metadata(db: &Connection, ids: &[String]) -> Result<Metadata, AppStorageError
 }
 
 // Usage lives in the Host's incremental log index, not an App SQL table.
-// json_each exposes its deduplicated window turns as a relation with one bound
-// parameter, independent of window size. Each run/queue probe uses a turn index;
-// dispatch completion time says nothing about when a turn's usage ends.
-pub(crate) const SCHEDULE_SESSIONS_SQL: &str = "
-    SELECT session.key FROM json_each(?1) session
-    WHERE NOT EXISTS (
-        SELECT 1 FROM json_each(session.value) turn
-        WHERE NOT EXISTS (
-            SELECT 1 FROM app_automation_runs r WHERE r.turn_id=turn.value
-        ) AND NOT EXISTS (
-            SELECT 1 FROM session_queued_messages q
-            JOIN app_automation_runs r ON r.queued_message_id=q.id
-            WHERE q.turn_id=turn.value
-        )
+// Probe only the turns needed to classify a session, with one prepared
+// statement. Dispatch completion time does not bound a turn's usage.
+pub(crate) const SCHEDULE_TURN_SQL: &str = "
+    SELECT EXISTS (
+        SELECT 1 FROM app_automation_runs r WHERE r.turn_id=?1
+    ) OR EXISTS (
+        SELECT 1 FROM session_queued_messages q
+        JOIN app_automation_runs r ON r.queued_message_id=q.id
+        WHERE q.turn_id=?1
     )";
 
 pub(super) fn scheduled_sessions(
     db: &Connection,
-    session_turns: &HashMap<String, HashSet<String>>,
+    view: &super::AppUsageMonitorView,
 ) -> Result<HashSet<String>, AppStorageError> {
-    if session_turns.is_empty() {
-        return Ok(HashSet::new());
-    }
-    let turns = json!(session_turns).to_string();
     let mut statement = db
-        .prepare(SCHEDULE_SESSIONS_SQL)
+        .prepare(SCHEDULE_TURN_SQL)
         .map_err(AppStorageError::sqlite)?;
-    statement
-        .query_map([turns], |row| row.get(0))
-        .map_err(AppStorageError::sqlite)?
-        .collect::<Result<_, _>>()
-        .map_err(AppStorageError::sqlite)
+    view.monitor.scheduled_sessions(&view.view, |turn| {
+        statement
+            .query_row([turn], |row| row.get(0))
+            .map_err(AppStorageError::sqlite)
+    })
 }
 
 /// Resolve App ids through their durable binding; telemetry scopes stay intact.

@@ -7,7 +7,7 @@ use rusqlite::{Connection, params_from_iter, types::Value};
 use super::{migrate, migration::SETTLE_ENDED_SQL};
 use crate::gateway::application::{
     automations::queued_sql,
-    monitoring::usage::SCHEDULE_SESSIONS_SQL,
+    monitoring::usage::SCHEDULE_TURN_SQL,
     progress_view::LIVE_ROWS_SQL,
     projection::HAS_KIND_SQL,
     queue::RESTORE_CLAIM_SQL,
@@ -69,8 +69,6 @@ pub(super) fn schedule_window_uses_turn_indexes() {
     migrate(&mut db, None).unwrap();
     db.execute_batch("DROP INDEX session_queued_messages_turn_idx;
         DROP INDEX automation_runs_turn_idx;
-        CREATE INDEX automation_runs_pending_idx ON app_automation_runs(completed_at,turn_id,queued_message_id) WHERE completed_at IS NULL;
-        CREATE INDEX automation_runs_completed_idx ON app_automation_runs(julianday(completed_at),turn_id,queued_message_id);
         INSERT INTO chats(id,title,kind,created_at,updated_at) VALUES('c','Chat','chat','old','old');
         INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,state,last_run_state,created_at,updated_at)
             VALUES('a','Report','Report','chat','c',3600,'paused','delivered','old','old');
@@ -90,9 +88,7 @@ pub(super) fn schedule_window_uses_turn_indexes() {
             .unwrap();
         assert_eq!(count, 300_000);
     }
-    let retired: i64 = db.query_row("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('automation_runs_pending_idx','automation_runs_completed_idx')", [], |r| r.get(0)).unwrap();
-    assert_eq!(retired, 0);
-    let plan = plan(&db, SCHEDULE_SESSIONS_SQL);
+    let plan = plan(&db, SCHEDULE_TURN_SQL);
     eprintln!("schedule lookup: 300000 runs + 300000 queued messages\n{plan}");
     for search in [
         "SEARCH r USING COVERING INDEX automation_runs_turn_idx (turn_id=?)",
@@ -109,18 +105,15 @@ pub(super) fn schedule_window_uses_turn_indexes() {
 }
 
 fn assert_schedule_matches(db: &Connection) {
-    let mut statement = db.prepare(SCHEDULE_SESSIONS_SQL).unwrap();
-    let turns = serde_json::json!({
-        "direct": ["direct-299999"], "queued": ["queued-299999"],
-        "both": ["direct-0", "queued-1"],
-        "mixed": ["direct-0", "interactive"], "chat": ["interactive"]
-    })
-    .to_string();
-    let mut sessions = statement
-        .query_map([turns], |r| r.get::<_, String>(0))
-        .unwrap()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-    sessions.sort();
-    assert_eq!(sessions, ["both", "direct", "queued"]);
+    let mut statement = db.prepare(SCHEDULE_TURN_SQL).unwrap();
+    for (turn, expected) in [
+        ("direct-299999", true),
+        ("queued-299999", true),
+        ("direct-0", true),
+        ("queued-1", true),
+        ("interactive", false),
+    ] {
+        let actual: bool = statement.query_row([turn], |r| r.get(0)).unwrap();
+        assert_eq!(actual, expected, "{turn}");
+    }
 }
