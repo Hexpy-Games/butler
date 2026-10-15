@@ -1,8 +1,10 @@
-//! Opt-in Windows project writes; observations keep exact-action approval.
+//! Probed Windows project writes; observations keep exact-action approval.
 mod drive;
 pub(crate) mod launch;
+mod links;
 pub(in crate::command_sandbox) mod prepare;
 mod probe;
+mod recovery;
 mod sdk;
 use super::super::{Invocation, ProtectError, Protection, SandboxCapabilities, SandboxError};
 use std::{
@@ -64,5 +66,6 @@ pub(in crate::command_sandbox) fn project_write(
 #[cfg(feature = "test-support")]
 pub(in crate::command_sandbox) fn verify_recovery_contract() {
     drive::verify_inaccessible_process();
+    sdk::verify_output_failures();
     launch::verify_cleanup_status();
 }

@@ -227,6 +227,7 @@ fn step_command(
         &command_sandbox::Invocation {
             program: step.executable.clone(),
             arguments: step.arguments.clone(),
+            ..Default::default()
         },
     );
     process_control::isolate_group(command.as_std_mut());

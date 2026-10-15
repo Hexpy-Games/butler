@@ -40,6 +40,7 @@ pub fn linux_syscall_probe(
                 "-c".into(),
                 include_str!("test_support/linux_probe.py").into(),
             ],
+            ..Default::default()
         },
         environment,
         &[],

@@ -159,7 +159,7 @@ pub(in crate::command_sandbox) fn reconcile(data: &Path) -> io::Result<()> {
     let entries = match fs::read_dir(&directory) {
         Ok(entries) => entries,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return super::prepare::reconcile_policies(data);
+            return super::recovery::reconcile_policies(data);
         }
         Err(e) => return Err(e),
     };
@@ -168,7 +168,7 @@ pub(in crate::command_sandbox) fn reconcile(data: &Path) -> io::Result<()> {
             eprintln!("sandbox drive reconciliation failed: {error}");
         }
     }
-    super::prepare::reconcile_policies(data)
+    super::recovery::reconcile_policies(data)
 }
 
 fn reconcile_entry(item: io::Result<fs::DirEntry>) -> io::Result<()> {

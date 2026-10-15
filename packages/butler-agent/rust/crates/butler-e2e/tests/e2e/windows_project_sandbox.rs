@@ -1,4 +1,4 @@
-//! PR2 opt-in acceptance. Full interactive boundary coverage belongs to PR3.
+//! Preparation and fallback regressions; the interactive matrix is in windows_sandbox.
 use super::access_tiers::stub;
 use butler_e2e::e2e::{
     HarnessError,
@@ -68,6 +68,17 @@ async fn filesystem_preparation_normalizes_search_separators() -> Result<(), Har
     assert!(invocation.arguments.iter().any(|a| a == "--policy-file"));
     assert!(!root.join("made.txt").exists());
     prepared_scratch_is_scoped_and_released(&invocation, &setup.sandbox.data)?;
+    let abandoned = prepare(&env).map_err(|e| std::io::Error::other(e.to_string()))?;
+    let abandoned_path = std::path::PathBuf::from(&abandoned.arguments[1]);
+    command_sandbox::reconcile_project_write(&setup.sandbox.data)?;
+    assert!(abandoned_path.exists(), "live preparation was reclaimed");
+    drop(abandoned);
+    let orphan = setup.sandbox.data.join("tmp/project-write/before-policy");
+    std::fs::create_dir(&orphan)?;
+    let next = prepare(&env).map_err(|e| std::io::Error::other(e.to_string()))?;
+    assert!(!abandoned_path.exists());
+    assert!(!orphan.exists());
+    command_sandbox::cleanup_prepared_invocation(&next)?;
     env.insert("PATH".into(), format!("{}.", tools.display()));
     let error = prepare(&env).unwrap_err().to_string();
     assert!(
@@ -94,27 +105,34 @@ async fn filesystem_preparation_normalizes_search_separators() -> Result<(), Har
 async fn auto_mutation_waits_for_approval_without_running() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows approval fallback");
+    approval_fallback().await
+}
+
+pub(super) async fn approval_fallback() -> Result<(), HarnessError> {
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("WINDOWS-AUTO-MUTATION-FALLBACK")?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
-        .env("BUTLER_WINDOWS_PROJECT_SANDBOX", "1");
+        .env("BUTLER_CODEX_BASE_URL", url);
     let folder = setup.sandbox.home.join("project");
     std::fs::create_dir_all(&folder)?;
     let mut s = setup.start().await?;
     let chat = super::project_workspace::bind_project(&mut s, &folder).await?;
     let project = folder.join("작업 Project");
     let prompt = "Create the project output.";
-    script.rounds.lock().unwrap().insert(
-        prompt.into(),
-        vec![stub::call(
-            "make",
-            "run_command",
-            &json!({"command":"echo complete > made.txt",
+    script
+        .rounds
+        .lock()
+        .map_err(|error| std::io::Error::other(error.to_string()))?
+        .insert(
+            prompt.into(),
+            vec![stub::call(
+                "make",
+                "run_command",
+                &json!({"command":"echo complete > made.txt",
             "summary":"Create output", "state_effect":"mutation"}),
-        )],
-    );
+            )],
+        );
     let turn = super::access_tiers::paused(&s, &chat, prompt).await?;
     super::access_tiers::assert_counts(&s, &turn, 1, 1)?;
     assert!(!project.join("made.txt").exists());
@@ -229,7 +247,7 @@ async fn probe_emits_loader_diagnostics() -> Result<(), HarnessError> {
     assert!(report.get("mxcError").is_some());
     let reason = report["reason"].as_str().unwrap();
     assert_ne!(reason, "probe_failed");
-    assert_ne!(reason, "non_interactive_desktop");
+
     if reason == "partial" || reason.starts_with("child_") {
         assert!(report["childExitCode"].is_i64() || report["reason"] == "child_timed_out");
         if report["childExitCode"].as_i64().is_some_and(|n| n < 0) {

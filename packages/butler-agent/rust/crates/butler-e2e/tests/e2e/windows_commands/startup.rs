@@ -51,6 +51,7 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
                     program: environment.get("COMSPEC").cloned().unwrap_or("cmd.exe".into()),
                     arguments: vec!["/d".into(), "/s".into(), "/c".into(),
                         format!("chcp 65001>nul & {script}")],
+                    ..Default::default()
                 }
             } else {
                 login_shell(script, ShellAccess::Full, &environment).unwrap()

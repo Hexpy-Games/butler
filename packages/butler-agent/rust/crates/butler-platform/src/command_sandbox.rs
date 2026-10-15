@@ -5,8 +5,9 @@
 
 mod denial;
 pub use denial::{
-    EXECUTION_TIMEOUT_EXIT, EXECUTION_TIMEOUT_MARKER, execution_timeout, execution_timeout_exit,
-    isolation_failure, isolation_failure_exit, sandbox_denial,
+    EXECUTION_FAILURE_EXIT, EXECUTION_FAILURE_MARKER, EXECUTION_TIMEOUT_EXIT,
+    EXECUTION_TIMEOUT_MARKER, execution_failure, execution_failure_exit, execution_timeout,
+    execution_timeout_exit, isolation_failure, isolation_failure_exit, sandbox_denial,
 };
 mod credentials;
 pub mod mxc_policy;
@@ -127,13 +128,28 @@ pub fn copy_command_helper(source: &Path, destination: &Path) -> std::io::Result
 pub const POSIX_SHELL: bool = shell::POSIX;
 
 /// A program and its arguments.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Invocation {
     /// The executable to start.
     pub program: String,
     /// Its arguments, in order.
     pub arguments: Vec<String>,
+    /// Keeps per-command preparation live until dispatch and execution finish.
+    pub lease: Option<std::sync::Arc<InvocationLease>>,
 }
+
+/// An opaque preparation lease; closing it permits subsequent reconciliation.
+#[derive(Debug)]
+pub struct InvocationLease {
+    _file: std::fs::File,
+    path: std::path::PathBuf,
+}
+impl PartialEq for InvocationLease {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
+    }
+}
+impl Eq for InvocationLease {}
 
 /// What a shell command may do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

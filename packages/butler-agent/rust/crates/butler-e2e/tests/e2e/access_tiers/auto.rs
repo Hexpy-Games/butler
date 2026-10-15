@@ -122,22 +122,32 @@ async fn sandbox_holds(
     script: &Arc<Script>,
     project: &Path,
 ) -> Result<(), HarnessError> {
-    let body = "echo escaped > ../escape.txt\necho changed > .git/config\n";
+    let (path, body, command, publish) = if butler_platform::command_sandbox::POSIX_SHELL {
+        (
+            "build.sh",
+            "echo started > src/sandbox-started.txt\necho escaped > ../escape.txt\necho changed > .git/config\n",
+            "sh build.sh",
+            "true",
+        )
+    } else {
+        (
+            "build.cmd",
+            "@echo off\r\necho started>src\\sandbox-started.txt\r\necho escaped>..\\escape.txt\r\necho changed>.git\\config\r\n",
+            "cmd /c build.cmd",
+            "cmd /c exit 0",
+        )
+    };
     script.rounds.lock().unwrap().insert(
         ESCAPE.into(),
         vec![
-            call(
-                "script",
-                "write_file",
-                &json!({"path":"build.sh","content":body}),
-            ),
-            mutation("build", "sh build.sh"),
+            call("script", "write_file", &json!({"path":path,"content":body})),
+            mutation("build", command),
             // Declared outputs must not copy protected files into artifacts
             // that the next contained command can read.
             call(
                 "publish",
                 "run_command",
-                &json!({"command":"true","summary":"Publish","state_effect":"mutation",
+                &json!({"command":publish,"summary":"Publish","state_effect":"mutation",
                     "output_paths":[".git/config"]}),
             ),
         ],
@@ -149,6 +159,11 @@ async fn sandbox_holds(
     assert!(
         !published.exists() || std::fs::read_dir(&published)?.next().is_none(),
         "a protected project file was published"
+    );
+    assert_eq!(
+        std::fs::read_to_string(project.join("src/sandbox-started.txt"))?.trim(),
+        "started",
+        "project script did not execute"
     );
     let parent = project.parent().unwrap();
     assert!(

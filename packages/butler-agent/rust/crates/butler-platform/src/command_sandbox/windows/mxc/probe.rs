@@ -6,7 +6,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 
 pub(in crate::command_sandbox) fn probe() -> SandboxCapabilities {
-    if std::env::var("BUTLER_WINDOWS_PROJECT_SANDBOX").as_deref() != Ok("1") {
+    if std::env::var("BUTLER_WINDOWS_PROJECT_SANDBOX").as_deref() == Ok("0") {
         return unavailable("mxc_disabled");
     }
     let Ok(helper) = helper().and_then(|p| {
@@ -82,7 +82,7 @@ fn set(object: Option<&mut serde_json::Map<String, Value>>, key: &str, value: Va
 }
 
 fn execute_probe(report: &mut Value) -> Result<(), Error> {
-    if std::env::var("BUTLER_WINDOWS_PROJECT_SANDBOX").as_deref() != Ok("1") {
+    if std::env::var("BUTLER_WINDOWS_PROJECT_SANDBOX").as_deref() == Ok("0") {
         set(report.as_object_mut(), "reason", "mxc_disabled".into());
         return Ok(());
     }
@@ -103,6 +103,14 @@ fn execute_probe(report: &mut Value) -> Result<(), Error> {
         "policy",
         mxc_policy::probe::redacted(&request),
     );
+    if !interactive_desktop()? {
+        set(
+            report.as_object_mut(),
+            "reason",
+            "non_interactive_desktop".into(),
+        );
+        return Ok(());
+    }
     let facts = match sdk::probe(&request) {
         Ok(facts) => facts,
         Err(error) => {
@@ -226,4 +234,22 @@ pub(super) fn rewrite_drive(request: &mut Value, drive: char, relative: &str) ->
         }
     }
     Ok(())
+}
+
+// .NET checks the window station visibility flag, including service sessions.
+// This runs once in the cached helper probe, never on the command hot path.
+fn interactive_desktop() -> Result<bool, Error> {
+    let shell = std::path::PathBuf::from(std::env::var("SYSTEMROOT")?)
+        .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+    let output = Command::new(shell)
+        .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "[Environment]::UserInteractive",
+        ])
+        .stdin(Stdio::null())
+        .output()?;
+    Ok(output.status.success() && output.stdout.trim_ascii() == b"True")
 }

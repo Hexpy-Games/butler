@@ -107,6 +107,7 @@ fn cmd_arguments_remain_verbatim() {
     let native = Invocation {
         program: "node.exe".into(),
         arguments: vec!["/d".into(), "/s".into(), "/c".into(), "quoted text".into()],
+        ..Default::default()
     };
     assert_eq!(cmd::raw_argument(&native), None);
     assert_eq!(cmd::script("Write-Output '한국어 출력'"), None);
@@ -172,12 +173,18 @@ fn expected_host_sandbox_is_enforced() {
 
 fn timeout_markers_require_both_code_and_trailing_marker() {
     use butler_platform::command_sandbox::{execution_timeout, execution_timeout_exit};
-    assert!(execution_timeout_exit(Some(124)));
+    assert_eq!(
+        execution_timeout_exit(Some(124)),
+        !butler_platform::command_sandbox::POSIX_SHELL
+    );
     assert!(!execution_timeout_exit(Some(125)));
-    assert!(execution_timeout(
-        Some(124),
-        b"child stderr\nbutler_command_execution_timed_out\n"
-    ));
+    assert_eq!(
+        execution_timeout(
+            Some(124),
+            b"child stderr\nbutler_command_execution_timed_out\n"
+        ),
+        !butler_platform::command_sandbox::POSIX_SHELL
+    );
     assert!(!execution_timeout(
         Some(0),
         b"butler_command_execution_timed_out\n"

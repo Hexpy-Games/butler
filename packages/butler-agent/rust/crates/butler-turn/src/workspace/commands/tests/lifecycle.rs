@@ -63,7 +63,7 @@ async fn command_environment_excludes_host_values() {
     structured_undefined_environment_entry_removes_inherited_value().await;
     guided_quotes_reach_the_shell_intact().await;
     sweep_survives_reconciliation_failure().await;
-    helper_timeout_maps_to_summary().await;
+    full_access_helper_markers_remain_ordinary_output().await;
 }
 
 /// What a POSIX shell or `cmd.exe` prints for an unset variable: the empty
@@ -346,31 +346,29 @@ async fn sweep_survives_reconciliation_failure() {
     assert_eq!(root.join(".env").exists(), !sweep_supported);
 }
 
-async fn helper_timeout_maps_to_summary() {
+async fn full_access_helper_markers_remain_ordinary_output() {
     let fixture = Fixture::new();
     let owner = Commands::new();
-    for (marker, expected) in [
-        ("butler_command_execution_timed_out", true),
-        ("ordinary error", false),
+    for (marker, code) in [
+        ("butler_command_execution_timed_out", 124),
+        ("ordinary error", 124),
+        ("butler_command_execution_failed", 126),
     ] {
         let command = if command_sandbox::POSIX_SHELL {
-            format!("printf '%s\\n' '{marker}' >&2; exit 124")
+            format!("printf '%s\\n' '{marker}' >&2; exit {code}")
         } else {
-            format!("[Console]::Error.WriteLine('{marker}'); exit 124")
+            format!("[Console]::Error.WriteLine('{marker}'); exit {code}")
         };
         let mut input = fixture.guided(&command);
         system_environment(&mut input.host_environment);
         let output = owner.submit_guided(input).unwrap().await.unwrap().unwrap();
-        assert_eq!(output.summary.timed_out, expected);
-        assert_eq!(
-            output.summary.exit_code,
-            if expected { None } else { Some(124) }
-        );
+        assert!(!output.summary.timed_out);
+        assert_eq!(output.summary.exit_code, Some(code));
         let payload = std::fs::read_to_string(&output.payload_source.path).unwrap();
         assert!(payload.contains(marker));
         let header: serde_json::Value =
             serde_json::from_str(payload.lines().next().unwrap()).unwrap();
-        assert_eq!(header["timedOut"], expected);
+        assert_eq!(header["timedOut"], false);
     }
     owner.close().await;
 }

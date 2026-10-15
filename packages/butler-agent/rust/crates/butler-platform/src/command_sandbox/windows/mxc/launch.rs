@@ -28,7 +28,16 @@ pub(crate) fn main() -> Result<i32, Error> {
             if args.next().as_deref() != Some("--") {
                 return Err("missing separator".into());
             }
-            run(Path::new(&file))
+            match run(Path::new(&file)) {
+                Err(error) if error.is::<sdk::RunError>() => {
+                    eprintln!(
+                        "{error}\n{}",
+                        crate::command_sandbox::EXECUTION_FAILURE_MARKER
+                    );
+                    Ok(crate::command_sandbox::EXECUTION_FAILURE_EXIT)
+                }
+                result => result,
+            }
         }
         _ => Err("invalid helper mode".into()),
     }
@@ -48,7 +57,7 @@ fn run(file: &Path) -> Result<i32, Error> {
     finish_cleanup(result, cleanup).map(sdk::RunOutcome::report)
 }
 fn execute(file: &Path, payload: &mut PolicyFile) -> Result<sdk::RunOutcome, Error> {
-    if std::env::var("BUTLER_WINDOWS_PROJECT_SANDBOX").as_deref() != Ok("1") {
+    if std::env::var("BUTLER_WINDOWS_PROJECT_SANDBOX").as_deref() == Ok("0") {
         return Err("mxc_disabled".into());
     }
     let cwd = dunce::canonicalize(std::env::current_dir()?)?;

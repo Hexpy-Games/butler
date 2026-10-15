@@ -38,6 +38,7 @@ pub(super) fn shell(text: &str, environment: &HashMap<String, Option<String>>) -
             "/c".into(),
             format!("chcp 65001>nul & {text}"),
         ],
+        ..Default::default()
     }
 }
 

@@ -111,6 +111,7 @@ pub(super) fn legacy_shell(
         ]
         .map(str::to_owned)
         .to_vec(),
+        ..Default::default()
     }
 }
 

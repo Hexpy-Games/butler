@@ -85,6 +85,7 @@ fn invocation(args: &[&str]) -> Invocation {
     Invocation {
         program: r"C:\Program Files\tool.exe".into(),
         arguments: args.iter().map(|s| (*s).into()).collect(),
+        ..Default::default()
     }
 }
 fn golden_policy_has_no_implicit_environment_network_or_fallback() {
@@ -351,6 +352,7 @@ fn command_lines_round_trip_crt_arguments_and_preserve_cmd_text() {
             "/c".into(),
             r#"echo "quoted" & dir "%USERPROFILE%""#.into(),
         ],
+        ..Default::default()
     };
     assert_eq!(
         command_line(&cmd).unwrap(),
