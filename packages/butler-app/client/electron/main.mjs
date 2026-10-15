@@ -22,7 +22,7 @@ import {
 import { openExternalSignIn, openLink, installAppLinks } from "./browser/links.mjs";
 import { installUserBrowser } from "./browser/ipc.mjs";
 import { prepareAppPackageUpdate } from "./app-package-update.mjs";
-import { unsupportedLegacyData } from "./app-legacy-data.mjs";
+import { appDataRoots } from "./app-legacy-data.mjs";
 import { getDesktopCopy } from "./i18n/desktop-copy.mjs";
 import { createQuitFeedback } from "./quit-feedback.mjs";
 import { spawnTracedAgent } from "./quit-agent-trace.mjs";
@@ -144,10 +144,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
 const userHome = homedir();
 let storageCorrectionWatch = null;
-const butlerDataRoot = process.env.BUTLER_DATA || join(userHome, ".butler");
-const legacyDataBlocked = unsupportedLegacyData(butlerDataRoot);
-/** App-owned logs and drafts live under the data folder only once the App accepts it; a refused folder stays untouched. */
-const appWritableDataRoot = legacyDataBlocked ? null : butlerDataRoot;
+/** App-owned writes go only to `appWritableDataRoot`, null while the data folder is refused. */
+const { dataRoot: butlerDataRoot, legacyDataBlocked, writableRoot: appWritableDataRoot } = appDataRoots();
 const uiCrashStore = createUiCrashStore(appWritableDataRoot, () => appInfoView().version);
 const wallpaperStateLog = createWallpaperStateLog(appWritableDataRoot);
 const preloadPath = resolve(__dirname, "preload.cjs");
@@ -203,7 +201,7 @@ if (windowsSquirrelLaunch.handled) {
       unregisterProtocol: (scheme, executable, args) =>
         app.removeAsDefaultProtocolClient(scheme, executable, args),
       cleanupOperationalState: () =>
-        removeWindowsOperationalState({ butlerData: butlerDataRoot }),
+        removeWindowsOperationalState({ butlerData: appWritableDataRoot }),
     });
   } catch (error) {
     squirrelExitCode = 1;
@@ -2990,7 +2988,7 @@ function createProjectFolderSelectionToken(folderPath, secret) {
 function handleFatalStartupError(error) {
   try {
     const diagnostics = bundledAgentSupervisor.diagnostics();
-    writeAppForegroundStartupFailure(butlerDataRoot, {
+    writeAppForegroundStartupFailure(appWritableDataRoot, {
       platform: process.platform,
       architecture: process.arch,
       lifecycleMode: appLifecycleMode,

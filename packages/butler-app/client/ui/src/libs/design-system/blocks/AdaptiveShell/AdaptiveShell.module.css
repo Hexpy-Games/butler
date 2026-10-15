@@ -47,6 +47,9 @@
 
 .root[data-chrome-environment="electron"][data-platform="darwin"] {
   --window-controls-width: 0px;
+  /* The native vibrancy blurs the desktop under the shell, so a thinner tint
+     lets it show through (Windows uses its acrylic token below). */
+  --sidebar-bg: var(--mac-sidebar-bg);
 }
 
 .root[data-chrome-environment="electron"][data-platform="linux"],
