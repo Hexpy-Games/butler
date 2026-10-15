@@ -232,14 +232,14 @@ def restore_tree(directory, expected, compatible=False):
         raise ValueError('Symlink Cargo target directory')
     runner_cache.delete_tree(target)
     os.makedirs(runner_cache.extended(target.parent), exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=target.parent) as stage:
-        previous = Path.cwd()
-        try:
-            os.chdir(stage)
-            cache.extract(directory.resolve())
-        finally:
-            os.chdir(previous)
-        os.rename(runner_cache.extended(Path(stage) / 'target'), runner_cache.extended(target))
+    stage = Path(tempfile.mkdtemp(dir=runner_cache.extended(target.parent)))
+    try:
+        # Windows applies MAX_PATH to cwd plus a relative name, and Cargo units
+        # nest past it below the stage: extract to the extended stage instead.
+        cache.extract(directory, base=stage)
+        os.rename(stage / 'target', runner_cache.extended(target))
+    finally:
+        runner_cache.delete_tree(stage)
     cache.source_times.restore(Path(os.environ['GITHUB_WORKSPACE']),
                               json.loads((directory / 'sources.json').read_text()))
     print(f'Restored verified CI Cargo snapshot at {json.loads((directory / "cache.json").read_text())["sha"]}.')
