@@ -238,6 +238,13 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.upload_message_file(input).await })
     }
+    fn message_file_metadata(
+        &self,
+        id: String,
+    ) -> ApplicationFuture<crate::gateway::MessageFileRef> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.message_file_metadata(id).await })
+    }
     fn download_message_file(&self, id: String) -> ApplicationFuture<AppFileDownload> {
         let this = self.clone_handle();
         Box::pin(async move { this.download_message_file(id).await })
