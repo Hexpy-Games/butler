@@ -177,11 +177,16 @@ def extract(directory, root='target', base=None):
                     if link.is_absolute() or not destination.resolve().is_relative_to(cache_root.resolve()):
                         raise tarfile.FilterError(f'Unexpected Cargo cache link: {member.name}')
                 if member.islnk():
-                    # Supplementing an existing cache leaves the destination
-                    # present. Python 3.12 then falls back to seeking an earlier
-                    # tar member, which a zstd stream cannot do. Replace only
-                    # the validated in-tree hardlink before recreating it.
-                    (base / path).unlink(missing_ok=True)
+                    # Link the validated source directly. tarfile joins the raw
+                    # `/` linkname (unconverted under Windows `\\?\`) and, missing
+                    # that source or meeting an existing name, seeks back in the
+                    # stream, which zstd cannot do. Replace only this in-tree name.
+                    created = runner_cache.extended(base / path)
+                    if os.path.lexists(created):
+                        os.unlink(created)
+                    os.makedirs(os.path.dirname(created), exist_ok=True)
+                    os.link(runner_cache.extended(destination.resolve()), created)
+                    continue
                 archive_tar.extract(member, path=base, filter='data')
         decompress.stdout.close()
         if decompress.wait() != 0:

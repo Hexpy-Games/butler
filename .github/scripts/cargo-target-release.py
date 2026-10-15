@@ -238,8 +238,13 @@ def restore_tree(directory, expected, compatible=False):
         # nest past it below the stage: extract to the extended stage instead.
         cache.extract(directory, base=stage)
         os.rename(stage / 'target', runner_cache.extended(target))
-    finally:
-        runner_cache.delete_tree(stage)
+    except BaseException as error:
+        try:
+            runner_cache.delete_tree(stage)
+        except OSError as cleanup:  # Report the restore failure, not its cleanup.
+            error.add_note(f'Cargo snapshot stage cleanup also failed: {cleanup}')
+        raise
+    runner_cache.delete_tree(stage)
     cache.source_times.restore(Path(os.environ['GITHUB_WORKSPACE']),
                               json.loads((directory / 'sources.json').read_text()))
     print(f'Restored verified CI Cargo snapshot at {json.loads((directory / "cache.json").read_text())["sha"]}.')
