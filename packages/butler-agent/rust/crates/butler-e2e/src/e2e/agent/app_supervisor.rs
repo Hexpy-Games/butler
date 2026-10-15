@@ -11,6 +11,7 @@ use super::{Agent, Launch};
 use crate::e2e::HarnessError;
 
 const STOP_INTENT_SCHEMA: &str = "butler.agent-stop-intent.v1";
+const STARTUP_TRACE: &str = "BUTLER_E2E_STARTUP_TRACE";
 
 impl Launch {
     /// Starts the agent as the Butler App does: the gateway token in D's App
@@ -27,6 +28,11 @@ impl Launch {
     /// the App-only variables; CLI commands run with [`Launch::command`].
     pub(super) fn service_command(&self) -> Command {
         let mut command = self.command();
+        // Every harness-started service logs its startup phase timings, so a
+        // readiness timeout names the slow phase. CLI output stays unchanged.
+        if !self.env.iter().any(|(key, _)| key == STARTUP_TRACE) {
+            command.env(STARTUP_TRACE, "1");
+        }
         if self.app_supervisor {
             command
                 .env("BUTLER_APP_FOREGROUND_LEASE", "1")

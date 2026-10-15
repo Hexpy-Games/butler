@@ -27,12 +27,13 @@ pub(in crate::host) struct RuntimeStores {
 impl RuntimeStores {
     pub(in crate::host) async fn open(
         data_root: &Path,
-        collation: Arc<LocaleCollation>,
+        collation: &Arc<LocaleCollation>,
         stop: &tokio_util::sync::CancellationToken,
         correction: super::startup_trace::CorrectionSender,
+        startup: &super::startup_trace::Trace,
     ) -> Result<Self, BtccError> {
         check_startup(stop)?;
-        let btcc = open_btcc(data_root, stop, correction).await?;
+        let btcc = open_btcc(data_root, stop, correction, startup.nested()).await?;
         if let Err(error) = check_startup(stop) {
             let _ = btcc.close().await;
             return Err(error);
@@ -58,7 +59,7 @@ impl RuntimeStores {
         let conversations = match AgentConversationStore::open(ConversationStoreConfig {
             path: conversation_store_path(data_root),
             identity_clock: Arc::new(SystemIdentity),
-            collation,
+            collation: collation.clone(),
         })
         .await
         {
@@ -130,6 +131,7 @@ async fn open_btcc(
     data_root: &Path,
     stop: &tokio_util::sync::CancellationToken,
     timing: super::startup_trace::CorrectionSender,
+    mut trace: super::startup_trace::Trace,
 ) -> Result<BtccStorage, BtccError> {
     let root = data_root.to_owned();
     let cancellation = stop.clone();
@@ -137,8 +139,10 @@ async fn open_btcc(
         if let Err(error) = butler_platform::command_sandbox::reconcile_project_write(&root) {
             eprintln!("Sandbox startup reconciliation failed: {error}");
         }
+        trace.phase("sandbox_reconcile");
         let bootstrap = prepare_btcc_storage(&root, crate::host::build_info::current().version)
             .map_err(|e| error("storage_bootstrap_failed", e))?;
+        trace.phase("btcc_storage_prepare");
         timing.send_replace(super::startup_trace::Correction::Running(
             std::time::Instant::now(),
         ));
