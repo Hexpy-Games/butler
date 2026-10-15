@@ -16,6 +16,7 @@ pub(super) async fn assert_burst_projects_other_chat(
                 title: Some("Burst B".into()),
                 project_id: None,
                 session_hint: Some("burst-b".into()),
+                group_id: None,
             },
             false,
         )

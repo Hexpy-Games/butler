@@ -105,6 +105,16 @@ describe("Windows Squirrel lifecycle", () => {
     expect(removed).toHaveLength(2);
   });
 
+  // test-category: security
+  test("uninstall cleanup leaves a refused data folder untouched", () => {
+    const removed: string[] = [];
+    expect(removeWindowsOperationalState({
+      butlerData: null,
+      removePath: (path: string) => removed.push(path),
+    })).toEqual([]);
+    expect(removed).toEqual([]);
+  });
+
   test("obsolete exits without managing shortcuts and first run stays normal", () => {
     const obsolete = resolveWindowsSquirrelLaunch({
       platform: "win32",

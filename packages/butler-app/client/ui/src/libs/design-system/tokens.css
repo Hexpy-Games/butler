@@ -697,8 +697,10 @@
   --danger-bg: rgba(255, 245, 244, 0.86);
   --danger-banner-bg: rgba(255, 239, 238, 0.96);
   --worker-panel-bg: rgba(241, 242, 244, 0.96);
-  /* Tuned for macOS light-mode translucency over Electron under-window material. */
+  /* Shell material for browsers and Linux (no native blur under the window). */
   --sidebar-bg: rgba(255, 255, 255, 0.52);
+  /* macOS Electron: thinner over the native "sidebar" vibrancy (AdaptiveShell, darwin). */
+  --mac-sidebar-bg: rgba(255, 255, 255, 0.3);
   --windows-sidebar-bg: rgba(255, 255, 255, 0.36);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
   /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
@@ -1108,6 +1110,7 @@
   --danger-banner-bg: rgba(190, 56, 54, 0.18);
   --worker-panel-bg: rgba(37, 38, 41, 0.96);
   --sidebar-bg: rgba(36, 37, 40, 0.72);
+  --mac-sidebar-bg: rgba(36, 37, 40, 0.5);
   --windows-sidebar-bg: rgba(24, 25, 28, 0.46);
   --sidebar-collapsed-bg: rgba(20, 21, 23, 0.18);
   /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
@@ -1273,6 +1276,7 @@
   --danger-banner-bg: rgba(255, 239, 238, 0.96);
   --worker-panel-bg: rgba(241, 242, 244, 0.96);
   --sidebar-bg: rgba(255, 255, 255, 0.52);
+  --mac-sidebar-bg: rgba(255, 255, 255, 0.3);
   --windows-sidebar-bg: rgba(255, 255, 255, 0.36);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
   /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
@@ -1388,16 +1392,19 @@
 
 .sidebar-solid {
   --sidebar-bg: rgba(246, 247, 249, 0.98);
+  --mac-sidebar-bg: rgba(246, 247, 249, 0.98);
   --windows-sidebar-bg: rgba(246, 247, 249, 0.98);
 }
 
 .theme-light.sidebar-solid {
   --sidebar-bg: rgba(246, 247, 249, 0.98);
+  --mac-sidebar-bg: rgba(246, 247, 249, 0.98);
   --windows-sidebar-bg: rgba(246, 247, 249, 0.98);
 }
 
 .theme-dark.sidebar-solid {
   --sidebar-bg: rgba(36, 37, 40, 0.98);
+  --mac-sidebar-bg: rgba(36, 37, 40, 0.98);
   --windows-sidebar-bg: rgba(36, 37, 40, 0.98);
 }
 
