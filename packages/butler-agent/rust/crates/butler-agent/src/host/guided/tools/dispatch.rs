@@ -23,6 +23,8 @@ use super::GuidedTools;
 use crate::host::GuidedWorkTools;
 pub(super) use work::execute_work;
 
+/// Runs `call` with its paths naming the places the OS reaches (see
+/// `link_targets`), so access, approval and execution agree on the target.
 pub(super) async fn execute(
     owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
@@ -85,27 +87,7 @@ pub(super) async fn execute(
         return steward::steer(owner, invocation, call).await;
     }
     if call.name == ToolName::CancelSteward {
-        let result = owner
-            .subsessions
-            .cancel(butler_turn::btcc::SubsessionCancelRequest {
-                parent_session_id: owner.binding.source_session_id.clone(),
-                parent_turn_id: owner.binding.turn_id.clone(),
-                source_message_id: invocation.turn.original_message_id.clone(),
-                relation_id: call
-                    .arguments
-                    .get("relation_id")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                safe_title: call
-                    .arguments
-                    .get("safe_title")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                child_role: butler_turn::workspace::SessionRole::Steward,
-            })
-            .await
-            .map_err(ToolExecutionError::Integrity)?;
-        return encoded(&result);
+        return steward::cancel(owner, invocation, call).await;
     }
     if call.name == ToolName::WaitForWorker {
         let waiting = owner

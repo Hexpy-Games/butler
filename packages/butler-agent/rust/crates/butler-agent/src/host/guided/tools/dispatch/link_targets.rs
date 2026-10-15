@@ -1,7 +1,8 @@
-//! A path that names a place inside the working folder but leads outside it
-//! through a link is replaced with the real place before the access check,
-//! the approval card and the operation, so all three name the same target
-//! and an approval never covers a place it did not show.
+//! A path whose spelling names another place than the one the OS reaches
+//! (a link or alias on the way, another spelling of the working folder) is
+//! replaced with the real place before the access check, the approval card
+//! and the operation, so all three name the same target and an approval
+//! never covers a place it did not show.
 use super::GuidedTools;
 use butler_core::tool_protocol::ToolName;
 use butler_turn::btcc::{BtccError, ModelRoundToolCall};
@@ -28,8 +29,8 @@ fn path_arguments(call: &ModelRoundToolCall) -> Vec<String> {
     }
 }
 
-/// `call` with each path that escapes through a link replaced by its real
-/// target, or None when no path does.
+/// `call` with each path respelled as `real_target` says, or None when every
+/// path already names its place.
 pub(super) async fn resolve(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
@@ -53,7 +54,7 @@ pub(super) async fn resolve(
         requested
             .into_iter()
             .filter_map(|(pointer, path)| {
-                butler_turn::workspace::link_escape(&root, &path).map(|real| (pointer, real))
+                butler_turn::workspace::real_target(&root, &path).map(|real| (pointer, real))
             })
             .collect::<Vec<_>>()
     })

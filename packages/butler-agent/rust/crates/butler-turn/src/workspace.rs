@@ -12,7 +12,7 @@ mod mutations;
 mod path_guard;
 mod path_messages;
 mod target_scope;
-pub use target_scope::{ScopeRoots, TargetScope, classify_targets, link_escape};
+pub use target_scope::{ScopeRoots, TargetScope, classify_targets, real_target};
 mod reference;
 mod session_folder;
 mod session_recovery;

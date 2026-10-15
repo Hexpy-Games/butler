@@ -36,17 +36,33 @@ pub fn classify_targets(roots: &ScopeRoots<'_>, base: &Path, targets: &[&str]) -
         .max()
         .unwrap_or(TargetScope::NoTarget)
 }
-/// Where `requested` really leads when it names a place inside `root` but a
-/// link on the way (a symlink or junction) points outside it: the real path
-/// the OS opens, as classification resolves it. None for a path that is
-/// outside lexically, stays inside, or does not parse.
-pub fn link_escape(root: &Path, requested: &str) -> Option<PathBuf> {
+/// How a file tool should spell `requested` so the access check, the
+/// approval card and the operation name the place the OS reaches, resolved
+/// as [`classify`] resolves it: relative to `root` when it really lies inside
+/// though spelled another way (another spelling of the root, a link into
+/// it), or the real absolute path when a link or alias leads somewhere other
+/// than its spelling says. None when the spelling already names that place
+/// (an in-folder path stays as written), or the path does not parse or is
+/// ambiguous (classified outside as is).
+pub fn real_target(root: &Path, requested: &str) -> Option<PathBuf> {
     let lexical = butler_platform::tool_paths::resolve(root, requested).ok()?;
-    if !path_is_within(&lexical, &butler_platform::tool_paths::lexical(root)) {
+    if ambiguous_path(&lexical) {
         return None;
     }
     let real = realpath_or_nearest(&lexical);
-    (!path_is_within(&real, &realpath_or_nearest(root))).then_some(real)
+    let root_real = realpath_or_nearest(root);
+    if path_is_within(&real, &root_real) {
+        if path_is_within(&lexical, &butler_platform::tool_paths::lexical(root)) {
+            return None;
+        }
+        let relative = inside_relative(&root_real, &real)?;
+        return Some(if relative.as_os_str().is_empty() {
+            PathBuf::from(".")
+        } else {
+            relative
+        });
+    }
+    (real != lexical).then_some(real)
 }
 fn classify(
     roots: &ScopeRoots<'_>,

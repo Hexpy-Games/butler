@@ -78,19 +78,25 @@ fn cases(home: &Path, installation: &Path) -> Vec<Case> {
     ]
 }
 
-/// Where a path inside the data folder really leads when a link on the way
-/// points outside it: the deepest existing parent resolved by the OS.
+/// Where a path outside the data folder really leads when its spelling (a
+/// link or alias on the way) names another place: the deepest existing
+/// parent resolved by the OS.
 fn escaped(data: &Path, path: &str) -> Option<PathBuf> {
     let lexical = butler_platform::tool_paths::resolve(data, path).ok()?;
-    lexical.strip_prefix(data).ok()?;
-    let mut real = butler_platform::secure_fs::canonicalize(&lexical).ok();
-    if real.is_none() {
-        let parent = butler_platform::secure_fs::canonicalize(lexical.parent()?).ok()?;
-        real = Some(parent.join(lexical.file_name()?));
-    }
-    let real = real?;
+    let (mut existing, mut missing) = (lexical.as_path(), Vec::new());
+    let real = loop {
+        if let Ok(real) = butler_platform::secure_fs::canonicalize(existing) {
+            break real;
+        }
+        missing.push(existing.file_name()?);
+        existing = existing.parent()?;
+    };
+    let real = missing
+        .into_iter()
+        .rev()
+        .fold(real, |path, name| path.join(name));
     let data = butler_platform::secure_fs::canonicalize(data).ok()?;
-    (!butler_platform::secure_fs::path_is_within(&real, &data)).then_some(real)
+    (!butler_platform::secure_fs::path_is_within(&real, &data) && real != lexical).then_some(real)
 }
 
 pub(super) async fn approve(
@@ -128,7 +134,7 @@ pub(super) async fn approve(
     if case.tool != "run_command" {
         assert_eq!(card["executable"], case.tool);
     }
-    // A link inside the data folder that leads outside shows where it leads.
+    // A path whose link or alias leads elsewhere shows where it leads.
     let observed = |path: &str| -> Result<PathBuf, HarnessError> {
         Ok(match escaped(&s.sandbox.data, path) {
             Some(real) => real,
