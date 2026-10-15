@@ -107,7 +107,7 @@ pub(super) async fn settle(
 
 /// Ends the child turn of a worker or steward session as failed, so its
 /// parent relation does not stay open. `false` for any other item.
-async fn close_child(
+pub(super) async fn close_child(
     item: &ClaimedInboundEvent,
     bindings: &SessionBindingStore,
     subsessions: &SubsessionService,

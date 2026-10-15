@@ -53,20 +53,26 @@ impl SubsessionService {
                     && relation.packet.child_role == crate::btcc::ChildRole::Steward
             })
             .ok_or_else(|| error(BtccCode::StewardRelationNotFound))?;
-        let parent = self
-            .bindings
+        self.bindings
             .get_by_session_id(&request.parent_session_id)
             .await
             .map_err(BtccError::from)?
             .filter(|binding| binding.role == SessionRole::Butler)
             .ok_or_else(|| error(BtccCode::StewardRelationNotFound))?;
-        let _ = parent;
+        // A child whose result reached the parent is terminal, even when its
+        // interrupted turn is still recorded as admitted.
         if self
             .repository
             .open_relation_by_work(relation.root_work_id.clone())
             .await
             .map_err(BtccError::from)?
             .is_none()
+            || self
+                .repository
+                .result_for_relation(relation.relation_id.clone())
+                .await
+                .map_err(BtccError::from)?
+                .is_some()
         {
             return Err(error(BtccCode::StewardRelationNotActive));
         }
