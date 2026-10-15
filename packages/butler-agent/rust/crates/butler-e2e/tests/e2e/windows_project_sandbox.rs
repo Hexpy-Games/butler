@@ -257,16 +257,14 @@ fn prepared_scratch_is_scoped_and_released(
     let grants = policy["request"]["filesystem"]["readwritePaths"]
         .as_array()
         .ok_or_else(|| std::io::Error::other("missing grants"))?;
-    let parent = data
-        .join("tmp/project-write")
-        .display()
-        .to_string()
-        .to_lowercase();
+    let parent = physical_grant(&data.join("tmp/project-write"))?;
+    let command_grant = physical_grant(scratch)?;
+    assert_eq!(grants.len(), 4);
     assert!(!grants.iter().any(|grant| grant.as_str() == Some(&parent)));
     assert!(
         grants
             .iter()
-            .any(|grant| grant.as_str() == Some(&scratch.display().to_string().to_lowercase()))
+            .any(|grant| grant.as_str() == Some(&command_grant))
     );
     command_sandbox::cleanup_prepared_invocation(invocation)?;
     assert!(!path.exists());
@@ -297,4 +295,11 @@ fn reconciliation_continues_past_bad_entries(
     std::fs::remove_dir(drives.join("D.json"))?;
     std::fs::remove_dir(policies.join("bad.json"))?;
     Ok(())
+}
+
+fn physical_grant(path: &std::path::Path) -> std::io::Result<String> {
+    let canonical = butler_platform::secure_fs::canonicalize(path)?;
+    command_sandbox::mxc_policy::WinPath::new(&canonical.to_string_lossy())
+        .map(|path| path.as_str().to_owned())
+        .map_err(std::io::Error::other)
 }
