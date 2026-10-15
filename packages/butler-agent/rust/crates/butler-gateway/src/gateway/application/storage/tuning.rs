@@ -10,11 +10,11 @@ use super::{AppStorageError, StorageResult};
 /// Compiled statements the lane keeps for `prepare_cached`.
 const CACHED_STATEMENTS: usize = 256;
 /// Reserve room for reader schemas and compiled statements as well as pages.
-/// The writer and both indexed readers share 3 MiB of page-cache allowance,
-/// below the previous 8 MiB writer allocation; responses retain every field.
+/// The writer and both indexed readers share 3 MiB. The checkpoint owner
+/// inherits another 1 MiB, still below the former 8 MiB writer allocation.
 const PAGE_CACHE_KIB: i64 = -1_024;
 /// Concurrent views need two indexed 1 MiB caches; bounded coalesced writes
-/// use the remaining 1 MiB without increasing the combined allowance.
+/// use 1 MiB; background maintenance has its separate bounded writer-sized cache.
 const READ_PAGE_CACHE_KIB: i64 = -1_024;
 /// Startup sweeps otherwise leave mapped database pages resident indefinitely.
 /// Use the bounded page cache for reads instead.
@@ -64,6 +64,7 @@ pub(super) fn optimize(connection: &Connection) -> StorageResult<()> {
 
 /// Retention must never wait for foreground readers to release the WAL.
 pub(super) fn passive_checkpoint(connection: &Connection) -> StorageResult<()> {
+    let _timing = crate::gateway::command_timing::CommandTiming::new("app_sqlite_checkpoint");
     connection
         .execute_batch("PRAGMA wal_checkpoint(PASSIVE)")
         .map_err(AppStorageError::sqlite)

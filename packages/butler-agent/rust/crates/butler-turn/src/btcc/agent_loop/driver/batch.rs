@@ -426,6 +426,7 @@ pub(super) async fn settle_batch(
     batch: &ToolBatch<'_>,
     results: &[ToolResult],
 ) -> Result<Step, AgentLoopError> {
+    let _timing = super::super::command_timing::CommandTiming::new("batch_settlement");
     match after_batch(input, batch.calls, results, batch.iteration).await? {
         BatchDisposition::Continue => Ok(Step::Continue),
         BatchDisposition::FinalReport => {

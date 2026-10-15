@@ -80,8 +80,11 @@ pub(super) async fn sync_requested(
     context: &ProjectionContext,
     chat: &str,
 ) -> Result<(), GatewayApplicationError> {
+    let timing = crate::gateway::command_timing::CommandTiming::new("projection_sync_requested");
     sync_chat(context, chat).await?;
+    timing.mark("chat_synced");
     while sync_deferred_once(context).await? {}
+    timing.mark("deferred_synced");
     context.streaming.flush_all(context).await
 }
 

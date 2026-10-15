@@ -40,6 +40,7 @@ pub(super) async fn run_model_round(
     surface: &mut ToolSurface,
     context: &dyn TurnContextProjection,
 ) -> Result<ModelRoundResult, AgentLoopError> {
+    let timing = super::command_timing::CommandTiming::new("model_preparation");
     let identity = next_round_identity(input, state, prepared);
     let started_model_ref = input.model_execution.active_model_ref();
     model_waiting(
@@ -49,6 +50,7 @@ pub(super) async fn run_model_round(
         Some(&started_model_ref),
     )
     .await;
+    timing.mark("waiting_published");
     let round = Round {
         input,
         prepared,
@@ -105,17 +107,21 @@ async fn attempt_round(
     state: &mut State,
     surface: &mut ToolSurface,
 ) -> Result<ModelRoundResult, AttemptError> {
+    let timing = super::command_timing::CommandTiming::new("model_projection");
     super::browser_context::supersede(&mut state.messages);
     identify_messages(&mut state.messages, &mut state.next_item_ordinal);
     let mut response_item_id = next_item_id(&mut state.next_item_ordinal);
     let replay = replay_transcript(round, state).await?;
+    timing.mark("replay_prepared");
     let mut projection = project_context(round, state, &replay, surface, &response_item_id).await?;
+    timing.mark("context_projected");
     if projection.rebase == ContextRebase::RequiredWithSteeringRecheck
         && steer_after_rebase(round, state, surface).await?
     {
         response_item_id = next_item_id(&mut state.next_item_ordinal);
         projection = project_context(round, state, &replay, surface, &response_item_id).await?;
     }
+    timing.mark("before_send");
     let mut response = send_request(round, state, &replay, surface, &projection).await?;
     accept_response(round, state, &mut response, response_item_id).await?;
     Ok(response)

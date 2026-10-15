@@ -276,10 +276,14 @@ jobs:
             $ErrorActionPreference = 'Stop'
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+      # Native failures stay fatal, but must not hide independent hosted evidence.
       - name: Export compiled verification harnesses
+        id: export-harnesses
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
         run: |
           ../../../deploy/windows-e2e-artifacts.ps1 -Mode Export
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.export-harnesses.outcome == 'success' }}
         with:
           name: windows-e2e
           path: ${{ env.PREVIEW_ROOT }}/artifacts
@@ -414,6 +418,7 @@ jobs:
     timeout-minutes: 30
     env:
       BUTLER_E2E_TIER: stub
+      BUTLER_DEBUG_COMMAND_TIMINGS: ${{ matrix.shard == 'basics' && '1' || '' }}
       RUST_TEST_THREADS: 8
     strategy:
       fail-fast: false
