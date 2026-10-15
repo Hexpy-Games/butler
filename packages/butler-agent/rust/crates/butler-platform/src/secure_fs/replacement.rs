@@ -23,8 +23,9 @@ pub fn replace_private<E>(
     replace(path, write, io_error, true)
 }
 
-/// Atomically publishes a private, reconstructible copy without a durability
-/// barrier. The caller must already hold a durable source and recover this
+/// Atomically publishes a private, reconstructible copy without explicit file
+/// or directory synchronization. Platform rename guarantees still apply.
+/// The caller must already hold a durable source and recover this
 /// copy if it is missing or incomplete after a crash. Never use for acceptance
 /// of new user data or for a source of truth.
 pub fn replace_private_reconstructible<E>(
