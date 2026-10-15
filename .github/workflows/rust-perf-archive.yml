@@ -42,8 +42,9 @@ jobs:
           isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
           out="$RUNNER_TEMP/perf-archive"
           mkdir -p "$out"
-          python3 "$isolate" cargo build --timings --release --tests --locked -j 8 -p butler-e2e
-          python3 "$isolate" cargo nextest archive --release --locked -p butler-e2e --archive-file "$out/tests.tar.zst"
+          # Include butler-sandbox so the test process probes the same sandbox as the stub archive.
+          python3 "$isolate" cargo build --timings --release --tests --locked -j 8 -p butler-e2e -p butler-platform
+          python3 "$isolate" cargo nextest archive --release --locked -p butler-e2e -p butler-platform --archive-file "$out/tests.tar.zst"
           python3 "$isolate" cargo nextest list --release --locked -p butler-e2e --message-format json > "$out/list.json"
           filter="$(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")"
           python3 "$isolate" cargo nextest list --release --locked -p butler-e2e --message-format json -E "$filter" > "$out/perf-list.json"
