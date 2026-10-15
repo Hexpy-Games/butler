@@ -43,21 +43,18 @@ pub struct UsageMonitor {
     transcripts: Mutex<TranscriptActivityCache>,
 }
 
-/// Private Host/App companion facts, never serialized into the HTTP response.
-#[derive(Default)]
-pub struct UsageSessionTurns {
-    /// Telemetry session id before App metadata enrichment.
-    pub session_id: String,
-    /// Recorded usage turn ids in the requested window.
-    pub turn_ids: Vec<std::sync::Arc<str>>,
-    /// Usage without a turn binding cannot be attributed to a schedule.
-    pub missing_turn: bool,
-}
-
 impl UsageMonitor {
-    /// Turn provenance for returned sessions, read from the existing scope index.
-    pub fn session_turns(&self, view: &Value) -> Vec<UsageSessionTurns> {
-        self.log.lock().session_turns(view)
+    /// Classify only returned sessions against the App's windowed run bindings.
+    /// With no runs, avoid walking usage rows entirely.
+    pub fn scheduled_sessions(
+        &self,
+        view: &Value,
+        schedule_turns: &std::collections::HashSet<String>,
+    ) -> std::collections::HashSet<String> {
+        if schedule_turns.is_empty() {
+            return Default::default();
+        }
+        self.log.lock().scheduled_sessions(view, schedule_turns)
     }
 
     /// The usage view of `session_id` (a runtime session id; all sessions

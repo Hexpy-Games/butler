@@ -1,10 +1,13 @@
 //! Incremental UTC slot indexes with compact per-scope counters.
+#[path = "sessions.rs"]
+mod sessions;
 use super::{
     buckets::{Buckets, PriceLookup, Tokens},
     row::{Names, Rows, UsageRow},
 };
 use crate::operations::log_tail::LogTail;
 use serde_json::{Value, json};
+use sessions::SessionCache;
 use std::{
     collections::{BTreeMap, HashMap},
     path::Path,
@@ -12,7 +15,6 @@ use std::{
 };
 
 pub(super) const SLOT_MS: i64 = 900_000;
-const TOP_SESSIONS_LIMIT: usize = 200;
 #[derive(Clone, Copy, Default)]
 pub(super) struct Window<'a> {
     pub(super) scope: Option<&'a str>,
@@ -30,7 +32,7 @@ struct ScopeSlot {
     rows: Vec<u32>,
 }
 /// Only counters consumed by timeline/topSessions, not full model buckets.
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct SessionUsage {
     requests: u64,
     prompt: f64,
@@ -84,6 +86,8 @@ pub(crate) struct UsageLogIndex {
     by_scope: HashMap<Arc<str>, BTreeMap<i64, ScopeSlot>>,
     rows: Rows,
     all: Option<Buckets>,
+    // One range of complete slots; append/rotation invalidates it immediately.
+    session_totals: Option<SessionCache>,
 }
 impl UsageLogIndex {
     pub(super) fn refresh(&mut self, data_root: &Path, pricing: Option<PriceLookup<'_>>) {
@@ -96,6 +100,7 @@ impl UsageLogIndex {
                 index.slots.clear();
                 index.by_scope.clear();
                 index.all = None;
+                index.session_totals = None;
                 index.names = Names::default();
             },
             |index, line| index.push_line(line, pricing),
@@ -113,6 +118,7 @@ impl UsageLogIndex {
             return;
         };
         let start = slot_start(row.ts);
+        self.session_totals = None;
         if let Some(all) = &mut self.all {
             all.add(&row, pricing, &self.names);
         }
@@ -280,93 +286,6 @@ impl UsageLogIndex {
             })
             .collect();
         json!({"slotMinutes":15,"slots":slots})
-    }
-    pub(super) fn session_turns(&self, view: &Value) -> Vec<super::UsageSessionTurns> {
-        let window = Window {
-            scope: None,
-            since_ts: view["filters"]["sinceTs"].as_f64(),
-            until_ts: view["filters"]["untilTs"].as_f64(),
-        };
-        view["topSessions"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|item| item["sessionId"].as_str())
-            .map(|id| {
-                let mut turns = super::UsageSessionTurns {
-                    session_id: id.into(),
-                    ..Default::default()
-                };
-                let mut unique = std::collections::HashSet::new();
-                for scope in [id.to_owned(), format!("btcc-guided:{id}")] {
-                    for (_, slot) in self.scope_slots(&scope, window) {
-                        for row in self.matching_rows(&slot.rows, window) {
-                            if let Some(id) = &row.turn_id {
-                                unique.insert(id.clone());
-                            } else {
-                                turns.missing_turn = true;
-                            }
-                        }
-                    }
-                }
-                turns.turn_ids = unique.into_iter().collect();
-                turns
-            })
-            .collect()
-    }
-    pub(super) fn top_sessions(&self, window: Window<'_>) -> Value {
-        // The selector remains global when the chart is filtered to a session.
-        let global = Window {
-            scope: None,
-            ..window
-        };
-        let mut scopes = HashMap::<String, SessionUsage>::new();
-        for scope in self.by_scope.keys() {
-            let session = scope.strip_prefix("btcc-guided:").unwrap_or(scope);
-            let target = scopes.entry(session.to_owned()).or_default();
-            for (&start, slot) in self.scope_slots(scope, global) {
-                if complete(start, global) {
-                    target.merge(&slot.usage);
-                } else {
-                    for row in self.matching_rows(&slot.rows, global) {
-                        target.add(row);
-                    }
-                }
-            }
-        }
-        scopes.retain(|_, value| value.requests > 0);
-        let selected_scope = window
-            .scope
-            .map(|scope| scope.strip_prefix("btcc-guided:").unwrap_or(scope));
-        if let Some(scope) = selected_scope {
-            scopes.entry(scope.into()).or_default();
-        }
-        let mut scopes: Vec<_> = scopes.into_iter().collect();
-        scopes.sort_by(|a, b| b.1.total.total_cmp(&a.1.total).then_with(|| a.0.cmp(&b.0)));
-        let selected =
-            selected_scope.and_then(|scope| scopes.iter().position(|item| item.0 == scope));
-        let mut keep: Vec<_> = (0..scopes.len().min(TOP_SESSIONS_LIMIT)).collect();
-        if let Some(index) = selected.filter(|index| *index >= TOP_SESSIONS_LIMIT) {
-            keep.push(index);
-        }
-        json!(
-            keep.into_iter()
-                .map(|index| {
-                    let (scope, usage) = &scopes[index];
-                    let guided = format!("btcc-guided:{scope}");
-                    let kind = if self.by_scope.contains_key(guided.as_str()) {
-                        "chat"
-                    } else {
-                        "butler"
-                    };
-                    json!({
-                        "sessionId": scope, "title": null, "kind": kind,
-                        "totalTokens": usage.total, "requests": usage.requests,
-                        "lastUsedMs": usage.last
-                    })
-                })
-                .collect::<Vec<_>>()
-        )
     }
 }
 fn matches(row: &UsageRow, window: Window<'_>) -> bool {

@@ -8,7 +8,7 @@ async fn usage_queued_schedule_and_internal_scopes() -> Result<(), HarnessError>
     fs::create_dir_all(setup.sandbox.data.join("metrics"))?;
     let now = chrono::Utc::now().timestamp_millis() - 1000;
     let mut file = fs::File::create(setup.sandbox.data.join("metrics/prompt-cache-usage.jsonl"))?;
-    // More distinct turns than one query chunk; duplicate requests per turn.
+    // Many queued turns, with duplicate requests per turn.
     for index in 0..901 {
         for _ in 0..2 {
             writeln!(
@@ -51,9 +51,25 @@ async fn usage_queued_schedule_and_internal_scopes() -> Result<(), HarnessError>
         tx.execute("INSERT INTO session_queued_messages(id,chat_id,text,attachments_json,controls_json,state,turn_id,created_at,updated_at)
             VALUES(?1,'queued-chat','Report','[]','{}','dispatched',?2,'2026-01-01','2026-01-01')", [&queued,&turn])?;
         tx.execute("INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,queued_message_id)
-            VALUES(?1,'a','queued-chat','delivered','scheduled','2026-01-01',?1)", [&queued])?;
+            VALUES(?1,'a','queued-chat','delivered','scheduled',?2,?1)", [&queued, &chrono::DateTime::from_timestamp_millis(now-1000).unwrap().to_rfc3339()])?;
     }
     tx.commit()?;
+    // One old queued binding cannot classify the entire conversation as scheduled.
+    db.execute(
+        "UPDATE app_automation_runs SET started_at='2026-01-01' WHERE id='queue-900'",
+        [],
+    )?;
+    let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
+    assert_eq!(reply.data()["topSessions"][0]["kind"], "chat");
+    // Timestamp offsets must compare by instant, and updated runs must be visible.
+    let stamp = chrono::DateTime::from_timestamp_millis(now - 1000)
+        .unwrap()
+        .with_timezone(&chrono::FixedOffset::east_opt(9 * 3600).unwrap())
+        .to_rfc3339();
+    db.execute(
+        "UPDATE app_automation_runs SET started_at=?1 WHERE id='queue-900'",
+        [stamp],
+    )?;
     let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
     let top = reply.data()["topSessions"].as_array().unwrap();
     assert_eq!(top.len(), 7);

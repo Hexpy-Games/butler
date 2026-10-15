@@ -85,8 +85,11 @@ fn usage_monitor_view(
     if let (Some(filters), Some(session_id)) = (view.get_mut("filters"), &query.session_id) {
         filters["sessionId"] = json!(session_id);
     }
-    let turns = monitor.session_turns(&view);
-    butler_gateway::gateway::AppUsageMonitorView { view, turns }
+    let scheduled_sessions = monitor.scheduled_sessions(&view, &query.schedule_turns);
+    butler_gateway::gateway::AppUsageMonitorView {
+        view,
+        scheduled_sessions,
+    }
 }
 
 impl AppMonitoringPort for AppMonitoring {
