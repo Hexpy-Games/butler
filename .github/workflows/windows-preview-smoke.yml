@@ -334,17 +334,7 @@ jobs:
           path: ${{ runner.temp }}/windows-verify/artifacts
       - name: Isolate verification profile
         run: |
-          $defender = Get-MpComputerStatus
-          $root = Join-Path $env:RUNNER_TEMP 'windows-verify'
-          $temporary = Join-Path $root 'tmp'
-          New-Item -ItemType Directory -Force "$root/logs",$temporary | Out-Null
-          "Storage control: Defender realtime=$($defender.RealTimeProtectionEnabled) engine=$($defender.AMEngineVersion) temp=$temporary previous_temp=$env:TEMP"
-          "BUTLER_CI_IO_BASELINE=$env:TEMP" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          foreach ($name in @('TEMP','TMP','TMPDIR')) {
-            "$name=$temporary" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          }
-          "PREVIEW_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "BUTLER_E2E_WORKSPACE_ROOT=$env:GITHUB_WORKSPACE/packages/butler-agent/rust" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          . ../../../deploy/windows-hosted-profile.ps1
       - name: Install ZIP, authenticate browser UI and exercise lifecycle
         working-directory: .
         run: ./deploy/windows-preview-smoke.ps1
@@ -439,17 +429,7 @@ jobs:
           path: ${{ runner.temp }}/windows-verify/artifacts
       - name: Isolate the existing compiled harnesses
         run: |
-          $defender = Get-MpComputerStatus
-          $root = Join-Path $env:RUNNER_TEMP 'windows-verify'
-          $temporary = Join-Path $root 'tmp'
-          New-Item -ItemType Directory -Force "$root/logs",$temporary | Out-Null
-          "Storage control: Defender realtime=$($defender.RealTimeProtectionEnabled) engine=$($defender.AMEngineVersion) temp=$temporary previous_temp=$env:TEMP"
-          "BUTLER_CI_IO_BASELINE=$env:TEMP" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          foreach ($name in @('TEMP','TMP','TMPDIR')) {
-            "$name=$temporary" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          }
-          "PREVIEW_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "BUTLER_E2E_WORKSPACE_ROOT=$env:GITHUB_WORKSPACE/packages/butler-agent/rust" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          . ../../../deploy/windows-hosted-profile.ps1
           "BUTLER_E2E_BIN=$root/artifacts/butler-agent.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Run every existing selected harness
         env:
