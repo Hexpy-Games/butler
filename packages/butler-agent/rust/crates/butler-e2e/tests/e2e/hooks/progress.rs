@@ -26,6 +26,9 @@ async fn hooks_unpublished_tool_row_interrupts_turn_and_retry_delivers() -> Resu
         ],
     )?;
     let s = setup.start().await?;
+    // Declared after the scenario so it drops first: every exit path, panics
+    // included, releases a held hook before the agent stops.
+    let mut release = Release(Some(release));
     let accepted =
         s.gw.say("general", "Read progress-input.txt, then finish.")
             .await?;
@@ -36,9 +39,11 @@ async fn hooks_unpublished_tool_row_interrupts_turn_and_retry_delivers() -> Resu
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     let db = sqlite::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    db.busy_timeout(Duration::ZERO)?;
+    // Wait out the agent's own short write transactions; the hold below
+    // starts only once this lock is ours.
+    db.busy_timeout(Duration::from_secs(5))?;
     db.execute_batch("BEGIN IMMEDIATE")?;
-    fs::write(&release, b"")?;
+    release.now()?;
     // Outlast the BTCC writer's 5 s lock wait, so the row's append fails, then
     // release: later writes succeed, and a dropped row lets the turn deliver.
     let locked = Instant::now();
@@ -64,4 +69,25 @@ async fn hooks_unpublished_tool_row_interrupts_turn_and_retry_delivers() -> Resu
     s.gw.wait_turn("general", &turn_id, &["delivered"], Duration::from_secs(30))
         .await?;
     s.finish().await
+}
+
+/// Writes the hook's release file once: explicitly, or when dropped.
+struct Release(Option<std::path::PathBuf>);
+
+impl Release {
+    fn now(&mut self) -> std::io::Result<()> {
+        if let Some(path) = &self.0 {
+            fs::write(path, b"")?;
+        }
+        self.0 = None;
+        Ok(())
+    }
+}
+
+impl Drop for Release {
+    fn drop(&mut self) {
+        if let Err(error) = self.now() {
+            eprintln!("hook release failed: {error}");
+        }
+    }
 }
