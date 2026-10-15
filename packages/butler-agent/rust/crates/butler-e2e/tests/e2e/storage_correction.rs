@@ -2,6 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 use super::storage_correction_seed as seed;
 mod matrix;
+mod scale;
 mod stub;
 use super::data_perf::wal;
 use butler_e2e::e2e::{
