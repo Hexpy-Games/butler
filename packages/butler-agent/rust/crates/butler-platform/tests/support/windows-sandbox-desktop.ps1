@@ -66,6 +66,7 @@ try {
     }
     New-Item -ItemType Directory -Force $profile | Out-Null
     $env:HOME = Join-Path $profile 'home'
+    $env:USERPROFILE = $env:HOME
     $env:BUTLER_DATA = Join-Path $profile 'data'
     $env:APPDATA = Join-Path $profile 'roaming'
     $env:LOCALAPPDATA = Join-Path $profile 'local'

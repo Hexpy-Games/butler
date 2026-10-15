@@ -14,7 +14,22 @@ fn language_policy_probe() -> Result<(), HarnessError> {
         f.root.join("language.ps1"),
         "$ExecutionContext.SessionState.LanguageMode; & .\\policy-probe.exe; exit $LASTEXITCODE\r\n",
     )?;
-    let output = f.pass("cmd /c powershell.exe -NoLogo -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -File language.ps1");
+    let script = "cmd /c powershell.exe -NoLogo -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -File language.ps1";
+    // Compare the same executable, script, temp profile and desktop session.
+    // An SSH baseline cannot distinguish desktop policy from container policy.
+    let plain = command_sandbox::login_shell(script, command_sandbox::ShellAccess::Full, &f.env)
+        .map_err(|error| HarnessError(error.to_string()))?;
+    let baseline = f.launch(&plain);
+    eprintln!(
+        "Desktop host language policy:\n{}",
+        String::from_utf8_lossy(&baseline.stdout)
+    );
+    assert!(baseline.status.success(), "{baseline:?}");
+    assert!(
+        String::from_utf8_lossy(&baseline.stdout).contains("system_policy="),
+        "{baseline:?}"
+    );
+    let output = f.pass(script);
     let text = String::from_utf8_lossy(&output.stdout);
     eprintln!("Contained language policy:\n{text}");
     assert!(text.contains("Language"), "{output:?}");
