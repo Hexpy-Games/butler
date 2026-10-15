@@ -1,11 +1,24 @@
 //! Finish project containment on all exit paths, including cancellation.
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::{CommandError, GuidedAccess, GuidedCommandInput, GuidedCommandOutput};
 
 pub(super) struct Prepared {
     paths: Vec<PathBuf>,
     lease: Option<butler_platform::command_sandbox::ProjectWritePreparation>,
+}
+
+impl Prepared {
+    fn sweep(self, root: &Path, data: &Path) -> std::io::Result<Vec<PathBuf>> {
+        let result = butler_platform::command_sandbox::sweep_new_secrets(root, &self.paths, data);
+        if let Some(lease) = self.lease {
+            lease.release();
+        }
+        if let Err(error) = butler_platform::command_sandbox::reconcile_project_write(data) {
+            eprintln!("Project write reconciliation failed: {error}");
+        }
+        result
+    }
 }
 
 impl std::ops::Deref for Prepared {
@@ -47,17 +60,11 @@ pub(super) async fn after_run(
     }
     let root = input.workspace_root.clone();
     let data = input.butler_data.clone();
-    let swept = tokio::task::spawn_blocking(move || {
-        let result =
-            butler_platform::command_sandbox::sweep_new_secrets(&root, &since.paths, &data);
-        if let Some(lease) = since.lease {
-            lease.release();
-        }
-        result
-    })
-    .await
-    .map_err(|error| CommandError::io(std::io::Error::other(error)))
-    .and_then(|result| result.map_err(CommandError::io));
+    let swept = tokio::task::spawn_blocking(move || since.sweep(&root, &data))
+        .await
+        .map_err(|error| CommandError::io(std::io::Error::other(error)))
+        .and_then(|result| result.map_err(CommandError::io));
+
     let violations = match swept {
         Ok(paths) => paths,
         Err(error) => {

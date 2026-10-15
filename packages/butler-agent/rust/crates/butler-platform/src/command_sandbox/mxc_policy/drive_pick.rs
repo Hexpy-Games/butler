@@ -14,27 +14,24 @@ pub fn candidates(logical: u32, persistent: &[char], claimed: &[char]) -> Vec<ch
         })
         .collect()
 }
-/// Parses subst's `L:\: => C:\path` listing without the host Path parser.
+/// Parses supported subst mappings; unrelated or unparseable mappings are omitted.
 pub fn subst_listing(text: &str) -> Result<Vec<(char, WinPath)>, &'static str> {
-    text.lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| {
-            let (drive, target) = line
-                .trim()
-                .split_once(" => ")
-                .ok_or("invalid subst listing")?;
+    Ok(text
+        .lines()
+        .filter_map(|line| {
+            let (drive, target) = line.trim().split_once(" => ")?;
             let [letter, b':', b'\\', b':'] = drive.as_bytes() else {
-                return Err("invalid subst drive");
+                return None;
             };
             if !letter.is_ascii_alphabetic() {
-                return Err("invalid subst drive");
+                return None;
             }
-            Ok((
+            Some((
                 char::from(*letter).to_ascii_uppercase(),
-                WinPath::new(target)?,
+                WinPath::new(target).ok()?,
             ))
         })
-        .collect()
+        .collect())
 }
 /// Cleanup decision after checking helper PID plus start time (PID alone can be reused).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

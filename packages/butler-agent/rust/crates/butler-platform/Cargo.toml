@@ -54,7 +54,7 @@ mxc-sdk = { git = "https://github.com/microsoft/mxc", rev = "2366ee9b1e0bed3a0f9
 windows-dpapi = "=0.2.0"
 aes-gcm = { version = "0.10", features = ["zeroize"] }
 dunce.workspace = true
-winsafe = { workspace = true, features = ["advapi", "shell"] }
+winsafe = { workspace = true, features = ["advapi", "shell", "user"] }
 if-addrs.workspace = true
 sysinfo.workspace = true
 win32job.workspace = true

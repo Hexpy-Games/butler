@@ -7,6 +7,7 @@ use super::Invocation;
 
 mod cmd;
 mod cwd;
+pub(super) mod mxc;
 pub(super) use cwd::working_directory;
 
 pub(super) const ESCAPE: char = '`';
