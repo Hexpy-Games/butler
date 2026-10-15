@@ -1,4 +1,5 @@
 //! Stub carrier replay through the real provider adapter and agent relay.
+use butler_e2e::e2e::binary::fixture_binary;
 use serde_json::{Value, json};
 use std::{fmt::Write as _, io::Write, process::Command};
 
@@ -12,7 +13,7 @@ fn provider_tool_names_precede_every_ordered_argument_delta()
     let cases = carriers(&args, &fragments)?;
     let path = std::path::PathBuf::from(std::env::var("BUTLER_DATA")?).join("provider-stream.json");
     std::fs::File::create(&path)?.write_all(&serde_json::to_vec(&cases)?)?;
-    let output = Command::new(env!("CARGO_BIN_EXE_e2e-provider-stream"))
+    let output = Command::new(fixture_binary("e2e-provider-stream")?)
         .stdin(std::fs::File::open(path)?)
         .output()?;
     assert!(

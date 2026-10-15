@@ -312,6 +312,16 @@ pub fn normalize_path_token(path: &str) -> String {
     shell::normalize_path_token(path)
 }
 
+/// Saves this process's sandbox probe as a startup hint in `data`. Probing
+/// itself never writes, so call this only once the host has accepted `data`;
+/// call off async workers.
+pub fn remember_probe(data: &Path) {
+    #[cfg(target_os = "linux")]
+    linux::remember_probe(data);
+    #[cfg(not(target_os = "linux"))]
+    let _ = data;
+}
+
 /// Reclaims helper-owned drive mappings after reap or at startup; call off async workers.
 pub fn reconcile_project_write(data: &Path) -> std::io::Result<()> {
     #[cfg(windows)]

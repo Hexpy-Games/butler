@@ -88,6 +88,10 @@ pub(super) fn available() -> bool {
     !matches!(tier(), Tier::L)
 }
 
+pub(super) fn remember(data: &Path) {
+    cache::remember(data);
+}
+
 /// Closes denials over other mount views. Another view of a writable root
 /// is denied (and on Tier M hidden) as a whole, so entries below the roots
 /// need no per-entry view resolution: with thousands of secrets, that
