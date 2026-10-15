@@ -24,6 +24,7 @@ isolated() {
 }
 
 prepare() {
+    export BUTLER_E2E_HEDGE_EVAL=1
     local sha=${1:?prepare requires main SHA}
     mkdir -p "$eval_root"
     if [[ -e "$eval_root/main" ]]; then
@@ -56,6 +57,7 @@ PY
 }
 
 run() {
+    export BUTLER_E2E_HEDGE_EVAL=1
     [[ ${1:-} == --rounds && ${2:-} =~ ^[1-9][0-9]*$ && $# == 2 ]] || { echo "run --rounds N" >&2; exit 1; }
     : "${BUTLER_E2E_CODEX_PROFILE:?operator must supply the dedicated Codex auth path}"
     [[ -f "$BUTLER_E2E_CODEX_PROFILE" ]] || { echo "Codex auth profile does not exist" >&2; exit 1; }
@@ -96,5 +98,5 @@ case ${1:-} in
             main_input="$eval_root/main-judged.jsonl"; branch_input="$eval_root/branch-judged.jsonl"
         fi
         python3 "$script_dir/hedge_eval_v2_report.py" "$main_input" "$branch_input" --out "$eval_root/report.json" "${inputs[@]}" ;;
-    *) echo "Usage: $0 prepare <main_sha> | run --rounds N | judge | pairs | report" >&2; exit 1 ;;
+    *) echo "Usage: $0 prepare <main_sha> | run --rounds N | judge | pairs | report (prepare/run opt in with BUTLER_E2E_HEDGE_EVAL=1)" >&2; exit 1 ;;
 esac
