@@ -45,20 +45,23 @@ pub(super) fn run(
         return copy_failure(path, &e, attempts, run);
     }
     run.failure_state = "failed_verify";
-    if let Err(e) = verify(&tmp, &p, &counts, run) {
-        remove(&tmp)?;
-        if expired(run) {
-            return pending_time(path, attempts);
+    let failures = match verify(&tmp, &p, &counts, run) {
+        Ok(failures) => failures,
+        Err(e) => {
+            remove(&tmp)?;
+            if expired(run) {
+                return pending_time(path, attempts);
+            }
+            return failed(
+                path,
+                "failed_verify",
+                StorageCode::StorageCorrectionVerifyFailed,
+                &e.to_string(),
+            );
         }
-        return failed(
-            path,
-            "failed_verify",
-            StorageCode::StorageCorrectionVerifyFailed,
-            &e.to_string(),
-        );
-    }
+    };
     run.failure_state = "failed_copy";
-    swap(path, &tmp, run)
+    swap(path, &tmp, &failures, run)
 }
 
 fn copy(path: &Path, tmp: &Path, run: &mut Run<'_>) -> StorageResult<()> {
@@ -94,7 +97,7 @@ fn verify(
     p: &Pages,
     expected: &BTreeMap<String, u64>,
     run: &mut Run<'_>,
-) -> StorageResult<()> {
+) -> StorageResult<Vec<bootstrap::ReferenceFailure>> {
     let started = Instant::now();
     let db = reader(path)?;
     run.hook(&db);
@@ -113,12 +116,17 @@ fn verify(
             "copy integrity, page size or counts differ",
         ));
     }
-    bootstrap::verify_correction(&db, started)?;
+    let failures = bootstrap::verify_correction(&db, started)?;
     (run.progress)("verification", started.elapsed(), 0);
-    Ok(())
+    Ok(failures)
 }
 
-fn swap(path: &Path, tmp: &Path, run: &mut Run<'_>) -> StorageResult<CorrectionOutcome> {
+fn swap(
+    path: &Path,
+    tmp: &Path,
+    failures: &[bootstrap::ReferenceFailure],
+    run: &mut Run<'_>,
+) -> StorageResult<CorrectionOutcome> {
     let started = Instant::now();
     if expired(run) {
         remove(tmp)?;
@@ -160,7 +168,7 @@ fn swap(path: &Path, tmp: &Path, run: &mut Run<'_>) -> StorageResult<CorrectionO
     run.swapped = true;
     secure_fs::sync_path(parent(path)).map_err(io_error)?;
     abort_point("after_rename");
-    bootstrap::stamp_verified(path)?;
+    bootstrap::validated(path, failures)?;
     (run.progress)("swap", started.elapsed(), 0);
     Ok(CorrectionOutcome::Compacted { swapped: true })
 }
