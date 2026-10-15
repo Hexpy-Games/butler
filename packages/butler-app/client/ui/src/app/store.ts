@@ -107,12 +107,13 @@ import {
   mergeTurnProgressSnapshotMap,
   mergeMessages,
   normalizeSettingsSectionId,
-  parseDraftChatId,
+  draftSessionTarget,
   pruneReplacedClientTurnProgress,
   projectDraftId,
   titleFromPrompt,
   runtimeModels,
 } from "./utils.ts";
+import { groupDraftId } from "./draftGroup.ts";
 import {
   freezeConversationActivity as freezeMessageWorkBlocks,
   freezeMessageActivity as freezeMessageWorkBlocksForRecord,
@@ -235,6 +236,7 @@ interface ButlerStore {
   openSession: (chatId: string, sessionTitle?: string) => void;
   openNewChat: () => void;
   openNewProjectChat: (projectId: string) => void;
+  openNewGroupChat: (groupId: string) => void;
   startProjectChatWithDocument: (
     projectId: string,
     document: ProjectDashboardDocument,
@@ -1327,6 +1329,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   openNewChat: () => get().openSession("draft:chat"),
   openNewProjectChat: (projectId) =>
     get().openSession(projectDraftId(projectId)),
+  openNewGroupChat: (groupId) => get().openSession(groupDraftId(groupId)),
   startProjectChatWithDocument: (projectId, document) => {
     set({ pendingProjectDocumentAttachment: { projectId, document } });
     get().openNewProjectChat(projectId);
@@ -1768,7 +1771,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     if (dashboardTarget) set({ activeChatId: initialChatId, messages: [], summary: null, turnProgress: {}, sessionView: null, sessionQueue: [] });
     const sendOperationId = `send-${clientMessageId}`;
     const initialDraft = isDraftChatId(initialChatId)
-      ? parseDraftChatId(initialChatId)
+      ? draftSessionTarget(get().navigation, initialChatId)
       : null;
     const optimisticStart: OptimisticSessionStart | null = initialDraft
       ? {
@@ -1870,6 +1873,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           body: JSON.stringify({
             kind: initialDraft.kind,
             project_id: initialDraft.projectId,
+            ...(initialDraft.groupId ? { group_id: initialDraft.groupId } : {}),
             workspace_mode: initialDraft.kind === "project" ? controls.workspaceMode ?? "local" : "local",
             title: titleFromPrompt(messageTitle),
             initial_message: text,

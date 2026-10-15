@@ -175,6 +175,113 @@ async fn ws_02_sidebar_groups_moves_pins_undo() -> Result<(), HarnessError> {
     s.finish().await
 }
 
+async fn create_group(
+    s: &Scenario,
+    title: &str,
+    parent: Option<&str>,
+) -> Result<String, HarnessError> {
+    let view = space(s).await?;
+    let created = mutate(
+        s,
+        "/space/groups",
+        json!({"expectedRevision": revision(&view), "title": title, "parentKey": parent}),
+    )
+    .await?;
+    Ok(created.data()["groupId"].as_str().unwrap().to_owned())
+}
+
+async fn chat_in_group(s: &Scenario, body: Value) -> Result<String, HarnessError> {
+    let reply = s.gw.post("/sessions", body).await?;
+    assert_eq!(reply.status, 201, "{}", reply.text);
+    Ok(format!(
+        "s:{}",
+        reply.data()["session"]["id"].as_str().unwrap()
+    ))
+}
+
+/// WS-03 — A chat created for a sidebar group (or a project's group) lands as
+/// that group's first child and survives restart; a group outside the chat's
+/// project or a missing group is refused without creating a chat.
+#[tokio::test]
+async fn ws_03_new_chat_in_group() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("WS-03")?.start().await?;
+    let garden = create_group(&s, "Garden", None).await?;
+    let project =
+        s.gw.post(
+            "/projects",
+            json!({"source": "scratch", "display_name": "Orchard"}),
+        )
+        .await?;
+    assert_eq!(project.status, 201, "{}", project.text);
+    let project = project.data()["project"]["id"].as_str().unwrap().to_owned();
+    let beds = create_group(&s, "Beds", Some(&format!("p:{project}"))).await?;
+
+    let first = chat_in_group(
+        &s,
+        json!({"kind": "chat", "title": "Seed", "group_id": garden}),
+    )
+    .await?;
+    let second = chat_in_group(
+        &s,
+        json!({"kind": "chat", "title": "Sprout", "group_id": garden}),
+    )
+    .await?;
+    let planned = chat_in_group(
+        &s,
+        json!({"kind": "project", "title": "Plan", "project_id": project, "group_id": beds}),
+    )
+    .await?;
+    let view = space(&s).await?;
+    let garden_children = children(&view, Some(&format!("g:{garden}")));
+    assert_eq!(garden_children, vec![second, first.clone()], "{view}");
+    assert_eq!(
+        children(&view, Some(&format!("g:{beds}"))),
+        vec![planned],
+        "{view}"
+    );
+    assert!(!children(&view, None).contains(&first), "{view}");
+
+    let chat_count = |navigation: &Value| navigation["chats"].as_array().map(Vec::len);
+    let before = chat_count(s.gw.get("/navigation").await?.data());
+    for (body, status) in [
+        (
+            json!({"kind": "chat", "title": "Stray", "group_id": beds}),
+            409,
+        ),
+        (
+            json!({"kind": "chat", "title": "Lost", "group_id": "missing"}),
+            404,
+        ),
+        (
+            json!({"kind": "chat", "title": "Typed", "group_id": 7}),
+            400,
+        ),
+    ] {
+        let refused = s.gw.post("/sessions", body).await?;
+        assert_eq!(refused.status, status, "{}", refused.text);
+    }
+    let navigation = s.gw.get("/navigation").await?;
+    assert_eq!(
+        chat_count(navigation.data()),
+        before,
+        "a refused create added a chat"
+    );
+    assert_eq!(
+        navigation.data()["space"],
+        view,
+        "a refused create changed the space"
+    );
+
+    s.restart().await?;
+    assert_eq!(
+        space(&s).await?,
+        view,
+        "group placement changed across restart"
+    );
+    s.finish().await
+}
+
 /// Relative path + content hash of every file under `root`.
 fn tree(root: &Path) -> Vec<(String, String)> {
     let mut out = Vec::new();

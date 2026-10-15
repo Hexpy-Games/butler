@@ -20,7 +20,7 @@ function shape(value: unknown): unknown {
 test("English and Korean catalogs have complete recursive key and formatter parity", () => {
   expect(shape(getAppCopy("en-US"))).toEqual(shape(getAppCopy("ko-KR")));
   expect(getAppCopy("en-US").conversation.work.collapsedSummary("Read file", 2)).toBe("Read file and 1 more activities");
-  expect(getAppCopy("ko-KR").space.general).toBe("일반");
+  expect(getAppCopy("ko-KR").space.general).toBe("대화");
   expect(getAppCopy("en-US").briefing.general.suggestions[0].title).toBe("Downloads folder cleanup");
 });
 
