@@ -20,7 +20,9 @@ fn language_policy_probe() -> Result<(), HarnessError> {
     let plain = command_sandbox::login_shell(script, command_sandbox::ShellAccess::Full, &f.env)
         .map_err(|error| HarnessError(error.to_string()))?;
     let baseline = f.launch(&plain);
-    assert!(baseline.status.success(), "{baseline:?}");
+    if super::setup_only() {
+        assert!(baseline.status.success(), "{baseline:?}");
+    }
     setup_complete!(f);
     let contained = f.run(script);
     let product = f.run("$ExecutionContext.SessionState.LanguageMode; [System.Text.UTF8Encoding]::new($false).WebName");

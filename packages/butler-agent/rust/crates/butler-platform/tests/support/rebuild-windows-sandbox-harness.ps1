@@ -9,7 +9,7 @@ $oldEnvironment = @{}
 foreach ($name in @('HOME','USERPROFILE','BUTLER_DATA','APPDATA','LOCALAPPDATA','TEMP','TMP')) {
     $oldEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
 }
-$profile = Join-Path ([IO.Path]::GetTempPath()) ('build-' + [guid]::NewGuid().ToString('N'))
+$profile = Join-Path $Destination ('build-' + [guid]::NewGuid().ToString('N').Substring(0,8))
 $logs = Join-Path $Destination ('build-logs\' + $revision)
 New-Item -ItemType Directory -Force $logs | Out-Null
 . (Join-Path $PSScriptRoot 'bundle-common.ps1')
