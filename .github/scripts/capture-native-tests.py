@@ -23,6 +23,7 @@ def capture(log, command):
     worker = threading.Thread(target=control.run, args=(stop, results, errors))
     worker.start()
     started = previous = time.monotonic()
+    pending = None
     try:
         with open(log, 'wb') as output, subprocess.Popen(
                 command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as process:
@@ -30,13 +31,23 @@ def capture(log, command):
                 for line in process.stdout:
                     output.write(line)
                     text = line.decode('utf-8', errors='replace').rstrip()
-                    if re.match(r'test .* \.\.\. (ok|FAILED|ignored)$', text):
+                    header = re.match(r'test (.+?) \.\.\. ?(.*)', text)
+                    outcome = header[2] if header else text
+                    if header:
+                        pending = header[1]
+                    # Serial libtest can print the name before uncaptured output
+                    # and put the outcome alone on a later line. Measure between
+                    # outcomes: a buffered name must not hide fixture setup time.
+                    if pending and outcome in ('ok', 'FAILED', 'ignored'):
                         now = time.monotonic()
-                        print(f'NATIVE-TEST seconds={now-previous:.3f} {text}', flush=True)
+                        print(f'NATIVE-TEST seconds={now-previous:.3f} test {pending} ... {outcome}', flush=True)
+                        output.flush()
+                        pending = None
                         previous = now
                     elif text.startswith(('running ', 'test result:', 'REFUSAL-SAMPLES',
                                           'REFUSAL-CONTROL-LIVE-SUMMARY', 'Error:')):
                         print(text, flush=True)
+                        output.flush()
                         if text.startswith('running '):
                             previous = time.monotonic()
                 code = process.wait()
