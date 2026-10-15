@@ -123,7 +123,14 @@ fn prepare_installation(root: &Path) -> Result<(PathBuf, PathBuf, PathBuf), Harn
         binary
             .parent()
             .ok_or_else(|| harness_error("installed agent has no parent"))?,
-    )?;
+    )
+    .map_err(|error| {
+        harness_error(format!(
+            "copy E2E command helper from {} to {}: {error}",
+            source.display(),
+            binary.display()
+        ))
+    })?;
     copy_tree(&resource_source(), &resources)?;
     fs::create_dir_all(resources.join("app-client/dist"))?;
     fs::write(
