@@ -8,6 +8,8 @@ mod approval_resume;
 mod current_work;
 #[path = "capabilities/delegation.rs"]
 mod delegation;
+#[path = "capabilities/open_reader.rs"]
+mod open_reader;
 #[path = "capabilities/operation.rs"]
 mod operation;
 #[path = "capabilities/refusal_latency.rs"]

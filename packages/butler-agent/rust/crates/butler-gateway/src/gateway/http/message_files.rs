@@ -26,9 +26,10 @@ pub(super) fn handles(method: &Method, path: &str) -> bool {
     (method == Method::GET && path.starts_with("/message-assets/"))
         || (method == Method::POST && path == "/message-files")
         || (method == Method::GET
-            && path
-                .strip_prefix("/message-files/")
-                .is_some_and(|id| !id.is_empty() && !id.contains('/')))
+            && path.strip_prefix("/message-files/").is_some_and(|id| {
+                let id = id.strip_suffix("/view").unwrap_or(id);
+                !id.is_empty() && !id.contains('/')
+            }))
 }
 
 pub(super) async fn route(
@@ -53,6 +54,16 @@ pub(super) async fn route(
                 data: json!({"file": file}),
             },
         );
+    }
+    if let Some(encoded) = request
+        .uri()
+        .path()
+        .strip_prefix("/message-files/")
+        .and_then(|id| id.strip_suffix("/view"))
+    {
+        let id = decode_file_id(encoded)?;
+        let file = state.application.message_file_metadata(id).await?;
+        return super::content::message_file::view(&state, &request, &file);
     }
     let encoded = request
         .uri()

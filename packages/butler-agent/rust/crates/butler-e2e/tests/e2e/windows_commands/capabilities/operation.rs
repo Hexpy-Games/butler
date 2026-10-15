@@ -187,6 +187,14 @@ pub(super) async fn observe_operation(
         }
     }
     diagnostic_logs(s, script);
+    // Keep discovery's own counts and elapsed time even when the end-to-end
+    // budget fails before verify() can inspect the complete result.
+    if case.tool == "list_files" {
+        eprintln!(
+            "WINDOWS-BASIC discovery metrics={} truncated={} stopped_by={}",
+            output["metrics"], output["truncated"], output["stopped_by"]
+        );
+    }
     if case.refused {
         let expected = if case.tool == "write_file" {
             "parent_traversal_not_allowed"

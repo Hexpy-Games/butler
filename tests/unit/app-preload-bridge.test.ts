@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { api, apiErrorCode } from "../../packages/butler-app/client/ui/src/app/api.ts";
+import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 
 function withBridge<T>(bridge: Record<string, unknown>, run: () => Promise<T>): Promise<T> {
   const previous = globalThis.window;
@@ -322,7 +323,10 @@ test("actual Electron preload sends the saved-key routes and returns bounded env
 });
 
 describe("preview.11 desktop route audit", () => {
-function actualPreload() {
+type PreloadResponse = { ok: boolean; status?: number; json: () => Promise<unknown> };
+const accepted: PreloadResponse = { ok: true, json: async () => ({ protocol_version: "butler.app.v1", data: { accepted: true } }) };
+
+function actualPreload(respond: (path: string) => PreloadResponse = () => accepted) {
   let bridge: Record<string, unknown> = {};
   const calls: { method: string; path: string; body?: Record<string, unknown> }[] = [];
   runInNewContext(readFileSync(resolve(import.meta.dir, "../../packages/butler-app/client/electron/preload.cjs"), "utf8"), {
@@ -337,7 +341,7 @@ function actualPreload() {
       new Request(url, options);
       calls.push({ method: options.method ?? "GET", path: new URL(url).pathname,
         ...(options.body ? { body: JSON.parse(String(options.body)) } : {}) });
-      return { ok: true, json: async () => ({ protocol_version: "butler.app.v1", data: { accepted: true } }) };
+      return respond(new URL(url).pathname);
     },
   });
   return { bridge, calls };
@@ -393,5 +397,21 @@ test("preload refuses unlisted reset paths and methods without sending a request
     await expect(api("/unlisted", { method: "POST" })).rejects.toThrow("Unsupported Butler app API route");
   });
   expect(calls).toHaveLength(0);
+});
+
+test("space requests through the actual preload keep the refusal code and localize it", async () => {
+  const { bridge, calls } = actualPreload((path) => path === "/space/branch-source"
+    ? { ok: false, status: 404, json: async () => ({ error: { code: "branch_origin_unavailable", message: "원본 답변을 찾을 수 없습니다." } }) }
+    : accepted);
+  await withBridge(bridge, async () => {
+    expect(await api<{ accepted: boolean }>("/space/pins", { method: "POST", body: JSON.stringify({ nodeKey: "s:s1" }) })).toEqual({ accepted: true });
+    const error = await api("/space/branch-source", { method: "POST", body: JSON.stringify({ sessionId: "branch" }) })
+      .then(() => null, (caught: unknown) => caught);
+    expect(apiErrorCode(error)).toBe("branch_origin_unavailable");
+    expect((error as { status?: number }).status).toBe(404);
+    expect((error as Error).message).toBe(appCopy.serverErrors.branch_origin_unavailable);
+  });
+  expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual(["POST /space/pins", "POST /space/branch-source"]);
+  expect(calls[1]!.body).toEqual({ sessionId: "branch" });
 });
 });

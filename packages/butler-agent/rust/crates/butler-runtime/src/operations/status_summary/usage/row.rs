@@ -1,6 +1,6 @@
 //! One provider request of the prompt-usage log, kept compactly in memory.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use serde_json::Value;
@@ -10,7 +10,6 @@ use crate::operations::UsageEvent;
 
 /// A prompt section's size in one request.
 pub(super) struct SectionRow {
-    pub(super) id: Arc<str>,
     pub(super) chars: f64,
     pub(super) estimated_tokens: f64,
 }
@@ -18,6 +17,7 @@ pub(super) struct SectionRow {
 /// The fields of a `metrics/prompt-cache-usage.jsonl` row the monitor reports.
 pub(super) struct UsageRow {
     pub(super) ts: f64,
+    pub(super) turn_id: Option<Arc<str>>,
     /// The row's whole-millisecond time; rows without one are not priced.
     ts_ms: Option<i64>,
     pub(super) model: Arc<str>,
@@ -31,21 +31,50 @@ pub(super) struct UsageRow {
     cache_write_1h: Option<f64>,
     pub(super) has_cache_key: bool,
     pub(super) has_retention: bool,
+    pub(super) section_layout: usize,
     pub(super) sections: Box<[SectionRow]>,
 }
 
-/// Shares one allocation between equal model, scope, phase and section names.
+/// Shares one allocation between equal turn ids, models, scopes, phases and section names.
 #[derive(Default)]
-pub(super) struct Names(HashMap<Box<str>, Arc<str>>);
-
+pub(super) struct Names {
+    strings: HashSet<Arc<str>>,
+    section_ids: HashMap<Arc<str>, usize>,
+    sections: Vec<Arc<str>>,
+    layouts: HashMap<Arc<[usize]>, usize>,
+    layout_ids: Vec<Arc<[usize]>>,
+}
 impl Names {
     fn get(&mut self, name: &str) -> Arc<str> {
-        if let Some(shared) = self.0.get(name) {
+        if let Some(shared) = self.strings.get(name) {
             return shared.clone();
         }
         let shared: Arc<str> = Arc::from(name);
-        self.0.insert(name.into(), shared.clone());
+        self.strings.insert(shared.clone());
         shared
+    }
+    fn section_id(&mut self, name: &str) -> usize {
+        if let Some(id) = self.section_ids.get(name) {
+            return *id;
+        }
+        let name = self.get(name);
+        let id = self.sections.len();
+        self.sections.push(name.clone());
+        self.section_ids.insert(name, id);
+        id
+    }
+    fn layout(&mut self, ids: Vec<usize>) -> usize {
+        if let Some(id) = self.layouts.get(ids.as_slice()) {
+            return *id;
+        }
+        let id = self.layout_ids.len();
+        let ids: Arc<[usize]> = ids.into();
+        self.layout_ids.push(ids.clone());
+        self.layouts.insert(ids, id);
+        id
+    }
+    pub(super) fn section(&self, layout: usize, index: usize) -> &Arc<str> {
+        &self.sections[self.layout_ids[layout][index]]
     }
 }
 
@@ -63,8 +92,14 @@ impl UsageRow {
             .and_then(Value::as_str)
             .filter(|value| !value.trim().is_empty())
             .map(|value| names.get(value.trim()));
+        let (section_layout, sections) = sections(event, names);
         Some(Self {
             ts,
+            turn_id: event
+                .get("turnId")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+                .map(|id| names.get(id)),
             ts_ms: event.get("ts").and_then(Value::as_i64),
             model: names.get(model),
             scope: names.get(scope),
@@ -83,7 +118,8 @@ impl UsageRow {
                 .get("promptCacheRetention")
                 .and_then(Value::as_str)
                 .is_some(),
-            sections: sections(event, names),
+            section_layout,
+            sections,
         })
     }
 
@@ -104,24 +140,58 @@ impl UsageRow {
     }
 }
 
-fn sections(event: &Value, names: &mut Names) -> Box<[SectionRow]> {
+fn sections(event: &Value, names: &mut Names) -> (usize, Box<[SectionRow]>) {
     let Some(sections) = event.get("promptSections").and_then(Value::as_array) else {
-        return Box::default();
+        return (0, Box::default());
     };
-    sections
-        .iter()
-        .filter_map(|section| {
-            let id = section
-                .get("id")
-                .and_then(Value::as_str)
-                .filter(|id| !id.trim().is_empty())?;
-            Some(SectionRow {
-                id: names.get(id),
-                chars: number(section.get("chars")).unwrap_or(0.0).max(0.0),
-                estimated_tokens: number(section.get("estimatedTokens"))
-                    .unwrap_or(0.0)
-                    .max(0.0),
-            })
-        })
-        .collect()
+    let mut ids = Vec::new();
+    let mut values = Vec::new();
+    for section in sections {
+        let Some(id) = section
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|id| !id.trim().is_empty())
+        else {
+            continue;
+        };
+        ids.push(names.section_id(id));
+        values.push(SectionRow {
+            chars: number(section.get("chars")).unwrap_or(0.0).max(0.0),
+            estimated_tokens: number(section.get("estimatedTokens"))
+                .unwrap_or(0.0)
+                .max(0.0),
+        });
+    }
+    (names.layout(ids), values.into_boxed_slice())
+}
+
+/// Append-only row storage without a whole-log realloc or power-of-two slack.
+/// Stable numeric indices are shared by the global and per-scope slot indexes.
+#[derive(Default)]
+pub(super) struct Rows {
+    chunks: Vec<Vec<UsageRow>>,
+    len: usize,
+}
+const ROWS_PER_CHUNK: usize = 1024;
+impl Rows {
+    pub(super) fn len(&self) -> usize {
+        self.len
+    }
+    pub(super) fn clear(&mut self) {
+        self.chunks.clear();
+        self.len = 0;
+    }
+    pub(super) fn push(&mut self, row: UsageRow) {
+        let chunk = self.len / ROWS_PER_CHUNK;
+        if chunk == self.chunks.len() {
+            self.chunks.push(Vec::with_capacity(ROWS_PER_CHUNK));
+        }
+        self.chunks[chunk].push(row);
+        self.len += 1;
+    }
+    pub(super) fn get(&self, index: usize) -> Option<&UsageRow> {
+        self.chunks
+            .get(index / ROWS_PER_CHUNK)?
+            .get(index % ROWS_PER_CHUNK)
+    }
 }

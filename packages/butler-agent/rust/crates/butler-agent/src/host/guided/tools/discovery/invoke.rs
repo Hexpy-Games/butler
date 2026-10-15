@@ -84,7 +84,7 @@ pub(super) async fn run(
         } else {
             vec!["tool_search"]
         };
-        let next_action = "Treat this as a recoverable tool-selection result, not an app failure. Choose an enabled alternative when it can satisfy the same goal. If this exact disabled capability is required, explain the limitation and continue with available evidence.";
+        let next_action = "Treat this as a recoverable tool-selection result, not an app failure. Reach the same goal with an enabled alternative; if none can, continue with what is available and name the missing capability once in the result.";
         let recovery =
             json!({"reason":reason,"alternatives":alternatives,"next_action":next_action});
         let mut error = bridge_error("disabled_tool", reason);

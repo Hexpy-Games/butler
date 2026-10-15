@@ -97,6 +97,14 @@ impl SubsessionService {
         .await
     }
 
+    /// Whether the child turn's result is saved.
+    pub async fn child_turn_closed(&self, session: &str, turn: &str) -> Result<bool, BtccError> {
+        self.repository
+            .has_turn_result(session.to_owned(), turn.to_owned())
+            .await
+            .map_err(BtccError::from)
+    }
+
     async fn complete_child_result(
         &self,
         session: &str,
@@ -105,7 +113,8 @@ impl SubsessionService {
         summary: String,
         failure_code: Option<String>,
     ) -> Result<(), BtccError> {
-        self.bind_child_work(session, turn).await?;
+        self.bind_result_work(session, turn, failure_code.as_deref())
+            .await?;
         if status == "cancelled" {
             self.work
                 .abandon_bound_work_for_turn(turn.to_owned())
@@ -166,7 +175,41 @@ impl SubsessionService {
             )
             .await
             .map_err(BtccError::from)?;
+        self.deliver_child_result(session, status).await
+    }
+
+    async fn bind_result_work(
+        &self,
+        session: &str,
+        turn: &str,
+        failure_code: Option<&str>,
+    ) -> Result<(), BtccError> {
+        if let Err(error) = self.bind_child_work(session, turn).await {
+            // A runtime failure answers the parent even when the child's Work
+            // cannot be bound; the failure needs no Work disposition.
+            if failure_code.is_none() {
+                return Err(error);
+            }
+            butler_core::diagnostic!(
+                "[native-btcc] failed child Work unbound code={}",
+                error.code()
+            );
+        }
+        Ok(())
+    }
+
+    async fn deliver_child_result(&self, session: &str, status: &str) -> Result<(), BtccError> {
         self.notify_execution_changed(session).await?;
+        // A direction that arrived during this turn and was not applied in it
+        // continues the child now that the turn has its result.
+        if status != "cancelled"
+            && let Err(error) = self.release_pending_direction(session).await
+        {
+            butler_core::diagnostic!(
+                "[native-btcc] pending direction not released code={}",
+                error.code()
+            );
+        }
         self.deliver_worker_results().await
     }
     /// Re-dispatches pending children, directions and worker results after a restart.

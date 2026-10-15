@@ -32,7 +32,7 @@ async fn scan_loop(path: std::path::PathBuf, stop: CancellationToken) -> Result<
     let delay = tokio::task::spawn_blocking(move || storage_scan_delay(&delay_path))
         .await
         .unwrap_or(Duration::ZERO);
-    tokio::select! { () = stop.cancelled() => return Ok(()), () = tokio::time::sleep(delay) => {} }
+    tokio::select! { () = stop.cancelled() => return Ok(()), () = butler_core::wall_clock::wait_for(delay) => {} }
     let mut retry = Duration::from_secs(5);
     loop {
         let db = path.clone();
@@ -59,7 +59,7 @@ async fn scan_loop(path: std::path::PathBuf, stop: CancellationToken) -> Result<
                 wait
             }
         };
-        tokio::select! { () = stop.cancelled() => return Ok(()), () = tokio::time::sleep(wait) => {} }
+        tokio::select! { () = stop.cancelled() => return Ok(()), () = butler_core::wall_clock::wait_for(wait) => {} }
     }
 }
 

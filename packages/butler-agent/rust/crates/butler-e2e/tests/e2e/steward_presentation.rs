@@ -6,8 +6,10 @@
     reason = "test assertions"
 )]
 mod files;
+mod intent;
 #[path = "steward_presentation/stub.rs"]
-pub(super) mod stub;
+pub(crate) mod stub;
+mod visible;
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -62,6 +64,7 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
     s.turn("general", stub::DIRECTION).await?;
     std::fs::remove_file(s.sandbox.data.join("e2e-hold-tool"))?;
     let complete = wait_result(&s).await?;
+    visible::assert_delivered_messages(&s, &child_id).await?;
     assert_eq!(complete["relation"]["relation_id"], relation);
     assert_eq!(complete["session_id"], child_id);
     assert_eq!(complete["result"]["status"], "success", "{complete}");
@@ -73,6 +76,7 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
             .contains("키센스.txt"),
         "Delivery must preserve decomposed filename bytes: {complete}"
     );
+    intent::assert_intent_carried(&script.requests.lock().unwrap());
     files::assert_delegated_files(&s).await?;
     assert_sidebar_work(&s, false).await?;
     let activity = s.gw.get("/worker-activity?include_history=true").await?;
@@ -275,7 +279,9 @@ async fn wait_held_tool(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), H
     Ok(())
 }
 
-async fn wait_result(s: &butler_e2e::e2e::scenario::Scenario) -> Result<Value, HarnessError> {
+pub(crate) async fn wait_result(
+    s: &butler_e2e::e2e::scenario::Scenario,
+) -> Result<Value, HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let view = s.gw.get("/session-view?session_id=general").await?;
@@ -294,10 +300,10 @@ async fn wait_result(s: &butler_e2e::e2e::scenario::Scenario) -> Result<Value, H
 }
 
 #[tokio::test]
-async fn interrupted_steward_exposes_resume_and_keeps_the_same_turn() -> Result<(), HarnessError> {
+async fn interrupted_steward_returns_its_failure_to_the_parent() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
-    let setup = setup("STEWARD-RESUME", &url)?.env("BUTLER_E2E_INTERRUPT_TOOL", "read_file");
+    let setup = setup("STEWARD-INTERRUPTED", &url)?.env("BUTLER_E2E_INTERRUPT_TOOL", "read_file");
     std::fs::write(setup.sandbox.data.join("a.txt"), "Approach A")?;
     std::fs::write(setup.sandbox.data.join("b.txt"), "Approach B")?;
     *script.workspace.lock().unwrap() = setup.sandbox.data.display().to_string();
@@ -307,44 +313,34 @@ async fn interrupted_steward_exposes_resume_and_keeps_the_same_turn() -> Result<
         .await
         .unwrap_or_else(|_| panic!("{}\n{}", diagnostic(&script), s.agent.logs()));
     let initial = s.gw.get("/session-view?session_id=general").await?;
-    let child = &initial.data()["steward_children"][0];
-    let relation = child["relation"]["relation_id"]
+    let relation = initial.data()["steward_children"][0]["relation"]["relation_id"]
         .as_str()
         .unwrap()
         .to_owned();
-    let turn = child["latest_turn"]["id"].clone();
-    let child_id = child["session_id"].as_str().unwrap().to_owned();
     std::fs::write(s.sandbox.data.join("e2e-interrupt-tool"), b"once")?;
     script.release.notify_one();
-    let deadline = Instant::now() + Duration::from_secs(15);
-    loop {
-        let view = s.gw.get("/session-view?session_id=general").await?;
-        let child = &view.data()["steward_children"][0];
-        if child["latest_turn"]["retryable"] == true {
-            assert_eq!(child["latest_turn"]["state"], "runtime_fault");
-            assert_eq!(child["status"], "failed");
-            assert!(child["active_turn"].is_null());
-            assert_eq!(child["terminal"], false);
-            break;
-        }
-        assert!(Instant::now() < deadline, "{view:?}\n{}", s.agent.logs());
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-    let own =
-        s.gw.get(&format!("/session-view?session_id={child_id}"))
-            .await?;
-    assert_eq!(own.data()["status"], "failed");
-    assert_eq!(own.data()["latest_turn"]["retryable"], true);
+    // The parent answers from the delegated result; nobody resumes the child.
+    let child = wait_result(&s).await?;
+    assert_eq!(child["result"]["status"], "failed", "{child}");
+    assert_eq!(child["terminal"], true, "{child}");
+    assert_eq!(child["latest_turn"]["retryable"], false, "{child}");
+    assert!(
+        script.requests.lock().unwrap().iter().any(|request| {
+            let text = request.to_string();
+            text.contains("Delegated result")
+                && text.contains("status: failed")
+                && text.contains("child_turn_interrupted")
+        }),
+        "{}",
+        diagnostic(&script)
+    );
     let resumed =
         s.gw.post(
             &format!("/steward-relations/{relation}/resume"),
             json!({"parent_session_id":"general"}),
         )
         .await?;
-    assert_eq!(resumed.status, 202, "{resumed:?}");
-    let complete = wait_result(&s).await?;
-    assert_eq!(complete["latest_turn"]["id"], turn);
-    assert_eq!(complete["result"]["status"], "success");
+    assert_eq!(resumed.status, 409, "{resumed:?}");
     s.finish().await?;
     server.abort();
     Ok(())
@@ -411,7 +407,7 @@ fn diagnostic(script: &stub::Script) -> String {
         .join("\n")
 }
 
-fn setup(id: &str, url: &str) -> Result<Setup, HarnessError> {
+pub(crate) fn setup(id: &str, url: &str) -> Result<Setup, HarnessError> {
     // Worker profile choices use the configured local gateway endpoint.
     let setup = Setup::new(id)?;
     // Holding/interruption fixtures need the debug-only tool hooks. The

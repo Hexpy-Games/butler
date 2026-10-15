@@ -124,6 +124,10 @@ impl GatewayApplication for AppApplication {
                 .await
         })
     }
+    fn branch_source(&self, session_id: String) -> ApplicationFuture<AppBranchSourceLocation> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.branch_source_owned(session_id).await })
+    }
     fn list_chats(&self) -> ApplicationFuture<Vec<AppChatSummary>> {
         let this = self.clone_handle();
         Box::pin(async move { this.list_chats().await })
@@ -237,6 +241,13 @@ impl GatewayApplication for AppApplication {
     ) -> ApplicationFuture<crate::gateway::MessageFileRef> {
         let this = self.clone_handle();
         Box::pin(async move { this.upload_message_file(input).await })
+    }
+    fn message_file_metadata(
+        &self,
+        id: String,
+    ) -> ApplicationFuture<crate::gateway::MessageFileRef> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.message_file_metadata(id).await })
     }
     fn download_message_file(&self, id: String) -> ApplicationFuture<AppFileDownload> {
         let this = self.clone_handle();

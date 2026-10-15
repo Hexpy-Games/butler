@@ -371,7 +371,10 @@ impl AppMonitoringPort for UnprovidedMonitoring {
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    fn usage_monitor(&self, _: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
+    fn usage_monitor(
+        &self,
+        _: AppUsageMonitorQuery,
+    ) -> ApplicationFuture<crate::gateway::AppUsageMonitorView> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn system_events(&self, _: AppMonitorPage) -> ApplicationFuture<Value> {

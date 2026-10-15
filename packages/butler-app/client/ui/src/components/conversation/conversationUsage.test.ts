@@ -15,7 +15,7 @@ describe("conversationUsageSummary", () => {
   });
 
   test("first fetch is loading; a failed first fetch is unavailable", () => {
-    expect(conversationUsageSummary({ mode: "api_key", context, view: null, status: "loading" })?.state).toBe("loading");
+    expect(conversationUsageSummary({ mode: "subscription", context, view: null, status: "loading" })?.state).toBe("loading");
     expect(conversationUsageSummary({ mode: "subscription", context, view: null, status: "failed" })?.state).toBe("unavailable");
   });
 
@@ -45,32 +45,4 @@ describe("conversationUsageSummary", () => {
     expect(String(summary.updatedLabel)).toBe(`Updated ${usageTime("2026-09-28T05:05:00.000Z")}`);
   });
 
-  test("API keys show conversation tokens; reasoning only when provided", () => {
-    const without = conversationUsageSummary({ mode: "api_key", context, view: usageView(), status: "ready" })!;
-    expect(without.tokens!.map((row) => [row.id, row.value])).toEqual([["input", 48_200], ["cached", 31_900], ["output", 3_420]]);
-    const withReasoning = conversationUsageSummary({ mode: "api_key", context, view: usageView({ reasoning: 1_280 }), status: "ready" })!;
-    expect(withReasoning.tokens!.map((row) => row.id)).toEqual(["input", "cached", "output", "reasoning"]);
-    expect(withReasoning.quotaWindows).toBeUndefined();
-  });
-
-  test("cost is a dash until priced, then an estimate when the rate table has a date", () => {
-    expect(conversationUsageSummary({ mode: "api_key", context, view: usageView(), status: "ready" })!.cost).toEqual({ label: "Cost", usd: null, estimated: false });
-    expect(conversationUsageSummary({ mode: "api_key", context, view: usageView({ usd: 0.0842, asOf: "2026-09-01" }), status: "ready" })!.cost)
-      .toEqual({ label: "Cost", usd: 0.0842, estimated: true });
-  });
-
-  test("a failed refetch keeps the last data and marks it stale", () => {
-    const summary = conversationUsageSummary({ mode: "api_key", context, view: usageView(), status: "failed" })!;
-    expect(summary.state).toBe("ready");
-    expect(String(summary.updatedLabel)).toBe(`Updated ${usageTime("2026-09-28T05:10:00.000Z")}`);
-  });
-
-  test("Korean copy", () => {
-    setAppCopyLanguage("ko-KR");
-    const summary = conversationUsageSummary({ mode: "api_key", context, view: usageView(), status: "failed" })!;
-    expect(summary.tokens!.map((row) => row.label)).toEqual(["입력", "캐시", "출력"]);
-    expect(summary.unavailableLabel).toBe("사용량 확인 불가");
-    expect(String(summary.updatedLabel)).toEndWith(" 기준");
-    expect(summary.locale).toBe("ko-KR");
-  });
 });

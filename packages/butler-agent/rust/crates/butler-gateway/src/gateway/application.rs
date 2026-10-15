@@ -105,8 +105,8 @@ use events::EventSubscribers;
 pub use model_catalog::{AppModelCatalogCommand, AppModelCatalogPort};
 pub use monitoring::{
     AppBoundWorkStatusFact, AppDeveloperLogsQuery, AppMonitorPage, AppMonitoringPort,
-    AppUsageMonitorQuery, AppWorkOperationalNoticeFact, AppWorkStatusConversationFact,
-    AppWorkerActivityQuery,
+    AppUsageMonitorQuery, AppUsageMonitorView, AppWorkOperationalNoticeFact,
+    AppWorkStatusConversationFact, AppWorkerActivityQuery,
 };
 pub(crate) use monitoring::{
     work_status as app_work_status, worker_activity as app_worker_activity,
@@ -149,6 +149,7 @@ pub use relocation_port::{
     AppRelocationHost, AppRelocationSnapshot, AppRelocationTransportBinding,
     AppRelocationWorkspaceMarker, AppRelocationWorkspacePlan, AppRelocationWorkspaceRequest,
 };
+pub use session_branches::AppBranchSourceLocation;
 pub(crate) use session_branches::{AppSessionBranchDestination, AppSessionBranchRequest};
 pub use session_branches::{AppSessionBranchResult, AppStartTopicConversationRequest};
 pub use session_controls::{AppSessionControlUpdate, AppSessionControlsView};

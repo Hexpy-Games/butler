@@ -5,6 +5,8 @@ export function artifactBridgeInput(method: string, url: URL): { method: string;
     method: "listArtifacts",
     input: { sessionId:url.searchParams.get("session_id") ?? url.searchParams.get("sessionId") },
   };
+  const file = url.pathname.match(/^\/message-files\/(file-[0-9a-f-]{36})\/view$/iu);
+  if (file) return { method: "getMessageFileView", input: { fileId: file[1] } };
   const output = url.pathname.match(/^\/outputs\/([a-f0-9]{64})\/view$/u);
   return output ? { method:"getOutputView", input:{ outputId:output[1], revision:url.searchParams.get("revision") ?? undefined } } : null;
 }
