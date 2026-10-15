@@ -26,7 +26,7 @@ try {
     New-Item -ItemType Directory -Force (Join-Path $stage 'cassettes') | Out-Null
     Copy-Item -LiteralPath (Join-Path $Cassettes 'TOOL-01') -Destination (Join-Path $stage 'cassettes\TOOL-01') -Recurse
     foreach ($name in @('windows-policy-probe.cs','windows-registry-snapshot.cs','windows-host-snapshot.ps1',
-        'windows-sandbox-desktop.ps1','bundle-common.ps1','bundle-self-check.ps1')) {
+        'windows-sandbox-desktop.ps1','windows-sandbox-cases.ps1','bundle-common.ps1','bundle-self-check.ps1')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $stage $name)
     }
     $binaries = @(Get-ChildItem -LiteralPath $stage -File -Recurse -Force | ForEach-Object {

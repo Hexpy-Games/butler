@@ -7,7 +7,7 @@ $bundle = Join-Path $Root ('bundles\' + $revision)
 New-Item -ItemType Directory -Force $bundle,(Join-Path $Root 'pins'),(Join-Path $Root 'requests') | Out-Null
 foreach ($name in @('butler-agent.exe','butler-sandbox.exe','e2e.exe','windows-policy-probe.cs',
     'windows-registry-snapshot.cs','windows-host-snapshot.ps1','ssh-row16.json',
-    'resources/eol.md','cassettes/TOOL-01/meta.json','bundle-common.ps1')) {
+    'resources/eol.md','cassettes/TOOL-01/meta.json','bundle-common.ps1','windows-sandbox-cases.ps1')) {
     $path = Join-Path $bundle $name
     New-Item -ItemType Directory -Force (Split-Path $path -Parent) | Out-Null
     [IO.File]::WriteAllText($path, 'fixture')

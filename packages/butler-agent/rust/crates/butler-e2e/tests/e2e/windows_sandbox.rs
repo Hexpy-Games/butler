@@ -1,5 +1,14 @@
 //! MXC acceptance matrix, executed by the pinned Medium-IL desktop bundle.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+// Explicit build-only boundary in the actual row, before any contained launch.
+macro_rules! setup_complete {
+    ($fixture:expr) => {
+        if super::setup_only() {
+            $fixture.check_setup()?;
+            return Ok(());
+        }
+    };
+}
 mod boundaries;
 mod bundle;
 mod language;
@@ -20,7 +29,20 @@ use std::{
 
 fn desktop() -> bool {
     !command_sandbox::POSIX_SHELL
-        && std::env::var("BUTLER_E2E_WINDOWS_SANDBOX_DESKTOP").as_deref() == Ok("1")
+        && (std::env::var("BUTLER_E2E_WINDOWS_SANDBOX_DESKTOP").as_deref() == Ok("1")
+            || setup_only())
+}
+pub(super) fn setup_only() -> bool {
+    std::env::var("BUTLER_E2E_SETUP_ONLY").as_deref() == Ok("1")
+}
+
+pub(super) async fn finish_setup(
+    mut scenario: butler_e2e::e2e::scenario::Scenario,
+) -> Result<(), HarnessError> {
+    scenario.agent.terminate().await?;
+    scenario.finish().await?;
+    eprintln!("BUNDLE_SETUP_COMPLETE");
+    Ok(())
 }
 struct Fixture {
     setup: Setup,
@@ -60,6 +82,18 @@ impl Fixture {
             env,
             scratch,
         })
+    }
+    fn check_setup(self) -> Result<(), HarnessError> {
+        let invocation = self.prepare("cmd /c echo complete");
+        assert!(Path::new(&invocation.program).is_file());
+        let policy: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&invocation.arguments[1])?)?;
+        assert!(policy["request"].is_object());
+        command_sandbox::cleanup_prepared_invocation(&invocation)?;
+        drop(invocation);
+        self.finish();
+        eprintln!("BUNDLE_SETUP_COMPLETE");
+        Ok(())
     }
     fn prepare(&self, script: &str) -> Invocation {
         let secrets = command_sandbox::discover_project_secrets(&self.root).unwrap();

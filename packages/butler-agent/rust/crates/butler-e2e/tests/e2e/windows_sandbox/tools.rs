@@ -29,6 +29,7 @@ fn row04_git() -> Result<(), HarnessError> {
         assert!(output.status.success(), "{output:?}");
     }
     let config = std::fs::read(f.root.join(".git/config"))?;
+    setup_complete!(f);
     for script in [
         "cmd /c git status --porcelain",
         "cmd /c git diff",
@@ -72,6 +73,7 @@ fn row10_toolchains_unicode_long_path() -> Result<(), HarnessError> {
         f.root.join("Cargo.toml"),
         "[package]\nname='fixture'\nversion='0.1.0'\nedition='2024'\n",
     )?;
+    setup_complete!(f);
     let out = f.pass("$env:CARGO_TARGET_DIR='target'; cargo build --offline; if ($LASTEXITCODE) {exit $LASTEXITCODE}; & .\\target\\debug\\fixture.exe; exit $LASTEXITCODE");
     assert!(String::from_utf8_lossy(&out.stdout).contains("complete"));
     // The owner build cache must already contain this exact workspace version;

@@ -29,6 +29,7 @@ function Build([string]$Name, [string[]]$Arguments) {
     }
 }
 try {
+    $env:RUSTUP_AUTO_INSTALL = '0'
     $env:ORT_PREFER_DYNAMIC_LINK = '0'
     $env:ORT_SKIP_DOWNLOAD = '1'
     Build 'agent' @('build','--locked','-p','butler-agent','--no-default-features',

@@ -19,9 +19,11 @@ The script builds only the agent, sandbox helper and E2E harness. It runs SSH ro
 16, packages resources and the TOOL-01 stub cassette, hashes every payload file,
 and **always** runs `bundle-self-check.ps1` before publishing the pins. The check
 uses an absent source workspace to catch dependencies on deleted build paths.
-It prepares each automated row's shared installation, Unicode project, helper
-policy, tool/profile staging and ledger paths; rows 9/11/12/15 also start the real
-agent, load the cassette and bind a project. Tool admission and row 16 run from
+It runs each actual automated row with `BUTLER_E2E_SETUP_ONLY=1`, stopping at
+an explicit boundary before the first desktop-dependent operation. This covers
+installation/resources, fixture files, Unicode projects, helper policy, tool
+staging and ledger paths; agent rows also start the real agent and load their
+cassettes. The full desktop entry point always clears the setup-only flag. Tool admission and row 16 run from
 the shipped bundle. No MXC process is launched by this setup check. Interactive
 behavior and latency remain the desktop matrix's responsibility.
 

@@ -52,6 +52,11 @@ async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), Harn
         &outside.with_file_name("linked-out"),
         &project.join("out-link"),
     )?;
+    if super::super::windows_sandbox::setup_only() {
+        super::super::windows_sandbox::finish_setup(s).await?;
+        server.abort();
+        return Ok(());
+    }
     let contained = butler_platform::command_sandbox::project_write_available();
 
     // In-folder edit and a project-contained command: no card (macOS); the

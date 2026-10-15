@@ -28,6 +28,11 @@ async fn row11_new_secrets_are_swept() -> Result<(), HarnessError> {
     let prompt = "Run the project step.";
     script.rounds.lock().unwrap().insert(prompt.into(),vec![stub::call("build","run_command",
         &json!({"command":"cmd /c build.cmd","summary":"Build project","state_effect":"mutation"}))]);
+    if super::setup_only() {
+        super::finish_setup(s).await?;
+        server.abort();
+        return Ok(());
+    }
     let id = accepted_turn_id(&s.gw.say(&chat, prompt).await?)?;
     access_tiers::delivered(&s, &chat, &id).await?;
     access_tiers::assert_counts(&s, &id, 0, 0)?;
@@ -97,6 +102,11 @@ async fn interrupted(kill: bool) -> Result<(), HarnessError> {
             "timeout_ms": if kill {30000} else {5000}}),
         )],
     );
+    if super::setup_only() {
+        super::finish_setup(s).await?;
+        server.abort();
+        return Ok(());
+    }
     let id = accepted_turn_id(&s.gw.say(&chat, prompt).await?)?;
     let deadline = Instant::now() + Duration::from_secs(20);
     let pid = loop {

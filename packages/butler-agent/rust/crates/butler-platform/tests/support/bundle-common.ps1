@@ -23,7 +23,7 @@ function Read-BundlePins([string]$Manifest, [string]$Bundle, [string]$Revision) 
         }
     }
     foreach ($required in @('butler-agent.exe','butler-sandbox.exe','e2e.exe',
-        'windows-sandbox-desktop.ps1','bundle-common.ps1','windows-policy-probe.cs',
+        'windows-sandbox-desktop.ps1','windows-sandbox-cases.ps1','bundle-common.ps1','windows-policy-probe.cs',
         'windows-registry-snapshot.cs','windows-host-snapshot.ps1','ssh-row16.json',
         'resources/eol.md','cassettes/TOOL-01/meta.json')) {
         if (!$seen.ContainsKey($required)) { throw ('missing_pin: ' + $required) }

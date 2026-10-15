@@ -13,6 +13,7 @@ fn row14_latency() -> Result<(), HarnessError> {
     let script = "cmd /c echo complete";
     let plain =
         command_sandbox::login_shell(script, command_sandbox::ShellAccess::Full, &f.env).unwrap();
+    setup_complete!(f);
     let launch = |contained| {
         let start = Instant::now();
         let out = if contained {

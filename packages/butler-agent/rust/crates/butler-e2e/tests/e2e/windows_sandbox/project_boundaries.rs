@@ -5,6 +5,7 @@ fn row01_project_and_scratch() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(desktop(), "interactive Windows desktop required");
     let f = Fixture::new("WIN-01")?;
+    setup_complete!(f);
     f.pass("$ErrorActionPreference='Stop'; [IO.File]::WriteAllText('made.txt','complete'); if ([IO.File]::ReadAllText('made.txt') -ne 'complete') {exit 1}; [IO.File]::WriteAllText(($env:TEMP+'\\scratch.txt'),'scratch'); if ([IO.File]::ReadAllText(($env:TEMP+'\\scratch.txt')) -ne 'scratch') {exit 2}");
     assert_eq!(std::fs::read(f.root.join("made.txt"))?, b"complete");
     for dir in &f.scratch[1..] {
@@ -21,6 +22,7 @@ fn row02_outside_writes() -> Result<(), HarnessError> {
     let f = Fixture::new("WIN-02")?;
     let sibling = f.setup.sandbox.home.join("sibling");
     std::fs::create_dir(&sibling)?;
+    setup_complete!(f);
     for path in [
         sibling.join("escape"),
         f.root.parent().unwrap().join("escape"),
@@ -80,6 +82,7 @@ fn row03_secret_contents_ads_and_parent_delete() -> Result<(), HarnessError> {
     for name in [".env", "sub/.env.local", "id_rsa", "key.pem"] {
         let path = f.root.join(name);
         std::fs::write(&path, "fixture-secret")?;
+        setup_complete!(f);
         for script in [
             format!("[IO.File]::ReadAllText({})", quote(&path)),
             format!("[IO.File]::WriteAllText({},'escape')", quote(&path)),
@@ -111,6 +114,7 @@ fn row08_ancestor_sibling_listings() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(desktop(), "interactive Windows desktop required");
     let f = Fixture::new("WIN-08")?;
+    setup_complete!(f);
     for path in [
         f.root.parent().unwrap(),
         &f.setup.sandbox.data,

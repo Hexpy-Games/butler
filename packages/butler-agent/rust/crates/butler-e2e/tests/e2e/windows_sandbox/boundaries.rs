@@ -17,6 +17,7 @@ fn row05_credentials() -> Result<(), HarnessError> {
         let path = f.setup.sandbox.home.join(name);
         std::fs::create_dir_all(path.parent().unwrap())?;
         std::fs::write(&path, "fixture-credential")?;
+        setup_complete!(f);
         let output = f.deny(&format!(
             "$ErrorActionPreference='Stop'; [IO.File]::ReadAllText({})",
             quote(&path)
@@ -49,6 +50,7 @@ fn row06_registry_tasks_wmi() -> Result<(), HarnessError> {
     butler_e2e::skip_unless!(desktop(), "interactive Windows desktop required");
     let f = Fixture::new("WIN-06")?;
     let nonce = uuid::Uuid::new_v4().simple().to_string();
+    setup_complete!(f);
     // Only these contained calls attempt writes. The harness snapshots HKCU
     // and the complete task definitions before and after this row.
     f.deny(&format!("cmd /c reg add HKCU\\Software\\ButlerSandboxDenied\\{nonce} /v blocked /t REG_SZ /d denied /f"));
@@ -73,6 +75,7 @@ fn row07_alias_escapes() -> Result<(), HarnessError> {
         .arg(&outside)
         .output()?;
     assert!(output.status.success(), "junction fixture: {output:?}");
+    setup_complete!(f);
     f.deny("$ErrorActionPreference='Stop'; [IO.File]::ReadAllText('alias\\private.txt')");
     f.deny("$ErrorActionPreference='Stop'; [IO.File]::WriteAllText('alias\\escape','escape')");
     // An inner subst must not make an ungranted physical target readable.
@@ -126,6 +129,11 @@ async fn row09_network() -> Result<(), HarnessError> {
     tcp.set_nonblocking(true)?;
     let v6 = std::net::TcpListener::bind("[::1]:0")?;
     v6.set_nonblocking(true)?;
+    if super::setup_only() {
+        super::finish_setup(agent).await?;
+        f.check_setup()?;
+        return Ok(());
+    }
     for (host, port) in [
         ("1.1.1.1", 443),
         ("127.0.0.1", agent_port),
