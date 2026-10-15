@@ -42,17 +42,17 @@ pub fn classify_targets(roots: &ScopeRoots<'_>, base: &Path, targets: &[&str]) -
 /// though spelled another way (another spelling of the root, a link into
 /// it), or the real absolute path when a link or alias leads somewhere other
 /// than its spelling says. None when the spelling already names that place
-/// (an in-folder path stays as written), or the path does not parse or is
-/// ambiguous (classified outside as is).
+/// (an in-folder path stays as written) or the path does not parse.
 pub fn real_target(root: &Path, requested: &str) -> Option<PathBuf> {
     let lexical = butler_platform::tool_paths::resolve(root, requested).ok()?;
-    if ambiguous_path(&lexical) {
-        return None;
-    }
     let real = realpath_or_nearest(&lexical);
     let root_real = realpath_or_nearest(root);
     if path_is_within(&real, &root_real) {
-        if path_is_within(&lexical, &butler_platform::tool_paths::lexical(root)) {
+        // An ambiguous spelling stays as written: classification keeps it
+        // outside rather than trusting its containment.
+        if ambiguous_path(&lexical)
+            || path_is_within(&lexical, &butler_platform::tool_paths::lexical(root))
+        {
             return None;
         }
         let relative = inside_relative(&root_real, &real)?;
