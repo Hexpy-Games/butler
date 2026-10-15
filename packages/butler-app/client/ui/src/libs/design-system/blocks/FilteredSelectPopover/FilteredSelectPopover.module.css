@@ -131,6 +131,30 @@
   color: var(--text-primary);
 }
 
+/* Touch chips grow to the 44px hit target; wider padding keeps short labels
+   pills instead of circles. */
+@media (width <= 640px) {
+  .filters
+    [data-slot="button"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ),
+  .footerOptions
+    [data-slot="button"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
+    padding-inline: var(--space-md);
+  }
+}
+
+@media (pointer: coarse) {
+  .filters [data-slot="button"],
+  .footerOptions [data-slot="button"] {
+    padding-inline: var(--space-md);
+  }
+}
+
 .results {
   height: min(calc(var(--filtered-select-results-max-rows, 6.65) * 30px), 42vh);
   min-width: 0;
