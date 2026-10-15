@@ -24,6 +24,7 @@ export const ComposerContextControl = memo(function ComposerContextControl({ loa
   const activeChatId = useButlerStore((store) => store.activeChatId);
   const openSettings = useButlerStore((store) => store.openSettings);
   const [pinned, setPinned] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   if (!context) return null;
@@ -60,6 +61,10 @@ export const ComposerContextControl = memo(function ComposerContextControl({ loa
         />
       </PopoverTrigger>
       <PopoverContent
+        ref={contentRef}
+        onEscapeKeyDown={(event) => {
+          if (contentRef.current?.querySelector('[data-slot="usage-bars"][data-selected="true"]')) event.preventDefault();
+        }}
         data-test-class="context-popover"
         data-pinned={pinned ? "true" : undefined}
         align="center"

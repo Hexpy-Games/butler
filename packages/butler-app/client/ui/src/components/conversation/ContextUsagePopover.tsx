@@ -1,6 +1,9 @@
-import { appCopy, getAppLocale, useAppLocale } from "@/app/copy.ts";
+import { useMemo, useState } from "react";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { ContextDetailsView } from "@/app/types.ts";
-import { Button, formatUsageTokens, Inline, ProgressMeter, Stack, Typo, UsageSummaryRows } from "@/butler-ds";
+import { Button, formatUsageTokens, Inline, ProgressMeter, Stack, Typo, UsageSummaryRows, Separator, UsageBars } from "@/butler-ds";
+import { UsageReadout } from "../usage/UsageReadout";
+import { usageReadout, usageSeries, usageTimeline } from "../usage/usageTimeline";
 import { conversationUsageSummary } from "./conversationUsage";
 import type { UsageAuthMode } from "./usageAuthMode";
 import { useConversationUsage, type QuotaLoader, type UsageLoader } from "./useConversationUsage";
@@ -20,7 +23,7 @@ function contextRevision(context: ContextDetailsView): string {
 
 /** Context meter, this conversation's usage for the model's auth mode, and Details. */
 export function ContextUsagePopover({ context, mode, sessionId, onDetails, load, loadQuota }: ContextUsagePopoverProps) {
-  useAppLocale();
+  const locale = useAppLocale();
   const tracked = mode === "subscription" || mode === "api_key";
   const usage = useConversationUsage({
     sessionId: tracked ? sessionId : null,
@@ -30,13 +33,18 @@ export function ContextUsagePopover({ context, mode, sessionId, onDetails, load,
     providerId: mode === "subscription" ? context?.provider_id ?? null : null,
     loadQuota,
   });
+  const [selected, setSelected] = useState<number | null>(null);
+  const timeline = useMemo(() => usageTimeline(usage.view, 24), [usage.view, locale]);
   if (!context) return null;
   const percent = Math.round(Math.max(0, Math.min(1, context.ratio)) * 100);
-  const locale = getAppLocale();
   const summary = conversationUsageSummary({ mode, context, ...usage });
 
+  const bucket = selected === null ? undefined : timeline.buckets[selected];
+  const copy = appCopy.composer.usage;
   return (
-    <Stack gap="lg" data-test-class="context-usage">
+    <Stack gap="lg" data-test-class="context-usage" onKeyDownCapture={(event) => {
+      if (event.key === "Escape" && selected !== null) { event.preventDefault(); event.stopPropagation(); setSelected(null); }
+    }}>
       <Stack gap="xs">
         <ProgressMeter
           label={appCopy.interfacePanels.contextWindow}
@@ -45,9 +53,23 @@ export function ContextUsagePopover({ context, mode, sessionId, onDetails, load,
         />
         <Typo.Caption numeric="tabular" tone="secondary">
           {formatUsageTokens(context.used_tokens, locale)} / {formatUsageTokens(context.budget_tokens, locale)}
+          {context.auto_compact_at_tokens !== undefined ? ` · ${appCopy.interfaceTemplates.contextMetric("compact", formatUsageTokens(context.auto_compact_at_tokens, locale))}` : ""}
         </Typo.Caption>
       </Stack>
-      {summary ? <UsageSummaryRows {...summary} /> : null}
+      {tracked ? <>
+        <Separator />
+        {!usage.view && usage.status === "failed" ? <Typo.Caption>{copy.unavailable}</Typo.Caption> :
+          <UsageReadout view={usage.view} values={usageReadout(usage.view, bucket)} label={bucket?.label ?? copy.thisChat}
+            unit={timeline.stepHours > 1 ? copy.bucketUnit(timeline.stepHours) : undefined}
+            selected={Boolean(bucket)} showCost={mode === "api_key"}>
+            <UsageBars {...timeline} series={usageSeries()} size="popover" selectedIndex={selected} onSelect={setSelected}
+              state={!usage.view ? "loading" : "ready"} emptyLabel={copy.noUsage} loadingLabel={copy.loading}
+              note={timeline.buckets.length === 1 ? copy.justStarted : undefined} ariaLabel={copy.chartLabel} />
+          </UsageReadout>}
+      </> : null}
+      {mode === "subscription" && summary ? <><Separator /><Stack gap="sm">
+        <Typo.Caption>{copy.accountLimits}</Typo.Caption><UsageSummaryRows {...summary} />
+      </Stack></> : null}
       {onDetails ? (
         <Inline justify="end">
           <Button

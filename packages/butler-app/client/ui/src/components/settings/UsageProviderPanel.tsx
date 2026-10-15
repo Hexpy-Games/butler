@@ -1,5 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import type { UsageMonitorView } from "@/app/types.ts";
+import { Stack } from "@/butler-ds";
 import { UsageProviderRow } from "./UsageProviderRow";
 
 type UsageProvider =
@@ -9,10 +10,10 @@ type UsageProvider =
 export function UsageProviderPanel({ providers }: { providers: UsageProvider[] }) {
   useAppLocale();
   return (
-    <>
+    <Stack gap="lg">
       {providers.map((provider) => (
         <UsageProviderRow key={provider.providerId} provider={provider} />
       ))}
-    </>
+    </Stack>
   );
 }
