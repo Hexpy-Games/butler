@@ -2,6 +2,8 @@
 param([string]$Root=$PSScriptRoot, [switch]$Once)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'bundle-common.ps1')
+Add-Type -TypeDefinition (Get-Content -Raw (Join-Path $PSScriptRoot 'desktop-runner-job.cs'))
+[DesktopRunnerJob]::Attach()
 $Root = (Resolve-Path -LiteralPath $Root).Path
 $requests = Join-Path $Root 'requests'
 $done = Join-Path $requests 'done'
@@ -42,7 +44,7 @@ try {
                 $result = Join-Path $env:LOCALAPPDATA ('Butler\e2e-results\' + $revision + '.json')
                 if (!(Test-Path -LiteralPath $result)) { throw 'result_missing' }
                 $response = Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
-                if ($response.revision -cne $revision -or [DateTime]$response.startedUtc -lt $started) { throw 'stale_result' }
+                if ($response.revision -cne $revision -or [DateTimeOffset]$response.startedUtc -lt [DateTimeOffset]$started) { throw 'stale_result' }
                 Move-Item -LiteralPath $request.FullName -Destination (Join-Path $done $request.Name) -Force
                 Write-Host "$revision $($response.status) exit=$($child.ExitCode)"
             } catch {

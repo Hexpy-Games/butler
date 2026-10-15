@@ -35,7 +35,8 @@ published bundles, pins, requests and evidence.
 
 In the owner's normal, non-admin desktop session, double-click
 `C:\Users\yeonw\work\windows-sandbox-e2e\start-desktop-runner.cmd` once. Leave the
-visible console open. Closing it stops the runner and its console children.
+visible console open. A process-scoped kill-on-close Job Object stops the matrix
+and its descendants when the console closes, including children without consoles.
 There is no installation, autostart, registry entry or scheduled task.
 
 The builder and SSH operator are trusted writers of this harness directory.

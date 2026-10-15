@@ -62,6 +62,10 @@ fn desktop_request_protocol() -> Result<(), HarnessError> {
     let f = Fixture::new("WIN-DESKTOP-QUEUE")?;
     for (name, source) in [
         (
+            "desktop-runner-job.cs",
+            include_str!("../../../../butler-platform/tests/support/desktop-runner-job.cs"),
+        ),
+        (
             "desktop-runner.ps1",
             include_str!("../../../../butler-platform/tests/support/desktop-runner.ps1"),
         ),
