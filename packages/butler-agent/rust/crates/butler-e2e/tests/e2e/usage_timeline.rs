@@ -194,6 +194,38 @@ async fn usage_range_tools_and_search_are_incremental() -> Result<(), HarnessErr
     s.finish().await
 }
 
+fn assert_session_totals_refresh(
+    monitor: &butler_runtime::operations::UsageMonitor,
+    directory: &std::path::Path,
+    path: &std::path::Path,
+) -> Result<(), HarnessError> {
+    let read = |since, until| monitor.read_at(directory, Some("s"), None, Some(since), until, None);
+    let initial = read(1_000_000.0, 3_000_000.0);
+    assert_eq!(initial["topSessions"][0]["requests"], 4);
+    assert_eq!(initial["topSessions"][0]["totalTokens"], 61.0);
+    // Same complete slots, different exact lower bound: exclude both aliases.
+    let shifted = read(1_000_001.0, 3_000_001.0);
+    assert_eq!(shifted["topSessions"][0]["requests"], 2);
+    assert_eq!(shifted["topSessions"][0]["totalTokens"], 24.0);
+    let mut file = fs::OpenOptions::new().append(true).open(path)?;
+    writeln!(
+        file,
+        "{}",
+        json!({"ts":1_800_001,"scope":"btcc-guided:s",
+        "model":"m","promptTokens":10,"cachedTokens":3,"totalTokens":12})
+    )?;
+    drop(file);
+    // An append inside a complete slot must invalidate the reused totals.
+    let appended = read(1_000_001.0, 3_000_001.0);
+    assert_eq!(appended["topSessions"][0]["requests"], 3);
+    assert_eq!(appended["topSessions"][0]["totalTokens"], 36.0);
+    assert_eq!(appended["topSessions"][0]["lastUsedMs"], 2_000_000.0);
+    // Advancing the upper edge within its slot must include newly in-range rows.
+    assert_eq!(read(0.0, 1_999_999.0)["topSessions"][0]["requests"], 5);
+    assert_eq!(read(0.0, 2_000_001.0)["topSessions"][0]["requests"], 7);
+    Ok(())
+}
+
 // test-category: pure-logic
 #[test]
 fn usage_exact_range_boundaries_and_rotation() -> Result<(), HarnessError> {
@@ -275,6 +307,7 @@ fn usage_exact_range_boundaries_and_rotation() -> Result<(), HarnessError> {
         scoped["model"]["requestCount"], 2,
         "guided scope takes precedence"
     );
+    assert_session_totals_refresh(&monitor, &directory, &path)?;
     fs::write(
         &path,
         format!(
@@ -296,6 +329,8 @@ fn usage_exact_range_boundaries_and_rotation() -> Result<(), HarnessError> {
     assert_eq!(view["model"]["requestCount"], 1);
     assert_eq!(view["model"]["totalTokens"], 30.0);
     assert_eq!(view["previousPeriod"]["totalTokens"], 0.0);
+    assert_eq!(view["topSessions"][0]["requests"], 1);
+    assert_eq!(view["topSessions"][0]["totalTokens"], 30.0);
     fs::remove_dir_all(directory).unwrap();
     Ok(())
 }
@@ -331,6 +366,13 @@ async fn usage_schedule_kind_uses_recorded_runs() -> Result<(), HarnessError> {
         [],
     )
     .unwrap();
+    // A matching turn on a run outside the range must still be excluded.
+    let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
+    assert_eq!(reply.data()["topSessions"][0]["kind"], "chat");
+    db.execute(
+        "UPDATE app_automation_runs SET started_at=?1",
+        [(now - chrono::Duration::seconds(2)).to_rfc3339()],
+    )?;
     let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
     let entry = &reply.data()["topSessions"][0];
     assert_eq!(entry["sessionId"], "opaque-chat-id");

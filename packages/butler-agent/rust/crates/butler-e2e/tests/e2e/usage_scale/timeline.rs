@@ -66,11 +66,47 @@ fn seed(data: &Path, base: i64) -> Result<(), HarnessError> {
     eprintln!("usage timeline fixture: {ROW_COUNT} rows, {SCOPE_COUNT} scopes, {bytes} bytes");
     Ok(())
 }
+fn scheduled(index: usize) -> bool {
+    scope_index(index).is_multiple_of(100) || (scope_index(index) == 1 && index.is_multiple_of(3))
+}
+
+/// Thousands of actual run bindings, half routed through the durable queue.
+fn seed_runs(data: &Path, base: i64) -> Result<(), HarnessError> {
+    let mut db = butler_platform::sqlite::open(data.join("app-server/butler-client.sqlite"))?;
+    db.execute_batch("INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,state,last_run_state,created_at,updated_at)
+        VALUES('scale','Report','Report','chat','general',3600,'paused','delivered','2026-01-01','2026-01-01');")?;
+    let tx = db.transaction()?;
+    let mut count = 0;
+    let mut queued_count = 0;
+    for index in (0..ROW_COUNT).filter(|&i| scheduled(i)) {
+        let id = format!("run-{index}");
+        let turn = format!("turn-{index}");
+        let stamp = chrono::DateTime::from_timestamp_millis(timestamp(base, index))
+            .unwrap()
+            .to_rfc3339();
+        let queued = count % 2 == 0;
+        if queued {
+            tx.execute("INSERT INTO session_queued_messages(id,chat_id,text,attachments_json,controls_json,state,turn_id,created_at,updated_at)
+                VALUES(?1,'general','Report','[]','{}','dispatched',?2,?3,?3)", [&id,&turn,&stamp])?;
+            queued_count += 1;
+        }
+        tx.execute("INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,turn_id,queued_message_id)
+            VALUES(?1,'scale','general','delivered','scheduled',?2,?3,?4)",
+            rusqlite::params![id, stamp, (!queued).then_some(&turn), queued.then_some(&id)])?;
+        count += 1;
+    }
+    tx.commit()?;
+    assert!(count > 3000 && queued_count > 1500);
+    eprintln!("usage schedule fixture: {count} runs, {queued_count} queued");
+    Ok(())
+}
+
 fn verify(view: &Value, base: i64, selected: bool) {
     assert_timeline(view);
     let since = view["filters"]["sinceTs"].as_f64().unwrap();
     let mut slots = BTreeMap::<i64, u64>::new();
     let mut scopes = BTreeMap::<String, (f64, u64, i64)>::new();
+    let mut kinds = BTreeMap::<String, bool>::new();
     let mut requests = 0;
     let mut tokens = 0.0;
     let mut prompt = 0.0;
@@ -81,6 +117,7 @@ fn verify(view: &Value, base: i64, selected: bool) {
         let id = scope(index);
         let in_scope = !selected || id == "btcc-guided:butler/app-general";
         if ts as f64 >= since {
+            *kinds.entry(id.clone()).or_insert(true) &= scheduled(index);
             let entry = scopes.entry(id).or_default();
             entry.0 += total(index);
             entry.1 += 1;
@@ -127,6 +164,16 @@ fn verify(view: &Value, base: i64, selected: bool) {
         top.windows(2)
             .all(|s| s[0]["totalTokens"].as_f64() >= s[1]["totalTokens"].as_f64())
     );
+    assert!(top.iter().any(|row| row["kind"] == "schedule"));
+    if selected {
+        let row = top.last().unwrap();
+        let (total, requests, last) = scopes["btcc-guided:butler/app-general"];
+        assert_eq!(row["sessionId"], "general");
+        assert_eq!(row["kind"], "chat");
+        assert_eq!(row["totalTokens"], total);
+        assert_eq!(row["requests"], requests);
+        assert_eq!(row["lastUsedMs"], last as f64);
+    }
     let mut expected: Vec<_> = scopes.into_iter().collect();
     expected.sort_by(|a, b| b.1.0.total_cmp(&a.1.0).then_with(|| a.0.cmp(&b.0)));
     assert_eq!(top.len(), if selected { 201 } else { 200 });
@@ -135,23 +182,31 @@ fn verify(view: &Value, base: i64, selected: bool) {
         assert_eq!(row["totalTokens"], total);
         assert_eq!(row["requests"], requests);
         assert_eq!(row["lastUsedMs"], last as f64);
-    }
-    if selected {
-        assert_eq!(top.last().unwrap()["sessionId"], "general");
+        let all_scheduled = kinds[&id];
+        assert_eq!(
+            row["kind"],
+            if all_scheduled { "schedule" } else { "butler" }
+        );
     }
 }
 #[tokio::test]
 async fn perf_usage_timeline_300k_ranges() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    eprintln!(
+        "usage timeline host load: {:?}",
+        butler_platform::process_control::usage::load_average()?
+    );
     let setup = Setup::new("usage-timeline-scale")?;
     let base = chrono_now().div_euclid(SLOT_MS) * SLOT_MS - SLOT_MS / 2;
     seed(&setup.sandbox.data, base)?;
     let s = setup.start().await?;
+    seed_runs(&s.sandbox.data, base)?;
     let memory = super::memory::PeakMemory::start(s.agent.pid().unwrap());
     let (ingest, view) = timed(&s.gw, "/usage-monitor?since_hours=720").await?;
     verify(&view, base, false);
     butler_e2e::assert_wall_clock_budget!(ingest, COLD, "300k ingest");
     eprintln!("usage timeline 300k ingest + initial request: {ingest:?}");
+    let mut measurements = Vec::new();
     for hours in [24, 168, 720] {
         for selected in [false, true] {
             let suffix = if selected { "&session_id=general" } else { "" };
@@ -162,23 +217,33 @@ async fn perf_usage_timeline_300k_ranges() -> Result<(), HarnessError> {
             .await?;
             verify(&view, base, selected);
             eprintln!("usage timeline {hours}h scoped={selected}: {latency:?}");
-            butler_e2e::assert_wall_clock_budget!(latency, WARM, "timeline range");
+            let budget = if selected && !cfg!(debug_assertions) {
+                Duration::from_millis(5)
+            } else {
+                WARM
+            };
+            measurements.push((latency, budget));
         }
     }
-    // Main's measured physical footprint baseline plus at most ten percent.
-    memory.finish_peak(390_500_000);
+    // Same-harness main baseline: 401 MB physical footprint; allow at most +10%.
+    memory.finish_peak(401_000_000 * 110 / 100);
+    for (latency, budget) in measurements {
+        butler_e2e::assert_wall_clock_budget!(latency, budget, "timeline range");
+    }
     s.finish().await
 }
 
-/// Identical fixture and legacy-field correctness for baseline binary comparisons.
+/// Explicit bench selection: `cargo test -p butler-e2e --test e2e bench_usage_`.
+/// Legacy-field correctness for baseline binary comparisons; excluded from `perf_`.
 /// BUTLER_E2E_BIN can select main without depending on the new JSON fields.
 #[tokio::test]
-async fn perf_usage_comparable_300k() -> Result<(), HarnessError> {
+async fn bench_usage_comparable_300k() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("usage-comparable")?;
     let base = chrono_now().div_euclid(SLOT_MS) * SLOT_MS - SLOT_MS / 2;
     seed(&setup.sandbox.data, base)?;
     let s = setup.start().await?;
+    seed_runs(&s.sandbox.data, base)?;
     let memory = super::memory::PeakMemory::start(s.agent.pid().unwrap());
     let (cold, view) = timed(&s.gw, "/usage-monitor?since_hours=720").await?;
     verify_legacy(&view, base, false);

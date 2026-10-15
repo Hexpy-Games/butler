@@ -71,9 +71,10 @@ fn seed(data: &Path) -> Result<(), HarnessError> {
     Ok(())
 }
 
+/// Explicit `bench_usage_` selection, outside the budget-enforcing `perf_` suite.
 /// All-time counters supported by both binaries for per-million growth evidence.
 #[tokio::test]
-async fn perf_usage_comparable_million_tools() -> Result<(), HarnessError> {
+async fn bench_usage_comparable_million_tools() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("usage-comparable-tools")?;
     seed(&setup.sandbox.data)?;

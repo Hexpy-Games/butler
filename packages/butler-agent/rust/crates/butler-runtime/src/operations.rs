@@ -46,7 +46,7 @@ pub use provider_quota::{
 };
 pub use service_readiness::ServiceReadiness;
 pub use status_summary::{
-    UsageMonitor, UsageMonitorSources, UsageSessionTurns, read_context_tool, read_metrics_status,
+    UsageMonitor, UsageMonitorSources, read_context_tool, read_metrics_status,
     read_prompt_cache_telemetry, read_usage_tool, render_metrics_status, render_status_context,
     tail_operational_metric_events,
 };
