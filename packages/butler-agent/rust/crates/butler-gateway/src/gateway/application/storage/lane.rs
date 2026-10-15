@@ -55,11 +55,14 @@ fn perform(
 }
 
 fn commit(db: &Connection, opened: &mut Option<Instant>) -> StorageResult<()> {
+    let timing = crate::gateway::command_timing::CommandTiming::new("app_sqlite_commit");
     if opened.take().is_some() && !db.is_autocommit() {
         db.execute_batch("COMMIT")
             .map_err(AppStorageError::sqlite)?;
     }
+    timing.mark("sqlite_done");
     event_outbox::flush();
+    timing.mark("events_delivered");
     Ok(())
 }
 
