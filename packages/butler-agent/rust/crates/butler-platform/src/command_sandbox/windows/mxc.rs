@@ -7,6 +7,7 @@ mod probe;
 mod recovery;
 mod sdk;
 mod shell;
+mod timing;
 use super::super::{Invocation, ProtectError, Protection, SandboxCapabilities, SandboxError};
 use std::{
     collections::HashMap,

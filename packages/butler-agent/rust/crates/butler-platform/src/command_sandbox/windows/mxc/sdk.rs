@@ -65,7 +65,9 @@ impl RunOutcome {
 }
 
 pub(super) fn run(request: &Value) -> Result<RunOutcome, Box<dyn std::error::Error>> {
+    let creation = super::timing::Phase::start("container_create");
     let mut child = __ffi::spawn_container_json(&serde_json::to_string(request)?, false)?;
+    drop(creation);
     drop(child.take_stdin());
     let closers = [child.stdout_closer(), child.stderr_closer()];
     let stdout = child
@@ -76,7 +78,10 @@ pub(super) fn run(request: &Value) -> Result<RunOutcome, Box<dyn std::error::Err
         .ok_or_else(|| RunError("sandbox stderr pipe missing".into()))?;
     let out = relay(stdout, false);
     let err = relay(stderr, true);
+    let wait = super::timing::Phase::start("child_wait");
     let result = child.wait();
+    drop(wait);
+    let _phase = super::timing::Phase::start("container_teardown");
     if result.is_err() {
         let _ = child.kill();
     }

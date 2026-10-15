@@ -1,7 +1,7 @@
 //! Helper owns the mapping and streams the contained child's output.
 use super::{Error, drive::Drive, prepare::PolicyFile, probe, sdk};
 use crate::command_sandbox::mxc_policy::environment;
-use std::{fs, path::Path};
+use std::{fs, io::Write, path::Path};
 
 pub(crate) fn main() -> Result<i32, Error> {
     let mut args = std::env::args().skip(1);
@@ -43,16 +43,25 @@ pub(crate) fn main() -> Result<i32, Error> {
     }
 }
 fn run(file: &Path) -> Result<i32, Error> {
+    let _phase = super::timing::Phase::start("helper");
+    let ownership = super::timing::Phase::start("policy_ownership");
     let mut payload: PolicyFile = serde_json::from_slice(&fs::read(file)?)?;
     let (pid, started) = super::drive::identity()?;
     payload.pid = pid;
     payload.started = started;
-    crate::secure_fs::replace_private(
-        file,
-        |file| serde_json::to_writer(file, &payload).map_err(std::io::Error::other),
-        |error| error,
-    )?;
+    // A sharing-exclusive write publishes the helper identity to recovery.
+    // Torn writes are reconciled; reboot also destroys the ephemeral mappings.
+    use std::os::windows::fs::OpenOptionsExt;
+    let mut policy = fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .share_mode(0)
+        .open(file)?;
+    policy.write_all(&serde_json::to_vec(&payload)?)?;
+    drop(policy);
+    drop(ownership);
     let result = execute(file, &mut payload);
+    let _cleanup = super::timing::Phase::start("scratch_cleanup");
     let cleanup = fs::remove_dir_all(&payload.scratch).and_then(|()| fs::remove_file(file));
     finish_cleanup(result, cleanup).map(sdk::RunOutcome::report)
 }
@@ -67,7 +76,9 @@ fn execute(file: &Path, payload: &mut PolicyFile) -> Result<sdk::RunOutcome, Err
     let relative = relative.to_str().ok_or("invalid cwd")?.to_owned();
     let drive = Drive::claim(&payload.data, &payload.project, file)?;
     let result = (|| {
+        let temp_phase = super::timing::Phase::start("temp_setup");
         let (temporary, path) = Drive::temporary(&payload.data, &payload.scratch, file)?;
+        drop(temp_phase);
         let result = run_mapped(payload, drive.letter, &path, &relative);
         finish_cleanup(result, temporary.map_or(Ok(()), |drive| drive.cleanup()))
     })();
@@ -100,6 +111,7 @@ fn run_mapped(
     sdk::run(&payload.request)
 }
 pub(super) fn files(payload: &PolicyFile, drive: char) -> Result<(), Error> {
+    let _phase = super::timing::Phase::start("scratch_files");
     let scratch = &payload.scratch;
     for name in [
         "home/AppData/Roaming",

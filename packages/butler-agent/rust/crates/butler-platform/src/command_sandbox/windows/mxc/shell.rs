@@ -5,6 +5,7 @@ use serde_json::Value;
 use std::{fs, io::Write, path::Path};
 
 pub(super) fn prepare(request: &mut Value, scratch: &Path, temporary: &str) -> Result<(), Error> {
+    let _phase = super::timing::Phase::start("shell_files");
     let original = request
         .pointer("/process/commandLine")
         .and_then(Value::as_str)

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::os::windows::fs::OpenOptionsExt;
 use std::{
     fs, io,
+    io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
@@ -25,6 +26,7 @@ pub(super) struct Drive {
 }
 impl Drive {
     pub(super) fn claim(data: &Path, target: &Path, policy: &Path) -> Result<Self, Error> {
+        let _phase = super::timing::Phase::start("drive_claim");
         let target = dunce::canonicalize(target)?;
         let text = target.to_str().ok_or("invalid_project_path")?;
         if text.encode_utf16().count() > MAX_SUBST_TARGET_UNITS {
@@ -40,7 +42,7 @@ impl Drive {
         let letters = drive_pick::candidates(winsafe::GetLogicalDrives(), &persistent()?, &[]);
         for letter in letters {
             let journal = directory.join(format!("{letter}.json"));
-            let file = match fs::OpenOptions::new()
+            let mut file = match fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
                 .share_mode(0)
@@ -56,8 +58,9 @@ impl Drive {
                 started,
                 policy: policy.into(),
             };
-            serde_json::to_writer(&file, &entry)?;
-            file.sync_all()?;
+            file.write_all(&serde_json::to_vec(&entry)?)?;
+            // Process crashes retain the OS cache; reboot removes DOS devices.
+            // No disk durability is needed for this transient ownership journal.
             drop(file);
             let drive = Self {
                 letter,
@@ -135,6 +138,7 @@ impl Drive {
         }
     }
     pub(super) fn cleanup(&self) -> io::Result<()> {
+        let _phase = super::timing::Phase::start("drive_cleanup");
         if self.matches()?
             && !subst(&[format!("{}:", self.letter), "/D".into()])?.success()
             && self.matches()?

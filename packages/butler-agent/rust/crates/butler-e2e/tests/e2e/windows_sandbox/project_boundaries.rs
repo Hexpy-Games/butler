@@ -33,12 +33,37 @@ fn row02_outside_writes() -> Result<(), HarnessError> {
         ));
         assert!(!path.exists());
     }
-    // An alternate spelling through the existing system drive is denied too;
-    // enumerate actual fixed drives rather than creating or changing mappings.
-    let output =
-        f.pass("[Environment]::GetLogicalDrives() | ForEach-Object { [Console]::WriteLine($_) }");
-    for drive in String::from_utf8_lossy(&output.stdout).lines() {
-        f.deny(&format!("$ErrorActionPreference='Stop'; [IO.File]::WriteAllText('{}Butler-sandbox-outside-{}.tmp','escape')",drive,f.setup.sandbox.root.file_name().unwrap().to_string_lossy()));
+    // Capture real host drives before the helper allocates its project/scratch
+    // aliases. A container-visible Z: may be the writable project itself.
+    let script = "[IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Fixed' } | ForEach-Object { $_.Name }";
+    let host =
+        command_sandbox::login_shell(script, command_sandbox::ShellAccess::Full, &f.env).unwrap();
+    let drives = f.launch(&host);
+    assert!(drives.status.success(), "{drives:?}");
+    assert!(!drives.stdout.is_empty(), "host fixed drives unavailable");
+    let probe = PathBuf::from(
+        std::env::var("BUTLER_E2E_WINDOWS_POLICY_PROBE").map_err(std::io::Error::other)?,
+    );
+    std::fs::copy(probe, f.root.join("drive-probe.exe"))?;
+    let diagnostic = f.pass("subst; Get-PSDrive -PSProvider FileSystem | Format-Table Name,Root,DisplayRoot; & .\\drive-probe.exe --drives; exit $LASTEXITCODE");
+    eprintln!(
+        "contained drives: {}",
+        String::from_utf8_lossy(&diagnostic.stdout)
+    );
+    // Correlate a successful alias write with its exact physical project file.
+    f.pass("$ErrorActionPreference='Stop'; [IO.File]::WriteAllText([IO.Path]::Combine([IO.Path]::GetPathRoot($pwd.Path),'alias-proof.txt'),'project')");
+    assert_eq!(std::fs::read(f.root.join("alias-proof.txt"))?, b"project");
+    for drive in String::from_utf8_lossy(&drives.stdout).lines() {
+        let path = PathBuf::from(drive).join(format!(
+            "Butler-sandbox-outside-{}.tmp",
+            f.setup.sandbox.root.file_name().unwrap().to_string_lossy()
+        ));
+        eprintln!("host fixed-drive denial: {}", path.display());
+        f.deny(&format!(
+            "$ErrorActionPreference='Stop'; [IO.File]::WriteAllText({},'escape')",
+            quote(&path)
+        ));
+        assert!(!path.exists(), "host file escaped: {}", path.display());
     }
     f.finish();
     Ok(())

@@ -20,6 +20,15 @@ pub(in crate::command_sandbox) fn verify() -> Result<(), Error> {
             "err",
         ),
         ("cmd /c exit 7", 7, "", ""),
+        ("cmd /c echo 한글", 0, "한글", ""),
+        ("cmd /c dir /b", 0, "유니코드.txt", ""),
+        (
+            r#"cmd /c "echo envelope & echo preserved""#,
+            0,
+            "envelope",
+            "",
+        ),
+        (r#"cmd /s /c "echo envelope & exit 19""#, 19, "envelope", ""),
         ("cmd /c echo 100% %% !literal!", 0, "100% %% !literal!", ""),
         ("& cmd /c exit 7", 1, "", ""),
         ("Write-Output 'before'; exit 23", 23, "before", ""),
@@ -60,14 +69,16 @@ pub(in crate::command_sandbox) fn verify() -> Result<(), Error> {
         let output = run(&scratch, &format!("Write-Output '{}'", "한".repeat(9000)))?;
         assert!(output.status.success(), "{output:?}");
         assert_eq!(String::from_utf8(output.stdout)?.trim(), "한".repeat(9000));
-        eprintln!("contained shell transport: 11 cases; Unicode, 9000 chars, streams, exit codes");
+        eprintln!("contained shell transport: 15 cases; Unicode, 9000 chars, streams, exit codes");
         Ok(())
     })();
     fs::remove_dir_all(&root)?;
     result
 }
 fn run(scratch: &Path, script: &str) -> Result<std::process::Output, Error> {
-    let invocation = super::super::super::legacy_shell(script, false, &HashMap::new());
+    let mut invocation = super::super::super::legacy_shell(script, false, &HashMap::new());
+    super::super::super::cmd::inside_utf8_bootstrap(&mut invocation);
+    fs::write(scratch.join("유니코드.txt"), "complete")?;
     let comspec = std::env::var("COMSPEC")?;
     let mut env = vec![format!("COMSPEC={comspec}")];
     if let Some(shell) = &invocation.shell_program {

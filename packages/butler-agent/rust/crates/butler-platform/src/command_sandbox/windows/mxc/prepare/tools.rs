@@ -152,48 +152,8 @@ pub(super) fn git_settings(
 
 mod msvc;
 
-fn add_path(env: &BTreeMap<String, String>, input: &mut Discovery) -> Result<(), Error> {
-    for dir in environment::get(env, "PATH")
-        .unwrap_or("")
-        .split(';')
-        .filter(|s| !s.is_empty())
-    {
-        let path = Path::new(dir);
-        if !path.is_dir() {
-            continue;
-        }
-        let lexical = WinPath::search_directory(dir)
-            .map_err(|reason| WinPath::rejection(dir, "PATH entry", reason))?;
-        if lexical.as_str().ends_with("\\windowsapps") {
-            continue;
-        }
-        let canonical = physical_for(path, "PATH entry")?;
-        if lexical.as_str().ends_with("\\.nodejs") {
-            input.shim_dirs.push(canonical.clone());
-        }
-        if path.join("node.exe").is_file() && input.real_node.is_none() {
-            let node = physical(&path.join("node.exe"))?
-                .parent()
-                .ok_or("node parent")?;
-            if input
-                .program_files
-                .iter()
-                .chain(&input.install_roots)
-                .any(|r| node.is_within(r))
-            {
-                input.real_node = Some(node);
-            }
-        }
-        if path.join("git.exe").is_file()
-            && canonical.as_str().ends_with("\\cmd")
-            && input.git_exe.is_none()
-        {
-            input.git_exe = Some(physical(&path.join("git.exe"))?);
-        }
-        input.path.push(canonical);
-    }
-    Ok(())
-}
+mod search_path;
+use search_path::add_path;
 
 // Installation discovery is cached; credential names and token-bearing
 // configuration are current at each admission, with no idle polling.

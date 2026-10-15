@@ -58,10 +58,9 @@ pub struct Toolchain {
     /// Explicit compiler variables (LIB and target linker).
     pub environment: BTreeMap<String, String>,
 }
-/// Selects only documented trusted install roots, replacing shims with the real Node install.
+/// Preserves host tool search directories, replacing aliases with real installs.
 pub fn discover(input: &Discovery) -> Result<Toolchain, &'static str> {
     let mut result = Toolchain::default();
-    let homes = trusted_homes(input)?;
     let git_cmd = vetted_git(input)?;
     if let Some(node) = &input.real_node {
         if !known_install(node, input) {
@@ -81,14 +80,12 @@ pub fn discover(input: &Discovery) -> Result<Toolchain, &'static str> {
         {
             continue;
         }
-        if homes.iter().any(|home| dir.is_within(home))
-            || python_home(dir, input.local_app_data.as_ref())?
-        {
-            push(&mut result.path, dir.clone());
-        }
+        // The host search path is explicit tool access, granted read-only.
+        // Physical resolution and credential denials still apply.
+        push(&mut result.path, dir.clone());
     }
-    // Program Files roots qualify PATH entries; they are not themselves
-    // broad grants. Cargo, rustup and Git need their complete install homes.
+    // Search directories are exact grants, never their ancestors.
+    // Cargo, rustup and Git also need their complete install homes.
     result.readonly.extend(input.cargo_home.clone());
     result.readonly.extend(input.rustup_home.clone());
     result
@@ -101,19 +98,6 @@ pub fn discover(input: &Discovery) -> Result<Toolchain, &'static str> {
         add_msvc(&mut result, msvc)?;
     }
     Ok(result)
-}
-fn python_home(dir: &WinPath, local: Option<&WinPath>) -> Result<bool, &'static str> {
-    let Some(local) = local else {
-        return Ok(false);
-    };
-    let root = local.join("Programs\\Python")?;
-    let Some(tail) = dir.as_str().strip_prefix(&format!("{}\\", root.as_str())) else {
-        return Ok(false);
-    };
-    let home = tail.split('\\').next().unwrap_or_default();
-    Ok(home
-        .strip_prefix("python")
-        .is_some_and(|version| !version.is_empty() && version.bytes().all(|b| b.is_ascii_digit())))
 }
 fn push(paths: &mut Vec<WinPath>, path: WinPath) {
     if !paths.contains(&path) {
@@ -156,23 +140,6 @@ fn add_msvc(result: &mut Toolchain, msvc: &Msvc) -> Result<(), &'static str> {
         bin.join("link.exe")?.as_str().into(),
     );
     Ok(())
-}
-
-fn trusted_homes(input: &Discovery) -> Result<Vec<WinPath>, &'static str> {
-    let mut homes = input.program_files.clone();
-    homes.extend(input.system_root.clone());
-    homes.extend(input.cargo_home.clone());
-    homes.extend(input.rustup_home.clone());
-    let git_cmd = vetted_git(input)?;
-    if let Some(cmd) = &git_cmd {
-        if !cmd.as_str().ends_with("\\cmd") {
-            return Err("Git executable must be under cmd");
-        }
-        homes.extend(cmd.parent());
-    }
-    let npm = input.app_data.as_ref().map(|p| p.join("npm")).transpose()?;
-    homes.extend(npm);
-    Ok(homes)
 }
 
 fn add_cargo(result: &mut Toolchain, input: &Discovery) -> Result<(), &'static str> {

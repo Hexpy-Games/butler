@@ -16,6 +16,20 @@ public static class WindowsPolicyProbe {
     static extern int WldpGetLockdownPolicy(ref HostInformation host, out uint state, uint flags);
     [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
     static extern uint QueryDosDevice(string name, System.Text.StringBuilder target, int length);
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFile(string path,
+        uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    static extern uint GetFinalPathNameByHandle(Microsoft.Win32.SafeHandles.SafeFileHandle handle,
+        System.Text.StringBuilder path, uint length, uint flags);
+    static string PhysicalRoot(string drive) {
+        using (var handle = CreateFile(drive, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero)) {
+            if (handle.IsInvalid) return "error:" + Marshal.GetLastWin32Error();
+            var path = new System.Text.StringBuilder(32768);
+            uint result = GetFinalPathNameByHandle(handle, path, (uint)path.Capacity, 0);
+            return result == 0 ? "error:" + Marshal.GetLastWin32Error() : path.ToString();
+        }
+    }
     static void Attempt(string stage, Action action) {
         try { action(); Console.WriteLine(stage + "_ok=True"); }
         catch (Exception error) {
@@ -56,7 +70,18 @@ public static class WindowsPolicyProbe {
         Console.WriteLine("temp_extended=" + temp.StartsWith(@"\\?\"));
         foreach (string extension in new [] { ".ps1", ".psm1" }) ProbeFile(temp, extension);
     }
-    public static int Main() {
+    static int Drives() {
+        foreach (string drive in Environment.GetLogicalDrives()) {
+            var target = new System.Text.StringBuilder(32768);
+            uint result = QueryDosDevice(drive.TrimEnd('\\'), target, target.Capacity);
+            Console.WriteLine("drive=" + drive + " physical=" + (result == 0
+                ? "error:" + Marshal.GetLastWin32Error() : target.ToString()));
+            Console.WriteLine("drive=" + drive + " final_path=" + PhysicalRoot(drive));
+        }
+        return 0;
+    }
+    public static int Main(string[] args) {
+        if (args.Length == 1 && args[0] == "--drives") return Drives();
         Attempt("wldp", delegate {
             var host = new HostInformation { revision=1, hostId=4 };
             uint state;

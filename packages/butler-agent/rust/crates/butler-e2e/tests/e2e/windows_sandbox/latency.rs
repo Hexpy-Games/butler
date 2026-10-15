@@ -19,7 +19,11 @@ fn row14_latency() -> Result<(), HarnessError> {
         let elapsed = start.elapsed().as_secs_f64() * 1000.0;
         assert!(out.status.success(), "{out:?}");
         assert_eq!(out.stdout, b"complete\r\n");
-        assert!(out.stderr.is_empty(), "{out:?}");
+        for line in String::from_utf8_lossy(&out.stderr).lines() {
+            assert!(line.starts_with("command_sandbox_phase phase="), "{out:?}");
+            eprintln!("{line}");
+        }
+        eprintln!("command_sandbox_sample contained={contained} elapsed_ms={elapsed:.3}");
         elapsed
     };
     launch(false);

@@ -16,7 +16,7 @@ pub(super) fn verify() {
     probe_policy_keeps_loader_grants_and_redacts_paths();
     golden_policy_has_no_implicit_environment_network_or_fallback();
     policy_rejects_broad_and_overriding_grants();
-    toolchains_replace_shims_and_keep_trusted_path_order();
+    toolchains_replace_shims_and_keep_host_path_order();
     environment_redirects_profiles_without_importing_host_credentials();
     drive_picker_and_reconcile_never_remove_other_owners_mapping();
     command_lines_round_trip_crt_arguments_and_preserve_cmd_text();
@@ -172,17 +172,17 @@ fn policy_rejects_broad_and_overriding_grants() {
             .is_err()
     );
 }
-fn toolchains_replace_shims_and_keep_trusted_path_order() {
+fn toolchains_replace_shims_and_keep_host_path_order() {
     let input = Discovery {
         path: [
-            r"C:\bad",
+            r"D:\Tools\bin",
             r"C:\Users\person\.nodejs",
             r"C:\Users\person\AppData\Local\Microsoft\WindowsApps",
             r"C:\Windows\System32",
             r"C:\Program Files\other",
             r"C:\Users\person\AppData\Roaming\npm",
             r"C:\Users\person\AppData\Local\Programs\Python\Python312",
-            r"C:\Users\person\AppData\Local\Programs\Python\untrusted",
+            r"C:\Users\person\AppData\Local\Programs\Python\CustomPython",
         ]
         .map(path)
         .into(),
@@ -207,10 +207,12 @@ fn toolchains_replace_shims_and_keep_trusted_path_order() {
             r"C:\Users\person\nvm\installs\v24",
             r"C:\Users\person\.cargo\bin",
             r"C:\Program Files\Git\cmd",
+            r"D:\Tools\bin",
             r"C:\Windows\System32",
             r"C:\Program Files\other",
             r"C:\Users\person\AppData\Roaming\npm",
-            r"C:\Users\person\AppData\Local\Programs\Python\Python312"
+            r"C:\Users\person\AppData\Local\Programs\Python\Python312",
+            r"C:\Users\person\AppData\Local\Programs\Python\CustomPython"
         ]
         .map(path)
     );

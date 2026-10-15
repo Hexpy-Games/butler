@@ -33,6 +33,14 @@ try {
         throw 'medium_integrity_required'
     }
     New-Item -ItemType Directory -Force $profile | Out-Null
+    foreach ($tool in @(@('CARGO_HOME','.cargo'), @('RUSTUP_HOME','.rustup'))) {
+        if (![Environment]::GetEnvironmentVariable($tool[0])) {
+            $path = Join-Path $env:USERPROFILE $tool[1]
+            if (Test-Path -LiteralPath $path -PathType Container) {
+                [Environment]::SetEnvironmentVariable($tool[0], $path, 'Process')
+            }
+        }
+    }
     $env:HOME = Join-Path $profile 'home'
     $env:USERPROFILE = $env:HOME
     $env:BUTLER_DATA = Join-Path $profile 'data'
@@ -118,6 +126,7 @@ public static class ButlerDesktop {
         $row = [int]$entry[0]
         $case = if ($row -eq 15) { $entry[1] } else { 'windows_sandbox::' + $entry[1] }
         $env:BUTLER_E2E_PERF = if ($row -eq 14) { '1' } else { '0' }
+        $env:BUTLER_DEBUG_SANDBOX_TIMINGS = if ($row -eq 14) { '1' } else { '0' }
         $log = Join-Path $resultRoot ($pins.revision + $suffix + '.row-' + $row + '.log')
         $rowBefore = HostSnapshot
         $item = @{row=$row;status='FAIL';test=$case;log=$log;startedUtc=[DateTime]::UtcNow.ToString('o')}

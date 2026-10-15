@@ -11,6 +11,7 @@ use std::os::windows::fs::OpenOptionsExt;
 use std::{
     collections::{BTreeMap, HashMap},
     fs,
+    io::Write,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
@@ -55,12 +56,14 @@ pub(in crate::command_sandbox) fn invocation(
         .map_err(|e| SandboxError::Filesystem(std::io::Error::other(e.to_string())))
 }
 fn prepare(
-    invocation: Invocation,
+    mut invocation: Invocation,
     host: &HashMap<String, String>,
     root: &Path,
     writable: &[&Path],
     denied: &[&Path],
 ) -> Result<Invocation, Error> {
+    let _phase = super::timing::Phase::start("prepare");
+    super::super::cmd::inside_utf8_bootstrap(&mut invocation);
     let mut env: BTreeMap<String, String> = host
         .iter()
         .map(|(k, v)| (k.to_ascii_uppercase(), v.clone()))
@@ -71,7 +74,9 @@ fn prepare(
     }
     normalize_host_roots(&mut env)?;
     let project = physical_for(root, "project")?;
+    let discovery = super::timing::Phase::start("tool_discovery");
     let tools = tools::discover(&env)?;
+    drop(discovery);
     for key in ["CARGO_HOME", "RUSTUP_HOME"] {
         if let Some(value) = tools.environment.get(key) {
             env.insert(key.into(), value.clone());
@@ -217,14 +222,16 @@ fn save_policy(
         request,
     };
     super::launch::files(&payload, 'Z')?;
-    let file = fs::OpenOptions::new()
+    let _phase = super::timing::Phase::start("policy_write");
+    let mut file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .share_mode(0)
         .open(&path)?;
-    let saved = serde_json::to_writer(&file, &payload)
+    // This transient file is consumed on this boot, not recovered after power loss.
+    let saved = serde_json::to_vec(&payload)
         .map_err(std::io::Error::other)
-        .and_then(|()| file.sync_all());
+        .and_then(|bytes| file.write_all(&bytes));
     drop(file);
     if let Err(error) = saved {
         let _ = fs::remove_file(&path);

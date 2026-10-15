@@ -132,37 +132,12 @@ async fn row09_network() -> Result<(), HarnessError> {
         ("127.0.0.1", tcp.local_addr()?.port()),
         ("::1", v6.local_addr()?.port()),
     ] {
-        let script = format!(
-            r#"node -e "const n=require('net');const s=n.connect({port},'{host}',()=>{{process.stdout.write('connected');process.exit(0)}});s.on('error',()=>{{process.stdout.write('blocked');process.exit(1)}});setTimeout(()=>{{process.stdout.write('blocked');process.exit(2)}},1500)"; exit $LASTEXITCODE"#
-        );
-        let plain =
-            command_sandbox::login_shell(&script, command_sandbox::ShellAccess::Full, &f.env)
-                .unwrap();
-        let baseline = f.launch(&plain);
-        assert!(
-            baseline.status.success(),
-            "host connectivity unavailable for {host}:{port}: {baseline:?}"
-        );
-        assert_eq!(baseline.stdout, b"connected");
-        let blocked = f.run(&script);
-        assert!(!blocked.status.success(), "{blocked:?}");
-        assert_eq!(blocked.stdout, b"blocked");
+        network_probe(&f, "tcp", host, port)?;
     }
     // Remove the successful baseline handshakes before checking the sandbox.
     tcp.accept()?;
     v6.accept()?;
-    let script = r#"node -e "require('dns').resolve4('example.com',e=>{process.stdout.write(e?'blocked':'resolved');process.exit(e?1:0)});setTimeout(()=>{process.stdout.write('blocked');process.exit(2)},1500)"; exit $LASTEXITCODE"#;
-    let plain =
-        command_sandbox::login_shell(script, command_sandbox::ShellAccess::Full, &f.env).unwrap();
-    let baseline = f.launch(&plain);
-    assert!(
-        baseline.status.success(),
-        "host DNS unavailable: {baseline:?}"
-    );
-    assert_eq!(baseline.stdout, b"resolved");
-    let blocked = f.run(script);
-    assert!(!blocked.status.success(), "{blocked:?}");
-    assert_eq!(blocked.stdout, b"blocked");
+    network_probe(&f, "dns", "example.com", 0)?;
     assert_eq!(
         tcp.accept().unwrap_err().kind(),
         std::io::ErrorKind::WouldBlock
@@ -173,5 +148,38 @@ async fn row09_network() -> Result<(), HarnessError> {
     );
     agent.finish().await?;
     f.finish();
+    Ok(())
+}
+
+fn network_probe(f: &Fixture, kind: &str, host: &str, port: u16) -> Result<(), HarnessError> {
+    std::fs::write(
+        f.root.join("network-probe.cjs"),
+        include_str!("network-probe.cjs"),
+    )?;
+    let script = format!(
+        "$ErrorActionPreference='Stop'; node .\\network-probe.cjs {kind} '{host}' {port}; exit $LASTEXITCODE"
+    );
+    let plain =
+        command_sandbox::login_shell(&script, command_sandbox::ShellAccess::Full, &f.env).unwrap();
+    let baseline = f.launch(&plain);
+    assert!(
+        baseline.status.success(),
+        "host {kind} {host}:{port}: {baseline:?}"
+    );
+    let report: serde_json::Value = serde_json::from_slice(&baseline.stdout)?;
+    assert_eq!(report["outcome"], "connected", "{baseline:?}");
+    let blocked = f.run(&script);
+    eprintln!("network {kind} {host}:{port}: {blocked:?}");
+    // Missing tools, CLM exceptions and lost stdout are test failures, never
+    // evidence of network denial. The probe writes its result synchronously.
+    let report = serde_json::from_slice::<serde_json::Value>(&blocked.stdout);
+    assert!(report.is_ok(), "network probe did not report: {blocked:?}");
+    let report = report?;
+    assert!(!blocked.status.success(), "{blocked:?}");
+    assert!(
+        matches!(report["outcome"].as_str(), Some("error" | "timeout")),
+        "{report}"
+    );
+    assert!(blocked.stderr.is_empty(), "{blocked:?}");
     Ok(())
 }

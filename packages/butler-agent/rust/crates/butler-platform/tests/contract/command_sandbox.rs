@@ -88,6 +88,15 @@ fn read_only_commands_run_sandboxed_or_are_refused() {
 
 fn cmd_arguments_remain_verbatim() {
     let environment = HashMap::from([("ComSpec".into(), Some("cmd.exe".into()))]);
+    let mut contained = cmd::shell("cmd /c echo complete", &environment);
+    cmd::inside_utf8_bootstrap(&mut contained);
+    assert_eq!(contained.arguments.last().unwrap(), "echo complete");
+    let mut quoted = cmd::shell(r#"cmd /c "echo complete""#, &environment);
+    cmd::inside_utf8_bootstrap(&mut quoted);
+    assert_eq!(
+        quoted.arguments.last().unwrap(),
+        r#"cmd /c "echo complete""#
+    );
     for text in [
         r#"cmd.exe /d /c "echo 한국어 출력""#,
         r#"cmd /c dir "%USERPROFILE%\Downloads""#,
