@@ -21,7 +21,6 @@ pub(super) fn corruption(error: &StorageError) -> bool {
             code,
             StorageCode::AgentBtccStorageQuickCheckFailed
                 | StorageCode::AgentBtccStorageForeignKeyCheckFailed
-                | StorageCode::AgentBtccMigrationReferenceCheckFailed
         ),
         _ => false,
     }
@@ -66,7 +65,30 @@ pub(super) fn record_corruption(path: &Path, result: &StorageResult<()>) {
     }
 }
 
-pub(super) fn verified(path: &Path) -> StorageResult<()> {
+/// Persist all logical findings using the legacy code as the first line.
+/// Readers only inspect existence; old code-only sidecars still trigger recheck.
+pub(in crate::btcc::storage) fn validated(
+    path: &Path,
+    failures: &[super::validate::ReferenceFailure],
+) -> StorageResult<()> {
+    if failures.is_empty() {
+        clear_corruption(path)?;
+    } else {
+        let code = StorageCode::AgentBtccMigrationReferenceCheckFailed;
+        let mut details = code.to_string();
+        for failure in failures {
+            let detail = format!("rule={} orphan_count={}", failure.rule, failure.count);
+            butler_core::diagnostic!("[btcc-storage] warning {code} {detail}");
+            details.push('\n');
+            details.push_str(&detail);
+        }
+        atomic_write(&sidecar(path, "corrupt"), details.as_bytes())?;
+    }
+    // A completed scan, including logical findings, waits the normal interval.
+    stamp(path)
+}
+
+pub(super) fn stamp(path: &Path) -> StorageResult<()> {
     let db =
         butler_platform::sqlite::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(StorageError::sqlite)?;
@@ -80,7 +102,10 @@ pub(super) fn verified(path: &Path) -> StorageResult<()> {
     atomic_write(
         &sidecar(path, "verified"),
         format!("{schema}:{now}").as_bytes(),
-    )?;
+    )
+}
+
+fn clear_corruption(path: &Path) -> StorageResult<()> {
     match std::fs::remove_file(sidecar(path, "corrupt")) {
         Ok(()) => butler_platform::secure_fs::sync_path(path.parent().unwrap_or(Path::new(".")))
             .map_err(io_error),

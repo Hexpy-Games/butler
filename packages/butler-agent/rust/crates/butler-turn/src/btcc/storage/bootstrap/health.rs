@@ -1,4 +1,4 @@
-//! Healthy startup checks metadata; suspected stores must pass full validation.
+//! Healthy startup checks metadata; suspected stores receive full validation.
 use super::super::{StorageError, StorageResult, migration, schema};
 use super::{validate, verdict};
 use rusqlite::Connection;
@@ -30,8 +30,7 @@ pub fn validate_storage_background(path: &Path, stop: CancellationToken) -> Stor
             None,
         ))
     })?;
-    let result =
-        validate::activated::read(path, true, stop, true).and_then(|_| verdict::verified(path));
+    let result = validate::activated::read(path, true, stop, true).map(|_| ());
     verdict::record_corruption(path, &result);
     result
 }
@@ -46,13 +45,13 @@ pub fn storage_error_is_corruption(error: &StorageError) -> bool {
 
 /// Stamp a verified replacement without a redundant full startup scan.
 pub(in crate::btcc::storage) fn stamp_verified(path: &Path) -> StorageResult<()> {
-    verdict::verified(path)
+    verdict::stamp(path)
 }
 
 pub(in crate::btcc::storage) fn verify_correction(
     db: &Connection,
     started: std::time::Instant,
-) -> StorageResult<()> {
-    validate::correction(db)?;
-    validate::activated::validate_connection(db, false, started).map(|_| ())
+) -> StorageResult<Vec<validate::ReferenceFailure>> {
+    validate::activated::validate_connection(db, false, started)?;
+    validate::correction(db)
 }
