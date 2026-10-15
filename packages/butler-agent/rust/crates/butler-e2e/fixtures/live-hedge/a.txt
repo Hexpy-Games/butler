@@ -1,0 +1,1 @@
+Approach A: cache per user; fast reads, 2x memory

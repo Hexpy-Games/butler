@@ -18,4 +18,4 @@ principal.
 - Keep edits targeted and reversible.
 - Do not send transport messages directly.
 - Do not touch private user data under `$BUTLER_DATA` unless the task explicitly requires it.
-- Include verification results and any residual risk in the final worker output.
+- Include what you verified, and how, in the final worker output.

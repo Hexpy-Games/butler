@@ -145,12 +145,12 @@ impl SubsessionService {
             BtccError::detected(BtccCode::SubsessionProjectionInvalid, "projection invalid")
         })?;
         if let Some(relation) = relation {
-            // The Presentation line instructs the model; the user sees only real checks.
+            // Presentation and intent lines instruct the model; the user sees only real checks.
             let checks = relation
                 .packet
                 .acceptance_criteria
                 .iter()
-                .filter(|check| !check.starts_with(super::helpers::PRESENTATION_LINE));
+                .filter(|check| !model_only_line(check));
             object.insert(
                 "delegated_request".into(),
                 json!({"turn_id":relation.child_turn_id,
@@ -332,4 +332,12 @@ fn projected_status(result: Option<&Value>, latest: Option<&(String, String)>) -
         _ if latest.is_some_and(|(_, state)| state == "admitted") => "active",
         _ => "waiting",
     }
+}
+
+/// Plan acceptance lines that instruct the model and are not checks for the user.
+fn model_only_line(check: &str) -> bool {
+    check.starts_with(super::helpers::PRESENTATION_LINE)
+        || crate::btcc::PLAN_INTENT_LINES
+            .iter()
+            .any(|line| check.starts_with(line))
 }
