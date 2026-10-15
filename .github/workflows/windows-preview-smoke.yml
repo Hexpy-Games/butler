@@ -209,8 +209,8 @@ jobs:
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
           $env:BUTLER_E2E_PERF = '1'
           $ErrorActionPreference = 'Continue'
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e windows_commands:: -- --test-threads=1 --nocapture 2>&1 |
-            Tee-Object "$env:PREVIEW_ROOT/logs/command-matrix.log"
+          python "$env:GITHUB_WORKSPACE/.github/scripts/capture-native-tests.py" "$env:PREVIEW_ROOT/logs/command-matrix.log" `
+            cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e windows_commands:: -- --test-threads=1 --nocapture
           $ErrorActionPreference = 'Stop'
           Remove-Item Env:BUTLER_E2E_PERF
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -334,6 +334,8 @@ jobs:
           path: ${{ runner.temp }}/windows-verify/artifacts
       - name: Isolate verification profile
         run: |
+          $defender = Get-MpComputerStatus
+          "Storage control: Defender realtime=$($defender.RealTimeProtectionEnabled) engine=$($defender.AMEngineVersion) temp=$env:TEMP"
           $root = Join-Path $env:RUNNER_TEMP 'windows-verify'
           New-Item -ItemType Directory -Force "$root/logs" | Out-Null
           "PREVIEW_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -432,6 +434,8 @@ jobs:
           path: ${{ runner.temp }}/windows-verify/artifacts
       - name: Isolate the existing compiled harnesses
         run: |
+          $defender = Get-MpComputerStatus
+          "Storage control: Defender realtime=$($defender.RealTimeProtectionEnabled) engine=$($defender.AMEngineVersion) temp=$env:TEMP"
           $root = Join-Path $env:RUNNER_TEMP 'windows-verify'
           New-Item -ItemType Directory -Force "$root/logs" | Out-Null
           "PREVIEW_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
