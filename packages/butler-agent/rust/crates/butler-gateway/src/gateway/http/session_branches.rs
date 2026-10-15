@@ -1,7 +1,8 @@
 //! Topic branch creation through the App session owner: tool-originated
-//! (`/internal/session-branches`) and App-originated (`/space/branches`).
+//! (`/internal/session-branches`) and App-originated (`/space/branches`),
+//! plus the way back to a branch's source answer (`/space/branch-source`).
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     body::Body,
@@ -15,9 +16,12 @@ use super::{
 };
 use crate::gateway::application::{AppSessionBranchDestination, AppSessionBranchRequest};
 use crate::gateway::{
-    AppStartTopicConversationRequest, SendMessageCommand,
+    AppSessionViewPage, AppStartTopicConversationRequest, SendMessageCommand,
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
 };
+
+/// The `/session-view` default page size.
+const SOURCE_PAGE_LIMIT: usize = 200;
 
 pub(super) async fn post(
     state: Arc<HttpState>,
@@ -78,13 +82,23 @@ pub(super) async fn post(
     )
 }
 
+/// The App's `/space/` branch routes.
+pub(super) async fn post_space(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+    path: &str,
+) -> Result<Option<Response>, HttpError> {
+    match path {
+        "/space/branches" => post_app(state, request).await.map(Some),
+        "/space/branch-source" => post_source(state, request).await.map(Some),
+        _ => Ok(None),
+    }
+}
+
 /// `POST /space/branches`: the App's "new conversation / new project from this
 /// answer" request (`SessionBranchRequest`). Any App session with a completed
 /// answer is a valid source, project sessions included.
-pub(super) async fn post_app(
-    state: Arc<HttpState>,
-    request: Request<Body>,
-) -> Result<Response, HttpError> {
+async fn post_app(state: Arc<HttpState>, request: Request<Body>) -> Result<Response, HttpError> {
     let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
     let body: AppSessionBranchRequest =
         serde_json::from_slice(&bytes).map_err(|_| invalid_request())?;
@@ -98,6 +112,57 @@ pub(super) async fn post_app(
         ApiEnvelope {
             protocol_version: APP_PROTOCOL_VERSION,
             data: json!({ "session": branch.session, "seed": branch.seed }),
+        },
+    )
+}
+
+/// `POST /space/branch-source`: the App's "go to the source answer" request
+/// from a branch conversation. Answers the source session's message page that
+/// ends at that answer, with the same window cursors as `/session-view`.
+async fn post_source(state: Arc<HttpState>, request: Request<Body>) -> Result<Response, HttpError> {
+    let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
+    let session_id = serde_json::from_slice::<Value>(&bytes)
+        .ok()
+        .and_then(|body| body.get("sessionId")?.as_str().map(str::to_owned))
+        .filter(|id| !id.trim().is_empty())
+        .ok_or_else(|| HttpError::public(400, "session_required", "Session id is required."))?;
+    let source = state.application.branch_source(session_id).await?;
+    let page = AppSessionViewPage {
+        after_cursor: None,
+        before_cursor: Some(source.cursor.saturating_add(1)),
+        limit: SOURCE_PAGE_LIMIT,
+    };
+    let view = state
+        .application
+        .session_view(source.session_id.clone(), page.clone())
+        .await?;
+    let mut view = super::subsessions::decorate_window(
+        view,
+        &source.session_id,
+        &page,
+        &HashMap::new(),
+        &state.session_cursor_secret,
+    )?;
+    let shown = view["messages"].as_array().is_some_and(|messages| {
+        messages
+            .iter()
+            .any(|m| m["id"] == source.message_id.as_str())
+    });
+    if !shown {
+        return Err(HttpError::public(
+            404,
+            "branch_origin_unavailable",
+            "원본 답변을 찾을 수 없습니다.",
+        ));
+    }
+    if let Some(artifacts) = view.get_mut("artifacts").and_then(Value::as_array_mut) {
+        artifacts.extend(state.previews.artifacts(&source.session_id));
+    }
+    response_json(
+        StatusCode::OK,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data: json!({ "view": view, "messageId": source.message_id }),
         },
     )
 }

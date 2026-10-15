@@ -166,10 +166,10 @@ async function runLocale(locale: "ko" | "en") {
         await remote.click();
         await section(page, "device-pairing").waitFor();
         await section(page, "security-advanced").getByRole("button").click();
-        await section(page, "allowed-hosts").waitFor();
-        if (!before) assert.deepEqual(await sectionIds(page), ["remote-access", "device-pairing", "paired-devices", "permissions", "grants", "saved-keys", "diagnostics", "security-advanced", "allowed-hosts"]);
+        await page.getByPlaceholder(appCopy.settings.security.hostPlaceholder).waitFor();
+        if (!before) assert.deepEqual(await sectionIds(page), ["remote-access", "device-pairing", "paired-devices", "permissions", "grants", "saved-keys", "diagnostics", "security-advanced"]);
         await screenshot(page, `${key}-enabled`, "remote-access");
-        await screenshot(page, `${key}-enabled`, "allowed-hosts");
+        await screenshot(page, `${key}-enabled`, before ? "allowed-hosts" : "security-advanced");
         await remote.click();
         await section(page, "device-pairing").waitFor({ state: "hidden" });
       }

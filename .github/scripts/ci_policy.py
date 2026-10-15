@@ -23,3 +23,10 @@ def rust_jobs(outputs, event):
         'ds': outputs['ds'] == 'true' and (event != 'push' or integration),
     }
     return selected
+
+
+def windows_preview_jobs(outputs, event):
+    """Owner-runner Windows smoke follows Rust/Windows inputs; installers run off PRs."""
+    native = outputs['windows'] == 'true'
+    installer = outputs['package'] == 'true' and event != 'pull_request'
+    return {'build': installer, 'stub': native, 'release': installer and native, 'hosted': native}
