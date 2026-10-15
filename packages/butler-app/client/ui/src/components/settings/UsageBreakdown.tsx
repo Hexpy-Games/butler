@@ -2,7 +2,7 @@ import { appCopy, getAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { modelDisplayName, runtimeModels } from "@/app/utils";
 import type { UsageMonitorView } from "@/app/types";
-import { Button, SkeletonRows, Clickable, Inline, ProgressMeter, Stack, Tabs, TabsContent, TabsList, TabsTrigger, Typo } from "@/butler-ds";
+import { Box, Button, SkeletonRows, Clickable, Inline, ProgressMeter, Stack, Tabs, TabsContent, TabsList, TabsTrigger, Typo } from "@/butler-ds";
 import { usageShare, usageTokens } from "../usage/usageTimeline";
 import { usageTime } from "../conversation/conversationUsage";
 import { usageProviderName } from "../usage/usageProviderName";
@@ -16,7 +16,7 @@ function BreakdownRows({ rows, total, count = false, selected, onSelect }: {
 }) {
   return <Stack gap="sm">{rows.length ? rows.map(row => {
     const share = total ? row.value / total : 0;
-    const content = <Stack gap="xs" grow minWidth="0">
+    const content = <Box paddingY="sm" grow minWidth="0"><Stack gap="xs" grow minWidth="0">
       <Inline justify="between" cross="start" wrap={false}>
         <Stack gap="xs" grow minWidth="0"><Typo.Body tone="primary" truncate>{row.title}</Typo.Body>
           {row.description ? <Typo.Caption tone="primary">{row.description}</Typo.Caption> : null}</Stack>
@@ -24,9 +24,9 @@ function BreakdownRows({ rows, total, count = false, selected, onSelect }: {
           <Typo.Caption tone="primary" numeric="tabular">{percent(share)}</Typo.Caption></Stack>
       </Inline>
       <ProgressMeter bare value={share * 100} ariaLabel={`${row.title}: ${percent(share)}`} />
-    </Stack>;
-    return onSelect ? <Clickable key={row.id} stretch aria-pressed={selected === row.id} onClick={() => onSelect(selected === row.id ? null : row.id)}>{content}</Clickable>
-      : <Clickable key={row.id} stretch role="presentation" tabIndex={-1} disabled>{content}</Clickable>;
+    </Stack></Box>;
+    return onSelect ? <Clickable key={row.id} bleed="inline" stretch selected={selected === row.id} onClick={() => onSelect(selected === row.id ? null : row.id)}>{content}</Clickable>
+      : <Box key={row.id} minWidth="0">{content}</Box>;
   }) : <Typo.Caption>{appCopy.composer.usage.noRecords}</Typo.Caption>}</Stack>;
 }
 

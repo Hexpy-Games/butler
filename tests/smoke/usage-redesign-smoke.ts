@@ -21,6 +21,7 @@ let cells = 0;
 let backendTitle = "Login form refactor";
 const heights = new Map<string, number>();
 const heightDeltas: number[] = [];
+const alignmentDeltas: number[] = [];
 let releaseLoading: (() => void)[] = [];
 function monitor(url: URL) {
   const view = usageView({ quota: quota(), usd: 0.0842 });
@@ -113,6 +114,7 @@ try {
       assert.match(await popover.innerText(), /요청 2회/u);
       assert(!((await popover.innerText()).includes("US$")), "bucket selection hides the cost");
       assert.equal(await chart.getAttribute("data-selected"), "true");
+      await page.waitForTimeout(400);
       if (shots) await page.screenshot({ path: join(shots, `after${auth === "subscription" ? "-subscription" : ""}-popover-${theme}-${width}-selected.png`) });
       await page.keyboard.press("Escape"); assert(await popover.isVisible());
       assert.equal(await chart.getAttribute("data-selected"), null);
@@ -129,20 +131,27 @@ try {
     if (!before && scenario === "ready") {
       const chart = page.locator('[data-slot="usage-bars"]'); await chart.focus(); await page.keyboard.press("End");
       assert.deepEqual((await probeFocusRing(page))?.clips, [], "panel chart focus ring");
+      await page.waitForTimeout(400);
       if (shots) await page.screenshot({ path: join(shots, `after${auth === "subscription" ? "-subscription" : ""}-usage-${theme}-${width}-selected.png`) });
       await page.keyboard.press("Escape");
       await Promise.all([page.waitForResponse(r => new URL(r.url()).searchParams.get("since_hours") === "720"),
         page.getByRole("radio", { name: "30일", exact: true }).click()]);
+      const headlineX = (await page.locator('[data-test-class="usage-readout"]').boundingBox())!.x;
       const rowXs: number[] = [];
+      const rowHeights: number[] = [];
       for (const [tab, title] of [["대화", "Login form refactor"], ["모델", "openai/gpt-6-luna"], ["도구", "파일 읽기"]]) {
         await page.getByRole("tab", { name: tab, exact: true }).click();
         const row = page.getByRole("tabpanel").getByText(title!, { exact: true });
         await row.waitFor();
-        rowXs.push((await row.boundingBox())!.x);
         await page.waitForTimeout(400);
+        rowXs.push((await row.boundingBox())!.x);
+        rowHeights.push((await row.locator("xpath=../../..").boundingBox())!.height);
         if (shots && tab !== "대화") await page.screenshot({ path: join(shots, `after${auth === "subscription" ? "-subscription" : ""}-${tab === "모델" ? "models" : "tools"}-${theme}-${width}.png`) });
       }
-      assert(Math.max(...rowXs) - Math.min(...rowXs) < 1, "all breakdown tabs align");
+      const deltas = rowXs.map(x => Math.abs(x - headlineX));
+      alignmentDeltas.push(...deltas);
+      assert(deltas.every(delta => delta <= 1), `rows align with headline: ${deltas}`);
+      assert(Math.max(...rowHeights) - Math.min(...rowHeights) <= 1, "all breakdown tabs share vertical rhythm");
       await page.getByRole("tab", { name: "도구", exact: true }).click();
       await page.getByText("파일 읽기", { exact: true }).waitFor();
       await page.getByRole("tab", { name: "대화", exact: true }).click();
@@ -158,6 +167,23 @@ try {
       await Promise.all([page.waitForResponse(r => new URL(r.url()).searchParams.get("session_id") === "s1"),
         page.getByRole("button", { name: /Login form refactor/u }).click()]);
       assert.equal(allReads, cachedReads, "chat switches reuse all-chat totals");
+      const selectedChat = page.getByRole("tabpanel").getByRole("button", { name: /Login form refactor/u });
+      await selectedChat.focus();
+      await page.waitForTimeout(400);
+      assert.equal(await selectedChat.getAttribute("aria-pressed"), "true");
+      assert.equal(await selectedChat.getAttribute("data-selected"), "true");
+      const fill = await selectedChat.evaluate(element => {
+        const probe = document.createElement("div");
+        probe.style.backgroundColor = "var(--selection-strong)";
+        element.append(probe);
+        const expected = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return { actual: getComputedStyle(element).backgroundColor, expected };
+      });
+      assert.notEqual(fill.actual, "rgba(0, 0, 0, 0)");
+      assert.equal(fill.actual, fill.expected, "selected chat uses the strong selection fill");
+      assert.deepEqual((await probeFocusRing(page))?.clips, [], "selected chat focus ring");
+      if (shots) await page.screenshot({ path: join(shots, `after${auth === "subscription" ? "-subscription" : ""}-usage-${theme}-${width}-selected-chat.png`) });
       await page.getByRole("tabpanel").getByRole("button", { name: /Login form refactor/u }).click();
       await page.getByRole("button", { name: "대화", exact: true }).click();
       const picker = page.locator('[data-slot="filtered-select-popover"]');
@@ -187,7 +213,7 @@ try {
     }
   }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, cells, reads, allReads, before, heightDeltas }));
+  console.log(JSON.stringify({ ok: true, cells, reads, allReads, before, heightDeltas, alignmentDeltas }));
 } finally {
   // The last loading cell deliberately holds a route. Settle it before teardown.
   releaseLoading.forEach(resolve => resolve());
