@@ -9,6 +9,8 @@ mod delegation;
 mod operation;
 #[path = "capabilities/refusal_latency.rs"]
 mod refusal_latency;
+#[path = "capabilities/transport_control.rs"]
+mod transport_control;
 use super::capability_stub::{self as provider, Case};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use butler_e2e::e2e::{

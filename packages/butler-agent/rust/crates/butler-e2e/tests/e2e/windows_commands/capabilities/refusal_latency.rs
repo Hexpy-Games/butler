@@ -20,6 +20,7 @@ async fn full_access_lexical_refusals_keep_complete_results_without_shell_work()
 async fn sample(access: Access) -> Result<(), HarnessError> {
     let (s, chat, script, server) = setup(access).await?;
     let initial_logs = s.agent.logs().lines().count();
+    let control = transport_control::Control::start(&s.gw)?;
     // POSIX read observations use the OS sandbox; mutation admission exercises
     // the same lexical guard that Windows uses for registered read commands.
     let (command, effect) = if butler_platform::command_sandbox::POSIX_SHELL {
@@ -89,6 +90,7 @@ async fn sample(access: Access) -> Result<(), HarnessError> {
         timings[SAMPLES / 2 - 1].midpoint(timings[SAMPLES / 2]),
         timings[SAMPLES - 1]
     );
+    control.finish().await?;
     s.finish().await?;
     server.abort();
     Ok(())
