@@ -27,8 +27,6 @@ CREATE TABLE IF NOT EXISTS btcc_subsession_delegations (
 
 CREATE INDEX IF NOT EXISTS idx_btcc_graph_parent_turn
 ON btcc_session_relations(parent_session_id,parent_turn_id,ordinal);
-CREATE INDEX IF NOT EXISTS idx_btcc_graph_plan
-ON btcc_subsession_delegations(json_extract(packet_json,'$.parent_work_ref.plan_revision_id'));
 
 CREATE TABLE IF NOT EXISTS btcc_subsession_directions (
   instruction_id TEXT PRIMARY KEY,
