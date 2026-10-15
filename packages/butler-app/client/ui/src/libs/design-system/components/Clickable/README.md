@@ -26,6 +26,24 @@ Nested icon controls retain compact defaults. A row can declare
 touch-target and icon-slot sizing instead. Set the icon size on the nearest
 control when leading identity icons differ from trailing action icons.
 
+Two opt-in row options, both off by default:
+
+- `bleed="inline"` pulls the row into its container's gutter by its own inline
+  padding (and grows a `stretch` row by the same amount), so the row's text
+  lines up with sibling content and the card's content edge while the hover
+  and selected fills extend into the gutter. Use it inside a padded surface
+  such as a settings card; the focus ring stays inside the card padding.
+- `selected` makes the row a toggle: it sets `aria-pressed` (while the role is
+  `button`), a lighter hover, and the `--selection-strong` fill when `true`.
+  The fill fades on `--motion-fast`; with reduced motion only the press scale
+  is dropped.
+
+```tsx
+<Clickable bleed="inline" stretch selected={active} onClick={toggle}>
+  <ListRow title="Release checklist" meta="412K" />
+</Clickable>
+```
+
 ## Who can use this component
 Product engineers and agents can use it when composing interactive rows. Design-system maintainers own its keyboard and accessibility contract.
 
@@ -41,4 +59,4 @@ Product engineers and agents can use it when composing interactive rows. Design-
 - Do not put large workflows inside a clickable row.
 
 ## Tags
-clickable, role-button, nested-action, sidebar, row
+clickable, role-button, nested-action, sidebar, row, toggle, bleed

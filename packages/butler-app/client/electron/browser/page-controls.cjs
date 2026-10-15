@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld("__butlerPageControl", (type, message, value) =>
   return ipcRenderer.sendSync("butler-browser:page-control", { type, message: String(message ?? ""), value: String(value ?? "") });
 });
 // Ask synchronously before Chromium commits the original navigation, preserving
-// form POST bodies and history entries. User pages never attach a debugger.
+// form POST bodies and history entries. User dialogs do not require CDP; identity still attaches it.
 if (!agent) contextBridge.executeInMainWorld({ func: () => {
   const add = window.addEventListener, remove = window.removeEventListener, confirmUnload = window.confirm;
   const wrapped = new WeakMap(), answers = new WeakMap(), skipped = new WeakSet();

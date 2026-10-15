@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 
 use super::selection::{RelationPurpose, RelationQuery};
-use super::{SubsessionService, error};
+use super::{SubsessionService, direction_text, error};
 use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, StoredSubsessionDelegation, StoredSubsessionDirection};
 use crate::workspace::SessionRole;
@@ -41,6 +41,55 @@ pub struct SubsessionResumeRequest {
 }
 
 impl SubsessionService {
+    /// Whether the child's latest turn still runs: admitted and without a saved
+    /// result. An interrupted turn closed with a failed result stays `admitted`
+    /// in the turn store but no longer holds back a direction.
+    async fn child_turn_running(&self, child_session: &str) -> Result<bool, BtccError> {
+        let Some((turn, state)) = self
+            .repository
+            .latest_turn(child_session.to_owned())
+            .await
+            .map_err(BtccError::from)?
+        else {
+            return Ok(false);
+        };
+        if state != "admitted" {
+            return Ok(false);
+        }
+        Ok(!self
+            .repository
+            .has_turn_result(child_session.to_owned(), turn)
+            .await
+            .map_err(BtccError::from)?)
+    }
+
+    /// Enqueues the child's pending direction once its latest turn has ended.
+    pub(super) async fn release_pending_direction(
+        &self,
+        child_session: &str,
+    ) -> Result<(), BtccError> {
+        let Some(relation) = self
+            .repository
+            .by_child(child_session.to_owned())
+            .await
+            .map_err(BtccError::from)?
+        else {
+            return Ok(());
+        };
+        let Some(direction) = self
+            .repository
+            .pending_direction(relation.relation_id.clone())
+            .await
+            .map_err(BtccError::from)?
+        else {
+            return Ok(());
+        };
+        if self.child_turn_running(child_session).await? {
+            return Ok(());
+        }
+        self.enqueue_direction(&relation, &direction).await
+    }
+
     /// Resumes a subsession.
     pub async fn resume(&self, request: SubsessionResumeRequest) -> Result<Value, BtccError> {
         let relation = self
@@ -53,20 +102,26 @@ impl SubsessionService {
                     && relation.packet.child_role == crate::btcc::ChildRole::Steward
             })
             .ok_or_else(|| error(BtccCode::StewardRelationNotFound))?;
-        let parent = self
-            .bindings
+        self.bindings
             .get_by_session_id(&request.parent_session_id)
             .await
             .map_err(BtccError::from)?
             .filter(|binding| binding.role == SessionRole::Butler)
             .ok_or_else(|| error(BtccCode::StewardRelationNotFound))?;
-        let _ = parent;
+        // A child whose result reached the parent is terminal, even when its
+        // interrupted turn is still recorded as admitted.
         if self
             .repository
             .open_relation_by_work(relation.root_work_id.clone())
             .await
             .map_err(BtccError::from)?
             .is_none()
+            || self
+                .repository
+                .result_for_relation(relation.relation_id.clone())
+                .await
+                .map_err(BtccError::from)?
+                .is_some()
         {
             return Err(error(BtccCode::StewardRelationNotActive));
         }
@@ -171,12 +226,7 @@ impl SubsessionService {
         if direction.instruction_id != instruction_id || direction.instruction != instruction {
             return Err(error(BtccCode::StewardDirectionIdentityConflict));
         }
-        let latest = self
-            .repository
-            .latest_turn(relation.child_session_id.clone())
-            .await
-            .map_err(BtccError::from)?;
-        if latest.as_ref().is_none_or(|(_, state)| state != "admitted") {
+        if !self.child_turn_running(&relation.child_session_id).await? {
             self.enqueue_direction(&relation, &direction).await?;
         }
         Ok(
@@ -270,12 +320,7 @@ impl SubsessionService {
                 .await
                 .map_err(BtccError::from)?
                 .ok_or_else(|| error(BtccCode::SubsessionDirectionRelationMissing))?;
-            let latest = self
-                .repository
-                .latest_turn(relation.child_session_id.clone())
-                .await
-                .map_err(BtccError::from)?;
-            if latest.as_ref().is_none_or(|(_, state)| state != "admitted") {
+            if !self.child_turn_running(&relation.child_session_id).await? {
                 self.enqueue_direction(&relation, &direction).await?;
             }
         }
@@ -316,7 +361,7 @@ impl SubsessionService {
             "eventId":format!("subsession-direction:{}",direction.instruction_id),"transport":"app","accountId":"local",
             "peer":{"kind":"dm","id":relation.child_session_id,"parentId":relation.parent_session_id},
             "sender":{"id":if role=="worker"{"steward-worker-direction"}else{"butler-steward-direction"},"displayName":if role=="worker"{"Steward"}else{"Butler"}},
-            "message":{"id":format!("subsession-direction-message:{}",direction.instruction_id),"text":format!("{}\n\nContinue the existing Work from its retained checkpoint. Review the new direction against the existing result; do not restart completed actions or create a replacement Work.",direction.instruction),"timestamp":direction.created_at},
+            "message":{"id":format!("subsession-direction-message:{}",direction.instruction_id),"text":direction_text(&direction.instruction),"timestamp":direction.created_at},
             "routingHints":{"sessionId":relation.child_session_id,"turnId":turn_id},
             "nativeStewardContext":{"version":1,"role":role,"projectName":child.project_id.unwrap_or_default(),"workspacePath":child.workspace_path,"modelRef":child.model_ref,"reasoningEffort":child.metadata.as_ref().and_then(|m|m.get("reasoning_effort")).and_then(Value::as_str).unwrap_or("")},
             "raw":{"source":"btcc-subsession-direction","instruction_id":direction.instruction_id}

@@ -1,13 +1,20 @@
 //! USE-06 — the usage monitor at owner scale: tens of thousands of usage rows
 //! and hundreds of megabytes of transcripts answer in milliseconds once warm,
 //! the session view counts only its own session, and a window or session
-//! query never reads the transcripts.
+//! query resumes only changed transcript content.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
     reason = "test assertions"
 )]
+
+#[path = "usage_scale/memory.rs"]
+mod memory;
+#[path = "usage_scale/timeline.rs"]
+mod timeline;
+#[path = "usage_scale/tools.rs"]
+mod tools;
 
 use std::fmt::Write as _;
 use std::fs;
@@ -180,14 +187,18 @@ async fn perf_use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), Harnes
     write_transcripts(&setup.sandbox.data, &mut expected)?;
     let s = setup.start().await?;
 
-    // A window and a session answer without reading the transcripts: the
-    // first read parses the log once, every later one is warm.
+    // The first window read indexes usage and transcript activity once;
+    // every later read reuses those counters.
     let (cold, day) = timed(&s.gw, "/usage-monitor?since_hours=24").await?;
     butler_e2e::assert_wall_clock_budget!(cold, COLD, "24h cold");
     assert_eq!(day["model"]["requestCount"], expected.recent_rows, "{day}");
-    assert_eq!(day["tools"]["calls"], 0, "no transcript scan for a window");
+    super::usage_timeline::assert_timeline(&day);
+    assert_eq!(
+        day["tools"]["calls"], 0,
+        "transcript tools are outside this window"
+    );
     assert!(
-        day["availability"]["tools"]["reason"] == "unscoped_since_filter_requires_session",
+        day["availability"]["tools"]["status"] == "available",
         "{day}"
     );
     let mut worst = Duration::ZERO;
@@ -231,7 +242,7 @@ async fn perf_use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), Harnes
     eprintln!("USE-06 session: cold {first:?}, warm worst {worst:?}");
     butler_e2e::assert_wall_clock_budget!(worst, WARM, "session warm");
 
-    // Adding transcripts changes neither answer's speed: they are not read.
+    // New transcripts are indexed once, within the same warm budget.
     let transcripts = s.sandbox.data.join("transcripts");
     for index in 0..40 {
         let tools = Tools {
@@ -308,6 +319,7 @@ async fn perf_use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), Harnes
     let (took, session) = timed(&s.gw, "/usage-monitor?session_id=general").await?;
     butler_e2e::assert_wall_clock_budget!(took, WARM, "session after an appended row");
     assert_eq!(session["model"]["requestCount"], SESSION_ROWS + 1);
+    super::usage_timeline::assert_timeline(&session);
     assert_eq!(
         session["cost"]["byWork"]["conversation"]["requestCount"],
         SESSION_ROWS + 1

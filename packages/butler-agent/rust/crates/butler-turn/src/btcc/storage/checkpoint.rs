@@ -3,7 +3,7 @@ use super::{StorageCode, StorageError, StorageResult, timing};
 use crate::btcc::agent_loop::command_timing::CommandTiming;
 use butler_platform::sqlite;
 
-pub(super) struct CheckpointOwner(sqlite::CheckpointOwner);
+pub(super) struct CheckpointOwner(pub(super) sqlite::CheckpointOwner);
 impl CheckpointOwner {
     pub(super) fn start(db: &rusqlite::Connection) -> StorageResult<Option<Self>> {
         let observer = (std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()

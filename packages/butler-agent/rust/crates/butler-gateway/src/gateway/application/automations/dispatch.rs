@@ -291,9 +291,21 @@ impl AppApplication {
             )
         } else if row.state == "enabled" {
             Some(
-                self.dependencies
-                    .identity_clock
-                    .iso_after_millis(u64::try_from(row.interval).unwrap_or_default() * 1000),
+                super::timing::interval_next(
+                    row.start_at
+                        .as_deref()
+                        .or(row.next.as_deref())
+                        .ok_or_else(super::timing::invalid)
+                        .map_err(app_error)?,
+                    row.interval,
+                    &completed,
+                    if trigger == "scheduled" {
+                        row.next.as_deref()
+                    } else {
+                        None
+                    },
+                )
+                .map_err(app_error)?,
             )
         } else {
             row.next.clone()

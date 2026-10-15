@@ -1,7 +1,10 @@
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 
-use super::{AppSessionBranchDestination, AppSessionBranchRequest, AppSessionBranchSeed};
+use super::{
+    AppBranchSourceLocation, AppSessionBranchDestination, AppSessionBranchRequest,
+    AppSessionBranchSeed,
+};
 use crate::gateway::application::AppStorageError;
 use crate::gateway::application::message_visibility::owner_visible;
 use crate::gateway::application::storage::AppStorageCode;
@@ -114,6 +117,43 @@ pub(super) fn resolve_source_session(
         return Ok(Some(id));
     }
     super::super::sessions::identity::resolve_owner(db, external_session)
+}
+
+/// A ready branch's source answer, located by the message itself. The seed
+/// names the session at branch time; a later General clear moves that history
+/// into its archive session, so the current owner comes from the message row.
+pub(super) fn source_location(
+    db: &Connection,
+    target_session_id: &str,
+) -> Result<Option<AppBranchSourceLocation>, AppStorageError> {
+    let seed_json: Option<String> = db
+        .query_row(
+            "SELECT seed_json FROM app_session_branches WHERE target_session_id=?1 AND state='ready'",
+            [target_session_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(AppStorageError::sqlite)?;
+    let Some(seed_json) = seed_json else {
+        return Ok(None);
+    };
+    let seed: AppSessionBranchSeed = serde_json::from_str(&seed_json).map_err(|error| {
+        AppStorageError::new(AppStorageCode::BranchJsonInvalid, error.to_string())
+            .with_source(error)
+    })?;
+    db.query_row(
+        "SELECT chat_id,rowid FROM app_owned_messages WHERE id=?1 LIMIT 1",
+        [&seed.source_message_id],
+        |row| {
+            Ok(AppBranchSourceLocation {
+                session_id: row.get(0)?,
+                message_id: seed.source_message_id.clone(),
+                cursor: row.get(1)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(AppStorageError::sqlite)
 }
 
 pub(super) fn selected_message(

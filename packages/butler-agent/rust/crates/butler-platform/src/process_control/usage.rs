@@ -51,9 +51,9 @@ pub struct ProcessUsage {
     /// Bytes written to storage. Windows supplies a conservative native I/O
     /// upper bound, including buffered/network writes.
     pub write_bytes: u64,
-    /// Cumulative native macOS user CPU counter from pidrusage; absent elsewhere.
+    /// Cumulative user CPU counter (Linux ticks, macOS nanoseconds); absent elsewhere.
     pub cpu_user_time: Option<u64>,
-    /// Cumulative native macOS system CPU counter from pidrusage; absent elsewhere.
+    /// Cumulative system CPU counter (Linux ticks, macOS nanoseconds); absent elsewhere.
     pub cpu_system_time: Option<u64>,
 }
 
@@ -63,6 +63,7 @@ pub fn sample(pid: u32) -> io::Result<Option<ProcessUsage>> {
     {
         let memory = std::fs::read_to_string(format!("/proc/{pid}/smaps_rollup"))?;
         let io = std::fs::read_to_string(format!("/proc/{pid}/io"))?;
+        let (cpu_user, cpu_system) = linux_cpu_times(pid)?;
         Ok(Some(ProcessUsage {
             resident_bytes: counter(&memory, "Rss")? * 1024,
             proportional_bytes: Some(counter(&memory, "Pss")? * 1024),
@@ -71,8 +72,8 @@ pub fn sample(pid: u32) -> io::Result<Option<ProcessUsage>> {
             read_bytes: counter(&io, "read_bytes")?,
             write_chars: Some(counter(&io, "wchar")?),
             write_bytes: counter(&io, "write_bytes")?,
-            cpu_user_time: None,
-            cpu_system_time: None,
+            cpu_user_time: Some(cpu_user),
+            cpu_system_time: Some(cpu_system),
         }))
     }
     #[cfg(target_os = "macos")]
@@ -194,4 +195,21 @@ pub fn embedding_children(parent: u32) -> io::Result<Option<Vec<u32>>> {
         let _ = parent;
         Ok(None)
     }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_cpu_times(pid: u32) -> io::Result<(u64, u64)> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat"))?;
+    let (_, fields) = stat
+        .rsplit_once(')')
+        .ok_or_else(|| io::Error::other("invalid process stat"))?;
+    let mut fields = fields.split_whitespace().skip(11);
+    let mut next = || {
+        fields
+            .next()
+            .ok_or_else(|| io::Error::other("missing CPU counter"))?
+            .parse()
+            .map_err(io::Error::other)
+    };
+    Ok((next()?, next()?))
 }

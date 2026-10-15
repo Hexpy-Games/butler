@@ -6,6 +6,7 @@ use serde_json::Value;
 
 mod cache;
 mod scan;
+mod window;
 
 pub(crate) use cache::TranscriptActivityCache;
 
@@ -33,6 +34,7 @@ pub(crate) struct StatusTranscriptActivity {
 
 #[derive(Default)]
 struct ActivityAccumulator {
+    timeline: window::ToolTimeline,
     summary: StatusTranscriptActivity,
     delivery_failures: Vec<DeliveryFailure>,
     delivery_unknown_count: u64,
@@ -73,6 +75,8 @@ impl ActivityAccumulator {
                     .and_then(|value| value.get("ok"))
                     .is_some_and(|value| value == false);
                 self.add_tool(name, kind == Some("tool_call"), ok);
+                self.timeline
+                    .add(event, name, kind == Some("tool_call"), ok);
             }
         }
         if kind != Some("delivery")
@@ -107,7 +111,8 @@ impl ActivityAccumulator {
 
     fn add_tool(&mut self, name: &str, is_call: bool, ok: bool) {
         let key = if self.summary.by_tool.contains_key(name)
-            || self.summary.by_tool.len() < MAX_TOOL_KEYS
+            || self.summary.by_tool.len()
+                < MAX_TOOL_KEYS - usize::from(!self.summary.by_tool.contains_key("__other__"))
         {
             name
         } else {

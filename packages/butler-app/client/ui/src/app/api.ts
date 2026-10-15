@@ -367,7 +367,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     const resources = ["groups", "moves", "group-sessions", "undo", "pins", "relocations", "branches", "branch-source"];
     const resource = url.pathname.slice("/space/".length);
     if (method === "POST" && resources.includes(resource)) {
-      return await callBridge<T>(bridge, "mutateSpace", { resource, body: parseBody(options.body) });
+      return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "mutateSpace", { resource, body: parseBody(options.body) }));
     }
   }
   if (method === "GET" && url.pathname === "/work-status") return await callBridge<T>(bridge, "getWorkStatus");
@@ -504,6 +504,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   if (method === "GET" && url.pathname === "/usage-monitor") {
     return await callBridge<T>(bridge, "getUsageMonitor", {
+      // Preserve the joint session/range filter for the native bridge as well as HTTP.
       sessionId: url.searchParams.get("session_id") ?? url.searchParams.get("sessionId"),
       sinceHours: numericSearchParam(url.searchParams, "since_hours") ??
         numericSearchParam(url.searchParams, "sinceHours"),

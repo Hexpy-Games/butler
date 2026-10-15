@@ -28,6 +28,7 @@ import {
   artifactMeta,
   artifactPreviewMode,
 } from "./artifactDisplay";
+import { HtmlFileFrame } from "./HtmlFileFrame";
 import { OutputFrame } from "./OutputFrame";
 import { useArtifactText, type ArtifactTextState } from "./useArtifactText";
 
@@ -76,7 +77,7 @@ export function ArtifactViewer({
         title={artifact.title}
       />}
       <ArtifactPreview data-test-class="artifact-viewer">
-        {mode === "web" ? <OutputFrame key={artifact.id} outputId={artifact.id} title={artifact.title} preview={artifact.url?.startsWith("/previews/")} /> : renderPreview({ mode, state, text, title: artifact.title, file })}
+        {mode === "web" ? <OutputFrame key={artifact.id} outputId={artifact.id} title={artifact.title} preview={artifact.url?.startsWith("/previews/")} /> : mode === "html" ? <HtmlFileFrame key={file.path} path={file.path} title={artifact.title} /> : renderPreview({ mode, state, text, title: artifact.title, file })}
       </ArtifactPreview>
     </Stack>
   );
