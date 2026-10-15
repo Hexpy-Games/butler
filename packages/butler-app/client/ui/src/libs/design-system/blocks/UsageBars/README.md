@@ -121,8 +121,10 @@ Transform-only (WAAPI through `animateMotion`):
 ## Accessibility
 One tab stop, `role="group"` named by `ariaLabel` (`role="status"` while
 loading). An sr-only table lists every bucket; a polite live region speaks
-the selected bucket. The focus ring sits `--focus-ring-room` outside the
-chart, so a clipping parent must leave that room.
+the selected bucket. The focus ring keeps `--focus-ring-room` of clear space
+from the axis labels, so it reaches `--focus-ring-room` plus
+`--focus-ring-width` (5px) outside the chart; a clipping parent must leave
+that room.
 
 ## Tags
 usage, tokens, chart, bars, stacked, timeline, context

@@ -20,7 +20,8 @@ function defaultFormat(value: number): string {
 /**
  * A number that counts to its new value over --motion-deliberate with the
  * decelerate easing (reduced motion: instant swap with a fade). Tabular
- * numerals and sizers in one grid cell keep the width stable; assistive tech
+ * numerals and start/end sizers in one grid cell keep the width stable while
+ * counting; the start sizer is released when the count ends. Assistive tech
  * reads the final value from static text.
  */
 export function AnimatedNumber({ value, format = defaultFormat, live = false, className, ...props }: AnimatedNumberProps) {
@@ -31,14 +32,20 @@ export function AnimatedNumber({ value, format = defaultFormat, live = false, cl
 
   useEffect(() => {
     const start = displayRef.current;
-    if (start === value) return undefined;
-    setFrom(start);
     const show = (next: number) => { displayRef.current = next; setDisplay(next); };
+    // The start sizer holds the width only while counting; every settled
+    // state releases it so a shorter value takes its own width.
+    if (start === value) {
+      setFrom(value);
+      return undefined;
+    }
     if (prefersReducedMotion()) {
+      setFrom(value);
       show(value);
       if (valueRef.current) animateMotion(valueRef.current, [{ opacity: 0 }, { opacity: 1 }], { duration: "fast" });
       return undefined;
     }
+    setFrom(start);
     const duration = motionDuration("deliberate");
     const integers = Number.isInteger(start) && Number.isInteger(value);
     let origin: number | null = null;
@@ -51,6 +58,7 @@ export function AnimatedNumber({ value, format = defaultFormat, live = false, cl
       const next = t >= 1 ? value : start + (value - start) * easeProgress("decelerate", t);
       show(integers ? Math.round(next) : next);
       if (t < 1) frame = requestAnimationFrame(tick);
+      else setFrom(value);
     };
     frame = requestAnimationFrame(tick);
     return () => { cancelled = true; cancelAnimationFrame(frame); };

@@ -16,8 +16,8 @@
   min-width: 0;
   border-radius: 2px;
   outline: none;
-  /* Focus scrolling keeps the ring's room inside the scroller. */
-  scroll-margin: var(--focus-ring-room);
+  /* Focus scrolling keeps the whole ring inside the scroller. */
+  scroll-margin: calc(var(--focus-ring-room) + var(--focus-ring-width));
 }
 
 .root[data-size="panel"] {
@@ -34,10 +34,12 @@
   column-gap: var(--space-sm);
 }
 
-/* The ring sits --focus-ring-room outside the chart (2px ring, 1px offset). */
+/* Axis labels sit flush with the chart edge, so the ring keeps
+   --focus-ring-room of clear space outside it instead of padding that would
+   move the plot and gutter. Callers keep that room plus the ring width. */
 .root:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
-  outline-offset: calc(var(--focus-ring-room) - var(--focus-ring-width));
+  outline-offset: var(--focus-ring-room);
 }
 
 .plot {
