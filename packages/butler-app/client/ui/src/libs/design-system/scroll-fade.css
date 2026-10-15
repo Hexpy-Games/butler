@@ -6,6 +6,10 @@
  * Per-scroller knobs:
  *   --scroll-fade-gutter  scrollbar lane left unmasked (default 0px)
  *   --scroll-fade-guard   fully transparent strip at an active edge (0px)
+ *
+ * While a focus ring shows inside, each fade turns solid --focus-ring-room
+ * sooner, so a control resting at an edge keeps its whole ring even when the
+ * fade lags the scroll by a frame or is still fading out.
  */
 @property --scroll-fade-start {
   syntax: "<length>";
@@ -19,6 +23,20 @@
   initial-value: 0;
 }
 
+/* Where each fade turns solid: the fade minus the ring room. Not transitioned,
+   so the room is there on the frame focus arrives. */
+@property --scroll-fade-start-solid {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --scroll-fade-end-solid {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0;
+}
+
 /* Zero-specificity defaults so component modules can override the knobs. */
 :where([data-scroll-fade]) {
   --scroll-fade-gutter: 0px;
@@ -27,11 +45,20 @@
   --scroll-fade-end: 0px;
   --scroll-fade-start-guard: 0px;
   --scroll-fade-end-guard: 0px;
+  --scroll-fade-ring-room: 0px;
+  --scroll-fade-start-solid: max(
+    0px,
+    var(--scroll-fade-start) - var(--scroll-fade-ring-room)
+  );
+  --scroll-fade-end-solid: max(
+    0px,
+    var(--scroll-fade-end) - var(--scroll-fade-ring-room)
+  );
   --scroll-fade-mask: linear-gradient(
     var(--scroll-fade-direction),
     transparent 0 var(--scroll-fade-start-guard),
-    var(--text-primary) var(--scroll-fade-start),
-    var(--text-primary) calc(100% - var(--scroll-fade-end)),
+    var(--text-primary) var(--scroll-fade-start-solid),
+    var(--text-primary) calc(100% - var(--scroll-fade-end-solid)),
     transparent calc(100% - var(--scroll-fade-end-guard)) 100%
   );
 
@@ -43,6 +70,11 @@
     var(--scroll-fade-mask),
     linear-gradient(var(--text-primary), var(--text-primary));
   mask-repeat: no-repeat;
+}
+
+/* A ring inside: the fades leave it room (see the header). */
+:where([data-scroll-fade]:has(:focus-visible)) {
+  --scroll-fade-ring-room: var(--focus-ring-room);
 }
 
 /* Keyboard focus scrolls a control clear of the fades, ring included. */
