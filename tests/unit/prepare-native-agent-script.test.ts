@@ -17,6 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { legacyProcessRoleFileNames, processRoleFileNames } from "../../packages/butler-app/client/electron/scripts/process-role-names.mjs";
+import { unpackagedWindowsDlls, windowsImportedDlls } from "../../packages/butler-app/client/electron/scripts/windows-system-dlls.mjs";
 
 const script = resolve("packages/butler-app/client/electron/scripts/prepare-native-agent.mjs");
 // The producer only runs on its supported host; the fixture agent implements
@@ -116,6 +117,46 @@ test("process role filenames follow each platform's display contract", () => {
   expect(legacyProcessRoleFileNames()).toEqual([
     "butler(memory)", "butler(restart)", "butler(update)",
   ]);
+});
+
+// The import tables of the 0.1.0-preview.12 butler-sandbox.exe CI build, in
+// `dumpbin /imports` layout, with a delay-load section.
+const sandboxImports = `
+  Section contains the following imports:
+
+    ADVAPI32.dll
+             1400F1000 Import Address Table
+                         0 RegCloseKey
+
+    tdh.dll
+             1400F1A00 Import Address Table
+                         0 TdhGetEventInformation
+
+    api-ms-win-security-base-l1-2-2.dll
+             1400F1B00 Import Address Table
+                         0 DeriveCapabilitySidsFromName
+
+    USERENV.dll
+             1400F1C00 Import Address Table
+                         0 CreateAppContainerProfile
+
+  Section contains the following delay load imports:
+
+    WINTRUST.dll
+              00000001 Characteristics
+                         0 WinVerifyTrust
+`;
+
+// test-category: pure-logic
+test("Windows closure accepts inbox system DLLs and API sets only", () => {
+  const names = windowsImportedDlls(sandboxImports);
+  expect(names).toEqual([
+    "advapi32.dll", "tdh.dll", "api-ms-win-security-base-l1-2-2.dll", "userenv.dll", "wintrust.dll",
+  ]);
+  expect(unpackagedWindowsDlls(names)).toEqual([]);
+  expect(unpackagedWindowsDlls([
+    "tdh.dll", "vcruntime140.dll", "msvcp140.dll", "onnxruntime.dll", "tdh-helper.dll",
+  ])).toEqual(["vcruntime140.dll", "msvcp140.dll", "onnxruntime.dll", "tdh-helper.dll"]);
 });
 
 // test-category: format-pin
