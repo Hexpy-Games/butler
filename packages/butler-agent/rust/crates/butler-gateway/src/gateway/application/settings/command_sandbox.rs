@@ -15,11 +15,14 @@ pub(super) fn project(stored: &Map<String, Value>, output: &mut Map<String, Valu
                 .unwrap_or(true)
         ),
     );
-    // This is host availability, independent of the user's switch. The cached
-    // host probe also respects the Windows environment kill switch.
+    // Unknown availability stays false while the runtime warms the probe.
+    // Never start or wait for a probe on the settings storage reader.
     output.insert(
         "command_sandbox_available".into(),
-        json!(command_sandbox::project_write_available()),
+        json!(
+            command_sandbox::cached_capabilities()
+                .is_some_and(command_sandbox::SandboxCapabilities::project_write_available)
+        ),
     );
 }
 
@@ -30,6 +33,7 @@ pub async fn command_sandbox_enabled(
 ) -> Result<bool, crate::gateway::GatewayApplicationError> {
     tokio::task::spawn_blocking(move || {
         let db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        db.busy_timeout(std::time::Duration::from_secs(5))?;
         let enabled: Option<Option<bool>> = db.query_row(
             "SELECT json_extract(value_json, '$.command_sandbox_enabled') FROM app_settings WHERE key='settings'",
             [], |row| row.get(0),

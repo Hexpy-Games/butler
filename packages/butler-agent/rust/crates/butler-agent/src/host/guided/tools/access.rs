@@ -26,23 +26,25 @@ pub(super) async fn kind(
         super::effect::is_managed_project_ledger_effect(&call.name),
     );
     if owner.binding.access_mode == butler_turn::btcc::AccessMode::Auto
-        && matches!(kind, CapabilityKind::CommandMutation { .. })
-        && !sandbox_enabled(owner).await?
+        && matches!(
+            kind,
+            CapabilityKind::CommandMutation { .. }
+                | CapabilityKind::CommandObservation { sandboxed: false }
+        )
+        && sandbox_enabled(owner).await != Some(true)
     {
         kind = CapabilityKind::CommandMutation {
-            sandbox: butler_turn::btcc::CommandSandbox::None,
+            sandbox: butler_turn::btcc::CommandSandbox::Disabled,
         };
     }
     Ok(kind)
 }
 
-pub(super) async fn sandbox_enabled(owner: &GuidedTools) -> Result<bool, BtccError> {
+pub(super) async fn sandbox_enabled(owner: &GuidedTools) -> Option<bool> {
     let path = owner.monitoring.app_database_path.clone();
     butler_gateway::gateway::command_sandbox_enabled(path)
         .await
-        .map_err(|error| {
-            BtccError::relayed("command_sandbox_settings_unavailable", error.to_string())
-        })
+        .ok()
 }
 
 pub(super) async fn gated_kind(
@@ -193,11 +195,14 @@ pub(super) fn for_kind(owner: &GuidedTools, kind: CapabilityKind) -> AccessDecis
 /// Explain effective project-write availability without disabling run_command:
 /// explicit approval and the other permission tiers remain usable.
 pub(super) async fn sandbox_report(owner: &GuidedTools) -> Result<Value, BtccError> {
-    let enabled = sandbox_enabled(owner).await?;
+    let setting = sandbox_enabled(owner).await;
+    let enabled = setting == Some(true);
     let caps = tokio::task::spawn_blocking(butler_platform::command_sandbox::capabilities)
         .await
         .map_err(|error| BtccError::relayed("sandbox_probe_failed", error.to_string()))?;
-    let reason = if !enabled {
+    let reason = if setting.is_none() {
+        Some("settings_unavailable")
+    } else if !enabled {
         Some("disabled_by_user")
     } else if !caps.project_write_available() {
         match caps.project_write {

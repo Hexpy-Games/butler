@@ -75,8 +75,7 @@ impl AgentRuntime {
         // All fallible in-memory setup precedes the first store owner.
         let collation = Arc::new(LocaleCollation::new(locale).map_err(setup)?);
         let writes = Arc::new(ConfigurationWrites::new());
-        let host_environment: Arc<std::collections::HashMap<String, String>> =
-            Arc::new(std::env::vars().collect());
+        let host_environment = environment::initialize_host();
         let continuation_limits =
             btcc::select_turn_continuation_budget(|key| host_environment.get(key).cloned())?;
         let mcp_client = mcp_owner::for_runtime(&paths, &host_environment, writes.clone());

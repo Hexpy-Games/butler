@@ -1743,7 +1743,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       runtimeSupportedModelsOnly:
         "Only models from currently runnable providers are shown.",
       scheduleAccess: "New schedules run with this permission.",
-      commandSandbox: "In Auto, commands run in an isolated sandbox. When off, Butler asks before running commands.",
+      commandSandbox: "In Auto, commands that change files run in a sandbox. When off, Butler asks first.",
       commandSandboxUnavailable: "Not available on this device",
       chatAccess: "New chats start with this. Change it in any chat.",
       language: "Sets the Butler App interface language.",

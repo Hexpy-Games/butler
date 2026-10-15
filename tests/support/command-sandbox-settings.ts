@@ -33,6 +33,7 @@ export async function commandSandboxSettings(page: Page, server: NativeAppServer
   await page.reload({ waitUntil: "domcontentloaded" });
   await toggle.waitFor();
   assert.equal(await toggle.isDisabled(), true);
+  assert.equal(await toggle.isChecked(), false, "unavailable containment never displays as enabled");
   await toggle.hover();
   await page.getByRole("tooltip", { name: copy.settings.descriptions.commandSandboxUnavailable, exact: true }).waitFor();
   await page.unroute(`${server.url}settings`);

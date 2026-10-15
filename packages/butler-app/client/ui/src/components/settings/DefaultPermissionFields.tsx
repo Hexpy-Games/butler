@@ -38,7 +38,7 @@ export function DefaultPermissionFields() {
       settingId="command-sandbox"
       label={fields.commandSandbox}
       description={descriptions.commandSandbox}
-      checked={sandboxEnabled}
+      checked={sandboxEnabled && sandboxAvailable}
       disabled={!sandboxAvailable}
       disabledReason={!sandboxAvailable ? descriptions.commandSandboxUnavailable : undefined}
       onChange={(value) => update({ command_sandbox_enabled: value }, setSettings)}
