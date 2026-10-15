@@ -29,6 +29,17 @@ trigger) at every viewport, capped by the viewport: a suggestion list under its
 field. `density="list"` drops the gap and uses a 4px inset for lists whose rows
 carry their own padding (`SuggestionList`).
 
+## Mobile sheet
+At 640px and narrower every popover except `width="anchor"` becomes a sheet:
+the screen width minus `--popover-sheet-gutter` (8px) on each side and the
+side safe areas, whatever its content, so selections never resize it. It stays
+attached above or below its trigger; `side="left"` or `"right"` opens below.
+Height is capped to the space Radix reports on that side (and the viewport
+minus the titlebar and bottom safe area); taller content scrolls inside with
+`overscroll-behavior: contain`. It opens with an 8px slide along its side and a
+fade (`--motion-enter-overlay`) and closes with a 4px slide and fade
+(`--motion-exit-fast`), without scale; reduced motion keeps only the fade.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 

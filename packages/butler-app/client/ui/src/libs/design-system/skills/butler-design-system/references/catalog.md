@@ -966,7 +966,7 @@ A non-modal glass layer anchored to a control, for choosers and small panels.
 - Not for: A plain list of actions → `DropdownMenu`
 - Not for: A task that needs focus and a backdrop → `Dialog`
 - Not for: A label that explains a control → `Tooltip`
-- Tokens: `--tinted-glass-bg`, `--radius-popover`, `--motion-enter-overlay`, `--motion-scale-menu`, `--z-popover`
+- Tokens: `--tinted-glass-bg`, `--radius-popover`, `--motion-enter-overlay`, `--motion-exit-fast`, `--motion-scale-menu`, `--motion-distance-md`, `--popover-sheet-gutter`, `--z-popover`
 
 ### Tooltip
 
