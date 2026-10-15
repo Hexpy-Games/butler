@@ -40,6 +40,8 @@ The harness builds `butler-agent` itself with `butler-agent/e2e-fixtures` unless
 `BUTLER_E2E_BIN` names a binary or `BUTLER_E2E_SKIP_BUILD=1`. Prebuilt agents used
 for browser import scenarios also need this feature to inject isolated profile
 and key sources. Never enable it in shipped agents.
+`BUTLER_E2E_WEB_PROBE_BIN` names a prebuilt `butler-runtime` `web-access-smoke`
+example; without it the web read scenario builds the example first.
 `BUTLER_E2E_WORKSPACE_ROOT` selects the Rust workspace containing resources,
 fixtures and cassettes when running a compiled harness on a different machine.
 
