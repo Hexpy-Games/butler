@@ -35,10 +35,10 @@ def sample(root, index):
     return marks, elapsed, payload
 
 
-def run(stop, results, errors):
+def run(stop, results, errors, directory=None):
     try:
-        with tempfile.TemporaryDirectory(prefix='plain-io-control-') as directory:
-            root = Path(directory)
+        with tempfile.TemporaryDirectory(prefix='plain-io-control-', dir=directory) as temporary:
+            root = Path(temporary)
             expected = bytearray()
             while not stop.is_set():
                 marks, elapsed, payload = sample(root, len(results))
@@ -52,13 +52,13 @@ def run(stop, results, errors):
         errors.append(error)
 
 
-def report(results, complete):
+def report(results, complete, prefix='IO-CONTROL'):
     for marks, elapsed in results:
         fields = zip(('start', 'created', 'written', 'synced', 'renamed',
                       'append_written', 'append_synced'), marks)
-        print('IO-CONTROL ' + ' '.join(f'{key}_utc_us={value}' for key, value in fields)
+        print(prefix + ' ' + ' '.join(f'{key}_utc_us={value}' for key, value in fields)
               + f' elapsed_us={elapsed}')
     if results:
         values = sorted(elapsed for _, elapsed in results)
-        print(f'IO-CONTROL-SUMMARY n={len(values)} p50_us={values[len(values)//2]} '
+        print(f'{prefix}-SUMMARY n={len(values)} p50_us={values[len(values)//2]} '
               f'max_us={values[-1]} complete={str(complete).lower()}')

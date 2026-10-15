@@ -5,6 +5,7 @@ The raw artifact retains every byte; the console shows outcomes and timings.
 A separate plain-I/O thread measures the harness temp volume concurrently.
 """
 import importlib.util
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -19,9 +20,13 @@ def capture(log, command):
     control = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(control)
     stop = threading.Event()
-    results, errors = [], []
-    worker = threading.Thread(target=control.run, args=(stop, results, errors))
-    worker.start()
+    controls = [('IO-CONTROL', None, [], [])]
+    if baseline := os.environ.get('BUTLER_CI_IO_BASELINE'):
+        controls.append(('IO-BASELINE', baseline, [], []))
+    workers = [threading.Thread(target=control.run, args=(stop, results, errors, directory))
+               for _, directory, results, errors in controls]
+    for worker in workers:
+        worker.start()
     started = previous = time.monotonic()
     pending = None
     try:
@@ -57,15 +62,19 @@ def capture(log, command):
                     process.wait()
     finally:
         stop.set()
-        worker.join()
+        for worker in workers:
+            worker.join()
         # Include control observations in the artifact as well as the console.
         import contextlib
         with open(log, 'a', encoding='utf-8') as output, contextlib.redirect_stdout(output):
-            control.report(results, complete=not errors)
-        control.report(results, complete=not errors)
+            for prefix, _, results, errors in controls:
+                control.report(results, complete=not errors, prefix=prefix)
+        for prefix, _, results, errors in controls:
+            control.report(results, complete=not errors, prefix=prefix)
     print(f'NATIVE-TEST-SUMMARY seconds={time.monotonic()-started:.3f} exit={code} log={log}')
-    if errors:
-        raise RuntimeError('plain I/O control failed') from errors[0]
+    for prefix, _, _, errors in controls:
+        if errors:
+            raise RuntimeError(f'{prefix} failed') from errors[0]
     return code
 
 
