@@ -348,20 +348,13 @@ fn strip_signatures(value: &mut Value) {
     }
 }
 
-/// Use an actual Vite build asset, without bundling the UI into every scenario.
+/// A static App asset served from the installed resources; any bundle file
+/// exercises the route, so the scenario needs no prior UI build.
 fn install_ui_asset(setup: &Setup) -> Result<(String, Vec<u8>), HarnessError> {
-    let dist =
-        butler_e2e::e2e::binary::workspace_root().join("../../butler-app/client/ui/dist/assets");
-    let source = std::fs::read_dir(dist)?
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .find(|entry| entry.path().extension().is_some_and(|ext| ext == "js"))
-        .expect("Build the App UI before the collected-answer E2E")
-        .path();
-    let name = source.file_name().unwrap().to_str().unwrap();
+    let name = "collected-answer-fixture.js";
+    let bytes = b"export const collectedAnswerFixture = true;\n".to_vec();
     let target = setup.sandbox.resources.join("app-client/dist/assets");
     std::fs::create_dir_all(&target)?;
-    let bytes = std::fs::read(&source)?;
     std::fs::write(target.join(name), &bytes)?;
     Ok((format!("/assets/{name}"), bytes))
 }

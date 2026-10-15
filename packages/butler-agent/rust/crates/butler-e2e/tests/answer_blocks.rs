@@ -65,7 +65,7 @@ fn answer_blocks_fixture_table() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
     }
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../..");
+    let root = butler_e2e::e2e::binary::manifest_dir().join("../../../../..");
     let output = Command::new("bun")
         .arg(root.join("tests/contracts/answer-blocks.ts"))
         .current_dir(root)
