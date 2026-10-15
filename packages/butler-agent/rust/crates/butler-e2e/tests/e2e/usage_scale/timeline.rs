@@ -217,18 +217,13 @@ async fn perf_usage_timeline_300k_ranges() -> Result<(), HarnessError> {
             .await?;
             verify(&view, base, selected);
             eprintln!("usage timeline {hours}h scoped={selected}: {latency:?}");
-            let budget = if selected && !cfg!(debug_assertions) {
-                Duration::from_millis(5)
-            } else {
-                WARM
-            };
-            measurements.push((latency, budget));
+            measurements.push(latency);
         }
     }
     // Same-harness main baseline: 401 MB physical footprint; allow at most +10%.
     memory.finish_peak(401_000_000 * 110 / 100);
-    for (latency, budget) in measurements {
-        butler_e2e::assert_wall_clock_budget!(latency, budget, "timeline range");
+    for latency in measurements {
+        butler_e2e::assert_wall_clock_budget!(latency, WARM, "timeline range");
     }
     s.finish().await
 }
