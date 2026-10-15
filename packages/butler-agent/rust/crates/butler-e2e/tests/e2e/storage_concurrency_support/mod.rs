@@ -39,11 +39,15 @@ pub(super) fn verify_rows(
     let db = butler_platform::sqlite::open(path).unwrap();
     for (session, turn) in sessions.iter().zip(turns) {
         let mut query = db
-            .prepare("SELECT role,text FROM messages WHERE chat_id=?1 ORDER BY rowid")
+            .prepare("SELECT role,text,status FROM messages WHERE chat_id=?1 ORDER BY rowid")
             .unwrap();
         let rows = query
             .query_map([session], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
             })
             .unwrap()
             .collect::<Result<Vec<_>, _>>()
@@ -51,7 +55,14 @@ pub(super) fn verify_rows(
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].0, "user");
         assert_eq!(rows[0].1, request);
-        assert_eq!(rows[1], ("assistant".to_owned(), answer.to_owned()));
+        assert_eq!(
+            rows[1],
+            (
+                "assistant".to_owned(),
+                answer.to_owned(),
+                "delivered".to_owned()
+            )
+        );
         let mut events = db.prepare("SELECT payload_json FROM events WHERE turn_id=?1 AND type='agent.turn_event' ORDER BY id").unwrap();
         let values = events
             .query_map(params![turn], |row| row.get::<_, String>(0))
@@ -81,18 +92,27 @@ pub(super) fn verify_rows(
 }
 
 fn verify_message_updates(db: &Connection, turn: &str, deltas: &[&str]) {
-    let mut query = db.prepare("SELECT payload_json,created_at FROM events WHERE turn_id=?1 AND type='message.updated' ORDER BY id").unwrap();
+    // Include created events so a second terminal publication cannot hide under
+    // the event type used before streamed final answers became updates.
+    let mut query = db.prepare("SELECT payload_json,created_at,type FROM events WHERE turn_id=?1 AND type IN ('message.created','message.updated') AND json_extract(payload_json,'$.message.role')='assistant' ORDER BY id").unwrap();
     let updates = query
         .query_map([turn], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
         })
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
-    assert_eq!(updates.len(), deltas.len());
+    // Every delta remains streaming; exactly one final update delivers it.
+    assert_eq!(updates.len(), deltas.len() + 1);
+    assert!(updates.iter().all(|(_, _, kind)| kind == "message.updated"));
+    let ((terminal, completed_at, _), streaming) = updates.split_last().unwrap();
     let mut text = String::new();
     let mut identity = None;
-    for ((payload, created_at), delta) in updates.iter().zip(deltas) {
+    for ((payload, created_at, _), delta) in streaming.iter().zip(deltas) {
         text.push_str(delta);
         let mut message = serde_json::from_str::<Value>(payload).unwrap()["message"].clone();
         assert_eq!(message["text"], text);
@@ -107,6 +127,27 @@ fn verify_message_updates(db: &Connection, turn: &str, deltas: &[&str]) {
             None => identity = Some(message),
         }
     }
+    let terminal = serde_json::from_str::<Value>(terminal).unwrap();
+    let mut expected = serde_json::from_str::<Value>(&streaming.last().unwrap().0).unwrap();
+    assert_eq!(expected["message"]["text"], deltas.concat());
+    assert!(completed_at >= &streaming.last().unwrap().1);
+    assert_eq!(
+        expected
+            .as_object_mut()
+            .unwrap()
+            .remove("segment_completed"),
+        Some(false.into())
+    );
+    expected["message"]["status"] = "delivered".into();
+    expected["message"]["updated_at"] = completed_at.clone().into();
+    // The final read model freezes activity; this text-only turn has none.
+    for field in ["work_blocks", "turn_activity_rows"] {
+        assert!(expected["message"].get(field).is_none());
+        expected["message"][field] = serde_json::json!([]);
+    }
+    // Compare the entire payload: the final text, identity, cursor, creation
+    // time and all fields outside the explicit terminal projection stay intact.
+    assert_eq!(terminal, expected);
 }
 
 /// The public detail and summary views must agree on the complete latest fact.

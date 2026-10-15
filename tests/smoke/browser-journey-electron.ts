@@ -1,3 +1,4 @@
+import { appLocaleFromLanguage, getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: race
 /** One public conversation turn drives trusted native input and delivers a crop. */
 import { strict as assert } from "node:assert";
@@ -89,7 +90,7 @@ try {
     await waitBrowser(() => app.page.expression("!document.querySelector('[data-test-class=browser-agent-control]')"), "released tab presentation");
     assert.equal(await app.page.expression("Boolean(document.querySelector('[data-test-class=browser-agent-control]'))"), false);
     await app.shot(`${language}-${theme}-${width}-released`);
-    await app.click(language === "ko" ? "일반" : "General");
+    await app.click(getAppCopy(appLocaleFromLanguage(language)).space.general);
     if (!await app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))")) await togglePane(app, true);
     await app.call("control", { id: tab.id, holder: "agent" });
     assert.equal(await app.page.expression("Boolean(document.querySelector('[data-test-class=browser-agent-control]'))"), false);

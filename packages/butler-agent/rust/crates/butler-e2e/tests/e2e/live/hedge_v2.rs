@@ -39,6 +39,10 @@ use std::{
 #[ignore = "LIVE tier"]
 async fn live_12_hedge_v2() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        std::env::var("BUTLER_E2E_HEDGE_EVAL").as_deref() == Ok("1"),
+        "on-demand hedge eval requires BUTLER_E2E_HEDGE_EVAL=1"
+    );
     let Some(provider) = live::gate("LIVE-12")? else {
         return Ok(());
     };
@@ -180,6 +184,10 @@ async fn write(record: Value) -> Result<(), HarnessError> {
 #[ignore = "Chromium prewarm utility"]
 async fn prewarm_shared_chromium() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        std::env::var("BUTLER_E2E_HEDGE_EVAL").as_deref() == Ok("1"),
+        "on-demand hedge eval requires BUTLER_E2E_HEDGE_EVAL=1"
+    );
     let cache =
         std::env::var("BUTLER_E2E_BROWSER_CACHE").map_err(|e| HarnessError(e.to_string()))?;
     let s = Setup::new("HEDGE-V2-PREWARM")?

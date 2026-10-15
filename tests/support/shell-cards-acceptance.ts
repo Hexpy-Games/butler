@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 /** App-shell evidence through the real renderer and native window compositor. */
 import { strict as assert } from "node:assert";
 import { waitBrowser } from "./browser-agent-app";
@@ -46,7 +47,7 @@ export async function prepareCardsCell(app: ShellApp, theme: string, width: numb
   await app.main(`${app.win}.setContentSize(${width},900)`);
   await app.page.reload(); await shellReady(app, "ko");
   await setSidebar(app, true);
-  await settled(app); await app.click("일반"); await settled(app);
+  await settled(app); await app.click(getAppCopy("ko-KR").space.general); await settled(app);
   if (await app.page.expression(`document.querySelector('${right}').getAttribute('aria-pressed')==='true' || document.querySelector('${root}').getAttribute('data-right-open')==='true'`)) {
     await app.page.clickSelector(right); await settled(app);
   }

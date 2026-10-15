@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: security
 /** S2 ownership, S3 holders/pointer and S4 native dialogs in the same real App. */
 import { strict as assert } from "node:assert";
@@ -57,7 +58,7 @@ async function dialogHolder(id: string) {
   assert.equal((await state()).tabs.find(t => t.id === id)?.waiting, true, "use reset preserves dialog waiting");
   await app.internal("tab.waiting", id, { value: false });
   assert.equal((await state()).tabs.find(t => t.id === id)?.waiting, true, "turn waiting release preserves dialog waiting");
-  await app.click("General");
+  await app.click(getAppCopy("en-US").space.general);
   await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="composer-authority-decision"]')));
   await app.shot("combined-approval-card");
   const approval = (await app.gateway.api<any>("/authority-requests?session_id=general")).requests[0];
