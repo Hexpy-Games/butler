@@ -36,6 +36,18 @@ pub fn classify_targets(roots: &ScopeRoots<'_>, base: &Path, targets: &[&str]) -
         .max()
         .unwrap_or(TargetScope::NoTarget)
 }
+/// Where `requested` really leads when it names a place inside `root` but a
+/// link on the way (a symlink or junction) points outside it: the real path
+/// the OS opens, as classification resolves it. None for a path that is
+/// outside lexically, stays inside, or does not parse.
+pub fn link_escape(root: &Path, requested: &str) -> Option<PathBuf> {
+    let lexical = butler_platform::tool_paths::resolve(root, requested).ok()?;
+    if !path_is_within(&lexical, &butler_platform::tool_paths::lexical(root)) {
+        return None;
+    }
+    let real = realpath_or_nearest(&lexical);
+    (!path_is_within(&real, &realpath_or_nearest(root))).then_some(real)
+}
 fn classify(
     roots: &ScopeRoots<'_>,
     base: &Path,

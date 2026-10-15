@@ -1,6 +1,7 @@
 //! Invoke the concrete domain owner; the caller owns occurrence and result journaling.
 
 pub(super) mod file_observation;
+mod link_targets;
 mod mcp;
 mod project;
 mod publication;
@@ -28,6 +29,10 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    let resolved = link_targets::resolve(owner, call)
+        .await
+        .map_err(ToolExecutionError::Integrity)?;
+    let call = resolved.as_ref().unwrap_or(call);
     if super::browser::supports(&call.name) {
         return super::browser::execute(owner, &invocation, call, call_id).await;
     }
