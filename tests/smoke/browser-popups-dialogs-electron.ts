@@ -47,7 +47,7 @@ async function dialog(id: string, type: string) {
   await nativeClick(id, `#${type}`);
   await waitBrowser(async () => (await state()).tabs.find(t => t.id === id)?.dialog?.type === type, `user ${type}`);
   await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-page-dialog"]')));
-  assert.equal(await app.main(`${contents(id)}.debugger.isAttached()`), false, "no debugger on a user tab");
+  assert.equal(await app.main(`${contents(id)}.debugger.isAttached()`), true, "identity debugger remains attached; dialogs use the native adapter");
   assert.equal(await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}).attached === null`), true, "native view occluded before DS dialog");
 }
 async function answer(id: string, accept: boolean, extra = {}) {

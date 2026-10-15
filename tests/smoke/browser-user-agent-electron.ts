@@ -1,18 +1,20 @@
+// test-category: security
 /** Functional identity acceptance on the production Electron tab registry. */
+import { googleSigninProbe } from "../support/browser-google-probe";
 import { strict as assert } from "node:assert";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnElectron, stopElectronChild } from "../support/electron-child";
-import { assertChromeIdentity, identityFixture } from "../support/browser-identity-fixture";
+import { assertBrowserIdentity, identityFixture } from "../support/browser-identity-fixture";
 
 const executable = process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE; assert.ok(executable);
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence); mkdirSync(evidence, { recursive: true });
 const fixture = identityFixture(), dir = mkdtempSync(join(tmpdir(), "browser-identity-"));
 const results = join(dir, "result.json"), root = resolve("packages/butler-app/client/electron/browser");
 const moduleUrl = (name: string) => pathToFileURL(join(root, `${name}.mjs`)).href;
-writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "butler-identity-smoke", main: "main.mjs", type: "module" }));
+writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "butler-identity-smoke", version: "0.1.0", main: "main.mjs", type: "module" }));
 writeFileSync(join(dir, "main.mjs"), `import {app,BrowserWindow,protocol,session} from 'electron';import {writeFileSync} from 'node:fs';
 protocol.registerSchemesAsPrivileged([{scheme:'app',privileges:{standard:true,secure:true,supportFetchAPI:true}}]);app.setPath('userData',${JSON.stringify(join(dir, "profile"))});app.on('window-all-closed',()=>{});
 console.log("entry");void app.whenReady().then(async()=>{try{console.log("ready");
@@ -35,8 +37,7 @@ console.log("entry");void app.whenReady().then(async()=>{try{console.log("ready"
  const {renderReader}=await import(${JSON.stringify(moduleUrl("reader-render"))});
  out.reader=await renderReader({url:${JSON.stringify(fixture.url + "?no-frame")},policy:{content_origin:${JSON.stringify(fixture.server.url.origin.replace("0.0.0.0", "127.0.0.1"))}}});
  ${process.env.BUTLER_UA_GOOGLE_CHECK === "1" ? `shell.show();const gid=b.create({url:'https://accounts.google.com/signin',profile:'signed_out'});const gt=b.tabs.get(gid);shell.contentView.addChildView(gt.view);gt.view.setBounds({x:0,y:0,width:1280,height:800});await gt.identityReady;
- for(let i=0;i<200;i++){if(!gt.view.webContents.isLoading()&&await gt.view.webContents.executeJavaScript("Boolean(document.querySelector('#identifierId,input[name=identifier],input[type=email]'))"))break;await new Promise(r=>setTimeout(r,100))}
- out.google=await gt.view.webContents.executeJavaScript("({url:location.href,email:Boolean(document.querySelector('#identifierId,input[name=identifier],input[type=email]')),insecure:document.body.innerText.includes('This browser or app may not be secure')})");
+ out.google=await (${googleSigninProbe.toString()})(gt.view.webContents);
  writeFileSync(${JSON.stringify(join(evidence, "google-signin.png"))},(await gt.view.webContents.capturePage()).toPNG());b.close(gid);` : ""}
  writeFileSync(${JSON.stringify(results)},JSON.stringify(out));shell.destroy();app.exit(0);
 }catch(error){writeFileSync(${JSON.stringify(results)},JSON.stringify({error:String(error.stack)}));app.exit(1)}});`);
@@ -59,10 +60,10 @@ try {
   const out = JSON.parse(readFileSync(results, "utf8"));
   writeFileSync(join(evidence, "electron-identity.json"), JSON.stringify({ ...out, requests: fixture.requests }, null, 2));
   assert.ok(!out.error, out.error); assert.equal(out.internal, out.internalAfter); assert.match(out.internal, /Electron\//u);
-  for (const backend of ["app", "hidden", "popup"]) assertChromeIdentity(out[backend], out.versions.chrome, fixture.requests);
+  for (const backend of ["app", "hidden", "popup"]) assertBrowserIdentity(out[backend], out.versions.chrome, fixture.requests);
   assert.equal(out.reader.status, "ok");
   const reader = Buffer.from(out.reader.html_base64, "base64").toString("utf8"); assert.ok(reader.includes('"worker"'));
-  if (out.google) { assert.equal(out.google.email, true); assert.equal(out.google.insecure, false); }
+  if (out.google) { assert.equal(out.google.outcome, "account_not_found", `Google probe: ${out.google.outcome}`); }
   console.log(JSON.stringify({ ok: true, version: out.versions.chrome, brands: out.app.page.js.data.brands, google: out.google }));
 } finally {
   await stopElectronChild(child); writeFileSync(join(evidence, "electron-identity.log"), logs);

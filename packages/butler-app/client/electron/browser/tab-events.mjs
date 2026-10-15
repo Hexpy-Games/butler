@@ -1,3 +1,4 @@
+import { wireWebAuthnAccounts } from "./webauthn.mjs";
 import { session } from "electron";
 import { menuPoint, popupMenu } from "../butler-platform/menu-placement.mjs";
 import { webUrl } from "./policy.mjs";
@@ -5,6 +6,7 @@ import { nativeContextMenuCopy } from "../i18n/native-context-menu.mjs";
 
 export function protectPartition(partition, browser) {
   const profile = session.fromPartition(partition);
+  wireWebAuthnAccounts(profile, browser);
   profile.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   profile.setPermissionCheckHandler(() => false);
   profile.setDevicePermissionHandler(() => false);

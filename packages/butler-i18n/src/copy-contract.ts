@@ -333,7 +333,7 @@ export interface BrowserCopy {
   signedIn: string; signinRequired: string; captcha: string; signinForm: string; saveSignIn: string; signinSaved: string; later: string;
   agentUsing: string; takeOver: string; userControl: string; butlerWaits: string; giveBack: string; autoGiveBack: string;
   stopTask: string; stopped: string; waiting: string; review: string; needYou: string; keypad: string; mfa: string; passkey: string; paymentRequired: string;
-  typeYourself: string; chooseFile: string; printer: string; noPrinters: string; popupBlocked: string; allow: string; popupOpened: string; showPopup: string; newTabOpened: string; downloaded: string;
+  choosePasskey: string; typeYourself: string; chooseFile: string; printer: string; noPrinters: string; popupBlocked: string; allow: string; popupOpened: string; showPopup: string; newTabOpened: string; downloaded: string;
   pointerButler: string; pointerLooking: string; pointerTyping: string; pointerWaiting: string; pointerAwaitingApproval: string;
   pointerNeedInput: string; pickMode: string; pickMulti: string; pickRegion: string; dragToChat: string; finish: string;
   pickHint: string; pickKeys: (mac: boolean) => string; pickFirst: string; picked: (count: number) => string; attachToChat: string; saveImage: string; downloadSaved: string; downloadFailed: string; downloadFileLimit: string; downloadSessionLimit: string; imagesSaved: (count: number) => string; copyText: string; clearSelection: string; dropToAttach: string;

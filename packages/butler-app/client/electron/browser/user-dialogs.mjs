@@ -11,7 +11,7 @@ export function wireUserDialogs(browser, tab) {
   registries.set(contents.id, { browser, tab });
   if (!tab.agent) {
     // Electron's pinned dialog adapter keeps Chromium's beforeunload watchdog
-    // paused while the owner answers. No native modal or user-tab debugger.
+    // paused while the owner answers. No native modal or dialog-specific CDP commands.
     contents.removeAllListeners("-run-dialog");
     contents.on("-run-dialog", (info, callback) => {
       const unload = tab.pageUnloadPrepared;
