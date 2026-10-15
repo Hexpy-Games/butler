@@ -7,7 +7,37 @@ use super::{Invocation, POSIX_SHELL};
 
 /// Run a fixture through the native shell with profiles disabled on Windows.
 pub fn shell(command: &str) -> Invocation {
-    super::shell::login_shell(command, &HashMap::new())
+    let invocation = super::shell::login_shell(command, &HashMap::new());
+    let (Some(program), Some(script)) = (&invocation.shell_program, &invocation.shell_script)
+    else {
+        return invocation;
+    };
+    // Structured CommandStep carries only program/arguments. Do not return
+    // the interactive wrapper, which also needs its environment transport.
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let encoded = STANDARD.encode(
+        script
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>(),
+    );
+    Invocation {
+        program: program.clone(),
+        arguments: [
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-OutputFormat",
+            "Text",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-EncodedCommand",
+            &encoded,
+        ]
+        .map(str::to_owned)
+        .to_vec(),
+        ..Default::default()
+    }
 }
 
 /// Write the three UTF-8 bytes of a euro sign across two flushed writes.
