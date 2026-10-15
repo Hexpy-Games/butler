@@ -14,6 +14,12 @@ pub(in crate::command_sandbox) fn verify() -> Result<(), Error> {
         ),
         ("Write-Output '한글 출력'", 0, "한글 출력", ""),
         (
+            "Write-Progress -Activity 'working' -Status 'first use'; [Console]::Out.Write('complete')",
+            0,
+            "complete",
+            "",
+        ),
+        (
             "[Console]::Out.Write('out'); [Console]::Error.Write('err'); exit 17",
             17,
             "out",
@@ -69,7 +75,7 @@ pub(in crate::command_sandbox) fn verify() -> Result<(), Error> {
         let output = run(&scratch, &format!("Write-Output '{}'", "한".repeat(9000)))?;
         assert!(output.status.success(), "{output:?}");
         assert_eq!(String::from_utf8(output.stdout)?.trim(), "한".repeat(9000));
-        eprintln!("contained shell transport: 15 cases; Unicode, 9000 chars, streams, exit codes");
+        eprintln!("contained shell transport: 16 cases; Unicode, 9000 chars, streams, exit codes");
         Ok(())
     })();
     fs::remove_dir_all(&root)?;

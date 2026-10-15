@@ -11,11 +11,14 @@ use butler_platform::command_sandbox::{
     },
 };
 use std::collections::BTreeMap;
+#[path = "mxc_read_grants.rs"]
+mod read_grants;
 /// Policy planning and admission invariants of the command sandbox contract.
 pub(super) fn verify() {
     probe_policy_keeps_loader_grants_and_redacts_paths();
     golden_policy_has_no_implicit_environment_network_or_fallback();
     policy_rejects_broad_and_overriding_grants();
+    read_grants::verify();
     toolchains_replace_shims_and_keep_host_path_order();
     environment_redirects_profiles_without_importing_host_credentials();
     drive_picker_and_reconcile_never_remove_other_owners_mapping();

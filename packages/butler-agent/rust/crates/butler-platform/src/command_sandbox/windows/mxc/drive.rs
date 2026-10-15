@@ -7,7 +7,7 @@ use std::{
     fs, io,
     io::Write,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, Command, Stdio},
 };
 use winsafe::co;
 const MAX_SUBST_TARGET_UNITS: usize = 240;
@@ -138,26 +138,60 @@ impl Drive {
         }
     }
     pub(super) fn cleanup(&self) -> io::Result<()> {
-        let _phase = super::timing::Phase::start("drive_cleanup");
-        if self.matches()?
-            && !subst(&[format!("{}:", self.letter), "/D".into()])?.success()
-            && self.matches()?
-        {
+        self.start_cleanup()?.finish()
+    }
+    pub(super) fn start_cleanup(&self) -> io::Result<Cleanup<'_>> {
+        let phase = super::timing::Phase::start("drive_cleanup");
+        let child = if self.matches()? {
+            Some(spawn_subst(&[format!("{}:", self.letter), "/D".into()])?)
+        } else {
+            None
+        };
+        Ok(Cleanup {
+            drive: self,
+            child,
+            _phase: phase,
+        })
+    }
+}
+
+/// Scratch deletion can run while subst exits, without another worker thread.
+pub(super) struct Cleanup<'a> {
+    drive: &'a Drive,
+    child: Option<Child>,
+    _phase: super::timing::Phase,
+}
+impl Cleanup<'_> {
+    pub(super) fn finish(mut self) -> io::Result<()> {
+        let status = self.child.as_mut().map(Child::wait).transpose()?;
+        self.child = None;
+        if status.is_some_and(|status| !status.success()) && self.drive.matches()? {
             return Err(io::Error::other("subst_remove_failed"));
         }
-        match fs::remove_file(&self.journal) {
+        match fs::remove_file(&self.drive.journal) {
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
             result => result,
         }
     }
 }
+impl Drop for Cleanup<'_> {
+    fn drop(&mut self) {
+        if let Some(child) = &mut self.child {
+            // Never let a cleanup child outlive its helper on an early return.
+            let _ = child.wait();
+        }
+    }
+}
 fn subst(args: &[String]) -> io::Result<std::process::ExitStatus> {
+    spawn_subst(args)?.wait()
+}
+fn spawn_subst(args: &[String]) -> io::Result<Child> {
     Command::new(system_subst()?)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .status()
+        .spawn()
 }
 fn system_subst() -> io::Result<PathBuf> {
     let root =

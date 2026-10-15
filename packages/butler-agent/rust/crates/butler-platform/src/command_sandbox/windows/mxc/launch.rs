@@ -60,12 +60,16 @@ fn run(file: &Path) -> Result<i32, Error> {
     policy.write_all(&serde_json::to_vec(&payload)?)?;
     drop(policy);
     drop(ownership);
-    let result = execute(file, &mut payload);
-    let _cleanup = super::timing::Phase::start("scratch_cleanup");
-    let cleanup = fs::remove_dir_all(&payload.scratch).and_then(|()| fs::remove_file(file));
-    finish_cleanup(result, cleanup).map(sdk::RunOutcome::report)
+    let mut drives = Vec::new();
+    let result = execute(file, &mut payload, &mut drives);
+    cleanup(file, &payload.scratch, &drives);
+    result.map(sdk::RunOutcome::report)
 }
-fn execute(file: &Path, payload: &mut PolicyFile) -> Result<sdk::RunOutcome, Error> {
+fn execute(
+    file: &Path,
+    payload: &mut PolicyFile,
+    drives: &mut Vec<Drive>,
+) -> Result<sdk::RunOutcome, Error> {
     if std::env::var("BUTLER_WINDOWS_PROJECT_SANDBOX").as_deref() == Ok("0") {
         return Err("mxc_disabled".into());
     }
@@ -75,14 +79,30 @@ fn execute(file: &Path, payload: &mut PolicyFile) -> Result<sdk::RunOutcome, Err
         .map_err(|_| "cwd_outside_project")?;
     let relative = relative.to_str().ok_or("invalid cwd")?.to_owned();
     let drive = Drive::claim(&payload.data, &payload.project, file)?;
-    let result = (|| {
-        let temp_phase = super::timing::Phase::start("temp_setup");
-        let (temporary, path) = Drive::temporary(&payload.data, &payload.scratch, file)?;
-        drop(temp_phase);
-        let result = run_mapped(payload, drive.letter, &path, &relative);
-        finish_cleanup(result, temporary.map_or(Ok(()), |drive| drive.cleanup()))
-    })();
-    finish_cleanup(result, drive.cleanup())
+    let letter = drive.letter;
+    drives.push(drive);
+    let temp_phase = super::timing::Phase::start("temp_setup");
+    let (temporary, path) = Drive::temporary(&payload.data, &payload.scratch, file)?;
+    drives.extend(temporary);
+    drop(temp_phase);
+    run_mapped(payload, letter, &path, &relative)
+}
+
+fn cleanup(file: &Path, scratch: &Path, drives: &[Drive]) {
+    let _phase = super::timing::Phase::start("cleanup");
+    // The container and both output relays are finished. Removing a mapping and
+    // removing physical scratch are independent; neither needs to delay the other.
+    // Reap subst before returning so the next command sees no outstanding cleanup.
+    let pending: Vec<_> = drives.iter().map(Drive::start_cleanup).collect();
+    {
+        let _phase = super::timing::Phase::start("scratch_cleanup");
+        let result = fs::remove_dir_all(scratch).and_then(|()| fs::remove_file(file));
+        let _ = finish_cleanup(Ok(()), result);
+    }
+    for cleanup in pending {
+        let result = cleanup.and_then(super::drive::Cleanup::finish);
+        let _ = finish_cleanup(Ok(()), result);
+    }
 }
 
 fn run_mapped(
@@ -192,6 +212,8 @@ fn finish_cleanup<T>(result: Result<T, Error>, cleanup: std::io::Result<()>) -> 
 
 #[cfg(feature = "test-support")]
 pub(in crate::command_sandbox) fn verify_cleanup_status() {
+    let cleaned = verify_parallel_cleanup();
+    assert!(cleaned.is_ok(), "{cleaned:?}");
     for code in [0, 17, 124, 125] {
         assert!(
             finish_cleanup(Ok(code), Err(std::io::Error::other("cleanup failure")))
@@ -200,4 +222,29 @@ pub(in crate::command_sandbox) fn verify_cleanup_status() {
     }
     let result = finish_cleanup::<i32>(Err("no_free_drive".into()), Ok(()));
     assert!(result.is_err_and(|error| error.to_string() == "no_free_drive"));
+}
+
+#[cfg(feature = "test-support")]
+fn verify_parallel_cleanup() -> Result<(), Error> {
+    let root = std::env::temp_dir().join(format!("cleanup-{}", std::process::id()));
+    let project = root.join("project");
+    let scratch = root.join("scratch");
+    let file = root.join("policy.json");
+    fs::create_dir_all(&project)?;
+    fs::create_dir_all(scratch.join("t"))?;
+    fs::write(&file, "policy")?;
+    fs::write(scratch.join("t/output"), "complete")?;
+    let drive = Drive::claim(&root, &project, &file)?;
+    let letter = drive.letter;
+    cleanup(&file, &scratch, &[drive]);
+    assert!(!scratch.exists());
+    assert!(!file.exists());
+    assert!(project.exists());
+    assert_eq!(fs::read_dir(root.join("sandbox/drives"))?.count(), 0);
+    assert_eq!(
+        winsafe::GetLogicalDrives() & (1 << (letter as u8 - b'A')),
+        0
+    );
+    fs::remove_dir_all(root)?;
+    Ok(())
 }

@@ -1,3 +1,4 @@
+$ProgressPreference = 'SilentlyContinue'
 # Respect the host application-control policy; never override language mode.
 trap {
     if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage' -and $_.FullyQualifiedErrorId -match 'ConstrainedLanguage|RestrictedLanguage|CannotDefineNewType|CannotCreateType') {

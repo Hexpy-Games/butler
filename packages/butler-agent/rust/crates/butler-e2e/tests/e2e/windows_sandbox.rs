@@ -3,6 +3,7 @@
 mod boundaries;
 mod language;
 mod latency;
+mod phase_profile;
 mod preparation;
 mod project_boundaries;
 mod project_write;

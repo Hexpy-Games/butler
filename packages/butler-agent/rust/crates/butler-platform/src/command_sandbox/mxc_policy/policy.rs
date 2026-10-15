@@ -88,6 +88,7 @@ impl Plan {
             }
         }
         self.validate(&write, &read, &deny, &scratch)?;
+        let read = minimal_read_grants(&read, &write, &deny);
         let env: Vec<_> = env
             .iter()
             .map(|(key, value)| format!("{key}={value}"))
@@ -151,4 +152,26 @@ impl Plan {
         };
         Ok(grant == &cargo && self.tools.readonly.contains(grant))
     }
+}
+
+// A descendant read rule adds nothing when an ancestor already grants reads,
+// unless an intervening write or deny rule changes the inherited permission.
+// Validate all input grants first: simplification must never hide a rejection.
+fn minimal_read_grants(read: &[WinPath], write: &[WinPath], deny: &[WinPath]) -> Vec<WinPath> {
+    read.iter()
+        .enumerate()
+        .filter(|(index, child)| {
+            !read.iter().enumerate().any(|(other, ancestor)| {
+                if ancestor == *child {
+                    return other < *index;
+                }
+                child.is_within(ancestor)
+                    && !write
+                        .iter()
+                        .chain(deny)
+                        .any(|barrier| barrier.is_within(ancestor) && child.is_within(barrier))
+            })
+        })
+        .map(|(_, path)| path.clone())
+        .collect()
 }
