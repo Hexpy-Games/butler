@@ -91,6 +91,7 @@ impl WorkspaceFiles {
         &self,
         action: impl FnOnce() -> T + Send + 'static,
     ) -> Result<T, FileOwnerError> {
+        let timing = super::file_timing::Timing::new("file_queue");
         let permit = self
             .inner
             .permits
@@ -106,11 +107,15 @@ impl WorkspaceFiles {
             }
             state.active += 1;
         }
+        timing.mark("permit_acquired");
         let active = ActiveOperation(Arc::clone(&self.inner));
         let task = tokio::task::spawn_blocking(move || {
             let _active = active;
             let _permit = permit;
-            action()
+            timing.mark("worker_started");
+            let result = action();
+            timing.mark("worker_finished");
+            result
         });
         task.await.map_err(FileOwnerError::WorkerFailed)
     }
