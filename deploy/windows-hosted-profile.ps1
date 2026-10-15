@@ -1,6 +1,13 @@
 # Job-owned hosted profiles keep fixture I/O off the default user temp volume.
 $ErrorActionPreference = 'Stop'
 $defender = Get-MpComputerStatus
+# Preserve long-path command support when fixtures move off the system volume.
+# This helper runs only on disposable hosted runners, never owner machines.
+$volume = [IO.Path]::GetPathRoot($env:RUNNER_TEMP).TrimEnd('\')
+fsutil.exe 8dot3name set $volume 0
+if ($LASTEXITCODE -ne 0) { throw "Could not enable short names on hosted work volume $volume" }
+fsutil.exe 8dot3name query $volume
+if ($LASTEXITCODE -ne 0) { throw "Could not inspect hosted work volume $volume" }
 $root = Join-Path $env:RUNNER_TEMP 'windows-verify'
 # Keep TEMP valid for post-job actions after verification-profile cleanup.
 $temporary = Join-Path $env:RUNNER_TEMP ("windows-fixtures-" + [guid]::NewGuid().ToString('N'))
