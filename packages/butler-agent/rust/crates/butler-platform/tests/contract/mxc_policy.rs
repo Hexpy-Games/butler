@@ -13,6 +13,7 @@ use butler_platform::command_sandbox::{
 use std::collections::BTreeMap;
 /// Policy planning and admission invariants of the command sandbox contract.
 pub(super) fn verify() {
+    probe_policy_keeps_loader_grants_and_redacts_paths();
     golden_policy_has_no_implicit_environment_network_or_fallback();
     policy_rejects_broad_and_overriding_grants();
     toolchains_replace_shims_and_keep_trusted_path_order();
@@ -20,6 +21,36 @@ pub(super) fn verify() {
     drive_picker_and_reconcile_never_remove_other_owners_mapping();
     command_lines_round_trip_crt_arguments_and_preserve_cmd_text();
     mutation_predicate_requires_project_boundary_and_network_only();
+    search_paths_normalize_separators_without_accepting_ambiguous_names();
+}
+fn search_paths_normalize_separators_without_accepting_ambiguous_names() {
+    let root = r"C:\Users\private\work\windows-sandbox-e2e\tmp-47a5c101";
+    assert!(WinPath::new(root).is_ok());
+    let repeated = r"C:\Users\private\AppData\Local\Author Software\nvm\\.nodejs";
+    assert_eq!(
+        WinPath::search_directory(repeated).unwrap(),
+        path(r"C:\Users\private\AppData\Local\Author Software\nvm\.nodejs")
+    );
+    let reason = WinPath::new(repeated).unwrap_err();
+    assert_eq!(reason, "empty path component");
+    let message = WinPath::rejection(repeated, "PATH entry", reason);
+    assert!(message.contains("PATH entry") && message.contains(reason));
+    for private in ["private", "Author Software", "nodejs"] {
+        assert!(!message.contains(private), "{message}");
+    }
+    for value in [
+        r"\\server\share",
+        r"\\?\C:\work",
+        r"\\.\C:\work",
+        r"C:\work\\..\escape",
+        r"C:\work\\trailing.",
+        r"C:\work\\trailing ",
+        r"C:\work\\file:stream",
+        r"C:\PROGRA~1\\Tools",
+        r"C:\work\\NUL",
+    ] {
+        assert!(WinPath::search_directory(value).is_err(), "{value}");
+    }
 }
 fn path(value: &str) -> WinPath {
     WinPath::new(value).unwrap()
@@ -47,6 +78,9 @@ fn plan() -> Plan {
         credentials: environment::credential_roots(&host()).unwrap(),
     }
 }
+fn command_scratch() -> WinPath {
+    path(r"C:\Users\person\.butler\tmp\project-write\command")
+}
 fn invocation(args: &[&str]) -> Invocation {
     Invocation {
         program: r"C:\Program Files\tool.exe".into(),
@@ -54,7 +88,9 @@ fn invocation(args: &[&str]) -> Invocation {
     }
 }
 fn golden_policy_has_no_implicit_environment_network_or_fallback() {
-    let result = plan().build(&invocation(&["argument"]), 'L', 1500).unwrap();
+    let result = plan()
+        .build(&invocation(&["argument"]), 'L', 1500, &command_scratch())
+        .unwrap();
     let expected: serde_json::Value =
         serde_json::from_str(include_str!("mxc-policy.json")).unwrap();
     assert_eq!(result, expected);
@@ -71,18 +107,37 @@ fn policy_rejects_broad_and_overriding_grants() {
         let mut p = plan();
         p.project = path(root);
         p.secrets.clear();
-        assert!(p.build(&invocation(&[]), 'L', 1500).is_err(), "{root}");
+        assert!(
+            p.build(&invocation(&[]), 'L', 1500, &command_scratch())
+                .is_err(),
+            "{root}"
+        );
     }
     let mut p = plan();
     p.tools
         .readonly
         .push(path(r"C:\work\project\sub\.env\child"));
-    assert!(p.build(&invocation(&[]), 'L', 1500).is_err());
+    assert!(
+        p.build(&invocation(&[]), 'L', 1500, &command_scratch())
+            .is_err()
+    );
     let mut p = plan();
     p.secrets.push(path(r"C:\outside\.env"));
-    assert!(p.build(&invocation(&[]), 'L', 1500).is_err());
-    assert!(plan().build(&invocation(&[]), 'C', 1500).is_err());
-    assert!(plan().build(&invocation(&[]), 'L', 500).is_err());
+    assert!(
+        p.build(&invocation(&[]), 'L', 1500, &command_scratch())
+            .is_err()
+    );
+    assert!(
+        plan()
+            .build(&invocation(&[]), 'C', 1500, &command_scratch())
+            .is_err()
+    );
+    for timeout in [0, 1, 500, 501] {
+        let result = plan()
+            .build(&invocation(&[]), 'L', timeout, &command_scratch())
+            .unwrap();
+        assert_eq!(result["process"]["timeout"], 1);
+    }
     for value in [
         r"C:relative",
         r"\\server\share",
@@ -104,11 +159,17 @@ fn policy_rejects_broad_and_overriding_grants() {
     p.tools.readonly.push(path(r"C:\Users\person\.cargo"));
     p.credentials
         .push(path(r"C:\Users\person\.cargo\credentials.toml"));
-    assert!(p.build(&invocation(&[]), 'L', 1500).is_ok());
+    assert!(
+        p.build(&invocation(&[]), 'L', 1500, &command_scratch())
+            .is_ok()
+    );
     let mut p = plan();
     p.tools.readonly.push(path(r"C:\private"));
     p.credentials.push(path(r"C:\private\credentials"));
-    assert!(p.build(&invocation(&[]), 'L', 1500).is_err());
+    assert!(
+        p.build(&invocation(&[]), 'L', 1500, &command_scratch())
+            .is_err()
+    );
 }
 fn toolchains_replace_shims_and_keep_trusted_path_order() {
     let input = Discovery {
@@ -126,6 +187,7 @@ fn toolchains_replace_shims_and_keep_trusted_path_order() {
         .into(),
         system_root: Some(path(r"C:\Windows")),
         program_files: vec![path(r"C:\Program Files")],
+        install_roots: vec![path(r"C:\Users\person\nvm\installs")],
         cargo_home: Some(path(r"C:\Users\person\.cargo")),
         rustup_home: Some(path(r"C:\Users\person\.rustup")),
         git_exe: Some(path(r"C:\Program Files\Git\cmd\git.exe")),
@@ -168,6 +230,12 @@ fn toolchains_replace_shims_and_keep_trusted_path_order() {
             .denied
             .contains(&path(r"C:\Users\person\.cargo\credentials.backup"))
     );
+    let mut untrusted = input.clone();
+    untrusted.real_node = Some(path(r"C:\untrusted\node"));
+    assert!(toolchain::discover(&untrusted).is_err());
+    untrusted = input.clone();
+    untrusted.git_exe = Some(path(r"C:\untrusted\cmd\git.exe"));
+    assert!(toolchain::discover(&untrusted).is_err());
     let mut input = input;
     input.msvc = Some(Msvc {
         tools: path(r"C:\VS\VC\Tools\MSVC\14.44"),
@@ -187,12 +255,15 @@ fn toolchains_replace_shims_and_keep_trusted_path_order() {
 }
 fn environment_redirects_profiles_without_importing_host_credentials() {
     let mut host = host();
+    host.insert("CODEX_AUTH_JSON".into(), String::new());
+    assert!(environment::credential_roots(&host).is_ok());
     host.insert("TOKEN".into(), "private".into());
     host.insert("NODE_OPTIONS".into(), "--preserve-symlinks".into());
     host.insert("RUSTUP_TOOLCHAIN".into(), "nightly".into());
     host.insert("CARGO_HOME".into(), r"C:\Users\person\.cargo".into());
     let tools = toolchain::discover(&Discovery {
-        real_node: Some(path(r"C:\node")),
+        real_node: Some(path(r"C:\installs\node")),
+        install_roots: vec![path(r"C:\installs")],
         ..Discovery::default()
     })
     .unwrap();
@@ -203,7 +274,7 @@ fn environment_redirects_profiles_without_importing_host_credentials() {
     assert_eq!(env["USERPROFILE"], r"c:\scratch\home");
     assert_eq!(env["HOMEDRIVE"], "c:");
     assert_eq!(env["HOMEPATH"], r"\scratch\home");
-    assert_eq!(env["PATH"], r"c:\scratch\bin;c:\node");
+    assert_eq!(env["PATH"], r"c:\scratch\bin;c:\installs\node");
     assert_eq!(env["CARGO_HOME"], host["CARGO_HOME"]);
     assert_eq!(env["BUTLER_COMMAND_CWD"], r"l:\");
     let roots = environment::credential_roots(&host).unwrap();
@@ -226,7 +297,7 @@ fn drive_picker_and_reconcile_never_remove_other_owners_mapping() {
         drive_pick::subst_listing("L:\\: => C:\\project\r\n"),
         Ok(vec![('L', target.clone())])
     );
-    assert!(drive_pick::subst_listing("invalid output").is_err());
+    assert_eq!(drive_pick::subst_listing("invalid output"), Ok(Vec::new()));
     assert_eq!(
         drive_pick::reconcile(true, &target, Some(&target)),
         Reconcile::Keep
@@ -244,11 +315,14 @@ fn drive_picker_and_reconcile_never_remove_other_owners_mapping() {
         Reconcile::Forget
     );
     for (code, reason) in [
-        (0xC000_0142, "non_interactive_desktop"),
+        (0xC000_0142, "child_dll_initialization_failed"),
+        (0xC000_0135, "child_dll_not_found"),
+        (0xC000_007B, "child_invalid_image"),
+        (0, "child_output_mismatch"),
         (1314, "privilege_not_held"),
         (126, "mxc_api_missing"),
         (127, "mxc_api_missing"),
-        (1, "probe_failed"),
+        (1, "child_exit_failed"),
     ] {
         assert_eq!(mxc_policy::reason_code(code), reason);
     }
@@ -363,4 +437,37 @@ fn mutation_predicate_requires_project_boundary_and_network_only() {
             && caps.read_only.is_enforced();
         assert_eq!(caps.project_write_available(), old);
     }
+}
+
+fn probe_policy_keeps_loader_grants_and_redacts_paths() {
+    use mxc_policy::probe;
+    let dir = path(r"C:\private\bundle");
+    let system = path(r"C:\Windows");
+    let request = probe::request(
+        &dir.join("helper.exe").unwrap(),
+        &dir,
+        &system,
+        &path(r"C:\scratch\local"),
+        "nonce",
+    )
+    .unwrap();
+    assert_eq!(request["ui"]["disable"], false);
+    assert_eq!(
+        request["filesystem"]["readonlyPaths"],
+        serde_json::json!([dir, system])
+    );
+    assert_eq!(request["process"]["inheritDefaultEnv"], false);
+    let env = request["process"]["env"].as_array().unwrap();
+    for key in ["LOCALAPPDATA=", "SYSTEMROOT=", "WINDIR=", "PATH="] {
+        assert!(env.iter().any(|v| v.as_str().unwrap().starts_with(key)));
+    }
+    let projected = probe::redacted(&request);
+    let text = projected.to_string();
+    for private in ["private", "bundle", "windows", "nonce\""] {
+        assert!(!text.contains(private));
+    }
+    assert_eq!(
+        projected["filesystem"]["readonlyPaths"][0],
+        r"c:\<dir>\<dir>"
+    );
 }

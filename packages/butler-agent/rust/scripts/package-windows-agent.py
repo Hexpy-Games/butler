@@ -44,12 +44,15 @@ def main():
     parser.add_argument('--channel', default='preview')
     args = parser.parse_args()
     verify_pe(args.binary)
+    helper = args.binary.with_name("butler-sandbox.exe")
+    verify_pe(helper)
     version = binary_version(args.binary)
     args.output.mkdir(parents=True, exist_ok=True)
     archive = args.output / f'butler-agent-{version}-windows-x64.zip'
     with tempfile.TemporaryDirectory() as temp:
         stage = Path(temp)
         shutil.copyfile(args.binary, stage / 'butler-agent.exe')
+        shutil.copyfile(helper, stage / helper.name)
         packager.validate_resource_symlinks(args.resources.resolve())
         shutil.copytree(args.resources, stage / 'resources', symlinks=False)
         renderer = stage / 'resources/app-client/dist'
@@ -68,6 +71,7 @@ def main():
                         platform='win32', architecture='x64', binary='butler-agent.exe',
                         resources='resources', launcher='butler.cmd',
                         binarySha256=packager.sha256_file(stage / 'butler-agent.exe'),
+                        sandboxSha256=packager.sha256_file(stage / 'butler-sandbox.exe'),
                         resourcesSha256=packager.sha256_tree(stage / 'resources'))
         (stage / 'native-agent-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
         with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as target:

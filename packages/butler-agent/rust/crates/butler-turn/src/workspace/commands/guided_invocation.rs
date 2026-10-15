@@ -50,6 +50,12 @@ pub(super) fn invocation(
         "BUTLER_DATA".into(),
         input.butler_data.to_string_lossy().into_owned(),
     );
+    environment.insert(
+        "BUTLER_COMMAND_TIMEOUT_MS".into(),
+        super::guided::guided_timeout(input.timeout_ms)
+            .as_millis()
+            .to_string(),
+    );
     let access = match input.access {
         GuidedAccess::FullAccessContained | GuidedAccess::ProjectWrite => ShellAccess::Full,
         GuidedAccess::ReadOnlyObservation | GuidedAccess::ContainedObservation => {

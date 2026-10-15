@@ -6,7 +6,10 @@ use butler_e2e::e2e::{
     scenario::{Access, Setup, accepted_turn_id},
 };
 use serde_json::{Value, json};
-use std::{path::Path, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 fn cases(home: &Path, installation: &Path) -> Vec<Case> {
     let case = |tool, args| Case {
@@ -122,11 +125,14 @@ pub(super) async fn approve(
             case.args["root"].as_str().unwrap()
         )?)])
     } else {
-        let path = case.args["path"].as_str().unwrap().replace('\\', "/");
-        json!([if path.starts_with("../") {
-            s.sandbox.data.join(path).to_string_lossy().into_owned()
-        } else {
-            path
+        // Outside targets show the real path that is checked and written:
+        // `..` resolved, native separators.
+        let native = |path: &Path| path.components().collect::<PathBuf>();
+        let path = case.args["path"].as_str().unwrap();
+        json!([match path.strip_prefix("../") {
+            Some(rest) => native(&s.sandbox.data.parent().unwrap().join(rest)),
+            None if Path::new(path).is_absolute() => native(Path::new(path)),
+            None => PathBuf::from(path),
         }])
     };
     assert_eq!(

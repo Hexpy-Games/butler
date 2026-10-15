@@ -9,5 +9,15 @@ fn main() {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(windows)]
+fn main() {
+    match butler_platform::command_sandbox::windows_sandbox_helper() {
+        Ok(code) => std::process::exit(code),
+        Err(error) => {
+            eprintln!("command_observation_isolation_unavailable: {error}");
+            std::process::exit(125);
+        }
+    }
+}
+#[cfg(not(any(target_os = "linux", windows)))]
 fn main() {}

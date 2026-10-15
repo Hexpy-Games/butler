@@ -1,11 +1,10 @@
 import { useRef } from "react";
 import { NavRow } from "../../../../blocks/NavRow";
-import { SidebarBrand, SidebarNav, SidebarShell } from "../../../../blocks/SidebarShell";
+import { SidebarNav, SidebarShell, SidebarTrafficSpace } from "../../../../blocks/SidebarShell";
 import { TitlebarShell } from "../../../../blocks/TitlebarShell";
 import { ButtonContainer } from "../../../ButtonContainer";
 import { IconButton } from "../../../IconButton";
 import { Briefcase, FileText, MessageSquare, MoreHorizontal, PanelLeftOpen, PanelRight, PencilLine, Search } from "../../../Icons";
-import { Typo } from "../../../Typo";
 import { type SizingCopy } from "./sizingCopy";
 import { Ruler } from "./Ruler";
 import { RulerLegend } from "./RulerLegend";
@@ -14,8 +13,8 @@ import { Subtitle } from "./Subtitle";
 import s from "./SizingHero.module.css";
 
 /**
- * A Butler window's top-left: the sidebar (SidebarShell with the brand in
- * its titlebar row and the first rows) beside the conversation pane's
+ * A Butler window's top-left: the sidebar (SidebarShell with its empty
+ * titlebar row and the first rows) beside the conversation pane's
  * titlebar, the floating sidebar toggle over both. The ruler on the outer
  * left edge measures the titlebar row and each sidebar row.
  */
@@ -28,7 +27,7 @@ export function Frame({ copy, name, space = false }: { copy: SizingCopy; name?: 
     <div className={s.frame}>
     <div className={s.window} ref={host}>
       <div className={s.side}>
-        <SidebarShell titlebar={<span className={s.measure} data-dim="--titlebar-height"><SidebarBrand><Typo.AppTitle>{copy.product}</Typo.AppTitle></SidebarBrand></span>}>
+        <SidebarShell titlebar={<span className={s.measureRow} data-dim="--titlebar-height"><SidebarTrafficSpace /></span>}>
           <SidebarNav>
             {rows.map(([label, icon], k) => (
               <span className={s.measure} data-dim="--sidebar-row-height" key={label}><NavRow active={k === 2 && !space} icon={icon} label={label} /></span>

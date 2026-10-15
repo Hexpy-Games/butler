@@ -21,8 +21,9 @@ const root = process.cwd();
 // tests/support/native-app-server.ts registers one Custom model ("Stub",
 // local/stub) as the default; the model picker selects it by that label.
 const STUB_MODEL_LABEL = /^Stub\b/u;
-// The stub Custom model advertises a single reasoning level.
-const STUB_REASONING_LABEL = "Instant";
+// The stub Custom model advertises a single reasoning level, "none"; #982
+// (a63e1d942) labels it "None" in English (butler-i18n reasoning-effort.ts).
+const STUB_REASONING_LABEL = "None";
 const tempDir = mkdtempSync(join(tmpdir(), "butler-app-layout-smoke-"));
 const uiRoot = resolve(root, process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist");
 const screenshotDir = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? join(root, ".tmp", "app-layout-smoke"));
@@ -2173,7 +2174,7 @@ try {
       modelMenuLayout.filterLabels.includes(appCopy.composer.allProviders) &&
       modelMenuLayout.groupTitles.length > 0 &&
       modelMenuLayout.footerTitle === appCopy.composer.reasoning &&
-      modelMenuLayout.reasoningLabels.includes("Instant") &&
+      modelMenuLayout.reasoningLabels.includes(STUB_REASONING_LABEL) &&
       !modelMenuLayout.reasoningLabels.some((label) =>
         label.includes("reasoning"),
       ) &&

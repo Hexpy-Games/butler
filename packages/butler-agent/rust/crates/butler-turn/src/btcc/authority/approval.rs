@@ -450,16 +450,12 @@ fn inside_workspace(path: &str, workspace: &str) -> Option<String> {
     Some(parts.join("/"))
 }
 
+/// The real target outside the workspace, as file tools resolve and check it.
 fn absolute_target(path: &str, workspace: &str) -> String {
-    let path = Path::new(path);
-    if path.is_absolute() {
-        path.to_string_lossy().into_owned()
-    } else {
-        Path::new(workspace)
-            .join(path)
-            .to_string_lossy()
-            .into_owned()
-    }
+    butler_platform::tool_paths::resolve(Path::new(workspace), path).map_or_else(
+        |_| path.to_owned(),
+        |target| target.to_string_lossy().into_owned(),
+    )
 }
 
 fn saturating_count(count: usize) -> u32 {
