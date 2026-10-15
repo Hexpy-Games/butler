@@ -117,6 +117,7 @@ async fn offline_generated_toolchains() -> Result<(), HarnessError> {
                 assert!(!path.exists(), "new secret remained in project");
             }
             preparation.release();
+
             // A refused command must still leave its source inputs intact.
             if tool == "cargo" {
                 assert_eq!(

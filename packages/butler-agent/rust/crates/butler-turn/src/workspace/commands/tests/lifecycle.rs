@@ -62,6 +62,8 @@ async fn command_environment_excludes_host_values() {
     guided_environment_excludes_non_allowlisted_host_values().await;
     structured_undefined_environment_entry_removes_inherited_value().await;
     guided_quotes_reach_the_shell_intact().await;
+    sweep_survives_reconciliation_failure().await;
+    helper_timeout_maps_to_summary().await;
 }
 
 /// What a POSIX shell or `cmd.exe` prints for an unset variable: the empty
@@ -290,4 +292,85 @@ async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
     .await;
     owner.close().await;
     assert_eq!(owner.active_count(), 0);
+}
+
+async fn sweep_survives_reconciliation_failure() {
+    let fixture = Fixture::new();
+    let root = fixture.0.join("project");
+    let data = fixture.0.join("data");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::create_dir_all(data.join("sandbox")).unwrap();
+    let mut input = fixture.guided("unused");
+    input.workspace_root = root.clone();
+    input.butler_data = data.clone();
+    input.access = GuidedAccess::ProjectWrite;
+    let prepared = super::super::secret_sweep::before_run(&input)
+        .await
+        .unwrap();
+    std::fs::write(root.join(".env"), "new secret").unwrap();
+    std::fs::write(data.join("sandbox/drives"), "not a directory").unwrap();
+    if !command_sandbox::POSIX_SHELL {
+        assert!(command_sandbox::reconcile_project_write(&data).is_err());
+    }
+    let owner = Commands::new();
+    let command = if command_sandbox::POSIX_SHELL {
+        "printf complete"
+    } else {
+        "Write-Output complete"
+    };
+    let mut original = fixture.guided(command);
+    system_environment(&mut original.host_environment);
+    let output = owner
+        .submit_guided(original)
+        .unwrap()
+        .await
+        .unwrap()
+        .unwrap();
+    let payload = output.payload_source.path.clone();
+    let result = super::super::secret_sweep::after_run(&input, prepared, Ok(Some(output))).await;
+    let output = result.unwrap().unwrap();
+    assert_eq!(output.summary.exit_code, Some(0));
+    let sweep_supported = command_sandbox::project_write_mechanism() != "seatbelt";
+    let expected = if sweep_supported {
+        vec![root.join(".env")]
+    } else {
+        Vec::new()
+    };
+    assert_eq!(output.summary.sandbox_violation, expected);
+    assert!(
+        std::fs::read_to_string(payload)
+            .unwrap()
+            .contains("complete")
+    );
+    owner.close().await;
+    assert_eq!(root.join(".env").exists(), !sweep_supported);
+}
+
+async fn helper_timeout_maps_to_summary() {
+    let fixture = Fixture::new();
+    let owner = Commands::new();
+    for (marker, expected) in [
+        ("butler_command_execution_timed_out", true),
+        ("ordinary error", false),
+    ] {
+        let command = if command_sandbox::POSIX_SHELL {
+            format!("printf '%s\\n' '{marker}' >&2; exit 124")
+        } else {
+            format!("[Console]::Error.WriteLine('{marker}'); exit 124")
+        };
+        let mut input = fixture.guided(&command);
+        system_environment(&mut input.host_environment);
+        let output = owner.submit_guided(input).unwrap().await.unwrap().unwrap();
+        assert_eq!(output.summary.timed_out, expected);
+        assert_eq!(
+            output.summary.exit_code,
+            if expected { None } else { Some(124) }
+        );
+        let payload = std::fs::read_to_string(&output.payload_source.path).unwrap();
+        assert!(payload.contains(marker));
+        let header: serde_json::Value =
+            serde_json::from_str(payload.lines().next().unwrap()).unwrap();
+        assert_eq!(header["timedOut"], expected);
+    }
+    owner.close().await;
 }

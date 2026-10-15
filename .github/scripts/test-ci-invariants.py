@@ -106,6 +106,28 @@ class ArtifactTrust(unittest.TestCase):
                         self.assertEqual((root / 'result/butler-sandbox').read_bytes(), b'complete sandbox')
 
     # test-category: security
+    def test_windows_reuse_requires_the_pinned_sandbox_helper(self):
+        expected = dict(platform='windows-x64', sha='a' * 40, version='0.1.0-preview.99')
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            binary = directory / 'butler-agent.exe'
+            helper = directory / 'butler-sandbox.exe'
+            binary.write_bytes(b'agent')
+            helper.write_bytes(b'sandbox')
+            metadata = dict(expected, binary=binary.name, sha256=provenance.digest(binary))
+            manifest = directory / 'provenance.json'
+            manifest.write_text(json.dumps(metadata))
+            with patch.object(provenance, 'verify_version') as version:
+                self.assertFalse(provenance.verify(directory, expected))
+                version.assert_not_called()
+                metadata['sandbox_sha256'] = provenance.digest(helper)
+                manifest.write_text(json.dumps(metadata))
+                self.assertTrue(provenance.verify(directory, expected))
+                helper.write_bytes(b'corrupt')
+                with self.assertRaisesRegex(ValueError, 'sandbox helper/digest'):
+                    provenance.verify(directory, expected)
+
+    # test-category: security
     def test_exact_identity_and_digest_required(self):
         expected = dict(schema=1, sha='a' * 40, platform='linux-x64', version='0.1.0-preview.99',
                         native_mode='static-ort', profile='release', toolchain='1.99.0',
