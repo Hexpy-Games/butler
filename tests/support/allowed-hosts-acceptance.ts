@@ -1,6 +1,7 @@
 /** SecuritySettings product UI with a deterministic settings transport. */
 import { strict as assert } from "node:assert";
 import { join } from "node:path";
+import { writeFileSync } from "node:fs";
 import type { Browser, Locator, Page } from "playwright";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 
@@ -34,6 +35,34 @@ async function screenshot(page: Page, output: string, key: string) {
   await page.locator(`[data-settings-section-id="${section}"]`).scrollIntoViewIfNeeded();
   await page.evaluate(async () => { await document.fonts.ready; });
   await page.screenshot({ path: join(output, `${key}.png`), animations: "disabled" });
+}
+
+async function measureFieldGaps(panel: Locator, output: string, key: string) {
+  const gaps = await panel.evaluate(node => {
+    const fields = [...node.querySelectorAll("[data-settings-field]")];
+    const rect = (element: Element) => element.getBoundingClientRect();
+    const groups = fields.map(field => {
+      const [copy, control] = [...field.children];
+      const [label, hint] = [...copy.children];
+      const list = control.firstElementChild!.firstElementChild!;
+      return {
+        labelToHint: rect(hint).top - rect(label).bottom,
+        hintToList: rect(list).top - rect(hint).bottom,
+        width: rect(control).width,
+      };
+    });
+    const addRow = fields[0].querySelector("input")!.parentElement!.parentElement!;
+    return { groups, addRowToNextLabel: rect(fields[1].querySelector("label")!).top - rect(addRow).bottom };
+  });
+  assert.equal(gaps.groups.length, 2);
+  for (const group of gaps.groups) {
+    assert.equal(group.labelToHint, 6, "settings label and description gap");
+    assert.equal(group.hintToList, 12, "settings description and control gap");
+    assert(group.width <= 460, "host controls retain the column cap");
+  }
+  assert.equal(gaps.addRowToNextLabel, 20, "standard gap between settings fields");
+  writeFileSync(join(output, `${key}-gaps.json`), JSON.stringify(gaps, null, 2));
+  console.log(`${key} gaps: ${JSON.stringify(gaps)}`);
 }
 
 export async function captureAllowedHosts(browser: Browser, url: string, output: string) {
@@ -99,6 +128,8 @@ export async function captureAllowedHosts(browser: Browser, url: string, output:
       await settledInput(contentInput);
       assert(await contentInput.evaluate(node => document.activeElement === node), "content host save restores focus");
       await row.getByText(copy.hostCount(2), { exact: true }).waitFor();
+      await screenshot(page, output, `${key}-expanded`);
+      await measureFieldGaps(panel, output, key);
       await panel.getByRole("button", { name: copy.removeHost("one.example.com"), exact: true }).click();
       await row.getByText(copy.hostCount(1), { exact: true }).waitFor();
       await toggle.click();

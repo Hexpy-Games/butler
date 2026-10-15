@@ -6,7 +6,7 @@ import { useSavedKeys } from "./hooks/useSavedKeys";
 import { useGrants } from "./useGrants";
 import { memo, useId, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { DisclosureRow, Stack, Typo } from "@/butler-ds";
+import { DisclosureRow, SettingsField, Stack } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { SecurityAllowedHostsField } from "./SecurityAllowedHostsField";
 import { SecurityPairingSection } from "./SecurityPairingSection";
@@ -100,13 +100,19 @@ function SecurityAdvancedSection({ security, open, onToggle }: {
       >
         <Stack id={panelId} align="row" gap="none">
           <Stack.Item basis="lg" minWidth="0">
-            <Stack gap="md">
-              <Typo.Label>{copy.hosts}</Typo.Label>
-              <Typo.Caption tone="secondary" id={hintId}>{copy.hostsDescription}</Typo.Caption>
-              <SecurityAllowedHostsField hosts={view.allowed_hosts} disabled={busy !== null} onSave={security.saveAllowedHosts} describedBy={hintId} />
-              <Typo.Label>{copy.contentHosts}</Typo.Label>
-              <Typo.Caption tone="secondary" id={contentHintId}>{copy.contentHostsDescription}</Typo.Caption>
-              <SecurityAllowedHostsField content hosts={view.content_hosts ?? []} disabled={busy !== null} onSave={security.saveContentHosts} describedBy={contentHintId} />
+            <Stack gap="xl">
+              <SettingsField
+                label={copy.hosts}
+                description={copy.hostsDescription}
+                descriptionId={hintId}
+                control={<SecurityAllowedHostsField hosts={view.allowed_hosts} disabled={busy !== null} onSave={security.saveAllowedHosts} describedBy={hintId} />}
+              />
+              <SettingsField
+                label={copy.contentHosts}
+                description={copy.contentHostsDescription}
+                descriptionId={contentHintId}
+                control={<SecurityAllowedHostsField content hosts={view.content_hosts ?? []} disabled={busy !== null} onSave={security.saveContentHosts} describedBy={contentHintId} />}
+              />
             </Stack>
           </Stack.Item>
         </Stack>
