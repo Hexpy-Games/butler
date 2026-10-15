@@ -18,6 +18,9 @@ let state = "ready";
 let reads = 0;
 let allReads = 0;
 let cells = 0;
+let backendTitle = "Login form refactor";
+const heights = new Map<string, number>();
+const heightDeltas: number[] = [];
 let releaseLoading: (() => void)[] = [];
 function monitor(url: URL) {
   const view = usageView({ quota: quota(), usd: 0.0842 });
@@ -26,7 +29,7 @@ function monitor(url: URL) {
   const session = url.searchParams.get("session_id");
   view.filters = { sessionId: session, sinceTs: hours ? now - hours * 3600000 : null, untilTs: hours ? now : null };
   view.timeline.slots = state === "empty" ? [] : [[now - 3600000, 1, 20000, 10000, 1000], [now - 600000, 2, 28200, 21900, 2420]];
-  view.topSessions = [{ sessionId: "s1", title: "Login form refactor", kind: "chat", totalTokens: 51620, requests: 3, lastUsedMs: now },
+  view.topSessions = [{ sessionId: "s1", title: backendTitle, kind: "chat", totalTokens: 51620, requests: 3, lastUsedMs: now },
     { sessionId: "s2", title: "Daily review", kind: "schedule", totalTokens: 1200, requests: 1, lastUsedMs: now - 3600000 }];
   if (state !== "empty") view.topSessions.push(...Array.from({ length: 6 }, (_, i) => ({ sessionId: `s${i + 3}`, title: `Review ${i + 3}`, kind: "chat" as const, totalTokens: 1000 - i * 100, requests: 1, lastUsedMs: now })));
   view.previousPeriod = { totalTokens: 40000 };
@@ -64,6 +67,7 @@ try {
     if (process.env.BUTLER_USAGE_STATE && scenario !== process.env.BUTLER_USAGE_STATE) continue;
     cells += 1;
     state = scenario;
+    backendTitle = "Login form refactor";
     await page.setViewportSize({ width, height: 1000 });
     await page.goto(`${base}/?visual=components&theme=${theme}&locale=ko&auth=${auth}`);
     const closeInspector = page.getByRole("button", { name: "오른쪽 패널 숨기기", exact: true }).first();
@@ -79,6 +83,15 @@ try {
     }
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(400);
+    const height = (await popover.boundingBox())!.height;
+    const heightKey = `${width}/${theme}`;
+    if (scenario === "ready") heights.set(heightKey, height);
+    if (!before && scenario === "loading" && heights.has(heightKey)) {
+      const delta = Math.abs(height - heights.get(heightKey)!);
+      heightDeltas.push(delta);
+      assert(delta <= 2, `loading popover height differs by ${delta}px`);
+    }
+    if (!before && scenario === "ready" && auth === "api_key") assert.match(await popover.innerText(), /(?:^|\s)\$0\.08/u);
     if (shots) await page.screenshot({ path: join(shots, `${before ? "before" : "after"}${auth === "subscription" ? "-subscription" : ""}-popover-${theme}-${width}-${scenario}.png`) });
     if (!before && scenario === "empty") assert.equal(await popover.locator('[data-test-class="usage-readout"]').count(), 0);
     if (auth === "subscription") await popover.getByText("계정 한도", { exact: true }).waitFor();
@@ -120,6 +133,16 @@ try {
       await page.keyboard.press("Escape");
       await Promise.all([page.waitForResponse(r => new URL(r.url()).searchParams.get("since_hours") === "720"),
         page.getByRole("radio", { name: "30일", exact: true }).click()]);
+      const rowXs: number[] = [];
+      for (const [tab, title] of [["대화", "Login form refactor"], ["모델", "openai/gpt-6-luna"], ["도구", "파일 읽기"]]) {
+        await page.getByRole("tab", { name: tab, exact: true }).click();
+        const row = page.getByRole("tabpanel").getByText(title!, { exact: true });
+        await row.waitFor();
+        rowXs.push((await row.boundingBox())!.x);
+        await page.waitForTimeout(400);
+        if (shots && tab !== "대화") await page.screenshot({ path: join(shots, `after${auth === "subscription" ? "-subscription" : ""}-${tab === "모델" ? "models" : "tools"}-${theme}-${width}.png`) });
+      }
+      assert(Math.max(...rowXs) - Math.min(...rowXs) < 1, "all breakdown tabs align");
       await page.getByRole("tab", { name: "도구", exact: true }).click();
       await page.getByText("파일 읽기", { exact: true }).waitFor();
       await page.getByRole("tab", { name: "대화", exact: true }).click();
@@ -139,6 +162,8 @@ try {
       await page.getByRole("button", { name: "대화", exact: true }).click();
       const picker = page.locator('[data-slot="filtered-select-popover"]');
       await picker.getByRole("textbox", { name: "대화 검색" }).fill("");
+      assert.equal(await picker.locator('[data-slot="filtered-select-group-title"]').count(), 1);
+      assert.equal(await picker.locator('[data-slot="filtered-select-group-title"]').innerText(), "사용량순");
       await page.waitForTimeout(400);
       if (shots) await page.screenshot({ path: join(shots, `after${auth === "subscription" ? "-subscription" : ""}-picker-${theme}-${width}.png`) });
       await picker.getByRole("textbox", { name: "대화 검색" }).fill("no matching title");
@@ -149,10 +174,20 @@ try {
       await picker.getByRole("textbox", { name: "대화 검색" }).fill("Daily");
       await picker.getByRole("button", { name: /Daily review/u }).waitFor();
       await page.keyboard.press("Escape");
+      // Leave the usage mount, change the gateway response, and revisit through Details.
+      backendTitle = "Updated backend conversation";
+      if (width === 375) await page.getByRole("button", { name: "돌아가기", exact: true }).first().click();
+      await page.locator('[data-test-class="settings-header settings-titlebar"]').getByRole("button", { name: "돌아가기", exact: true }).click();
+      await page.locator('[data-slot="composer-compact-preview"]').click();
+      await trigger.click();
+      const revisitReads = allReads;
+      await popover.getByRole("button", { name: "자세히", exact: true }).click();
+      await page.getByRole("tabpanel").getByText(backendTitle, { exact: true }).waitFor();
+      assert(allReads > revisitReads, "revisit fetches fresh all-chat data");
     }
   }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, cells, reads, allReads, before }));
+  console.log(JSON.stringify({ ok: true, cells, reads, allReads, before, heightDeltas }));
 } finally {
   // The last loading cell deliberately holds a route. Settle it before teardown.
   releaseLoading.forEach(resolve => resolve());

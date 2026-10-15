@@ -10,11 +10,6 @@ import { UsageBreakdown } from "./UsageBreakdown";
 import { UsageSessionSelect, usageSessionTitle } from "./UsageSessionSelect";
 import { UsageProviderPanel } from "./UsageProviderPanel";
 
-/** A range/session key prevents stale responses from replacing a newly selected scope. */
-const allRevisions = new Map<number, number>();
-let lastViews = new Map<string, UsageMonitorView>();
-export function resetUsageSettingsCache(): void { lastViews.clear(); allRevisions.clear(); }
-
 /** Keep one scoped view and the all-chat view per range, rather than every visited chat. */
 function rememberView(views: Map<string, UsageMonitorView>, key: string, next: UsageMonitorView) {
   const updated = new Map(views);
@@ -27,7 +22,8 @@ function rememberView(views: Map<string, UsageMonitorView>, key: string, next: U
 
 function useUsageRange(hours: number, session: string | null, revision: number) {
   const key = `${hours}/${session ?? ""}`;
-  const [views, setViews] = useState(() => new Map(lastViews));
+  const [views, setViews] = useState(() => new Map<string, UsageMonitorView>());
+  const allRevisions = useRef(new Map<number, number>());
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -35,13 +31,12 @@ function useUsageRange(hours: number, session: string | null, revision: number) 
     setPending(key); setError(null);
     const params = new URLSearchParams({ since_hours: String(hours) });
     if (session) params.set("session_id", session);
-    const needsAll = allRevisions.get(hours) !== revision;
+    const needsAll = allRevisions.current.get(hours) !== revision;
     const requests = session && needsAll ? [[`${hours}/`, new URLSearchParams({ since_hours: String(hours) })], [key, params]] as const : session || needsAll ? [[key, params]] as const : [];
     Promise.all(requests.map(async ([requestKey, query]) => {
       const next = await api<UsageMonitorView>(`/usage-monitor?${query}`);
       if (cancelled) return;
-      if (requestKey === `${hours}/`) allRevisions.set(hours, revision);
-      lastViews = rememberView(lastViews, requestKey, next);
+      if (requestKey === `${hours}/`) allRevisions.current.set(hours, revision);
       setViews(previous => rememberView(previous, requestKey, next));
     })).catch(() => { if (!cancelled) setError(key); })
       .finally(() => { if (!cancelled) setPending(null); });
@@ -92,7 +87,7 @@ export function UsageSettings() {
             <UsageSessionSelect triggerRef={pickerTrigger} open={pickerOpen} onOpenChange={setPickerOpen} range={ranges.find(r => r.value === String(hours))!.label} sessions={sessions} value={session} onChange={setSession} /></Stack>
           <Stack gap="xs"><Typo.Caption>{copy.period}</Typo.Caption>
             <SegmentedControl ariaLabel={copy.period} size="sm" options={ranges} value={String(hours)} onValueChange={v => setHours(Number(v))} /></Stack>
-          <Inline gap="xs"><Typo.Caption>{result.view ? copy.updated(usageClock(Date.parse(result.view.generated_at))) : "—"}</Typo.Caption>
+          <Inline gap="xs" cross="end"><Typo.Caption>{result.view ? copy.updated(usageClock(Date.parse(result.view.generated_at))) : "—"}</Typo.Caption>
             <IconButton label={appCopy.common.refresh} disabled={result.loading} onClick={refresh}><RefreshCcw size="sm" /></IconButton></Inline>
         </Inline>
         <UsageReadout view={result.view} values={usageReadout(result.view, bucket)} label={bucket?.label ?? label}

@@ -4,6 +4,7 @@ import type { UsageMonitorView } from "@/app/types";
 import { Stack, Typo } from "@/butler-ds";
 import { planLabel, quotaReasonLabel } from "./providerQuotaPresentation";
 import { ProviderQuotaGauge } from "./ProviderQuotaGauge";
+import { usageProviderName } from "../usage/usageProviderName";
 import { usageClock } from "../usage/usageTimeline";
 
 type UsageProvider = UsageMonitorView["providerUsage"]["providers"][number];
@@ -12,7 +13,7 @@ export function UsageProviderRow({ provider }: { provider: UsageProvider }) {
   const catalog = useButlerStore(store => store.modelCatalog);
   const name = catalog.providers.find(item => item.provider_id === provider.providerId)?.provider_label
     ?? catalog.models.find(item => item.provider_id === provider.providerId)?.provider_label
-    ?? appCopy.settings.localModels.provider;
+    ?? usageProviderName(provider.providerId);
   const quota = provider.remaining;
   const displayName = quota.sourceKind === "codex_app_server" ? appCopy.composer.usage.codexProvider : name;
   const description = [displayName, planLabel(quota.planKind, quota.planName),

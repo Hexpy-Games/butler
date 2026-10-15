@@ -1,7 +1,7 @@
 import { useState, type Ref } from "react";
 import { appCopy } from "@/app/copy";
 import type { UsageMonitorView } from "@/app/types";
-import { FilteredSelectPopover, Popover, PopoverContent, PopoverTrigger, RollingSwap, SelectButton, Typo } from "@/butler-ds";
+import { FilteredSelectPopover, Popover, PopoverContent, PopoverTrigger, RollingSwap, SelectButton } from "@/butler-ds";
 import { usageTokens } from "../usage/usageTimeline";
 import { usageTime } from "../conversation/conversationUsage";
 
@@ -36,11 +36,12 @@ export function UsageSessionSelect({ sessions, value, onChange, open, onOpenChan
         searchClearLabel={appCopy.interfaceDetails.clearSearch} searchValue={query} onSearchChange={setQuery}
         filters={[{ id: "all", label: copy.all }, ...(["chat", "schedule", "butler"] as const).map(id => ({ id, label: usageKind(id) }))]}
         activeFilterId={kind} onFilterChange={setKind} emptyLabel={copy.noMatches} resultsMaxRows={7}
-        groups={[{ id: "all", title: null, items: !query && kind === "all" ? [{ id: "all", label: copy.all, selected: value === null, onSelect: () => select(null) }] : [] },
-          { id: "sessions", title: copy.usageOrder, items: items.map(s => ({ id: s.sessionId, label: usageSessionTitle(s),
+        footerTitle={copy.pickerFooter(range)}
+        groups={[{ id: "sessions", title: copy.usageOrder, items: [
+          ...(!query && kind === "all" ? [{ id: "all", label: copy.all, selected: value === null, onSelect: () => select(null) }] : []),
+          ...items.map(s => ({ id: s.sessionId, label: usageSessionTitle(s),
             description: [usageTokens(s.totalTokens), usageKind(s.kind), s.lastUsedMs ? usageTime(new Date(s.lastUsedMs).toISOString()) : null].filter(Boolean).join(" · "),
-            selected: value === s.sessionId, onSelect: () => select(s.sessionId) })) }]} />
-      <Typo.Caption>{copy.pickerFooter(range)}</Typo.Caption>
+            selected: value === s.sessionId, onSelect: () => select(s.sessionId) }))] }]} />
     </PopoverContent>
   </Popover>;
 }

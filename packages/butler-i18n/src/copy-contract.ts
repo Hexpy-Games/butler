@@ -808,9 +808,6 @@ export interface AppCopy {
     apiUsage: string;
     unconfirmed: string;
     unknown: string;
-    codexUsage: string;
-    zaiUsage: string;
-    providerUsage: string;
     authNotApplicable: string;
     authRequired: string;
     authMismatch: string;
@@ -1016,11 +1013,8 @@ export interface AppCopy {
       checked: (time: string) => string;
       failures: (count: string) => string;
       details: string;
-      input: string;
       cached: string;
       output: string;
-      reasoning: string;
-      cost: string;
       estimate: string;
       left: (percent: string) => string;
       unavailable: string;
