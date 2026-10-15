@@ -30,15 +30,38 @@ pub(super) async fn prepare(s: &mut Scenario, chat: &str) -> Result<Option<Histo
         btcc::seed(&data)?;
         btcc::assert_complete(&data)?;
         Connection::open(btcc::path(&data))?.execute_batch("PRAGMA journal_mode=WAL")?;
-        Ok::<_, HarnessError>(History(
-            transcripts::seed(&data)?,
-            active::seed(&data, &chat)?,
-        ))
+        let history = History(transcripts::seed(&data)?, active::seed(&data, &chat)?);
+        settle_history(&data)?;
+        Ok::<_, HarnessError>(history)
     })
     .await
     .map_err(|error| HarnessError(error.to_string()))??;
     s.gw = s.agent.start_again().await?;
     Ok(Some(history))
+}
+
+// All these files represent previously acknowledged history. Finish fixture
+// writeback before either binary starts, rather than racing 1.8 GB of unrelated
+// synthetic transcript/metrics writes against the sampled user operations.
+fn settle_history(data: &std::path::Path) -> Result<(), HarnessError> {
+    let started = std::time::Instant::now();
+    let mut files = 0;
+    for folder in ["transcripts", "metrics"] {
+        let directory = data.join(folder);
+        for entry in std::fs::read_dir(&directory)? {
+            let entry = entry?;
+            if entry.file_type()?.is_file() {
+                butler_platform::secure_fs::sync_path(entry.path())?;
+                files += 1;
+            }
+        }
+        butler_platform::secure_fs::sync_directory(&directory).unwrap_or(Ok(()))?;
+    }
+    eprintln!(
+        "APPROVAL-HISTORY settled_files={files} sync_us={}",
+        started.elapsed().as_micros()
+    );
+    Ok(())
 }
 
 pub(super) async fn assert_complete(

@@ -76,7 +76,7 @@ fn discard(directory: &Path) -> Result<usize, HarnessError> {
         if entry.file_type()?.is_dir() {
             count += discard(&entry.path())?;
         } else if entry.file_type()?.is_file() {
-            butler_platform::secure_fs::sync_path(&entry.path())?;
+            butler_platform::secure_fs::sync_path(entry.path())?;
             let file = std::fs::File::open(entry.path())?;
             if let Some(result) = butler_platform::secure_fs::discard_cached_pages(&file) {
                 result?;
