@@ -9,6 +9,8 @@ import { DeveloperLogRow } from "./DeveloperLogRow";
 import type { DeveloperLogTab } from "./developerLogViewerTypes";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 
+import { DeveloperUsageSections } from "./DeveloperUsageSections";
+
 const PAGE_SIZE = 30;
 type DeveloperLogKindFilter = "all" | "model_turn" | "model_turn_error";
 
@@ -82,6 +84,7 @@ export function DeveloperLogsSettings() {
 
   return (
     <SettingsPage>
+      <DeveloperUsageSections />
       <SettingsSection
         id="developer-logs"
         kind="list"

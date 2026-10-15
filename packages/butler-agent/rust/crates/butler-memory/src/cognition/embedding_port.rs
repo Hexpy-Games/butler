@@ -50,6 +50,9 @@ pub struct EmbeddingRequest {
 pub type EmbeddingFuture<'a> =
     Pin<Box<dyn Future<Output = CognitionResult<EmbeddingResult>> + Send + 'a>>;
 
+/// Completion of model initialization, without running inference.
+pub type EmbeddingReadyFuture<'a> = Pin<Box<dyn Future<Output = CognitionResult<()>> + Send + 'a>>;
+
 /// Embeds texts for memory projection and recall.
 pub trait CognitionEmbeddingPort: Send + Sync {
     /// Readiness without loading or I/O. In-process implementations are already available.
@@ -60,6 +63,12 @@ pub trait CognitionEmbeddingPort: Send + Sync {
     /// The user's memory-model choice: false means no model load, query or vector work.
     fn enabled(&self) -> bool {
         true
+    }
+
+    /// Load on demand and await readiness without charging initialization to inference.
+    /// In-process implementations are already available.
+    fn ready(&self, _deadline_at_epoch_ms: i64) -> EmbeddingReadyFuture<'_> {
+        Box::pin(async { Ok(()) })
     }
 
     /// Embeds the request, or fails when cancelled.

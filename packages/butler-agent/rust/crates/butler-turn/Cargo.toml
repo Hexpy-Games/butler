@@ -31,6 +31,7 @@ regress.workspace = true
 test-support = ["rusqlite/trace"]
 
 [dev-dependencies]
+butler-platform = { path = "../butler-platform", features = ["test-support"] }
 butler-test-support = { path = "../butler-test-support" }
 tokio = { workspace = true, features = ["test-util"] }
 

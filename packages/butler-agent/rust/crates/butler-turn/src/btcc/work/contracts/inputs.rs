@@ -39,6 +39,11 @@ pub struct ContinueWorkInput {
     pub backfill_tool_call_ids: Option<Vec<String>>,
 }
 
+/// Check-line labels recording a Plan's Conception: the goal, the deliverables
+/// it implies, the likely next request and the assumptions made instead of
+/// asking. They travel with the Plan to delegated work.
+pub const PLAN_INTENT_LINES: [&str; 4] = ["Goal:", "Deliver:", "Next:", "Assumed:"];
+
 /// Replaces the Work's plan.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

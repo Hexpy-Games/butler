@@ -108,11 +108,12 @@ pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -
     // Owner decision: a turn a crashed process was running is not resumed;
     // it runs only when its session was never bound (BTCC never started it).
     if needs_interruption_report(&item.record)
-        && let Some(poll) = interrupted::settle(
+        && let Some(poll) = interrupted::settle_returning_child(
             &item,
             &queue,
             &bindings,
             delivery.as_ref(),
+            subsessions.as_ref(),
             "crash-interrupted",
         )
         .await
@@ -183,31 +184,23 @@ async fn failed(
             error.message
         );
     }
-    let replaced = interrupted::replaced_once(&item.record);
     if let Some(code) = rejected::safe_code(error) {
         return rejected::reject(item, queue, bindings, delivery, subsessions, code).await;
     }
-    if error.message == super::shutdown::INTERRUPTED
-        && let Some(poll) =
-            interrupted::settle(item, queue, bindings, delivery, "shutdown-interrupted").await
-    {
-        return poll;
-    }
-    if replaced
-        && let Some(poll) =
-            interrupted::settle(item, queue, bindings, delivery, "replacement-interrupted").await
-    {
-        return poll;
-    }
-    if replaced {
-        // The turn never started, so its report is unavailable: no second replacement.
-        return rejected::reject(item, queue, bindings, delivery, subsessions, error.code).await;
-    }
+    let status = if error.message == super::shutdown::INTERRUPTED {
+        "shutdown-interrupted"
+    } else if interrupted::replaced_once(&item.record) {
+        "replacement-interrupted"
+    } else {
+        "runtime-interrupted"
+    };
     if let Some(poll) =
-        interrupted::settle(item, queue, bindings, delivery, "runtime-interrupted").await
+        interrupted::settle_returning_child(item, queue, bindings, delivery, subsessions, status)
+            .await
     {
         return poll;
     }
+    // The turn never started, so its report is unavailable: no second replacement.
     rejected::reject(item, queue, bindings, delivery, subsessions, error.code).await
 }
 
@@ -469,10 +462,18 @@ pub(super) async fn recover_interrupted(
     queue: &InboundQueue,
     bindings: &SessionBindingStore,
     delivery: &dyn IngressDelivery,
+    subsessions: &butler_turn::btcc::SubsessionService,
 ) -> Result<(), super::IngressError> {
-    if interrupted::settle(&item, queue, bindings, delivery, "shutdown-interrupted")
-        .await
-        .is_none()
+    if interrupted::settle_returning_child(
+        &item,
+        queue,
+        bindings,
+        delivery,
+        subsessions,
+        "shutdown-interrupted",
+    )
+    .await
+    .is_none()
     {
         queue
             .defer_async(item, "startup_turn_not_started".into())

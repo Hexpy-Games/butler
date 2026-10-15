@@ -21,23 +21,23 @@ export async function connectElectronMain(inspectorPort: number) {
     if(reply.error || reply.result?.exceptionDetails)entry.fail(new Error(JSON.stringify(reply)));
     else entry.done(reply.result);
   });
-  const send = (method: string, params: Record<string, unknown>) => new Promise<any>((done, fail) => {
+  const send = (method: string, params: Record<string, unknown>, timeoutMs = 10_000) => new Promise<any>((done, fail) => {
     if(socket.readyState!==WebSocket.OPEN){fail(new Error("Main inspector disconnected"));return}
     const requestId=++id;
     const timer=setTimeout(()=>{
       pending.delete(requestId);
       fail(new Error(`Main inspector timed out: ${method} request ${requestId}, socket ${socket.readyState}`));
-    },10_000);
+    },timeoutMs);
     pending.set(requestId,{done:value=>{clearTimeout(timer);done(value)},fail:error=>{clearTimeout(timer);fail(error)}});
     socket.send(JSON.stringify({id:requestId,method,params}));
   });
   return {
-    async evaluate<T>(expression:string,queryInstances=false):Promise<T> {
+    async evaluate<T>(expression:string,queryInstances=false, timeoutMs=10_000):Promise<T> {
       // Release remote handles from queryObjects after every query. Ordinary
       // evaluations return by value and allocate no retained inspector handles.
       const objectGroup=`butler-smoke-${id+1}`;
       try {
-        const result=await send("Runtime.evaluate",{expression,awaitPromise:true,returnByValue:!queryInstances,objectGroup});
+        const result=await send("Runtime.evaluate",{expression,awaitPromise:true,returnByValue:!queryInstances,objectGroup},timeoutMs);
         if(!queryInstances)return result.result.value;
         const objects=await send("Runtime.queryObjects",{prototypeObjectId:result.result.objectId,objectGroup});
         const bounds=await send("Runtime.callFunctionOn",{objectId:objects.objects.objectId,

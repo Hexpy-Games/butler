@@ -31,6 +31,8 @@ pub(super) struct PageRead<'a> {
     pub input: &'a RecallRequest,
     pub cursors: &'a CursorStore,
     pub deadline_at: i64,
+    /// Model initialization is prework, not time spent searching text or graphs.
+    pub initialization_ms: i64,
 }
 
 /// The pinned sources of one read.
@@ -163,8 +165,8 @@ fn pinned(
     close_sources(graph, canonical, result)
 }
 
-/// Candidate selection within the graph and candidate deadlines (2 s and
-/// 3.5 s before the operation deadline).
+/// Preserve the candidate/graph work windows after model initialization,
+/// while capping every stage at the original overall recall deadline.
 fn select(
     read: &PageRead<'_>,
     sources: &Sources<'_>,
@@ -173,7 +175,17 @@ fn select(
     clocks: Clocks<'_>,
 ) -> CognitionResult<Selection> {
     let graph_started = Instant::now();
-    let graph_deadline = read.deadline_at - 2_000;
+    // Shift candidate work past initialization, reserving at least 750 ms
+    // each for graph expansion and source hydration. Neither stage may
+    // consume the next stage's reserve after a capped readiness wait.
+    let shifted = read.deadline_at.saturating_add(read.initialization_ms);
+    let now = (clocks.now_millis)();
+    let candidate_deadline = (shifted - 3_500)
+        .max(now.saturating_add(500))
+        .min(read.deadline_at - 1_500);
+    let graph_deadline = (shifted - 2_000)
+        .max(candidate_deadline.saturating_add(750))
+        .min(read.deadline_at - 750);
     let memory_root = read.environment.memory_root(read.data_root);
     let selected = selection::run(selection::RecallSelectionInput {
         graph: sources.graph,
@@ -183,7 +195,7 @@ fn select(
         generation: read.generation,
         input: read.input,
         vector_matches: vector.matches.as_ref(),
-        candidate_deadline: graph_deadline - 1_500,
+        candidate_deadline,
         graph_deadline,
         now_iso: sources.now_iso,
         now_millis: clocks.now_millis,

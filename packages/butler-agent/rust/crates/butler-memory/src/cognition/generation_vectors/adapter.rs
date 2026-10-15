@@ -8,8 +8,9 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::cognition::{
     CandidateSearchInput, CognitionEmbeddingPort, CognitionError, CognitionPathEnvironment,
-    CognitionResult, CognitionVectorSearch, EmbeddingMode, EmbeddingRequest, EmbeddingRequestClass,
-    MemoryGenerationHandle, RecallVectorFuture, RecallVectorPort, VectorSearchFuture,
+    CognitionResult, CognitionVectorSearch, EmbeddingMode, EmbeddingReadyFuture, EmbeddingRequest,
+    EmbeddingRequestClass, MemoryGenerationHandle, RecallVectorFuture, RecallVectorPort,
+    VectorSearchFuture,
     generation::resolve_projection_generation,
     recall::{RecallRequest, RecallVectorMatches},
 };
@@ -39,6 +40,22 @@ impl GenerationVectorAdapter {
             paths,
             embedding,
         }
+    }
+
+    /// Indexed turn-start probe, called on a blocking lane before requesting a load.
+    pub fn has_recall_vectors(
+        data_root: &std::path::Path,
+        paths: &CognitionPathEnvironment,
+    ) -> CognitionResult<bool> {
+        let generation = crate::cognition::resolve_active_generation(data_root, paths)?;
+        let Some(expected) = &generation.embedding else {
+            return Ok(false);
+        };
+        compatibility::preflight(expected)?;
+        let graph = crate::cognition::graph::GraphRecallReader::open(&generation.graph_path)?;
+        let result = graph.has_completed_vectors();
+        graph.close()?;
+        result
     }
 
     async fn query(
@@ -116,6 +133,26 @@ impl GenerationVectorAdapter {
 impl RecallVectorPort for GenerationVectorAdapter {
     fn enabled(&self) -> bool {
         self.embedding.enabled()
+    }
+
+    fn ready<'a>(
+        &'a self,
+        generation: &'a MemoryGenerationHandle,
+        deadline_at: i64,
+    ) -> EmbeddingReadyFuture<'a> {
+        Box::pin(async move {
+            if let Some(expected) = &generation.embedding {
+                compatibility::preflight(expected)?;
+            }
+            let result = self.embedding.ready(deadline_at).await;
+            if !self.embedding.enabled() {
+                return Err(CognitionError::new(
+                    CognitionCode::VectorUnavailable,
+                    "embedding_disabled",
+                ));
+            }
+            result
+        })
     }
 
     fn warm<'a>(

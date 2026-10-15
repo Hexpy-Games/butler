@@ -35,7 +35,7 @@ export async function resolveDialog(browser, tab, answer, reason = "answered") {
   browserEvent(browser, tab, answer.accept ? "dialog_accepted" : "dialog_cancelled", { dialog: dialog.id, dialog_type: dialog.type, reason });
   browser.publish(); browser.sync(tab);
 }
-/** Only agent/agent-driven tabs attach the debugger. */
+/** Only agent/agent-driven tabs subscribe to CDP dialog events. */
 export function wireDialogs(browser, tab) {
   if (tab.debugDialogs) return;
   tab.debugDialogs = true;

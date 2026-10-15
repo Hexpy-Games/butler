@@ -143,6 +143,8 @@ export const OFF_SCALE_ALLOWLIST: Record<string, readonly string[]> = {
   "libs/design-system/blocks/MessageRow/MessageRow.module.css": ["radius:14", "spacing:10", "spacing:18", "spacing:26", "spacing:28", "spacing:6"],
   // The viewport wallpaper's leading corners follow the workspace frame (--workspace-left-radius fallback).
   "libs/design-system/blocks/Wallpaper/Wallpaper.module.css": ["radius:18"],
+  // Panel-size usage columns round their tops by 4px (owner-approved UsageBars spec, 2026-10-15).
+  "libs/design-system/blocks/UsageBars/UsageBars.module.css": ["radius:4"],
   // The queued bubble must match the MessageRow user bubble box so a delivered message resolves in place.
   "libs/design-system/blocks/QueuedMessage/QueuedMessage.module.css": ["radius:14", "spacing:10", "spacing:6"],
   "libs/design-system/blocks/WorkActivityBlock/WorkActivityBlock.module.css": ["spacing:5"],

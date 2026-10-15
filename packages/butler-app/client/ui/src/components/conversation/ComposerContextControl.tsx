@@ -24,11 +24,13 @@ export const ComposerContextControl = memo(function ComposerContextControl({ loa
   const activeChatId = useButlerStore((store) => store.activeChatId);
   const openSettings = useButlerStore((store) => store.openSettings);
   const [pinned, setPinned] = useState(false);
+  const [selected, setSelected] = useState<number | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   if (!context) return null;
 
   const close = () => {
+    setSelected(null);
     setPinned(false);
     setOpen(false);
   };
@@ -60,6 +62,9 @@ export const ComposerContextControl = memo(function ComposerContextControl({ loa
         />
       </PopoverTrigger>
       <PopoverContent
+        onEscapeKeyDown={(event) => {
+          if (selected !== null) { event.preventDefault(); setSelected(null); }
+        }}
         data-test-class="context-popover"
         data-pinned={pinned ? "true" : undefined}
         align="center"
@@ -73,6 +78,8 @@ export const ComposerContextControl = memo(function ComposerContextControl({ loa
         }}
       >
         <ContextUsagePopover
+          selected={selected}
+          onSelect={setSelected}
           context={context}
           load={load}
           loadQuota={loadQuota}

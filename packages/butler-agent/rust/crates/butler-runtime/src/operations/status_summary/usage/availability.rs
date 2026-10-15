@@ -1,19 +1,18 @@
 //! Read-only web-search and transcript availability projections.
 
-use butler_core::tool_protocol::ToolName;
-use std::{
-    collections::BTreeMap,
-    fs::File,
-    io::{BufRead, BufReader},
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 
-use super::super::stream::{number, unsigned_count, visit_jsonl};
+use super::super::stream::unsigned_count;
 use super::UsageMonitor;
 
-pub(super) fn read_web_search(data_root: &Path, since_ts: Option<f64>) -> Value {
+pub(super) fn read_web_search(
+    data_root: &Path,
+    since_ts: Option<f64>,
+    now: f64,
+    monitor: &UsageMonitor,
+) -> Value {
     if since_ts.is_none() {
         let metrics = read_json(&data_root.join("runtime/web-search-metrics.json"));
         return json!({
@@ -22,41 +21,10 @@ pub(super) fn read_web_search(data_root: &Path, since_ts: Option<f64>) -> Value 
             "lastError": metrics.get("lastError").and_then(Value::as_str)
         });
     }
-    let mut count = 0_u64;
-    let mut latest = None::<(f64, String, Option<String>)>;
-    let path = data_root.join("metrics/web-search-usage.jsonl");
-    let _ = visit_jsonl(&path, |_, parsed| {
-        let Some(event) = parsed else { return };
-        let Some(ts) = number(event.get("ts")) else {
-            return;
-        };
-        let Some(provider) = event
-            .get("provider")
-            .and_then(Value::as_str)
-            .filter(|value| !value.trim().is_empty())
-        else {
-            return;
-        };
-        if since_ts.is_some_and(|since| ts < since) {
-            return;
-        }
-        count += 1;
-        if latest.as_ref().is_none_or(|(current, _, _)| ts >= *current) {
-            latest = Some((
-                ts,
-                provider.to_owned(),
-                event
-                    .get("error")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-            ));
-        }
-    });
-    json!({
-        "requestCount": count,
-        "lastProvider": latest.as_ref().map(|(_, provider, _)| provider),
-        "lastError": latest.as_ref().and_then(|(_, _, error)| error.as_ref())
-    })
+    monitor
+        .searches
+        .lock()
+        .read(data_root, since_ts.unwrap_or_default(), now)
 }
 
 /// What the monitor says about its transcript scan when it did not scan
@@ -69,21 +37,34 @@ pub(super) fn read_tools(
     data_root: &Path,
     session_id: Option<&str>,
     since_ts: Option<f64>,
+    now: f64,
     monitor: &UsageMonitor,
 ) -> (Value, Value, Value) {
+    if let Some(since) = since_ts {
+        let path = session_id.map(|id| session_transcript_path(data_root, id));
+        let activity =
+            monitor
+                .transcripts
+                .lock()
+                .read_window(data_root, path.as_deref(), since, now);
+        return match activity {
+            Ok(activity) => (
+                activity_tools(&activity),
+                degraded_activity(),
+                json!({"status":"available","reason":null}),
+            ),
+            Err(_) => (
+                json!({"calls":null,"results":null,"successes":null,"failures":null,"byTool":{}}),
+                degraded_activity(),
+                json!({"status":"unavailable","reason":"transcript_read_failed"}),
+            ),
+        };
+    }
     if let Some(session_id) = session_id {
-        let tools = read_session_tools(data_root, session_id, since_ts, monitor);
         return (
-            tools,
+            read_session_tools(data_root, session_id, monitor),
             degraded_activity(),
             json!({"status":"available","reason":null}),
-        );
-    }
-    if since_ts.is_some() {
-        return (
-            json!({ "calls": 0, "results": 0, "successes": 0, "failures": 0, "byTool": {} }),
-            degraded_activity(),
-            json!({ "status": "unavailable", "reason": "unscoped_since_filter_requires_session" }),
         );
     }
     let transcript_activity = monitor.transcript_activity(data_root);
@@ -117,21 +98,16 @@ fn session_transcript_path(data_root: &Path, session_id: &str) -> PathBuf {
     data_root.join("transcripts").join(format!("{safe}.jsonl"))
 }
 
-/// A session's tool usage: from the per-file activity cache, or, within a
-/// time window, by reading the session's transcript.
-fn read_session_tools(
-    data_root: &Path,
-    session_id: &str,
-    since_ts: Option<f64>,
-    monitor: &UsageMonitor,
-) -> Value {
+/// A session's all-time tool usage from the per-file activity cache.
+fn read_session_tools(data_root: &Path, session_id: &str, monitor: &UsageMonitor) -> Value {
     let path = session_transcript_path(data_root, session_id);
-    if since_ts.is_some() {
-        return read_windowed_session_tools(&path, since_ts);
-    }
     let Some(activity) = monitor.file_activity(&path) else {
         return empty_tools();
     };
+    activity_tools(&activity)
+}
+
+fn activity_tools(activity: &crate::context::StatusTranscriptActivity) -> Value {
     let by_tool: serde_json::Map<String, Value> = activity
         .by_tool
         .iter()
@@ -145,65 +121,6 @@ fn read_session_tools(
 fn tool_bucket(bucket: &crate::context::StatusTranscriptToolUsageBucket) -> Value {
     json!({"calls":bucket.calls,"results":bucket.results,
         "successes":bucket.successes,"failures":bucket.failures})
-}
-
-fn read_windowed_session_tools(path: &Path, since_ts: Option<f64>) -> Value {
-    let Ok(file) = File::open(path) else {
-        return empty_tools();
-    };
-    let mut totals = [0_u64; 4];
-    let mut by_tool = BTreeMap::<String, [u64; 4]>::new();
-    let mut reader = BufReader::new(file);
-    let mut line = Vec::new();
-    while reader
-        .read_until(b'\n', &mut line)
-        .is_ok_and(|length| length > 0)
-    {
-        if let Ok(event) = serde_json::from_slice::<Value>(&line) {
-            let in_window = since_ts.is_none_or(|since| {
-                event
-                    .get("timestamp")
-                    .and_then(Value::as_str)
-                    .and_then(butler_core::js_date::parse_iso_millis)
-                    .is_some_and(|ts| ts as f64 >= since)
-            });
-            if in_window {
-                let kind = event.get("kind").and_then(Value::as_str);
-                let name = event
-                    .pointer("/payload/name")
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    .filter(|name| !name.is_empty());
-                if let (Some(kind @ ("tool_call" | "tool_result")), Some(name)) = (kind, name) {
-                    let key = if by_tool.contains_key(name) || by_tool.len() < 512 {
-                        name
-                    } else {
-                        "__other__"
-                    };
-                    let bucket = by_tool.entry(key.to_owned()).or_default();
-                    let index = if kind == ToolName::ToolCall {
-                        0
-                    } else if event.pointer("/payload/ok") == Some(&Value::Bool(false)) {
-                        3
-                    } else {
-                        2
-                    };
-                    totals[index] += 1;
-                    bucket[index] += 1;
-                    if kind == "tool_result" {
-                        totals[1] += 1;
-                        bucket[1] += 1;
-                    }
-                }
-            }
-        }
-        line.clear();
-    }
-    json!({"calls":totals[0],"results":totals[1],"successes":totals[2],
-        "failures":totals[3],"byTool":by_tool.into_iter().map(|(name, count)| {
-            (name,json!({"calls":count[0],"results":count[1],
-                "successes":count[2],"failures":count[3]}))
-        }).collect::<serde_json::Map<String,Value>>()})
 }
 
 fn empty_tools() -> Value {

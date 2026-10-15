@@ -220,11 +220,10 @@ impl AppApplication {
             .map_err(app_error)
     }
 
-    pub(crate) async fn record_automation_scheduler_error(&self, code: &'static str) {
+    pub(crate) async fn record_automation_scheduler_error(&self, code: &'static str) -> bool {
         let now = self.dependencies.identity_clock.now_iso();
         let subscribers = self.subscribers.clone();
-        let _ = self
-            .storage
+        self.storage
             .execute(move |db| {
                 publish(
                     db,
@@ -234,7 +233,8 @@ impl AppApplication {
                     &now,
                 )
             })
-            .await;
+            .await
+            .is_ok()
     }
 }
 
