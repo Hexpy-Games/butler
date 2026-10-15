@@ -24,6 +24,7 @@ use std::{
 const EDIT: &str = "Write notes and make a file.";
 const ESCAPE: &str = "Run the project build step.";
 const SCHEDULED: &str = "Nightly cleanup of the old export.";
+const LINKED_WRITE: &str = "Write the note into the linked folder.";
 
 #[tokio::test]
 async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), HarnessError> {
@@ -45,6 +46,11 @@ async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), Harn
     std::fs::write(project.join(".git/config"), "original-config")?;
     std::fs::write(project.join("a.txt"), "project-marker")?;
     std::fs::create_dir_all(project.join("src"))?;
+    std::fs::create_dir_all(outside.with_file_name("linked-out"))?;
+    butler_platform::secure_fs::fixture_links::directory_alias(
+        &outside.with_file_name("linked-out"),
+        &project.join("out-link"),
+    )?;
     let contained = butler_platform::command_sandbox::project_write_available();
 
     // In-folder edit and a project-contained command: no card (macOS); the
@@ -214,6 +220,14 @@ async fn risky_steps_ask(
             ),
         ),
         (
+            LINKED_WRITE,
+            call(
+                "linked-write",
+                "write_file",
+                &json!({"path":"out-link/note.txt","content":"x"}),
+            ),
+        ),
+        (
             "Fetch the release notes.",
             call(
                 "net",
@@ -230,13 +244,30 @@ async fn risky_steps_ask(
             .insert(prompt.into(), vec![step]);
         let id = paused(s, chat, prompt).await?;
         assert_counts(s, &id, 1, 1)?;
+        if prompt == LINKED_WRITE {
+            // A link in the project that leads outside shows where it leads.
+            let real =
+                butler_platform::secure_fs::canonicalize(outside.with_file_name("linked-out"))?
+                    .join("note.txt");
+            let card = &s.gw.approval_requests(chat).await?[0]["approval"];
+            assert_eq!(card["examples"], json!([real]), "{card}");
+            assert_eq!(card["risk"], "high", "{card}");
+        }
         approve(s, chat, "deny").await?;
         delivered(s, chat, &id).await?;
         assert_counts(s, &id, 1, 0)?;
     }
     assert_eq!(std::fs::read_to_string(outside)?, "outside-marker");
     assert!(!outside.with_extension("new").exists());
-    eprintln!("PERM-02 risky: outside_rm=asked git=asked outside_write=asked network=asked");
+    assert!(
+        !outside
+            .with_file_name("linked-out")
+            .join("note.txt")
+            .exists()
+    );
+    eprintln!(
+        "PERM-02 risky: outside_rm=asked git=asked outside_write=asked linked_write=asked network=asked"
+    );
     Ok(())
 }
 
