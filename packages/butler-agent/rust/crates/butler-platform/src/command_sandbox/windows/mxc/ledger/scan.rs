@@ -23,6 +23,7 @@ struct Entry {
     depth: usize,
     secret: Option<PathBuf>,
     parent: Option<Arc<Pin>>,
+    directory: bool,
 }
 struct Queue {
     entries: VecDeque<Entry>,
@@ -86,7 +87,15 @@ fn worker(
         if state.entries.is_empty() {
             return Ok(inventory);
         }
-        let count = state.entries.len().min(32);
+        // A directory can contain an entire inline file batch. Give it to one
+        // worker at a time; batch only leaf candidates to amortize queue locks.
+        let count = state
+            .entries
+            .iter()
+            .take(32)
+            .take_while(|entry| !entry.directory)
+            .count()
+            .max(1);
         let batch: Vec<_> = state.entries.drain(..count).collect();
         state.active += 1;
         drop(state);
@@ -124,14 +133,22 @@ fn visit(
         depth,
         secret,
         parent,
+        directory,
     } = entry;
     if depth > MAX_DEPTH {
         return Err(io::Error::other("project link discovery depth exceeded"));
     }
-    if !inspect(&path, secret.as_deref(), roots, protected, inventory)? {
+    if !directory && !inspect(&path, secret.as_deref(), roots, protected, inventory)? {
         return Ok(Vec::new());
     }
-    let pinned = pin(&path, parent)?;
+    // The enumeration hint only avoids a redundant open: pin still opens
+    // no-follow and validates that this is a directory before it is listed.
+    let Some(pinned) = surviving(pin(&path, parent))? else {
+        return Ok(Vec::new());
+    };
+    if let Some(secret) = &secret {
+        inventory.secrets.insert(secret.clone());
+    }
     let Some(entries) = surviving(fs::read_dir(&path))? else {
         return Ok(Vec::new());
     };
@@ -176,6 +193,7 @@ fn visit(
             depth: depth + 1,
             secret: child_secret,
             parent: Some(Arc::clone(&pinned)),
+            directory: metadata.is_dir(),
         });
     }
     Ok(children)
@@ -287,6 +305,7 @@ fn entries(paths: &[PathBuf], roots: &[PathBuf]) -> io::Result<VecDeque<Entry>> 
                 depth: depth + 1,
                 secret: child_secret(path, secret.as_deref()),
                 parent: Some(Arc::clone(parent)),
+                directory: false,
             });
             continue;
         }
@@ -327,6 +346,7 @@ fn entries(paths: &[PathBuf], roots: &[PathBuf]) -> io::Result<VecDeque<Entry>> 
             depth,
             secret: inventory::secret(path, roots),
             parent,
+            directory: false,
         });
     }
     Ok(entries)
