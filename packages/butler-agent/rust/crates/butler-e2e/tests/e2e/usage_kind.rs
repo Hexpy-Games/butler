@@ -54,14 +54,14 @@ async fn usage_queued_schedule_and_internal_scopes() -> Result<(), HarnessError>
             VALUES(?1,'a','queued-chat','delivered','scheduled',?2,?1)", [&queued, &chrono::DateTime::from_timestamp_millis(now-1000).unwrap().to_rfc3339()])?;
     }
     tx.commit()?;
-    // A queued binding completed before the window cannot classify newer usage.
+    // Dispatch completed before the window, but this turn still produced usage.
     db.execute(
         "UPDATE app_automation_runs SET completed_at='2026-01-01' WHERE id='queue-900'",
         [],
     )?;
     let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
-    assert_eq!(reply.data()["topSessions"][0]["kind"], "chat");
-    // Timestamp offsets must compare by instant, and updated runs must be visible.
+    assert_eq!(reply.data()["topSessions"][0]["kind"], "schedule");
+    // Updating the dispatch timestamp must preserve the same attribution.
     let stamp = chrono::DateTime::from_timestamp_millis(now - 1000)
         .unwrap()
         .with_timezone(&chrono::FixedOffset::east_opt(9 * 3600).unwrap())
@@ -119,7 +119,7 @@ async fn usage_schedule_run_overlaps_window() -> Result<(), HarnessError> {
     let completed = now
         .with_timezone(&chrono::FixedOffset::east_opt(9 * 3600).unwrap())
         .to_rfc3339();
-    for completion in [None, Some(completed.as_str())] {
+    for completion in [None, Some(completed.as_str()), Some(started.as_str())] {
         db.execute(
             "UPDATE app_automation_runs SET completed_at=?1",
             [completion],
@@ -144,18 +144,6 @@ async fn usage_schedule_run_overlaps_window() -> Result<(), HarnessError> {
                 .iter()
                 .any(|entry| entry["sessionId"] == "unbound-runtime")
         );
-    }
-    // Completion before the window excludes both bindings, even if usage has
-    // the same turn id; lifetime queries still retain those schedule bindings.
-    db.execute("UPDATE app_automation_runs SET completed_at=?1", [&started])?;
-    let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
-    for entry in reply.data()["topSessions"].as_array().unwrap() {
-        let expected = if entry["sessionId"] == "bound-chat" {
-            "chat"
-        } else {
-            "butler"
-        };
-        assert_eq!(entry["kind"], expected, "{entry}");
     }
     let reply = s.gw.get("/usage-monitor").await?;
     assert!(

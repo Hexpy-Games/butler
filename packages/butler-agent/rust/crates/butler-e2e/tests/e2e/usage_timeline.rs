@@ -356,8 +356,8 @@ async fn usage_schedule_kind_uses_recorded_runs() -> Result<(), HarnessError> {
         VALUES('opaque-chat-id','Daily report','chat','opaque-runtime-id','2026-01-01','2026-01-01');
         INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,state,last_run_state,created_at,updated_at)
         VALUES('a','Daily report','Report','chat','opaque-chat-id',3600,'paused','delivered','2026-01-01','2026-01-01');").unwrap();
-    db.execute("INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,turn_id)
-        VALUES('r','a','opaque-chat-id','delivered','scheduled',?1,'unrelated-turn')",[(now - chrono::Duration::hours(25)).to_rfc3339()]).unwrap();
+    db.execute("INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,completed_at,turn_id)
+        VALUES('r','a','opaque-chat-id','delivered','scheduled',?1,?1,'unrelated-turn')",[(now - chrono::Duration::hours(25)).to_rfc3339()]).unwrap();
     // A schedule targeting this chat is insufficient: the actual usage turn must match.
     let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
     assert_eq!(reply.data()["topSessions"][0]["kind"], "chat");
@@ -366,7 +366,7 @@ async fn usage_schedule_kind_uses_recorded_runs() -> Result<(), HarnessError> {
         [],
     )
     .unwrap();
-    // A run started before the range remains relevant until it completes.
+    // Dispatch completed before the range; usage in its turn still belongs to the schedule.
     let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
     assert_eq!(reply.data()["topSessions"][0]["kind"], "schedule");
     db.execute(

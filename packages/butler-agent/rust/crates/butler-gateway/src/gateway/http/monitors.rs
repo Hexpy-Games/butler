@@ -253,7 +253,6 @@ fn usage_query(parameters: &std::collections::HashMap<String, String>) -> AppUsa
         usage_scope: None,
         since_ts: hours.map(|hours| now - hours * 3_600_000.0),
         until_ts: hours.map(|_| now),
-        schedule_turns: Default::default(),
     }
 }
 

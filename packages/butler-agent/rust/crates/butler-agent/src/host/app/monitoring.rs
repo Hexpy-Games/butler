@@ -85,10 +85,10 @@ fn usage_monitor_view(
     if let (Some(filters), Some(session_id)) = (view.get_mut("filters"), &query.session_id) {
         filters["sessionId"] = json!(session_id);
     }
-    let scheduled_sessions = monitor.scheduled_sessions(&view, &query.schedule_turns);
+    let session_turns = monitor.session_turns(&view);
     butler_gateway::gateway::AppUsageMonitorView {
         view,
-        scheduled_sessions,
+        session_turns,
     }
 }
 

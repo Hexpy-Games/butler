@@ -44,17 +44,13 @@ pub struct UsageMonitor {
 }
 
 impl UsageMonitor {
-    /// Classify only returned sessions against the App's windowed run bindings.
-    /// With no runs, avoid walking usage rows entirely.
-    pub fn scheduled_sessions(
+    /// Windowed usage turn provenance for the returned sessions. The App owner
+    /// resolves these against indexed schedule bindings, independently of dispatch time.
+    pub fn session_turns(
         &self,
         view: &Value,
-        schedule_turns: &std::collections::HashSet<String>,
-    ) -> std::collections::HashSet<String> {
-        if schedule_turns.is_empty() {
-            return Default::default();
-        }
-        self.log.lock().scheduled_sessions(view, schedule_turns)
+    ) -> std::collections::HashMap<String, std::collections::HashSet<String>> {
+        self.log.lock().session_turns(view)
     }
 
     /// The usage view of `session_id` (a runtime session id; all sessions

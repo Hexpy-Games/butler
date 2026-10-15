@@ -12,11 +12,10 @@ pub(super) struct SessionCache {
 }
 
 impl UsageLogIndex {
-    pub(in super::super) fn scheduled_sessions(
+    pub(in super::super) fn session_turns(
         &self,
         view: &Value,
-        schedule_turns: &std::collections::HashSet<String>,
-    ) -> std::collections::HashSet<String> {
+    ) -> HashMap<String, std::collections::HashSet<String>> {
         let window = Window {
             scope: None,
             since_ts: view["filters"]["sinceTs"].as_f64(),
@@ -27,23 +26,19 @@ impl UsageLogIndex {
             .into_iter()
             .flatten()
             .filter_map(|item| item["sessionId"].as_str())
-            .filter(|id| {
+            .filter_map(|id| {
                 let guided = format!("btcc-guided:{id}");
-                let mut rows = [*id, guided.as_str()]
+                let mut rows = [id, guided.as_str()]
                     .into_iter()
                     .flat_map(|scope| self.scope_slots(scope, window))
                     .flat_map(|(_, slot)| self.matching_rows(&slot.rows, window));
-                // Any missing or interactive turn retains the original kind;
-                // stop at the first such row, without allocating or deduplicating ids.
-                let mut found = false;
-                rows.all(|row| {
-                    found = true;
-                    row.turn_id
-                        .as_ref()
-                        .is_some_and(|id| schedule_turns.contains(id.as_ref()))
-                }) && found
+                // Missing turn provenance prevents schedule classification.
+                let turns = rows.try_fold(std::collections::HashSet::new(), |mut ids, row| {
+                    ids.insert(row.turn_id.as_ref()?.to_string());
+                    Some(ids)
+                })?;
+                (!turns.is_empty()).then(|| (id.to_owned(), turns))
             })
-            .map(str::to_owned)
             .collect()
     }
     pub(in super::super) fn top_sessions(&mut self, window: Window<'_>) -> Value {

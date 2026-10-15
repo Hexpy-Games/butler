@@ -65,34 +65,39 @@ fn metadata(db: &Connection, ids: &[String]) -> Result<Metadata, AppStorageError
         .map_err(AppStorageError::sqlite)
 }
 
-/// Read runs that can overlap the window, including queued or active runs.
-/// Index both branches; compare completion timestamps by instant across offsets.
-pub(super) fn schedule_turns(
+// Usage lives in the Host's incremental log index, not an App SQL table.
+// json_each exposes its deduplicated window turns as a relation with one bound
+// parameter, independent of window size. Each run/queue probe uses a turn index;
+// dispatch completion time says nothing about when a turn's usage ends.
+pub(crate) const SCHEDULE_SESSIONS_SQL: &str = "
+    SELECT session.key FROM json_each(?1) session
+    WHERE NOT EXISTS (
+        SELECT 1 FROM json_each(session.value) turn
+        WHERE NOT EXISTS (
+            SELECT 1 FROM app_automation_runs r WHERE r.turn_id=turn.value
+        ) AND NOT EXISTS (
+            SELECT 1 FROM session_queued_messages q
+            JOIN app_automation_runs r ON r.queued_message_id=q.id
+            WHERE q.turn_id=turn.value
+        )
+    )";
+
+pub(super) fn scheduled_sessions(
     db: &Connection,
-    since_ts: Option<f64>,
+    session_turns: &HashMap<String, HashSet<String>>,
 ) -> Result<HashSet<String>, AppStorageError> {
-    let predicate = if since_ts.is_some() {
-        "WHERE r.completed_at IS NULL
-            OR julianday(r.completed_at) >= julianday(?1 / 1000.0, 'unixepoch')"
-    } else {
-        ""
-    };
-    let sql = format!(
-        "SELECT r.turn_id,q.turn_id FROM app_automation_runs r
-        LEFT JOIN session_queued_messages q ON q.id=r.queued_message_id {predicate}"
-    );
-    let mut statement = db.prepare(&sql).map_err(AppStorageError::sqlite)?;
-    let args: Vec<f64> = since_ts.into_iter().collect();
-    let rows = statement
-        .query_map(params_from_iter(args), |row| {
-            Ok([row.get::<_, Option<String>>(0)?, row.get(1)?])
-        })
-        .map_err(AppStorageError::sqlite)?;
-    let mut turns = HashSet::new();
-    for row in rows {
-        turns.extend(row.map_err(AppStorageError::sqlite)?.into_iter().flatten());
+    if session_turns.is_empty() {
+        return Ok(HashSet::new());
     }
-    Ok(turns)
+    let turns = json!(session_turns).to_string();
+    let mut statement = db
+        .prepare(SCHEDULE_SESSIONS_SQL)
+        .map_err(AppStorageError::sqlite)?;
+    statement
+        .query_map([turns], |row| row.get(0))
+        .map_err(AppStorageError::sqlite)?
+        .collect::<Result<_, _>>()
+        .map_err(AppStorageError::sqlite)
 }
 
 /// Resolve App ids through their durable binding; telemetry scopes stay intact.
