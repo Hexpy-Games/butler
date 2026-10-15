@@ -14,7 +14,7 @@ export function UsageReadout({ view, values, label, selected, showCost, delta, s
   const cacheRatio = values.prompt ? Math.round(values.cached / values.prompt * 100) : 0;
   const cost = view?.cost.available ? view.cost.estimatedUsd : null;
   const costText = !cost ? "—" : cost < 0.01 ? copy.tinyCost : new Intl.NumberFormat(getAppLocale(), { style: "currency", currency: "USD" }).format(cost);
-  if (!view) return <Stack gap="sm"><SkeletonRows rows={2} label={copy.loading} />{children}<SkeletonRows rows={3} label={copy.loading} /></Stack>;
+  if (!view) return <Stack gap="sm"><SkeletonRows rows={2} label={copy.loading} />{children}{!panel ? <SkeletonRows rows={3} label={copy.loading} /> : null}</Stack>;
   if (!panel && !selected && values.total === 0 && values.requests === 0) {
     return <Stack gap="sm"><Typo.Caption>{label}</Typo.Caption>{children}</Stack>;
   }

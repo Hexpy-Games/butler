@@ -109,6 +109,10 @@ try {
     await page.locator('[data-settings-section-id="usage-overview"]').waitFor();
     await page.waitForTimeout(400);
     if (shots) await page.screenshot({ path: join(shots, `${before ? "before" : "after"}${auth === "subscription" ? "-subscription" : ""}-usage-${theme}-${width}-${scenario}.png`) });
+    if (!before && scenario === "loading") {
+      assert(await page.getByRole("tab", { name: "대화", exact: true }).isVisible(), "loading preserves breakdown tabs");
+      assert(await page.getByRole("tabpanel").locator('[data-slot="skeleton-rows"]').isVisible(), "only breakdown rows load inside the tab panel");
+    }
     if (!before && scenario === "ready") {
       const chart = page.locator('[data-slot="usage-bars"]'); await chart.focus(); await page.keyboard.press("End");
       assert.deepEqual((await probeFocusRing(page))?.clips, [], "panel chart focus ring");
