@@ -30,14 +30,6 @@ export function planLabel(
   return appCopy.interfaceStatus.unconfirmed;
 }
 
-export function sourceLabel(
-  kind: ProviderQuotaResultView["sourceKind"],
-): string {
-  if (kind === "codex_app_server") return appCopy.interfaceStatus.codexUsage;
-  if (kind === "zai_usage_query") return appCopy.interfaceStatus.zaiUsage;
-  return appCopy.interfaceStatus.providerUsage;
-}
-
 export function quotaReasonLabel(
   code: ProviderQuotaReasonCode | undefined,
   planKind?: ProviderQuotaResultView["planKind"],

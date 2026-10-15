@@ -47,8 +47,8 @@ pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
     AppApprovalClaims, AppArtifactMaterializer, AppAuthorityDecision, AppAuthorityDecisionInput,
     AppAuthorityHandoff, AppAuthorityPage, AppBoundWorkStatusFact, AppBranchCanonicalAnswer,
-    AppBranchConversationReader, AppBranchSummarizer, AppBranchSummary, AppBranchSummaryInput,
-    AppCancellation, AppChatKind, AppChatSummary, AppContextBudgetFacts,
+    AppBranchConversationReader, AppBranchSourceLocation, AppBranchSummarizer, AppBranchSummary,
+    AppBranchSummaryInput, AppCancellation, AppChatKind, AppChatSummary, AppContextBudgetFacts,
     AppContextConfigurationFacts, AppContextReadFacts, AppContextReadPort, AppContextReadQuery,
     AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult, AppCreateSessionInput,
     AppCreateSessionRequest, AppCreateSessionResult, AppDeveloperLogsQuery, AppExecutorReadiness,
@@ -83,7 +83,7 @@ pub use application::{
     AppSettingsFacts, AppSettingsFactsProvider, AppSettingsMutationPort, AppSourceDocument,
     AppSourceSnapshotRequest, AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin,
     AppStartTopicConversationRequest, AppSubsessionPort, AppTaskGraphQuery, AppTurn,
-    AppUsageMonitorQuery, AppWorkOperationalNoticeFact, AppWorkProgress,
+    AppUsageMonitorQuery, AppUsageMonitorView, AppWorkOperationalNoticeFact, AppWorkProgress,
     AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
     AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
@@ -220,6 +220,10 @@ pub trait GatewayApplication:
     ) -> ApplicationFuture<AppSessionBranchResult> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
+    /// Where a branch conversation's source answer is shown now.
+    fn branch_source(&self, _session_id: String) -> ApplicationFuture<AppBranchSourceLocation> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn list_chats(&self) -> ApplicationFuture<Vec<AppChatSummary>>;
     fn read_navigation(&self) -> ApplicationFuture<serde_json::Value>;
     fn read_user_work(&self) -> ApplicationFuture<serde_json::Value> {
@@ -300,6 +304,7 @@ pub trait GatewayApplication:
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn upload_message_file(&self, input: AppFileUpload) -> ApplicationFuture<MessageFileRef>;
+    fn message_file_metadata(&self, id: String) -> ApplicationFuture<MessageFileRef>;
     fn download_message_file(&self, id: String) -> ApplicationFuture<AppFileDownload>;
     fn runtime_readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError>;
     /// First-run setup (#230); an application without it answers 404.

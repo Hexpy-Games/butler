@@ -5,7 +5,6 @@ import { absoluteGatewayUrl, messageFileSource } from "@/app/messageFileUrls.ts"
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"];
 const TEXT_EXTENSIONS = [
   ".csv",
-  ".html",
   ".json",
   ".log",
   ".md",
@@ -30,6 +29,7 @@ const CODE_EXTENSIONS = [
 
 export type ArtifactPreviewMode =
   | "web"
+  | "html"
   | "image"
   | "markdown"
   | "pdf"
@@ -72,6 +72,7 @@ export function artifactPreviewMode(
   if (artifact.kind === "image" || IMAGE_EXTENSIONS.includes(extension)) {
     return "image";
   }
+  if ([".html", ".htm"].includes(extension)) return "html";
   if (extension === ".pdf" || artifact.kind === "report") return "pdf";
   if (extension === ".md") return "markdown";
   if (

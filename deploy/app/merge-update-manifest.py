@@ -10,6 +10,8 @@ def merge(mac_manifest, linux_dir, version, base_url, windows_dir=None):
     manifest = json.loads(mac_manifest.read_text()) if mac_manifest else {"app_version": version, "artifacts": []}
     if manifest["app_version"] != version:
         raise ValueError("App version differs from the release tag")
+    # A rerun reads back the manifest it published; this run's platforms replace those entries.
+    published, manifest["artifacts"] = manifest["artifacts"], []
     for platform in ("linux-x64", "linux-arm64"):
         name = f"butler-app-{version}-{platform}.deb"
         if not linux_dir:
@@ -43,6 +45,8 @@ def merge(mac_manifest, linux_dir, version, base_url, windows_dir=None):
             if digest != item["sha256"]:
                 raise ValueError("Windows App digest mismatch")
             manifest["artifacts"].append(item)
+    fresh = {item["platform"] for item in manifest["artifacts"]}
+    manifest["artifacts"][:0] = [item for item in published if item["platform"] not in fresh]
     platforms = [item["platform"] for item in manifest["artifacts"]]
     if len(platforms) != len(set(platforms)):
         raise ValueError("Duplicate App platform")

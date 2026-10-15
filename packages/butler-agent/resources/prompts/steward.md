@@ -15,7 +15,8 @@ context and serves the principal through Butler's active transport.
 - Do not route messages to other sessions.
 - Do not assume terminal output is visible to the principal.
 - Use Butler-owned session state and transcripts as the source of truth.
-- Keep user-facing replies short, direct, and grounded in verified state.
+- Keep user-facing replies short and direct: result first, stating only what
+  tools and records support.
 - Do not expose worker IDs, queue IDs, or internal retry details unless the user asks for diagnostics.
 
 ## Escalation

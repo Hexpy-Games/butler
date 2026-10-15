@@ -98,15 +98,15 @@ async fn scheduler_next_due_reads(s: &Scenario) -> Result<usize, HarnessError> {
 }
 
 #[tokio::test]
-async fn sched_06_idle_calendar_scheduler_reads_only_on_change_in_60_seconds()
+async fn sched_06_idle_calendar_scheduler_rechecks_without_writes_in_60_seconds()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let s = Setup::new("SCHED-06")?
+    let setup = Setup::new("SCHED-06")?
         .env("BUTLER_E2E_SCHEDULER_INSTRUMENTATION", "1")
         .env("BUTLER_E2E_APP_NOW", "2026-03-07T00:00:00.000Z")
-        .env("BUTLER_E2E_TIER", "stub")
-        .start()
-        .await?;
+        .env("BUTLER_E2E_TIER", "stub");
+    super::memory_fixture::initialize_empty(&setup.sandbox.data)?;
+    let s = setup.start().await?;
     let schedules = s.gw.get("/automations").await?;
     assert!(
         schedules.data()["automations"]
@@ -145,12 +145,17 @@ async fn sched_06_idle_calendar_scheduler_reads_only_on_change_in_60_seconds()
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     assert_eq!(scheduler_next_due_reads(&s).await?, 2);
+    super::memory_fixture::settle(&s.sandbox.data).await?;
+    let mut writes =
+        super::idle_resources::writes::Watch::open_after_quiet(&s.sandbox.data).await?;
     tokio::time::sleep(Duration::from_secs(60)).await;
     assert_eq!(
         scheduler_next_due_reads(&s).await?,
         2,
-        "scheduler repeated the due lookup during the idle window"
+        "scheduler must retain its due lookup until a change"
     );
+    writes.assert_unchanged();
+    eprintln!("SCHED-06 idle window_s=60 next_due_reads=0 data_writes=0");
     let after = s.gw.get("/automations").await?.data()["automations"].clone();
     assert_eq!(
         after, before,

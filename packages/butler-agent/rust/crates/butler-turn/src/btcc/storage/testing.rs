@@ -131,6 +131,54 @@ impl Fixture {
         fixture
     }
 
+    /// Exercise durable shutdown after a real maintenance-thread panic.
+    pub fn close_after_checkpoint_panic(&self) -> (StorageResult<()>, String, u64) {
+        let mut db = sqlite::open(&self.path).expect("connection");
+        writer::configure(&db, StorageProfile::Durable).expect("configure");
+        bootstrap::migrate_current(&mut db).expect("migrate");
+        let config = self.config("shutdown-owner");
+        let owner = runtime_owner::RuntimeOwner::register(
+            &mut db,
+            config.runtime_owner,
+            config.process_liveness,
+        )
+        .expect("register");
+        db.pragma_update(None, "wal_autocheckpoint", 1)
+            .expect("threshold");
+        let checkpoint = sqlite::CheckpointOwner::start(
+            &db,
+            Some(|event| {
+                if matches!(event, sqlite::CheckpointEvent::Finished { .. }) {
+                    panic!("injected maintenance failure");
+                }
+            }),
+        )
+        .expect("start")
+        .expect("worker");
+        db.execute_batch(
+            "BEGIN IMMEDIATE; CREATE TABLE close_committed(value);
+             INSERT INTO close_committed VALUES(42); COMMIT;",
+        )
+        .expect("commit");
+        let result = writer::close(db, &owner, Some(checkpoint::CheckpointOwner(checkpoint)));
+        let retained = std::fs::metadata(self.path.with_extension("sqlite-wal"))
+            .expect("retained WAL")
+            .len();
+        let db = sqlite::open(&self.path).expect("reopen");
+        let status = db
+            .query_row(
+                "SELECT status FROM btcc_runtime_owners WHERE owner_id='shutdown-owner'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("owner status");
+        let value: i64 = db
+            .query_row("SELECT value FROM close_committed", [], |r| r.get(0))
+            .expect("committed row");
+        assert_eq!(value, 42);
+        (result, status, retained)
+    }
+
     pub fn config(&self, owner_id: &str) -> BtccStorageConfig {
         BtccStorageConfig {
             path: self.path.clone(),

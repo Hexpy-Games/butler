@@ -23,7 +23,7 @@ import { AnimatedNumber, Typo } from "@/butler-ds";
 
 ## Behavior
 - First render shows the value; only changes animate.
-- Tabular numerals plus invisible start/end sizers in the same grid cell keep the width stable (no layout shift).
+- Tabular numerals plus invisible start/end sizers in the same grid cell keep the width stable while counting (no layout shift); when the count ends the width settles to the new value's own width.
 - Reduced motion: the value swaps instantly and fades in over `--motion-fast`.
 - The animated digits are `aria-hidden`; assistive tech reads the final formatted value from static visually hidden text.
 

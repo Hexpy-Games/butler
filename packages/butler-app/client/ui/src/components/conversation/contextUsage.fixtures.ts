@@ -1,4 +1,4 @@
-import type { ContextDetailsView, ProviderQuotaResultView, UsageMonitorView } from "@/app/types.ts";
+import type { ContextDetailsView, ProviderQuotaResultView, UsageMonitorView } from "../../app/types.ts";
 
 export const usageContext: ContextDetailsView = {
   session_id: "s1", provider_id: "openai", model_ref: "openai/m",
@@ -21,7 +21,9 @@ export function usageView(fields: { quota?: ProviderQuotaResultView; reasoning?:
   const bucket = { requestCount: 3, promptTokens: 48_200, cachedTokens: 31_900, uncachedTokens: 16_300, outputTokens: 3_420,
     totalTokens: 51_620, missingTotalTokenCount: 0, ...(fields.reasoning === undefined ? {} : { reasoningTokens: fields.reasoning }) };
   return {
-    filters: { sessionId: "s1", sinceTs: null },
+    filters: { sessionId: "s1", sinceTs: null, untilTs: null },
+    timeline: { slotMinutes: 15, slots: [[Date.parse("2026-09-28T05:00:00Z"), 3, 48_200, 31_900, 3_420]] },
+    topSessions: [], previousPeriod: null,
     model: { ...bucket, cacheHitRatio: 0.66, byScope: {}, byScopeUsage: {}, byModel: {}, bySection: {} },
     webSearch: { requestCount: 0, lastProvider: null, lastError: null },
     tools: { calls: 0, results: 0, successes: 0, failures: 0, byTool: {} },

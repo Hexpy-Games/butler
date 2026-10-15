@@ -315,6 +315,17 @@ impl GraphRecallReader {
         rollback.and(close)
     }
 
+    /// Indexed existence probe; never scans the corpus to decide whether to preload.
+    pub(in crate::cognition) fn has_completed_vectors(&self) -> CognitionResult<bool> {
+        self.connection()?
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM memory_vector_units WHERE state='complete')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(super::db_error)
+    }
+
     pub(in crate::cognition) fn connection(&self) -> CognitionResult<&Connection> {
         self.connection.as_deref().ok_or_else(|| {
             CognitionError::new(CognitionCode::MemoryGraphClosed, "memory_graph_closed")

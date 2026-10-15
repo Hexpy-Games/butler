@@ -79,7 +79,7 @@ pub use continuity_recovery::{
 };
 pub use embedding::{EmbeddingEngine, EmbeddingIdentity, EmbeddingResult, Tokenization};
 pub use embedding_port::{
-    CognitionEmbeddingPort, EmbeddingFuture, EmbeddingMode, EmbeddingRequest,
+    CognitionEmbeddingPort, EmbeddingFuture, EmbeddingMode, EmbeddingReadyFuture, EmbeddingRequest,
     EmbeddingRequestClass, WorkerOperation, WorkerRequest, WorkerResponse, WorkerResult,
 };
 pub use error::{CognitionCode, CognitionError, CognitionResult};

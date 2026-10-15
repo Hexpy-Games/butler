@@ -823,7 +823,7 @@ const butlerApp = Object.freeze({
   }),
   mutateSpace: ({ resource, body }) => {
     if (!["groups", "moves", "group-sessions", "undo", "pins", "relocations", "branches", "branch-source"].includes(resource)) throw new Error("Invalid space operation");
-    return requestJson(`/space/${resource}`, { method: "POST", body: JSON.stringify(body) });
+    return requestBridgeResult(`/space/${resource}`, { method: "POST", body: JSON.stringify(body) });
   },
   changeSpaceGroup: ({ groupId, method, body }) => {
     if (method !== "PATCH" && method !== "DELETE") throw new Error("Invalid group operation");
@@ -1347,6 +1347,10 @@ const butlerApp = Object.freeze({
   listArtifacts: ({ sessionId }) => {
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/artifacts?${params.toString()}`);
+  },
+  getMessageFileView: ({ fileId } = {}) => {
+    if (typeof fileId !== "string" || !/^file-[0-9a-f-]{36}$/iu.test(fileId)) throw new Error("Invalid file");
+    return requestBridgeResult(`/message-files/${encodeURIComponent(fileId)}/view`);
   },
   getOutputView: ({ outputId, revision } = {}) => {
     if (typeof outputId !== "string" || !/^[a-f0-9]{64}$/u.test(outputId)) throw new Error("Invalid output");

@@ -36,7 +36,6 @@ src/host/guided/tools/effect/topic_conversation.rs	TopicConversationEffect::requ
 src/host/guided/tools/execute.rs	execute	122
 src/host/guided/tools/image.rs	admitted_image	96
 src/host/guided/tools/image.rs	execute	100
-src/host/guided/tools/message/preview.rs	fit	85
 src/host/guided/tools/message/preview/work.rs	project_raw	99
 src/host/guided/tools/occurrence.rs	occurrence	100
 src/host/guided/work_streams/prompt.rs	render	92
@@ -46,7 +45,7 @@ src/host/memory_jobs/briefing.rs	<BriefingSource as BriefingInputSource>::snapsh
 src/host/memory_jobs/recall_metrics.rs	<RecallMetrics as RecallMetricSink>::record	107
 src/host/memory_jobs/transcript_sync.rs	LegacySessionSync::run	157
 src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	125
-src/host/runtime.rs	AgentRuntime::open	389
+src/host/runtime.rs	AgentRuntime::open	388
 src/host/service/ingress/bind.rs	bind_and_request	136
 src/host/service/ingress/bind.rs	control_request	81
 src/host/service/ingress/bind/policy.rs	upsert_app_binding	210

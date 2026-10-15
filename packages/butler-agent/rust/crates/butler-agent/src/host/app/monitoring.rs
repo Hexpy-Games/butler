@@ -63,7 +63,7 @@ fn usage_monitor_view(
     monitor: &UsageMonitor,
     catalog: &ModelCatalog,
     quota: &ProviderQuotaStore,
-) -> Value {
+) -> butler_gateway::gateway::AppUsageMonitorView {
     let pricing = |model_ref: &str| catalog.pricing(model_ref);
     let quota_view = |provider_id: &str| quota.view(provider_id);
     let sources = UsageMonitorSources {
@@ -71,17 +71,25 @@ fn usage_monitor_view(
         quota: &quota_view,
         quota_providers: quota.provider_ids(),
     };
-    let mut view = monitor.read(
+    let mut view = monitor.read_at(
         root,
         query.runtime_session_id.as_deref(),
+        query.usage_scope.as_deref(),
         query.since_ts,
+        query
+            .until_ts
+            .unwrap_or_else(|| (chrono::Utc::now().timestamp_millis() + 1) as f64),
         Some(&sources),
     );
     // Echo the id the client asked with, not the runtime's spelling of it.
     if let (Some(filters), Some(session_id)) = (view.get_mut("filters"), &query.session_id) {
         filters["sessionId"] = json!(session_id);
     }
-    view
+    let scheduled_sessions = monitor.scheduled_sessions(&view, &query.schedule_turns);
+    butler_gateway::gateway::AppUsageMonitorView {
+        view,
+        scheduled_sessions,
+    }
 }
 
 impl AppMonitoringPort for AppMonitoring {
@@ -90,7 +98,10 @@ impl AppMonitoringPort for AppMonitoring {
         Box::pin(async move { work_status::read(session_work).await })
     }
 
-    fn usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
+    fn usage_monitor(
+        &self,
+        query: AppUsageMonitorQuery,
+    ) -> ApplicationFuture<butler_gateway::gateway::AppUsageMonitorView> {
         let root = self.data_root.clone();
         let catalog = self.catalog.clone();
         let quota = self.quota.clone();
@@ -113,7 +124,7 @@ impl AppMonitoringPort for AppMonitoring {
             })
             .await
             .map_err(GatewayApplicationError::internal_from)?;
-            if let Some(object) = view.as_object_mut() {
+            if let Some(object) = view.view.as_object_mut() {
                 object.insert("generated_at".into(), json!(now_iso()));
                 object.insert("raw_text_included".into(), json!(false));
             }

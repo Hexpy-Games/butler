@@ -10,6 +10,7 @@ pub mod fake_servers;
 pub mod faults;
 pub mod fixtures;
 pub mod gateway;
+pub mod hedge;
 pub mod install_fixture;
 pub mod live;
 pub mod matching;
