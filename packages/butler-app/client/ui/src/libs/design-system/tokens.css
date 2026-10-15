@@ -367,6 +367,10 @@
   --layout-basis-md: 260px;
   --layout-basis-lg: 460px;
 
+  /* Mobile popover sheet: the gap left at each screen edge. Equals the
+     floating collision padding so the sheet sits centred. */
+  --popover-sheet-gutter: var(--space-sm);
+
   /* Page max-width scale: forms, reading columns, dashboards. */
   --page-max-width-narrow: 38rem;
   --page-max-width-reading: 760px;
