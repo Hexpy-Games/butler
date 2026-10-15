@@ -58,3 +58,12 @@ pub struct AppSessionBranchResult {
     pub session: AppSessionSummary,
     pub seed: AppSessionBranchSeed,
 }
+
+/// Where a branch conversation's source answer is shown now: the session that
+/// owns the message and its message cursor.
+#[derive(Clone, Debug)]
+pub struct AppBranchSourceLocation {
+    pub session_id: String,
+    pub message_id: String,
+    pub cursor: u64,
+}

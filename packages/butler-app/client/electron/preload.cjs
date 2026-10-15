@@ -823,7 +823,7 @@ const butlerApp = Object.freeze({
   }),
   mutateSpace: ({ resource, body }) => {
     if (!["groups", "moves", "group-sessions", "undo", "pins", "relocations", "branches", "branch-source"].includes(resource)) throw new Error("Invalid space operation");
-    return requestJson(`/space/${resource}`, { method: "POST", body: JSON.stringify(body) });
+    return requestBridgeResult(`/space/${resource}`, { method: "POST", body: JSON.stringify(body) });
   },
   changeSpaceGroup: ({ groupId, method, body }) => {
     if (method !== "PATCH" && method !== "DELETE") throw new Error("Invalid group operation");

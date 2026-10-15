@@ -47,8 +47,8 @@ pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
     AppApprovalClaims, AppArtifactMaterializer, AppAuthorityDecision, AppAuthorityDecisionInput,
     AppAuthorityHandoff, AppAuthorityPage, AppBoundWorkStatusFact, AppBranchCanonicalAnswer,
-    AppBranchConversationReader, AppBranchSummarizer, AppBranchSummary, AppBranchSummaryInput,
-    AppCancellation, AppChatKind, AppChatSummary, AppContextBudgetFacts,
+    AppBranchConversationReader, AppBranchSourceLocation, AppBranchSummarizer, AppBranchSummary,
+    AppBranchSummaryInput, AppCancellation, AppChatKind, AppChatSummary, AppContextBudgetFacts,
     AppContextConfigurationFacts, AppContextReadFacts, AppContextReadPort, AppContextReadQuery,
     AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult, AppCreateSessionInput,
     AppCreateSessionRequest, AppCreateSessionResult, AppDeveloperLogsQuery, AppExecutorReadiness,
@@ -218,6 +218,10 @@ pub trait GatewayApplication:
         _request: AppStartTopicConversationRequest,
         _server_shutdown: CancellationToken,
     ) -> ApplicationFuture<AppSessionBranchResult> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    /// Where a branch conversation's source answer is shown now.
+    fn branch_source(&self, _session_id: String) -> ApplicationFuture<AppBranchSourceLocation> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_chats(&self) -> ApplicationFuture<Vec<AppChatSummary>>;
