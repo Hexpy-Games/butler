@@ -29,9 +29,6 @@ jobs:
       workflow: post-merge-ci.yml
 
   windows-check:
-    # Windows is not ported: the host and CLI are unix-only and main.rs prints
-    # "not yet available". This compile check only reports how far the
-    # workspace is from building; its failures never fail the workflow.
     name: Windows compile check (x86_64-pc-windows-msvc)
     needs: changes
     outputs:
@@ -53,9 +50,12 @@ jobs:
           cache-key: windows-check
       - name: Check the workspace
         id: check
-        continue-on-error: true
         run: |
           set -o pipefail
+          # Git Bash puts its coreutils link.exe ahead of MSVC's on PATH; name the MSVC linker explicitly.
+          linker="${VCToolsInstallDir}bin\\HostX64\\x64\\link.exe"
+          test -f "$linker" || { echo "MSVC link.exe not found at $linker" >&2; exit 1; }
+          export CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER="$linker"
           python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo check --workspace --locked --keep-going --target x86_64-pc-windows-msvc \
             --message-format short 2>&1 | tee "$RUNNER_TEMP/windows-check.log"
       - name: Summarize

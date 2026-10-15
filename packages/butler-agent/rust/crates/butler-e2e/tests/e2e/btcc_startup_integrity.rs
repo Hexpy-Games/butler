@@ -248,6 +248,8 @@ async fn btcc_every_start_applies_migrations_with_existing_user_version() -> Res
     let db = Connection::open(&path)?;
     db.execute_batch(
         "PRAGMA user_version=1;
+        CREATE INDEX idx_btcc_graph_plan ON btcc_subsession_delegations(
+        json_extract(packet_json,'$.parent_work_ref.plan_revision_id'));
         INSERT INTO btcc_guided_works(work_id,session_id,scope_kind,scope_ref,origin_turn_id,
         origin_message_id,objective,status,created_at,updated_at)
         VALUES('stable','fixture','session','fixture','fixture','fixture','changed','completed','now','now');
@@ -280,6 +282,15 @@ async fn btcc_every_start_applies_migrations_with_existing_user_version() -> Res
             |r| r.get(0),
         )?;
         assert_eq!(indexes, 1);
+        let obsolete_indexes: i64 = db.query_row(
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name='idx_btcc_graph_plan'",
+            [],
+            |r| r.get(0),
+        )?;
+        assert_eq!(
+            obsolete_indexes, 0,
+            "retired index must stay absent on restart"
+        );
         let identity: String = db.query_row(
             "SELECT activity_worker_id FROM btcc_session_relations WHERE relation_id='identity'",
             [],
