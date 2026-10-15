@@ -165,8 +165,87 @@ async fn perf_usage_timeline_300k_ranges() -> Result<(), HarnessError> {
             butler_e2e::assert_wall_clock_budget!(latency, WARM, "timeline range");
         }
     }
-    // Same release fixture on main: RSS growth 368,099,328 bytes above the
-    // idle App. Allow ten percent; the sampler also reports absolute peak RSS.
-    memory.finish(404_909_260);
+    // Main's measured physical footprint baseline plus at most ten percent.
+    memory.finish_peak(390_500_000);
     s.finish().await
+}
+
+/// Identical fixture and legacy-field correctness for baseline binary comparisons.
+/// BUTLER_E2E_BIN can select main without depending on the new JSON fields.
+#[tokio::test]
+async fn perf_usage_comparable_300k() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("usage-comparable")?;
+    let base = chrono_now().div_euclid(SLOT_MS) * SLOT_MS - SLOT_MS / 2;
+    seed(&setup.sandbox.data, base)?;
+    let s = setup.start().await?;
+    let memory = super::memory::PeakMemory::start(s.agent.pid().unwrap());
+    let (cold, view) = timed(&s.gw, "/usage-monitor?since_hours=720").await?;
+    verify_legacy(&view, base, false);
+    eprintln!("comparable cold: {cold:?}");
+    for hours in [24, 168, 720] {
+        for scoped in [false, true] {
+            let suffix = if scoped { "&session_id=general" } else { "" };
+            let (elapsed, view) = timed(
+                &s.gw,
+                &format!("/usage-monitor?since_hours={hours}{suffix}"),
+            )
+            .await?;
+            verify_legacy(&view, base, scoped);
+            eprintln!("comparable {hours}h scoped={scoped}: {elapsed:?}");
+        }
+    }
+    let (_, before) = timed(&s.gw, "/usage-monitor").await?;
+    for index in 0..3 {
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .open(s.sandbox.data.join("metrics/prompt-cache-usage.jsonl"))?;
+        writeln!(
+            file,
+            "{}",
+            usage_row(ROW_COUNT as u64 + index, "worker", chrono_now())
+        )?;
+        drop(file);
+        let (elapsed, view) = timed(&s.gw, "/usage-monitor").await?;
+        assert_eq!(view["model"]["requestCount"], ROW_COUNT as u64 + index + 1);
+        assert_eq!(
+            view["model"]["totalTokens"].as_f64().unwrap(),
+            before["model"]["totalTokens"].as_f64().unwrap() + 1200.0 * (index + 1) as f64
+        );
+        assert_eq!(view["model"]["bySection"], before["model"]["bySection"]);
+        eprintln!("comparable all-time append {index}: {elapsed:?}");
+    }
+    memory.measure();
+    s.finish().await
+}
+
+fn verify_legacy(view: &Value, base: i64, scoped: bool) {
+    let since = view["filters"]["sinceTs"].as_f64().unwrap();
+    let mut count = 0;
+    let mut tokens = 0.0;
+    let mut prompt = 0.0;
+    for index in 0..ROW_COUNT {
+        if timestamp(base, index) as f64 >= since
+            && (!scoped || scope_index(index) == SCOPE_COUNT - 1)
+        {
+            count += 1;
+            tokens += total(index);
+            prompt += total(index) / 1.2;
+        }
+    }
+    assert_eq!(view["model"]["requestCount"], count);
+    assert_eq!(view["model"]["totalTokens"], tokens);
+    assert_eq!(view["model"]["promptTokens"], prompt);
+    assert_eq!(view["model"]["cachedTokens"], prompt * 0.4);
+    assert_eq!(
+        view["model"]["byModel"]["openai/gpt-6-luna"]["totalTokens"],
+        tokens
+    );
+    let sections = view["model"]["bySection"].as_object().unwrap();
+    assert_eq!(sections.len(), if count == 0 { 0 } else { 20 });
+    for section in sections.values() {
+        assert_eq!(section["requestCount"], count);
+        assert_eq!(section["estimatedTokens"], prompt / 20.0);
+        assert_eq!(section["chars"], prompt / 5.0);
+    }
 }

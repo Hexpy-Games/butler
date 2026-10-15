@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 
 use butler_models::models::ModelPricing;
 
-use super::row::UsageRow;
+use super::row::{Names, UsageRow};
 use super::{PROVIDER_LIMIT, provider_id};
 use crate::operations::usage_cost::UsageTotals;
 
@@ -24,6 +24,23 @@ pub(super) struct Tokens {
 }
 
 impl Tokens {
+    pub(super) fn timeline(
+        request_count: u64,
+        prompt: f64,
+        cached: f64,
+        output: f64,
+        total: f64,
+    ) -> Self {
+        Self {
+            request_count,
+            prompt,
+            cached,
+            output,
+            total,
+            ..Self::default()
+        }
+    }
+
     pub(super) fn add(&mut self, row: &UsageRow) {
         self.request_count += 1;
         self.prompt += row.prompt;
@@ -116,7 +133,7 @@ impl Buckets {
         }
     }
 
-    pub(super) fn add(&mut self, row: &UsageRow, pricing: Option<PriceLookup<'_>>) {
+    pub(super) fn add(&mut self, row: &UsageRow, pricing: Option<PriceLookup<'_>>, names: &Names) {
         self.model.add(row);
         let scope = bounded_key(&row.scope, &self.by_scope, super::MAP_LIMIT);
         *self.by_scope.entry(scope.clone()).or_default() += 1;
@@ -144,15 +161,19 @@ impl Buckets {
         self.providers.entry(provider_key).or_default().add(row);
         self.missing_key += u64::from(!row.has_cache_key);
         self.missing_retention += u64::from(!row.has_retention);
-        self.add_sections(row);
+        self.add_sections(row, names);
         if let Some(pricing) = pricing {
             self.add_cost(row, pricing);
         }
     }
 
-    fn add_sections(&mut self, row: &UsageRow) {
-        for section in &row.sections {
-            let section_key = bounded_key(&section.id, &self.by_section, super::MAP_LIMIT);
+    fn add_sections(&mut self, row: &UsageRow, names: &Names) {
+        for (index, section) in row.sections.iter().enumerate() {
+            let section_key = bounded_key(
+                names.section(row.section_layout, index),
+                &self.by_section,
+                super::MAP_LIMIT,
+            );
             let bucket = self.by_section.entry(section_key).or_default();
             bucket.0 += 1;
             bucket.1 += section.chars;
@@ -331,8 +352,4 @@ fn bounded_key<T>(name: &Arc<str>, values: &BTreeMap<Arc<str>, T>, limit: usize)
     } else {
         Arc::from("__other__")
     }
-}
-/// Internal work requires affirmative provenance from a known telemetry owner.
-pub(super) fn internal_work(scope: &str) -> bool {
-    work_kind(scope) == "memory"
 }

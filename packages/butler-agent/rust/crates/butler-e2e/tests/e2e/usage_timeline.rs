@@ -366,3 +366,6 @@ async fn usage_schedule_kind_uses_recorded_runs() -> Result<(), HarnessError> {
     drop(db);
     s.finish().await
 }
+
+#[path = "usage_kind.rs"]
+mod kind;

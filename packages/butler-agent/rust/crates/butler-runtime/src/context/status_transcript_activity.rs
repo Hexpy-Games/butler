@@ -111,7 +111,8 @@ impl ActivityAccumulator {
 
     fn add_tool(&mut self, name: &str, is_call: bool, ok: bool) {
         let key = if self.summary.by_tool.contains_key(name)
-            || self.summary.by_tool.len() < MAX_TOOL_KEYS
+            || self.summary.by_tool.len()
+                < MAX_TOOL_KEYS - usize::from(!self.summary.by_tool.contains_key("__other__"))
         {
             name
         } else {

@@ -18,26 +18,21 @@ struct ToolSlot {
     edges: Vec<Edge>,
 }
 struct Edge {
-    ts: i64,
+    offset_ms: u32,
     tool: u16,
     kind: u8,
 }
 impl ToolTimeline {
     pub(super) fn add(&mut self, event: &Value, name: &str, is_call: bool, ok: bool) {
-        let Some(ts) = event
-            .get("timestamp")
-            .and_then(Value::as_str)
-            .and_then(butler_core::js_date::parse_iso_millis)
-        else {
-            return;
-        };
-        let name = if self.ids.contains_key(name) || self.ids.len() < MAX_TOOL_KEYS {
+        let name = if self.ids.contains_key(name)
+            || self.ids.len() < MAX_TOOL_KEYS - usize::from(!self.ids.contains_key("__other__"))
+        {
             name
         } else {
             "__other__"
         };
         let tool = self.ids.get(name).copied().unwrap_or_else(|| {
-            // At most MAX_TOOL_KEYS names plus __other__ are interned.
+            // Reserve one of MAX_TOOL_KEYS dictionary entries for overflow.
             #[expect(clippy::cast_possible_truncation, reason = "bounded tool dictionary")]
             let id = self.names.len() as u16;
             let shared: Arc<str> = Arc::from(name);
@@ -45,6 +40,13 @@ impl ToolTimeline {
             self.ids.insert(shared, id);
             id
         });
+        let Some(ts) = event
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .and_then(butler_core::js_date::parse_iso_millis)
+        else {
+            return;
+        };
         let kind = if is_call {
             0
         } else if ok {
@@ -52,12 +54,15 @@ impl ToolTimeline {
         } else {
             2
         };
-        let slot = self
-            .slots
-            .entry(ts.div_euclid(SLOT_MS).saturating_mul(SLOT_MS))
-            .or_default();
+        let start = ts.div_euclid(SLOT_MS).saturating_mul(SLOT_MS);
+        let slot = self.slots.entry(start).or_default();
         increment(slot.totals.entry(tool).or_default(), kind);
-        slot.edges.push(Edge { ts, tool, kind });
+        let offset_ms = u32::try_from(ts.rem_euclid(SLOT_MS)).unwrap_or_default();
+        slot.edges.push(Edge {
+            offset_ms,
+            tool,
+            kind,
+        });
     }
     pub(super) fn read(&self, since: f64, until: f64, target: &mut StatusTranscriptActivity) {
         let first = butler_core::json::saturating_i64(since)
@@ -73,7 +78,8 @@ impl ToolTimeline {
                 }
             } else {
                 for edge in &slot.edges {
-                    if edge.ts as f64 >= since && (edge.ts as f64) < until {
+                    let ts = start.saturating_add(i64::from(edge.offset_ms)) as f64;
+                    if ts >= since && ts < until {
                         let mut count = StatusTranscriptToolUsageBucket::default();
                         increment(&mut count, edge.kind);
                         self.merge(target, edge.tool, &count);
@@ -90,20 +96,16 @@ impl ToolTimeline {
     ) {
         merge_bucket(&mut target.tools, count);
         let name = &self.names[usize::from(id)];
-        let key =
-            if target.by_tool.contains_key(name.as_ref()) || target.by_tool.len() < MAX_TOOL_KEYS {
-                name.as_ref()
-            } else {
-                "__other__"
-            };
-        if key == "__other__"
-            && !target.by_tool.contains_key(key)
-            && target.by_tool.len() >= MAX_TOOL_KEYS
-            && let Some((_, overflow)) = target.by_tool.pop_last()
+        // Membership is fixed in file order at ingest, as in all-time reads.
+        let reserve = usize::from(!target.by_tool.contains_key("__other__"));
+        let key = if target.by_tool.contains_key(name.as_ref())
+            || target.by_tool.len() < MAX_TOOL_KEYS - reserve
         {
-            merge_bucket(target.by_tool.entry(key.into()).or_default(), &overflow);
-        }
-        merge_bucket(target.by_tool.entry(key.into()).or_default(), count);
+            name.as_ref()
+        } else {
+            "__other__"
+        };
+        merge_bucket(target.by_tool.entry(key.to_owned()).or_default(), count);
     }
 }
 fn increment(target: &mut StatusTranscriptToolUsageBucket, kind: u8) {

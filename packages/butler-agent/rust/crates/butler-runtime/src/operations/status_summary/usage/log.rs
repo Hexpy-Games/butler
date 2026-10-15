@@ -29,24 +29,47 @@ struct ScopeSlot {
     usage: SessionUsage,
     rows: Vec<u32>,
 }
+/// Only counters consumed by timeline/topSessions, not full model buckets.
 #[derive(Default)]
 struct SessionUsage {
-    tokens: Tokens,
+    requests: u64,
+    prompt: f64,
+    cached: f64,
+    output: f64,
+    total: f64,
     last: Option<f64>,
 }
 impl SessionUsage {
     fn add(&mut self, row: &UsageRow) {
-        self.tokens.add(row);
+        self.requests += 1;
+        self.prompt += row.prompt;
+        self.cached += row.cached;
+        self.total += row.total.unwrap_or_default();
+        self.output += row.total.map_or(0.0, |total| (total - row.prompt).max(0.0));
         self.last = Some(self.last.map_or(row.ts, |ts| ts.max(row.ts)));
     }
     fn merge(&mut self, other: &Self) {
-        self.tokens.merge(&other.tokens);
+        self.requests += other.requests;
+        self.prompt += other.prompt;
+        self.cached += other.cached;
+        self.output += other.output;
+        self.total += other.total;
         self.last = match (self.last, other.last) {
             (Some(a), Some(b)) => Some(a.max(b)),
             (a, b) => a.or(b),
         };
     }
+    fn tokens(&self) -> Tokens {
+        Tokens::timeline(
+            self.requests,
+            self.prompt,
+            self.cached,
+            self.output,
+            self.total,
+        )
+    }
 }
+
 fn complete(start: i64, window: Window<'_>) -> bool {
     window.since_ts.is_none_or(|ts| ts <= start as f64)
         && window
@@ -90,7 +113,9 @@ impl UsageLogIndex {
             return;
         };
         let start = slot_start(row.ts);
-        self.all = None;
+        if let Some(all) = &mut self.all {
+            all.add(&row, pricing, &self.names);
+        }
         let scoped = self
             .by_scope
             .entry(row.scope.clone())
@@ -103,7 +128,7 @@ impl UsageLogIndex {
         global
             .buckets
             .get_or_insert_with(|| Buckets::new(pricing.is_some()))
-            .add(&row, pricing);
+            .add(&row, pricing, &self.names);
         global.rows.push(index);
         self.rows.push(row);
     }
@@ -171,7 +196,7 @@ impl UsageLogIndex {
         if let Some(scope) = window.scope {
             for (_, slot) in self.scope_slots(scope, window) {
                 for row in self.matching_rows(&slot.rows, window) {
-                    buckets.add(row, pricing);
+                    buckets.add(row, pricing, &self.names);
                 }
             }
             return buckets;
@@ -183,7 +208,7 @@ impl UsageLogIndex {
                 }
             } else {
                 for row in self.matching_rows(&slot.rows, window) {
-                    buckets.add(row, pricing);
+                    buckets.add(row, pricing, &self.names);
                 }
             }
         }
@@ -214,7 +239,7 @@ impl UsageLogIndex {
                 .map(|(&start, slot)| {
                     (
                         start,
-                        self.slot_tokens(start, &slot.rows, &slot.usage.tokens, window),
+                        self.slot_tokens(start, &slot.rows, &slot.usage.tokens(), window),
                     )
                 })
                 .collect()
@@ -266,24 +291,25 @@ impl UsageLogIndex {
             .as_array()
             .into_iter()
             .flatten()
-            .filter(|item| item["kind"] == "chat")
             .filter_map(|item| item["sessionId"].as_str())
             .map(|id| {
                 let mut turns = super::UsageSessionTurns {
                     session_id: id.into(),
                     ..Default::default()
                 };
+                let mut unique = std::collections::HashSet::new();
                 for scope in [id.to_owned(), format!("btcc-guided:{id}")] {
                     for (_, slot) in self.scope_slots(&scope, window) {
                         for row in self.matching_rows(&slot.rows, window) {
                             if let Some(id) = &row.turn_id {
-                                turns.turn_ids.push(id.clone());
+                                unique.insert(id.clone());
                             } else {
                                 turns.missing_turn = true;
                             }
                         }
                     }
                 }
+                turns.turn_ids = unique.into_iter().collect();
                 turns
             })
             .collect()
@@ -308,7 +334,7 @@ impl UsageLogIndex {
                 }
             }
         }
-        scopes.retain(|_, value| value.tokens.request_count > 0);
+        scopes.retain(|_, value| value.requests > 0);
         let selected_scope = window
             .scope
             .map(|scope| scope.strip_prefix("btcc-guided:").unwrap_or(scope));
@@ -316,12 +342,7 @@ impl UsageLogIndex {
             scopes.entry(scope.into()).or_default();
         }
         let mut scopes: Vec<_> = scopes.into_iter().collect();
-        scopes.sort_by(|a, b| {
-            b.1.tokens
-                .total
-                .total_cmp(&a.1.tokens.total)
-                .then_with(|| a.0.cmp(&b.0))
-        });
+        scopes.sort_by(|a, b| b.1.total.total_cmp(&a.1.total).then_with(|| a.0.cmp(&b.0)));
         let selected =
             selected_scope.and_then(|scope| scopes.iter().position(|item| item.0 == scope));
         let mut keep: Vec<_> = (0..scopes.len().min(TOP_SESSIONS_LIMIT)).collect();
@@ -332,18 +353,15 @@ impl UsageLogIndex {
             keep.into_iter()
                 .map(|index| {
                     let (scope, usage) = &scopes[index];
-                    let tokens = &usage.tokens;
                     let guided = format!("btcc-guided:{scope}");
-                    let kind = if super::buckets::internal_work(scope)
-                        && !self.by_scope.contains_key(guided.as_str())
-                    {
-                        "butler"
-                    } else {
+                    let kind = if self.by_scope.contains_key(guided.as_str()) {
                         "chat"
+                    } else {
+                        "butler"
                     };
                     json!({
                         "sessionId": scope, "title": null, "kind": kind,
-                        "totalTokens": tokens.total, "requests": tokens.request_count,
+                        "totalTokens": usage.total, "requests": usage.requests,
                         "lastUsedMs": usage.last
                     })
                 })

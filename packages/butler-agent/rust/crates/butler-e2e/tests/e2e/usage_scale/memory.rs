@@ -1,4 +1,4 @@
-//! Native RSS sampling of the isolated agent, including transient ingest allocations.
+//! Native footprint sampling of the isolated agent, including transient ingest allocations.
 use super::*;
 use std::sync::{
     Arc,
@@ -32,9 +32,13 @@ impl PeakMemory {
     pub(super) fn finish(self, budget: u64) {
         let (baseline, peak) = self.measure();
         let delta = peak.saturating_sub(baseline);
-        assert!(delta <= budget, "peak RSS growth {delta} > {budget}");
+        assert!(delta <= budget, "peak footprint growth {delta} > {budget}");
     }
-    fn measure(mut self) -> (u64, u64) {
+    pub(super) fn finish_peak(self, budget: u64) {
+        let (_, peak) = self.measure();
+        assert!(peak <= budget, "peak footprint {peak} > {budget}");
+    }
+    pub(super) fn measure(mut self) -> (u64, u64) {
         self.stop.store(true, Ordering::Release);
         let peak = self.worker.take().unwrap().join().unwrap().unwrap();
         eprintln!(
@@ -55,6 +59,11 @@ impl Drop for PeakMemory {
 }
 fn sample(pid: u32) -> std::io::Result<u64> {
     butler_platform::process_control::usage::sample(pid)?
-        .map(|usage| usage.resident_bytes)
-        .ok_or_else(|| std::io::Error::other("native RSS sampling unavailable"))
+        .map(|usage| {
+            usage
+                .footprint_bytes
+                .or(usage.proportional_bytes)
+                .unwrap_or(usage.resident_bytes)
+        })
+        .ok_or_else(|| std::io::Error::other("native memory sampling unavailable"))
 }
