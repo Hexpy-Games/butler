@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { NavRow } from "../../../../blocks/NavRow";
 import { NavSectionHeading } from "../../../../blocks/NavSection";
-import { SidebarBrand, SidebarNav, SidebarShell } from "../../../../blocks/SidebarShell";
+import { SidebarNav, SidebarShell, SidebarTrafficSpace } from "../../../../blocks/SidebarShell";
 import { Box } from "../../../Box";
 import { ButtonContainer } from "../../../ButtonContainer";
 import { IconButton } from "../../../IconButton";
@@ -14,16 +14,12 @@ import type { LayersCopy } from "./layersCopy";
 
 const glyph = (icon: ReactNode) => <IconSlot size="sidebar">{icon}</IconSlot>;
 
-/** The sidebar as the product builds it (SpaceSidebar): brand, entry actions, favorites, sticky browse tabs, the space tree, settings. */
+/** The sidebar as the product builds it (SpaceSidebar): entry actions, favorites, sticky browse tabs, the space tree, settings. */
 export function Sidebar({ copy }: { copy: LayersCopy }) {
   return (
     <SidebarShell
       ariaLabel={copy.sidebar}
-      titlebar={
-        <SidebarBrand>
-          <Typo.AppTitle>{copy.app}</Typo.AppTitle>
-        </SidebarBrand>
-      }
+      titlebar={<SidebarTrafficSpace />}
       scrollHeader={
         <Stack gap="2xl">
           <SidebarNav>

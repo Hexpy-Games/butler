@@ -75,11 +75,13 @@ rmSync(payloadRoot, { recursive: true, force: true });
 const binaryRoot = join(payloadRoot, "bin");
 mkdirSync(binaryRoot, { recursive: true });
 copyFileSync(sourceBinary, join(binaryRoot, binaryName));
-if (requestedPlatform === "linux") {
-  const helper = join(dirname(sourceBinary), "butler-sandbox");
+if (["linux", "win32"].includes(requestedPlatform)) {
+  const helperName = requestedPlatform === "win32" ? "butler-sandbox.exe" : "butler-sandbox";
+  const helper = join(dirname(sourceBinary), helperName);
   accessSync(helper, constants.X_OK);
-  verifyLinuxDependencyClosure(helper, requestedArch);
-  copyFileSync(helper, join(binaryRoot, "butler-sandbox"));
+  if (requestedPlatform === "linux") verifyLinuxDependencyClosure(helper, requestedArch);
+  else verifyWindowsDependencyClosure(helper);
+  copyFileSync(helper, join(binaryRoot, helperName));
 }
 run(process.execPath, [join(scriptDir, "prepare-process-links.mjs"), join(binaryRoot, binaryName)], rustRoot);
 const roleLinks = spawnSync(join(binaryRoot, "butler-agent"), ["--prepare-process-links"], { stdio: "inherit" });

@@ -69,7 +69,9 @@ fn probe() -> SandboxCapabilities {
     };
     #[cfg(target_os = "linux")]
     return super::linux::probe();
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(windows)]
+    return super::windows::mxc::probe();
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
     unavailable("no command sandbox on this host")
 }
 

@@ -114,7 +114,7 @@ runs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         }
         $ErrorActionPreference = 'Continue'
-        cargo build --timings -j 8 --locked --profile ${{ inputs.profile }} --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
+        cargo build --timings -j 8 --locked --profile ${{ inputs.profile }} --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox
         $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         if ('${{ inputs.owner-runner }}' -eq 'true') {

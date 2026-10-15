@@ -4,7 +4,10 @@
 //! trampoline. Unsupported hosts keep exact-action approval behavior.
 
 mod denial;
-pub use denial::{isolation_failure, isolation_failure_exit, sandbox_denial};
+pub use denial::{
+    EXECUTION_TIMEOUT_EXIT, EXECUTION_TIMEOUT_MARKER, execution_timeout, execution_timeout_exit,
+    isolation_failure, isolation_failure_exit, sandbox_denial,
+};
 mod credentials;
 pub mod mxc_policy;
 mod project_secrets;
@@ -25,9 +28,9 @@ use std::path::Path;
 mod macos;
 #[cfg(target_os = "macos")]
 use macos as sandbox;
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 mod unsandboxed;
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 use unsandboxed as sandbox;
 
 #[cfg(unix)]
@@ -38,11 +41,16 @@ use unix as shell;
 mod windows;
 #[cfg(windows)]
 use windows as shell;
+#[cfg(windows)]
+use windows::mxc as sandbox;
 
 #[cfg(feature = "test-support")]
 mod test_support;
 #[cfg(feature = "test-support")]
-pub use test_support::{UnixSocketProbe, linux_syscall_probe, linux_test_host, wsl_test_host};
+pub use test_support::{
+    UnixSocketProbe, linux_syscall_probe, linux_test_host, windows_prepare_project_write,
+    windows_recovery_contract, wsl_test_host,
+};
 
 mod host_capabilities;
 pub use host_capabilities::{Level, SandboxCapabilities, capabilities};
@@ -104,6 +112,11 @@ pub fn copy_command_helper(source: &Path, destination: &Path) -> std::io::Result
     std::fs::copy(
         source.join("butler-sandbox"),
         destination.join("butler-sandbox"),
+    )?;
+    #[cfg(windows)]
+    std::fs::copy(
+        source.join("butler-sandbox.exe"),
+        destination.join("butler-sandbox.exe"),
     )?;
     let _ = (source, destination);
     Ok(())
@@ -269,6 +282,22 @@ pub fn normalize_path_token(path: &str) -> String {
     shell::normalize_path_token(path)
 }
 
+/// Reclaims helper-owned drive mappings after reap or at startup; call off async workers.
+pub fn reconcile_project_write(data: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    return windows::mxc::reconcile(data);
+    #[cfg(not(windows))]
+    {
+        let _ = data;
+        Ok(())
+    }
+}
+/// Windows helper entry point; the agent never calls PSEC directly.
+#[cfg(windows)]
+pub fn windows_sandbox_helper() -> Result<i32, Box<dyn std::error::Error>> {
+    windows::mxc::launch::main()
+}
+
 /// Holds a project-write setup/cleanup lease across the command lifetime.
 pub struct ProjectWritePreparation {
     #[cfg(target_os = "linux")]
@@ -298,4 +327,18 @@ pub fn project_mount_aliases(root: &Path) -> std::io::Result<Vec<std::path::Path
     return linux::project_mount_aliases(root);
     #[cfg(not(target_os = "linux"))]
     Ok(vec![root.to_path_buf()])
+}
+
+/// Releases per-command preparation after execution or when the helper never starts.
+/// Call off runtime workers; running helpers retain ownership of their files.
+pub fn cleanup_prepared_invocation(invocation: &Invocation) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        windows::mxc::prepare::cleanup_invocation(invocation)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = invocation;
+        Ok(())
+    }
 }
