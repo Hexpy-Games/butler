@@ -115,8 +115,7 @@ impl AppApplication {
                         kind,
                         title: Some(request.title.clone()),
                         project_id,
-                        session_hint: None,
-                        group_id: None,
+                        ..AppCreateSessionInput::default()
                     },
                     clock.as_ref(),
                 )?;

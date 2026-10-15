@@ -4,9 +4,10 @@ use tokio_util::sync::CancellationToken;
 
 use crate::gateway::{ApplicationFuture, GatewayApplicationError};
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum AppChatKind {
+    #[default]
     Chat,
     Project,
 }
@@ -20,7 +21,7 @@ impl AppChatKind {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct AppCreateSessionInput {
     pub kind: AppChatKind,
     pub title: Option<String>,
