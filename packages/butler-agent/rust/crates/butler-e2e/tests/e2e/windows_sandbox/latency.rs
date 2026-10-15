@@ -1,6 +1,10 @@
 use super::*;
 use std::time::Instant;
 
+// Owner decision 2026-10-15: MXC creation has a fixed 70-80 ms floor;
+// revisit when MXC supports pre-creation.
+const BUDGET_P50_MS: u64 = 220;
+
 #[test]
 fn row14_latency() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -42,12 +46,12 @@ fn row14_latency() -> Result<(), HarnessError> {
     delta.sort_by(f64::total_cmp);
     let p50 = f64::midpoint(delta[14], delta[15]);
     eprintln!(
-        "WINDOWS-MXC-LATENCY samples=30 added_p50_ms={p50:.3} added_p95_ms={:.3} budget_p50_ms=150 powershell_startup=false complete_output=true",
+        "WINDOWS-MXC-LATENCY samples=30 added_p50_ms={p50:.3} added_p95_ms={:.3} budget_p50_ms={BUDGET_P50_MS} powershell_startup=false complete_output=true",
         delta[28]
     );
     butler_e2e::assert_wall_clock_budget!(
         std::time::Duration::from_secs_f64(p50.max(0.0) / 1000.0),
-        std::time::Duration::from_millis(150),
+        std::time::Duration::from_millis(BUDGET_P50_MS),
         "Windows MXC added p50 latency",
     );
     f.finish();
