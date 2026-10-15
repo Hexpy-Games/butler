@@ -8,7 +8,7 @@
     "packages/butler-agent/rust/Cargo.lock": "ffcc56be2d66d852e4b00a86feb285b3555c535145935d3eaf62f87d3b27d1ca",
     "packages/butler-agent/rust/Cargo.toml": "d74d0251e354c1ec916d057d396badfcd600ad811b0e7a06fa8a90407c34a7f5",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
-    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "21b121cd6d50f5abc67405bba11d956714d409920c8f0243f5fa94fdf79a56eb",
+    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "6c76c4b5d9f708217bb74e2fa0826550581a5b415ebaf843c1bf5fb57606fea9",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs": "f11dc3b1952a178092fbf7da589b8c39e28021c4975f884e236cd71c78c8d7a9",
     "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "b8a781872e8e48a1b1e02c6ab77f37ee31bf1237b6f68b03faa68b10b1e4270e",

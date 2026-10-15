@@ -10,23 +10,31 @@ pub(super) fn configured_recall(
     models: &models::ProcessModels,
     date_parser: Arc<crate::host::DateParser>,
     collation: Arc<LocaleCollation>,
-) -> MemoryRecall {
+    metrics: Arc<butler_runtime::operations::MetricFiles>,
+    vectors: Arc<butler_memory::cognition::GenerationVectorAdapter>,
+) -> Arc<MemoryRecall> {
     let source = crate::host::memory_jobs::recall_judge::RecallJudge::new(
         models.configuration.clone(),
         &paths.data_root,
     );
-    MemoryRecall::new(
-        paths.data_root.clone(),
-        environment.clone(),
-        Arc::new(move |value| date_parser.parse(value)),
-        Arc::new(move |left, right| collation.compare(left, right)),
-        Arc::new(|| SystemIdentity.now_epoch_millis()),
-        2,
+    Arc::new(
+        MemoryRecall::new(
+            paths.data_root.clone(),
+            environment.clone(),
+            Arc::new(move |value| date_parser.parse(value)),
+            Arc::new(move |left, right| collation.compare(left, right)),
+            Arc::new(|| SystemIdentity.now_epoch_millis()),
+            2,
+        )
+        .with_judge_port(Arc::new(
+            butler_memory::cognition::ConfiguredRecallJudge::new(
+                models.provider.clone(),
+                Arc::new(source),
+            ),
+        ))
+        .with_metric_sink(Arc::new(
+            crate::host::memory_jobs::recall_metrics::RecallMetrics::new(metrics),
+        ))
+        .with_vector_port(vectors),
     )
-    .with_judge_port(Arc::new(
-        butler_memory::cognition::ConfiguredRecallJudge::new(
-            models.provider.clone(),
-            Arc::new(source),
-        ),
-    ))
 }

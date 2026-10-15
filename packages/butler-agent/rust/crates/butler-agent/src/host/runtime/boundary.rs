@@ -119,6 +119,7 @@ pub(super) async fn open_observer(
     cognition_paths: &butler_memory::cognition::CognitionPathEnvironment,
     metric_files: Arc<butler_runtime::operations::MetricFiles>,
     stores: &RuntimeStores,
+    embedding: Arc<crate::host::EmbeddingOwner>,
 ) -> Result<(Arc<WorkStreams>, Arc<ConversationObserver>), BtccError> {
     let work_streams = match WorkStreams::open(data_root.to_owned()) {
         Ok(owner) => Arc::new(owner),
@@ -132,6 +133,7 @@ pub(super) async fn open_observer(
         cognition_paths,
         Arc::new(crate::host::SystemIdentity),
         metric_files.clone(),
+        Some(embedding),
     ) {
         Ok(observer) => Arc::new(observer),
         Err(error) => {
