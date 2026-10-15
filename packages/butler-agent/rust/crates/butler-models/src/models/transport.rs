@@ -1,4 +1,5 @@
 mod sse;
+mod timing;
 
 use reqwest::{Client, RequestBuilder, Response};
 use serde_json::Value;
@@ -210,12 +211,15 @@ async fn send_attempt(
     stream_observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
     mode: ResponseMode,
 ) -> Result<Value, Box<ProviderRequestError>> {
+    let timing = timing::Timing::new();
     let response = current
         .send()
         .await
         .map_err(|error| Box::new(diagnostics::network(provider, api, &error.to_string())))?;
+    timing.mark("headers_received");
     progress.record_progress();
     let response = checked(response, provider, api, quota).await?;
+    timing.mark("headers_checked");
     Reading {
         provider,
         api,

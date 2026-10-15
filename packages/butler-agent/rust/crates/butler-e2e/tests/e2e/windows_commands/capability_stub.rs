@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use std::{
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -30,6 +30,7 @@ pub(super) struct Script {
     pub result: Mutex<Option<(Value, Duration)>>,
     pub disposition: Mutex<Option<Value>>,
     pub diagnostics: Mutex<Vec<[u128; 4]>>,
+    pub diagnostic_log_lines: AtomicUsize,
     selected: Mutex<Instant>,
 }
 
@@ -73,6 +74,7 @@ pub(super) async fn start(
         result: Mutex::new(None),
         disposition: Mutex::new(None),
         diagnostics: Mutex::new(Vec::new()),
+        diagnostic_log_lines: AtomicUsize::new(0),
         selected: Mutex::new(Instant::now()),
     });
     let router = Router::new()

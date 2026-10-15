@@ -52,8 +52,14 @@ impl TurnStore for BtccRepositories {
         Box::pin(async move {
             storage
                 .execute(move |db| {
+                    let timing = crate::btcc::agent_loop::command_timing::CommandTiming::new(
+                        "authority_storage",
+                    );
                     transitions::resume_authority(db, &id)?;
-                    hydration::find_turn(db, &id)
+                    timing.mark("transition_done");
+                    let turn = hydration::find_turn(db, &id);
+                    timing.mark("hydrated");
+                    turn
                 })
                 .await
                 .map_err(BtccError::from)

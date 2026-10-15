@@ -162,6 +162,7 @@ pub(super) fn project_suspended(
     metadata: &Map<String, Value>,
     now: &str,
 ) -> Result<(bool, bool), AppStorageError> {
+    let timing = crate::gateway::command_timing::CommandTiming::new("project_suspended");
     let suspension = metadata.get("suspension").and_then(Value::as_str);
     let decision_pending = matches!(suspension, Some("authority_pending" | "question_pending"));
     let (state, label, cancellable) = if decision_pending {
@@ -173,6 +174,7 @@ pub(super) fn project_suspended(
         "UPDATE turns SET state=?1,safe_status_label=?2,safe_error_code=NULL,retryable=0,cancellable=?3,updated_at=?4 WHERE id=?5",
         params![state, label, cancellable, now, turn],
     ).map_err(AppStorageError::sqlite)?;
+    timing.mark("turn_updated");
     events::append(
         db,
         subscribers,
@@ -192,6 +194,7 @@ pub(super) fn project_suspended(
         now,
         suspension != Some("authority_pending"),
     )?;
+    timing.mark("stream_settled");
     if decision_pending {
         return Ok((false, false));
     }
