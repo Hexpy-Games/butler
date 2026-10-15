@@ -26,7 +26,7 @@ export async function googleSigninProbe(contents: any) {
     await contents.executeJavaScript("document.querySelector('#identifierId,input[name=identifier],input[type=email]').focus()");
     contents.focus();
     submitted = true;
-    contents.insertText(`butler-probe-${crypto.randomUUID()}@gmail.com`);
+    await contents.insertText(`butler-probe-${crypto.randomUUID()}@gmail.com`);
     for (const type of ["keyDown", "char", "keyUp"]) contents.sendInputEvent({ type, keyCode: "Enter" });
     state = await until(s => s.rejected || s.captcha || s.notFound);
   }

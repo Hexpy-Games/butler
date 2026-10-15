@@ -30,12 +30,11 @@ try {
     // A my-tab in the signed-in web profile, as the owner opens Google sign-in.
     const google = await app.call<string>("create", { url: "https://accounts.google.com/signin" });
     const wc = `globalThis.browserAgentSubject.tabs.get(${JSON.stringify(google)}).view.webContents`;
-    await app.main(`globalThis.googleProbeResult=null;void (${googleSigninProbe.toString()})(${wc}).then(result=>{globalThis.googleProbeResult=result},()=>{globalThis.googleProbeResult={outcome:'inconclusive_error'}});true`);
-    await waitBrowser(() => app.main<boolean>("Boolean(globalThis.googleProbeResult)"), "single Google lookup outcome");
-    const result = await app.main<any>("globalThis.googleProbeResult");
+    // The one lookup has a 25 s observation window; allow its inspector call to finish.
+    const result = await app.main<any>(`(${googleSigninProbe.toString()})(${wc})`, 35_000);
+    writeFileSync(join(evidence, "google-signin-result.json"), JSON.stringify(result, null, 2));
     await app.main(`${wc}.capturePage().then(image=>process.getBuiltinModule('fs').writeFileSync(${JSON.stringify(join(evidence, "google-signin-native.png"))},image.toPNG()))`);
     writeFileSync(join(evidence, "google-signin-app-renderer.png"), await app.page.screenshot());
-    writeFileSync(join(evidence, "google-signin-result.json"), JSON.stringify(result, null, 2));
     console.log(JSON.stringify({ google: result.outcome }));
     assert.equal(result.outcome, "account_not_found", `Google probe: ${result.outcome}`);
     await app.call("close", { id: google });

@@ -38,6 +38,7 @@ console.log("entry");void app.whenReady().then(async()=>{try{console.log("ready"
  out.reader=await renderReader({url:${JSON.stringify(fixture.url + "?no-frame")},policy:{content_origin:${JSON.stringify(fixture.server.url.origin.replace("0.0.0.0", "127.0.0.1"))}}});
  ${process.env.BUTLER_UA_GOOGLE_CHECK === "1" ? `shell.show();const gid=b.create({url:'https://accounts.google.com/signin',profile:'signed_out'});const gt=b.tabs.get(gid);shell.contentView.addChildView(gt.view);gt.view.setBounds({x:0,y:0,width:1280,height:800});await gt.identityReady;
  out.google=await (${googleSigninProbe.toString()})(gt.view.webContents);
+ writeFileSync(${JSON.stringify(join(evidence, "google-signin-result.json"))},JSON.stringify(out.google,null,2));
  writeFileSync(${JSON.stringify(join(evidence, "google-signin.png"))},(await gt.view.webContents.capturePage()).toPNG());b.close(gid);` : ""}
  writeFileSync(${JSON.stringify(results)},JSON.stringify(out));shell.destroy();app.exit(0);
 }catch(error){writeFileSync(${JSON.stringify(results)},JSON.stringify({error:String(error.stack)}));app.exit(1)}});`);

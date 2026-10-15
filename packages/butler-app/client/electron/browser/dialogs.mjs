@@ -3,17 +3,17 @@ import { shortId } from "./ids.mjs";
 import { browserEvent } from "./events.mjs";
 
 export const DIALOG_TIMEOUT_MS = 120_000;
-export function publicDialog(tab, forUser = false) {
+export function publicDialog(tab) {
   const dialog = tab.dialog;
   if (!dialog) return null;
   const { id, epoch, type, message, defaultPrompt, origin, deadline, printers } = dialog;
-  return { ...(forUser && dialog.accounts ? { accounts: dialog.accounts } : {}), id, epoch, type, message, defaultPrompt, origin, deadline, printers, approvalRequired: (tab.agent || tab.driven) && tab.holder !== "user", untrusted: true };
+  return { id, epoch, type, message, defaultPrompt, origin, deadline, printers, approvalRequired: (tab.agent || tab.driven) && tab.holder !== "user", untrusted: true };
 }
 export function beginDialog(browser, tab, value, callback) {
   if (tab.dialog) return;
   const dialog = { id: shortId("d"), epoch: tab.epoch, type: value.type, message: String(value.message ?? ""),
     defaultPrompt: String(value.defaultPrompt ?? ""), origin: value.url ?? value.origin ?? tab.url, deadline: Date.now() + DIALOG_TIMEOUT_MS,
-    accounts: value.accounts, sessionId: value.sessionId, beforeUnloadClose: value.beforeUnloadClose, pageBeforeUnload: value.pageBeforeUnload, navigation: value.navigation, callback };
+    sessionId: value.sessionId, beforeUnloadClose: value.beforeUnloadClose, pageBeforeUnload: value.pageBeforeUnload, navigation: value.navigation, callback };
   tab.dialog = dialog; tab.waiting = true;
   dialog.timer = setTimeout(() => { void resolveDialog(browser, tab, { accept: false }, "timeout"); }, DIALOG_TIMEOUT_MS);
   browserEvent(browser, tab, "dialog_opened", { dialog: publicDialog(tab) });
@@ -35,7 +35,7 @@ export async function resolveDialog(browser, tab, answer, reason = "answered") {
   browserEvent(browser, tab, answer.accept ? "dialog_accepted" : "dialog_cancelled", { dialog: dialog.id, dialog_type: dialog.type, reason });
   browser.publish(); browser.sync(tab);
 }
-/** Only agent/agent-driven tabs subscribe to CDP dialog events. */
+/** Only agent/agent-driven tabs attach the debugger. */
 export function wireDialogs(browser, tab) {
   if (tab.debugDialogs) return;
   tab.debugDialogs = true;

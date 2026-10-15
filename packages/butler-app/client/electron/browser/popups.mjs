@@ -14,7 +14,7 @@ const windows = new Map();
 let installed = false;
 function popupState(tab) {
   return { id: tab.id, url: tab.url, title: tab.title,
-    locale: tab.popupAppearance?.locale ?? "ko", theme: tab.popupAppearance?.theme ?? "light", platform: popupPlatform(), dialog: publicDialog(tab, true), still: tab.still };
+    locale: tab.popupAppearance?.locale ?? "ko", theme: tab.popupAppearance?.theme ?? "light", platform: popupPlatform(), dialog: publicDialog(tab), still: tab.still };
 }
 export function publishPopup(tab) {
   const win = tab.popupWindow;

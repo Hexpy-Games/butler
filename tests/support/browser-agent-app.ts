@@ -38,10 +38,10 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
   const win = `${module}('electron').BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().startsWith('app://butler/'))`;
   let lastExpression = "";
   let inspectorClient: ReturnType<typeof connectElectronMain> | undefined;
-  const main = async <T>(expression: string): Promise<T> => {
+  const main = async <T>(expression: string, timeoutMs?: number): Promise<T> => {
     lastExpression = expression;
     inspectorClient ??= connectElectronMain(inspector);
-    return (await inspectorClient).evaluate<T>(expression);
+    return (await inspectorClient).evaluate<T>(expression, false, timeoutMs);
   };
   let page: Awaited<ReturnType<typeof electronPage>> | undefined;
   const stop = async () => {
