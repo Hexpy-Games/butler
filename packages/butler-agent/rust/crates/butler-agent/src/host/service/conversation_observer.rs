@@ -54,15 +54,13 @@ impl ConversationObserver {
         let now_iso = Arc::new(move || clock.now_iso());
         let publisher = CompletionPublisher::new(data_root, paths, now_iso);
         let metrics = ConversationMetrics::new(metric_files);
-        let data_root = data_root.to_owned();
-        let paths = paths.clone();
+        let mut prewarm = prewarm::Prewarm::new(data_root, paths, embedding);
         let worker = std::thread::Builder::new()
             .name("butler-completion-observer".into())
             .spawn(move || {
                 while let Some(job) = receiver.blocking_recv() {
                     match job {
                         Job::Admission(input, result) => {
-                            prewarm::on_admission(&input, &data_root, &paths, embedding.as_deref());
                             metrics.admission(AdmissionMeasure {
                                 session_id: &input.session_id,
                                 session_role: &input.session_role,
@@ -76,6 +74,7 @@ impl ConversationObserver {
                                 reason: input.reason,
                             });
                             let _ = result.send(Ok(()));
+                            prewarm.on_admission(&input);
                         }
                         Job::Completion(input, result) => {
                             let outcome = publisher.publish(&input).map_err(|error| {
@@ -93,6 +92,7 @@ impl ConversationObserver {
                         }
                     }
                 }
+                prewarm.drain();
             })?;
         Ok(Self {
             state: Mutex::new(State {
