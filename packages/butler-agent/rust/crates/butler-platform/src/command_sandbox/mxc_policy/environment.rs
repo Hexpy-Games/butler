@@ -106,10 +106,10 @@ pub fn git_config(
     Ok(text)
 }
 /// Windows credential paths, collected before redirecting the profile.
-pub fn credential_roots(env: &BTreeMap<String, String>) -> Result<Vec<WinPath>, &'static str> {
+pub fn credential_roots(env: &BTreeMap<String, String>) -> Result<Vec<WinPath>, String> {
     let mut roots = Vec::new();
     if let Some(home) = get(env, "USERPROFILE").or_else(|| get(env, "HOME")) {
-        let home = WinPath::new(home)?;
+        let home = WinPath::categorized(home, "USERPROFILE/HOME")?;
         for name in [
             ".ssh",
             ".aws",
@@ -132,7 +132,7 @@ pub fn credential_roots(env: &BTreeMap<String, String>) -> Result<Vec<WinPath>, 
         }
     }
     if let Some(app) = get(env, "APPDATA") {
-        let app = WinPath::new(app)?;
+        let app = WinPath::categorized(app, "APPDATA")?;
         for name in [
             "Microsoft\\Credentials",
             "Microsoft\\Protect",
@@ -144,7 +144,7 @@ pub fn credential_roots(env: &BTreeMap<String, String>) -> Result<Vec<WinPath>, 
         }
     }
     if let Some(local) = get(env, "LOCALAPPDATA") {
-        roots.push(WinPath::new(local)?.join("Microsoft\\Credentials")?);
+        roots.push(WinPath::categorized(local, "LOCALAPPDATA")?.join("Microsoft\\Credentials")?);
     }
     for (key, name) in [
         ("CARGO_HOME", "credentials"),
@@ -154,25 +154,28 @@ pub fn credential_roots(env: &BTreeMap<String, String>) -> Result<Vec<WinPath>, 
         ("BUTLER_DATA", "sandbox-quarantine"),
     ] {
         if let Some(root) = get(env, key) {
-            roots.push(WinPath::new(root)?.join(name)?);
+            roots.push(WinPath::categorized(root, key)?.join(name)?);
         }
     }
     for key in ["GH_CONFIG_DIR", "CLOUDSDK_CONFIG"] {
         if let Some(path) = get(env, key).filter(|p| !p.is_empty()) {
-            roots.push(WinPath::new(path)?);
+            roots.push(WinPath::categorized(path, key)?);
         }
     }
     if let Some(root) = get(env, "XDG_CONFIG_HOME").filter(|p| !p.is_empty()) {
-        roots.push(WinPath::new(root)?.join("gh")?);
+        roots.push(WinPath::categorized(root, "XDG_CONFIG_HOME")?.join("gh")?);
     }
     if let Some(path) = get(env, "CODEX_AUTH_JSON").filter(|p| !p.is_empty()) {
-        roots.push(WinPath::new(path)?);
+        roots.push(WinPath::categorized(path, "CODEX_AUTH_JSON")?);
     }
     if let Some(data) = get(env, "BUTLER_DATA") {
-        let data = WinPath::new(data)?;
+        let data = WinPath::categorized(data, "BUTLER_DATA")?;
         for key in ["BUTLER_CODEX_AUTH_PROFILE", "BUTLER_OPENAI_AUTH_PROFILE"] {
             if let Some(path) = get(env, key).filter(|p| !p.is_empty()) {
-                roots.push(WinPath::new(path).or_else(|_| data.join(path))?);
+                let resolved = WinPath::new(path)
+                    .or_else(|_| data.join(path))
+                    .map_err(|reason| WinPath::rejection(path, key, reason))?;
+                roots.push(resolved);
             }
         }
     }

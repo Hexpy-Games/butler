@@ -44,7 +44,10 @@ use windows::mxc as sandbox;
 #[cfg(feature = "test-support")]
 mod test_support;
 #[cfg(feature = "test-support")]
-pub use test_support::{UnixSocketProbe, linux_syscall_probe, linux_test_host, wsl_test_host};
+pub use test_support::{
+    UnixSocketProbe, linux_syscall_probe, linux_test_host, windows_prepare_project_write,
+    wsl_test_host,
+};
 
 mod host_capabilities;
 pub use host_capabilities::{Level, SandboxCapabilities, capabilities};

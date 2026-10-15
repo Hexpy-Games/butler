@@ -1,6 +1,32 @@
 //! OS fixtures for Linux sandbox E2Es, kept inside the platform boundary.
 use std::{io, path::Path};
 
+/// Exercises filesystem admission without launching a container or requiring WinSta0.
+/// The caller owns the isolated profile and must check capabilities before launch.
+pub fn windows_prepare_project_write(
+    command: &str,
+    environment: &std::collections::HashMap<String, String>,
+    root: &Path,
+    writable: &[&Path],
+    denied: &[&Path],
+) -> Result<super::Invocation, super::SandboxError> {
+    #[cfg(windows)]
+    {
+        super::windows::mxc::prepare::invocation(
+            super::windows::login_shell(command, environment),
+            environment,
+            root,
+            writable,
+            denied,
+        )
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (command, environment, root, writable, denied);
+        Err(super::SandboxError::ProjectWriteUnavailable)
+    }
+}
+
 /// Exercises native/x32 syscall encodings from inside a sandboxed child.
 /// Kept in the platform fixture boundary because syscall tables are OS-specific.
 pub fn linux_syscall_probe(

@@ -1,5 +1,5 @@
 //! Cached toolchain discovery, with canonical install evidence.
-use super::{Error, physical};
+use super::{Error, physical, physical_for};
 use crate::command_sandbox::mxc_policy::{
     WinPath, environment,
     toolchain::{self, Discovery, Toolchain},
@@ -35,7 +35,7 @@ pub(super) fn discover(env: &BTreeMap<String, String>) -> Result<Toolchain, Erro
 fn root(env: &BTreeMap<String, String>, key: &str) -> Result<Option<WinPath>, Error> {
     environment::get(env, key)
         .filter(|v| !v.is_empty())
-        .map(|v| physical(Path::new(v)))
+        .map(|v| physical_for(Path::new(v), key))
         .transpose()
 }
 fn collect(env: &BTreeMap<String, String>) -> Result<Toolchain, Error> {
@@ -162,11 +162,12 @@ fn add_path(env: &BTreeMap<String, String>, input: &mut Discovery) -> Result<(),
         if !path.is_dir() {
             continue;
         }
-        let lexical = WinPath::new(dir)?;
+        let lexical = WinPath::search_directory(dir)
+            .map_err(|reason| WinPath::rejection(dir, "PATH entry", reason))?;
         if lexical.as_str().ends_with("\\windowsapps") {
             continue;
         }
-        let canonical = physical(path)?;
+        let canonical = physical_for(path, "PATH entry")?;
         if lexical.as_str().ends_with("\\windowsapps") || lexical.as_str().ends_with("\\.nodejs") {
             input.shim_dirs.push(canonical.clone());
         }

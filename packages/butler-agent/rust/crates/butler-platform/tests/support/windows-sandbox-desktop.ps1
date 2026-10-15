@@ -98,8 +98,18 @@ public static class ButlerDesktop {
     $after = (& reg query HKCU\Software\Classes\butler /s | Out-String)
     $result.registryUnchanged = $before -eq $after
     if (!$result.registryUnchanged) { $result.status='FAIL'; $result.error='registry_changed' }
-    Remove-Item -LiteralPath $profile -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force $resultRoot | Out-Null
+    $log = Join-Path $bundle 'desktop-test.log'
+    if ($result.testExit -ne $null -and (Test-Path $log)) {
+        $result.testLog = Join-Path $resultRoot ($pins.revision + '.desktop-test.log')
+        Copy-Item -LiteralPath $log -Destination $result.testLog -Force
+    }
+    if ($result.status -eq 'PASS') {
+        Remove-Item -LiteralPath $profile -Recurse -Force -ErrorAction SilentlyContinue
+    } elseif (Test-Path $profile) {
+        $result.failureDirectory = $profile
+        Write-Host ('Failure directory: ' + $profile)
+    }
     $result | ConvertTo-Json -Depth 15 | Set-Content -Encoding UTF8 $resultFile
     if ($result.probeDetails) {
         $details = $result.probeDetails

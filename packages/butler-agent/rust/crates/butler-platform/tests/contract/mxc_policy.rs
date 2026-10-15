@@ -21,6 +21,36 @@ pub(super) fn verify() {
     drive_picker_and_reconcile_never_remove_other_owners_mapping();
     command_lines_round_trip_crt_arguments_and_preserve_cmd_text();
     mutation_predicate_requires_project_boundary_and_network_only();
+    search_paths_normalize_separators_without_accepting_ambiguous_names();
+}
+fn search_paths_normalize_separators_without_accepting_ambiguous_names() {
+    let root = r"C:\Users\private\work\windows-sandbox-e2e\tmp-47a5c101";
+    assert!(WinPath::new(root).is_ok());
+    let repeated = r"C:\Users\private\AppData\Local\Author Software\nvm\\.nodejs";
+    assert_eq!(
+        WinPath::search_directory(repeated).unwrap(),
+        path(r"C:\Users\private\AppData\Local\Author Software\nvm\.nodejs")
+    );
+    let reason = WinPath::new(repeated).unwrap_err();
+    assert_eq!(reason, "empty path component");
+    let message = WinPath::rejection(repeated, "PATH entry", reason);
+    assert!(message.contains("PATH entry") && message.contains(reason));
+    for private in ["private", "Author Software", "nodejs"] {
+        assert!(!message.contains(private), "{message}");
+    }
+    for value in [
+        r"\\server\share",
+        r"\\?\C:\work",
+        r"\\.\C:\work",
+        r"C:\work\\..\escape",
+        r"C:\work\\trailing.",
+        r"C:\work\\trailing ",
+        r"C:\work\\file:stream",
+        r"C:\PROGRA~1\\Tools",
+        r"C:\work\\NUL",
+    ] {
+        assert!(WinPath::search_directory(value).is_err(), "{value}");
+    }
 }
 fn path(value: &str) -> WinPath {
     WinPath::new(value).unwrap()

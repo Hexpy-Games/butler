@@ -1,7 +1,7 @@
 //! Opt-in Windows project writes; observations keep exact-action approval.
 mod drive;
 pub(crate) mod launch;
-mod prepare;
+pub(in crate::command_sandbox) mod prepare;
 mod probe;
 mod sdk;
 use super::super::{Invocation, ProtectError, Protection, SandboxCapabilities, SandboxError};

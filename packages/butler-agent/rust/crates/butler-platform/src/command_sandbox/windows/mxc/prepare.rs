@@ -26,6 +26,14 @@ pub(super) struct PolicyFile {
     pub request: Value,
 }
 pub(super) fn physical(path: &Path) -> Result<WinPath, Error> {
+    physical_for(path, "physical grant")
+}
+pub(super) fn physical_for(path: &Path, category: &str) -> Result<WinPath, Error> {
+    resolve_physical(path).map_err(|error| {
+        WinPath::rejection(&path.to_string_lossy(), category, &error.to_string()).into()
+    })
+}
+fn resolve_physical(path: &Path) -> Result<WinPath, Error> {
     let final_path = dunce::canonicalize(path)?;
     let normalized = WinPath::new(final_path.to_str().ok_or("non_unicode_path")?)?;
     // Case-sensitive Windows directories must never turn a grant or denial
@@ -36,7 +44,7 @@ pub(super) fn physical(path: &Path) -> Result<WinPath, Error> {
     Ok(normalized)
 }
 
-pub(super) fn invocation(
+pub(in crate::command_sandbox) fn invocation(
     invocation: Invocation,
     host: &HashMap<String, String>,
     root: &Path,
@@ -61,20 +69,8 @@ fn prepare(
     for dir in writable {
         fs::create_dir_all(dir)?;
     }
-    for key in [
-        "SYSTEMROOT",
-        "USERPROFILE",
-        "APPDATA",
-        "LOCALAPPDATA",
-        "BUTLER_DATA",
-        "CARGO_HOME",
-        "RUSTUP_HOME",
-    ] {
-        if let Some(value) = env.get(key).filter(|s| !s.is_empty()).cloned() {
-            env.insert(key.into(), physical(Path::new(&value))?.as_str().into());
-        }
-    }
-    let project = physical(root)?;
+    normalize_host_roots(&mut env)?;
+    let project = physical_for(root, "project")?;
     let tools = tools::discover(&env)?;
     for key in ["CARGO_HOME", "RUSTUP_HOME"] {
         if let Some(value) = tools.environment.get(key) {
@@ -84,16 +80,16 @@ fn prepare(
     let credentials = environment::credential_roots(&env)?
         .into_iter()
         .filter(|p| Path::new(p.as_str()).exists())
-        .map(|p| physical(Path::new(p.as_str())))
+        .map(|p| physical_for(Path::new(p.as_str()), "credential denial"))
         .collect::<Result<Vec<_>, _>>()?;
     let secrets = denied
         .iter()
         .filter(|p| p.starts_with(root))
-        .map(|p| physical(p))
+        .map(|p| physical_for(p, "project secret denial"))
         .collect::<Result<Vec<_>, _>>()?;
     let plan = Plan {
         project,
-        data: physical(&data)?,
+        data: physical_for(&data, "BUTLER_DATA")?,
         host_environment: env.clone(),
         tools,
         secrets,
@@ -101,7 +97,7 @@ fn prepare(
     };
     if writable
         .iter()
-        .map(|p| physical(p))
+        .map(|p| physical_for(p, "writable scratch"))
         .collect::<Result<Vec<_>, _>>()?
         != plan.scratch()?
     {
@@ -126,6 +122,25 @@ fn prepare(
         .collect(),
     })
 }
+fn normalize_host_roots(env: &mut BTreeMap<String, String>) -> Result<(), Error> {
+    for key in [
+        "SYSTEMROOT",
+        "USERPROFILE",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "BUTLER_DATA",
+        "CARGO_HOME",
+        "RUSTUP_HOME",
+    ] {
+        if let Some(value) = env.get(key).filter(|s| !s.is_empty()).cloned() {
+            env.insert(
+                key.into(),
+                physical_for(Path::new(&value), key)?.as_str().into(),
+            );
+        }
+    }
+    Ok(())
+}
 fn canonical_grants(request: &mut Value) -> Result<(), Error> {
     for field in ["readwritePaths", "readonlyPaths", "deniedPaths"] {
         let paths = request
@@ -137,7 +152,7 @@ fn canonical_grants(request: &mut Value) -> Result<(), Error> {
         for path in paths.iter() {
             let path = Path::new(path.as_str().ok_or("invalid path")?);
             if path.exists() {
-                resolved.push(serde_json::to_value(physical(path)?)?);
+                resolved.push(serde_json::to_value(physical_for(path, field)?)?);
             } else if field == "readwritePaths" {
                 return Err("writable grant missing".into());
             }

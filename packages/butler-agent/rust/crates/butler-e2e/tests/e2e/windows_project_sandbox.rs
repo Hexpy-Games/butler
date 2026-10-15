@@ -9,6 +9,87 @@ use butler_platform::command_sandbox::{self, Level};
 use serde_json::json;
 
 #[tokio::test]
+async fn filesystem_preparation_normalizes_search_separators() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        !command_sandbox::POSIX_SHELL,
+        "Windows filesystem preparation"
+    );
+    let mut setup = Setup::new("WINDOWS-PATH-PREPARATION")?;
+    let home = &setup.sandbox.home;
+    let root = home.join("project");
+    let tools = home.join("tools");
+    let dirs = [
+        setup.sandbox.data.join("tmp/project-write"),
+        setup.sandbox.data.join("cache/project-write"),
+        setup.sandbox.data.join("artifacts/generated"),
+    ];
+    for dir in [&root, &tools, &home.join("roaming"), &home.join("local")] {
+        std::fs::create_dir_all(dir)?;
+    }
+    let mut env: std::collections::HashMap<String, String> = std::env::vars().collect();
+    env.retain(|key, _| {
+        ![
+            "CARGO_HOME",
+            "RUSTUP_HOME",
+            "USERPROFILE",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "BUTLER_DATA",
+            "PATH",
+        ]
+        .iter()
+        .any(|k| key.eq_ignore_ascii_case(k))
+    });
+    for (key, value) in [
+        ("USERPROFILE", home.clone()),
+        ("APPDATA", home.join("roaming")),
+        ("LOCALAPPDATA", home.join("local")),
+        ("BUTLER_DATA", setup.sandbox.data.clone()),
+    ] {
+        env.insert(key.into(), value.display().to_string());
+    }
+    env.insert("BUTLER_COMMAND_TIMEOUT_MS".into(), "30000".into());
+    let repeated = format!("{}\\\\tools", home.display());
+    env.insert("PATH".into(), repeated);
+    let prepare = |env: &std::collections::HashMap<String, String>| {
+        command_sandbox::windows_prepare_project_write(
+            "cmd /c echo complete > made.txt",
+            env,
+            &root,
+            &dirs
+                .iter()
+                .map(std::path::PathBuf::as_path)
+                .collect::<Vec<_>>(),
+            &[],
+        )
+    };
+    let invocation = prepare(&env).map_err(|error| std::io::Error::other(error.to_string()))?;
+    assert!(invocation.arguments.iter().any(|a| a == "--policy-file"));
+    assert!(!root.join("made.txt").exists());
+    env.insert("PATH".into(), format!("{}.", tools.display()));
+    let error = prepare(&env).unwrap_err().to_string();
+    assert!(
+        error.contains("PATH entry") && error.contains("trailing dot or space"),
+        "{error}"
+    );
+    assert!(!error.contains(&home.display().to_string()));
+    env.insert("PATH".into(), tools.display().to_string());
+    env.insert(
+        "GH_CONFIG_DIR".into(),
+        format!("{}\\credentials.", home.display()),
+    );
+    let error = prepare(&env).unwrap_err().to_string();
+    assert!(
+        error.contains("GH_CONFIG_DIR") && error.contains("trailing dot or space"),
+        "{error}"
+    );
+    assert!(!error.contains(&home.display().to_string()));
+    setup.sandbox.mark_success();
+    Ok(())
+}
+
+#[tokio::test]
 async fn auto_mutation_waits_for_approval_without_running() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows approval fallback");
@@ -53,10 +134,7 @@ async fn desktop_project_write_cleans_drive_journal() -> Result<(), HarnessError
         std::env::var("BUTLER_E2E_WINDOWS_SANDBOX_DESKTOP").as_deref() == Ok("1"),
         "owner desktop harness required"
     );
-    let caps = command_sandbox::capabilities();
-    assert!(matches!(caps.project_write, Level::Partial(_)), "{caps:?}");
-    assert!(caps.network_deny.is_enforced());
-    let setup = Setup::new("WINDOWS-PROJECT-WRITE")?;
+    let mut setup = Setup::new("WINDOWS-PROJECT-WRITE")?;
     let root = setup.sandbox.home.join("project");
     std::fs::create_dir_all(&root)?;
     let data = &setup.sandbox.data;
@@ -79,7 +157,7 @@ async fn desktop_project_write_cleans_drive_journal() -> Result<(), HarnessError
     let subst = std::path::Path::new(system).join("System32/subst.exe");
     let before = std::process::Command::new(&subst).output()?;
     assert!(before.status.success());
-    let invocation = command_sandbox::project_write_shell(
+    let invocation = command_sandbox::windows_prepare_project_write(
         "cmd /c echo complete > made.txt",
         &env,
         &root,
@@ -90,6 +168,10 @@ async fn desktop_project_write_cleans_drive_journal() -> Result<(), HarnessError
         &[],
     )
     .map_err(|error| std::io::Error::other(error.to_string()))?;
+    // Admission is reproducible over SSH; process launch still requires WinSta0.
+    let caps = command_sandbox::capabilities();
+    assert!(matches!(caps.project_write, Level::Partial(_)), "{caps:?}");
+    assert!(caps.network_deny.is_enforced());
     let mut cmd = std::process::Command::new(&invocation.program);
     command_sandbox::add_arguments(&mut cmd, &invocation);
     let output = cmd.current_dir(&root).output()?;
@@ -106,6 +188,7 @@ async fn desktop_project_write_cleans_drive_journal() -> Result<(), HarnessError
     assert_eq!(std::fs::read_dir(data.join("sandbox/drives"))?.count(), 0);
     let after = std::process::Command::new(&subst).output()?;
     assert_eq!(before.stdout, after.stdout);
+    setup.sandbox.mark_success();
     Ok(())
 }
 
