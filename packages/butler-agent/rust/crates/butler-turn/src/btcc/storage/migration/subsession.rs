@@ -4,6 +4,9 @@ use super::{column_exists, ensure_column, table_definition, table_schema};
 use crate::btcc::storage::schema::subsession::SUBSESSION_SCHEMA;
 
 pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
+    // Graph and plan reads select delegations by work, task or relation identity.
+    // Retire the unused JSON index on existing databases as well as fresh installs.
+    db.execute_batch("DROP INDEX IF EXISTS idx_btcc_graph_plan")?;
     ensure_dispatch_intent(db)?;
     let Some(definition) = table_definition(db, "btcc_steward_results")? else {
         return Ok(());
