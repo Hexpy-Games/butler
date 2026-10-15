@@ -7,13 +7,13 @@ use super::contracts::{
     AuthorityResumeSource, AuthorityStoredExecution, ConversationPermission, PrincipalAuthority,
 };
 use super::{admission, decision, execution, identity, projection};
-use crate::btcc::storage::{BtccStorage, SqliteAuthorityRepository};
+use crate::btcc::storage::{BtccStorage, SqliteAuthorityReader, SqliteAuthorityRepository};
 use butler_core::locale::LocaleCollation;
 
 impl PrincipalAuthority {
     /// Whether the turn still holds an approval it must not release.
     pub async fn retains_approval_claim(&self, turn_id: String) -> AuthorityResult<bool> {
-        self.in_lane(move |repo| repo.retains_approval_claim(&turn_id))
+        self.in_read(move |repo| repo.retains_approval_claim(&turn_id))
             .await
     }
     /// An authority over the store, collation, clock and id source.
@@ -43,6 +43,17 @@ impl PrincipalAuthority {
             .await
             .map_err(|error| AuthorityError::storage(error.code(), error.message()))?
     }
+    /// A fresh WAL snapshot includes every write committed before this read starts.
+    /// Keep read/modify/write operations in `in_lane`; readers never claim authority.
+    pub(super) async fn in_read<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&SqliteAuthorityReader<'_>) -> AuthorityResult<T> + Send + 'static,
+    ) -> AuthorityResult<T> {
+        self.storage
+            .read(move |db| Ok(operation(&SqliteAuthorityReader::new(db))))
+            .await
+            .map_err(|error| AuthorityError::storage(error.code(), error.message()))?
+    }
     /// Admits a reviewed operation (see `AuthorityAdmissionResult`).
     pub async fn admit(
         &self,
@@ -60,7 +71,7 @@ impl PrincipalAuthority {
         owner_session_id: String,
     ) -> AuthorityResult<Vec<super::contracts::AuthorityRequestProjection>> {
         let collation = self.collation.clone();
-        self.in_lane(move |repo| {
+        self.in_read(move |repo| {
             repo.list_pending(&owner_session_id)?
                 .iter()
                 .map(|record| projection::request(record, &collation))
@@ -80,7 +91,7 @@ impl PrincipalAuthority {
     }
     /// Decided requests whose source turns have not resumed yet.
     pub async fn list_decided(&self) -> AuthorityResult<Vec<AuthorityDecisionResult>> {
-        self.in_lane(move |repo| {
+        self.in_read(move |repo| {
             repo.list_decided()?
                 .iter()
                 .map(projection::decision)
@@ -108,16 +119,20 @@ impl PrincipalAuthority {
         &self,
         request_ref: String,
     ) -> AuthorityResult<Option<AuthorityResumeSource>> {
-        self.in_lane(move |repo| repo.resume_source(&request_ref))
+        self.in_read(move |repo| repo.resume_source(&request_ref))
             .await
     }
     /// Sessions with turns waiting on an authority decision.
+    #[expect(
+        clippy::redundant_closure_for_method_calls,
+        reason = "the method pointer fixes the reader lifetime and fails in_read's higher-ranked bound"
+    )]
     pub async fn waiting_source_sessions(&self) -> AuthorityResult<Vec<String>> {
-        self.in_lane(|repo| repo.waiting_source_sessions()).await
+        self.in_read(|repo| repo.waiting_source_sessions()).await
     }
     /// Visible conversations waiting for a principal decision (including delegated work).
     pub async fn attention_owners(&self, owners: Vec<String>) -> AuthorityResult<Vec<String>> {
-        self.in_lane(move |repo| repo.attention_owners(&owners))
+        self.in_read(move |repo| repo.attention_owners(&owners))
             .await
     }
     /// The owner's standing conversation permissions.
@@ -126,7 +141,7 @@ impl PrincipalAuthority {
         owner_session_id: String,
     ) -> AuthorityResult<Vec<ConversationPermission>> {
         let collation = self.collation.clone();
-        self.in_lane(move |repo| {
+        self.in_read(move |repo| {
             let mut grants = repo.list_permissions(&owner_session_id)?;
             let mut sources = std::collections::HashMap::new();
             for record in repo.permission_records(&owner_session_id)? {

@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: race
 /** browser_wait_for_user in the real App: whether or not the user already took the tab, the wait
  * hands it to the user, shows the hand-off card and holds until the hand-back; Stop task ends it. */
@@ -32,7 +33,7 @@ try {
   app.stub.set([describeBrowser, () => bridgeBrowser("browser_open", { url: app.url }), request => { tab = latestBrowser(request, "tab").tab as string; return null; }]);
   await app.send("Open the fixture"); await app.delivered();
   assert.ok(tab); assert.equal((await tabOf(tab)).holder, "agent");
-  await app.click("General");
+  await app.click(getAppCopy("en-US").space.general);
 
   // 1. Not taken over yet: the wait hands the tab to the user and holds.
   app.stub.set([describeBrowser, waitFor]);

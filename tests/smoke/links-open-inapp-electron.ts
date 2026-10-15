@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: race
 /** Real App link ingress and both native menus; external opens are stubbed. */
 import { strict as assert } from "node:assert";
@@ -34,7 +35,7 @@ try {
   const state = () => a.call<State>("state");
   await a.gateway.api("/messages", { method: "POST", body: JSON.stringify({ chat_id: "general", text: "링크를 보여 주세요", client_message_id: crypto.randomUUID() }) });
   await waitBrowser(async () => (await a.gateway.api<any>("/session-view?session_id=general")).latest_turn?.state === "delivered", "stub chat reply");
-  await a.click("일반");
+  await a.click(getAppCopy("ko-KR").space.general);
   await a.page.waitForFunction(() => Boolean(document.querySelector("a[href]")?.textContent));
   const chatLink = `a[href="${fixture.url.href}"]`;
   await waitBrowser(() => a.page.expression(`Boolean(document.querySelector(${JSON.stringify(chatLink)}))`), "markdown link");
@@ -53,7 +54,7 @@ try {
     await a.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme }) });
     let click: { x:number;y:number };
     if (context === "app") {
-      await a.click("일반");
+      await a.click(getAppCopy("ko-KR").space.general);
       await waitBrowser(() => a.page.expression(`Boolean(document.querySelector(${JSON.stringify(chatLink)}))`), "chat link visible");
       await a.main(`${a.win}.webContents.setZoomFactor(${zoom})`);
       await waitBrowser(() => a.page.expression(`Math.abs(devicePixelRatio-${display.scaleFactor*zoom})<0.01`), "App zoom applied");
@@ -151,7 +152,7 @@ try {
   const frameUrl = new URL("/__links_fixture__", a.gateway.url).href;
   const frameHtml = `<a id="plain" href="${new URL("/next", fixture.url).href}">Preview link</a><form method="post" action="/__links_fixture__/post"><input name="intent" value="fixture"><button id="submit">Submit</button></form>`;
   await a.main(`(()=>{globalThis.framePosts=[];return ${a.win}.webContents.session.protocol.handle('http',async request=>{if(!new URL(request.url).pathname.startsWith('/__links_fixture__'))return ${electron}.net.fetch(request,{bypassCustomProtocolHandlers:true});if(request.method==='POST')globalThis.framePosts.push(await request.text());return new Response(${JSON.stringify(frameHtml)},{headers:{'content-type':'text/html'}})})})()`);
-  await a.click("일반");
+  await a.click(getAppCopy("ko-KR").space.general);
   await a.page.expression(`(()=>{const frame=document.createElement('iframe');frame.id='link-preview';frame.src=${JSON.stringify(frameUrl)};document.body.append(frame)})()`);
   await waitBrowser(() => a.main(`${a.win}.webContents.mainFrame.frames.some(f=>f.url===${JSON.stringify(frameUrl)})`), "preview frame loaded");
   await a.main(`${a.win}.webContents.mainFrame.frames.find(f=>f.url===${JSON.stringify(frameUrl)}).executeJavaScript("document.querySelector('#plain').click()")`);

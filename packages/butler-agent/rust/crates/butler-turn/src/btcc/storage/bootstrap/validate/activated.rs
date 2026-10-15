@@ -29,7 +29,13 @@ pub(crate) fn read(
     let started = std::time::Instant::now();
     trace("activated_begin", started);
     let db = open_validation(path, full, cancellation, deferred, started)?;
-    validate_connection(&db, full, started)
+    let manifest = validate_connection(&db, full, started)?;
+    if full {
+        let failures = references::validate(&db)?;
+        super::super::verdict::validated(path, &failures)?;
+        trace("references_validated", started);
+    }
+    Ok(manifest)
 }
 
 /// Validate the manifest using the caller's deadline-aware connection.
@@ -57,8 +63,6 @@ pub(in crate::btcc::storage) fn validate_connection(
         trace("full_validation_begin", started);
         integrity(db)?;
         trace("integrity_validated", started);
-        references::validate(db)?;
-        trace("references_validated", started);
     }
     let (marker_id, marker_raw) = marker_row(
         db,

@@ -18,7 +18,8 @@ pub(super) fn seed(data: &Path) -> Result<(), HarnessError> {
     let tx = db.transaction()?;
     {
         let mut inbox = tx.prepare("INSERT INTO btcc_inbound_inbox(inbox_id,session_id,trigger_key,turn_id,admission_input_hash,command_json,status) VALUES(?1,'history',?1,?1,'fixture','{}','constructed')")?;
-        let mut relation = tx.prepare("INSERT INTO btcc_session_relations(relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at,activity_role,activity_worker_id,activity_terminal) VALUES(?1,'history',?1,?1,?1,?2,'Historical child','2026-01-01T00:00:00Z','steward',?1,1)")?;
+        // Match the current activity identity; settled history must not trigger a migration repair.
+        let mut relation = tx.prepare("INSERT INTO btcc_session_relations(relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at,activity_role,activity_worker_id,activity_terminal) VALUES(?1,'history',?1,?1,?1,?2,'Historical child','2026-01-01T00:00:00Z','steward','steward-'||?1,1)")?;
         let mut turn = tx.prepare("INSERT INTO btcc_turns(turn_id,session_id,inbox_id,trigger_key,original_message_id,original_message,admission_snapshot_ref,model_selection_json,context_json,semantic_state,revision,execution_fence) VALUES(?1,'history',?1,?1,?1,?2,'fixture','{}','{}','delivered',1,1)")?;
         let mut outbox = tx.prepare("INSERT INTO btcc_subsession_outbox(outbox_id,relation_id,result_id,parent_session_id,parent_turn_id,message_id,input_json,status,created_at) VALUES(?1,?1,?1,'history',?1,?1,'{}','delivered','2026-01-01T00:00:00Z')")?;
         let body = "x".repeat(23_000);
@@ -68,6 +69,14 @@ pub(super) fn assert_complete(data: &Path) -> Result<(), HarnessError> {
         )?;
         assert_eq!(count, TURNS);
     }
+    let repairs: i64 = db.query_row(
+        "SELECT COUNT(*) FROM btcc_session_relations WHERE activity_worker_id != activity_role||'-'||relation_id OR activity_worker_id IS NULL",
+        [], |row| row.get(0),
+    )?;
+    assert_eq!(
+        repairs, 0,
+        "settled history must already satisfy the activity identity invariant"
+    );
     for id in ["history-000000", "history-299999"] {
         let body: String = db.query_row(
             "SELECT original_message FROM btcc_turns WHERE turn_id=?1",
