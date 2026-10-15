@@ -1,10 +1,12 @@
 import { useState } from "react";
 import type { ShowcaseGuidance } from "../../showcase";
 import { Copy, Library, Popup } from "../../components/Icons";
+import { DoneIconButton } from "../../components/DoneIconButton";
 import { IconButton } from "../../components/IconButton";
 import { MediaFrame } from "../../components/MediaFrame";
 import { fixturePicture } from "../../components/MediaFrame/fixtures";
 import { ItemCard } from "../ItemCard";
+import { fixtureSave } from "../ItemCard/fixtures";
 import { VIEWER_LABELS, viewerImages } from "./fixtures";
 import { ImageViewer } from "./ImageViewer";
 import { ImageViewerSurface } from "./ImageViewerSurface";
@@ -20,7 +22,7 @@ function CardPictureViewer() {
       <ImageViewer images={images} index={index} onIndexChange={setIndex} onClose={() => setIndex(null)} labels={VIEWER_LABELS["en-US"]}
         actions={<>
           <IconButton label="Open the source page"><Popup size="sm" /></IconButton>
-          <IconButton label="Save to library"><Library size="sm" /></IconButton>
+          <DoneIconButton icon={<Library size="sm" />} label="Save to library" doneLabel="Saved to library" onAction={fixtureSave} />
           <IconButton label="Copy image"><Copy size="sm" /></IconButton>
         </>} />
     </>
@@ -48,7 +50,7 @@ export const guidance: ShowcaseGuidance = {
   content: [
     "alt names the picture for assistive tech; caption is the visible line (a title or the alt text). Keep both plain.",
     "source is where the picture was read: the site and the read time (“shop.example.com · 오후 5:41 확인”).",
-    "Actions are IconButtons the container builds for the shown picture: open its page, save, copy. Close is built in.",
+    "Actions are IconButtons the container builds for the shown picture: open its page, save (a DoneIconButton that confirms), copy. Close is built in.",
   ],
   accessibility: [
     "A modal dialog: focus moves to Close, stays inside and returns to the opener. Esc and a click on the scrim close.",

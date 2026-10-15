@@ -32,6 +32,7 @@ export const guidance: ShowcaseGuidance = {
   whenNotToUse: [
     { when: "The action needs words to be understood", use: "Button" },
     { when: "Copying text with confirmation", use: "CopyButton" },
+    { when: "Saving or another one-shot action that confirms on the button", use: "DoneIconButton" },
     { when: "A rounded chip with an icon and text", use: "PillButton" },
   ],
   recipes: [

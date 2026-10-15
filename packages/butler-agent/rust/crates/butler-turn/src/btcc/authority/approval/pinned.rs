@@ -50,7 +50,7 @@ pub(in crate::btcc::authority) fn assert_approval_summaries() {
                 &json!({"command": "rm -rf build", "cwd": "../..", "state_effect": "mutation"}),
             ),
             json!({"action_kind": "run_command", "count": 1, "examples": ["rm -rf build"], "risk": "high",
-                "targets": [{"kind": "outside", "path": "/Users/someone/work/garden/../.."}]}),
+                "targets": [{"kind": "outside", "path": "/Users/someone"}]}),
         ),
         (
             summary(
@@ -109,12 +109,18 @@ pub(in crate::btcc::authority) fn assert_approval_summaries() {
 }
 
 fn assert_path_and_example_bounds() {
-    for path in [
-        "/etc/hosts",
-        "../hosts",
-        "app/../../hosts",
-        "/Users/someone/work/garden/../hosts",
+    // Outside targets show the real path the file tools check: `..` resolved.
+    for (path, real) in [
+        ("/etc/hosts", "/etc/hosts"),
+        ("../hosts", "/Users/someone/work/hosts"),
+        ("app/../../hosts", "/Users/someone/work/hosts"),
+        (
+            "/Users/someone/work/garden/../hosts",
+            "/Users/someone/work/hosts",
+        ),
+        ("./../a/./../hosts", "/Users/someone/work/hosts"),
     ] {
+        assert_eq!(absolute_target(path, WORKSPACE), real);
         let actual = summary("write_file", path, &json!({"path": path}));
         assert_eq!(actual["risk"], "high");
         assert_eq!(

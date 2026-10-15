@@ -89,6 +89,8 @@ wire_codes! {
         SettingsJsonFailed = "settings_json_failed",
         SourceChanged = "source_changed",
         SourceUnavailable = "source_unavailable",
+        SpaceGroupNotFound = "space_group_not_found",
+        SpaceProjectBoundary = "space_project_boundary",
         TooManyAttachments = "too_many_attachments",
         TurnControlResolutionInvalid = "turn_control_resolution_invalid",
         TurnExecutionControlsMissing = "turn_execution_controls_missing",

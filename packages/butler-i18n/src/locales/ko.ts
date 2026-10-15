@@ -708,9 +708,9 @@ export const koKrCopy: AppCopy = {
     success: "성공",
     failures: "실패",
   },
-  clearChat: { archiveCount: (count: number) => `아카이브 (${count})`, title: "대화 비우기", description: "지금까지의 대화는 아카이브에 보관되고, 빈 화면에서 새로 시작합니다.", memory: "지침과 대화 기억은 그대로 유지됩니다.", manageMemory: "지침·기억 관리 ›", clear: "비우기", busy: "진행 중인 작업이 끝나면 비울 수 있습니다.", failed: "대화를 비우지 못했습니다.", archivedTitle: (date: string) => `일반 · ${date}` },
+  clearChat: { archiveCount: (count: number) => `아카이브 (${count})`, title: "대화 비우기", description: "지금까지의 대화는 아카이브에 보관되고, 빈 화면에서 새로 시작합니다.", memory: "지침과 대화 기억은 그대로 유지됩니다.", manageMemory: "지침·기억 관리 ›", clear: "비우기", busy: "진행 중인 작업이 끝나면 비울 수 있습니다.", failed: "대화를 비우지 못했습니다.", archivedTitle: (date: string) => `대화 · ${date}` },
   space: {
-    general: "일반",
+    general: "대화",
     space: "스페이스",
     reference: "작성 중인 메시지에 참조",
     dashboard: "프로젝트 대시보드",
@@ -770,6 +770,7 @@ export const koKrCopy: AppCopy = {
 rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으로 정리했습니다.`, relocationDescription: (source, target) => `${source} 대화를 ${target}(으)로 이동합니다. 대화 기록과 기존 파일은 보존되며, 이후 작업은 새 소속의 작업 폴더와 프로젝트 지식을 사용합니다. 진행 중인 작업이 있으면 완료한 뒤 이동할 수 있습니다.`,
   },
   interfaceStatus: {
+    generalCategory: "일반",
     countSummary: (kind, count, truncated) => `${({ filesRead: "파일 읽기", files: "파일 목록", matches: "검색 결과", documents: "문서 목록", results: "조회 결과" })[kind]} · ${count}${kind === "matches" ? "건" : "개"}${truncated ? " · 일부 결과" : ""}`,
     bytes: (count) => `${count.toLocaleString("ko-KR")}바이트`,
     lines: (range) => `${range}줄`,

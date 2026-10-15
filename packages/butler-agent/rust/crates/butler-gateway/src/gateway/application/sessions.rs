@@ -172,7 +172,12 @@ impl AppApplication {
         let subscribers = self.subscribers.clone();
         self.storage
             .execute(move |db| {
-                write::create(db, &subscribers, &input, clock.as_ref(), emit_created)
+                // Session row and sidebar placement commit together.
+                let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+                let summary =
+                    write::create(&tx, &subscribers, &input, clock.as_ref(), emit_created)?;
+                tx.commit().map_err(AppStorageError::sqlite)?;
+                Ok(summary)
             })
             .await
             .map_err(app_error)

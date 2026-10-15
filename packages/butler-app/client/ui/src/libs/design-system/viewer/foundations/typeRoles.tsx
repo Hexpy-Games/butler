@@ -26,7 +26,7 @@ export const ROLE_COPY: Record<string, { use: string; en: string; ko: string }> 
   h4: { use: "Settings section titles", en: "Appearance", ko: "화면 설정" },
   "metric-value": { use: "Metric cards (tabular)", en: "12,480", ko: "12,480건" },
   h5: { use: "Minor headings, lead copy", en: "Release checklist", ko: "릴리스 체크리스트" },
-  "app-title": { use: "Window and sidebar brand", en: "New conversation", ko: "새 대화" },
+  "app-title": { use: "Window and sidebar brand", en: "New chat", ko: "새 대화" },
   "panel-title": { use: "Panel and card titles", en: "Worker activity", ko: "작업자 활동" },
   "panel-section-title": { use: "Groups inside a panel", en: "Recent files", ko: "최근 파일" },
   h6: { use: "Smallest heading", en: "Attachments", ko: "첨부 파일" },

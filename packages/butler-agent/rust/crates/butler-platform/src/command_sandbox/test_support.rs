@@ -1,6 +1,32 @@
 //! OS fixtures for Linux sandbox E2Es, kept inside the platform boundary.
 use std::{io, path::Path};
 
+/// Exercises filesystem admission without launching a container or requiring WinSta0.
+/// The caller owns the isolated profile and must check capabilities before launch.
+pub fn windows_prepare_project_write(
+    command: &str,
+    environment: &std::collections::HashMap<String, String>,
+    root: &Path,
+    writable: &[&Path],
+    denied: &[&Path],
+) -> Result<super::Invocation, super::SandboxError> {
+    #[cfg(windows)]
+    {
+        super::windows::mxc::prepare::invocation(
+            super::windows::login_shell(command, environment),
+            environment,
+            root,
+            writable,
+            denied,
+        )
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (command, environment, root, writable, denied);
+        Err(super::SandboxError::ProjectWriteUnavailable)
+    }
+}
+
 /// Exercises native/x32 syscall encodings from inside a sandboxed child.
 /// Kept in the platform fixture boundary because syscall tables are OS-specific.
 pub fn linux_syscall_probe(
@@ -24,6 +50,15 @@ pub fn linux_syscall_probe(
 /// Whether this host supports the Linux-specific E2E scenarios.
 pub fn linux_test_host() -> bool {
     cfg!(target_os = "linux")
+}
+
+/// Whether this Linux test host runs under Windows Subsystem for Linux.
+pub fn wsl_test_host() -> bool {
+    linux_test_host()
+        && (Path::new("/proc/sys/fs/binfmt_misc/WSLInterop").exists()
+            || std::env::var_os("WSL_DISTRO_NAME").is_some()
+            || std::fs::read_to_string("/proc/sys/kernel/osrelease")
+                .is_ok_and(|release| release.to_ascii_lowercase().contains("microsoft")))
 }
 
 /// A nonblocking pathname unix socket used to detect sandbox escapes.
@@ -64,4 +99,10 @@ impl UnixSocketProbe {
             "Linux socket fixture",
         ))
     }
+}
+
+/// Exercises native recovery error classifications without elevated processes.
+pub fn windows_recovery_contract() {
+    #[cfg(windows)]
+    super::windows::mxc::verify_recovery_contract();
 }
