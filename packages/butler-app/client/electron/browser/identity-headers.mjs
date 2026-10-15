@@ -1,4 +1,4 @@
-// Client Hints for the web profile, as Chrome sends them. Electron has no
+// Honest Butler Client Hints for the web profile, matching its CDP metadata. Electron has no
 // Accept-CH store, so navigations carry no hints and documents get only the
 // low-entropy set. Chrome sends no UA hints from workers; Electron attributes
 // worker requests to their frame, but leaves them without Sec-CH-UA, so only

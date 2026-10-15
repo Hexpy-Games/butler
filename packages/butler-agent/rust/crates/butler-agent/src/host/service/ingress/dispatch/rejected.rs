@@ -4,6 +4,7 @@
 //! Running such an item again in a new process fails the same way, so the
 //! service is not replaced: the App is told the turn failed, an internal
 //! child turn closes its relation, and the queue record is settled failed.
+//! An unsaved child failure defers the record for another close attempt.
 
 use serde_json::json;
 
@@ -52,6 +53,17 @@ pub(super) fn safe_code(error: &IngressError) -> Option<&str> {
     }
 }
 
+/// What closing an internal child turn did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ChildClose {
+    /// Not a Worker or Steward turn.
+    NotChild,
+    /// The child turn's result is saved (now or earlier), or it has no parent.
+    Closed,
+    /// The failed result could not be saved yet; the record must be retried.
+    Pending,
+}
+
 /// Fails the item: the App is told the turn failed with `code` and the
 /// relation of an internal child turn is closed.
 pub(super) async fn reject(
@@ -62,8 +74,20 @@ pub(super) async fn reject(
     subsessions: &SubsessionService,
     code: &str,
 ) -> IngressPoll {
-    let child = close_child(item, bindings, subsessions, code).await;
-    settle(item, queue, bindings, delivery, code, child).await
+    match close_child(item, bindings, subsessions, code).await {
+        ChildClose::Pending => interrupted::retry_child_close(item, queue, code).await,
+        child => {
+            settle(
+                item,
+                queue,
+                bindings,
+                delivery,
+                code,
+                child == ChildClose::Closed,
+            )
+            .await
+        }
+    }
 }
 
 /// Fails the queue record after telling the App (unless the item is an
@@ -106,31 +130,40 @@ pub(super) async fn settle(
 }
 
 /// Ends the child turn of a worker or steward session as failed, so its
-/// parent relation does not stay open. `false` for any other item.
-async fn close_child(
+/// parent relation does not stay open.
+pub(super) async fn close_child(
     item: &ClaimedInboundEvent,
     bindings: &SessionBindingStore,
     subsessions: &SubsessionService,
     code: &str,
-) -> bool {
+) -> ChildClose {
     let Ok(envelope) = bind::Envelope::from_record(&item.record) else {
-        return false;
+        return ChildClose::NotChild;
     };
     let Ok(binding) = bind::existing_control_binding(&envelope, bindings).await else {
-        return false;
+        return ChildClose::NotChild;
     };
     if !matches!(binding.role, SessionRole::Worker | SessionRole::Steward) {
-        return false;
+        return ChildClose::NotChild;
     }
     let turn_id = bind::routed_turn_id(&envelope);
-    if let Err(error) = subsessions
+    let Err(error) = subsessions
         .complete_failed_child(&binding.session_id, turn_id, code)
         .await
+    else {
+        return ChildClose::Closed;
+    };
+    butler_core::diagnostic!(
+        "[native-btcc] child result unavailable code={}",
+        error.code()
+    );
+    if error.code() == BtccCode::SubsessionRelationMissing.as_str()
+        || subsessions
+            .child_turn_closed(&binding.session_id, turn_id)
+            .await
+            .unwrap_or(false)
     {
-        butler_core::diagnostic!(
-            "[native-btcc] rejected child result unavailable code={}",
-            error.code()
-        );
+        return ChildClose::Closed;
     }
-    true
+    ChildClose::Pending
 }

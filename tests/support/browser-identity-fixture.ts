@@ -1,3 +1,4 @@
+// test-category: security
 /** Offline UA/Client-Hints echo, including worker fetches and cross-site frames. */
 import { strict as assert } from "node:assert";
 
@@ -38,16 +39,21 @@ export function identityFixture(frameMode: "cross-site" | "sandboxed" = "cross-s
 const brandList = (list: Array<{ brand: string; version: string }>) => list.map(b => `${JSON.stringify(b.brand)};v=${JSON.stringify(b.version)}`).join(", ");
 const uaHints = (headers: Record<string, string>) => Object.keys(headers).filter(name => name.startsWith("sec-ch-ua")).sort();
 
-/** Chrome's identity in every context, with Chrome's Client Hints: pages and
+/** Butler's honest identity in every context, with consistent Client Hints: pages and
  * frames send them; workers send none (as Chrome itself does). */
-export function assertChromeIdentity(reports: Record<string, Report>, chrome: string, requests: Array<{ path: string; headers: Record<string, string> }>) {
+export function assertBrowserIdentity(reports: Record<string, Report>, chrome: string, requests: Array<{ path: string; headers: Record<string, string> }>, product: "Butler" | "Google Chrome" = "Butler") {
   const page = reports.page.js;
   const major = chrome.split(".")[0];
-  assert.doesNotMatch(page.ua, /Butler\/|Electron\/|HeadlessChrome/u);
+  assert.doesNotMatch(page.ua, /Electron\/|HeadlessChrome/u);
   assert.ok(page.ua.includes(` Chrome/${chrome} `), page.ua);
-  for (const brand of ["Google Chrome", "Chromium"]) {
-    assert.ok(page.data.brands.some((b: any) => b.brand === brand && b.version === major), brand);
-    assert.ok(page.data.fullVersionList.some((b: any) => b.brand === brand && b.version === chrome), brand);
+  if (product === "Butler") {
+    assert.match(page.ua, / Safari\/537\.36 Butler\/(\S+)$/u);
+    for (const list of [page.data.brands, page.data.fullVersionList]) assert.ok(!list.some((b: any) => b.brand === "Google Chrome"));
+  } else assert.doesNotMatch(page.ua, /Butler\//u); // The Rust reader runs stock Chrome for Testing.
+  const appVersion = page.ua.split("Butler/")[1];
+  for (const brand of [product, "Chromium"]) {
+    assert.ok(page.data.brands.some((b: any) => b.brand === brand && b.version === (brand === "Butler" ? appVersion.split(".")[0] : major)), brand);
+    assert.ok(page.data.fullVersionList.some((b: any) => b.brand === brand && b.version === (brand === "Butler" ? appVersion : chrome)), brand);
   }
   assert.equal(page.data.mobile, false);
   for (const context of ["page", "worker", "iframe"]) {

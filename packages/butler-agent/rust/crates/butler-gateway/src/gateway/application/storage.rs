@@ -348,28 +348,32 @@ fn run_connection_lane(
             .with_source(error)
     })?;
     if initialized.send(Ok(())).is_err() {
-        checkpoint::close(checkpoint)?;
-        return close_connection(connection);
+        let drained = checkpoint::close(checkpoint);
+        return drained.and(close_connection(connection));
     }
     let result = lane::run(&mut connection, receiver);
-    checkpoint::close(checkpoint)?;
-    result?;
-    metrics.save(path)?;
-    close_connection(connection)
+    let drained = checkpoint::close(checkpoint);
+    let saved = metrics.save(path);
+    let closed = close_connection(connection);
+    result.and(drained).and(saved).and(closed)
 }
 
 fn close_connection(connection: sqlite::Connection) -> StorageResult<()> {
-    if !connection.is_autocommit() {
-        return Err(AppStorageError::new(
+    let transaction = if connection.is_autocommit() {
+        Ok(())
+    } else {
+        Err(AppStorageError::new(
             AppStorageCode::AppSqliteTransactionOpenAtClose,
             "App SQLite transaction remained open at close",
-        ));
-    }
-    tuning::prepare_close(&connection)?;
-    crate::gateway::shutdown_trace::measure_sync("app_sqlite_connection_close", || {
-        connection.close()
-    })
-    .map_err(|(_, error)| AppStorageError::sqlite(error))
+        ))
+    };
+    let prepared = tuning::prepare_close(&connection);
+    let closed =
+        crate::gateway::shutdown_trace::measure_sync("app_sqlite_connection_close", || {
+            connection.close()
+        })
+        .map_err(|(_, error)| AppStorageError::sqlite(error));
+    transaction.and(prepared).and(closed)
 }
 
 async fn join_failed_initialization(thread: JoinHandle<StorageResult<()>>) {

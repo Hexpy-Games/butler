@@ -22,6 +22,7 @@ const MAX_SCAN_THREADS: usize = 8;
 
 /// What one transcript contributed the last time it was scanned.
 struct CachedFile {
+    id: Option<butler_platform::secure_fs::FileId>,
     len: u64,
     modified: Option<SystemTime>,
     /// Offset just past the last complete line scanned.
@@ -31,6 +32,7 @@ struct CachedFile {
 
 /// A transcript file as listed: its length and modification time.
 struct Listing {
+    id: Option<butler_platform::secure_fs::FileId>,
     path: PathBuf,
     len: u64,
     modified: Option<SystemTime>,
@@ -96,14 +98,49 @@ impl TranscriptActivityCache {
         }))
     }
 
+    /// Range tool totals from incrementally indexed transcript slots.
+    pub(crate) fn read_window(
+        &mut self,
+        data_root: &Path,
+        path: Option<&Path>,
+        since: f64,
+        until: f64,
+    ) -> Result<StatusTranscriptActivity, TranscriptScanError> {
+        let listed = if let Some(path) = path {
+            file_listing(path)?.into_iter().collect()
+        } else {
+            list_transcripts(&data_root.join("transcripts"))?
+        };
+        if path.is_none() {
+            let present: HashSet<_> = listed.iter().map(|listing| listing.path.clone()).collect();
+            self.files.retain(|path, _| present.contains(path));
+        } else if listed.is_empty()
+            && let Some(path) = path
+        {
+            self.files.remove(path);
+        }
+        self.refresh(listed)?;
+        let mut total = StatusTranscriptActivity::default();
+        if let Some(path) = path {
+            if let Some(file) = self.files.get(path) {
+                file.activity.timeline.read(since, until, &mut total);
+            }
+        } else {
+            for file in self.files.values() {
+                file.activity.timeline.read(since, until, &mut total);
+            }
+        }
+        Ok(total)
+    }
+
     fn refresh(&mut self, listed: Vec<Listing>) -> Result<(), TranscriptScanError> {
         let mut jobs = Vec::new();
         for listing in listed {
-            if self
-                .files
-                .get(&listing.path)
-                .is_some_and(|file| file.len == listing.len && file.modified == listing.modified)
-            {
+            if self.files.get(&listing.path).is_some_and(|file| {
+                file.id == listing.id
+                    && file.len == listing.len
+                    && file.modified == listing.modified
+            }) {
                 continue;
             }
             let cached = self.files.remove(&listing.path);
@@ -142,6 +179,7 @@ fn list_transcripts(directory: &Path) -> Result<Vec<Listing>, TranscriptScanErro
 fn file_listing(path: &Path) -> Result<Option<Listing>, TranscriptScanError> {
     match fs::metadata(path) {
         Ok(metadata) if metadata.is_file() => Ok(Some(Listing {
+            id: butler_platform::secure_fs::identity(&metadata).id,
             path: path.to_path_buf(),
             len: metadata.len(),
             modified: metadata.modified().ok(),
@@ -194,7 +232,9 @@ fn scan_jobs(jobs: Vec<Job>) -> Result<Vec<(PathBuf, CachedFile)>, TranscriptSca
 fn scan_job(job: Job) -> Result<(PathBuf, CachedFile), TranscriptScanError> {
     let Job { listing, cached } = job;
     let resumed = cached.filter(|cached| {
-        listing.len >= cached.consumed
+        listing.id == cached.id
+            && (listing.len > cached.len || listing.modified == cached.modified)
+            && listing.len >= cached.consumed
             && listing
                 .modified
                 .zip(cached.modified)
@@ -207,6 +247,7 @@ fn scan_job(job: Job) -> Result<(PathBuf, CachedFile), TranscriptScanError> {
     Ok((
         listing.path,
         CachedFile {
+            id: listing.id,
             len: listing.len,
             modified: listing.modified,
             consumed,
@@ -226,7 +267,8 @@ impl ActivityAccumulator {
         self.summary.tools.failures = self.summary.tools.failures.saturating_add(tools.failures);
         for (name, bucket) in &other.summary.by_tool {
             let key = if self.summary.by_tool.contains_key(name)
-                || self.summary.by_tool.len() < MAX_TOOL_KEYS
+                || self.summary.by_tool.len()
+                    < MAX_TOOL_KEYS - usize::from(!self.summary.by_tool.contains_key("__other__"))
             {
                 name.as_str()
             } else {

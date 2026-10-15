@@ -1381,9 +1381,13 @@ export interface UsageSectionBucketView {
 }
 
 export interface UsageMonitorView {
+  timeline: { slotMinutes: 15; slots: [number, number, number, number, number][] };
+  topSessions: { sessionId: string; title: string | null; kind: "chat" | "schedule" | "butler"; totalTokens: number; requests: number; lastUsedMs: number | null }[];
+  previousPeriod: { totalTokens: number } | null;
   filters: {
     sessionId: string | null;
     sinceTs: number | null;
+    untilTs: number | null;
   };
   model: UsageTokenBucketView & {
     cacheHitRatio: number;

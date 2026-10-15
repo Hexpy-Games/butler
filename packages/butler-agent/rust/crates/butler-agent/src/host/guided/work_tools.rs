@@ -74,20 +74,8 @@ impl GuidedWorkTools {
                 "This is not a durable Work tool",
             ));
         }
-        if let Some(handoff) = args.get("capability_handoff") {
-            let tool = handoff["requested_action"]["tool_name"]
-                .as_str()
-                .unwrap_or_default();
-            if self
-                .child_tools
-                .as_ref()
-                .is_none_or(|tools| tools.iter().any(|name| name == tool))
-            {
-                return Err(BtccError::relayed(
-                    "capability_handoff_rejected",
-                    "Hand back only a capability absent from this delegated session's granted tools",
-                ));
-            }
+        if let Some(error) = self.handoff_rejection(args) {
+            return Ok(self.rejected(error).await);
         }
         // Source safeBindOpenWork runs outside the tool result catch for these
         // non-relationship mutations; it must not silently choose unrelated Work.
@@ -116,20 +104,40 @@ impl GuidedWorkTools {
         };
         Ok(match result {
             Ok(work) => json!({"ok":true,"work":view::success(&work)}),
-            Err(error) => {
-                let mut response = json!({"ok":false,"error":source_error(&error)});
-                if let Some(context) = self
-                    .service
-                    .load_context(self.scope.clone())
-                    .await
-                    .ok()
-                    .flatten()
-                {
-                    response["work"] = view::current(&context.work);
-                }
-                response
-            }
+            Err(error) => self.rejected(source_error(&error)).await,
         })
+    }
+
+    /// A hand-back naming a tool this session can call is model input to
+    /// correct, not a runtime fault: the model records its disposition again.
+    fn handoff_rejection(&self, args: &Map<String, Value>) -> Option<Value> {
+        let handoff = args.get("capability_handoff")?;
+        let tool = handoff["requested_action"]["tool_name"]
+            .as_str()
+            .unwrap_or_default();
+        let message = match &self.child_tools {
+            None => "capability_handoff is only for a delegated session. Record the disposition again without it.".to_owned(),
+            Some(tools) if tools.iter().any(|name| name == tool) => format!(
+                "{tool} is granted in this session; capability_handoff is only for a tool this session lacks. Record the disposition again without capability_handoff, and say in the summary what failed."
+            ),
+            Some(_) => return None,
+        };
+        Some(json!({"code":"capability_handoff_rejected","message":message}))
+    }
+
+    /// A rejected Work call answers the model with the error and the current Work.
+    async fn rejected(&self, error: Value) -> Value {
+        let mut response = json!({"ok":false,"error":error});
+        if let Some(context) = self
+            .service
+            .load_context(self.scope.clone())
+            .await
+            .ok()
+            .flatten()
+        {
+            response["work"] = view::current(&context.work);
+        }
+        response
     }
 
     /// Source publication reads the bound Work after the journal commits the

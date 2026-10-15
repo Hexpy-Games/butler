@@ -385,6 +385,7 @@ mod tests {
         worker_packet_is_byte_stable();
         dispatch_intent_is_byte_stable();
         outbox_inputs_are_byte_stable();
+        super::super::completion::tests::assert_success_relay_format();
         crate::btcc::subsessions::delegation_identities_are_byte_stable();
         crate::btcc::agent_loop::tests::stored_authority_continuation_with_every_field_is_byte_stable();
         crate::btcc::effects::workspace_file::tests::write_effect_normalized_input_is_byte_stable();

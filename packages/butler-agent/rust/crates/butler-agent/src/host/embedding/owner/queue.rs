@@ -46,7 +46,27 @@ pub(super) struct Pending {
     pub(super) max_embeddings: Option<usize>,
     pub(super) cancellation: CancellationToken,
     pub(super) deadline: Option<Instant>,
-    pub(super) response: oneshot::Sender<CognitionResult<EmbeddingResult>>,
+    pub(super) response: PendingResponse,
+}
+
+pub(super) enum PendingResponse {
+    Ready(oneshot::Sender<CognitionResult<()>>),
+    Embedding(oneshot::Sender<CognitionResult<EmbeddingResult>>),
+}
+
+impl PendingResponse {
+    pub(super) fn send(self, result: CognitionResult<Option<EmbeddingResult>>) {
+        match self {
+            Self::Ready(sender) => {
+                let _ = sender.send(result.map(|_| ()));
+            }
+            Self::Embedding(sender) => {
+                let _ = sender.send(result.and_then(|result| {
+                    result.ok_or_else(|| error(CognitionCode::EmbedWorkerProtocolInvalid))
+                }));
+            }
+        }
+    }
 }
 
 impl QueueState {
@@ -69,7 +89,7 @@ impl QueueState {
                     } else {
                         CognitionCode::EmbedRequestDeadline
                     };
-                    let _ = item.response.send(Err(error(code)));
+                    item.response.send(Err(error(code)));
                 } else {
                     retained.push_back(item);
                 }
