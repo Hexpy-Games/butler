@@ -6,6 +6,7 @@ mod discovery;
 mod effect_file;
 mod error;
 mod file_owner;
+mod file_timing;
 mod files;
 mod grep;
 mod mutations;
