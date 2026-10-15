@@ -13,19 +13,12 @@ fn criteria(packet: &SubsessionPacket) -> String {
     serde_json::to_string(&packet.acceptance_criteria).unwrap_or_default()
 }
 
-/// Every steer delivered as a new child message ends with this tail. The child
-/// model reads it; the App shows only the instruction before it.
+/// Every steer delivered as a new child message ends with this tail.
 const DIRECTION_CONTINUATION: &str = "\n\nContinue the existing Work from its retained checkpoint. Review the new direction against the existing result; do not restart completed actions or create a replacement Work.";
 
 /// The steer message text the child receives.
 pub(super) fn direction_text(instruction: &str) -> String {
     format!("{instruction}{DIRECTION_CONTINUATION}")
-}
-
-/// The instruction of a stored steer message, without its continuation tail;
-/// `None` when `text` is not a steer message.
-pub fn delivered_direction(text: &str) -> Option<&str> {
-    text.strip_suffix(DIRECTION_CONTINUATION)
 }
 
 /// A card title: the model's safe title, else the request's first line.

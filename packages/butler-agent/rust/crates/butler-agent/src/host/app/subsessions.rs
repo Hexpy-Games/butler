@@ -1,9 +1,7 @@
 //! Host adapter from App session projection/control to the BTCC owner.
 
 mod lifecycle;
-mod messages;
 mod task_graphs;
-use messages::project_message;
 use std::sync::Arc;
 
 use butler_gateway::gateway::{
@@ -14,7 +12,8 @@ use butler_turn::btcc::{
     StorageProgressPublication, SubsessionCancelRequest, SubsessionResumeRequest, SubsessionService,
 };
 use butler_turn::conversation::{
-    AgentConversationStore, conversation_session_id_for_durable_session,
+    AgentConversationStore, ConversationMessageWithParts, ConversationPartKind, ConversationRole,
+    ConversationStatus, conversation_session_id_for_durable_session,
 };
 use butler_turn::workspace::SessionRole;
 
@@ -126,22 +125,12 @@ impl AppSubsessionPort for AppSubsessions {
                 .app_projection(&session_id)
                 .await
                 .map_err(GatewayApplicationError::internal_from)?;
-            let delegated = projection
-                .as_object_mut()
-                .and_then(|object| object.remove("delegated_request"));
             lifecycle::enrich(&conversations, &settings, &mut projection).await?;
             if projection
                 .get("relation")
                 .is_some_and(serde_json::Value::is_object)
             {
-                with_child_messages(
-                    &conversations,
-                    &session_id,
-                    page,
-                    &mut projection,
-                    delegated.as_ref(),
-                )
-                .await?;
+                with_child_messages(&conversations, &session_id, page, &mut projection).await?;
             }
             with_progress(&progress, &mut projection).await?;
             Ok(projection)
@@ -220,7 +209,6 @@ async fn with_child_messages(
     session_id: &str,
     page: Option<AppSessionViewPage>,
     projection: &mut serde_json::Value,
-    delegated: Option<&serde_json::Value>,
 ) -> Result<(), GatewayApplicationError> {
     let canonical_session_id = conversation_session_id_for_durable_session(session_id);
     let page = page.unwrap_or(AppSessionViewPage {
@@ -237,10 +225,13 @@ async fn with_child_messages(
         )
         .await
         .map_err(GatewayApplicationError::internal_from)?;
+    let request = projection
+        .as_object_mut()
+        .and_then(|object| object.remove("delegated_request"));
     let messages: Vec<_> = page
         .messages
         .iter()
-        .filter_map(|message| project_message(message, session_id, delegated))
+        .filter_map(|message| project_message(message, session_id, request.as_ref()))
         .collect();
     let turn_id = projection
         .pointer("/latest_turn/id")
@@ -292,6 +283,74 @@ async fn with_child_messages(
         );
     }
     Ok(())
+}
+
+fn project_message(
+    message: &ConversationMessageWithParts,
+    public_session_id: &str,
+    request: Option<&serde_json::Value>,
+) -> Option<serde_json::Value> {
+    if !matches!(
+        message.message.role,
+        ConversationRole::User | ConversationRole::Assistant
+    ) {
+        return None;
+    }
+    let text = message
+        .parts
+        .iter()
+        .flat_map(|part| match part.kind {
+            ConversationPartKind::Text => part
+                .content_json
+                .get("text")
+                .and_then(|value| value.as_str())
+                .into_iter()
+                .collect::<Vec<_>>(),
+            ConversationPartKind::MessageContent => part
+                .content_json
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|item| {
+                    matches!(
+                        item.get("type").and_then(|value| value.as_str()),
+                        Some("input_text" | "output_text" | "text")
+                    )
+                })
+                .filter_map(|item| item.get("text").and_then(|value| value.as_str()))
+                .collect(),
+            _ => Vec::new(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let text = if message.message.role == ConversationRole::User
+        && request.is_some_and(|request| {
+            request["turn_id"].as_str() == message.message.turn_id.as_deref()
+        }) {
+        request
+            .and_then(|request| request["text"].as_str())
+            .unwrap_or("")
+            .to_owned()
+    } else {
+        text
+    };
+    let status = match message.message.status {
+        ConversationStatus::Failed => "failed",
+        ConversationStatus::Pending => "thinking",
+        ConversationStatus::Complete | ConversationStatus::Compacted => "delivered",
+    };
+    Some(serde_json::json!({
+        "id": message.message.id,
+        "chat_id": public_session_id,
+        "turn_id": message.message.turn_id,
+        "role": message.message.role,
+        "text": text,
+        "status": status,
+        "retryable": false,
+        "cursor": message.message.seq,
+        "created_at": message.message.created_at,
+        "updated_at": message.message.created_at,
+    }))
 }
 
 fn turn_state(status: &str) -> &'static str {
@@ -373,9 +432,8 @@ fn map_error(error: &butler_turn::btcc::BtccError) -> GatewayApplicationError {
 mod tests {
     use super::*;
     use butler_turn::conversation::{
-        ConversationMessage, ConversationMessageWithParts, ConversationOriginKind,
-        ConversationPart, ConversationPartKind, ConversationProvenance, ConversationRole,
-        ConversationStatus, ConversationVisibility,
+        ConversationMessage, ConversationOriginKind, ConversationPart, ConversationProvenance,
+        ConversationVisibility,
     };
 
     #[test]

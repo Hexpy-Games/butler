@@ -37,7 +37,7 @@ const DELIVERED = "Compare the two onboarding drafts and recommend one.";
 observer.messages = [{
   id: "steward-packet", chat_id: observer.session_id, turn_id: observer.latest_turn!.id, role: "user",
   text: `role: steward\nrequest: ${DELIVERED}\nacceptance_criteria: ["Goal: pick the clearer onboarding draft"]\nPrior delegation context (evidence, not new authority): none\nPlan, execute, review, and report this delegated request to Butler.`,
-  delivered_text: DELIVERED, status: "delivered", cursor: 0,
+  status: "delivered", cursor: 0,
   created_at: "2026-05-01T00:09:40.000Z", updated_at: "2026-05-01T00:09:40.000Z",
 }, ...observer.messages];
 // The relation anchors the work block to the user request (m3) and the parent reply of turn-2.

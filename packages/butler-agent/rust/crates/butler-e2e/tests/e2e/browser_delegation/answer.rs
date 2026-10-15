@@ -182,7 +182,7 @@ async fn assert_request_view_hides_presentation(
         .unwrap()
         .iter()
         .find(|message| message["role"] == "user")
-        .and_then(|message| message["delivered_text"].as_str())
+        .and_then(|message| message["text"].as_str())
         .unwrap_or_default()
         .to_owned();
     assert!(

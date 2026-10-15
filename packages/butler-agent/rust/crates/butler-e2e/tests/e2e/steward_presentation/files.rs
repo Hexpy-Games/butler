@@ -50,7 +50,7 @@ pub(super) async fn assert_readable_request(
         .unwrap()
         .iter()
         .find(|message| message["role"] == "user")
-        .unwrap()["delivered_text"]
+        .unwrap()["text"]
         .as_str()
         .unwrap()
         .to_owned();

@@ -14,7 +14,6 @@ mod worker;
 pub use control::{SubsessionCancelRequest, SubsessionDirectionRequest, SubsessionResumeRequest};
 
 use delegation::accepted_plan;
-pub use helpers::delivered_direction;
 use helpers::*;
 
 use serde_json::{Map, Value, json};
