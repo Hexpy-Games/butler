@@ -1,6 +1,9 @@
 //! Repeated lexical refusals retain their complete result without running a shell.
 use super::*;
 
+#[path = "refusal_scale.rs"]
+mod scale;
+
 const SAMPLES: usize = 20;
 
 #[tokio::test]
@@ -18,7 +21,8 @@ async fn full_access_lexical_refusals_keep_complete_results_without_shell_work()
 }
 
 async fn sample(access: Access) -> Result<(), HarnessError> {
-    let (s, chat, script, server) = setup(access).await?;
+    let (mut s, chat, script, server) = setup(access).await?;
+    let history = scale::prepare(&mut s, &chat).await?;
     let initial_logs = s.agent.logs().lines().count();
     let control = transport_control::Control::start(&s.gw)?;
     // POSIX read observations use the OS sandbox; mutation admission exercises
@@ -36,9 +40,11 @@ async fn sample(access: Access) -> Result<(), HarnessError> {
     };
     let mut expected = None;
     let mut timings = Vec::new();
+    let mut slowest = Duration::ZERO;
     let mut receipts = std::collections::HashSet::new();
     for _ in 0..SAMPLES {
-        let (mut output, elapsed) = operation(&s, &chat, &script, &case, access).await?;
+        let (mut output, elapsed) =
+            super::operation::observe_operation(&s, &chat, &script, &case, access).await?;
         assert_eq!(output["ok"], false);
         assert_eq!(output["exit_code"], 1);
         assert_eq!(output["timed_out"], false);
@@ -65,6 +71,7 @@ async fn sample(access: Access) -> Result<(), HarnessError> {
             expected = Some(output);
         }
         timings.push(elapsed.as_micros());
+        slowest = slowest.max(elapsed);
     }
     let logs = s
         .agent
@@ -91,6 +98,13 @@ async fn sample(access: Access) -> Result<(), HarnessError> {
         timings[SAMPLES - 1]
     );
     control.finish().await?;
+    scale::assert_complete(&s, history).await?;
+    // Every sample must still meet the one-second bound; report all N=20 first.
+    butler_e2e::assert_wall_clock_budget!(
+        slowest,
+        Duration::from_secs(1),
+        "refusal sample maximum"
+    );
     s.finish().await?;
     server.abort();
     Ok(())

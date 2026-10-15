@@ -15,7 +15,7 @@ impl PrincipalAuthority {
     pub async fn list_all_permissions(&self) -> AuthorityResult<Vec<ConversationPermission>> {
         let collation = self.collation.clone();
         let cache = self.permission_targets.clone();
-        self.in_lane(move |repo| {
+        self.in_read(move |repo| {
             let profile = std::env::var("BUTLER_E2E_STORAGE_METRICS").as_deref() == Ok("1");
             let usage = profile.then(|| butler_platform::process_control::sample_usage(std::process::id()).ok().flatten()).flatten();
             let start = std::time::Instant::now();
@@ -53,7 +53,7 @@ impl PrincipalAuthority {
 }
 
 fn project_targets(
-    repo: &mut dyn super::contracts::AuthorityRepository,
+    repo: &crate::btcc::storage::SqliteAuthorityReader<'_>,
     collation: &butler_core::locale::LocaleCollation,
     cache: &mut PermissionCache,
     grants: &mut [ConversationPermission],

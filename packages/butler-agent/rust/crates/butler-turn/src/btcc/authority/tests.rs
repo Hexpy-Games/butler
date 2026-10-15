@@ -15,6 +15,7 @@ use butler_core::locale::LocaleCollation;
 
 mod bun_oracle;
 mod policy_tests;
+mod reader;
 
 fn clock() -> Arc<dyn Fn() -> String + Send + Sync> {
     Arc::new(|| "2026-09-19T00:00:00.000Z".into())
