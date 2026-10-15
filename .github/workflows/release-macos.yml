@@ -49,6 +49,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/agent-provenance.py reuse "$RUNNER_TEMP/reused-agent" darwin-arm64 static-ort release "${GITHUB_REF_NAME#v}"
 
+      - name: Read the pinned Rust toolchain
+        id: toolchain
+        run: python3 -c 'import tomllib; print("channel=" + tomllib.load(open("packages/butler-agent/rust/rust-toolchain.toml", "rb"))["toolchain"]["channel"])' >> "$GITHUB_OUTPUT"
+
       - name: Cache the pinned native Rust build
         if: steps.reuse.outputs.reused != 'true'
         uses: ./.github/actions/rust-agent-setup
@@ -62,11 +66,13 @@ jobs:
         if: steps.reuse.outputs.reused == 'true'
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.99.0
+          toolchain: ${{ steps.toolchain.outputs.channel }}
       - name: Verify pinned native Rust toolchain
         # The toolchain check remains required even when a payload is reused.
+        env:
+          PINNED_RUST: ${{ steps.toolchain.outputs.channel }}
         run: |
-          rustc --version --verbose | grep -E '^release: 1\.91\.0$'
+          rustc --version --verbose | grep -Fx "release: $PINNED_RUST"
           rustc --version --verbose | grep -E '^host: aarch64-apple-darwin$'
 
       - name: Install app client dependencies
@@ -150,7 +156,7 @@ jobs:
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
           notes_file=".github/releases/${tag}.md"
-          if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-preview\..+$ ]]; then
+          if [ ! -f "$notes_file" ] && [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-preview\..+$ ]]; then
             notes_file=".github/releases/${tag%%-preview.*}-preview.md"
           fi
           notes_args=(--notes "Butler Agent release $tag")

@@ -215,7 +215,7 @@ pub(super) fn begin_final_report(state: &mut State, offers_blocks: bool) {
     };
     state.messages.push(ModelRoundMessage::user(
         format!(
-            "Execution is settled. Write the final factual report as your normal assistant response now; the runtime delivers it to the recipient automatically. {presentation} Include the outcome, checks performed, and any remaining work from the results already received."
+            "Execution is settled. Write the final report as your normal assistant response now; the runtime delivers it to the recipient automatically. {presentation} Lead with the result, stating only what the results already received support. Add one line on an assumption, gap or remaining work only when it would change the recipient's next decision: what you did or assumed and how to change it. Never ask the recipient to check what a tool could check."
         ),
         None,
     ));

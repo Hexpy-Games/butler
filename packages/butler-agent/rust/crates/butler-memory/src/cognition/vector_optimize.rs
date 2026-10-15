@@ -87,7 +87,7 @@ impl VectorOptimizeService {
         // No connection or model is loaded until optimize is actually requested.
         let _operation = tokio::select! {
             () = cancellation.cancelled() => return Err(error(CognitionCode::MemoryWriteAborted)),
-            () = tokio::time::sleep(remaining(deadline_at_epoch_ms)?) =>
+            () = butler_core::wall_clock::wait_until(deadline_at_epoch_ms, butler_core::wall_clock::now_millis) =>
                 return Err(error(CognitionCode::MemoryWriteBusy)),
             permit = self.store.one_at_a_time.acquire() =>
                 permit.map_err(|source| error(CognitionCode::VectorStoreUnavailable).with_source(source))?,

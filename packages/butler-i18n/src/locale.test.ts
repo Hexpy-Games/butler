@@ -145,6 +145,12 @@ test("settings titles never use the A / B style in either locale", () => {
 });
 
 // test-category: pure-logic
+test("security host counts use native singular and plural copy", () => {
+  expect([0, 1, 3].map(getAppCopy("ko-KR").settings.security.hostCount)).toEqual(["없음", "1개", "3개"]);
+  expect([0, 1, 3].map(getAppCopy("en-US").settings.security.hostCount)).toEqual(["None", "1 host", "3 hosts"]);
+});
+
+// test-category: pure-logic
 test("reasoning effort labels localize provider levels and safely title-case future values", () => {
   const levels = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "", "ultra high", "toString"];
   expect(levels.map((value) => reasoningEffortLabel(value, "ko-KR")))

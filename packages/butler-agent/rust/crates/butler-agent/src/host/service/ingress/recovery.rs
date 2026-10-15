@@ -26,6 +26,7 @@ impl IngressDispatcher {
                     &self.queue,
                     &self.bindings,
                     self.delivery.as_ref(),
+                    self.subsessions.as_ref(),
                 )
                 .await?;
             }

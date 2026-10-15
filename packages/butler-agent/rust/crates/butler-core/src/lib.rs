@@ -72,3 +72,4 @@ pub mod public_text;
 pub mod segmentation;
 pub mod tool_catalog;
 pub mod tool_protocol;
+pub mod wall_clock;

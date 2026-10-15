@@ -10,6 +10,11 @@ use super::{append_field, failure, field};
 
 pub(super) fn project(name: &str, raw: &str) -> Result<String, BtccError> {
     let excluded: &[&str] = match name {
+        "web_search" | "web_read" => &[
+            "evidence_receipts",
+            "evidence_capability_receipts",
+            "public_web_evidence_items",
+        ],
         "run_command" => &["evidence_receipts", "evidence_capability_receipts"],
         "grep_files" => &[
             "evidence_receipts",

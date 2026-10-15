@@ -133,7 +133,7 @@ async fn watch_queue(
 
 async fn wait_for_deferred(delay: Option<Duration>) {
     match delay {
-        Some(delay) => tokio::time::sleep(delay).await,
+        Some(delay) => butler_core::wall_clock::wait_for(delay).await,
         None => std::future::pending().await,
     }
 }

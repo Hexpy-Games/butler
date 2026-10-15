@@ -2,7 +2,8 @@ import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 // Branch actions from a project-session answer against an isolated native
 // gateway (temp BUTLER_DATA, free port, stub model): "Start a new
 // conversation" creates a session in the same project and "Start a new
-// project" creates a project, both seeded from the clicked answer.
+// project" creates a project, both seeded from the clicked answer. A branch
+// from a General answer leads back to that answer after newer General turns.
 import { strict as assert } from "node:assert";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,12 +25,15 @@ import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 
 type BranchSeed = { sourceSessionId?: string; sourceMessageId?: string };
 
+/** General turns after the source answer, so it is no longer the latest. */
+const NEWER_TURNS = 3;
+let replies = 0;
 const dir = mkdtempSync(join(tmpdir(), "butler-branch-actions-"));
 const server = await createNativeAppServer({
   butlerData: join(dir, "data"),
   uiRoot: resolve("packages/butler-app/client/ui/dist"),
   config: { user: { name: "Smoke", language: "en" } },
-  stubReply: () => "Here is the answer to branch from.",
+  stubReply: () => `Here is answer ${++replies} to branch from.`,
 });
 const navigation = () => server.api<NavigationView>("/navigation");
 const sessionView = (id: string) =>
@@ -43,6 +47,27 @@ async function eventually<T>(label: string, read: () => Promise<T | undefined>, 
     if (Date.now() > deadline) throw new Error(`Timed out waiting for ${label}`);
     await new Promise((done) => setTimeout(done, 250));
   }
+}
+
+/** Sends `text` to `sessionId` and waits for its delivered answer. */
+async function ask(sessionId: string, text: string): Promise<MessageRecord> {
+  await server.api("/messages", {
+    method: "POST",
+    body: JSON.stringify({ chat_id: sessionId, text, client_message_id: `client-${crypto.randomUUID()}` }),
+  });
+  return await eventually(`the answer to "${text}"`, async () => {
+    const messages = (await sessionView(sessionId)).messages;
+    const asked = messages.findIndex((message) => message.role === "user" && message.text === text);
+    return asked < 0 ? undefined : messages.slice(asked + 1).find((message) =>
+      message.role === "assistant" && message.status === "delivered");
+  });
+}
+
+async function inView(page: Page, text: string): Promise<boolean> {
+  const target = page.getByText(text, { exact: true }).first();
+  const box = await target.count() > 0 ? await target.boundingBox() : null;
+  const viewport = page.viewportSize();
+  return Boolean(box && viewport && box.height > 0 && box.y < viewport.height && box.y + box.height > 0);
 }
 
 async function openSession(page: Page, projectId: string, sessionId: string): Promise<void> {
@@ -118,10 +143,31 @@ try {
   assert(createdSession, "the new project has the branch session");
   assertSeededFrom(await sessionView(createdSession.id), source.id, answer);
 
+  // Back to the source answer from a General branch.
+  const generalAnswer = await ask("general", "A General question to branch from.");
+  await page.locator('[data-tree-item="s:general"] [data-test-class~="tree-row"]').first().click();
+  await page.locator('[data-test-class~="assistant-footer"]').first().waitFor();
+  await branchFromAnswer(page, appCopy.interfaceStatus.branchChat, "General branch");
+  const seedCard = page.locator('[data-test-class="session-branch-seed"]');
+  await seedCard.waitFor();
+  for (let turn = 1; turn <= NEWER_TURNS; turn += 1) await ask("general", `Newer General turn ${turn}.`);
+  const latestGeneral = page.waitForResponse((response) =>
+    response.url().includes("/session-view?session_id=general") && response.ok());
+  await seedCard.getByRole("button", { name: appCopy.interfaceDetails.branchSource, exact: true }).click();
+  await page.locator('[data-tree-item="s:general"] [aria-current="page"]').first().waitFor();
+  await page.getByText(generalAnswer.text, { exact: true }).first().waitFor();
+  assert(await inView(page, generalAnswer.text), "the source answer is scrolled into view");
+  await latestGeneral;
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  assert(await inView(page, generalAnswer.text), "the source answer stays in view after the latest page loads");
+
   console.log(JSON.stringify({
     ok: true,
     service: "butler-app-branch-actions-smoke",
-    checks: ["project-answer-new-conversation-same-project", "project-answer-new-project", "branch-seed-source"],
+    checks: [
+      "project-answer-new-conversation-same-project", "project-answer-new-project", "branch-seed-source",
+      "general-branch-back-to-source-answer",
+    ],
   }));
 } finally {
   await browser.close();

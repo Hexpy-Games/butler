@@ -6,13 +6,17 @@ use std::{
     fmt::Write,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
 };
 use tokio::sync::Notify;
 
 pub(crate) const OWNER: &str = "Delegate reading and comparing a.txt and b.txt.";
-pub(super) const DIRECTION: &str = "Use approach B and read b.txt next.";
+pub(crate) const DIRECTION: &str = "Use approach B and read b.txt next.";
+
+pub(crate) const HOLD_PARENT: &str = "Keep this turn open while the work runs.";
+pub(crate) const QUEUED: &str = "Note the status for later.";
+pub(crate) const QUEUED_REPLY: &str = "Status noted.";
 
 #[derive(Default)]
 pub(crate) struct Script {
@@ -26,6 +30,8 @@ pub(crate) struct Script {
     pub workspace: Mutex<String>,
     pub requests: Mutex<Vec<Value>>,
     pub held: Notify,
+    pub parent_held: Notify,
+    pub hold_seen: AtomicUsize,
     pub release: Notify,
 }
 
@@ -50,7 +56,19 @@ async fn reply(
     use axum::response::IntoResponse;
     let key = matching::key("/codex/responses", &body, &Placeholders::default());
     script.requests.lock().unwrap().push(body.clone());
-    let child = key.user_request.starts_with("role: steward");
+    let child = child_lane(&body);
+    if !child && key.user_request == HOLD_PARENT {
+        script.hold_seen.fetch_add(1, Ordering::SeqCst);
+        script.parent_held.notify_one();
+        return std::future::pending::<axum::response::Response>().await;
+    }
+    if !child && key.user_request == QUEUED {
+        return (
+            [("content-type", "text/event-stream")],
+            wire(message(QUEUED_REPLY)),
+        )
+            .into_response();
+    }
     if !child
         && key.user_request != OWNER
         && key.user_request != DIRECTION
@@ -100,6 +118,32 @@ async fn reply(
     ([("content-type", "text/event-stream")], wire(item)).into_response()
 }
 
+pub(crate) fn user_text(item: &Value) -> String {
+    matching::user_request(&raw_text(item), &Placeholders::default())
+}
+
+fn raw_text(item: &Value) -> String {
+    match &item["content"] {
+        Value::String(text) => text.clone(),
+        Value::Array(parts) => parts
+            .iter()
+            .filter_map(|part| part["text"].as_str())
+            .collect::<Vec<_>>()
+            .join("\n"),
+        _ => String::new(),
+    }
+}
+
+pub(crate) fn child_lane(body: &Value) -> bool {
+    body["input"].as_array().into_iter().flatten().any(|item| {
+        item["role"] == "user"
+            && (user_text(item).starts_with("role: steward")
+                || raw_text(item).lines().any(|line| {
+                    line.starts_with("Original request (highest priority): role: steward")
+                }))
+    })
+}
+
 /// With `presented`, the parent Plan decides to show the result as cards and
 /// a table, which the delegated task then carries.
 fn parent_item(step: usize, presented: bool) -> Value {
@@ -107,11 +151,16 @@ fn parent_item(step: usize, presented: bool) -> Value {
     if presented {
         parent_plan["presentation"] = json!(["cards", "table"]);
     }
+    let mut revised_plan = parent_plan.clone();
+    revised_plan["checks"] = json!(["Approach verified", REVISED_CHECK]);
+    parent_plan["intent"] = json!({"goal":"Choose the better approach for the owner's next step","deliver":"A one-line recommendation","next":"Apply the chosen approach","assume":"Both files are current"});
     match step {
         0 => call("start", "start_work", &json!({"objective":OWNER})),
         1 => call("plan", "replace_work_plan", &parent_plan),
-        2 => call("review", "record_work_review", &review()),
-        3 => call("delegate", "delegate_to_steward", &json!({"request":OWNER})),
+        2 => call("plan-revise", "record_work_review", &revise()),
+        3 => call("plan-revision", "replace_work_plan", &revised_plan),
+        4 => call("review", "record_work_review", &review()),
+        5 => call("delegate", "delegate_to_steward", &json!({"request":OWNER})),
         _ => message("Direction delivered."),
     }
 }
@@ -285,12 +334,33 @@ fn work_id(body: &Value) -> String {
                 .and_then(Value::as_str)
                 .map(str::to_owned)
         })
+        .or_else(|| {
+            body["input"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|item| item["role"] == "user")
+                .find_map(|item| {
+                    raw_text(item).lines().find_map(|line| {
+                        line.strip_prefix(
+                            "Explicit relation Work id (model-only; never report to user): ",
+                        )
+                        .map(str::to_owned)
+                    })
+                })
+        })
         .unwrap()
 }
 
 fn plan(start_new: bool, mode: &str) -> Value {
     json!({"start_new":start_new,"objective":OWNER,"execution_mode":mode,"governing_refs":[],"actions":[{"action_key":"read","description":"Read source","dependency_keys":[]},{"action_key":"compare","description":"Compare approaches","dependency_keys":["read"]}],"checks":["Approach verified"]})
 }
+pub(crate) const REVISED_CHECK: &str = "Comparison names its deciding criterion";
+
+fn revise() -> Value {
+    json!({"subject":"plan","verdict":"revise","summary":"Name the deciding criterion","corrections":["Add a check that the comparison names its deciding criterion"],"correction_scope":"planning","action_updates":[]})
+}
+
 fn review() -> Value {
     json!({"subject":"plan","verdict":"accept","summary":"Ready","corrections":[],"action_updates":[]})
 }

@@ -25,10 +25,12 @@ export function configureWebIdentity(contents, initialize = true) {
   const userAgent = contents.getUserAgent();
   const acceptLanguage = app.getPreferredSystemLanguages().join(",") || app.getLocale();
   // Set the native network/worker default synchronously, before popup navigation.
-  const ua = chromeUserAgent(userAgent, fullVersion);
+  const ua = chromeUserAgent(userAgent, fullVersion, app.getVersion());
   contents.session.setUserAgent(ua, acceptLanguage);
+  // Electron 44 session UA overrides leave native brands Chromium-only. CDP
+  // remains necessary for Butler brands in documents and out-of-process workers.
   if (initialize && !contents.debugger.isAttached()) contents.debugger.attach("1.3");
-  const identity = (nativeIdentity ??= readNativeIdentity()).then(native => chromeIdentity(userAgent, fullVersion, native, acceptLanguage));
+  const identity = (nativeIdentity ??= readNativeIdentity()).then(native => chromeIdentity(userAgent, fullVersion, native, acceptLanguage, app.getVersion()));
   installIdentityHeaders(contents.session, identity);
   const send = (method, params, id) => contents.debugger.sendCommand(method, params, id);
   const apply = async (id, type = "page") => {

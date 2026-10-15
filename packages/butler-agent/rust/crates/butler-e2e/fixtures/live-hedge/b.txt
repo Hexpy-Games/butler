@@ -1,0 +1,1 @@
+Approach B: shared cache; half the memory, slower cold start

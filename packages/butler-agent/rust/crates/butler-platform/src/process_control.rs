@@ -15,6 +15,8 @@
 //! them to stop through their control endpoint instead (see
 //! `instance::request_stop`).
 
+#[cfg(feature = "test-support")]
+pub mod test_support;
 pub mod usage;
 pub use usage::{ProcessUsage, sample as sample_usage};
 

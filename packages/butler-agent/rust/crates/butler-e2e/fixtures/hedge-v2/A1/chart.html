@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>월별 매출</title>
+<style>body{font-family:sans-serif;margin:16px}svg{width:100%;height:auto}</style></head>
+<body><h1>월별 매출</h1><svg id="chart" viewBox="0 0 400 220"></svg>
+<script>
+const data = [
+  { month: "2026-07", amount: 410 },
+  { month: "2026-08", amount: 455 },
+  { month: "2026-09", amount: 430 },
+];
+function draw(rows) {
+  const svg = document.getElementById("chart");
+  const max = Math.max(...rows.map(r => r.amount));
+  rows.forEach((r, i) => {
+    const h = Math.round((r.amount / max) * 160);
+    const bar = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bar.setAttribute("x", 20 + i * 90); bar.setAttribute("y", 190 - h);
+    bar.setAttribute("width", 60); bar.setAttribute("height", h);
+    svg.appendChild(bar);
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("x", 50 + i * 90); label.setAttribute("y", 210);
+    label.setAttribute("text-anchor", "middle"); label.textContent = r.month.slice(5) + "월";
+    svg.appendChil(label);
+  });
+}
+draw(data);
+</script></body></html>

@@ -37,8 +37,9 @@ use serde_json::{Map, Value, json};
 
 use butler_turn::btcc::{
     ActionProgress, ActionStatus, CheckpointInput, ContinueWorkInput, CorrectionScope,
-    DispositionActionUpdate, DispositionInput, DispositionStatus, ExecutionMode, PlanAction,
-    ReplacePlanInput, ReviewInput, ReviewSubject, ReviewVerdict, StartWorkInput, WorkTurnScope,
+    DispositionActionUpdate, DispositionInput, DispositionStatus, ExecutionMode, PLAN_INTENT_LINES,
+    PlanAction, ReplacePlanInput, ReviewInput, ReviewSubject, ReviewVerdict, StartWorkInput,
+    WorkTurnScope,
 };
 
 pub(super) enum Command {
@@ -202,12 +203,16 @@ fn boolean(value: Option<&Value>, field: &str) -> Result<bool, WorkArgumentError
         _ => Err(WorkArgumentError::NotBoolean(field.to_owned())),
     }
 }
-/// The Plan's checks plus its presentation decision, recorded as one
-/// `Presentation:` line so it travels with the Plan: delegated children
-/// receive it among their acceptance criteria and the reporting round reads
-/// it from the Work. A revision's decision replaces the previous line.
+/// The Plan's checks plus its Conception and presentation decision. The
+/// Conception becomes `Goal:`/`Deliver:`/`Next:`/`Assumed:` lines (see
+/// `intent_lines`) and the presentation decision one `Presentation:` line, so
+/// both travel with the Plan: delegated children receive them among their
+/// acceptance criteria and the reporting round reads them from the Work. A
+/// revision's intent or decision replaces the previous lines; a revision
+/// without intent keeps the current Plan's intent lines.
 fn planned_checks(args: &Map<String, Value>) -> Result<Vec<String>, WorkArgumentError> {
     let mut checks = strings(args.get("checks"), "checks")?;
+    intent_lines(args, &mut checks)?;
     let Some(value) = args.get("presentation") else {
         return Ok(checks);
     };
@@ -227,6 +232,35 @@ fn planned_checks(args: &Map<String, Value>) -> Result<Vec<String>, WorkArgument
     }
     Ok(checks)
 }
+
+/// The Plan's Conception: the goal, the deliverables it implies, the likely
+/// next request and the assumptions made instead of asking, recorded as
+/// `Goal:`/`Deliver:`/`Next:`/`Assumed:` check lines so they travel with the
+/// Plan to delegated children beside the unchanged request. A revision's
+/// intent replaces the previous lines; a revision without one keeps the
+/// current Plan's lines (`DurableWorkService::replace_plan`).
+fn intent_lines(
+    args: &Map<String, Value>,
+    checks: &mut Vec<String>,
+) -> Result<(), WorkArgumentError> {
+    let Some(value) = args.get("intent") else {
+        return Ok(());
+    };
+    let intent = object(value, "intent")?;
+    checks.retain(|check| !PLAN_INTENT_LINES.iter().any(|line| check.starts_with(line)));
+    for (index, (field, line)) in INTENT_FIELDS.iter().zip(PLAN_INTENT_LINES).enumerate() {
+        match intent.get(*field) {
+            None if index > 0 => {}
+            value => checks.push(format!(
+                "{line} {}",
+                required(value, &format!("intent.{field}"))?
+            )),
+        }
+    }
+    Ok(())
+}
+
+const INTENT_FIELDS: [&str; 4] = ["goal", "deliver", "next", "assume"];
 
 const PRESENTATION: [&str; 7] = [
     "text", "cards", "table", "gallery", "facts", "metrics", "chart",

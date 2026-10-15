@@ -3,7 +3,7 @@
 use std::{future::Future, pin::Pin};
 
 use crate::cognition::{
-    CognitionResult, MemoryGenerationHandle,
+    CognitionResult, EmbeddingReadyFuture, MemoryGenerationHandle,
     recall::{RecallRequest, RecallVectorMatches},
 };
 
@@ -17,6 +17,15 @@ pub trait RecallVectorPort: Send + Sync {
     /// off, not failing. Recall then runs on its text lanes alone.
     fn enabled(&self) -> bool {
         true
+    }
+
+    /// Await model readiness within recall's overall deadline, before the search budget.
+    fn ready<'a>(
+        &'a self,
+        _generation: &'a MemoryGenerationHandle,
+        _deadline_at: i64,
+    ) -> EmbeddingReadyFuture<'a> {
+        Box::pin(async { Ok(()) })
     }
 
     /// Optionally warm a fresh generation without claiming that vectors were searched.

@@ -26,7 +26,6 @@ use super::{
 };
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
-use crate::host::memory_jobs::recall_metrics::RecallMetrics;
 use crate::host::runtime::environment::ProcessEnvironment;
 use crate::host::runtime::stores::RuntimeStores;
 use boundary::{setup, validate_data_installation_boundary};
@@ -69,7 +68,7 @@ impl AgentRuntime {
         worker_profiles: Arc<dyn butler_turn::btcc::WorkerProfileReader>,
         app: startup_trace::AppStartup<'_>,
     ) -> Result<Self, BtccError> {
-        let (app_endpoint, stop, correction) = app;
+        let (app_endpoint, stop, timing) = app;
         let mut startup = startup_trace::Trace::new();
         stores::check_startup(stop)?;
         validate_data_installation_boundary(&paths.data_root, &paths.installation_root)?;
@@ -81,18 +80,18 @@ impl AgentRuntime {
         let continuation_limits =
             btcc::select_turn_continuation_budget(|key| host_environment.get(key).cloned())?;
         let mcp_client = mcp_owner::for_runtime(&paths, &host_environment, writes.clone());
-        let process_services = web_owner::open(
+        let web_owner::ProcessWebServices { models, web_access } = web_owner::open(
             &paths,
             environment.model,
             &writes,
             &collation,
             mcp_client.clone(),
-        )?;
-        let models = self::models::with_moved_credentials(process_services.models).await;
-        let web_access = process_services.web_access;
+            &mut startup,
+        )
+        .await?;
         let (prompt_clock, date_parser) = process_clocks()?;
         let metric_files = Arc::new(MetricFiles::new(paths.data_root.clone()));
-        startup.phase("configuration_and_models");
+        startup.phase("process_clocks");
         let (coordinator, embedding, vectors, fresh_memory, memory_management) =
             memory_bootstrap::open(&paths, &environment.cognition_paths).await?;
         startup.phase("memory_preflight");
@@ -103,7 +102,7 @@ impl AgentRuntime {
         let (skills, capabilities, catalog) = skills_owner::open(&paths, &files, &mutations)?;
         startup.phase("skills");
         let stores =
-            RuntimeStores::open(&paths.data_root, collation.clone(), stop, correction).await?;
+            RuntimeStores::open(&paths.data_root, &collation, stop, timing, &startup).await?;
         startup.phase("canonical_stores");
         let response_language =
             defaults::initialize(&paths, &app_database_path, &installation).await?;
@@ -112,6 +111,7 @@ impl AgentRuntime {
             &environment.cognition_paths,
             metric_files.clone(),
             &stores,
+            embedding.clone(),
         )
         .await?;
         let memory_sync = boundary::MemoryStartup {
@@ -202,16 +202,14 @@ impl AgentRuntime {
         let tool_artifacts = Arc::new(super::ToolArtifactReader::new(tool_output.clone()));
         let (memory_query, conversation_reference) =
             owners::memory_source_readers(&paths.data_root, &environment.cognition_paths);
-        let memory_recall = Arc::new(
-            recall::configured_recall(
-                &paths,
-                &environment.cognition_paths,
-                &models,
-                date_parser.clone(),
-                collation.clone(),
-            )
-            .with_metric_sink(Arc::new(RecallMetrics::new(metric_files.clone())))
-            .with_vector_port(vectors),
+        let memory_recall = recall::configured_recall(
+            &paths,
+            &environment.cognition_paths,
+            &models,
+            date_parser.clone(),
+            collation.clone(),
+            metric_files.clone(),
+            vectors,
         );
         let conversation_context = ContextConversation::new(
             stores.conversations.clone(),

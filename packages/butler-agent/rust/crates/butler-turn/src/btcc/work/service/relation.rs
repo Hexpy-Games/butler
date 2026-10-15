@@ -36,7 +36,7 @@ impl DurableWorkService {
     }
 
     /// Validates and records a plan revision.
-    pub async fn replace_plan(&self, input: ReplacePlanInput) -> Result<WorkView, BtccError> {
+    pub async fn replace_plan(&self, mut input: ReplacePlanInput) -> Result<WorkView, BtccError> {
         super::super::validation::validate_replace(&input)?;
         let start_new = input.start_new.unwrap_or(false);
         let context = if start_new {
@@ -56,6 +56,12 @@ impl DurableWorkService {
                 "Durable Work relation is already selected for a terminal Work; start new Work in a fresh Turn",
             ));
         }
+        carry_intent(
+            &mut input.checks,
+            context
+                .as_ref()
+                .and_then(|value| value.work.current_plan.as_ref()),
+        );
         let governing_refs = input.governing_refs.clone().unwrap_or_default();
         let mut identity = serde_json::Map::new();
         super::with_null_project(&input.scope, &mut identity);
@@ -99,4 +105,26 @@ impl DurableWorkService {
             })
             .await
     }
+}
+
+/// A revision that states no Conception keeps the current Plan's intent
+/// lines, so delegated work never loses Butler's reading of the request; a
+/// revision with a `Goal:` line replaces them all. New Work has no current
+/// Plan and inherits nothing.
+fn carry_intent(checks: &mut Vec<String>, current: Option<&WorkPlan>) {
+    if checks
+        .iter()
+        .any(|check| check.starts_with(PLAN_INTENT_LINES[0]))
+    {
+        return;
+    }
+    let Some(plan) = current else {
+        return;
+    };
+    checks.extend(
+        plan.checks
+            .iter()
+            .filter(|check| PLAN_INTENT_LINES.iter().any(|line| check.starts_with(line)))
+            .cloned(),
+    );
 }

@@ -206,7 +206,7 @@ impl EffectAdapter for CommandEffectAdapter {
             };
             Ok(AdapterOutcome::Uncertain(Some(adapter_error(
                 code,
-                "The command may have run. Inspect the workspace or external target and report the uncertainty; do not repeat it blindly.",
+                "The command may have run. Inspect the workspace or external target to learn its outcome, then continue from it; do not repeat it blindly.",
             ))))
         })
     }

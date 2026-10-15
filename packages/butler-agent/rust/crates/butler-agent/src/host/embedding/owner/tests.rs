@@ -1,15 +1,16 @@
 use super::*;
 use std::{process::Stdio, time::Duration};
-use tokio::process::Command;
 
 #[tokio::test]
 async fn active_cancellation_kills_and_reaps_child() {
-    let mut child = Command::new("/bin/sleep")
-        .arg("30")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("sleep child");
+    let mut child = butler_platform::process_control::test_support::slow_line_peer(
+        r#"{"id":1,"status":"ready"}"#,
+    )
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .kill_on_drop(true)
+    .spawn()
+    .expect("protocol peer");
     let pid = child.id().expect("child pid");
     let mut process = Some(WorkerChild {
         stdin: child.stdin.take().expect("child stdin"),
@@ -44,7 +45,7 @@ async fn active_cancellation_kills_and_reaps_child() {
         max_embeddings: None,
         cancellation: cancellation.clone(),
         deadline: None,
-        response: sender,
+        response: PendingResponse::Embedding(sender),
     };
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -60,70 +61,23 @@ async fn active_cancellation_kills_and_reaps_child() {
     .expect("active request cancelled");
     assert_eq!(failure.code(), "embed_request_cancelled");
     assert!(process.is_none());
-    let status = std::process::Command::new("ps")
-        .args(["-p", &pid.to_string(), "-o", "pid="])
-        .status()
-        .expect("ps child");
-    assert!(!status.success(), "cancelled child must be reaped");
+    assert!(
+        butler_platform::instance::process_start(pid)
+            .unwrap()
+            .is_none(),
+        "cancelled child must be reaped"
+    );
 }
 
-#[cfg(unix)]
+/// Readiness contract: deadline cancellation and concurrent callers share the
+/// owner's load; switching off releases it. These exercise the queue API as well
+/// as the initialization path previously covered directly through run_item.
+// test-category: race
 #[tokio::test]
-async fn slow_initialization_outlives_first_deadline_and_keeps_ready_child() {
-    let mut child = Command::new("/bin/sh")
-        .arg("-c")
-        .arg("IFS= read -r line; sleep 0.2; printf '%s\\n' '{\"id\":1,\"status\":\"ready\"}'; exec sleep 30")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("fake slow worker");
-    let mut process = Some(WorkerChild {
-        stdin: child.stdin.take().expect("child stdin"),
-        stdout: child.stdout.take().expect("child stdout"),
-        child,
-        initialized: false,
-    });
-    let inner = Inner {
-        data_root: PathBuf::new(),
-        executable: PathBuf::new(),
-        next_id: AtomicU64::new(1),
-        warm: AtomicBool::new(false),
-        enabled: AtomicBool::new(true),
-        release: AtomicBool::new(false),
-        release_signal: Notify::new(),
-        released: watch::channel(false).0,
-        state: Mutex::new(QueueState::default()),
-        notify: Notify::new(),
-        shutdown: CancellationToken::new(),
-    };
-    let (sender, _) = oneshot::channel();
-    let item = Pending {
-        id: 1,
-        frame: b"{}\n".to_vec(),
-        bytes: 3,
-        cold_start_allowed: true,
-        background: false,
-        mode: EmbeddingMode::CheckedCls,
-        requested_texts: 1,
-        resplit: false,
-        max_embeddings: None,
-        cancellation: CancellationToken::new(),
-        deadline: Some(Instant::now() + Duration::from_millis(50)),
-        response: sender,
-    };
-    let failure = tokio::time::timeout(
-        Duration::from_secs(3),
-        run_item(&inner, &mut process, &item),
-    )
-    .await
-    .expect("initialization settles")
-    .err()
-    .expect("first caller expires");
-    assert_eq!(failure.code(), "embed_request_deadline");
-    let ready = process.as_mut().expect("owner keeps initialized child");
-    assert!(ready.initialized);
-    assert!(ready.child.try_wait().expect("child status").is_none());
-    kill_and_reap(&mut process).await;
+async fn readiness_lifecycle_keeps_one_load_until_release() {
+    readiness_tests::readiness_timeout_leaves_load_for_later_waiter().await;
+    readiness_tests::concurrent_readiness_waiters_share_one_load().await;
+    readiness_tests::switching_off_interrupts_readiness_and_reaps_loading_worker().await;
 }
 
 /// Race: concurrent and repeated closes of the embedding owner finish even
@@ -181,4 +135,5 @@ async fn concurrent_and_repeated_close_finish_even_when_actor_fails() {
         second.expect_err("aborted actor fails").code(),
         "embed_worker_unavailable"
     );
+    readiness_tests::worker_loop_panic_closes_queue_and_future_readiness_fails_fast().await;
 }
