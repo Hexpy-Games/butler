@@ -30,7 +30,7 @@ function monitor(url: URL) {
   view.previousPeriod = { totalTokens: 40000 };
   view.model.byModel = { "openai/gpt-6-luna": { ...view.model } };
   view.tools = { calls: 3, results: 3, successes: 2, failures: 1, byTool: { read_file: { calls: 3, results: 3, successes: 2, failures: 1 } } };
-  if (state === "empty") { view.model.totalTokens = 0; view.model.requestCount = 0; view.model.promptTokens = 0;
+  if (state === "empty") { view.cost.estimatedUsd = 0; view.model.totalTokens = 0; view.model.requestCount = 0; view.model.promptTokens = 0;
     view.model.cachedTokens = 0; view.topSessions = []; view.model.byModel = {}; view.tools.byTool = {}; }
   return view;
 }
@@ -77,6 +77,7 @@ try {
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(400);
     if (shots) await page.screenshot({ path: join(shots, `${before ? "before" : "after"}${auth === "subscription" ? "-subscription" : ""}-popover-${theme}-${width}-${scenario}.png`) });
+    if (!before && scenario === "empty") assert.equal(await popover.locator('[data-test-class="usage-readout"]').count(), 0);
     if (auth === "subscription") await popover.getByText("계정 한도", { exact: true }).waitFor();
     if (!before && scenario === "ready") {
       const chart = popover.locator('[data-slot="usage-bars"]');

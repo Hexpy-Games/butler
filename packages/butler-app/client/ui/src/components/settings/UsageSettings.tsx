@@ -48,7 +48,9 @@ function useUsageRange(hours: number, session: string | null, revision: number) 
 }
 
 function periodDelta(view: UsageMonitorView | null): string | undefined {
-  if (!view?.previousPeriod) return undefined;
+  if (!view) return undefined;
+  if (view.model.totalTokens === 0) return appCopy.composer.usage.noUsage;
+  if (!view.previousPeriod) return undefined;
   const previous = view.previousPeriod.totalTokens;
   return previous ? appCopy.composer.usage.delta(`${view.model.totalTokens >= previous ? "+" : ""}${Math.round((view.model.totalTokens - previous) / previous * 100)}%`)
     : appCopy.composer.usage.previousEmpty;

@@ -15,6 +15,9 @@ export function UsageReadout({ view, values, label, selected, showCost, delta, s
   const cost = view?.cost.available ? view.cost.estimatedUsd : null;
   const costText = cost === null ? "—" : new Intl.NumberFormat(getAppLocale(), { style: "currency", currency: "USD" }).format(cost);
   if (!view) return <Stack gap="sm"><SkeletonRows rows={2} label={copy.loading} />{children}</Stack>;
+  if (!panel && !selected && values.total === 0 && values.requests === 0) {
+    return <Stack gap="sm"><Typo.Caption>{label}</Typo.Caption>{children}</Stack>;
+  }
   return <Stack gap="sm" data-test-class="usage-readout">
     <Inline justify="between" gap="sm" wrap>
       <Typo.Caption><RollingSwap itemKey={label}>{label}</RollingSwap></Typo.Caption>
