@@ -19,6 +19,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { unpackagedWindowsDlls, windowsImportedDlls } from "./windows-system-dlls.mjs";
 
 const requestedPlatform = process.argv[2] ?? process.platform;
 const requestedArch = process.argv[3] ?? process.arch;
@@ -237,22 +238,9 @@ function verifyWindowsDependencyClosure(binary) {
   if (!/8664 machine \(x64\)/iu.test(header)) {
     throw new Error("Native Butler Agent is not a Windows x64 executable.");
   }
-  const imports = run("dumpbin", ["/imports", binary], rustRoot);
-  const systemDlls = new Set([
-    "advapi32.dll", "bcrypt.dll", "bcryptprimitives.dll", "cfgmgr32.dll",
-    "combase.dll", "credui.dll", "crypt32.dll", "dbghelp.dll", "dnsapi.dll", "gdi32.dll", "iphlpapi.dll",
-    "kernel32.dll", "mswsock.dll", "ncrypt.dll", "netapi32.dll", "ntdll.dll",
-    "ole32.dll", "oleaut32.dll", "pdh.dll", "powrprof.dll", "propsys.dll", "psapi.dll",
-    "rpcrt4.dll", "secur32.dll", "setupapi.dll", "shell32.dll", "shlwapi.dll",
-    "synchronization.dll", "user32.dll", "userenv.dll", "uuid.dll",
-    "version.dll", "winhttp.dll", "winmm.dll", "wintrust.dll", "ws2_32.dll",
-    "wtsapi32.dll", "normaliz.dll",
-  ]);
-  const names = [...imports.matchAll(/^\s+([\w.-]+\.dll)\s*$/gimu)]
-    .map((match) => match[1].toLowerCase());
+  const names = windowsImportedDlls(run("dumpbin", ["/imports", binary], rustRoot));
   if (names.length === 0) throw new Error("Native Butler Agent PE imports are missing.");
-  const unsupported = names.filter((name) => !systemDlls.has(name) &&
-    !/^(?:api|ext)-ms-win-[a-z0-9-]+\.dll$/u.test(name));
+  const unsupported = unpackagedWindowsDlls(names);
   if (unsupported.length) {
     throw new Error(`Native Butler Agent has unpackaged runtime dependencies: ${unsupported.join(", ")}`);
   }
