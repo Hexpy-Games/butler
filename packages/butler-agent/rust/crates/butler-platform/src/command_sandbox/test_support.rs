@@ -116,3 +116,5 @@ pub fn windows_shell_file_contract() {
         assert!(result.is_ok(), "{result:?}");
     }
 }
+
+pub(super) mod ledger;

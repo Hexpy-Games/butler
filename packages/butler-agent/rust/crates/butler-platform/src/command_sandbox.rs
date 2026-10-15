@@ -52,6 +52,8 @@ pub mod command_fixtures;
 #[cfg(feature = "test-support")]
 mod test_support;
 #[cfg(feature = "test-support")]
+pub use test_support::ledger::WindowsLedger;
+#[cfg(feature = "test-support")]
 pub use test_support::{
     UnixSocketProbe, linux_syscall_probe, linux_test_host, windows_prepare_project_write,
     windows_recovery_contract, windows_shell_file_contract, wsl_test_host,
@@ -178,6 +180,9 @@ pub enum SandboxError {
     /// This host cannot contain a mutating command to its project.
     #[error("this host cannot contain commands to the project folder")]
     ProjectWriteUnavailable,
+    /// The project inventory is still building or being verified.
+    #[error("project write inventory pending")]
+    ProjectWritePending,
     /// Filesystem discovery or policy preparation failed; never run uncontained.
     #[error("sandbox filesystem preparation failed: {0}")]
     Filesystem(#[from] std::io::Error),

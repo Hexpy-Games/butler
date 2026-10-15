@@ -52,8 +52,15 @@ pub(in crate::command_sandbox) fn invocation(
     writable: &[&Path],
     denied: &[&Path],
 ) -> Result<Invocation, SandboxError> {
-    prepare(invocation, host, root, writable, denied)
-        .map_err(|e| SandboxError::Filesystem(std::io::Error::other(e.to_string())))
+    prepare(invocation, host, root, writable, denied).map_err(|e| {
+        if e.downcast_ref::<std::io::Error>()
+            .is_some_and(|e| e.kind() == std::io::ErrorKind::WouldBlock)
+        {
+            SandboxError::ProjectWritePending
+        } else {
+            SandboxError::Filesystem(std::io::Error::other(e.to_string()))
+        }
+    })
 }
 fn prepare(
     mut invocation: Invocation,
@@ -203,22 +210,15 @@ fn save_policy(
     fs::create_dir(&scratch)?;
     let mut scratch_guard = ScratchGuard(Some(scratch.clone()));
     let mut request = plan.build(invocation, 'Z', timeout, &physical(&scratch)?)?;
-    let mut link_roots = vec![root.to_path_buf()];
-    link_roots.extend(
-        plan.scratch()?
-            .iter()
-            .skip(1)
-            .map(|p| PathBuf::from(p.as_str())),
-    );
-    super::links::validate(
-        &link_roots,
-        &plan
-            .secrets
-            .iter()
-            .chain(&plan.credentials)
-            .cloned()
-            .collect::<Vec<_>>(),
-    )?;
+    let link_roots: Vec<_> = plan
+        .scratch()?
+        .iter()
+        .skip(1)
+        .map(|p| PathBuf::from(p.as_str()))
+        .collect();
+    let admission = super::ledger::admit(root, &link_roots, &plan.credentials, &plan.secrets)?;
+    // Admission synchronizes both inventories immediately before policy publication.
+    let _ = (admission.secrets, admission.generation);
     canonical_grants(&mut request)?;
     let (pid, started) = super::drive::identity()?;
     let payload = PolicyFile {

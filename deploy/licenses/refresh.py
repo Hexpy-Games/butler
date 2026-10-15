@@ -341,6 +341,7 @@ def model_components():
 
 def vendored_components():
     entries = [
+        ("notify Windows ledger backend", "8.2.0", "CC0-1.0", "third_party/notify-windows-ledger/LICENSE"),
         ("Noto Sans KR", "2.004", "OFL-1.1", "packages/butler-agent/rust/crates/butler-runtime/assets/OFL.txt"),
         ("IBM Plex Mono", "2.5.0", "OFL-1.1", "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt"),
         ("LobeHub provider logos", "1.95.1", "MIT", "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE"),

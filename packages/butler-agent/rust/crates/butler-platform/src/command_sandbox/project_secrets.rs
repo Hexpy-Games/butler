@@ -6,8 +6,10 @@ pub(in crate::command_sandbox) mod portable;
 
 /// Finds existing protected names with a bounded metadata-only walk.
 pub fn discover_project_secrets(root: &Path) -> std::io::Result<Vec<PathBuf>> {
-    #[cfg(any(target_os = "linux", windows))]
+    #[cfg(target_os = "linux")]
     return portable::discover_project_secrets(root);
+    #[cfg(windows)]
+    return super::windows::mxc::ledger::secrets(root);
     #[cfg(not(any(target_os = "linux", windows)))]
     {
         let _ = root;
@@ -29,7 +31,7 @@ pub fn sweep_new_secrets(
         result.and_then(|paths| cleaned.map(|()| paths))
     }
     #[cfg(windows)]
-    return portable::sweep_new_secrets(root, since, data);
+    return super::windows::mxc::ledger::sweep(root, since, data);
     #[cfg(not(any(target_os = "linux", windows)))]
     {
         let _ = (root, since, data);

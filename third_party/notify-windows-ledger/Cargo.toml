@@ -1,0 +1,9 @@
+[package]
+name = "notify-windows-ledger"
+version = "8.2.0"
+edition = "2024"
+license = "CC0-1.0"
+repository = "https://github.com/notify-rs/notify"
+description = "Minimal vendored notify Windows backend with rescan and drain barriers"
+[dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Threading", "Win32_Security"] }

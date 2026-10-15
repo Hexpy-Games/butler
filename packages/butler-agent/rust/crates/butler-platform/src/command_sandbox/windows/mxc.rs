@@ -1,7 +1,7 @@
 //! Probed Windows project writes; observations keep exact-action approval.
 mod drive;
 pub(crate) mod launch;
-mod links;
+pub(in crate::command_sandbox) mod ledger;
 pub(in crate::command_sandbox) mod prepare;
 mod probe;
 mod recovery;
