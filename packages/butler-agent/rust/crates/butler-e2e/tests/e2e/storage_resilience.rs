@@ -154,3 +154,59 @@ async fn closing_storage_reports_service_stopping() -> Result<(), HarnessError> 
     }
     s.finish().await
 }
+
+#[tokio::test]
+async fn failed_batch_commit_preserves_writer() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("STORAGE-COMMIT")?.start().await?;
+    let id = create(&s).await?;
+    let path = s.sandbox.data.join("app-server/butler-client.sqlite");
+    tokio::task::spawn_blocking(move || -> Result<(), HarnessError> {
+        let db = sqlite::open(path)?;
+        db.execute_batch(
+            "CREATE TABLE commit_parent(id INTEGER PRIMARY KEY);
+             CREATE TABLE commit_child(parent_id INTEGER REFERENCES commit_parent(id)
+                 DEFERRABLE INITIALLY DEFERRED);
+             CREATE TRIGGER fail_commit AFTER UPDATE OF title ON app_automations
+             BEGIN INSERT INTO commit_child VALUES(1); END;",
+        )?;
+        Ok(())
+    })
+    .await
+    .map_err(|error| HarnessError(error.to_string()))??;
+    let reply =
+        s.gw.patch(&format!("/automations/{id}"), json!({"title":"Rejected"}))
+            .await?;
+    eprintln!("deferred COMMIT failure: {} {}", reply.status, reply.text);
+    assert_eq!(reply.status, 500, "{}", reply.text);
+    let logs = s.agent.logs();
+    assert!(logs.contains("FOREIGN KEY constraint failed"), "{logs}");
+    for line in logs
+        .lines()
+        .filter(|line| line.contains("[app-sqlite] batch failed:"))
+    {
+        eprintln!("{line}");
+    }
+    eprintln!("App writer reported FOREIGN KEY constraint failed at deferred COMMIT");
+    let path = s.sandbox.data.join("app-server/butler-client.sqlite");
+    tokio::task::spawn_blocking(move || -> Result<(), HarnessError> {
+        let db = sqlite::open(path)?;
+        db.execute_batch("DROP TRIGGER fail_commit")?;
+        let children: usize =
+            db.query_row("SELECT COUNT(*) FROM commit_child", [], |row| row.get(0))?;
+        assert_eq!(children, 0, "failed commit leaked writes");
+        Ok(())
+    })
+    .await
+    .map_err(|error| HarnessError(error.to_string()))??;
+    let item = s.gw.get(&format!("/automations/{id}")).await?;
+    assert_eq!(item.data()["automation"]["title"], "Numbers");
+    let reply =
+        s.gw.patch(&format!("/automations/{id}"), json!({"title":"Recovered"}))
+            .await?;
+    eprintln!("following writer PATCH: {} {}", reply.status, reply.text);
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let item = s.gw.get(&format!("/automations/{id}")).await?;
+    assert_eq!(item.data()["automation"]["title"], "Recovered");
+    s.finish().await
+}

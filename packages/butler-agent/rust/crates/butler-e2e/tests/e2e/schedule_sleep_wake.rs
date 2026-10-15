@@ -16,6 +16,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod diagnostics;
+use diagnostics::*;
+
 const NUMBERS: &str = "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.";
 
 async fn setup(id: &str) -> Result<(Scenario, String), HarnessError> {
@@ -366,50 +369,12 @@ async fn scheduler_errors(data: &std::path::Path) -> Result<usize, HarnessError>
     .map_err(|error| HarnessError(error.to_string()))?
 }
 
-async fn scheduler_reads(s: &Scenario) -> Result<u64, HarnessError> {
-    let reply =
-        s.gw.get("/automations/_test/scheduler-next-due-reads")
-            .await?;
-    Ok(reply.data().as_u64().unwrap())
-}
-
-async fn scheduler_diagnostics(s: &Scenario) -> Result<(), HarnessError> {
-    eprintln!(
-        "scheduler reads={} scheduler_errors={} runs={:?}",
-        scheduler_reads(s).await?,
-        scheduler_errors(&s.sandbox.data).await?,
-        runs(s).await?
-    );
-    Ok(())
-}
-
 async fn wake_scheduler(s: &Scenario) -> Result<(), HarnessError> {
     let reply =
         s.gw.patch("/automations/anchored", json!({"title":"Daily"}))
             .await?;
     assert_eq!(reply.status, 200, "{}", reply.text);
     Ok(())
-}
-
-async fn wait_scheduler_reads(s: &Scenario, expected: u64) -> Result<Instant, HarnessError> {
-    let result = tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            if scheduler_reads(s).await? >= expected {
-                return Ok::<_, HarnessError>(Instant::now());
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    })
-    .await
-    .unwrap_or_else(|_| {
-        Err(HarnessError(
-            "scheduler did not retry the failed dispatch after wake".into(),
-        ))
-    });
-    if result.is_err() {
-        scheduler_diagnostics(s).await?;
-    }
-    result
 }
 
 #[tokio::test]
@@ -449,17 +414,17 @@ async fn sched_14_failed_dispatch_retries_without_notification() -> Result<(), H
     .map_err(|_| HarnessError("scheduler did not observe the dispatch failure".into()))??;
     assert_eq!(scheduler_errors(&s.sandbox.data).await?, 1);
     // A notified retry during the same failure streak must not emit another error.
-    let last = scheduler_reads(&s).await?;
+    let last = scheduler_attempts(&s).await?;
     wake_scheduler(&s).await?;
-    let previous_read_observed = wait_scheduler_reads(&s, last + 1).await?;
+    let dispatch_observed = wait_scheduler_attempt(&s, last).await?;
     assert_eq!(scheduler_errors(&s.sandbox.data).await?, 1);
     assert_eq!(runs(&s).await?, [] as [Value; 0]);
     dispatch_fault(&s.sandbox.data, false).await?;
     // No wake: the natural retry must dispatch and finish within one slice plus jitter.
     let deadline =
-        previous_read_observed + butler_core::wall_clock::MAX_WAIT_SLICE + Duration::from_secs(5);
+        dispatch_observed + butler_core::wall_clock::MAX_WAIT_SLICE + Duration::from_secs(5);
     let started = Instant::now();
-    tokio::time::timeout_at(deadline.into(), async {
+    let recovery = tokio::time::timeout_at(deadline.into(), async {
         while !runs(&s)
             .await?
             .iter()
@@ -470,7 +435,19 @@ async fn sched_14_failed_dispatch_retries_without_notification() -> Result<(), H
         Ok::<_, HarnessError>(())
     })
     .await
-    .map_err(|_| HarnessError("scheduler did not recover without notification".into()))??;
+    .map_err(|_| HarnessError("scheduler did not recover without notification".into()))
+    .and_then(|result| result);
+    if recovery.is_err() {
+        eprintln!(
+            "SCHED-14 diagnostics: {:?}",
+            scheduler_diagnostics(&s).await
+        );
+        let probe =
+            s.gw.patch("/automations/anchored", json!({"title":"Writer probe"}))
+                .await;
+        eprintln!("SCHED-14 writer probe: {probe:?}");
+    }
+    recovery?;
     eprintln!(
         "SCHED-14 unnotified_retry_ms={}",
         started.elapsed().as_millis()
