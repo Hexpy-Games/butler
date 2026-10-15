@@ -56,6 +56,15 @@ async fn start(
     master: &str,
     verified: bool,
 ) -> Result<(Scenario, Arc<Stub>, tokio::task::JoinHandle<()>), HarnessError> {
+    start_with(ttl, master, verified, &[]).await
+}
+
+async fn start_with(
+    ttl: &str,
+    master: &str,
+    verified: bool,
+    env: &[(&str, &str)],
+) -> Result<(Scenario, Arc<Stub>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let base = format!("http://{}/v1", listener.local_addr()?);
     let stub = Arc::new(Stub::default());
@@ -68,7 +77,7 @@ async fn start(
     let server = tokio::spawn(async move {
         let _ = axum::serve(listener, app).await;
     });
-    let setup = Setup::new("ANTHROPIC-CACHE")?
+    let mut setup = Setup::new("ANTHROPIC-CACHE")?
         .env("BUTLER_ANTHROPIC_BASE_URL", &base)
         .env("BUTLER_ANTHROPIC_CACHE_TTL", ttl)
         .env("BUTLER_ANTHROPIC_PROMPT_CACHE", master)
@@ -81,6 +90,9 @@ async fn start(
             },
         )
         .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1");
+    for (key, value) in env {
+        setup = setup.env(key, *value);
+    }
     std::fs::write(
         setup.sandbox.data.join("cache-input.txt"),
         "complete cache tool fixture",
