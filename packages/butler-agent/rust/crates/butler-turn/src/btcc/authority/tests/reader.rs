@@ -66,13 +66,14 @@ pub(super) async fn committed_reads(
                 ),
                 format!("{permissions:?}")
             );
-            assert!(authority.list("session".into()).await.unwrap().is_empty());
-            assert!(
+            let pending = authority.list("session".into()).await.unwrap();
+            assert_eq!(pending.len(), 0, "{pending:?}");
+            assert_eq!(
                 authority
                     .attention_owners(vec!["session".into()])
                     .await
-                    .unwrap()
-                    .is_empty()
+                    .unwrap(),
+                Vec::<String>::new()
             );
         }
     })

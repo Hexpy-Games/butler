@@ -2,10 +2,7 @@
 use butler_e2e::e2e::{HarnessError, scenario::Scenario};
 use rusqlite::Connection;
 
-#[path = "../../support/btcc_scale.rs"]
-mod btcc;
-#[path = "../../support/transcript_scale.rs"]
-mod transcripts;
+use crate::{btcc_scale as btcc, transcript_scale as transcripts};
 
 #[path = "active_transcript.rs"]
 mod active;

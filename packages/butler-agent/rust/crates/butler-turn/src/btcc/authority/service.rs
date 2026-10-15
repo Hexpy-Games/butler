@@ -123,6 +123,10 @@ impl PrincipalAuthority {
             .await
     }
     /// Sessions with turns waiting on an authority decision.
+    #[expect(
+        clippy::redundant_closure_for_method_calls,
+        reason = "the method pointer fixes the reader lifetime and fails in_read's higher-ranked bound"
+    )]
     pub async fn waiting_source_sessions(&self) -> AuthorityResult<Vec<String>> {
         self.in_read(|repo| repo.waiting_source_sessions()).await
     }

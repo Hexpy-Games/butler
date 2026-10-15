@@ -22,13 +22,13 @@ pub(crate) fn seed_owner_scale(db: &Connection, blob_bytes: usize) {
 pub(crate) fn seed_scale(db: &Connection, chats: u32, turns: u32, blob_bytes: usize) {
     db.execute_batch(&format!(
         "PRAGMA synchronous=OFF; BEGIN;
-         WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<{}-1)
+         WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<{chats}-1)
          INSERT INTO chats(id,title,kind,pinned,archived,created_at,updated_at)
            SELECT 'perf-c'||i,'Chat '||i,'chat',0,0,'2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z' FROM n;
-         WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<{}-1)
+         WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<{turns}-1)
          INSERT INTO turns(id,chat_id,state,safe_status_label,created_at,updated_at)
-           SELECT 'perf-t'||i,'perf-c'||(i%{}),'delivered','Delivered',
-                  '2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z' FROM n;", chats, turns, chats
+           SELECT 'perf-t'||i,'perf-c'||(i%{chats}),'delivered','Delivered',
+                  '2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z' FROM n;"
     ))
     .unwrap();
     seed_events(db, chats, turns, blob_bytes);
