@@ -1,15 +1,17 @@
-# Dev-only desktop acceptance runner. Installed by prepare-windows-sandbox-harness.ps1.
-param([Parameter(Mandatory=$true)][string]$Manifest, [ValidateSet('all','normal','timeout','agent-kill')][string]$WfpCase='all')
+# Dev-only desktop acceptance runner. Copied by prepare-windows-sandbox-harness.ps1.
+param([Parameter(Mandatory=$true)][string]$Manifest, [string]$Bundle, [ValidateSet('all','normal','timeout','agent-kill')][string]$WfpCase='all')
 $ErrorActionPreference = 'Stop'
 $Manifest = (Resolve-Path -LiteralPath $Manifest).Path
-$bundle = Split-Path -Parent $Manifest
+if (!$Bundle) { $Bundle = Split-Path -Parent $Manifest }
+$bundle = (Resolve-Path -LiteralPath $Bundle).Path
+. (Join-Path $PSScriptRoot 'bundle-common.ps1')
 $pins = Get-Content -Raw $Manifest | ConvertFrom-Json
 $resultRoot = Join-Path $env:LOCALAPPDATA 'Butler\e2e-results'
 $suffix = if ($WfpCase -eq 'all') { '' } else { '.wfp-' + $WfpCase }
 $resultFile = Join-Path $resultRoot ($pins.revision + $suffix + '.json')
 $diagnostic = Join-Path $resultRoot ($pins.revision + '.diagnostic.json')
-$result = @{ diagnostic=$diagnostic; revision=$pins.revision; status='FAIL'; probe=$null; desktop=$null; testExit=$null }
-$profile = Join-Path $bundle ('tmp-' + [guid]::NewGuid().ToString('N').Substring(0,8))
+$result = @{ startedUtc=[DateTime]::UtcNow.ToString('o'); diagnostic=$diagnostic; revision=$pins.revision; status='FAIL'; probe=$null; desktop=$null; testExit=$null }
+$profile = Join-Path ([IO.Path]::GetTempPath()) ('b-' + [guid]::NewGuid().ToString('N').Substring(0,8))
 $installedApp = Join-Path $env:LOCALAPPDATA 'butler-app\Butler.exe'
 $script:installedProtocolHash = $null
 $before = $null
@@ -19,12 +21,7 @@ $result.rows = @(0..16 | ForEach-Object {
 })
 
 try {
-    foreach ($pin in $pins.binaries) {
-        $path = Join-Path $bundle $pin.name
-        if ((Get-FileHash -Algorithm SHA256 $path).Hash.ToLowerInvariant() -ne $pin.sha256) {
-            throw ('binary_hash_mismatch: ' + $pin.name)
-        }
-    }
+    $null = Read-BundlePins $Manifest $bundle $pins.revision
     . (Join-Path $bundle 'windows-host-snapshot.ps1')
     # whoami supplies the integrity SID; refuse anything other than Medium IL.
     $groups = (& whoami /groups | Out-String)
@@ -32,23 +29,7 @@ try {
         $result.status = 'REFUSED'
         throw 'medium_integrity_required'
     }
-    New-Item -ItemType Directory -Force $profile | Out-Null
-    foreach ($tool in @(@('CARGO_HOME','.cargo'), @('RUSTUP_HOME','.rustup'))) {
-        if (![Environment]::GetEnvironmentVariable($tool[0])) {
-            $path = Join-Path $env:USERPROFILE $tool[1]
-            if (Test-Path -LiteralPath $path -PathType Container) {
-                [Environment]::SetEnvironmentVariable($tool[0], $path, 'Process')
-            }
-        }
-    }
-    $env:HOME = Join-Path $profile 'home'
-    $env:USERPROFILE = $env:HOME
-    $env:BUTLER_DATA = Join-Path $profile 'data'
-    $env:APPDATA = Join-Path $profile 'roaming'
-    $env:LOCALAPPDATA = Join-Path $profile 'local'
-    $env:TEMP = Join-Path $profile 'temp'
-    $env:TMP = $env:TEMP
-    New-Item -ItemType Directory -Force $env:HOME,$env:BUTLER_DATA,$env:APPDATA,$env:LOCALAPPDATA,$env:TEMP | Out-Null
+    Set-BundleEnvironment $bundle $profile
     Add-Type -TypeDefinition (Get-Content -Raw (Join-Path $bundle 'windows-registry-snapshot.cs'))
     if (Test-Path -LiteralPath $installedApp -PathType Leaf) {
         $script:installedProtocolHash = InstalledProtocolHash $installedApp
@@ -185,14 +166,6 @@ public static class ButlerDesktop {
     } else { $result.rows += @{row=16;status='FAIL';reason='ssh_evidence_missing'} }
     if (@($result.rows | Where-Object { $_.status -eq 'FAIL' -and ($WfpCase -eq 'all' -or $_.reason -ne 'not_run') }).Count -eq 0) { $result.status='PASS' }
     $result.qualification = 'Row 13 requires owner admin WFP comparison'
-    Write-Host 'Owner only: open Administrator PowerShell for snapshots; run each test command in a separate NORMAL desktop PowerShell.'
-    Write-Host ('$wfp = "' + $resultRoot + '\' + $pins.revision + '.wfp"; New-Item -ItemType Directory -Force $wfp')
-    foreach ($phase in @('normal','timeout','agent-kill')) {
-        Write-Host ('ADMIN: netsh wfp show filters file="$wfp\before-' + $phase + '.xml"')
-        Write-Host ('NORMAL: powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -Manifest "' + $Manifest + '" -WfpCase ' + $phase)
-        Write-Host ('ADMIN: netsh wfp show filters file="$wfp\after-' + $phase + '.xml"')
-    }
-    Write-Host 'ADMIN: foreach ($phase in @("normal","timeout","agent-kill")) { $a=[xml](Get-Content -Raw "$wfp\before-$phase.xml"); $b=[xml](Get-Content -Raw "$wfp\after-$phase.xml"); $x=@($a.SelectNodes("//filters/item")); $y=@($b.SelectNodes("//filters/item")); "$phase before=$($x.Count) after=$($y.Count)"; if ($x.Count -eq 0 -or $x.Count -ne $y.Count) { throw "WFP count mismatch or invalid XML" } }'
 
 } catch {
     $result.error = $_.Exception.Message

@@ -1,6 +1,7 @@
 //! MXC acceptance matrix, executed by the pinned Medium-IL desktop bundle.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
 mod boundaries;
+mod bundle;
 mod language;
 mod latency;
 mod ledger;
