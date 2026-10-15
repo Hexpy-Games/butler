@@ -88,6 +88,8 @@ export function removeWindowsOperationalState({
   }),
 } = {}) {
   const removed = [];
+  // Without an accepted data root (`null`) a refused folder is left untouched.
+  if (!butlerData) return removed;
   for (const path of windowsOperationalCleanupPaths(butlerData)) {
     removePath(path);
     removed.push(path);

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -19,6 +19,7 @@ import {
   writeAppForegroundStartupFailure,
   writeAppForegroundStartupProgress,
 } from "../../packages/butler-app/client/electron/app-foreground-lifecycle.mjs";
+import { resolveAppDataRoots } from "../../packages/butler-app/client/electron/app-legacy-data.mjs";
 
 const roots: string[] = [];
 
@@ -206,6 +207,29 @@ describe("App foreground lifecycle", () => {
     expect(() => readFileSync(appForegroundStartupFailurePath(root), "utf8"))
       .toThrow();
     rmSync(root, { recursive: true, force: true });
+  });
+
+  // test-category: security
+  test("keeps the fatal-startup record only in an accepted data folder", () => {
+    const root = mkdtempSync(join(tmpdir(), "butler-foreground-refused-"));
+    roots.push(root);
+    mkdirSync(join(root, "app-server"));
+    writeFileSync(join(root, "app-server/butler-client.sqlite"), "legacy\n");
+    const tree = () => readdirSync(root, { recursive: true }).map(String).sort();
+    const before = tree();
+    const refused = resolveAppDataRoots({ BUTLER_DATA: root }, "/unused-home");
+    expect(refused).toEqual({ dataRoot: root, legacyDataBlocked: true, writableRoot: null });
+    expect(writeAppForegroundStartupFailure(refused.writableRoot, { supervisorPhase: "idle" }))
+      .toMatchObject({ error_code: "app_startup_failed", raw_text_included: false });
+    expect(tree()).toEqual(before);
+
+    mkdirSync(join(root, "agent-runtime"));
+    writeFileSync(join(root, "agent-runtime/btcc.sqlite"), "");
+    const accepted = resolveAppDataRoots({ BUTLER_DATA: root }, "/unused-home");
+    expect(accepted.writableRoot).toBe(root);
+    writeAppForegroundStartupFailure(accepted.writableRoot, { supervisorPhase: "failed" });
+    expect(existsSync(appForegroundStartupFailurePath(root))).toBeTrue();
+    expect(resolveAppDataRoots({ BUTLER_DATA: "" }, root).dataRoot).toBe(join(root, ".butler"));
   });
 
   // test-category: format-pin
