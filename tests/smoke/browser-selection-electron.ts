@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 /** S5: real overlay input → trusted App renderer drops, with isolated stub runtime. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -56,7 +57,7 @@ try {
   assert.ok(!isPickShortcut({ type: "keyDown", key: "S", shift: true, meta: true }, "win32"));
   const other = await app.gateway.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "Pick destination" }) });
   await app.page.reload(); await shellReady(app, "en");
-  await app.click("General");
+  await app.click(getAppCopy("en-US").space.general);
   await app.page.expression("window.dropPointerProof=[];window.addEventListener('pointerup',e=>window.dropPointerProof.push({x:e.clientX,y:e.clientY,hit:document.elementFromPoint(e.clientX,e.clientY)?.outerHTML?.slice(0,400),invalid:document.querySelector('[data-slot=drag-preview]')?.dataset.invalid}),true);window.selectionDragProof=[];window.butlerBrowser.onElementDrag(e=>window.selectionDragProof.push({phase:e.phase,count:e.elements?.length,x:e.x,y:e.y}));");
   await app.call("open");
   tab = await app.call<string>("create", { owner: "conversation:general", profile: "signed_out", url: app.url });
@@ -94,7 +95,7 @@ try {
   await app.click("Pick destination");
   await waitBrowser(() => app.page.expression("document.querySelectorAll('[data-slot=element-chip]').length===2"), "destination chips survive reload");
   await waitBrowser(() => app.page.expression("(()=>{const images=[...document.querySelectorAll('[data-slot=element-chip] img')];return images.length===2 && images.every(img=>img.complete && img.naturalWidth>0)})()"), "restored chip images loaded");
-  await app.click("General"); await app.call("activate", { id: tab }); await nativeAligned(app);
+  await app.click(getAppCopy("en-US").space.general); await app.call("activate", { id: tab }); await nativeAligned(app);
   await drag('[data-test-class="library-entry"]');
   await waitBrowser(async () => (await app.gateway.api<{ items: unknown[] }>("/library?kind=scrap")).items.length === 2, "Library drop saves scraps");
   await drag('[data-test-class="composer-card"]');
