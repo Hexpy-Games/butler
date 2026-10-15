@@ -10,7 +10,7 @@ use uuid::Uuid;
 use super::contracts::{CommitObserver, CommittedFile, GuardedPath, MutationFailure};
 use super::{diff, failure};
 
-mod timing;
+use super::super::file_timing::Timing;
 
 pub(super) struct Snapshot {
     pub path: GuardedPath,
@@ -51,7 +51,13 @@ pub(super) fn observe(path: GuardedPath, parent: Parent) -> Result<Snapshot, Mut
     let metadata = match fs::symlink_metadata(&path.absolute) {
         Ok(metadata) => Some(metadata),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-        Err(error) => return Err(failure::io(Some(path.public.clone()), &error)),
+        Err(error) => {
+            return Err(failure::io(
+                "observe_metadata",
+                Some(path.public.clone()),
+                &error,
+            ));
+        }
     };
     let Some(metadata) = metadata else {
         return Ok(Snapshot {
@@ -68,8 +74,8 @@ pub(super) fn observe(path: GuardedPath, parent: Parent) -> Result<Snapshot, Mut
             "target_not_regular_file",
         ));
     }
-    let bytes =
-        fs::read(&path.absolute).map_err(|error| failure::io(Some(path.public.clone()), &error))?;
+    let bytes = fs::read(&path.absolute)
+        .map_err(|error| failure::io("observe_read", Some(path.public.clone()), &error))?;
     let mode = secure_fs::file_mode(&metadata);
     Ok(Snapshot {
         sha256: Some(sha256(&bytes)),
@@ -211,6 +217,7 @@ pub(super) fn ensure_existing_parent(path: &GuardedPath) -> Result<(), MutationF
 }
 
 fn parent_failure(path: &str, error: &std::io::Error) -> MutationFailure {
+    failure::record_io("parent", error);
     let kind = match error.kind() {
         std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory => {
             "parent_directory_missing"
@@ -300,13 +307,14 @@ fn atomic_replace(
     temporary: &Path,
     observer: &dyn CommitObserver,
 ) -> Result<bool, MutationFailure> {
-    let timing = timing::Timing::new();
+    let timing = Timing::new("file_replace");
     write_temporary(prepared, temporary, observer)
-        .map_err(|error| mutation_io(prepared, &error))?;
+        .map_err(|error| mutation_io(prepared, temporary, &error))?;
     timing.mark("temporary_synced");
     verify_unchanged(prepared)?;
     timing.mark("unchanged_verified");
-    publish_temporary(prepared, temporary, observer).map_err(|error| mutation_io(prepared, &error))
+    publish_temporary(prepared, temporary, observer)
+        .map_err(|error| mutation_io(prepared, temporary, &error))
 }
 
 fn write_temporary(
@@ -319,12 +327,17 @@ fn write_temporary(
     if let Some(mode) = prepared.before.mode {
         secure_fs::creation_mode(&mut options, mode);
     }
-    let timing = timing::Timing::new();
-    let mut file = options.open(temporary)?;
+    let timing = Timing::new("file_temporary");
+    let mut file = options
+        .open(temporary)
+        .map_err(|error| failure::inspect_io("temporary_open", error))?;
     timing.mark("temporary_opened");
-    file.write_all(&prepared.data)?;
+    file.write_all(&prepared.data)
+        .map_err(|error| failure::inspect_io("temporary_write", error))?;
     timing.mark("temporary_written");
-    let result = observer.sync_temporary(&file);
+    let result = observer
+        .sync_temporary(&file)
+        .map_err(|error| failure::inspect_io("temporary_sync", error));
     timing.mark("fsync_finished");
     result
 }
@@ -335,7 +348,8 @@ fn publish_temporary(
     observer: &dyn CommitObserver,
 ) -> std::io::Result<bool> {
     if prepared.before.exists {
-        fs::rename(temporary, &prepared.before.path.absolute)?;
+        fs::rename(temporary, &prepared.before.path.absolute)
+            .map_err(|error| failure::inspect_io("rename", error))?;
         Ok(false)
     } else {
         match observer.link(temporary, &prepared.before.path.absolute) {
@@ -350,14 +364,14 @@ fn publish_temporary(
                 destination.write_all(&prepared.data)?;
                 destination.sync_all()?;
             }
-            Err(error) => return Err(error),
+            Err(error) => return Err(failure::inspect_io("link", error)),
         }
         observer.after_link(temporary);
         Ok(fs::remove_file(temporary).is_err())
     }
 }
 
-fn mutation_io(prepared: &Prepared, error: &std::io::Error) -> MutationFailure {
+fn mutation_io(prepared: &Prepared, temporary: &Path, error: &std::io::Error) -> MutationFailure {
     let code = if !prepared.before.exists && error.kind() == std::io::ErrorKind::AlreadyExists {
         "external_change_conflict"
     } else if error.kind() == std::io::ErrorKind::PermissionDenied {
@@ -366,6 +380,8 @@ fn mutation_io(prepared: &Prepared, error: &std::io::Error) -> MutationFailure {
         "io_error"
     };
     failure::record_io("publication", error);
+    failure::attributes("destination", &prepared.before.path.absolute);
+    failure::attributes("temporary", temporary);
     failure::new(Some(prepared.before.path.public.clone()), code)
 }
 

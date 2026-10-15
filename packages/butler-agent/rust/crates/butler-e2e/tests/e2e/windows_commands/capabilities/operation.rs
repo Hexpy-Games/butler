@@ -173,6 +173,14 @@ pub(super) async fn operation(
         }
     }
     diagnostic_logs(s, script);
+    // Keep discovery's own counts and elapsed time even when the end-to-end
+    // budget fails before verify() can inspect the complete result.
+    if case.tool == "list_files" {
+        eprintln!(
+            "WINDOWS-BASIC discovery metrics={} truncated={} stopped_by={}",
+            output["metrics"], output["truncated"], output["stopped_by"]
+        );
+    }
     let budget = Duration::from_secs(if case.refused { 1 } else { 5 });
     butler_e2e::assert_wall_clock_budget!(elapsed, budget, case.tool);
     if case.refused {
