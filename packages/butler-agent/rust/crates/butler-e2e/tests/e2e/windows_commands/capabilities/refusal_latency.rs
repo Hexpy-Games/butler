@@ -23,7 +23,7 @@ async fn full_access_lexical_refusals_keep_complete_results_without_shell_work()
 async fn sample(access: Access) -> Result<(), HarnessError> {
     let (mut s, chat, script, server) = setup(access).await?;
     let history = scale::prepare(&mut s, &chat).await?;
-    let initial_logs = s.agent.logs().lines().count();
+    let initial_logs = s.agent.current_logs().await?.lines().count();
     let control = transport_control::Control::start(&s.gw)?;
     // POSIX read observations use the OS sandbox; mutation admission exercises
     // the same lexical guard that Windows uses for registered read commands.
@@ -75,7 +75,8 @@ async fn sample(access: Access) -> Result<(), HarnessError> {
     }
     let logs = s
         .agent
-        .logs()
+        .current_logs()
+        .await?
         .lines()
         .skip(initial_logs)
         .collect::<Vec<_>>()
@@ -98,6 +99,13 @@ async fn sample(access: Access) -> Result<(), HarnessError> {
         timings[SAMPLES - 1]
     );
     control.finish().await?;
+    if std::env::var("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref() == Ok("1") {
+        eprintln!("REFUSAL-STORAGE-TRACE-BEGIN");
+        for line in logs.lines().filter(|line| line.starts_with("command_")) {
+            eprintln!("{line}");
+        }
+        eprintln!("REFUSAL-STORAGE-TRACE-END");
+    }
     scale::assert_complete(&s, history).await?;
     // Every sample must still meet the one-second bound; report all N=20 first.
     butler_e2e::assert_wall_clock_budget!(
