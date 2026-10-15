@@ -391,15 +391,8 @@ async fn wake_scheduler(s: &Scenario) -> Result<(), HarnessError> {
     Ok(())
 }
 
-async fn wait_scheduler_reads(
-    s: &Scenario,
-    expected: u64,
-    previous_read_observed: Instant,
-) -> Result<Instant, HarnessError> {
-    // The 5s covers failed dispatch run time plus poll jitter and bounds "one retry per slice".
-    let deadline =
-        previous_read_observed + butler_core::wall_clock::MAX_WAIT_SLICE + Duration::from_secs(5);
-    let result = tokio::time::timeout_at(deadline.into(), async {
+async fn wait_scheduler_reads(s: &Scenario, expected: u64) -> Result<Instant, HarnessError> {
+    let result = tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             if scheduler_reads(s).await? >= expected {
                 return Ok::<_, HarnessError>(Instant::now());
@@ -410,7 +403,7 @@ async fn wait_scheduler_reads(
     .await
     .unwrap_or_else(|_| {
         Err(HarnessError(
-            "scheduler did not retry the failed dispatch".into(),
+            "scheduler did not retry the failed dispatch after wake".into(),
         ))
     });
     if result.is_err() {
@@ -440,44 +433,55 @@ async fn sched_14_failed_dispatch_retries_without_notification() -> Result<(), H
     error_event_fault(&s.sandbox.data, true).await?;
     jump(address.clone(), "2026-10-13T22:00:00.000Z").await?;
     let before = scheduler_reads(&s).await?;
-    let observed = Instant::now();
     wake_scheduler(&s).await?;
-    wait_scheduler_reads(&s, before + 1, observed).await?;
+    wait_scheduler_reads(&s, before + 1).await?;
     assert_eq!(scheduler_errors(&s.sandbox.data).await?, 0);
     assert_eq!(runs(&s).await?, [] as [Value; 0]);
     error_event_fault(&s.sandbox.data, false).await?;
     wake_scheduler(&s).await?;
-    let previous_read_observed =
-        tokio::time::timeout(butler_core::wall_clock::MAX_WAIT_SLICE, async {
-            while scheduler_errors(&s.sandbox.data).await? == 0 {
-                tokio::time::sleep(Duration::from_millis(50)).await;
-            }
-            Ok::<_, HarnessError>(Instant::now())
-        })
-        .await
-        .map_err(|_| HarnessError("scheduler did not observe the dispatch failure".into()))??;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while scheduler_errors(&s.sandbox.data).await? == 0 {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        Ok::<_, HarnessError>(Instant::now())
+    })
+    .await
+    .map_err(|_| HarnessError("scheduler did not observe the dispatch failure".into()))??;
     assert_eq!(scheduler_errors(&s.sandbox.data).await?, 1);
-    // Only this step waits a natural slice: no notification is sent while the
-    // dispatch fault remains installed. Each new lookup follows a failed retry.
+    // A notified retry during the same failure streak must not emit another error.
     let last = scheduler_reads(&s).await?;
-    let started = Instant::now();
-    wait_scheduler_reads(&s, last + 1, previous_read_observed).await?;
-    assert_eq!(scheduler_reads(&s).await?, last + 1);
+    wake_scheduler(&s).await?;
+    let previous_read_observed = wait_scheduler_reads(&s, last + 1).await?;
     assert_eq!(scheduler_errors(&s.sandbox.data).await?, 1);
     assert_eq!(runs(&s).await?, [] as [Value; 0]);
+    dispatch_fault(&s.sandbox.data, false).await?;
+    // No wake: the natural retry must dispatch and finish within one slice plus jitter.
+    let deadline =
+        previous_read_observed + butler_core::wall_clock::MAX_WAIT_SLICE + Duration::from_secs(5);
+    let started = Instant::now();
+    tokio::time::timeout_at(deadline.into(), async {
+        while !runs(&s)
+            .await?
+            .iter()
+            .any(|run| run["state"] == "succeeded")
+        {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        Ok::<_, HarnessError>(())
+    })
+    .await
+    .map_err(|_| HarnessError("scheduler did not recover without notification".into()))??;
     eprintln!(
         "SCHED-14 unnotified_retry_ms={}",
         started.elapsed().as_millis()
     );
-    dispatch_fault(&s.sandbox.data, false).await?;
-    wake_scheduler(&s).await?;
     assert_next(&s, "2026-10-14T22:00:00.000Z").await?;
     assert_eq!(runs(&s).await?.len(), 1);
     assert_eq!(scheduler_errors(&s.sandbox.data).await?, 1);
     dispatch_fault(&s.sandbox.data, true).await?;
     jump(address, "2026-10-14T22:00:00.000Z").await?;
     wake_scheduler(&s).await?;
-    tokio::time::timeout(butler_core::wall_clock::MAX_WAIT_SLICE, async {
+    tokio::time::timeout(Duration::from_secs(10), async {
         while scheduler_errors(&s.sandbox.data).await? < 2 {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
