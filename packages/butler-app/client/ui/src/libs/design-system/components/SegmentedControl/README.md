@@ -10,7 +10,7 @@ SegmentedControl is a compact single-choice radiogroup for a secondary choice in
 | `options` | `{ value, label, disabled? }[]` |
 | `value`, `onValueChange` | controlled selection |
 | `ariaLabel` | accessible group name |
-| `size` | `default` (30px track, 24px thumb, 3px inset), `sm` (28px track, 24px thumb, 2px inset); on touch the default track is 44px |
+| `size` | `default` (30px track, 24px thumb, 3px inset), `sm` (28px track, 24px thumb, 2px inset); on touch the default track is 44px and each segment fills it (a 44px target; the thumb keeps the 3px inset) |
 
 ## How to use this component
 
