@@ -7,7 +7,8 @@ jobs = json.loads(os.environ['RESULTS'])
 assert jobs['changes']['result'] == 'success', jobs
 outputs = jobs['changes']['outputs']
 for name, groups in json.loads(os.environ['CHECK_GROUPS']).items():
-    enabled = json.loads(outputs['jobs'])[name] if outputs.get('tier') == 'integration' else any(outputs[group] == 'true' for group in groups)
+    # "jobs": the changes job's per-job smoke policy also selects this check.
+    enabled = json.loads(outputs['jobs'])[name] if outputs.get('tier') == 'integration' or groups == 'jobs' else any(outputs[group] == 'true' for group in groups)
     expected = 'success' if enabled else 'skipped'
     assert jobs[name]['result'] == expected, f'{name}: {jobs[name]["result"]}, expected {expected}'
 print('All selected checks passed.')

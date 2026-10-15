@@ -53,6 +53,27 @@ class Paths(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(changes.categories(path), expected)
 
+    # test-category: pure-logic
+    def test_windows_native_smoke_follows_rust_and_windows_inputs_only(self):
+        for path, expected in {
+            'packages/butler-agent/rust/crates/butler-core/src/lib.rs': True,
+            'packages/butler-agent/rust/Cargo.lock': True,
+            'deploy/windows-preview-quality.ps1': True,
+            '.github/workflows/windows-preview-smoke.yml': True,
+            '.github/actions/build-windows-debug-agent/action.yml': True,
+            '.github/actions/rust-agent-setup/action.yml': True,
+            '.github/scripts/prepare-windows-zstd.py': True,
+            '.github/workflows/e2e.yml': False,
+            '.github/scripts/ci-changes.py': False,
+            '.github/pull_request_template.md': False,
+            'deploy/install.sh': False,
+            'packages/butler-app/client/electron/src/main.ts': False,
+            'packages/butler-agent/rust/docs/install-layout.md': False,
+            'README.md': False,
+        }.items():
+            with self.subTest(path=path):
+                self.assertEqual(changes.windows_native(path), expected)
+
     # test-category: security
     def test_every_locked_license_input_selects_its_validator(self):
         self.assertGreater(len(changes.LICENSE_INPUTS), 20)
@@ -143,6 +164,31 @@ class Trust(unittest.TestCase):
                 self.assertIn('rust=' + str(full).lower(), output)
                 self.assertIn('ui=true', output)
 
+    # test-category: pure-logic
+    def test_windows_preview_installers_never_run_on_pull_requests(self):
+        rust, workflow = 'packages/butler-agent/rust/crates/butler-core/src/lib.rs', '.github/workflows/e2e.yml'
+        pr = {'pull_request': {'number': 12, 'base': {'sha': 'base'}}}
+        none = dict.fromkeys(['build', 'stub', 'release', 'hosted'], False)
+        native = dict(none, stub=True, hosted=True)
+        for event_name, ref, event, paths, expected in [
+            ('pull_request', 'refs/pull/12/merge', pr, ['docs/notes.md', workflow], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['deploy/install.sh', 'packages/butler-npm/index.js'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, [rust], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['deploy/windows-preview-smoke.ps1'], native),
+            ('workflow_dispatch', 'refs/heads/main', {}, [], dict.fromkeys(none, True)),
+        ]:
+            with self.subTest(event=event_name, paths=paths), tempfile.TemporaryDirectory() as temporary:
+                env = dict(GITHUB_EVENT_NAME=event_name, GITHUB_REF=ref, GITHUB_REPOSITORY='owner/repo',
+                           GITHUB_RUN_ID='2', GITHUB_OUTPUT=str(Path(temporary) / 'output'),
+                           GITHUB_STEP_SUMMARY=str(Path(temporary) / 'summary'))
+                with patch.dict(os.environ, env), patch.object(changes, 'command', return_value='checkout'), \
+                     patch.object(changes, 'changed', return_value=paths), \
+                     patch.object(changes, 'previous', return_value=iter([])), \
+                     patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
+                    changes.select(event, 'windows-preview-smoke.yml')
+                output = dict(line.split('=', 1) for line in (Path(temporary) / 'output').read_text().splitlines())
+                self.assertEqual(json.loads(output['jobs']), expected)
+
     # test-category: security
     def test_invalid_candidate_fails_closed(self):
         for ref in ['refs/heads/release/latest', 'refs/heads/release/0.1.0-beta.1', 'refs/heads/release/0.1.0-preview.11/extra']:
@@ -202,6 +248,16 @@ class Trust(unittest.TestCase):
                 env = dict(os.environ, RESULTS=json.dumps(jobs), CHECK_GROUPS='{"ui":["ui"]}')
                 actual = subprocess.run(['python3', ROOT / 'ci-check-selected.py'], env=env, capture_output=True)
                 self.assertEqual(actual.returncode == 0, result == ('success' if enabled == 'true' else 'skipped'))
+
+    # test-category: security
+    def test_gate_can_follow_the_selected_job_policy(self):
+        for selected in [True, False]:
+            for result in ['success', 'failure', 'cancelled', 'skipped']:
+                outputs = {'tier': 'smoke', 'package': 'true', 'jobs': json.dumps({'build': selected})}
+                jobs = dict(changes=dict(result='success', outputs=outputs), build=dict(result=result))
+                env = dict(os.environ, RESULTS=json.dumps(jobs), CHECK_GROUPS='{"build":"jobs"}')
+                actual = subprocess.run(['python3', ROOT / 'ci-check-selected.py'], env=env, capture_output=True)
+                self.assertEqual(actual.returncode == 0, result == ('success' if selected else 'skipped'))
 
     # test-category: security
     def test_hash_match_required_even_with_prior_success(self):
