@@ -5,17 +5,17 @@ use super::{CommandError, GuidedAccess, GuidedCommandInput, GuidedCommandOutput}
 
 pub(super) struct Prepared {
     paths: Vec<PathBuf>,
-    _lease: Option<butler_platform::command_sandbox::ProjectWritePreparation>,
+    lease: Option<butler_platform::command_sandbox::ProjectWritePreparation>,
 }
 
 impl Prepared {
     fn sweep(self, root: &Path, data: &Path) -> std::io::Result<Vec<PathBuf>> {
         let result = butler_platform::command_sandbox::sweep_new_secrets(root, &self.paths, data);
-        if let Some(lease) = self._lease {
+        if let Some(lease) = self.lease {
             lease.release();
         }
         if let Err(error) = butler_platform::command_sandbox::reconcile_project_write(data) {
-            tracing::warn!(%error, "Project write reconciliation failed");
+            eprintln!("Project write reconciliation failed: {error}");
         }
         result
     }
@@ -32,7 +32,7 @@ pub(super) async fn before_run(input: &GuidedCommandInput) -> Result<Prepared, C
     if input.access != GuidedAccess::ProjectWrite {
         return Ok(Prepared {
             paths: Vec::new(),
-            _lease: None,
+            lease: None,
         });
     }
     let root = input.workspace_root.clone();
@@ -42,7 +42,7 @@ pub(super) async fn before_run(input: &GuidedCommandInput) -> Result<Prepared, C
         let paths = butler_platform::command_sandbox::discover_project_secrets(&root)?;
         Ok(Prepared {
             paths,
-            _lease: Some(lease),
+            lease: Some(lease),
         })
     })
     .await

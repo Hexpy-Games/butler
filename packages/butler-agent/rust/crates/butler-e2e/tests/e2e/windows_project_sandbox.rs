@@ -67,6 +67,7 @@ async fn filesystem_preparation_normalizes_search_separators() -> Result<(), Har
     let invocation = prepare(&env).map_err(|error| std::io::Error::other(error.to_string()))?;
     assert!(invocation.arguments.iter().any(|a| a == "--policy-file"));
     assert!(!root.join("made.txt").exists());
+    prepared_scratch_is_scoped_and_released(&invocation, &setup.sandbox.data)?;
     env.insert("PATH".into(), format!("{}.", tools.display()));
     let error = prepare(&env).unwrap_err().to_string();
     assert!(
@@ -237,5 +238,63 @@ async fn probe_emits_loader_diagnostics() -> Result<(), HarnessError> {
         }
     }
     setup.sandbox.mark_success();
+    Ok(())
+}
+
+fn prepared_scratch_is_scoped_and_released(
+    invocation: &command_sandbox::Invocation,
+    data: &std::path::Path,
+) -> Result<(), HarnessError> {
+    let path = std::path::Path::new(&invocation.arguments[1]);
+    let policy: serde_json::Value = serde_json::from_slice(&std::fs::read(path)?)?;
+    let scratch = std::path::Path::new(
+        policy["scratch"]
+            .as_str()
+            .ok_or_else(|| std::io::Error::other("missing scratch"))?,
+    );
+    assert!(scratch.join("gitconfig").is_file());
+    assert!(scratch.join("npmrc").is_file());
+    let grants = policy["request"]["filesystem"]["readwritePaths"]
+        .as_array()
+        .ok_or_else(|| std::io::Error::other("missing grants"))?;
+    let parent = data
+        .join("tmp/project-write")
+        .display()
+        .to_string()
+        .to_lowercase();
+    assert!(!grants.iter().any(|grant| grant.as_str() == Some(&parent)));
+    assert!(
+        grants
+            .iter()
+            .any(|grant| grant.as_str() == Some(&scratch.display().to_string().to_lowercase()))
+    );
+    command_sandbox::cleanup_prepared_invocation(invocation)?;
+    assert!(!path.exists());
+    assert!(!scratch.exists());
+    reconciliation_continues_past_bad_entries(data, policy)?;
+    Ok(())
+}
+
+fn reconciliation_continues_past_bad_entries(
+    data: &std::path::Path,
+    mut policy: serde_json::Value,
+) -> Result<(), HarnessError> {
+    let drives = data.join("sandbox/drives");
+    std::fs::create_dir_all(drives.join("D.json"))?;
+    std::fs::write(drives.join("E.json"), "torn claim")?;
+    let policies = data.join("sandbox/policies");
+    std::fs::create_dir_all(policies.join("bad.json"))?;
+    let scratch = data.join("tmp/project-write/recovery");
+    std::fs::create_dir(&scratch)?;
+    policy["pid"] = json!(u32::MAX);
+    policy["started"] = json!(0);
+    policy["scratch"] = json!(scratch);
+    std::fs::write(policies.join("stale.json"), serde_json::to_vec(&policy)?)?;
+    command_sandbox::reconcile_project_write(data)?;
+    assert!(!drives.join("E.json").exists());
+    assert!(!policies.join("stale.json").exists());
+    assert!(!scratch.exists());
+    std::fs::remove_dir(drives.join("D.json"))?;
+    std::fs::remove_dir(policies.join("bad.json"))?;
     Ok(())
 }

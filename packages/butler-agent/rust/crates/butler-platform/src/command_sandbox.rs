@@ -4,7 +4,10 @@
 //! trampoline. Unsupported hosts keep exact-action approval behavior.
 
 mod denial;
-pub use denial::{isolation_failure, isolation_failure_exit, sandbox_denial};
+pub use denial::{
+    EXECUTION_TIMEOUT_EXIT, EXECUTION_TIMEOUT_MARKER, execution_timeout, execution_timeout_exit,
+    isolation_failure, isolation_failure_exit, sandbox_denial,
+};
 mod credentials;
 pub mod mxc_policy;
 mod project_secrets;
@@ -46,7 +49,7 @@ mod test_support;
 #[cfg(feature = "test-support")]
 pub use test_support::{
     UnixSocketProbe, linux_syscall_probe, linux_test_host, windows_prepare_project_write,
-    wsl_test_host,
+    windows_recovery_contract, wsl_test_host,
 };
 
 mod host_capabilities;
@@ -324,4 +327,18 @@ pub fn project_mount_aliases(root: &Path) -> std::io::Result<Vec<std::path::Path
     return linux::project_mount_aliases(root);
     #[cfg(not(target_os = "linux"))]
     Ok(vec![root.to_path_buf()])
+}
+
+/// Releases per-command preparation after execution or when the helper never starts.
+/// Call off runtime workers; running helpers retain ownership of their files.
+pub fn cleanup_prepared_invocation(invocation: &Invocation) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        windows::mxc::prepare::cleanup_invocation(invocation)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = invocation;
+        Ok(())
+    }
 }

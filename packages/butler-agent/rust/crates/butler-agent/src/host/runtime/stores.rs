@@ -134,8 +134,9 @@ async fn open_btcc(
     let root = data_root.to_owned();
     let cancellation = stop.clone();
     let (bootstrap, correction) = tokio::task::spawn_blocking(move || {
-        butler_platform::command_sandbox::reconcile_project_write(&root)
-            .map_err(|e| error("sandbox_reconcile_failed", e))?;
+        if let Err(error) = butler_platform::command_sandbox::reconcile_project_write(&root) {
+            eprintln!("Sandbox startup reconciliation failed: {error}");
+        }
         let bootstrap = prepare_btcc_storage(&root, crate::host::build_info::current().version)
             .map_err(|e| error("storage_bootstrap_failed", e))?;
         timing.send_replace(super::startup_trace::Correction::Running(

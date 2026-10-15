@@ -142,11 +142,17 @@ pub(super) fn start_time(pid: u32) -> io::Result<Option<u64>> {
     let process =
         match winsafe::HPROCESS::OpenProcess(co::PROCESS::QUERY_LIMITED_INFORMATION, false, pid) {
             Ok(process) => process,
-            Err(e) if e == co::ERROR::INVALID_PARAMETER => return Ok(None),
-            Err(e) => return Err(io::Error::other(e)),
+            Err(error) => return inaccessible_process(error),
         };
     let (created, exited, _, _) = process.GetProcessTimes().map_err(io::Error::other)?;
     Ok((u64::from(exited) == 0).then(|| u64::from(created)))
+}
+pub(super) fn inaccessible_process(error: co::ERROR) -> io::Result<Option<u64>> {
+    if error == co::ERROR::INVALID_PARAMETER || error == co::ERROR::ACCESS_DENIED {
+        Ok(None)
+    } else {
+        Err(io::Error::other(error))
+    }
 }
 pub(in crate::command_sandbox) fn reconcile(data: &Path) -> io::Result<()> {
     let directory = data.join("sandbox/drives");
@@ -158,49 +164,69 @@ pub(in crate::command_sandbox) fn reconcile(data: &Path) -> io::Result<()> {
         Err(e) => return Err(e),
     };
     for item in entries {
-        let item = item?;
-        let name = item.file_name();
-        let name = name.to_string_lossy();
-        let bytes = name.as_bytes();
-        let Some(letter) = bytes.first().copied() else {
-            continue;
-        };
-        if bytes.len() != 6 || !name.ends_with(".json") || !(b'D'..=b'Z').contains(&letter) {
-            continue;
+        if let Err(error) = reconcile_entry(item) {
+            eprintln!("sandbox drive reconciliation failed: {error}");
         }
-        let bytes = match fs::read(item.path()) {
-            Ok(bytes) => bytes,
-            Err(error)
-                if error.raw_os_error() == Some(32) || error.kind() == io::ErrorKind::NotFound =>
-            {
-                continue;
-            }
-            Err(error) => return Err(error),
-        };
-        let entry: Entry = match serde_json::from_slice(&bytes) {
-            Ok(entry) => entry,
-            Err(_) => {
-                // An exclusive writer cannot be read mid-claim. A torn claim
-                // never reached subst; forget it without touching any mapping.
-                fs::remove_file(item.path())?;
-                continue;
-            }
-        };
-        if start_time(entry.pid)? == Some(entry.started) {
-            continue;
-        }
-        let drive = Drive {
-            letter: char::from(letter),
-            journal: item.path(),
-            entry,
-        };
-        drive.cleanup()?;
     }
     super::prepare::reconcile_policies(data)
+}
+
+fn reconcile_entry(item: io::Result<fs::DirEntry>) -> io::Result<()> {
+    let item = item?;
+    let name = item.file_name();
+    let name = name.to_string_lossy();
+    let bytes = name.as_bytes();
+    let Some(letter) = bytes.first().copied() else {
+        return Ok(());
+    };
+    if bytes.len() != 6 || !name.ends_with(".json") || !(b'D'..=b'Z').contains(&letter) {
+        return Ok(());
+    }
+    let bytes = match fs::read(item.path()) {
+        Ok(bytes) => bytes,
+        Err(error)
+            if error.raw_os_error() == Some(32) || error.kind() == io::ErrorKind::NotFound =>
+        {
+            return Ok(());
+        }
+        Err(error) => return Err(error),
+    };
+    let entry: Entry = match serde_json::from_slice(&bytes) {
+        Ok(entry) => entry,
+        Err(_) => {
+            // An exclusive writer cannot be read mid-claim. A torn claim
+            // never reached subst; forget it without touching any mapping.
+            fs::remove_file(item.path())?;
+            return Ok(());
+        }
+    };
+    if start_time(entry.pid)? == Some(entry.started) {
+        return Ok(());
+    }
+    let drive = Drive {
+        letter: char::from(letter),
+        journal: item.path(),
+        entry,
+    };
+    drive.cleanup()?;
+    Ok(())
 }
 
 pub(super) fn identity() -> io::Result<(u32, u64)> {
     let pid = std::process::id();
     let started = start_time(pid)?.ok_or_else(|| io::Error::other("helper_identity_missing"))?;
     Ok((pid, started))
+}
+
+#[cfg(feature = "test-support")]
+pub(in crate::command_sandbox) fn verify_inaccessible_process() {
+    assert!(matches!(
+        inaccessible_process(co::ERROR::ACCESS_DENIED),
+        Ok(None)
+    ));
+    assert!(matches!(
+        inaccessible_process(co::ERROR::INVALID_PARAMETER),
+        Ok(None)
+    ));
+    assert!(inaccessible_process(co::ERROR::INVALID_HANDLE).is_err());
 }

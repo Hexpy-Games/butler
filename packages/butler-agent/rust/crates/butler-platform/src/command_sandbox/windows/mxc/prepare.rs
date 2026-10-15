@@ -106,11 +106,10 @@ fn prepare(
     let timeout = environment::get(&env, "BUTLER_COMMAND_TIMEOUT_MS")
         .ok_or("timeout required")?
         .parse()?;
-    let mut request = plan.build(&invocation, 'Z', timeout)?;
-    canonical_grants(&mut request)?;
-    let path = save_policy(&data, root, &env, &plan, request)?;
+    let helper = helper()?;
+    let path = save_policy(&data, root, &env, &plan, &invocation, timeout)?;
     Ok(Invocation {
-        program: helper()?.to_string_lossy().into(),
+        program: helper.to_string_lossy().into(),
         arguments: vec![
             "--policy-file".into(),
             path.to_string_lossy().into(),
@@ -161,33 +160,14 @@ fn canonical_grants(request: &mut Value) -> Result<(), Error> {
     }
     Ok(())
 }
-fn redirect_scratch(request: &mut Value, root: &WinPath, scratch: &WinPath) {
-    if let Some(env) = request
-        .pointer_mut("/process/env")
-        .and_then(Value::as_array_mut)
-    {
-        for entry in env {
-            if let Some(text) = entry.as_str() {
-                let (from, to) = if text.starts_with("HOMEPATH=") {
-                    (
-                        root.as_str().get(2..).unwrap_or_default(),
-                        scratch.as_str().get(2..).unwrap_or_default(),
-                    )
-                } else {
-                    (root.as_str(), scratch.as_str())
-                };
-                *entry = text.replace(from, to).into();
-            }
-        }
-    }
-}
 
 fn save_policy(
     data: &Path,
     root: &Path,
     env: &BTreeMap<String, String>,
     plan: &Plan,
-    mut request: Value,
+    invocation: &Invocation,
+    timeout: u32,
 ) -> Result<PathBuf, Error> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let id = format!(
@@ -200,11 +180,9 @@ fn save_policy(
     );
     let scratch = data.join("tmp/project-write").join(&id);
     fs::create_dir(&scratch)?;
-    redirect_scratch(
-        &mut request,
-        plan.scratch()?.first().ok_or("missing scratch")?,
-        &physical(&scratch)?,
-    );
+    let mut scratch_guard = ScratchGuard(Some(scratch.clone()));
+    let mut request = plan.build(invocation, 'Z', timeout, &physical(&scratch)?)?;
+    canonical_grants(&mut request)?;
     let (pid, started) = super::drive::identity()?;
     let payload = PolicyFile {
         pid,
@@ -215,6 +193,7 @@ fn save_policy(
         git_settings: tools::git_settings(env, &plan.tools)?,
         request,
     };
+    super::launch::files(&payload, 'Z')?;
     let directory = data.join("sandbox/policies");
     fs::create_dir_all(&directory)?;
     let path = directory.join(format!("{id}.json"));
@@ -223,8 +202,15 @@ fn save_policy(
         .create_new(true)
         .share_mode(0)
         .open(&path)?;
-    serde_json::to_writer(&file, &payload)?;
-    file.sync_all()?;
+    let saved = serde_json::to_writer(&file, &payload)
+        .map_err(std::io::Error::other)
+        .and_then(|()| file.sync_all());
+    drop(file);
+    if let Err(error) = saved {
+        let _ = fs::remove_file(&path);
+        return Err(error.into());
+    }
+    scratch_guard.0 = None;
     Ok(path)
 }
 
@@ -237,37 +223,46 @@ pub(super) fn reconcile_policies(data: &Path) -> std::io::Result<()> {
     };
     let scratch_root = data.join("tmp/project-write");
     for entry in entries {
-        let entry = entry?;
-        if entry.path().extension().is_none_or(|ext| ext != "json") {
-            continue;
+        if let Err(error) = reconcile_policy(entry, &scratch_root) {
+            eprintln!("sandbox policy reconciliation failed: {error}");
         }
-        let bytes = match fs::read(entry.path()) {
-            Ok(bytes) => bytes,
-            Err(error)
-                if error.kind() == std::io::ErrorKind::NotFound
-                    || error.raw_os_error() == Some(32) =>
-            {
-                continue;
-            }
-            Err(error) => return Err(error),
-        };
-        let payload: PolicyFile = match serde_json::from_slice(&bytes) {
-            Ok(payload) => payload,
-            Err(_) => {
-                ignore_missing(fs::remove_file(entry.path()))?;
-                continue;
-            }
-        };
-        if super::drive::start_time(payload.pid)? == Some(payload.started) {
-            continue;
-        }
-        if let Ok(scratch) = dunce::canonicalize(&payload.scratch)
-            && scratch.parent() == Some(dunce::canonicalize(&scratch_root)?.as_path())
-        {
-            ignore_missing(fs::remove_dir_all(scratch))?;
-        }
-        ignore_missing(fs::remove_file(entry.path()))?;
     }
+    Ok(())
+}
+
+fn reconcile_policy(
+    entry: std::io::Result<fs::DirEntry>,
+    scratch_root: &Path,
+) -> std::io::Result<()> {
+    let entry = entry?;
+    if entry.path().extension().is_none_or(|ext| ext != "json") {
+        return Ok(());
+    }
+    let bytes = match fs::read(entry.path()) {
+        Ok(bytes) => bytes,
+        Err(error)
+            if error.kind() == std::io::ErrorKind::NotFound || error.raw_os_error() == Some(32) =>
+        {
+            return Ok(());
+        }
+        Err(error) => return Err(error),
+    };
+    let payload: PolicyFile = match serde_json::from_slice(&bytes) {
+        Ok(payload) => payload,
+        Err(_) => {
+            ignore_missing(fs::remove_file(entry.path()))?;
+            return Ok(());
+        }
+    };
+    if super::drive::start_time(payload.pid)? == Some(payload.started) {
+        return Ok(());
+    }
+    if let Ok(scratch) = dunce::canonicalize(&payload.scratch)
+        && scratch.parent() == Some(dunce::canonicalize(scratch_root)?.as_path())
+    {
+        ignore_missing(fs::remove_dir_all(scratch))?;
+    }
+    ignore_missing(fs::remove_file(entry.path()))?;
     Ok(())
 }
 
@@ -276,4 +271,42 @@ fn ignore_missing(result: std::io::Result<()>) -> std::io::Result<()> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         result => result,
     }
+}
+
+struct ScratchGuard(Option<PathBuf>);
+impl Drop for ScratchGuard {
+    fn drop(&mut self) {
+        if let Some(path) = &self.0
+            && let Err(error) = fs::remove_dir_all(path)
+        {
+            eprintln!("sandbox scratch cleanup failed: {error}");
+        }
+    }
+}
+
+pub(in crate::command_sandbox) fn cleanup_invocation(
+    invocation: &Invocation,
+) -> std::io::Result<()> {
+    if invocation.program != helper()?.to_string_lossy()
+        || invocation.arguments.first().map(String::as_str) != Some("--policy-file")
+    {
+        return Ok(());
+    }
+    let Some(path) = invocation.arguments.get(1).map(Path::new) else {
+        return Ok(());
+    };
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    let payload: PolicyFile = serde_json::from_slice(&bytes)?;
+    // Never remove preparation belonging to a helper which is still running.
+    if payload.pid != std::process::id()
+        && super::drive::start_time(payload.pid)? == Some(payload.started)
+    {
+        return Ok(());
+    }
+    ignore_missing(fs::remove_dir_all(payload.scratch))?;
+    ignore_missing(fs::remove_file(path))
 }

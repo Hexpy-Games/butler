@@ -60,3 +60,9 @@ pub(in crate::command_sandbox) fn project_write(
     }
     prepare::invocation(invocation, environment, root, writable, denied)
 }
+
+#[cfg(feature = "test-support")]
+pub(in crate::command_sandbox) fn verify_recovery_contract() {
+    drive::verify_inaccessible_process();
+    launch::verify_cleanup_status();
+}

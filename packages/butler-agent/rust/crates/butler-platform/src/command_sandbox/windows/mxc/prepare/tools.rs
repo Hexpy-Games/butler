@@ -168,7 +168,7 @@ fn add_path(env: &BTreeMap<String, String>, input: &mut Discovery) -> Result<(),
             continue;
         }
         let canonical = physical_for(path, "PATH entry")?;
-        if lexical.as_str().ends_with("\\windowsapps") || lexical.as_str().ends_with("\\.nodejs") {
+        if lexical.as_str().ends_with("\\.nodejs") {
             input.shim_dirs.push(canonical.clone());
         }
         if path.join("node.exe").is_file() && input.real_node.is_none() {

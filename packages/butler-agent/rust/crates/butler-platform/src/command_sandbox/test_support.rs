@@ -100,3 +100,9 @@ impl UnixSocketProbe {
         ))
     }
 }
+
+/// Exercises native recovery error classifications without elevated processes.
+pub fn windows_recovery_contract() {
+    #[cfg(windows)]
+    super::windows::mxc::verify_recovery_contract();
+}

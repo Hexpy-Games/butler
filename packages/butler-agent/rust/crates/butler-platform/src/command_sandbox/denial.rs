@@ -40,3 +40,19 @@ pub fn isolation_failure(exit_code: Option<i32>, stderr: &[u8]) -> bool {
 pub fn isolation_failure_exit(exit_code: Option<i32>) -> bool {
     cfg!(any(target_os = "linux", windows)) && exit_code == Some(125)
 }
+
+/// Reserved helper timeout status, qualified by its trailing stderr marker.
+pub const EXECUTION_TIMEOUT_EXIT: i32 = 124;
+/// Emitted only when MXC reports a timed out container after draining output.
+pub const EXECUTION_TIMEOUT_MARKER: &str = "butler_command_execution_timed_out";
+/// Whether an exit needs timeout-marker inspection.
+pub fn execution_timeout_exit(exit_code: Option<i32>) -> bool {
+    exit_code == Some(EXECUTION_TIMEOUT_EXIT)
+}
+/// Distinguishes an MXC timeout from a command which itself exits 124.
+pub fn execution_timeout(exit_code: Option<i32>, stderr_tail: &[u8]) -> bool {
+    execution_timeout_exit(exit_code)
+        && stderr_tail
+            .trim_ascii_end()
+            .ends_with(EXECUTION_TIMEOUT_MARKER.as_bytes())
+}

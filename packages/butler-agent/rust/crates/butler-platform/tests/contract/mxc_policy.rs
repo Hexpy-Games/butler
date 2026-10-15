@@ -78,6 +78,9 @@ fn plan() -> Plan {
         credentials: environment::credential_roots(&host()).unwrap(),
     }
 }
+fn command_scratch() -> WinPath {
+    path(r"C:\Users\person\.butler\tmp\project-write\command")
+}
 fn invocation(args: &[&str]) -> Invocation {
     Invocation {
         program: r"C:\Program Files\tool.exe".into(),
@@ -85,7 +88,9 @@ fn invocation(args: &[&str]) -> Invocation {
     }
 }
 fn golden_policy_has_no_implicit_environment_network_or_fallback() {
-    let result = plan().build(&invocation(&["argument"]), 'L', 1500).unwrap();
+    let result = plan()
+        .build(&invocation(&["argument"]), 'L', 1500, &command_scratch())
+        .unwrap();
     let expected: serde_json::Value =
         serde_json::from_str(include_str!("mxc-policy.json")).unwrap();
     assert_eq!(result, expected);
@@ -102,18 +107,37 @@ fn policy_rejects_broad_and_overriding_grants() {
         let mut p = plan();
         p.project = path(root);
         p.secrets.clear();
-        assert!(p.build(&invocation(&[]), 'L', 1500).is_err(), "{root}");
+        assert!(
+            p.build(&invocation(&[]), 'L', 1500, &command_scratch())
+                .is_err(),
+            "{root}"
+        );
     }
     let mut p = plan();
     p.tools
         .readonly
         .push(path(r"C:\work\project\sub\.env\child"));
-    assert!(p.build(&invocation(&[]), 'L', 1500).is_err());
+    assert!(
+        p.build(&invocation(&[]), 'L', 1500, &command_scratch())
+            .is_err()
+    );
     let mut p = plan();
     p.secrets.push(path(r"C:\outside\.env"));
-    assert!(p.build(&invocation(&[]), 'L', 1500).is_err());
-    assert!(plan().build(&invocation(&[]), 'C', 1500).is_err());
-    assert!(plan().build(&invocation(&[]), 'L', 500).is_err());
+    assert!(
+        p.build(&invocation(&[]), 'L', 1500, &command_scratch())
+            .is_err()
+    );
+    assert!(
+        plan()
+            .build(&invocation(&[]), 'C', 1500, &command_scratch())
+            .is_err()
+    );
+    for timeout in [0, 1, 500, 501] {
+        let result = plan()
+            .build(&invocation(&[]), 'L', timeout, &command_scratch())
+            .unwrap();
+        assert_eq!(result["process"]["timeout"], 1);
+    }
     for value in [
         r"C:relative",
         r"\\server\share",
@@ -135,11 +159,17 @@ fn policy_rejects_broad_and_overriding_grants() {
     p.tools.readonly.push(path(r"C:\Users\person\.cargo"));
     p.credentials
         .push(path(r"C:\Users\person\.cargo\credentials.toml"));
-    assert!(p.build(&invocation(&[]), 'L', 1500).is_ok());
+    assert!(
+        p.build(&invocation(&[]), 'L', 1500, &command_scratch())
+            .is_ok()
+    );
     let mut p = plan();
     p.tools.readonly.push(path(r"C:\private"));
     p.credentials.push(path(r"C:\private\credentials"));
-    assert!(p.build(&invocation(&[]), 'L', 1500).is_err());
+    assert!(
+        p.build(&invocation(&[]), 'L', 1500, &command_scratch())
+            .is_err()
+    );
 }
 fn toolchains_replace_shims_and_keep_trusted_path_order() {
     let input = Discovery {

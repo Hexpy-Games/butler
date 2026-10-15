@@ -29,26 +29,26 @@
     "commandLine": "\"C:\\Program Files\\tool.exe\" argument",
     "cwd": "l:\\",
     "env": [
-      "APPDATA=c:\\users\\person\\.butler\\tmp\\project-write\\home\\appdata\\roaming",
+      "APPDATA=c:\\users\\person\\.butler\\tmp\\project-write\\command\\home\\appdata\\roaming",
       "BUTLER_COMMAND_CWD=l:\\",
       "CARGO_NET_OFFLINE=true",
-      "GIT_CONFIG_GLOBAL=c:\\users\\person\\.butler\\tmp\\project-write\\gitconfig",
+      "GIT_CONFIG_GLOBAL=c:\\users\\person\\.butler\\tmp\\project-write\\command\\gitconfig",
       "GIT_CONFIG_NOSYSTEM=1",
       "GIT_TERMINAL_PROMPT=0",
-      "HOME=c:\\users\\person\\.butler\\tmp\\project-write\\home",
+      "HOME=c:\\users\\person\\.butler\\tmp\\project-write\\command\\home",
       "HOMEDRIVE=c:",
-      "HOMEPATH=\\users\\person\\.butler\\tmp\\project-write\\home",
-      "LOCALAPPDATA=c:\\users\\person\\.butler\\tmp\\project-write\\home\\appdata\\local",
-      "NPM_CONFIG_CACHE=c:\\users\\person\\.butler\\tmp\\project-write\\npm-cache",
+      "HOMEPATH=\\users\\person\\.butler\\tmp\\project-write\\command\\home",
+      "LOCALAPPDATA=c:\\users\\person\\.butler\\tmp\\project-write\\command\\home\\appdata\\local",
+      "NPM_CONFIG_CACHE=c:\\users\\person\\.butler\\tmp\\project-write\\command\\npm-cache",
       "NPM_CONFIG_OFFLINE=true",
-      "NPM_CONFIG_USERCONFIG=c:\\users\\person\\.butler\\tmp\\project-write\\npmrc",
-      "PATH=c:\\users\\person\\.butler\\tmp\\project-write\\bin",
+      "NPM_CONFIG_USERCONFIG=c:\\users\\person\\.butler\\tmp\\project-write\\command\\npmrc",
+      "PATH=c:\\users\\person\\.butler\\tmp\\project-write\\command\\bin",
       "PYTHONIOENCODING=utf-8",
       "PYTHONUTF8=1",
       "SYSTEMROOT=C:\\Windows",
-      "TEMP=c:\\users\\person\\.butler\\tmp\\project-write\\temp",
-      "TMP=c:\\users\\person\\.butler\\tmp\\project-write\\temp",
-      "USERPROFILE=c:\\users\\person\\.butler\\tmp\\project-write\\home"
+      "TEMP=c:\\users\\person\\.butler\\tmp\\project-write\\command\\temp",
+      "TMP=c:\\users\\person\\.butler\\tmp\\project-write\\command\\temp",
+      "USERPROFILE=c:\\users\\person\\.butler\\tmp\\project-write\\command\\home"
     ],
     "inheritDefaultEnv": false,
     "timeout": 1000
@@ -56,7 +56,7 @@
   "filesystem": {
     "readwritePaths": [
       "c:\\work\\project",
-      "c:\\users\\person\\.butler\\tmp\\project-write",
+      "c:\\users\\person\\.butler\\tmp\\project-write\\command",
       "c:\\users\\person\\.butler\\cache\\project-write",
       "c:\\users\\person\\.butler\\artifacts\\generated"
     ],

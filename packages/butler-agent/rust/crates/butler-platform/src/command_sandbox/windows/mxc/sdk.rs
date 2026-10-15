@@ -42,20 +42,46 @@ pub(super) fn probe(request: &Value) -> Result<Value, Box<dyn std::error::Error>
     Ok(serde_json::to_value(facts)?)
 }
 
-pub(super) fn run(request: &Value) -> Result<i32, Box<dyn std::error::Error>> {
+pub(super) struct RunOutcome {
+    code: i32,
+    timed_out: bool,
+}
+impl RunOutcome {
+    pub(super) fn report(self) -> i32 {
+        if self.timed_out {
+            eprintln!("\n{}", crate::command_sandbox::EXECUTION_TIMEOUT_MARKER);
+        }
+        self.code
+    }
+}
+
+pub(super) fn run(request: &Value) -> Result<RunOutcome, Box<dyn std::error::Error>> {
     let mut child = __ffi::spawn_container_json(&serde_json::to_string(request)?, false)?;
     drop(child.take_stdin());
-    let stdout = child.take_stdout().ok_or("missing stdout")?;
-    let stderr = child.take_stderr().ok_or("missing stderr")?;
-    let out = relay(stdout, false);
-    let err = relay(stderr, true);
+    let out = child.take_stdout().map(|stream| relay(stream, false));
+    let err = child.take_stderr().map(|stream| relay(stream, true));
     let result = child.wait();
-    out.join().map_err(|_| "stdout relay panicked")??;
-    err.join().map_err(|_| "stderr relay panicked")??;
-    match result? {
-        v1::WaitResult::Exited(code) => Ok(code),
-        // An execution timeout is not a failure to install isolation.
-        v1::WaitResult::TimedOut => Ok(124),
+    for thread in [out, err].into_iter().flatten() {
+        if !matches!(thread.join(), Ok(Ok(()))) {
+            eprintln!("sandbox output relay failed");
+        }
+    }
+    match result {
+        Ok(v1::WaitResult::Exited(code)) => Ok(RunOutcome {
+            code,
+            timed_out: false,
+        }),
+        Ok(v1::WaitResult::TimedOut) => Ok(RunOutcome {
+            code: crate::command_sandbox::EXECUTION_TIMEOUT_EXIT,
+            timed_out: true,
+        }),
+        Err(error) => {
+            eprintln!("sandbox child wait failed: {error}");
+            Ok(RunOutcome {
+                code: 126,
+                timed_out: false,
+            })
+        }
     }
 }
 

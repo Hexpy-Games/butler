@@ -37,15 +37,19 @@ impl Plan {
         invocation: &Invocation,
         drive: char,
         timeout_ms: u32,
+        command_scratch: &WinPath,
     ) -> Result<Value, &'static str> {
         if !('D'..='Z').contains(&drive.to_ascii_uppercase()) {
             return Err("invalid project drive");
         }
-        let timeout = timeout_ms
-            .checked_sub(500)
-            .filter(|n| *n > 0)
-            .ok_or("timeout must leave teardown room")?;
-        let scratch = self.scratch()?;
+        // Short commands retain the timer coercion used by the command owner.
+        let timeout = timeout_ms.saturating_sub(500).max(1);
+        let mut scratch = self.scratch()?;
+        let temporary = scratch.first_mut().ok_or("scratch root missing")?;
+        if command_scratch == temporary || !command_scratch.is_within(temporary) {
+            return Err("invalid command scratch");
+        }
+        *temporary = command_scratch.clone();
         let cwd = WinPath::new(&format!("{drive}:\\"))?;
         let env = environment::build(
             &self.host_environment,
