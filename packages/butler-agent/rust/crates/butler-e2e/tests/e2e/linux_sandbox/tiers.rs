@@ -222,7 +222,7 @@ async fn project_fallback_to_l_keeps_declared_directories() -> Result<(), Harnes
         "complete\n"
     );
     command_sandbox::sweep_new_secrets(&root, &inventory, &setup.sandbox.data)?;
-    drop(preparation);
+    preparation.release();
     assert_eq!(std::fs::read_to_string(root.join("visible.txt"))?, "public");
     setup.sandbox.mark_success();
     Ok(())
