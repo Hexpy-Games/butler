@@ -39,6 +39,17 @@ use butler_e2e::e2e::{
 };
 use serde_json::Value;
 
+#[test]
+fn recovery_errors_preserve_command_outcomes() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        !butler_platform::command_sandbox::POSIX_SHELL,
+        "Windows recovery classifications"
+    );
+    butler_platform::command_sandbox::windows_recovery_contract();
+    Ok(())
+}
+
 async fn log_approval_timeout_diagnostics(
     scenario: &Scenario,
     chat_id: &str,
