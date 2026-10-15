@@ -377,9 +377,10 @@ async fn final_stream_boundary_survives_an_immediate_crash() -> Result<(), Harne
     assert_eq!(turn_state(&delivered), "delivered");
     s.agent.kill9()?;
     let path = s.sandbox.data.join("app-server/butler-client.sqlite");
+    let sessions = ["general".into()];
     verify_rows(
         &path,
-        &["general".into()],
+        &sessions,
         std::slice::from_ref(&turn),
         DELTAS,
         REQUEST,
@@ -389,7 +390,10 @@ async fn final_stream_boundary_survives_an_immediate_crash() -> Result<(), Harne
     let view = s.gw.get("/session-view?session_id=general").await?;
     assert_eq!(view.status, 200);
     assert_eq!(view.data()["messages"][1]["text"], answer());
+    assert_eq!(view.data()["messages"][1]["status"], "delivered");
     assert_eq!(view.data()["latest_turn"]["state"], "delivered");
+    s.agent.terminate().await?;
+    verify_rows(&path, &sessions, &[turn], DELTAS, REQUEST, &answer());
     s.finish().await
 }
 
