@@ -2,16 +2,15 @@ import { type ReactNode } from "react";
 import { AdaptiveShell, AdaptiveShellSidebar, AdaptiveShellWorkspace } from "../../../../blocks/AdaptiveShell";
 import { NavRow } from "../../../../blocks/NavRow";
 import { NavSectionHeading } from "../../../../blocks/NavSection";
-import { SidebarBrand, SidebarNav, SidebarShell } from "../../../../blocks/SidebarShell";
+import { SidebarNav, SidebarShell, SidebarTrafficSpace } from "../../../../blocks/SidebarShell";
 import { MessageSquare, PencilLine, Search, Settings } from "../../../Icons";
 import { Stack } from "../../../Stack";
-import { Typo } from "../../../Typo";
 import { Mark } from "../shared/Mark";
 import type { FocusCopy } from "./focusCopy";
 import { Workspace } from "./Workspace";
 import s from "./FocusHero.module.css";
 
-/** The app's sidebar: brand, New chat, Search, recents, Settings (view tabs left out: the DS draws no focus on an active tab). */
+/** The app's sidebar: New chat, Search, recents, Settings (view tabs left out: the DS draws no focus on an active tab). */
 function Sidebar({ copy, live }: { copy: FocusCopy; live: boolean }) {
   const mark = (n: string, row: ReactNode) => (live ? <Mark block n={n}>{row}</Mark> : row);
   return (
@@ -26,7 +25,7 @@ function Sidebar({ copy, live }: { copy: FocusCopy; live: boolean }) {
           </SidebarNav>
         </Stack>
       }
-      titlebar={<SidebarBrand><Typo.AppTitle>{copy.app}</Typo.AppTitle></SidebarBrand>}
+      titlebar={<SidebarTrafficSpace />}
     >
       <Stack gap="sm">
         <NavSectionHeading title={copy.recent} />
