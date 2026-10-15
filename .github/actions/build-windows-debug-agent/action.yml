@@ -15,7 +15,7 @@ runs:
         $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
         $ErrorActionPreference = 'Continue'
-        cargo build --timings -j 8 --locked --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent 2>&1 |
+        cargo build --timings -j 8 --locked --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox 2>&1 |
           Tee-Object "$env:PREVIEW_ROOT/logs/debug-build.log"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" save-local windows-x64 static-ort dev

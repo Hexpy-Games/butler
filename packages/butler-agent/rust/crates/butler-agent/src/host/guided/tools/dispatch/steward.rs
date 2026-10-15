@@ -129,3 +129,30 @@ pub(super) async fn steer(
         .map_err(ToolExecutionError::Integrity)?;
     encoded(&result)
 }
+
+/// Cancels this turn's Steward conversation.
+pub(super) async fn cancel(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let text = |key: &str| {
+        call.arguments
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+    };
+    let result = owner
+        .subsessions
+        .cancel(butler_turn::btcc::SubsessionCancelRequest {
+            parent_session_id: owner.binding.source_session_id.clone(),
+            parent_turn_id: owner.binding.turn_id.clone(),
+            source_message_id: invocation.turn.original_message_id.clone(),
+            relation_id: text("relation_id"),
+            safe_title: text("safe_title"),
+            child_role: butler_turn::workspace::SessionRole::Steward,
+        })
+        .await
+        .map_err(ToolExecutionError::Integrity)?;
+    encoded(&result)
+}
