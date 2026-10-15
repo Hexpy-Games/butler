@@ -35,7 +35,7 @@ impl Decoder {
     }
     fn select(&mut self) {
         let sample = self.prefix.get(..64).unwrap_or(&self.prefix);
-        let pairs = || sample.chunks_exact(2);
+        let pairs = || sample.as_chunks::<2>().0.iter();
         let le = self.prefix.starts_with(&[0xff, 0xfe])
             || pairs().filter(|p| p.get(1) == Some(&0)).count() >= 3;
         let be = self.prefix.starts_with(&[0xfe, 0xff])

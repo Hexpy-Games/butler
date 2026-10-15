@@ -25,7 +25,7 @@ pub(super) fn supports(name: &str) -> bool {
     )
 }
 
-pub(super) fn prepare(
+pub(super) async fn prepare(
     owner: &GuidedTools,
     call: &butler_turn::btcc::ModelRoundToolCall,
     occurrence: &str,
@@ -77,7 +77,12 @@ pub(super) fn prepare(
             ));
         }
     };
-    let input = Value::Object(call.arguments.clone());
+    let mut input = Value::Object(call.arguments.clone());
+    if call.name == ToolName::CreateAutomation {
+        resolve_default(owner, occurrence, &mut input).await?;
+    } else if call.name == ToolName::DeleteAutomation {
+        resolve_delete(owner, occurrence, &mut input).await?;
+    }
     let adapter = AutomationEffect {
         endpoint: owner.app_endpoint.clone(),
         session_id: owner
@@ -194,4 +199,93 @@ fn policy(code: &str) -> EffectFailure {
 
 fn adapter(code: &str) -> EffectAdapterError {
     EffectAdapterError::new(code, "Automation effect was not applied")
+}
+
+async fn resolve_default(
+    owner: &GuidedTools,
+    occurrence: &str,
+    input: &mut Value,
+) -> Result<(), BtccError> {
+    if restore_reviewed_input(owner, occurrence, input).await? {
+        return Ok(());
+    }
+    let client = ScheduleClient::active(&owner.app_endpoint)
+        .map_err(|e| BtccError::relayed("schedule_default_unavailable", e.message().to_owned()))?;
+    let settings = client
+        .request(reqwest::Method::GET, "/settings", None)
+        .await
+        .map_err(|e| BtccError::relayed("schedule_default_unavailable", e.message().to_owned()))?;
+    let mode = settings.get("settings").unwrap_or(&settings)["schedule_access_mode"]
+        .as_str()
+        .and_then(butler_turn::btcc::AccessMode::parse)
+        .ok_or_else(|| {
+            BtccError::relayed(
+                "schedule_default_unavailable",
+                "Schedule permission unavailable.",
+            )
+        })?;
+    input["access_mode"] = Value::String(mode.as_str().into());
+    Ok(())
+}
+
+async fn restore_reviewed_input(
+    owner: &GuidedTools,
+    occurrence: &str,
+    input: &mut Value,
+) -> Result<bool, BtccError> {
+    // Keep the reviewed schedule facts on resume, even if the schedule or Settings changed.
+    if super::super::access::resumes(owner, occurrence) {
+        let stored = owner
+            .authority
+            .execution(butler_turn::btcc::AuthorityExecutionInput {
+                owner_session_id: owner.binding.owner_session_id.clone(),
+                request_ref: owner
+                    .binding
+                    .authority_request_ref
+                    .clone()
+                    .unwrap_or_default(),
+                source_session_id: Some(owner.binding.source_session_id.clone()),
+                client_message_id: None,
+                turn_id: owner.binding.turn_id.clone(),
+            })
+            .await
+            .map_err(BtccError::from)?;
+        *input = stored.normalized_input;
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+async fn resolve_delete(
+    owner: &GuidedTools,
+    occurrence: &str,
+    input: &mut Value,
+) -> Result<(), BtccError> {
+    if restore_reviewed_input(owner, occurrence, input).await? {
+        return Ok(());
+    }
+    // Schedule facts come from App storage, never model-supplied arguments.
+    if let Some(args) = input.as_object_mut() {
+        args.remove("schedule");
+    }
+    let id = input["id"].as_str().unwrap_or("");
+    let client = ScheduleClient::active(&owner.app_endpoint)
+        .map_err(|e| BtccError::relayed(e.code().to_owned(), e.message().to_owned()))?;
+    let result = client.read(id).await;
+    match result {
+        Ok(data) => {
+            let stored = &data["automation"];
+            input["schedule"] = serde_json::json!({
+                "title": stored["title"], "schedule_type": stored["schedule_type"],
+                "run_at": stored["run_at"], "start_at": stored["start_at"],
+                "interval_seconds": stored["interval_seconds"], "access_mode": stored["access_mode"],
+            });
+            Ok(())
+        }
+        Err(error) if error.code() == "automation_not_found" => Ok(()),
+        Err(error) => Err(BtccError::relayed(
+            error.code().to_owned(),
+            error.message().to_owned(),
+        )),
+    }
 }

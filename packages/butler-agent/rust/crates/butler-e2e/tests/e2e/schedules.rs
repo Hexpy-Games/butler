@@ -81,15 +81,10 @@ fn make_file(name: &str) -> String {
 /// App phrases in the user's language: edit one file, named inside the
 /// workspace, in the folder named by its label (never an absolute path),
 /// medium risk.
-fn assert_file_edit_approval(
-    request: &Value,
-    workspace_label: &str,
-    file: &str,
-    workspace: &std::path::Path,
-) {
+fn assert_file_edit_approval(request: &Value, workspace_label: &str, file: &str) {
     assert_eq!(
         request["approval"],
-        json!({"operation":{"tool":"write_file","access":"change","targets":[workspace.join(file)]},"action_kind": "edit_files", "count": 1, "examples": [file], "risk": "medium",
+        json!({"operation":{"tool":"write_file","access":"change","targets":[file]},"action_kind": "edit_files", "count": 1, "examples": [file], "risk": "medium",
                "targets": [{"kind": "folder", "path": workspace_label},
                            {"kind": "file", "path": file}]}),
         "{request}"
@@ -121,7 +116,7 @@ async fn sched_01_schedule_runs_with_its_own_access_mode() -> Result<(), Harness
         .find(|request| request["source_turn_id"] == turn_id.as_str())
         .unwrap_or_else(|| panic!("no approval request for the ask-first schedule: {requests:?}"));
     let label = s.sandbox.data.file_name().unwrap().to_str().unwrap();
-    assert_file_edit_approval(request, label, &asked, &s.sandbox.data);
+    assert_file_edit_approval(request, label, &asked);
     assert!(
         !s.sandbox.data.join(&asked).exists(),
         "the ask-first schedule wrote before approval"
@@ -151,8 +146,9 @@ async fn sched_01_schedule_runs_with_its_own_access_mode() -> Result<(), Harness
 }
 
 /// SCHED-02 — The schedule API carries `access_mode`: create takes it (or the
-/// target conversation's current mode), update replaces it, reads return it,
-/// and an unknown mode is refused.
+/// schedule default, D7: never the target conversation's mode), update
+/// replaces it, reads return it, and an unknown mode is refused. A saved
+/// schedule default is what new schedules take.
 #[tokio::test]
 async fn sched_02_schedule_api_carries_access_mode() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -163,7 +159,12 @@ async fn sched_02_schedule_api_carries_access_mode() -> Result<(), HarnessError>
     let strict = new_chat(&s, "strict").await?;
     set_chat_access(&s, &strict, "ask_first").await?;
     let inherited = create(&s, &strict, "Summarize my day.", None).await?;
-    assert_eq!(inherited["access_mode"], "ask_first", "{inherited}");
+    assert_eq!(inherited["access_mode"], "full_access", "{inherited}");
+    s.patch_settings(json!({"schedule_access_mode": "auto"}), "schedule default")
+        .await?;
+    assert_eq!(s.gw.settings().await?["schedule_access_mode"], "auto");
+    let chosen = create(&s, &strict, "Summarize my day.", None).await?;
+    assert_eq!(chosen["access_mode"], "auto", "{chosen}");
 
     let id = inherited["id"].as_str().unwrap();
     let updated =

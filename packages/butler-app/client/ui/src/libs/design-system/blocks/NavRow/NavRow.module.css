@@ -46,7 +46,7 @@
 }
 
 .multiline:has(.meta) > .controlRegion {
-  height: calc(var(--font-size-2) * 1.5);
+  height: var(--typo-label-line-height);
 }
 
 .row:has(.actions) > .controlRegion {
@@ -60,12 +60,12 @@
 .multiline .label {
   flex: 1;
   white-space: normal;
-  line-height: 1.5;
+  line-height: var(--typo-label-line-height);
   overflow-wrap: anywhere;
 }
 
 .multiline .icon {
-  min-height: 1.5em;
+  min-height: var(--typo-label-line-height);
   font-size: var(--font-size-2);
 }
 
@@ -124,6 +124,7 @@
   white-space: nowrap;
   font-weight: var(--font-weight-regular);
   font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height);
 }
 
 .controlRegion {
@@ -157,6 +158,7 @@
   max-width: 7ch;
   color: var(--text-tertiary);
   font-size: var(--font-size-1);
+  line-height: var(--typo-caption-line-height);
   font-weight: var(--font-weight-regular);
   opacity: 1;
   text-align: right;
@@ -211,7 +213,7 @@
       [data-viewport="desktop"],
       [data-viewport="desktop"] *
     ) {
-    height: calc(var(--font-size-4) * 1.5);
+    height: var(--typo-app-title-line-height);
   }
   .multiline .icon:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     font-size: var(--font-size-4);
@@ -226,6 +228,7 @@
 
   .label:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     font-size: var(--font-size-4);
+    line-height: var(--typo-app-title-line-height);
   }
 }
 

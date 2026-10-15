@@ -153,3 +153,45 @@ pub async fn lock_file_async(path: &Path) -> Result<ChangeLock, ConfigError> {
         .await
         .map_err(ConfigError::LockTask)?
 }
+
+/// Page reader modes, the default first.
+pub const WEB_READER_BACKENDS: [&str; 6] = [
+    "browser",
+    "auto",
+    "lightpanda",
+    "lightweight",
+    "jina-hosted",
+    "disabled",
+];
+
+/// The revision a `webSearch.readerBackend` written from now on carries.
+/// Before it, `lightweight` was the default every new config was written
+/// with, so an unrevised `lightweight` is that old default, not a choice.
+pub const WEB_READER_REVISION: u64 = 2;
+
+/// The page reader mode a `webSearch` config section selects: `browser`
+/// when unset or still the old default; any other valid choice as written.
+pub fn web_reader_backend(web_search: &serde_json::Value) -> &'static str {
+    let raw = web_search
+        .get("readerBackend")
+        .and_then(serde_json::Value::as_str)
+        .map(|value| value.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+    let revised = web_search
+        .get("readerBackendRevision")
+        .and_then(serde_json::Value::as_u64)
+        .is_some_and(|revision| revision >= WEB_READER_REVISION);
+    if raw == "lightweight" && !revised {
+        return WEB_READER_BACKENDS[0];
+    }
+    normalize_web_reader(&raw)
+}
+
+/// A reader mode name, or the default for an unknown one.
+pub fn normalize_web_reader(value: &str) -> &'static str {
+    let value = value.trim().to_ascii_lowercase();
+    WEB_READER_BACKENDS
+        .into_iter()
+        .find(|mode| *mode == value)
+        .unwrap_or(WEB_READER_BACKENDS[0])
+}

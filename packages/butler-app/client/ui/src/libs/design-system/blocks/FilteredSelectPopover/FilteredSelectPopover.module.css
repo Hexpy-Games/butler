@@ -20,7 +20,7 @@
   color: var(--text-primary);
   font-size: var(--font-size-2);
   font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-compact);
+  line-height: var(--typo-label-line-height);
 }
 
 /* Group and footer titles label the options below them: the shared menu
@@ -243,7 +243,7 @@
   padding: var(--space-2);
   color: var(--text-secondary);
   font-size: var(--font-size-3);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-body-line-height);
 }
 
 @media (prefers-reduced-motion: reduce) {

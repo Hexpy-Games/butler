@@ -40,8 +40,14 @@ branch_reservation_lost
 empty_queued_message
 general_channel_protected
 invalid_json
+invalid_library_request
 invalid_session_controls
 invalid_utf8
+library_group_exists
+library_group_kind_mismatch
+library_group_not_found
+library_item_not_found
+library_tag_not_found
 message_file_already_attached
 message_file_not_found
 message_file_wrong_session
@@ -75,6 +81,8 @@ session_worktree_creation_failed
 settings_json_failed
 source_changed
 source_unavailable
+space_group_not_found
+space_project_boundary
 too_many_attachments
 turn_control_resolution_invalid
 turn_execution_controls_missing

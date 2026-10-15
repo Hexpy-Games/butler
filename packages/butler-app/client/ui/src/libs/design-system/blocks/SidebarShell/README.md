@@ -23,7 +23,11 @@ The shell clips the child paint/hit-test area below the transparent sticky
 header, including nested CollapsibleNavGroup branches. One passive scroll/RAF
 measurement updates CSS variables, without React state or a second scrollbar.
 Resize/structural changes refresh the boundaries; keyboard focus reveals a
-clipped row through the same scrollbar. Native sticky owns branch push-off.
+clipped row, focus ring included, through the same scrollbar. Native sticky
+owns branch push-off. The scroll frame keeps `--focus-ring-room` of paint room
+on its inline start and block edges (content pads it back, rows keep their
+place), and the sticky clips leave the same room on their other edges, so a
+row's focus ring is never cut by the shell, its fades or a folder clip.
 
 ## What is this component
 
@@ -52,6 +56,11 @@ macOS traffic-control spacing consistent without reintroducing product CSS.
 Pass titlebar, fixed header, scroll content, and footer slots. Keep direct
 navigation in the fixed header. Put project/session and chat sections in the
 scroll content so only session-related navigation scrolls.
+
+## Peek
+Inside an AdaptiveShell peek (`leftPeek`), a `collapsed` SidebarShell still
+shows its content: the peek card is the sidebar shown, whatever `collapsed`
+the product passes for the docked state.
 
 ## Header row
 

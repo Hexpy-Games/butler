@@ -72,6 +72,10 @@ pub(super) fn creation_mode(options: &mut OpenOptions, mode: FileMode) -> Option
     Some(options.mode(mode.0))
 }
 
+pub(super) fn has_other_links(_path: &Path, metadata: &Metadata) -> bool {
+    metadata.is_file() && metadata.nlink() > 1
+}
+
 pub(super) fn file_mode(metadata: &Metadata) -> Option<FileMode> {
     Some(FileMode(metadata.permissions().mode() & PERMISSION_BITS))
 }

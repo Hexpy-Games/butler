@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Slow</title>
+<style>
+body { margin: 0; font: 16px sans-serif; }
+#bar { position: absolute; left: 40px; top: 40px; display: flex; gap: 12px; }
+#bar button { padding: 8px 12px; }
+.car { width: 48px; height: 36px; background: #ddd; border: 1px solid #888; }
+#spinner { display: none; width: 24px; height: 24px; border: 4px solid #ccc; border-top-color: #36f; border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#result { position: absolute; left: 40px; top: 120px; }
+</style>
+<!-- A hidden frame, as many sites keep for ads or logging: it has no layout box. -->
+<iframe style="display:none" srcdoc="<p>hidden</p>"></iframe>
+<div id="bar"><button id="search">Search</button><button class="car car-disabled" id="mode"><svg width="20" height="14"><rect width="20" height="14" fill="#555"/></svg></button></div>
+<div id="result"><div id="spinner"></div><h2 id="status">Idle</h2></div>
+<script>
+window.log = { mode: 0 };
+document.querySelector('#mode').onclick = () => { log.mode++; };
+// The result arrives with the page's own request; only a CSS spinner moves meanwhile.
+document.querySelector('#search').onclick = async () => {
+  document.querySelector('#spinner').style.display = 'block';
+  document.querySelector('#status').textContent = 'Loading';
+  await fetch(location.href, { cache: 'no-store' });
+  document.querySelector('#spinner').style.display = 'none';
+  document.querySelector('#status').textContent = 'Result ready';
+};
+</script></html>

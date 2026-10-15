@@ -1,0 +1,289 @@
+/* The article is the size container: the card's orientation follows its own
+   width, not the viewport (a grid cell, the phone, the chat beside the
+   browser). Cards in one grid row share the height. */
+.root {
+  display: grid;
+  min-width: 0;
+  container: item-card / inline-size;
+
+  /* Size containment drops the content's width; in a shrink-to-fit parent
+     (a flex row, a centred cell) the card takes a vertical card's width
+     instead of collapsing. Grid columns size it as usual. */
+  contain-intrinsic-inline-size: 240px;
+}
+
+/* Vertical (below 340px): picture, body, footer. The body takes the spare
+   height so footers line up along a row of cards. */
+.card {
+  --item-card-text-clamp: 4;
+
+  display: grid;
+  min-width: 0;
+  gap: var(--space-sm);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.card:not([data-media]) {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+/* Over Clickable's flex row: the frame takes the full width. */
+.card .media {
+  display: block;
+  min-width: 0;
+}
+
+.body {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: var(--space-xs);
+  padding-inline: var(--space-xs);
+}
+
+.eyebrow {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.body .open {
+  display: block;
+  min-width: 0;
+  text-align: start;
+}
+
+/* The whole card opens the item: the title's target stretches over the card
+   (its one tab stop). The picture viewer, Show more and the footer sit above
+   it and keep their own actions. */
+.card[data-interactive="true"] {
+  position: relative;
+}
+
+.body .open::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: "";
+}
+
+.card [data-item-card-media="viewer"],
+.textBlock button,
+.footer {
+  position: relative;
+  z-index: 1;
+}
+
+/* The card's hover means "open the item"; a part with its own action
+   drops it while the pointer is on that part. */
+.card[data-interactive="true"]:has(
+    [data-item-card-media="viewer"]:hover,
+    .textBlock button:hover,
+    .footer [data-slot="clickable"]:hover,
+    .footer button:hover
+  ):hover {
+  background: var(--surface-raised);
+}
+
+/* Above the app-wide pointer cursor of [role="button"]. */
+.card [data-item-card-media="viewer"][role="button"] {
+  cursor: zoom-in;
+}
+
+.card [data-item-card-media="viewer"]:hover [data-slot="media-frame"] {
+  filter: brightness(0.94);
+}
+
+.title {
+  font-size: var(--font-size-3);
+  line-height: var(--typo-body-line-height);
+}
+
+.value {
+  display: grid;
+  min-width: 0;
+}
+
+.amounts {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-sm);
+}
+
+.was {
+  text-decoration: line-through;
+}
+
+/* Facts: one dot-separated line that wraps whole facts. The dot belongs to
+   the fact before it, so a wrapped line never starts with a separator. */
+.facts {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-1);
+  line-height: var(--typo-caption-line-height);
+  list-style: none;
+}
+
+.fact {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fact:not(:last-child)::after {
+  margin-inline: var(--space-xs);
+  color: var(--text-tertiary);
+  content: "·";
+}
+
+.textBlock {
+  display: grid;
+  min-width: 0;
+  justify-items: start;
+  margin-top: var(--space-xs);
+}
+
+.text {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height);
+  overflow-wrap: anywhere;
+}
+
+.text:not([data-expanded]) {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--item-card-text-clamp);
+}
+
+/* Footer: the source line takes the room; actions keep their size. */
+.footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-xs);
+  padding-top: var(--space-xs);
+  padding-inline-start: var(--space-xs);
+  border-top: var(--border-hairline) solid var(--line);
+}
+
+.footer .source {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* A vertical card shows only the read time; a row card adds the site. */
+.site {
+  display: none;
+}
+
+/* Vertical footer: a short read time ("오후 12:59 확인") stays whole down to
+   a 168px card. The site icon goes with the site name (the button's name and
+   tooltip keep both) and the actions close up. */
+@container item-card (width < 340px) {
+  .footer .source > [data-site-icon] {
+    display: none;
+  }
+
+  .footer .actions {
+    gap: var(--space-xs);
+  }
+}
+
+/* Row (340px and up): a 112px picture on the start side, the body beside
+   it, the footer across the full width. Text shows whole. */
+@container item-card (width >= 340px) {
+  .card {
+    --item-card-text-clamp: none;
+
+    column-gap: var(--space-md);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .card[data-media] {
+    grid-template-columns: 112px minmax(0, 1fr);
+  }
+
+  .card[data-media] .media {
+    align-self: start;
+  }
+
+  .card[data-media] .body {
+    padding-inline: 0;
+  }
+
+  .footer {
+    grid-column: 1 / -1;
+  }
+
+  .text:not([data-expanded]) {
+    display: block;
+  }
+
+  .site {
+    display: inline;
+  }
+}
+
+/* ItemCardSkeleton: the same card, tracks and container query as a card,
+   so a skeleton that becomes a card shifts nothing. The picture box takes
+   MediaFrame's aspect; each text line is a box of its role's line height
+   with the bar centred in it. */
+.media .skeletonMedia {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 16 / 10;
+}
+
+.media .skeletonMedia[data-aspect="1:1"] {
+  aspect-ratio: 1;
+}
+
+.media .skeletonMedia[data-aspect="4:5"] {
+  aspect-ratio: 4 / 5;
+}
+
+.media .skeletonMedia[data-aspect="3:4"] {
+  aspect-ratio: 3 / 4;
+}
+
+.media .skeletonMedia[data-aspect="16:9"] {
+  aspect-ratio: 16 / 9;
+}
+
+.skeletonLine {
+  display: flex;
+  min-width: 0;
+  height: calc(var(--typo-caption-size) * var(--typo-caption-line-height));
+  align-items: center;
+}
+
+.skeletonLine[data-role="title"] {
+  height: calc(var(--font-size-3) * var(--line-height-body));
+}
+
+.skeletonLine[data-role="facts"] {
+  height: calc(var(--font-size-1) * var(--line-height-body));
+}
+
+/* The bar is shorter than the line box and never taller than it. */
+.skeletonBar {
+  max-height: 100%;
+}
+
+/* Holds the footer at the actions' height on every pointer and viewport. */
+.skeletonAction {
+  visibility: hidden;
+}

@@ -1,3 +1,5 @@
+import { reconcileAnswerDrafts } from "./answerDrafts";
+import { retainAnswerBlocks } from "./stableAnswerBlocks";
 import { generalChatCleared } from "./generalChatEvents";
 import { create } from "zustand";
 import { mergeSessionViewWindow } from "./sessionViewWindow.ts";
@@ -43,6 +45,7 @@ import {
   navigationWithOptimisticSession,
   navigationWithoutOptimisticSession,
   optimisticSessionId,
+  draftSessionControls,
   summaryWithSessionId,
 } from "./optimisticSession.ts";
 import {
@@ -104,12 +107,13 @@ import {
   mergeTurnProgressSnapshotMap,
   mergeMessages,
   normalizeSettingsSectionId,
-  parseDraftChatId,
+  draftSessionTarget,
   pruneReplacedClientTurnProgress,
   projectDraftId,
   titleFromPrompt,
   runtimeModels,
 } from "./utils.ts";
+import { groupDraftId } from "./draftGroup.ts";
 import {
   freezeConversationActivity as freezeMessageWorkBlocks,
   freezeMessageActivity as freezeMessageWorkBlocksForRecord,
@@ -123,6 +127,7 @@ type SessionAction = "rename" | "archive";
 
 export interface SessionViewRefreshOptions {
   isCurrent?: () => boolean;
+  snapshot?: boolean;
 }
 
 export interface NavigationSetOptions {
@@ -231,6 +236,7 @@ interface ButlerStore {
   openSession: (chatId: string, sessionTitle?: string) => void;
   openNewChat: () => void;
   openNewProjectChat: (projectId: string) => void;
+  openNewGroupChat: (groupId: string) => void;
   startProjectChatWithDocument: (
     projectId: string,
     document: ProjectDashboardDocument,
@@ -337,6 +343,7 @@ function messageRecordsEqual(
       structurallyEqual(message.attachments ?? [], other.attachments ?? []) &&
       structurallyEqual(message.artifacts ?? [], other.artifacts ?? []) &&
       structurallyEqual(message.work_blocks ?? [], other.work_blocks ?? []) &&
+      structurallyEqual(message.answer_blocks ?? [], other.answer_blocks ?? []) &&
       structurallyEqual(
         message.turn_activity_rows ?? [],
         other.turn_activity_rows ?? [],
@@ -359,7 +366,7 @@ function retainFrozenTurnPresentation(
   previous: MessageRecord | undefined,
   incoming: MessageRecord,
 ): MessageRecord {
-  let retained = incoming;
+  let retained = retainAnswerBlocks(previous, incoming);
   if (previous?.work_blocks?.length && !retained.work_blocks) {
     retained = { ...retained, work_blocks: previous.work_blocks };
   }
@@ -1198,7 +1205,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         ? state
         : { turnProgress: resolvedTurnProgress, messages };
     }),
-  applyTimelineEvents: (events) =>
+  applyTimelineEvents: (events) => {
     set((state) => {
       const next = applyTimelineEventsToViewState(events, state.activeChatId, {
         messages: state.messages,
@@ -1223,7 +1230,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         ...next,
         ...(completedSendState ?? {}),
       };
-    }),
+    });
+    reconcileAnswerDrafts(events);
+  },
   setSettings: (settings) =>
     set((state) => {
       const nextSettings = settingsWithDefaults(settings);
@@ -1320,6 +1329,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   openNewChat: () => get().openSession("draft:chat"),
   openNewProjectChat: (projectId) =>
     get().openSession(projectDraftId(projectId)),
+  openNewGroupChat: (groupId) => get().openSession(groupDraftId(groupId)),
   startProjectChatWithDocument: (projectId, document) => {
     set({ pendingProjectDocumentAttachment: { projectId, document } });
     get().openNewProjectChat(projectId);
@@ -1356,7 +1366,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           ? get().sessionView?.message_window.next_cursor_token
           : undefined;
       const query = new URLSearchParams({ session_id: chatId });
-      if (currentCursorToken) {
+      if (currentCursorToken && !options?.snapshot) {
         query.set("cursor_token", currentCursorToken);
       }
       const data = await api<SessionView>(
@@ -1761,7 +1771,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     if (dashboardTarget) set({ activeChatId: initialChatId, messages: [], summary: null, turnProgress: {}, sessionView: null, sessionQueue: [] });
     const sendOperationId = `send-${clientMessageId}`;
     const initialDraft = isDraftChatId(initialChatId)
-      ? parseDraftChatId(initialChatId)
+      ? draftSessionTarget(get().navigation, initialChatId)
       : null;
     const optimisticStart: OptimisticSessionStart | null = initialDraft
       ? {
@@ -1771,6 +1781,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           title: titleFromPrompt(messageTitle),
           statusLabel: appCopy.sidebar.newSessionStarting,
           startedAt,
+          controls: draftSessionControls(controls, get().settings),
         }
       : null;
     // A follow-up sent while a turn runs is shown as a queued record (in the
@@ -1862,6 +1873,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           body: JSON.stringify({
             kind: initialDraft.kind,
             project_id: initialDraft.projectId,
+            ...(initialDraft.groupId ? { group_id: initialDraft.groupId } : {}),
             workspace_mode: initialDraft.kind === "project" ? controls.workspaceMode ?? "local" : "local",
             title: titleFromPrompt(messageTitle),
             initial_message: text,
@@ -1869,6 +1881,13 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         });
         const previousChatId = targetChatId;
         targetChatId = session.session.id;
+        // The draft composer's choice becomes the conversation's controls before the
+        // composer reads them for the new id; the message still carries it as well.
+        if (optimisticStart.controls) {
+          await api(`/sessions/${encodeURIComponent(targetChatId)}/controls`, {
+            method: "PATCH", body: JSON.stringify(optimisticStart.controls),
+          }).catch(() => undefined);
+        }
         dashboardTarget?.onSessionCreated?.(targetChatId);
         set((state) => ({
           activeChatId:
@@ -2505,7 +2524,7 @@ export const selectActiveChat = (state: ButlerStore) =>
 export const selectActiveSessionView = (state: ButlerStore) =>
   state.view.kind === "session";
 export const selectRightAvailable = (state: ButlerStore) =>
-  (selectActiveSessionView(state) || state.view.kind === "browser") && isServerBackedSessionId(state.activeChatId);
+  selectActiveSessionView(state) && isServerBackedSessionId(state.activeChatId);
 export const selectEffectiveRightOpen = (state: ButlerStore) =>
   state.rightOpen && selectRightAvailable(state);
 export const selectViewTitle = (state: ButlerStore) =>

@@ -19,7 +19,7 @@ pub(super) mod storage_bootstrap;
 pub(super) mod stores;
 mod subsession_queue;
 mod web_owner;
-use super::{AcceptedPlanProducer, ActiveAppEndpoint, CognitionPrompt, ConversationObserver};
+use super::{AcceptedPlanProducer, CognitionPrompt, ConversationObserver};
 use super::{
     GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter, ResolvedInstallation,
     SystemIdentity, SystemPromptClock,
@@ -67,9 +67,9 @@ impl AgentRuntime {
         environment: ProcessEnvironment,
         locale: &str,
         worker_profiles: Arc<dyn butler_turn::btcc::WorkerProfileReader>,
-        app: (Arc<ActiveAppEndpoint>, &tokio_util::sync::CancellationToken),
+        app: startup_trace::AppStartup<'_>,
     ) -> Result<Self, BtccError> {
-        let (app_endpoint, stop) = app;
+        let (app_endpoint, stop, timing) = app;
         let mut startup = startup_trace::Trace::new();
         stores::check_startup(stop)?;
         validate_data_installation_boundary(&paths.data_root, &paths.installation_root)?;
@@ -81,19 +81,19 @@ impl AgentRuntime {
         let continuation_limits =
             btcc::select_turn_continuation_budget(|key| host_environment.get(key).cloned())?;
         let mcp_client = mcp_owner::for_runtime(&paths, &host_environment, writes.clone());
-        let process_services = web_owner::open(
+        let web_owner::ProcessWebServices { models, web_access } = web_owner::open(
             &paths,
             environment.model,
             &writes,
             &collation,
             mcp_client.clone(),
-        )?;
-        let models = self::models::with_moved_credentials(process_services.models).await;
-        let web_access = process_services.web_access;
+            &mut startup,
+        )
+        .await?;
         let (prompt_clock, date_parser) = process_clocks()?;
         let metric_files = Arc::new(MetricFiles::new(paths.data_root.clone()));
-        startup.phase("configuration_and_models");
-        let (coordinator, embedding, vectors, fresh_memory) =
+        startup.phase("process_clocks");
+        let (coordinator, embedding, vectors, fresh_memory, memory_management) =
             memory_bootstrap::open(&paths, &environment.cognition_paths).await?;
         startup.phase("memory_preflight");
         let files = WorkspaceFiles::new(4);
@@ -102,8 +102,8 @@ impl AgentRuntime {
         let mutations = WorkspaceMutations::new();
         let (skills, capabilities, catalog) = skills_owner::open(&paths, &files, &mutations)?;
         startup.phase("skills");
-        stores::check_startup(stop)?;
-        let stores = RuntimeStores::open(&paths.data_root, collation.clone(), stop).await?;
+        let stores =
+            RuntimeStores::open(&paths.data_root, &collation, stop, timing, &startup).await?;
         startup.phase("canonical_stores");
         let response_language =
             defaults::initialize(&paths, &app_database_path, &installation).await?;
@@ -130,6 +130,8 @@ impl AgentRuntime {
             vectors.clone(),
         )
         .await?;
+        let memory_acquisition =
+            memory_bootstrap::acquisition(&paths.data_root, &embedding, &memory_sync).await;
         startup.phase("defaults_observer_and_memory_consumer");
         let capsule_service = Arc::new(ProjectCapsuleService::new(
             paths.data_root.clone(),
@@ -233,7 +235,6 @@ impl AgentRuntime {
             conversation_context,
         ));
         let documents = BtccRepositories::new(stores.btcc.clone(), continuation_limits);
-        let context_compactions = documents.context_compactions();
         let repositories = Arc::new(documents.clone());
         let now: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
         let memory_writes =
@@ -375,7 +376,10 @@ impl AgentRuntime {
         let bindings = stores.bindings.clone();
         let conversations = Arc::new(stores.conversations.clone());
         let progress = StorageProgressPublication::new(stores.btcc.clone());
+        let (developer_log_capture, developer_settings) =
+            owners::developer_capture(&paths.data_root, app_database_path, installation)?;
         let owner = Arc::new(RuntimeOwners {
+            developer_settings,
             stores,
             project_work,
             project_tools,
@@ -407,16 +411,10 @@ impl AgentRuntime {
             agent,
             messages: repositories.clone(),
             progress: repositories.clone(),
-            readiness: repositories,
-            developer_log_capture: crate::host::service::developer_log::capture(
-                paths.data_root.clone(),
-                app_database_path,
-                installation,
-            ),
+            readiness: repositories.clone(),
+            developer_log_capture,
             host: owner,
         });
-        let (memory_management, memory_acquisition) =
-            Self::memory_owners(&paths.data_root, &environment.cognition_paths, coordinator);
         startup.phase("runtime_ports");
         Self::finish_startup(Self {
             hooks,
@@ -429,9 +427,10 @@ impl AgentRuntime {
             bindings,
             models,
             context_budget,
-            context_compactions,
+            context_compactions: repositories.context_compactions(),
             collation,
             progress,
+            answer_drafts: repositories.answer_drafts.clone(),
             conversations,
             image_files,
             authority,
@@ -458,28 +457,6 @@ fn process_clocks() -> Result<(Arc<SystemPromptClock>, Arc<super::DateParser>), 
         Arc::new(SystemPromptClock::new().map_err(setup)?),
         Arc::new(super::DateParser::from_process().map_err(setup)?),
     ))
-}
-
-impl AgentRuntime {
-    fn memory_owners(
-        data_root: &std::path::Path,
-        environment: &butler_memory::cognition::CognitionPathEnvironment,
-        coordinator: Arc<butler_memory::coordination::CognitionWriteCoordinator>,
-    ) -> (
-        Arc<butler_memory::management::MemoryManagement>,
-        Arc<crate::host::embedding::worker::assets::Acquisition>,
-    ) {
-        (
-            Arc::new(butler_memory::management::MemoryManagement::new(
-                data_root.to_path_buf(),
-                environment.clone(),
-                coordinator,
-            )),
-            Arc::new(crate::host::embedding::worker::assets::Acquisition::start(
-                data_root.to_path_buf(),
-            )),
-        )
-    }
 }
 
 impl AgentRuntime {

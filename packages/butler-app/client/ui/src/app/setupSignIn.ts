@@ -46,8 +46,3 @@ export async function cancelSignIn(session: SignInSession): Promise<OpenAIOAuthL
   if (!flowId) return undefined;
   return await api<OpenAIOAuthLoginResult>(`/setup/oauth/${encodeURIComponent(flowId)}/cancel`, { method: "POST", body: JSON.stringify({}) });
 }
-
-/** Opens the sign-in page in the system browser (Electron routes window.open there). */
-export function openSignInPage(url: string): void {
-  window.open(url, "_blank", "noopener,noreferrer");
-}

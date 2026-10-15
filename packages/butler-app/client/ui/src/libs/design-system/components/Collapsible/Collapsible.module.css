@@ -3,8 +3,9 @@
 .collapsible {
   interpolate-size: allow-keywords;
   overflow: clip;
-  /* A drop scope (NavDropScope) widens the clip while a drag moves rows. */
-  overflow-clip-margin: var(--collapsible-clip-margin, 0);
+  /* Content paints --focus-ring-room past the clip, so a row's focus ring is
+     whole; a drop scope (NavDropScope) widens it while a drag moves rows. */
+  overflow-clip-margin: var(--collapsible-clip-margin, var(--focus-ring-room));
   height: auto;
   /* A flex or grid item (a row in a Stack) would otherwise keep its content
      height as its automatic minimum and never fold. */

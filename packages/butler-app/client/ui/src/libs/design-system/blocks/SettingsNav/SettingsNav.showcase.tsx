@@ -18,7 +18,7 @@ const labels = {
   },
   "ko-KR": {
     app: "앱", general: "일반", appearance: "화면", privacy: "개인정보", models: "모델", mcp: "MCP 서버",
-    skills: "스킬", usage: "사용량", data: "데이터", butler: "Butler", update: "1",
+    skills: "스킬", usage: "사용량", data: "데이터", butler: "버틀러", update: "1",
   },
 } as const;
 

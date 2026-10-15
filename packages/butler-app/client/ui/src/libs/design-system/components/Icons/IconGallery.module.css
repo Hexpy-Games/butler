@@ -54,6 +54,7 @@
   overflow: hidden;
   color: var(--text-secondary);
   font-size: var(--font-size-1);
+  line-height: var(--typo-caption-line-height);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

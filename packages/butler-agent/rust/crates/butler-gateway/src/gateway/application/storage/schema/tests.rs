@@ -14,6 +14,7 @@ use butler_turn::btcc::AccessMode;
 #[test]
 fn app_schema_migrations_keep_existing_data() {
     fresh_schema_has_full_support_and_functional_message_fts();
+    failed_vault_upgrade_rolls_back_and_releases_savepoint();
     deployed_events_gain_actual_turn_index_without_rewriting_payloads();
     deployed_schema_adds_columns_without_removing_unknown_data();
     an_existing_install_keeps_full_access_until_it_saves_a_mode();
@@ -336,4 +337,56 @@ fn column_exists(connection: &Connection, table: &str, column: &str) -> bool {
         .query_map([], |row| row.get::<_, String>(1))
         .unwrap()
         .any(|name| name.unwrap() == column)
+}
+
+/// A failed upgrade preserves deployed data and releases its nested transaction.
+fn failed_vault_upgrade_rolls_back_and_releases_savepoint() {
+    for both in [false, true] {
+        let db = Connection::open_in_memory().unwrap();
+        super::vault::create(&db).unwrap();
+        db.execute_batch(
+            "ALTER TABLE browser_autofill_profiles RENAME TO browser_traveler_profiles;
+            INSERT INTO browser_traveler_profiles(id,nickname,created_at) VALUES('kept','Profile','now');
+            INSERT INTO browser_vault_sites VALUES('profile','kept','example.test','now');
+            DROP TABLE browser_vault_audit;",
+        )
+        .unwrap();
+        if both {
+            db.execute_batch(
+                "CREATE TABLE browser_autofill_profiles AS
+                SELECT * FROM browser_traveler_profiles;",
+            )
+            .unwrap();
+        }
+        assert!(super::vault::create(&db).is_err());
+        assert!(
+            db.is_autocommit(),
+            "failed migration must end its transaction"
+        );
+        assert!(db.execute_batch("RELEASE autofill_upgrade;").is_err());
+        let old: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='browser_traveler_profiles')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(old, "failed migration must preserve legacy metadata");
+        let rows: i64 = db
+            .query_row("SELECT COUNT(*) FROM browser_traveler_profiles", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(rows, 1);
+        let sites: i64 = db
+            .query_row("SELECT COUNT(*) FROM browser_vault_sites", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(sites, 1);
+        db.execute_batch(
+            "CREATE TABLE browser_vault_audit(id INTEGER PRIMARY KEY,kind TEXT,item_id TEXT);",
+        )
+        .unwrap();
+        super::vault::create(&db).unwrap();
+        assert!(db.is_autocommit());
+    }
 }

@@ -3,6 +3,7 @@ import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { workerActivityDisplayName, workerActivityStatusLine } from "@/app/utils.ts";
 import { Button, Stack } from "@/butler-ds";
+import { useObservedSessionId } from "./observedSessionContext.ts";
 import { stewardPlanProgress } from "./stewardProgressPresentation.ts";
 import { localizeWorkerActivity } from "./workerActivityLocalization";
 import { workerActivityTitle } from "./workerActivityTitle.ts";
@@ -10,8 +11,9 @@ import { workerActivityTitle } from "./workerActivityTitle.ts";
 /** The invocation owns placement; SessionView owns the live child state. */
 export function WorkerCallCapsule({ turnId, callId }: { turnId: string; callId: string }) {
   useAppLocale();
+  const observedSessionId = useObservedSessionId();
   const worker = useButlerStore((state) => {
-    const sessionId = state.observerSessionId ?? state.activeChatId;
+    const sessionId = observedSessionId ?? state.observerSessionId ?? state.activeChatId;
     return state.sessionViews[sessionId]?.workers.find((item) =>
       item.parent_turn_id === turnId && item.source_tool_call_id === callId,
     );

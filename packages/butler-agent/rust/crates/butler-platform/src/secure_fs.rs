@@ -13,7 +13,10 @@ mod contained_read;
 mod exact_name;
 pub use exact_name::exact_entry_exists;
 mod fault;
-pub use fault::{checkpoint as fault_checkpoint, write as fault_write};
+mod replacement;
+mod timing;
+pub use fault::{abort_point, checkpoint as fault_checkpoint, hold_point, write as fault_write};
+pub use replacement::replace_private;
 
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
@@ -151,6 +154,12 @@ pub fn creation_mode(options: &mut OpenOptions, mode: FileMode) -> Option<&mut O
     sys::creation_mode(options, mode)
 }
 
+/// Whether a regular file has other hard links, so its content may also be
+/// reachable under a name outside the folder that holds this one.
+pub fn has_other_links(path: &Path, metadata: &Metadata) -> bool {
+    sys::has_other_links(path, metadata)
+}
+
 /// The permission mode of a file; `None` without [`PERMISSION_MODES`].
 pub fn file_mode(metadata: &Metadata) -> Option<FileMode> {
     sys::file_mode(metadata)
@@ -263,49 +272,6 @@ pub fn sync_path(path: impl AsRef<Path>) -> io::Result<()> {
     sys::sync_path(path.as_ref())
 }
 
-/// Atomically replaces `path` with a private file: Unix creation modes or
-/// Windows ACLs restrict the empty staging file before `write` fills it. The
-/// temporary file next to `path` is
-/// is synced, renamed over `path`, and the rename is synced where
-/// [`DIRECTORY_SYNC`]. On failure before the rename, the temporary file is
-/// removed and `path` is untouched; an entry this call did not create is
-/// never removed. `write` reports its own errors; `io_error` converts the
-/// I/O failures of creating, syncing and renaming.
-pub fn replace_private<E>(
-    path: &Path,
-    write: impl FnOnce(&mut File) -> Result<(), E>,
-    io_error: impl Fn(io::Error) -> E,
-) -> Result<(), E> {
-    let parent = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    let temporary = unique_temporary(path);
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    let _ = owner_only(&mut options);
-    let mut file = options.open(&temporary).map_err(&io_error)?;
-    // On ACL hosts an existing parent may still have explicit broad ACEs.
-    // Restrict the empty staging file before any secret content is written.
-    let private = if OWNER_ONLY {
-        Ok(())
-    } else {
-        restrict_file(&temporary)
-            .unwrap_or(Ok(()))
-            .map_err(&io_error)
-    };
-    let written = private.and_then(|()| write(&mut file)).and_then(|()| {
-        file.sync_all().map_err(&io_error)?;
-        drop(file);
-        rename(&temporary, path).map_err(&io_error)
-    });
-    if let Err(error) = written {
-        let _ = fs::remove_file(&temporary);
-        return Err(error);
-    }
-    sync_directory(parent).unwrap_or(Ok(())).map_err(io_error)
-}
-
 /// Renames `from` to `to`, replacing a file at `to`, like [`fs::rename`].
 /// Windows refuses the rename while another process (a reader, an indexer,
 /// an antivirus scan) has either file open without sharing its deletion; it
@@ -400,15 +366,6 @@ pub fn identity(metadata: &Metadata) -> FileIdentity {
     sys::identity(metadata)
 }
 
-/// Whether two metadata describe the same file: the same [`FileId`]; without
-/// [`FILE_IDS`], the same length and modification time.
-pub fn same_file(left: &Metadata, right: &Metadata) -> bool {
-    match (identity(left).id, identity(right).id) {
-        (Some(left), Some(right)) => left == right,
-        _ => left.len() == right.len() && left.modified().ok() == right.modified().ok(),
-    }
-}
-
 /// Whether this user may create entries in a directory.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Writability {
@@ -493,6 +450,9 @@ pub fn workspace_test_alias(path: &Path) -> PathBuf {
             .join(path.file_name().unwrap_or_default())
     }
 }
-
 #[cfg(feature = "test-support")]
 pub mod fixture_links;
+#[cfg(feature = "test-support")]
+pub mod fixture_locks;
+mod path_identity;
+pub use path_identity::{same_file, same_metadata};

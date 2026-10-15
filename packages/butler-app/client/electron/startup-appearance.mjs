@@ -13,6 +13,31 @@ function smallJson(file) {
   } catch { return {}; }
 }
 
+const RISO_SOURCE = { kind: "live", module: "butler.riso-print" };
+
+function startupSource(wallpaper, row) {
+  const source = wallpaper?.source;
+  if (source) {
+    const oldDefault = source.kind === "live" && source.module === "butler.bloom"
+      && !source.paramsDark && (!source.params || Object.keys(source.params).length === 0
+        || (Object.keys(source.params).length === 1 && source.params.colors === "monochrome"));
+    return wallpaper.origin !== "chosen" && oldDefault ? RISO_SOURCE : source;
+  }
+  if (row?.legacy === "none") return { kind: "none" };
+  if (row?.legacy === "silk" || row?.legacy === "curtain") return { kind: "live", module: "butler.silk" };
+  const preset = row?.preset;
+  if (["aurora", "bloom", "lavender", "morning"].includes(preset))
+    return { kind: "live", module: "butler.bloom", params: { colors: preset } };
+  if (preset === "custom" && row?.colors) {
+    const colors = JSON.parse(row.colors);
+    const defaults = ["#32424d", "#555d7c", "#485c70", "#6a7d9a", "#53708d", "#434d70"];
+    if (Array.isArray(colors) && colors.length === 6 && colors.every((v) => typeof v === "string" && /^#[a-f0-9]{6}$/i.test(v))
+      && colors.some((v, i) => v.toLowerCase() !== defaults[i]))
+      return { kind: "live", module: "butler.bloom", params: { colors } };
+  }
+  return RISO_SOURCE;
+}
+
 export function readStartupAppearance(data = process.env.BUTLER_DATA || join(homedir(), ".butler")) {
   const config = smallJson(join(data, "gateways/app.json")).config;
   const configured = typeof config?.dbPath === "string" ? config.dbPath.trim() : null;
@@ -21,11 +46,11 @@ export function readStartupAppearance(data = process.env.BUTLER_DATA || join(hom
   let db;
   try {
     db = new DatabaseSync(path, { readOnly: true, timeout: 0 });
-    const row = db.prepare("SELECT json_extract(value_json, '$.wallpaper') AS wallpaper, json_extract(value_json, '$.main_screen_theme') AS legacy, json_extract(value_json, '$.appearance_theme') AS theme, json_extract(value_json, '$.language') AS locale FROM app_settings WHERE key = 'settings'").get();
+    const row = db.prepare("SELECT json_extract(value_json, '$.wallpaper') AS wallpaper, json_extract(value_json, '$.main_screen_theme') AS legacy, json_extract(value_json, '$.main_screen_theme_preset') AS preset, json_extract(value_json, '$.main_screen_theme_custom_colors') AS colors, json_extract(value_json, '$.appearance_theme') AS theme, json_extract(value_json, '$.language') AS locale FROM app_settings WHERE key = 'settings'").get();
     const wallpaper = row?.wallpaper ? JSON.parse(row.wallpaper) : null;
-    const source = wallpaper?.source ?? { kind: "live", module: row?.legacy === "silk" ? "butler.silk" : "butler.bloom" };
+    const source = startupSource(wallpaper, row);
     return { source, reducedMotion: wallpaper?.motion === "paused", theme: row?.theme, locale: row?.locale };
-  } catch { return { source: { kind: "live", module: "butler.bloom" } }; }
+  } catch { return { source: RISO_SOURCE }; }
   finally { db?.close(); }
 }
 

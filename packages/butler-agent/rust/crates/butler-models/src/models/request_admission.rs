@@ -13,7 +13,7 @@ use super::{
     parse_model_ref,
 };
 
-const IMAGE_TOKEN_ALLOWANCE: f64 = 8_192.0;
+pub(super) const IMAGE_TOKEN_ALLOWANCE: f64 = 8_192.0;
 const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
 
 pub(super) struct PreparedRequestAdmission<'a> {
@@ -59,19 +59,13 @@ impl<'a> PreparedRequestAdmission<'a> {
             .transpose()
             .map_err(serialization_failure)?
             .map_or(2, |value| value.len());
-        let mut image_count = 0;
-        let token_input = if has_image_data_url(input.body) {
-            Bytes::from(
-                butler_core::json::stringify_with_string_projection(input.body, |text| {
-                    image_data_url(text).then(|| {
-                        image_count += 1;
-                        format!("[image input bytes={}]", text.len())
-                    })
-                })
-                .map_err(serialization_failure)?,
-            )
+        let mut payloads = Vec::new();
+        image_payloads(input.body, None, &mut payloads);
+        let (token_input, image_count) = if payloads.is_empty() {
+            (input.serialized.clone(), 0)
         } else {
-            input.serialized.clone()
+            let (text, count) = project_images(input.body, &payloads)?;
+            (Bytes::from(text), count)
         };
         Ok(Self {
             catalog: input.catalog,
@@ -240,32 +234,106 @@ fn serialization_failure(error: impl std::fmt::Display) -> ModelRoundError {
     }
 }
 
+/// Image payloads are pixels, not text tokens. Every inline image costs the
+/// same conservative allowance in pre-round sizing and physical request
+/// admission on every carrier; its base64 is never estimated as text.
+pub(super) fn image_token_projection(
+    body: &serde_json::Value,
+) -> Result<(String, u32), ModelRoundError> {
+    let mut payloads = Vec::new();
+    image_payloads(body, None, &mut payloads);
+    project_images(body, &payloads)
+}
+
+fn project_images(
+    body: &serde_json::Value,
+    payloads: &[&str],
+) -> Result<(String, u32), ModelRoundError> {
+    let mut count = 0;
+    let text = butler_core::json::stringify_with_string_projection(body, |text| {
+        // Identity, not equality: only the payload strings located below.
+        payloads
+            .iter()
+            .any(|payload| std::ptr::eq(*payload, text))
+            .then(|| {
+                count += 1;
+                format!("[image input bytes={}]", text.len())
+            })
+    })
+    .map_err(serialization_failure)?;
+    Ok((text, count))
+}
+
+const IMAGE_DATA_URL_PREFIXES: [&str; 4] = [
+    "data:image/png;base64,",
+    "data:image/jpeg;base64,",
+    "data:image/webp;base64,",
+    "data:image/gif;base64,",
+];
+
 fn image_data_url(value: &str) -> bool {
-    [
-        "data:image/png;base64,",
-        "data:image/jpeg;base64,",
-        "data:image/webp;base64,",
-        "data:image/gif;base64,",
-    ]
-    .iter()
-    .any(|prefix| {
+    IMAGE_DATA_URL_PREFIXES.iter().any(|prefix| {
         value
             .get(..prefix.len())
             .is_some_and(|value| value.eq_ignore_ascii_case(prefix))
     })
 }
 
+fn image_mime(value: Option<&serde_json::Value>) -> bool {
+    value
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|mime| {
+            IMAGE_DATA_URL_PREFIXES.iter().any(|prefix| {
+                prefix
+                    .strip_prefix("data:")
+                    .and_then(|rest| rest.strip_suffix(";base64,"))
+                    .is_some_and(|known| known.eq_ignore_ascii_case(mime))
+            })
+        })
+}
+
 #[cfg(test)]
 mod tests;
 
-// The body is already parsed during request construction. Only strings that
-// actually begin with a supported data URL require projection; ordinary tool
-// history need not be scanned byte by byte or parsed again for admission.
-fn has_image_data_url(value: &serde_json::Value) -> bool {
+// The base64 of every inline image in a carrier body: OpenAI data URLs,
+// Anthropic `"source":{"type":"base64","media_type",…,"data"}` and Gemini
+// `inline_data`/`inlineData` parts. The body is already parsed during request
+// construction, so ordinary history is walked once, never scanned byte by byte
+// or parsed again for admission.
+fn image_payloads<'v>(
+    value: &'v serde_json::Value,
+    key: Option<&str>,
+    payloads: &mut Vec<&'v str>,
+) {
     match value {
-        serde_json::Value::String(text) => image_data_url(text),
-        serde_json::Value::Array(values) => values.iter().any(has_image_data_url),
-        serde_json::Value::Object(values) => values.values().any(has_image_data_url),
-        _ => false,
+        serde_json::Value::String(text) if image_data_url(text) => payloads.push(text),
+        serde_json::Value::Array(values) => {
+            for value in values {
+                image_payloads(value, None, payloads);
+            }
+        }
+        serde_json::Value::Object(values) => {
+            let inline = match key {
+                Some("source") => {
+                    values.get("type").and_then(serde_json::Value::as_str) == Some("base64")
+                        && image_mime(values.get("media_type"))
+                }
+                Some("inline_data") => image_mime(values.get("mime_type")),
+                Some("inlineData") => image_mime(values.get("mimeType")),
+                _ => false,
+            };
+            for (key, value) in values {
+                match value {
+                    // Empty strings share one dangling pointer; never match them.
+                    serde_json::Value::String(data)
+                        if inline && key == "data" && !data.is_empty() =>
+                    {
+                        payloads.push(data);
+                    }
+                    _ => image_payloads(value, Some(key), payloads),
+                }
+            }
+        }
+        _ => {}
     }
 }

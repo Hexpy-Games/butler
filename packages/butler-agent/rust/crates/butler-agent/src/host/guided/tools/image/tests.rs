@@ -10,6 +10,7 @@ fn image_analysis_runs_in_full_access_and_ask_first_never_in_read_only() {
         (AccessMode::FullAccess, true),
         (AccessMode::AskAlways, true),
         (AccessMode::AskExceptReads, true),
+        (AccessMode::Auto, true),
         (AccessMode::ReadOnly, false),
     ] {
         match require_analysis_access(&access) {

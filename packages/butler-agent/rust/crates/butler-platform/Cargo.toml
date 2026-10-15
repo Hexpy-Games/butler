@@ -10,10 +10,21 @@ publish.workspace = true
 # leaf: it depends on no other workspace crate, so every crate can use it.
 [dependencies]
 # Quotes paths inside macOS sandbox profiles.
+iana-time-zone.workspace = true
 serde_json.workspace = true
+serde.workspace = true
+sysinfo = { workspace = true, features = ["disk"] }
 tokio-util.workspace = true
 base64.workspace = true
 roxmltree = "0.20"
+sha1.workspace = true
+sha2.workspace = true
+hmac.workspace = true
+notify.workspace = true
+aes = { version = "0.8", features = ["zeroize"] }
+cbc = { version = "0.1", features = ["alloc", "zeroize"] }
+des = { version = "0.8", features = ["zeroize"] }
+pbkdf2 = "0.12"
 rusqlite.workspace = true
 thiserror.workspace = true
 # Shutdown requests (host stop signals) and the stdin lease are awaited on the
@@ -21,8 +32,12 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["io-std"] }
 
 [target.'cfg(unix)'.dependencies]
-nix.workspace = true
-rustix.workspace = true
+nix = { workspace = true, features = ["user", "sched", "mount"] }
+rustix = { workspace = true, features = ["process"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = "=0.4.7"
+seccompiler = "=0.5.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 memmap2 = "=0.9.11"
@@ -30,15 +45,16 @@ dunce.workspace = true
 libproc.workspace = true
 sysinfo.workspace = true
 zip.workspace = true
-serde.workspace = true
 
 # The process table (identity, liveness, host facts), Job Objects that
 # contain command trees, paths without a needless `\\?\` prefix, and the
 # system time zone's IANA name.
 [target.'cfg(windows)'.dependencies]
+mxc-sdk = { git = "https://github.com/microsoft/mxc", rev = "2366ee9b1e0bed3a0f950ec49a509f92285239cf", default-features = false }
+windows-dpapi = "=0.2.0"
+aes-gcm = { version = "0.10", features = ["zeroize"] }
 dunce.workspace = true
-winsafe.workspace = true
-iana-time-zone.workspace = true
+winsafe = { workspace = true, features = ["advapi", "shell", "user"] }
 if-addrs.workspace = true
 sysinfo.workspace = true
 win32job.workspace = true
@@ -50,6 +66,10 @@ windows-permissions = "=0.2.4"
 [features]
 # Fixture values for tests of other crates (e.g. archive entry modes).
 test-support = []
+
+[dev-dependencies]
+# Integration contracts use the fixture helpers through the library target.
+butler-platform = { path = ".", features = ["test-support"] }
 
 [lints]
 workspace = true
@@ -77,3 +97,9 @@ workspace = true
 
 [target.'cfg(windows)'.dependencies.windows-native-keyring-store]
 workspace = true
+
+# `user_auth`: Touch ID or the login password (LocalAuthentication) on macOS,
+# Windows Hello or the Windows credential prompt on Windows, behind a safe API
+# (the workspace forbids unsafe code). Other systems report Unavailable.
+[target.'cfg(any(target_os = "macos", windows))'.dependencies.robius-authentication]
+version = "=0.3.1"

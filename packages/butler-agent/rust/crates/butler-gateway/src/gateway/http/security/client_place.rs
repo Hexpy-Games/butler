@@ -17,7 +17,7 @@ use super::request_policy::{self, RequestOrigin};
 
 /// Headers proxies and tunnels add. They are never trusted for Host or
 /// client address; they only mark a request as forwarded.
-const FORWARDING_HEADERS: [&str; 10] = [
+const FORWARDING_HEADERS: [&str; 11] = [
     "forwarded",
     "via",
     "x-forwarded-for",
@@ -27,6 +27,7 @@ const FORWARDING_HEADERS: [&str; 10] = [
     "x-real-ip",
     "x-client-ip",
     "cf-connecting-ip",
+    "cf-visitor",
     "true-client-ip",
 ];
 
@@ -43,4 +44,37 @@ pub(in crate::gateway::http) fn is_local_client(
             .any(|name| headers.contains_key(*name))
         && request_policy::is_loopback_host(headers)
         && origin.is_local()
+}
+
+/// Called only after Host/Origin admission. Forwarding metadata may select
+/// cookie transport security, but never grants access or changes the Host.
+pub(in crate::gateway::http) fn is_proxied_https(
+    peer: Option<SocketAddr>,
+    headers: &HeaderMap,
+    origin: &RequestOrigin,
+) -> bool {
+    if is_local_client(peer, headers, origin) {
+        return false;
+    }
+    let single = |name: &str| {
+        let mut values = headers.get_all(name).iter();
+        match (values.next(), values.next()) {
+            (Some(value), None) => value.to_str().ok(),
+            _ => None,
+        }
+    };
+    single("x-forwarded-proto").is_some_and(|proto| proto.trim().eq_ignore_ascii_case("https"))
+        || single("forwarded").is_some_and(|value| {
+            !value.contains(',')
+                && value.split(';').any(|part| {
+                    part.trim().split_once('=').is_some_and(|(key, value)| {
+                        key.trim().eq_ignore_ascii_case("proto")
+                            && value.trim().trim_matches('"').eq_ignore_ascii_case("https")
+                    })
+                })
+        })
+        || single("cf-visitor").is_some_and(|value| {
+            serde_json::from_str::<serde_json::Value>(value)
+                .is_ok_and(|visitor| visitor["scheme"] == "https")
+        })
 }

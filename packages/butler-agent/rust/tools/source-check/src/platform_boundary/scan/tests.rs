@@ -140,7 +140,7 @@ fn b() { env::var(\"PATH\"); user_dirs::home_dir(); let unix = 1; let mode = 0x6
 use std::os::raw::c_int;
 fn c(consts: Table) { consts.get(\"OS\"); }
 ";
-    assert!(found(contents).is_empty());
+    assert_eq!(found(contents), [] as [(usize, std::string::String); 0]);
 }
 
 #[test]

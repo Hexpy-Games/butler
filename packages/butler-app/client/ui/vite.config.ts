@@ -85,20 +85,14 @@ export default defineConfig({
     createHash("sha256").update(srcRoot).digest("hex").slice(0, 12),
   ),
   base: "./",
-  define: { __BUTLER_BROWSER_ENABLED__: process.env.BUTLER_FEATURE_BROWSER !== "false", "import.meta.env.BUTLER_APP_VERSION": JSON.stringify(JSON.parse(readFileSync(path.resolve(process.cwd(), "../electron/package.json"), "utf8")).version) },
-  plugins: [startupAssets(process.cwd()), {
-    name: "butler-product-features",
-    generateBundle() {
-      this.emitFile({ type: "asset", fileName: "product-features.json",
-        source: JSON.stringify({ browser: process.env.BUTLER_FEATURE_BROWSER !== "false" }) });
-    },
-  }, hugeiconsPureAnnotationPatch(), react(), fontLicenseNotices(), thirdPartyNotices(), {
+  define: { "import.meta.env.BUTLER_APP_VERSION": JSON.stringify(JSON.parse(readFileSync(path.resolve(process.cwd(), "../electron/package.json"), "utf8")).version) },
+  plugins: [startupAssets(process.cwd()), hugeiconsPureAnnotationPatch(), react(), fontLicenseNotices(), thirdPartyNotices(), {
     name: "wallpaper-poster-inputs",
     apply: "build",
     buildStart: () => checkWallpaperPosters(process.cwd()),
   }],
   // Font slices stay files so unicode-range fetches them lazily.
-  build: { assetsInlineLimit: (file) => (file.endsWith(".woff2") ? false : undefined) },
+  build: { rollupOptions: { input: { app: path.resolve(process.cwd(), "index.html"), overlay: path.resolve(process.cwd(), "browser-overlay.html") } }, assetsInlineLimit: (file) => (file.endsWith(".woff2") ? false : undefined) },
   resolve: {
     alias: [
       {

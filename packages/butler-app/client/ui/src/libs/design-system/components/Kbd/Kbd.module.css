@@ -27,4 +27,5 @@
   min-width: var(--icon-size-lg);
   height: var(--icon-size-lg);
   font-size: var(--typo-caption-size);
+  line-height: var(--line-height-none);
 }

@@ -33,6 +33,7 @@ pub(super) struct McpServerConfig {
     pub id: String,
     pub display_name: String,
     pub enabled: bool,
+    pub tool_filter_review_required: bool,
     pub transport: McpTransportKind,
     pub command: Option<String>,
     pub args: Vec<String>,
@@ -42,6 +43,15 @@ pub(super) struct McpServerConfig {
     headers: Vec<KeyValueSecret>,
     created_at: String,
     updated_at: String,
+}
+
+impl McpServerConfig {
+    /// Empty literal slots must be filled before any connection is attempted.
+    pub(super) fn needs_secret(&self) -> bool {
+        self.env.iter().chain(&self.headers).any(|item| {
+            item.secret.source == SecretSource::Literal && item.secret.value.trim().is_empty()
+        })
+    }
 }
 
 pub(super) struct ResolvedServerSecrets {
@@ -150,6 +160,7 @@ pub(super) fn server_to_value(server: &McpServerConfig) -> Value {
         "id": server.id,
         "display_name": server.display_name,
         "enabled": server.enabled,
+        "tool_filter_review_required": server.tool_filter_review_required,
         "transport": match server.transport {
             McpTransportKind::Stdio => "stdio",
             McpTransportKind::Http => "http",
@@ -230,6 +241,7 @@ pub(super) fn redact_server(server: &McpServerConfig) -> Value {
         "id": server.id,
         "display_name": server.display_name,
         "enabled": server.enabled,
+        "tool_filter_review_required": server.tool_filter_review_required,
         "transport": match server.transport {
             McpTransportKind::Stdio => "stdio",
             McpTransportKind::Http => "http",
@@ -253,7 +265,8 @@ pub(super) fn redact_server(server: &McpServerConfig) -> Value {
     value
 }
 
-pub(super) fn normalize_server_id(value: &str) -> String {
+/// The registry id for a requested id or name: lower case, `[a-z0-9._-]`.
+pub fn normalize_server_id(value: &str) -> String {
     let mut normalized = String::new();
     let mut in_separator = false;
     for ch in value.trim().to_lowercase().chars() {
@@ -343,6 +356,8 @@ fn normalize_server(
         id,
         display_name,
         enabled: value.get("enabled") != Some(&Value::Bool(false)),
+        tool_filter_review_required: value.get("tool_filter_review_required")
+            == Some(&Value::Bool(true)),
         transport,
         command,
         args: value
@@ -386,14 +401,17 @@ fn normalize_secrets(value: Option<&Value>) -> Vec<KeyValueSecret> {
                 })
                 .collect::<String>();
             let value = item.get("value").and_then(Value::as_str).unwrap_or("");
-            if key.is_empty() || value.is_empty() {
-                return None;
-            }
             let source = match item.get("source").and_then(Value::as_str) {
                 Some("env") => SecretSource::Environment,
                 Some("file") => SecretSource::File,
                 _ => SecretSource::Literal,
             };
+            // An empty literal is a slot the user still has to fill (an
+            // imported server whose secret was not copied); it resolves to
+            // nothing; connection waits until all slots are filled.
+            if key.is_empty() || (value.is_empty() && source != SecretSource::Literal) {
+                return None;
+            }
             Some(KeyValueSecret {
                 key,
                 secret: SecretValue {

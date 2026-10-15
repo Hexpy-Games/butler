@@ -25,6 +25,12 @@ Use `surface="glass"` for floating conversation controls, including jump-to-late
 and active task status capsules. It owns the shared border, tint, shadow, blur,
 type size and interaction states; callers only own position and label content.
 
+## Chips (pressed, count, drop)
+A row of chips that picks one value (the Library's group chips: 전체 · 여행 · 레시피 · ＋ 새 그룹) uses
+`pressed` on the chosen chip (flat selection background, `aria-pressed`), `count` for a quiet number after
+the label, and `drop` while a dragged card is over a chip that accepts it (accent ring). Put the row in a
+horizontal `ScrollArea` when it can overflow.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and agents can use it for compact Butler controls.
 

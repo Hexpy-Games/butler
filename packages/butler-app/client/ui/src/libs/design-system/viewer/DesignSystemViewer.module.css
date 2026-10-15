@@ -169,7 +169,7 @@
   color: var(--color-text-inverse);
   font-size: var(--typo-caption-size);
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-caption-line-height);
   white-space: nowrap;
   opacity: 0;
   pointer-events: none;
@@ -355,7 +355,7 @@
   margin: 0;
   color: var(--text-secondary);
   font-size: var(--typo-h5-size);
-  line-height: var(--line-height-document);
+  line-height: var(--typo-h5-line-height);
 }
 
 .doDont {

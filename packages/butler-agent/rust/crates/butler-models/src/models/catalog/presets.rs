@@ -18,11 +18,22 @@ pub struct ModelPreset {
     pub effort: ReasoningEffort,
 }
 
+impl super::ModelCatalogSnapshot {
+    /// Lightweight query planning stays on the conversation's provider.
+    pub fn search_planning_preset(&self, provider_id: &str) -> Option<ModelPreset> {
+        let presets = self.static_catalog.provider_presets(provider_id)?;
+        Some(presets.planning.unwrap_or(presets.routine))
+    }
+}
+
 /// The presets one provider carries.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ProviderPresets {
     /// Everyday default: the latest balanced-tier model at medium effort.
     pub routine: ModelPreset,
+    /// Lightweight query planning; providers without one use routine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planning: Option<ModelPreset>,
 }
 
 /// How a provider bills requests made with an API key.

@@ -27,6 +27,8 @@ export interface McpSecretRowState {
   source: McpSecretInput["source"];
   value: string;
   redacted?: boolean;
+  /** An empty slot left by an import: the key still needs its value. */
+  missing?: boolean;
 }
 
 export function emptyMcpServerForm(): McpServerFormState {
@@ -125,6 +127,7 @@ function secretRowFromView(secret: McpServerView["env"][number]): McpSecretRowSt
     source: secret.source,
     value: secret.value ?? "",
     redacted: secret.redacted,
+    missing: !secret.has_value,
   };
 }
 

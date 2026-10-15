@@ -1,11 +1,16 @@
-import { api, apiErrorCode } from "@/app/api.ts";
+import { apiErrorCode } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
-import { isServerBackedSessionId } from "@/app/sessionIds.ts";
-import type { AccessMode, SessionControlsView } from "@/app/types.ts";
+import type { AccessMode, SettingsView } from "@/app/types.ts";
 import { isAccessMode } from "@/components/conversation/accessModeUtils";
 
-/** A new schedule's access mode when the target conversation's mode is unknown. */
-export const DEFAULT_SCHEDULE_ACCESS_MODE: AccessMode = "ask_except_reads";
+/** A new schedule's access mode when the settings do not name one: Auto (D7). */
+export const DEFAULT_SCHEDULE_ACCESS_MODE: AccessMode = "auto";
+
+/** A new schedule's access mode: the schedule default the gateway resolves into the settings. */
+export function scheduleDefaultAccessMode(settings: Pick<SettingsView, "schedule_access_mode"> | undefined): AccessMode {
+  const mode = settings?.schedule_access_mode;
+  return isAccessMode(mode) ? mode : DEFAULT_SCHEDULE_ACCESS_MODE;
+}
 
 export type AutomationFormField = "title" | "prompt" | "interval" | "accessMode" | "form";
 
@@ -31,17 +36,6 @@ export function automationSaveError(error: unknown): AutomationSaveError | null 
   if (field) return { field, message: errors[field] };
   const status = typeof error === "object" && error !== null ? (error as { status?: unknown }).status : undefined;
   return status === 400 ? { field: "form", message: errors.invalid } : null;
-}
-
-/** The target conversation's current access mode, or null when the UI cannot read it. */
-export async function conversationAccessMode(sessionId: string): Promise<AccessMode | null> {
-  if (!sessionId || !isServerBackedSessionId(sessionId)) return null;
-  try {
-    const view = await api<SessionControlsView>(`/sessions/${encodeURIComponent(sessionId)}/controls`);
-    return isAccessMode(view?.controls?.access_mode) ? view.controls.access_mode : null;
-  } catch {
-    return null;
-  }
 }
 
 export function withoutFieldError(

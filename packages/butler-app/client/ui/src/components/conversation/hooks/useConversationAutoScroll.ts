@@ -146,6 +146,15 @@ export function useConversationAutoScroll({
     const markKeyboardScrollIntent = (event: KeyboardEvent) => {
       if (SCROLL_NAVIGATION_KEYS.has(event.key)) markUserScrollIntent();
     };
+    // Keyboard focus on a control above the bottom moves the reader there:
+    // release the bottom lock so a later pin (a settling or streaming
+    // conversation) does not pull the focused control out of view.
+    const keepKeyboardFocusInView = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.matches(":focus-visible")) return;
+      const contentBottom = target.getBoundingClientRect().bottom - element.getBoundingClientRect().top + element.scrollTop;
+      if (element.scrollHeight - contentBottom > BOTTOM_LOCK_THRESHOLD) releaseBottomLock();
+    };
     const recentUserScrollIntent = () =>
       pointerScrollActiveRef.current ||
       window.performance.now() - lastUserScrollIntentAtRef.current <=
@@ -183,6 +192,7 @@ export function useConversationAutoScroll({
     window.addEventListener("pointercancel", clearPointerScrollIntent);
     window.addEventListener("blur", clearPointerScrollIntent);
     window.addEventListener("keydown", markKeyboardScrollIntent);
+    element.addEventListener("focusin", keepKeyboardFocusInView);
     element.addEventListener("scroll", updatePinnedState, { passive: true });
     return () => {
       element.removeEventListener("wheel", markUserScrollIntent);
@@ -193,10 +203,11 @@ export function useConversationAutoScroll({
       window.removeEventListener("pointercancel", clearPointerScrollIntent);
       window.removeEventListener("blur", clearPointerScrollIntent);
       window.removeEventListener("keydown", markKeyboardScrollIntent);
+      element.removeEventListener("focusin", keepKeyboardFocusInView);
       element.removeEventListener("scroll", updatePinnedState);
       cancelScheduledScrolls();
     };
-  }, [cancelScheduledScrolls, latestMessageVersion, scrollRef]);
+  }, [cancelScheduledScrolls, latestMessageVersion, releaseBottomLock, scrollRef]);
 
   useEffect(() => {
     if (itemCount <= 0) return;

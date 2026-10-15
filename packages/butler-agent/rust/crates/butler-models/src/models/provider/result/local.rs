@@ -178,8 +178,7 @@ fn normalize(value: &str, allowed: &HashSet<&str>) -> Option<String> {
     let final_segment = value
         .split(':')
         .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|value| !value.is_empty())
-        .next_back()
+        .rfind(|value| !value.is_empty())
         .unwrap_or(value);
     Some(
         if allowed.contains(value) {
@@ -251,9 +250,14 @@ fn standalone_names(text: &str, allowed: &HashSet<&str>) -> Vec<String> {
     allowed
         .iter()
         .filter(|name| {
+            // A tool name followed by its arguments, as `name(` or as `name`
+            // then a JSON object, is a call written as text.
             // The name is escaped, so only the regex size limit could reject it.
-            Regex::new(&format!(r"(?:^|[^A-Za-z0-9_]){}\s*\(", regex::escape(name)))
-                .is_ok_and(|call| call.is_match(&masked))
+            Regex::new(&format!(
+                r"(?:^|[^A-Za-z0-9_]){}\s*[({{]",
+                regex::escape(name)
+            ))
+            .is_ok_and(|call| call.is_match(&masked))
         })
         .map(|value| (*value).to_owned())
         .collect()

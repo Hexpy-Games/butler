@@ -1,7 +1,7 @@
 // test-category: pure-logic
 /// <reference types="bun" />
 import { expect, test } from "bun:test";
-import { BLOOM_WALLPAPER, SILK_WALLPAPER } from "./modules";
+import { RISO_PRINT_WALLPAPER, SILK_WALLPAPER } from "./modules";
 import { EMPTY_WALLPAPER_PRESENTATION, stepWallpaperPresentation, type WallpaperPresentation } from "./presentation";
 import { defineWallpaperModule } from "./manifest";
 import { BUILTIN_WALLPAPERS, createWallpaperRegistry, resolveWallpaperScene } from "./registry";
@@ -81,7 +81,7 @@ test("a failed load crossfades to the default module for the tone and reports it
   const dark = scene({ kind: "image", asset: "a", fit: "cover", dim: 0, blur: 0 }, "dark");
   const waiting = stepWallpaperPresentation(showing(SILK), { type: "request", scene: dark, ready: false }).state;
   const failed = stepWallpaperPresentation(waiting, { type: "failed", asset: "a", message: "404" });
-  expect(failed.present?.module).toBe(BLOOM_WALLPAPER);
+  expect(failed.present?.module).toBe(RISO_PRINT_WALLPAPER);
   expect(failed.present?.dark).toBe(true);
   expect(failed.present?.image).toBeNull();
   expect(failed.state).toEqual(showing(failed.present!));
@@ -117,7 +117,7 @@ test("after none, an image waits for its load (nothing on screen), then fades in
     state: showing(IMAGE_A), present: IMAGE_A, crossfade: false, fadeIn: true,
   });
   const failed = stepWallpaperPresentation(waiting.state, { type: "failed", asset: "a", message: "404" });
-  expect(failed.present?.module).toBe(BLOOM_WALLPAPER);
+  expect(failed.present?.module).toBe(RISO_PRINT_WALLPAPER);
   expect(failed).toMatchObject({ crossfade: false, fadeIn: true });
 });
 

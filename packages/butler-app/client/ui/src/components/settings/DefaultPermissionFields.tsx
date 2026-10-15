@@ -8,11 +8,13 @@ import { AccessModeSettingsField } from "./AccessModeSettingsField";
 export function DefaultPermissionFields() {
   useAppLocale();
   const accessMode = useSettingsUIStore((state) => state.draft?.access_mode);
+  const scheduleMode = useSettingsUIStore((state) => state.draft?.schedule_access_mode ?? "auto");
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
   const { fields, descriptions } = appCopy.settings;
   if (!accessMode) return null;
   return (
+    <>
     <AccessModeSettingsField
       settingId="access-mode"
       label={fields.chatAccess}
@@ -21,5 +23,14 @@ export function DefaultPermissionFields() {
       factoryDefault={CHAT_ACCESS_FACTORY_DEFAULT}
       onChange={(mode) => update({ access_mode: mode }, setSettings)}
     />
+    <AccessModeSettingsField
+      settingId="schedule-access-mode"
+      label={fields.scheduleAccess}
+      description={descriptions.scheduleAccess}
+      value={scheduleMode}
+      factoryDefault="auto"
+      onChange={(mode) => update({ schedule_access_mode: mode }, setSettings)}
+    />
+    </>
   );
 }

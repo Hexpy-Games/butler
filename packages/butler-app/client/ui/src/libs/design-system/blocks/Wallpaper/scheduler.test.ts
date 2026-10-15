@@ -19,6 +19,7 @@ import {
   wallpaperStillFrameDue,
   type WallpaperScheduleState,
 } from "./scheduler";
+import { wallpaperDriftHost } from "./driftScheduler";
 
 const RUNNING: WallpaperScheduleState = {
   moduleMotion: "animated",
@@ -30,6 +31,8 @@ const RUNNING: WallpaperScheduleState = {
   onBattery: false,
   degraded: false,
   contextLost: false,
+  windowBlur: 0,
+  constrained: false,
 };
 
 test("render policy: animated ≤20fps, DPR ≤1, ≤1.4MP; static renders on change, DPR ≤2, ≤4MP", () => {
@@ -80,6 +83,22 @@ test("pauses hold a still frame", () => {
   // Battery alone, or the option alone, keeps animating.
   expect(wallpaperFrameMode({ ...RUNNING, onBattery: true })).toBe("animate");
   expect(wallpaperFrameMode({ ...RUNNING, pauseOnBattery: true })).toBe("animate");
+  // Window blur and low power slow only drift modules.
+  expect(wallpaperFrameMode({ ...RUNNING, windowBlur: 2, constrained: true })).toBe("animate");
+});
+
+test("drift modules: no 20 fps cap; blur halves then pauses them; battery halves; reduced motion and low power hold a still print", () => {
+  const DRIFT = { ...RUNNING, moduleMotion: "drift" } as const;
+  expect(wallpaperRenderPolicy("drift")).toEqual({ maxFps: 0, maxPixelRatio: 1.5, maxPixels: 2_400_000 });
+  expect(wallpaperFrameMode(DRIFT)).toBe("drift");
+  expect(wallpaperDriftHost(DRIFT)).toBe("full");
+  expect(wallpaperDriftHost({ ...DRIFT, windowBlur: 1 })).toBe("slow");
+  expect(wallpaperDriftHost({ ...DRIFT, onBattery: true })).toBe("slow");
+  expect(wallpaperFrameMode({ ...DRIFT, windowBlur: 2 })).toBe("paused");
+  for (const still of [{ reducedMotion: true }, { constrained: true }, { motion: "paused" as const }, { degraded: true }, { pauseOnBattery: true, onBattery: true }]) {
+    expect(wallpaperFrameMode({ ...DRIFT, ...still })).toBe("still");
+  }
+  expect(wallpaperFrameMode({ ...DRIFT, documentHidden: true })).toBe("idle");
 });
 
 test("animated frames are capped at the policy fps", () => {

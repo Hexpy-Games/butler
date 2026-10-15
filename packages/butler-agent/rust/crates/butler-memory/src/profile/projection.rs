@@ -257,7 +257,7 @@ pub(super) fn reflective(
             consent.mode,
             0,
             if locale == "ko" {
-                "아직 확정적으로 정리된 프로필 항목은 없습니다. Butler는 먼저 후보로 관찰하고, 명시성이나 반복성이 충분할 때만 반영합니다."
+                "아직 확정적으로 정리된 프로필 항목은 없습니다. 버틀러는 먼저 후보로 관찰하고, 명시성이나 반복성이 충분할 때만 반영합니다."
             } else {
                 "No stable profile entries have been consolidated yet. Butler keeps observations as candidates first and only promotes them when evidence is sufficient."
             },
@@ -271,7 +271,7 @@ pub(super) fn reflective(
         consent.mode,
         count,
         if locale == "ko" {
-            "지금까지의 명시 피드백과 반복 관찰을 바탕으로 Butler가 조심스럽게 형성한 이해입니다. 단정이 아니라 현재까지의 작업 가설입니다."
+            "지금까지의 명시 피드백과 반복 관찰을 바탕으로 버틀러가 조심스럽게 형성한 이해입니다. 단정이 아니라 현재까지의 작업 가설입니다."
         } else {
             "This is Butler's careful current understanding from explicit feedback and repeated observations. It is a working interpretation, not a fixed judgment."
         },

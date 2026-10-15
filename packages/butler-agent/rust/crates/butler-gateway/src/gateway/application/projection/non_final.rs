@@ -1,6 +1,7 @@
 //! Claim-fenced projection of delivered App transport events before final-result handling.
 
 pub(super) mod batch;
+mod claim_status;
 mod operations;
 mod progress;
 mod runtime_event;
@@ -12,7 +13,9 @@ pub(in crate::gateway::application::projection) use stream_message::fail_unanswe
 mod values;
 
 use crate::gateway::application::storage::CachedSql;
+use claim_status::current_claim_status;
 use operations::*;
+pub(in crate::gateway::application) use operations::{FailedProjection, project_failed};
 use progress::*;
 pub(in crate::gateway::application) use runtime_progress::row_from_runtime_event;
 use runtime_values::*;
@@ -34,12 +37,28 @@ use crate::gateway::application::{
     MaterializedResponderFile,
     events::{self, EventSubscribers},
     internal_continuation,
-    queue::{self, QueuedTurnClaimStatus},
+    queue::QueuedTurnClaimStatus,
     service,
     storage::AppStorageError,
 };
 
-pub(super) struct ProjectionIds {
+fn terminal_update_is_stale(
+    db: &Connection,
+    kind: &str,
+    turn: &str,
+) -> Result<bool, AppStorageError> {
+    Ok(matches!(
+        kind,
+        "tool_progress"
+            | "todo_progress"
+            | "intermediate"
+            | "turn_failed"
+            | "turn_cancelled"
+            | "turn_suspended"
+    ) && terminal_turn(db, turn)?)
+}
+
+pub(in crate::gateway::application) struct ProjectionIds {
     pub event_id: String,
     pub message_id: String,
 }
@@ -58,6 +77,23 @@ pub(super) struct ApplyInput<'a> {
     pub subscribers: &'a EventSubscribers,
     pub ids: ProjectionIds,
     pub worker_files: Vec<MaterializedResponderFile>,
+}
+
+struct ResolvedInput<'a> {
+    chat_id: &'a str,
+    action_id: &'a str,
+    outbound: &'a TranscriptEvent,
+    cursor: &'a checkpoint::Checkpoint,
+    now: &'a str,
+    subscribers: &'a EventSubscribers,
+    ids: ProjectionIds,
+    metadata: &'a Map<String, Value>,
+    message: &'a Map<String, Value>,
+    turn_id: String,
+    kind: String,
+    claim_id: Option<String>,
+    is_runtime_event: bool,
+    is_progress: bool,
 }
 
 pub(super) fn apply(
@@ -98,149 +134,242 @@ pub(super) fn apply(
     if !handled_kind {
         return Ok(not_handled());
     }
-    let claim_id = token(metadata.get("appQueueClaimId"));
+    apply_claimed(
+        db,
+        ResolvedInput {
+            chat_id,
+            action_id,
+            outbound,
+            cursor,
+            now,
+            subscribers,
+            ids,
+            metadata,
+            message,
+            turn_id,
+            kind,
+            claim_id: token(metadata.get("appQueueClaimId")),
+            is_runtime_event,
+            is_progress,
+        },
+    )
+}
+
+fn apply_claimed(
+    db: &mut Connection,
+    input: ResolvedInput<'_>,
+) -> Result<ProjectionOutcome, AppStorageError> {
     let tx = transaction::Transaction::begin(db).map_err(AppStorageError::sqlite)?;
-    if staging::projected(&tx, action_id)? {
-        return skip(tx, action_id, cursor, now);
+    if staging::projected(&tx, input.action_id)? {
+        return skip(tx, input.action_id, input.cursor, input.now);
     }
-    let claim_status = current_claim_status(&tx, chat_id, &turn_id, claim_id.as_deref(), outbound)?;
+    let claim_status = current_claim_status(
+        &tx,
+        input.chat_id,
+        &input.turn_id,
+        input.claim_id.as_deref(),
+        input.outbound,
+    )?;
     if claim_status == QueuedTurnClaimStatus::Stale {
-        return skip(tx, action_id, cursor, now);
+        return skip(tx, input.action_id, input.cursor, input.now);
     }
     if claim_status == QueuedTurnClaimStatus::Terminal {
-        finish(&tx, action_id, outbound, chat_id, cursor, now)?;
-        tx.commit().map_err(AppStorageError::sqlite)?;
-        return Ok(ProjectionOutcome {
-            handled: true,
-            wake_queue: false,
-            terminal_turn: None,
-        });
+        return finish_terminal(tx, &input, no_terminal());
     }
     if claim_status == QueuedTurnClaimStatus::Current {
-        let fenced = match claim_id.as_deref() {
-            Some(claim) => batch::fence(&tx, chat_id, &turn_id, claim)?,
+        let fenced = match input.claim_id.as_deref() {
+            Some(claim) => batch::fence(&tx, input.chat_id, &input.turn_id, claim)?,
             None => false,
         };
         if !fenced {
-            return skip(tx, action_id, cursor, now);
+            return skip(tx, input.action_id, input.cursor, input.now);
         }
     }
-    if kind == "turn_suspended" {
-        let (terminal, wake_queue) = project_suspended(
-            &tx,
-            subscribers,
-            chat_id,
-            &turn_id,
-            claim_id.as_deref(),
-            metadata,
-            now,
-        )?;
-        finish(&tx, action_id, outbound, chat_id, cursor, now)?;
-        tx.execute_cached(
-            "UPDATE chats SET updated_at=?1 WHERE id=?2",
-            params![now, chat_id],
-        )
-        .map_err(AppStorageError::sqlite)?;
-        tx.commit().map_err(AppStorageError::sqlite)?;
-        return Ok(ProjectionOutcome {
-            handled: true,
-            wake_queue,
-            terminal_turn: terminal.then_some(turn_id),
-        });
+    // A resumed final result can arrive before the earlier suspension outbound.
+    if terminal_update_is_stale(&tx, &input.kind, &input.turn_id)? {
+        return finish_terminal(tx, &input, no_terminal());
     }
-    if matches!(
-        kind.as_str(),
-        "tool_progress" | "todo_progress" | "intermediate" | "turn_failed" | "turn_cancelled"
-    ) && terminal_turn(&tx, &turn_id)?
-    {
-        finish(&tx, action_id, outbound, chat_id, cursor, now)?;
-        tx.commit().map_err(AppStorageError::sqlite)?;
-        return Ok(ProjectionOutcome {
-            handled: true,
-            wake_queue: false,
-            terminal_turn: None,
-        });
+    if input.kind == "turn_suspended" {
+        return apply_suspended(tx, &input);
     }
-    if kind == "turn_failed" && btcc_retains_authority(&tx, &turn_id)? {
-        return skip(tx, action_id, cursor, now);
+    if input.kind == "turn_failed" && btcc_retains_authority(&tx, &input.turn_id)? {
+        return skip(tx, input.action_id, input.cursor, input.now);
     }
-    let terminal = if is_runtime_event {
-        project_runtime_event(RuntimeInput {
-            db: &tx,
-            subscribers,
-            chat: chat_id,
-            turn: &turn_id,
-            metadata,
-            message,
-            now,
-            generated_id: &ids.event_id,
-        })?
-        .map(str::to_owned)
-    } else if is_progress {
-        project_progress(ProgressInput {
-            db: &tx,
-            subscribers,
-            chat: chat_id,
-            turn: &turn_id,
-            action: action_id,
-            kind: &kind,
-            metadata,
-            message,
-            timestamp: &outbound.timestamp,
-            now,
-            event_id: &ids.event_id,
-        })?;
-        None
-    } else if kind == "turn_cancellation_ack" {
-        project_cancellation_ack(&tx, &turn_id, metadata, &outbound.timestamp)?;
-        None
-    } else if kind == "turn_cancelled" {
-        project_cancelled(
-            &tx,
-            subscribers,
-            chat_id,
-            &turn_id,
-            metadata,
-            now,
-            &ids.event_id,
-        )?;
-        Some("turn_cancelled".to_owned())
-    } else {
-        project_failed(
-            &tx,
-            subscribers,
-            chat_id,
-            &turn_id,
-            FailedProjection {
-                metadata,
-                message,
-                retryable: false,
-            },
-            now,
-            &ids,
-        )?;
-        Some(token(metadata.get("safeErrorCode")).unwrap_or_else(|| "gateway_failed".to_owned()))
-    };
-    let mut wake = false;
-    if let Some(code) = terminal.as_deref() {
-        wake = settle_if_claimed(
-            &tx,
-            subscribers,
-            chat_id,
-            &turn_id,
-            claim_id.as_deref(),
-            code,
-            now,
-        )?;
-    }
-    finish(&tx, action_id, outbound, chat_id, cursor, now)?;
-    batch::update_chat(&tx, chat_id, now)?;
+    apply_projection(tx, input)
+}
+
+fn apply_suspended(
+    tx: transaction::Transaction<'_>,
+    input: &ResolvedInput<'_>,
+) -> Result<ProjectionOutcome, AppStorageError> {
+    let (terminal, wake_queue) = project_suspended(
+        &tx,
+        input.subscribers,
+        input.chat_id,
+        &input.turn_id,
+        input.claim_id.as_deref(),
+        input.metadata,
+        input.now,
+    )?;
+    finish(
+        &tx,
+        input.action_id,
+        input.outbound,
+        input.chat_id,
+        input.cursor,
+        input.now,
+    )?;
+    tx.execute_cached(
+        "UPDATE chats SET updated_at=?1 WHERE id=?2",
+        params![input.now, input.chat_id],
+    )
+    .map_err(AppStorageError::sqlite)?;
     tx.commit().map_err(AppStorageError::sqlite)?;
     Ok(ProjectionOutcome {
         handled: true,
-        wake_queue: wake,
-        terminal_turn: terminal.map(|_| turn_id),
+        wake_queue,
+        terminal_turn: terminal.then(|| input.turn_id.clone()),
     })
+}
+
+fn apply_projection(
+    tx: transaction::Transaction<'_>,
+    input: ResolvedInput<'_>,
+) -> Result<ProjectionOutcome, AppStorageError> {
+    if input.is_runtime_event || input.is_progress {
+        project_resumed(
+            &tx,
+            input.subscribers,
+            input.chat_id,
+            &input.turn_id,
+            input.now,
+        )?;
+    }
+    let terminal = project_kind(&tx, &input)?;
+    let wake_queue = match terminal.as_deref() {
+        Some(code) => settle_if_claimed(
+            &tx,
+            input.subscribers,
+            input.chat_id,
+            &input.turn_id,
+            input.claim_id.as_deref(),
+            code,
+            input.now,
+        )?,
+        None => false,
+    };
+    finish(
+        &tx,
+        input.action_id,
+        input.outbound,
+        input.chat_id,
+        input.cursor,
+        input.now,
+    )?;
+    batch::update_chat(&tx, input.chat_id, input.now)?;
+    tx.commit().map_err(AppStorageError::sqlite)?;
+    Ok(ProjectionOutcome {
+        handled: true,
+        wake_queue,
+        terminal_turn: terminal.map(|_| input.turn_id),
+    })
+}
+
+fn project_kind(
+    tx: &transaction::Transaction<'_>,
+    input: &ResolvedInput<'_>,
+) -> Result<Option<String>, AppStorageError> {
+    if input.is_runtime_event {
+        return Ok(project_runtime_event(RuntimeInput {
+            db: tx,
+            subscribers: input.subscribers,
+            chat: input.chat_id,
+            turn: &input.turn_id,
+            metadata: input.metadata,
+            message: input.message,
+            now: input.now,
+            generated_id: &input.ids.event_id,
+        })?
+        .map(str::to_owned));
+    }
+    if input.is_progress {
+        project_progress(ProgressInput {
+            db: tx,
+            subscribers: input.subscribers,
+            chat: input.chat_id,
+            turn: &input.turn_id,
+            action: input.action_id,
+            kind: &input.kind,
+            metadata: input.metadata,
+            message: input.message,
+            timestamp: &input.outbound.timestamp,
+            now: input.now,
+            event_id: &input.ids.event_id,
+        })?;
+        return Ok(None);
+    }
+    if input.kind == "turn_cancellation_ack" {
+        project_cancellation_ack(
+            tx,
+            &input.turn_id,
+            input.metadata,
+            &input.outbound.timestamp,
+        )?;
+        return Ok(None);
+    }
+    if input.kind == "turn_cancelled" {
+        project_cancelled(
+            tx,
+            input.subscribers,
+            input.chat_id,
+            &input.turn_id,
+            input.metadata,
+            input.now,
+            &input.ids.event_id,
+        )?;
+        return Ok(Some("turn_cancelled".to_owned()));
+    }
+    project_failed(
+        tx,
+        input.subscribers,
+        input.chat_id,
+        &input.turn_id,
+        FailedProjection {
+            metadata: input.metadata,
+            message: input.message,
+            retryable: false,
+        },
+        input.now,
+        &input.ids,
+    )?;
+    Ok(Some(
+        token(input.metadata.get("safeErrorCode")).unwrap_or_else(|| "gateway_failed".to_owned()),
+    ))
+}
+
+fn finish_terminal(
+    tx: transaction::Transaction<'_>,
+    input: &ResolvedInput<'_>,
+    outcome: ProjectionOutcome,
+) -> Result<ProjectionOutcome, AppStorageError> {
+    finish(
+        &tx,
+        input.action_id,
+        input.outbound,
+        input.chat_id,
+        input.cursor,
+        input.now,
+    )?;
+    tx.commit().map_err(AppStorageError::sqlite)?;
+    Ok(outcome)
+}
+
+fn no_terminal() -> ProjectionOutcome {
+    ProjectionOutcome {
+        handled: true,
+        wake_queue: false,
+        terminal_turn: None,
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -254,70 +383,6 @@ struct RuntimeInput<'a> {
     now: &'a str,
     generated_id: &'a str,
 }
-/// The status of `claim` for this outbound. The restarted App may have
-/// recovered the claim of the crashed process before the restarted service
-/// reported the interruption (turn_failed, turn_interrupted); the report
-/// then restores and settles that same claim, so the message is not
-/// dispatched again.
-fn current_claim_status(
-    db: &Connection,
-    chat_id: &str,
-    turn_id: &str,
-    claim: Option<&str>,
-    outbound: &TranscriptEvent,
-) -> Result<QueuedTurnClaimStatus, AppStorageError> {
-    let status = queue::claim_status(db, chat_id, turn_id, claim)?;
-    if matches!(
-        status,
-        QueuedTurnClaimStatus::Stale | QueuedTurnClaimStatus::Terminal
-    ) && cancellation_settlement(db, chat_id, turn_id, outbound)?
-    {
-        // The owner's durable cancellation authorizes only these terminal
-        // authority projections after the suspended queue claim was settled.
-        return Ok(QueuedTurnClaimStatus::Unlinked);
-    }
-    let metadata = object(outbound.payload.get("metadata"));
-    let reply_to = token(object(outbound.payload.get("message")).get("replyToMessageId"));
-    if status == QueuedTurnClaimStatus::Stale
-        && text(metadata.get("kind")).as_deref() == Some("turn_failed")
-        && token(metadata.get("safeErrorCode")).as_deref()
-            == Some(crate::gateway::application::retry::INTERRUPTED_TURN_CODE)
-        && let (Some(claim), Some(reply_to)) = (claim, reply_to)
-        && queue::restore_interrupted_claim(db, chat_id, turn_id, claim, &reply_to)?
-    {
-        return Ok(QueuedTurnClaimStatus::Current);
-    }
-    Ok(status)
-}
-
-fn cancellation_settlement(
-    db: &Connection,
-    chat_id: &str,
-    turn_id: &str,
-    outbound: &TranscriptEvent,
-) -> Result<bool, AppStorageError> {
-    let metadata = object(outbound.payload.get("metadata"));
-    let event = object(metadata.get("event"));
-    let payload = object(event.get("payload"));
-    if text(metadata.get("kind")).as_deref() != Some("turn_event")
-        || !matches!(
-            text(event.get("kind")).as_deref(),
-            Some("tool.cancelled" | "operation.output.chunk")
-        )
-        || payload
-            .get("authorityCancellation")
-            .and_then(Value::as_bool)
-            != Some(true)
-    {
-        return Ok(false);
-    }
-    db.query_row(
-        "SELECT EXISTS(SELECT 1 FROM turns t JOIN app_turn_cancel_outbox c ON c.turn_id=t.id \
-         WHERE t.id=?1 AND t.chat_id=?2 AND c.state IN ('pending','accepted','completed') AND c.queue_id IS NOT NULL)",
-        params![turn_id, chat_id], |row| row.get(0),
-    ).map_err(AppStorageError::sqlite)
-}
-
 fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>, AppStorageError> {
     let RuntimeInput {
         db,

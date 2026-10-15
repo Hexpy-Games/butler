@@ -73,13 +73,20 @@ fn source(
 
 /// Additive read indexes: permission identity, storage rows and enforcement stay intact.
 pub(super) fn permission_indexes(db: &Connection) -> rusqlite::Result<()> {
+    let covers_scope: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_index_info('idx_btcc_permissions_active') WHERE name='scope_key')",
+        [], |row| row.get(0),
+    )?;
+    if !covers_scope {
+        db.execute_batch("DROP INDEX IF EXISTS idx_btcc_permissions_active")?;
+    }
     db.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_btcc_permission_sources
          ON btcc_authority_requests(owner_session_id,created_at,workspace_path,capability,
          normalized_target,normalized_input_json,decision,allow_scope)
          WHERE decision='allowed' AND allow_scope='conversation';
          CREATE INDEX IF NOT EXISTS idx_btcc_permissions_active
-         ON btcc_conversation_permissions(created_at DESC,grant_ref,owner_session_id,workspace_path,revoked_at)
+         ON btcc_conversation_permissions(created_at DESC,grant_ref,owner_session_id,workspace_path,revoked_at,scope_key)
          WHERE revoked_at IS NULL;",
     )
 }

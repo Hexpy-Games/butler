@@ -91,7 +91,7 @@ impl Wal {
 }
 
 fn checksum(bytes: &[u8], mut sum: [u32; 2], little: bool) -> [u32; 2] {
-    for pair in bytes.chunks_exact(8) {
+    for pair in bytes.as_chunks::<8>().0 {
         let word = |bytes: &[u8]| {
             if little {
                 u32::from_le_bytes(bytes.try_into().unwrap())

@@ -1,17 +1,21 @@
 //! PERM-01: project reads, exact approvals, real-path sensitivity and normal-chat isolation.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
-mod stub;
+mod authority;
+mod auto;
+mod link_targets;
+pub(super) use authority::{approve, assert_counts, delivered, paused};
+mod sandbox_data_reads;
+pub(super) mod stub;
+mod web_found;
+mod web_guard;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
-    gateway::{tool_rows, turn_state},
+    gateway::tool_rows,
     scenario::{Access, Scenario, Setup, accepted_turn_id},
 };
 use serde_json::{Value, json};
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{sync::Arc, time::Instant};
 use stub::{Script, call};
 
 const MIXED: &str = "Check project files and outside files.";
@@ -75,7 +79,18 @@ async fn ask_first_reads_the_project_and_asks_for_the_rest() -> Result<(), Harne
     let mixed_started = Instant::now();
     let id = paused(&s, &chat, MIXED).await?;
     let expected = if linked { 2 } else { 1 };
-    assert_eq!(s.gw.approval_requests(&chat).await?.len(), expected);
+    let cards = s.gw.approval_requests(&chat).await?;
+    assert_eq!(cards.len(), expected);
+    if linked {
+        // The read through a link shows the real file it reads, as the
+        // outside read does.
+        let real = json!([butler_platform::secure_fs::canonicalize(&outside)?]);
+        let shown = cards
+            .iter()
+            .filter(|card| card["approval"]["examples"] == real)
+            .count();
+        assert_eq!(shown, 2, "{cards:?}");
+    }
     assert_eq!(script.requests_for(MIXED).len(), 1);
     assert_counts(&s, &id, expected as u64, expected as u64)?;
     approve(&s, &chat, "allow").await?;
@@ -233,51 +248,7 @@ fn read(id: &str, path: &str) -> Value {
         &json!({"requests":[{"path":path,"max_bytes":2048}]}),
     )
 }
-async fn paused(s: &Scenario, chat: &str, prompt: &str) -> Result<String, HarnessError> {
-    let id = accepted_turn_id(&s.gw.say(chat, prompt).await?)?;
-    let turn =
-        s.gw.wait_turn(
-            chat,
-            &id,
-            &["waiting_for_form", "delivered", "failed"],
-            Duration::from_secs(20),
-        )
-        .await?;
-    assert_eq!(
-        turn_state(&turn),
-        "waiting_for_form",
-        "{turn}\n{}",
-        s.agent.logs()
-    );
-    Ok(id)
-}
-async fn approve(s: &Scenario, chat: &str, action: &str) -> Result<(), HarnessError> {
-    for card in s.gw.approval_requests(chat).await? {
-        let reference = card["request_ref"].as_str().unwrap();
-        let reply =
-            s.gw.post(
-                &format!("/authority-requests/{reference}/{action}?session_id={chat}"),
-                json!({"scope":"once"}),
-            )
-            .await?;
-        assert_eq!(reply.status, 202, "{reply:?}");
-    }
-    Ok(())
-}
-async fn delivered(s: &Scenario, chat: &str, id: &str) -> Result<(), HarnessError> {
-    let turn =
-        s.gw.wait_terminal(chat, id, Duration::from_secs(20))
-            .await?;
-    assert_eq!(turn_state(&turn), "delivered", "{turn}\n{}", s.agent.logs());
-    Ok(())
-}
-fn assert_counts(s: &Scenario, id: &str, total: u64, pending: u64) -> Result<(), HarnessError> {
-    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    let counts: (u64,u64) = db.query_row("SELECT count(*),coalesce(sum(decision='pending'),0) FROM btcc_authority_requests WHERE source_turn_id=?1", [id], |row| Ok((row.get(0)?,row.get(1)?)))?;
-    assert_eq!(counts, (total, pending));
-    Ok(())
-}
-async fn outputs(
+pub(super) async fn outputs(
     s: &Scenario,
     chat: &str,
     id: &str,
@@ -445,7 +416,7 @@ async fn guarded_commands(
                 .all(|v| !v.contains("SECRET_IN_") && !v.contains("outside-marker"))
         );
     }
-    if butler_platform::command_sandbox::READ_ONLY_SANDBOX {
+    if butler_platform::command_sandbox::approval_free_reads() {
         let prompt = "Search project keys.";
         script.rounds.lock().unwrap().insert(prompt.into(), vec![call("grep-command", "run_command",
             &json!({"command":"grep -r KEY .","summary":"Search keys","state_effect":"read_only"}))]);

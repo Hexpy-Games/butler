@@ -19,6 +19,7 @@ pub(super) fn read(row: &Row<'_>) -> rusqlite::Result<MessageRow> {
         safe_error_code: row.get(13)?,
         retryable: row.get(14)?,
         plan_json: row.get(15)?,
+        blocks_json: row.get(16)?,
     })
 }
 
@@ -34,7 +35,7 @@ pub(in crate::gateway::application) fn streaming_message(
     let sql = concat!(
         "SELECT rowid,id,chat_id,turn_id,conversation_session_id,conversation_turn_id,",
         "conversation_message_id,role,text,content_parts_json,status,created_at,updated_at,",
-        "safe_error_code,retryable,plan_json FROM app_owned_messages m ",
+        "safe_error_code,retryable,plan_json,blocks_json FROM app_owned_messages m ",
         "WHERE id=?1 AND chat_id=?2 AND turn_id=?3 AND role='assistant' AND status='streaming' ",
         "AND EXISTS(SELECT 1 FROM turns WHERE id=?3 AND state IN ",
         "('accepted','thinking','streaming','waiting_for_tool','retrying','cancelling')) ",
@@ -51,4 +52,30 @@ pub(in crate::gateway::application) fn streaming_message(
         message(row, &attachments(db, &ids)?, &changed_files(db, &ids)?)
     })
     .transpose()
+}
+
+/// Project one accepted row by its primary key, with the same visibility and decoration.
+pub(in crate::gateway::application) fn exact_message(
+    db: &Connection,
+    chat_id: &str,
+    id: &str,
+) -> Result<Option<MessageRecord>, AppStorageError> {
+    let query = format!(
+        "SELECT rowid,id,chat_id,turn_id,conversation_session_id,conversation_turn_id,conversation_message_id,role,text,content_parts_json,status,created_at,updated_at,safe_error_code,retryable,plan_json,blocks_json FROM messages m WHERE id=?1 AND chat_id=?2 AND {}",
+        owner_visible!()
+    );
+    let row = db
+        .query_row_cached(&query, params![id, chat_id], read)
+        .optional()
+        .map_err(AppStorageError::sqlite)?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let ids = vec![id.to_owned()];
+    let attachments = attachments(db, &ids)?;
+    let changed = changed_files(db, &ids)?;
+    let mut messages = vec![message(row, &attachments, &changed)?];
+    let progress = progress_for_messages(db, &messages)?;
+    super::super::message_projection::decorate(db, &mut messages, &progress)?;
+    Ok(messages.pop())
 }

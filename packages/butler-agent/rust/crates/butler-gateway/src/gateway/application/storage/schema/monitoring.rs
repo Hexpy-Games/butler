@@ -1,6 +1,6 @@
 //! Additive persisted monitor projection with transaction-local invalidation.
 use super::AppStorageError;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
 pub(super) fn migrate(db: &Connection) -> Result<(), AppStorageError> {
     db.execute_batch("CREATE TABLE IF NOT EXISTS app_work_monitor (
@@ -42,14 +42,39 @@ pub(super) fn migrate(db: &Connection) -> Result<(), AppStorageError> {
             };
             let mut body = String::new();
             for row in rows {
-                body.push_str("INSERT OR IGNORE INTO app_work_monitor_dirty ");
-                body.push_str(&expression.replace("{row}", row));
-                body.push(';');
+                let selection = expression.replace("{row}", row);
+                body.push_str("INSERT INTO app_work_monitor_dirty ");
+                body.push_str(&selection);
+                if !selection.contains(" WHERE ") {
+                    body.push_str(" WHERE true");
+                }
+                // UPSERT remains idempotent inside cascading/triggered deletes, where
+                // an outer statement's conflict policy can override OR IGNORE.
+                body.push_str(" ON CONFLICT(chat_id) DO NOTHING;");
             }
 
-            db.execute_batch(&format!("CREATE TRIGGER IF NOT EXISTS work_monitor_{table}_{operation} AFTER {operation} ON {table}{condition} BEGIN {body} END;"))
-                .map_err(AppStorageError::sqlite)?;
+            let name = format!("work_monitor_{table}_{operation}");
+            let sql = format!(
+                "CREATE TRIGGER {name} AFTER {operation} ON {table}{condition} BEGIN {body} END"
+            );
+            install_trigger(db, &name, &sql)?;
         }
     }
     Ok(())
+}
+
+fn install_trigger(db: &Connection, name: &str, sql: &str) -> Result<(), AppStorageError> {
+    let existing: Option<String> = db
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?1",
+            [name],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(AppStorageError::sqlite)?;
+    if existing.as_deref() == Some(sql) {
+        return Ok(());
+    }
+    db.execute_batch(&format!("SAVEPOINT monitor_trigger_upgrade; DROP TRIGGER IF EXISTS {name}; {sql}; RELEASE monitor_trigger_upgrade;"))
+        .map_err(AppStorageError::sqlite)
 }

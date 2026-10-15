@@ -106,3 +106,17 @@ fn string<'a>(row: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
 fn truthy_string(row: &Map<String, Value>, key: &str) -> bool {
     string(row, key).is_some_and(|value| !value.is_empty())
 }
+
+/// Stored specs are projected without rechecking today's source history.
+pub(super) fn answer_blocks(json: Option<&str>) -> Result<Option<Vec<Value>>, AppStorageError> {
+    json.map(|text| {
+        serde_json::from_str(text).map_err(|error| {
+            AppStorageError::new(
+                super::storage::AppStorageCode::AppProjectionJsonInvalid,
+                error.to_string(),
+            )
+            .with_source(error)
+        })
+    })
+    .transpose()
+}

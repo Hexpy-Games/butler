@@ -27,7 +27,7 @@ const copy = {
     success: "성공 보기", saved: "설정을 저장했습니다",
     message: "메시지 보기", queued: "메시지를 대기열에 넣었습니다. 현재 작업이 끝나면 보냅니다.",
     error: "오류 보기", failed: "모델 제공자에 연결하지 못했습니다.",
-    loading: "진행 보기", checking: "업데이트를 확인하는 중…", done: "Butler가 최신 버전입니다",
+    loading: "진행 보기", checking: "업데이트를 확인하는 중…", done: "버틀러가 최신 버전입니다",
     action: "실행 취소 보기", archived: "대화를 보관했습니다", undo: "실행 취소",
     warning: "경고 보기", slow: "모델 제공자의 응답이 느립니다.",
     burst: "세 개 연달아 보기", motion: "토스트는 24px 내려오며 나타나고(--motion-enter-overlay) 더 빨리 사라집니다(--motion-exit-base). 동작 줄이기에서는 페이드만 합니다.",

@@ -6,7 +6,10 @@ use butler_e2e::e2e::{
     scenario::{Access, Setup, accepted_turn_id},
 };
 use serde_json::{Value, json};
-use std::{path::Path, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 fn cases(home: &Path, installation: &Path) -> Vec<Case> {
     let case = |tool, args| Case {
@@ -63,7 +66,37 @@ fn cases(home: &Path, installation: &Path) -> Vec<Case> {
             "write_file",
             json!({"path":home.join("Desktop/new/sub/file.txt"),"content":"nested creation","create_parents":true}),
         ),
+        case(
+            "edit_file",
+            json!({"path":"link/linked.txt","old_text":"symlink parent","new_text":"symlink edited"}),
+        ),
+        case(
+            "read_file",
+            json!({"requests":[{"path":"link/linked.txt"}]}),
+        ),
+        case("list_files", json!({"root":"link","max_depth":1})),
     ]
+}
+
+/// Where a path outside the data folder really leads when its spelling (a
+/// link or alias on the way) names another place: the deepest existing
+/// parent resolved by the OS.
+fn escaped(data: &Path, path: &str) -> Option<PathBuf> {
+    let lexical = butler_platform::tool_paths::resolve(data, path).ok()?;
+    let (mut existing, mut missing) = (lexical.as_path(), Vec::new());
+    let real = loop {
+        if let Ok(real) = butler_platform::secure_fs::canonicalize(existing) {
+            break real;
+        }
+        missing.push(existing.file_name()?);
+        existing = existing.parent()?;
+    };
+    let real = missing
+        .into_iter()
+        .rev()
+        .fold(real, |path, name| path.join(name));
+    let data = butler_platform::secure_fs::canonicalize(data).ok()?;
+    (!butler_platform::secure_fs::path_is_within(&real, &data) && real != lexical).then_some(real)
 }
 
 pub(super) async fn approve(
@@ -101,6 +134,16 @@ pub(super) async fn approve(
     if case.tool != "run_command" {
         assert_eq!(card["executable"], case.tool);
     }
+    // A path whose link or alias leads elsewhere shows where it leads.
+    let observed = |path: &str| -> Result<PathBuf, HarnessError> {
+        Ok(match escaped(&s.sandbox.data, path) {
+            Some(real) => real,
+            None => s
+                .sandbox
+                .data
+                .join(butler_platform::tool_paths::parse(&s.sandbox.data, path)?),
+        })
+    };
     let paths = if case.tool == "run_command" {
         json!([case.args["command"]])
     } else if case.tool == "read_file" {
@@ -109,13 +152,23 @@ pub(super) async fn approve(
                 .as_array()
                 .unwrap()
                 .iter()
-                .map(|r| r["path"].clone())
-                .collect::<Vec<_>>()
+                .map(|r| observed(r["path"].as_str().unwrap()))
+                .collect::<Result<Vec<_>, _>>()?
         )
     } else if matches!(case.tool, "list_files" | "grep_files") {
-        json!([case.args["root"]])
+        json!([observed(case.args["root"].as_str().unwrap())?])
+    } else if let Some(real) = escaped(&s.sandbox.data, case.args["path"].as_str().unwrap()) {
+        json!([real])
     } else {
-        json!([case.args["path"].as_str().unwrap().replace('\\', "/")])
+        // Outside targets show the real path that is checked and written:
+        // `..` resolved, native separators.
+        let native = |path: &Path| path.components().collect::<PathBuf>();
+        let path = case.args["path"].as_str().unwrap();
+        json!([match path.strip_prefix("../") {
+            Some(rest) => native(&s.sandbox.data.parent().unwrap().join(rest)),
+            None if Path::new(path).is_absolute() => native(Path::new(path)),
+            None => PathBuf::from(path),
+        }])
     };
     assert_eq!(
         card["approval"]["examples"], paths,
@@ -199,7 +252,20 @@ fn verify(
                 "nested creation"
             );
         }
-        12 => {
+        12 => assert_eq!(
+            std::fs::read_to_string(home.join("Desktop/linked.txt"))?,
+            "symlink edited"
+        ),
+        13 => assert_eq!(output["files"][0]["content"], "symlink edited"),
+        14 => assert!(
+            output["files"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|file| file["path"].as_str().unwrap().ends_with("linked.txt")),
+            "{output}"
+        ),
+        15 => {
             assert!(!home.join("Downloads/보고서.txt").exists());
             assert_eq!(
                 std::fs::read_to_string(home.join("Downloads/moved.txt"))?,
@@ -362,7 +428,10 @@ async fn run(access: Access) -> Result<(), HarnessError> {
         }
     }
     if access == Access::FullAccess {
-        assert!(s.gw.approval_requests("general").await?.is_empty());
+        assert_eq!(
+            s.gw.approval_requests("general").await?,
+            [] as [serde_json::Value; 0]
+        );
     }
     s.finish().await?;
     server.abort();

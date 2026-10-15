@@ -306,7 +306,7 @@ async function measureSendFlight(page: Page, serverUrl: string, ids: Map<string,
 /**
  * ProgressRing: value and indeterminate changes keep the ring's box (zero
  * layout shift), the value moves only through stroke-dashoffset, and
- * indeterminate is the DS Spinner (running, and still under reduced motion).
+ * indeterminate is the DS Spinner (running, also under reduced motion).
  */
 async function measureProgressRing(page: Page, serverUrl: string, ids: Map<string, string>) {
   const scope = await openItem(page, serverUrl, ids.get("ProgressRing")!, "light", "Live");
@@ -331,20 +331,25 @@ async function measureProgressRing(page: Page, serverUrl: string, ids: Map<strin
     const valueNow = ring.getAttribute("aria-valuenow");
     return { boxes: [...boxes], offsetBefore, offsetAfter, transitionProperty, spinning, valueNow };
   });
-  // Under reduced motion the indeterminate ring follows the Spinner: the orbit stops.
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  const reduced = await scope.evaluate((story) => {
+  // The Spinner is exempt from reduced motion (OS preference and the App's
+  // data-motion="reduced" scope), so the indeterminate ring keeps turning.
+  const orbitAnimation = () => scope.evaluate((story) => {
     const orbit = story.querySelector('[data-slot="progress-ring"] [data-slot="spinner-orbit"]');
     return orbit ? getComputedStyle(orbit).animationName : null;
   });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const reduced = await orbitAnimation();
   await page.emulateMedia({ reducedMotion: "no-preference" });
+  await scope.evaluate((story) => { (story as HTMLElement).dataset.motion = "reduced"; });
+  const reducedScope = await orbitAnimation();
+  await scope.evaluate((story) => { delete (story as HTMLElement).dataset.motion; });
   await scope.locator('[data-ds-motion="progress-ring-indeterminate"]').click();
   assert(probe.boxes.length === 1, `ProgressRing moved while its value changed: ${probe.boxes.join(" | ")}`);
   assert(probe.offsetBefore !== probe.offsetAfter, `ProgressRing value did not change the fill: ${JSON.stringify(probe)}`);
   assert(probe.transitionProperty === "stroke-dashoffset", `ProgressRing fill must transition stroke-dashoffset only: ${probe.transitionProperty}`);
   assert(/spinner-orbit/u.test(probe.spinning ?? "") && probe.valueNow === null, `indeterminate ProgressRing must be the running Spinner: ${JSON.stringify(probe)}`);
-  assert(reduced === "none", `indeterminate ProgressRing must follow the Spinner under reduced motion: ${reduced}`);
-  return { ...probe, reduced };
+  assert(/spinner-orbit/u.test(reduced ?? "") && /spinner-orbit/u.test(reducedScope ?? ""), `the Spinner must keep turning under reduced motion: OS ${reduced}, scope ${reducedScope}`);
+  return { ...probe, reduced, reducedScope };
 }
 
 type EnterProbe = { name: string; durationMs: number; firstFrame60Hz: number; observedFirstFrame: { ms: number; progress: number } };

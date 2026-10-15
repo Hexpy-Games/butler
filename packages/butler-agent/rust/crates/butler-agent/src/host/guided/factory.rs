@@ -23,7 +23,7 @@ use butler_turn::conversation::CanonicalMemoryReadBinding;
 use crate::host::{
     GuidedActivity, GuidedJournal, GuidedPreparation, GuidedPrompt, GuidedSteering,
     GuidedTextState, GuidedToolBinding, GuidedTools, GuidedWorkAdapter, GuidedWorkTools,
-    PreparedNativeGuidedTurn, resolve_guided_response_language,
+    PreparedNativeGuidedTurn, TurnGuard, resolve_guided_response_language,
 };
 
 /// All fields are process services or immutable host configuration, never Turn state.
@@ -186,12 +186,14 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         allowed_tools_and_effects: None,
                         mutation_scope: None,
                         installation_root: Some(self.installation_root.clone()),
+                        contained: false,
                     },
                     butler_turn::workspace::EffectFileScope {
                         workspace: workspace_path.clone(),
                         butler_data: self.butler_data.clone(),
                         protected_roots: self.protected_ledger_roots.clone(),
                         installation_root: Some(self.installation_root.clone()),
+                        contained: false,
                     },
                 ),
                 self.memory_query.clone(),
@@ -227,16 +229,13 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                     owner_session_id: authority_owner,
                     source_session_id: start.turn.session_id.clone(),
                     model_ref: format!("{}/{}", semantic.model.provider, semantic.model.model),
-                    reasoning_effort: serde_json::to_value(&semantic.model.reasoning_effort)
-                        .map_err(|source| error("invalid_reasoning_effort").with_source(source))?
-                        .as_str()
-                        .ok_or_else(|| error("invalid_reasoning_effort"))?
-                        .to_owned(),
+                    reasoning_effort: reasoning_text(&semantic.model.reasoning_effort)?,
                     authority_request_ref: semantic.context.authority_request_ref.clone(),
                     authority_source_call_id: semantic
                         .authority
                         .as_ref()
                         .map(|cursor| cursor.call_id.clone()),
+                    turn_guard: TurnGuard::new(&start.turn.context, semantic.authority.as_ref()),
                     current_user_message: start.turn.original_message.clone(),
                     memory: CanonicalMemoryReadBinding {
                         runtime_session_id: start.turn.session_id.clone(),
@@ -247,7 +246,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         ),
                     },
                     project_id: policy.project_id.clone(),
-                    project_folder: policy.project_id.as_ref().map(|_| workspace_path.clone()),
+                    project_folder: project_folder(&workspace, &phase),
                     project_sources: project_sources(&start.turn.context),
                     visible_names: surface.iter().map(|t| t.name.clone()).collect(),
                     authorized_names: phase.authorized_names.iter().cloned().collect(),
@@ -298,7 +297,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 start.turn.turn_id.clone(),
                 activity,
             ));
-            let stream_relay = butler_turn::btcc::StreamRelay::new();
+            let stream_relay = super::tools::AnswerBlocksStream::relay(tools.clone());
             let inputs = GuidedTurnInputs {
                 semantic,
                 dependencies: GuidedPolicyDependencies {
@@ -337,6 +336,15 @@ fn error(code: &str) -> BtccError {
     BtccError::relayed(code.to_owned(), code)
 }
 
+/// The wire name of a reasoning effort.
+fn reasoning_text(effort: &impl serde::Serialize) -> Result<String, BtccError> {
+    serde_json::to_value(effort)
+        .map_err(|source| error("invalid_reasoning_effort").with_source(source))?
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| error("invalid_reasoning_effort"))
+}
+
 impl GuidedTurnFactoryAdapter {
     // Both owners share the admitted tool grant; the model never authors that grant.
     fn work_adapters(
@@ -362,6 +370,19 @@ impl GuidedTurnFactoryAdapter {
             );
         Ok((Arc::new(work), tools))
     }
+}
+
+/// The project folder for containment: a moved folder counts when the user
+/// consented to it; otherwise a project turn's folder does. The reference
+/// keeps the decision so a folder switch can change it.
+fn project_folder(
+    workspace: &butler_turn::workspace::WorkspaceReference,
+    phase: &butler_turn::btcc::GuidedPhaseSelection,
+) -> Option<PathBuf> {
+    let policy = &phase.execution_policy;
+    let consented = workspace.consent().unwrap_or(policy.project_id.is_some());
+    workspace.set_consent(consented);
+    consented.then(|| PathBuf::from(&policy.workspace_path))
 }
 
 /// Keep the model's policy root and tool reference on the same recovered path.

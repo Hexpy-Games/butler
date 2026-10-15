@@ -67,17 +67,16 @@ fn seed_large_turns(
         db.query_row("SELECT id FROM conversation_sessions LIMIT 1", [], |row| {
             row.get(0)
         })?;
-    let mut turn_seq: u64 =
-        db.query_row("SELECT MAX(seq)+1 FROM conversation_turns", [], |row| {
-            row.get(0)
-        })?;
+    let turn_seq: u64 = db.query_row("SELECT MAX(seq)+1 FROM conversation_turns", [], |row| {
+        row.get(0)
+    })?;
     let mut message_seq: u64 =
         db.query_row("SELECT MAX(seq)+1 FROM conversation_messages", [], |row| {
             row.get(0)
         })?;
     let request = "u".repeat(chars);
     let reply = "a".repeat(chars);
-    for index in 0..count {
+    for (turn_seq, index) in (turn_seq..).zip(0..count) {
         let turn_id = format!("ct_large_{index}");
         db.execute(
             "INSERT INTO conversation_turns(id,session_id,seq,actor,status,started_at,completed_at) VALUES(?1,?2,?3,'user','complete',?4,?4)",
@@ -99,7 +98,6 @@ fn seed_large_turns(
             )?;
             message_seq += 1;
         }
-        turn_seq += 1;
     }
     Ok(())
 }

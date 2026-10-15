@@ -1,4 +1,4 @@
-import { launchSmokeBrowser } from "../support/smoke-browser.ts";
+import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { type Page } from "playwright";
@@ -6,7 +6,12 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 import { assertFirstRunContrast, assertFirstRunLayout } from "../support/first-run-visual.ts";
 import { firstRunCopy } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
 
-const screenshots = resolve(".tmp/firstrun-ds");
+const matrix = [320, 375, 768, 1280, 1440].flatMap(width =>
+  ["ko", "en"].flatMap(language => ["light", "dark"].flatMap(theme =>
+    ["fresh", "renewal"].map(mode => `${width}-${language}-${theme}-${mode}`))));
+if (await runSmokeCases(matrix, "BUTLER_CONSENT_CASE", import.meta.path)) process.exit(0);
+
+const screenshots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? process.env.TMPDIR ?? "/tmp", "consent");
 let textNodes = 0;
 let minimumContrast = Infinity;
 mkdirSync(screenshots, { recursive: true });
@@ -42,6 +47,11 @@ async function verifyConsent(page: Page, language: "ko" | "en", label: string) {
   assert(await page.getByRole("link", { name: copy.consentProviderLink }).evaluate((node) => node === document.activeElement), "provider link follows heading");
   assert(await page.getByRole("link", { name: copy.consentProviderLink }).evaluate((node) => node.scrollWidth <= node.clientWidth), "provider link text is not clipped");
   await page.keyboard.press("Tab");
+  const retry = page.getByRole("button", { name: copy.memoryModel.retry, exact: true });
+  if (await retry.count()) {
+    assert(await retry.evaluate((node) => node === document.activeElement), "memory retry follows link");
+    await page.keyboard.press("Tab");
+  }
   assert(await page.getByRole("button", { name: copy.decline, exact: true }).evaluate((node) => node === document.activeElement), "Decline follows link");
   await page.keyboard.press("Tab");
   assert(await page.getByRole("button", { name: copy.agree, exact: true }).evaluate((node) => node === document.activeElement), "Agree follows Decline");
@@ -92,7 +102,7 @@ async function verifyIcons(page: Page) {
     return Math.abs(slot.top - text.getBoundingClientRect().top) < 1 && Math.abs(slot.height - parseFloat(style.lineHeight)) < 1;
   }));
   assert(valid, "consent icons align to first body line");
-  const firstLine = await page.locator('[data-first-run-screen="consent"] [data-slot="icon-slot"]').last().evaluate((slot) => {
+  const firstLine = await page.locator('[data-first-run-screen="consent"] [role="list"] + * [data-slot="icon-slot"]').evaluate((slot) => {
     const text = slot.nextElementSibling!.querySelector("p")!;
     const glyph = slot.querySelector("svg")!.getBoundingClientRect();
     const lineCenter = text.getBoundingClientRect().top + parseFloat(getComputedStyle(text).lineHeight) / 2;
@@ -113,6 +123,8 @@ async function runCase(width: number, language: "ko" | "en", theme: "light" | "d
   if (!renewal) {
     await screen(page, "welcome");
     await audit(page);
+    assert(await page.locator("[data-setup-mark]").count() === 1, "plain intro mark");
+    assert(await page.locator("[data-setup-rows]").count() === 1, "intro action rows");
     assert(await page.locator("#first-run-start").evaluate((node) =>
       node !== document.activeElement && !node.matches(":focus-visible")), "fresh Start is not focused");
     await page.screenshot({ path: resolve(screenshots, `${label}-welcome.png`) });
@@ -129,7 +141,8 @@ async function runCase(width: number, language: "ko" | "en", theme: "light" | "d
   assert(before.onboarding.consent_version === (renewal ? 1 : null), "Decline saves no agreement");
   await page.getByRole("button", { name: copy.start, exact: true }).click();
   await page.getByRole("button", { name: copy.agree, exact: true }).click();
-  await screen(page, "connect");
+  // A first run asks for the memory model next; a consent renewal goes to the AI list.
+  await screen(page, renewal ? "connect" : "memory");
   const saved = await server.api<{ onboarding: { consent_version: number; accepted_at: string; completed_at: string | null } }>("/settings");
   assert(saved.onboarding.consent_version === 2 && Boolean(Date.parse(saved.onboarding.accepted_at)), "agreement durable before connection");
   assert(saved.onboarding.completed_at === (renewal ? completed : null), "agreement preserves completion");
@@ -144,6 +157,7 @@ try {
     for (const language of ["ko", "en"] as const) {
       for (const theme of ["light", "dark"] as const) {
         for (const renewal of [false, true]) {
+          if (process.env.BUTLER_CONSENT_CASE && process.env.BUTLER_CONSENT_CASE !== `${width}-${language}-${theme}-${renewal ? "renewal" : "fresh"}`) continue;
           await runCase(width, language, theme, renewal);
           cases += 1;
         }

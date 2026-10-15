@@ -21,9 +21,10 @@ function settingsUpdated(settings: unknown, createdAt?: string): TimelineEvent {
 test("settings.updated merges its fields over the current settings", () => {
   const next = settingsFromLiveEvent(
     current,
-    settingsUpdated({ wallpaper: silk, appearance_theme: "dark", enabled_worker_profile_count: 2 }),
+    settingsUpdated({ wallpaper: silk, conversation_background: { source: { kind: "none" }, overlay: 35 }, appearance_theme: "dark", enabled_worker_profile_count: 2 }),
   );
   expect(next?.wallpaper).toEqual(silk);
+  expect(next?.conversation_background).toEqual({ source: { kind: "none" }, overlay: 35 });
   expect(next?.appearance_theme).toBe("dark");
   // Fields the event does not carry keep their current value.
   expect(next?.model).toBe("local/stub");

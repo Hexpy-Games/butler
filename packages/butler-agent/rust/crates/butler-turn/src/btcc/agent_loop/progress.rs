@@ -2,7 +2,7 @@ use base64::Engine;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::btcc::{AgentLoopProgress, RuntimeTurnEventInput};
+use crate::btcc::{AgentLoopProgress, BtccError, RuntimeTurnEventInput};
 
 const OUTPUT_CHUNK_BYTES: usize = 32 * 1024;
 
@@ -52,9 +52,9 @@ pub(super) async fn operation(
     status: Status,
     output: Option<&butler_core::json::JsonDocument>,
     operation_call_id: Option<&str>,
-) {
+) -> Result<(), BtccError> {
     let call_id = &call.id;
-    let tool_name = &call.name;
+    let tool_name = operation_tool_name(call);
     let mut event = RuntimeTurnEventInput::new(status.event_kind());
     let mut payload = butler_core::json::json_object!({
         "safeLabel": tool_name,
@@ -68,7 +68,10 @@ pub(super) async fn operation(
     if let Some(target) = operation_target(call) {
         payload.insert("inputLabel".into(), Value::String(target));
     }
-    let encoded = output.map(butler_core::json::JsonDocument::as_str);
+    let transcript = output.and_then(|output| transcript_body(tool_name, output.as_str()));
+    let encoded = transcript
+        .as_deref()
+        .or_else(|| output.map(butler_core::json::JsonDocument::as_str));
     let result_ref = encoded.map(|body| {
         let sha256 = super::super::identity::digest(body);
         let pending = output
@@ -89,12 +92,28 @@ pub(super) async fn operation(
         (id, sha256)
     });
     event.payload = Some(payload);
-    let _ = progress.emit(event).await;
+    // The transcript row and its output exist only as these events: a failed
+    // append fails the caller rather than leaving the row silently incomplete.
+    progress.emit(event).await?;
     if matches!(status, Status::Completed)
         && let (Some(body), Some((result_id, result_sha256))) = (encoded, result_ref)
     {
-        emit_output_chunks(progress, call_id, &result_id, &result_sha256, body).await;
+        emit_output_chunks(progress, call_id, &result_id, &result_sha256, body).await?;
     }
+    Ok(())
+}
+
+/// A browser result whose screenshot was kept as a message file reaches the
+/// transcript naming that file (`image.file`) instead of repeating its base64.
+fn transcript_body(tool_name: &str, body: &str) -> Option<String> {
+    if !tool_name.starts_with("browser_") || !body.contains("\"file\"") {
+        return None;
+    }
+    let mut value: Value = serde_json::from_str(body).ok()?;
+    let image = value.get_mut("image")?.as_object_mut()?;
+    image.get("file")?;
+    image.remove("data")?;
+    Some(value.to_string())
 }
 
 async fn emit_output_chunks(
@@ -103,7 +122,7 @@ async fn emit_output_chunks(
     result_id: &str,
     result_sha256: &str,
     body: &str,
-) {
+) -> Result<(), BtccError> {
     let bytes = body.as_bytes();
     let chunk_count = bytes.len().div_ceil(OUTPUT_CHUNK_BYTES).max(1);
     for chunk_index in 0..chunk_count {
@@ -125,8 +144,9 @@ async fn emit_output_chunks(
         })
         .as_object()
         .cloned();
-        let _ = progress.emit(event).await;
+        progress.emit(event).await?;
     }
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
@@ -160,7 +180,7 @@ impl Status {
 fn operation_target(call: &super::contracts::ModelRoundToolCall) -> Option<String> {
     let keys: &[&str] = match call.name.as_str() {
         "run_command" => &["command"],
-        "write_file" | "edit_file" | "read_file" => &["path"],
+        "write_file" | "edit_file" | "read_file" | "switch_folder" => &["path"],
         "list_files" | "grep_files" => &["path", "directory", "root"],
         _ => return None,
     };
@@ -184,7 +204,41 @@ fn operation_target(call: &super::contracts::ModelRoundToolCall) -> Option<Strin
         .or_else(|| (call.name == "list_files").then(|| ".".into()))
 }
 
+fn operation_tool_name(call: &super::contracts::ModelRoundToolCall) -> &str {
+    if call.name == "tool_call"
+        && let Some(name) = call
+            .arguments
+            .get("id")
+            .and_then(Value::as_str)
+            .and_then(|id| id.strip_prefix("native:"))
+        && matches!(
+            name,
+            "browser_open"
+                | "browser_observe"
+                | "browser_act"
+                | "browser_tabs"
+                | "browser_selection"
+                | "browser_screenshot"
+                | "browser_close"
+                | "browser_wait_for_user"
+                | "browser_sign_in"
+                | "browser_pay_fill"
+                | "browser_autofill_fill"
+                | "browser_history_search"
+                | "library_search"
+                | "library_organize"
+        )
+    {
+        name
+    } else {
+        &call.name
+    }
+}
+
 /// Publish pending rows only after persistence, or fail them when parking fails.
+/// Either way the transition outcome stands: a failed commit returns its own
+/// error, and a committed suspension stays the truth because the decision
+/// publishes each row's terminal result. A failed publication is reported.
 pub(crate) async fn authority_batch(
     progress: &dyn AgentLoopProgress,
     transition: &crate::btcc::TurnTransition,
@@ -218,7 +272,7 @@ pub(crate) async fn authority_batch(
         {
             continue;
         }
-        if persisted {
+        let published = if persisted {
             operation(
                 progress,
                 call,
@@ -226,10 +280,22 @@ pub(crate) async fn authority_batch(
                 output.or(pending.as_ref()),
                 None,
             )
-            .await;
+            .await
         } else {
-            authority_terminal(progress, call, Status::Failed).await;
-        }
+            authority_terminal(progress, call, Status::Failed).await
+        };
+        report_unpublished(published);
+    }
+}
+
+/// Reports a row publication that cannot change the caller's outcome: the
+/// caller already returns its own error, or its durable state supersedes it.
+pub(super) fn report_unpublished(published: Result<(), BtccError>) {
+    if let Err(error) = published {
+        butler_core::diagnostic!(
+            "[native-btcc] tool row publish failed code={}",
+            error.code()
+        );
     }
 }
 
@@ -242,7 +308,7 @@ fn result_identity(call_id: &str, phase: &str, request_ref: &str) -> String {
 /// Reuse the terminal projection for durable cancellation before the turn's final event.
 pub(crate) async fn authority_cancellation_events(
     continuation: &super::continuation::AuthorityLoopContinuation,
-) -> Vec<RuntimeTurnEventInput> {
+) -> Result<Vec<RuntimeTurnEventInput>, BtccError> {
     let events = AuthorityCancellationEvents::default();
     for (index, call) in continuation
         .batch
@@ -263,13 +329,13 @@ pub(crate) async fn authority_cancellation_events(
                 })
         };
         if pending {
-            authority_terminal(&events, call, Status::Cancelled).await;
+            authority_terminal(&events, call, Status::Cancelled).await?;
         }
     }
-    events
+    Ok(events
         .0
         .into_inner()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .unwrap_or_else(std::sync::PoisonError::into_inner))
 }
 
 /// Collect only the small terminal projections; the caller durably appends each event.
@@ -299,13 +365,13 @@ pub(super) async fn authority_terminal(
     progress: &dyn AgentLoopProgress,
     call: &super::contracts::ModelRoundToolCall,
     status: Status,
-) {
+) -> Result<(), BtccError> {
     let Ok(output) = butler_core::json::JsonDocument::from_value(&json!({
         "ok":false,"error":{"code":status.as_str(),"message":"Operation did not complete."},
     })) else {
-        return;
+        return Ok(());
     };
-    operation(progress, call, status, Some(&output), None).await;
+    operation(progress, call, status, Some(&output), None).await?;
     emit_output_chunks(
         progress,
         &call.id,
@@ -313,10 +379,11 @@ pub(super) async fn authority_terminal(
         &super::super::identity::digest(output.as_str()),
         output.as_str(),
     )
-    .await;
+    .await
 }
 
 /// Settle unresolved pending rows; completed siblings retain their actual result.
+/// Runs only where the loop already ends failed, so its own outcome stands.
 pub(super) async fn fail_pending(
     input: &super::driver::Invocation<'_>,
     state: &super::state::State,
@@ -354,7 +421,7 @@ pub(super) async fn fail_pending_except(
                 .iter()
                 .any(|result| result.tool_call_id == call.id)
         {
-            authority_terminal(input.progress, call, Status::Failed).await;
+            report_unpublished(authority_terminal(input.progress, call, Status::Failed).await);
         }
     }
 }

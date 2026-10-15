@@ -12,7 +12,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: ./.github/actions/product-features
     - uses: oven-sh/setup-bun@v2
       if: inputs.owner-runner != 'true'
     - uses: actions/setup-node@v4

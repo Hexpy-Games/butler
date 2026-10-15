@@ -19,15 +19,18 @@ export interface WallpaperCrossfade {
  * `none` the canvas is hidden (an empty opaque WebGL layer would paint black)
  * and the next scene's first frame fades it in. Reduced motion switches
  * instantly. The WebGL canvas does not preserve its drawing buffer, so
- * `repaint` draws the current frame again right before the snapshot.
+ * `repaint` draws the current frame again right before the snapshot. A drift
+ * module's base layer (`companion`) fades in with the canvas when it shows.
  */
 export function createWallpaperCrossfade(
   canvas: HTMLCanvasElement,
   overlay: HTMLCanvasElement | null,
   repaint: () => void = () => undefined,
+  companion: HTMLElement | null = null,
 ): WallpaperCrossfade {
   let animation: Animation | null = null;
   let fade: Animation | null = null;
+  let companionFade: Animation | null = null;
   let revealOnDraw = false;
 
   const hide = () => {
@@ -42,7 +45,9 @@ export function createWallpaperCrossfade(
 
   const stopFade = () => {
     fade?.cancel();
+    companionFade?.cancel();
     fade = null;
+    companionFade = null;
   };
 
   return {
@@ -77,7 +82,9 @@ export function createWallpaperCrossfade(
       canvas.style.visibility = "";
       stopFade();
       // An implicit end keyframe: up to the canvas's own opacity.
-      if (!prefersReducedMotion()) fade = animateMotion(canvas, [{ opacity: 0, offset: 0 }], { duration: "slow", easing: "standard" });
+      if (prefersReducedMotion()) return;
+      fade = animateMotion(canvas, [{ opacity: 0, offset: 0 }], { duration: "slow", easing: "standard" });
+      if (companion && !companion.hidden) companionFade = animateMotion(companion, [{ opacity: 0, offset: 0 }], { duration: "slow", easing: "standard" });
     },
     dispose() {
       hide();

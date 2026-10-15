@@ -40,6 +40,7 @@ pub(super) async fn run_model_round(
     surface: &mut ToolSurface,
     context: &dyn TurnContextProjection,
 ) -> Result<ModelRoundResult, AgentLoopError> {
+    let timing = super::command_timing::CommandTiming::new("model_preparation");
     let identity = next_round_identity(input, state, prepared);
     let started_model_ref = input.model_execution.active_model_ref();
     model_waiting(
@@ -49,6 +50,7 @@ pub(super) async fn run_model_round(
         Some(&started_model_ref),
     )
     .await;
+    timing.mark("waiting_published");
     let round = Round {
         input,
         prepared,
@@ -105,16 +107,21 @@ async fn attempt_round(
     state: &mut State,
     surface: &mut ToolSurface,
 ) -> Result<ModelRoundResult, AttemptError> {
+    let timing = super::command_timing::CommandTiming::new("model_projection");
+    super::browser_context::supersede(&mut state.messages);
     identify_messages(&mut state.messages, &mut state.next_item_ordinal);
     let mut response_item_id = next_item_id(&mut state.next_item_ordinal);
     let replay = replay_transcript(round, state).await?;
+    timing.mark("replay_prepared");
     let mut projection = project_context(round, state, &replay, surface, &response_item_id).await?;
+    timing.mark("context_projected");
     if projection.rebase == ContextRebase::RequiredWithSteeringRecheck
         && steer_after_rebase(round, state, surface).await?
     {
         response_item_id = next_item_id(&mut state.next_item_ordinal);
         projection = project_context(round, state, &replay, surface, &response_item_id).await?;
     }
+    timing.mark("before_send");
     let mut response = send_request(round, state, &replay, surface, &projection).await?;
     accept_response(round, state, &mut response, response_item_id).await?;
     Ok(response)
@@ -267,13 +274,17 @@ async fn send_request(
         stream_observer: prepared.ports.stream_observer.as_deref(),
         identity_observer: prepared.ports.identity_observer.as_deref(),
     };
+    let timing = super::command_timing::CommandTiming::new("model_exchange");
     input.model_round_observer.request(&request).await;
+    timing.mark("before_round");
     let response = input
         .model
         .run_round(request)
         .await
         .map_err(AttemptError::Model)?;
+    timing.mark("round_returned");
     input.model_round_observer.response(&response).await;
+    timing.mark("observer_returned");
     Ok(response)
 }
 
@@ -285,6 +296,7 @@ async fn accept_response(
     response: &mut ModelRoundResult,
     response_item_id: String,
 ) -> Result<(), AttemptError> {
+    let timing = super::command_timing::CommandTiming::new("model_acceptance");
     let input = round.input;
     let round_id = &round.identity.round_id;
     if let Some(runtime) = input.operation_results {
@@ -293,12 +305,14 @@ async fn accept_response(
             .await
             .map_err(replay_error)?;
     }
+    timing.mark("replay_accepted");
     if let Some(budget) = &input.budget {
         budget
             .record_output(round_id, model_round_output_bytes(response)?)
             .await
             .map_err(AttemptError::Contract)?;
     }
+    timing.mark("budget_recorded");
     state.provider_continuation = response.continuation.take();
     let completed_model_ref = input.model_execution.active_model_ref();
     model_waiting(

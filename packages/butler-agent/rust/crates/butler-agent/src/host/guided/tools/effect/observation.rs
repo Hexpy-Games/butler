@@ -23,6 +23,7 @@ pub(super) async fn execute(
     {
         return Ok(None);
     }
+    let timing = crate::host::guided::command::timing::CommandTiming::new("admission");
     let mut input = Value::Object(call.arguments.clone());
     if input.get("state_effect").is_none() {
         input["state_effect"] = "read_only".into();
@@ -44,22 +45,40 @@ pub(super) async fn execute(
     } else {
         None
     };
+    timing.mark("authority_done");
     let mut approved_scope = scope.clone();
-    if needs_approval && !butler_platform::command_sandbox::READ_ONLY_SANDBOX {
+    if needs_approval && !butler_platform::command_sandbox::approval_free_reads() {
         approved_scope.execution = crate::host::guided::command::CommandExecution::Registered;
     }
     if !needs_approval && owner.binding.access_mode.reviews_effects() {
-        if butler_platform::command_sandbox::READ_ONLY_SANDBOX {
+        if butler_platform::command_sandbox::approval_free_reads() {
             approved_scope.contained_reads = true;
         } else {
             approved_scope.execution = crate::host::guided::command::CommandExecution::Registered;
         }
     }
+    timing.mark("capabilities_done");
     let result = owner
         .command
         .execute_observation(&call.arguments, approved_scope)
         .await
         .map(Some);
+    if needs_approval {
+        // An approved observation may have read beyond the project (D5).
+        owner.mark_external();
+    }
+    record_outcome(owner, approval, result.is_ok()).await?;
+    match result {
+        Ok(result) => Ok(result),
+        Err(error) => ordinary(error.code(), error.message(), None).map(Some),
+    }
+}
+
+async fn record_outcome(
+    owner: &GuidedTools,
+    approval: Option<String>,
+    applied: bool,
+) -> Result<(), ToolExecutionError> {
     if let Some(request_ref) = approval {
         owner
             .authority
@@ -67,15 +86,12 @@ pub(super) async fn execute(
                 request_ref,
                 owner_session_id: owner.binding.owner_session_id.clone(),
                 source_work_id: String::new(),
-                status: if result.is_ok() { "applied" } else { "failed" }.into(),
+                status: if applied { "applied" } else { "failed" }.into(),
                 receipt: None,
             })
             .await
             .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
         *owner.authority_consumed.lock() = true;
     }
-    match result {
-        Ok(result) => Ok(result),
-        Err(error) => ordinary(error.code(), error.message(), None).map(Some),
-    }
+    Ok(())
 }

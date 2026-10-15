@@ -136,6 +136,14 @@ async fn asset(
     }
     reply.body(Body::from_stream(stream)).unwrap()
 }
+/// The user picks the memory model (first run or Settings); nothing downloads before.
+pub(crate) async fn choose(gw: &Gateway, enabled: bool) -> Result<Value, HarnessError> {
+    let reply = gw
+        .post("/setup/memory-model", json!({ "enabled": enabled }))
+        .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    Ok(reply.data()["memory_model"].clone())
+}
 pub(crate) async fn model_until(gw: &Gateway, state: &str) -> Result<Value, HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {

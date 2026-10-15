@@ -18,13 +18,13 @@ use crate::gateway::application::{
 };
 
 #[derive(Clone, Copy)]
-pub(super) struct FailedProjection<'a> {
+pub(in crate::gateway::application) struct FailedProjection<'a> {
     pub metadata: &'a Map<String, Value>,
     pub message: &'a Map<String, Value>,
     pub retryable: bool,
 }
 
-pub(super) fn project_failed(
+pub(in crate::gateway::application) fn project_failed(
     db: &Connection,
     subscribers: &EventSubscribers,
     chat: &str,
@@ -121,6 +121,38 @@ pub(super) fn project_cancellation_ack(
     Ok(())
 }
 
+/// A suspended turn reports progress again only once its answer or decision resumed it:
+/// it no longer waits for the user, so "waiting for your response" ends with the request.
+pub(super) fn project_resumed(
+    db: &Connection,
+    subscribers: &EventSubscribers,
+    chat: &str,
+    turn: &str,
+    now: &str,
+) -> Result<(), AppStorageError> {
+    let resumed = db
+        .execute(
+            "UPDATE turns SET state='thinking',safe_status_label='Thinking',cancellable=1,updated_at=?1 WHERE id=?2 AND state='waiting_for_form'",
+            params![now, turn],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    if resumed == 0 {
+        return Ok(());
+    }
+    events::append(
+        db,
+        subscribers,
+        "turn.state_changed",
+        Some(turn),
+        service::map(&json!({
+            "session_id":chat,"turn_id":turn,"state":"thinking","safe_status_label":"Thinking",
+            "retryable":false,"cancellable":true
+        }))?,
+        now,
+    )?;
+    Ok(())
+}
+
 pub(super) fn project_suspended(
     db: &Connection,
     subscribers: &EventSubscribers,
@@ -130,6 +162,7 @@ pub(super) fn project_suspended(
     metadata: &Map<String, Value>,
     now: &str,
 ) -> Result<(bool, bool), AppStorageError> {
+    let timing = crate::gateway::command_timing::CommandTiming::new("project_suspended");
     let suspension = metadata.get("suspension").and_then(Value::as_str);
     let decision_pending = matches!(suspension, Some("authority_pending" | "question_pending"));
     let (state, label, cancellable) = if decision_pending {
@@ -141,6 +174,7 @@ pub(super) fn project_suspended(
         "UPDATE turns SET state=?1,safe_status_label=?2,safe_error_code=NULL,retryable=0,cancellable=?3,updated_at=?4 WHERE id=?5",
         params![state, label, cancellable, now, turn],
     ).map_err(AppStorageError::sqlite)?;
+    timing.mark("turn_updated");
     events::append(
         db,
         subscribers,
@@ -160,6 +194,7 @@ pub(super) fn project_suspended(
         now,
         suspension != Some("authority_pending"),
     )?;
+    timing.mark("stream_settled");
     if decision_pending {
         return Ok((false, false));
     }

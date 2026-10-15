@@ -1,3 +1,4 @@
+mod message_files;
 use std::{
     path::PathBuf,
     sync::{
@@ -321,18 +322,6 @@ impl AppArtifactMaterializer for Materializer {
     }
 }
 
-impl AppMessageFileStorage for Materializer {
-    fn write_upload(&self, _: AppFileWrite) -> ApplicationFuture<MaterializedResponderFile> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
-    fn prepare_uploaded(&self, _: AppMessageFileSnapshot) -> ApplicationFuture<()> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
-    fn read_original(&self, _: AppMessageFileSnapshot) -> ApplicationFuture<bytes::Bytes> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
-}
-
 pub(super) struct SettingsFacts;
 
 impl AppSettingsFactsProvider for SettingsFacts {
@@ -436,6 +425,7 @@ pub(super) fn dependencies(native: Arc<Native>, clock: u64) -> AppApplicationDep
         work_streams: Arc::new(UnprovidedSessions),
         subsessions: Arc::new(UnprovidedSessions),
         branch_conversations: Arc::new(UnprovidedBranchConversations),
+        session_title_generator: Arc::new(TestBranchSummarizer),
         branch_summarizer: Arc::new(TestBranchSummarizer),
         setup: crate::gateway::application::test_setup_port(),
     }
@@ -473,6 +463,7 @@ pub(super) fn command(client: &str, text: &str) -> SendMessageCommand {
             access_mode: None,
             plan_mode: None,
             subsession_result: None,
+            schedule_run: None,
         },
     }
 }
@@ -483,4 +474,14 @@ pub(super) fn temp_path(label: &str) -> PathBuf {
         std::process::id(),
         uuid::Uuid::new_v4()
     ))
+}
+
+impl crate::gateway::AppSessionTitleGenerator for TestBranchSummarizer {
+    fn generate(
+        &self,
+        _input: crate::gateway::AppSessionTitleInput,
+        _cancellation: tokio_util::sync::CancellationToken,
+    ) -> crate::gateway::ApplicationFuture<String> {
+        Box::pin(async { Ok("Generated chat title".into()) })
+    }
 }

@@ -2,12 +2,12 @@
 
 mod contracts;
 mod dashboard;
-mod folder;
+pub(super) mod folder;
 mod git;
 mod mutations;
 mod owner;
 mod rows;
-mod token;
+pub(super) mod token;
 
 use crate::gateway::application::storage::AppStorageCode;
 pub(crate) use contracts::AppProjectSummary;
@@ -80,9 +80,19 @@ pub(super) fn branch_project_created_event(
     rows::append_created_unpublished(db, clock, project)
 }
 
-pub(super) fn initial_root(db: &Connection, fallback: &Path) -> Result<PathBuf, AppStorageError> {
-    let path = configured_root(db)?.unwrap_or_else(|| fallback.to_path_buf());
-    absolute_root(path)
+/// The effective folder for creation, Settings and turn context. Resolving it
+/// never creates a directory or persists the fallback as a user preference.
+pub(super) fn effective_root(db: &Connection) -> Result<PathBuf, AppStorageError> {
+    if let Some(path) = configured_root(db)? {
+        return Ok(path);
+    }
+    let home = butler_platform::user_dirs::non_empty_home_dir().ok_or_else(|| {
+        AppStorageError::new(
+            AppStorageCode::ProjectWorkspaceUnavailable,
+            "User home directory is unavailable.",
+        )
+    })?;
+    absolute_root(home.join("butler-workspace"))
 }
 
 /// Read the current setting without substituting a workspace when it is unset.

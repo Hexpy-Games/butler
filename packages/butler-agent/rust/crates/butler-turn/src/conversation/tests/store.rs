@@ -258,7 +258,10 @@ async fn store_preserves_transactions_outcomes_and_summary_authority() {
         .await
         .unwrap();
     verify_readonly_history(&store, false).await;
-    assert!(store.read_summaries("cs_fixed").await.unwrap().is_empty());
+    assert_eq!(
+        store.read_summaries("cs_fixed").await.unwrap(),
+        [] as [crate::conversation::types::ConversationSummary; 0]
+    );
     let restored = store
         .read_message_by_id("cm_request")
         .await

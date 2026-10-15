@@ -192,7 +192,7 @@ async fn mem_05_vector_batch_finds_chat_a_fact_by_paraphrase_in_chat_b() -> Resu
     assert_eq!(turn_state(&turn), "delivered");
     memory_stubs::text_complete(&s.sandbox.data, 6).await?;
     if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
-        assert!(workers.is_empty());
+        assert_eq!(workers, [] as [u32; 0]);
     }
     assert!(memory_stubs::unit_states(&s.sandbox.data)?.0 > 0);
     let first_after_idle = recall(&s, "general", COLD_AGAIN).await?;

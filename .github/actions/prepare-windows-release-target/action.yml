@@ -1,0 +1,30 @@
+name: Prepare owner Windows release target
+description: Build and publish the unchanged static ORT release profile for tag reuse
+runs:
+  using: composite
+  steps:
+    - name: Prepare static-ORT release target for tag builds
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      working-directory: packages/butler-agent/rust
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TARGET_SNAPSHOT_PROFILE: release
+        TARGET_SNAPSHOT_FEATURES: butler-agent/static-ort
+        CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+        CARGO_PROFILE_RELEASE_LTO: thin
+        CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '1'
+        RUSTFLAGS: -C target-feature=+crt-static
+        BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
+      run: |
+        $ErrorActionPreference = 'Continue'
+        $env:CARGO_TARGET_DIR = python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" target windows-x64 static-ort native
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort native
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --locked --release --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" save-local windows-x64 static-ort native
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    - uses: ./.github/actions/publish-windows-target
+      with:
+        profile: release

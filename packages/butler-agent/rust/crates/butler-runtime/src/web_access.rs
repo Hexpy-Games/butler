@@ -17,4 +17,4 @@ pub mod testing;
 mod tests;
 
 pub(crate) use error::WebAccessCode;
-pub use service::{WebAccess, WebSession};
+pub use service::{LivePage, SearchResultRef, WebAccess, WebSession};

@@ -1,13 +1,14 @@
 import { snapshotFiles, fileDelta } from "./browser-p0-file-snapshot.ts";
-import { quietHost } from "./browser-p0-host-load.ts";
+import { hostWindow } from "./browser-p0-host-load.ts";
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { budget, sample, type P0App, type Row, type Sample } from "./browser-p0-measure.ts";
 import { memoryCheckpoint } from "./browser-p0-memory";
 import { openBrowserArea, visitUserSite } from "./browser-p0-user";
-import { seedP0OwnerScale } from "./browser-p0-owner-scale";
+import { waitFor } from "./browser-p0-app";
+import { seedP0OwnerScale, waitP0OwnerScaleSpace } from "./browser-p0-owner-scale";
 
 function agentRSS(pid: number): number {
   if (process.platform === "win32") return Number(execFileSync("powershell.exe", ["-NoProfile", "-Command", `(Get-Process -Id ${pid}).WorkingSet64`], { encoding: "utf8" }).trim());
@@ -22,6 +23,7 @@ export async function leakSoak(app: P0App, origin: string, rows: Row[], minutes:
   assert(evidence, "BUTLER_P0_EVIDENCE required"); mkdirSync(evidence, { recursive: true });
   const pid = JSON.parse(readFileSync(join(app.data, "app/runtime/foreground/instance.json"), "utf8")).agent_host_pid;
   assert(Number.isSafeInteger(pid) && pid > 0);
+  await waitP0OwnerScaleSpace(app.data);
   const ownerScale = seedP0OwnerScale(app.data);
   await app.page.reload(); await openBrowserArea(app);
   await visitUserSite(app, `${origin}/nodes`, evidence);
@@ -30,22 +32,33 @@ export async function leakSoak(app: P0App, origin: string, rows: Row[], minutes:
     try { await app.main.evaluate("browserP0.step('warm')"); }
     finally { await app.main.evaluate("browserP0.close('warm')"); }
   }
+  await app.main.evaluate("browserP0.close('user')");
   await Bun.sleep(60_000);
-  const initialIdleLoad = await quietHost("initial 10 min idle", app);
-  const idleBefore = await snapshotFiles(app, "idle-before");
-  await Bun.sleep(600_000);
-  const idleAfter = await snapshotFiles(app, "idle-after"), initialIdle = fileDelta(idleBefore, idleAfter);
-  console.log(JSON.stringify({ initialIdle, initialIdleLoad }));
-  const hostLoad = await quietHost("2 h soak", app);
-  const baselineCPU = await cpuSamples(app);
-  const warm = await sample(app), agentWarm = agentRSS(pid);
-  const productWarm = await app.main.evaluate("browserP0.productInventory()");
-  const sessionsWarm = await app.main.evaluate<number>("browserP0.sample().sessionsCreated");
-  await app.main.evaluate("browserP0.resetDelay()");
-  const loop = await runSoakLoop(app, origin, minutes, evidence);
-  const after = await sample(app);
-  const agentAfter = agentRSS(pid);
-  const productAfter = await app.main.evaluate("browserP0.productInventory()");
+  const initial = await idleSnapshot(app, "initial");
+  const { before: idleBefore, after: idleAfter, delta: initialIdle } = initial;
+  console.log(JSON.stringify({ initialIdle }));
+  // Target-task inspection can suspend Electron: keep it outside the histogram.
+  const nativeStart = await memoryCheckpoint(app, evidence, "soak-start-native");
+  const measured = await hostWindow("2 h soak", async () => {
+    const baselineCPU = await cpuSamples(app);
+    const warm = await sample(app), agentWarm = agentRSS(pid);
+    const productWarm = await app.main.evaluate("browserP0.productInventory()");
+    const sessionsWarm = await app.main.evaluate<number>("browserP0.sample().sessionsCreated");
+    const measurementStart = await app.main.evaluate<string>("browserP0.resetDelay()");
+    await app.main.evaluate(`browserP0.openProductGPU('user', '${origin}/video')`);
+    await waitFor(() => app.main.evaluate("browserP0.evaluate('user','video.readyState>=3&&!video.paused')"), "real USER decoded video playing");
+    const loop = await runSoakLoop(app, origin, minutes, evidence);
+    await app.main.evaluate("browserP0.close('user')");
+    await app.page.expression("new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
+    const measurementEnd = await app.main.evaluate<string>("browserP0.finishDelay()");
+    const outliers = await app.main.evaluate("browserP0.delayOutliers()");
+    const after = await sample(app), agentAfter = agentRSS(pid);
+    const productAfter = await app.main.evaluate("browserP0.productInventory()");
+    return { baselineCPU, warm, agentWarm, productWarm, sessionsWarm, loop, after, agentAfter, productAfter, outliers, measurement: { start: measurementStart, end: measurementEnd } };
+  });
+  const { baselineCPU, warm, agentWarm, productWarm, sessionsWarm, loop, after, agentAfter, productAfter, outliers, measurement } = measured;
+  writeFileSync(join(evidence, "soak-main-loop.json"), JSON.stringify({ measurement, loop: after.loop, outliers }, null, 2));
+  const nativeEnd = await memoryCheckpoint(app, evidence, "soak-end-native");
   assert.equal((await app.main.evaluate<{ count: number }>("browserP0.productErrors()")).count, 0, "No rejected product lifecycle IPC during soak");
   assert.deepEqual(productAfter, productWarm, "Product tabs/profiles/stills return to warm baseline");
   assert.equal(await app.main.evaluate("browserP0.sample().sessionsCreated"), sessionsWarm, "No per-iteration Session creation");
@@ -57,26 +70,25 @@ export async function leakSoak(app: P0App, origin: string, rows: Row[], minutes:
   for (const key of ["contents", "listeners", "debuggers"] as const) rows.push({ test: "soak", metric: `${key} delta`, value: after.resources[key] - warm.resources[key], budget: 0, status: after.resources[key] === warm.resources[key] ? "PASS" : "FAIL", attribution: "Electron main lifetime", mitigation: "Release views/listeners/debugger sessions" });
   const afterSoak = fileDelta(idleAfter, await snapshotFiles(app, "soak-after"));
   console.log(JSON.stringify({ ...loop, afterSoak, rows: rows.filter(r => r.test === "soak") }));
-  const idleHostLoad = await quietHost("post-soak 10 min idle", app);
-  const beforeWrites = await snapshotFiles(app, "post-idle-before");
-  await Bun.sleep(600_000);
+  const post = await idleSnapshot(app, "post-soak");
   const idleCPU = await cpuSamples(app);
   const mean = (ns: number[]) => ns.reduce((a, b) => a + b, 0) / ns.length;
   budget(rows, "soak", "GPU CPU delta percentage points after close", mean(idleCPU) - mean(baselineCPU), 1, "GPU", "Inspect GPU resources");
-  const postIdle = fileDelta(beforeWrites, await snapshotFiles(app, "post-idle-after"));
+  const postIdle = post.delta;
   for (const [label, delta] of [["initial idle", initialIdle], ["post-soak idle", postIdle]] as const) {
     const data = delta.scopes.find(s => s.scope === "data")!;
     rows.push({ test: "soak", metric: `${label} Butler DATA changed files`, value: delta.writers.Butler ?? data.changedFiles, budget: 0, status: delta.writers.Butler === 0 ? "PASS" : "FAIL" });
     rows.push({ test: "soak", metric: `${label} unresolved writer changed files`, value: delta.writers.unresolved ?? 0, budget: 0, status: delta.writers.unresolved ? "UNAVAILABLE" : "PASS" });
     rows.push({ test: "soak", metric: `${label} Chromium profile deltas`, value: JSON.stringify(delta), budget: "report internal flushes", status: "DESCRIPTIVE" });
   }
-  return { ownerScale, productWarm, productAfter, ...loop, minutes, initialIdle, afterSoak, postIdle, idleCPU, baselineCPU, hostLoad, initialIdleLoad, idleHostLoad, shortVariant: minutes === 10 };
+  return { ownerScale, productWarm, productAfter, measurement, outliers, nativeCheckpoints: [nativeStart, nativeEnd], ...loop, minutes, initialIdle, afterSoak, postIdle, idleCPU, baselineCPU, initialIdleSnapshots: { before: idleBefore, after: idleAfter }, shortVariant: minutes === 10 };
 }
 
-async function runSoakLoop(app: P0App, origin: string, minutes: number, evidence: string) {
+export async function runSoakLoop(app: P0App, origin: string, minutes: number, evidence: string, native = false) {
   const startedAt = Date.now(), end = startedAt + minutes * 60_000;
   let iterations = 0, userVisits = 0, nextCheckpoint = startedAt + 15 * 60_000;
-  const checkpoints = [await memoryCheckpoint(app, evidence, "soak-start")];
+  const videoFrames = [await decodedVideoFrames(app)];
+  const checkpoints = [await memoryCheckpoint(app, evidence, "soak-start", false, native)];
   const paths = ["nodes", "cpu", "network"], fixtureVisits = { nodes: 0, cpu: 0, network: 0 };
   while (Date.now() < end) {
     const id = `soak-${iterations}`, path = paths[iterations % paths.length]! as keyof typeof fixtureVisits;
@@ -90,15 +102,21 @@ async function runSoakLoop(app: P0App, origin: string, minutes: number, evidence
       console.log(JSON.stringify({ soakIterations: iterations, fixtureVisits, userVisits }));
     }
     if (Date.now() >= nextCheckpoint) {
-      checkpoints.push(await memoryCheckpoint(app, evidence, `soak-${Math.round((Date.now() - startedAt) / 60000)}m`));
+      const decoded = await decodedVideoFrames(app);
+      assert(decoded > videoFrames.at(-1)!, "Real USER video decodes during each soak interval");
+      videoFrames.push(decoded);
+      checkpoints.push(await memoryCheckpoint(app, evidence, `soak-${Math.round((Date.now() - startedAt) / 60000)}m`, false, native));
       nextCheckpoint += 15 * 60_000;
     }
     await Bun.sleep(1000);
   }
   const elapsedMs = Date.now() - startedAt;
-  checkpoints.push(await memoryCheckpoint(app, evidence, "soak-end"));
+  checkpoints.push(await memoryCheckpoint(app, evidence, "soak-end", false, native));
+  const decoded = await decodedVideoFrames(app);
+  assert(decoded > videoFrames.at(-1)!, "Real USER video still decodes at soak completion");
+  videoFrames.push(decoded);
   assert(userVisits >= iterations, "Every iteration exercised real USER and agent tabs");
-  return { elapsedMs, iterations, fixtureVisits, userVisits, checkpoints, realSites: Math.floor(iterations / 50) * 2 };
+  return { elapsedMs, iterations, fixtureVisits, userVisits, videoFrames, checkpoints, realSites: Math.floor(iterations / 50) * 2 };
 }
 
 async function visitRealSite(app: P0App, url: string) {
@@ -111,4 +129,18 @@ async function cpuSamples(app: P0App) {
   const samples = [];
   for (let i = 0; i < 5; i++) { await Bun.sleep(1000); samples.push(gpuCPU(await sample(app))); }
   return samples;
+}
+
+async function idleSnapshot(app: P0App, label: string) {
+  return hostWindow(`${label} 10 min idle`, async () => {
+    const before = await snapshotFiles(app, `${label}-idle-before`);
+    const started = Date.now();
+    await Bun.sleep(600_000);
+    const after = await snapshotFiles(app, `${label}-idle-after`);
+    return { before, after, elapsedMs: Date.now() - started, delta: fileDelta(before, after) };
+  });
+}
+
+async function decodedVideoFrames(app: P0App) {
+  return app.main.evaluate<number>("browserP0.evaluate('user', 'video.getVideoPlaybackQuality().totalVideoFrames')");
 }

@@ -28,6 +28,13 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_BUILD_JOBS: "8"
+      # Keep filename/line backtraces inside the archived executables, without
+      # packed split-debug postprocessing (dsymutil/dwp) or missing sidecars.
+      BUTLER_EXPECT_SANDBOX: ${{ startsWith(inputs.platform, 'linux-') && 'linux' || startsWith(inputs.platform, 'darwin-') && 'macos' || 'unavailable' }}
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+      CARGO_PROFILE_DEV_SPLIT_DEBUGINFO: 'off'
+      CARGO_PROFILE_TEST_SPLIT_DEBUGINFO: 'off'
       BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
       # Read-only build provenance must not refresh the index it tracks.
       GIT_OPTIONAL_LOCKS: "0"
@@ -36,7 +43,6 @@ jobs:
         working-directory: packages/butler-agent/rust
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/product-features
       - uses: ./.github/actions/rust-agent-setup
         with:
           components: clippy
@@ -48,15 +54,13 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-      # These four libraries allow panic/unwrap/expect and dead-code lints
-      # under test-support. --all-targets enables it through dev dependencies;
-      # retain their feature-free production check. Other ordinary libraries
-      # and binaries are covered by the workspace all-targets invocation.
-      - name: Clippy strict production libraries and all targets
+      # Linux x64 retains strict production and workspace/all-targets Clippy.
+      # source-check enforces OS-specific production code in butler-platform;
+      # lint its native implementations and contracts on macOS and arm64.
+      - name: Clippy native platform library and contracts
         if: inputs.clippy
         run: |
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy -p butler-turn -p butler-models -p butler-runtime -p butler-ledger --lib --locked --keep-going -- -D warnings
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy -p butler-platform --all-targets --locked --keep-going -- -D warnings
       - name: Build the complete workspace once
         env:
           ORT_MODE: ${{ inputs.ort-mode }}
@@ -96,6 +100,9 @@ jobs:
           python3 "$GITHUB_WORKSPACE/.github/scripts/balance-e2e.py" "$RUNNER_TEMP/rust-archive/list.json" "$RUNNER_TEMP/rust-archive" "$RUNNER_TEMP/rust-archive/perf-list.json"
           python3 "$isolate" python3 "$GITHUB_WORKSPACE/.github/scripts/test-ci-invariants.py" "$RUNNER_TEMP/rust-archive"
           cp target/debug/butler-agent "$RUNNER_TEMP/rust-archive/butler-agent"
+          if [[ "${{ inputs.platform }}" == linux-* ]]; then
+            cp target/debug/butler-sandbox "$RUNNER_TEMP/rust-archive/butler-sandbox"
+          fi
       - name: Run doctests when present
         env:
           ORT_MODE: ${{ inputs.ort-mode }}
@@ -121,6 +128,7 @@ jobs:
           if [[ "$version" != v[0-9]* && "$version" != 0.1.0-preview.99 ]]; then version=0.1.0-dev; fi
           version="${version#v}"
           python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" record "$RUNNER_TEMP/rust-archive" "$PLATFORM" "$ORT_MODE" dev "$version"
+      # Test jobs need this bundle even when the later snapshot publish fails.
       - uses: actions/upload-artifact@v4
         with:
           name: rust-${{ inputs.platform }}
@@ -128,6 +136,9 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
           compression-level: 1
+      - name: Free the uploaded test bundle before the snapshot
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+        run: rm -rf "$RUNNER_TEMP/rust-archive"
       - uses: ./.github/actions/publish-cargo-target
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
         with:

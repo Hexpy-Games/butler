@@ -24,12 +24,14 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   memory: [
     { id: "instructions", kind: "list", fields: [] },
     { id: "chat-memory", kind: "status", fields: [] },
+    { id: "memory-model", kind: "form", fields: ["memory-model"] },
     { id: "profile-memory", kind: "status", fields: [] },
     { id: "project-memory", kind: "status", fields: ["memory-project"] },
   ],
   general: [
     { id: "language-region", kind: "form", fields: ["language", "timezone"] },
     { id: "conversation-input", kind: "form", fields: ["follow-up-behavior", "multiline-send", "plan-mode-default"] },
+    { id: "sidebar", kind: "form", fields: ["smart-groups"] },
     { id: "default-permission", kind: "form", fields: ["access-mode"] },
     { id: "notifications", kind: "form", fields: ["desktop-notifications", "notify-assistant-messages", "notify-task-completions"] },
     { id: "notification-permission", kind: "status", fields: ["notification-permission"] },
@@ -39,15 +41,16 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   ],
   appearance: [
     { id: "theme", kind: "form", fields: ["theme", "translucent-sidebar"] },
-    { id: "sidebar", kind: "form", fields: ["smart-groups"] },
-    { id: "home-screen", kind: "form", fields: ["main-screen-wallpaper", "main-screen-motion", "main-screen-battery", "collapse-message-box", "composer-decoration", "composer-character"] },
+    { id: "home-screen", kind: "form", fields: ["main-screen-wallpaper", "main-screen-motion", "main-screen-battery"] },
+    { id: "conversation", kind: "form", fields: ["conversation-background"] },
+    { id: "message-box", kind: "form", fields: ["collapse-message-box", "composer-decoration", "composer-character"] },
     { id: "accessibility", kind: "form", fields: ["reduce-motion"] },
   ],
   personalization: [
     { id: "profile", kind: "form", fields: ["butler-nickname", "principal-name", "preferred-address"] },
     { id: "response-style", kind: "form", fields: ["response-language", "persona-preset", "persona", "eol"] },
     { id: "learning", kind: "form", fields: ["profiling-mode", "profiling-model", "profiling-reasoning", "memory-link"] },
-    { id: "import", kind: "form", fields: ["profile-migration", "profile-migration-prompt", "profile-migration-dump"] },
+    { id: "agent-import", kind: "list", fields: ["profile-migration", "profile-migration-prompt", "profile-migration-dump"] },
   ],
   // Memory cleanup and worker profiles show when the Advanced disclosure is open.
   models: [
@@ -81,6 +84,14 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "usage-tools", kind: "list", fields: [] },
   ],
   logs: [{ id: "developer-logs", kind: "list", fields: [] }],
+  browser: [
+    { id: "browser-history", kind: "form", fields: ["browser-history"] },
+    { id: "sign-ins", kind: "list", fields: [] },
+    { id: "browser-import", kind: "list", fields: ["browser-import-bookmarks", "browser-import-passwords"] },
+    { id: "payment-methods", kind: "list", fields: [] },
+    { id: "profiles", kind: "list", fields: [] },
+    { id: "purchase-sites", kind: "form", fields: [] },
+  ],
   // Remote-only controls hide when refused. Authority, keys and diagnostics stay visible.
   security: [
     { id: "remote-access", kind: "form", fields: ["remote-access-enabled", "lan-urls"] },

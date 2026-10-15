@@ -1,4 +1,5 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
+import { useAnswerDrafts, draftTurns, withDraftMessages } from "@/app/answerDrafts";
 import { SessionBranchSeed } from "./SessionBranchSeed";
 import type { MessageRecord, TurnProgressSnapshot } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -8,21 +9,24 @@ import { TurnActivityMessage } from "./TurnActivityMessage";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { useMessageList } from "./hooks/useMessageList";
 import { useMessageListLayout } from "./hooks/useMessageListLayout";
-import { ConversationScroll, MessageListSurface } from "@/butler-ds";
+import { type ConversationColumnRect, ConversationScroll, MessageListSurface } from "@/butler-ds";
 import { useEnteringMessageIds } from "./hooks/useEnteringMessageIds";
 import { QueuedMessageItem } from "./QueuedMessageItem";
 import { useQueuedConversation } from "./hooks/useQueuedConversation";
 
 interface MessageListProps {
+  onColumnRect?: (rect: ConversationColumnRect) => void;
   messages: MessageRecord[];
   turnProgress: Record<string, TurnProgressSnapshot>;
   bottomReserve: number;
   isSending: boolean;
 }
 
-function MessageListComponent({ messages, turnProgress, bottomReserve, isSending }: MessageListProps) {
+function MessageListComponent({ messages, turnProgress, bottomReserve, isSending, onColumnRect }: MessageListProps) {
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const summary = useButlerStore((state) => state.summary);
+  const turns = useAnswerDrafts(state => draftTurns(state, activeChatId));
+  const displayMessages = useMemo(() => withDraftMessages(messages, turns, activeChatId), [messages, turns, activeChatId]);
   const {
     visibleMessages,
     progressRows,
@@ -34,8 +38,10 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
     copyContextMenuText,
     assistantFooterMetaById,
     anchoredStewardProgress,
-  } = useMessageList(messages, summary, turnProgress, isSending);
+  } = useMessageList(displayMessages, summary, turnProgress, isSending);
 
+  const liveActivity = useMemo(() => <TurnActivityPanel rows={progressRows} state={turnState}
+    startedAt={turnStartedAt} turnId={turnId} />, [progressRows, turnState, turnStartedAt, turnId]);
   const enteringIds = useEnteringMessageIds(visibleMessages, activeChatId);
   const queue = useQueuedConversation(visibleMessages, activeChatId);
   const itemCount = messageItemCount + queue.items.length;
@@ -47,7 +53,7 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
   return (
     <>
       <ConversationScroll virtualized scrollRef={parentRef}>
-        <MessageListSurface height={virtualListHeight}>
+        <MessageListSurface height={virtualListHeight} onColumnRect={onColumnRect}>
           {summary?.branch_seed && <div ref={seedRef}><SessionBranchSeed /></div>}
           {rowVirtualizer.getVirtualItems().map((virtualRow) => {
             const queued = queue.items[virtualRow.index - messageItemCount];
@@ -71,7 +77,7 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
             if (!message) return null;
             return (
               <MessageItem
-                key={message.id ?? `${message.role}-${message.text}`}
+                key={message.role === "assistant" && message.turn_id ? `answer-${message.turn_id}:${virtualRow.index}` : message.id ?? `${message.role}-${message.text}`}
                 message={message}
                 virtualRow={virtualRow}
                 topOffset={topOffset}
@@ -82,8 +88,7 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
                 onCopyContextMenuText={copyContextMenuText}
                 rowVirtualizer={rowVirtualizer}
                 stewardProgress={anchoredStewardProgress.get(message.id)}
-                liveActivity={message.id === liveMessageId ? <TurnActivityPanel
-                  rows={progressRows} state={turnState} startedAt={turnStartedAt} turnId={turnId} /> : undefined}
+                liveActivity={message.id === liveMessageId ? liveActivity : undefined}
               />
             );
           })}
@@ -106,6 +111,7 @@ export const MessageList = memo(
     previous.messages === next.messages &&
     previous.turnProgress === next.turnProgress &&
     previous.bottomReserve === next.bottomReserve &&
-    previous.isSending === next.isSending,
+    previous.isSending === next.isSending &&
+    previous.onColumnRect === next.onColumnRect,
 );
 MessageList.displayName = "MessageList";

@@ -29,7 +29,7 @@ pub(super) fn read_json(db: &Connection, key: &str) -> Result<Option<Value>, App
     Ok(value.and_then(|value| serde_json::from_str(&value).ok()))
 }
 
-pub(super) fn write_json(
+pub(in crate::gateway::application) fn write_json(
     db: &Connection,
     key: &str,
     value: &Value,

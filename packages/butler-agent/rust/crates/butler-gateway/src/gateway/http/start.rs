@@ -9,7 +9,7 @@ use tokio_util::sync::CancellationToken;
 /// listeners too when remote access is enabled.
 pub(in crate::gateway) fn serve(
     listener: TcpListener,
-    content_listener: Option<TcpListener>,
+    content_listener: TcpListener,
     application: Arc<dyn GatewayApplication>,
     config: GatewayConfig,
     shutdown: CancellationToken,
@@ -28,8 +28,25 @@ pub(in crate::gateway) fn serve(
             allowed_hosts: config.allowed_hosts.clone(),
             content_hosts: config.content_hosts.clone(),
         };
+        let content = butler_runtime::browser::ContentOrigin(local_addr.port().saturating_add(1));
+        let app_host = app_host(config.headless_browser.as_ref(), &shutdown);
+        let headless = config.headless_browser.map(|browser| {
+            butler_runtime::browser::Headless::new(
+                butler_runtime::browser::HeadlessConfig {
+                    root: browser.root,
+                    install: browser.install,
+                    content: Some(content),
+                    enabled: browser.enabled,
+                },
+                shutdown.clone(),
+            )
+        });
         let state = Arc::new(HttpState {
             browser: super::browser_host::Hub::default(),
+            headless,
+            app_host,
+            previews: butler_runtime::previews::Previews::default(),
+            preview_lifetime_started: parking_lot::Mutex::new(false),
             application,
             devices,
             security: security::GatewaySecurity::new(security::SecurityConfig {
@@ -53,15 +70,54 @@ pub(in crate::gateway) fn serve(
             uploads: tokio::sync::Semaphore::new(2),
             static_ui_root: config.static_ui_root,
             output_data: config.output_data,
+            signin_secrets: super::signin_secrets::SignInSecrets::new(),
+            browser_import: super::browser_import::ImportSessions::default(),
+            import_dependencies: config.browser_import,
+            agent_imports: super::agent_import::AgentImports::default(),
         });
         // Publish the saved exposure before loopback admission: a successful
         // health probe must not race initialization of Settings → Security.
         state.remote.apply(&state, exposure);
-        if let Some(content_listener) = content_listener {
-            super::content::spawn(content_listener, state.clone(), shutdown.clone());
-        }
+        browser_ports(&state);
+        super::content::spawn(content_listener, state.clone(), shutdown.clone());
         listeners::spawn(listener, state, shutdown)
             .await
             .map_err(std::io::Error::other)?
     })
+}
+
+/// Reader renders and headless downloads go through this gateway.
+fn browser_ports(state: &Arc<HttpState>) {
+    butler_runtime::browser::set_render_port(Arc::new(super::browser_host::reader::ReaderPort(
+        Arc::downgrade(state),
+    )));
+    if let Some(headless) = &state.headless {
+        headless.set_history_port(Arc::new(super::library::history::HeadlessHistory(
+            Arc::downgrade(state),
+        )));
+        headless.set_download_port(Arc::new(super::browser_host::downloads::HeadlessDownloads(
+            Arc::downgrade(state),
+        )));
+    }
+}
+
+/// The hidden App host, where the browser without the App may use one.
+fn app_host(
+    browser: Option<&crate::gateway::HeadlessBrowserConfig>,
+    shutdown: &CancellationToken,
+) -> Option<Arc<butler_runtime::browser::AppHost>> {
+    let browser = browser?;
+    if matches!(
+        browser.app_host,
+        butler_runtime::browser::AppHostSource::Off
+    ) {
+        return None;
+    }
+    Some(butler_runtime::browser::AppHost::new(
+        butler_runtime::browser::AppHostConfig {
+            root: browser.app_host_root.clone(),
+            source: browser.app_host.clone(),
+        },
+        shutdown.clone(),
+    ))
 }

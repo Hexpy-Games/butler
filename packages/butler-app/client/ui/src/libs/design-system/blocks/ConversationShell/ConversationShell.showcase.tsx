@@ -7,6 +7,8 @@ import {
   ConversationShell,
   MessageListSurface,
 } from "./ConversationShell";
+import { SharedBackground } from "./ConversationShell.demo";
+import { InConversation } from "../TabRail/tabRailDemo";
 import styles from "./ConversationShell.showcase.module.css";
 
 export const meta: ShowcaseMeta = {
@@ -68,4 +70,8 @@ function Conversation({ locale, jump }: ShowcaseRenderContext & { jump: boolean 
 export const stories: ShowcaseStory[] = [
   { name: "Messages", states: ["scroll"], render: (context) => <Conversation {...context} jump={false} /> },
   { name: "Unread below", states: ["unread"], render: (context) => <Conversation {...context} jump /> },
+  { name: "Background: new chat, then messages", widths: ["app", "wide", "375"], render: (context) => <SharedBackground {...context} /> },
+  { name: "Background behind messages", widths: ["app", "wide", "375"], render: (context) => <SharedBackground {...context} startWithMessages /> },
+  // rail: a TabRail; the column and composer move left only as far as needed (full, compact), or start below a shelf.
+  { name: "Tab rail beside the messages", widths: ["320", "375", "app", "wide"], render: ({ locale }) => <InConversation locale={locale} /> },
 ];

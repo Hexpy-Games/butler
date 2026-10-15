@@ -419,6 +419,12 @@ pub(crate) fn validate_write_destinations(
     Ok(())
 }
 
+/// Holds DATA ownership for a stopped-service settings write without a record.
+pub(crate) fn lock_stopped_data(data_root: &Path) -> Result<InstanceLock, crate::host::HostError> {
+    let file = open_lock(&instance_lock_path(data_root), true)?;
+    InstanceLock::try_exclusive(file).map_err(|_| crate::host::HostError::new("service_data_busy"))
+}
+
 fn open_lock(path: &Path, create: bool) -> Result<File, crate::host::HostError> {
     if fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err("service_lock_path_ambiguous".into());

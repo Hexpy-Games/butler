@@ -6,6 +6,8 @@ import {
   ButtonContainer, Switch,
   CardListItem,
   PencilLine,
+  Stack,
+  Typo,
   RefreshCcw,
   Trash2,
 } from "@/butler-ds";
@@ -34,8 +36,14 @@ export function McpServerRow({
   return (
     <CardListItem
       title={server.display_name}
-      description={mcpServerSubtitle(server)}
-      meta={server.enabled ? copy.mcpEnabled : copy.mcpDisabled}
+      description={server.tool_filter_review_required
+        ? <Stack as="span" gap="xs">
+            <Typo.Caption as="span">{copy.mcpToolFilterReview}</Typo.Caption>
+            <Typo.Caption as="span">{mcpServerSubtitle(server)}</Typo.Caption>
+          </Stack>
+        : mcpServerSubtitle(server)}
+      meta={[...server.env, ...server.headers].some(slot => !slot.has_value)
+        ? copy.mcpNeedsSecret : server.enabled ? copy.mcpEnabled : copy.mcpDisabled}
       actions={
         <ButtonContainer size="xs">
           <Button

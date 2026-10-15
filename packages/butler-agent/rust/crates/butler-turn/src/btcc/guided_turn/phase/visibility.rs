@@ -1,3 +1,4 @@
+mod browser;
 use std::collections::HashSet;
 
 use crate::btcc::{AccessMode, ApprovalExemptAction};
@@ -19,6 +20,7 @@ const DISCOVERY: &[&str] = &[
     "list_files",
 ];
 const NON_FULL: &[&str] = &[
+    "answer_blocks",
     "output_check",
     "output_publish",
     "run_command",
@@ -61,6 +63,9 @@ const NON_FULL: &[&str] = &[
     "list_wallpapers",
     "set_wallpaper",
     "save_wallpaper_module",
+    "browser_history_search",
+    "library_search",
+    "library_organize",
     "read_mcp_resource",
     "list_skills",
     "load_skill",
@@ -77,6 +82,7 @@ const SCHEDULE_WRITES: &[&str] = &[
 ];
 const ASK_FIRST_WRITES: &[&str] = &[
     "output_publish",
+    "library_organize",
     "run_command",
     "set_wallpaper",
     "save_wallpaper_module",
@@ -133,6 +139,7 @@ pub(super) fn legacy_authorized<'a>(
     names.insert("output_check".into());
     authorize_schedules(&mut names, policy, scope);
     apply_access_mode(&mut names, catalog, policy, scope);
+    browser::authorize(&mut names, catalog, policy, scope.worker);
     apply_role(&mut names, policy);
     names.retain(|name| {
         !catalog.project_mutations.contains(name)
@@ -154,6 +161,10 @@ pub(super) fn legacy_authorized<'a>(
         names.insert("read_project_source".into());
     } else {
         names.remove("read_project_source");
+    }
+    // Moving the working folder goes wherever commands may run.
+    if names.contains("run_command") {
+        names.insert("switch_folder".into());
     }
     let tracked = policy.tracking_mode != "none";
     if tracked {
@@ -292,7 +303,13 @@ fn apply_access_mode(
 }
 
 /// Only the butler may delegate to stewards and only a steward to workers.
+/// Stewards and workers report to their parent instead of answering the
+/// user, so they never show answer blocks: a child's blocks would be accepted
+/// but never reach the conversation.
 fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
+    if matches!(policy.role, PolicyRole::Steward | PolicyRole::Worker) {
+        names.remove("answer_blocks");
+    }
     for (role, tools) in [("butler", STEWARD_PARENT), ("steward", WORKER_DELEGATION)] {
         if policy.role.as_str() == role {
             names.extend(tools.iter().map(|name| (*name).to_owned()));
@@ -305,7 +322,8 @@ fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
 }
 
 /// Tools every legacy surface shows.
-const LEGACY_BASE: [&str; 19] = [
+const LEGACY_BASE: [&str; 20] = [
+    "answer_blocks",
     "tool_search",
     "tool_describe",
     "tool_call",
@@ -361,7 +379,7 @@ pub(super) fn legacy_visible<'a>(
     }
     match policy.access_mode {
         AccessMode::ReadOnly => {}
-        AccessMode::AskAlways | AccessMode::AskExceptReads => {
+        AccessMode::AskAlways | AccessMode::AskExceptReads | AccessMode::Auto => {
             names.extend([
                 "run_command",
                 "read_tool_output_artifact",
@@ -395,6 +413,9 @@ pub(super) fn legacy_visible<'a>(
             }
         }
     }
+    if names.contains("run_command") {
+        names.insert("switch_folder");
+    }
     authorized
         .iter()
         .copied()
@@ -408,6 +429,21 @@ pub(super) fn phase_allows(phase: GuidedPhase, tool: &GuidedCatalogTool) -> bool
     }
     if tool.durable {
         return false;
+    }
+    if matches!(
+        tool.name.as_str(),
+        "browser_act"
+            | "browser_wait_for_user"
+            | "browser_sign_in"
+            | "browser_pay_fill"
+            | "browser_autofill_fill"
+    ) {
+        return true;
+    }
+    if tool.effect_boundary.as_deref() == Some("turn_local")
+        && tool.category.as_deref() == Some("message")
+    {
+        return true;
     }
     if tool.effect_boundary.as_deref() != Some("none") {
         return false;

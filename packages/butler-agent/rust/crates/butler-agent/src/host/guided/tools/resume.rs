@@ -69,3 +69,17 @@ fn catalog_id(raw: &str) -> Result<Option<String>, BtccError> {
     })?;
     Ok(id)
 }
+
+/// Catalog descriptions disclosed before a parked turn, reconstructed without I/O.
+pub(super) fn restored_descriptions(
+    restored: Option<&butler_turn::btcc::AuthorityLoopContinuation>,
+) -> std::collections::HashSet<String> {
+    restored
+        .into_iter()
+        .flat_map(|continuation| &continuation.messages)
+        .flat_map(|message| message.tool_calls.as_deref().unwrap_or(&[]))
+        .filter(|call| call.name == butler_core::tool_protocol::ToolName::ToolCall)
+        .filter_map(|call| call.arguments.get("id").and_then(serde_json::Value::as_str))
+        .map(str::to_owned)
+        .collect()
+}

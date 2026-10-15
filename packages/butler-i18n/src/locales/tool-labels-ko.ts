@@ -1,9 +1,11 @@
 export const additionalToolLabels = {
+  browser_history_search: "방문 기록 검색",
   forget_explicit_memory: "지침 삭제",
   project_artifacts: "프로젝트 결과물 찾기",
   search: "검색",
   transform_public_data_table: "공개 데이터 변환",
   bind_session_git_worktree: "Git 작업공간 연결",
+  switch_folder: "작업 폴더 이동",
   project_ledger_index: "프로젝트 색인",
   project_ledger_status: "프로젝트 상태 확인",
   project_ledger_list: "프로젝트 기록 목록",

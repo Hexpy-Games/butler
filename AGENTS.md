@@ -35,6 +35,7 @@ This routine requires Ledger access and publication authorization. Codex workers
   - For changes to `packages/butler-app/**`, `packages/butler-i18n/**` or any `*.ts`/`*.tsx`, run `bun run lint` and `bun run typecheck`. Run lifecycle-check only when UI lifecycle assets or inputs change, and run only TS tests covering the changed files.
   - For Rust-only changes, skip all Bun checks. E2E and real-app verification remain the primary evidence.
 - **Root causes.** Fix the cause, not the symptom. Never skip, weaken or retry tests to get green. Never raise timeouts or loosen performance budgets. If you can't reproduce a failure, say so; don't claim a cause you haven't shown.
+- **No special cases (zero tolerance).** Production code must never contain domain-specific or test-specific cases. That means no branches, strings, paths or names keyed to a test fixture, cassette, E2E command, acceptance scenario, site, app, owner value (host name, user name, folder) or CI environment. A fix must be a general rule that would also be correct for inputs no test uses. If only a special case makes a test pass, stop and report. Every Codex PR gets an independent review for this.
 - **Performance without cutting quality.** Meet a latency or throughput budget by doing less *work*, never by returning less *content*. Truncating, dropping fields, skipping items, lowering fidelity or serving stale cached data to pass a budget is a failure. Every timed perf check must also assert that the response is complete and correct (counts, order, latest state).
 - **Flaky tests.** Don't retry, skip, or mark tests ignored to get green. A test that fails on main without a code change gets a GitHub issue the same day and a fix within 48 hours. Re-run CI only with that issue linked in a PR comment.
 - **Before pushing:**
@@ -64,6 +65,15 @@ This routine requires Ledger access and publication authorization. Codex workers
 ## Recurring mistakes (feedback log)
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
+
+- **2026-10-14: Focus rings must never be clipped.** A container that clips its content (overflow, clip-path, mask or edge fades) must leave `--focus-ring-room` for focus rings, and a card that clips its own content must draw the ring on the card. Run `bun run app:focus-ring:smoke` for any UI change.
+  - What happened: the sidebar "새 대화" ring was cut on its left edge by the scroll frame. The same cut came back each time a new clipping container was added.
+
+- **2026-10-10: Never tailor tool descriptions, prompts or product code to an acceptance scenario (named site, app, task recipe).** Acceptance tests measure general capability; fixes must be general.
+  - What happened: browser tool descriptions accumulated Naver Map route and JSPaint drawing recipes while iterating to pass live acceptance runs.
+
+- **2026-10-09: Spawned test Apps must not outlive the harness: stdio to a file, kill the child PID on every exit path.**
+  - What happened: an orphaned smoke Electron (ppid 1) logged to a closed pipe and raised an EPIPE error dialog on the owner's screen.
 
 - **2026-10-07: Owner-PC runners: never use installer/setup actions or registry/PATH writes; use the existing toolchain.**
   - What happened: `actions/setup-python` tried to rewrite Python registry registrations on the owner PC, logged a permission error and hung until the 90-minute job timeout (run 37560002889).

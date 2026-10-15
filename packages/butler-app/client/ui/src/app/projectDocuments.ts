@@ -32,7 +32,7 @@ export function groupSpecs(
 ): Array<[string, ProjectDashboardDocument[]]> {
   const groups = new Map<string, ProjectDashboardDocument[]>();
   for (const spec of specs) {
-    const category = spec.category?.trim() || appCopy.space.general;
+    const category = spec.category?.trim() || appCopy.interfaceStatus.generalCategory;
     groups.set(category, [...(groups.get(category) ?? []), spec]);
   }
   return [...groups.entries()].sort(([left], [right]) =>

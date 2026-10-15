@@ -62,6 +62,8 @@ async fn start(
     let app = Router::new()
         .route("/v1/messages", post(reply))
         .route("/v1/models", get(|| async { Json(json!({"data":[]})) }))
+        // Image requests exceed axum's 2 MB default; the API accepts 32 MB.
+        .layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024))
         .with_state(stub.clone());
     let server = tokio::spawn(async move {
         let _ = axum::serve(listener, app).await;
@@ -199,7 +201,7 @@ fn usage(s: &Scenario) -> Result<(), HarnessError> {
         .iter()
         .filter(|row| row["model"] == "anthropic/claude-sonnet-5")
         .collect();
-    assert!(!rows.is_empty());
+    assert_ne!(rows, [] as [&serde_json::Value; 0]);
     for row in rows {
         assert_eq!(row["promptTokens"], 600);
         assert_eq!(row["cachedTokens"], 200);
@@ -268,7 +270,7 @@ async fn anthropic_cache_survives_image_projection() -> Result<(), HarnessError>
                 .contains("## Conversation history")
         );
         assert_eq!(blocks[1]["type"], "image");
-        assert!(!blocks[1]["source"]["data"].as_str().unwrap().is_empty());
+        assert_ne!(blocks[1]["source"]["data"].as_str().unwrap(), "");
         assert!(
             blocks[2]["text"]
                 .as_str()
@@ -459,3 +461,6 @@ mod idle;
 
 #[path = "anthropic_cache_append.rs"]
 mod append;
+
+#[path = "anthropic_cache_photo.rs"]
+mod photo;

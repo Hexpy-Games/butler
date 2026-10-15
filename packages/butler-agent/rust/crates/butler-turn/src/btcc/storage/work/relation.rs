@@ -98,7 +98,10 @@ pub(super) fn continue_work(
     {
         return Err(common::error(
             StorageCode::DurableWorkRelationOther,
-            "Durable Work relation is already selected for another Work",
+            format!(
+                "Durable Work relation is already selected for another Work. Use the exact bound work_id: {}",
+                bound.id
+            ),
         ));
     }
     let target = head

@@ -44,7 +44,7 @@ async fn scan_loop(path: std::path::PathBuf, stop: CancellationToken) -> Result<
             Ok(Ok(())) => {
                 butler_core::diagnostic!("[btcc-storage] integrity=ok");
                 retry = Duration::from_secs(5);
-                Duration::from_secs(24 * 60 * 60)
+                Duration::from_hours(24)
             }
             other => {
                 if stop.is_cancelled() {

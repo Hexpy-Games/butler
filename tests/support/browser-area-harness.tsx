@@ -9,7 +9,8 @@ import { BrowserEntry } from "../../packages/butler-app/client/ui/src/components
 import { Titlebar } from "../../packages/butler-app/client/ui/src/components/layout/Titlebar";
 import { setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy";
 import { useButlerStore } from "../../packages/butler-app/client/ui/src/app/store";
-import type { BrowserSnapshot } from "../../packages/butler-app/client/ui/src/components/browser/browserBridge";
+import { connectBrowser, type BrowserSnapshot } from "../../packages/butler-app/client/ui/src/components/browser/browserBridge";
+import { useBrowserShellState } from "../../packages/butler-app/client/ui/src/components/browser/browserShellState";
 import "../../packages/butler-app/client/ui/src/libs/design-system/tokens.css";
 
 const params = new URLSearchParams(location.search);
@@ -18,7 +19,13 @@ const theme = params.get("theme") === "dark" ? "dark" : "light";
 setAppCopyLanguage(locale);
 document.body.classList.add(`theme-${theme}`, "sidebar-translucent");
 const mode = params.get("state") ?? "empty";
-useButlerStore.setState({ view: { kind: mode === "output" ? "session" : "browser" }, activeChatId: "general" });
+const sidebar = mode !== "security" && (mode !== "background" || innerWidth >= 900);
+useButlerStore.setState({
+  view: { kind: ["output", "background"].includes(mode) ? "session" : "browser" }, activeChatId: "general",
+  navigation: { ...useButlerStore.getState().navigation, chats: [{
+    id: "general", kind: "chat", title: "General", last_activity_at: "2026-10-09T00:00:00Z", pinned: false, archived: false,
+  }] },
+});
 const canvas = document.createElement("canvas");
 canvas.width = 1440; canvas.height = 720;
 const context = canvas.getContext("2d")!;
@@ -36,10 +43,20 @@ const subscribers = new Set<(value: BrowserSnapshot) => void>();
 const publish = () => { for (const subscriber of subscribers) subscriber({ ...snapshot, tabs: [...snapshot.tabs] }); };
 const addressListeners = new Set<() => void>();
 window.butlerBrowser = {
+  onFrame() { return () => {}; },
   subscribe(callback) { subscribers.add(callback); callback(snapshot); return () => { subscribers.delete(callback); }; },
+  onPointer() { return () => {}; },
+  onElementDrag() { return () => {}; },
+  onSelectionAction() { return () => {}; },
   onAddress(callback) { addressListeners.add(callback); return () => { addressListeners.delete(callback); }; },
   async call(op, raw) {
     const input = raw as { id?: string; value?: string | boolean; tabId?: string; index?: number; owner?: string; url?: string } | undefined;
+    if (op === "smoke-state") {
+      const next = raw as { browser: BrowserSnapshot; views: import("../../packages/butler-app/client/ui/src/app/types").SessionView[]; session?: string };
+      Object.assign(snapshot, next.browser);
+      useButlerStore.setState({ sessionViews: Object.fromEntries(next.views.map(view => [view.session_id, view])), activeChatId: next.session ?? "general" });
+      publish(); return;
+    }
     const tab = snapshot.tabs.find((item) => item.id === input?.id);
     if (op === "state" || op === "open") return { ...snapshot, keyboardFocused };
     if (op === "scope") keyboardFocused = input?.value === true;
@@ -56,19 +73,21 @@ window.butlerBrowser = {
       const item = snapshot.tabs.find((entry) => entry.id === input?.tabId)!;
       snapshot.tabs = snapshot.tabs.filter((entry) => entry !== item); snapshot.tabs.splice(input?.index ?? 0, 0, item);
     }
-    publish(); return undefined;
+    publish(); return op === "create" ? snapshot.activeId : undefined;
   },
 };
+connectBrowser();
 function FixtureWorkspace() {
-  const view = useButlerStore((state) => state.view);
+  const open = useBrowserShellState((state) => Boolean(state.conversations.general?.open));
   if (mode === "security") return <SecuritySettings />;
-  return mode === "output" && view.kind !== "browser" ? <OutputFrame outputId={"a".repeat(64)} title="Fixture output" /> : <BrowserArea />;
+  if (mode === "background") return null;
+  return mode === "output" && !open ? <OutputFrame outputId={"a".repeat(64)} title="Fixture output" /> : <BrowserArea />;
 }
 createRoot(document.getElementById("root")!).render(
-  <AdaptiveShell theme={{ appearance: theme }} leftOpen={mode !== "security"} rightOpen={false} chromeEnvironment="electron">
-    <AdaptiveShellSidebar open={mode !== "security"}><BrowserEntry /></AdaptiveShellSidebar>
+  <AdaptiveShell theme={{ appearance: theme }} leftOpen={sidebar} rightOpen={false} chromeEnvironment="electron">
+    <AdaptiveShellSidebar open={sidebar}><BrowserEntry /></AdaptiveShellSidebar>
     <AdaptiveShellWorkspace>
-      <Titlebar />
+      <Titlebar sidebarOpen={sidebar} />
       <Stack fill gap="none"><Stack gap="none"><Dialog><DialogTrigger asChild><Button>Overlay</Button></DialogTrigger>
         <DialogContent><DialogTitle>Fixture dialog</DialogTitle></DialogContent></Dialog></Stack>
       <FixtureWorkspace /></Stack>

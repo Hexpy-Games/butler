@@ -56,21 +56,10 @@ pub(super) fn read_health(
     }
     let mut web_search = read_json(&data_root.join("runtime/web-search-metrics.json"));
     let page_reader = read_json(&data_root.join("butler.config.json"));
-    let reader_backend = env_value("BUTLER_WEB_READER_BACKEND")
-        .or_else(|| {
-            page_reader
-                .pointer("/webSearch/readerBackend")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        })
-        .filter(|value| {
-            matches!(
-                value.to_ascii_lowercase().as_str(),
-                "lightweight" | "browser" | "firecrawl"
-            )
-        })
-        .unwrap_or_else(|| "lightweight".into())
-        .to_ascii_lowercase();
+    let reader_backend = env_value("BUTLER_WEB_READER_BACKEND").map_or_else(
+        || butler_core::configuration::web_reader_backend(&page_reader["webSearch"]),
+        |value| butler_core::configuration::normalize_web_reader(&value),
+    );
     if !web_search.is_object() {
         web_search = json!({});
     }

@@ -159,7 +159,9 @@ pub(super) fn create_scratch(
     ))
 }
 
-pub(super) fn validate_existing(path: &Path) -> Result<PathBuf, GatewayApplicationError> {
+pub(in crate::gateway::application) fn validate_existing(
+    path: &Path,
+) -> Result<PathBuf, GatewayApplicationError> {
     let invalid = || {
         error(
             400,

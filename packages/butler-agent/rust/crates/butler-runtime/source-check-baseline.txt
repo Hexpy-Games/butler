@@ -31,15 +31,9 @@ src/context/tool_output/evidence.rs	read	106
 src/context/tool_output/reader.rs	read	116
 src/operations/developer_log/capture/entry.rs	terminal_entry	147
 src/operations/status_summary/context.rs	read_context_for_session	87
-src/operations/status_summary/health.rs	read_health	94
+src/operations/status_summary/health.rs	read_health	83
 src/web_access/html/extraction.rs	markdown_from_html	89
 src/web_access/page.rs	extract_page	114
-src/web_access/planning.rs	create_plan	96
 src/web_access/providers.rs	configured	86
-src/web_access/providers/codex.rs	<CodexSubscriptionWebSearchProvider as SearchProvider>::search	81
-src/web_access/providers/duckduckgo.rs	<DuckDuckGoHtmlSearchProvider as SearchProvider>::search	81
-src/web_access/read.rs	WebSession::web_read	124
 src/web_access/read.rs	bounded_result	83
-src/web_access/read/lightpanda.rs	run_dump	101
-src/web_access/search.rs	WebSession::web_search	172
-src/web_access/search.rs	execute_planned	98
+src/web_access/read/lightpanda.rs	run_dump	89

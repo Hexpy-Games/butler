@@ -73,6 +73,7 @@ pub struct ToolJournalRecord {
 /// One ordered closeout page; raw result bodies are released after projection.
 pub struct ToolJournalCloseoutRow {
     pub rowid: i64,
+    pub call_id: String,
     pub tool_name: String,
     pub status: String,
     pub arguments: JsonDocument,

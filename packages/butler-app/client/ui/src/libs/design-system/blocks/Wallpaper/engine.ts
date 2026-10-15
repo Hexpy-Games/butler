@@ -1,14 +1,19 @@
 import { resetWallpaperPaint } from "./paintSignal";
 import type { WallpaperEngine, WallpaperEngineOptions } from "./engineTypes";
+import { createDriftLayers } from "./driftLayers";
+import { createEngineDiagnostics } from "./engineDiagnostics";
+import { createEngineDrift } from "./engineDrift";
+import { createEngineIntro } from "./engineIntro";
+import { createEngineLoop } from "./engineLoop";
 import { initialWallpaperState } from "./engineState";
 import { createEngineWatchdog } from "./engineWatchdog";
 import { measureWallpaperFrame, readWallpaperCanvasBox } from "./measure";
 import { createWallpaperPresenter } from "./presenter";
 import { createWallpaperRenderer } from "./renderer";
 import { reportWallpaperRuntimeFailure } from "./runtimeFailure";
-import { WALLPAPER_DAY_PHASE_REFRESH_MS, advanceWallpaperClock, nextWallpaperFrameSlot, wallpaperFrameDue, wallpaperFrameMode, wallpaperRenderPolicy, wallpaperStillFrameDue, type WallpaperScheduleState } from "./scheduler";
+import { wallpaperFrameMode, type WallpaperScheduleState } from "./scheduler";
 import { watchWallpaperContext, watchWallpaperSignals, type WallpaperSignals } from "./signals";
-import { wallpaperDayPhase } from "./time";
+import type { WallpaperScene } from "./registry";
 import type { WallpaperContentRect } from "./types";
 
 export type { WallpaperEngine, WallpaperEngineOptions } from "./engineTypes";
@@ -16,101 +21,84 @@ export type { WallpaperEngine, WallpaperEngineOptions } from "./engineTypes";
 /**
  * Drives one wallpaper canvas: a renderer, image loading with crossfades
  * (presenter) and the contract's scheduler (capped animation, still frames on
- * change, pauses, watchdog, context-loss recovery). The canvas box is read
- * once and again on resize, never per frame. Null when WebGL2 is unavailable
+ * change, pauses, watchdog, context-loss recovery). Drift modules hand their
+ * frames to the drift controller (engineDrift). The canvas box is read once
+ * and again on resize, never per frame. Null when WebGL2 is unavailable
  * (reported through onError).
  */
 export function createWallpaperEngine(canvas: HTMLCanvasElement, options: WallpaperEngineOptions): WallpaperEngine | null {
   const { onError, transparent } = options;
-  const renderer = createWallpaperRenderer(canvas, { onError, transparent });
-  if (!renderer) {
+  const created = createWallpaperRenderer(canvas, { onError, transparent });
+  if (!created) {
     resetWallpaperPaint(canvas, "unsupported");
     onError({ reason: "unsupported", module: "", message: "WebGL2 is unavailable" });
     return null;
   }
+  // Transitions of what decides whether the canvas draws, for the app diagnostics (nothing at idle).
+  const diagnostics = createEngineDiagnostics(canvas, { state: () => state, intro: () => intro.active(), drift: () => drift.owns(),
+    debug: () => ({ module: renderer.drawnModule(), contentRect, box, drift: drift.debug() }) });
+  const renderer = diagnostics.count(created);
   const seed = Math.random();
   let state: WallpaperScheduleState = initialWallpaperState(canvas, renderer.softwareRendering());
   let hasScene = false;
+  let scene: WallpaperScene | null = null;
   let contentRect: WallpaperContentRect | null = null;
   let box = readWallpaperCanvasBox(canvas);
-  let dirty = true;
-  let frame = 0;
-  let refreshTimer = 0;
-  let clock = performance.now();
-  let lastTick: number | null = null;
-  let lastDraw: number | null = null;
-  let slot: number | null = null;
-
-  const schedule = () => {
-    if (!frame) frame = window.requestAnimationFrame(tick);
-  };
-  const redraw = () => {
-    dirty = true;
-    schedule();
-  };
-  const armRefresh = () => {
-    window.clearTimeout(refreshTimer);
-    refreshTimer = 0;
-    if (!renderer.usesDayPhase() || wallpaperFrameMode(state) === "animate") return;
-    refreshTimer = window.setTimeout(schedule, WALLPAPER_DAY_PHASE_REFRESH_MS);
-  };
-  const paint = () => {
-    const geometry = measureWallpaperFrame(box, renderer.motion(), contentRect, renderer.pixelRatio());
-    renderer.draw({ ...geometry, timeMs: clock, dayPhase: wallpaperDayPhase(new Date()), seed });
-  };
-  const draw = (now: number) => {
-    paint();
-    presenter.drawn();
-    lastDraw = now;
-    dirty = false;
-    armRefresh();
-  };
-  const tick = (now: number) => {
-    frame = 0;
-    const mode = hasScene ? wallpaperFrameMode(state) : "idle";
-    if (mode !== "animate") {
-      lastTick = null;
-      slot = null;
-      if (mode === "still" && wallpaperStillFrameDue({ dirty, usesDayPhase: renderer.usesDayPhase(), now, lastDraw })) draw(now);
-      return;
-    }
-    if (lastTick !== null) clock = advanceWallpaperClock(clock, now - lastTick);
-    lastTick = now;
-    const { maxFps } = wallpaperRenderPolicy(state.moduleMotion);
-    const due = wallpaperFrameDue(now, slot, maxFps);
-    if (dirty || due) {
-      // Only a due frame takes a slot: changes drawn between slots never push the cap's grid ahead of the clock.
-      if (due) slot = nextWallpaperFrameSlot(now, slot, maxFps);
-      if (watchdog.time(() => draw(now))) return;
-    }
-    schedule();
-  };
 
   // Too slow to animate: hold the current frame (reported once per scene), then try again after a quiet period.
-  const watchdog = createEngineWatchdog({
-    onDegrade: (first) => { if (first) reportWallpaperRuntimeFailure(onError, renderer.drawnModule(), "degraded"); update({ degraded: true }); },
-    onRetry: () => update({ degraded: false }),
+  const degrade = (first: boolean) => { if (first) reportWallpaperRuntimeFailure(onError, renderer.drawnModule(), "degraded"); update({ degraded: true }); };
+  const retry = () => update({ degraded: false });
+  const watchdog = createEngineWatchdog({ onDegrade: degrade, onRetry: retry });
+  const layers = options.driftLayers ? createDriftLayers(canvas, options.driftLayers.base, options.driftLayers.top) : null;
+  // The first-run intro holds the canvas until its hand-off; the drift then dissolves from its dried print.
+  const intro = createEngineIntro({
+    renderer, layers, box: () => box, state: () => state, scene: () => (hasScene ? scene : null),
+    // Setup cards: after the hand-off a moved card eases the drift keep-out now, and a step change also wakes the print.
+    onCard: (rect) => { const previous = contentRect; engine.setContentRect(rect); if (!intro.active()) drift.setupCard(previous, rect, false); },
+    onBeat: (from, to) => drift.setupCard(from, to, true), onDrawn: () => presenter.drawn(),
+    onHandoff: (seeded) => { if (drift.owns()) drift.handoff(state, seeded); else { layers?.hide(); loop.invalidate(); loop.schedule(); } diagnostics.check(); },
   });
-
+  const drift = createEngineDrift({
+    layers, held: intro.active, renderer, seed, box: () => box, contentRect: () => contentRect,
+    onDrawn: () => presenter.drawn(), onDegrade: degrade, onRetry: retry,
+  });
+  const loop = createEngineLoop({
+    renderer, watchdog, seed, state: () => state, hasScene: () => hasScene, box: () => box, contentRect: () => contentRect,
+    owned: () => drift.owns() || intro.active(), drawn: () => presenter.drawn(),
+  });
+  const redraw = () => {
+    loop.invalidate();
+    if (intro.active()) intro.resize();
+    else if (drift.owns()) drift.refresh();
+    else loop.schedule();
+  };
   const update = (patch: Partial<WallpaperScheduleState>) => {
-    if (patch.reducedMotion !== undefined && patch.reducedMotion !== state.reducedMotion) dirty = true;
+    if (patch.reducedMotion !== undefined && patch.reducedMotion !== state.reducedMotion) loop.invalidate();
     state = { ...state, ...patch };
-    schedule();
+    drift.sync(state);
+    intro.sync();
+    // A drifting print schedules its own frames: no rAF from signal changes (hidden, blur, battery).
+    if (!drift.owns() && !intro.active()) loop.schedule();
+    diagnostics.check();
   };
   const presenter = createWallpaperPresenter({
     ...options,
     canvas,
     renderer,
-    hasDrawn: () => lastDraw !== null,
-    repaint: () => { if (hasScene && lastDraw !== null && !state.contextLost) paint(); },
+    hasDrawn: () => loop.hasDrawn() || drift.owns() || intro.active(),
+    repaint: () => { if (intro.active()) intro.repaint(); else if (drift.owns()) drift.repaint(); else if (hasScene && loop.hasDrawn() && !state.contextLost) loop.paint(); },
     bufferSize: (motion, pixelRatio) => measureWallpaperFrame(box, motion, null, pixelRatio),
-    show(scene) {
-      resetWallpaperPaint(canvas, scene ? "pending" : "none");
-      hasScene = scene !== null;
-      if (scene) renderer.setScene(scene);
+    show(next) {
+      resetWallpaperPaint(canvas, next ? "pending" : "none");
+      hasScene = next !== null;
+      scene = next;
+      if (next) renderer.setScene(next);
       watchdog.reset();
-      dirty = true;
-      update({ moduleMotion: renderer.motion(), degraded: false });
+      loop.invalidate();
+      state = { ...state, moduleMotion: renderer.motion(), degraded: false };
+      drift.shown(hasScene, state);
+      intro.shown();
+      update({});
     },
   });
 
@@ -118,7 +106,7 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     box = readWallpaperCanvasBox(canvas);
     redraw();
     presenter.refresh();
-  });
+  }, () => drift.event("focus"));
   const stopContext = watchWallpaperContext(canvas, () => {
     resetWallpaperPaint(canvas, "context-lost");
     reportWallpaperRuntimeFailure(onError, hasScene ? renderer.drawnModule() : null, "context-lost");
@@ -127,29 +115,38 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     renderer.restore();
     // The restored context has no textures: upload the images in use again.
     presenter.refresh();
-    dirty = true;
+    loop.invalidate();
     update({ contextLost: false });
   });
 
-  return {
+  const engine: WallpaperEngine = {
     setScene(scene) {
       if (scene?.error) onError(scene.error);
       resetWallpaperPaint(canvas, scene ? "pending" : "none");
       presenter.request(scene);
     },
-    setMotion(motion, pauseOnBattery) {
-      update({ motion, pauseOnBattery });
-    },
+    setMotion: (motion, pauseOnBattery) => update({ motion, pauseOnBattery }),
     setContentRect(rect) {
+      const appeared = (contentRect === null) !== (rect === null);
       contentRect = rect;
       box = readWallpaperCanvasBox(canvas); // A layout change may have moved the canvas too.
-      // Only modules that read u_contentRect redraw; an animating one picks it up on its next capped frame.
-      if (renderer.usesContentRect() && wallpaperFrameMode(state) !== "animate") redraw();
+      // Only modules that read u_contentRect redraw; an animating one picks it up on its next capped frame. A drifting
+      // print picks a moved rect up at its next keyframe (a scrolling rail never redraws it); one appearing or going redraws.
+      // The first-run intro reads its card from its timeline.
+      if (intro.active() || !renderer.usesContentRect() || wallpaperFrameMode(state) === "animate") return;
+      if (!drift.owns()) redraw();
+      else if (appeared) drift.refresh();
     },
+    setContentRect2: (rect) => drift.setContentRect2(rect),
+    setColumnRect(rect) { box = readWallpaperCanvasBox(canvas); drift.setColumn(rect); },
+    event: (kind) => drift.event(kind),
+    setIntro: (timeline) => { intro.attach(timeline); diagnostics.check(); },
     dispose() {
-      window.cancelAnimationFrame(frame);
-      window.clearTimeout(refreshTimer);
+      diagnostics.dispose();
+      intro.dispose();
+      loop.dispose();
       watchdog.dispose();
+      drift.dispose();
       presenter.dispose();
       stopSignals();
       stopContext();
@@ -157,4 +154,6 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
       resetWallpaperPaint(canvas, "disposed");
     },
   };
+  intro.attach(options.intro ?? null);
+  return engine;
 }

@@ -1,4 +1,5 @@
-// Browser smoke: scrolling the new-chat suggestion rail never stops the animated wallpaper.
+// Browser smoke: scrolling the new-chat suggestion rail never stops the animated wallpaper, and never redraws the
+// drifting riso print (a keyframe every 8 s at rest, no frames from scrolling).
 // Counts the engine's drawn frames on the new-chat canvas (no pixels read) before, during and after
 // wheel scrolling and a drag-like scroll of the rail, at 1280 and 375. Run it on a GPU (or pass
 // BUTLER_SMOKE_BROWSER_ARGS with GPU flags): on software GL the engine holds still frames by design.
@@ -20,6 +21,25 @@ async function drawsOver(page: Page, ms: number, during?: () => Promise<void>): 
   if (elapsed > ms) await page.waitForTimeout(0);
   const draws = await page.evaluate(() => (window as unknown as DrawWindow).__wallpaperDraws);
   return (draws * 1000) / elapsed;
+}
+
+/** A drift module: a keyframe every 8 s at rest; scrolling for 6 s draws at most one keyframe and no event frames. */
+async function driftScroll(page: Page, key: string) {
+  await page.waitForTimeout(3000); // The first-paint focus event ends (about 2.1 s).
+  const rest = (await drawsOver(page, 9000)) * 9;
+  const box = (await page.locator(RAIL).boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const scroll = (await drawsOver(page, 6000, async () => {
+    for (let step = 0; step < 360; step += 1) {
+      await page.mouse.wheel(step % 30 < 15 ? 60 : -60, 0);
+      await page.waitForTimeout(16);
+    }
+  })) * 6;
+  const row = { rest: Math.round(rest), scroll: Math.round(scroll) };
+  console.log(`newchat wallpaper scroll ${key}: ${JSON.stringify(row)}`);
+  assert(row.rest >= 1 && row.rest <= 3, `${key}: the print drifts by keyframes at rest (${row.rest} in 9 s)`);
+  assert(row.scroll <= 1, `${key}: scrolling draws at most one keyframe and no event frames (${row.scroll} in 6 s)`);
+  return row;
 }
 
 const server = await createNativeAppServer({ uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist") });
@@ -44,7 +64,7 @@ try {
   });
   await server.signIn(page);
   // Modules that read u_contentRect (the rail's visible cards) and one that does not; diatom is two-pass.
-  for (const module of ["butler.shoreline", "butler.diatom", "butler.bloom"]) for (const width of [1280, 375]) {
+  for (const module of ["butler.shoreline", "butler.diatom", "butler.bloom", "butler.riso-print"]) for (const width of [1280, 375]) {
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({
       wallpaper: { source: { kind: "live", module }, motion: "auto", pauseOnBattery: false },
     }) });
@@ -58,6 +78,10 @@ try {
     // Software GL holds still frames by design (data-wallpaper-fallback); nothing animates to stop.
     if (await canvas.getAttribute("data-wallpaper-fallback")) {
       results[key] = { skipped: "software GL fallback" };
+      continue;
+    }
+    if (module === "butler.riso-print") {
+      results[key] = await driftScroll(page, key);
       continue;
     }
     const scrollable = await page.locator(RAIL).evaluate((rail) => rail.scrollWidth > rail.clientWidth + 1);

@@ -3,7 +3,7 @@ import { useCallback } from "react";
 import { CollapsibleNavGroup } from "../../../../blocks/CollapsibleNavGroup";
 import { NavRow } from "../../../../blocks/NavRow";
 import { NavSectionHeading } from "../../../../blocks/NavSection";
-import { SidebarBrand, SidebarNav, SidebarShell } from "../../../../blocks/SidebarShell";
+import { SidebarNav, SidebarShell, SidebarTrafficSpace } from "../../../../blocks/SidebarShell";
 import { Box } from "../../../Box";
 import { ButtonContainer } from "../../../ButtonContainer";
 import { IconButton } from "../../../IconButton";
@@ -16,7 +16,7 @@ import type { LayoutCopy } from "./layoutCopy";
 
 const glyph = (icon: ReactNode) => <IconSlot size="sidebar">{icon}</IconSlot>;
 
-/** The space sidebar as the app draws it (SpaceSidebar): brand, entry rows, favourites, the browse tabs, the space tree, settings. */
+/** The space sidebar as the app draws it (SpaceSidebar): entry rows, favourites, the browse tabs, the space tree, settings. */
 export function Sidebar({ copy, touch }: { copy: LayoutCopy; touch: boolean }) {
   // In the touch drawer the list is short of room, so it is scrolled up to the browse tabs, as a person browsing it would leave it.
   const scrollRef = useCallback((node: HTMLDivElement | null) => {
@@ -27,7 +27,7 @@ export function Sidebar({ copy, touch }: { copy: LayoutCopy; touch: boolean }) {
     <SidebarShell
       density={touch ? "touch" : "comfortable"}
       scrollRef={scrollRef}
-      titlebar={<SidebarBrand><Typo.AppTitle>{copy.app}</Typo.AppTitle></SidebarBrand>}
+      titlebar={<SidebarTrafficSpace />}
       scrollHeader={
         <Stack gap="2xl">
           <SidebarNav>

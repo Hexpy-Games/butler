@@ -43,6 +43,16 @@ fn authority_json(authority: SessionWorkspaceAuthority) -> Value {
             "workspaceLabel":workspace_label,
             "safeErrorCode":error_code,
         }),
+        SessionWorkspaceAuthority::SessionFolder {
+            workspace_path,
+            consented,
+            origin_path,
+        } => json!({
+            "kind":"session_folder",
+            "workspacePath":workspace_path,
+            "consented":consented,
+            "originPath":origin_path,
+        }),
     }
 }
 

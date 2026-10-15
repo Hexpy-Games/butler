@@ -12,6 +12,7 @@ export const modelInputs = {
 };
 export const refreshCommand = "python3 deploy/licenses/refresh.py && node deploy/licenses/generate.mjs";
 export const noticeDirectories = [
+  "packages/butler-agent/rust/crates/butler-runtime/assets",
   "packages/butler-app/client/ui/src/libs/design-system/fonts",
   "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos",
   "packages/butler-agent/rust/crates/butler-core/src/js_date/parse",
@@ -86,6 +87,7 @@ function collectFiles(base, directory, accept) {
 
 export function inputFiles(base = root) {
   const files = ["bun.lock", "packages/butler-agent/rust/Cargo.lock",
+    "packages/butler-agent/rust/rust-toolchain.toml",
     "packages/butler-agent/rust/scripts/static-ort.lock.json",
     "deploy/licenses/generate.mjs", "deploy/licenses/inputs.mjs",
     "deploy/licenses/refresh.py", "deploy/licenses/disclosure.py",

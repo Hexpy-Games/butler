@@ -3,11 +3,11 @@
 mod health;
 mod manifest;
 mod verdict;
-pub(super) use health::migrate_current;
 pub use health::{
     begin_storage_startup, storage_error_is_corruption, storage_scan_delay,
     validate_storage_background,
 };
+pub(super) use health::{migrate_current, stamp_verified, verify_correction};
 mod validate;
 
 use crate::btcc::StorageCode;
@@ -191,7 +191,7 @@ fn error(code: StorageCode) -> StorageError {
     StorageError::new(code, code.as_str())
 }
 
-fn io_error(error: std::io::Error) -> StorageError {
+pub(in crate::btcc::storage) fn io_error(error: std::io::Error) -> StorageError {
     StorageError::new(StorageCode::AgentBtccStorageIoError, error.to_string()).with_source(error)
 }
 

@@ -75,21 +75,9 @@ impl AppMemoryManagement {
                 Ok(json!({"ok":true}))
             }
             AppMemoryCommand::Instructions => self.list_instructions().await,
-            AppMemoryCommand::DeleteInstruction {
-                handle,
-                expected_revision,
-                project_id,
-                operation_id,
-            } => {
-                self.delete_instruction(
-                    handle,
-                    expected_revision,
-                    project_id,
-                    operation_id,
-                    sink,
-                    cancellation,
-                )
-                .await
+            command @ (AppMemoryCommand::RememberInstruction { .. }
+            | AppMemoryCommand::DeleteInstruction { .. }) => {
+                self.change_instruction(command, sink, cancellation).await
             }
             AppMemoryCommand::Project { project_id } => {
                 self.project(project_id, cancellation).await

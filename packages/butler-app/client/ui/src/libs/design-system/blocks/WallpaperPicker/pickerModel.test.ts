@@ -7,6 +7,7 @@ import {
   wallpaperPickerDefault,
   wallpaperPickerKey,
   wallpaperPickerOptions,
+  withWallpaperImageDefaults,
   withWallpaperImageFilter,
 } from "./pickerModel";
 
@@ -17,7 +18,7 @@ const LENS = defineWallpaperModule({
 const REGISTRY = createWallpaperRegistry([...BUILTIN_WALLPAPERS.list(), LENS]);
 /** Built-in live tiles: modules that draw alone, living photos (on their own photo) and stipple (on its sample) included. */
 const BUILTIN_LIVE = [
-  "live:butler.bloom", "live:butler.silk", "live:butler.riso-flow", "live:butler.lamina", "live:butler.diatom", "live:butler.dusk",
+  "live:butler.riso-print", "live:butler.bloom", "live:butler.silk", "live:butler.riso-flow", "live:butler.lamina", "live:butler.diatom", "live:butler.dusk",
   "live:butler.shoreline", "live:butler.photo-clouds", "live:butler.photo-daisies", "live:butler.stipple",
 ];
 
@@ -47,16 +48,24 @@ test("the selected image keeps its tile while the image list catches up", () => 
 });
 
 test("a tile's default: images fill the screen with a dim from their luminance", () => {
-  const [inherit, none, bloom] = wallpaperPickerOptions({ registry: BUILTIN_WALLPAPERS, images: [], inherit: { label: "x" }, value: "inherit" });
+  const [inherit, none, riso] = wallpaperPickerOptions({ registry: BUILTIN_WALLPAPERS, images: [], inherit: { label: "x" }, value: "inherit" });
   expect(wallpaperPickerDefault(inherit!)).toBe("inherit");
   expect(wallpaperPickerDefault(none!)).toEqual({ kind: "none" });
-  expect(wallpaperPickerDefault(bloom!)).toEqual({ kind: "live", module: "butler.bloom" });
+  expect(wallpaperPickerDefault(riso!)).toEqual({ kind: "live", module: "butler.riso-print" });
   const images = wallpaperPickerOptions({ registry: BUILTIN_WALLPAPERS, images: [{ id: "bright", luminance: 0.9 }, { id: "unknown" }], value: "inherit" })
     .filter((option) => option.kind === "image");
   expect(images.map(wallpaperPickerDefault)).toEqual([
     { kind: "image", asset: "bright", fit: "cover", dim: 0.4, blur: 0 },
     { kind: "image", asset: "unknown", fit: "cover", dim: 0.2, blur: 0 },
   ]);
+});
+
+test("caller image defaults replace only the image's starting options", () => {
+  const image = { kind: "image", asset: "bright", fit: "cover", dim: 0.4, blur: 0 } as const;
+  expect(withWallpaperImageDefaults(image, { dim: 0 })).toEqual({ ...image, dim: 0 });
+  expect(withWallpaperImageDefaults(image, undefined)).toBe(image);
+  expect(withWallpaperImageDefaults({ kind: "live", module: "butler.bloom" }, { dim: 0 })).toEqual({ kind: "live", module: "butler.bloom" });
+  expect(withWallpaperImageDefaults("inherit", { dim: 0 })).toBe("inherit");
 });
 
 test("filters are the registered modules that take an image, except living photos", () => {

@@ -54,9 +54,12 @@ pub(super) fn commit(
 }
 
 pub(super) fn resume_authority(connection: &mut Connection, turn_id: &str) -> StorageResult<()> {
+    let timing =
+        crate::btcc::agent_loop::command_timing::CommandTiming::new("authority_transaction");
     let transaction = connection
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(StorageError::sqlite)?;
+    timing.mark("begin_acquired");
     let ready = transaction
         .query_row(
             "SELECT turn.revision, turn.context_json, request.request_ref, \
@@ -73,6 +76,7 @@ pub(super) fn resume_authority(connection: &mut Connection, turn_id: &str) -> St
                 row.get::<_, String>(2)?, row.get::<_, String>(3)?)),
         )
         .optional().map_err(StorageError::sqlite)?;
+    timing.mark("ready_queried");
     let Some((old_revision, context_json, request_ref, client_message_id)) = ready else {
         transaction.commit().map_err(StorageError::sqlite)?;
         return Ok(());
@@ -84,18 +88,7 @@ pub(super) fn resume_authority(connection: &mut Connection, turn_id: &str) -> St
         )
     })?;
     let checkpoint = checkpoint_for(turn_id, revision, TurnSemanticState::Admitted);
-    let mut context = super::common::json(&context_json, StorageCode::InvalidTurnContext)?;
-    let object = context.as_object_mut().ok_or_else(|| {
-        error(
-            StorageCode::InvalidTurnContext,
-            "BTCC Turn context must be an object",
-        )
-    })?;
-    object.insert("authorityRequestRef".to_owned(), Value::String(request_ref));
-    object.insert(
-        "authorityClientMessageId".to_owned(),
-        Value::String(client_message_id),
-    );
+    let context = authority_context(&context_json, request_ref, client_message_id)?;
     let changed = transaction
         .execute(
             "UPDATE btcc_turns SET suspension_reason = NULL, revision = ?1, \
@@ -116,8 +109,32 @@ pub(super) fn resume_authority(connection: &mut Connection, turn_id: &str) -> St
             "BTCC authority resume lost Turn CAS",
         ));
     }
+    timing.mark("turn_updated");
     insert_checkpoint(&transaction, turn_id, revision, &checkpoint)?;
-    transaction.commit().map_err(StorageError::sqlite)
+    timing.mark("checkpoint_inserted");
+    let result = transaction.commit().map_err(StorageError::sqlite);
+    timing.mark("committed");
+    result
+}
+
+fn authority_context(
+    context_json: &str,
+    request_ref: String,
+    client_message_id: String,
+) -> StorageResult<Value> {
+    let mut context = super::common::json(context_json, StorageCode::InvalidTurnContext)?;
+    let object = context.as_object_mut().ok_or_else(|| {
+        error(
+            StorageCode::InvalidTurnContext,
+            "BTCC Turn context must be an object",
+        )
+    })?;
+    object.insert("authorityRequestRef".to_owned(), Value::String(request_ref));
+    object.insert(
+        "authorityClientMessageId".to_owned(),
+        Value::String(client_message_id),
+    );
+    Ok(context)
 }
 
 fn suspend(

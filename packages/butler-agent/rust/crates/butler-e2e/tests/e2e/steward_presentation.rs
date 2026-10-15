@@ -7,7 +7,7 @@
 )]
 mod files;
 #[path = "steward_presentation/stub.rs"]
-mod stub;
+pub(super) mod stub;
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -44,6 +44,7 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
         .unwrap()
         .to_owned();
     let child_id = child["session_id"].as_str().unwrap().to_owned();
+    files::assert_readable_request(&s, child).await?;
     *script.relation.lock().unwrap() = relation.clone();
     let activity = s.gw.get("/worker-activity?include_history=true").await?;
     let worker = activity.data()["workers"][0]["worker_id"].clone();

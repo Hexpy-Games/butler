@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use tokio::fs::{File, OpenOptions};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::process::{ChildStderr, ChildStdout};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -153,12 +153,45 @@ impl SpoolPaths {
     pub(super) async fn complete(
         self,
         capture: Capture,
-        summary: &GuidedSummary,
+        summary: &mut GuidedSummary,
         end: CaptureEnd,
     ) -> Result<SpooledPayload, CommandError> {
         if let Err(error) = capture.finish(end).await {
             self.discard().await;
             return Err(error);
+        }
+        if butler_platform::command_sandbox::isolation_failure_exit(summary.exit_code) {
+            let mut prefix = Vec::new();
+            File::open(&self.stderr)
+                .await
+                .map_err(CommandError::io)?
+                .take(64)
+                .read_to_end(&mut prefix)
+                .await
+                .map_err(CommandError::io)?;
+            if butler_platform::command_sandbox::isolation_failure(summary.exit_code, &prefix) {
+                self.discard().await;
+                return Err(CommandError::new(
+                    CommandCode::CommandObservationIsolationUnavailable,
+                    "The command sandbox could not be fully enforced",
+                ));
+            }
+        }
+        if butler_platform::command_sandbox::execution_timeout_exit(summary.exit_code) {
+            let mut file = File::open(&self.stderr).await.map_err(CommandError::io)?;
+            let size = file.metadata().await.map_err(CommandError::io)?.len();
+            file.seek(std::io::SeekFrom::Start(size.saturating_sub(128)))
+                .await
+                .map_err(CommandError::io)?;
+            let mut tail = Vec::new();
+            file.take(128)
+                .read_to_end(&mut tail)
+                .await
+                .map_err(CommandError::io)?;
+            if butler_platform::command_sandbox::execution_timeout(summary.exit_code, &tail) {
+                summary.timed_out = true;
+                summary.exit_code = None;
+            }
         }
         let result = self.write_payload(summary).await;
         if result.is_err() {

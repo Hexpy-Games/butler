@@ -31,7 +31,12 @@ export function SpaceRowMenu({
   const app = useButlerStore;
   const mutate = useOrganization((s) => s.mutate);
   const setDialog = useOrganization((s) => s.setDialog);
+  // Projects and groups start a chat that is created inside them.
+  const newChat = row.project
+    ? () => app.getState().openNewProjectChat(row.node.entityId)
+    : row.node.kind === "group" ? () => app.getState().openNewGroupChat(row.node.entityId) : undefined;
   const items = [
+    ...(newChat ? [{ icon: <MessageSquarePlus />, label: appCopy.space.newChat, onSelect: newChat }] : []),
     ...(row.session ? [{
       icon: <MessageSquarePlus />,
       label: appCopy.space.reference,
@@ -44,12 +49,6 @@ export function SpaceRowMenu({
             label: appCopy.space.dashboard,
             onSelect: () =>
               app.getState().openProjectDashboard(row.node.entityId),
-          },
-          {
-            icon: <MessageSquarePlus />,
-            label: appCopy.space.newChat,
-            onSelect: () =>
-              app.getState().openNewProjectChat(row.node.entityId),
           },
           {
             icon: <Folder />,

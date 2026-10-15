@@ -20,6 +20,15 @@ impl Trace {
         }
     }
 
+    /// Sub-phases measured on another thread; totals keep the outer start.
+    pub(in crate::host) fn nested(&self) -> Self {
+        Self {
+            started: self.started,
+            previous: Instant::now(),
+            enabled: self.enabled,
+        }
+    }
+
     pub(in crate::host) fn phase(&mut self, phase: &str) {
         let now = Instant::now();
         if self.enabled {
@@ -32,3 +41,19 @@ impl Trace {
         self.previous = now;
     }
 }
+
+/// In-process correction timing survives removal of the external progress sidecar.
+#[derive(Clone, Copy)]
+pub(crate) enum Correction {
+    Pending,
+    Running(Instant),
+    Finished(Instant),
+}
+
+pub(crate) type CorrectionSender = tokio::sync::watch::Sender<Correction>;
+
+pub(crate) type AppStartup<'a> = (
+    std::sync::Arc<crate::host::app::gateway_lifecycle::ActiveAppEndpoint>,
+    &'a tokio_util::sync::CancellationToken,
+    CorrectionSender,
+);

@@ -13,6 +13,11 @@ import {
   type WallpaperAssetProblem,
 } from "@/app/wallpaperAssets.ts";
 
+const assetListeners = new Set<(change: (assets: WallpaperAsset[]) => WallpaperAsset[]) => void>();
+function publishAssets(change: (assets: WallpaperAsset[]) => WallpaperAsset[]) {
+  for (const listener of assetListeners) listener(change);
+}
+
 const TOAST_ID = "wallpaper-asset";
 
 /** One brief toast per problem (terse copy, no raw server text). */
@@ -50,6 +55,11 @@ export function useWallpaperAssets(pickerClass?: string) {
   }, [pickerClass, uploadError, uploadErrorId]);
 
   useEffect(() => {
+    assetListeners.add(setAssets);
+    return () => { assetListeners.delete(setAssets); };
+  }, []);
+
+  useEffect(() => {
     let live = true;
     listWallpaperAssets().then((list) => {
       if (live) setAssets(list);
@@ -70,7 +80,7 @@ export function useWallpaperAssets(pickerClass?: string) {
     setUploading(true);
     try {
       const asset = await uploadWallpaperAsset(file);
-      setAssets((current) => [...current.filter((item) => item.id !== asset.id), asset]);
+      publishAssets((current) => [...current.filter((item) => item.id !== asset.id), asset]);
       return asset;
     } catch (error) {
       setUploadErrorCode(apiErrorCode(error) ?? "unknown");
@@ -83,7 +93,7 @@ export function useWallpaperAssets(pickerClass?: string) {
   const remove = async (id: string) => {
     try {
       await deleteWallpaperAsset(id);
-      setAssets((current) => current.filter((item) => item.id !== id));
+      publishAssets((current) => current.filter((item) => item.id !== id));
     } catch (error) {
       notifyProblem(wallpaperAssetProblem(error), "deleteFailed");
     }

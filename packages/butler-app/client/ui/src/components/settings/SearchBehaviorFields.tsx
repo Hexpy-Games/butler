@@ -30,6 +30,7 @@ export function SearchBehaviorFields({ draft }: { draft: Pick<SettingsView, "web
           )
         }
         options={[
+          { value: "browser", label: options.searchReaderBrowser },
           { value: "lightweight", label: options.searchReaderLightweight },
           { value: "auto", label: options.searchReaderAuto },
           { value: "lightpanda", label: options.searchReaderLightpanda },

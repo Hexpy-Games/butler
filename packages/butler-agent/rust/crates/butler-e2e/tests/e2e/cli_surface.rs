@@ -73,6 +73,8 @@ fn cli_surface_exposes_only_user_commands() -> Result<(), HarnessError> {
         "mcp.test",
         "skills.list",
         "skills.import",
+        "folder.show",
+        "folder.set",
         "config.get",
         "config.set",
         "help",
@@ -90,6 +92,16 @@ fn cli_surface_exposes_only_user_commands() -> Result<(), HarnessError> {
     assert!(usage.contains("예약 작업") && usage.contains("schedule"));
     assert!(usage.contains("npx @hexpygames/butler install"));
     assert!(usage.contains("butler --version, -V"));
+    let config_help = launch
+        .command()
+        .args(["help", "config", "--json"])
+        .output()?;
+    assert!(config_help.status.success());
+    let config_help: serde_json::Value = serde_json::from_slice(&config_help.stdout)?;
+    let usage = config_help["data"]["usage"].as_str().unwrap();
+    assert!(usage.contains("config.headlessBrowser") && usage.contains("default true"));
+    assert!(usage.contains("Background browser / 백그라운드 브라우저"));
+    assert!(usage.contains("BUTLER_BROWSER_HEADLESS=on|off"));
     for args in [
         vec!["context", "status"],
         vec!["maintenance", "context"],

@@ -16,13 +16,13 @@ export const meta: ShowcaseMeta = {
 
 const labels = {
   "en-US": {
-    general: "General", project: "butler", active: "Design-system viewer", settings: "Settings",
+    general: "Chats", project: "butler", active: "Design-system viewer", settings: "Settings",
     long: "Settings with a very long navigation label that truncates before the control region",
     menu: "Row actions", disabled: "Archived project", recent: "Release checklist review",
     recentMeta: "butler · 3 minutes ago", more: "More (12)", back: "Back to app", skills: "Skills",
   },
   "ko-KR": {
-    general: "일반", project: "butler", active: "디자인 시스템 뷰어", settings: "설정",
+    general: "대화", project: "butler", active: "디자인 시스템 뷰어", settings: "설정",
     long: "컨트롤 영역에 닿기 전에 말줄임되는 아주 긴 내비게이션 라벨이 있는 설정",
     menu: "행 작업", disabled: "보관된 프로젝트", recent: "릴리스 체크리스트 검토",
     recentMeta: "butler · 3분 전", more: "더 보기 (12)", back: "앱으로 돌아가기", skills: "스킬",

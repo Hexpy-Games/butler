@@ -5,6 +5,8 @@
 //! the required [`GatewayApplication`] implementation supplied at composition.
 
 mod application;
+pub use application::AppAssetCommand;
+pub use application::storage::history::{AppHistoryCommand, AppHistoryQuery};
 mod file_watch;
 pub use file_watch::FileChangeWatch;
 mod auth;
@@ -28,7 +30,7 @@ mod transcript;
 mod ui_language;
 
 pub(crate) use mutations::GatewayMutationCommands;
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::sync::Arc;
 
 use butler_runtime::operations::ProviderQuotaView;
 use tokio_util::sync::CancellationToken;
@@ -38,6 +40,9 @@ pub use crate::gateway::inbound_queue::{
     InboundSettlementListener, QueuedInboundEvent,
 };
 pub use crate::gateway::message_file_store::AppMessageFiles;
+pub use application::settings::{
+    DiagnosticsSettingsReader, diagnostics_enabled_readonly, stored_ui_language_readonly,
+};
 pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
     AppApprovalClaims, AppArtifactMaterializer, AppAuthorityDecision, AppAuthorityDecisionInput,
@@ -48,19 +53,19 @@ pub use application::{
     AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult, AppCreateSessionInput,
     AppCreateSessionRequest, AppCreateSessionResult, AppDeveloperLogsQuery, AppExecutorReadiness,
     AppFileDownload, AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView, AppIdentityClock,
-    AppLedgerSourceRequest, AppMemoryCommand, AppMemoryPort, AppMessageFileSnapshot,
-    AppMessageFileStorage, AppModelCatalogCommand, AppModelCatalogPort, AppModelFallbackFacts,
-    AppModelMetadata, AppMonitorPage, AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress,
-    AppPersonalizationCommand, AppPersonalizationEvent, AppPersonalizationPort,
-    AppPersonalizationResult, AppPlanDecisionAction, AppPlanDecisionLedgerError,
-    AppPlanDecisionLedgerFuture, AppPlanDecisionLedgerPort, AppPlanDecisionPlan,
-    AppPlanDecisionRequest, AppPlanDecisionResult, AppPlanDecisionStatus, AppProjectActionResult,
-    AppProjectDashboardActionProgress, AppProjectDashboardBriefingPort,
-    AppProjectDashboardBriefingPrompt, AppProjectDashboardBriefingRequest,
-    AppProjectDashboardCheckpoint, AppProjectDashboardDisposition, AppProjectDashboardLedgerError,
-    AppProjectDashboardLedgerEvent, AppProjectDashboardLedgerFuture,
-    AppProjectDashboardLedgerHistory, AppProjectDashboardLedgerPort,
-    AppProjectDashboardLedgerRecord, AppProjectDashboardManagedPlan,
+    AppLedgerSourceRequest, AppLibraryChange, AppLibraryCommand, AppLibraryQuery, AppMemoryCommand,
+    AppMemoryPort, AppMessageFileSnapshot, AppMessageFileStorage, AppModelCatalogCommand,
+    AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata, AppMonitorPage,
+    AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress, AppPersonalizationCommand,
+    AppPersonalizationEvent, AppPersonalizationPort, AppPersonalizationResult,
+    AppPlanDecisionAction, AppPlanDecisionLedgerError, AppPlanDecisionLedgerFuture,
+    AppPlanDecisionLedgerPort, AppPlanDecisionPlan, AppPlanDecisionRequest, AppPlanDecisionResult,
+    AppPlanDecisionStatus, AppProjectActionResult, AppProjectDashboardActionProgress,
+    AppProjectDashboardBriefingPort, AppProjectDashboardBriefingPrompt,
+    AppProjectDashboardBriefingRequest, AppProjectDashboardCheckpoint,
+    AppProjectDashboardDisposition, AppProjectDashboardLedgerError, AppProjectDashboardLedgerEvent,
+    AppProjectDashboardLedgerFuture, AppProjectDashboardLedgerHistory,
+    AppProjectDashboardLedgerPort, AppProjectDashboardLedgerRecord, AppProjectDashboardManagedPlan,
     AppProjectDashboardManagedWork, AppProjectDashboardPageQuery, AppProjectDashboardPinRef,
     AppProjectDashboardPreferencesUpdate, AppProjectDashboardRecordsQuery,
     AppProjectDashboardReview, AppProjectDashboardSnapshot, AppProjectDashboardSource,
@@ -72,19 +77,24 @@ pub use application::{
     AppRelocationSnapshot, AppRelocationTransportBinding, AppRelocationWorkspaceMarker,
     AppRelocationWorkspacePlan, AppRelocationWorkspaceRequest, AppRoutinePreset,
     AppRuntimeInfoProvider, AppSessionActionResult, AppSessionBranchQuery, AppSessionBranchResult,
-    AppSessionControlUpdate, AppSessionControlsView, AppSessionSummary, AppSessionUpdate,
-    AppSessionViewPage, AppSessionWorkProgress, AppSessionWorkspaceProvisioner,
-    AppSessionWorkspaceSnapshot, AppSettingsFacts, AppSettingsFactsProvider,
-    AppSettingsMutationPort, AppSourceDocument, AppSourceSnapshotRequest, AppSpaceCommand,
-    AppSpaceMutationResult, AppSpaceOrigin, AppStartTopicConversationRequest, AppSubsessionPort,
-    AppTaskGraphQuery, AppTurn, AppUsageMonitorQuery, AppWorkOperationalNoticeFact,
-    AppWorkProgress, AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
+    AppSessionControlUpdate, AppSessionControlsView, AppSessionReadResult, AppSessionSummary,
+    AppSessionTitleGenerator, AppSessionTitleInput, AppSessionUpdate, AppSessionViewPage,
+    AppSessionWorkProgress, AppSessionWorkspaceProvisioner, AppSessionWorkspaceSnapshot,
+    AppSettingsFacts, AppSettingsFactsProvider, AppSettingsMutationPort, AppSourceDocument,
+    AppSourceSnapshotRequest, AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin,
+    AppStartTopicConversationRequest, AppSubsessionPort, AppTaskGraphQuery, AppTurn,
+    AppUsageMonitorQuery, AppWorkOperationalNoticeFact, AppWorkProgress,
+    AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
     AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
     EnqueueReceipt, MaterializedResponderFile, MemoryEventSink, OperationOutputChunk,
     OperationOutputView, ProjectSnapshot, ResolvedNativeAssets, TranscriptExport,
     VisualAdmissionRequest, project_task_graphs, task_graph_label, task_graph_model_label,
     task_graph_response,
+};
+pub use application::{
+    AppCardInput, AppProfileInput, AppSignInCommand, AppSignInUpsert, AppVaultCommand,
+    GatewaySignIns,
 };
 pub use application::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
@@ -95,14 +105,11 @@ pub use application::{
 };
 pub(crate) use application::{
     AutomationDetailView, AutomationListView, AutomationMutationResult, AutomationRunListView,
-    AutomationRunResult, CreateAutomationRequest, UpdateAutomationRequest,
+    AutomationRunResult, AutomationRunSummary, CreateAutomationRequest, UpdateAutomationRequest,
 };
 #[cfg(test)]
 pub(crate) use application::{TestProjectDashboardBriefing, TestProjectDashboardLedger};
-pub use application::{
-    app_session_hint, diagnostics_enabled_readonly, normalize_committed_turn_event,
-    stored_ui_language_readonly,
-};
+pub use application::{app_session_hint, normalize_committed_turn_event};
 pub(crate) use application::{app_work_status, app_worker_activity};
 pub use application::{read_new_chat_briefing_projects, read_new_chat_briefing_settings};
 pub use auth::LocalAuthConfig;
@@ -121,70 +128,20 @@ pub use security_settings::{
     ADMIN_CREDENTIAL_HEADER, AllowedHostError, GatewayExposure, GatewaySecurityStore,
     MAX_ALLOWED_HOSTS, RotatedConnectionCode, normalize_allowed_host,
 };
-pub use server::{GatewayConfig, GatewayServer, serve_gateway};
+pub use server::{GatewayConfig, GatewayServer, HeadlessBrowserConfig, serve_gateway};
 mod error;
-pub use error::GatewayApplicationError;
+pub use error::{ApplicationFuture, GatewayApplicationError};
 pub use session_references::resolve_session_references;
 pub use transcript::{TranscriptAppendListener, TranscriptCode, TranscriptWriter};
+mod command_timing;
 pub use wallpapers::{
     AppWallpaperAsset, AppWallpaperChange, AppWallpaperFile, AppWallpaperModuleShader,
     AppWallpaperModuleStatusReport, AppWallpaperRejection, AppWallpaperScope,
     AppWallpaperSetRequest, AppWallpaperVariant, GatewayWallpapers,
 };
 
-pub type ApplicationFuture<T> =
-    Pin<Box<dyn Future<Output = Result<T, GatewayApplicationError>> + Send + 'static>>;
-
-/// Project dashboard HTTP operations, backed by the App and Project Ledger owners.
-pub trait GatewayProjectDashboard: Send + Sync {
-    fn get_project_dashboard(&self, project_id: String) -> ApplicationFuture<serde_json::Value>;
-    fn get_project_dashboard_records(
-        &self,
-        project_id: String,
-        query: AppProjectDashboardRecordsQuery,
-    ) -> ApplicationFuture<serde_json::Value>;
-    fn get_project_dashboard_materials(
-        &self,
-        project_id: String,
-        query: AppProjectDashboardPageQuery,
-    ) -> ApplicationFuture<serde_json::Value>;
-    fn get_project_dashboard_history(
-        &self,
-        project_id: String,
-        query: AppProjectDashboardPageQuery,
-    ) -> ApplicationFuture<serde_json::Value>;
-    fn get_project_dashboard_artifacts(
-        &self,
-        project_id: String,
-        query: AppProjectDashboardPageQuery,
-    ) -> ApplicationFuture<serde_json::Value>;
-    fn get_project_dashboard_source(
-        &self,
-        project_id: String,
-        query: AppProjectDashboardSourceQuery,
-    ) -> ApplicationFuture<serde_json::Value>;
-    fn get_project_dashboard_statistics(
-        &self,
-        project_id: String,
-        query: AppProjectDashboardStatisticsQuery,
-    ) -> ApplicationFuture<serde_json::Value>;
-    fn update_project_dashboard_preferences(
-        &self,
-        project_id: String,
-        update: AppProjectDashboardPreferencesUpdate,
-    ) -> ApplicationFuture<serde_json::Value>;
-    fn request_project_dashboard_briefing(
-        &self,
-        project_id: String,
-        request: AppProjectDashboardBriefingRequest,
-    ) -> ApplicationFuture<serde_json::Value>;
-    fn attach_project_dashboard_artifact(
-        &self,
-        project_id: String,
-        artifact_id: String,
-        revision: String,
-    ) -> ApplicationFuture<MessageFileRef>;
-}
+mod project_dashboard_contract;
+pub use project_dashboard_contract::GatewayProjectDashboard;
 
 /// Session controls and Plan decisions use the App revision and Project Ledger owners.
 mod session_controls_contract;
@@ -200,10 +157,16 @@ pub trait GatewayApplication:
     + GatewaySessionControls
     + GatewayDevices
     + GatewayWallpapers
+    + GatewaySignIns
     + Send
     + Sync
     + 'static
 {
+    /// Read a bounded page of saved browser items.
+    fn library(&self, command: AppLibraryCommand) -> ApplicationFuture<serde_json::Value> {
+        let _ = command;
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn runtime_session_hint(&self, chat: String) -> ApplicationFuture<String> {
         Box::pin(async move { Ok(app_session_hint(&chat)) })
     }
@@ -333,6 +296,9 @@ pub trait GatewayApplication:
     fn run_automation(&self, id: String) -> ApplicationFuture<AutomationRunResult>;
     fn dispatch_due_automations(&self) -> ApplicationFuture<AutomationRunListView>;
     fn list_automation_runs(&self, id: String) -> ApplicationFuture<AutomationRunListView>;
+    fn assets(&self, _command: AppAssetCommand) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn upload_message_file(&self, input: AppFileUpload) -> ApplicationFuture<MessageFileRef>;
     fn download_message_file(&self, id: String) -> ApplicationFuture<AppFileDownload>;
     fn runtime_readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError>;
@@ -495,3 +461,5 @@ mod tests;
 mod wallpaper_modules;
 mod wallpaper_store;
 mod wallpapers;
+
+pub use application::project_folder;

@@ -80,7 +80,10 @@ async fn auto_01_automation_runs_a_turn() -> Result<(), HarnessError> {
         dispatch_due(&s).await?.is_empty(),
         "an automation ran before it was due"
     );
-    assert!(s.gw.messages("general").await?.is_empty());
+    assert_eq!(
+        s.gw.messages("general").await?,
+        [] as [serde_json::Value; 0]
+    );
 
     let turn_id = run_now(&s, &id).await?;
     let turn =
@@ -123,7 +126,7 @@ async fn auto_01_automation_runs_a_turn() -> Result<(), HarnessError> {
         listed(&s, &id).await?.is_none(),
         "deleted automation still listed"
     );
-    assert!(dispatch_due(&s).await?.is_empty());
+    assert_eq!(dispatch_due(&s).await?, [] as [serde_json::Value; 0]);
     let turns = s.gw.turns("general").await?.len();
     let messages = s.gw.messages("general").await?.len();
 

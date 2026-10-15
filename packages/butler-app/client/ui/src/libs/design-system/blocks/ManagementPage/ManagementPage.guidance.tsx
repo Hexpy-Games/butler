@@ -27,7 +27,7 @@ function WallpaperDashboard() {
   return (
     <ManagementPage background={<Wallpaper scope="container" source={{ kind: "live", module: "butler.silk" }} />}>
       <ManagementPagePanel>
-        <DashboardHeader title="Butler" description="Desktop client and gateway." action={<Button variant="outline" text="New conversation" />} />
+        <DashboardHeader title="Butler" description="Desktop client and gateway." action={<Button variant="outline" text="New chat" />} />
       </ManagementPagePanel>
       <ManagementPagePanel>
         <ListRow title="Wallpaper upgrade" description="P3 · dashboard" meta="open" />

@@ -1,5 +1,15 @@
 import { expect, test } from "bun:test";
-import { getAppCopy, getInterfaceProgressLabel } from "./index.ts";
+import { getAppCopy, getInterfaceProgressLabel, reasoningEffortLabel } from "./index.ts";
+
+// test-category: pure-logic
+test("native browser context menu labels follow the App locale", () => {
+  const ko = getAppCopy("ko-KR").browser.contextMenu;
+  expect([ko.openInNewTab, ko.openInButler, ko.openInBrowser("Safari"), ko.copyLink, ko.copy, ko.selectAll, ko.paste])
+    .toEqual(["새 탭에서 열기", "버틀러에서 열기", "다음 브라우저로 열기: Safari", "링크 복사", "복사", "모두 선택", "붙여넣기"]);
+  const en = getAppCopy("en-US").browser.contextMenu;
+  expect([en.openInNewTab, en.openInButler, en.openInBrowser("Safari"), en.copyLink, en.copy, en.selectAll, en.paste])
+    .toEqual(["Open in new tab", "Open in Butler", "Open in Safari", "Copy link", "Copy", "Select All", "Paste"]);
+});
 
 function shape(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(shape);
@@ -10,7 +20,7 @@ function shape(value: unknown): unknown {
 test("English and Korean catalogs have complete recursive key and formatter parity", () => {
   expect(shape(getAppCopy("en-US"))).toEqual(shape(getAppCopy("ko-KR")));
   expect(getAppCopy("en-US").conversation.work.collapsedSummary("Read file", 2)).toBe("Read file and 1 more activities");
-  expect(getAppCopy("ko-KR").space.general).toBe("일반");
+  expect(getAppCopy("ko-KR").space.general).toBe("대화");
   expect(getAppCopy("en-US").briefing.general.suggestions[0].title).toBe("Downloads folder cleanup");
 });
 
@@ -113,10 +123,9 @@ test("API key copy claims Keychain storage only where the agent reports it (#217
   }
 });
 
-test("the schedule access hint names the Ask first mode with the composer's label", () => {
+test("the schedule access hint is one line", () => {
   for (const locale of ["en-US", "ko-KR"] as const) {
     const copy = getAppCopy(locale);
-    expect(copy.automations.accessHint).toContain(copy.permissions.askFirst);
     expect(copy.automations.accessHint).not.toContain("\n");
   }
 });
@@ -133,4 +142,13 @@ test("settings titles never use the A / B style in either locale", () => {
     ]);
     expect(titles.filter((text) => /\S\s*\/\s*\S/u.test(text)), locale).toEqual([]);
   }
+});
+
+// test-category: pure-logic
+test("reasoning effort labels localize provider levels and safely title-case future values", () => {
+  const levels = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "", "ultra high", "toString"];
+  expect(levels.map((value) => reasoningEffortLabel(value, "ko-KR")))
+    .toEqual(["없음", "최소", "낮음", "보통", "높음", "매우 높음", "최대", "보통", "Ultra High", "ToString"]);
+  expect(levels.map((value) => reasoningEffortLabel(value, "en-US")))
+    .toEqual(["None", "Minimal", "Low", "Medium", "High", "Very high", "Max", "Medium", "Ultra High", "ToString"]);
 });

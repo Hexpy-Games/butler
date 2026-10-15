@@ -147,7 +147,7 @@ async fn load(
         "local_timezone": local_timezone(),
         "web_search": {
             "provider": web_search.get("provider"),
-            "reader_backend": web_search.get("readerBackend"),
+            "reader_backend": butler_core::configuration::web_reader_backend(web_search),
             "planning_enabled": planning.get("enabled"),
             "planning_mode": planning.get("mode"),
             "planning_default_depth": planning.get("defaultDepth"),
@@ -251,9 +251,7 @@ fn web_search_credentials(
     let mut values = serde_json::Map::new();
     for (provider, primary, accepted) in keys {
         let configured = accepted.iter().any(|name| {
-            std::env::var(name)
-                .ok()
-                .is_some_and(|value| !value.trim().is_empty())
+            std::env::var(name).is_ok_and(|value| !value.trim().is_empty())
                 || private_environment
                     .get(*name)
                     .is_some_and(|value| !value.trim().is_empty())
@@ -299,7 +297,7 @@ fn model(source: &ModelProviderMetadata) -> AppModelMetadata {
     }
 }
 
-fn reasoning_effort(source: ModelReasoningEffort) -> BtccReasoningEffort {
+pub(super) fn reasoning_effort(source: ModelReasoningEffort) -> BtccReasoningEffort {
     match source {
         ModelReasoningEffort::None => BtccReasoningEffort::None,
         ModelReasoningEffort::Low => BtccReasoningEffort::Low,

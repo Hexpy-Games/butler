@@ -101,6 +101,15 @@ pub(super) fn render(entries: &[Entry]) -> String {
         }
         lines.push(String::new());
     }
+    if entries.iter().any(|entry| entry.id.starts_with("config.")) {
+        lines.push("Background browser / 백그라운드 브라우저 (restart to apply):".into());
+        lines.push("  gateways/app.json: config.headlessBrowser = true|false (Chrome fallback; default true).".into());
+        lines.push("  BUTLER_BROWSER_HEADLESS=on|off overrides the config, e.g. BUTLER_BROWSER_HEADLESS=off butler start.".into());
+        lines.push(
+            "  App → Background browser (App Electron, then Chrome for Testing); starts on demand."
+                .into(),
+        );
+    }
     lines.push("설치 / Install: npx @hexpygames/butler install".into());
     lines.join("\n")
 }

@@ -143,6 +143,11 @@ pub fn system_time_zone() -> io::Result<SystemTimeZone> {
     sys::system_time_zone()
 }
 
+/// The host IANA timezone used when the user has not configured one.
+pub fn system_time_zone_name() -> io::Result<String> {
+    iana_time_zone::get_timezone().map_err(io::Error::other)
+}
+
 /// When process `pid` started, in epoch milliseconds at whole-second
 /// resolution, as `ps -o lstart=` reports it; `None` when it cannot be read.
 ///

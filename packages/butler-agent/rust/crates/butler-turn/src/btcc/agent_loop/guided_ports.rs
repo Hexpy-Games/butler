@@ -177,6 +177,12 @@ pub trait ToolPort: Send + Sync {
     /// The journal call id of a provider tool call, if journaled.
     fn operation_result_call_id(&self, provider_call_id: &str) -> Option<String>;
 
+    /// Tool state an authority continuation carries across the suspension
+    /// (for example whether the turn already read external content).
+    fn continuation_extensions(&self) -> serde_json::Map<String, serde_json::Value> {
+        serde_json::Map::new()
+    }
+
     /// The transcript message of a tool result.
     fn result_message<'a>(
         &'a self,
@@ -238,6 +244,7 @@ pub trait JournalPort: Send + Sync {
 pub struct JournalCloseout {
     pub artifacts: Vec<FinalArtifact>,
     pub changed_files: Vec<crate::btcc::ChangedFileSummary>,
+    pub answer_blocks: Vec<serde_json::Value>,
 }
 
 /// Durable Work of a guided turn.

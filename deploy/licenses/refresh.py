@@ -95,6 +95,11 @@ def crate_evidence(package):
     vcs = directory / ".cargo_vcs_info.json"
     if source.startswith("https://github.com/"):
         revision = json.loads(vcs.read_text())["git"]["sha1"] if vcs.exists() else package["version"]
+        # Git checkouts do not contain Cargo's packaged VCS metadata. Use the
+        # resolved source commit, never a crate version as a repository ref.
+        cargo_source = package.get("source") or ""
+        if cargo_source.startswith("git+"):
+            revision = cargo_source.rsplit("#", 1)[-1]
         repository = source.removesuffix(".git").rstrip("/")
         repository = "/".join(repository.split("/")[:5])
         raw = repository.replace("https://github.com/", "https://raw.githubusercontent.com/")
@@ -144,6 +149,10 @@ def crate_evidence(package):
         source = "https://crates.io/crates/windows-permissions/0.2.4"
         files = [("Upstream MIT declaration (no copyright notice supplied)", (directory / "Cargo.toml.orig").read_text()),
                  ("Full MIT license (upstream omits text)", fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt"))]
+    if (package.get("source") or "").startswith("git+"):
+        checkout = next((parent for parent in directory.parents if (parent / ".git").exists()), None)
+        if checkout:
+            source += "/" + directory.relative_to(checkout).as_posix()
     return package, license_id, source, files
 
 
@@ -204,6 +213,13 @@ def js_components():
             revision = "8ca9ba5ea52de03308fe8ced94f7b159a44d28ff"
             url = f"https://raw.githubusercontent.com/theKashey/react-remove-scroll-bar/{revision}/LICENSE"
             files = [(url, fetch(url))]
+        if name == "woff2sfnt-sfnt2woff" and version == "1.0.0" and not files:
+            # The pinned distribution declares MIT and its copyright in source,
+            # but omits the license body. Keep both declarations and link MIT.
+            header = (directory / "index.js").read_text().split("*/", 1)[0] + "*/"
+            files = [("index.js (upstream MIT copyright declaration)", header),
+                     ("package.json (upstream MIT declaration)", (directory / "package.json").read_text()),
+                     ("Full MIT license (upstream omits text)", fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt"))]
         if not files:
             raise ValueError(f"Missing npm license evidence: {name} {version}")
         if name == "electron":
@@ -325,6 +341,7 @@ def model_components():
 
 def vendored_components():
     entries = [
+        ("Noto Sans KR", "2.004", "OFL-1.1", "packages/butler-agent/rust/crates/butler-runtime/assets/OFL.txt"),
         ("IBM Plex Mono", "2.5.0", "OFL-1.1", "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt"),
         ("LobeHub provider logos", "1.95.1", "MIT", "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE"),
         ("JavaScriptCore V8 Date.parse adaptation", "2026-09-19", "BSD-2-Clause", "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt"),

@@ -48,9 +48,12 @@
     var(--nav-sticky-surface, var(--color-surface-base));
 }
 
+/* Clips rows under the stuck folder header; the other edges leave the fold's
+   clip margin (focus-ring room, or the drop slot while dragging). */
 .stickyGroup > .content {
   --sticky-clip-top: 0px;
   clip-path: inset(
-    var(--sticky-clip-top, 0) 0 calc(-1 * var(--collapsible-clip-margin, 0px))
+    var(--sticky-clip-top, 0) calc(-1 * var(--focus-ring-room))
+      calc(-1 * var(--collapsible-clip-margin, var(--focus-ring-room)))
   );
 }

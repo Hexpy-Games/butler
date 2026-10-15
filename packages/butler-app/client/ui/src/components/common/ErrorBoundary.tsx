@@ -10,6 +10,8 @@ interface ErrorBoundaryProps {
   fallback?: ReactNode | ((retry: () => void) => ReactNode);
   /** A static UI identifier, never a conversation/project title or URL. */
   scope?: string;
+  /** Reset a failed boundary on navigation, preserving healthy child identity. */
+  resetKey?: string;
 }
 
 interface ErrorBoundaryState { error: Error | null }
@@ -21,6 +23,10 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     reportUiCrash(error, this.props.scope ?? "app", info.componentStack ?? "");
+  }
+
+  componentDidUpdate(previous: ErrorBoundaryProps): void {
+    if (previous.resetKey !== this.props.resetKey && this.state.error) this.retry();
   }
 
   private retry = () => {

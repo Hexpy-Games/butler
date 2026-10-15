@@ -18,13 +18,13 @@ function hash(text: string): string {
 
 /**
  * Content revision of a module (manifest, shaders and default image): equal
- * modules share it, an edited `wallpaper.json`, `shader.frag` or `overlay.frag` changes it. Stills and
+ * modules share it, an edited `wallpaper.json`, `shader.frag`, `overlay.frag` or `density.frag` changes it. Stills and
  * change detection (hot reload) key by it.
  */
 export function wallpaperModuleRevision(module: WallpaperModule): string {
   let revision = revisions.get(module);
   if (revision === undefined) {
-    const passes = module.overlay === undefined ? module.fragment : `${module.fragment}\n${module.overlay}`;
+    const passes = [module.fragment, module.overlay, module.density].filter((pass) => pass !== undefined).join("\n");
     revision = `${hash(JSON.stringify(stable(module.manifest)))}${hash(passes)}${module.defaultImage ? hash(module.defaultImage.key) : ""}`;
     revisions.set(module, revision);
   }

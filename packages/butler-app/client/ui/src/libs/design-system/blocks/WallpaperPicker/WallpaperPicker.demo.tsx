@@ -1,5 +1,7 @@
 import { useState } from "react";
 import type { ShowcaseRenderContext } from "../../showcase";
+import { Field, FieldTitle } from "../../components/Field";
+import { Slider } from "../../components/Slider";
 import { BUILTIN_WALLPAPERS, createWallpaperRegistry, defineWallpaperModule, type WallpaperSource, type WallpaperUserModule } from "../Wallpaper";
 import type { WallpaperPickerImage, WallpaperPickerLabels, WallpaperPickerValue } from "./types";
 
@@ -18,6 +20,23 @@ export const PICKER_LABELS: Record<ShowcaseRenderContext["locale"], WallpaperPic
 };
 
 export const INHERIT_LABEL: Record<ShowcaseRenderContext["locale"], string> = { "en-US": "Same as Home", "ko-KR": "홈과 같게" };
+
+/** The conversation picker's copy: its none tile is a plain theme colour, and its extra control an overlay. */
+export const CONVERSATION_COPY: Record<ShowcaseRenderContext["locale"], { none: string; overlay: string }> = {
+  "en-US": { none: "Solid", overlay: "Overlay" },
+  "ko-KR": { none: "단색", overlay: "배경 불투명도" },
+};
+
+/** A caller's extra control, as the conversation picker passes it: the value sits in the label. */
+export function OverlayDemoControl({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  const title = `${label} ${value}%`;
+  return (
+    <Field>
+      <FieldTitle>{title}</FieldTitle>
+      <Slider aria-label={title} max={95} min={0} step={5} value={value} onValueChange={onChange} />
+    </Field>
+  );
+}
 
 const START_IMAGES: WallpaperPickerImage[] = [{ id: "landscape", luminance: 0.55 }];
 /** The module `onImportModule` "installs" (already in `USER_DEMO_REGISTRY`, held back from the initial `userModules`). */

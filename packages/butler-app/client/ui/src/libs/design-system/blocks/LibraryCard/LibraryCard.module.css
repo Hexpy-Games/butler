@@ -1,0 +1,183 @@
+/* Media on top; title and source below; the menu at the title row's end. */
+.layout {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-xs);
+}
+
+.open {
+  display: block;
+  min-width: 0;
+  grid-column: 1 / -1;
+  text-align: start;
+}
+
+.body {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-xs);
+  grid-column: 1 / -1;
+}
+
+/* A quote or document preview; an image is a MediaFrame with this class (its
+   16:10 shape, matte and fit rule live in MediaFrame). */
+.media {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  margin-bottom: var(--space-xs);
+  border-radius: var(--radius-control);
+  background: var(--muted);
+}
+
+/* A text scrap previews its words, not a picture of them. */
+.quote {
+  display: -webkit-box;
+  align-self: center;
+  overflow: hidden;
+  margin: var(--space-md);
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.document {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: calc(var(--space-xs) + var(--border-width-strong));
+  padding: var(--space-md);
+}
+
+.document span {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+}
+
+.document span:first-child {
+  width: 60%;
+  height: 9px;
+  background: var(--text-tertiary);
+}
+
+.document span:last-child {
+  width: 72%;
+}
+
+.tag {
+  position: absolute;
+  top: var(--space-xs);
+  left: var(--space-xs);
+}
+
+.title,
+.meta {
+  min-width: 0;
+  overflow: hidden;
+  padding-inline-end: var(--control-height-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height);
+  font-weight: var(--font-weight-medium);
+}
+
+.meta {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-1);
+  line-height: var(--typo-caption-line-height);
+}
+
+/* The menu sits on the title row, beside the title (never over the media). */
+.menu {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+}
+
+/* The kind tag keeps a document preview's first line and a quote's first words clear. */
+.media[data-tagged] .document {
+  padding-top: calc(var(--tag-height-sm) + var(--space-sm));
+}
+
+.media[data-tagged] .quote {
+  margin-top: calc(var(--tag-height-sm) + var(--space-sm));
+}
+
+/* Tags: one line under the meta; "+N" says how many more. */
+.tags {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  gap: var(--space-xs);
+  padding-inline-end: var(--control-height-md);
+}
+
+/* Rename in place: the title row becomes a field of the same type. */
+.titleInput {
+  min-width: 0;
+  height: var(--control-height-sm);
+  margin-inline: calc(-1 * var(--space-xs)) var(--control-height-md);
+  padding: 0 var(--space-xs);
+  border: var(--border-hairline) solid
+    color-mix(in srgb, var(--accent) 52%, var(--line));
+  border-radius: calc(var(--radius-control) - var(--border-width-strong));
+  outline: none;
+  background: var(--surface-raised);
+  box-shadow: var(--focus-ring);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Selection: a circle on the media's corner, on hover or focus, always while selecting. */
+.check {
+  position: absolute;
+  top: var(--space-xs);
+  right: var(--space-xs);
+  display: grid;
+  width: var(--tag-height-sm);
+  height: var(--tag-height-sm);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--border-width-strong) var(--line-strong);
+  color: var(--neutral-white);
+  cursor: pointer;
+  opacity: 0;
+  place-items: center;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+.layout:hover .check,
+.layout:focus-within .check,
+.layout[data-selection="active"] .check,
+.check[data-checked] {
+  opacity: 1;
+}
+
+.check[data-checked] {
+  background: var(--accent);
+  box-shadow: none;
+}
+
+.check:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.layout[data-dragging="true"] {
+  opacity: 0.45;
+}

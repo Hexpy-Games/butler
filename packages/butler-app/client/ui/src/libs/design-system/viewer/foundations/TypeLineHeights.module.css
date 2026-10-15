@@ -1,0 +1,50 @@
+.tableFrame {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--text-primary);
+  font-size: var(--typo-label-size);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--typo-label-line-height);
+}
+
+.table th,
+.table td {
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: var(--border-hairline) solid var(--line);
+  text-align: start;
+  white-space: nowrap;
+}
+
+.table th {
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-medium);
+}
+
+.old {
+  color: var(--text-tertiary);
+}
+
+.new {
+  font-weight: var(--font-weight-semibold);
+}
+
+.samples {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.sample {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  outline: var(--border-hairline) dashed var(--line-strong);
+}
+
+.line {
+  min-width: 0;
+}

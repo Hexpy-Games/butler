@@ -11,8 +11,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  FolderPlus,
   IconSlot,
-  Plus,
+  PencilLine,
   Stack,
   Tabs,
   TabsList,
@@ -61,10 +62,16 @@ export function SpaceBrowseHeader() {
         }
         actions={
           <ButtonContainer size="icon-sm">
+            <IconButton
+              label={appCopy.space.newChat}
+              onClick={() => useButlerStore.getState().openNewChat()}
+            >
+              <IconSlot size="sm"><PencilLine /></IconSlot>
+            </IconButton>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <IconButton label={appCopy.space.menu}>
-                  <IconSlot size="sm"><Plus /></IconSlot>
+                  <IconSlot size="sm"><FolderPlus /></IconSlot>
                 </IconButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" sideOffset={8}>
@@ -79,7 +86,6 @@ export function SpaceBrowseHeader() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-
           </ButtonContainer>
         }
       />

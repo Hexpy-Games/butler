@@ -53,7 +53,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - uses: ./.github/actions/product-features
 
       - name: Set up Rust and the selected ONNX Runtime
         if: inputs.shared-agents != true
@@ -125,7 +124,7 @@ jobs:
       - name: Use the shared native Agent
         if: inputs.shared-agents == true
         run: |
-          chmod +x "$RUNNER_TEMP/shared-agent/butler-agent"
+          chmod +x "$RUNNER_TEMP/shared-agent/butler-agent" "$RUNNER_TEMP/shared-agent/butler-sandbox"
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$RUNNER_TEMP/shared-agent/butler-agent" >> "$GITHUB_ENV"
 
       - name: Package the App
@@ -176,7 +175,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
       - name: Download the packages
         uses: actions/download-artifact@v4
         with:

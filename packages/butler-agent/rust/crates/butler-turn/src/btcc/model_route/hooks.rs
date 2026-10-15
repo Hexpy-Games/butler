@@ -93,6 +93,9 @@ impl RouteHooks {
         model: &str,
         result: ModelRoundResult,
     ) -> Result<(), crate::btcc::agent_loop::ModelRoundError> {
+        let _timing = crate::btcc::agent_loop::command_timing::CommandTiming::new(
+            "model_response_persistence",
+        );
         let write = ModelRoundAcceptanceWrite {
             binding: self.binding.clone(),
             key: self.key(round, candidate, model, KeyScope::Checkpoint),

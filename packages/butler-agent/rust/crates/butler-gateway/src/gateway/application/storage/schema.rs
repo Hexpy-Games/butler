@@ -1,6 +1,8 @@
 //! Existing App schema migration in its source-defined order.
 
+mod assets;
 mod core;
+mod library;
 mod message_ownership;
 mod migration;
 mod monitoring;
@@ -8,8 +10,11 @@ mod project_ledger_bindings;
 mod schedule_access;
 mod schedule_legacy;
 mod security;
+mod session_reads;
+mod signins;
 mod space;
 mod supporting;
+mod vault;
 mod wallpapers;
 
 use std::path::Path;
@@ -27,6 +32,8 @@ pub(super) fn migrate(
 ) -> Result<(), AppStorageError> {
     let turns_new = !migration::table_exists(connection, "turns")?;
     core::create(connection)?;
+    library::create(connection)?;
+    super::history::schema::create(connection)?;
     security::create(connection)?;
     // Open-turn lookups filter on the state alone; databases that predate the
     // index get it here.
@@ -42,6 +49,7 @@ pub(super) fn migrate(
     // database, the connected provider's routine preset for a new one.
     record_default_model_policy(connection, !turns_new)?;
     migration::add_current_columns(connection)?;
+    assets::create(connection)?;
     connection.execute_batch(
         "CREATE INDEX IF NOT EXISTS chats_archived_idx ON chats(archived);
          CREATE INDEX IF NOT EXISTS projects_archived_idx ON projects(archived);
@@ -75,8 +83,12 @@ pub(super) fn migrate(
     project_ledger_bindings::initialize(connection, butler_data)?;
     space::migrate(connection)?;
     wallpapers::create(connection)?;
+    signins::create(connection)?;
+    vault::create(connection)?;
     message_ownership::migrate(connection)?;
+    session_reads::create(connection)?;
     monitoring::migrate(connection)?;
+    library::recover(connection, butler_data)?;
     Ok(())
 }
 
@@ -132,3 +144,5 @@ pub(super) fn migrate_legacy_schedules(
 mod plans;
 #[cfg(test)]
 mod tests;
+
+pub(in crate::gateway::application) use core::create_settings_table;

@@ -1,0 +1,160 @@
+import { Component, createRef, type ReactNode } from "react";
+import { prefersReducedMotion } from "../../lib/motion";
+import type { WallpaperIntroTimeline } from "../Wallpaper/intro/introTimeline";
+import { runSetupIntro, type SetupIntroPhase, type SetupIntroRun } from "./setupIntro";
+import { copyFrame } from "./setupMorphLayers";
+import { canMorph, startSetupMorph, type SetupWizardMorph } from "./setupWizardMorph";
+import morphStyles from "./SetupWizardMorph.module.css";
+import styles from "./SetupWizardShell.module.css";
+import introStyles from "./SetupWizardIntro.module.css";
+
+/**
+ * How the first card appears. `full`: the first-install ink intro (the
+ * backdrop writes the mark, which lands in the SetupWizardMark slot of the
+ * card, then the card and its lines arrive). `rerun`: the short re-run
+ * variant, the dried print still and the card fading in with a 4px rise over
+ * --motion-slow (at once under reduced motion). `none`: no ink at all (a
+ * resumed setup): the backdrop drifts from the first frame around the card
+ * and the card has the re-run entrance.
+ */
+export type SetupWizardIntro = "none" | "rerun" | "full";
+
+interface SetupWizardStageProps {
+  stepKey: string;
+  intro?: SetupWizardIntro;
+  /** The ink intro clock the backdrop shares (intro `full`, `rerun`, or `none` already handed off). */
+  timeline?: WallpaperIntroTimeline | null;
+  /** The card waits unseen until the host can show the intro; it arrives when the hold ends. */
+  held?: boolean;
+  children: ReactNode;
+}
+
+interface SetupWizardStageState {
+  /** The step whose card is rising in; null once nothing is moving. */
+  enteringKey: string | null;
+  introPhase: SetupIntroPhase;
+}
+
+/** Longest exit before the snapshot is dropped even without `animationend`. */
+const EXIT_FALLBACK_MS = 400;
+
+/**
+ * Replaces the focus column when `stepKey` changes. A static, inert copy of
+ * the old card stays in place while the new card arrives on the same top
+ * edge. When both frames hold a solid card (any step change, forward or
+ * back: the 420px intro and a 520px step, or two steps of different heights)
+ * the card morphs: one surface moves its real edges, never scaled. Otherwise
+ * the copy fades out and the new card rises in. Under reduced motion the card
+ * swaps at once. The copy is plain DOM: the React tree of the old step is not
+ * rendered again.
+ */
+export class SetupWizardStage extends Component<SetupWizardStageProps, SetupWizardStageState> {
+  state: SetupWizardStageState = { enteringKey: null, introPhase: this.props.held || (this.props.intro === "full" && this.props.timeline) ? "pending" : null };
+  private intro: SetupIntroRun | null = null;
+  private readonly root = createRef<HTMLDivElement>();
+  private readonly frame = createRef<HTMLDivElement>();
+  private readonly ghosts = createRef<HTMLDivElement>();
+  private readonly surface = createRef<HTMLDivElement>();
+  private exitTimer: ReturnType<typeof setTimeout> | undefined;
+  private morph: SetupWizardMorph | null = null;
+  /** The first card's key while the re-run entrance applies; cleared by the first step change. */
+  private rerunKey = (this.props.intro === "rerun" || this.props.intro === "none") && !this.props.held && !prefersReducedMotion() ? this.props.stepKey : null;
+
+  getSnapshotBeforeUpdate(previous: SetupWizardStageProps): HTMLElement | null {
+    if (previous.stepKey === this.props.stepKey) return null;
+    this.morph?.finish();
+    if (prefersReducedMotion()) return null;
+    const node = this.frame.current;
+    return node ? copyFrame(node) : null;
+  }
+
+  componentDidMount() {
+    if (!this.props.held) this.startIntro();
+  }
+
+  componentDidUpdate(previous: SetupWizardStageProps, _state: SetupWizardStageState, snapshot: HTMLElement | null) {
+    if (previous.held && !this.props.held) this.release();
+    const ghosts = this.ghosts.current;
+    const changed = previous.stepKey !== this.props.stepKey;
+    if (!snapshot || !ghosts) return changed ? this.intro?.stepChanged(null, null) : undefined;
+    for (const element of [snapshot, ...snapshot.querySelectorAll("[id]")]) element.removeAttribute("id");
+    if (this.startMorph(ghosts, snapshot)) return;
+    this.intro?.stepChanged(null, null);
+    snapshot.className = `${styles.stageFrame} ${styles.stageExit}`;
+    snapshot.setAttribute("data-stage", "exit");
+    const drop = () => {
+      clearTimeout(this.exitTimer);
+      snapshot.remove();
+    };
+    snapshot.addEventListener("animationend", (event) => {
+      if (event.target === snapshot) drop();
+    });
+    clearTimeout(this.exitTimer);
+    this.exitTimer = setTimeout(drop, EXIT_FALLBACK_MS);
+    ghosts.replaceChildren(snapshot);
+    this.setState({ enteringKey: this.props.stepKey });
+  }
+
+  componentWillUnmount() {
+    clearTimeout(this.exitTimer);
+    this.morph?.finish();
+    this.intro?.dispose();
+  }
+
+  /** The card morph of any step change; false when a frame holds no solid card (plain swap). */
+  private startMorph(ghosts: HTMLDivElement, snapshot: HTMLElement): boolean {
+    const root = this.root.current, frame = this.frame.current, surface = this.surface.current;
+    if (!root || !frame || !surface || !canMorph(snapshot, frame)) return false;
+    snapshot.className = styles.stageFrame;
+    snapshot.setAttribute("data-stage", "morph");
+    ghosts.replaceChildren(snapshot);
+    const morph = startSetupMorph(root, surface, snapshot, frame, () => {
+      snapshot.remove();
+      if (this.morph === morph) this.morph = null;
+      this.intro?.measure();
+    });
+    if (!morph) {
+      snapshot.remove();
+      return false;
+    }
+    this.morph = morph;
+    // The print beat: the ink keep-out moves from the old card to the new one, then the intro hands off.
+    this.intro?.stepChanged(morph.from, morph.to);
+    return true;
+  }
+
+  private startIntro() {
+    const { timeline, intro } = this.props, stage = this.root.current, surface = this.surface.current;
+    if (!timeline || !stage || !surface) return;
+    this.intro = runSetupIntro({ stage, surface, timeline, frame: () => this.frame.current, rerun: intro !== "full", onPhase: (introPhase) => this.setState({ introPhase }) });
+  }
+
+  /** The hold ended: the card arrives as it would have at mount (the re-run entrance, or with the reveal). */
+  private release() {
+    const { intro, stepKey, timeline } = this.props;
+    if ((intro === "rerun" || intro === "none") && !prefersReducedMotion()) this.rerunKey = stepKey;
+    this.startIntro();
+    if (intro !== "full" || !timeline) this.setState({ introPhase: null });
+  }
+
+  render() {
+    const { stepKey, children } = this.props;
+    if (this.rerunKey !== stepKey) this.rerunKey = null;
+    const entering = this.state.enteringKey === stepKey;
+    const motion = entering ? styles.stageEnter : this.rerunKey !== null ? styles.stageRerun : undefined;
+    return (
+      <div className={`${styles.stage} ${introStyles.stage}`} data-intro={this.state.introPhase ?? undefined} data-test-class="setup-wizard-stage" ref={this.root}>
+        <div aria-hidden="true" className={morphStyles.surface} data-test-class="setup-wizard-morph-surface" hidden ref={this.surface} />
+        <div aria-hidden="true" className={styles.stageGhosts} inert ref={this.ghosts} />
+        <div
+          className={motion ? `${styles.stageFrame} ${motion}` : styles.stageFrame}
+          data-stage={entering ? "enter" : this.rerunKey !== null ? "rerun" : "current"}
+          key={stepKey}
+          ref={this.frame}
+        >
+          {children}
+        </div>
+      </div>
+    );
+  }
+}

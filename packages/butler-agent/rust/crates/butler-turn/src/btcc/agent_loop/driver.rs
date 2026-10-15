@@ -80,6 +80,7 @@ struct Reply {
 
 /// Runs the model/tool loop for one admitted turn until it answers or suspends.
 pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, AgentLoopError> {
+    let timing = super::command_timing::CommandTiming::new("loop_preparation");
     let mut prepared = match input.policy.prepare(GuidedInvocation::from(&input)).await {
         Ok(prepared) => prepared,
         Err(error) => {
@@ -87,6 +88,7 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
             return Err(propagated(error));
         }
     };
+    timing.mark("policy_prepared");
     let mut state = match restore_state(&mut input, &mut prepared) {
         Ok(state) => state,
         Err(error) => {
@@ -105,6 +107,7 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
             return Err(propagated(error));
         }
     };
+    timing.mark("context_begun");
     loop {
         let step = match run_iteration(&input, &mut state, &prepared, context.as_ref()).await {
             Err(AgentLoopError::Propagate(error))
@@ -150,12 +153,14 @@ async fn run_iteration(
     prepared: &PreparedPolicy,
     context: &dyn TurnContextProjection,
 ) -> Result<Step, AgentLoopError> {
+    let timing = super::command_timing::CommandTiming::new("loop_iteration");
     cancelled(&input.cancellation)?;
     let iteration = state.begin_iteration();
     let resumed_batch = state.resumed_batch.take();
     if !state.is_replaying(resumed_batch.as_ref()) {
         observe_steering(input, state).await?;
     }
+    timing.mark("steering_done");
     let mut surface = match &resumed_batch {
         Some(batch) => ToolSurface {
             tools: batch.tools.clone(),
@@ -167,6 +172,7 @@ async fn run_iteration(
             .await
             .map_err(propagated)?,
     };
+    timing.mark("tools_resolved");
     let reply = match &resumed_batch {
         Some(batch) => Reply {
             nonfinal: false,

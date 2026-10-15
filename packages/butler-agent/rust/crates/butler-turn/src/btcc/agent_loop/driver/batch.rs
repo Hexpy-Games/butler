@@ -1,6 +1,7 @@
 //! Tool batch execution of one loop iteration: concurrent or sequential calls, refusals, authority parking and the policy's settlement.
 
 use super::*;
+use butler_core::tool_protocol::ToolName;
 
 mod concurrent;
 use super::super::tool_batch::ExecutedCall;
@@ -304,7 +305,9 @@ pub(super) async fn refuse_call(
         .record_unexecuted(GuidedInvocation::from(input), call, &result)
         .await
         .map_err(propagated)?;
-    super::super::progress::authority_terminal(input.progress, call, Status::Cancelled).await;
+    super::super::progress::authority_terminal(input.progress, call, Status::Cancelled)
+        .await
+        .map_err(propagated)?;
     Ok(result)
 }
 
@@ -341,8 +344,14 @@ async fn park_batch(
         state.tool_results = completed;
         for (index, call) in batch.calls.iter().enumerate().skip(start) {
             if index == start || pending.get(index) == Some(&true) {
-                super::super::progress::authority_terminal(input.progress, call, Status::Failed)
-                    .await;
+                super::super::progress::report_unpublished(
+                    super::super::progress::authority_terminal(
+                        input.progress,
+                        call,
+                        Status::Failed,
+                    )
+                    .await,
+                );
             }
         }
     }
@@ -373,7 +382,8 @@ pub(super) async fn suspend_for_authority(
         .await
         .map_err(propagated)?
         .or_else(|| state.presentation.take());
-    let mut extensions = serde_json::Map::new();
+    // Rides on the continuation row the suspension writes anyway.
+    let mut extensions = input.policy.continuation_extensions();
     if let Some(diagnostics) = prepared
         .request
         .usage_attribution
@@ -424,10 +434,15 @@ pub(super) async fn settle_batch(
     batch: &ToolBatch<'_>,
     results: &[ToolResult],
 ) -> Result<Step, AgentLoopError> {
+    let _timing = super::super::command_timing::CommandTiming::new("batch_settlement");
     match after_batch(input, batch.calls, results, batch.iteration).await? {
         BatchDisposition::Continue => Ok(Step::Continue),
         BatchDisposition::FinalReport => {
-            begin_final_report(state);
+            let offers_blocks = batch
+                .tools
+                .iter()
+                .any(|tool| tool.name == ToolName::AnswerBlocks);
+            begin_final_report(state, offers_blocks);
             Ok(Step::Continue)
         }
         BatchDisposition::Wait => finish(

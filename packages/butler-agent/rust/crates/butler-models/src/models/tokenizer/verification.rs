@@ -1,5 +1,6 @@
 //! Extends the admission test's exact token-count contract across cached blocks.
 use super::*;
+use std::fmt::Write as _;
 
 pub(crate) fn exact_encoding() {
     let owner = TokenizerOwner::default();
@@ -29,6 +30,28 @@ pub(crate) fn exact_encoding() {
     // input exceeding the cache's entry count must also retain every token.
     for text in [String::new(), "🧑\u{200d}🚀".repeat(3000), " ".repeat(9000)] {
         assert_exact(&owner, &reference, &text);
+    }
+    // Exact IDs across every compact JSON scalar/container boundary, including
+    // escaped newlines/Unicode and a large unchanged payload after moving history.
+    let values = [
+        serde_json::json!(null),
+        serde_json::json!(true),
+        serde_json::json!(42),
+        serde_json::json!(-2.5),
+        serde_json::json!("한글\nI'm quoted"),
+        serde_json::json!([]),
+        serde_json::json!({}),
+        serde_json::json!({"image": "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/".repeat(3000)}),
+    ];
+    for offset in 0..values.len() {
+        let mut text = String::new();
+        for value in values.iter().cycle().skip(offset).take(values.len()) {
+            writeln!(&mut text, "{value}").unwrap();
+        }
+        assert_eq!(
+            owner.encode_json_components(&text).unwrap(),
+            reference.encode_ordinary(&text)
+        );
     }
     let mut cache = blocks::BlockCache::default();
     for index in 0..4100 {

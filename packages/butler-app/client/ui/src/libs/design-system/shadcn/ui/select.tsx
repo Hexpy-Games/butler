@@ -83,17 +83,25 @@ function SelectTrigger({
  */
 const SelectButton = React.forwardRef<
   HTMLButtonElement,
-  DsBaseProps<React.ButtonHTMLAttributes<HTMLButtonElement>>
->(function SelectButton({ className, children, type = "button", ...props }, ref) {
+  DsBaseProps<React.ButtonHTMLAttributes<HTMLButtonElement>> & {
+    /** How many values are chosen (a filter with 2 tags): an accent badge, and the trigger reads as active. */
+    count?: number;
+    size?: "default" | "sm";
+  }
+>(function SelectButton({ className, children, type = "button", count, size = "default", ...props }, ref) {
+  const active = count != null && count > 0;
   return (
     <button
       ref={ref}
       type={type}
       data-slot="select-trigger"
+      data-size={size === "sm" ? "sm" : undefined}
+      data-active={active ? "true" : undefined}
       className={cn(styles.trigger, className)}
       {...props}
     >
       <span data-slot="select-value">{children}</span>
+      {active ? <span className={styles.count} data-slot="select-count">{count}</span> : null}
       <ChevronDownIcon aria-hidden="true" />
     </button>
   );

@@ -2,7 +2,12 @@
 
 ## What is this block
 
-Notice is a Butler design-system block for alert/notice banners with info, warning, error, or success tones.
+Notice is a Butler design-system block for alert/notice banners with neutral, info, warning, error, or success tones.
+
+`tone="neutral"` is a quiet status with no color meaning: a muted fill, a hairline
+border and secondary text. Use it for a waiting state ("Waiting for your browser")
+or a plain fact ("Signed in as …"); use the colored tones when the status is good,
+risky or broken.
 
 ## When to use this block
 
@@ -46,6 +51,7 @@ import { Notice } from "@/butler-ds";
 
 - Full-width by default
 - Icon uses `IconSlot size="md" minHeight="line"`, matching Body text. It centers in the first line box, never in the whole multi-line message. A title uses the Label line box; single-line notices keep the same alignment.
+- The action centers on the first line too: a one-line notice looks centered, a wrapped one keeps the action beside its first line. Notices with an action get extra block padding so a small control fits.
 - Icon and action remain visible
 - Message wraps if needed
 

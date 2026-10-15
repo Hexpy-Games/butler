@@ -1,14 +1,19 @@
 import { useEffect, useState } from "react";
-import { Typo } from "@/butler-ds";
+import { SettingsSection, Stack, Typo } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { fetchSetupReadiness, retrySetupReadiness } from "@/app/setupConnection.ts";
-import type { SetupReadinessView } from "@/app/setupReadiness.ts";
+import { notifyError } from "@/app/notifications.ts";
+import { chooseMemoryModel, fetchSetupReadiness, retrySetupReadiness } from "@/app/setupConnection.ts";
+import { memoryModelChoice, memoryModelSettled, type SetupReadinessView } from "@/app/setupReadiness.ts";
 import { MemoryModelStatus } from "../first-run/MemoryModelStatus";
+import { SettingsSwitch } from "./SettingsSwitch";
 
+/** Settings → Memory: the same memory-model choice as the first run, with its download status. */
 export function MemoryModelPreparation() {
   const language = useAppLocale();
   const [view, setView] = useState<SetupReadinessView | null>(null);
-  const settled = view?.memory_model?.state === "ready" || view?.memory_model?.state === "failed";
+  const [saving, setSaving] = useState(false);
+  const model = view?.memory_model;
+  const settled = Boolean(view) && memoryModelSettled(model);
   useEffect(() => {
     if (settled) return;
     let cancelled = false;
@@ -20,8 +25,24 @@ export function MemoryModelPreparation() {
     void poll();
     return () => { cancelled = true; clearTimeout(timer); };
   }, [settled]);
-  if (view?.memory_model?.state === "ready") return <Typo.Caption role="status" tone="success">{appCopy.firstRun.memoryModel.ready}</Typo.Caption>;
-  return <MemoryModelStatus model={view?.memory_model} language={language} retry={() => {
-    void retrySetupReadiness(true).then(setView).catch(() => setView(null));
-  }} />;
+  const copy = appCopy.firstRun;
+  const sizeMB = model && model.bytes_total > 0 && model.state !== "ready" ? Math.round(model.bytes_total / 1_000_000) : undefined;
+  const choose = (enabled: boolean) => {
+    setSaving(true);
+    chooseMemoryModel(enabled).then(setView)
+      .catch((error: unknown) => notifyError(error, copy.memoryChoice.saveFailed, { id: "memory-model-choice" }))
+      .finally(() => setSaving(false));
+  };
+  return (
+    <SettingsSection id="memory-model" kind="form" title={copy.memoryModel.label}>
+      <Stack gap="sm">
+        <SettingsSwitch settingId="memory-model" label={copy.memoryChoice.on} description={copy.memoryModel.description(sizeMB)}
+          checked={memoryModelChoice(model) === "on"} disabled={!model || saving} onChange={choose} />
+        {model?.state === "ready" ? <Typo.Caption role="status" tone="success">{copy.memoryModel.ready}</Typo.Caption> : null}
+        <MemoryModelStatus model={model} language={language} retry={() => {
+          void retrySetupReadiness(true).then(setView).catch(() => setView(null));
+        }} />
+      </Stack>
+    </SettingsSection>
+  );
 }

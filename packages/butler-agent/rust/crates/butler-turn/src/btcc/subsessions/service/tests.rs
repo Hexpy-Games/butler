@@ -292,6 +292,7 @@ async fn cancelled_child_abandons_bound_work_and_commits_cancelled_result() {
         panic!("expected a butler App result");
     };
     assert!(input.text.contains("status: cancelled"));
+    assert_eq!(input.safe_title, "Delegated task");
 
     drop(service);
     drop(repository);

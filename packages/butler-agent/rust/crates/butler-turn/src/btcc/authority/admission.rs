@@ -18,6 +18,9 @@ pub(super) fn admit(
 ) -> AuthorityResult<AuthorityAdmissionResult> {
     let (identity_sha, generation) = match free_slot(repository, &input, collation)? {
         Slot::Settled(result) => return Ok(*result),
+        Slot::Free { .. } if input.unattended => {
+            return Ok(AuthorityAdmissionResult::Unattended);
+        }
         Slot::Free {
             identity_sha,
             generation,
@@ -70,7 +73,11 @@ fn free_slot(
             return projection::admission(&existing, collation)
                 .map(|result| Slot::Settled(Box::new(result)));
         }
-        if repository.has_permission(&permission::for_admission(input, collation)?.grant_ref)? {
+        if input.honor_standing_permission
+            && input.normalized_input.get("always_confirm") != Some(&serde_json::Value::Bool(true))
+            && input.capability != "browser_wait_for_user"
+            && repository.has_permission(&permission::for_admission(input, collation)?.grant_ref)?
+        {
             return Ok(Slot::Settled(Box::new(AuthorityAdmissionResult::Granted)));
         }
         match repository.find_slot(input, generation)? {

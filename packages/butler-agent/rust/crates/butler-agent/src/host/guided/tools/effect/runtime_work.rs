@@ -2,7 +2,7 @@
 use super::GuidedTools;
 use butler_turn::btcc::{DurableWorkStatus as WorkStatus, WorkOrigin, WorkScope, WorkView};
 
-pub(super) fn untracked(owner: &GuidedTools) -> WorkView {
+pub(in crate::host::guided::tools) fn untracked(owner: &GuidedTools) -> WorkView {
     WorkView {
         work_id: format!("operation-turn:{}", owner.binding.turn_id),
         session_id: owner.binding.source_session_id.clone(),

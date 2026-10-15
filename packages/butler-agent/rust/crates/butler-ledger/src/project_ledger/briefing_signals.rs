@@ -217,7 +217,7 @@ fn event_summary(path: &Path) -> Result<Vec<String>, ProjectLedgerReadError> {
             counts.push((line, 1));
         }
     }
-    counts.sort_by(|left, right| right.1.cmp(&left.1));
+    counts.sort_by_key(|item| std::cmp::Reverse(item.1));
     Ok(counts
         .into_iter()
         .take(12)

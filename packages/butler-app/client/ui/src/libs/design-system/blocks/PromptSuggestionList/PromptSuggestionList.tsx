@@ -3,9 +3,9 @@ import { useCallback, useState, type ReactNode } from "react";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import { useScrollEdges } from "../../lib/useScrollEdges";
-import { Wallpaper, type WallpaperMotion, type WallpaperSource, type WallpaperTone } from "../Wallpaper";
+import { Wallpaper, type WallpaperContentRect, type WallpaperMotion, type WallpaperSource, type WallpaperTone } from "../Wallpaper";
 import { PromptSuggestionCard } from "./PromptSuggestionCard";
-import { usePromptContentRect } from "./usePromptContentRect";
+import { useContentRectReport, usePromptContentRect } from "./usePromptContentRect";
 import styles from "./PromptSuggestionList.module.css";
 import { dsClass } from "../../lib/internal";
 
@@ -31,6 +31,12 @@ export interface PromptSuggestionListProps extends DsPrivateStyleProps {
   wallpaperPauseOnBattery?: boolean;
   /** Omit to follow the nearest theme scope. */
   wallpaperTone?: WallpaperTone;
+  /**
+   * External wallpaper: the caller draws it (e.g. in `ConversationShell
+   * background`, shared with the messages) and gets the text to keep
+   * readable here, as `Wallpaper contentRect` wants it. Omit `wallpaper`.
+   */
+  onContentRect?: (rect: WallpaperContentRect | undefined) => void;
   moment?: ReactNode;
   titleIcon?: ReactNode;
 }
@@ -44,6 +50,7 @@ export function PromptSuggestionList({
   wallpaperMotion,
   wallpaperPauseOnBattery,
   wallpaperTone,
+  onContentRect,
   moment,
   titleIcon,
 }: PromptSuggestionListProps) {
@@ -57,7 +64,8 @@ export function PromptSuggestionList({
     return railFadeRef(node);
   }, [railFadeRef]);
   // Modules keep the headline and cards readable (u_contentRect), as they are composed around them.
-  const contentRect = usePromptContentRect(wallpaper ? header : null, rail, grid);
+  const contentRect = usePromptContentRect(wallpaper || onContentRect ? header : null, rail, grid);
+  useContentRectReport(contentRect, onContentRect);
 
   return (
     <section
@@ -87,12 +95,11 @@ export function PromptSuggestionList({
               </span>
             ) : null}
             {moment ? (
-              <Typo.Caption
-                className={dsClass(styles.moment)}
-                data-slot="prompt-suggestion-moment"
-              >
-                {moment}
-              </Typo.Caption>
+              // The row of dots and text is a wrapper: a Typo stays a block
+              // container so its cap/baseline trim applies.
+              <span className={styles.moment} data-slot="prompt-suggestion-moment">
+                <Typo.Caption className={dsClass(styles.momentText)}>{moment}</Typo.Caption>
+              </span>
             ) : null}
           </div>
         ) : null}

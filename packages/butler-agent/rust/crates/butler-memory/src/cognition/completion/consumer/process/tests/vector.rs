@@ -173,6 +173,7 @@ async fn setup(fixture: &Fixture) -> (Input, MemoryGenerationHandle) {
 // test-category: format-pin
 #[tokio::test]
 async fn adopted_stage_pins_serving_receipts_and_refuses_other_assets() {
+    crate::cognition::generation_vectors::cosine_distance_preserves_semantic_relevance().await;
     let fixture = Fixture::new();
     let (input, generation) = setup(&fixture).await;
     let graph = GraphRepository::open_readonly(&generation.graph_path).unwrap();

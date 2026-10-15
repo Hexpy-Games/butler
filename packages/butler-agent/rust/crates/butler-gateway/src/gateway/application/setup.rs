@@ -178,6 +178,12 @@ pub trait AppSetupPort: Send + Sync + 'static {
     fn retry_memory_model(&self) -> SetupReadinessView {
         self.readiness().borrow().clone()
     }
+    /// Persists the memory-model choice: on downloads it in the background, off
+    /// stops it and keeps memory text-only. Never changes setup eligibility.
+    fn choose_memory_model(&self, _enabled: bool) -> ApplicationFuture<SetupReadinessView> {
+        let view = self.readiness().borrow().clone();
+        Box::pin(async move { Ok(view) })
+    }
     fn local_model_servers(&self) -> ApplicationFuture<LocalModelServersView>;
     /// Checks a key with the provider; nothing is stored.
     fn verify_provider_key(

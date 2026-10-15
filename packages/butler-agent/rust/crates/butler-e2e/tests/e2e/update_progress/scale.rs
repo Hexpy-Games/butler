@@ -7,7 +7,7 @@
 use butler_e2e::e2e::HarnessError;
 use std::path::Path;
 
-pub(super) async fn seed(data: &Path) -> Result<u64, HarnessError> {
+pub(crate) async fn seed(data: &Path) -> Result<u64, HarnessError> {
     let path = data.join("app-server/butler-client.sqlite");
     let cursor = tokio::task::spawn_blocking(move || {
         let db = butler_platform::sqlite::open(&path).expect("fixture database");

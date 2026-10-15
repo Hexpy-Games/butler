@@ -9,14 +9,11 @@ import { readStartupAppearance, lifecycleAppearance } from "./startup-appearance
 const directory = dirname(fileURLToPath(import.meta.url));
 const surfaces = new Map();
 let bridgesInstalled = false;
-let parkedWindow;
-export function isLifecycleWindow(window) { return window === parkedWindow || surfaces.has(window.webContents.id); }
+export function isLifecycleWindow(window) { return surfaces.has(window.webContents.id); }
 export function parkLifecycleWindow(surface) {
   if (!surface || surface.window.isDestroyed()) return;
-  surface.window.hide();
-  surface.window.webContents.setBackgroundThrottling(true);
-  parkedWindow = surface.window;
-  surfaces.delete(parkedWindow.webContents.id);
+  surfaces.delete(surface.window.webContents.id);
+  surface.destroy();
 }
 function installBridges() {
   if (bridgesInstalled) return;
@@ -50,8 +47,7 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
     locale: locale ?? appearance.locale ?? app.getLocale(), forceQuit: false, copy };
   timing("appearance_read_end");
   timing(`${kind}_create_start`);
-  const reused = kind === "quit" && parkedWindow && !parkedWindow.isDestroyed();
-  const window = reused ? parkedWindow : new BrowserWindow({
+  const window = new BrowserWindow({
     width: 296, height: manifest.initialHeight, useContentSize: true, frame: false, resizable: false,
     maximizable: false, fullscreenable: false, show: false, paintWhenInitiallyHidden: false, hasShadow: true,
     roundedCorners: true, closable: kind !== "quit", title: "Butler",
@@ -59,7 +55,6 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
     webPreferences: { preload: join(directory, "lifecycle-preload.cjs"), sandbox: true,
       contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, devTools: !app.isPackaged },
   });
-  if (reused) { parkedWindow = null; window.setClosable(false); window.setBackgroundColor(manifest.surface[appearance.theme]); window.webContents.setBackgroundThrottling(false); }
   timing(`${kind}_create_end`);
   window.webContents.once("dom-ready", () => timing(`${kind}_dom_ready`));
   window.webContents.once("did-finish-load", () => timing(`${kind}_load_end`));
@@ -90,7 +85,6 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
   });
   const load = () => {
     timing(`${kind}_load_start`);
-    if (reused) { window.webContents.send("butler:lifecycle-state", { ...state, repaint: true }); return Promise.resolve(); }
     return window.loadFile(join(dist, "lifecycle/lifecycle.html"), { query: {
     kind, stage: state.stage, locale: state.locale, theme: state.theme,
     motion: state.reducedMotion ? "reduced" : "auto",
@@ -102,7 +96,7 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
       .catch(() => { timing("trace_failed"); void load(); });
   } else void load();
   timing(`${kind}_show_start`);
-  if (reused) window.showInactive(); else window.show();
+  window.show();
   timing(`${kind}_show_end`);
   return surface;
 }

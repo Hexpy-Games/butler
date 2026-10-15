@@ -25,6 +25,7 @@ pub(super) async fn send(
             access_mode: None,
             plan_mode: None,
             subsession_result: None,
+            schedule_run: None,
         },
     })
     .await?;
@@ -48,9 +49,12 @@ impl AppApplication {
         &self,
         input: super::AppAuthorityDecisionInput,
     ) -> Result<super::AppAuthorityDecision, GatewayApplicationError> {
+        let timing = crate::gateway::command_timing::CommandTiming::new("approval_decision");
         let question = input.action == "answer";
         let session = self.owner_chat(input.owner_session_id.clone()).await?;
+        timing.mark("owner_resolved");
         let result = self.dependencies.authority_handoff.decide(input).await?;
+        timing.mark("handoff_done");
         if let Some(followup) = &result.question_followup {
             super::question_followup::send(self, &session, &result.request_ref, followup).await?;
         }

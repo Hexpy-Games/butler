@@ -71,11 +71,19 @@ fn prompt(request: &Value) -> String {
     text
 }
 
+fn turn_requests(s: &Scenario) -> Result<Vec<Value>, HarnessError> {
+    Ok(s.provider()?
+        .requests()
+        .into_iter()
+        .filter(|r| !butler_e2e::e2e::provider::is_title_request(r))
+        .collect())
+}
+
 async fn run(s: &Scenario, chat: &str) -> Result<String, HarnessError> {
-    let before = s.provider()?.requests().len();
+    let before = turn_requests(s)?.len();
     let (_, turn) = s.turn(chat, "Reply done.").await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
-    let requests = s.provider()?.requests();
+    let requests = turn_requests(s)?;
     assert_eq!(requests.len(), before + 1);
     Ok(prompt(&requests[before]))
 }
@@ -266,7 +274,7 @@ async fn in_flight_edit_waits_for_next_turn() -> Result<(), HarnessError> {
     let gate = s.provider()?.hold_next_reply("Read notes and reply done.");
     let id = accepted_turn_id(&s.gw.say(&chat, "Read notes and reply done.").await?)?;
     let deadline = Instant::now() + Duration::from_secs(60);
-    while s.provider()?.requests().is_empty() {
+    while turn_requests(&s)?.is_empty() {
         assert!(Instant::now() < deadline, "no admitted request");
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
@@ -276,7 +284,7 @@ async fn in_flight_edit_waits_for_next_turn() -> Result<(), HarnessError> {
         s.gw.wait_terminal(&chat, &id, Duration::from_secs(60))
             .await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
-    let requests = s.provider()?.requests();
+    let requests = turn_requests(&s)?;
     assert_eq!(requests.len(), 2);
     for request in requests {
         let text = prompt(&request);

@@ -1,7 +1,8 @@
 //! Locates (and by default builds) the `butler-agent` executable under test.
 //!
 //! `BUTLER_E2E_BIN` selects a prebuilt binary. Otherwise the harness runs
-//! `cargo build -p butler-agent --bin butler-agent` once per test process, so
+//! `cargo build -p butler-agent --bin butler-agent --features e2e-fixtures`
+//! once per test process, so
 //! `cargo test -p butler-e2e` (and `cargo mutants` using it) always exercises
 //! the binary built from the current sources. `BUTLER_E2E_SKIP_BUILD=1` uses
 //! the existing workspace binary without rebuilding.
@@ -77,6 +78,12 @@ fn locate() -> Result<PathBuf, String> {
             "butler-agent",
             "--bin",
             "butler-agent",
+            "-p",
+            "butler-platform",
+            "--bin",
+            "butler-sandbox",
+            "--features",
+            "butler-platform/test-support,butler-agent/e2e-fixtures",
         ]);
         if profile == "release" {
             command.arg("--release");

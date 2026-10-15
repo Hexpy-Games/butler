@@ -140,14 +140,16 @@ impl JournalPort for GuidedJournal {
                 .and_then(serde_json::Value::as_str)
                 == Some("steward");
             if result.is_none() && !workers {
-                return Ok(own);
+                return Ok(closeout::without_pictured(own));
             }
             let child = self
                 .subsessions
                 .delivered_files(invocation.turn.session_id.clone(), result, workers)
                 .await
                 .map_err(BtccError::from)?;
-            Ok(closeout::merge_files(child, own))
+            Ok(closeout::without_pictured(closeout::merge_files(
+                child, own,
+            )))
         })
     }
 }

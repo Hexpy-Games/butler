@@ -1,7 +1,9 @@
 //! File SQLite connections using the host's path-capable VFS.
 //! Database schemas, flags, transactions and state remain with their owners.
 use rusqlite::{OpenFlags, Result};
+mod checkpoint;
 mod connection;
+pub use checkpoint::{CheckpointError, CheckpointEvent, CheckpointObserver, CheckpointOwner};
 pub use connection::Connection;
 use std::path::Path;
 

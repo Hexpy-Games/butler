@@ -19,6 +19,7 @@ ALLOW = (
     'packages/project-ledger/templates/**', 'packages/project-ledger/examples/**',
     '**/fixtures/**', '**/cassettes/**', '**/tests/golden/**',
     'packages/butler-app/client/ui/index.html',
+    'packages/butler-app/client/ui/browser-overlay.html',  # Product renderer entry.
     'packages/butler-app/client/ui/lifecycle-assets/lifecycle.html',
     'packages/butler-app/client/ui/ds-site/index.html',
     'packages/butler-app/client/ui/ds-site/host/404.html',
@@ -32,7 +33,7 @@ ALLOW = (
     'packages/butler-agent/rust/crates/*/os-specific-baseline.txt',
     'packages/butler-agent/rust/crates/*/src/**/wire_codes.txt',
     'packages/butler-agent/rust/crates/butler-models/src/models/catalog/zai-image-model.txt',
-    '**/LICENSE*', '**/THIRD_PARTY_NOTICES.*',
+    '**/LICENSE*', '**/THIRD_PARTY_NOTICES.*', '**/OFL.txt',  # Font licenses ship beside fonts.
 )
 
 

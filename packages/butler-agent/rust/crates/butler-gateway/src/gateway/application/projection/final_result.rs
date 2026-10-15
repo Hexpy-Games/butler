@@ -23,12 +23,33 @@ pub(super) struct FinalApply<'a> {
     pub turn_event_ids: super::final_turn_events::FinalTurnEventIds,
 }
 
-pub(super) fn apply(
+/// Library output rows share the fenced final-message transaction.
+pub(super) fn apply_library(
     db: &mut Connection,
     input: &FinalCandidate,
     apply: FinalApply<'_>,
+    outputs: Vec<Value>,
 ) -> Result<bool, AppStorageError> {
-    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+    let mut tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+    if !self::apply(
+        tx.savepoint().map_err(AppStorageError::sqlite)?,
+        input,
+        apply,
+    )? {
+        return Ok(false);
+    }
+    for item in outputs {
+        super::super::library::save(&tx, &item)?;
+    }
+    tx.commit().map_err(AppStorageError::sqlite)?;
+    Ok(true)
+}
+
+fn apply(
+    tx: rusqlite::Savepoint<'_>,
+    input: &FinalCandidate,
+    apply: FinalApply<'_>,
+) -> Result<bool, AppStorageError> {
     if staging::projected(&tx, &input.action_id)? {
         return Ok(false);
     }
@@ -76,7 +97,8 @@ pub(super) fn apply(
     let visible = !input.text.is_empty()
         || !apply.files.is_empty()
         || !input.changed_files.is_empty()
-        || input.plan.is_some();
+        || input.plan.is_some()
+        || input.answer_blocks.is_some();
     if input.no_visible_reply || !visible {
         super::final_turn_events::append_if_missing(
             &tx,
@@ -123,23 +145,13 @@ pub(super) fn apply(
                 created_at: apply.now,
             },
         )?;
-        if current_existing.is_some() {
-            tx.execute("UPDATE messages SET text=?1,status='delivered',updated_at=?2,safe_error_code=NULL,retryable=0,plan_json=?3 WHERE id=?4",
-                params![input.text,apply.now,input.plan.as_ref().map(Value::to_string),message_id]).map_err(AppStorageError::sqlite)?;
-            tx.execute(
-                "DELETE FROM message_attachments WHERE message_id=?1",
-                [message_id],
-            )
-            .map_err(AppStorageError::sqlite)?;
-            tx.execute(
-                "DELETE FROM message_changed_files WHERE message_id=?1",
-                [message_id],
-            )
-            .map_err(AppStorageError::sqlite)?;
-        } else {
-            tx.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,retryable,plan_json) VALUES(?1,?2,?3,'assistant',?4,'delivered',?5,?5,0,?6)",
-                params![message_id,input.chat_id,input.turn_id,input.text,apply.now,input.plan.as_ref().map(Value::to_string)]).map_err(AppStorageError::sqlite)?;
-        }
+        save_message(
+            &tx,
+            input,
+            apply.now,
+            message_id,
+            current_existing.is_some(),
+        )?;
         attach_files(&tx, &input.chat_id, message_id, apply.files)?;
         for (position, detail) in input.changed_files.iter().enumerate() {
             tx.execute("INSERT INTO message_changed_files(message_id,position,safe_path_label,detail_json) VALUES(?1,?2,?3,?4)",
@@ -212,7 +224,11 @@ pub(super) fn apply(
         super::super::events::append(
             &tx,
             apply.subscribers,
-            "message.created",
+            if current_existing.is_some() {
+                "message.updated"
+            } else {
+                "message.created"
+            },
             Some(&input.turn_id),
             object_value(&json!({"message":message}))?,
             apply.now,
@@ -324,6 +340,7 @@ fn attach_files(
             params![message, file.id, position],
         )
         .map_err(AppStorageError::sqlite)?;
+        super::super::library::document(db, &file.id)?;
     }
     Ok(())
 }
@@ -334,10 +351,8 @@ fn append_turn_state_changed(
     turn: &str,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    let turn_view = read_model::list_turns(db, chat_id, 0.0)?
-        .turns
-        .into_iter()
-        .find(|row| row.id == turn)
+    let turn_view = read_model::exact_turn(db, turn)?
+        .filter(|row| row.chat_id == chat_id)
         .ok_or_else(|| {
             AppStorageError::new(
                 AppStorageCode::ProjectedTurnMissing,
@@ -362,4 +377,31 @@ fn object_value(value: &Value) -> Result<Map<String, Value>, AppStorageError> {
             "Projection payload is invalid.",
         )
     })
+}
+
+fn save_message(
+    db: &Connection,
+    input: &FinalCandidate,
+    now: &str,
+    message_id: &str,
+    existing: bool,
+) -> Result<(), AppStorageError> {
+    if existing {
+        db.execute("UPDATE messages SET text=?1,status='delivered',updated_at=?2,safe_error_code=NULL,retryable=0,plan_json=?3,blocks_json=?5 WHERE id=?4",
+                params![input.text,now,input.plan.as_ref().map(Value::to_string),message_id,input.answer_blocks.as_ref().map(Value::to_string)]).map_err(AppStorageError::sqlite)?;
+        db.execute(
+            "DELETE FROM message_attachments WHERE message_id=?1",
+            [message_id],
+        )
+        .map_err(AppStorageError::sqlite)?;
+        db.execute(
+            "DELETE FROM message_changed_files WHERE message_id=?1",
+            [message_id],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    } else {
+        db.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,retryable,plan_json,blocks_json) VALUES(?1,?2,?3,'assistant',?4,'delivered',?5,?5,0,?6,?7)",
+                params![message_id,input.chat_id,input.turn_id,input.text,now,input.plan.as_ref().map(Value::to_string),input.answer_blocks.as_ref().map(Value::to_string)]).map_err(AppStorageError::sqlite)?;
+    }
+    Ok(())
 }

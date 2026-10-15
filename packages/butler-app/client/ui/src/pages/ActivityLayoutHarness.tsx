@@ -4,7 +4,7 @@ import { completedWorkBlocks } from "@/app/conversation-progress/terminal-activi
 import { MessageList } from "@/components/conversation/MessageList";
 import { SessionObserverTimeline } from "@/components/layout/SessionObserverTimeline";
 import { ComposerAuthorityDecisionSurface } from "@/components/conversation/ComposerAuthorityDecisionSurface";
-import { normalizeApprovalSummary, approvalRequestView } from "@/app/approvalRequest";
+import { normalizeApprovalSummary, approvalRequestView, browserHandoffView } from "@/app/approvalRequest";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { setAppCopyLanguage } from "@/app/copy";
@@ -52,14 +52,15 @@ export function ActivityLayoutHarness() {
   const [observer, setObserver] = useState(params.get("observer") === "1");
   const count = params.get("list") === "1" ? 4 : 1;
   const theme = params.get("theme") === "dark" ? "dark" : "light";
-  const settings = { ...EMPTY_SETTINGS, appearance_theme: theme, language: "ko" } as const;
+  const language = params.get("lang") === "en" ? "en" : "ko";
+  const settings = { ...EMPTY_SETTINGS, appearance_theme: theme, language } as const;
   usePortalThemeClasses(settings);
   useEffect(() => {
-    setAppCopyLanguage("ko");
+    setAppCopyLanguage(language);
     useButlerStore.setState({ activeChatId: "activity-layout", settings: {
-      ...EMPTY_SETTINGS, language: "ko", appearance_theme: theme,
+      ...EMPTY_SETTINGS, language, appearance_theme: theme,
     } });
-  }, [theme]);
+  }, [theme, language]);
   useEffect(() => {
     useButlerStore.setState({ summary: { session_id: "activity-layout", turn_state: running ? "running" : "delivered",
       latest_progress: { turn_id: "activity-layout-0", state: running ? "running" : "delivered", safe_progress_rows: rows } } });
@@ -78,15 +79,19 @@ export function ActivityLayoutHarness() {
     status: "delivered", text: "이전 답변을 확인했습니다.\n\n".repeat(60), turn_activity_rows: undefined });
   const turn = { ...HARNESS_SS03_OBSERVER_VIEW.latest_turn!, id: "activity-layout-0",
     state: running ? "running" : "delivered", progress: { safe_progress_rows: rows } };
-  const approval = normalizeApprovalSummary({ action_kind: "other", count: 1, risk: "low",
+  const approvalFixture = (window as Window & { butlerApprovalFixture?: unknown }).butlerApprovalFixture;
+  const approval = normalizeApprovalSummary(approvalFixture ?? { action_kind: "other", count: 1, risk: "low",
     targets: [{ kind: "folder", path: "C:\\Users\\test\\Downloads" }], examples: ["C:\\Users\\test\\Downloads"],
     operation: { tool: "list_files", access: "read_only", targets: ["C:\\Users\\test\\Downloads"] } });
-  const decision = approvalRequestView({ approval, reason: "", scope: undefined }, appCopy.interfaceTemplates.approvalRequest, appCopy.guided.tools);
+  const decision = approvalRequestView({ approval, reason: (window as Window & { butlerApprovalReason?: string }).butlerApprovalReason ?? "", scope: undefined }, appCopy.interfaceTemplates.approvalRequest, appCopy.guided.tools);
+  const canOpenTab = params.get("browser") === "1";
+  const handoff = browserHandoffView({ approval }, appCopy.interfaceTemplates.approvalRequest, canOpenTab);
   return (
     <AdaptiveShell leftOpen={false} rightOpen={false} theme={appShellTheme(settings)}>
       <AdaptiveShellSidebar open={false} />
       <AdaptiveShellWorkspace><Stack fill gap="md" data-stub-stream-complete={length === answer.length}>
-      {params.get("approval") === "1" ? <ComposerCard><ComposerAuthorityDecisionSurface decision={{ ...decision,
+      {params.get("approval") === "1" ? <ComposerCard><ComposerAuthorityDecisionSurface decision={{ ...decision, ...handoff,
+        ...(handoff ? { handoff: { canOpenTab, signIn: handoff.signIn, onOpenTab: () => {}, onStop: () => {} } } : {}),
         pending: false, pendingCount: 1, scope: undefined, composingMessage: false,
         onAllow: async () => {}, onAllowConversation: async () => {}, onDeny: async () => {},
         onShowDecision: () => {}, onOpenSource: () => {}, onComposeMessage: () => {},

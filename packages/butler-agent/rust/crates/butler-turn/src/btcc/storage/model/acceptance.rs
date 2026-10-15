@@ -5,20 +5,26 @@ use super::super::common::{column_exists, error, json, stringify};
 use super::super::{StorageError, StorageResult};
 use super::events::assert_claim;
 use super::normalizer::normalize;
+use super::{
+    chain::{self, Row},
+    delta,
+    memo::{ContinuationMemo, Entry, item_strings},
+};
 use crate::btcc::StorageCode;
 use crate::btcc::turn::{ModelRoundAcceptanceWrite, ModelRoundKey};
 
 pub(in crate::btcc::storage) fn load_acceptance(
     connection: &Connection,
     key: &ModelRoundKey,
+    memo: &mut ContinuationMemo,
 ) -> StorageResult<Option<crate::btcc::ModelRoundResult>> {
     let (checkpoint_id, checkpoint_revision) = checkpoint(key)?;
     assert_checkpoint(connection, &key.turn_id, checkpoint_id, checkpoint_revision)?;
-    let row = connection
+    let id = connection
         .query_row(
-            "SELECT normalized_response_json,provider_identity_json FROM \
-        btcc_model_round_acceptances WHERE turn_id=?1 AND round_id=?2 AND route_digest=?3 \
-        AND candidate_index=?4 AND model_ref=?5 AND checkpoint_id=?6 AND checkpoint_revision=?7",
+            "SELECT acceptance_id,provider_identity_json FROM btcc_model_round_acceptances
+        WHERE turn_id=?1 AND round_id=?2 AND route_digest=?3 AND candidate_index=?4
+        AND model_ref=?5 AND checkpoint_id=?6 AND checkpoint_revision=?7",
             params![
                 key.turn_id,
                 key.round_id,
@@ -32,31 +38,94 @@ pub(in crate::btcc::storage) fn load_acceptance(
         )
         .optional()
         .map_err(StorageError::sqlite)?;
-    row.map(|(raw, identity)| {
-        let mut value = normalize(&json(&raw, StorageCode::ModelAcceptanceJson)?)?;
-        if let Some(raw) = identity {
-            value
-                .as_object_mut()
-                .ok_or_else(|| {
-                    error(
-                        StorageCode::ModelResponseInvalid,
-                        "normalized response must be object",
-                    )
-                })?
-                .insert(
-                    "providerIdentity".into(),
-                    normalize_provider_identity(&json(&raw, StorageCode::ProviderIdentityJson)?)?,
-                );
+    let Some((id, identity)) = id else {
+        return Ok(None);
+    };
+    let row = Row::load(connection, &id)?;
+    let mut result = decode(&row, identity.as_deref())?;
+    let entry = if row.state == 1 {
+        let continuation = result
+            .continuation
+            .as_mut()
+            .and_then(Value::as_object_mut)
+            .ok_or_else(delta::invalid)?;
+        if continuation.contains_key("statelessInput") {
+            return Err(delta::invalid());
         }
-        serde_json::from_value(value).map_err(|source| {
-            error(
-                StorageCode::ModelResponseInvalid,
-                "invalid accepted response",
-            )
-            .with_source(source)
-        })
+        let entry = chain::reconstruct(connection, &row, memo)?;
+        continuation.insert("statelessInput".into(), Value::Array(entry.items.clone()));
+        Some(entry)
+    } else {
+        result
+            .continuation
+            .as_ref()
+            .and_then(|v| v.get("statelessInput"))
+            .and_then(Value::as_array)
+            .map(|items| -> StorageResult<Entry> {
+                Ok(Entry {
+                    turn_id: row.turn_id,
+                    checkpoint_id: row.checkpoint_id,
+                    checkpoint_revision: row.checkpoint_revision,
+                    acceptance_id: row.acceptance_id,
+                    approx_bytes: row.raw.len() * 3 + items.len() * 160,
+                    serialized: item_strings(items)?,
+                    items: items.clone(),
+                    chain_len: 1,
+                })
+            })
+            .transpose()?
+    };
+    if let Some(entry) = entry {
+        memo.put(entry);
+    }
+    Ok(Some(result))
+}
+
+// Passthrough: decode all fallible metadata before moving a warm continuation.
+fn decode(row: &Row, identity: Option<&str>) -> StorageResult<crate::btcc::ModelRoundResult> {
+    let code = match row.state {
+        0 => StorageCode::ModelAcceptanceJson,
+        1 => StorageCode::ModelAcceptanceDeltaInvalid,
+        2 => {
+            return Err(error(
+                StorageCode::ModelAcceptanceReclaimed,
+                "acceptance payload reclaimed",
+            ));
+        }
+        _ => {
+            return Err(error(
+                StorageCode::ModelAcceptanceFormatUnknown,
+                "unknown acceptance payload format",
+            ));
+        }
+    };
+    let normalized = normalize(&json(&row.raw, code)?);
+    let mut value = if row.state == 1 {
+        normalized.map_err(|_| delta::invalid())?
+    } else {
+        normalized?
+    };
+    if let Some(raw) = identity {
+        value
+            .as_object_mut()
+            .ok_or_else(|| {
+                error(
+                    StorageCode::ModelResponseInvalid,
+                    "normalized response must be object",
+                )
+            })?
+            .insert(
+                "providerIdentity".into(),
+                normalize_provider_identity(&json(raw, StorageCode::ProviderIdentityJson)?)?,
+            );
+    }
+    serde_json::from_value(value).map_err(|source| {
+        error(
+            StorageCode::ModelResponseInvalid,
+            "invalid accepted response",
+        )
+        .with_source(source)
     })
-    .transpose()
 }
 
 /// The accepted response as JSON, which is normalized for persistence.
@@ -73,11 +142,89 @@ fn encoded(write: &ModelRoundAcceptanceWrite) -> StorageResult<Value> {
 pub(in crate::btcc::storage) fn record_acceptance(
     connection: &mut Connection,
     write: &ModelRoundAcceptanceWrite,
+    memo: &mut ContinuationMemo,
 ) -> StorageResult<()> {
     let (checkpoint_id, checkpoint_revision) = checkpoint(&write.key)?;
     let tx = connection.transaction().map_err(StorageError::sqlite)?;
-    assert_claim(
+    assert_checkpoint(&tx, &write.key.turn_id, checkpoint_id, checkpoint_revision)?;
+    assert_acceptance_claim(&tx, write, checkpoint_id, checkpoint_revision)?;
+    let result = encoded(write)?;
+    let normalized = normalize(&result)?;
+    let provider = result.get("providerIdentity").map(stringify).transpose()?;
+    let acceptance_id = format!(
+        "{}:{}:{}:{}:{}",
+        write.key.turn_id,
+        write.key.round_id,
+        write.key.route_digest,
+        write.key.candidate_index,
+        write.key.model_ref
+    );
+    let payload = prepare_payload(&tx, normalized, &write.key, &acceptance_id, memo)?;
+    let inserted = insert_acceptance(&tx, write, &acceptance_id, provider.as_deref(), &payload)?;
+    record_succeeded_event(&tx, write)?;
+    project_execution_model(
         &tx,
+        &write.key.turn_id,
+        &write.key.model_ref,
+        payload.normalized.get("providerIdentity"),
+    )?;
+    tx.commit().map_err(StorageError::sqlite)?;
+    if inserted == 0 {
+        memo.evict(&write.key.turn_id);
+    } else if let Some(entry) = payload.entry {
+        memo.put(entry);
+    } else {
+        memo.evict(&write.key.turn_id);
+    }
+    Ok(())
+}
+
+struct Payload {
+    normalized: Value,
+    state: u8,
+    delta: Option<String>,
+    entry: Option<Entry>,
+}
+fn insert_acceptance(
+    tx: &rusqlite::Transaction<'_>,
+    write: &ModelRoundAcceptanceWrite,
+    acceptance_id: &str,
+    provider: Option<&str>,
+    payload: &Payload,
+) -> StorageResult<usize> {
+    let (checkpoint_id, checkpoint_revision) = checkpoint(&write.key)?;
+    tx.execute(
+        "INSERT OR IGNORE INTO btcc_model_round_acceptances (acceptance_id,turn_id,round_id,
+        route_digest,candidate_index,checkpoint_id,checkpoint_revision,model_ref,transport_attempt,
+        normalized_response_json,provider_identity_json,payload_state,continuation_delta_json,created_at) VALUES
+        (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+        params![
+            acceptance_id,
+            write.key.turn_id,
+            write.key.round_id,
+            write.key.route_digest,
+            write.key.candidate_index,
+            checkpoint_id,
+            checkpoint_revision,
+            write.key.model_ref,
+            write.transport_attempt,
+            stringify(&payload.normalized)?,
+            provider,
+            payload.state,
+            payload.delta
+        ],
+    )
+    .map_err(StorageError::sqlite)
+}
+
+fn assert_acceptance_claim(
+    tx: &rusqlite::Transaction<'_>,
+    write: &ModelRoundAcceptanceWrite,
+    checkpoint_id: &str,
+    checkpoint_revision: u64,
+) -> StorageResult<()> {
+    assert_claim(
+        tx,
         &write.binding.turn_id,
         write.binding.expected_revision,
         write.binding.execution_fence,
@@ -97,46 +244,103 @@ pub(in crate::btcc::storage) fn record_acceptance(
             "BTCC model response acceptance lost exact Turn claim",
         ));
     }
-    assert_checkpoint(&tx, &write.key.turn_id, checkpoint_id, checkpoint_revision)?;
-    let result = encoded(write)?;
-    let normalized = normalize(&result)?;
-    let provider = result.get("providerIdentity").map(stringify).transpose()?;
-    let acceptance_id = format!(
-        "{}:{}:{}:{}:{}",
-        write.key.turn_id,
-        write.key.round_id,
-        write.key.route_digest,
-        write.key.candidate_index,
-        write.key.model_ref
-    );
-    tx.execute(
-        "INSERT OR IGNORE INTO btcc_model_round_acceptances (acceptance_id,turn_id,round_id,
-        route_digest,candidate_index,checkpoint_id,checkpoint_revision,model_ref,transport_attempt,
-        normalized_response_json,provider_identity_json,created_at) VALUES
-        (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
-        params![
-            acceptance_id,
-            write.key.turn_id,
-            write.key.round_id,
-            write.key.route_digest,
-            write.key.candidate_index,
-            checkpoint_id,
-            checkpoint_revision,
-            write.key.model_ref,
-            write.transport_attempt,
-            stringify(&normalized)?,
-            provider
-        ],
-    )
-    .map_err(StorageError::sqlite)?;
-    record_succeeded_event(&tx, write)?;
-    project_execution_model(
-        &tx,
-        &write.key.turn_id,
-        &write.key.model_ref,
-        normalized.get("providerIdentity"),
-    )?;
-    tx.commit().map_err(StorageError::sqlite)
+    Ok(())
+}
+
+// Passthrough: split only a final statelessInput key, preserving all other keys.
+fn prepare_payload(
+    db: &Connection,
+    mut normalized: Value,
+    key: &ModelRoundKey,
+    id: &str,
+    memo: &ContinuationMemo,
+) -> StorageResult<Payload> {
+    let (checkpoint, revision) = checkpoint(key)?;
+    let turn = &key.turn_id;
+    let Some(items) = delta::split_stateless(&mut normalized) else {
+        return Ok(Payload {
+            normalized,
+            state: 0,
+            delta: None,
+            entry: None,
+        });
+    };
+    let cold = if memo.base(turn, checkpoint, revision).is_none() {
+        previous_base(db, turn, checkpoint, revision)?
+    } else {
+        None
+    };
+    let base = memo.base(turn, checkpoint, revision).or(cold.as_ref());
+    let serialized = item_strings(&items)?;
+    let encoded = base
+        .filter(|base| base.chain_len < 10_000)
+        .map(|base| delta::encode(&base.acceptance_id, &base.serialized, &serialized))
+        .transpose()?
+        .flatten();
+    let approx_bytes = serialized.iter().map(String::len).sum::<usize>() * 3 + items.len() * 160;
+    let chain_len = if encoded.is_some() {
+        base.map_or(1, |e| e.chain_len + 1)
+    } else {
+        1
+    };
+    let state = u8::from(encoded.is_some());
+    if state == 0 {
+        normalized
+            .get_mut("continuation")
+            .and_then(Value::as_object_mut)
+            .ok_or_else(delta::invalid)?
+            .insert("statelessInput".into(), Value::Array(items.clone()));
+    }
+    Ok(Payload {
+        normalized,
+        state,
+        delta: encoded,
+        entry: Some(Entry {
+            turn_id: turn.clone(),
+            checkpoint_id: checkpoint.into(),
+            checkpoint_revision: revision,
+            acceptance_id: id.into(),
+            items,
+            serialized,
+            approx_bytes,
+            chain_len,
+        }),
+    })
+}
+fn previous_base(
+    db: &Connection,
+    turn: &str,
+    checkpoint: &str,
+    revision: u64,
+) -> StorageResult<Option<Entry>> {
+    let row = db
+        .query_row(
+            "SELECT rowid,acceptance_id,checkpoint_id,checkpoint_revision,payload_state
+        FROM btcc_model_round_acceptances WHERE turn_id=?1 ORDER BY rowid DESC LIMIT 1",
+            [turn],
+            |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, u64>(3)?,
+                    r.get::<_, i64>(4)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(StorageError::sqlite)?;
+    let Some((_, id, cp, rev, state)) = row else {
+        return Ok(None);
+    };
+    if cp != checkpoint || rev != revision || !matches!(state, 0 | 1) {
+        return Ok(None);
+    }
+    let row = Row::load(db, &id)?;
+    if state == 0 {
+        return chain::full_entry(&row);
+    }
+    chain::reconstruct(db, &row, &mut ContinuationMemo::default()).map(Some)
 }
 
 /// The route event of the accepted attempt.
@@ -177,11 +381,17 @@ fn assert_checkpoint(
     revision: u64,
 ) -> StorageResult<()> {
     let row=connection.query_row("SELECT turn.active_checkpoint_id,checkpoint.checkpoint_id,
-        checkpoint.checkpoint_revision,checkpoint.is_active FROM btcc_turns turn LEFT JOIN
+        checkpoint.checkpoint_revision,checkpoint.is_active,turn.semantic_state FROM btcc_turns turn LEFT JOIN
         btcc_checkpoints checkpoint ON checkpoint.checkpoint_id=?1 AND checkpoint.turn_id=turn.turn_id
         AND checkpoint.checkpoint_revision=?2 WHERE turn.turn_id=?3",params![id,revision,turn_id],
-        |r|Ok((r.get::<_,Option<String>>(0)?,r.get::<_,Option<String>>(1)?,r.get::<_,Option<u64>>(2)?,r.get::<_,Option<u8>>(3)?)))
+        |r|Ok((r.get::<_,Option<String>>(0)?,r.get::<_,Option<String>>(1)?,r.get::<_,Option<u64>>(2)?,r.get::<_,Option<u8>>(3)?,r.get::<_,String>(4)?)))
         .optional().map_err(StorageError::sqlite)?;
+    if row.as_ref().is_some_and(|r| r.4 != "admitted") {
+        return Err(error(
+            StorageCode::ModelAcceptanceTurnSettled,
+            "model acceptance turn settled",
+        ));
+    }
     if !row.is_some_and(|r| {
         r.0.as_deref() == Some(id)
             && r.1.as_deref() == Some(id)

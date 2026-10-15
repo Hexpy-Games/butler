@@ -13,6 +13,7 @@ use super::{HarnessError, harness_error};
 pub struct LiveEvents {
     events: Arc<Mutex<Vec<Value>>>,
     task: tokio::task::JoinHandle<()>,
+    changed: tokio::sync::watch::Receiver<()>,
 }
 
 impl LiveEvents {
@@ -31,6 +32,7 @@ impl LiveEvents {
         }
         let events = Arc::new(Mutex::new(Vec::new()));
         let sink = events.clone();
+        let (changed, changes) = tokio::sync::watch::channel(());
         let task = tokio::spawn(async move {
             let mut stream = response.bytes_stream();
             let mut buffer = String::new();
@@ -48,11 +50,16 @@ impl LiveEvents {
                         sink.lock()
                             .unwrap_or_else(std::sync::PoisonError::into_inner)
                             .push(value);
+                        changed.send_replace(());
                     }
                 }
             }
         });
-        Ok(Self { events, task })
+        Ok(Self {
+            events,
+            task,
+            changed: changes,
+        })
     }
 
     /// Whether the gateway ended the stream.
@@ -67,16 +74,59 @@ impl LiveEvents {
             .clone()
     }
 
-    /// Waits until an event satisfies `predicate`; returns it.
+    /// Call after subscribing before submission. Wait for the committed state
+    /// event before fetching the complete turn, avoiding projection-refresh polls.
+    pub async fn wait_turn(
+        &self,
+        gateway: &Gateway,
+        chat: &str,
+        turn: &str,
+        states: &[&str],
+        timeout: Duration,
+    ) -> Result<Value, HarnessError> {
+        self.wait_for(timeout, |event| {
+            event["type"] == "turn.state_changed"
+                && event_turn_id(event) == Some(turn)
+                && event["payload"]["state"]
+                    .as_str()
+                    .or_else(|| event["payload"]["turn"]["state"].as_str())
+                    .is_some_and(|state| states.contains(&state))
+        })
+        .await?;
+        let value = gateway
+            .turn(chat, turn)
+            .await?
+            .ok_or_else(|| harness_error("event's complete turn is missing"))?;
+        if !states.contains(&super::gateway::turn_state(&value)) {
+            return Err(harness_error(format!(
+                "turn moved beyond expected states: {value}"
+            )));
+        }
+        Ok(value)
+    }
+
+    /// Scans each received event once and sleeps until the stream changes.
     pub async fn wait_for(
         &self,
         timeout: Duration,
         predicate: impl Fn(&Value) -> bool,
     ) -> Result<Value, HarnessError> {
         let deadline = Instant::now() + timeout;
+        let mut after = 0;
+        let mut changed = self.changed.clone();
         loop {
-            if let Some(found) = self.snapshot().into_iter().find(|event| predicate(event)) {
-                return Ok(found);
+            // Observe the version before scanning, so an arrival during the scan
+            // remains visible to changed() even if no waiter was registered yet.
+            changed.borrow_and_update();
+            {
+                let events = self
+                    .events
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if let Some(event) = events.iter().skip(after).find(|event| predicate(event)) {
+                    return Ok(event.clone());
+                }
+                after = events.len();
             }
             if Instant::now() > deadline || self.task.is_finished() {
                 return Err(harness_error(format!(
@@ -84,7 +134,15 @@ impl LiveEvents {
                     self.snapshot().len()
                 )));
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
+            if tokio::time::timeout(
+                deadline.saturating_duration_since(Instant::now()),
+                changed.changed(),
+            )
+            .await
+            .is_err()
+            {
+                return Err(harness_error("live event wait expired"));
+            }
         }
     }
 }

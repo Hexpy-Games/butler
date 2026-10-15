@@ -1,3 +1,4 @@
+mod message_files;
 use super::*;
 mod sessions;
 use sessions::TestSessions;
@@ -109,6 +110,7 @@ pub(super) fn test_dependencies() -> AppApplicationDependencies {
         work_streams: Arc::new(TestSessions),
         subsessions: Arc::new(TestSessions),
         branch_conversations: Arc::new(TestBranchConversations),
+        session_title_generator: Arc::new(TestBranchSummarizer),
         branch_summarizer: Arc::new(TestBranchSummarizer),
         setup: crate::gateway::application::test_setup_port(),
     }
@@ -317,20 +319,6 @@ impl AppArtifactMaterializer for TestMaterializer {
     }
 }
 
-impl AppMessageFileStorage for TestMaterializer {
-    fn write_upload(&self, _: AppFileWrite) -> ApplicationFuture<MaterializedResponderFile> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
-
-    fn prepare_uploaded(&self, _: AppMessageFileSnapshot) -> ApplicationFuture<()> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
-
-    fn read_original(&self, _: AppMessageFileSnapshot) -> ApplicationFuture<Bytes> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
-}
-
 struct TestSettings;
 struct TestSettingsMutation;
 
@@ -444,5 +432,15 @@ impl AppAuthorityHandoff for TestAuthority {
     }
     fn settle_question_followup(&self, _: String) -> ApplicationFuture<()> {
         Box::pin(async { Ok(()) })
+    }
+}
+
+impl crate::gateway::AppSessionTitleGenerator for TestBranchSummarizer {
+    fn generate(
+        &self,
+        _input: crate::gateway::AppSessionTitleInput,
+        _cancellation: tokio_util::sync::CancellationToken,
+    ) -> crate::gateway::ApplicationFuture<String> {
+        Box::pin(async { Ok("Generated chat title".into()) })
     }
 }

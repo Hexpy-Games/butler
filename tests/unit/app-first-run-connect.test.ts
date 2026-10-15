@@ -90,24 +90,24 @@ test("bug-report info is localized by the renderer, not the desktop bridge", () 
     checks: [{ id: "agent_service", status: "failed" }, { id: "unknown_step", status: "pending" }],
     errors: [{ code: "agent_service_failed" }, { code: "setup_failed" }],
   }, getAppCopy("ko-KR").firstRun);
-  expect(localized.checks.map((check) => check.label)).toEqual(["Butler Agent 서비스", "unknown_step"]);
+  expect(localized.checks.map((check) => check.label)).toEqual(["버틀러 에이전트 서비스", "unknown_step"]);
   expect(localized.errors.map((error) => error.message)).toEqual(["백그라운드 서비스가 멈췄습니다.", "백그라운드 서비스가 응답하지 않습니다."]);
 });
 
-test("This computer joins the top tier only when a local server is reachable", () => {
+test("Other holds local models and joins the top tier only when a local server is reachable", () => {
   expect(providerCardLayout({ localReachable: false })).toEqual({
     top: ["chatgpt", "claude", "gemini"],
-    more: ["local", ...MORE_CARD_IDS],
-    localPlaceholder: true,
+    more: [...MORE_CARD_IDS],
   });
   expect(providerCardLayout({ localReachable: true })).toEqual({
-    top: ["chatgpt", "claude", "gemini", "local"],
-    more: [...MORE_CARD_IDS],
-    localPlaceholder: false,
+    top: ["chatgpt", "claude", "gemini", "other"],
+    more: MORE_CARD_IDS.filter((id) => id !== "other"),
   });
+  expect(Object.keys(PROVIDER_CARDS)).not.toContain("local");
   expect(MORE_CARD_IDS).toHaveLength(8);
   expect(MORE_CARD_IDS.at(-1)).toBe("other");
-  expect(PROVIDER_CARDS.chatgpt).toMatchObject({ kind: "signin", providerId: "openai", logo: "openai", tag: "noKey" });
+  expect(PROVIDER_CARDS.chatgpt).toMatchObject({ kind: "signin", providerId: "openai", logo: "openai" });
+  expect(PROVIDER_CARDS.chatgpt).not.toHaveProperty("tag");
   expect(PROVIDER_CARDS.kimi).toMatchObject({ kind: "key", providerId: "kimi", logo: "kimi" });
   expect(PROVIDER_CARDS.zaiApi).toMatchObject({ kind: "key", providerId: "zai-api", logo: "zai" });
   expect(PROVIDER_CARDS.other).toMatchObject({ kind: "custom", icon: "server" });
@@ -202,8 +202,8 @@ test("the connected model maps back to its first-run card (Run setup again shows
   expect(connectionCardId(model({ provider_id: "anthropic" }))).toBe("claude");
   expect(connectionCardId(model({ provider_id: "google" }))).toBe("gemini");
   expect(connectionCardId(model({ provider_id: "zai-api" }))).toBe("zaiApi");
-  expect(connectionCardId(model({ provider_id: "local", platform: "ollama" }))).toBe("local");
-  expect(connectionCardId(model({ provider_id: "local", platform: "lm_studio" }))).toBe("local");
+  expect(connectionCardId(model({ provider_id: "local", platform: "ollama" }))).toBe("other");
+  expect(connectionCardId(model({ provider_id: "local", platform: "lm_studio" }))).toBe("other");
   expect(connectionCardId(model({ provider_id: "local", platform: "custom" }))).toBe("other");
   expect(connectionCardId(model({ provider_id: "unknown" }))).toBeNull();
   expect(connectionCardId(undefined)).toBeNull();

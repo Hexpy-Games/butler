@@ -81,7 +81,7 @@ function RolePane({ fg, bg, exempt }: { fg: string; bg: string; exempt?: boolean
   const tone = exempt ? "neutral" : grade === "Fail" ? "danger" : grade === "AA large" ? "warning" : "success";
   return (
     <div className={f.rolePane} ref={ref} style={{ "--role-bg": `var(${bg})`, "--role-fg": `var(${fg})` } as CSSProperties}>
-      <span className={f.roleInk}>Aa 가 Butler</span>
+      <span className={f.roleInk}>Aa 가 버틀러</span>
       <Stack align="row" cross="center" gap="xs">
         <Typo.Caption numeric="tabular">{ratio === null ? "—" : formatRatio(ratio)}</Typo.Caption>
         {grade ? <Tag tone={tone}>{exempt ? "exempt" : grade}</Tag> : null}

@@ -10,17 +10,16 @@ async fn perf_task_graph_endpoints_owner_scale() -> Result<(), HarnessError> {
         std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("perf"),
         "requires perf tier and release agent"
     );
-    let mut s = Setup::new("PERF-TASK-GRAPH")?.start().await?;
+    let s = Setup::new("PERF-TASK-GRAPH")?.start().await?;
     let created = s.gw.post("/sessions", json!({"kind":"chat"})).await?;
     let chat = created.data()["session"]["id"].as_str().unwrap().to_owned();
     let hint = created.data()["session"]["session_hint"]
         .as_str()
         .unwrap()
         .to_owned();
-    s.agent.terminate().await?;
-    fixture::seed(&s.sandbox.data, &hint, 6)?;
-    let bytes = super::scale::seed(&s.sandbox.data)?;
-    s.gw = s.agent.start_again().await?;
+    let ids = Box::pin(fixture::seed(&s.sandbox.data, &hint, 6)).await?;
+    let graph_id = &ids[0];
+    let bytes = Box::pin(super::scale::seed(&s.sandbox.data)).await?;
     tokio::time::sleep(Duration::from_secs(10)).await;
     super::scale::assert_indexes(&s.sandbox.data)?;
     let pins = [
@@ -34,10 +33,12 @@ async fn perf_task_graph_endpoints_owner_scale() -> Result<(), HarnessError> {
         .iter()
         .map(wal::Wal::sample)
         .collect::<Result<Vec<_>, _>>()?;
+    let graph = s.gw.get(&format!("/plans/{graph_id}/task-graph")).await?;
+    let task_id = graph.data()["nodes"][0]["task_id"].as_str().unwrap();
     for (path, kind) in [
         (format!("/sessions/{chat}/task-graphs"), "list"),
-        ("/plans/graph-6-0/task-graph".into(), "graph"),
-        ("/tasks/task-6-0-a/document".into(), "document"),
+        (format!("/plans/{graph_id}/task-graph"), "graph"),
+        (format!("/tasks/{task_id}/document"), "document"),
     ] {
         measure(&s, &path, kind, bytes).await?;
     }
@@ -76,7 +77,7 @@ async fn measure(
             }
             "graph" => assert_graph(reply.data(), 6),
             _ => {
-                assert_eq!(reply.data()["id"], "task-6-0-a");
+                assert!(reply.data()["id"].as_str().unwrap().starts_with("task:"));
                 assert!(
                     reply.data()["markdown"]
                         .as_str()

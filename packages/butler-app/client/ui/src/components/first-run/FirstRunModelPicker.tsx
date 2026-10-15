@@ -1,19 +1,16 @@
 import { useState } from "react";
 import {
-  Button,
+  SetupWizardStepAction,
+  CheckCircle2,
   ChoiceCard,
   ChoiceCardList,
-  IconTile,
-  Inline,
+  Notice,
   ProviderLogo,
   Server,
-  SetupWizardContent,
-  Stack,
   Typo,
 } from "@/butler-ds";
 import type { FirstRunProviderCardId, LocalModelOption, ProviderCardLogo } from "@/app/setupProviders.ts";
-import { CardGlyph } from "./CardGlyph";
-import { FirstRunBack } from "./FirstRunBack";
+import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
 /** Detected models on this computer (or on a typed server): pick one and start. */
@@ -28,20 +25,17 @@ export function FirstRunModelPicker({ cardId, flow, options, apiKey, title, body
   const { copy } = flow;
   const [selectedKey, setSelectedKey] = useState(options[0]?.key ?? "");
   const selected = options.find((option) => option.key === selectedKey) ?? options[0];
-  const busy = Boolean(flow.commit.pending);
+  const busy = Boolean(flow.commit.pending) && !flow.commit.connected;
   return (
-    <SetupWizardContent width="wide">
-      <Inline>
-        <FirstRunBack label={copy.backToList} onClick={flow.backToList} />
-      </Inline>
-      <Inline cross="start" gap="md" wrap={false}>
-        <IconTile size="md"><CardGlyph cardId={cardId} /></IconTile>
-        <Stack gap="none">
-          <Typo.H4 as="h1" id="first-run-models-title">{title}</Typo.H4>
-          {body ? <Typo.Caption tone="secondary">{body}</Typo.Caption> : null}
-        </Stack>
-      </Inline>
-      {options.length === 0 ? <Typo.Body tone="secondary">{copy.noModels}</Typo.Body> : (
+    <FirstRunStepCard flow={flow} contentKey={`models:${cardId}`} title={title}
+      titleId="first-run-models-title" description={body} onBack={flow.backToList}
+      footerStart={<Typo.Caption tone="tertiary">{copy.localNote}</Typo.Caption>}
+      actions={<SetupWizardStepAction forward disabled={(!selected && !flow.commit.connected) || busy} onClick={() => flow.commit.connected ? flow.toReply() : selected && flow.connectAndAdvance(cardId, selected, apiKey)}>
+        {busy ? copy.connecting : flow.copy.next}
+      </SetupWizardStepAction>}
+    >
+      {flow.commit.connected ? <Notice tone="neutral" icon={<CheckCircle2 size="md" />} message={copy.keyValid} />
+        : options.length === 0 ? <Typo.Body tone="secondary">{copy.noModels}</Typo.Body> : (
         <ChoiceCardList aria-labelledby="first-run-models-title" role="radiogroup">
           {options.map((option) => (
             <ChoiceCard
@@ -60,22 +54,10 @@ export function FirstRunModelPicker({ cardId, flow, options, apiKey, title, body
           ))}
         </ChoiceCardList>
       )}
-      <Stack gap="sm">
-        {!flow.commit.connected ? <Button
-          disabled={!selected || busy}
-          size="lg"
-          stretch
-          type="button"
-          onClick={() => selected && flow.connectLocal(cardId, selected, apiKey)}
-        >
-          {busy ? copy.connecting : copy.localStart}
-        </Button> : null}
-        <Typo.Caption align="center" tone="tertiary">{copy.localNote}</Typo.Caption>
-      </Stack>
-    </SetupWizardContent>
+    </FirstRunStepCard>
   );
 }
 
-function ModelLogo({ logo }: { logo?: ProviderCardLogo }) {
+export function ModelLogo({ logo }: { logo?: ProviderCardLogo }) {
   return logo ? <ProviderLogo name={logo} /> : <Server size="md" />;
 }

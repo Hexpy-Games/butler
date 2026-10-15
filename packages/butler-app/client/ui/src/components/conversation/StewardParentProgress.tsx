@@ -1,6 +1,6 @@
 import { useSessionViewSubscription } from "@/components/layout/hooks/useSessionViewSubscription.ts";
 import { useAppLocale } from "@/app/copy.ts";
-import { useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import {
@@ -11,15 +11,19 @@ import {
   Stack,
   SurfacePanel,
   Typo,
+  WorkActivityDisclosure,
 } from "@/butler-ds";
-import { workActivityToolsFromRows } from "./toolchainUtils.tsx";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection.ts";
 import {
+  effectiveStewardStatus,
   stewardProgressStatus,
   stewardCurrentActivityTitle,
-  stewardToolRows,
 } from "./stewardProgressPresentation.ts";
 import { workerActivityTitle } from "./workerActivityTitle.ts";
+import { WorkBlockDetails } from "./WorkBlockDetails.tsx";
+import { useWorkBlockExpanded } from "./workBlockExpansion.ts";
+import { workBlockLatestStatus } from "./workBlockLatestStatus.ts";
+import { workBlockTail } from "./workBlockTail.ts";
 
 export function StewardParentProgress({
   progress,
@@ -35,6 +39,8 @@ export function StewardParentProgress({
     approved_plan_completed: view.approved_plan_completed ?? progress.child.approved_plan_completed, waiting_for_children: view.waiting_for_children } : progress.child;
   const rows = (child.active_turn ?? child.latest_turn)?.progress?.safe_progress_rows ?? progress.rows;
   const [resuming, setResuming] = useState(false);
+  const [detailsOpen, toggleDetails] = useWorkBlockExpanded(child.session_id);
+  const detailsId = useId();
   const openSessionObserver = useButlerStore(
     (state) => state.openSessionObserver,
   );
@@ -42,13 +48,14 @@ export function StewardParentProgress({
     (state) => state.resumeObservedSteward,
   );
   const turn = child.active_turn ?? child.latest_turn;
-  const toolRows = stewardToolRows(rows);
-  const tools = workActivityToolsFromRows(toolRows, turn?.id);
-  const toolSummary = summarizeTools(tools);
+  const live = Boolean(child.active_turn || child.waiting_for_children);
   const activityLabel = workerActivityTitle(
     stewardCurrentActivityTitle(child),
     child.title,
   );
+  const latestStatus = workBlockLatestStatus(rows, turn?.id, live, effectiveStewardStatus(child)) ?? activityLabel;
+  const tail = useMemo(() => workBlockTail(view, rows, turn?.id), [view, rows, turn?.id]);
+  const status = stewardProgressStatus(child);
   return (
     <SurfacePanel
       aria-label={child.title}
@@ -87,36 +94,22 @@ export function StewardParentProgress({
             </IconButton>
           </ButtonContainer>
         </Stack>
-        <Typo.Caption data-test-class="steward-progress-status">
-          {stewardProgressStatus(child)}
-          {child.active_turn ? ` · ${activityLabel}` : ""}
-        </Typo.Caption>
-        <Stack
-          align="row"
-          aria-label={activityLabel}
-          data-test-class="steward-tool-summary"
-          gap="xs"
-          wrap
+        <WorkActivityDisclosure
+          data-test-class="work-block-disclosure"
+          detailsId={detailsId}
+          detailsLabel={appCopy.conversation.work.detailsRegionLabel(child.title)}
+          expanded={detailsOpen}
+          hiddenCount={tail.earlier}
+          label={appCopy.conversation.work.disclosureLabel(status, latestStatus, tail.earlier)}
+          latest={latestStatus}
+          live={live}
+          onToggle={toggleDetails}
+          previous={tail.previous}
+          status={status}
         >
-          <Typo.Caption tone="tertiary">{activityLabel}</Typo.Caption>
-          <Typo.Caption tone="secondary">
-            {toolSummary || appCopy.interfaceDetails.noHistory}
-          </Typo.Caption>
-        </Stack>
+          <WorkBlockDetails live={live} sessionId={child.session_id} view={view} />
+        </WorkActivityDisclosure>
       </Stack>
     </SurfacePanel>
   );
-}
-
-function summarizeTools(
-  tools: ReturnType<typeof workActivityToolsFromRows>,
-): string {
-  const counts = new Map<string, number>();
-  for (const tool of tools) {
-    const label = tool.summaryLabel?.trim() || appCopy.interfaceDetails.tool;
-    counts.set(label, (counts.get(label) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([label, count]) => `${count} ${label}`)
-    .join(", ");
 }

@@ -1,0 +1,270 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "blocks"],
+  "properties": {
+    "v": {"const": 1},
+    "blocks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {"$ref": "#/$defs/block"}
+    }
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z0-9-]{1,32}$", "description": "Stable name; reuse to replace."},
+    "title": {"type": "string", "maxLength": 40},
+    "checked": {"type": "string", "format": "date-time", "description": "RFC 3339 time the source was read."},
+    "img": {"type": "string", "pattern": "^img_[a-z0-9]{10,12}$", "description": "Id from image_collect."},
+    "media": {"enum": ["1:1", "4:5", "3:4", "16:9"]},
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title"],
+      "properties": {
+        "key": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$"},
+        "label": {"type": "string", "maxLength": 24},
+        "title": {"type": "string", "minLength": 1, "maxLength": 80},
+        "sub": {"type": "string", "maxLength": 60},
+        "img": {"$ref": "#/$defs/img"},
+        "facts": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {"type": "string", "maxLength": 40}
+        },
+        "text": {"type": "string", "maxLength": 200},
+        "checked": {"$ref": "#/$defs/checked"},
+        "value": {"$ref": "#/$defs/value"},
+        "source": {"$ref": "#/$defs/source"}
+      }
+    },
+    "cell": {"type": ["string", "number", "null"], "description": "At most 60 characters."},
+    "block": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "items"],
+          "properties": {
+            "type": {"const": "cards"},
+            "id": {"$ref": "#/$defs/id"},
+            "title": {"$ref": "#/$defs/title"},
+            "media": {"$ref": "#/$defs/media"},
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 24,
+              "items": {"$ref": "#/$defs/card"}
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "columns", "rows"],
+          "properties": {
+            "type": {"const": "table"},
+            "id": {"$ref": "#/$defs/id"},
+            "title": {"$ref": "#/$defs/title"},
+            "columns": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 8,
+              "items": {"type": "string", "maxLength": 40}
+            },
+            "rows": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 30,
+              "items": {
+                "type": "array",
+                "items": {"$ref": "#/$defs/cell"}
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "items"],
+          "properties": {
+            "type": {"const": "gallery"},
+            "id": {"$ref": "#/$defs/id"},
+            "title": {"$ref": "#/$defs/title"},
+            "media": {"$ref": "#/$defs/media"},
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 12,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["img"],
+                "properties": {
+                  "img": {"$ref": "#/$defs/img"},
+                  "caption": {"type": "string", "maxLength": 60},
+                  "source": {"$ref": "#/$defs/source"}
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "items"],
+          "properties": {
+            "type": {"const": "facts"},
+            "id": {"$ref": "#/$defs/id"},
+            "title": {"$ref": "#/$defs/title"},
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 12,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["label", "value"],
+                "properties": {
+                  "label": {"type": "string", "maxLength": 30},
+                  "value": {"type": "string", "maxLength": 120},
+                  "checked": {"$ref": "#/$defs/checked"},
+                  "source": {"$ref": "#/$defs/source"}
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "items"],
+          "properties": {
+            "type": {"const": "metrics"},
+            "id": {"$ref": "#/$defs/id"},
+            "title": {"$ref": "#/$defs/title"},
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["label", "value"],
+                "properties": {
+                  "label": {"type": "string", "maxLength": 30},
+                  "value": {"type": ["string", "number"]},
+                  "unit": {"type": "string", "maxLength": 12},
+                  "delta": {"type": "string", "maxLength": 16},
+                  "checked": {"$ref": "#/$defs/checked"},
+                  "source": {"$ref": "#/$defs/source"}
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "kind", "x", "series"],
+          "properties": {
+            "type": {"const": "chart"},
+            "id": {"$ref": "#/$defs/id"},
+            "title": {"$ref": "#/$defs/title"},
+            "kind": {"enum": ["bar", "line"]},
+            "x": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 24,
+              "items": {"type": "string", "maxLength": 16}
+            },
+            "series": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 3,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "values"],
+                "properties": {
+                  "name": {"type": "string", "maxLength": 24},
+                  "values": {
+                    "type": "array",
+                    "items": {"type": ["number", "null"]}
+                  }
+                }
+              }
+            },
+            "unit": {"type": "string", "maxLength": 12},
+            "checked": {"$ref": "#/$defs/checked"},
+            "source": {"$ref": "#/$defs/source"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "text"],
+          "properties": {
+            "type": {"const": "callout"},
+            "id": {"$ref": "#/$defs/id"},
+            "title": {"$ref": "#/$defs/title"},
+            "tone": {"enum": ["neutral", "info", "success", "warning"]},
+            "text": {"type": "string", "minLength": 1, "maxLength": 280}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "items"],
+          "properties": {
+            "type": {"const": "actions"},
+            "id": {"$ref": "#/$defs/id"},
+            "title": {"$ref": "#/$defs/title"},
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["ask"],
+                    "properties": {
+                      "ask": {"type": "string", "minLength": 1, "maxLength": 80}
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["open", "label"],
+                    "properties": {
+                      "open": {"$ref": "#/$defs/source"},
+                      "label": {"type": "string", "maxLength": 24}
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "source": {"type": "string", "pattern": "^https?://", "maxLength": 2048},
+    "value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["amount"],
+      "properties": {
+        "amount": {"type": "number"},
+        "cur": {"type": "string", "pattern": "^[A-Z]{3}$"},
+        "was": {"type": "number"},
+        "note": {"type": "string", "maxLength": 40},
+        "unit": {"type": "string", "maxLength": 12}
+      },
+      "description": "Amount with an optional unit or currency, never both.",
+      "not": {"required": ["unit", "cur"]}
+    }
+  }
+}

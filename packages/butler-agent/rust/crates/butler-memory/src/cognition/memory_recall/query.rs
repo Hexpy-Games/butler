@@ -185,7 +185,6 @@ fn select(
         vector_matches: vector.matches.as_ref(),
         candidate_deadline: graph_deadline - 1_500,
         graph_deadline,
-        overall_deadline: read.deadline_at,
         now_iso: sources.now_iso,
         now_millis: clocks.now_millis,
         parse_date: clocks.parse_date,

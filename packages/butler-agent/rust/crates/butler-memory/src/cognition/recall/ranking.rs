@@ -1,6 +1,6 @@
 //! Pure episode candidate fusion and ranking, retaining source ordering.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::contracts::{
     EpisodeRankInput, ExecutedEpisodeChannels, FusedEpisodeCandidates, RankedEpisode,
@@ -50,6 +50,51 @@ pub(in crate::cognition) fn fuse_episode_candidates(
         episode_ids,
         candidate_limit,
     }
+}
+
+/// Ranked ids each lane contributes to a reciprocal rank fusion.
+pub(in crate::cognition) const RRF_LANE_DEPTH: usize = 30;
+
+/// Reciprocal rank fusion (k = 60) of ranked lanes, each contributing its best
+/// [`RRF_LANE_DEPTH`] ids, best fused score first. Ties go to the better
+/// single-lane rank, then to the id, so the order is stable. Ids found only
+/// deeper in their lanes follow the fused ones, interleaved by lane rank:
+/// fusion orders the candidates and never drops one.
+pub(in crate::cognition) fn fuse_reciprocal_rank(lanes: &[&[String]]) -> Vec<String> {
+    let mut fused = HashMap::<&str, (f64, usize)>::new();
+    for lane in lanes {
+        for (index, id) in lane.iter().take(RRF_LANE_DEPTH).enumerate() {
+            let entry = fused.entry(id.as_str()).or_insert((0.0, usize::MAX));
+            entry.0 += 1.0 / (60.0 + (index + 1) as f64);
+            entry.1 = entry.1.min(index);
+        }
+    }
+    let mut ranked = fused
+        .iter()
+        .map(|(id, score)| (*id, *score))
+        .collect::<Vec<_>>();
+    ranked.sort_by(|(a_id, (a_score, a_rank)), (b_id, (b_score, b_rank))| {
+        b_score
+            .total_cmp(a_score)
+            .then(a_rank.cmp(b_rank))
+            .then_with(|| a_id.as_bytes().cmp(b_id.as_bytes()))
+    });
+    let mut ids = ranked
+        .into_iter()
+        .map(|(id, _)| id.to_owned())
+        .collect::<Vec<_>>();
+    let mut seen = fused.into_keys().collect::<HashSet<_>>();
+    let deepest = lanes.iter().map(|lane| lane.len()).max().unwrap_or(0);
+    for index in RRF_LANE_DEPTH..deepest {
+        for lane in lanes {
+            if let Some(id) = lane.get(index)
+                && seen.insert(id.as_str())
+            {
+                ids.push(id.clone());
+            }
+        }
+    }
+    ids
 }
 
 /// What every episode of one recall is scored against.
@@ -106,12 +151,8 @@ impl RankContext<'_> {
             input.support_count.unwrap_or(0.0).ln_1p() / 17.0f64.ln(),
         );
         let metadata = 0.5 * salience + 0.3 * recency + 0.2 * support;
-        let score = match input.query_relevance {
-            None => 0.8 * fused + 0.2 * metadata,
-            Some(relevance) => {
-                0.55 * js_min(1.0, js_max(0.0, relevance)) + 0.35 * fused + 0.1 * metadata
-            }
-        };
+        let score =
+            0.55 * js_min(1.0, js_max(0.0, input.query_relevance)) + 0.35 * fused + 0.1 * metadata;
         RankedEpisode {
             input,
             score,
@@ -242,4 +283,10 @@ fn compare_nullable_time(a: Option<&str>, b: Option<&str>) -> std::cmp::Ordering
         (Some(_), None) => std::cmp::Ordering::Less,
         (Some(a), Some(b)) => a.as_bytes().cmp(b.as_bytes()),
     }
+}
+
+/// Positive cosine similarity on a 0..1 relevance scale. Orthogonal and
+/// opposite vectors provide no positive relevance; roundoff cannot exceed one.
+pub(in crate::cognition) fn cosine_relevance(distance: f64) -> f64 {
+    (1.0 - distance).clamp(0.0, 1.0)
 }

@@ -43,6 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
+      - run: python3 .github/scripts/isolated.py bun install --frozen-lockfile --ignore-scripts
       - run: python3 .github/scripts/isolated.py deploy/macos/selftest.sh
 
   gate:

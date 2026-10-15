@@ -75,7 +75,7 @@ tree and archive were not changed by those commands. Windows archives are not
 produced yet.
 
 The tag workflow (`.github/workflows/release.yml`) gates, packages, and smokes
-the darwin-arm64 archive on `macos-15` (Python 3.12, Rust 1.91.0), the Linux
+the darwin-arm64 archive on `macos-15` (Python 3.12, Rust 1.99.0), the Linux
 archives on `ubuntu-24.04` and `ubuntu-24.04-arm`, publishes them with the
 merged manifests and `install.sh`, and lists all of them in
 `butler-<version>-SHA256SUMS`.

@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode, Ref } from "react";
+import { useState, type CSSProperties, type ReactNode, type Ref } from "react";
 import { cn } from "../../lib/utils";
 import { useComposedRefs } from "../../lib/composeRefs";
 import { useScrollEdges } from "../../lib/useScrollEdges";
@@ -6,6 +6,10 @@ import { ChevronDownIcon } from "../../components/Icons";
 import { PillButton } from "../../components/PillButton";
 import styles from "./ConversationShell.module.css";
 import { dsClass } from "../../lib/internal";
+import { ConversationShellElementContext, useConversationColumnRect, type ConversationColumnRect } from "./conversationColumn";
+import { ConversationRailContext, useRailReserve } from "./conversationRail";
+
+export type { ConversationColumnRect } from "./conversationColumn";
 
 export interface ConversationShellProps {
   children: ReactNode;
@@ -13,6 +17,16 @@ export interface ConversationShellProps {
   contentGutter?: string;
   titleIconGap?: string;
   titleIconSize?: string;
+  /**
+   * A layer behind everything in the shell (e.g. one `Wallpaper` shared by
+   * the new chat and its messages): over the shell's background, clipped to
+   * it, never takes pointer input. It stays mounted while the content swaps.
+   */
+  background?: ReactNode;
+  /** A `TabRail`: the column and composer move left only as far as needed; a shelf pushes the messages down. */
+  rail?: ReactNode;
+  /** The rail's view (conversation id): room made for the first tab stays for the whole view. */
+  railView?: string;
 }
 
 export function ConversationShell({
@@ -21,7 +35,13 @@ export function ConversationShell({
   contentGutter,
   titleIconGap,
   titleIconSize,
+  background,
+  rail,
+  railView,
 }: ConversationShellProps) {
+  const [element, setElement] = useState<HTMLElement | null>(null);
+  const hasRail = rail !== undefined && rail !== null && rail !== false;
+  const { reserved, report } = useRailReserve(hasRail, railView);
   const style = {
     "--composer-reserve": `${composerReserve}px`,
     ...(titleIconSize ? { "--new-chat-title-icon-size": titleIconSize } : {}),
@@ -35,13 +55,23 @@ export function ConversationShell({
   } as CSSProperties;
 
   return (
-    <section
-      className={styles.shell}
-      data-test-class="conversation"
-      style={style}
-    >
-      {children}
-    </section>
+    <ConversationShellElementContext.Provider value={element}>
+      <section
+        className={cn(styles.shell, background ? styles.withBackground : undefined, reserved ? styles.railed : undefined)}
+        data-test-class="conversation"
+        data-rail={reserved ? "reserved" : undefined}
+        ref={setElement}
+        style={style}
+      >
+        {background ? (
+          <div aria-hidden="true" className={styles.background} data-slot="conversation-background">
+            {background}
+          </div>
+        ) : null}
+        {children}
+        {hasRail ? <ConversationRailContext.Provider value={report}>{rail}</ConversationRailContext.Provider> : null}
+      </section>
+    </ConversationShellElementContext.Provider>
   );
 }
 
@@ -78,10 +108,15 @@ export function ConversationScroll({
 export function MessageListSurface({
   children,
   height,
+  onColumnRect,
 }: {
   children: ReactNode;
   height?: number;
+  /** The column's edges and the conversation's top, on mount and on every resize (never on scroll): a background's keep-out. */
+  onColumnRect?: (rect: ConversationColumnRect) => void;
 }) {
+  const [column, setColumn] = useState<HTMLDivElement | null>(null);
+  useConversationColumnRect(column, onColumnRect);
   return (
     <div
       className={cn(
@@ -89,6 +124,7 @@ export function MessageListSurface({
         height && styles.virtualizedMessageList,
       )}
       data-test-class={`message-list${height ? " virtualized" : ""}`}
+      ref={setColumn}
       style={height ? { height: `${height}px` } : undefined}
     >
       {children}

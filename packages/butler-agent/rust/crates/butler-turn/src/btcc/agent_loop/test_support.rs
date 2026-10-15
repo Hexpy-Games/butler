@@ -39,6 +39,8 @@ pub struct Fixture {
     pub cleanup_error: AtomicBool,
     pub operation_scopes: Mutex<Vec<OperationResultScope>>,
     pub result_references: Mutex<Vec<OperationResultMessageReferences>>,
+    /// Extra tools the prepared surface offers, such as answer blocks.
+    pub reply_tools: Mutex<Vec<ModelRoundTool>>,
 }
 
 impl Fixture {
@@ -63,10 +65,11 @@ impl Fixture {
             cleanup_error: AtomicBool::new(false),
             operation_scopes: Mutex::new(Vec::new()),
             result_references: Mutex::new(Vec::new()),
+            reply_tools: Mutex::new(Vec::new()),
         })
     }
 
-    pub(crate) fn agent(self: &Arc<Self>) -> FixtureAgentLoop {
+    pub fn agent(self: &Arc<Self>) -> FixtureAgentLoop {
         FixtureAgentLoop {
             model: self.clone(),
             execution_factory: self.clone(),
@@ -177,11 +180,14 @@ impl GuidedPolicyPort for Fixture {
             Ok(PreparedPolicy {
                 prompt: invocation.turn.original_message.clone(),
                 instructions: Some("guided".into()),
-                tools: vec![
+                tools: [
                     tool("read_file", false),
                     tool("web_search", true),
                     tool("start_work", true),
-                ],
+                ]
+                .into_iter()
+                .chain(self.reply_tools.lock().unwrap().iter().cloned())
+                .collect(),
                 tool_choice: Some(ToolChoice::Auto),
                 resumed_tool_call: None,
                 authority_decision: self.authority.lock().unwrap().clone(),
@@ -226,8 +232,13 @@ impl GuidedPolicyPort for Fixture {
                 "surface:ordinary"
             });
             Ok(ToolSurface {
+                // Reporting keeps only what can still run: the reply's blocks.
                 tools: if final_report {
-                    vec![]
+                    fallback
+                        .iter()
+                        .filter(|tool| tool.name == "answer_blocks")
+                        .cloned()
+                        .collect()
                 } else {
                     fallback.to_vec()
                 },
@@ -429,6 +440,7 @@ impl GuidedPolicyPort for Fixture {
                 runtime_failure: None,
                 artifacts: Vec::<FinalArtifact>::new(),
                 changed_files: vec![],
+                answer_blocks: Vec::new(),
                 model_identity: Some(ModelIdentity {
                     requested_model_ref: "openai/model".into(),
                     effective_model_ref: "openai/model".into(),

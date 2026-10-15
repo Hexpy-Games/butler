@@ -7,12 +7,16 @@ use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 
 mod access;
+mod background_sources;
 mod composer_decoration;
 mod controls;
+mod conversation_background;
 mod default_model;
+mod diagnostics_reader;
+pub use diagnostics_reader::DiagnosticsSettingsReader;
 mod model;
 mod onboarding;
-mod persistence;
+pub(super) mod persistence;
 mod plan_continuation;
 mod session;
 mod storage_helpers;
@@ -91,6 +95,7 @@ pub(super) struct ResolvedControls {
 }
 pub(super) use access::{
     access_mode_name, conversation_access_mode, default_access_mode, record_default_access_mode,
+    schedule_access_mode,
 };
 pub(super) use default_model::record_default_model_policy;
 pub(super) use plan_continuation::{
@@ -102,10 +107,20 @@ pub(super) use wallpaper::{
     source_image_asset,
 };
 
-/// The stored global `wallpaper.source`, if a settings write stored one.
-pub(super) fn stored_wallpaper_source(db: &Connection) -> Result<Option<Value>, AppStorageError> {
-    Ok(read_json(db, SETTINGS_KEY)?
-        .and_then(|settings| settings.get(wallpaper::KEY)?.get("source").cloned()))
+/// Stored sources for both global surfaces, read from one indexed settings row.
+pub(super) fn stored_background_sources(
+    db: &Connection,
+) -> Result<Vec<(String, Value)>, AppStorageError> {
+    let settings = read_json(db, SETTINGS_KEY)?.unwrap_or(Value::Null);
+    Ok([wallpaper::KEY, conversation_background::KEY]
+        .into_iter()
+        .filter_map(|key| {
+            Some((
+                format!("settings.{key}"),
+                settings.get(key)?.get("source")?.clone(),
+            ))
+        })
+        .collect())
 }
 
 pub(super) use session::{
@@ -165,6 +180,9 @@ pub(super) fn resolve_for_message_send(
     if let Some(result) = &request.subsession_result {
         persisted["subsession_result"] = json!(result);
     }
+    if let Some(run) = &request.schedule_run {
+        persisted["schedule_run"] = json!(run);
+    }
     Ok(ResolvedControls {
         resolution: ControlResolution {
             model: controls.model,
@@ -176,6 +194,7 @@ pub(super) fn resolve_for_message_send(
             catalog_generation: facts.catalog_generation.clone(),
             model_fallback: Some(fallback),
             subsession_result: request.subsession_result.clone(),
+            schedule_run: request.schedule_run.clone(),
         },
         persisted,
     })
@@ -230,12 +249,19 @@ pub(super) fn resolution_from_persisted(value: &str) -> Result<ControlResolution
         .map(serde_json::from_value)
         .transpose()
         .map_err(|source| invalid_resolution().with_source(source))?;
-    let subsession_result = object
-        .get("subsession_result")
-        .cloned()
-        .map(serde_json::from_value)
-        .transpose()
-        .map_err(|source| invalid_resolution().with_source(source))?;
+    fn optional<T: serde::de::DeserializeOwned>(
+        object: &serde_json::Map<String, Value>,
+        key: &str,
+    ) -> Result<Option<T>, AppStorageError> {
+        object
+            .get(key)
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|source| invalid_resolution().with_source(source))
+    }
+    let subsession_result = optional(object, "subsession_result")?;
+    let schedule_run = optional(object, "schedule_run")?;
     Ok(ControlResolution {
         model,
         reasoning_effort,
@@ -246,6 +272,7 @@ pub(super) fn resolution_from_persisted(value: &str) -> Result<ControlResolution
         catalog_generation,
         model_fallback,
         subsession_result,
+        schedule_run,
     })
 }
 
@@ -268,10 +295,12 @@ impl super::AppApplication {
         let now = self.dependencies.identity_clock.now_iso();
         let workspace_root = self.project_creation.workspace_root();
         let subscribers = self.subscribers.clone();
-        self.storage
+        let view = self
+            .storage
             .read(move |db| view::read(db, &subscribers, &facts, &now, &workspace_root))
             .await
-            .map_err(super::app_error)
+            .map_err(super::app_error)?;
+        self.resolve_background_sources(view).await
     }
 
     pub(super) async fn update_settings_owned(
@@ -291,8 +320,11 @@ impl super::AppApplication {
         input: Value,
         origin: WallpaperOrigin,
     ) -> Result<(Value, Value), crate::gateway::GatewayApplicationError> {
+        let timing = crate::gateway::command_timing::CommandTiming::new("settings_patch");
         let _update = self.settings_update_lock.lock().await;
+        timing.mark("lock_acquired");
         self.dependencies.settings_facts.refresh().await?;
+        timing.mark("facts_refreshed");
         let facts = self.dependencies.settings_facts.snapshot()?;
         let current_root = self.project_creation.workspace_root();
         let view_root = current_root.clone();
@@ -301,29 +333,37 @@ impl super::AppApplication {
         let now = self.dependencies.identity_clock.now_iso();
         let current = self
             .storage
-            .execute(move |db| view::read(db, &subscribers, &view_facts, &now, &view_root))
+            .read(move |db| view::read(db, &subscribers, &view_facts, &now, &view_root))
             .await
             .map_err(super::app_error)?;
 
-        let prepared = update::prepare(&input, &current, &facts, &current_root, |token| {
-            self.project_creation.resolve_workspace_selection(token)
+        let selected = self.resolve_folder_selection(&input).await?;
+        let prepared = update::prepare(&input, &current, &facts, &current_root, |_| {
+            selected.ok_or_else(crate::gateway::GatewayApplicationError::internal)
         })?;
-        if prepared.workspace_root.is_none()
-            && update::unchanged_composer_preferences(&prepared.patch, &current)
-        {
-            return Ok((wallpaper::source(&current), current));
-        }
         self.validate_wallpaper_patch(&prepared.patch).await?;
+        timing.mark("patch_prepared");
+        if prepared.workspace_root.is_none()
+            && update::unchanged_preferences(&prepared.patch, &current)
+        {
+            return Ok((
+                wallpaper::source(&current),
+                self.resolve_background_sources(current).await?,
+            ));
+        }
         self.dependencies
             .settings_mutations
             .apply(prepared.patch.clone(), prepared.projection)
             .await?;
+        timing.mark("mutation_applied");
         self.dependencies.settings_facts.refresh().await?;
+        timing.mark("facts_reloaded");
         let refreshed = self.dependencies.settings_facts.snapshot()?;
         let workspace_root = prepared.workspace_root.unwrap_or(current_root);
         let projection =
             update::project_after_refresh(&current, &prepared.patch, &refreshed, &workspace_root);
         let stored_projection = update::persistence_projection(&projection);
+        let projection = self.resolve_background_sources(projection).await?;
         let event_payload = update::event_payload(&projection);
         let previous = wallpaper::source(&current);
         let wallpaper_event = wallpapers::change_payload(
@@ -333,12 +373,42 @@ impl super::AppApplication {
             &wallpaper::source(&projection),
             origin,
         );
-        let root_changed = workspace_root != self.project_creation.workspace_root();
-        let persisted_root = workspace_root.clone();
+        let root = (workspace_root != self.project_creation.workspace_root())
+            .then(|| workspace_root.clone());
+        let schedule_mode_chosen = prepared.patch.get("schedule_access_mode").is_some();
+        self.persist_settings_update(
+            (stored_projection, schedule_mode_chosen),
+            event_payload,
+            wallpaper_event,
+            root,
+        )
+        .await?;
+        self.project_creation.set_workspace_root(workspace_root);
+        Ok((previous, projection))
+    }
+
+    async fn persist_settings_update(
+        &self,
+        (mut stored_projection, schedule_mode_chosen): (Value, bool),
+        event_payload: serde_json::Map<String, Value>,
+        wallpaper_event: Option<serde_json::Map<String, Value>>,
+        root: Option<std::path::PathBuf>,
+    ) -> Result<(), crate::gateway::GatewayApplicationError> {
         let now = self.dependencies.identity_clock.now_iso();
         let subscribers = self.subscribers.clone();
         self.storage
             .execute(move |db| {
+                // The view resolves the schedule default (D7); store it only once
+                // the user chose one, so an unsaved default keeps following the
+                // conversation default.
+                let saved = read_json(db, SETTINGS_KEY)?
+                    .is_some_and(|stored| stored.get("schedule_access_mode").is_some());
+                if !schedule_mode_chosen
+                    && !saved
+                    && let Some(fields) = stored_projection.as_object_mut()
+                {
+                    fields.remove("schedule_access_mode");
+                }
                 write_json(db, SETTINGS_KEY, &stored_projection, &now)?;
                 events::append(
                     db,
@@ -351,7 +421,7 @@ impl super::AppApplication {
                 if let Some(payload) = wallpaper_event {
                     events::append(db, &subscribers, wallpapers::CHANGED, None, payload, &now)?;
                 }
-                if root_changed {
+                if let Some(persisted_root) = root {
                     write_json(
                         db,
                         update::DEFAULT_PROJECT_WORKSPACE_SETTING_KEY,
@@ -362,9 +432,27 @@ impl super::AppApplication {
                 Ok(())
             })
             .await
-            .map_err(super::app_error)?;
-        self.project_creation.set_workspace_root(workspace_root);
-        Ok((previous, projection))
+            .map_err(super::app_error)
+    }
+
+    async fn resolve_folder_selection(
+        &self,
+        input: &Value,
+    ) -> Result<Option<std::path::PathBuf>, crate::gateway::GatewayApplicationError> {
+        let Some(token) = input
+            .get("default_project_folder_selection_token")
+            .and_then(Value::as_str)
+            .filter(|token| !butler_core::public_text::trim_js_whitespace(token).is_empty())
+        else {
+            return Ok(None);
+        };
+        let token = token.to_owned();
+        let owner = self.project_creation.clone();
+        let data = self.butler_data.clone();
+        tokio::task::spawn_blocking(move || owner.resolve_workspace_selection(&token, &data))
+            .await
+            .map_err(crate::gateway::GatewayApplicationError::internal_from)?
+            .map(Some)
     }
 
     async fn validate_wallpaper_patch(
@@ -375,6 +463,16 @@ impl super::AppApplication {
             && !self.wallpaper_asset_exists(asset.to_owned()).await?
         {
             return Err(wallpaper::unknown_asset());
+        }
+        if let Some(asset) = patch
+            .get(conversation_background::KEY)
+            .and_then(|v| v.get("source"))
+            .and_then(wallpaper::source_image_asset)
+            && !self.wallpaper_asset_exists(asset.to_owned()).await?
+        {
+            return Err(conversation_background::invalid(
+                "source.asset must name a stored wallpaper image",
+            ));
         }
         Ok(())
     }

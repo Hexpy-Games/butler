@@ -19,6 +19,8 @@ pub struct GatewayConfig {
     pub allowed_hosts: Vec<String>,
     pub content_hosts: Vec<String>,
     pub output_data: Option<std::path::PathBuf>,
+    /// Read-only native browser source dependencies.
+    pub browser_import: butler_platform::browser_transfer::ImportDependencies,
     /// Settings → Security: also listen on the machine's LAN addresses (same
     /// port) and answer their Host names.
     pub remote_access_enabled: bool,
@@ -38,6 +40,25 @@ pub struct GatewayConfig {
     /// Site icon cache, normally BUTLER_DATA/cache/favicons.
     pub favicon_cache_root: Option<std::path::PathBuf>,
     pub static_ui_root: Option<std::path::PathBuf>,
+    /// Butler's own headless browser, used while no App is attached. `None`
+    /// turns it off (calls without an App answer `no_browser`).
+    pub headless_browser: Option<HeadlessBrowserConfig>,
+}
+
+/// Where the headless browser keeps its throwaway profile and its pinned
+/// Chrome for Testing install.
+#[derive(Clone, Debug)]
+pub struct HeadlessBrowserConfig {
+    /// Profile and log directory (emptied when the browser is reaped).
+    pub root: std::path::PathBuf,
+    pub install: butler_runtime::browser::InstallSource,
+    /// On at start (Settings → Security changes it while running).
+    pub enabled: bool,
+    /// The installed App's Electron, run without a window, serves before
+    /// the headless browser when it can start (same switch).
+    pub app_host: butler_runtime::browser::AppHostSource,
+    /// The hidden App host's profiles and log.
+    pub app_host_root: std::path::PathBuf,
 }
 
 impl Default for GatewayConfig {
@@ -48,6 +69,7 @@ impl Default for GatewayConfig {
             allowed_hosts: Vec::new(),
             content_hosts: Vec::new(),
             output_data: None,
+            browser_import: Default::default(),
             remote_access_enabled: false,
             admin_credential: None,
             security_store: None,
@@ -56,6 +78,7 @@ impl Default for GatewayConfig {
             message_rate_limit_window: std::time::Duration::from_secs(60),
             static_ui_root: None,
             favicon_cache_root: None,
+            headless_browser: None,
         }
     }
 }
@@ -112,11 +135,7 @@ pub async fn serve_gateway(
             .checked_add(1)
             .ok_or_else(|| std::io::Error::other("content port overflow"))?,
     );
-    let content_listener = if butler_core::product_features::BROWSER {
-        Some(TcpListener::bind(content_addr).await?)
-    } else {
-        None
-    };
+    let content_listener = TcpListener::bind(content_addr).await?;
     let shutdown = CancellationToken::new();
     let task = http::serve(
         listener,

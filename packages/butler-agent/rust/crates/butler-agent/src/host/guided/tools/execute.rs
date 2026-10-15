@@ -16,6 +16,7 @@ pub(super) async fn execute(
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    let timing = Some(super::super::command::timing::CommandTiming::new("handler"));
     owner
         .same_turn(invocation)
         .map_err(ToolExecutionError::Integrity)?;
@@ -85,7 +86,7 @@ pub(super) async fn execute(
         match record.status.as_str() {
             "completed" => {
                 let output = record_output(record)?;
-                super::discovery::remember_described(owner, call, &output)?;
+                observe(owner, call, (&effective_name, &presentation_args), &output)?;
                 if GuidedWorkTools::repairs_completed_relation(&call.name)
                     && output.field("ok").ok().flatten() == Some("true")
                 {
@@ -116,14 +117,44 @@ pub(super) async fn execute(
     if record.is_none() {
         start(owner, call, &call_id, &effective_name, &presentation_args).await?;
     }
+    if let Some(timing) = &timing {
+        timing.mark("before_dispatch");
+    }
     let result = dispatch_result(owner, invocation, call, &call_id).await?;
-    super::discovery::remember_described(owner, call, &result)?;
+    if let Some(timing) = &timing {
+        timing.mark("result_returned");
+    }
+    observe(owner, call, (&effective_name, &presentation_args), &result)?;
     if result.field("authority_pending").ok().flatten() == Some("true") {
         // Authority admission atomically moved this call to awaiting_authority.
         // The loop persists the pending result in its continuation, not as a
         // completed tool-journal result before a decision exists.
         return Ok(result);
     }
+    complete(owner, invocation, call, call_id, result).await
+}
+
+/// What a result (fresh or replayed) tells the turn: described catalog ids,
+/// whether it brought in external content (D5), and where the browser went
+/// (R5 provenance).
+fn observe(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    (effective_name, args): (&str, &Value),
+    output: &JsonDocument,
+) -> Result<(), ToolExecutionError> {
+    owner.observe_result(effective_name, args);
+    super::browser::discover_reached(owner, effective_name, output);
+    super::discovery::remember_described(owner, call, output)
+}
+
+async fn complete(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    call_id: String,
+    result: JsonDocument,
+) -> Result<JsonDocument, ToolExecutionError> {
     if invocation.cancellation.is_cancelled() {
         owner
             .journal

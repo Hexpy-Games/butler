@@ -29,6 +29,28 @@ impl SubsessionService {
         ))
     }
 
+    /// Canonical App conversation for browser ownership, including nested workers.
+    /// A child binding is never an App docking target, even if its context has an App ID.
+    pub async fn browser_owner(&self, session_id: &str) -> Result<Option<String>, BtccError> {
+        let owner = self.authority_owner(session_id).await?;
+        let binding = self
+            .bindings
+            .get_by_session_id(&owner)
+            .await
+            .map_err(BtccError::from)?;
+        Ok(binding
+            .filter(|binding| binding.role == crate::workspace::SessionRole::Butler)
+            .and_then(|binding| {
+                binding
+                    .transport_bindings
+                    .into_iter()
+                    .find(|transport| {
+                        transport.transport == "app" && !transport.peer_id.trim().is_empty()
+                    })
+                    .map(|transport| transport.peer_id)
+            }))
+    }
+
     /// Prompt lines describing the parent's worker tasks.
     pub async fn worker_prompt_lines(
         &self,
@@ -112,8 +134,8 @@ impl SubsessionService {
         let (stewards, workers): (Vec<_>, Vec<_>) = summaries
             .into_iter()
             .partition(|value| value.get("role").and_then(Value::as_str) == Some("steward"));
-        let own = if let Some(relation) = relation {
-            Some(self.project_child(&relation).await?)
+        let own = if let Some(relation) = &relation {
+            Some(self.project_child(relation).await?)
         } else {
             None
         };
@@ -122,6 +144,21 @@ impl SubsessionService {
         let object = projection.as_object_mut().ok_or_else(|| {
             BtccError::detected(BtccCode::SubsessionProjectionInvalid, "projection invalid")
         })?;
+        if let Some(relation) = relation {
+            // The Presentation line instructs the model; the user sees only real checks.
+            let checks = relation
+                .packet
+                .acceptance_criteria
+                .iter()
+                .filter(|check| !check.starts_with(super::helpers::PRESENTATION_LINE));
+            object.insert(
+                "delegated_request".into(),
+                json!({"turn_id":relation.child_turn_id,
+                "text":std::iter::once(relation.packet.objective.clone())
+                    .chain(checks.map(|check| format!("• {check}")))
+                    .collect::<Vec<_>>().join("\n\n")}),
+            );
+        }
         object.insert("steward_children".into(), json!(stewards));
         object.insert("workers".into(), json!(workers));
         Ok(projection)
@@ -149,7 +186,11 @@ impl SubsessionService {
             false
         };
         let turn=latest.as_ref().map(|(id,state)|json!({"id":id,"state":if retryable { "runtime_fault" } else { state },"retryable":retryable,"cancellable":state == "admitted" && !retryable,"created_at":relation.created_at,"updated_at":relation.created_at}));
-        let relation_view = json!({"relation_id":relation.relation_id,"parent_session_id":relation.parent_session_id,"parent_turn_id":relation.parent_turn_id,"child_session_id":relation.child_session_id,"anchor_message_id":relation.anchor_message_id,"ordinal":relation.ordinal,"safe_title":relation.safe_title,"created_at":relation.created_at});
+        let title = super::helpers::delegation_title(
+            Some(&relation.safe_title),
+            &relation.packet.objective,
+        );
+        let relation_view = json!({"relation_id":relation.relation_id,"parent_session_id":relation.parent_session_id,"parent_turn_id":relation.parent_turn_id,"child_session_id":relation.child_session_id,"anchor_message_id":relation.anchor_message_id,"ordinal":relation.ordinal,"safe_title":title,"created_at":relation.created_at});
         let result_view = result.map(|mut value| {
             if let Some(object) = value.as_object_mut() {
                 object.insert("relation_id".into(), json!(relation.relation_id));
@@ -162,7 +203,7 @@ impl SubsessionService {
             && self
                 .waiting_for_children(&relation.child_session_id)
                 .await?;
-        let mut projection = json!({"role":role,"relation":relation_view,"session_id":relation.child_session_id,"title":relation.safe_title,"status":status,"active_turn":if status=="active" && !retryable{turn.clone()}else{None},"latest_turn":turn,"waiting_for_children":waiting_for_children,"result":result_view,"updated_at":relation.created_at,"model_ref":relation.packet.model_ref,"terminal":result_view.is_some()});
+        let mut projection = json!({"role":role,"relation":relation_view,"session_id":relation.child_session_id,"title":title,"status":status,"active_turn":if status=="active" && !retryable{turn.clone()}else{None},"latest_turn":turn,"waiting_for_children":waiting_for_children,"result":result_view,"updated_at":relation.created_at,"model_ref":relation.packet.model_ref,"terminal":result_view.is_some()});
         if let Some((id, _)) = &latest {
             self.plan_counters(id, &mut projection).await?;
         }

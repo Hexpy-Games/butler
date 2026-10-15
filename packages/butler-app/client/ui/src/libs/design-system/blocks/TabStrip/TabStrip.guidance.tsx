@@ -49,6 +49,7 @@ export const guidance: ShowcaseGuidance = {
     "Tab titles come from the page; the strip truncates them. An empty title reads the untitled label.",
     "Group labels are the conversation title. Pass Korean labels (내 탭, 새 탭, 탭 닫기, 승인 대기) from the App copy.",
     "Group state is one of working, waiting for approval or crashed: no extra text in the strip.",
+    "hideChip: a conversation's own browser pane shows its one group without the chip (the title bar names it) and at full strength; trailing holds row-end controls such as Bring in a tab.",
   ],
   accessibility: [
     "Each open group is a role=tablist named by its label; tabs are role=tab with aria-selected and aria-controls (panelId).",

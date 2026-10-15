@@ -38,6 +38,8 @@ pub(super) struct Pending {
     pub(super) frame: Vec<u8>,
     pub(super) bytes: usize,
     pub(super) cold_start_allowed: bool,
+    /// Background maintenance: a worker it starts runs at background priority.
+    pub(super) background: bool,
     pub(super) mode: EmbeddingMode,
     pub(super) requested_texts: usize,
     pub(super) resplit: bool,

@@ -54,16 +54,57 @@ fn runs(text: &str) -> Vec<(String, Script)> {
     words
 }
 
-fn tokens(text: &str, query: bool) -> Vec<String> {
+/// Strong tokens. A recall query also collects its weak ones in `weak` (see
+/// [`recall_query`]); without it one-character words keep their prior analysis.
+fn tokens(text: &str, query: bool, weak: Option<&mut Vec<String>>) -> Vec<String> {
+    if text.is_ascii() {
+        return ascii_tokens(text);
+    }
+    unicode_tokens(text, query, weak)
+}
+
+// ASCII is already NFKC/NFD stable; Latin letters and Common digits are distinct runs.
+fn ascii_tokens(text: &str) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+    let mut tokens = Vec::new();
+    for run in text.as_bytes().chunk_by(|a, b| {
+        a.is_ascii_alphabetic() == b.is_ascii_alphabetic()
+            && a.is_ascii_digit() == b.is_ascii_digit()
+    }) {
+        if !run.first().is_some_and(u8::is_ascii_alphanumeric) {
+            continue;
+        }
+        let token: String = run
+            .iter()
+            .map(|byte| char::from(byte.to_ascii_lowercase()))
+            .collect();
+        if seen.insert(token.clone()) {
+            tokens.push(token);
+        }
+    }
+    tokens
+}
+
+fn unicode_tokens(text: &str, query: bool, mut weak: Option<&mut Vec<String>>) -> Vec<String> {
     let normalized = crate::cognition::lexical::case_fold(&text.nfkc().collect::<String>());
     let single = normalized.chars().filter(|c| grams(c.script())).count() == 1;
     let mut tokens = Vec::new();
     for (mut run, kind) in runs(&normalized) {
         let chars = run.chars().collect::<Vec<_>>();
-        if kind == Script::Hangul
-            && (STOP.contains(&run.as_str()) || chars.len() < 2)
-            && (!single || !query)
+        let stop = kind == Script::Hangul && STOP.contains(&run.as_str());
+        // A one-character word of a character-indexed script is a weak recall
+        // term: indexed as a unigram, it ranks but never matches on its own.
+        if let Some(weak) = weak.as_deref_mut()
+            && query
+            && !single
+            && !stop
+            && grams(kind)
+            && chars.len() == 1
         {
+            unigrams(weak, &chars);
+            continue;
+        }
+        if kind == Script::Hangul && (stop || chars.len() < 2) && (!single || !query) {
             if !query {
                 unigrams(&mut tokens, &chars);
             }
@@ -112,12 +153,13 @@ fn grams(kind: Script) -> bool {
     )
 }
 
-pub(super) fn field(text: &str) -> String {
-    tokens(text, false).join(" ")
+pub(in crate::cognition) fn field(text: &str) -> String {
+    tokens(text, false, None).join(" ")
 }
 
-pub(super) fn query(text: &str) -> String {
-    tokens(text, true)
+/// The OR-joined FTS5 terms of a query (App search).
+pub(in crate::cognition) fn query(text: &str) -> String {
+    tokens(text, true, None)
         .into_iter()
         .collect::<BTreeSet<_>>()
         .into_iter()
@@ -126,8 +168,47 @@ pub(super) fn query(text: &str) -> String {
         .join(" OR ")
 }
 
+/// The FTS5 expression of a recall cue. Strong tokens match alone (OR). Weak
+/// tokens, one-character words of character-indexed scripts, are too common to
+/// match alone: all of them together match, and beside a strong token each one
+/// adds rank.
+pub(in crate::cognition) fn recall_query(text: &str) -> String {
+    let mut weak = Vec::new();
+    let strong = tokens(text, true, Some(&mut weak))
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let weak = weak
+        .into_iter()
+        .filter(|token| !strong.contains(token))
+        .collect::<BTreeSet<_>>();
+    let any = |set: &BTreeSet<String>, operator: &str| {
+        set.iter()
+            .map(|token| format!("\"{token}\""))
+            .collect::<Vec<_>>()
+            .join(operator)
+    };
+    match (strong.is_empty(), weak.is_empty()) {
+        (true, true) => String::new(),
+        (false, true) => any(&strong, " OR "),
+        (true, false) => any(&weak, " AND "),
+        (false, false) => {
+            let strong = any(&strong, " OR ");
+            let together = if weak.len() > 1 {
+                format!(" OR ({})", any(&weak, " AND "))
+            } else {
+                String::new()
+            };
+            format!(
+                "{strong}{together} OR (({}) AND ({strong}))",
+                any(&weak, " OR ")
+            )
+        }
+    }
+}
+
 #[cfg(test)]
 pub(in crate::cognition) fn assert_frozen_analysis() {
+    assert_ascii_analysis();
     assert_eq!(field("CAFÉ café STRAßE forêt"), "cafe strasse foret");
     assert_eq!(field("ΆΛΦΑ ЙЁ"), "αλφα ие");
     let repeated = format!("cjk{:x}x{:x}", '청' as u32, '자' as u32);
@@ -142,4 +223,32 @@ pub(in crate::cognition) fn assert_frozen_analysis() {
     assert!(query("청").contains(&format!("uni{:x}", '청' as u32)));
     assert!(field("ภาษาไทย").contains(&format!("cjk{:x}x{:x}", 'ภ' as u32, 'า' as u32)));
     assert_eq!(query("청자Azure비밀번호"), query("청자 azure 비밀번호"));
+    let car = format!("\"uni{:x}\"", '차' as u32);
+    let weak = recall_query("내 차 번호");
+    assert!(weak.contains(&car) && weak.contains(") AND ("), "{weak}");
+    let mine = format!("(\"uni{:x}\" AND {car})", '내' as u32);
+    assert!(weak.contains(&mine), "weak words together match: {weak}");
+    assert!(!recall_query("그 차 번호").contains(&format!("uni{:x}", '그' as u32)));
+    assert_eq!(recall_query("그 차"), car);
+    assert_eq!(recall_query("청자 azure"), query("청자 azure"));
+}
+
+#[cfg(test)]
+fn assert_ascii_analysis() {
+    // Pin boundaries, folding and duplicate runs to the frozen Unicode path.
+    for left in 0_u8..128 {
+        for right in 0_u8..128 {
+            let text = format!("AA{}9{}Z aa 99", char::from(left), char::from(right));
+            assert_eq!(
+                ascii_tokens(&text),
+                unicode_tokens(&text, false, None),
+                "{text:?}"
+            );
+            assert_eq!(
+                ascii_tokens(&text),
+                unicode_tokens(&text, true, None),
+                "{text:?}"
+            );
+        }
+    }
 }

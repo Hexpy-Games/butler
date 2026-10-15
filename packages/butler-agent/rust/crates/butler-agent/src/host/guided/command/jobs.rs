@@ -49,6 +49,7 @@ impl CommandJobs {
         F: FnOnce() -> T + Send + 'static,
         T: Send + 'static,
     {
+        let timing = super::timing::CommandTiming::new("job");
         let permit = Arc::clone(&self.inner.slots)
             .acquire_owned()
             .await
@@ -63,8 +64,10 @@ impl CommandJobs {
             };
             state.active = active;
         }
+        timing.mark("permit_acquired");
         let active = Active(Arc::clone(&self.inner));
         tokio::task::spawn_blocking(move || {
+            timing.mark("inside_job");
             let _active = active;
             let _permit = permit;
             job()

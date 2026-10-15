@@ -1,5 +1,8 @@
+import { connectToElectronPage, waitForExpression, evaluateBoolean, evaluateString, clickButton, fillInput, waitForHeading, waitForText, type CdpClient } from "../support/first-run-cdp";
+import { spawnElectron, stopElectronChild } from "../support/electron-child";
 import { smokeElectronArgs } from "../support/smoke-browser.ts";
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { freeGatewayPort } from "../support/native-app-server.ts";
+import { spawnSync, type ChildProcess } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import { createServer } from "node:net";
@@ -56,20 +59,6 @@ let appServerPort: number | null = null;
 let cdp: CdpClient | null = null;
 let ownedListenerPids = new Set<number>();
 const output: string[] = [];
-
-interface CdpClient {
-  send<T = Record<string, unknown>>(
-    method: string,
-    params?: Record<string, unknown>,
-  ): Promise<T>;
-  close(): void;
-}
-
-interface CdpTarget {
-  type?: string;
-  url?: string;
-  webSocketDebuggerUrl?: string;
-}
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -141,237 +130,6 @@ async function cleanupOwnedPort(
   await waitForPortClear(port);
 }
 
-function stopElectron(): void {
-  if (!electronProcess || electronProcess.exitCode !== null) return;
-  electronProcess.kill("SIGTERM");
-  const child = electronProcess;
-  setTimeout(() => {
-    if (child.exitCode === null) child.kill("SIGKILL");
-  }, 1500).unref();
-}
-
-async function connectToElectronPage(
-  debugPort: number,
-  appUrl: string,
-): Promise<CdpClient> {
-  const origin = new URL(appUrl).origin;
-  const startedAt = Date.now();
-  let lastTargets: CdpTarget[] = [];
-  while (Date.now() - startedAt < 60_000) {
-    if (electronProcess && electronProcess.exitCode !== null) {
-      throw new Error(
-        `Electron exited before CDP target appeared: ${electronProcess.exitCode}`,
-      );
-    }
-    try {
-      const targets = (await fetch(`http://127.0.0.1:${debugPort}/json/list`)
-        .then((response) => response.json())) as CdpTarget[];
-      lastTargets = targets;
-      const target = targets.find((item) =>
-        item.type === "page" &&
-        (
-          item.url?.startsWith(origin) ||
-          item.url?.startsWith("app://butler/") ||
-          item.url?.endsWith("/app-client/index.html") ||
-          item.url?.endsWith("/dist/index.html")
-        ) &&
-        item.webSocketDebuggerUrl,
-      );
-      if (target?.webSocketDebuggerUrl) {
-        const client = await connectCdp(target.webSocketDebuggerUrl);
-        await client.send("Runtime.enable");
-        await client.send("Page.enable");
-        return client;
-      }
-    } catch {
-      // Retry while Electron starts and exposes the renderer target.
-    }
-    await new Promise((resolveWait) => setTimeout(resolveWait, 150));
-  }
-  const seen = lastTargets.map((item) => `${item.type ?? "?"} ${item.url ?? ""}`);
-  throw new Error(
-    `Timed out waiting for Electron page target at ${origin}. Last targets: ${JSON.stringify(seen)}`,
-  );
-}
-
-async function connectCdp(url: string): Promise<CdpClient> {
-  const socket = new WebSocket(url);
-  const pending = new Map<number, {
-    reject: (error: Error) => void;
-    resolve: (value: unknown) => void;
-  }>();
-  let nextId = 1;
-  await new Promise<void>((resolveOpen, rejectOpen) => {
-    const timeout = setTimeout(
-      () => rejectOpen(new Error(`Timed out opening CDP socket: ${url}`)),
-      10_000,
-    );
-    socket.addEventListener("open", () => {
-      clearTimeout(timeout);
-      resolveOpen();
-    }, { once: true });
-    socket.addEventListener("error", () => {
-      clearTimeout(timeout);
-      rejectOpen(new Error(`Failed to open CDP socket: ${url}`));
-    }, { once: true });
-  });
-  socket.addEventListener("message", (message) => {
-    const payload = JSON.parse(String(message.data)) as {
-      error?: { message?: string };
-      id?: number;
-      result?: unknown;
-    };
-    if (!payload.id) return;
-    const entry = pending.get(payload.id);
-    if (!entry) return;
-    pending.delete(payload.id);
-    if (payload.error) {
-      entry.reject(new Error(payload.error.message ?? "CDP command failed."));
-    } else {
-      entry.resolve(payload.result);
-    }
-  });
-
-  return {
-    send<T = Record<string, unknown>>(
-      method: string,
-      params: Record<string, unknown> = {},
-    ): Promise<T> {
-      const id = nextId;
-      nextId += 1;
-      return new Promise<T>((resolve, reject) => {
-        pending.set(id, {
-          reject,
-          resolve: (value) => resolve(value as T),
-        });
-        socket.send(JSON.stringify({ id, method, params }));
-      });
-    },
-    close() {
-      socket.close();
-      for (const entry of pending.values()) {
-        entry.reject(new Error("CDP socket closed."));
-      }
-      pending.clear();
-    },
-  };
-}
-
-async function waitForExpression(
-  client: CdpClient,
-  expression: string,
-  label: string,
-  timeoutMs = 20_000,
-): Promise<void> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    if (await evaluateBoolean(client, expression)) return;
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 120));
-  }
-  throw new Error(`Timed out waiting for ${label}.`);
-}
-
-async function evaluateBoolean(
-  client: CdpClient,
-  expression: string,
-): Promise<boolean> {
-  const result = await client.send<{
-    exceptionDetails?: unknown;
-    result?: { value?: unknown };
-  }>("Runtime.evaluate", {
-    awaitPromise: true,
-    expression,
-    returnByValue: true,
-  });
-  if (result.exceptionDetails) return false;
-  return result.result?.value === true;
-}
-
-async function evaluateString(
-  client: CdpClient,
-  expression: string,
-): Promise<string> {
-  const result = await client.send<{
-    exceptionDetails?: unknown;
-    result?: { value?: unknown };
-  }>("Runtime.evaluate", {
-    awaitPromise: true,
-    expression,
-    returnByValue: true,
-  });
-  if (result.exceptionDetails) return "";
-  return typeof result.result?.value === "string" ? result.result.value : "";
-}
-
-async function clickButton(client: CdpClient, label: string): Promise<void> {
-  await waitForExpression(
-    client,
-    `Array.from(document.querySelectorAll("button")).some((button) => button.textContent?.trim() === ${JSON.stringify(label)})`,
-    `button ${label}`,
-  );
-  const clicked = await evaluateBoolean(
-    client,
-    `(() => {
-      const button = Array.from(document.querySelectorAll("button")).find((candidate) => candidate.textContent?.trim() === ${JSON.stringify(label)});
-      if (!button) return false;
-      button.click();
-      return true;
-    })()`,
-  );
-  assert(clicked, `button click failed: ${label}`);
-}
-
-async function fillInput(
-  client: CdpClient,
-  selector: string,
-  value: string,
-): Promise<void> {
-  await waitForExpression(
-    client,
-    `document.querySelector(${JSON.stringify(selector)}) !== null`,
-    `input ${selector}`,
-  );
-  const filled = await evaluateBoolean(
-    client,
-    `(() => {
-      const input = document.querySelector(${JSON.stringify(selector)});
-      if (!(input instanceof HTMLInputElement)) return false;
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      setter?.call(input, ${JSON.stringify(value)});
-      input.dispatchEvent(new InputEvent("input", { bubbles: true, data: ${JSON.stringify(value)} }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-      return input.value === ${JSON.stringify(value)};
-    })()`,
-  );
-  assert(filled, `input fill failed: ${selector}`);
-}
-
-async function waitForHeading(
-  client: CdpClient,
-  label: string,
-  timeoutMs = 20_000,
-): Promise<void> {
-  await waitForExpression(
-    client,
-    `Array.from(document.querySelectorAll("h1,h2,h3")).some((heading) => heading.textContent?.trim() === ${JSON.stringify(label)})`,
-    `heading ${label}`,
-    timeoutMs,
-  );
-}
-
-async function waitForText(
-  client: CdpClient,
-  label: string,
-  timeoutMs = 20_000,
-): Promise<void> {
-  await waitForExpression(
-    client,
-    `document.body?.innerText?.includes(${JSON.stringify(label)}) === true`,
-    `text ${label}`,
-    timeoutMs,
-  );
-}
-
 async function expectNoForbiddenCopy(
   client: CdpClient,
   allowed = new Set<string>(),
@@ -437,7 +195,7 @@ async function main(): Promise<void> {
   );
 
   await startStubModelServer();
-  const serverPort = await freePort();
+  const serverPort = await freeGatewayPort();
   appServerPort = serverPort;
   const debugPort = await freePort();
   assertPortAvailable(serverPort);
@@ -479,7 +237,7 @@ async function main(): Promise<void> {
   delete env.BUTLER_APP_BUTLER_HOME;
   delete env.BUTLER_APP_BUNDLED_AGENT_DIR;
 
-  electronProcess = spawn(
+  electronProcess = spawnElectron(
     electronBin,
     [
       `--remote-debugging-port=${debugPort}`, ...smokeElectronArgs(),
@@ -488,15 +246,19 @@ async function main(): Promise<void> {
       electronAppRoot,
     ],
     {
+      cleanupPaths: [electronProfileDir],
       cwd: root,
       env,
-      stdio: ["ignore", "pipe", "pipe"],
+      onOutput: bytes => output.push(String(bytes)),
     },
   );
-  electronProcess.stdout?.on("data", (chunk) => output.push(String(chunk)));
-  electronProcess.stderr?.on("data", (chunk) => output.push(String(chunk)));
 
-  cdp = await connectToElectronPage(debugPort, `http://127.0.0.1:${serverPort}/`);
+  await verifyAppStartup(debugPort, serverPort);
+  reportFirstRun(serverPort);
+}
+
+async function verifyAppStartup(debugPort: number, serverPort: number): Promise<void> {
+  cdp = await connectToElectronPage(debugPort, `http://127.0.0.1:${serverPort}/`, electronProcess);
   ownedListenerPids = new Set(listenerPids(serverPort));
   await waitForExpression(
     cdp,
@@ -517,16 +279,44 @@ async function main(): Promise<void> {
     `first-run drag lane should be draggable, got ${setupDragRegion}`,
   );
 
+  await verifyFirstRun(cdp);
+}
+
+function reportFirstRun(serverPort: number): void {
+  console.log(JSON.stringify({
+    ok: true,
+    service: "butler-app-first-run-setup-smoke",
+    checks: [
+      "sandbox-preload-app-bridge",
+      "electron-first-run-visible",
+      "first-run-drag-lane",
+      "system-language-ko-preselected",
+      "first-run-honors-dark-theme",
+      "welcome-then-pick-an-ai",
+      "no-language-safety-install-screens",
+      "no-normal-gateway-selector",
+      "no-personal-onboarding-copy",
+      "top-provider-cards",
+      "no-jargon-in-ai-list",
+      "openai-compatible-server-models",
+      "workspace-gate-opens-after-connection",
+    ],
+    appServerUrl: `http://127.0.0.1:${serverPort}/`,
+  }));
+}
+
+async function verifyFirstRun(cdp: CdpClient): Promise<void> {
   // Welcome: language comes from the system, consent is one screen, and the
   // agent prepares in the background (no language, safety or install screen).
   await waitForHeading(cdp, "반갑습니다");
   await expectNoForbiddenCopy(cdp);
+  assert(await evaluateBoolean(cdp, "Boolean(document.querySelector('[data-setup-mark]')) && !document.querySelector('[data-first-run-screen] [data-test-class=\"butler-thinking-mark\"]')"), "intro uses the plain still mark");
   const selectedLanguage = await evaluateString(
     cdp,
     "document.querySelector('#first-run-language')?.value ?? ''",
   );
   assert(selectedLanguage === "ko", "system language did not preselect Korean");
-  for (const retired of ["언어 선택", "안전고지", "Butler Agent를 준비합니다", "모델 설정"]) {
+  for (const retired of ["언어 선택", "안전고지", "버틀러 Agent를 준비합니다", "모델 설정"]) {
     assert(!(await evaluateBoolean(cdp, `document.body.innerText.includes(${JSON.stringify(retired)})`)), `retired first-run screen visible: ${retired}`);
   }
 
@@ -555,7 +345,8 @@ async function main(): Promise<void> {
   await waitForHeading(cdp, "반갑습니다");
   assert(await evaluateBoolean(cdp, "document.activeElement?.id === 'first-run-start'"), "Decline focuses Start");
   await clickButton(cdp, "시작하기");
-  await clickButton(cdp, "동의하고 시작");
+  await clickButton(cdp, "동의하고 계속");
+  await verifyMemoryStep(cdp);
   await waitForHeading(cdp, "어떤 AI와 일할까요?");
   await expectNoForbiddenCopy(cdp);
   const topCards = await evaluateString(
@@ -567,6 +358,50 @@ async function main(): Promise<void> {
     assert(!(await evaluateBoolean(cdp, `document.body.innerText.includes(${JSON.stringify(jargon)})`)), `jargon in the AI list: ${jargon}`);
   }
 
+  await verifyConnection(cdp);
+}
+
+const captureDir = resolve(root, ".tmp", "memory-model-opt-in");
+
+/** One capture per theme; the first run and the workspace follow the system theme. */
+async function captureThemes(client: CdpClient, name: string): Promise<void> {
+  mkdirSync(captureDir, { recursive: true });
+  for (const theme of ["light", "dark"] as const) {
+    await client.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: theme }] });
+    await waitForExpression(client, `document.body.classList.contains('theme-dark') === ${theme === "dark"}`, `${name} ${theme} theme`);
+    await new Promise((done) => setTimeout(done, 900));
+    const shot = await client.send<{ data: string }>("Page.captureScreenshot", { format: "png" });
+    writeFileSync(join(captureDir, `${name}-ko-${theme}.png`), Buffer.from(shot.data, "base64"));
+  }
+  await client.send("Emulation.setEmulatedMedia", { features: [] });
+}
+
+/** The memory step needs a choice; off never downloads and is saved for Settings → Memory. */
+async function verifyMemoryStep(client: CdpClient): Promise<void> {
+  await waitForHeading(client, "대화를 어떻게 기억할까요?");
+  const continueDisabled = `Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.trim() === '계속')?.disabled === true`;
+  assert(await evaluateBoolean(client, continueDisabled), "Continue waits for a memory choice");
+  await waitForExpression(client, "Boolean(document.querySelector('[data-memory-choice=on]')?.textContent?.includes('MB'))", "download size on the choice");
+  await captureThemes(client, "first-run-memory-step");
+  await evaluateBoolean(client, "(() => { document.querySelector('[data-memory-choice=off]')?.click(); return true; })()");
+  await waitForExpression(client, continueDisabled.replace("=== true", "=== false"), "Continue after a choice");
+  await clickButton(client, "계속");
+  await waitForHeading(client, "어떤 AI와 일할까요?");
+  const config = JSON.parse(readFileSync(join(dataDir, "butler.config.json"), "utf8")) as { memory?: { embeddings?: string } };
+  assert(config.memory?.embeddings === "off", "memory choice saved as off");
+  assert(!existsSync(join(dataDir, "cache", "models")), "no memory model download without the choice");
+}
+
+/** Settings → Memory carries the same switch, off after the first-run choice. */
+async function verifyMemorySettings(client: CdpClient): Promise<void> {
+  await clickButton(client, "설정");
+  await clickButton(client, "기억");
+  await waitForExpression(client, "document.querySelector('[data-settings-section-id=memory-model] [role=switch]')?.getAttribute('aria-checked') === 'false'", "memory model switch off");
+  await evaluateBoolean(client, "(() => { document.querySelector('[data-settings-section-id=memory-model]')?.scrollIntoView({ block: 'center' }); return true; })()");
+  await captureThemes(client, "settings-memory-model-switch");
+}
+
+async function verifyConnection(cdp: CdpClient): Promise<void> {
   // Other (OpenAI-compatible) against a stub server: the one path that needs
   // no network account, so the smoke stays offline.
   await clickButton(cdp, "다른 서비스 8개");
@@ -579,35 +414,27 @@ async function main(): Promise<void> {
   await fillInput(cdp, "#first-run-server-url", `http://127.0.0.1:${stubModelPort}/v1`);
   await clickButton(cdp, "연결");
   await waitForText(cdp, stubModelId);
-  await clickButton(cdp, "이 모델로 시작");
+  await clickButton(cdp, "다음");
   await waitForExpression(cdp, "document.querySelector('#first-run-reply-language')?.disabled === false", "reply language choice");
-  await clickButton(cdp, "시작");
+  await clickButton(cdp, "다음");
+  await waitForHeading(cdp, "다른 AI에서 가져오기");
+  await clickButton(cdp, "건너뛰기");
+  await waitForHeading(cdp, "다른 브라우저에서 가져오기");
+  await clickButton(cdp, "건너뛰기");
+  await waitForHeading(cdp, "준비를 마쳤습니다");
+  await clickButton(cdp, "대화 시작");
   await waitForExpression(
     cdp,
     `document.querySelector(${JSON.stringify(firstRunSelector)}) === null && document.querySelector('[data-test-class="workspace"]') !== null`,
     "workspace after first-run completion",
   );
+  // The connect step already showed the connection: no late toast greets the workspace.
+  await new Promise((done) => setTimeout(done, 1500));
+  await captureThemes(cdp, "first-run-landing");
+  assert(!(await evaluateBoolean(cdp, "[...document.querySelectorAll('[data-sonner-toast]')].some((toast) => toast.textContent?.includes('연결했습니다'))")),
+    "no connected toast after first-run");
+  await verifyMemorySettings(cdp);
 
-  console.log(JSON.stringify({
-    ok: true,
-    service: "butler-app-first-run-setup-smoke",
-    checks: [
-      "sandbox-preload-app-bridge",
-      "electron-first-run-visible",
-      "first-run-drag-lane",
-      "system-language-ko-preselected",
-      "first-run-honors-dark-theme",
-      "welcome-then-pick-an-ai",
-      "no-language-safety-install-screens",
-      "no-normal-gateway-selector",
-      "no-personal-onboarding-copy",
-      "top-provider-cards",
-      "no-jargon-in-ai-list",
-      "openai-compatible-server-models",
-      "workspace-gate-opens-after-connection",
-    ],
-    appServerUrl: `http://127.0.0.1:${serverPort}/`,
-  }));
 }
 
 try {
@@ -618,11 +445,8 @@ try {
   throw new Error(details ? `${message}\n${details}` : message, { cause: error });
 } finally {
   (cdp as CdpClient | null)?.close();
-  stopElectron();
+  if (electronProcess) await stopElectronChild(electronProcess);
   (stubModelServer as HttpServer | null)?.close();
-  if (electronProcess) {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-  }
   if (appServerPort !== null) await cleanupOwnedPort(appServerPort, ownedListenerPids);
   rmSync(tempDir, { recursive: true, force: true });
 }

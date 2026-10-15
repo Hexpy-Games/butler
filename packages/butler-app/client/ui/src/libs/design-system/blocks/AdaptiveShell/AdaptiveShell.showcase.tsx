@@ -7,6 +7,8 @@ import { PanelLeft, PanelRightClose } from "../../components/Icons";
 import { ChromeFloatingToggleLayer } from "../ChromeFrame";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
+import { ConversationFrameDemo } from "../BrowserPane/fixtures/ConversationFrame";
+import { cardsStories } from "./fixtures/cardsStories";
 import {
   AdaptivePanelResizeHandle,
   AdaptivePanelTitlebar,
@@ -29,12 +31,12 @@ export const meta: ShowcaseMeta = {
 const labels = {
   "en-US": {
     navigation: "Navigation", workspace: "Conversation", inspector: "Inspector", close: "Close",
-    openNav: "Open navigation", openInspector: "Open inspector", scrim: "Close panel", resize: "Resize left sidebar",
+    openNav: "Open navigation", openInspector: "Open inspector", scrim: "Close panel", resize: "Resize left sidebar", drag: "Drag to resize",
     hint: "Below 768px the side panels become drawers over a scrim; at app width they sit beside the workspace.",
   },
   "ko-KR": {
     navigation: "내비게이션", workspace: "대화", inspector: "인스펙터", close: "닫기",
-    openNav: "내비게이션 열기", openInspector: "인스펙터 열기", scrim: "패널 닫기", resize: "왼쪽 사이드바 크기 조절",
+    openNav: "내비게이션 열기", openInspector: "인스펙터 열기", scrim: "패널 닫기", resize: "왼쪽 사이드바 크기 조절", drag: "드래그하여 크기 조절",
     hint: "768px 미만에서는 양쪽 패널이 스크림 위 드로어가 되고, 앱 너비에서는 작업 영역 옆에 놓입니다.",
   },
 } as const;
@@ -78,7 +80,7 @@ function ShellDemo({ context }: { context: ShowcaseRenderContext }) {
           </Box>
         </AdaptiveShellWorkspace>
         {panel === "left" ? (
-          <AdaptivePanelResizeHandle aria-label={copy.resize} aria-orientation="vertical" side="left"
+          <AdaptivePanelResizeHandle aria-label={copy.resize} hint={copy.drag} aria-orientation="vertical" side="left"
             onKeyDown={() => undefined} onPointerDown={() => undefined} />
         ) : null}
         <AdaptiveShellInspector open={panel === "right"}>
@@ -95,4 +97,43 @@ function ShellDemo({ context }: { context: ShowcaseRenderContext }) {
 
 export const stories: ShowcaseStory[] = [
   { name: "Sidebar, workspace and inspector", states: ["open", "collapsed"], widths: ["375", "app", "wide"], render: (context) => <ShellDemo context={context} /> },
+  {
+    // AdaptiveShellSplit: chat | browser pane in the workspace's second row; drag or arrow-key the boundary (340–560px).
+    name: "Conversation frame: chat | browser pane (resizable)",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ConversationFrameDemo locale={locale} width={1440} height={900} />,
+  },
+  {
+    // AdaptiveShellPeekEdge: the collapsed sidebar floats over the workspace while the pointer is on it.
+    name: "Sidebar peek",
+    states: ["open"],
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ConversationFrameDemo locale={locale} width={1100} height={800} sidebar="peek" />,
+  },
+  {
+    // useSidebarPeek: hover the left edge to peek; leaving the sidebar, Escape, a press outside or window blur
+    // closes it, and the button sends the host signal a native page view needs (pointerOutside).
+    name: "Sidebar peek (live): edge hover, dismiss, host signal",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ConversationFrameDemo locale={locale} width={1100} height={700} sidebar="live-peek" />,
+  },
+  {
+    // Beside the pane the chat column contains the conversation's wallpaper: it never paints over the pane.
+    name: "Conversation frame with a wallpaper (contained to the chat)",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ConversationFrameDemo locale={locale} width={1440} height={760} wallpaper holder="none" band={null} pointer={false} />,
+  },
+  {
+    // useSidebarAutoCollapse: 1100 − 304 − 400 leaves a 396px page, so the sidebar steps aside; at 1440 it stays.
+    name: "Auto-collapse below a 720px page",
+    states: ["collapsed"],
+    widths: ["app", "wide"],
+    render: ({ locale }) => (
+      <Stack gap="md">
+        <ConversationFrameDemo locale={locale} width={1440} height={700} autoCollapse />
+        <ConversationFrameDemo locale={locale} width={1100} height={700} autoCollapse />
+      </Stack>
+    ),
+  },
+  ...cardsStories,
 ];

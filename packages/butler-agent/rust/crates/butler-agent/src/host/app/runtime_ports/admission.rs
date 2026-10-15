@@ -112,11 +112,11 @@ fn ledger_error(error: ProjectLedgerReadError) -> GatewayApplicationError {
             message: "Source changed. Reload it.".into(),
             source: None,
         },
-        ProjectLedgerReadError::DashboardUnavailable { code: _, .. } => unavailable(),
-        ProjectLedgerReadError::DashboardInternal { code: _, .. }
-        | ProjectLedgerReadError::Resolution { code: _, .. }
-        | ProjectLedgerReadError::RecordShow { code: _, .. }
-        | ProjectLedgerReadError::Owner { code: _, .. } => GatewayApplicationError::internal(),
+        ProjectLedgerReadError::DashboardUnavailable { .. } => unavailable(),
+        ProjectLedgerReadError::DashboardInternal { .. }
+        | ProjectLedgerReadError::Resolution { .. }
+        | ProjectLedgerReadError::RecordShow { .. }
+        | ProjectLedgerReadError::Owner { .. } => GatewayApplicationError::internal(),
     }
 }
 

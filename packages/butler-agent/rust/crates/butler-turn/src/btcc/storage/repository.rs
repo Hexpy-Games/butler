@@ -19,6 +19,8 @@ use crate::btcc::StorageCode;
 #[derive(Clone)]
 pub struct BtccRepositories {
     pub(super) storage: BtccStorage,
+    /// Ephemeral draft delivery shared by repository clones.
+    pub answer_drafts: crate::btcc::AnswerDraftPublisher,
     pub(super) continuation_limits: Option<TurnContinuationBudgetLimits>,
 }
 
@@ -50,8 +52,14 @@ impl TurnStore for BtccRepositories {
         Box::pin(async move {
             storage
                 .execute(move |db| {
+                    let timing = crate::btcc::agent_loop::command_timing::CommandTiming::new(
+                        "authority_storage",
+                    );
                     transitions::resume_authority(db, &id)?;
-                    hydration::find_turn(db, &id)
+                    timing.mark("transition_done");
+                    let turn = hydration::find_turn(db, &id);
+                    timing.mark("hydrated");
+                    turn
                 })
                 .await
                 .map_err(BtccError::from)
@@ -145,9 +153,12 @@ impl TurnStore for BtccRepositories {
         key: ModelRoundKey,
     ) -> PortFuture<'_, Option<crate::btcc::ModelRoundResult>> {
         let storage = self.storage.clone();
+        let memo = storage.payload_memo();
         Box::pin(async move {
             storage
-                .execute(move |db| model::load_acceptance(db, &key))
+                .execute(move |db| {
+                    model::load_acceptance(db, &key, &mut *super::payload::lock(&memo)?)
+                })
                 .await
                 .map_err(BtccError::from)
         })
@@ -157,9 +168,12 @@ impl TurnStore for BtccRepositories {
         write: ModelRoundAcceptanceWrite,
     ) -> PortFuture<'_, ()> {
         let storage = self.storage.clone();
+        let memo = storage.payload_memo();
         Box::pin(async move {
             storage
-                .execute(move |db| model::record_acceptance(db, &write))
+                .execute(move |db| {
+                    model::record_acceptance(db, &write, &mut *super::payload::lock(&memo)?)
+                })
                 .await
                 .map_err(BtccError::from)
         })
@@ -195,6 +209,9 @@ impl CanonicalMessageStore for BtccRepositories {
     }
 }
 impl ProgressEventRepository for BtccRepositories {
+    fn answer_blocks_draft(&self, payload: serde_json::Value) {
+        self.answer_drafts.publish(payload);
+    }
     fn append(&self, write: ProgressWrite) -> PortFuture<'_, ()> {
         let storage = self.storage.clone();
         Box::pin(async move {
@@ -236,6 +253,7 @@ impl BtccRepositories {
         Self {
             storage,
             continuation_limits,
+            answer_drafts: Default::default(),
         }
     }
 

@@ -36,7 +36,7 @@ const labels = {
     counts: ["1", "12", "128", "1,024"],
   },
   "ko-KR": {
-    body: "본문은 Butler 타입 스케일을 사용합니다.",
+    body: "본문은 버틀러 타입 스케일을 사용합니다.",
     caption: "메타데이터 캡션",
     label: "필드 레이블",
     code: "bun run lint:ds",

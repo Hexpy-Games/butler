@@ -16,7 +16,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - uses: ./.github/actions/product-features
 
       # The runner context is not available in job-level env.
       - name: Select the native Agent payload directory
@@ -63,7 +62,7 @@ jobs:
         if: steps.reuse.outputs.reused == 'true'
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.91.0
+          toolchain: 1.99.0
       - name: Verify pinned native Rust toolchain
         # The toolchain check remains required even when a payload is reused.
         run: |

@@ -96,13 +96,16 @@ impl GenerationVectorStore {
         Self { data_root, paths }
     }
 
-    /// Caller retains the write lease until the SDK mutation and receipt query finish.
+    /// Caller retains the write lease until the SDK mutation and receipt query
+    /// finish. `compact` merges fragments past the limit after the write; a
+    /// batch passes false and compacts once at its end ([`Self::maintain`]).
     pub(crate) fn upsert<'a>(
         &'a self,
         lease: &CognitionWriteLease,
         target: &'a MemoryGenerationTarget,
         generation: &'a MemoryGenerationHandle,
         rows: &'a [GenerationVectorRow],
+        compact: bool,
     ) -> impl Future<Output = CognitionResult<String>> + Send + 'a {
         let lock = self.paths.consolidation_lock(&self.data_root);
         let lease_check = lease
@@ -149,10 +152,53 @@ impl GenerationVectorStore {
                 .await?
                 .ok_or_else(|| error(CognitionCode::MemoryVectorReceiptMismatch))?;
             // A maintenance failure never fails a write that already landed.
-            let _ = lance_maintenance::compact_if_fragmented(&table).await;
+            if compact {
+                let _ = lance_maintenance::compact_if_fragmented(&table).await;
+            }
             Ok(receipt)
         }
     }
+
+    /// Compacts a fragmented table and prunes old versions, under the lease.
+    /// Nothing is written when the table is within both limits.
+    pub(crate) fn maintain<'a>(
+        &'a self,
+        lease: &CognitionWriteLease,
+        target: &'a MemoryGenerationTarget,
+        generation: &'a MemoryGenerationHandle,
+    ) -> impl Future<Output = CognitionResult<()>> + Send + 'a {
+        let lease_check = lease
+            .assert_for_path(&self.paths.consolidation_lock(&self.data_root))
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
+        async move {
+            lease_check?;
+            assert_mutation_authority(&self.data_root, &self.paths, target, generation)?;
+            let root = generation.root.join("butler.lance");
+            ensure_data_authority(&self.data_root, &[&generation.root, &root])?;
+            if !root.exists() {
+                return Ok(());
+            }
+            let table = match lance_store::shared(&root, TABLE).await {
+                Ok(table) => table,
+                Err(lancedb::Error::TableNotFound { .. }) => return Ok(()),
+                Err(source) => return Err(unavailable(source)),
+            };
+            lance_maintenance::compact_if_fragmented(&table)
+                .await
+                .map_err(unavailable)?;
+            lance_maintenance::prune_old_versions(&table)
+                .await
+                .map_err(unavailable)?;
+            Ok(())
+        }
+    }
+}
+
+/// The completion receipt of one unit: its own stored vector key.
+pub(crate) fn unit_receipt(row: &GenerationVectorRow) -> String {
+    json!({"generation":row.generation,"embedding_version":row.embedding_version,
+    "vector_keys":[row.vector_key],"row_count":1})
+    .to_string()
 }
 
 /// One to [`MAX_ROWS`] rows of this generation, each with a finite vector of

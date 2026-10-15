@@ -35,11 +35,16 @@
   --menu-group-label-size: var(--typo-section-title-size);
   --menu-group-label-weight: var(--font-weight-medium);
   --menu-group-label-color: var(--text-tertiary);
-  --menu-group-label-line-height: var(--line-height-compact);
+  --menu-group-label-line-height: var(--typo-section-title-line-height);
   --menu-group-label-padding: var(--space-sm) var(--space-2) var(--space-xs);
   --scroll-fade-size: 14px;
   --textarea-max-lines: 6;
   --focus-ring-width: 2px;
+  /* Room a focus ring needs outside its control: the 2px ring plus the 1px
+     outline offset. Clipping containers (scrollers, folds, clip-paths) keep
+     this much paint room around their content. A plain length: Chromium
+     ignores calc() in overflow-clip-margin. */
+  --focus-ring-room: 3px;
   /* Layering scale: tooltips and popovers opened inside dialogs stay above them. */
   --z-sticky: 50;
   --z-drawer: 60;
@@ -111,6 +116,35 @@
   --motion-ease-linear: linear;
   --motion-ease-enter: var(--motion-ease-standard);
   --motion-ease-exit: var(--motion-ease-accelerate);
+  /* First-run intro. Draw: a pen stroke that starts and lands softly (the
+     mark's ring). Settle: a critically damped spring (omega*T 8.6, no
+     overshoot) for plates sliding into register; the emphasized curve is its
+     fallback. Out-cubic: the ink bloom and flow clock (GL timelines only). */
+  --motion-ease-draw: cubic-bezier(0.65, 0, 0.35, 1);
+  --motion-ease-settle: linear(
+    0,
+    0.0698,
+    0.2129,
+    0.3696,
+    0.5129,
+    0.6331,
+    0.7287,
+    0.8023,
+    0.8576,
+    0.8984,
+    0.9281,
+    0.9494,
+    0.9646,
+    0.9754,
+    0.9829,
+    0.9882,
+    0.9919,
+    0.9944,
+    0.9962,
+    0.9974,
+    1
+  );
+  --motion-ease-out-cubic: cubic-bezier(0.33, 1, 0.68, 1);
   /* Travel and scale are tokens so reduced motion can zero them globally and
      every token-driven animation becomes a pure opacity fade. */
   --motion-distance-xs: 2px;
@@ -135,11 +169,38 @@
   --spinner-duration: 1320ms;
   --spinner-rotate-duration: 2000ms;
   --pulse-duration: 1250ms;
+  /* One slow breath of a live timeline dot (the newest activity of running
+     work). Runs on --motion-loop-count, so reduced motion shows it static. */
+  --motion-live-pulse: 1600ms;
   --shimmer-duration: 1400ms;
+  /* ActivityGlow (the titlebar browser toggle while Butler browses): one turn
+     of the busy ink ring, one breath of its opacity, one entry pulse of the
+     needs-you halo. The loops stop under reduced motion (loop count 0). */
+  --activity-glow-spin-duration: 3200ms;
+  --activity-glow-breathe-duration: 2400ms;
+  --activity-glow-nudge-duration: 1200ms;
   /* Iterations of a decorative status loop (activity pulse). Reduced motion
      (OS or data-motion scope) sets 0, so the loop never runs and the element
      shows its static resting state. */
   --motion-loop-count: infinite;
+  /* Agent control: one turn of the riso edge around a page Butler holds,
+     and the glide of Butler's pointer between targets. Reduced motion sets
+     both to 0 (a static edge, a pointer that jumps). */
+  --motion-agent-edge: 14s;
+  --motion-pointer-glide: 400ms;
+  /* Sequences. Rows of a setup card arrive 30ms apart once the morphing card
+     is 94% there (150ms on the emphasized curve); intro text lines 70ms
+     apart. The intro segments are the first-run ink scene's timeline: the
+     drop, the pen drawing the ring, the bow tie printing (also the no-WebGL
+     reveal), the ink bloom, and the whole reveal until the GL loop stops. */
+  --motion-stagger-row: 30ms;
+  --motion-stagger-intro: 70ms;
+  --motion-morph-rows: 150ms;
+  --motion-intro-drop: 350ms;
+  --motion-intro-draw: 850ms;
+  --motion-intro-print: 400ms;
+  --motion-intro-bloom: 1450ms;
+  --motion-intro-total: 2900ms;
   /* Skeleton heights for a text line and a heading line. */
   --skeleton-height-line: 0.75rem;
   --skeleton-height-title: 1.125rem;
@@ -160,6 +221,36 @@
   /* Minimum lane width of a sideways-scrolling board (KanbanBoard scroll). */
   --kanban-lane-min-width: 15rem;
   --split-browser-height: 14.5rem;
+  /* Browser (BrowserPane, PageCard): the pane is a sheet whose top corners
+     match the page card; the card stands --browser-card-inset off the pane
+     edges; the chat column beside the pane resizes between min and max. */
+  --browser-pane-radius: var(--radius-popover);
+  --browser-card-inset: var(--space-sm);
+  --browser-band-height: 40px;
+  --browser-chat-width: 400px;
+  --browser-chat-width-min: 340px;
+  --browser-chat-width-max: 560px;
+  /* TabRail beside the conversation: full cards (208, 16:10 frame) from a
+     960px conversation, compact thumbnails (128) from 720px, a shelf strip
+     below. The column keeps --tab-rail-clearance from the rail. */
+  --tab-rail-width: 208px;
+  --tab-rail-compact-width: 128px;
+  --tab-rail-shelf-height: 46px;
+  --tab-rail-inset: var(--space-lg);
+  --tab-rail-clearance: var(--space-2xl);
+  /* ComposerDecisionPanel media in a composer under 420px: the page
+     thumbnail spans the text column, cropped from the page's top to this
+     height. */
+  --decision-media-narrow-height: 140px;
+  /* Marks Butler draws over web pages (pointer, pick badges): one shadow
+     that separates them from any page, light or dark. */
+  --browser-overlay-shadow: 0 1px 4px rgba(0, 0, 0, 0.32);
+  /* The user's pick marks over web pages (PickOutline): the ink stroke and
+     index badge, a white keyline around the stroke (it carries the outline
+     on black and photo pages) and a faint tint over picked elements. */
+  --browser-pick-ink: var(--blue-07);
+  --browser-pick-keyline: var(--neutral-white);
+  --browser-pick-tint: color-mix(in srgb, var(--blue-06) 12%, transparent);
   /* StatusCapsule part caps (composer work capsules). */
   --status-capsule-title-max: min(34vw, 240px);
   --status-capsule-detail-max: min(30vw, 220px);
@@ -220,6 +311,13 @@
       var(--space-md)
   );
   --sidebar-width: 304px;
+  /* App shell, AdaptiveShell frame="cards": the sidebar, window chrome and title
+     row are one shell surface; content sits in rounded cards inset from the
+     window edges and from each other (the gap is the resize handle's lane). */
+  --shell-card-inset: var(--space-sm);
+  --shell-card-gap: var(--space-sm);
+  --shell-card-radius: var(--radius-popover);
+  --shell-card-shadow: none;
   --right-panel-width: 376px;
   --composer-reserve: 260px;
   /* Semantic spacing tokens */
@@ -406,54 +504,64 @@
   --color-focus-ring: var(--focus-ring-color);
 
   /* Typography Role Tokens */
+  /* Every role has an integer px line-height (even, close to the old ratio's
+     rendered height), so even icon sizes centre on whole pixels in every
+     renderer. Text never takes a unitless ratio; --line-height-* below are
+     for display art and measured samples only. */
   --typo-h1-size: 32px;
   --typo-h1-weight: 620;
-  --typo-h1-line-height: 1.25;
+  --typo-h1-line-height: 40px;
   --typo-h1-letter-spacing: 0;
 
   --typo-h2-size: 24px;
   --typo-h2-weight: 620;
-  --typo-h2-line-height: 1.3;
+  --typo-h2-line-height: 32px;
   --typo-h2-letter-spacing: 0;
 
   --typo-h3-size: 20px;
   --typo-h3-weight: 560;
-  --typo-h3-line-height: 1.35;
+  --typo-h3-line-height: 28px;
   --typo-h3-letter-spacing: 0;
 
   --typo-h4-size: 18px;
   --typo-h4-weight: 560;
-  --typo-h4-line-height: 1.4;
+  --typo-h4-line-height: 26px;
   --typo-h4-letter-spacing: 0;
 
   --typo-h5-size: 16px;
   --typo-h5-weight: 560;
-  --typo-h5-line-height: 1.45;
+  --typo-h5-line-height: 24px;
   --typo-h5-letter-spacing: 0;
 
   --typo-h6-size: 14px;
   --typo-h6-weight: 560;
-  --typo-h6-line-height: 1.45;
+  --typo-h6-line-height: 20px;
   --typo-h6-letter-spacing: 0;
 
   --typo-body-size: 14px;
   --typo-body-weight: 400;
-  --typo-body-line-height: 1.45;
+  --typo-body-line-height: 20px;
+  /* Reading prose (messages, Markdown). */
+  --typo-body-line-height-document: 22px;
   --typo-body-letter-spacing: 0;
 
   --typo-caption-size: 12px;
   --typo-caption-weight: 400;
-  --typo-caption-line-height: 1.45;
+  --typo-caption-line-height: 16px;
+  /* Single-line chips and tags (padding sets the height). */
+  --typo-caption-line-height-tight: 14px;
   --typo-caption-letter-spacing: 0;
 
   --typo-label-size: 13px;
   --typo-label-weight: 500;
-  --typo-label-line-height: 1.45;
+  --typo-label-line-height: 18px;
+  /* Single-line tabs, chips and fields (padding sets the height). */
+  --typo-label-line-height-tight: 16px;
   --typo-label-letter-spacing: 0;
 
   --typo-code-size: 13px;
   --typo-code-weight: 400;
-  --typo-code-line-height: 1.45;
+  --typo-code-line-height: 20px;
   --typo-code-letter-spacing: 0;
   --typo-code-font: var(--typo-code-weight) var(--typo-code-size) /
     var(--typo-code-line-height) var(--font-family-code);
@@ -461,39 +569,41 @@
   /* App UI Typography Tokens - Compact variants for app chrome */
   --typo-app-title-size: 15px;
   --typo-app-title-weight: 620;
-  --typo-app-title-line-height: 1.4;
+  --typo-app-title-line-height: 20px;
   --typo-app-title-letter-spacing: 0;
 
   --typo-panel-title-size: 15px;
   --typo-panel-title-weight: 620;
-  --typo-panel-title-line-height: 1.3;
+  --typo-panel-title-line-height: 20px;
   --typo-panel-title-letter-spacing: 0;
 
   --typo-dashboard-title-size: 24px;
   --typo-dashboard-title-weight: 620;
-  --typo-dashboard-title-line-height: 1.3;
+  --typo-dashboard-title-line-height: 32px;
   --typo-dashboard-title-letter-spacing: 0;
 
   --typo-new-chat-title-size: 48px;
   --typo-new-chat-title-size-md: 40px;
   --typo-new-chat-title-size-sm: 34px;
   --typo-new-chat-title-weight: 620;
-  --typo-new-chat-title-line-height: 1.06;
+  --typo-new-chat-title-line-height: 52px;
+  --typo-new-chat-title-line-height-md: 42px;
+  --typo-new-chat-title-line-height-sm: 36px;
   --typo-new-chat-title-letter-spacing: 0;
 
   --typo-section-title-size: 13px;
   --typo-section-title-weight: 500;
-  --typo-section-title-line-height: 1.45;
+  --typo-section-title-line-height: 18px;
   --typo-section-title-letter-spacing: 0;
 
   --typo-panel-section-title-size: 15px;
   --typo-panel-section-title-weight: 500;
-  --typo-panel-section-title-line-height: 1.45;
+  --typo-panel-section-title-line-height: 22px;
   --typo-panel-section-title-letter-spacing: 0;
 
   --typo-metric-value-size: 18px;
   --typo-metric-value-weight: 560;
-  --typo-metric-value-line-height: 1.4;
+  --typo-metric-value-line-height: 26px;
   --typo-metric-value-letter-spacing: 0;
 
   /* Pretendard Variable is bundled (fonts/fonts.css); the platform Hangul
@@ -507,7 +617,7 @@
   --font-family-code:
     "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas,
     "Pretendard Variable", monospace;
-  --font-code: var(--font-size-2)/var(--line-height-body)
+  --font-code: var(--typo-code-size)/var(--typo-code-line-height)
     var(--font-family-code);
   /* Deprecated numeric scale: aliases of the canonical --typo-* role scale.
      Prefer the --typo-* role token in new code. */
@@ -521,14 +631,17 @@
   --font-weight-medium: 500;
   --font-weight-semibold: 560;
   --font-weight-strong: 620;
+  /* Unitless ratios: display art, hero numerals and measured samples only.
+     UI text uses the --typo-*-line-height role tokens (integer px). */
   --line-height-none: 1;
   --line-height-tight: 1.2;
   --line-height-snug: 1.35;
   --line-height-body: 1.45;
   --line-height-document: 1.58;
   /* Role alias: compact single-line UI labels (menu and filtered-select
-     section titles, attachment chips, composer decision rows). */
-  --line-height-compact: var(--line-height-snug);
+     section titles, attachment chips, composer decision rows): the label
+     line-height (integer px). */
+  --line-height-compact: var(--typo-label-line-height);
   --icon-size-xs: 12px;
   --icon-size-sm: 14px;
   --icon-size-md: 16px;
@@ -584,10 +697,25 @@
   --danger-bg: rgba(255, 245, 244, 0.86);
   --danger-banner-bg: rgba(255, 239, 238, 0.96);
   --worker-panel-bg: rgba(241, 242, 244, 0.96);
-  /* Tuned for macOS light-mode translucency over Electron under-window material. */
+  /* Shell material for browsers and Linux (no native blur under the window). */
   --sidebar-bg: rgba(255, 255, 255, 0.52);
+  /* macOS Electron: thinner over the native "sidebar" vibrancy (AdaptiveShell, darwin). */
+  --mac-sidebar-bg: rgba(255, 255, 255, 0.3);
   --windows-sidebar-bg: rgba(255, 255, 255, 0.36);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
+  /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
+     the workspace surface with one quiet edge. */
+  --shell-bg: var(--sidebar-bg);
+  --shell-card-bg: var(--workspace-bg);
+  --shell-card-edge: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  /* The browser sheet in frame="cards": its ink tint over the card surface and
+     the page card's shadow on it. Light keeps both faint, so the sheet's strip
+     beside the 8px gap stays as light as the chat card and the gap reads as
+     8px, not 8px plus a shadowed strip; the page card keeps its edge. Dark
+     keeps both: there the shell is the lighter surface. */
+  --shell-sheet-tint: 1%;
+  --shell-page-shadow:
+    0 1px 2px rgba(15, 18, 22, 0.05), 0 2px 6px rgba(15, 18, 22, 0.04);
   --text-primary: var(--color-text-primary);
   --text-secondary: var(--color-text-secondary);
   --text-tertiary: var(--color-text-tertiary);
@@ -619,6 +747,7 @@
   --switch-inline-track-bg: rgba(0, 0, 0, 0.14);
   --dialog-overlay-bg: rgba(0, 0, 0, 0.12);
   --command-overlay-bg: rgba(0, 0, 0, 0.06);
+  --image-viewer-overlay-bg: rgba(0, 0, 0, 0.78);
   --chrome-button-bg: rgba(0, 0, 0, 0.18);
   --chrome-divider-bg: rgba(0, 0, 0, 0.12);
   --danger-line: rgba(190, 56, 54, 0.24);
@@ -638,6 +767,21 @@
   --shadow-window: 0 18px 48px rgba(0, 0, 0, 0.14);
   --shadow-control: 0 1px 3px rgba(0, 0, 0, 0.22);
   --shadow-switch: 0 1px 3px rgba(0, 0, 0, 0.18);
+  /* Butler inks: the thinking mark's riso set (ButlerThinkingMark reads them);
+     lines and fills that mean "Butler is acting". */
+  --butler-ink-blue: rgb(0, 120, 191);
+  --butler-ink-purple: rgb(96, 56, 156);
+  --butler-ink-pink: rgb(255, 72, 176);
+  /* Riso print paper (the default wallpaper, its paper overlay and the intro):
+     day = the lower stop of the light --conversation-bg, night = the night
+     stock; --riso-paper follows the theme. The print's inks are the Butler inks. */
+  --riso-paper-day: rgb(250, 250, 248);
+  --riso-paper-night: rgb(25, 28, 36);
+  --riso-paper: var(--riso-paper-day);
+  /* The Butler mark's key ink (the plain logo; the intro's printed key). */
+  --butler-mark-ink: rgb(10, 10, 11);
+  --browser-card-shadow:
+    0 1px 2px rgba(15, 18, 22, 0.05), 0 6px 20px rgba(15, 18, 22, 0.06);
   --background: var(--surface-raised);
   --foreground: var(--text-primary);
   --popover: var(--color-surface-overlay);
@@ -653,6 +797,12 @@
   --destructive: var(--danger);
   --border: var(--line);
   --input: var(--line);
+  /* Browser pane sheet: a faint tint of the workspace behind the page card. */
+  --browser-pane-bg: color-mix(
+    in srgb,
+    var(--text-primary) 4%,
+    var(--workspace-bg)
+  );
   --ring: var(--focus-ring-color);
   --radius: var(--radius-control);
 
@@ -714,7 +864,7 @@
   --sidebar-row-spacing: var(--space-sm);
   --sidebar-action-size: var(--touch-target);
   --sidebar-icon-surface-size: var(--control-height-xs);
-  --sidebar-icon-optical-offset: calc(var(--font-size-4) * -0.03);
+  --sidebar-icon-optical-offset: 0px;
 }
 
 /* Comfortable is the touch density on phones and coarse pointers. */
@@ -726,7 +876,7 @@
     --sidebar-row-spacing: var(--space-sm);
     --sidebar-action-size: var(--touch-target);
     --sidebar-icon-surface-size: var(--control-height-xs);
-    --sidebar-icon-optical-offset: calc(var(--font-size-4) * -0.03);
+    --sidebar-icon-optical-offset: 0px;
   }
 }
 
@@ -745,6 +895,8 @@
     --motion-scale-palette: 1;
     --motion-scale-check: 1;
     --motion-loop-count: 0;
+    --motion-agent-edge: 0s;
+    --motion-pointer-glide: 0ms;
   }
 }
 
@@ -763,6 +915,8 @@
   --motion-scale-palette: 1;
   --motion-scale-check: 1;
   --motion-loop-count: 0;
+  --motion-agent-edge: 0s;
+  --motion-pointer-glide: 0ms;
 }
 
 /* Compact settings (single-pane SettingsShell) keep the ramp and only
@@ -809,6 +963,53 @@
     --typo-section-title-size: 15px;
     --typo-panel-section-title-size: 17px;
     --typo-metric-value-size: 20px;
+    --typo-h1-line-height: 42px;
+    --typo-h2-line-height: 34px;
+    --typo-h3-line-height: 30px;
+    --typo-h4-line-height: 28px;
+    --typo-h5-line-height: 26px;
+    --typo-h6-line-height: 24px;
+    --typo-body-line-height: 24px;
+    --typo-caption-line-height: 20px;
+    --typo-label-line-height: 22px;
+    --typo-code-line-height: 22px;
+    --typo-app-title-line-height: 24px;
+    --typo-panel-title-line-height: 22px;
+    --typo-dashboard-title-line-height: 34px;
+    --typo-section-title-line-height: 22px;
+    --typo-panel-section-title-line-height: 24px;
+    --typo-metric-value-line-height: 28px;
+    --typo-caption-line-height-tight: 16px;
+    --typo-label-line-height-tight: 18px;
+    --typo-body-line-height-document: 26px;
+    --typo-new-chat-title-line-height-sm: 38px;
+  }
+}
+
+/* A desktop-forced subtree (DS viewer) keeps the desktop line-heights at
+   640px and below; the sizes are restored by [data-viewport="desktop"]. */
+@media (width <= 640px) {
+  [data-viewport="desktop"] {
+    --typo-h1-line-height: 40px;
+    --typo-h2-line-height: 32px;
+    --typo-h3-line-height: 28px;
+    --typo-h4-line-height: 26px;
+    --typo-h5-line-height: 24px;
+    --typo-h6-line-height: 20px;
+    --typo-body-line-height: 20px;
+    --typo-caption-line-height: 16px;
+    --typo-label-line-height: 18px;
+    --typo-code-line-height: 20px;
+    --typo-app-title-line-height: 20px;
+    --typo-panel-title-line-height: 20px;
+    --typo-dashboard-title-line-height: 32px;
+    --typo-section-title-line-height: 18px;
+    --typo-panel-section-title-line-height: 22px;
+    --typo-metric-value-line-height: 26px;
+    --typo-caption-line-height-tight: 14px;
+    --typo-label-line-height-tight: 16px;
+    --typo-body-line-height-document: 22px;
+    --typo-new-chat-title-line-height-sm: 36px;
   }
 }
 
@@ -909,8 +1110,17 @@
   --danger-banner-bg: rgba(190, 56, 54, 0.18);
   --worker-panel-bg: rgba(37, 38, 41, 0.96);
   --sidebar-bg: rgba(36, 37, 40, 0.72);
+  --mac-sidebar-bg: rgba(36, 37, 40, 0.5);
   --windows-sidebar-bg: rgba(24, 25, 28, 0.46);
   --sidebar-collapsed-bg: rgba(20, 21, 23, 0.18);
+  /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
+     the workspace surface with one quiet edge. */
+  --shell-bg: var(--sidebar-bg);
+  --shell-card-bg: var(--workspace-bg);
+  --shell-card-edge: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --shell-sheet-tint: 2.5%;
+  --shell-page-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.32), 0 6px 20px rgba(0, 0, 0, 0.28);
   --text-primary: var(--color-text-primary);
   --text-secondary: var(--color-text-secondary);
   --text-tertiary: var(--color-text-tertiary);
@@ -930,6 +1140,7 @@
   --switch-inline-track-bg: rgba(255, 255, 255, 0.14);
   --dialog-overlay-bg: rgba(0, 0, 0, 0.34);
   --command-overlay-bg: rgba(0, 0, 0, 0.26);
+  --image-viewer-overlay-bg: rgba(0, 0, 0, 0.86);
   --chrome-button-bg: rgba(255, 255, 255, 0.11);
   --chrome-divider-bg: rgba(255, 255, 255, 0.1);
   --danger-line: rgba(190, 56, 54, 0.28);
@@ -941,6 +1152,19 @@
   --shadow-window: 0 18px 48px rgba(0, 0, 0, 0.38);
   --shadow-control: 0 1px 3px rgba(0, 0, 0, 0.32);
   --shadow-switch: 0 1px 3px rgba(0, 0, 0, 0.28);
+  --butler-ink-blue: rgb(96, 140, 255);
+  --butler-ink-purple: rgb(150, 96, 236);
+  --butler-ink-pink: rgb(255, 112, 190);
+  --riso-paper: var(--riso-paper-night);
+  --butler-mark-ink: rgb(255, 255, 255);
+  /* Softer in dark so the page card's rim does not glow; the riso edge is separate. */
+  --browser-card-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.32), 0 6px 20px rgba(0, 0, 0, 0.28);
+  --browser-pane-bg: color-mix(
+    in srgb,
+    var(--text-primary) 4%,
+    var(--workspace-bg)
+  );
   --background: var(--surface-raised);
   --foreground: var(--text-primary);
   --popover: var(--color-surface-overlay);
@@ -1052,8 +1276,22 @@
   --danger-banner-bg: rgba(255, 239, 238, 0.96);
   --worker-panel-bg: rgba(241, 242, 244, 0.96);
   --sidebar-bg: rgba(255, 255, 255, 0.52);
+  --mac-sidebar-bg: rgba(255, 255, 255, 0.3);
   --windows-sidebar-bg: rgba(255, 255, 255, 0.36);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
+  /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
+     the workspace surface with one quiet edge. */
+  --shell-bg: var(--sidebar-bg);
+  --shell-card-bg: var(--workspace-bg);
+  --shell-card-edge: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  /* The browser sheet in frame="cards": its ink tint over the card surface and
+     the page card's shadow on it. Light keeps both faint, so the sheet's strip
+     beside the 8px gap stays as light as the chat card and the gap reads as
+     8px, not 8px plus a shadowed strip; the page card keeps its edge. Dark
+     keeps both: there the shell is the lighter surface. */
+  --shell-sheet-tint: 1%;
+  --shell-page-shadow:
+    0 1px 2px rgba(15, 18, 22, 0.05), 0 2px 6px rgba(15, 18, 22, 0.04);
   --text-primary: var(--color-text-primary);
   --text-secondary: var(--color-text-secondary);
   --text-tertiary: var(--color-text-tertiary);
@@ -1073,6 +1311,7 @@
   --switch-inline-track-bg: rgba(0, 0, 0, 0.14);
   --dialog-overlay-bg: rgba(0, 0, 0, 0.12);
   --command-overlay-bg: rgba(0, 0, 0, 0.06);
+  --image-viewer-overlay-bg: rgba(0, 0, 0, 0.78);
   --chrome-button-bg: rgba(0, 0, 0, 0.18);
   --chrome-divider-bg: rgba(0, 0, 0, 0.12);
   --danger-line: rgba(190, 56, 54, 0.24);
@@ -1084,6 +1323,21 @@
   --shadow-window: 0 18px 48px rgba(0, 0, 0, 0.14);
   --shadow-control: 0 1px 3px rgba(0, 0, 0, 0.22);
   --shadow-switch: 0 1px 3px rgba(0, 0, 0, 0.18);
+  /* Butler inks: the thinking mark's riso set (ButlerThinkingMark reads them);
+     lines and fills that mean "Butler is acting". */
+  --butler-ink-blue: rgb(0, 120, 191);
+  --butler-ink-purple: rgb(96, 56, 156);
+  --butler-ink-pink: rgb(255, 72, 176);
+  --riso-paper: var(--riso-paper-day);
+  /* The Butler mark's key ink (the plain logo; the intro's printed key). */
+  --butler-mark-ink: rgb(10, 10, 11);
+  --browser-card-shadow:
+    0 1px 2px rgba(15, 18, 22, 0.05), 0 6px 20px rgba(15, 18, 22, 0.06);
+  --browser-pane-bg: color-mix(
+    in srgb,
+    var(--text-primary) 4%,
+    var(--workspace-bg)
+  );
   --secondary: rgba(32, 35, 39, 0.08);
   --secondary-border: transparent;
   --muted: rgba(32, 35, 39, 0.06);
@@ -1138,16 +1392,19 @@
 
 .sidebar-solid {
   --sidebar-bg: rgba(246, 247, 249, 0.98);
+  --mac-sidebar-bg: rgba(246, 247, 249, 0.98);
   --windows-sidebar-bg: rgba(246, 247, 249, 0.98);
 }
 
 .theme-light.sidebar-solid {
   --sidebar-bg: rgba(246, 247, 249, 0.98);
+  --mac-sidebar-bg: rgba(246, 247, 249, 0.98);
   --windows-sidebar-bg: rgba(246, 247, 249, 0.98);
 }
 
 .theme-dark.sidebar-solid {
   --sidebar-bg: rgba(36, 37, 40, 0.98);
+  --mac-sidebar-bg: rgba(36, 37, 40, 0.98);
   --windows-sidebar-bg: rgba(36, 37, 40, 0.98);
 }
 
@@ -1169,7 +1426,7 @@ body {
   overflow: hidden;
   background: transparent;
   color: var(--text-primary);
-  font: var(--font-size-3)/var(--line-height-body) var(--font-body);
+  font: var(--typo-body-size)/var(--typo-body-line-height) var(--font-body);
   letter-spacing: 0;
 }
 
@@ -1207,7 +1464,7 @@ textarea::placeholder {
 
 :where(:focus-visible) {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
-  outline-offset: 1px;
+  outline-offset: calc(var(--focus-ring-room) - var(--focus-ring-width));
 }
 
 .sr-only {
@@ -1299,7 +1556,7 @@ input[type="radio"]:not(:disabled),
   --typo-section-title-size: 13px;
   --typo-panel-section-title-size: 15px;
   --typo-metric-value-size: 18px;
-  --font-code: var(--font-size-2)/var(--line-height-body)
+  --font-code: var(--typo-code-size)/var(--typo-code-line-height)
     var(--font-family-code);
   --font-size-1: var(--typo-caption-size);
   --font-size-2: var(--typo-label-size);

@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use std::{
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -29,16 +29,32 @@ pub(super) struct Script {
     sent: Mutex<Option<Instant>>,
     pub result: Mutex<Option<(Value, Duration)>>,
     pub disposition: Mutex<Option<Value>>,
+    pub diagnostics: Mutex<Vec<[u128; 4]>>,
+    pub diagnostic_log_lines: AtomicUsize,
     selected: Mutex<Instant>,
 }
 
 impl Script {
+    pub(super) fn mark(&self, event: &'static str) {
+        let elapsed = self
+            .sent
+            .lock()
+            .unwrap()
+            .map_or(0, |sent| sent.elapsed().as_micros());
+        eprintln!(
+            "command_provider_timing event={event} refused={} elapsed_us={elapsed} utc_us={}",
+            self.case.lock().unwrap().refused,
+            utc_us()
+        );
+    }
+
     pub(super) fn select(&self, case: Case) {
         *self.case.lock().unwrap() = case;
         *self.step.lock().unwrap() = 0;
         *self.sent.lock().unwrap() = None;
         *self.result.lock().unwrap() = None;
         *self.disposition.lock().unwrap() = None;
+        self.diagnostics.lock().unwrap().clear();
         *self.selected.lock().unwrap() = Instant::now();
     }
 }
@@ -57,6 +73,8 @@ pub(super) async fn start(
         sent: Mutex::new(None),
         result: Mutex::new(None),
         disposition: Mutex::new(None),
+        diagnostics: Mutex::new(Vec::new()),
+        diagnostic_log_lines: AtomicUsize::new(0),
         selected: Mutex::new(Instant::now()),
     });
     let router = Router::new()
@@ -72,6 +90,7 @@ async fn reply(
     State(script): State<Arc<Script>>,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
+    let received = utc_us();
     let delegated = script.delegated.load(Ordering::SeqCst);
     let work = script.work.load(Ordering::SeqCst);
     let key = butler_e2e::e2e::matching::key(
@@ -79,6 +98,7 @@ async fn reply(
         &body,
         &butler_e2e::e2e::sanitize::Placeholders::default(),
     );
+    let matched = utc_us();
     let child = key.user_request.starts_with("role: steward");
     if !child && key.user_request != PROMPT && key.user_request != DELEGATE_PROMPT {
         return (
@@ -116,10 +136,21 @@ async fn reply(
             .filter_map(|v| v["work"]["work_id"].as_str())
             .collect::<Vec<_>>()
     );
+    script
+        .diagnostics
+        .lock()
+        .unwrap()
+        .push([step as u128, received, matched, utc_us()]);
     let objective = format!("Verify {} {}", case.tool, case.args);
     if step == 4 {
         let output = outputs.last().expect("tool result").clone();
         let elapsed = script.sent.lock().unwrap().unwrap().elapsed();
+        eprintln!(
+            "command_provider_timing event=result_delivered refused={} elapsed_us={} utc_us={}",
+            case.refused,
+            elapsed.as_micros(),
+            utc_us()
+        );
         *script.result.lock().unwrap() = Some((output, elapsed));
     }
     if step == 5 {
@@ -141,6 +172,11 @@ async fn reply(
         ),
         3 => {
             *script.sent.lock().unwrap() = Some(Instant::now());
+            eprintln!(
+                "command_provider_timing event=sent refused={} utc_us={}",
+                case.refused,
+                utc_us()
+            );
             call("operation", case.tool, &case.args)
         }
         4 if !delegated && !work => message("파일 확인 완료"),
@@ -208,4 +244,11 @@ fn parent(step: usize) -> Value {
 fn message(text: &str) -> Value {
     json!({"type":"message","id":"answer","role":"assistant","status":"completed",
         "content":[{"type":"output_text","text":text,"annotations":[]}]})
+}
+
+fn utc_us() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_micros()
 }

@@ -19,7 +19,7 @@ use butler_core::public_text::{trim_js_whitespace, trim_js_whitespace_end};
 
 use super::{LegacyIndexService, legacy_graph};
 
-const HOT_CACHE_LOCK_STALE_AFTER: Duration = Duration::from_secs(10 * 60);
+const HOT_CACHE_LOCK_STALE_AFTER: Duration = Duration::from_mins(10);
 
 impl LegacyIndexService {
     /// Adds an imported memory summary to the hot cache as a semantic

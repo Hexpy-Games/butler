@@ -4,9 +4,10 @@ use tokio_util::sync::CancellationToken;
 
 use crate::gateway::{ApplicationFuture, GatewayApplicationError};
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum AppChatKind {
+    #[default]
     Chat,
     Project,
 }
@@ -20,12 +21,15 @@ impl AppChatKind {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct AppCreateSessionInput {
     pub kind: AppChatKind,
     pub title: Option<String>,
     pub project_id: Option<String>,
     pub session_hint: Option<String>,
+    /// The sidebar group the new session is placed in (first child); the
+    /// group's project scope must match `project_id`.
+    pub group_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -69,6 +73,12 @@ pub trait AppSessionWorkspaceProvisioner: Send + Sync + 'static {
         snapshot: AppSessionWorkspaceSnapshot,
         server_shutdown: CancellationToken,
     ) -> ApplicationFuture<()>;
+    fn download_workspace(
+        &self,
+        _query: AppSessionBranchQuery,
+    ) -> ApplicationFuture<Option<String>> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn branch_info(
         &self,
         _query: AppSessionBranchQuery,
@@ -160,7 +170,8 @@ pub struct AppSessionSummary {
     pub safe_status_label_parameters: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub safe_status_content: Option<Value>,
-    pub unread_count: u64,
+    /// A finished reply arrived after the owner last read this chat.
+    pub unread: bool,
     pub pinned: bool,
     pub archived: bool,
     pub automation_target_count: u64,

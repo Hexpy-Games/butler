@@ -139,5 +139,8 @@ pub(crate) fn a_body_without_windows_or_plan_is_a_schema_mismatch() {
     ));
     // A plan without limits is a valid reading with no windows.
     let reading = parse(&json!({"plan_type": "enterprise", "rate_limit": null})).unwrap();
-    assert!(reading.windows.is_empty());
+    assert_eq!(
+        reading.windows,
+        [] as [crate::models::quota::ProviderQuotaWindow; 0]
+    );
 }

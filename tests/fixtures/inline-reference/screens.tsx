@@ -18,9 +18,9 @@ const language = params.get("language") === "ko" ? "ko" : "en";
 setAppCopyLanguage(language);
 document.body.classList.add(`theme-${params.get("theme") ?? "light"}`);
 const noop = () => {};
-const flow = { copy: firstRunCopy[language], language, mode: "first-run", savingConsent: false,
+const flow = { copy: firstRunCopy[language], language, mode: "first-run", step: "consent", view: { kind: "list" }, savingConsent: false,
   readiness: { status: "ready" }, commit: { connected: null }, focusStart: false,
-  start: noop, agree: noop, decline: noop, backToList: noop, setLanguage: noop,
+  start: noop, agree: noop, decline: noop, backToWelcome: noop, backToList: noop, setLanguage: noop,
   connectKey: noop, retryPreparation: noop } as unknown as FirstRunFlow;
 const markdown = "# [Heading](https://cached.invalid/heading)\n\n[Titled link](https://cached.invalid/title), https://cached.invalid/ and [Unavailable](https://failed.invalid/).\n\n| Source | Reference |\n| --- | --- |\n| Docs | [Table](https://cached.invalid/table) |";
 const artifact = { id: "fixture", title: "reference.md", kind: "document", safe_path_label: "reference.md",

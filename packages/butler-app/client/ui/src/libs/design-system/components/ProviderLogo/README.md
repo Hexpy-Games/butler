@@ -9,7 +9,7 @@ vendored SVG files in `logos/` exactly as shipped.
 
 | Prop | Values |
 | --- | --- |
-| `name` | `openai`, `claude`, `gemini`, `grok`, `qwen`, `kimi`, `zai`, `opencode`, `ollama`, `lmstudio` |
+| `name` | `openai`, `claude`, `anthropic`, `gemini`, `grok`, `qwen`, `kimi`, `zai`, `opencode`, `ollama`, `lmstudio` |
 | `size` | `sm` (14px), `md` (16px, default), `lg` (20px) |
 | `label` | Accessible name; omit when visible text names the service |
 
@@ -22,6 +22,7 @@ import { IconTile, ProviderLogo } from "@/butler-ds";
 ```
 
 ## Source and license
+- `anthropic` (the provider) and `claude` (the product) share `claude-color.svg`.
 - The files come from `@lobehub/icons-static-svg` 1.95.1 (MIT). Only these ten
   files are vendored; the package is not a dependency. `logos/NOTICE` carries
   the license and the trademark note.
@@ -29,6 +30,27 @@ Vendored SVG bytes and license notices are verified by the asset tests; rendered
   fails if a string drifts from its file.
 - Kimi uses the monochrome file: the color file has white lettering that
   disappears on light surfaces.
+
+## Fitting a logo
+The vendored files are full-bleed (the mark touches the 24-unit box), but the
+icon pack (Hugeicons) draws on a keyline: a 24 grid whose marks span 20 units
+(2 to 22), centred on (12, 12) by their bounding box. So that a logo and a line
+glyph at the same size look equally large and equally centred, each logo has a
+`fit` viewBox in `providerLogoSvgs.ts`, and `ProviderLogo` renders with it. The
+shipped drawing is never edited; the viewBox only moves and scales it.
+
+To fit a new logo:
+1. Rasterise the vendored SVG at 40px per unit and take its ink box (alpha above
+   0.5): `x, y, w, h` in grid units.
+2. `s = max(w, h) / 20`, centre `cx = x + w / 2`, `cy = y + h / 2`.
+3. `fit = "${cx - 12s} ${cy - 12s} ${24s} ${24s}"` (three decimals).
+4. Check it beside a line glyph in a card in the app: equal visual size, and
+   both centred on the title line.
+
+Optical exceptions live in the logo's `fit` only (never in CSS) and carry a
+one-line comment saying why. The only one is the Claude mark under the `claude`
+name (Claude, Claude Code): the mark is short at the bottom, so its fit sits it
+1px lower at 14px. `anthropic` draws the same file on the plain centred fit.
 
 ## Themes
 Monochrome logos paint with `currentColor` (the text color), so they stay

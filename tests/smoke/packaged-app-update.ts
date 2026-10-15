@@ -1,3 +1,4 @@
+import { spawnElectron, stopElectronChild } from "../support/electron-child";
 /** Real packaged macOS update, update choices and quit with isolated DATA. */
 import { strict as assert } from "node:assert";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
@@ -199,15 +200,14 @@ async function smoke() {
     return;
   }
   const debugPort = await freePort(), agentPort = await freePort();
-  child = spawn(join(installed, "Contents/MacOS/Butler"), [`--remote-debugging-port=${debugPort}`, ...smokeElectronArgs()], { env: {
+  child = spawnElectron(join(installed, "Contents/MacOS/Butler"), [`--remote-debugging-port=${debugPort}`, ...smokeElectronArgs()], { env: {
     ...env, BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"),
     BUTLER_APP_UPDATE_MANIFEST: discovery ? "" : process.env.BUTLER_UPDATE_SMOKE_MANIFEST ?? `http://127.0.0.1:${updatePort}/manifest.json`,
     ...(discovery ? { BUTLER_UPDATE_MANIFEST: "", BUTLER_UPDATE_RELEASES_API: "" } : {}),
     BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
     BUTLER_E2E_TIER: "stub", BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9",
     ...(mode === "background-quit" ? { BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP: "1" } : {}),
-  }, stdio: ["ignore", "pipe", "pipe"] });
-  child.stdout!.on("data", bytes => logs.push(String(bytes))); child.stderr!.on("data", bytes => logs.push(String(bytes)));
+  }, onOutput: bytes => logs.push(String(bytes)) });
   child.on("exit", (code, signal) => logs.push(`App exited: code=${code}, signal=${signal}\n`));
   console.log(`LAUNCH ${from}: ${installed}`);
   if (discovery) console.log(`DISCOVERY ${from}: fresh process, default published release API, no manifest override`);
@@ -306,14 +306,13 @@ async function cleanup() {
     const instance = JSON.parse(readFileSync(join(data, "app/runtime/foreground/instance.json"), "utf8"));
     ownedPids.add(instance.app_pid); ownedPids.add(instance.agent_host_pid);
   } catch { /* App never started. */ }
-  if (child && child.exitCode === null) child.kill("SIGTERM");
+  if (child) await stopElectronChild(child);
   for (const pid of ownedPids) {
     try { process.kill(pid, "SIGTERM"); } catch { /* Already exited. */ }
   }
   server?.stop(true);
   // Allow the App's confirmed graceful quit to finish before removing its DATA.
   await new Promise(done => setTimeout(done, 1500));
-  if (child && child.exitCode === null) child.kill("SIGKILL");
   for (const pid of ownedPids) {
     try { process.kill(pid, "SIGKILL"); } catch { /* Already exited. */ }
   }

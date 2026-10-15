@@ -6,10 +6,11 @@ import type { DsBaseProps } from "../../lib/dsProps";
  */
 
 import { HugeiconsIcon } from "@hugeicons/react";
-import type { HugeiconsIconProps, IconSvgElement } from "@hugeicons/react";
+import type { HugeiconsIconProps } from "@hugeicons/react";
+import { createIcon } from "./iconBase";
 // Named imports keep the bundle to the glyphs mapped below.
 import {
-  Activity01Icon, Add01Icon, AiChipIcon, AlertCircleIcon, ArchiveIcon, ArrowDown01Icon,
+  Activity01Icon, Add01Icon, ArrowTurnBackwardIcon, AiChipIcon, AlertCircleIcon, ArchiveIcon, ArrowDown01Icon,
   ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, ArrowUpDownIcon, AttachmentIcon,
   BookOpen01Icon, BotIcon, Briefcase01Icon, BubbleChatIcon, Cancel01Icon, CancelCircleIcon,
   CheckListIcon, CheckmarkCircle02Icon, CircleIcon, Clock03Icon, CollapseIcon, CommandIcon, ComputerIcon,
@@ -20,29 +21,12 @@ import {
   Note01Icon, PaintBrush02Icon, PanelLeftIcon, PanelLeftOpenIcon, PanelRightCloseIcon,
   PanelRightIcon, PencilEdit01Icon, PencilEdit02Icon, PinIcon, PlayIcon, ReloadIcon,
   Rocket01Icon, Search01Icon, SecurityCheckIcon, SecurityIcon, SentIcon, ServerStack01Icon,
-  Settings01Icon, ShieldEnergyIcon, SlidersHorizontalIcon, SquareIcon, StarIcon, Sun03Icon, Task01Icon,
+  Settings01Icon, ShieldEnergyIcon, SlidersHorizontalIcon, SquareIcon, StarIcon, Sun03Icon, Tag01Icon, Task01Icon,
   TerminalIcon, Tick02Icon, Time03Icon, UserCircleIcon, ViewIcon, Wrench01Icon,
 } from "@hugeicons/core-free-icons";
 
-/** Icon size scale; mirrors --icon-size-sm/md/lg in tokens.css. */
-export const ICON_SIZE = { xs: 12, sm: 14, md: 16, lg: 20, xl: 24, "2xl": 32, "3xl": 48 } as const;
-export type IconSize = keyof typeof ICON_SIZE;
-
-// Icon component props extending Hugeicons with simplified API
-export interface IconProps extends Omit<DsBaseProps<HugeiconsIconProps>, "icon" | "size"> {
-  size?: IconSize | number;
-}
-
-// Helper to create icon component
-function createIcon(icon: IconSvgElement) {
-  return ({ size = "md", ...props }: IconProps) => (
-    <HugeiconsIcon
-      icon={icon}
-      size={typeof size === "string" ? ICON_SIZE[size] : size}
-      {...props}
-    />
-  );
-}
+export { ICON_SIZE, type IconProps, type IconSize } from "./iconBase";
+export * from "./BrowserIcons";
 
 // Export individual icon components. A glyph is mapped once; alternate
 // names (kept for shadcn-style call sites) alias the same component.
@@ -65,6 +49,8 @@ export const ChevronDown = createIcon(ArrowDown01Icon);
 export const ChevronDownIcon = ChevronDown;
 export const ChevronRight = createIcon(ArrowRight01Icon);
 export const ChevronRightIcon = ChevronRight;
+/** Forward navigation (toolbar, beside ArrowLeft): the ChevronRight glyph. */
+export const ArrowRight = ChevronRight;
 export const ChevronUpIcon = createIcon(ArrowUp01Icon);
 export const ChevronsUpDown = createIcon(ArrowUpDownIcon);
 export const Collapse = createIcon(CollapseIcon);
@@ -112,6 +98,8 @@ export const Pin = createIcon(PinIcon);
 export const Play = createIcon(PlayIcon);
 export const Plus = createIcon(Add01Icon);
 export const RefreshCcw = createIcon(ReloadIcon);
+/** A follow-up the user sends back (a suggested reply chip). */
+export const Reply = createIcon(ArrowTurnBackwardIcon);
 export const Rocket = createIcon(Rocket01Icon);
 export const RotateCcw = RefreshCcw;
 export const Save = createIcon(FloppyDiskIcon);
@@ -124,6 +112,8 @@ export const ShieldQuestion = createIcon(SecurityIcon);
 export const ShieldEnergy = createIcon(ShieldEnergyIcon);
 export const SlidersHorizontal = createIcon(SlidersHorizontalIcon);
 export const Sparkles = createIcon(StarIcon);
+/** A tag (label) on a saved item; `Tag` is the pill component. */
+export const TagIcon = createIcon(Tag01Icon);
 export const Square = createIcon(SquareIcon);
 export const Sun = createIcon(Sun03Icon);
 export const Terminal = createIcon(TerminalIcon);

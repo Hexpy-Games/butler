@@ -73,7 +73,7 @@ pub struct SendMessageCommand {
     pub chat_id: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct MessageSendRequest {
     pub expected_project_id: Option<String>,
     pub content_parts: Option<MessageContent>,
@@ -86,6 +86,10 @@ pub struct MessageSendRequest {
     pub access_mode: Option<Value>,
     pub plan_mode: Option<Value>,
     pub subsession_result: Option<butler_turn::btcc::SubsessionResultContext>,
+    /// Set only by the scheduler and the internal steward-result route (never
+    /// parsed from a client body): the schedule run this message belongs to,
+    /// and whether nobody attends it.
+    pub schedule_run: Option<butler_turn::btcc::ScheduleRunContext>,
 }
 
 #[derive(Clone, Debug)]
@@ -272,6 +276,8 @@ pub struct MessageRecord {
     pub changed_files: Option<Vec<ChangedFileDetail>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_document: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub answer_blocks: Option<Vec<Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub work_blocks: Option<Vec<Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]

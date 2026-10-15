@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import urllib.request
@@ -20,6 +21,7 @@ sys.dont_write_bytecode = True
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS.parents[1] / 'packages/butler-agent/rust/scripts'))
 import ci_oci
+import runner_cache
 
 spec = importlib.util.spec_from_file_location('cargo_cache', SCRIPTS / 'cargo-artifact-cache.py')
 cache = importlib.util.module_from_spec(spec)
@@ -101,11 +103,11 @@ def download(entry, destination):
     ci_oci.fetch(entry, destination)
 
 
-def fetch_snapshot(published, manifest, directory, expected):
+def fetch_snapshot(published, manifest, directory, expected, compatible=False):
     download(manifest, directory / 'generation.json')
     generation = json.loads((directory / 'generation.json').read_text())
     metadata = generation['metadata']
-    if metadata['identity'] != expected:
+    if not cache.matches(metadata['identity'], expected, compatible):
         raise ValueError('Cargo snapshot identity mismatch')
     trusted(metadata)
     if not generation['chunks'] or len(set(generation['chunks'])) != len(generation['chunks']):
@@ -122,11 +124,27 @@ def fetch_snapshot(published, manifest, directory, expected):
     source_name = manifest['name'][:-5] + '-sources.json'
     download(assets[source_name], directory / 'sources.json')
     (directory / 'cache.json').write_text(json.dumps(metadata))
-    cache.verify(directory, expected)
+    cache.verify(directory, expected, compatible)
 
 
 def restore(expected):
+    local = persistent_target(expected)
+    if local and restore_local(local, expected):
+        return True
     published = release(tag_name(expected))
+    selected_identity = expected
+    compatible = False
+    if not published and 'profile_config' in expected:
+        # Existing snapshots already pin the exact manifest digest, which
+        # proves these same profile settings. Keep that safe warm upgrade path.
+        legacy = dict(expected, runtime=os.environ.get('ORT_LIB_PATH', ''))
+        legacy.pop('profile_config')
+        published = release(tag_name(legacy))
+        if published:
+            selected_identity = legacy
+    if not published:
+        published = release(compatible_tag(expected))
+        compatible = True
     candidates = generations(published['assets']) if published else []
     if not candidates:
         print('No persistent CI snapshot for this lane; cold Cargo build follows.')
@@ -134,24 +152,86 @@ def restore(expected):
     with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
         directory = Path(temporary)
         try:
-            fetch_snapshot(published, candidates[0], directory, expected)
+            fetch_snapshot(published, candidates[0], directory, selected_identity, compatible)
         except UnsuccessfulProducer:
             print('Cargo snapshot producer is not successful yet; cold Cargo build follows.')
             return False
-        restore_tree(directory, expected)
+        restore_tree(directory, selected_identity, compatible)
     return True
 
 
-def restore_tree(directory, expected):
-    cache.verify(directory, expected)
+def legacy_refs(base):
+    # Old targets have only a ref hash. Resolve protected release/tag names
+    # once during migration, including refs absent from a shallow checkout.
+    base = runner_cache.namespace(base)
+    if not runner_cache.lexists(base):
+        return []
+    legacy = False
+    for path in runner_cache.children(base):
+        if runner_cache.linked(path):
+            raise ValueError(f'Linked Cargo ref directory: {path}')
+        legacy |= runner_cache.is_directory(path) and not runner_cache.lexists(path / runner_cache.MARKER)
+    if not legacy:
+        return []
+    output = subprocess.check_output(
+        ['git', 'ls-remote', '--refs', 'origin', 'refs/heads/release/*', 'refs/tags/*'],
+        cwd=os.environ.get('GITHUB_WORKSPACE'), text=True)
+    return [line.split()[1] for line in output.splitlines()]
+
+
+def persistent_target(expected):
+    base = os.environ.get('BUTLER_PERSISTENT_TARGET')
+    if not base:
+        return None
+    refs = legacy_refs(Path(base))
+    target = runner_cache.prepare(base, os.environ['GITHUB_REF'], compatible_tag(expected), refs)
+    os.environ['CARGO_TARGET_DIR'] = str(target)
+    with open(os.environ['GITHUB_ENV'], 'a') as output:
+        output.write(f'CARGO_TARGET_DIR={target}\n')
+    return target
+
+
+def target_path(path):
+    """Cargo target trees exceed Windows MAX_PATH, so their paths take the extended form."""
+    return Path(runner_cache.extended(path))
+
+
+def restore_local(target, expected):
+    marker = target_path(target / 'ci-local.json')
+    if not marker.is_file():
+        return False
+    metadata = json.loads(marker.read_text())
+    if not cache.matches(metadata['identity'], expected, compatible=True):
+        raise ValueError('Local Cargo target identity mismatch')
+    sources = target_path(target / 'ci-local-sources.json')
+    if cache.digest(sources) != metadata['sources_sha256']:
+        raise ValueError('Local Cargo source digest mismatch')
+    cache.source_times.restore(Path(os.environ['GITHUB_WORKSPACE']), json.loads(sources.read_text()))
+    print('Reused isolated runner-local Cargo target; Cargo verifies unit fingerprints.')
+    return True
+
+
+def save_local(target, expected):
+    # Capture only after a successful build. A failed compile must retain the
+    # previous digest so changed sources stay dirty on the next checkout.
+    sources = target_path(target / 'ci-local-sources.json')
+    sources.write_text(json.dumps(cache.source_times.capture(Path(os.environ['GITHUB_WORKSPACE']))))
+    marker = dict(identity=expected, sources_sha256=cache.digest(sources))
+    target_path(target / 'ci-local.json').write_text(json.dumps(marker))
+    if os.environ.get('BUTLER_PERSISTENT_TARGET'):
+        runner_cache.record_size(os.environ['BUTLER_PERSISTENT_TARGET'], target)
+
+
+def restore_tree(directory, expected, compatible=False):
+    cache.verify(directory, expected, compatible)
     directory = directory.resolve()
-    target = Path(os.environ.get('CARGO_TARGET_DIR', 'target')).absolute()
+    # Extended paths skip normalization, so collapse separators and `..` first.
+    target = Path(os.path.abspath(os.environ.get('CARGO_TARGET_DIR', 'target')))
     # Do not merge newer/foreign fingerprints or executables into the snapshot.
-    if target.is_symlink():
+    if runner_cache.lexists(target) and runner_cache.linked(target):
         raise ValueError('Symlink Cargo target directory')
-    if target.exists():
-        shutil.rmtree(target)
-    target.parent.mkdir(parents=True, exist_ok=True)
+    runner_cache.delete_tree(target)
+    os.makedirs(runner_cache.extended(target.parent), exist_ok=True)
     with tempfile.TemporaryDirectory(dir=target.parent) as stage:
         previous = Path.cwd()
         try:
@@ -159,7 +239,7 @@ def restore_tree(directory, expected):
             cache.extract(directory.resolve())
         finally:
             os.chdir(previous)
-        (Path(stage) / 'target').rename(target)
+        os.rename(runner_cache.extended(Path(stage) / 'target'), runner_cache.extended(target))
     cache.source_times.restore(Path(os.environ['GITHUB_WORKSPACE']),
                               json.loads((directory / 'sources.json').read_text()))
     print(f'Restored verified CI Cargo snapshot at {json.loads((directory / "cache.json").read_text())["sha"]}.')
@@ -169,22 +249,21 @@ def tag_name(expected):
     return cache.artifact_name(expected).removeprefix('cargo-build-cache-')
 
 
-def split(archive, directory, prefix):
-    chunks = []
-    with archive.open('rb') as source:
-        while True:
-            name = f'{prefix}-{len(chunks):04}.zst'
-            destination = directory / name
-            with destination.open('wb') as output:
-                remaining = CHUNK_BYTES
-                while remaining and (block := source.read(min(1024**2, remaining))):
-                    output.write(block)
-                    remaining -= len(block)
-            if destination.stat().st_size == 0:
-                destination.unlink()
-                break
-            chunks.append(name)
-    return chunks
+def compatible_tag(expected):
+    return 'compatible-' + tag_name(cache.compatible_identity(expected))
+
+
+def recorded_parts(directory, prefix):
+    """Upload parts written by the recorder, numbered consecutively from zero."""
+    names = sorted(path.name for path in directory.glob(prefix + '-*.zst'))
+    if not names or names != [f'{prefix}-{index:04}.zst' for index in range(len(names))]:
+        raise ValueError('Cargo snapshot parts are missing or misnamed')
+    return names
+
+
+def report_free_disk(label):
+    usage = shutil.disk_usage(os.environ['RUNNER_TEMP'])
+    print(f'Free disk {label}: {usage.free / 1024**3:.1f} of {usage.total / 1024**3:.1f} GiB.', flush=True)
 
 
 def prune(tag, prefix):
@@ -215,21 +294,19 @@ def publish(directory, run_id):
     if str(metadata['run_id']) != str(run_id):
         raise ValueError('Cargo snapshot run mismatch')
     trusted(metadata, publishing=True)
-    cache.verify(directory, metadata['identity'])
-    tag = tag_name(metadata['identity'])
     prefix = f'{int(run_id)}-{int(metadata["run_attempt"])}'
+    chunks = recorded_parts(directory, prefix)
+    cache.verify(directory, metadata['identity'], parts=chunks)
+    tag = compatible_tag(metadata['identity'])
     reference = f'{ci_oci.REGISTRY}/cargo-target:{tag}--{prefix}'
     committed = ci_oci.manifest(reference, anonymous=False)
     if committed is None:
-        with tempfile.TemporaryDirectory() as temporary:
-            stage = Path(temporary)
-            chunks = split(directory / 'cache.tar.zst', stage, prefix)
-            sources = stage / (prefix + '-sources.json')
-            shutil.copyfile(directory / 'sources.json', sources)
-            manifest = stage / (prefix + '.json')
-            manifest.write_text(json.dumps(dict(metadata=metadata, chunks=chunks)))
-            # OCI commits its manifest only after every complete chunk is stored.
-            ci_oci.push(reference, [*(stage / name for name in chunks), sources, manifest])
+        sources = directory / (prefix + '-sources.json')
+        shutil.copyfile(directory / 'sources.json', sources)
+        manifest = directory / (prefix + '.json')
+        manifest.write_text(json.dumps(dict(metadata=metadata, chunks=chunks)))
+        # OCI commits its manifest only after every complete chunk is stored.
+        ci_oci.push(reference, [*(directory / name for name in chunks), sources, manifest])
     else:
         with tempfile.TemporaryDirectory() as temporary:
             manifest = next(entry for entry in committed['assets'] if entry['name'] == prefix + '.json')
@@ -238,15 +315,23 @@ def publish(directory, run_id):
             if json.loads(download_manifest.read_text())['metadata'] != metadata:
                 raise ValueError('Committed Cargo generation cannot be overwritten')
     ci_oci.checked('tag', reference, tag, anonymous=False)
+    ci_oci.checked('tag', reference, tag_name(metadata['identity']), anonymous=False)
     if os.environ.get('BUTLER_OCI_LAYOUT') != '1':
         prune(tag, prefix)
 
 
 def publish_lane(platform, mode, kind):
     expected = cache.identity(platform, mode, kind)
-    directory = Path(os.environ['RUNNER_TEMP']) / 'cargo-build-cache'
-    cache.record(directory, expected, target=os.environ.get('CARGO_TARGET_DIR', 'target'))
-    publish(directory, os.environ['GITHUB_RUN_ID'])
+    run_id = os.environ['GITHUB_RUN_ID']
+    prefix = f'{int(run_id)}-{int(os.environ.get("GITHUB_RUN_ATTEMPT", "1"))}'
+    report_free_disk('before snapshot')
+    # The only extra disk is one compressed copy, written directly as upload parts.
+    with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
+        directory = Path(temporary)
+        cache.record(directory, expected, target=os.environ.get('CARGO_TARGET_DIR', 'target'),
+                     part=(prefix, CHUNK_BYTES))
+        report_free_disk('after compression')
+        publish(directory, run_id)
 
 
 if __name__ == '__main__':

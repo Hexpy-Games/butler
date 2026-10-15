@@ -55,7 +55,7 @@ pub(super) fn assemble(input: Assembly<'_>) -> Result<JsonDocument, BtccError> {
             append_raw(&mut encoded, key, value)?;
         }
     }
-    append_sandbox(&mut encoded, registered, effect)?;
+    append_sandbox(&mut encoded, input)?;
     if (success || registered) && requested > 0 {
         let unpublished = requested.saturating_sub(declared);
         let mut details = serde_json::json!({
@@ -163,11 +163,24 @@ pub(super) fn assemble(input: Assembly<'_>) -> Result<JsonDocument, BtccError> {
         .map_err(|source| error("command_result_encoding_failed").with_source(source))
 }
 
-fn append_sandbox(
-    encoded: &mut String,
-    registered: bool,
-    effect: Option<&str>,
-) -> Result<(), BtccError> {
+fn append_sandbox(encoded: &mut String, input: Assembly<'_>) -> Result<(), BtccError> {
+    let Assembly {
+        registered,
+        effect,
+        base,
+        budget,
+        summary,
+        ..
+    } = input;
+    if !summary.sandbox_violation.is_empty() {
+        append_value(
+            encoded,
+            "sandbox_violation",
+            &serde_json::json!(summary.sandbox_violation),
+        )?;
+    }
+    let failed = budget.exit_code != Some(0) || budget.timed_out;
+    append_denial(encoded, base, failed && !registered && effect.is_none())?;
     if registered {
         append_field_string(encoded, "sandbox", "unisolated")?;
     } else {
@@ -176,10 +189,38 @@ fn append_sandbox(
             "sandbox",
             if effect.is_some() {
                 "full_access_contained"
-            } else {
+            } else if butler_platform::command_sandbox::capabilities()
+                .network_deny
+                .is_enforced()
+            {
                 "read_only_no_network"
+            } else {
+                "read_only_network_open"
             },
         )?;
+    }
+    Ok(())
+}
+
+fn append_denial(
+    out: &mut String,
+    base: &JsonDocument,
+    failed_read: bool,
+) -> Result<(), BtccError> {
+    if !failed_read {
+        return Ok(());
+    }
+    let Some(stderr) = base
+        .field("stderr")
+        .map_err(|source| error("command_result_encoding_failed").with_source(source))?
+    else {
+        return Ok(());
+    };
+    let stderr: String = serde_json::from_str(stderr)
+        .map_err(|source| error("command_result_encoding_failed").with_source(source))?;
+    if let Some((kind, hint)) = butler_platform::command_sandbox::sandbox_denial(&stderr) {
+        append_field_string(out, "sandbox_denial", kind)?;
+        append_field_string(out, "next_step", hint)?;
     }
     Ok(())
 }

@@ -6,6 +6,7 @@ import { activeChatFromNavigation } from "@/app/utils.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useAppearanceTheme } from "@/stores/appearanceStore.ts";
+import { useConversationWallpaper } from "./hooks/useConversationWallpaper";
 import { EmptyState } from "./EmptyState";
 import { BranchProjectContext } from "./AssistantBranchActions";
 import { withQuestionAnswers } from "./userQuestions";
@@ -21,11 +22,15 @@ import { ConversationScroll, ConversationShell } from "@/butler-ds";
 import { useSessionViewSubscription } from
   "@/components/layout/hooks/useSessionViewSubscription.ts";
 
+import { AgentTabRail } from "../browser/AgentTabRail";
+import { useBrowserShellState } from "../browser/browserShellState";
+
 void appCopy;
 
 export function Conversation() {
   const locale = useAppLocale();
   const activeChatId = useButlerStore((state) => state.activeChatId);
+  const browserOpen = useBrowserShellState(state => Boolean(state.conversations[activeChatId]?.open));
   const branchProjectId = useButlerStore((state) => {
     if (activeChatId === "general") return null;
     const view = state.sessionViews[activeChatId] ??
@@ -83,6 +88,7 @@ export function Conversation() {
   );
   const showMessageList = hasMessages || hasDurableActivity || Boolean(summary?.branch_seed);
   const showEmptyState = !showMessageList && !messageLoadPending;
+  const wallpaper = useConversationWallpaper(showEmptyState, isActiveChatSending);
   const composerLarge = true;
   const newChatTitleIconSize = showEmptyState
     ? "clamp(40px, 5.333vw, 54px)"
@@ -94,6 +100,9 @@ export function Conversation() {
   const markTheme = resolveButlerMarkTheme(appearanceTheme);
   return (
     <ConversationShell
+      railView={activeChatId}
+      rail={window.butlerBrowser && !browserOpen ? <AgentTabRail session={activeChatId} /> : undefined}
+      background={wallpaper.background}
       composerReserve={composerReserve}
       contentGutter={newChatTitleIconGutter}
       titleIconGap={newChatTitleIconGap}
@@ -103,6 +112,7 @@ export function Conversation() {
         <BranchProjectContext.Provider value={branchProjectId}>
           <ErrorBoundary key={activeChatId} scope="messages">
             <MessageList
+              onColumnRect={wallpaper.onColumnRect}
               messages={messages}
               turnProgress={turnProgress}
               bottomReserve={composerReserve}
@@ -113,6 +123,7 @@ export function Conversation() {
       ) : showEmptyState ? (
         <ConversationScroll masked={false} scrollable={false}>
           <EmptyState
+            onContentRect={wallpaper.onContentRect}
             activeChat={activeChat}
             isSending={isActiveChatSending}
             markTheme={markTheme}
@@ -125,6 +136,7 @@ export function Conversation() {
       <ErrorBoundary key={activeChatId} scope="composer"
         fallback={(retry) => <ComposerCrashFallback retry={retry} onReserveChange={updateComposerReserve} />}>
         <Composer
+          onWallpaperRect={wallpaper.onComposerRect}
           onReserveChange={updateComposerReserve}
           large={composerLarge}
         />

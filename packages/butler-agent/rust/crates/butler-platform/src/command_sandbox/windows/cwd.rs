@@ -12,9 +12,12 @@ pub(crate) fn working_directory(path: &Path) -> io::Result<PathBuf> {
     if path.as_os_str().encode_wide().count() < MAX_PATH {
         return Ok(dunce::simplified(path).to_path_buf());
     }
+    // Native lookup needs the extended prefix even when the caller supplied
+    // an ordinary long path. Canonicalization also pins the directory identity.
+    let canonical = std::fs::canonicalize(path)?;
     let mut original = PathBuf::new();
     let mut short = PathBuf::new();
-    for component in path.components() {
+    for component in canonical.components() {
         original.push(component);
         if let Component::Normal(name) = component {
             let mut data = winsafe::WIN32_FIND_DATA::default();

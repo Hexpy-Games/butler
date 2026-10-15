@@ -228,7 +228,10 @@ pub(crate) async fn nothing_to_read_replaces_the_reading_with_its_reason() {
     assert!(!view.available && view.windows.is_empty(), "{view:?}");
     assert_eq!(code(&view), Some("provider_quota_not_offered"));
     assert_eq!(view.plan_kind, crate::operations::QuotaPlanKind::Api);
-    assert!(h.poller.store().provider_ids().is_empty());
+    assert_eq!(
+        h.poller.store().provider_ids(),
+        [] as [std::string::String; 0]
+    );
     h.at(10 * MINUTE);
     h.fetcher.push(Err(QuotaFetchError::NotConfigured));
     h.poll(QuotaPollTrigger::Scheduled).await;
@@ -254,7 +257,7 @@ pub(crate) async fn the_kill_switch_stops_polls_and_shows_not_offered() {
     h.fetcher.disabled.store(true, Ordering::SeqCst);
     h.poll(QuotaPollTrigger::Explicit).await;
     h.poll(QuotaPollTrigger::Scheduled).await;
-    assert!(h.fetcher.calls().is_empty());
+    assert_eq!(h.fetcher.calls(), [] as [bool; 0]);
     let view = h.view();
     assert_eq!(code(&view), Some("provider_quota_not_offered"));
     assert_eq!(view.plan_kind, crate::operations::QuotaPlanKind::Unknown);

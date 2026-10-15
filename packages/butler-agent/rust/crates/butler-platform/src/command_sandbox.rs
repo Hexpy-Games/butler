@@ -1,11 +1,18 @@
 //! The shells commands run in and the sandboxes that bound what they can do.
 //!
-//! macOS enforces read-only commands and write-protected roots with the
-//! seatbelt (`sandbox-exec`). Linux and Windows have no sandbox yet: they
-//! refuse read-only commands ([`SandboxError::ReadOnlyUnavailable`]) and
-//! report write protection as [`Protection::Unavailable`]. Linux gets a
-//! Landlock wrapper in a later stage.
+//! macOS uses Seatbelt; Linux uses a single-threaded Landlock/seccomp
+//! trampoline. Unsupported hosts keep exact-action approval behavior.
 
+mod denial;
+pub use denial::{
+    EXECUTION_TIMEOUT_EXIT, EXECUTION_TIMEOUT_MARKER, execution_timeout, execution_timeout_exit,
+    isolation_failure, isolation_failure_exit, sandbox_denial,
+};
+mod credentials;
+pub mod mxc_policy;
+mod project_secrets;
+pub use credentials::secret_name;
+pub use project_secrets::{discover_project_secrets, sweep_new_secrets};
 mod environment;
 pub use environment::tool_environment;
 mod operators;
@@ -21,9 +28,9 @@ use std::path::Path;
 mod macos;
 #[cfg(target_os = "macos")]
 use macos as sandbox;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 mod unsandboxed;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 use unsandboxed as sandbox;
 
 #[cfg(unix)]
@@ -34,16 +41,89 @@ use unix as shell;
 mod windows;
 #[cfg(windows)]
 use windows as shell;
+#[cfg(windows)]
+use windows::mxc as sandbox;
 
-/// Whether this host runs [`ShellAccess::ReadOnly`] commands in a sandbox
-/// (otherwise [`login_shell`] refuses them).
-pub const READ_ONLY_SANDBOX: bool = sandbox::ENFORCED;
+#[cfg(feature = "test-support")]
+mod test_support;
+#[cfg(feature = "test-support")]
+pub use test_support::{
+    UnixSocketProbe, linux_syscall_probe, linux_test_host, windows_prepare_project_write,
+    windows_recovery_contract, wsl_test_host,
+};
 
-/// Whether [`protect_writes`] enforces its root on this host.
-pub const WRITE_PROTECTION: bool = sandbox::ENFORCED;
+mod host_capabilities;
+pub use host_capabilities::{Level, SandboxCapabilities, capabilities};
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+use linux as sandbox;
+
+/// Whether contained observations can run without exact-action approval.
+pub fn approval_free_reads() -> bool {
+    capabilities().approval_free_reads()
+}
+
+/// Whether [`project_write_shell`] can contain a mutating command to its
+/// project (writes inside the project only, no network).
+pub fn project_write_available() -> bool {
+    capabilities().project_write_available()
+}
+
+/// Mechanism used by project-write containment; availability is probed separately.
+pub const fn project_write_mechanism() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "seatbelt"
+    } else if cfg!(target_os = "linux") {
+        "landlock"
+    } else if cfg!(windows) {
+        "mxc_base_container"
+    } else {
+        "unavailable"
+    }
+}
+
+/// Host-specific limits reported after a failed contained command.
+pub fn project_write_limits() -> &'static str {
+    #[cfg(target_os = "linux")]
+    if linux::metadata_tier_available() {
+        return "This command ran contained to the project folder: no writes elsewhere, no network, and existing secrets are masked. New secret names are swept after the run. If it needs more access, run it again with sandbox \"none\"; the user will be asked.";
+    }
+    #[cfg(target_os = "linux")]
+    if linux::mount_tier_available() {
+        return "This command ran contained to the project folder: no writes elsewhere, no network, and existing secrets are masked. New secret names are swept after the run. Metadata changes are blocked. If it needs more access, run it again with sandbox \"none\"; the user will be asked.";
+    }
+    if cfg!(target_os = "linux") || cfg!(target_os = "macos") {
+        "This command ran contained to the project folder: no writes elsewhere (including .git and existing secrets) and no network. Creating, deleting or renaming top-level project entries is also blocked. If it needs those, run it again with sandbox \"none\"; the user will be asked."
+    } else {
+        "This command ran contained to the project folder: no writes elsewhere (including .git and existing secrets) and no network. New secret names are swept after the run. If it needs more access, run it again with sandbox \"none\"; the user will be asked."
+    }
+}
+
+/// Entry point of the single-threaded trampoline, never called by the agent.
+#[cfg(target_os = "linux")]
+pub fn trampoline() -> Result<(), Box<dyn std::error::Error>> {
+    linux::trampoline()
+}
+
+/// Copies the command helper next to a relocated agent (e.g. isolated E2E installs).
+pub fn copy_command_helper(source: &Path, destination: &Path) -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    std::fs::copy(
+        source.join("butler-sandbox"),
+        destination.join("butler-sandbox"),
+    )?;
+    #[cfg(windows)]
+    std::fs::copy(
+        source.join("butler-sandbox.exe"),
+        destination.join("butler-sandbox.exe"),
+    )?;
+    let _ = (source, destination);
+    Ok(())
+}
 
 /// Whether [`login_shell`] runs commands in a POSIX shell (`sh -c`); Windows
-/// runs them in `cmd.exe`, whose syntax differs.
+/// runs them in Windows PowerShell 5.1, whose syntax differs.
 pub const POSIX_SHELL: bool = shell::POSIX;
 
 /// A program and its arguments.
@@ -70,6 +150,12 @@ pub enum SandboxError {
     /// This host cannot enforce [`ShellAccess::ReadOnly`].
     #[error("this host cannot enforce read-only commands")]
     ReadOnlyUnavailable,
+    /// This host cannot contain a mutating command to its project.
+    #[error("this host cannot contain commands to the project folder")]
+    ProjectWriteUnavailable,
+    /// Filesystem discovery or policy preparation failed; never run uncontained.
+    #[error("sandbox filesystem preparation failed: {0}")]
+    Filesystem(#[from] std::io::Error),
     /// The read-deny paths could not be quoted into the sandbox profile.
     #[error("sandbox profile encoding failed")]
     Profile(#[from] serde_json::Error),
@@ -93,7 +179,8 @@ pub enum Protection {
 }
 
 /// The login-shell invocation of a user command with `access`: `/bin/sh -lc`
-/// on Unix and `%ComSpec% /d /s /c` on Windows (read from `environment`).
+/// on Unix and Windows PowerShell 5.1 on Windows. Explicit `cmd /c` scripts
+/// use `%ComSpec% /d /s /c` (read from `environment`).
 /// Read-only commands run inside the host sandbox, and hosts without one
 /// refuse them.
 pub fn login_shell(
@@ -104,7 +191,7 @@ pub fn login_shell(
     let invocation = shell::login_shell(command, environment);
     match access {
         ShellAccess::Full => Ok(invocation),
-        ShellAccess::ReadOnly => sandbox::read_only(invocation),
+        ShellAccess::ReadOnly => sandbox::read_only_contained(invocation, environment, &[], &[]),
     }
 }
 
@@ -123,11 +210,33 @@ pub fn login_shell_contained(
     )
 }
 
+/// The login shell of a mutating command contained to `root`: it may write
+/// only inside `root` and the `writable` scratch roots, never below `denied`
+/// or to project metadata and secrets, may not read credential stores, and
+/// has no network. Hosts without [`project_write_available`] refuse it.
+pub fn project_write_shell(
+    command: &str,
+    environment: &HashMap<String, String>,
+    root: &Path,
+    writable: &[&Path],
+    denied: &[&Path],
+) -> Result<Invocation, SandboxError> {
+    sandbox::project_write(
+        shell::login_shell(command, environment),
+        environment,
+        root,
+        writable,
+        denied,
+    )
+}
+
 /// Adds the arguments of `invocation` to `command`, which starts its
 /// program. Windows passes the text `cmd.exe /d /s /c` runs verbatim between
 /// one pair of quotes: `cmd` does not undo the `\"` escaping that
 /// `Command::arg` applies, so a command containing quotes would reach it
 /// mangled.
+/// Configure the environment and working directory first; PowerShell also
+/// restores its provider location to that same admitted directory.
 pub fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
     shell::add_arguments(command, invocation);
 }
@@ -171,4 +280,65 @@ pub fn is_registry_path(path: &str) -> bool {
 /// such as a quoted `printf` newline as a filesystem separator.
 pub fn normalize_path_token(path: &str) -> String {
     shell::normalize_path_token(path)
+}
+
+/// Reclaims helper-owned drive mappings after reap or at startup; call off async workers.
+pub fn reconcile_project_write(data: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    return windows::mxc::reconcile(data);
+    #[cfg(not(windows))]
+    {
+        let _ = data;
+        Ok(())
+    }
+}
+/// Windows helper entry point; the agent never calls PSEC directly.
+#[cfg(windows)]
+pub fn windows_sandbox_helper() -> Result<i32, Box<dyn std::error::Error>> {
+    windows::mxc::launch::main()
+}
+
+/// Holds a project-write setup/cleanup lease across the command lifetime.
+pub struct ProjectWritePreparation {
+    #[cfg(target_os = "linux")]
+    _lease: nix::fcntl::Flock<std::fs::File>,
+}
+
+impl ProjectWritePreparation {
+    /// Consumes the preparation, releasing any platform lease after cleanup.
+    pub fn release(self) {}
+}
+
+/// Prepares declared generated directories where the project root is withheld.
+pub fn prepare_project_write(root: &Path, data: &Path) -> std::io::Result<ProjectWritePreparation> {
+    #[cfg(target_os = "linux")]
+    return linux::prepare_project_write(root, data);
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (root, data);
+        Ok(ProjectWritePreparation {})
+    }
+}
+
+/// Namespace aliases for kernel-boundary E2E checks.
+#[cfg(feature = "test-support")]
+pub fn project_mount_aliases(root: &Path) -> std::io::Result<Vec<std::path::PathBuf>> {
+    #[cfg(target_os = "linux")]
+    return linux::project_mount_aliases(root);
+    #[cfg(not(target_os = "linux"))]
+    Ok(vec![root.to_path_buf()])
+}
+
+/// Releases per-command preparation after execution or when the helper never starts.
+/// Call off runtime workers; running helpers retain ownership of their files.
+pub fn cleanup_prepared_invocation(invocation: &Invocation) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        windows::mxc::prepare::cleanup_invocation(invocation)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = invocation;
+        Ok(())
+    }
 }

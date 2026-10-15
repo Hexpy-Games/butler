@@ -224,11 +224,11 @@ async fn recall_pages_read_canonical_writer_rows_and_preserve_json_errors() {
             .collect::<Vec<_>>(),
         vec!["cm_recovered"]
     );
-    assert!(
+    assert_eq!(
         reader
             .read_recovered_source_page(Some("cm_recovered"), Some(500))
-            .unwrap()
-            .is_empty()
+            .unwrap(),
+        [] as [crate::conversation::types::ConversationMessageWithParts; 0]
     );
     reader.close().unwrap();
 

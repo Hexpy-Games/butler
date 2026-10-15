@@ -1,8 +1,11 @@
+import { useEffect, useId, useRef, useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
+import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
-import { SetupWizardContent, SetupWizardList, SetupWizardShell } from "./SetupWizardShell";
+import { SetupWizardStepAction, SetupWizardStepCard } from "../SetupWizardStepCard";
+import { SetupWizardContent, SetupWizardList, SetupWizardMark, SetupWizardProgress, SetupWizardShell, type SetupWizardIntro } from "./SetupWizardShell";
 
 export const meta: ShowcaseMeta = {
   title: "SetupWizardShell",
@@ -18,7 +21,7 @@ const labels = {
     back: "Back", accept: "Accept",
   },
   "ko-KR": {
-    steps: ["언어", "안전", "설치", "모델"], title: "안전", body: "Butler는 허용한 권한으로 컴퓨터에서 작업합니다.",
+    steps: ["언어", "안전", "설치", "모델"], title: "안전", body: "버틀러는 허용한 권한으로 컴퓨터에서 작업합니다.",
     items: ["전체 권한을 주기 전에 명령을 확인하세요.", "공유 프로젝트에 비밀 정보를 두지 마세요.", "언제든 워커를 멈출 수 있습니다."],
     back: "뒤로", accept: "동의",
   },
@@ -47,13 +50,13 @@ function Wizard({ context, tone }: { context: ShowcaseRenderContext; tone: "ligh
 
 const focusLabels = {
   "en-US": { title: "Welcome to Butler", body: "Butler works for you on this computer.", agree: "Agree and continue" },
-  "ko-KR": { title: "반갑습니다", body: "Butler는 이 컴퓨터에서 일을 대신합니다.", agree: "동의하고 계속" },
+  "ko-KR": { title: "반갑습니다", body: "버틀러는 이 컴퓨터에서 일을 대신합니다.", agree: "동의하고 계속" },
 } as const;
 
-function Focus({ context, tone }: { context: ShowcaseRenderContext; tone: "light" | "dark" }) {
+function Focus({ context, tone, anchor = "center" }: { context: ShowcaseRenderContext; tone: "light" | "dark"; anchor?: "center" | "top" }) {
   const copy = focusLabels[context.locale];
   return (
-    <SetupWizardShell embedded title="Butler" tone={tone} variant="focus">
+    <SetupWizardShell anchor={anchor} embedded title="Butler" tone={tone} variant="focus">
       <SetupWizardContent surface="solid">
         <Typo.H3 as="h1" align="center">{copy.title}</Typo.H3>
         <Typo.Body align="center">{copy.body}</Typo.Body>
@@ -63,9 +66,64 @@ function Focus({ context, tone }: { context: ShowcaseRenderContext; tone: "light
   );
 }
 
+/**
+ * The first-run flow: the 420px intro, the 520px safety step and a shorter
+ * install step. Every Start, Accept and Back changes `stepKey`, so the card
+ * morphs each time (width, height or both); focus follows the new card.
+ */
+function MorphFlow({ context, tone, intro }: { context: ShowcaseRenderContext; tone: "light" | "dark"; intro?: SetupWizardIntro }) {
+  const copy = text(context), welcome = focusLabels[context.locale], id = useId();
+  const [step, setStep] = useState(0);
+  const moved = useRef(false);
+  useEffect(() => {
+    if (moved.current) document.getElementById(step ? `${id}-title` : `${id}-start`)?.focus({ preventScroll: true });
+    moved.current = true;
+  }, [id, step]);
+  const steps = copy.steps.map((label) => ({ id: label, label }));
+  return (
+    <SetupWizardShell anchor="top" embedded intro={intro} stepKey={`step-${step}`} title="Butler" tone={tone} variant="focus">
+      {step === 1 ? (
+        <SetupWizardStepCard activeIndex={1} backLabel={copy.back} onBack={() => setStep(0)}
+          steps={steps} title={copy.title} titleId={`${id}-title`}
+          actions={<SetupWizardStepAction forward text={copy.accept} onClick={() => setStep(2)} />}>
+          <Typo.Body>{copy.body}</Typo.Body>
+          <SetupWizardList>{copy.items.map((item) => <li key={item}><Typo.Body as="span">{item}</Typo.Body></li>)}</SetupWizardList>
+        </SetupWizardStepCard>
+      ) : step === 2 ? (
+        <SetupWizardStepCard activeIndex={2} backLabel={copy.back} onBack={() => setStep(1)}
+          steps={steps} title={copy.steps[2]} titleId={`${id}-title`} />
+      ) : (
+        <SetupWizardContent surface="solid">
+          <Stack cross="center" gap="md">
+            <SetupWizardMark />
+            <Typo.H3 as="h1" align="center">{welcome.title}</Typo.H3>
+            <Typo.Body align="center" tone="secondary">{welcome.body}</Typo.Body>
+          </Stack>
+          <Button id={`${id}-start`} size="lg" stretch onClick={() => setStep(1)}>{welcome.agree}</Button>
+        </SetupWizardContent>
+      )}
+    </SetupWizardShell>
+  );
+}
+
 export const stories: ShowcaseStory[] = [
   { name: "Step (light backdrop)", widths: ["375", "app", "wide"], render: (context) => <Wizard context={context} tone="light" /> },
   { name: "Step (dark backdrop)", widths: ["375", "app", "wide"], render: (context) => <Wizard context={context} tone="dark" /> },
   { name: "Focus (one column, light)", widths: ["375", "app"], render: (context) => <Focus context={context} tone="light" /> },
   { name: "Focus (one column, dark)", widths: ["375", "app"], render: (context) => <Focus context={context} tone="dark" /> },
+  { name: "Focus anchored to the top (light)", widths: ["app", "wide"], render: (context) => <Focus anchor="top" context={context} tone="light" /> },
+  { name: "Focus anchored to the top (dark)", widths: ["app", "wide"], render: (context) => <Focus anchor="top" context={context} tone="dark" /> },
+  { name: "Card morph (every step change)", widths: ["375", "app", "wide"], render: (context) => <MorphFlow context={context} tone="light" /> },
+  { name: "Card morph (every step change, dark)", widths: ["375", "app"], render: (context) => <MorphFlow context={context} tone="dark" /> },
+  { name: "Re-run entrance (intro=\"rerun\")", widths: ["375", "app"], render: (context) => <MorphFlow context={context} intro="rerun" tone="light" /> },
+  { name: "Ink intro (intro=\"full\", first install)", widths: ["375", "app", "wide"], render: (context) => <MorphFlow context={context} intro="full" tone="light" /> },
+  { name: "Ink intro (intro=\"full\", dark)", widths: ["375", "app"], render: (context) => <MorphFlow context={context} intro="full" tone="dark" /> },
+  {
+    name: "Step indicator (SetupWizardProgress)",
+    widths: ["375", "app"],
+    render: (context) => (
+      <SetupWizardProgress activeIndex={1} ariaLabel={context.locale === "ko-KR" ? "설정 단계" : "Setup steps"}
+        steps={text(context).steps.map((label) => ({ id: label, label }))} />
+    ),
+  },
 ];

@@ -39,10 +39,9 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: ./.github/actions/product-features
     - name: Look for an exact-commit release Agent
       id: reuse
-      if: inputs.reuse-pr-agent == 'true' && env.BUTLER_FEATURE_BROWSER != 'false'
+      if: inputs.reuse-pr-agent == 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
@@ -94,10 +93,10 @@ runs:
         if [[ "$BUILD_VERSION_REF" == release/* ]]; then export GITHUB_REF_NAME="v${BUILD_VERSION_REF#release/}"; fi
         case "$ORT_MODE" in
           static-ort)
-            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox --no-default-features --features static-ort
             ;;
           prebuilt-ort)
-            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent --no-default-features --features prebuilt-ort
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox --no-default-features --features prebuilt-ort
             ;;
           *)
             printf 'Unsupported ONNX Runtime mode: %s\n' "$ORT_MODE" >&2
@@ -124,6 +123,7 @@ runs:
       shell: bash
       run: |
         chmod +x "$RUNNER_TEMP/shared-agent/butler-agent"
+        if [ "$RUNNER_OS" = Linux ]; then chmod +x "$RUNNER_TEMP/shared-agent/butler-sandbox"; fi
         echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$RUNNER_TEMP/shared-agent/butler-agent" >> "$GITHUB_ENV"
 
     - name: Package and smoke the archive

@@ -7,6 +7,7 @@ import { resolveWallpaperScene, wallpaperSourceKey, wallpaperSourceTransparent }
 import { useWallpaperErrorReporter, useWallpaperRegistry } from "./registryContext";
 import type { WallpaperSource } from "./types";
 import type { WallpaperProps } from "./wallpaperProps";
+import { useWallpaperEngineInputs } from "./useWallpaperEngineInputs";
 import { useWallpaperTone } from "./wallpaperTone";
 import styles from "./Wallpaper.module.css";
 
@@ -18,23 +19,12 @@ function moduleId(source: WallpaperSource): string {
   return source.filter?.module ?? WALLPAPER_IMAGE_MODULE.manifest.id;
 }
 
-function WallpaperCanvas({
-  source,
-  motion = "auto",
-  pauseOnBattery = false,
-  tone: explicitTone,
-  scope = "viewport",
-  contentRect,
-  registry: explicitRegistry,
-  imageLoader,
-  onError,
-  dataTestClass,
-  className,
-  style,
-  transparent,
-}: WallpaperProps & { transparent: boolean }) {
+function WallpaperCanvas(props: WallpaperProps & { transparent: boolean }) {
+  const { source, tone: explicitTone, scope = "viewport", registry: explicitRegistry, imageLoader, onError, dataTestClass, className, style, transparent, intro = null } = props;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
+  const baseRef = useRef<HTMLCanvasElement | null>(null);
+  const topRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<WallpaperEngine | null>(null);
   const registry = useWallpaperRegistry(explicitRegistry);
   const report = useWallpaperErrorReporter();
@@ -42,6 +32,7 @@ function WallpaperCanvas({
   const reportRef = useRef(report);
   const loader = useWallpaperImageLoader(imageLoader);
   const loaderRef = useRef(loader);
+  const introRef = useRef(intro);
   const tone = useWallpaperTone(canvasRef, explicitTone);
   // Content key: a new but equal source object never rebuilds anything.
   const sourceKey = wallpaperSourceKey(source);
@@ -63,8 +54,12 @@ function WallpaperCanvas({
       // Read at load time, so a new loader function never rebuilds the engine.
       imageLoader: (asset, variant) => (loaderRef.current ? loaderRef.current(asset, variant) : Promise.reject(new Error("No imageLoader"))),
       overlay: overlayRef.current,
+      driftLayers: baseRef.current && topRef.current ? { base: baseRef.current, top: topRef.current } : null,
       transparent,
+      intro: introRef.current,
     });
+    // No WebGL2: the intro plays its no-WebGL reveal in the shell.
+    if (!engine) introRef.current?.start("fallback");
     engineRef.current = engine;
     return () => {
       engine?.dispose();
@@ -77,17 +72,15 @@ function WallpaperCanvas({
   }, [sourceKey, registry, tone]);
 
   useEffect(() => {
-    engineRef.current?.setMotion(motion, pauseOnBattery);
-  }, [motion, pauseOnBattery]);
+    introRef.current = intro;
+    engineRef.current?.setIntro(intro);
+    if (!engineRef.current) intro?.start("fallback");
+  }, [intro]);
 
-  // By value: a new but equal rect object never redraws.
-  const { x, y, width, height } = contentRect ?? { x: 0, y: 0, width: 0, height: 0 };
-  const hasContentRect = contentRect !== undefined;
-  useEffect(() => {
-    engineRef.current?.setContentRect(hasContentRect ? { x, y, width, height } : null);
-  }, [hasContentRect, x, y, width, height]);
+  useWallpaperEngineInputs(engineRef, props);
 
   const layerClass = cn(styles.root, scope === "container" ? styles.container : styles.viewport, className);
+  const paper = Math.min(0.95, Math.max(0, props.paperOverlay ?? 0));
   return (
     <>
       <canvas
@@ -101,8 +94,14 @@ function WallpaperCanvas({
         ref={canvasRef}
         style={style}
       />
+      {/* Drift modules: the current keyframe (base) and the next one fading in (top), copied from the canvas. */}
+      <canvas aria-hidden="true" className={layerClass} data-drift-layer="base" hidden ref={baseRef} style={style} />
+      <canvas aria-hidden="true" className={cn(layerClass, styles.driftTop)} data-drift-layer="top" hidden ref={topRef} style={style} />
       {/* Crossfade: the previous frame, frozen and fading out over the canvas. */}
       <canvas aria-hidden="true" className={layerClass} hidden ref={overlayRef} style={style} />
+      {paper > 0 ? (
+        <div aria-hidden="true" className={cn(layerClass, styles.paper)} data-tone={tone} data-test-class="wallpaper-paper" style={{ ...style, opacity: paper }} />
+      ) : null}
     </>
   );
 }
@@ -112,7 +111,9 @@ function WallpaperCanvas({
  * content under the engine's performance and motion policy. Another module or
  * image crossfades; params and image options redraw in place. Once something
  * has shown, `none` keeps the (cleared) canvas so the last frame fades out and
- * the next source fades in.
+ * the next source fades in. Drift modules (the riso print) crossfade slowly
+ * between keyframes on two layers and move more on `event`s; `columnRect` and
+ * `contentRect2` keep their ink out of the reading column and the composer.
  */
 export function Wallpaper(props: WallpaperProps) {
   const [shown, setShown] = useState(props.source.kind !== "none");

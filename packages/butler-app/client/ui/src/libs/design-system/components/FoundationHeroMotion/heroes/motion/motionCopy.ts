@@ -40,7 +40,7 @@ export const MOTION_COPY = {
     add: "추가 기능", attachments: "첨부", documents: "프로젝트 문서", attach: "파일 첨부", attachImage: "이미지 첨부",
     mode: "응답 방식", normal: "일반", plan: "계획",
     ask: "이번 주 요약해 줘", reply: "월요일 이후 세 가지가 바뀌었어요.",
-    placeholder: "Butler에게 무엇이든 물어보세요", send: "전송", stop: "중지", more: "추가 기능", askFirst: "먼저 확인", permission: "권한",
+    placeholder: "버틀러에게 무엇이든 물어보세요", send: "전송", stop: "중지", more: "추가 기능", askFirst: "먼저 확인", permission: "권한",
     model: "GPT-5.1", effort: "medium", sent: "오전 9:41", generating: "응답 생성 중 · 0분 1초",
     worked: "2초 동안 작업", done: "답변 완료", copyMessage: "메시지 복사", copyResponse: "답변 복사",
     full: "모든 동작", reduced: "동작 줄이기", fullHow: "translate + opacity", reducedHow: "opacity",

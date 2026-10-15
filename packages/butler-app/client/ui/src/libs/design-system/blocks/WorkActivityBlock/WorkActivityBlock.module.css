@@ -69,7 +69,7 @@
   place-items: center;
   color: var(--text-tertiary);
   font-size: var(--typo-body-size);
-  line-height: var(--line-height-body);
+  line-height: var(--typo-body-line-height);
 }
 
 .marker {
@@ -83,6 +83,23 @@
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-pill);
   background: var(--surface);
+}
+
+/* Live dot: the newest activity of running work. Filled, breathing slowly on
+   --motion-live-pulse; --motion-loop-count is 0 under reduced motion, so the
+   dot stays filled and still. Shared by the expanded timeline and the
+   collapsed tail (WorkActivityDisclosure). */
+.marker[data-live="true"] {
+  border-color: var(--text-primary);
+  background: var(--text-primary);
+  animation: work-activity-live-pulse var(--motion-live-pulse)
+    var(--motion-ease-standard) var(--motion-loop-count);
+}
+
+@keyframes work-activity-live-pulse {
+  50% {
+    opacity: 0.35;
+  }
 }
 
 .icon {
@@ -322,5 +339,9 @@ button.toolDetailButton:focus-visible {
   button.tool,
   .toolGroup {
     transition: none;
+  }
+
+  .marker[data-live="true"] {
+    animation: none;
   }
 }

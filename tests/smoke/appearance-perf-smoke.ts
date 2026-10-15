@@ -14,7 +14,7 @@ mkdirSync(out, { recursive: true });
 const server = await createNativeAppServer();
 const browser = await launchSmokeBrowser();
 writeFileSync(`${out}/environment.json`, JSON.stringify({ browser: browser.version(), viewportHeight: 900, deviceScaleFactor: 1, custom, ownerScale: Bun.argv.includes("--owner-scale") }, null, 2));
-const expected = ["none", "live:butler.bloom", "live:butler.silk", "live:butler.riso-flow", "live:butler.lamina", "live:butler.diatom", "live:butler.dusk", "live:butler.shoreline", "live:butler.photo-clouds", "live:butler.photo-daisies", "live:butler.stipple"];
+const expected = ["none", "live:butler.riso-print", "live:butler.bloom", "live:butler.silk", "live:butler.riso-flow", "live:butler.lamina", "live:butler.diatom", "live:butler.dusk", "live:butler.shoreline", "live:butler.photo-clouds", "live:butler.photo-daisies", "live:butler.stipple"];
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -23,12 +23,15 @@ function assert(condition: unknown, message: string): asserts condition {
 async function snapshot(page: Page) {
   return page.evaluate(() => {
     const root = document.querySelector('[data-slot="wallpaper-picker"]')!;
-    const images = [...root.querySelectorAll("img")];
+    const pickers = [...document.querySelectorAll('[data-slot="wallpaper-picker"]')];
+    const images = pickers.flatMap(picker => [...picker.querySelectorAll("img")]);
     const state = (window as any).__appearance;
     return {
+      pickerOptions: pickers.map(picker => [...picker.querySelector('[role="radiogroup"]')!.querySelectorAll('[role="radio"]')].map(e => e.closest("[data-option]")?.getAttribute("data-option"))),
       ...state, options: [...root.querySelector('[role="radiogroup"]')!.querySelectorAll('[role="radio"]')].map((e) => e.closest("[data-option]")?.getAttribute("data-option")),
       images: images.map((e) => ({ width: e.naturalWidth, height: e.naturalHeight, complete: e.complete })),
-      canvases: root.querySelectorAll("canvas").length, videos: root.querySelectorAll("video").length,
+      canvases: pickers.reduce((count, picker) => count + picker.querySelectorAll("canvas").length, 0),
+      videos: pickers.reduce((count, picker) => count + picker.querySelectorAll("video").length, 0),
       domNodes: root.querySelectorAll("*").length,
       requests: performance.getEntriesByType("resource").map((e) => {
         const r = e as PerformanceResourceTiming;
@@ -63,7 +66,7 @@ async function measure(width: number, module: string, tone: string) {
     if (width === 375 && round === "reopen") await page.getByRole("button", { name: "돌아가기", exact: true }).filter({ visible: true }).click();
     await startTrace(cdp);
     const interactiveMs = await navigateAppearance(page);
-    await page.waitForFunction(() => document.querySelectorAll('[data-slot="wallpaper-picker"] img').length === 10 && [...document.querySelectorAll<HTMLImageElement>('[data-slot="wallpaper-picker"] img')].every((e) => e.complete && e.naturalWidth > 0));
+    await page.waitForFunction(() => document.querySelectorAll('[data-slot="wallpaper-picker"] img').length === 22 && [...document.querySelectorAll<HTMLImageElement>('[data-slot="wallpaper-picker"] img')].every((e) => e.complete && e.naturalWidth > 0));
     const readyMs = await page.evaluate(() => performance.now() - (window as any).__appearance.start);
     await page.waitForTimeout(1000);
     const events = await endTrace(cdp);
@@ -89,6 +92,7 @@ async function measure(width: number, module: string, tone: string) {
     writeFileSync(`${out}/${width}-${module}-${tone}-${round}.json`, JSON.stringify(result, null, 2));
     rounds.push(result);
     assert(JSON.stringify(data.options) === JSON.stringify(expected), `Wallpaper count/order changed: ${JSON.stringify(data.options)}`);
+    assert(data.pickerOptions.length === 2 && data.pickerOptions.every((options: Array<string | null | undefined>) => JSON.stringify(options) === JSON.stringify(expected)), "Both complete pickers in native order");
     assert(!data.canvases && !data.videos, "Picker must contain stills only");
     const selected = page.locator('[data-slot="wallpaper-picker"] [role="radiogroup"]').first().getByRole("radio", { checked: true });
     assert(await selected.evaluate((e) => e.closest("[data-option]")?.getAttribute("data-option")) === `live:${module}`, "Latest selection was lost");
@@ -127,7 +131,7 @@ try {
     console.error(`owner-scale: ${ids.length} complete chat summaries`);
   }
   for (const width of widths) {
-    for (const module of ["butler.silk", "butler.photo-clouds"]) {
+    for (const module of [...(!custom ? ["butler.riso-print"] : []), "butler.silk", "butler.photo-clouds"]) {
       for (const tone of ["light", "dark"]) results.push(...await measure(width, module, tone));
     }
   }

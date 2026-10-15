@@ -288,7 +288,7 @@ pub(super) fn model_preference<'a>(
         config.get("consolidation_model"),
         app_settings.and_then(|settings| settings.get("consolidation_model")),
     ]);
-    if selected.is_none() || selected.is_some_and(is_default_model_sentinel) {
+    if selected.is_none_or(is_default_model_sentinel) {
         first_non_null([
             app_settings.and_then(|settings| settings.get("model")),
             config.pointer("/system/butlerModel"),

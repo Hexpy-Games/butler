@@ -41,6 +41,7 @@ pub fn describe_native(tool: BridgeCatalogTool<'_>) -> Result<Value, json::JsonE
     Ok(json!({
         "id":format!("native:{}",tool.name), "name":tool.name,
         "namespace":null, "provider":"native", "category":tool.category,
+        "description":tool.definition.get("description").and_then(Value::as_str).unwrap_or(""),
         "enabled":tool.enabled, "disabled_reason":tool.disabled_reason,
         "recovery_hint":if tool.enabled { None } else { tool.recovery_hint },
         "safety_notes":tool.safety_notes, "schema":schema, "schema_digest":digest,

@@ -353,3 +353,6 @@ mod recall_judge;
 
 #[path = "memory/fts.rs"]
 mod fts;
+
+#[path = "memory/model_choice.rs"]
+mod model_choice;

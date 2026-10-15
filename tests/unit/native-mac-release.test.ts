@@ -39,7 +39,10 @@ test("native mac release validates inputs and stages the runtime shell", () => {
     writeFileSync(join(packageDir, name, "fixture"), name);
   }
   writeFileSync(join(packageDir, "main.mjs"), "import { app } from 'electron';");
+  writeFileSync(join(packageDir, "package.json"), JSON.stringify({ version: "1.2.3", devDependencies: { electron: "1" } }));
   const staged = stageElectronPackageSource(root, join(root, "electron-source"));
+  // Dev tooling is not staged, so the staged manifest must not list it for the packager's prune walk.
+  expect(JSON.parse(readFileSync(join(staged, "package.json"), "utf8")).devDependencies).toBeUndefined();
   expect(readFileSync(join(staged, "main.mjs"), "utf8")).toBe("import { app } from 'electron';");
   expect(readFileSync(join(staged, "assets/fixture"), "utf8")).toBe("assets");
   for (const name of ["node_modules", "dist", ".native-agent-payload"]) {
@@ -57,6 +60,23 @@ test("native mac release validates inputs and stages the runtime shell", () => {
   } finally {
     if (previousTag === undefined) delete process.env.GITHUB_REF_NAME;
     else process.env.GITHUB_REF_NAME = previousTag;
+  }
+  mkdirSync(join(packageDir, "browser"));
+  mkdirSync(join(packageDir, "i18n"));
+  writeFileSync(join(packageDir, "i18n/menu.mjs"), "export const label = 'Open';");
+  const nested = join(packageDir, "browser/menu.mjs");
+  writeFileSync(nested, "import { label } from '../i18n/menu.mjs'; export { label };");
+  stageElectronPackageSource(root, join(root, "internal-source"));
+  for (const source of [
+    "import { label } from '../../../../butler-i18n/src/native-context-menu.mjs';",
+    "export { label } from '../../outside.mjs';",
+    "await import('../../outside.mjs');",
+    "const outside = require('../../outside.mjs');",
+    "import '/outside.mjs';",
+    "import 'file:///outside.mjs';",
+  ]) {
+    writeFileSync(nested, source);
+    expect(() => stageElectronPackageSource(root, join(root, "escaped-source"))).toThrow("Electron import outside package: browser/menu.mjs");
   }
   writeFileSync(join(packageDir, "package.json"), JSON.stringify({ dependencies: { unexpected: "1" } }));
   expect(() => stageElectronPackageSource(root, join(root, "invalid-source"))).toThrow(

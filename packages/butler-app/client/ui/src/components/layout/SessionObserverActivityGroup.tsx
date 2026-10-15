@@ -8,8 +8,9 @@ import { CurrentTurnStatus } from "@/components/conversation/CurrentTurnStatus.t
 export type ObserverPhaseActivity = PhaseActivity & { turnId: string };
 
 // Internal Turns retain tool ownership, but are not conversation boundaries.
-export function SessionObserverActivityGroup({ activities, active, state, delegatedGoal }: {
+export function SessionObserverActivityGroup({ activities, active, state, delegatedGoal, expandAll }: {
   activities: ObserverPhaseActivity[];
+  expandAll?: boolean;
   delegatedGoal?: string;
   active?: SessionView["active_turn"];
   state?: string;
@@ -19,7 +20,7 @@ export function SessionObserverActivityGroup({ activities, active, state, delega
     : undefined;
   return (
     <Stack gap="md">
-      {activities.length > 0 ? <TurnActivityTimeline delegatedGoal={delegatedGoal} activities={activities} live={Boolean(active)}
+      {activities.length > 0 ? <TurnActivityTimeline delegatedGoal={delegatedGoal} activities={activities} live={Boolean(active)} pulseLatest={Boolean(active)} expandAll={expandAll}
         currentState={current?.semanticState ?? state} turnId={activities[0]?.turnId} /> : null}
       {active && activities.length === 0 && current?.phaseActivities.length === 0 ? <TurnActivityPanel
         rows={active.progress?.safe_progress_rows ?? []} state={active.state}

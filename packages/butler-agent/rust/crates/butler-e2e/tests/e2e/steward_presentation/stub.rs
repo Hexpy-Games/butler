@@ -11,11 +11,14 @@ use std::{
 };
 use tokio::sync::Notify;
 
-pub(super) const OWNER: &str = "Delegate reading and comparing a.txt and b.txt.";
+pub(crate) const OWNER: &str = "Delegate reading and comparing a.txt and b.txt.";
 pub(super) const DIRECTION: &str = "Use approach B and read b.txt next.";
 
 #[derive(Default)]
-pub(super) struct Script {
+pub(crate) struct Script {
+    pub(crate) answer_blocks: AtomicBool,
+    answer_step: Mutex<usize>,
+    pub(crate) browser: AtomicBool,
     pub open_disposition: AtomicBool,
     pub blocked_disposition: AtomicBool,
     steps: Mutex<(usize, usize)>,
@@ -26,7 +29,7 @@ pub(super) struct Script {
     pub release: Notify,
 }
 
-pub(super) async fn start()
+pub(crate) async fn start()
 -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = format!("http://{}/codex", listener.local_addr()?);
@@ -62,7 +65,7 @@ async fn reply(
         *step += 1;
         current
     };
-    if child && step == 4 {
+    if child && step == 4 && !script.browser.load(Ordering::SeqCst) {
         script.held.notify_one();
         script.release.notified().await;
     }
@@ -82,29 +85,139 @@ async fn reply(
         && script.open_disposition.load(Ordering::SeqCst)
     {
         message("Delegated work could not complete; progress remains saved.")
+    } else if key.user_request.contains("Delegated result")
+        && script.answer_blocks.load(Ordering::SeqCst)
+    {
+        super::super::browser_delegation::answer::parent_item(
+            &body,
+            &mut script.answer_step.lock().unwrap(),
+        )
     } else if key.user_request.contains("Delegated result") {
         message("Approach B verified.")
     } else {
-        parent_item(step)
+        parent_item(step, script.answer_blocks.load(Ordering::SeqCst))
     };
     ([("content-type", "text/event-stream")], wire(item)).into_response()
 }
 
-fn parent_item(step: usize) -> Value {
+/// With `presented`, the parent Plan decides to show the result as cards and
+/// a table, which the delegated task then carries.
+fn parent_item(step: usize, presented: bool) -> Value {
+    let mut parent_plan = plan(false, "steward");
+    if presented {
+        parent_plan["presentation"] = json!(["cards", "table"]);
+    }
     match step {
         0 => call("start", "start_work", &json!({"objective":OWNER})),
-        1 => call("plan", "replace_work_plan", &plan(false, "steward")),
+        1 => call("plan", "replace_work_plan", &parent_plan),
         2 => call("review", "record_work_review", &review()),
-        3 => call(
-            "delegate",
-            "delegate_to_steward",
-            &json!({"request":OWNER,"safe_title":"Compare approaches"}),
-        ),
+        3 => call("delegate", "delegate_to_steward", &json!({"request":OWNER})),
         _ => message("Direction delivered."),
     }
 }
 
 fn child_item(step: usize, body: &Value, script: &Script) -> Value {
+    // Only the butler answers the user; a steward reports to it.
+    let offered = body["tools"].as_array().into_iter().flatten();
+    assert!(
+        !offered
+            .into_iter()
+            .any(|tool| tool["name"] == "answer_blocks"),
+        "a steward was offered answer_blocks"
+    );
+    // Two collections: both succeed for an answer; otherwise the second is
+    // refused so its recovery reaches the steward.
+    let collecting = 2;
+    if script.browser.load(Ordering::SeqCst) && (7..7 + collecting).contains(&step) {
+        return call(
+            &format!("collect-browser-{step}"),
+            "tool_call",
+            &json!({"id":"native:image_collect","arguments":{"tab":"parent-tab","ref":format!("image-ref-{step}"),"observation":"parent-observation"}}),
+        );
+    }
+    let step = if script.browser.load(Ordering::SeqCst) && step >= 7 + collecting {
+        step - collecting
+    } else {
+        step
+    };
+    if script.browser.load(Ordering::SeqCst) {
+        let presents_answer_blocks = script.answer_blocks.load(Ordering::SeqCst);
+        if presents_answer_blocks && (7..10).contains(&step) {
+            return match step {
+                7 => call(
+                    "open-other-page",
+                    "tool_call",
+                    &json!({"id":"native:browser_open","arguments":{"url":"https://example.org/"}}),
+                ),
+                8 => call(
+                    "observe-other-page",
+                    "tool_call",
+                    &json!({"id":"native:browser_observe","arguments":{"tab":"other-tab"}}),
+                ),
+                _ => call(
+                    "capture-other-page",
+                    "tool_call",
+                    &json!({"id":"native:browser_screenshot","arguments":{"tab":"other-tab","observation":"other-observation"}}),
+                ),
+            };
+        }
+        let step = if presents_answer_blocks && step >= 10 {
+            step - 3
+        } else {
+            step
+        };
+        return match step {
+            0 => call("browser-plan", "replace_work_plan", &plan(false, "direct")),
+            1 => call("browser-review", "record_work_review", &review()),
+            2 => call(
+                "describe-browser",
+                "tool_describe",
+                &json!({"ids":["native:browser_open","native:browser_tabs","native:browser_observe","native:browser_screenshot","native:image_collect"]}),
+            ),
+            3 => call(
+                "open-browser",
+                "tool_call",
+                &json!({"id":"native:browser_open","arguments":{"url":"https://example.com/"}}),
+            ),
+            4 => call(
+                "list-browser",
+                "tool_call",
+                &json!({"id":"native:browser_tabs","arguments":{}}),
+            ),
+            5 => call(
+                "observe-browser",
+                "tool_call",
+                &json!({"id":"native:browser_observe","arguments":{"tab":"parent-tab"}}),
+            ),
+            6 => call(
+                "capture-browser",
+                "tool_call",
+                &json!({"id":"native:browser_screenshot","arguments":{"tab":"parent-tab","observation":"parent-observation"}}),
+            ),
+            7 => {
+                let mut wrong = work_id(body);
+                wrong.pop();
+                call(
+                    "wrong-browser-work",
+                    "record_work_disposition",
+                    &json!({"work_id":wrong,"disposition":"completed","summary":"Browser verified"}),
+                )
+            }
+            8 => call(
+                "wrong-browser-continuation",
+                "continue_work",
+                &json!({"work_id":format!("{}-wrong",work_id(body))}),
+            ),
+            9 => call(
+                "close-browser-work",
+                "record_work_disposition",
+                &json!({"work_id":work_id(body),"disposition":"completed","summary":"Browser verified",
+                    "action_updates":[{"action_key":"read","status":"done"},{"action_key":"compare","status":"done"}],
+                    "remaining_actions":[],"followups":[]}),
+            ),
+            _ => message("Browser verified."),
+        };
+    }
     let path = |name: &str| format!("{}/{}", script.workspace.lock().unwrap(), name);
     match step {
         0 => call("child-plan", "replace_work_plan", &plan(false, "direct")),

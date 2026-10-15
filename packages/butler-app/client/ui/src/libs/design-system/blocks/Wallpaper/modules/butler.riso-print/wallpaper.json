@@ -1,0 +1,110 @@
+{
+  "id": "butler.riso-print",
+  "name": {
+    "en": "Riso Print",
+    "ko": "리소 프린트"
+  },
+  "version": "1.0.0",
+  "engine": 1,
+  "motion": "drift",
+  "image": "none",
+  "density": true,
+  "params": [
+    {
+      "key": "inks",
+      "type": "enum",
+      "label": {
+        "en": "Inks",
+        "ko": "잉크"
+      },
+      "default": "print",
+      "options": [
+        {
+          "value": "print",
+          "label": {
+            "en": "Blue · Pink · Purple",
+            "ko": "블루 · 핑크 · 퍼플"
+          }
+        },
+        {
+          "value": "violet",
+          "label": {
+            "en": "Purple lead",
+            "ko": "퍼플 위주"
+          }
+        }
+      ]
+    },
+    {
+      "key": "paper",
+      "type": "enum",
+      "label": {
+        "en": "Paper",
+        "ko": "종이"
+      },
+      "default": "day",
+      "defaultDark": "night",
+      "options": [
+        {
+          "value": "day",
+          "label": {
+            "en": "Light",
+            "ko": "밝은 종이"
+          }
+        },
+        {
+          "value": "night",
+          "label": {
+            "en": "Night",
+            "ko": "밤 종이"
+          }
+        }
+      ]
+    },
+    {
+      "key": "composition",
+      "type": "enum",
+      "label": {
+        "en": "Composition",
+        "ko": "구도"
+      },
+      "default": "masses",
+      "options": [
+        {
+          "value": "masses",
+          "label": {
+            "en": "Masses",
+            "ko": "덩어리"
+          }
+        },
+        {
+          "value": "corners",
+          "label": {
+            "en": "Corners",
+            "ko": "모서리"
+          }
+        },
+        {
+          "value": "lowTide",
+          "label": {
+            "en": "Low tide",
+            "ko": "썰물"
+          }
+        }
+      ]
+    },
+    {
+      "key": "seed",
+      "type": "number",
+      "label": {
+        "en": "Print",
+        "ko": "판"
+      },
+      "default": 0,
+      "min": 0,
+      "max": 99,
+      "step": 1,
+      "control": "shuffle"
+    }
+  ]
+}

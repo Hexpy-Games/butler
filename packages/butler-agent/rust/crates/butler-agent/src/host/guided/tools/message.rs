@@ -51,6 +51,7 @@ pub(super) fn result_message(
         append_output(result, output, &mut content)?;
     }
     content.push('}');
+    let content = browser_content(content)?;
     let content = preview::without_details(&content)?;
     let content = if preview::admitted(result) {
         content
@@ -188,4 +189,16 @@ pub(super) fn tool_failure(name: &str, code: &str) -> serde_json::Value {
     serde_json::json!({"ok":false,"error":{
         "code":"tool_error", "message":format!("{name} could not complete: {code}")
     }})
+}
+
+fn browser_content(content: String) -> Result<String, BtccError> {
+    if !content.contains("\"still_file\"") {
+        return Ok(content);
+    }
+    let mut value: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| error("guided_tool_provider_serialization_failed").with_source(e))?;
+    if let Some(output) = value["output"].as_object_mut() {
+        output.remove("still_file");
+    }
+    Ok(value.to_string())
 }

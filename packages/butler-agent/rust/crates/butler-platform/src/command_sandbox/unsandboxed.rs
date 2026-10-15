@@ -5,8 +5,6 @@ use std::path::Path;
 
 use super::{Invocation, ProtectError, Protection, SandboxError};
 
-pub(super) const ENFORCED: bool = false;
-
 pub(super) fn read_only(invocation: Invocation) -> Result<Invocation, SandboxError> {
     drop(invocation);
     Err(SandboxError::ReadOnlyUnavailable)
@@ -17,6 +15,17 @@ pub(super) fn protect_writes(
     _root: &Path,
 ) -> Result<Protection, ProtectError> {
     Ok(Protection::Unavailable(invocation))
+}
+
+pub(super) fn project_write(
+    invocation: Invocation,
+    _environment: &std::collections::HashMap<String, String>,
+    _root: &Path,
+    _writable: &[&Path],
+    _denied: &[&Path],
+) -> Result<Invocation, SandboxError> {
+    drop(invocation);
+    Err(SandboxError::ProjectWriteUnavailable)
 }
 
 pub(super) fn read_only_contained(

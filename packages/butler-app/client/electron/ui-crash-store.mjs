@@ -2,8 +2,9 @@ import { mkdir, open, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { appendCrash, CRASH_LOG_BYTES } from "./ui-crash-log.mjs";
 
-/** One serialized writer, no timer, no startup write; survives renderer reloads. */
+/** One serialized writer, no timer, no startup write; survives renderer reloads. No accepted data root (`null`): nothing is kept. */
 export function createUiCrashStore(dataRoot, getVersion) {
+  if (!dataRoot) return { path: null, read: async () => [], append: async () => ({ ok: false }) };
   const path = join(dataRoot, "app", "logs", "ui-crashes.json");
   let pending = Promise.resolve();
   async function read() {

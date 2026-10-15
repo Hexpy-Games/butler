@@ -2,6 +2,35 @@ use super::*;
 use crate::gateway::GatewayMutationCommands;
 
 impl GatewayMutationCommands for AppApplication {
+    fn automation_run_attention(
+        &self,
+        id: String,
+        run_id: String,
+        code: String,
+        tainted: bool,
+    ) -> ApplicationFuture<crate::gateway::AutomationRunSummary> {
+        let this = self.clone_handle();
+        Box::pin(async move {
+            this.automation_run_attention_owned(id, run_id, code, tainted)
+                .await
+        })
+    }
+    fn preview_session_open(&self, id: String) -> ApplicationFuture<bool> {
+        let this = self.clone_handle();
+        Box::pin(async move {
+            this.storage
+                .read(move |db| {
+                    db.query_row(
+                        "SELECT EXISTS(SELECT 1 FROM chats WHERE id=?1 AND archived=0)",
+                        [id],
+                        |row| row.get(0),
+                    )
+                    .map_err(storage::AppStorageError::sqlite)
+                })
+                .await
+                .map_err(app_error)
+        })
+    }
     fn update_project(
         &self,
         id: String,
@@ -28,7 +57,11 @@ impl GatewayMutationCommands for AppApplication {
         permanent: bool,
     ) -> ApplicationFuture<AppProjectActionResult> {
         let this = self.clone_handle();
-        Box::pin(async move { this.delete_project_owned(id, permanent).await })
+        Box::pin(async move {
+            let result = this.delete_project_owned(id, permanent).await?;
+            this.assets_owned(AppAssetCommand::Sweep).await?;
+            Ok(result)
+        })
     }
     fn update_session(
         &self,
@@ -50,13 +83,21 @@ impl GatewayMutationCommands for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.clear_general_owned(title).await })
     }
+    fn mark_session_read(&self, id: String) -> ApplicationFuture<AppSessionReadResult> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.mark_session_read_owned(id).await })
+    }
     fn delete_session(
         &self,
         id: String,
         permanent: bool,
     ) -> ApplicationFuture<AppSessionActionResult> {
         let this = self.clone_handle();
-        Box::pin(async move { this.delete_session_owned(id, permanent).await })
+        Box::pin(async move {
+            let result = this.delete_session_owned(id, permanent).await?;
+            this.assets_owned(AppAssetCommand::Sweep).await?;
+            Ok(result)
+        })
     }
     fn mutate_space(
         &self,

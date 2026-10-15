@@ -27,10 +27,13 @@ pub(in crate::host) struct RuntimeStores {
 impl RuntimeStores {
     pub(in crate::host) async fn open(
         data_root: &Path,
-        collation: Arc<LocaleCollation>,
+        collation: &Arc<LocaleCollation>,
         stop: &tokio_util::sync::CancellationToken,
+        correction: super::startup_trace::CorrectionSender,
+        startup: &super::startup_trace::Trace,
     ) -> Result<Self, BtccError> {
-        let btcc = open_btcc(data_root, stop).await?;
+        check_startup(stop)?;
+        let btcc = open_btcc(data_root, stop, correction, startup.nested()).await?;
         if let Err(error) = check_startup(stop) {
             let _ = btcc.close().await;
             return Err(error);
@@ -56,7 +59,7 @@ impl RuntimeStores {
         let conversations = match AgentConversationStore::open(ConversationStoreConfig {
             path: conversation_store_path(data_root),
             identity_clock: Arc::new(SystemIdentity),
-            collation,
+            collation: collation.clone(),
         })
         .await
         {
@@ -127,34 +130,101 @@ pub(super) fn check_startup(stop: &tokio_util::sync::CancellationToken) -> Resul
 async fn open_btcc(
     data_root: &Path,
     stop: &tokio_util::sync::CancellationToken,
+    timing: super::startup_trace::CorrectionSender,
+    mut trace: super::startup_trace::Trace,
 ) -> Result<BtccStorage, BtccError> {
     let root = data_root.to_owned();
-    let bootstrap = tokio::task::spawn_blocking(move || {
-        prepare_btcc_storage(&root, crate::host::build_info::current().version)
+    let cancellation = stop.clone();
+    let (bootstrap, correction) = tokio::task::spawn_blocking(move || {
+        if let Err(error) = butler_platform::command_sandbox::reconcile_project_write(&root) {
+            eprintln!("Sandbox startup reconciliation failed: {error}");
+        }
+        trace.phase("sandbox_reconcile");
+        let bootstrap = prepare_btcc_storage(&root, crate::host::build_info::current().version)
+            .map_err(|e| error("storage_bootstrap_failed", e))?;
+        trace.phase("btcc_storage_prepare");
+        timing.send_replace(super::startup_trace::Correction::Running(
+            std::time::Instant::now(),
+        ));
+        let correction = butler_turn::btcc::run_startup_correction(
+            &bootstrap.path,
+            &cancellation,
+            correction_progress,
+        );
+        timing.send_replace(super::startup_trace::Correction::Finished(
+            std::time::Instant::now(),
+        ));
+        Ok::<_, BtccError>((bootstrap, correction))
     })
     .await
-    .map_err(|e| error("storage_bootstrap_worker_failed", e))?
-    .map_err(|e| error("storage_bootstrap_failed", e))?;
+    .map_err(|e| error("storage_bootstrap_worker_failed", e))??;
     check_startup(stop)?;
     let host_id = SystemIdentity
         .hostname()
         .map_err(|e| error("runtime_host_identity_failed", e))?;
-    let btcc = BtccStorage::open(BtccStorageConfig {
-        path: bootstrap.path,
+    let config = || btcc_config(&bootstrap.path, &bootstrap.manifest_id, &host_id);
+    let started = std::time::Instant::now();
+    let btcc = match BtccStorage::open(config()).await {
+        Ok(store) => store,
+        Err(e) => {
+            let path = bootstrap.path.clone();
+            let restored = tokio::task::spawn_blocking(move || correction.rollback(&path))
+                .await
+                .map_err(|e| error("storage_correction_open_failed", e))?
+                .map_err(|e| error(e.code(), e.message()))?;
+            if !restored {
+                return Err(error(e.code(), e.message()));
+            }
+            butler_core::diagnostic!(
+                "[btcc-storage] storage_correction_open_failed: {}",
+                e.code()
+            );
+            return BtccStorage::open(config())
+                .await
+                .map_err(|e| error(e.code(), e.message()));
+        }
+    };
+    butler_core::diagnostic!(
+        "[btcc-startup] phase=storage_correction step=open duration_us={}",
+        started.elapsed().as_micros()
+    );
+    let path = bootstrap.path;
+    if let Err(error) = tokio::task::spawn_blocking(move || correction.opened(&path)).await {
+        butler_core::diagnostic!("[btcc-storage] correction cleanup worker: {error}");
+    }
+    Ok(btcc)
+}
+
+fn btcc_config(path: &Path, manifest_id: &str, host_id: &str) -> BtccStorageConfig {
+    BtccStorageConfig {
+        path: path.to_owned(),
         profile: StorageProfile::Durable,
         activation: StorageActivation {
-            manifest_id: bootstrap.manifest_id,
+            manifest_id: manifest_id.to_owned(),
         },
         runtime_owner: RuntimeOwnerIdentity {
             owner_id: uuid::Uuid::new_v4().to_string(),
-            host_id: host_id.clone(),
+            host_id: host_id.to_owned(),
             process_id: std::process::id(),
             process_started_at_ms: u64::try_from(SystemIdentity.now_epoch_millis().max(0))
                 .unwrap_or_default(),
         },
-        process_liveness: Arc::new(ProcessLivenessProbe { host_id }),
-    })
-    .await
-    .map_err(|e| error(e.code(), e.message()))?;
-    Ok(btcc)
+        process_liveness: Arc::new(ProcessLivenessProbe {
+            host_id: host_id.to_owned(),
+        }),
+    }
+}
+
+fn correction_progress(step: &str, duration: std::time::Duration, bytes: u64) {
+    if let Some(outcome) = step.strip_prefix("outcome=") {
+        butler_core::diagnostic!(
+            "[btcc-startup] phase=storage_correction outcome={outcome} duration_us={} wal_bytes={bytes}",
+            duration.as_micros()
+        );
+    } else {
+        butler_core::diagnostic!(
+            "[btcc-startup] phase=storage_correction step={step} duration_us={} wal_bytes={bytes}",
+            duration.as_micros()
+        );
+    }
 }

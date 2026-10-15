@@ -36,6 +36,7 @@ export const guidance: ShowcaseGuidance = {
     { when: "Choosing a value inside a form", use: "Select" },
     { when: "Two to four short text options", use: "SegmentedControl" },
     { when: "A card that shows content, not a choice", use: "Card" },
+    { when: "Picking several items to act on", use: "CheckCard" },
   ],
   recipes: [
     { name: "Pick a service", description: "Rows for the well-known choices; the Tag names the easiest path.", render: () => <PickService /> },
@@ -56,10 +57,15 @@ export const guidance: ShowcaseGuidance = {
   content: [
     "Title: the service name people know (ChatGPT, not OpenAI OAuth). Description: what they need, in a few words.",
     "Tags are two or three words (No key needed, Free · Private).",
+    "The icon is bare: a logo or glyph with no tile or boxed background behind it.",
+    "Leading icon = title text size, centered on the title line; brand logos are fitted to the icon-pack grid, so all leading icons share one rule. Trailing controls vertically centered.",
+    "Selected is a 1px accent border on the info tint; press is the stretched-row pressed fill, never a scale.",
   ],
   accessibility: [
     "Each card is a button; the description is its aria-describedby. Loading sets aria-busy, unavailable sets aria-disabled.",
     "For single choice lists pass role=radiogroup on ChoiceCardList and role=radio with aria-checked on each card.",
+    "For picking several items use CheckCard in a CheckCardList, not ChoiceCard.",
   ],
-  tokens: ["--control-bg", "--control-hover-bg", "--line", "--line-strong", "--accent", "--color-info-bg", "--danger-line-strong", "--radius-panel", "--focus-ring"],
+  tokens: ["--control-bg", "--control-hover-bg", "--line", "--line-strong", "--accent", "--color-info-bg", "--danger-line-strong", "--radius-panel", "--focus-ring",
+    "--border-hairline", "--icon-size-sm", "--icon-size-md", "--selection-strong", "--motion-fast", "--motion-ease-standard"],
 };

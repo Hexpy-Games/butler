@@ -10,6 +10,7 @@ import type { WallpaperMotion, WallpaperSource } from "./types";
 import type { WallpaperParamInput } from "./values";
 import { Wallpaper } from "./Wallpaper";
 import { TransparentDecorationDemo } from "./Wallpaper.decoration";
+import { PaperOverlayDemo, RisoDriftDemo } from "./Wallpaper.drift";
 import { ImageWallpaperDemo, showcaseImageLoader } from "./Wallpaper.demo";
 import { WallpaperParamControls } from "./WallpaperParamControls";
 import { useWallpaperTone } from "./wallpaperTone";
@@ -47,7 +48,7 @@ function Playground({ locale }: ShowcaseRenderContext) {
   const text = copy[locale];
   const stageRef = useRef<HTMLDivElement | null>(null);
   const tone = useWallpaperTone(stageRef);
-  const [choice, setChoice] = useState("butler.bloom");
+  const [choice, setChoice] = useState("butler.riso-print");
   const [inputs, setInputs] = useState<Record<string, WallpaperParamInput>>({});
   const [motion, setMotion] = useState<WallpaperMotion>("auto");
   const module = BUILTIN_WALLPAPERS.get(choice);
@@ -124,6 +125,8 @@ function ViewportScope({ locale }: ShowcaseRenderContext) {
 
 export const stories: ShowcaseStory[] = [
   { name: "Module playground", render: (context) => <Playground {...context} /> },
+  { name: "Riso print: drift, events and column keep-out", render: (context) => <RisoDriftDemo {...context} /> },
+  { name: "Paper overlay", render: (context) => <PaperOverlayDemo {...context} /> },
   { name: "Image wallpaper", render: (context) => <ImageWallpaperDemo {...context} /> },
   { name: "Transparent decoration", render: (context) => <TransparentDecorationDemo {...context} /> },
   { name: "Generated param controls", render: (context) => <GeneratedControls {...context} /> },

@@ -24,9 +24,9 @@ const labels = {
   "ko-KR": {
     persona: "페르소나",
     personaValue: "차분하고 직설적으로 말합니다. 장단점은 짧게 설명하고, 되돌릴 수 없는 변경 전에는 먼저 묻고, 사용자의 언어로 답합니다.",
-    personaHint: "Butler가 자신을 표현하고 사용자와 협업하는 방식",
+    personaHint: "버틀러가 자신을 표현하고 사용자와 협업하는 방식",
     args: "인자", argsHint: "한 줄에 하나씩 입력", argsValue: "--stdio\n--read-only",
-    description: "프로젝트 설명", descriptionValue: "Butler 데스크톱 앱: Electron 셸, React UI, Rust 에이전트 게이트웨이.",
+    description: "프로젝트 설명", descriptionValue: "버틀러 데스크톱 앱: Electron 셸, React UI, Rust 에이전트 게이트웨이.",
     cancel: "취소", save: "저장", prompt: "마이그레이션 프롬프트",
   },
 } as const;

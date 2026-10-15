@@ -8,7 +8,7 @@ import { cn } from "../../lib/utils";
 import { adaptiveShellThemeClasses, type AdaptiveShellTheme } from "../../lib/theme";
 import { usePopperExitFreezeRef } from "../../lib/popperExit";
 import { floatingContentCollisionPadding } from "../../lib/floatingConstraints";
-import { CheckIcon, ChevronRightIcon } from "../../components/Icons";
+import { CheckIcon, ChevronRightIcon, Minus } from "../../components/Icons";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import styles from "../../components/DropdownMenu/DropdownMenu.module.css";
 import { dsClass } from "../../lib/internal";
@@ -124,8 +124,9 @@ function DropdownMenuCheckboxItem({
         className={styles.indicator}
         data-slot="dropdown-menu-checkbox-item-indicator"
       >
+        {/* "indeterminate": some of the selected items have it (a bulk tag menu). */}
         <DropdownMenuPrimitive.ItemIndicator>
-          <CheckIcon />
+          {checked === "indeterminate" ? <Minus /> : <CheckIcon />}
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}

@@ -9,9 +9,11 @@ type GapToken = "none" | "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 export type GridColumnPreset = "1" | "2" | "3" | "4" | "6" | "12" | "auto-fit" | "auto-fill" | "main-aside" | "label-value";
 /**
  * Responsive columns keyed to the enclosing PageContainer: `base` always
- * applies, `wide` from `@container page (min-width: 48rem)`.
+ * applies, `wide` from `@container page (min-width: 48rem)`, and `compact`
+ * below `@container page (max-width: 36rem)` (a phone: two card columns).
  */
 export interface GridResponsiveColumns {
+  compact?: GridColumnPreset;
   base: GridColumnPreset;
   wide?: GridColumnPreset;
 }
@@ -22,6 +24,12 @@ export interface GridProps extends DsBaseProps<HTMLAttributes<HTMLElement>> {
   as?: LayoutElement;
   columns?: GridColumnPreset | GridResponsiveColumns;
   gap?: GapToken;
+  /**
+   * How cells meet their row. `stretch` (default): cells in a row share its height. `start`: each cell keeps
+   * its own height, for a list that is still growing (an answer card never grows because a later cell is
+   * taller). Switch back with `settleGrid` when the list closes.
+   */
+  cross?: "stretch" | "start";
   /** DOM ref (e.g. a scroll-edge observer on a scrolling grid). */
   ref?: Ref<HTMLElement>;
 }
@@ -31,6 +39,7 @@ function GridRoot({
   children,
   columns = "auto-fit",
   gap = "md",
+  cross = "stretch",
   className,
   ref,
   ...props
@@ -41,6 +50,7 @@ function GridRoot({
     styles.grid,
     responsive ? styles.responsive : styles[`columns-${base}`],
     styles[`gap-${gap}`],
+    cross === "start" && styles["cross-start"],
     className,
   ]
     .filter(Boolean)
@@ -51,6 +61,7 @@ function GridRoot({
       className={classes}
       data-columns={base}
       data-columns-wide={responsive ? columns.wide : undefined}
+      data-columns-compact={responsive ? columns.compact : undefined}
       {...props}
       // One ref type for every element the grid can render as.
       ref={ref as Ref<HTMLDivElement & HTMLUListElement & HTMLOListElement & HTMLLIElement>}

@@ -1,3 +1,4 @@
+import type { AnswerBlockSet } from "../../../shared/app-contracts.ts";
 import type { ReactElement, ReactNode } from "react";
 // Relative (not `@/butler-ds`): the root typecheck reaches this file without the UI path aliases.
 import type { WallpaperSetting, WallpaperSource } from "../libs/design-system/blocks/Wallpaper/types.ts";
@@ -20,6 +21,7 @@ export type SettingsSectionId =
   | "logs"
   | "personalization"
   | "memory"
+  | "browser"
   | "security"
   | "system"
   | "archives"
@@ -272,6 +274,7 @@ export interface McpSecretView {
 }
 
 export interface McpServerView {
+  tool_filter_review_required?: boolean;
   id: string;
   display_name: string;
   enabled: boolean;
@@ -371,6 +374,7 @@ export type WebSearchProviderSetting =
   | "disabled";
 
 export type WebSearchReaderBackendSetting =
+  | "browser"
   | "lightweight"
   | "auto"
   | "lightpanda"
@@ -576,6 +580,8 @@ export interface SettingsView {
   worker_profiles: WorkerProfile[];
   max_simultaneous_workers: number;
   access_mode: AccessMode;
+  /** A new schedule's access mode, resolved by the gateway (saved, else derived; D7). */
+  schedule_access_mode?: AccessMode;
   plan_mode_default: boolean;
   follow_up_behavior: "queue" | "steer";
   multiline_send_behavior:
@@ -585,7 +591,7 @@ export interface SettingsView {
   /** false follows the OS; true forces the DS reduced-motion path. */
   reduce_motion: boolean;
   collapse_message_box: boolean;
-  main_screen_theme: "none" | "bloom" | "silk";
+  main_screen_theme: "none" | "bloom" | "silk" | "riso";
   main_screen_theme_preset:
     | "monochrome"
     | "aurora"
@@ -603,6 +609,7 @@ export interface SettingsView {
   ];
   /** The home screen wallpaper; derived from the legacy `main_screen_theme*` keys until one is saved. */
   wallpaper: WallpaperSetting;
+  conversation_background: { source: WallpaperSource; overlay: number };
   composer_decoration: { theme: "none" | "shoreline" | "cherry"; character: boolean };
   translucent_sidebar: boolean;
   smart_grouping_enabled: boolean;
@@ -644,6 +651,7 @@ export interface SecurityView {
   /** Extra host names the gateway answers (tunnels, reverse proxies). */
   allowed_hosts: string[];
   content_hosts?: string[];
+
 }
 
 export interface ModelFallbackSettingsView {
@@ -805,7 +813,8 @@ export interface SessionSummary {
   safe_status_label_key?: string;
   safe_status_label_parameters?: { attempt: number; maxAttempts: number };
   safe_status_content?: InterfaceContentReferences;
-  unread_count?: number;
+  /** A finished reply arrived after the owner last read this session. */
+  unread?: boolean;
   automation_target_count?: number;
 }
 
@@ -862,6 +871,8 @@ export interface ActiveChatView {
   title: string;
   shortTitle: string;
   project: string;
+  /** Where a new chat lands when it is not the project root (`Project › Group`). */
+  location?: string;
 }
 
 export interface MessageFileRef {
@@ -915,6 +926,7 @@ export interface MessageRecord {
     | "automation";
   text: string;
   plan_document?: PlanDocumentRecord;
+  answer_blocks?: Array<AnswerBlockSet>;
   attachments?: MessageFileRef[];
   artifacts?: SessionArtifactSummary[];
   changed_files?: ChangedFileDetail[];
@@ -1640,8 +1652,10 @@ export interface SessionSummaryView {
     branch_name?: string;
     safe_status?: string;
     safe_error_code?: string;
-    workspace_binding?: "project" | "session_worktree";
+    workspace_binding?: "project" | "session_worktree" | "session_folder";
     workspace_label?: string;
+    /** The moved working folder (`session_folder`). */
+    workspace_path?: string;
     workspace_status?: "available" | "unavailable";
     dirty?: boolean;
   };
@@ -1684,6 +1698,10 @@ export interface TimelineEvent {
     event_id?: string;
     /** `settings.updated`: the changed settings subset. */
     settings?: Record<string, unknown>;
+    tainted?: boolean;
+    /** `automation.run`: the run's conversation and its safe error code. */
+    target_session_id?: string;
+    safe_error_code?: string;
   };
 }
 
@@ -1713,8 +1731,18 @@ export interface WorkStatusView {
   counts: Record<WorkStatusState, number>;
 }
 
+/** A Library (서랍) kind; scraps and bookmarks have groups (bookmark groups are its folders). */
+export type LibraryKind = "scrap" | "document" | "bookmark" | "output";
+/**
+ * The Library: the main screen, a kind's full view (`section`), a group in it (`group`: an id or "none"
+ * for ungrouped) and a scrap's detail (`item`). Each level is one step up from the next (titlebar back).
+ */
+export type LibraryView = { kind: "library"; section?: LibraryKind; group?: string; item?: string };
+
 export type AppView =
   | { kind: "browser" }
+  | { kind: "history"; from?: "browser" | "settings" }
+  | LibraryView
   | { kind: "session" }
   | { kind: "settings"; section: SettingsSectionId }
   | { kind: "automations" }
@@ -1748,6 +1776,7 @@ export interface AutomationSummary {
 export interface AutomationRunSummary {
   id: string;
   state: string;
+  safe_error_code?: string;
   started_at: string;
 }
 
@@ -1825,8 +1854,10 @@ export type ApprovalRisk = "low" | "medium" | "high";
  */
 export interface ApprovalSummary {
   /** Exact local decision facts; do not apply workspace-label normalization. */
-  operation?: { tool: string; access: "read_only" | "change"; targets: string[]; command?: string };
+  operation?: { tool: string; access: "read_only" | "change"; targets: string[]; command?: string; allow_conversation?: boolean; browser_tab?: string; browser_mode?: "signed_out" | "signed_in"; sign_in_step?: string; wait_reason?: string; browser_steps?: Array<{ action: string; role: string; name: string; frame: string; value_preview?: string | null; addons: string[] }> };
   commandAccess?: "read_only_unisolated";
+  /** What a reviewed schedule create sets up: its name, timing and run mode; never its id. */
+  schedule?: { title: string; scheduleType: "once" | "interval"; runAt?: string; startAt?: string; intervalSeconds?: number; accessMode?: AccessMode };
   actionKind: string;
   /** The folder first where there is one, then files, a connector or a named target. */
   targets: ApprovalTarget[];
@@ -1872,8 +1903,10 @@ export interface CalendarSchedule {
 }
 
 export interface UserQuestion {
-  id: string; eyebrow: string; title: string; kind: "single" | "multi"; allow_custom: boolean;
-  options: { id: string; label: string; description?: string; recommended?: boolean }[];
+  /** `text`: a free-text answer with no options. */
+  id: string; eyebrow: string; title: string; kind: "single" | "multi" | "text"; allow_custom: boolean;
+  /** `skip` and `input` duplicate the card's own Skip and free input; the runtime drops them. */
+  options: { id: string; label: string; description?: string; recommended?: boolean; kind?: "answer" | "skip" | "input" }[];
 }
 export interface PendingUserQuestions {
   request_ref: string; source_turn_id: string; source_session_id: string;
