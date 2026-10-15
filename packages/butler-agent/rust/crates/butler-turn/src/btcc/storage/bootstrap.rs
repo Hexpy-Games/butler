@@ -93,9 +93,26 @@ impl FreshStorage<'_> {
     /// Creates the current schema in the temporary file and records the
     /// fresh-install migration receipt, then syncs it.
     fn prepare(&self) -> StorageResult<()> {
+        let timing =
+            super::super::agent_loop::command_timing::CommandTiming::new("storage_bootstrap");
         let mut db = sqlite::open(self.temp).map_err(StorageError::sqlite)?;
+        timing.mark("opened");
         schema::create_current(&db).map_err(StorageError::sqlite)?;
+        timing.mark("schema_created");
         migration::apply(&mut db).map_err(StorageError::sqlite)?;
+        timing.mark("migrated");
+        self.prepare_metadata(&mut db)?;
+        timing.mark("metadata_committed");
+        db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+            .map_err(StorageError::sqlite)?;
+        db.close()
+            .map_err(|(_, error)| StorageError::sqlite(error))?;
+        timing.mark("closed");
+        butler_platform::secure_fs::sync_path(self.temp).map_err(io_error)
+    }
+
+    fn prepare_metadata(&self, db: &mut rusqlite::Connection) -> StorageResult<()> {
+        let db = db.transaction().map_err(StorageError::sqlite)?;
         db.execute_batch(METADATA_SCHEMA)
             .map_err(StorageError::sqlite)?;
         validate::empty_canonical_database(&db)?;
@@ -119,11 +136,7 @@ impl FreshStorage<'_> {
         )
         .map_err(StorageError::sqlite)?;
         validate::readiness(&db, self.id)?;
-        db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
-            .map_err(StorageError::sqlite)?;
-        db.close()
-            .map_err(|(_, error)| StorageError::sqlite(error))?;
-        butler_platform::secure_fs::sync_path(self.temp).map_err(io_error)
+        db.commit().map_err(StorageError::sqlite)
     }
 
     /// The fresh-install receipt. A fresh source has no rows or claims:
