@@ -61,8 +61,8 @@ def capture(log, command):
         # Include control observations in the artifact as well as the console.
         import contextlib
         with open(log, 'a', encoding='utf-8') as output, contextlib.redirect_stdout(output):
-            control.report(results)
-        control.report(results)
+            control.report(results, complete=not errors)
+        control.report(results, complete=not errors)
     print(f'NATIVE-TEST-SUMMARY seconds={time.monotonic()-started:.3f} exit={code} log={log}')
     if errors:
         raise RuntimeError('plain I/O control failed') from errors[0]

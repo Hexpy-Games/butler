@@ -52,7 +52,7 @@ def run(stop, results, errors):
         errors.append(error)
 
 
-def report(results):
+def report(results, complete):
     for marks, elapsed in results:
         fields = zip(('start', 'created', 'written', 'synced', 'renamed',
                       'append_written', 'append_synced'), marks)
@@ -61,4 +61,4 @@ def report(results):
     if results:
         values = sorted(elapsed for _, elapsed in results)
         print(f'IO-CONTROL-SUMMARY n={len(values)} p50_us={values[len(values)//2]} '
-              f'max_us={values[-1]} complete=true')
+              f'max_us={values[-1]} complete={str(complete).lower()}')
