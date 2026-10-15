@@ -222,11 +222,8 @@ async fn project_fallback_to_l_keeps_declared_directories() -> Result<(), Harnes
         "complete\n"
     );
     command_sandbox::sweep_new_secrets(&root, &inventory, &setup.sandbox.data)?;
-    #[allow(
-        clippy::drop_non_drop,
-        reason = "Linux-only E2E releases a real mount lease; the guard is empty on other build hosts"
-    )]
-    drop(preparation);
+    preparation.release();
+
     assert_eq!(std::fs::read_to_string(root.join("visible.txt"))?, "public");
     setup.sandbox.mark_success();
     Ok(())

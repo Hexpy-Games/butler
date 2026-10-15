@@ -301,6 +301,11 @@ pub struct ProjectWritePreparation {
     _lease: nix::fcntl::Flock<std::fs::File>,
 }
 
+impl ProjectWritePreparation {
+    /// Consumes the preparation, releasing any platform lease after cleanup.
+    pub fn release(self) {}
+}
+
 /// Prepares declared generated directories where the project root is withheld.
 pub fn prepare_project_write(root: &Path, data: &Path) -> std::io::Result<ProjectWritePreparation> {
     #[cfg(target_os = "linux")]

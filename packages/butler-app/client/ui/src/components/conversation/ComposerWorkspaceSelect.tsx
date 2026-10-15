@@ -1,13 +1,14 @@
 import { ComposerSelectControl, Select, SelectContent, SelectItem, SelectValue, Monitor, GitBranch } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { selectIsGitProject, useButlerStore } from "@/app/store.ts";
-import { parseDraftChatId } from "@/app/utils.ts";
+import { draftSessionTarget } from "@/app/utils.ts";
+import type { NavigationView } from "@/app/types.ts";
 import { useComposerStore } from "./composerStore.ts";
 
-/** The project a new-chat draft belongs to (project draft or dashboard composer). */
-function draftProjectId(draftId: string): string | undefined {
+/** The project a new-chat draft belongs to (project or project-group draft, dashboard composer). */
+function draftProjectId(navigation: NavigationView, draftId: string): string | undefined {
   if (draftId.startsWith("dashboard:")) return draftId.slice("dashboard:".length) || undefined;
-  return parseDraftChatId(draftId).projectId;
+  return draftSessionTarget(navigation, draftId).projectId;
 }
 
 export function ComposerWorkspaceSelect() {
@@ -17,7 +18,8 @@ export function ComposerWorkspaceSelect() {
   const setMode = useComposerStore((state) => state.setWorkspaceMode);
   const isSending = useComposerStore((state) => state.isSending);
   // A worktree needs Git, so the choice exists only for new chats in a Git project.
-  const gitProject = useButlerStore(selectIsGitProject(draftProjectId(draftId)));
+  const projectId = useButlerStore((state) => draftProjectId(state.navigation, draftId));
+  const gitProject = useButlerStore(selectIsGitProject(projectId));
   if (!gitProject) return null;
   const copy = appCopy.composer;
   // Rendered in the composer toolbar so it stays on the composer surface.

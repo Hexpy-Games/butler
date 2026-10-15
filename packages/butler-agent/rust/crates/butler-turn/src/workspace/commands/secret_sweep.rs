@@ -10,8 +10,14 @@ pub(super) struct Prepared {
 
 impl Prepared {
     fn sweep(self, root: &Path, data: &Path) -> std::io::Result<Vec<PathBuf>> {
-        butler_platform::command_sandbox::reconcile_project_write(data)?;
-        butler_platform::command_sandbox::sweep_new_secrets(root, &self.paths, data)
+        let result = butler_platform::command_sandbox::sweep_new_secrets(root, &self.paths, data);
+        if let Some(lease) = self._lease {
+            lease.release();
+        }
+        if let Err(error) = butler_platform::command_sandbox::reconcile_project_write(data) {
+            tracing::warn!(%error, "Project write reconciliation failed");
+        }
+        result
     }
 }
 
@@ -58,6 +64,7 @@ pub(super) async fn after_run(
         .await
         .map_err(|error| CommandError::io(std::io::Error::other(error)))
         .and_then(|result| result.map_err(CommandError::io));
+
     let violations = match swept {
         Ok(paths) => paths,
         Err(error) => {

@@ -116,11 +116,8 @@ async fn offline_generated_toolchains() -> Result<(), HarnessError> {
             for path in moved {
                 assert!(!path.exists(), "new secret remained in project");
             }
-            #[allow(
-                clippy::drop_non_drop,
-                reason = "Linux-only E2E releases a real mount lease; the guard is empty on other build hosts"
-            )]
-            drop(preparation);
+            preparation.release();
+
             // A refused command must still leave its source inputs intact.
             if tool == "cargo" {
                 assert_eq!(

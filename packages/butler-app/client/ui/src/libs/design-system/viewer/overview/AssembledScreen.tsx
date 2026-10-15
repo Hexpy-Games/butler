@@ -17,12 +17,12 @@ export type AssembleStage = "screen" | "tokens" | "components" | "blocks";
 
 const COPY = {
   "en-US": {
-    chats: "Chats", general: "General", projects: "Projects", sessions: ["Token page review", "Settings S7", "Motion trace"],
+    chats: "Chats", general: "Chats", projects: "Projects", sessions: ["Token page review", "Settings S7", "Motion trace"],
     title: "Token page review", ask: "Make the token pages generated from tokens.css.", work: "Reading tokens.css", search: "Search",
     answer: "Done: every token in tokens.css, light and dark side by side.", placeholder: "Ask for follow-up changes", plan: "Plan 2/4",
   },
   "ko-KR": {
-    chats: "채팅", general: "일반", projects: "프로젝트", sessions: ["토큰 페이지 검토", "설정 S7", "모션 추적"],
+    chats: "채팅", general: "대화", projects: "프로젝트", sessions: ["토큰 페이지 검토", "설정 S7", "모션 추적"],
     title: "토큰 페이지 검토", ask: "토큰 페이지를 tokens.css에서 생성해 줘.", work: "tokens.css 읽는 중", search: "검색",
     answer: "완료: tokens.css의 모든 토큰을 라이트와 다크로 나란히 보여 줍니다.", placeholder: "후속 변경사항 요청", plan: "계획 2/4",
   },
