@@ -8,60 +8,44 @@ fn language_policy_probe() -> Result<(), HarnessError> {
     let probe = std::env::var("BUTLER_E2E_WINDOWS_POLICY_PROBE")
         .map_err(|_| HarnessError("policy probe executable required".into()))?;
     std::fs::copy(probe, f.root.join("policy-probe.exe"))?;
-    // Explicit cmd bypasses Butler's PowerShell prelude. The mode and policy
-    // evidence must remain observable even if that prelude fails to initialize.
+    std::fs::write(
+        f.root.join("language-mode.ps1"),
+        "$ExecutionContext.SessionState.LanguageMode\r\n",
+    )?;
     std::fs::write(
         f.root.join("language.ps1"),
-        "$ExecutionContext.SessionState.LanguageMode; & .\\policy-probe.exe; exit $LASTEXITCODE\r\n",
+        include_str!("../../../../butler-platform/tests/support/windows-language-matrix.ps1"),
     )?;
     let script = "cmd /c powershell.exe -NoLogo -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -File language.ps1";
-    // Compare the same executable, script, temp profile and desktop session.
-    // An SSH baseline cannot distinguish desktop policy from container policy.
     let plain = command_sandbox::login_shell(script, command_sandbox::ShellAccess::Full, &f.env)
         .map_err(|error| HarnessError(error.to_string()))?;
     let baseline = f.launch(&plain);
-    eprintln!(
-        "Desktop host language policy:\n{}",
-        String::from_utf8_lossy(&baseline.stdout)
+    let contained = f.run(script);
+    let product = f.run("$ExecutionContext.SessionState.LanguageMode; [System.Text.UTF8Encoding]::new($false).WebName");
+    let matrix = serde_json::json!({
+        "host": matrix_output(&baseline), "contained": matrix_output(&contained),
+        "product": {"exitCode": product.status.code(),
+            "stdout": String::from_utf8_lossy(&product.stdout),
+            "stderr": String::from_utf8_lossy(&product.stderr)}
+    });
+    // Emit before assertions: one failed probe must not hide the other modes.
+    eprintln!("WINDOWS_LANGUAGE_MATRIX={matrix}");
+    assert!(baseline.status.success(), "{matrix}");
+    assert!(contained.status.success(), "{matrix}");
+    assert_eq!(
+        matrix["contained"]["data"]["fileMode"], "FullLanguage",
+        "{matrix}"
     );
-    assert!(baseline.status.success(), "{baseline:?}");
-    assert!(
-        String::from_utf8_lossy(&baseline.stdout).contains("system_policy="),
-        "{baseline:?}"
-    );
-    let output = f.pass(script);
-    let text = String::from_utf8_lossy(&output.stdout);
-    eprintln!("Contained language policy:\n{text}");
-    assert!(
-        text.lines().any(|line| line == "FullLanguage"),
-        "{output:?}"
-    );
-    for marker in [
-        "TEMP_under_limit=True",
-        "TMP_under_limit=True",
-        "temp_matches_env=True",
-        "temp_under_limit=True",
-    ] {
-        assert!(text.contains(marker), "{output:?}");
-    }
-    assert!(text.contains("temp_removed=True"), "{output:?}");
-    assert!(text.contains("temp_roundtrip=True"), "{output:?}");
-    assert!(text.contains("system_policy="), "{output:?}");
-    assert!(text.contains("system_policy=None"), "{output:?}");
-    // -File can be FullLanguage even when the initial runspace is constrained.
-    // Exercise both a fresh -Command and Butler's normal command prelude.
-    for script in [
-        r#"cmd /c powershell.exe -NoLogo -NoProfile -NonInteractive -Command "$ExecutionContext.SessionState.LanguageMode""#,
-        "$ExecutionContext.SessionState.LanguageMode; [System.Text.UTF8Encoding]::new($false).WebName",
-    ] {
-        let output = f.pass(script);
-        let text = String::from_utf8_lossy(&output.stdout);
-        eprintln!("Contained command language: {text}");
-        assert!(
-            text.lines().any(|line| line == "FullLanguage"),
-            "{output:?}"
+    assert!(product.status.success(), "{matrix}");
+    let text = String::from_utf8_lossy(&product.stdout);
+    assert!(text.lines().any(|line| line == "FullLanguage"), "{matrix}");
+    assert!(text.lines().any(|line| line == "utf-8"), "{matrix}");
+    for extension in ["ps1", "psm1"] {
+        assert_eq!(
+            matrix["contained"]["data"]["policy"][format!("policy_file_{extension}_roundtrip")],
+            "True",
+            "{matrix}"
         );
-        assert!(!text.contains("ConstrainedLanguage"), "{output:?}");
     }
     assert_eq!(std::fs::read_dir(&f.scratch[0])?.count(), 0);
     assert_eq!(
@@ -70,6 +54,12 @@ fn language_policy_probe() -> Result<(), HarnessError> {
     );
     f.finish();
     Ok(())
+}
+fn matrix_output(output: &Output) -> serde_json::Value {
+    serde_json::json!({"exitCode": output.status.code(),
+        "data": serde_json::from_slice::<serde_json::Value>(&output.stdout).ok(),
+        "stdout": String::from_utf8_lossy(&output.stdout),
+        "stderr": String::from_utf8_lossy(&output.stderr)})
 }
 
 #[test]

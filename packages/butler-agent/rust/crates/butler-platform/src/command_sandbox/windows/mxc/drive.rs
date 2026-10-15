@@ -83,6 +83,21 @@ impl Drive {
         }
         Err("no_free_drive".into())
     }
+    pub(super) fn temporary(
+        data: &Path,
+        scratch: &Path,
+        policy: &Path,
+    ) -> Result<(Option<Self>, String), Error> {
+        let path = dunce::canonicalize(scratch)?.join("t");
+        let text = path.to_str().ok_or("invalid_scratch_path")?;
+        // The in-container bootstrap restores this exact path after MXC's
+        // profile rewrite. A short physical path needs no extra subst process.
+        if text.encode_utf16().count() + 1 + 38 < 260 {
+            return Ok((None, text.to_owned()));
+        }
+        let (drive, temporary) = Self::claim_scratch(data, scratch, policy)?;
+        Ok((Some(drive), temporary))
+    }
     pub(super) fn claim_scratch(
         data: &Path,
         scratch: &Path,

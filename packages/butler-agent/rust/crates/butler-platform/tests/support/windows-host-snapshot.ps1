@@ -5,7 +5,8 @@ function SnapshotHash([string]$text) {
     finally { $sha.Dispose() }
 }
 function RegistryTree($key, [string]$relative, $entries, $times) {
-    $times[$relative] = [ButlerRegistrySnapshot]::LastWriteUtc($key)
+    $timeKey = if ($relative -eq '') { '.' } else { $relative }
+    $times[$timeKey] = [ButlerRegistrySnapshot]::LastWriteUtc($key)
     $entries.Add([ordered]@{key=$relative})
     foreach ($name in ($key.GetValueNames() | Sort-Object)) {
         $entries.Add([ordered]@{key=$relative;name=$name;kind=$key.GetValueKind($name).ToString();value=$key.GetValue($name,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)})
@@ -40,7 +41,7 @@ function RegistrySnapshot {
         finally { if ($null -ne $key) { $key.Dispose() } }
         $hash = SnapshotHash (ConvertTo-Json -InputObject @($entries.ToArray()) -Depth 8 -Compress)
         $registry['HKCU\' + $path] = @{
-            hash=$hash; lastWriteUtc=$times['']; subkeyLastWriteUtc=$times
+            hash=$hash; lastWriteUtc=$times['.']; subkeyLastWriteUtc=$times
             matchesInstalledRegistration=($path -eq 'Software\Classes\butler' -and $null -ne $script:installedProtocolHash -and $hash -eq $script:installedProtocolHash)
         }
     }

@@ -83,7 +83,7 @@ async fn interrupted(kill: bool) -> Result<(), HarnessError> {
     let project = folder.join("작업 Project");
     std::fs::write(
         project.join("wait.cmd"),
-        "@echo off\r\npowershell -NoProfile -Command \"[IO.File]::WriteAllText('child.pid',[string]$PID); Start-Sleep -Seconds 120\"\r\n",
+        "@echo off\r\npowershell -NoProfile -Command \"$PID | Set-Content -Encoding ASCII child.pid; Start-Sleep -Seconds 120\"\r\n",
     )?;
     let before = Command::new("subst.exe").output()?;
     let prompt = "Run the project step.";

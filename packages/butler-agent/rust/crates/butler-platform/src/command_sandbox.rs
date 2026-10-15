@@ -50,7 +50,7 @@ mod test_support;
 #[cfg(feature = "test-support")]
 pub use test_support::{
     UnixSocketProbe, linux_syscall_probe, linux_test_host, windows_prepare_project_write,
-    windows_recovery_contract, wsl_test_host,
+    windows_recovery_contract, windows_shell_file_contract, wsl_test_host,
 };
 
 mod host_capabilities;

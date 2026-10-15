@@ -19,7 +19,9 @@ pub(super) fn member_access_dot(ch: char, previous: Option<char>, quoted: bool) 
 }
 
 pub(super) fn path_script(command: &str) -> &str {
-    explicit_script(command).unwrap_or(command)
+    cmd::script(command)
+        .or_else(|| explicit_script(command))
+        .unwrap_or(command)
 }
 
 /// `cmd.exe /d /s /c <command>` takes the command verbatim: with `/s`, `cmd`

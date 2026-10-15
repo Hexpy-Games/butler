@@ -40,7 +40,10 @@ fn read_only_commands_run_sandboxed_or_are_refused() {
     super::windows_language::verify();
     super::mxc_policy::verify();
     #[cfg(feature = "test-support")]
-    butler_platform::command_sandbox::windows_recovery_contract();
+    {
+        butler_platform::command_sandbox::windows_recovery_contract();
+        butler_platform::command_sandbox::windows_shell_file_contract();
+    }
     timeout_markers_require_both_code_and_trailing_marker();
     super::project_secrets::verify();
     cmd_arguments_remain_verbatim();

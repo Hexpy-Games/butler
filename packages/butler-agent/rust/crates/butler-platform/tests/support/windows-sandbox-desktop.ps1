@@ -135,6 +135,11 @@ public static class ButlerDesktop {
                 $item.exitCode = $child.ExitCode
                 $output = (Get-Content -Raw $out) + "`n" + (Get-Content -Raw $err)
                 $output | Set-Content -Encoding UTF8 $log
+                if ($row -eq 0) {
+                    $matrixLine=@($output -split "`r?`n" | Where-Object { $_.StartsWith('WINDOWS_LANGUAGE_MATRIX=') })
+                    if ($matrixLine.Count -ne 1) { throw 'language_matrix_missing' }
+                    $item.languageMatrix=$matrixLine[0].Substring('WINDOWS_LANGUAGE_MATRIX='.Length) | ConvertFrom-Json
+                }
                 if ($item.exitCode -ne 0 -or $output -notmatch 'test result: ok\. 1 passed; 0 failed' -or $output -match 'SKIP|skipping') { throw 'row_failed' }
                 if ($row -eq 14 -and $output -notmatch 'Windows MXC added p50 latency.*enforced=true') { throw 'latency_budget_not_enforced' }
                 if ($row -eq 15 -and $output -notmatch 'contained=true authority_count=0') { throw 'permission_card_appeared' }
@@ -212,7 +217,9 @@ public static class ButlerDesktop {
         Write-Host ('Failure directory: ' + $profile)
     }
     $result.rows = @($result.rows | Sort-Object row)
-    $result | ConvertTo-Json -Depth 15 | Set-Content -Encoding UTF8 $resultFile
+    $json = $result | ConvertTo-Json -Depth 20
+    $null = $json | ConvertFrom-Json
+    $json | Set-Content -Encoding UTF8 $resultFile
     if ($result.probeDetails) {
         $details = $result.probeDetails
         Write-Host ('Probe: ' + $details.reason + '; child exit: ' + $details.childExitCode + '; NTSTATUS: ' + $details.childNtstatus)

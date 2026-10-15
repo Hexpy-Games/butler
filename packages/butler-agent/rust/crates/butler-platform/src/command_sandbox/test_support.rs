@@ -107,3 +107,12 @@ pub fn windows_recovery_contract() {
     #[cfg(windows)]
     super::windows::mxc::verify_recovery_contract();
 }
+
+/// Executes contained shell file transport with native PowerShell, without MXC.
+pub fn windows_shell_file_contract() {
+    #[cfg(windows)]
+    {
+        let result = super::windows::mxc::verify_shell();
+        assert!(result.is_ok(), "{result:?}");
+    }
+}

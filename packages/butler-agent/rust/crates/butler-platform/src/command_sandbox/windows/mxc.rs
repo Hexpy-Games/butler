@@ -6,6 +6,7 @@ pub(in crate::command_sandbox) mod prepare;
 mod probe;
 mod recovery;
 mod sdk;
+mod shell;
 use super::super::{Invocation, ProtectError, Protection, SandboxCapabilities, SandboxError};
 use std::{
     collections::HashMap,
@@ -14,6 +15,8 @@ use std::{
 pub(super) type Error = Box<dyn std::error::Error>;
 pub(in crate::command_sandbox) use drive::reconcile;
 pub(in crate::command_sandbox) use probe::probe;
+#[cfg(feature = "test-support")]
+pub(in crate::command_sandbox) use shell::verify as verify_shell;
 
 pub(super) fn helper() -> std::io::Result<PathBuf> {
     #[cfg(feature = "test-support")]

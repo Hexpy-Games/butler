@@ -1,7 +1,7 @@
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'windows-host-snapshot.ps1')
 function State([string]$hash, [bool]$installed, [string]$time) {
-    return @{hash=$hash;matchesInstalledRegistration=$installed;lastWriteUtc=$time;subkeyLastWriteUtc=@{''=$time}}
+    return @{hash=$hash;matchesInstalledRegistration=$installed;lastWriteUtc=$time;subkeyLastWriteUtc=@{'.'=$time}}
 }
 $key='HKCU\Software\Classes\butler'
 $before=@{registry=@{$key=(State 'old' $false '1')};tasks=@{'\existing'='one';'\removed'='old'}}
@@ -25,3 +25,7 @@ $after.registry.Remove('HKCU\Software\ButlerSandboxDenied')
 $after.registry[$key]=State 'old' $false '2'
 if (!(HostChanges $before $after).unattributed) { throw 'rewrite_timestamp_ignored' }
 Write-Output 'host_attribution_complete'
+
+$json = @{rows=@(@{registryBefore=$before.registry;registryAfter=$after.registry})} | ConvertTo-Json -Depth 15
+$parsed = $json | ConvertFrom-Json
+if ($parsed.rows[0].registryBefore.$key.subkeyLastWriteUtc.'.' -ne '1') { throw 'json_timestamp_roundtrip_failed' }

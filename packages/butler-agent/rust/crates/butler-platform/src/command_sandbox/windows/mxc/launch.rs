@@ -67,9 +67,9 @@ fn execute(file: &Path, payload: &mut PolicyFile) -> Result<sdk::RunOutcome, Err
     let relative = relative.to_str().ok_or("invalid cwd")?.to_owned();
     let drive = Drive::claim(&payload.data, &payload.project, file)?;
     let result = (|| {
-        let (temporary, path) = Drive::claim_scratch(&payload.data, &payload.scratch, file)?;
+        let (temporary, path) = Drive::temporary(&payload.data, &payload.scratch, file)?;
         let result = run_mapped(payload, drive.letter, &path, &relative);
-        finish_cleanup(result, temporary.cleanup())
+        finish_cleanup(result, temporary.map_or(Ok(()), |drive| drive.cleanup()))
     })();
     finish_cleanup(result, drive.cleanup())
 }
@@ -94,6 +94,7 @@ fn run_mapped(
             *item = format!("{key}={temporary}").into();
         }
     }
+    super::shell::prepare(&mut payload.request, &payload.scratch, temporary)?;
     rewrite_git_config(payload, project_drive)?;
     probe::rewrite_drive(&mut payload.request, project_drive, relative)?;
     sdk::run(&payload.request)

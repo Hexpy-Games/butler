@@ -14,51 +14,71 @@ public static class WindowsPolicyProbe {
     }
     [DllImport("wldp.dll", CharSet=CharSet.Unicode)]
     static extern int WldpGetLockdownPolicy(ref HostInformation host, out uint state, uint flags);
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    static extern uint QueryDosDevice(string name, System.Text.StringBuilder target, int length);
+    static void Attempt(string stage, Action action) {
+        try { action(); Console.WriteLine(stage + "_ok=True"); }
+        catch (Exception error) {
+            while (error is TargetInvocationException && error.InnerException != null) error = error.InnerException;
+            Console.WriteLine(stage + "_ok=False");
+            Console.WriteLine(stage + "_exception=" + error.GetType().FullName);
+            Console.WriteLine(stage + "_hresult=0x" + error.HResult.ToString("X8"));
+            Console.WriteLine(stage + "_message=" + error.Message.Replace('\r',' ').Replace('\n',' '));
+        }
+    }
+    static void ProbeFile(string temp, string extension) {
+        string path = Path.Combine(temp, "__PSScriptPolicyTest_" + Path.GetRandomFileName() + extension);
+        string stage = "policy_file_" + extension.Substring(1);
+        Console.WriteLine(stage + "_path=" + path);
+        Console.WriteLine(stage + "_length=" + path.Length);
+        Console.WriteLine(stage + "_extended=" + path.StartsWith(@"\\?\"));
+        Attempt(stage, delegate {
+            try {
+                File.WriteAllText(path, "# PowerShell test file to determine AppLocker lockdown mode");
+                Console.WriteLine(stage + "_roundtrip=" + File.ReadAllText(path).StartsWith("# PowerShell"));
+            } finally { File.Delete(path); }
+            Console.WriteLine(stage + "_removed=" + !File.Exists(path));
+        });
+    }
     static void ProbeTemp() {
-        foreach (string name in new [] { "TEMP", "TMP" }) {
+        foreach (string name in new [] { "TEMP", "TMP", "USERPROFILE", "LOCALAPPDATA", "BUTLER_COMMAND_TEMP" }) {
             string value = Environment.GetEnvironmentVariable(name) ?? "";
             Console.WriteLine(name + "=" + value);
             Console.WriteLine(name + "_length=" + value.Length);
-            Console.WriteLine(name + "_under_limit=" + (value.Length + 39 < 260));
         }
         string temp = Path.GetTempPath();
         Console.WriteLine("resolved_temp=" + temp);
         Console.WriteLine("resolved_temp_length=" + temp.Length);
-        Console.WriteLine("temp_matches_env=" + String.Equals(
-            temp.TrimEnd('\\'), (Environment.GetEnvironmentVariable("TEMP") ?? "").TrimEnd('\\'),
-            StringComparison.OrdinalIgnoreCase));
-        // Reserve room for PowerShell's longest policy-test filename and NUL.
-        Console.WriteLine("temp_under_limit=" + (temp.Length + 38 < 260));
-        string path = Path.Combine(temp, "__PSScriptPolicyTest_" + Path.GetRandomFileName() + ".psm1");
-        try {
-            File.WriteAllText(path, "# policy file roundtrip");
-            Console.WriteLine("temp_roundtrip=" + (File.ReadAllText(path) == "# policy file roundtrip"));
-        } finally { File.Delete(path); }
-        Console.WriteLine("temp_removed=" + !File.Exists(path));
+        var target = new System.Text.StringBuilder(4096);
+        uint result = QueryDosDevice(Path.GetPathRoot(temp).TrimEnd('\\'), target, target.Capacity);
+        Console.WriteLine("temp_device_target=" + (result == 0 ? "unavailable" : target.ToString()));
+        Console.WriteLine("temp_is_subst=" + (result != 0 && target.ToString().StartsWith(@"\??\")));
+        Console.WriteLine("temp_extended=" + temp.StartsWith(@"\\?\"));
+        foreach (string extension in new [] { ".ps1", ".psm1" }) ProbeFile(temp, extension);
     }
     public static int Main() {
-        try {
+        Attempt("wldp", delegate {
             var host = new HostInformation { revision=1, hostId=4 };
             uint state;
             int hr = WldpGetLockdownPolicy(ref host, out state, 0);
-            Console.WriteLine("wldp_hresult=0x{0:X8} state=0x{1:X8}", hr, state);
-            Console.WriteLine("lockdown_env_present=" + (Environment.GetEnvironmentVariable("__PSLockdownPolicy") != null));
-            ProbeTemp();
+            Console.WriteLine("wldp_hresult=0x{0:X8}", hr);
+            Console.WriteLine("wldp_state=0x{0:X8}", state);
+        });
+        Console.WriteLine("lockdown_env_present=" + (Environment.GetEnvironmentVariable("__PSLockdownPolicy") != null));
+        Attempt("temp", ProbeTemp);
+        Attempt("policy", delegate {
             var assembly = Assembly.Load("System.Management.Automation, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
+            Console.WriteLine("policy_assembly=" + assembly.FullName);
             var policy = assembly.GetType("System.Management.Automation.Security.SystemPolicy", true);
-            Console.WriteLine("system_policy=" + policy.GetMethod("GetSystemLockdownPolicy").Invoke(null, null));
+            Attempt("system_policy", delegate {
+                Console.WriteLine("system_policy=" + policy.GetMethod("GetSystemLockdownPolicy").Invoke(null, null));
+            });
             foreach (string name in new [] { "GetWldpPolicy", "GetAppLockerPolicy" }) {
                 var method = policy.GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic);
                 if (method == null) { Console.WriteLine(name + "=unavailable"); continue; }
-                try { Console.WriteLine(name + "=" + method.Invoke(null, new object[] { null, null })); }
-                catch (TargetInvocationException error) {
-                    Console.WriteLine(name + "_error=" + error.InnerException.GetType().Name);
-                }
+                Attempt(name, delegate { Console.WriteLine(name + "=" + method.Invoke(null, new object[] { null, null })); });
             }
-            return 0;
-        } catch (Exception error) {
-            Console.WriteLine("policy_probe_error=" + error.GetType().Name + " hresult=0x" + error.HResult.ToString("X8"));
-            return 1;
-        }
+        });
+        return 0;
     }
 }
