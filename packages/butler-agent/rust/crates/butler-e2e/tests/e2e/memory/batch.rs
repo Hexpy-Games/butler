@@ -13,7 +13,7 @@ const COLD_AGAIN: &str =
     "Remind me of my lock code again. Call recall_memory with cue bike lock code.";
 const ASK: &str = "How do I unlock my bicycle security cable? Call recall_memory with cue bicycle security cable combination.";
 
-fn setup(name: &str) -> Result<(Setup, String, String), HarnessError> {
+pub(super) fn setup(name: &str) -> Result<(Setup, String, String), HarnessError> {
     let code = nonce();
     let mut cassette = Cassette::load("MEM-01")?;
     let remember = cassette.exchanges[0].request.key.user_request.clone();

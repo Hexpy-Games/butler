@@ -8,8 +8,9 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::cognition::{
     CandidateSearchInput, CognitionEmbeddingPort, CognitionError, CognitionPathEnvironment,
-    CognitionResult, CognitionVectorSearch, EmbeddingMode, EmbeddingRequest, EmbeddingRequestClass,
-    MemoryGenerationHandle, RecallVectorFuture, RecallVectorPort, VectorSearchFuture,
+    CognitionResult, CognitionVectorSearch, EmbeddingMode, EmbeddingReadyFuture, EmbeddingRequest,
+    EmbeddingRequestClass, MemoryGenerationHandle, RecallVectorFuture, RecallVectorPort,
+    VectorSearchFuture,
     generation::resolve_projection_generation,
     recall::{RecallRequest, RecallVectorMatches},
 };
@@ -116,6 +117,19 @@ impl GenerationVectorAdapter {
 impl RecallVectorPort for GenerationVectorAdapter {
     fn enabled(&self) -> bool {
         self.embedding.enabled()
+    }
+
+    fn ready<'a>(
+        &'a self,
+        generation: &'a MemoryGenerationHandle,
+        deadline_at: i64,
+    ) -> EmbeddingReadyFuture<'a> {
+        Box::pin(async move {
+            if let Some(expected) = &generation.embedding {
+                compatibility::preflight(expected)?;
+            }
+            self.embedding.ready(deadline_at).await
+        })
     }
 
     fn warm<'a>(

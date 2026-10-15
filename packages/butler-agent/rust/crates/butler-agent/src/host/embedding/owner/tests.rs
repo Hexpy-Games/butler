@@ -44,7 +44,7 @@ async fn active_cancellation_kills_and_reaps_child() {
         max_embeddings: None,
         cancellation: cancellation.clone(),
         deadline: None,
-        response: sender,
+        response: PendingResponse::Embedding(sender),
     };
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -109,7 +109,7 @@ async fn slow_initialization_outlives_first_deadline_and_keeps_ready_child() {
         max_embeddings: None,
         cancellation: CancellationToken::new(),
         deadline: Some(Instant::now() + Duration::from_millis(50)),
-        response: sender,
+        response: PendingResponse::Embedding(sender),
     };
     let failure = tokio::time::timeout(
         Duration::from_secs(3),

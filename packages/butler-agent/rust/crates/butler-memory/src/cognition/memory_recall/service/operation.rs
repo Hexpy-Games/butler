@@ -122,8 +122,8 @@ impl Operation {
         Ok(())
     }
 
-    /// The vector lane: searched within 750 ms (or the deadline), or the code
-    /// of why it was not.
+    /// Await a configured model within recall's deadline, then search within
+    /// 750 ms, or report why the vector lane was unavailable.
     async fn vector_facts(
         &self,
         generation: &MemoryGenerationHandle,
@@ -143,20 +143,16 @@ impl Operation {
             vector.code = Some(EMBEDDING_DISABLED.into());
             return Ok(vector);
         }
-        // A fresh generation also warms through the adapter. Cold initialization
-        // outlives this lane's deadline; the first answer still uses text lanes.
-        let clock = &self.clock;
-        let vector_deadline = self.deadline_at.min(clock() + 750);
-        let remaining = u64::try_from(vector_deadline.saturating_sub(clock())).unwrap_or_default();
-        let lane = if generation.embedding.is_none() {
-            port.warm(generation, &self.input, vector_deadline)
-        } else {
-            port.search(generation, &self.input, vector_deadline)
-        };
+        // Initialization is owned background work. Keep a search window for
+        // text retrieval if the optional vector lane cannot become ready.
+        let vector_deadline = self.deadline_at.saturating_sub(750);
+        let remaining =
+            u64::try_from(vector_deadline.saturating_sub((self.clock)())).unwrap_or_default();
         let result = tokio::select! {
-            ()=self.shutdown.cancelled()=>return Err(closed()),
-            result=tokio::time::timeout(std::time::Duration::from_millis(remaining),
-                lane)=>result,
+            () = self.shutdown.cancelled() => return Err(closed()),
+            () = self.caller_cancel.cancelled() => return Err(closed()),
+            result = tokio::time::timeout(std::time::Duration::from_millis(remaining),
+                self.search_vectors(port.as_ref(), generation, vector_deadline)) => result,
         };
         match result {
             Ok(Ok(_)) if generation.embedding.is_none() => {
@@ -176,6 +172,31 @@ impl Operation {
             Err(_) => vector.code = Some("vector_unavailable".into()),
         }
         Ok(vector)
+    }
+
+    async fn search_vectors(
+        &self,
+        port: &dyn super::super::vector::RecallVectorPort,
+        generation: &MemoryGenerationHandle,
+        deadline_at: i64,
+    ) -> CognitionResult<crate::cognition::recall::RecallVectorMatches> {
+        // A fresh generation has no vectors to retrieve yet. Its existing warm
+        // path starts the owner without delaying text recall for model readiness.
+        if generation.embedding.is_some() {
+            port.ready(generation, deadline_at).await?;
+        }
+        let deadline = deadline_at.min((self.clock)() + 750);
+        let remaining = u64::try_from(deadline.saturating_sub((self.clock)())).unwrap_or_default();
+        let lane = if generation.embedding.is_none() {
+            port.warm(generation, &self.input, deadline)
+        } else {
+            port.search(generation, &self.input, deadline)
+        };
+        tokio::time::timeout(std::time::Duration::from_millis(remaining), lane)
+            .await
+            .map_err(|_| {
+                CognitionError::new(CognitionCode::VectorUnavailable, "vector_unavailable")
+            })?
     }
 
     /// The first page, or the next page of a cursor (at the cursor's `as_of`).

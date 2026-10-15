@@ -25,7 +25,12 @@ use butler_memory::cognition::{
     EmbeddingRequest, EmbeddingRequestClass, EmbeddingResult, WorkerOperation, WorkerRequest,
 };
 
+mod execute;
 mod queue;
+mod readiness;
+
+use execute::run_item;
+use queue::PendingResponse;
 #[cfg(test)]
 mod tests;
 mod wire;
@@ -205,7 +210,7 @@ impl EmbeddingOwner {
             background: request.request_class == EmbeddingRequestClass::Background,
             cancellation: admitted_cancel.clone(),
             deadline,
-            response: sender,
+            response: PendingResponse::Embedding(sender),
         };
         self.inner.enqueue(pending, request.request_class)?;
         let _guard = AdmissionGuard {
@@ -240,6 +245,13 @@ impl CognitionEmbeddingPort for EmbeddingOwner {
 
     fn enabled(&self) -> bool {
         self.inner.enabled.load(Ordering::Acquire)
+    }
+
+    fn ready(
+        &self,
+        deadline_at_epoch_ms: i64,
+    ) -> butler_memory::cognition::EmbeddingReadyFuture<'_> {
+        Box::pin(self.await_ready(deadline_at_epoch_ms))
     }
 
     fn embed(
@@ -284,12 +296,12 @@ impl Inner {
         }
         state.closed = true;
         for pending in state.interactive.drain(..) {
-            let _ = pending
+            pending
                 .response
                 .send(Err(error(CognitionCode::EmbedOwnerClosed)));
         }
         for pending in state.background.drain(..) {
-            let _ = pending
+            pending
                 .response
                 .send(Err(error(CognitionCode::EmbedOwnerClosed)));
         }
@@ -354,7 +366,7 @@ async fn run_actor(inner: Arc<Inner>) {
                 butler_core::diagnostic!("[embedding-worker] ready");
                 butler_memory::cognition::signal_memory_work();
             }
-            let _ = item.response.send(result);
+            item.response.send(result);
             let mut state = inner.state.lock();
             state.active_cancel = None;
             state.release(item.bytes);
@@ -397,84 +409,6 @@ async fn initialize_for_ownership_test(inner: &Inner, child: &mut Option<WorkerC
         tokio::select! {
             () = inner.shutdown.cancelled() => {},
             _ = initialize(process, 0) => {},
-        }
-    }
-}
-
-async fn run_item(
-    inner: &Inner,
-    child: &mut Option<WorkerChild>,
-    item: &Pending,
-) -> CognitionResult<EmbeddingResult> {
-    if !inner.enabled.load(Ordering::Acquire) {
-        return Err(error(CognitionCode::EmbedWorkerCold));
-    }
-    if item.cancellation.is_cancelled() {
-        return Err(error(CognitionCode::EmbedRequestCancelled));
-    }
-    if expired(item.deadline) {
-        return Err(error(CognitionCode::EmbedRequestDeadline));
-    }
-    if child
-        .as_mut()
-        .is_some_and(|process| process.child.try_wait().ok().flatten().is_some())
-    {
-        *child = None;
-    }
-    if child.is_none() {
-        if !item.cold_start_allowed {
-            return Err(error(CognitionCode::EmbedWorkerCold));
-        }
-        *child = Some(spawn_worker(&inner.executable, &inner.data_root, item.background).await?);
-        inner.released.send_replace(false);
-    }
-    if let Some(process) = child.as_mut().filter(|process| !process.initialized) {
-        let load_started = Instant::now();
-        // A load outlives a caller that gave up, but not a switch to off.
-        let initialized = tokio::select! {
-            biased;
-            () = inner.shutdown.cancelled() => Err(error(CognitionCode::EmbedOwnerClosed)),
-            () = release_requested(inner) => Err(error(CognitionCode::EmbedRequestCancelled)),
-            result = tokio::time::timeout(Duration::from_secs(300), initialize(process, item.id)) =>
-                result.unwrap_or_else(|_| Err(error(CognitionCode::EmbedWorkerUnavailable))),
-        };
-        match initialized {
-            Ok(()) => {
-                process.initialized = true;
-                butler_core::diagnostic!(
-                    "[embedding-worker] initialized load_ms={}",
-                    load_started.elapsed().as_millis()
-                );
-            }
-            Err(failure) => {
-                kill_and_reap(child).await;
-                return Err(failure);
-            }
-        }
-    }
-    // Initialization belongs to the owner. An initiating caller may have
-    // timed out while the same child became ready for later live requests.
-    if item.cancellation.is_cancelled() {
-        return Err(error(CognitionCode::EmbedRequestCancelled));
-    }
-    if expired(item.deadline) {
-        return Err(error(CognitionCode::EmbedRequestDeadline));
-    }
-    let Some(process) = child.as_mut() else {
-        return Err(error(CognitionCode::EmbedWorkerUnavailable));
-    };
-    let outcome = tokio::select! {
-        biased;
-        () = inner.shutdown.cancelled() => Err(error(CognitionCode::EmbedOwnerClosed)),
-        () = item.cancellation.cancelled() => Err(error(CognitionCode::EmbedRequestCancelled)),
-        () = deadline_wait(item.deadline) => Err(error(CognitionCode::EmbedRequestDeadline)),
-        result = exchange(process, item) => result,
-    };
-    match outcome {
-        Ok(result) => result,
-        Err(failure) => {
-            kill_and_reap(child).await;
-            Err(failure)
         }
     }
 }
