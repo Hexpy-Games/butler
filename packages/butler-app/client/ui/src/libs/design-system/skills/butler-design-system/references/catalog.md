@@ -864,7 +864,7 @@ A compact single-choice radiogroup that changes what one panel shows.
 - Not for: Switching between panels of content → `Tabs`
 - Not for: More than five options or long labels → `Select`
 - Not for: An on/off setting → `Switch`
-- Tokens: `--selection`, `--radius-control`, `--motion-fast`, `--control-height-sm`
+- Tokens: `--selection`, `--radius-control`, `--motion-fast`, `--control-height-md`, `--control-height-xs`, `--control-hit-target`
 
 ### Select
 
