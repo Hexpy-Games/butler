@@ -352,6 +352,7 @@ impl AgentRuntime {
             profile: profile.clone(),
             monitoring: monitoring::open(
                 &paths.data_root,
+                &app_database_path,
                 &environment.cognition_paths,
                 &models,
                 coordinator.clone(),
@@ -362,15 +363,12 @@ impl AgentRuntime {
             web_access,
             app_endpoint: app_endpoint.clone(),
         };
-        let agent = Arc::new(ProductionAgentLoop::native(
-            models.provider.clone(),
-            Arc::new(TurnModelExecutionFactory::new(
-                repositories.clone(),
-                ModelRouteRetryConfig::new(environment.model_route_retry_base_ms),
-            )),
-            Arc::new(factory),
-            None,
-        ));
+        let agent = owners::agent_loop(
+            &models,
+            &repositories,
+            factory,
+            environment.model_route_retry_base_ms,
+        );
         let bindings = stores.bindings.clone();
         let conversations = Arc::new(stores.conversations.clone());
         let progress = StorageProgressPublication::new(stores.btcc.clone());

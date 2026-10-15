@@ -169,3 +169,21 @@ pub(super) fn developer_capture(
     crate::host::service::developer_log::capture(data_root.to_owned(), database_path, installation)
         .map_err(setup)
 }
+
+/// Compose the process loop and its durable model-route retry owner together.
+pub(super) fn agent_loop(
+    models: &super::super::ProcessModels,
+    repositories: &Arc<BtccRepositories>,
+    factory: GuidedTurnFactoryAdapter,
+    retry_base_ms: f64,
+) -> Arc<ProductionAgentLoop> {
+    Arc::new(ProductionAgentLoop::native(
+        models.provider.clone(),
+        Arc::new(TurnModelExecutionFactory::new(
+            repositories.clone(),
+            ModelRouteRetryConfig::new(retry_base_ms),
+        )),
+        Arc::new(factory),
+        None,
+    ))
+}

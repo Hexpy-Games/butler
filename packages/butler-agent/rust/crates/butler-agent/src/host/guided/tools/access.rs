@@ -9,7 +9,10 @@ use butler_turn::btcc::{
 use butler_turn::workspace::{FolderRelation, ScopeRoots, classify_targets};
 use serde_json::Value;
 
-pub(super) async fn kind(call: &ModelRoundToolCall) -> Result<CapabilityKind, BtccError> {
+pub(super) async fn kind(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+) -> Result<CapabilityKind, BtccError> {
     if call.name == "run_command" {
         // The first probe spawns a helper and waits for it. Cache it from a
         // blocking worker before synchronous classification touches it.
@@ -17,16 +20,36 @@ pub(super) async fn kind(call: &ModelRoundToolCall) -> Result<CapabilityKind, Bt
             .await
             .map_err(|error| BtccError::relayed("sandbox_probe_failed", error.to_string()))?;
     }
-    Ok(CapabilityKind::of_call(
+    let mut kind = CapabilityKind::of_call(
         &call.name,
         &call.arguments,
         super::effect::is_managed_project_ledger_effect(&call.name),
-    ))
+    );
+    if owner.binding.access_mode == butler_turn::btcc::AccessMode::Auto
+        && matches!(kind, CapabilityKind::CommandMutation { .. })
+        && !sandbox_enabled(owner).await?
+    {
+        kind = CapabilityKind::CommandMutation {
+            sandbox: butler_turn::btcc::CommandSandbox::None,
+        };
+    }
+    Ok(kind)
 }
+
+pub(super) async fn sandbox_enabled(owner: &GuidedTools) -> Result<bool, BtccError> {
+    let path = owner.monitoring.app_database_path.clone();
+    butler_gateway::gateway::command_sandbox_enabled(path)
+        .await
+        .map_err(|error| {
+            BtccError::relayed("command_sandbox_settings_unavailable", error.to_string())
+        })
+}
+
 pub(super) async fn gated_kind(
+    owner: &GuidedTools,
     call: &ModelRoundToolCall,
 ) -> Result<CapabilityKind, ToolExecutionError> {
-    Ok(kind(call)
+    Ok(kind(owner, call)
         .await
         .map_err(ToolExecutionError::Integrity)?
         .gated_effect())
@@ -37,7 +60,7 @@ pub(super) async fn decision(
     call: &ModelRoundToolCall,
     args: &Value,
 ) -> Result<AccessDecision, BtccError> {
-    decision_for_kind(owner, call, args, kind(call).await?).await
+    decision_for_kind(owner, call, args, kind(owner, call).await?).await
 }
 pub(super) async fn decision_for_kind(
     owner: &GuidedTools,
@@ -164,5 +187,29 @@ pub(super) fn for_kind(owner: &GuidedTools, kind: CapabilityKind) -> AccessDecis
             scope: TargetScope::NoTarget,
             taint: owner.taint(),
         },
+    )
+}
+
+/// Explain effective project-write availability without disabling run_command:
+/// explicit approval and the other permission tiers remain usable.
+pub(super) async fn sandbox_report(owner: &GuidedTools) -> Result<Value, BtccError> {
+    let enabled = sandbox_enabled(owner).await?;
+    let caps = tokio::task::spawn_blocking(butler_platform::command_sandbox::capabilities)
+        .await
+        .map_err(|error| BtccError::relayed("sandbox_probe_failed", error.to_string()))?;
+    let reason = if !enabled {
+        Some("disabled_by_user")
+    } else if !caps.project_write_available() {
+        match caps.project_write {
+            butler_platform::command_sandbox::Level::Unavailable(reason) => Some(reason),
+            _ => Some("sandbox_unavailable"),
+        }
+    } else {
+        None
+    };
+    Ok(
+        serde_json::json!({"enabled":enabled, "available":caps.project_write_available(),
+        "project_write":enabled && caps.project_write_available(), "disabled_reason":reason,
+        "when_unavailable":"Auto project-write commands require approval."}),
     )
 }
