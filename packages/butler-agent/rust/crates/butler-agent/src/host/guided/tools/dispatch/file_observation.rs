@@ -193,8 +193,8 @@ fn normalized(owner: &GuidedTools, call: &ModelRoundToolCall) -> Result<Value, T
         })?
         .unwrap_or_else(|| owner.binding.workspace_path.clone());
     let absolute = |path: &str| -> String {
-        butler_platform::tool_paths::parse(&workspace, path)
-            .map(|parsed| workspace.join(parsed).to_string_lossy().into_owned())
+        butler_platform::tool_paths::resolve(&workspace, path)
+            .map(|target| target.to_string_lossy().into_owned())
             .unwrap_or_else(|_| path.to_owned())
     };
     let mut args = Value::Object(call.arguments.clone());
