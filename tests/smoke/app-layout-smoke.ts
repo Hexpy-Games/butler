@@ -1,5 +1,11 @@
 import { assertWallpaperPaint } from "../support/wallpaper-paint.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
+import {
+  armPanelSlideCapture,
+  readPanelSlideCapture,
+  type PanelBox,
+  type PanelSlideCapture,
+} from "../support/panel-slide-motion.ts";
 import { Buffer } from "node:buffer";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -21,8 +27,9 @@ const root = process.cwd();
 // tests/support/native-app-server.ts registers one Custom model ("Stub",
 // local/stub) as the default; the model picker selects it by that label.
 const STUB_MODEL_LABEL = /^Stub\b/u;
-// The stub Custom model advertises a single reasoning level.
-const STUB_REASONING_LABEL = "Instant";
+// The stub Custom model advertises a single reasoning level, "none"; #982
+// (a63e1d942) labels it "None" in English (butler-i18n reasoning-effort.ts).
+const STUB_REASONING_LABEL = "None";
 const tempDir = mkdtempSync(join(tmpdir(), "butler-app-layout-smoke-"));
 const uiRoot = resolve(root, process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist");
 const screenshotDir = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? join(root, ".tmp", "app-layout-smoke"));
@@ -43,6 +50,38 @@ const sidebarVisibleWidth = (box: { x: number; width: number } | null) =>
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
+}
+
+/**
+ * A docked panel's close must run as a transform transition with the
+ * adaptive-panel motion tokens and pass through in-between positions (#797).
+ */
+function assertPanelSlide(
+  label: string,
+  slide: PanelSlideCapture,
+  startWidth: number,
+  visibleWidth: (box: PanelBox) => number,
+): void {
+  const details = JSON.stringify({ startWidth, ...slide });
+  assert(
+    slide.duration !== null &&
+      slide.tokenDuration > 0 &&
+      slide.duration === slide.tokenDuration &&
+      slide.delay === 0 &&
+      slide.tokenEasing !== "" &&
+      slide.easing === slide.tokenEasing &&
+      slide.samples.length > 0,
+    `${label} should slide out with the adaptive-panel duration and easing: ${details}`,
+  );
+  let previous = startWidth;
+  for (const { box } of slide.samples) {
+    const visible = visibleWidth(box);
+    assert(
+      Math.abs(box.width - startWidth) <= 2 && visible > 8 && visible < previous - 8,
+      `${label} should slide while closing: ${details}`,
+    );
+    previous = visible;
+  }
 }
 
 /** Waits until finite (enter/exit) animations settle so geometry is read at rest. */
@@ -1233,39 +1272,33 @@ try {
     openRightPanelToggleState.background === "rgba(0, 0, 0, 0)",
     `right panel toggle should not show selected ghosting while open: ${JSON.stringify(openRightPanelToggleState)}`,
   );
+  await armPanelSlideCapture(rightPanelSlot);
   await page
     .getByRole("button", { name: appCopy.titlebar.hideRightPanel })
     .click();
-  await page.waitForTimeout(90);
-  const closingSlotBox = await rightPanelSlot.boundingBox();
-  const closingInspectorBox = await page
-    .locator(testClass("right-inspector"))
-    .boundingBox();
-  const closingInspectorState = await page
-    .locator(testClass("right-inspector"))
-    .evaluate((element) => ({
-      opacity: getComputedStyle(element).opacity,
-      transform: getComputedStyle(element).transform,
-      width: element.getBoundingClientRect().width,
-    }));
   // The docked inspector keeps its width and slides out on the compositor
   // (useInspectorTrackMotion): mid-close it is partly off the right edge.
+  const rightSlide = await readPanelSlideCapture(
+    rightPanelSlot,
+    [0.25, 0.5],
+    testClass("right-inspector"),
+  );
   const rightEdge = page.viewportSize()?.width ?? 0;
-  const closingVisibleWidth = closingSlotBox ? Math.max(0, rightEdge - closingSlotBox.x) : 0;
-  assert(
-    closingSlotBox &&
-      Math.abs(closingSlotBox.width - inspectorWidthAfterResize) <= 2 &&
-      closingVisibleWidth > 8 &&
-      closingVisibleWidth < inspectorWidthAfterResize - 8,
-    `right panel slot should slide out while closing: start=${inspectorWidthAfterResize} mid=${JSON.stringify(closingSlotBox)} visible=${closingVisibleWidth}`,
+  assertPanelSlide(
+    "right panel slot",
+    rightSlide,
+    inspectorWidthAfterResize,
+    (box) => Math.max(0, rightEdge - box.x),
   );
-  assert(
-    closingInspectorBox &&
-      closingInspectorBox.width >= inspectorWidthAfterResize - 2 &&
-      closingInspectorState.opacity === "1" &&
-      closingInspectorState.transform === "none",
-    `right panel content should keep stable width while the slot clips it: box=${JSON.stringify(closingInspectorBox)} state=${JSON.stringify(closingInspectorState)}`,
-  );
+  for (const { content } of rightSlide.samples) {
+    assert(
+      content &&
+        content.width >= inspectorWidthAfterResize - 2 &&
+        content.opacity === "1" &&
+        content.transform === "none",
+      `right panel content should keep stable width while the slot clips it: ${JSON.stringify(rightSlide.samples)}`,
+    );
+  }
   await page.waitForTimeout(260);
   const closedInspectorCount = await page
     .locator(testClass("right-inspector"))
@@ -1801,16 +1834,14 @@ try {
 
   const sidebarWidthBeforeToggle =
     (await page.locator(testClass("sidebar-slot")).boundingBox())?.width ?? 0;
+  const sidebarSlot = page.locator(testClass("sidebar-slot"));
+  await armPanelSlideCapture(sidebarSlot);
   await page.getByRole("button", { name: "Hide sidebar" }).click();
-  await page.waitForTimeout(90);
-  const sidebarMidToggleBox = await page
-    .locator(testClass("sidebar-slot"))
-    .boundingBox();
-  assert(
-    sidebarMidToggleBox &&
-      sidebarVisibleWidth(sidebarMidToggleBox) > 8 &&
-      sidebarVisibleWidth(sidebarMidToggleBox) < sidebarWidthBeforeToggle - 8,
-    `left sidebar should slide while closing: start=${sidebarWidthBeforeToggle} mid=${JSON.stringify(sidebarMidToggleBox)}`,
+  assertPanelSlide(
+    "left sidebar",
+    await readPanelSlideCapture(sidebarSlot, [0.25, 0.5]),
+    sidebarWidthBeforeToggle,
+    sidebarVisibleWidth,
   );
   await page.waitForTimeout(320);
   const sidebarBox = await page
@@ -2173,7 +2204,7 @@ try {
       modelMenuLayout.filterLabels.includes(appCopy.composer.allProviders) &&
       modelMenuLayout.groupTitles.length > 0 &&
       modelMenuLayout.footerTitle === appCopy.composer.reasoning &&
-      modelMenuLayout.reasoningLabels.includes("Instant") &&
+      modelMenuLayout.reasoningLabels.includes(STUB_REASONING_LABEL) &&
       !modelMenuLayout.reasoningLabels.some((label) =>
         label.includes("reasoning"),
       ) &&
