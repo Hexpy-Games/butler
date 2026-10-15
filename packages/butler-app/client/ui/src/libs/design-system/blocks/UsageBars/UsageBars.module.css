@@ -1,0 +1,249 @@
+/* UsageBars: stacked columns on a hairline baseline. Columns are divs sized
+   by --usage-bars-fraction of the plot; motion is transform-only (WAAPI in
+   useUsageBarsMotion), so this sheet only fades the selection dim. Reduced
+   motion keeps that fade (the DS rule: reduced motion is an opacity fade). */
+.root {
+  --usage-bars-plot-height: 56px;
+  --usage-bars-column-max: 14px;
+  /* Room above the tallest column so the top tick label stays inside the plot. */
+  --usage-bars-headroom: 0px;
+  --usage-bars-dim: 0.4;
+
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-xs);
+  min-width: 0;
+  border-radius: 2px;
+  outline: none;
+  /* Focus scrolling keeps the ring's room inside the scroller. */
+  scroll-margin: var(--focus-ring-room);
+}
+
+.root[data-size="panel"] {
+  --usage-bars-plot-height: var(--chart-height-panel);
+  --usage-bars-column-max: 24px;
+
+  border-radius: 4px;
+}
+
+.root[data-ticks="true"] {
+  --usage-bars-headroom: var(--space-sm);
+
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-sm);
+}
+
+/* The ring sits --focus-ring-room outside the chart (2px ring, 1px offset). */
+.root:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(var(--focus-ring-room) - var(--focus-ring-width));
+}
+
+.plot {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--usage-bars-slots), minmax(0, 1fr));
+  align-items: end;
+  height: var(--usage-bars-plot-height);
+  cursor: default;
+  touch-action: pan-y;
+}
+
+/* Baseline. */
+.plot::after {
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  content: "";
+  background: var(--line);
+}
+
+.slot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 100%;
+  min-width: 0;
+}
+
+/* Non-zero columns are at least 2px tall. Size containment lets the stack
+   drop its 1px separators on short columns (below). */
+.column {
+  width: min(calc(100% - 2px), var(--usage-bars-column-max));
+  height: max(
+    2px,
+    calc(var(--usage-bars-fraction) * (100% - var(--usage-bars-headroom)))
+  );
+  overflow: hidden;
+  border-radius: 2px 2px 0 0;
+  container-type: size;
+  transform-origin: center bottom;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+.column[data-zero="true"] {
+  height: 0;
+}
+
+.root[data-size="panel"] .column,
+.root[data-size="panel"] .skeletonColumn {
+  border-radius: 4px 4px 0 0;
+}
+
+.root[data-selected="true"] .column:not([data-selected="true"]) {
+  opacity: var(--usage-bars-dim);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 1px;
+  height: 100%;
+}
+
+@container (height < 6px) {
+  .stack {
+    gap: 0;
+  }
+}
+
+/* Each segment's basis is its share of the column; the 1px separators come
+   out of every segment in proportion (flex-shrink weighs by basis). */
+.segment {
+  flex: 0 1 calc(var(--usage-bars-share) * 100%);
+  min-height: 0;
+}
+
+.segment[data-color="chart-1"] {
+  background: var(--context-chart-1);
+}
+
+.segment[data-color="chart-2"] {
+  background: var(--context-chart-2);
+}
+
+.segment[data-color="chart-3"] {
+  background: var(--context-chart-3);
+}
+
+.segment[data-color="chart-4"] {
+  background: var(--context-chart-4);
+}
+
+.segment[data-color="chart-5"] {
+  background: var(--context-chart-5);
+}
+
+.segment[data-color="chart-6"] {
+  background: var(--context-chart-6);
+}
+
+.gridline {
+  position: absolute;
+  right: 0;
+  bottom: calc(
+    var(--usage-bars-fraction) * (100% - var(--usage-bars-headroom))
+  );
+  left: 0;
+  height: 1px;
+  background: var(--line);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* Labels share one grid cell, so the gutter is as wide as the widest. */
+.yAxis {
+  display: grid;
+  height: var(--usage-bars-plot-height);
+  color: var(--text-tertiary);
+  font-size: var(--typo-caption-size);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--typo-caption-line-height-tight);
+  text-align: end;
+}
+
+.yLabel {
+  position: relative;
+  top: calc(
+    100% - var(--usage-bars-fraction) * (100% - var(--usage-bars-headroom))
+  );
+  grid-area: 1 / 1;
+  align-self: start;
+  white-space: nowrap;
+  translate: 0 -50%;
+}
+
+/* column-gap is the least room between two kept labels (useAxisLabelFit). */
+.axis {
+  position: relative;
+  min-width: 0;
+  column-gap: var(--space-sm);
+  height: var(--typo-caption-line-height);
+  color: var(--text-tertiary);
+  font-size: var(--typo-caption-size);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--typo-caption-line-height);
+}
+
+.root[data-ticks="true"] .axis {
+  grid-column: 2;
+}
+
+.axisLabel {
+  position: absolute;
+  top: 0;
+  left: calc(var(--usage-bars-left) * 100% + var(--usage-bars-nudge, 0px));
+  white-space: nowrap;
+  translate: -50% 0;
+}
+
+.axisLabel[data-align="start"] {
+  translate: 0 0;
+}
+
+.axisLabel[data-align="end"] {
+  translate: -100% 0;
+}
+
+.axisLabel[data-hidden="true"] {
+  visibility: hidden;
+}
+
+/* 6px off the baseline, as in the approved popover mockup. */
+.note {
+  position: absolute;
+  bottom: 6px;
+  left: calc(var(--usage-bars-left) * 100% + var(--space-sm));
+  color: var(--text-tertiary);
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
+  white-space: nowrap;
+}
+
+.empty {
+  position: absolute;
+  inset: 0 0 1px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  color: var(--text-tertiary);
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
+  text-align: center;
+}
+
+/* The usage page's empty line reads at label size (13/18). */
+.root[data-size="panel"] .empty {
+  font-size: var(--typo-label-size);
+  line-height: var(--typo-label-line-height);
+}
+
+.plot .skeletonColumn {
+  width: min(calc(100% - 2px), var(--usage-bars-column-max));
+  min-height: 0;
+  height: calc(var(--usage-bars-fraction) * 100%);
+  border-radius: 2px 2px 0 0;
+}
