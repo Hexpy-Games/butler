@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { appCopy, getAppLocale } from "@/app/copy";
-import { AnimatedNumber, Inline, KeyValueRow, RollingSwap, Stack, Typo, Skeleton } from "@/butler-ds";
+import { AnimatedNumber, Inline, KeyValueRow, Stack, Typo, Skeleton } from "@/butler-ds";
 import type { UsageMonitorView } from "@/app/types";
 import { usageClock, usageReadout, usageSeries, usageTokens } from "./usageTimeline";
 
@@ -18,17 +18,17 @@ export function UsageReadout({ view, values, label, selected, showCost, delta, s
     return <Stack gap="sm"><Typo.Caption>{label}</Typo.Caption>{children}</Stack>;
   }
   return <Stack gap="sm" data-test-class="usage-readout" aria-busy={!view}>
-    <Inline justify="between" gap="sm" wrap>
-      {view ? <Typo.Caption><RollingSwap itemKey={label}>{label}</RollingSwap></Typo.Caption> : <Skeleton width="1/3" label={copy.loading} />}
+    <Inline justify="between" gap="sm" wrap={panel}>
+      {view ? <Typo.Caption grow basis="0" minWidth="0" truncate title={label}>{label}</Typo.Caption> : <Skeleton width="1/3" label={copy.loading} />}
       <Typo.Caption numeric="tabular">{view ? copy.requests(new Intl.NumberFormat(getAppLocale()).format(values.requests)) : "—"}{unit ? ` · ${unit}` : ""}</Typo.Caption>
     </Inline>
     <Inline justify="between" cross="baseline" gap="sm" wrap>
       <Inline cross="baseline" gap="xs">
         <Typo.MetricValue numeric="tabular">{view ? <AnimatedNumber value={values.total} format={usageTokens} /> : "—"}</Typo.MetricValue>
         <Typo.Caption>{copy.tokens}</Typo.Caption>
+        {!selected && delta ? <Typo.Caption>{delta}</Typo.Caption> : null}
       </Inline>
       {showCost && !selected && !panel ? <Typo.Caption>{costText} · {copy.estimate}</Typo.Caption> : null}
-      {!selected && delta ? <Typo.Caption>{delta}</Typo.Caption> : null}
     </Inline>
     {stale && view ? <Typo.Caption>{copy.updated(usageClock(Date.parse(view.generated_at)))}</Typo.Caption> : null}
     {children}

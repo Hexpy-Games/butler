@@ -1121,6 +1121,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       bucketUnit: hours => hours < 24 ? `${hours}-hour bars` : `${hours / 24}-day bars`,
       codexProvider: "OpenAI Codex",
       thisChat: "This chat",
+      calls: count => `${count} ${count === "1" ? "call" : "calls"}`,
       requests: count => `${count} ${count === "1" ? "request" : "requests"}`,
       tokens: "tokens",
       newInput: "New input",

@@ -973,6 +973,7 @@ export interface AppCopy {
       codexProvider: string;
       thisChat: string;
       bucketUnit: (hours: number) => string;
+      calls: (count: string) => string;
       requests: (count: string) => string;
       tokens: string;
       newInput: string;

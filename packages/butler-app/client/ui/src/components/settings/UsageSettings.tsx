@@ -82,13 +82,15 @@ export function UsageSettings() {
     <SettingsSection id="usage-overview" kind="status"
       state={result.error && !result.view ? "error" : "ready"} errorMessage={appCopy.interfacePanels.usageFailed} onRetry={refresh}>
       <Stack gap="lg">
-        <Inline justify="between" cross="end" gap="md" wrap>
+        <Inline justify="between" cross="start" gap="md" wrap>
           <Stack grow basis="md" gap="xs" minWidth="0"><Typo.Caption>{copy.chats}</Typo.Caption>
             <UsageSessionSelect triggerRef={pickerTrigger} open={pickerOpen} onOpenChange={setPickerOpen} range={ranges.find(r => r.value === String(hours))!.label} sessions={sessions} value={session} onChange={setSession} /></Stack>
-          <Stack gap="xs"><Typo.Caption>{copy.period}</Typo.Caption>
-            <SegmentedControl ariaLabel={copy.period} size="sm" options={ranges} value={String(hours)} onValueChange={v => setHours(Number(v))} /></Stack>
-          <Inline gap="xs" cross="end"><Typo.Caption>{result.view ? copy.updated(usageClock(Date.parse(result.view.generated_at))) : "—"}</Typo.Caption>
-            <IconButton label={appCopy.common.refresh} disabled={result.loading} onClick={refresh}><RefreshCcw size="sm" /></IconButton></Inline>
+          <Stack gap="xs" grow><Typo.Caption>{copy.period}</Typo.Caption>
+            <Inline justify="between" cross="center" gap="md">
+              <SegmentedControl ariaLabel={copy.period} size="default" options={ranges} value={String(hours)} onValueChange={v => setHours(Number(v))} />
+              <Inline gap="xs" cross="center" wrap={false}><Typo.Caption>{result.view ? copy.updated(usageClock(Date.parse(result.view.generated_at))) : "—"}</Typo.Caption>
+                <IconButton label={appCopy.common.refresh} disabled={result.loading} onClick={refresh}><RefreshCcw size="sm" /></IconButton></Inline>
+            </Inline></Stack>
         </Inline>
         <UsageReadout view={result.view} values={usageReadout(result.view, bucket)} label={bucket?.label ?? label}
           panel selected={Boolean(bucket)} showCost delta={periodDelta(result.view, hours)} share={session && result.allView?.model.totalTokens
