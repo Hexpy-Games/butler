@@ -67,8 +67,11 @@ pub(super) fn hot_queries_use_their_indexes() {
 pub(super) fn schedule_window_uses_turn_indexes() {
     let mut db = Connection::open_in_memory().unwrap();
     migrate(&mut db, None).unwrap();
+    // The deployed schema: no turn indexes yet, and the superseded started-at index.
     db.execute_batch("DROP INDEX session_queued_messages_turn_idx;
         DROP INDEX automation_runs_turn_idx;
+        CREATE INDEX automation_runs_started_idx
+            ON app_automation_runs(julianday(started_at),turn_id,queued_message_id);
         INSERT INTO chats(id,title,kind,created_at,updated_at) VALUES('c','Chat','chat','old','old');
         INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,state,last_run_state,created_at,updated_at)
             VALUES('a','Report','Report','chat','c',3600,'paused','delivered','old','old');
@@ -81,6 +84,14 @@ pub(super) fn schedule_window_uses_turn_indexes() {
         .unwrap();
     migrate(&mut db, None).unwrap();
     migrate(&mut db, None).unwrap();
+    let started_idx: i64 = db
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='automation_runs_started_idx'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(started_idx, 0, "migrate must drop the superseded index");
     db.execute_batch("ANALYZE").unwrap();
     for table in ["app_automation_runs", "session_queued_messages"] {
         let count: i64 = db

@@ -145,14 +145,10 @@ async fn usage_schedule_run_overlaps_window() -> Result<(), HarnessError> {
                 .any(|entry| entry["sessionId"] == "unbound-runtime")
         );
     }
+    // All time counts both turns even though their runs started before 24h.
     let reply = s.gw.get("/usage-monitor").await?;
-    assert!(
-        reply.data()["topSessions"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|entry| entry["kind"] == "schedule")
-    );
+    assert_eq!(reply.data()["model"]["requestCount"], 2);
+    assert_eq!(reply.data()["model"]["totalTokens"], 24.0);
     drop(db);
     s.finish().await
 }
