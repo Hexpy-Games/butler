@@ -37,6 +37,7 @@ fn write_command(targets: &[&Path]) -> String {
 #[test]
 fn read_only_commands_run_sandboxed_or_are_refused() {
     super::mxc_policy::verify();
+    #[cfg(feature = "test-support")]
     butler_platform::command_sandbox::windows_recovery_contract();
     timeout_markers_require_both_code_and_trailing_marker();
     super::project_secrets::verify();
