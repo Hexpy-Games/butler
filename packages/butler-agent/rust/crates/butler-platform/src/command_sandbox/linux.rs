@@ -450,6 +450,10 @@ pub(super) fn cleanup_generated(root: &Path, data: &Path) -> std::io::Result<()>
     generated::cleanup(root, data, false)
 }
 
+pub(super) fn remember_probe(data: &Path) {
+    mountns::remember(data);
+}
+
 pub(super) fn mount_tier_available() -> bool {
     mountns::available()
 }

@@ -142,6 +142,8 @@ async fn open_btcc(
         trace.phase("sandbox_reconcile");
         let bootstrap = prepare_btcc_storage(&root, crate::host::build_info::current().version)
             .map_err(|e| error("storage_bootstrap_failed", e))?;
+        // Only an accepted data folder receives the sandbox probe hint.
+        butler_platform::command_sandbox::remember_probe(&root);
         trace.phase("btcc_storage_prepare");
         timing.send_replace(super::startup_trace::Correction::Running(
             std::time::Instant::now(),

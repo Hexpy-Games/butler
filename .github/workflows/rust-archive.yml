@@ -99,6 +99,12 @@ jobs:
           python3 "$isolate" cargo nextest list "${args[@]}" --message-format json -E "package(=butler-e2e) and ($perf_filter)" > "$RUNNER_TEMP/rust-archive/perf-list.json"
           python3 "$GITHUB_WORKSPACE/.github/scripts/balance-e2e.py" "$RUNNER_TEMP/rust-archive/list.json" "$RUNNER_TEMP/rust-archive" "$RUNNER_TEMP/rust-archive/perf-list.json"
           python3 "$isolate" python3 "$GITHUB_WORKSPACE/.github/scripts/test-ci-invariants.py" "$RUNNER_TEMP/rust-archive"
+          ort=()
+          if [ "$ORT_MODE" = static-ort ]; then
+            ort=(--no-default-features --features butler-agent/static-ort)
+          fi
+          # The E2E agent needs the harness's fixture build (crates/butler-e2e README).
+          python3 "$isolate" cargo build -j 8 --locked "${ort[@]}" -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox --features butler-platform/test-support,butler-agent/e2e-fixtures
           cp target/debug/butler-agent "$RUNNER_TEMP/rust-archive/butler-agent"
           if [[ "${{ inputs.platform }}" == linux-* ]]; then
             cp target/debug/butler-sandbox "$RUNNER_TEMP/rust-archive/butler-sandbox"
