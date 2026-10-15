@@ -1,24 +1,58 @@
 //! Separate elapsed-time stability from bounded history window rollover.
 use super::*;
-use std::time::{Duration, Instant};
+use butler_e2e::e2e::fixtures::FIXTURE_TIME;
+use std::io::{BufRead, BufReader, Write};
+use std::time::Duration;
+
+/// Past the provider's default 5-minute cache TTL.
+const IDLE_SECONDS: i64 = 361;
+
+/// Set the agent's stub-tier App clock through its loopback control.
+async fn set_app_clock(address: String, now: String) -> Result<Value, HarnessError> {
+    tokio::task::spawn_blocking(move || -> Result<Value, HarnessError> {
+        let mut stream = std::net::TcpStream::connect(address)?;
+        stream.set_read_timeout(Some(Duration::from_secs(1)))?;
+        writeln!(stream, "{now}")?;
+        let mut reply = String::new();
+        BufReader::new(stream).read_line(&mut reply)?;
+        Ok(serde_json::from_str(&reply)?)
+    })
+    .await
+    .map_err(|e| HarnessError(e.to_string()))?
+}
 
 #[tokio::test]
 async fn six_minute_idle_preserves_stable_and_completed_history_bytes() -> Result<(), HarnessError>
 {
     butler_e2e::gate!();
-    let (s, stub, server) = start("1h", "on", true).await?;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let clock = listener.local_addr()?.to_string();
+    drop(listener);
+    let env = [("BUTLER_E2E_APP_CLOCK_ADDRESS", clock.as_str())];
+    let (s, stub, server) = start_with("1h", "on", true, &env).await?;
     s.turn("general", "warm cache before idle").await?;
     s.turn("general", "capture completed history before idle")
         .await?;
     let before = stub.requests.lock().unwrap().last().unwrap().clone();
     let previous = history_blocks(&before);
-    let began = Instant::now();
-    tokio::time::sleep(Duration::from_secs(361)).await;
+    // Advance the agent's clock instead of sleeping through the idle period.
+    let idle_until = (chrono::DateTime::parse_from_rfc3339(FIXTURE_TIME)
+        .map_err(|e| HarnessError(e.to_string()))?
+        + chrono::Duration::seconds(IDLE_SECONDS))
+    .with_timezone(&chrono::Utc)
+    .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let state = set_app_clock(clock, idle_until.clone()).await?;
+    assert_eq!(state["now"], idle_until.as_str(), "{state}");
     let begin = stub.requests.lock().unwrap().len();
     s.turn("general", "resume cache after six minute idle")
         .await?;
     let after = stub.requests.lock().unwrap()[begin].clone();
     let current = history_blocks(&after);
+    let resumed_at = format!("Current Time UTC: {idle_until}");
+    assert!(
+        after.to_string().contains(&resumed_at),
+        "the resumed turn did not observe the idle clock"
+    );
     assert_eq!(before["system"], after["system"]);
     assert_eq!(before["tools"], after["tools"]);
     assert!(
@@ -27,8 +61,7 @@ async fn six_minute_idle_preserves_stable_and_completed_history_bytes() -> Resul
     );
     assert_eq!(current.len(), previous.len() + 1);
     eprintln!(
-        "CACHE-IDLE idle_seconds={} unchanged_blocks={} stable_and_history_prefix=100%",
-        began.elapsed().as_secs(),
+        "CACHE-IDLE idle_seconds={IDLE_SECONDS} unchanged_blocks={} stable_and_history_prefix=100%",
         previous.len()
     );
     s.finish().await?;
