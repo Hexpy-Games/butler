@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 // Four live App surfaces at both required widths/themes, with a deterministic tool provider.
 import { strict as assert } from "node:assert";
@@ -42,10 +43,10 @@ try {
       };
       await assertNewChatSurfaces(page);
       await capture("new-chat");
-      const general = page.getByRole("button", { name: "일반", exact: true });
+      const general = page.getByRole("button", { name: getAppCopy("ko-KR").space.general, exact: true });
       if (!(await general.isVisible())) await page.getByRole("button", { name: "사이드바 보기", exact: true }).click();
       await general.click();
-      assert.equal(await page.locator('[data-test-class="titlebar-title"]').innerText(), "일반");
+      assert.equal(await page.locator('[data-test-class="titlebar-title"]').innerText(), getAppCopy("ko-KR").space.general);
       // A mobile navigation selection closes its drawer; show it for this capture.
       if (!(await general.isVisible())) await page.getByRole("button", { name: "사이드바 보기", exact: true }).click();
       if (width === 390) await page.getByRole("button", { name: "사이드바 숨기기", exact: true }).last().click();
