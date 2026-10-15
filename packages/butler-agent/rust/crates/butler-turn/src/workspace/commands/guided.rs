@@ -108,10 +108,33 @@ async fn execute(
     completion: &mut Option<oneshot::Sender<Result<GuidedCommandOutput, CommandError>>>,
     secrets: &[PathBuf],
 ) -> Result<Option<GuidedCommandOutput>, CommandError> {
-    let (cwd, command) = prepare_command(&input, &shutdown, secrets).await?;
+    let (cwd, command, invocation) = prepare_command(&input, &shutdown, secrets).await?;
+    let result = execute_prepared(host, &input, &shutdown, completion, cwd, command).await;
+    cleanup_preparation(invocation).await;
+    result
+}
+
+async fn cleanup_preparation(invocation: command_sandbox::Invocation) {
+    let result = tokio::task::spawn_blocking(move || {
+        command_sandbox::cleanup_prepared_invocation(&invocation)
+    })
+    .await;
+    if !matches!(result, Ok(Ok(()))) {
+        eprintln!("Command preparation cleanup failed");
+    }
+}
+
+async fn execute_prepared(
+    host: &dyn ProcessHost,
+    input: &GuidedCommandInput,
+    shutdown: &CancellationToken,
+    completion: &mut Option<oneshot::Sender<Result<GuidedCommandOutput, CommandError>>>,
+    cwd: PathBuf,
+    command: Command,
+) -> Result<Option<GuidedCommandOutput>, CommandError> {
     let spool = Spool::create(&input.butler_data).await?;
     let mut running = spawn_captured(host, command, spool).await?;
-    let cause = await_stop(host, &mut running, &input, &shutdown).await;
+    let cause = await_stop(host, &mut running, input, shutdown).await;
     let (stopped, reaped) = match settle_process(host, &mut running, cause).await {
         Ok(settled) => settled,
         Err(error) => return running.fail(host, error).await,
@@ -156,10 +179,10 @@ async fn execute(
     }
     let timed_out = stopped == Stopped::TimedOut;
     let exit_code = if timed_out { None } else { status.code() };
-    let summary = summary(exit_code, signal_name(status), timed_out);
+    let mut summary = summary(exit_code, signal_name(status), timed_out);
     let payload_source = running
         .paths
-        .complete(running.capture, &summary, CaptureEnd::Drained)
+        .complete(running.capture, &mut summary, CaptureEnd::Drained)
         .await?;
     Ok(Some(GuidedCommandOutput {
         summary,
@@ -173,7 +196,7 @@ async fn prepare_command(
     input: &GuidedCommandInput,
     shutdown: &CancellationToken,
     secrets: &[PathBuf],
-) -> Result<(PathBuf, Command), CommandError> {
+) -> Result<(PathBuf, Command, command_sandbox::Invocation), CommandError> {
     if input.command.is_empty() {
         return Err(CommandError::new(
             CommandCode::CommandInvalid,
@@ -203,8 +226,8 @@ async fn prepare_command(
             let scratch = Scratch::new(&butler_data, input.access == GuidedAccess::ProjectWrite);
             let environment = scratch_environment(&host, &butler_data, &scratch)?;
             std::fs::create_dir_all(&scratch.artifacts).map_err(CommandError::io)?;
-            let invocation = super::guided_invocation::invocation(&input, &secrets)?;
             let process_cwd = command_sandbox::working_directory(&cwd).map_err(CommandError::io)?;
+            let invocation = super::guided_invocation::invocation(&input, &secrets)?;
             Ok::<_, CommandError>((invocation, environment, process_cwd))
         }
     })
@@ -214,6 +237,7 @@ async fn prepare_command(
             .with_source(error)
     })??;
     if shutdown.is_cancelled() {
+        cleanup_preparation(invocation).await;
         return Err(CommandError::new(
             CommandCode::CommandCancelled,
             "Command owner is closing",
@@ -230,7 +254,7 @@ async fn prepare_command(
         .kill_on_drop(true);
     command_sandbox::add_arguments(command.as_std_mut(), &invocation);
     process_control::isolate_group(command.as_std_mut());
-    Ok((cwd, command))
+    Ok((cwd, command, invocation))
 }
 
 async fn spawn_captured(
@@ -340,10 +364,10 @@ async fn discard_cancelled<T>(capture: Capture, paths: SpoolPaths) -> Result<T, 
 async fn complete(
     paths: SpoolPaths,
     capture: Capture,
-    summary: GuidedSummary,
+    mut summary: GuidedSummary,
 ) -> Result<GuidedCommandOutput, CommandError> {
     paths
-        .complete(capture, &summary, CaptureEnd::Stopped)
+        .complete(capture, &mut summary, CaptureEnd::Stopped)
         .await
         .map(|payload_source| GuidedCommandOutput {
             summary,

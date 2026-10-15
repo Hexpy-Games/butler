@@ -47,8 +47,8 @@ import { ButlerThinkingMark } from "@/butler-ds";
   `lint:motion` (`CANVAS_MOTION_ENGINES`).
 - Reduced motion (the prop, the OS setting or the DS `data-motion="reduced"`
   scope, via `subscribeReducedMotion()`) stops the frame loop and draws the
-  still logo; while working, the canvas breathes in CSS exactly like the
-  Spinner's reduced pulse (`calc(--pulse-duration * 2)`, `--spinner-easing`,
+  still logo; while working, the canvas breathes in CSS
+  (`calc(--pulse-duration * 2)`, `--spinner-easing`,
   alternate, to opacity 0.45) and settles back from its current opacity over
   `--motion-slow` on `--motion-ease-standard`.
 - One shared requestAnimationFrame drives every moving mark on the page (N

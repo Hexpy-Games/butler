@@ -30,3 +30,12 @@ test("the main log keeps only well-formed lines, caps a session and writes under
     expect(echoed.length).toBe(WALLPAPER_STATE_SESSION_CAP);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("without an accepted data root the log only echoes and writes no file", async () => {
+  const echoed: string[] = [];
+  const log = createWallpaperStateLog(null, { now: () => new Date(0), echo: (line: string) => echoed.push(line) });
+  expect(log.path).toBeNull();
+  expect(log.record("wallpaper_state mode=drift reason=none")).toBe(true);
+  await log.flushed();
+  expect(echoed).toEqual(["1970-01-01T00:00:00.000Z wallpaper_state mode=drift reason=none"]);
+});

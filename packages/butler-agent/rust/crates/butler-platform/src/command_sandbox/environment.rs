@@ -43,6 +43,7 @@ const WINDOWS: &[&str] = &[
     "PROCESSOR_ARCHITECTURE",
     "OS",
     "PSModulePath",
+    "BUTLER_WINDOWS_PROJECT_SANDBOX",
 ];
 
 /// Copies only tool allowlisted variables. Credentials and arbitrary host

@@ -120,7 +120,7 @@ export function MotionPage({ entries, locale, state, anchor, onChange, onOpen }:
             {group("Sequences").map((token) => <Typo.Code key={token.name}>{`${token.name}: ${token.light}`}</Typo.Code>)}
           </Stack>
         </GuideSection>
-        <GuideSection spec={s.at("loops")} lead="Spinner, pulse and shimmer loop on their own durations; reduced motion stops them.">
+        <GuideSection spec={s.at("loops")} lead="Spinner, pulse and shimmer loop on their own durations; reduced motion stops pulse and shimmer, the Spinner keeps turning.">
           <Stack align="row" cross="center" gap="xl" wrap>
             {group("Loops").map((token) => <Typo.Code key={token.name}>{`${token.name}: ${token.light}`}</Typo.Code>)}
             <Spinner size={24} label="Loading" />

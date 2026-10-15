@@ -42,10 +42,12 @@ def verify(directory, expected):
     filename = 'butler-agent.exe' if expected['platform'] == 'windows-x64' else 'butler-agent'
     if metadata.get('binary') != filename or digest(directory / filename) != metadata.get('sha256'):
         raise ValueError('Matching Agent artifact has invalid binary/digest')
-    if expected['platform'].startswith('linux-'):
-        helper = directory / 'butler-sandbox'
+    if expected['platform'].startswith(('linux-', 'windows-')):
+        helper = directory / ('butler-sandbox.exe' if expected['platform'].startswith('windows-') else 'butler-sandbox')
+        if expected['platform'].startswith('windows-') and 'sandbox_sha256' not in metadata:
+            return False
         if not helper.is_file() or digest(helper) != metadata.get('sandbox_sha256'):
-            raise ValueError('Matching Linux artifact has invalid sandbox helper/digest')
+            raise ValueError('Matching native artifact has invalid sandbox helper/digest')
         helper.chmod(0o755)
     verify_version(directory / filename, expected['version'])
     return True
@@ -63,8 +65,9 @@ def record(directory, expected):
     filename = 'butler-agent.exe' if expected['platform'] == 'windows-x64' else 'butler-agent'
     verify_version(directory / filename, expected['version'])
     metadata = dict(expected, binary=filename, sha256=digest(directory / filename))
-    if expected['platform'].startswith('linux-'):
-        metadata['sandbox_sha256'] = digest(directory / 'butler-sandbox')
+    if expected['platform'].startswith(('linux-', 'windows-')):
+        helper = 'butler-sandbox.exe' if expected['platform'].startswith('windows-') else 'butler-sandbox'
+        metadata['sandbox_sha256'] = digest(directory / helper)
     (directory / 'provenance.json').write_text(json.dumps(metadata, indent=2) + '\n')
 
 
@@ -104,9 +107,10 @@ def reuse(directory, expected):
             filename = 'butler-agent.exe' if expected['platform'] == 'windows-x64' else 'butler-agent'
             shutil.copyfile(candidate / filename, directory / filename)
             (directory / filename).chmod(0o755)
-            if expected['platform'].startswith('linux-'):
-                shutil.copyfile(candidate / 'butler-sandbox', directory / 'butler-sandbox')
-                (directory / 'butler-sandbox').chmod(0o755)
+            if expected['platform'].startswith(('linux-', 'windows-')):
+                helper = 'butler-sandbox.exe' if expected['platform'].startswith('windows-') else 'butler-sandbox'
+                shutil.copyfile(candidate / helper, directory / helper)
+                (directory / helper).chmod(0o755)
             with open(os.environ['GITHUB_ENV'], 'a') as env:
                 env.write(f'BUTLER_NATIVE_AGENT_EXECUTABLE={directory.resolve() / filename}\n')
             print(f'Reusing verified {expected["sha"]} Agent from run {run["id"]}.')

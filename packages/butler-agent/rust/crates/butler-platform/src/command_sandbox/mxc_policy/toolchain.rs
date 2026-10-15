@@ -11,6 +11,8 @@ pub struct Discovery {
     pub system_root: Option<WinPath>,
     /// Trusted Program Files roots.
     pub program_files: Vec<WinPath>,
+    /// Other known install roots, such as NVM installs and Scoop apps.
+    pub install_roots: Vec<WinPath>,
     /// Real Cargo home, mounted read-only.
     pub cargo_home: Option<WinPath>,
     /// Real rustup home, mounted read-only.
@@ -60,8 +62,11 @@ pub struct Toolchain {
 pub fn discover(input: &Discovery) -> Result<Toolchain, &'static str> {
     let mut result = Toolchain::default();
     let homes = trusted_homes(input)?;
-    let git_cmd = input.git_exe.as_ref().and_then(WinPath::parent);
+    let git_cmd = vetted_git(input)?;
     if let Some(node) = &input.real_node {
+        if !known_install(node, input) {
+            return Err("Node outside known install root");
+        }
         push(&mut result.path, node.clone());
         push(&mut result.readonly, node.clone());
     }
@@ -86,13 +91,9 @@ pub fn discover(input: &Discovery) -> Result<Toolchain, &'static str> {
     // broad grants. Cargo, rustup and Git need their complete install homes.
     result.readonly.extend(input.cargo_home.clone());
     result.readonly.extend(input.rustup_home.clone());
-    result.readonly.extend(
-        input
-            .git_exe
-            .as_ref()
-            .and_then(WinPath::parent)
-            .and_then(|cmd| cmd.parent()),
-    );
+    result
+        .readonly
+        .extend(vetted_git(input)?.and_then(|cmd| cmd.parent()));
     for dir in &result.path {
         push(&mut result.readonly, dir.clone());
     }
@@ -162,7 +163,7 @@ fn trusted_homes(input: &Discovery) -> Result<Vec<WinPath>, &'static str> {
     homes.extend(input.system_root.clone());
     homes.extend(input.cargo_home.clone());
     homes.extend(input.rustup_home.clone());
-    let git_cmd = input.git_exe.as_ref().and_then(WinPath::parent);
+    let git_cmd = vetted_git(input)?;
     if let Some(cmd) = &git_cmd {
         if !cmd.as_str().ends_with("\\cmd") {
             return Err("Git executable must be under cmd");
@@ -197,4 +198,23 @@ fn add_cargo(result: &mut Toolchain, input: &Discovery) -> Result<(), &'static s
             .extend([cargo.join("config")?, cargo.join("config.toml")?]);
     }
     Ok(())
+}
+
+fn known_install(path: &WinPath, input: &Discovery) -> bool {
+    input
+        .program_files
+        .iter()
+        .chain(&input.install_roots)
+        .any(|root| path.is_within(root) && path != root)
+}
+fn vetted_git(input: &Discovery) -> Result<Option<WinPath>, &'static str> {
+    let Some(exe) = &input.git_exe else {
+        return Ok(None);
+    };
+    let cmd = exe.parent().ok_or("Git parent missing")?;
+    let root = cmd.parent().ok_or("Git root missing")?;
+    if !cmd.as_str().ends_with("\\cmd") || !known_install(&root, input) {
+        return Err("Git outside known install root");
+    }
+    Ok(Some(cmd))
 }

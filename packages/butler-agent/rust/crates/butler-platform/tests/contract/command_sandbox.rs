@@ -37,6 +37,9 @@ fn write_command(targets: &[&Path]) -> String {
 #[test]
 fn read_only_commands_run_sandboxed_or_are_refused() {
     super::mxc_policy::verify();
+    #[cfg(feature = "test-support")]
+    butler_platform::command_sandbox::windows_recovery_contract();
+    timeout_markers_require_both_code_and_trailing_marker();
     super::project_secrets::verify();
     cmd_arguments_remain_verbatim();
     expected_host_sandbox_is_enforced();
@@ -45,7 +48,7 @@ fn read_only_commands_run_sandboxed_or_are_refused() {
             Some(125),
             b"command_observation_isolation_unavailable: fixture",
         ),
-        cfg!(target_os = "linux")
+        cfg!(any(target_os = "linux", windows))
     );
     assert!(!butler_platform::command_sandbox::isolation_failure(
         Some(125),
@@ -166,4 +169,23 @@ fn expected_host_sandbox_is_enforced() {
         _ => assert!(!caps.read_only.is_enforced(), "{caps:?}"),
     }
     eprintln!("sandbox capabilities: {caps:?}");
+}
+
+fn timeout_markers_require_both_code_and_trailing_marker() {
+    use butler_platform::command_sandbox::{execution_timeout, execution_timeout_exit};
+    assert!(execution_timeout_exit(Some(124)));
+    assert!(!execution_timeout_exit(Some(125)));
+    assert!(execution_timeout(
+        Some(124),
+        b"child stderr\nbutler_command_execution_timed_out\n"
+    ));
+    assert!(!execution_timeout(
+        Some(0),
+        b"butler_command_execution_timed_out\n"
+    ));
+    assert!(!execution_timeout(Some(124), b"shell error\n"));
+    assert!(!execution_timeout(
+        Some(124),
+        b"butler_command_execution_timed_out\nchild stderr"
+    ));
 }

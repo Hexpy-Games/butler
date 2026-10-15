@@ -26,7 +26,8 @@ export function appForegroundStartupFailurePath(butlerData: string): string;
 export function appForegroundStartupProgressPath(butlerData: string): string;
 export function clearAppForegroundStartupFailure(butlerData: string): void;
 export function writeAppForegroundStartupFailure(
-  butlerData: string,
+  /** Null when there is no accepted data root: nothing is written. */
+  butlerData: string | null,
   input: {
     platform?: string;
     architecture?: string;

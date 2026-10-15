@@ -10,10 +10,11 @@ const ROLL_BYTES = 256 * 1024;
 /**
  * The wallpaper run-state log: `<data>/app/logs/wallpaper-state.log`, also echoed to the main console (the
  * Electron log when one is enabled). Lines arrive only on transitions; one serialized appender, no timer, no
- * startup write, at most WALLPAPER_STATE_SESSION_CAP lines per App session.
+ * startup write, at most WALLPAPER_STATE_SESSION_CAP lines per App session. Without an accepted data root
+ * (`null`) lines are echoed only.
  */
 export function createWallpaperStateLog(dataRoot, { now = () => new Date(), echo = (line) => console.info(line) } = {}) {
-  const path = join(dataRoot, "app", "logs", "wallpaper-state.log");
+  const path = dataRoot ? join(dataRoot, "app", "logs", "wallpaper-state.log") : null;
   let lines = 0;
   let prepared = false;
   let pending = Promise.resolve();
@@ -24,6 +25,7 @@ export function createWallpaperStateLog(dataRoot, { now = () => new Date(), echo
       lines += 1;
       const entry = `${now().toISOString()} ${line}`;
       echo(entry);
+      if (!path) return true;
       pending = pending.then(async () => {
         if (!prepared) {
           prepared = true;

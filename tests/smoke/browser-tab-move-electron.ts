@@ -24,7 +24,7 @@ try {
   assert.equal((await app.internal("tab.observe", tab)).reason, "not_your_tab");
   assert.equal((await app.internal("tab.observe", tab, {}, destination.session.id)).status, "ok");
   await app.click("Browser"); await app.call("move", { tabId: tab, toGroupId: "mine", index: 0 }); await app.call("activate", { id: tab });
-  await app.page.clickSelector('[data-slot="titlebar-leading"] button'); await app.page.clickText("New conversation", '[role="menuitem"]');
+  await app.page.clickSelector('[data-slot="titlebar-leading"] button'); await app.page.clickText("New chat", '[role="menuitem"]');
   await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-slot=adaptive-shell-split-chat]'))"), "new conversation docked");
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, state: await app.call("state") }));
 } catch (error) {

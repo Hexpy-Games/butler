@@ -32,7 +32,7 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["io-std"] }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["user"] }
+nix = { workspace = true, features = ["user", "sched", "mount"] }
 rustix = { workspace = true, features = ["process"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -54,7 +54,7 @@ mxc-sdk = { git = "https://github.com/microsoft/mxc", rev = "2366ee9b1e0bed3a0f9
 windows-dpapi = "=0.2.0"
 aes-gcm = { version = "0.10", features = ["zeroize"] }
 dunce.workspace = true
-winsafe = { workspace = true, features = ["advapi", "shell"] }
+winsafe = { workspace = true, features = ["advapi", "shell", "user"] }
 if-addrs.workspace = true
 sysinfo.workspace = true
 win32job.workspace = true
@@ -66,6 +66,10 @@ windows-permissions = "=0.2.4"
 [features]
 # Fixture values for tests of other crates (e.g. archive entry modes).
 test-support = []
+
+[dev-dependencies]
+# Integration contracts use the fixture helpers through the library target.
+butler-platform = { path = ".", features = ["test-support"] }
 
 [lints]
 workspace = true

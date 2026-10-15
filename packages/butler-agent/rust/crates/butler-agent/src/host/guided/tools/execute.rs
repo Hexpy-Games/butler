@@ -16,8 +16,7 @@ pub(super) async fn execute(
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    let timing = (call.name == ToolName::RunCommand)
-        .then(|| super::super::command::timing::CommandTiming::new("handler"));
+    let timing = Some(super::super::command::timing::CommandTiming::new("handler"));
     owner
         .same_turn(invocation)
         .map_err(ToolExecutionError::Integrity)?;

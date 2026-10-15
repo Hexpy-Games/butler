@@ -150,7 +150,7 @@ pub(super) async fn execute<'a>(
         None,
         None,
     )
-    .await;
+    .await?;
     if let Some(error) = &prepared.validation {
         let result = ToolResult {
             tool_call_id: prepared.call.id.clone(),
@@ -167,7 +167,7 @@ pub(super) async fn execute<'a>(
             None,
             None,
         )
-        .await;
+        .await?;
         super::hooks::post_tool(policy, invocation, &prepared.call, &result).await;
         return Ok(ExecutedCall::settled(result));
     }
@@ -197,7 +197,7 @@ pub(super) async fn execute<'a>(
     // A pending body is visible only after the continuation commit succeeds.
     let executed = ExecutedCall::restored(result);
     if executed.pending_authority.is_none() {
-        publish_result(policy, invocation, prepared, &executed.result).await;
+        publish_result(policy, invocation, prepared, &executed.result).await?;
     }
     Ok(executed)
 }
@@ -207,7 +207,7 @@ async fn publish_result(
     invocation: GuidedInvocation<'_>,
     prepared: &PreparedCall<'_>,
     result: &ToolResult,
-) {
+) -> Result<(), BtccError> {
     let visible = result
         .error
         .as_ref()
@@ -226,7 +226,7 @@ async fn publish_result(
         result.output.as_ref(),
         operation_call_id.as_deref(),
     )
-    .await;
+    .await
 }
 
 fn enrich_rejection(result: &mut ToolResult, prepared: &PreparedCall<'_>) {
@@ -283,19 +283,21 @@ async fn execute_validated<'a>(
             }
         }
         Err(ToolExecutionError::Integrity(error)) => {
-            visible_operation(
-                prepared,
-                invocation.progress,
-                &prepared.call,
-                if invocation.cancellation.is_cancelled() {
-                    Status::Cancelled
-                } else {
-                    Status::Failed
-                },
-                None,
-                None,
-            )
-            .await;
+            super::progress::report_unpublished(
+                visible_operation(
+                    prepared,
+                    invocation.progress,
+                    &prepared.call,
+                    if invocation.cancellation.is_cancelled() {
+                        Status::Cancelled
+                    } else {
+                        Status::Failed
+                    },
+                    None,
+                    None,
+                )
+                .await,
+            );
             return Err(error);
         }
     };
@@ -319,12 +321,14 @@ pub(super) async fn execute_concurrent<'a>(
                 .as_ref()
                 .is_ok_and(|result| result.pending_authority.is_some())
             {
-                super::progress::authority_terminal(
-                    invocation.progress,
-                    &call.call,
-                    Status::Failed,
-                )
-                .await;
+                super::progress::report_unpublished(
+                    super::progress::authority_terminal(
+                        invocation.progress,
+                        &call.call,
+                        Status::Failed,
+                    )
+                    .await,
+                );
             }
         }
     }
@@ -405,8 +409,9 @@ async fn visible_operation(
     status: Status,
     output: Option<&JsonDocument>,
     operation_call_id: Option<&str>,
-) {
+) -> Result<(), BtccError> {
     if prepared.visible() {
-        operation(progress, call, status, output, operation_call_id).await;
+        operation(progress, call, status, output, operation_call_id).await?;
     }
+    Ok(())
 }

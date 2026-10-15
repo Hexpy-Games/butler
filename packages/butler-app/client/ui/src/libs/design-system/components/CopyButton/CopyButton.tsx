@@ -1,13 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { IconButton } from "../IconButton";
-import { Copy, ICON_SIZE } from "../Icons";
-import { SuccessCheck } from "../SuccessCheck";
-import styles from "./CopyButton.module.css";
-import { dsClass } from "../../lib/internal";
-import { cn } from "../../lib/utils";
+import { Copy } from "../Icons";
+import { DONE_FEEDBACK_MS, DoneIconButton } from "../DoneIconButton";
 
 /** How long the check stays before the copy icon returns. */
-export const COPY_FEEDBACK_MS = 1500;
+export const COPY_FEEDBACK_MS = DONE_FEEDBACK_MS;
 
 export interface CopyButtonProps {
   /** Label (tooltip and accessible name) before copying. */
@@ -24,63 +19,18 @@ export interface CopyButtonProps {
   "aria-label"?: string;
 }
 
-export function CopyButton({
-  label,
-  copiedLabel,
-  text,
-  onCopy,
-  copied: copiedProp,
-  onError,
-  "aria-label": ariaLabel,
-}: CopyButtonProps) {
-  const [copiedState, setCopiedState] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
-  }, []);
-  const copied = copiedProp ?? copiedState;
-  // Each false -> true mounts a new SuccessCheck, so the check draws every copy.
-  const [checkRun, setCheckRun] = useState(0);
-  const [wasCopied, setWasCopied] = useState(copied);
-  if (copied !== wasCopied) {
-    setWasCopied(copied);
-    if (copied) setCheckRun((run) => run + 1);
-  }
-
-  const copy = async () => {
-    if (onCopy) {
-      onCopy();
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(typeof text === "function" ? text() : text ?? "");
-      setCopiedState(true);
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopiedState(false), COPY_FEEDBACK_MS);
-    } catch (error) {
-      onError?.(error);
-    }
-  };
-
+/** DoneIconButton's copy action: writes `text` to the clipboard, then the shared icon -> check morph. */
+export function CopyButton({ label, copiedLabel, text, onCopy, copied, onError, "aria-label": ariaLabel }: CopyButtonProps) {
   return (
-    <>
-      <IconButton
-        className={dsClass(styles.button)}
-        data-copied={copied ? "true" : "false"}
-        label={copied ? copiedLabel : label}
-        aria-label={copied ? copiedLabel : ariaLabel ?? label}
-        onClick={() => void copy()}
-      >
-        <span className={styles.icons} aria-hidden="true">
-          <Copy size="sm" className={dsClass(styles.icon, styles.copyIcon)} />
-          <span className={cn(styles.icon, styles.checkIcon)}>
-            <SuccessCheck key={checkRun} size={ICON_SIZE.sm} animate={checkRun > 0} />
-          </span>
-        </span>
-      </IconButton>
-      <span className="sr-only" role="status" aria-live="polite">
-        {copied ? copiedLabel : ""}
-      </span>
-    </>
+    <DoneIconButton
+      label={label}
+      doneLabel={copiedLabel}
+      aria-label={ariaLabel}
+      icon={<Copy size="sm" />}
+      // A parent-driven copy shows only the parent's copied state.
+      done={copied ?? (onCopy ? false : undefined)}
+      onAction={onCopy ? () => { onCopy(); } : () => navigator.clipboard.writeText(typeof text === "function" ? text() : text ?? "")}
+      onError={onError}
+    />
   );
 }

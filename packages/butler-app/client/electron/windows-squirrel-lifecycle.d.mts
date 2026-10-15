@@ -42,7 +42,8 @@ export function windowsLoginItemSettings(input?: {
 export function windowsOperationalCleanupPaths(butlerData: string): string[];
 
 export function removeWindowsOperationalState(input: {
-  butlerData: string;
+  /** Null when there is no accepted data root: nothing is removed. */
+  butlerData: string | null;
   removePath?: (path: string) => void;
 }): string[];
 
