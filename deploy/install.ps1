@@ -59,14 +59,17 @@ function Install-Butler {
             $manifest.binarySha256 -notmatch '^[a-f0-9]{64}$') { throw 'Invalid Agent manifest' }
         $program = Join-Path $stage 'butler-agent.exe'
         if ((Get-FileHash $program -Algorithm SHA256).Hash -ne $manifest.binarySha256) { throw 'Binary checksum mismatch' }
+        Assert-ButlerSandbox $stage $manifest.sandboxSha256
         $name = "$version-$($manifest.binarySha256.Substring(0,8))"
         $target = Join-Path $agentHome $name
         if (Test-Path $target) {
             $installed = Get-Content "$target/native-agent-manifest.json" -Raw | ConvertFrom-Json
-            if ($installed.binarySha256 -ne $manifest.binarySha256 -or $installed.resourcesSha256 -ne $manifest.resourcesSha256) {
+            if ($installed.binarySha256 -ne $manifest.binarySha256 -or $installed.resourcesSha256 -ne $manifest.resourcesSha256 -or
+                $installed.sandboxSha256 -ne $manifest.sandboxSha256) {
                 throw 'Existing version differs from this archive; nothing activated'
             }
         } else { Move-Item $stage $target; $stage = $null }
+        Assert-ButlerSandbox $target $manifest.sandboxSha256
         # Never execute a staging image that must then be moved or deleted.
         # Full resource integrity must pass at the final path before activation.
         $ErrorActionPreference = 'Continue'
@@ -81,6 +84,15 @@ function Install-Butler {
     } finally {
         if ($stage -and (Test-Path $stage)) { [IO.Directory]::Delete((ConvertTo-ButlerExtendedPath $stage),$true) }
         [IO.Directory]::Delete((ConvertTo-ButlerExtendedPath $temp),$true)
+    }
+}
+
+function Assert-ButlerSandbox {
+    param([string]$Root, [string]$Digest)
+    $helper = Join-Path $Root 'butler-sandbox.exe'
+    if ($Digest -or (Test-Path $helper)) {
+        if ($Digest -notmatch '^[a-f0-9]{64}$' -or !(Test-Path $helper) -or
+            (Get-FileHash $helper -Algorithm SHA256).Hash -ne $Digest) { throw 'Sandbox checksum mismatch' }
     }
 }
 
@@ -175,7 +187,7 @@ function Expand-ButlerZip {
         foreach ($entry in $archive.Entries) {
             $name = $entry.FullName
             if ($name.Contains('\') -or $name -match '(^/|:|(^|/)\.\.?(/|$))' -or
-                $name -notmatch '^(butler-agent\.exe|butler\.cmd|native-agent-manifest\.json|THIRD_PARTY_NOTICES\.txt|resources(/.*)?)$' -or
+                $name -notmatch '^(butler-agent\.exe|butler-sandbox\.exe|butler\.cmd|native-agent-manifest\.json|THIRD_PARTY_NOTICES\.txt|resources(/.*)?)$' -or
                 (($entry.ExternalAttributes -shr 16) -band 0xF000) -eq 0xA000 -or $seen.ContainsKey($name)) { throw 'Unsafe archive entry' }
             $seen[$name] = $true
             $path = $destination.TrimEnd('\') + '\' + $name.Replace('/','\')
