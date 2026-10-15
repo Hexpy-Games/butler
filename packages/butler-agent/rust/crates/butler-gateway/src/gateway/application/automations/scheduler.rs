@@ -126,14 +126,22 @@ impl AutomationScheduler {
 }
 
 async fn dispatch(app: &AppApplication, failing: &mut bool) -> bool {
+    #[cfg(debug_assertions)]
+    let timing = crate::gateway::command_timing::CommandTiming::new("scheduler_dispatch");
     let succeeded = app.dispatch_due_owned().await.is_ok();
+    #[cfg(debug_assertions)]
+    timing.mark("owned_completed");
     if succeeded {
         *failing = false;
     } else {
         record_failure(app, failing).await;
     }
     #[cfg(debug_assertions)]
-    DISPATCH_ATTEMPTS.fetch_add(1, Ordering::Relaxed);
+    {
+        timing.mark("completed");
+        drop(timing);
+        DISPATCH_ATTEMPTS.fetch_add(1, Ordering::Relaxed);
+    }
     succeeded
 }
 

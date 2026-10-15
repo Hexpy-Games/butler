@@ -55,7 +55,19 @@ pub(super) async fn wait_scheduler_attempt(
 ) -> Result<Instant, HarnessError> {
     let result = tokio::time::timeout(Duration::from_secs(10), async {
         loop {
-            if scheduler_attempts(s).await? > before {
+            let completed = scheduler_attempts(s).await?;
+            let reads = scheduler_reads(s).await?;
+            // A notified attempt is followed by a lookup and another due attempt.
+            // The due attempt's completed count stays ahead of its lookup during
+            // failure backoff; the notified completion alone can race that attempt.
+            if completed > before && completed > reads {
+                eprintln!(
+                    "SCHED-14 backoff observed completed_dispatches={completed} indexed_reads={reads} utc_us={}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_micros()
+                );
                 return Ok::<_, HarnessError>(Instant::now());
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
