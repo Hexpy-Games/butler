@@ -99,6 +99,11 @@ rectangular shell.
 - The root paints one shell surface (`--shell-bg`, the window material):
   sidebar, traffic lights, title row and the gaps between cards. The title
   bar is transparent on it.
+- `--shell-bg` follows `--sidebar-bg`, which the root picks per platform:
+  macOS Electron uses `--mac-sidebar-bg` (0.30 light, 0.50 dark) over the
+  native "sidebar" vibrancy, Windows uses `--windows-sidebar-bg` over acrylic,
+  and browsers and Linux keep `--sidebar-bg` (0.52 light, 0.72 dark; no native
+  blur). `.sidebar-solid` sets all three to the near-opaque fill.
 - Content sits in rounded cards (`--shell-card-bg`, `--shell-card-radius`
   12, one quiet `--shell-card-edge`, `--shell-card-shadow` none), inset
   `--shell-card-inset` (8) from the window and `--shell-card-gap` (8) from
