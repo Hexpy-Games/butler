@@ -122,6 +122,10 @@ jobs:
         with:
           name: rust-${{ inputs.platform }}
           path: ${{ runner.temp }}/rust-archive
+      # The answer-blocks fixture table also runs its TypeScript contract.
+      - uses: ./.github/actions/bun-setup
+      - name: Install the TypeScript contract dependencies
+        run: python3 .github/scripts/isolated.py bun install --frozen-lockfile
       - name: Select measured shard
         env:
           SHARD: ${{ matrix.shard }}
