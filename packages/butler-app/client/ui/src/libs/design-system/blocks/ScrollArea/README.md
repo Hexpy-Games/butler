@@ -32,7 +32,10 @@ horizontal scroller; the fade follows the scrolling axis.
 The frame keeps `--focus-ring-room` of paint room on every edge (it bleeds past
 the content's inline start, and across on the block edges, and the content pads
 it back), so a row flush with the content edge shows its whole ring and nothing
-moves. Keyboard focus scrolls a control clear of an active fade, ring included.
+moves. Keyboard focus scrolls a control clear of an active fade, ring included,
+and while a ring shows inside, each fade turns solid `--focus-ring-room` sooner:
+a control resting at an edge keeps its whole ring even on the frame where the
+fade still lags the scroll. Nothing changes while nothing inside has focus.
 
 ## Boundaries
 
