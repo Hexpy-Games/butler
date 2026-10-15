@@ -239,10 +239,10 @@ fn bursts_restart_bound_wal_and_leave_zero_idle_checkpoint_writes()
         RESTARTS.load(SeqCst),
         store.bytes()
     );
-    assert!(RESTARTS.load(SeqCst) > 0, "WAL never restarted");
     // SQLite limits retained space when a WAL resets, not the active frame
-    // span. A slow PASSIVE checkpoint may span several bursts; even a complete
-    // backfill keeps the high-water file until the next writer resets it.
+    // span. A slow PASSIVE checkpoint may span the entire burst workload;
+    // require restart after draining, not within the fixed quiet gaps. Even a
+    // complete backfill keeps the file until the next writer resets it.
     // https://www.sqlite.org/pragma.html#pragma_journal_size_limit
     // https://www.sqlite.org/c3ref/wal_checkpoint_v2.html
     // insert() checks every observed reset. Keep the peak as diagnostic evidence
@@ -264,8 +264,8 @@ fn bursts_restart_bound_wal_and_leave_zero_idle_checkpoint_writes()
     // final pass. The maintenance connection disables checkpoint-on-close, so
     // this completion barrier cannot repair a stranded tail for the test.
     owner.close().unwrap();
-    store.reset_after_quiet();
-    committed += 1;
+    let (log, done) = frames(&store.path);
+    assert_eq!(done, log, "quiet tail was stranded after the last request");
     eprintln!("maximum background pass: {} us", MAX_PASS_US.load(SeqCst));
     let idle_owner = store.worker();
     let passes = PASSES.load(SeqCst);
@@ -277,7 +277,6 @@ fn bursts_restart_bound_wal_and_leave_zero_idle_checkpoint_writes()
     assert_eq!(store.bytes(), bytes);
     assert_eq!(after.write_chars, before.write_chars);
     assert_eq!(after.write_bytes, before.write_bytes);
-    store.counts(committed);
     eprintln!(
         "idle 60s: checkpoint_passes=0 write_chars={:?} write_bytes={}",
         after
@@ -287,6 +286,10 @@ fn bursts_restart_bound_wal_and_leave_zero_idle_checkpoint_writes()
         after.write_bytes - before.write_bytes
     );
     idle_owner.close().unwrap();
+    // Keep the reset probe's new write outside the drained idle observation.
+    store.reset_after_quiet();
+    committed += 1;
+    store.counts(committed);
     Ok(())
 }
 
