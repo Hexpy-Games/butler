@@ -1094,7 +1094,7 @@ Layout item props (grow, shrink, basis, minWidth, alignSelf, span, invisible) th
 - Use for: Reserve space for a hidden item
 - Not for: Padding or a surface → `Box`
 - Not for: Spacing between siblings → `Stack`
-- Tokens: `--layout-basis-xs`, `--layout-basis-sm`, `--layout-basis-md`, `--layout-basis-lg`
+- Tokens: `--layout-basis-xs`, `--layout-basis-sm`, `--layout-basis-md`, `--layout-basis-lg`, `--layout-max-width-field`, `--layout-wrap-width-field`
 
 ### PageContainer
 
