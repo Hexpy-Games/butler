@@ -8,6 +8,8 @@ pub use health::{
     validate_storage_background,
 };
 pub(super) use health::{migrate_current, stamp_verified, verify_correction};
+pub(super) use validate::ReferenceFailure;
+pub(super) use verdict::validated;
 mod validate;
 
 use crate::btcc::StorageCode;
@@ -164,12 +166,10 @@ impl FreshStorage<'_> {
     }
 }
 
-/// Full offline validation for recovery. A passing scan clears the corruption
-/// verdict, without repairing or fabricating the receipt/activation pair.
+/// Full offline validation for recovery. Logical findings retain a diagnostic
+/// verdict; only physical/schema failures refuse activation. No rows are repaired.
 pub fn read_activated_storage_manifest(path: &Path) -> StorageResult<String> {
-    let id = validate::read_activated(path)?;
-    verdict::verified(path)?;
-    Ok(id)
+    validate::read_activated(path)
 }
 
 fn remove_temp(temp: &Path) -> StorageResult<()> {

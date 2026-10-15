@@ -1,5 +1,6 @@
 pub(super) mod activated;
 mod references;
+pub(in crate::btcc::storage) use references::ReferenceFailure;
 
 pub(super) use activated::read_activated;
 
@@ -154,7 +155,7 @@ pub(super) fn readiness(db: &Connection, expected: &str) -> StorageResult<()> {
     Ok(())
 }
 
-pub(super) fn correction(db: &Connection) -> StorageResult<()> {
+pub(super) fn correction(db: &Connection) -> StorageResult<Vec<ReferenceFailure>> {
     canonical_schema(db)?;
     foreign_keys(db, None)?;
     references::validate(db)

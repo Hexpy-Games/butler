@@ -1,3 +1,4 @@
+import { appLocaleFromLanguage, getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 /** S6 in the real Electron 44 App, using an isolated gateway and scripted model. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -25,7 +26,7 @@ async function itemMenu(kind: string, label: string) {
 }
 try {
   const destination = await app.gateway.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "Library destination" }) });
-  await app.page.reload(); await shellReady(app, "en"); await app.click("General"); await app.call("open");
+  await app.page.reload(); await shellReady(app, "en"); await app.click(getAppCopy("en-US").space.general); await app.call("open");
   const tab = await app.call<string>("create", { owner: "conversation:general", profile: "signed_out", url: app.url });
   await app.click("Show browser"); await app.call("activate", { id: tab }); await align();
   await waitBrowser(() => app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)}).title === 'Browser fixture'`), "bookmark source title loaded");
@@ -58,7 +59,7 @@ try {
   await library(); await itemMenu("bookmark", "Attach to chat"); await app.page.clickText("Library destination", "[role=dialog] button");
   await waitBrowser(() => app.page.expression("document.querySelectorAll('[data-slot=element-chip], [data-slot=attachment-item]').length===3"), "bookmark attaches to destination draft");
   // Bookmark removal and re-add travel through the AddressField star.
-  await app.click("General"); await app.call("activate", { id:tab }); await align(); await app.click("Bookmarked");
+  await app.click(getAppCopy("en-US").space.general); await app.call("activate", { id:tab }); await align(); await app.click("Bookmarked");
   await waitBrowser(async () => !(await app.gateway.api<{ items:unknown[] }>("/library?kind=bookmark")).items.length, "star removes bookmark");
   await app.click("Add bookmark");
   const emptyTab = await app.call<string>("create", { owner: "conversation:general", profile: "signed_out" });
@@ -79,7 +80,7 @@ try {
     await fill(`[aria-label="${search}"]`, "no-match-unique"); await waitBrowser(() => app.page.expression("document.querySelectorAll('[data-library-card]').length===0"), "empty search visible"); await app.shot(`${language}-${theme}-${width}-empty`);
     await fill(`[aria-label="${search}"]`, ""); await waitBrowser(() => app.page.expression("document.querySelectorAll('[data-library-kind=scrap] [data-library-card]').length===3"), "grid restored");
     await app.page.clickSelector("[data-library-kind=scrap] [data-library-card] button"); await app.page.clickText(ko?"대화에 첨부":"Attach to chat", "[role=menuitem]"); await app.shot(`${language}-${theme}-${width}-attach`); await app.page.press("Escape"); await waitBrowser(() => app.page.expression("!document.querySelector('[role=dialog]')"), "attach dialog dismissed");
-    await app.click(ko?"일반":"General"); await waitBrowser(() => app.page.expression("!document.querySelector('[data-test-class=library-page]')"), "sidebar returns to conversation"); await app.call("activate", { id:tab }); await align(); await app.shot(`${language}-${theme}-${width}-star`);
+    await app.click(getAppCopy(appLocaleFromLanguage(language)).space.general); await waitBrowser(() => app.page.expression("!document.querySelector('[data-test-class=library-page]')"), "sidebar returns to conversation"); await app.call("activate", { id:tab }); await align(); await app.shot(`${language}-${theme}-${width}-star`);
     await app.click(ko?"북마크":"Bookmarks"); await waitBrowser(() => app.page.expression("document.querySelector('[role=menuitem]')!==null"), "bookmark menu visible"); await app.shot(`${language}-${theme}-${width}-bookmarks-menu`);
     await app.page.clickText("Work", "[role=menuitem]"); await waitBrowser(() => app.page.expression("[...document.querySelectorAll('[role=menuitem]')].some(n=>n.textContent==='Browser fixture')"), "folder submenu visible"); await app.shot(`${language}-${theme}-${width}-folder-menu`, true); await app.page.press("Escape"); await app.page.press("Escape");
     const fresh = await app.call<string>("create", { owner:"conversation:general", profile:"signed_out" });
