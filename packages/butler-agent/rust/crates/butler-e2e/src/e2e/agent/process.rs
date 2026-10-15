@@ -16,6 +16,13 @@ use super::Agent;
 use crate::e2e::{HarnessError, harness_error};
 
 impl Agent {
+    /// The current process's complete log, without concatenating earlier starts.
+    pub async fn current_logs(&self) -> Result<String, HarnessError> {
+        let bytes =
+            tokio::fs::read(self.launch.logs.join(format!("agent-{}.log", self.starts))).await?;
+        Ok(String::from_utf8_lossy(&bytes).into_owned())
+    }
+
     /// Starts the agent process without waiting for its gateway (the process
     /// must not be running); returns its PID.
     pub fn start_process(&mut self) -> Result<u32, HarnessError> {

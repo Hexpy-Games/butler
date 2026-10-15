@@ -36,7 +36,7 @@ fn count(db: &Connection, sql: &str) -> i64 {
 }
 
 /// Waits (bounded) until no seeded turn holds retention work.
-async fn wait_retention_settled(s: &Scenario) -> Duration {
+pub(super) async fn wait_retention_settled(s: &Scenario) -> Duration {
     let started = Instant::now();
     loop {
         let db = database(s);

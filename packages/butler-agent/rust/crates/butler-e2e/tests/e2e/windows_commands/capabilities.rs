@@ -1,4 +1,7 @@
 //! Basic Windows capabilities in a profile with sibling Downloads and .butler.
+#[path = "capabilities/approval_crash.rs"]
+#[cfg(debug_assertions)]
+mod approval_crash;
 #[path = "capabilities/approval_resume.rs"]
 mod approval_resume;
 #[path = "capabilities/current_work.rs"]

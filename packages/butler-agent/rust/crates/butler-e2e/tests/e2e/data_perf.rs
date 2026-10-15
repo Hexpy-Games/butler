@@ -7,13 +7,10 @@
 )]
 
 use super::app_storage_scale::seed as app;
-#[path = "support/btcc_scale.rs"]
-mod btcc;
+use crate::{btcc_scale as btcc, transcript_scale as transcripts};
 #[path = "support/btcc_validation_probe.rs"]
 mod btcc_validation_probe;
 use super::memory_fixture;
-#[path = "support/transcript_scale.rs"]
-mod transcripts;
 #[path = "support/wal.rs"]
 pub(super) mod wal;
 

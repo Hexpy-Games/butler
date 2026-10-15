@@ -193,7 +193,8 @@ async fn modify_precedence_same_decision_replay_and_optional_execution_identity(
 
 /// Race: authority decisions are compare-and-set at one generation. Grant
 /// precedence, revocation and operational close race on one request, and the
-/// terminal slot generation and close decisions keep the source order.
+/// terminal slot generation and close decisions keep the source order. Readers
+/// observe committed grants and revocations while ignoring uncommitted writes.
 // test-category: race
 #[tokio::test]
 async fn authority_decision_cas_races() {
@@ -212,6 +213,7 @@ async fn grant_precedence_revocation_and_operational_close_cas() {
         .await
         .unwrap();
     assert_eq!(grants.len(), 1);
+    super::reader::committed_reads(&ready.storage, &ready.authority, &ready.request_ref).await;
     let mut new_request = input(&ready.work_id, &ready.plan_id);
     new_request.action_key = "different-action".into();
     new_request.operation_occurrence_id = None;
@@ -238,6 +240,14 @@ async fn grant_precedence_revocation_and_operational_close_cas() {
         ready
             .authority
             .list_permissions("session".into())
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        ready
+            .authority
+            .list_all_permissions()
             .await
             .unwrap()
             .is_empty()

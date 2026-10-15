@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::SystemTime;
 
+const FILE: &str = "sandbox-mountns-probe.json";
+
 #[derive(Serialize, Deserialize, PartialEq)]
 struct Key {
     boot: String,
@@ -12,10 +14,13 @@ struct Key {
     uid: u32,
 }
 
+/// A probe this process ran itself, kept until a host has accepted its data folder.
+static FRESH: std::sync::OnceLock<(Key, Tier)> = std::sync::OnceLock::new();
+
 pub(super) fn probe(helper: &Path) -> Tier {
     let key = key(helper);
-    let cache = std::env::var_os("BUTLER_DATA")
-        .map(|data| std::path::PathBuf::from(data).join("sandbox-mountns-probe.json"));
+    let cache =
+        std::env::var_os("BUTLER_DATA").map(|data| std::path::PathBuf::from(data).join(FILE));
     if let (Some(key), Some(path)) = (&key, &cache)
         && let Ok(bytes) = std::fs::read(path)
         && let Ok((cached, available)) = serde_json::from_slice::<(Key, Tier)>(&bytes)
@@ -24,17 +29,27 @@ pub(super) fn probe(helper: &Path) -> Tier {
         return available;
     }
     let available = run_probe(helper);
-    // Hint only: mask() must complete before granting the project root.
-    if let (Some(key), Some(path)) = (key, cache)
-        && let Ok(bytes) = serde_json::to_vec(&(key, available))
-    {
-        let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
-        if std::fs::write(&temporary, bytes).is_ok() {
-            let _ = std::fs::rename(&temporary, path);
-            let _ = std::fs::remove_file(temporary);
-        }
+    if let Some(key) = key {
+        let _ = FRESH.set((key, available));
     }
     available
+}
+
+/// Probing never writes: a refused or unaccepted data folder stays unchanged.
+/// Hint only: mask() must complete before granting the project root.
+pub(super) fn remember(data: &Path) {
+    let Some(fresh) = FRESH.get() else {
+        return;
+    };
+    let Ok(bytes) = serde_json::to_vec(fresh) else {
+        return;
+    };
+    let path = data.join(FILE);
+    let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
+    if std::fs::write(&temporary, bytes).is_ok() {
+        let _ = std::fs::rename(&temporary, path);
+        let _ = std::fs::remove_file(temporary);
+    }
 }
 
 fn key(helper: &Path) -> Option<Key> {
