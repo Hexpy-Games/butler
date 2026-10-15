@@ -137,7 +137,7 @@ async function capture(width: number, theme: "light" | "dark") {
     await shot(page, cell, "empty-general");
     await archives(page);
     const archived = (await server.api<ArchiveListView>("/archives")).sessions[0];
-    assert(archived?.title.startsWith("일반 · "));
+    assert(archived?.title.startsWith(copy.clearChat.archivedTitle("")));
     await page.getByRole("button", { name: archived.title, exact: true }).waitFor();
     await shot(page, cell, "archives");
     await page.getByRole("button", { name: archived.title, exact: true }).click();

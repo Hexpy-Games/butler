@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 /** Offline real-App download and SelectionBar acceptance. No live model calls. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -30,7 +31,7 @@ async function events() {
   return app.main<Array<{ type: string; reason?: string; path?: string; output_id?: string; size_bytes?: number }>>("globalThis.browserAgentSubject.events?.get('conversation:general') ?? []");
 }
 try {
-  await app.page.reload(); await shellReady(app, "en"); await app.click("General");
+  await app.page.reload(); await shellReady(app, "en"); await app.click(getAppCopy("en-US").space.general);
   await app.call("open");
   tab = await app.call<string>("create", { owner: "conversation:general", profile: "signed_out", url: app.url });
   await app.click("Show browser"); await app.call("activate", { id: tab }); await nativeAligned(app);

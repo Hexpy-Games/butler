@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 /** Public Library paths in an isolated real App; native input, stub models, stills only. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -57,7 +58,7 @@ async function library() {
   await app.page.expression("document.fonts.ready.then(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)))))");
 }
 async function picking() {
-  await app.click("General"); await app.call("activate", { id: tab });
+  await app.click(getAppCopy("en-US").space.general); await app.call("activate", { id: tab });
   if (!await app.page.expression("document.querySelector('[data-slot=browser-pane]')!==null")) await app.click("Show browser");
   await nativeAligned(app); await showPickSidebar(app);
   await app.call("pick", { id: tab, value: true });
@@ -227,7 +228,7 @@ async function matrix(group: string) {
   }
 }
 try {
-  await app.page.reload(); await shellReady(app, "en"); await app.click("General"); await app.call("open");
+  await app.page.reload(); await shellReady(app, "en"); await app.click(getAppCopy("en-US").space.general); await app.call("open");
   tab = await app.call<string>("create", { owner: "conversation:general", profile: "signed_out", url: app.url });
   await app.click("Show browser"); await app.call("activate", { id: tab }); await nativeAligned(app);
   const crop = await app.page.expression<string>("(()=>{const c=document.createElement('canvas');c.width=300;c.height=160;const x=c.getContext('2d');x.fillStyle='#f1f1f1';x.fillRect(0,0,300,160);x.fillStyle='#252525';x.font='bold 24px sans-serif';x.fillText('Saved heading',16,48);x.font='16px sans-serif';x.fillText('Complete saved content',16,90);return c.toDataURL('image/jpeg')})()");
