@@ -81,6 +81,8 @@ session_worktree_creation_failed
 settings_json_failed
 source_changed
 source_unavailable
+space_group_not_found
+space_project_boundary
 too_many_attachments
 turn_control_resolution_invalid
 turn_execution_controls_missing
