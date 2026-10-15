@@ -2,8 +2,13 @@
  * Adaptive time bucketing for UsageBars: 15-minute usage slots become at most
  * `maxBars` buckets of one shared step, aligned to local wall-clock time.
  * Pure: no clock reads, no DOM. Empty buckets stay in the list as gaps, so
- * the time scale stays honest.
+ * the time scale stays honest. Bucket starts are wall-clock times: a DST
+ * change lengthens or shortens only the bucket it falls in.
  */
+
+import { bucketGrid, DEFAULT_WEEK_START, modulo, type BucketGrid } from "./usageBucketGrid";
+
+export { alignUsageBucketStart } from "./usageBucketGrid";
 
 /** Bucket steps in hours, smallest first: 1, 2, 3, 6, 12 hours, then 1, 2 and 7 days. */
 export const USAGE_BUCKET_STEPS = [1, 2, 3, 6, 12, 24, 48, 168] as const;
@@ -37,33 +42,8 @@ export interface BucketUsageSlotsOptions {
   toMs?: number;
   /** Most bars the chart may show; the smallest step that fits wins. Default 24. */
   maxBars?: number;
-}
-
-/** Start of the local-time bucket of `stepHours` that contains `ms`. */
-export function alignUsageBucketStart(ms: number, stepHours: number): number {
-  const date = new Date(ms);
-  date.setMinutes(0, 0, 0);
-  if (stepHours >= 24) date.setHours(0);
-  else date.setHours(Math.floor(date.getHours() / stepHours) * stepHours);
-  return date.getTime();
-}
-
-/** Next bucket start: wall-clock hours below a day, calendar days above (DST-safe). */
-function nextBucketStart(ms: number, stepHours: number): number {
-  const date = new Date(ms);
-  if (stepHours >= 24) date.setDate(date.getDate() + stepHours / 24);
-  else date.setHours(date.getHours() + stepHours);
-  return date.getTime();
-}
-
-/** Bucket starts covering [fromMs, toMs); stops early once more than `limit` are needed. */
-function bucketStarts(fromMs: number, toMs: number, stepHours: number, limit: number): number[] {
-  const starts: number[] = [];
-  for (let start = alignUsageBucketStart(fromMs, stepHours); start < toMs; start = nextBucketStart(start, stepHours)) {
-    starts.push(start);
-    if (starts.length > limit) break;
-  }
-  return starts;
+  /** First day of a 7-day bucket (0 Sunday ... 6 Saturday). Default 1 (Monday). */
+  weekStartsOn?: number;
 }
 
 /** Index of the last start <= ms, or -1. */
@@ -102,17 +82,19 @@ export function bucketUsageSlots(slots: readonly UsageSlot[], options: BucketUsa
   if (!window || window[1] <= window[0]) return { stepHours: USAGE_BUCKET_STEPS[0], buckets: [] };
   const [fromMs, toMs] = window;
   const maxBars = Math.max(1, Math.floor(options.maxBars ?? DEFAULT_MAX_BARS));
+  const weekStartsOn = modulo(Math.floor(options.weekStartsOn ?? DEFAULT_WEEK_START), 7);
   let stepHours: UsageBucketStepHours = USAGE_BUCKET_STEPS[0];
-  let starts: number[] = [];
+  let grid: BucketGrid = { starts: [], end: toMs };
   for (const step of USAGE_BUCKET_STEPS) {
     stepHours = step;
-    starts = bucketStarts(fromMs, toMs, step, step === 168 ? Infinity : maxBars);
-    if (starts.length <= maxBars) break;
+    grid = bucketGrid(fromMs, toMs, step, weekStartsOn, step === 168 ? Infinity : maxBars);
+    if (grid.starts.length <= maxBars) break;
   }
+  const { starts, end } = grid;
   const width = slots.reduce((most, slot) => Math.max(most, slot.length - 1), 0);
   const buckets = starts.map((startMs, index) => ({
     startMs,
-    endMs: starts[index + 1] ?? nextBucketStart(startMs, stepHours),
+    endMs: starts[index + 1] ?? end,
     values: new Array<number>(width).fill(0),
   }));
   for (const slot of slots) {

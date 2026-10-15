@@ -24,9 +24,12 @@ function paintedScale(column: HTMLElement): number {
   return Number.isFinite(scaleY) ? scaleY : 1;
 }
 
+/** Per-bar grow delay of the approved mockups; the whole stagger stays within --motion-slow. */
+const GROW_STAGGER_MS = 12;
+
 /** First show or a new bucket count: columns grow from the baseline, staggered (total stagger capped). */
 function grow(columns: HTMLElement[]): void {
-  const step = Math.min(motionDuration("stagger-row"), motionDuration("slow") / Math.max(columns.length, 1));
+  const step = Math.min(GROW_STAGGER_MS, motionDuration("slow") / Math.max(columns.length, 1));
   columns.forEach((column, index) => {
     if (column.offsetHeight === 0) return;
     animateMotion(column, [{ transform: "scaleY(0)" }, { transform: "scaleY(1)" }],

@@ -4,6 +4,8 @@ export interface UsageBarsColumnSegment {
   id: string;
   color: UsageBarsColor;
   value: number;
+  /** Part of the column total (0..1); sizes the segment whatever the unit. */
+  share: number;
 }
 
 export interface UsageBarsColumn {
@@ -40,7 +42,7 @@ function columnSegments(bucket: UsageBarsBucket, series: readonly UsageBarsSerie
     const value = bucket.segments
       .filter((segment) => segment.id === entry.id)
       .reduce((sum, segment) => sum + (Number.isFinite(segment.value) && segment.value > 0 ? segment.value : 0), 0);
-    return value > 0 ? [{ id: entry.id, color: entry.color, value }] : [];
+    return value > 0 ? [{ id: entry.id, color: entry.color, value, share: 0 }] : [];
   });
 }
 
@@ -51,11 +53,13 @@ export function usageBarsGeometry(
   { minSlots, ticks }: { minSlots: number; ticks: boolean },
 ): UsageBarsGeometry {
   const stacked = buckets.map((bucket) => {
-    const segments = columnSegments(bucket, series);
-    return { key: bucket.key, segments, total: segments.reduce((sum, segment) => sum + segment.value, 0) };
+    const parts = columnSegments(bucket, series);
+    const total = parts.reduce((sum, segment) => sum + segment.value, 0);
+    return { key: bucket.key, total, segments: parts.map((segment) => ({ ...segment, share: segment.value / total })) };
   });
   const max = stacked.reduce((most, column) => Math.max(most, column.total), 0);
-  const top = ticks ? niceCeiling(max) : Math.max(max, 1);
+  // Any unit works: fractional totals scale to the plot like whole ones.
+  const top = ticks ? niceCeiling(max) : max > 0 ? max : 1;
   return {
     columns: stacked.map((column) => ({ ...column, fraction: column.total / top })),
     slots: Math.max(buckets.length, Math.floor(minSlots), 1),

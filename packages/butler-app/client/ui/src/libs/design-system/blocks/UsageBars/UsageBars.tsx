@@ -34,9 +34,10 @@ export function UsageBars({
     [buckets, minSlots, series, state, ticks],
   );
   const ready = state === "ready" && !geometry.blank;
-  const count = ready ? geometry.columns.length : 0;
+  const keys = useMemo(() => (ready ? geometry.columns.map((column) => column.key) : []), [geometry, ready]);
+  const count = keys.length;
   const { selected, plotHandlers, rootHandlers } = useUsageBarsSelection({
-    count, slots: geometry.slots, selectedIndex, onSelect, rootRef, plotRef,
+    keys, slots: geometry.slots, selectedIndex, onSelect, rootRef, plotRef,
   });
   const signature = useMemo(() => geometry.columns.map((column) => column.fraction.toFixed(4)).join(","), [geometry]);
   useUsageBarsMotion(plotRef, ready, signature);
@@ -44,10 +45,11 @@ export function UsageBars({
 
   return (
     <div ref={rootRef} className={cn(styles.root, className)} style={style} data-slot="usage-bars" data-size={size}
-      data-state={state} data-ticks={ticks && ready ? "true" : undefined} data-selected={selected === null ? undefined : "true"}
+      data-state={state} data-ticks={ticks ? "true" : undefined} data-selected={selected === null ? undefined : "true"}
       role={state === "loading" ? "status" : "group"} aria-label={ariaLabel} aria-busy={state === "loading" || undefined}
       tabIndex={ready ? 0 : undefined} {...(ready ? rootHandlers : {})}>
-      {ticks && ready ? <UsageBarsYAxis ticks={geometry.ticks} top={geometry.top} format={yTicks.format} /> : null}
+      {/* The gutter stays while loading or empty (just "0"), so data arriving never shifts the plot. */}
+      {ticks ? <UsageBarsYAxis ticks={ready ? geometry.ticks : []} top={geometry.top} format={yTicks.format} /> : null}
       <div ref={plotRef} className={styles.plot} style={{ "--usage-bars-slots": geometry.slots } as CSSProperties}
         {...(ready ? plotHandlers : {})}>
         {state === "loading" ? <UsageBarsSkeleton slots={geometry.slots} label={loadingLabel} /> : null}

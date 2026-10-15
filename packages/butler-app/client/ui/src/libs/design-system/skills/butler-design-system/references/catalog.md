@@ -2617,7 +2617,7 @@ Stacked usage columns over time (tokens per hour or day) with a keyboard- and po
 - Not for: Totals as rows without a time axis → `UsageSummaryRows`
 - Not for: Activity per calendar day over weeks → `ActivityHeatmap`
 - Not for: Generic multi-series charts with legends and tooltips → `Chart`
-- Tokens: `--context-chart-1`, `--context-chart-2`, `--context-chart-5`, `--chart-height-panel`, `--line`, `--text-tertiary`, `--focus-ring-room`, `--motion-deliberate`, `--motion-slow`, `--motion-fast`, `--motion-stagger-row`
+- Tokens: `--context-chart-1`, `--context-chart-2`, `--context-chart-5`, `--chart-height-panel`, `--line`, `--text-tertiary`, `--focus-ring-room`, `--motion-deliberate`, `--motion-slow`, `--motion-fast`
 
 ## Blocks · Documents & Artifacts
 

@@ -18,7 +18,7 @@ export function UsageBarsColumnView({ column, selected }: { column: UsageBarsCol
         style={{ "--usage-bars-fraction": column.fraction } as Vars}>
         <div className={styles.stack}>
           {column.segments.map((segment) => (
-            <span key={segment.id} className={styles.segment} data-color={segment.color} style={{ flexGrow: segment.value }} />
+            <span key={segment.id} className={styles.segment} data-color={segment.color} style={{ "--usage-bars-share": segment.share } as Vars} />
           ))}
         </div>
       </div>

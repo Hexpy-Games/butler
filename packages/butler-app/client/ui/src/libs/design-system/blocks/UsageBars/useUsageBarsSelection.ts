@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState, type FocusEvent, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
 import { bucketAtPointer } from "./usageBarsLayout";
 
 interface SelectionOptions {
-  count: number;
+  /** Keys of the drawn buckets, in order (empty when nothing is drawn). */
+  keys: readonly string[];
   slots: number;
   selectedIndex: number | null | undefined;
   onSelect: ((index: number | null) => void) | undefined;
@@ -35,11 +36,32 @@ function keyTarget(key: string, current: number | null, count: number): number |
 }
 
 /**
+ * Drops a selection whose bucket went away: the index fell out of range (the
+ * buckets emptied or shrank) or a different bucket now sits at that index
+ * (a new window or chat). The caller hears onSelect(null).
+ */
+function useClearStaleSelection(keys: readonly string[], raw: number | null, selected: number | null, clear: () => void): void {
+  const held = useRef<{ index: number; key: string } | null>(null);
+  useEffect(() => {
+    const previous = held.current;
+    const shifted = previous !== null && selected === previous.index && keys[selected] !== previous.key;
+    if ((raw !== null && selected === null) || shifted) {
+      held.current = null;
+      clear();
+      return;
+    }
+    held.current = selected === null ? null : { index: selected, key: keys[selected]! };
+  }, [clear, keys, raw, selected]);
+}
+
+/**
  * Selection for UsageBars: mouse hover follows the pointer, a touch tap toggles
  * a bucket, arrows/Home/End move, Esc and blur clear, a press outside clears.
- * Controlled when `selectedIndex` is passed, otherwise kept here.
+ * Controlled when `selectedIndex` is passed, otherwise kept here. A selection
+ * whose bucket goes away is cleared (useClearStaleSelection).
  */
-export function useUsageBarsSelection({ count, slots, selectedIndex, onSelect, rootRef, plotRef }: SelectionOptions): UsageBarsSelection {
+export function useUsageBarsSelection({ keys, slots, selectedIndex, onSelect, rootRef, plotRef }: SelectionOptions): UsageBarsSelection {
+  const count = keys.length;
   const [own, setOwn] = useState<number | null>(null);
   const raw = selectedIndex === undefined ? own : selectedIndex;
   const selected = raw !== null && Number.isInteger(raw) && raw >= 0 && raw < count ? raw : null;
@@ -49,6 +71,11 @@ export function useUsageBarsSelection({ count, slots, selectedIndex, onSelect, r
     if (selectedIndex === undefined) setOwn(next);
     onSelect?.(next);
   }, [onSelect, selected, selectedIndex]);
+  const clear = useCallback(() => {
+    if (selectedIndex === undefined) setOwn(null);
+    onSelect?.(null);
+  }, [onSelect, selectedIndex]);
+  useClearStaleSelection(keys, raw, selected, clear);
 
   const pick = (event: PointerEvent<HTMLElement>) => {
     const plot = plotRef.current;

@@ -56,22 +56,40 @@ Props:
 - `minSlots` (default 8): the plot keeps at least this many slots, so a few
   buckets sit at the start instead of stretching.
 - `yTicks` (`panel` only): `{ format(value) }`. The scale rounds up to a clean
-  top; half and top gridlines are drawn and labelled in a left gutter.
+  top; half and top gridlines are drawn and labelled in a left gutter. The
+  gutter stays while loading or empty (just "0"), so data arriving never
+  shifts the plot.
 - `emptyLabel`, `loadingLabel`, `note`, `ariaLabel`.
 
-Non-zero buckets are at least 2px tall. Selecting a bucket dims the others to
-40%.
+Non-zero buckets are at least 2px tall; segments split a column by their
+share of its total, so any unit (tokens, dollars, fractions) fills it.
+Selecting a bucket dims the others to 40%. A selection whose bucket goes away
+(the buckets empty, or another bucket now sits at that index) is cleared with
+`onSelect(null)`.
 
 ### Bucketing helper
 
-`bucketUsageSlots(slots, { fromMs?, toMs?, maxBars? })` takes 15-minute slots
-`[startMs, ...values]` and returns `{ stepHours, buckets: [{ startMs, endMs,
-values }] }`. It picks the smallest step from 1, 2, 3, 6, 12 hours, 1, 2 or
-7 days whose bucket count is at most `maxBars` (default 24), aligned to local
-time (DST-safe, half-hour time zones included). Empty buckets stay as gaps.
-`fromMs` defaults to the earliest slot and `toMs` (exclusive, usually now) to
-the end of the latest slot. `alignUsageBucketStart(ms, stepHours)` returns the
-bucket start for a time.
+`bucketUsageSlots(slots, { fromMs?, toMs?, maxBars?, weekStartsOn? })` takes
+15-minute slots `[startMs, ...values]` and returns `{ stepHours, buckets:
+[{ startMs, endMs, values }] }`. It picks the smallest step from 1, 2, 3, 6,
+12 hours, 1, 2 or 7 days whose bucket count is at most `maxBars` (default
+24). Empty buckets stay as gaps. `fromMs` defaults to the earliest slot and
+`toMs` (exclusive, usually now) to the end of the latest slot.
+
+Buckets sit on a fixed local-time grid, so a rolling window keeps its
+boundaries from hour to hour and day to day:
+
+- below a day: multiples of the step from local midnight (0, 6, 12, 18);
+- 1 day: local midnight; 2 days: a fixed grid of local days (even day
+  numbers since 1970-01-01);
+- 7 days: the week start, `weekStartsOn` (0 Sunday … 6 Saturday, default 1
+  Monday). Pass the locale's week start when it differs.
+
+Starts are built from wall-clock fields, so a daylight-saving change only
+lengthens or shortens the one bucket it falls in (a start inside a skipped
+hour moves to the first hour that exists). Half-hour and 45-minute time
+zones work the same way. `alignUsageBucketStart(ms, stepHours, weekStartsOn?)`
+returns the bucket start for a time.
 
 ## Who can use this component
 Product containers that already hold usage numbers and copy.
@@ -91,8 +109,8 @@ tooltip (`Chart`). Do not add a floating tooltip.
 Transform-only (WAAPI through `animateMotion`):
 
 - First show and a new bucket count: columns grow from the baseline over
-  `--motion-deliberate` (decelerate), staggered by `--motion-stagger-row`
-  with the whole stagger capped at `--motion-slow`.
+  `--motion-deliberate` (decelerate), 12ms apart, with the whole stagger
+  capped at `--motion-slow`.
 - Same bucket count, new values (a live update, a session switch): each
   column eases from the height it painted to the new one over `--motion-slow`
   (FLIP via `scaleY`). An update in flight starts from what is on screen.

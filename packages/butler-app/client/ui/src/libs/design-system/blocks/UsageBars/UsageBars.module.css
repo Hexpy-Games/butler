@@ -110,8 +110,10 @@
   }
 }
 
+/* Each segment's basis is its share of the column; the 1px separators come
+   out of every segment in proportion (flex-shrink weighs by basis). */
 .segment {
-  flex: 0 1 0;
+  flex: 0 1 calc(var(--usage-bars-share) * 100%);
   min-height: 0;
 }
 
@@ -210,9 +212,10 @@
   visibility: hidden;
 }
 
+/* 6px off the baseline, as in the approved popover mockup. */
 .note {
   position: absolute;
-  bottom: var(--space-xs);
+  bottom: 6px;
   left: calc(var(--usage-bars-left) * 100% + var(--space-sm));
   color: var(--text-tertiary);
   font-size: var(--typo-caption-size);
@@ -230,6 +233,12 @@
   font-size: var(--typo-caption-size);
   line-height: var(--typo-caption-line-height);
   text-align: center;
+}
+
+/* The usage page's empty line reads at label size (13/18). */
+.root[data-size="panel"] .empty {
+  font-size: var(--typo-label-size);
+  line-height: var(--typo-label-line-height);
 }
 
 .plot .skeletonColumn {

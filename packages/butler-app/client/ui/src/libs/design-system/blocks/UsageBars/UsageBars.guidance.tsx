@@ -82,6 +82,6 @@ export const guidance: ShowcaseGuidance = {
   ],
   tokens: [
     "--context-chart-1", "--context-chart-2", "--context-chart-5", "--chart-height-panel", "--line", "--text-tertiary",
-    "--focus-ring-room", "--motion-deliberate", "--motion-slow", "--motion-fast", "--motion-stagger-row",
+    "--focus-ring-room", "--motion-deliberate", "--motion-slow", "--motion-fast",
   ],
 };

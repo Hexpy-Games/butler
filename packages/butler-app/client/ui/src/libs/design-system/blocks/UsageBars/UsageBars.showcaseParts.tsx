@@ -82,7 +82,8 @@ export function EmptyDemo({ context, size }: { context: ShowcaseRenderContext; s
 export function LoadingDemo({ context, size }: { context: ShowcaseRenderContext; size: UsageBarsSize }) {
   const text = usageCopy(context.locale);
   return <UsageBars size={size} state="loading" buckets={[]} series={usageSeries(context.locale)}
-    minSlots={size === "panel" ? 28 : 10} loadingLabel={text.loading} ariaLabel={size === "panel" ? text.period : text.chat} />;
+    minSlots={size === "panel" ? 28 : 10} loadingLabel={text.loading} ariaLabel={size === "panel" ? text.period : text.chat}
+    yTicks={size === "panel" ? { format: tickFormat(context.locale) } : undefined} />;
 }
 
 /** Live update (same bucket count: FLIP), a range switch (new count: grow) and a replay (remount). */
