@@ -4,6 +4,7 @@ mod availability;
 mod buckets;
 mod log;
 mod row;
+mod web;
 
 use std::{collections::BTreeMap, path::Path};
 
@@ -38,14 +39,14 @@ pub struct UsageMonitorSources<'a> {
 #[derive(Default)]
 pub struct UsageMonitor {
     log: Mutex<UsageLogIndex>,
+    searches: Mutex<web::SearchIndex>,
     transcripts: Mutex<TranscriptActivityCache>,
 }
 
 impl UsageMonitor {
     /// The usage view of `session_id` (a runtime session id; all sessions
     /// when `None`) since `since_ts`. Transcripts are read only for the
-    /// all-time, all-session view (and, cached per file, for a session's
-    /// tools).
+    /// selected view; every file scan resumes from its last complete line.
     pub fn read(
         &self,
         data_root: &Path,
@@ -53,29 +54,72 @@ impl UsageMonitor {
         since_ts: Option<f64>,
         sources: Option<&UsageMonitorSources<'_>>,
     ) -> Value {
+        self.read_at(
+            data_root,
+            session_id,
+            None,
+            since_ts,
+            (chrono::Utc::now().timestamp_millis() + 1) as f64,
+            sources,
+        )
+    }
+
+    /// The same projection with one captured upper bound for both periods.
+    pub fn read_at(
+        &self,
+        data_root: &Path,
+        session_id: Option<&str>,
+        usage_scope: Option<&str>,
+        since_ts: Option<f64>,
+        now: f64,
+        sources: Option<&UsageMonitorSources<'_>>,
+    ) -> Value {
         let session_id = session_id.filter(|id| !id.trim().is_empty());
-        let scope = session_id.map(|id| format!("btcc-guided:{id}"));
         let pricing = sources.map(|sources| sources.pricing);
-        let buckets = {
+        let (buckets, timeline, top_sessions, previous, scope) = {
             let mut log = self.log.lock();
-            log.refresh(data_root);
-            log.buckets(
-                Window {
-                    scope: scope.as_deref(),
-                    since_ts,
+            log.refresh(data_root, pricing);
+            let scope = log.resolve_scope(session_id, usage_scope);
+            let window = Window {
+                scope: scope.as_deref(),
+                since_ts,
+                until_ts: since_ts.map(|_| now),
+            };
+            let previous = since_ts.map(|since| {
+                log.tokens(Window {
+                    since_ts: Some(since - (now - since)),
+                    until_ts: Some(since),
+                    ..window
+                })
+                .total
+            });
+            (
+                log.buckets(window, pricing),
+                log.timeline(window),
+                if since_ts.is_some() {
+                    log.top_sessions(window)
+                } else {
+                    json!([])
                 },
-                pricing,
+                previous,
+                scope,
             )
         };
         let cost = buckets.cost_value();
         let (model_value, provider_buckets) = buckets.views();
-        let web_search = availability::read_web_search(data_root, since_ts);
+        let web_search = availability::read_web_search(data_root, since_ts, now, self);
         let providers = provider_summary(provider_buckets, sources);
+        let tool_session = scope
+            .as_deref()
+            .map(|scope| scope.strip_prefix("btcc-guided:").unwrap_or(scope));
         let (tools, transcript_activity_status, tools_availability) =
-            availability::read_tools(data_root, session_id, since_ts, self);
+            availability::read_tools(data_root, tool_session, since_ts, now, self);
         json!({
-            "filters": { "sessionId": session_id, "sinceTs": since_ts },
+            "filters": { "sessionId": session_id, "sinceTs": since_ts, "untilTs": since_ts.map(|_| now) },
             "model": model_value,
+            "timeline": timeline,
+            "topSessions": top_sessions,
+            "previousPeriod": previous.map(|total| json!({"totalTokens":total})),
             "webSearch": web_search,
             "tools": tools,
             "providerUsage": providers,

@@ -71,10 +71,14 @@ fn usage_monitor_view(
         quota: &quota_view,
         quota_providers: quota.provider_ids(),
     };
-    let mut view = monitor.read(
+    let mut view = monitor.read_at(
         root,
         query.runtime_session_id.as_deref(),
+        query.usage_scope.as_deref(),
         query.since_ts,
+        query
+            .until_ts
+            .unwrap_or_else(|| (chrono::Utc::now().timestamp_millis() + 1) as f64),
         Some(&sources),
     );
     // Echo the id the client asked with, not the runtime's spelling of it.

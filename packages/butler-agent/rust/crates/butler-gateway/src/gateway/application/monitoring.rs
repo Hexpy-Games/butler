@@ -4,6 +4,7 @@ pub(super) mod activity;
 mod conversation;
 pub(super) mod materialized;
 mod sessions;
+mod usage;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::{Value, json};
@@ -28,6 +29,9 @@ pub struct AppUsageMonitorQuery {
     /// usage rows of a conversation are keyed by it.
     pub runtime_session_id: Option<String>,
     pub since_ts: Option<f64>,
+    pub until_ts: Option<f64>,
+    /// An unbound selector may refer directly to a telemetry scope.
+    pub usage_scope: Option<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -451,11 +455,23 @@ impl super::AppApplication {
     ) -> crate::gateway::ApplicationFuture<Value> {
         let this = self.clone_handle();
         Box::pin(async move {
-            query.runtime_session_id = match query.session_id.as_deref() {
-                Some(chat) => Some(this.runtime_hint(chat).await?),
-                None => None,
-            };
-            this.dependencies.monitoring.usage_monitor(query).await
+            if let Some(id) = query.session_id.clone() {
+                let (runtime, scope) = this
+                    .storage
+                    .read(move |db| usage::runtime_session(db, &id))
+                    .await
+                    .map_err(super::app_error)?;
+                query.runtime_session_id = Some(runtime);
+                query.usage_scope = scope;
+            }
+            let mut view = this.dependencies.monitoring.usage_monitor(query).await?;
+            this.storage
+                .read(move |db| {
+                    usage::enrich(db, &mut view)?;
+                    Ok(view)
+                })
+                .await
+                .map_err(super::app_error)
         })
     }
 }

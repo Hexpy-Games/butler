@@ -244,12 +244,15 @@ fn usage_query(parameters: &std::collections::HashMap<String, String>) -> AppUsa
         .get("since_hours")
         .or_else(|| parameters.get("sinceHours"))
         .and_then(|value| value.trim().parse::<f64>().ok())
-        .filter(|hours| hours.is_finite() && *hours > 0.0);
+        .filter(|hours| hours.is_finite() && *hours > 0.0 && (hours * 3_600_000.0).is_finite());
+    // Exclusive end: include every event recorded in the current millisecond.
+    let now = (chrono::Utc::now().timestamp_millis() + 1) as f64;
     AppUsageMonitorQuery {
         session_id,
         runtime_session_id: None,
-        since_ts: hours
-            .map(|hours| chrono::Utc::now().timestamp_millis() as f64 - hours * 3_600_000.0),
+        usage_scope: None,
+        since_ts: hours.map(|hours| now - hours * 3_600_000.0),
+        until_ts: hours.map(|_| now),
     }
 }
 

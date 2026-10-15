@@ -17,7 +17,7 @@ pub(super) struct Tokens {
     pub(super) prompt: f64,
     pub(super) cached: f64,
     uncached: f64,
-    output: f64,
+    pub(super) output: f64,
     reasoning: Option<f64>,
     pub(super) total: f64,
     missing: u64,
@@ -37,6 +37,19 @@ impl Tokens {
             self.output += (total - row.prompt).max(0.0);
         } else {
             self.missing += 1;
+        }
+    }
+
+    pub(super) fn merge(&mut self, other: &Self) {
+        self.request_count += other.request_count;
+        self.prompt += other.prompt;
+        self.cached += other.cached;
+        self.uncached += other.uncached;
+        self.output += other.output;
+        self.total += other.total;
+        self.missing += other.missing;
+        if let Some(value) = other.reasoning {
+            *self.reasoning.get_or_insert(0.0) += value;
         }
     }
 
@@ -107,7 +120,7 @@ impl Buckets {
             .entry(scope.clone())
             .or_default()
             .add(row);
-        let model_key = safe_key(&row.model, &self.by_model);
+        let model_key = row.model.to_string();
         self.by_model.entry(model_key).or_default().add(row);
         let phase = row.phase.as_deref().unwrap_or(&scope);
         let phase_key = safe_key(phase, &self.by_phase);
@@ -147,6 +160,45 @@ impl Buckets {
             .entry(work.into())
             .or_default()
             .add(&event, price.as_ref());
+    }
+
+    pub(super) fn merge(&mut self, other: &Self) {
+        self.model.merge(&other.model);
+        self.missing_key += other.missing_key;
+        self.missing_retention += other.missing_retention;
+        for (key, value) in &other.by_scope {
+            let key = safe_key(key, &self.by_scope);
+            *self.by_scope.entry(key).or_default() += value;
+        }
+        for (target, source, limit) in [
+            (
+                &mut self.by_scope_usage,
+                &other.by_scope_usage,
+                super::MAP_LIMIT,
+            ),
+            (&mut self.by_model, &other.by_model, usize::MAX),
+            (&mut self.by_phase, &other.by_phase, super::MAP_LIMIT),
+            (&mut self.providers, &other.providers, PROVIDER_LIMIT),
+        ] {
+            for (key, value) in source {
+                let key = safe_key_with_limit(key, target, limit);
+                target.entry(key).or_default().merge(value);
+            }
+        }
+        for (key, value) in &other.by_section {
+            let key = safe_key(key, &self.by_section);
+            let target = self.by_section.entry(key).or_default();
+            target.0 += value.0;
+            target.1 += value.1;
+            target.2 += value.2;
+        }
+        self.cost.merge(&other.cost);
+        for (key, value) in &other.cost_by_work {
+            self.cost_by_work
+                .entry(key.clone())
+                .or_default()
+                .merge(value);
+        }
     }
 
     /// The monitor's `cost` object.
