@@ -78,10 +78,10 @@ export const guidance: ShowcaseGuidance = {
   accessibility: [
     "One tab stop (role group named by ariaLabel); ←/→ move, Home/End jump, Esc clears (and passes through when nothing is selected).",
     "An sr-only table lists every bucket's label and valueText; a polite live region speaks the selection.",
-    "The focus ring sits --focus-ring-room outside the chart; clipping parents must leave that room.",
+    "The focus ring keeps --focus-ring-room clear of the axis labels and reaches 5px outside the chart; clipping parents must leave that room.",
   ],
   tokens: [
     "--context-chart-1", "--context-chart-2", "--context-chart-5", "--chart-height-panel", "--line", "--text-tertiary",
-    "--focus-ring-room", "--motion-deliberate", "--motion-slow", "--motion-fast",
+    "--focus-ring-room", "--focus-ring-width", "--motion-deliberate", "--motion-slow", "--motion-fast",
   ],
 };
