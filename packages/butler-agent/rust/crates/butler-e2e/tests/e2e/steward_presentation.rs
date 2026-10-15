@@ -8,7 +8,7 @@
 mod files;
 mod intent;
 #[path = "steward_presentation/stub.rs"]
-pub(super) mod stub;
+pub(crate) mod stub;
 mod visible;
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
 use serde_json::{Value, json};
@@ -279,7 +279,9 @@ async fn wait_held_tool(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), H
     Ok(())
 }
 
-async fn wait_result(s: &butler_e2e::e2e::scenario::Scenario) -> Result<Value, HarnessError> {
+pub(crate) async fn wait_result(
+    s: &butler_e2e::e2e::scenario::Scenario,
+) -> Result<Value, HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let view = s.gw.get("/session-view?session_id=general").await?;
@@ -405,7 +407,7 @@ fn diagnostic(script: &stub::Script) -> String {
         .join("\n")
 }
 
-fn setup(id: &str, url: &str) -> Result<Setup, HarnessError> {
+pub(crate) fn setup(id: &str, url: &str) -> Result<Setup, HarnessError> {
     // Worker profile choices use the configured local gateway endpoint.
     let setup = Setup::new(id)?;
     // Holding/interruption fixtures need the debug-only tool hooks. The

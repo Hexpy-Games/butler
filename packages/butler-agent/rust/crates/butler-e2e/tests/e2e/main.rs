@@ -140,6 +140,7 @@ mod shutdown_wal;
 mod skills_disclosure;
 mod startup_port;
 mod startup_readiness;
+mod steward_interrupted_queue;
 mod steward_presentation;
 mod steward_results;
 mod storage_resilience;
