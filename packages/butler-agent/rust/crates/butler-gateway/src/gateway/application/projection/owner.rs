@@ -163,12 +163,14 @@ impl ProjectionOwner {
         &self,
         chat_id: String,
     ) -> Result<(), GatewayApplicationError> {
+        let timing = crate::gateway::command_timing::CommandTiming::new("projection_refresh");
         let (sender, receiver) = oneshot::channel();
         self.inner
             .sender
             .send(Command::Refresh(chat_id, sender))
             .await
             .map_err(GatewayApplicationError::internal_from)?;
+        timing.mark("enqueued");
         receiver
             .await
             .map_err(GatewayApplicationError::internal_from)?
