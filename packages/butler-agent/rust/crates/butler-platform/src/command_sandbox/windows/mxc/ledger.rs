@@ -136,6 +136,7 @@ fn start_verify(ledger: &Arc<Ledger>, state: &mut State) -> io::Result<()> {
     if state.stale.is_some() {
         state.feed = Feed::start(&state.roots)?;
     }
+    state.feed.begin_verify()?;
     state.verifying = true;
     let (roots, protected, ledger) = (
         state.roots.clone(),
@@ -151,16 +152,19 @@ fn start_verify(ledger: &Arc<Ledger>, state: &mut State) -> io::Result<()> {
                 "ledger_verify"
             });
             #[cfg(feature = "test-support")]
-            support::wait(&roots);
+            support::wait(&roots, false);
             let result = std::panic::catch_unwind(|| scan::walk(&roots, &roots, &protected))
                 .unwrap_or_else(|_| Err(io::Error::other("ledger build panic")));
+            #[cfg(feature = "test-support")]
+            support::wait(&roots, true);
             if let Ok(mut state) = lock(&ledger) {
                 let result = result.and_then(|inventory| {
                     // Keep the old inventory until the full scan AND queued delta succeed.
                     #[cfg(feature = "test-support")]
                     let verified_files = inventory.opened_files;
                     let mut fresh = inventory;
-                    apply(&state.feed, &roots, &protected, &mut fresh)?;
+                    let replay = state.feed.finish_verify()?;
+                    apply(&state.feed, &roots, &protected, &mut fresh, replay)?;
                     state.inventory = fresh;
                     #[cfg(feature = "test-support")]
                     {
@@ -191,6 +195,7 @@ fn sync(state: &mut State) -> io::Result<()> {
         &state.roots,
         &state.protected,
         &mut state.inventory,
+        Vec::new(),
     );
     if let Err(error) = &result {
         state.stale = Some(error.to_string());
@@ -205,10 +210,13 @@ fn apply(
     roots: &[PathBuf],
     protected: &[WinPath],
     inventory: &mut Inventory,
+    mut events: Vec<Event>,
 ) -> io::Result<()> {
     let deadline = Instant::now() + WAIT;
     loop {
-        let events = feed.drain()?;
+        if events.is_empty() {
+            events = feed.drain()?;
+        }
         if events.is_empty() {
             return Ok(());
         }
@@ -218,7 +226,7 @@ fn apply(
         let changes_phase = super::timing::Phase::start("ledger_changes");
         let mut added = HashSet::new();
         let mut removed = HashSet::new();
-        for event in events {
+        for event in std::mem::take(&mut events) {
             match event {
                 Event::Added(path) => {
                     removed.insert(path.as_os_str().to_owned());

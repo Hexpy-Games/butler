@@ -60,45 +60,58 @@ pub(in crate::command_sandbox) fn tree(root: &Path) -> io::Result<Vec<PathBuf>> 
     )
 }
 
-type Pause = Arc<(Mutex<bool>, Condvar)>;
-static PAUSES: std::sync::OnceLock<Mutex<std::collections::HashMap<PathBuf, Pause>>> =
+type Pause = Arc<(Mutex<(bool, bool)>, Condvar)>;
+static PAUSES: std::sync::OnceLock<Mutex<std::collections::HashMap<(PathBuf, bool), Pause>>> =
     std::sync::OnceLock::new();
-pub(in crate::command_sandbox) fn pause(root: &Path, paused: bool) -> io::Result<()> {
-    let key = fs::canonicalize(root)?;
+pub(in crate::command_sandbox) fn pause(
+    root: &Path,
+    paused: bool,
+    after_scan: bool,
+) -> io::Result<()> {
+    let key = (fs::canonicalize(root)?, after_scan);
     let mut pauses = PAUSES
         .get_or_init(Mutex::default)
         .lock()
         .map_err(|_| io::Error::other("pause poisoned"))?;
     if paused {
-        pauses.insert(key, Arc::new((Mutex::new(true), Condvar::new())));
+        pauses.insert(key, Arc::new((Mutex::new((true, false)), Condvar::new())));
     } else if let Some(pause) = pauses.remove(&key) {
-        *pause
+        pause
             .0
             .lock()
-            .map_err(|_| io::Error::other("pause poisoned"))? = false;
+            .map_err(|_| io::Error::other("pause poisoned"))?
+            .0 = false;
         pause.1.notify_all();
     }
     Ok(())
 }
-pub(super) fn wait(roots: &[PathBuf]) {
+pub(super) fn wait(roots: &[PathBuf], after_scan: bool) {
     let Some(pauses) = PAUSES.get() else {
         return;
     };
-    let pause = pauses
-        .lock()
-        .ok()
-        .and_then(|p| roots.iter().find_map(|r| p.get(r).cloned()));
+    let pause = pauses.lock().ok().and_then(|p| {
+        roots
+            .iter()
+            .find_map(|r| p.get(&(r.clone(), after_scan)).cloned())
+    });
     if let Some(pause) = pause
-        && let Ok(guard) = pause.0.lock()
+        && let Ok(mut guard) = pause.0.lock()
     {
+        guard.1 = true;
         // A failed test must not leak a permanently blocked verifier.
         let _ = pause
             .1
-            .wait_timeout_while(guard, Duration::from_secs(5), |paused| *paused);
+            .wait_timeout_while(guard, Duration::from_secs(5), |state| state.0);
     }
 }
 
 pub(in crate::command_sandbox) fn verified_files(root: &Path) -> io::Result<usize> {
     let ledger = registry::get(root, &[])?;
     Ok(lock(&ledger)?.verified_files)
+}
+
+pub(in crate::command_sandbox) fn commit_paused(root: &Path) -> io::Result<bool> {
+    let key = (fs::canonicalize(root)?, true);
+    let pause = PAUSES.get().and_then(|p| p.lock().ok()?.get(&key).cloned());
+    Ok(pause.is_some_and(|p| p.0.lock().is_ok_and(|s| s.1)))
 }

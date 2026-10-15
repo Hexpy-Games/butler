@@ -314,3 +314,41 @@ fn ledger_post_run_background_and_admission_wait() -> Result<(), HarnessError> {
     f.finish();
     Ok(())
 }
+
+#[test]
+fn ledger_replays_events_consumed_by_overlapping_sweep() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows ledger");
+    let f = Fixture::new("WIN-LEDGER-REPLAY")?;
+    admit(&f)?;
+    let outside = f.setup.sandbox.home.join("outside-source");
+    fs::write(&outside, b"complete")?;
+    Ledger::pause_verify_commit(&f.root, true)?;
+    let root = f.root.clone();
+    let verifier = std::thread::spawn(move || Ledger::force_verify(&root));
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !Ledger::verify_commit_paused(&f.root)? {
+        assert!(
+            Instant::now() < deadline,
+            "verifier did not reach commit barrier"
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    fs::hard_link(&outside, f.root.join("alias"))?;
+    assert_eq!(
+        command_sandbox::sweep_new_secrets(&f.root, &[], &f.setup.sandbox.data)?,
+        Vec::<PathBuf>::new()
+    );
+    assert_eq!(
+        Ledger::aliases(&f.root)?.len(),
+        1,
+        "sweep consumed the event"
+    );
+    Ledger::pause_verify_commit(&f.root, false)?;
+    verifier.join().unwrap()?;
+    refused(&f, 1);
+    fs::remove_file(f.root.join("alias"))?;
+    admit(&f)?;
+    f.finish();
+    Ok(())
+}

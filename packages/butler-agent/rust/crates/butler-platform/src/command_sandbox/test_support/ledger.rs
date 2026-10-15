@@ -62,10 +62,30 @@ impl WindowsLedger {
     /// Pauses a background scan to verify admission waits for its fresh verdict.
     pub fn pause_verify(root: &Path, paused: bool) -> io::Result<()> {
         #[cfg(windows)]
-        return support::pause(root, paused);
+        return support::pause(root, paused, false);
         #[cfg(not(windows))]
         {
             let _ = (root, paused);
+            Err(io::Error::other("Windows required"))
+        }
+    }
+    /// Pauses after a full scan, before queued changes and atomic replacement.
+    pub fn pause_verify_commit(root: &Path, paused: bool) -> io::Result<()> {
+        #[cfg(windows)]
+        return support::pause(root, paused, true);
+        #[cfg(not(windows))]
+        {
+            let _ = (root, paused);
+            Err(io::Error::other("Windows required"))
+        }
+    }
+    /// Whether the verifier has reached the deliberately paused commit barrier.
+    pub fn verify_commit_paused(root: &Path) -> io::Result<bool> {
+        #[cfg(windows)]
+        return support::commit_paused(root);
+        #[cfg(not(windows))]
+        {
+            let _ = root;
             Err(io::Error::other("Windows required"))
         }
     }

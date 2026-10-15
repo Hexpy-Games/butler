@@ -9,7 +9,7 @@ use std::{
 };
 
 /// Directory name events; rename halves are remove/add so moved trees are rescanned.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Change {
     Added(PathBuf),
     Removed(PathBuf),
