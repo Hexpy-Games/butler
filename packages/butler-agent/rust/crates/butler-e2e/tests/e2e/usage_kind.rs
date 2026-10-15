@@ -54,9 +54,9 @@ async fn usage_queued_schedule_and_internal_scopes() -> Result<(), HarnessError>
             VALUES(?1,'a','queued-chat','delivered','scheduled',?2,?1)", [&queued, &chrono::DateTime::from_timestamp_millis(now-1000).unwrap().to_rfc3339()])?;
     }
     tx.commit()?;
-    // One old queued binding cannot classify the entire conversation as scheduled.
+    // A queued binding completed before the window cannot classify newer usage.
     db.execute(
-        "UPDATE app_automation_runs SET started_at='2026-01-01' WHERE id='queue-900'",
+        "UPDATE app_automation_runs SET completed_at='2026-01-01' WHERE id='queue-900'",
         [],
     )?;
     let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
@@ -67,7 +67,7 @@ async fn usage_queued_schedule_and_internal_scopes() -> Result<(), HarnessError>
         .with_timezone(&chrono::FixedOffset::east_opt(9 * 3600).unwrap())
         .to_rfc3339();
     db.execute(
-        "UPDATE app_automation_runs SET started_at=?1 WHERE id='queue-900'",
+        "UPDATE app_automation_runs SET completed_at=?1 WHERE id='queue-900'",
         [stamp],
     )?;
     let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
@@ -81,6 +81,90 @@ async fn usage_queued_schedule_and_internal_scopes() -> Result<(), HarnessError>
         let chat = matches!(id, "app-chat" | "deleted-chat");
         assert_eq!(item["kind"], if chat { "chat" } else { "butler" }, "{item}");
     }
+    drop(db);
+    s.finish().await
+}
+
+/// Both durable turn bindings survive a run starting before the usage window.
+#[tokio::test]
+async fn usage_schedule_run_overlaps_window() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("usage-schedule-window")?;
+    fs::create_dir_all(setup.sandbox.data.join("metrics"))?;
+    let now = chrono::Utc::now();
+    let mut log = fs::File::create(setup.sandbox.data.join("metrics/prompt-cache-usage.jsonl"))?;
+    for scope in ["bound-runtime", "unbound-runtime"] {
+        writeln!(
+            log,
+            "{}",
+            json!({"ts":now.timestamp_millis()-1000,"scope":scope,
+            "model":"m","promptTokens":10,"cachedTokens":3,"totalTokens":12,
+            "turnId":scope})
+        )?;
+    }
+    drop(log);
+    let s = setup.start().await?;
+    let db = butler_platform::sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    db.execute_batch("INSERT INTO chats(id,title,kind,runtime_session_hint,created_at,updated_at)
+        VALUES('bound-chat','Report','chat','bound-runtime','2026-01-01','2026-01-01');
+        INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,state,last_run_state,created_at,updated_at)
+        VALUES('a','Report','Report','chat','bound-chat',3600,'paused','delivered','2026-01-01','2026-01-01');
+        INSERT INTO session_queued_messages(id,chat_id,text,attachments_json,controls_json,state,turn_id,created_at,updated_at)
+        VALUES('q','bound-chat','Report','[]','{}','dispatched','bound-runtime','2026-01-01','2026-01-01');")?;
+    let started = (now - chrono::Duration::hours(25)).to_rfc3339();
+    db.execute("INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,queued_message_id,turn_id)
+        VALUES('queued','a','bound-chat','queued','scheduled',?1,'q',NULL),
+              ('direct','a','bound-chat','running','scheduled',?1,NULL,'unbound-runtime')", [&started])?;
+    // Cover pending runs and completed runs with a non-UTC timestamp offset.
+    let completed = now
+        .with_timezone(&chrono::FixedOffset::east_opt(9 * 3600).unwrap())
+        .to_rfc3339();
+    for completion in [None, Some(completed.as_str())] {
+        db.execute(
+            "UPDATE app_automation_runs SET completed_at=?1",
+            [completion],
+        )?;
+        let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
+        let entries = reply.data()["topSessions"].as_array().unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(reply.data()["model"]["requestCount"], 2);
+        assert_timeline(reply.data());
+        for entry in entries {
+            assert_eq!(entry["kind"], "schedule", "{entry}");
+            assert_eq!(entry["requests"], 1);
+            assert_eq!(entry["totalTokens"], 12.0);
+        }
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry["sessionId"] == "bound-chat")
+        );
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry["sessionId"] == "unbound-runtime")
+        );
+    }
+    // Completion before the window excludes both bindings, even if usage has
+    // the same turn id; lifetime queries still retain those schedule bindings.
+    db.execute("UPDATE app_automation_runs SET completed_at=?1", [&started])?;
+    let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
+    for entry in reply.data()["topSessions"].as_array().unwrap() {
+        let expected = if entry["sessionId"] == "bound-chat" {
+            "chat"
+        } else {
+            "butler"
+        };
+        assert_eq!(entry["kind"], expected, "{entry}");
+    }
+    let reply = s.gw.get("/usage-monitor").await?;
+    assert!(
+        reply.data()["topSessions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|entry| entry["kind"] == "schedule")
+    );
     drop(db);
     s.finish().await
 }

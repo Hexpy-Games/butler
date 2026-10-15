@@ -366,9 +366,9 @@ async fn usage_schedule_kind_uses_recorded_runs() -> Result<(), HarnessError> {
         [],
     )
     .unwrap();
-    // A matching turn on a run outside the range must still be excluded.
+    // A run started before the range remains relevant until it completes.
     let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
-    assert_eq!(reply.data()["topSessions"][0]["kind"], "chat");
+    assert_eq!(reply.data()["topSessions"][0]["kind"], "schedule");
     db.execute(
         "UPDATE app_automation_runs SET started_at=?1",
         [(now - chrono::Duration::seconds(2)).to_rfc3339()],

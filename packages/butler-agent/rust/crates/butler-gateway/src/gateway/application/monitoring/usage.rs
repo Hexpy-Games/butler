@@ -65,14 +65,15 @@ fn metadata(db: &Connection, ids: &[String]) -> Result<Metadata, AppStorageError
         .map_err(AppStorageError::sqlite)
 }
 
-/// Read runs, never telemetry turn ids. The expression index bounds ranged
-/// reads even when durable timestamps use different RFC3339 UTC offsets.
+/// Read runs that can overlap the window, including queued or active runs.
+/// Index both branches; compare completion timestamps by instant across offsets.
 pub(super) fn schedule_turns(
     db: &Connection,
     since_ts: Option<f64>,
 ) -> Result<HashSet<String>, AppStorageError> {
     let predicate = if since_ts.is_some() {
-        "WHERE julianday(r.started_at) >= julianday(?1 / 1000.0, 'unixepoch')"
+        "WHERE r.completed_at IS NULL
+            OR julianday(r.completed_at) >= julianday(?1 / 1000.0, 'unixepoch')"
     } else {
         ""
     };
