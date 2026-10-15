@@ -4,9 +4,9 @@ import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSavedKeys } from "./hooks/useSavedKeys";
 import { useGrants } from "./useGrants";
-import { memo, useState } from "react";
+import { memo, useId, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { DisclosureRow } from "@/butler-ds";
+import { DisclosureRow, SettingsField, Stack } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { SecurityAllowedHostsField } from "./SecurityAllowedHostsField";
 import { SecurityPairingSection } from "./SecurityPairingSection";
@@ -70,32 +70,53 @@ export const SecuritySettings = memo(function SecuritySettings() {
         </>
       )}
       {securityAuthoritySections({ models, savedKeys, grants })}
-      {view && (
-        <SettingsSection id="security-advanced" kind="form" title={settingsCopy.security.advanced}>
-          <DisclosureRow
-            surface="plain"
-            data-test-class="settings-security-advanced"
-            title={settingsCopy.security.advancedContents}
-            open={advancedOpen}
-            onToggle={() => setAdvancedOpen(!advancedOpen)}
-          />
-        </SettingsSection>
-      )}
-      {view && advancedOpen && (
-        <SettingsSection id="allowed-hosts" kind="form" title={sections.allowedHosts}>
-          <SecurityAllowedHostsField
-            hosts={view.allowed_hosts}
-            disabled={busy !== null}
-            onSave={security.saveAllowedHosts}
-          />
-          <SecurityAllowedHostsField
-            content
-            hosts={view.content_hosts ?? []}
-            disabled={busy !== null}
-            onSave={security.saveContentHosts}
-          />
-        </SettingsSection>
-      )}
+      {view && <SecurityAdvancedSection security={security} open={advancedOpen} onToggle={() => setAdvancedOpen(!advancedOpen)} />}
     </SettingsPage>
   );
 });
+
+function SecurityAdvancedSection({ security, open, onToggle }: {
+  security: ReturnType<typeof useSecuritySettings>;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const panelId = useId();
+  const hintId = useId();
+  const contentHintId = useId();
+  const copy = appCopy.settings.security;
+  const { view, busy } = security;
+  if (!view) return null;
+  return (
+    <SettingsSection id="security-advanced" kind="form" title={copy.advanced}>
+      <DisclosureRow
+        surface="plain"
+        data-test-class="settings-security-advanced"
+        data-setting-id="allowed-hosts"
+        title={copy.advancedContents}
+        meta={copy.hostCount(view.allowed_hosts.length + (view.content_hosts?.length ?? 0))}
+        controlsId={panelId}
+        open={open}
+        onToggle={onToggle}
+      >
+        <Stack id={panelId} align="row" gap="none">
+          <Stack.Item basis="lg" minWidth="0">
+            <Stack gap="xl">
+              <SettingsField
+                label={copy.hosts}
+                description={copy.hostsDescription}
+                descriptionId={hintId}
+                control={<SecurityAllowedHostsField hosts={view.allowed_hosts} disabled={busy !== null} onSave={security.saveAllowedHosts} describedBy={hintId} />}
+              />
+              <SettingsField
+                label={copy.contentHosts}
+                description={copy.contentHostsDescription}
+                descriptionId={contentHintId}
+                control={<SecurityAllowedHostsField content hosts={view.content_hosts ?? []} disabled={busy !== null} onSave={security.saveContentHosts} describedBy={contentHintId} />}
+              />
+            </Stack>
+          </Stack.Item>
+        </Stack>
+      </DisclosureRow>
+    </SettingsSection>
+  );
+}
