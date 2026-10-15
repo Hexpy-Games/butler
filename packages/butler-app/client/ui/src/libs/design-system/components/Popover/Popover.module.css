@@ -103,7 +103,9 @@
       [data-viewport="desktop"] *
     ) {
     /* Sheet: the screen width minus a small gutter (and side safe areas),
-       whatever the content; it stays attached to its trigger's side. */
+       whatever the content; it stays attached to its trigger's side, so
+       desktop nested-menu offsets (data-nested-menu-align) do not apply. */
+    translate: none;
     width: calc(
       100vw - 2 * var(--popover-sheet-gutter) - var(--safe-area-left) -
         var(--safe-area-right)
