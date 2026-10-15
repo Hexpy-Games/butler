@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: security
 /** Pick granularity, whole modals, cross-site frames and areas through the real App overlay with native OS input. */
 import { strict as assert } from "node:assert";
@@ -60,7 +61,7 @@ async function cropFits(index: number) {
     return {ok:Math.abs(size.width-p.cropRect.width*s)<=2*s+1&&Math.abs(size.height-p.cropRect.height*s)<=2*s+1,size,css:{width:p.cropRect.width,height:p.cropRect.height}};})()`);
 }
 try {
-  await app.page.reload(); await shellReady(app, "en"); await app.click("General");
+  await app.page.reload(); await shellReady(app, "en"); await app.click(getAppCopy("en-US").space.general);
   await app.call("open");
   tab = await app.call<string>("create", { owner: "conversation:general", profile: "signed_out", url: `${server.url.href}modal` });
   await app.click("Show browser"); await app.call("activate", { id: tab }); await nativeAligned(app);
