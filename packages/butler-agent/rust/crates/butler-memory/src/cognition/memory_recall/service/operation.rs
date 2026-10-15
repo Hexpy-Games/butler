@@ -90,6 +90,7 @@ impl Operation {
             input: &self.input,
             cursors: &self.cursors,
             deadline_at: self.deadline_at,
+            initialization_ms: self.initialization_ms,
         };
         query::prepare_judge(&read, vector, self.metrics.as_deref(), clocks)
     }
@@ -125,7 +126,7 @@ impl Operation {
     /// Await a configured model within recall's deadline, then search within
     /// 750 ms, or report why the vector lane was unavailable.
     async fn vector_facts(
-        &self,
+        &mut self,
         generation: &MemoryGenerationHandle,
     ) -> CognitionResult<VectorFacts> {
         let mut vector = VectorFacts::default();
@@ -146,30 +147,29 @@ impl Operation {
         // Initialization is owned background work. Keep a search window for
         // text retrieval if the optional vector lane cannot become ready.
         let vector_deadline = self.deadline_at.saturating_sub(750);
-        let remaining =
-            u64::try_from(vector_deadline.saturating_sub((self.clock)())).unwrap_or_default();
+        let mut initialization_ms = 0;
         let result = tokio::select! {
             () = self.shutdown.cancelled() => return Err(closed()),
             () = self.caller_cancel.cancelled() => return Err(closed()),
-            result = tokio::time::timeout(std::time::Duration::from_millis(remaining),
-                self.search_vectors(port.as_ref(), generation, vector_deadline)) => result,
+            result = self.search_vectors(port.as_ref(), generation, vector_deadline,
+                &mut initialization_ms) => result,
         };
+        self.initialization_ms = initialization_ms;
         match result {
-            Ok(Ok(_)) if generation.embedding.is_none() => {
+            Ok(_) if generation.embedding.is_none() => {
                 vector.code = Some("embedding_not_configured".into());
             }
-            Ok(Ok(matches)) => {
+            Ok(matches) => {
                 vector.searched = true;
                 vector.diagnostics = matches.diagnostics.clone();
                 vector.matches = Some(matches);
             }
-            Ok(Err(error)) => {
+            Err(error) => {
                 let code = vector_error_code(&error);
                 // The choice switched off while this recall was starting.
                 vector.disabled = code == EMBEDDING_DISABLED;
                 vector.code = Some(code);
             }
-            Err(_) => vector.code = Some("vector_unavailable".into()),
         }
         Ok(vector)
     }
@@ -179,11 +179,22 @@ impl Operation {
         port: &dyn super::super::vector::RecallVectorPort,
         generation: &MemoryGenerationHandle,
         deadline_at: i64,
+        initialization_ms: &mut i64,
     ) -> CognitionResult<crate::cognition::recall::RecallVectorMatches> {
         // A fresh generation has no vectors to retrieve yet. Its existing warm
         // path starts the owner without delaying text recall for model readiness.
         if generation.embedding.is_some() {
-            port.ready(generation, deadline_at).await?;
+            let started = (self.clock)();
+            let remaining = u64::try_from(deadline_at.saturating_sub(started)).unwrap_or_default();
+            let ready = tokio::time::timeout(
+                std::time::Duration::from_millis(remaining),
+                port.ready(generation, deadline_at),
+            )
+            .await;
+            *initialization_ms = (self.clock)().saturating_sub(started).max(0);
+            ready.map_err(|_| {
+                CognitionError::new(CognitionCode::VectorUnavailable, "vector_unavailable")
+            })??;
         }
         let deadline = deadline_at.min((self.clock)() + 750);
         let remaining = u64::try_from(deadline.saturating_sub((self.clock)())).unwrap_or_default();
@@ -226,6 +237,7 @@ impl Operation {
             input: &self.input,
             cursors: &self.cursors,
             deadline_at: self.deadline_at,
+            initialization_ms: self.initialization_ms,
         };
         if let Some(page) = page {
             let mut effective = self.input.clone();
