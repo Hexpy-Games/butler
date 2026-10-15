@@ -14,7 +14,7 @@ export const SIZING_COPY = {
     tag: "Filter", period: "Period", day: "Day", week: "Week", model: "Model", auto: "Automatic", find: "Find", save: "Save", cancel: "Cancel",
     product: "Butler", session: "Weekly report", project: "Workspace", local: "Local",
     sessionMenu: "Session menu", rightPanel: "Show right panel", showSidebar: "Show sidebar", hideSidebar: "Hide sidebar",
-    newConversation: "New conversation", search: "Search", general: "Chats",
+    newConversation: "New chat", search: "Search", general: "Chats",
   },
   ko: {
     title: "Sizing",

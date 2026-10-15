@@ -746,7 +746,6 @@ export const koKrCopy: AppCopy = {
     running: "진행중",
     createGroup: "그룹 만들기",
     menu: "스페이스 메뉴",
-    newChatAction: "새 대화",
     newProject: "새 프로젝트",
     automations: "예약 작업",
     archives: "아카이브",

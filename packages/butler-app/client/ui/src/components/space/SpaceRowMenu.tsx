@@ -36,7 +36,7 @@ export function SpaceRowMenu({
     ? () => app.getState().openNewProjectChat(row.node.entityId)
     : row.node.kind === "group" ? () => app.getState().openNewGroupChat(row.node.entityId) : undefined;
   const items = [
-    ...(newChat ? [{ icon: <MessageSquarePlus />, label: appCopy.space.newChatAction, onSelect: newChat }] : []),
+    ...(newChat ? [{ icon: <MessageSquarePlus />, label: appCopy.space.newChat, onSelect: newChat }] : []),
     ...(row.session ? [{
       icon: <MessageSquarePlus />,
       label: appCopy.space.reference,

@@ -113,6 +113,17 @@ try {
     await checkHeader(page, `after-${width}-${theme}`);
   }
 
+  // English names the action "New chat" in the header button and the top-left entry alike.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en" }) });
+  await page.goto(server.url);
+  const english = sidebar(page).getByRole("button", { name: "Space menu", exact: true });
+  await english.waitFor();
+  assert.equal(await english.locator("xpath=preceding-sibling::button[1]").getAttribute("aria-label"), "New chat");
+  assert.deepEqual((await page.getByRole("navigation", { name: "Start and search conversations", exact: true })
+    .locator('[data-slot="nav-row-label"]').allTextContents()).slice(0, 1), ["New chat"]);
+  assert(await sidebar(page).getByText("Chats", { exact: true }).first().isVisible(), "default channel reads Chats");
+
   await open(page, 1280, "light");
   await newChatButton(page).click();
   const current = page.getByRole("navigation", { name: "대화 시작과 검색", exact: true }).locator('[aria-current="page"]');
@@ -144,7 +155,7 @@ try {
 
   writeFileSync(join(output, "screenshots.txt"), `${screenshots.join("\n")}\n`);
   console.log(JSON.stringify({ ok: true, screenshots: screenshots.length, chat, projectChat,
-    verified: ["header buttons", "default channel label", "project menu", "group menu", "group draft location", "group placement", "project group placement"] }));
+    verified: ["header buttons", "default channel label", "English New chat labels", "project menu", "group menu", "group draft location", "group placement", "project group placement"] }));
 } finally {
   await browser.close(); await server.stop();
 }

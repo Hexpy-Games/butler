@@ -11,7 +11,7 @@ export const LAYERS_COPY = {
       ["Depth", "Depth comes from order, dimming and shadow."],
     ] as IntroLead,
     app: "Butler",
-    newChat: "New conversation",
+    newChat: "New chat",
     search: "Search",
     favorites: "Favorites",
     favoritesHint: "Pin conversations you visit often.",

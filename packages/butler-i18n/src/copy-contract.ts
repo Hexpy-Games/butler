@@ -714,7 +714,6 @@ export interface AppCopy {
     running: string;
     createGroup: string;
     menu: string;
-    newChatAction: string;
     newProject: string;
     automations: string;
     archives: string;

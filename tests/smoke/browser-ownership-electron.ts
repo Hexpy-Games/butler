@@ -74,7 +74,7 @@ try {
   assert.equal((await app.internal("tab.observe", second, {}, other.session.id)).status, "ok");
   await app.call("move", { tabId: mine, toGroupId: "mine", index: 0 });
   await togglePane(app, false); await app.click("Browser"); await app.call("activate", { id: mine });
-  await app.page.clickSelector('[data-slot="titlebar-leading"] button'); await app.page.clickText("New conversation", '[role="menuitem"]');
+  await app.page.clickSelector('[data-slot="titlebar-leading"] button'); await app.page.clickText("New chat", '[role="menuitem"]');
   await waitBrowser(async () => (await state()).tabs.find((tab) => tab.id === mine)?.owner !== "mine", "new conversation handover");
   assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=adaptive-shell-split-chat]'))"), true);
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, elapsedMs: Date.now() - started, before, after, state: await state() }, null, 2));

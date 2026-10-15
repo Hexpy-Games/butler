@@ -63,7 +63,7 @@ export function SpaceBrowseHeader() {
         actions={
           <ButtonContainer size="icon-sm">
             <IconButton
-              label={appCopy.space.newChatAction}
+              label={appCopy.space.newChat}
               onClick={() => useButlerStore.getState().openNewChat()}
             >
               <IconSlot size="sm"><PencilLine /></IconSlot>

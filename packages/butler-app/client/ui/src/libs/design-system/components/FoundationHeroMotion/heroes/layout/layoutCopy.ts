@@ -14,7 +14,7 @@ export const LAYOUT_COPY = {
       ["Modes", "The window's width picks the mode: expanded, medium or compact."],
       ["Platform", "Breakpoints are constants in responsive.ts; below them the sidebar is a drawer."],
     ] as IntroLead,
-    app: "Butler", newChat: "New conversation", search: "Search", favorites: "Favorites", favoritesHint: "Pin conversations you visit often.",
+    app: "Butler", newChat: "New chat", search: "Search", favorites: "Favorites", favoritesHint: "Pin conversations you visit often.",
     all: "All", recent: "Recent", running: "Running", general: "Chats", space: "Space", settings: "Settings",
     project: "Design system",
     sessions: ["Migrate spacing tokens to rem", "Audit icon sizes in the sidebar", "Composer jumps on iOS", "Compare focus ring contrast", "Clean up stale feature flags", "Weekly release notes", "Draft the launch week plan"],
