@@ -162,6 +162,7 @@
 | A row of chips that picks one group (pressed, count, drop) | `PillButton` |  |
 | A row of metrics on a dashboard | `MetricGrid` |  |
 | A row of tags or chips that may wrap | `Inline` |  |
+| A row that toggles a filter on and off (selected) | `Clickable` |  |
 | A row with a title and trailing meta that is not a fact | `ListRow` | `KeyValueRow` |
 | A row with hover-revealed actions | `NavRow` |  |
 | A row's overflow menu with icon items | `OverflowActionMenu` | `DropdownMenu` |
@@ -350,6 +351,7 @@
 | Choosing among several modes | `SegmentedControl` | `Switch` |
 | Choosing between a few text options | `SegmentedControl` | `WallpaperPicker` |
 | Choosing from a fixed list | `Select` | `Input` |
+| Choosing one of a few labelled options | `SegmentedControl` | `Clickable` |
 | Choosing one value from a fixed set | `Select` | `SuggestionList` |
 | Code or a command name | `Typo.Code` | `Kbd` |
 | Collapsible categories in a navigation list | `CollapsibleNavGroup` |  |
@@ -717,10 +719,12 @@ Makes a row, tile or piece of text one keyboard-operable click target without a 
 
 - Use for: Make a whole list row clickable
 - Use for: Turn a title into a quiet text link that opens details
+- Use for: A row that toggles a filter on and off (selected)
 - Not for: A labelled action → `Button`
 - Not for: A sidebar navigation row → `NavRow`
 - Not for: A card that opens something → `Card`
-- Tokens: `--selection`, `--radius-control`, `--focus-ring`, `--interactive-disabled-fg`
+- Not for: Choosing one of a few labelled options → `SegmentedControl`
+- Tokens: `--selection`, `--selection-strong`, `--radius-control`, `--focus-ring`, `--interactive-disabled-fg`, `--motion-fast`
 
 ### CopyButton
 
