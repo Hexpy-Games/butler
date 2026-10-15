@@ -1,5 +1,6 @@
-//! Startup and deferred validation must share the existing corruption exit path.
+//! Physical corruption fails closed; logical reference findings remain diagnostic.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
+mod effects;
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use rusqlite::Connection;
 use std::time::{Duration, Instant};
@@ -318,35 +319,33 @@ async fn btcc_verdict_recheck_preserves_reference_failure_and_repair() -> Result
     drop(db);
     let verdict = path.with_extension("sqlite.corrupt");
     std::fs::write(&verdict, "agent_btcc_migration_reference_check_failed")?;
-    s.agent.start_process()?;
-    let start = Instant::now();
-    while s.agent.is_running() && start.elapsed() < Duration::from_secs(5) {
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    assert!(!s.agent.is_running());
-    assert!(
-        !s.agent
-            .reap()
-            .expect("failed reference startup exits")
-            .success()
-    );
+    s.gw = s.agent.start_again().await?;
+    assert!(s.gw.healthy().await);
     let log = std::fs::read_to_string(s.sandbox.logs.join("agent-2.log"))?;
-    assert!(log.contains("storage_bootstrap_failed"), "{log}");
     assert!(
-        log.contains("agent_btcc_migration_reference_check_failed"),
+        log.contains(
+            "warning agent_btcc_migration_reference_check_failed rule=turn_inbox orphan_count=1"
+        ),
         "{log}"
     );
-    assert!(!log.contains("[native-butler] ready"), "{log}");
-    assert!(verdict.exists());
-    let db = Connection::open(path)?;
+    assert!(!log.contains("storage_bootstrap_failed"), "{log}");
+    assert!(log.contains("[native-butler] ready"), "{log}");
+    assert!(!verdict.exists());
+    let findings = path.with_extension("sqlite.findings");
+    assert!(std::fs::read_to_string(&findings)?.contains("rule=turn_inbox orphan_count=1"));
+    s.agent.terminate().await?;
+    let db = Connection::open(&path)?;
     db.execute_batch(
         "INSERT INTO btcc_inbound_inbox(inbox_id,session_id,trigger_key,turn_id,
         admission_input_hash,command_json,status)
         VALUES('missing','fixture','reference','reference','fixture','{}','constructed')",
     )?;
     drop(db);
+    std::fs::remove_file(path.with_extension("sqlite.verified"))?;
     s.gw = s.agent.start_again().await?;
+    effects::wait_scan(&s, &path).await?;
     assert!(s.gw.healthy().await);
     assert!(!verdict.exists());
+    assert!(!findings.exists());
     s.finish().await
 }
