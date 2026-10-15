@@ -147,6 +147,7 @@ async fn perf_usage_timeline_300k_ranges() -> Result<(), HarnessError> {
     let base = chrono_now().div_euclid(SLOT_MS) * SLOT_MS - SLOT_MS / 2;
     seed(&setup.sandbox.data, base)?;
     let s = setup.start().await?;
+    let memory = super::memory::PeakMemory::start(s.agent.pid().unwrap());
     let (ingest, view) = timed(&s.gw, "/usage-monitor?since_hours=720").await?;
     verify(&view, base, false);
     butler_e2e::assert_wall_clock_budget!(ingest, COLD, "300k ingest");
@@ -164,5 +165,8 @@ async fn perf_usage_timeline_300k_ranges() -> Result<(), HarnessError> {
             butler_e2e::assert_wall_clock_budget!(latency, WARM, "timeline range");
         }
     }
+    // Same release fixture on main: RSS growth 368,099,328 bytes above the
+    // idle App. Allow ten percent; the sampler also reports absolute peak RSS.
+    memory.finish(404_909_260);
     s.finish().await
 }

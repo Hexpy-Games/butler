@@ -1,7 +1,7 @@
-//! Incremental UTC slot indexes. Only partial boundary slots visit raw rows.
+//! Incremental UTC slot indexes with compact per-scope counters.
 use super::{
     buckets::{Buckets, PriceLookup, Tokens},
-    row::{Names, UsageRow},
+    row::{Names, Rows, UsageRow},
 };
 use crate::operations::log_tail::LogTail;
 use serde_json::{Value, json};
@@ -22,9 +22,12 @@ pub(super) struct Window<'a> {
 #[derive(Default)]
 struct Slot {
     buckets: Option<Buckets>,
-    tokens: Tokens,
-    rows: Vec<Arc<UsageRow>>,
-    scopes: HashMap<Arc<str>, SessionUsage>,
+    rows: Vec<u32>,
+}
+#[derive(Default)]
+struct ScopeSlot {
+    usage: SessionUsage,
+    rows: Vec<u32>,
 }
 #[derive(Default)]
 struct SessionUsage {
@@ -44,29 +47,19 @@ impl SessionUsage {
         };
     }
 }
-impl Slot {
-    fn add(&mut self, row: Arc<UsageRow>, pricing: Option<PriceLookup<'_>>) {
-        self.buckets
-            .get_or_insert_with(|| Buckets::new(pricing.is_some()))
-            .add(&row, pricing);
-        self.tokens.add(&row);
-        let scope = self.scopes.entry(row.scope.clone()).or_default();
-        scope.add(&row);
-        self.rows.push(row);
-    }
-    fn complete(&self, start: i64, window: Window<'_>) -> bool {
-        window.since_ts.is_none_or(|ts| ts <= start as f64)
-            && window
-                .until_ts
-                .is_none_or(|ts| ts >= start.saturating_add(SLOT_MS) as f64)
-    }
+fn complete(start: i64, window: Window<'_>) -> bool {
+    window.since_ts.is_none_or(|ts| ts <= start as f64)
+        && window
+            .until_ts
+            .is_none_or(|ts| ts >= start.saturating_add(SLOT_MS) as f64)
 }
 #[derive(Default)]
 pub(crate) struct UsageLogIndex {
     tail: LogTail,
     names: Names,
     slots: BTreeMap<i64, Slot>,
-    by_scope: HashMap<Arc<str>, BTreeMap<i64, Slot>>,
+    by_scope: HashMap<Arc<str>, BTreeMap<i64, ScopeSlot>>,
+    rows: Rows,
     all: Option<Buckets>,
 }
 impl UsageLogIndex {
@@ -76,6 +69,7 @@ impl UsageLogIndex {
             &data_root.join("metrics/prompt-cache-usage.jsonl"),
             self,
             |index| {
+                index.rows.clear();
                 index.slots.clear();
                 index.by_scope.clear();
                 index.all = None;
@@ -92,18 +86,26 @@ impl UsageLogIndex {
         let Some(row) = UsageRow::parse(&event, &mut self.names) else {
             return;
         };
+        let Ok(index) = u32::try_from(self.rows.len()) else {
+            return;
+        };
         let start = slot_start(row.ts);
-        let row = Arc::new(row);
-        self.all
-            .get_or_insert_with(|| Buckets::new(pricing.is_some()))
-            .add(&row, pricing);
-        self.by_scope
+        self.all = None;
+        let scoped = self
+            .by_scope
             .entry(row.scope.clone())
             .or_default()
             .entry(start)
-            .or_default()
-            .add(row.clone(), pricing);
-        self.slots.entry(start).or_default().add(row, pricing);
+            .or_default();
+        scoped.usage.add(&row);
+        scoped.rows.push(index);
+        let global = self.slots.entry(start).or_default();
+        global
+            .buckets
+            .get_or_insert_with(|| Buckets::new(pricing.is_some()))
+            .add(&row, pricing);
+        global.rows.push(index);
+        self.rows.push(row);
     }
     pub(super) fn resolve_scope(
         &self,
@@ -111,90 +113,180 @@ impl UsageLogIndex {
         scope: Option<&str>,
     ) -> Option<String> {
         if let Some(scope) = scope {
-            if self.by_scope.contains_key(scope) {
-                return Some(scope.into());
-            }
             let guided = format!("btcc-guided:{scope}");
             if self.by_scope.contains_key(guided.as_str()) {
                 return Some(guided);
             }
+            if self.by_scope.contains_key(scope) {
+                return Some(scope.into());
+            }
         }
         session.map(|id| {
-            if self.by_scope.contains_key(id) {
-                id.into()
+            let guided = format!("btcc-guided:{id}");
+            if self.by_scope.contains_key(guided.as_str()) || !self.by_scope.contains_key(id) {
+                guided
             } else {
-                format!("btcc-guided:{id}")
+                id.into()
             }
         })
     }
     fn slots(&self, window: Window<'_>) -> impl Iterator<Item = (&i64, &Slot)> {
-        let slots = match window.scope {
-            Some(scope) => self.by_scope.get(scope),
-            None => Some(&self.slots),
-        };
         let start = window.since_ts.map_or(i64::MIN, slot_start);
         let end = window.until_ts.map_or(i64::MAX, slot_start);
-        slots
+        self.slots.range(start..=end)
+    }
+    fn scope_slots<'a>(
+        &'a self,
+        scope: &str,
+        window: Window<'_>,
+    ) -> impl Iterator<Item = (&'a i64, &'a ScopeSlot)> {
+        let start = window.since_ts.map_or(i64::MIN, slot_start);
+        let end = window.until_ts.map_or(i64::MAX, slot_start);
+        self.by_scope
+            .get(scope)
             .into_iter()
             .flat_map(move |slots| slots.range(start..=end))
     }
-    pub(super) fn buckets(&self, window: Window<'_>, pricing: Option<PriceLookup<'_>>) -> Buckets {
-        if window.scope.is_none() && window.since_ts.is_none() && window.until_ts.is_none() {
-            return self
-                .all
-                .clone()
-                .unwrap_or_else(|| Buckets::new(pricing.is_some()));
+    fn matching_rows<'a>(
+        &'a self,
+        indices: &'a [u32],
+        window: Window<'a>,
+    ) -> impl Iterator<Item = &'a UsageRow> {
+        indices
+            .iter()
+            .filter_map(|index| self.rows.get(*index as usize))
+            .filter(move |row| matches(row, window))
+    }
+    pub(super) fn buckets(
+        &mut self,
+        window: Window<'_>,
+        pricing: Option<PriceLookup<'_>>,
+    ) -> Buckets {
+        let all_time =
+            window.scope.is_none() && window.since_ts.is_none() && window.until_ts.is_none();
+        if all_time && let Some(all) = &self.all {
+            return all.clone();
         }
         let mut buckets = Buckets::new(pricing.is_some());
+        if let Some(scope) = window.scope {
+            for (_, slot) in self.scope_slots(scope, window) {
+                for row in self.matching_rows(&slot.rows, window) {
+                    buckets.add(row, pricing);
+                }
+            }
+            return buckets;
+        }
         for (&start, slot) in self.slots(window) {
-            if slot.complete(start, window) {
+            if complete(start, window) {
                 if let Some(value) = &slot.buckets {
                     buckets.merge(value);
                 }
             } else {
-                for row in slot.rows.iter().filter(|row| matches(row, window)) {
+                for row in self.matching_rows(&slot.rows, window) {
                     buckets.add(row, pricing);
                 }
             }
         }
+        if all_time {
+            self.all = Some(buckets.clone());
+        }
         buckets
+    }
+    fn slot_tokens(
+        &self,
+        start: i64,
+        indices: &[u32],
+        totals: &Tokens,
+        window: Window<'_>,
+    ) -> Tokens {
+        if complete(start, window) {
+            return totals.clone();
+        }
+        let mut tokens = Tokens::default();
+        for row in self.matching_rows(indices, window) {
+            tokens.add(row);
+        }
+        tokens
+    }
+    fn token_slots(&self, window: Window<'_>) -> Vec<(i64, Tokens)> {
+        if let Some(scope) = window.scope {
+            self.scope_slots(scope, window)
+                .map(|(&start, slot)| {
+                    (
+                        start,
+                        self.slot_tokens(start, &slot.rows, &slot.usage.tokens, window),
+                    )
+                })
+                .collect()
+        } else {
+            self.slots(window)
+                .map(|(&start, slot)| {
+                    let totals = slot
+                        .buckets
+                        .as_ref()
+                        .map(Buckets::tokens)
+                        .cloned()
+                        .unwrap_or_default();
+                    (start, self.slot_tokens(start, &slot.rows, &totals, window))
+                })
+                .collect()
+        }
     }
     pub(super) fn tokens(&self, window: Window<'_>) -> Tokens {
         let mut tokens = Tokens::default();
-        for (&start, slot) in self.slots(window) {
-            if slot.complete(start, window) {
-                tokens.merge(&slot.tokens);
-            } else {
-                for row in slot.rows.iter().filter(|row| matches(row, window)) {
-                    tokens.add(row);
-                }
-            }
+        for (_, value) in self.token_slots(window) {
+            tokens.merge(&value);
         }
         tokens
     }
     pub(super) fn timeline(&self, window: Window<'_>) -> Value {
-        let mut slots = Vec::new();
-        for (&start, slot) in self.slots(window) {
-            let tokens = if slot.complete(start, window) {
-                slot.tokens.clone()
-            } else {
-                let mut tokens = Tokens::default();
-                for row in slot.rows.iter().filter(|row| matches(row, window)) {
-                    tokens.add(row);
-                }
-                tokens
-            };
-            if tokens.request_count > 0 {
-                slots.push(json!([
+        let slots: Vec<_> = self
+            .token_slots(window)
+            .into_iter()
+            .filter(|(_, tokens)| tokens.request_count > 0)
+            .map(|(start, tokens)| {
+                json!([
                     start,
                     tokens.request_count,
                     tokens.prompt,
                     tokens.cached,
                     tokens.output
-                ]));
-            }
-        }
+                ])
+            })
+            .collect();
         json!({"slotMinutes":15,"slots":slots})
+    }
+    pub(super) fn session_turns(&self, view: &Value) -> Vec<super::UsageSessionTurns> {
+        let window = Window {
+            scope: None,
+            since_ts: view["filters"]["sinceTs"].as_f64(),
+            until_ts: view["filters"]["untilTs"].as_f64(),
+        };
+        view["topSessions"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|item| item["kind"] == "chat")
+            .filter_map(|item| item["sessionId"].as_str())
+            .map(|id| {
+                let mut turns = super::UsageSessionTurns {
+                    session_id: id.into(),
+                    ..Default::default()
+                };
+                for scope in [id.to_owned(), format!("btcc-guided:{id}")] {
+                    for (_, slot) in self.scope_slots(&scope, window) {
+                        for row in self.matching_rows(&slot.rows, window) {
+                            if let Some(id) = &row.turn_id {
+                                turns.turn_ids.push(id.clone());
+                            } else {
+                                turns.missing_turn = true;
+                            }
+                        }
+                    }
+                }
+                turns
+            })
+            .collect()
     }
     pub(super) fn top_sessions(&self, window: Window<'_>) -> Value {
         // The selector remains global when the chart is filtered to a session.
@@ -202,20 +294,26 @@ impl UsageLogIndex {
             scope: None,
             ..window
         };
-        let mut scopes = HashMap::<Arc<str>, SessionUsage>::new();
-        for (&start, slot) in self.slots(global) {
-            if slot.complete(start, global) {
-                for (scope, usage) in &slot.scopes {
-                    scopes.entry(scope.clone()).or_default().merge(usage);
-                }
-            } else {
-                for row in slot.rows.iter().filter(|row| matches(row, global)) {
-                    scopes.entry(row.scope.clone()).or_default().add(row);
+        let mut scopes = HashMap::<String, SessionUsage>::new();
+        for scope in self.by_scope.keys() {
+            let session = scope.strip_prefix("btcc-guided:").unwrap_or(scope);
+            let target = scopes.entry(session.to_owned()).or_default();
+            for (&start, slot) in self.scope_slots(scope, global) {
+                if complete(start, global) {
+                    target.merge(&slot.usage);
+                } else {
+                    for row in self.matching_rows(&slot.rows, global) {
+                        target.add(row);
+                    }
                 }
             }
         }
-        if let Some(scope) = window.scope {
-            scopes.entry(Arc::from(scope)).or_default();
+        scopes.retain(|_, value| value.tokens.request_count > 0);
+        let selected_scope = window
+            .scope
+            .map(|scope| scope.strip_prefix("btcc-guided:").unwrap_or(scope));
+        if let Some(scope) = selected_scope {
+            scopes.entry(scope.into()).or_default();
         }
         let mut scopes: Vec<_> = scopes.into_iter().collect();
         scopes.sort_by(|a, b| {
@@ -224,9 +322,8 @@ impl UsageLogIndex {
                 .total_cmp(&a.1.tokens.total)
                 .then_with(|| a.0.cmp(&b.0))
         });
-        let selected = window
-            .scope
-            .and_then(|scope| scopes.iter().position(|item| item.0.as_ref() == scope));
+        let selected =
+            selected_scope.and_then(|scope| scopes.iter().position(|item| item.0 == scope));
         let mut keep: Vec<_> = (0..scopes.len().min(TOP_SESSIONS_LIMIT)).collect();
         if let Some(index) = selected.filter(|index| *index >= TOP_SESSIONS_LIMIT) {
             keep.push(index);
@@ -236,10 +333,19 @@ impl UsageLogIndex {
                 .map(|index| {
                     let (scope, usage) = &scopes[index];
                     let tokens = &usage.tokens;
-                    let session = scope.strip_prefix("btcc-guided:");
-                    json!({"sessionId":session.unwrap_or(scope),"title":null,
-                "kind":"butler",
-                "totalTokens":tokens.total,"requests":tokens.request_count,"lastUsedMs":usage.last})
+                    let guided = format!("btcc-guided:{scope}");
+                    let kind = if super::buckets::internal_work(scope)
+                        && !self.by_scope.contains_key(guided.as_str())
+                    {
+                        "butler"
+                    } else {
+                        "chat"
+                    };
+                    json!({
+                        "sessionId": scope, "title": null, "kind": kind,
+                        "totalTokens": tokens.total, "requests": tokens.request_count,
+                        "lastUsedMs": usage.last
+                    })
                 })
                 .collect::<Vec<_>>()
         )

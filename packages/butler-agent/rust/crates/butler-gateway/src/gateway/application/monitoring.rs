@@ -34,6 +34,12 @@ pub struct AppUsageMonitorQuery {
     pub usage_scope: Option<String>,
 }
 
+/// Native usage projection plus private turn provenance used by App metadata.
+pub struct AppUsageMonitorView {
+    pub view: Value,
+    pub turns: Vec<butler_runtime::operations::UsageSessionTurns>,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct AppDeveloperLogsQuery {
     pub limit: Option<usize>,
@@ -87,7 +93,7 @@ pub struct AppWorkStatusConversationFact {
 /// File-backed monitor reads remain owned by the native Host projection.
 pub trait AppMonitoringPort: Send + Sync + 'static {
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>>;
-    fn usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<Value>;
+    fn usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<AppUsageMonitorView>;
     fn system_events(&self, page: AppMonitorPage) -> ApplicationFuture<Value>;
     fn developer_logs(&self, query: AppDeveloperLogsQuery) -> ApplicationFuture<Value>;
     /// The provider's latest subscription quota, polled first when
@@ -467,8 +473,8 @@ impl super::AppApplication {
             let mut view = this.dependencies.monitoring.usage_monitor(query).await?;
             this.storage
                 .read(move |db| {
-                    usage::enrich(db, &mut view)?;
-                    Ok(view)
+                    usage::enrich(db, &mut view.view, &view.turns)?;
+                    Ok(view.view)
                 })
                 .await
                 .map_err(super::app_error)

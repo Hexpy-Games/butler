@@ -1,14 +1,14 @@
 //! Per-request usage rows folded into the usage monitor's token buckets and
 //! its catalog-price cost estimate.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use serde_json::{Value, json};
 
 use butler_models::models::ModelPricing;
 
 use super::row::UsageRow;
-use super::{PROVIDER_LIMIT, provider_id, safe_key, safe_key_with_limit};
+use super::{PROVIDER_LIMIT, provider_id};
 use crate::operations::usage_cost::UsageTotals;
 
 #[derive(Clone, Default)]
@@ -78,22 +78,26 @@ pub(super) type PriceLookup<'a> = &'a dyn Fn(&str) -> Option<ModelPricing>;
 #[derive(Clone)]
 pub(super) struct Buckets {
     model: Tokens,
-    by_scope: BTreeMap<String, u64>,
-    by_scope_usage: BTreeMap<String, Tokens>,
-    by_model: BTreeMap<String, Tokens>,
-    by_phase: BTreeMap<String, Tokens>,
-    by_section: BTreeMap<String, (u64, f64, f64)>,
-    providers: BTreeMap<String, Tokens>,
+    by_scope: BTreeMap<Arc<str>, u64>,
+    by_scope_usage: BTreeMap<Arc<str>, Tokens>,
+    by_model: BTreeMap<Arc<str>, Tokens>,
+    by_phase: BTreeMap<Arc<str>, Tokens>,
+    by_section: BTreeMap<Arc<str>, (u64, f64, f64)>,
+    providers: BTreeMap<Arc<str>, Tokens>,
     missing_key: u64,
     missing_retention: u64,
     /// Whether rows are priced (the catalog was given).
     priced: bool,
-    prices: BTreeMap<String, Option<ModelPricing>>,
+    prices: BTreeMap<Arc<str>, Option<ModelPricing>>,
     cost: UsageTotals,
     cost_by_work: BTreeMap<String, UsageTotals>,
 }
 
 impl Buckets {
+    pub(super) fn tokens(&self) -> &Tokens {
+        &self.model
+    }
+
     pub(super) fn new(priced: bool) -> Self {
         Self {
             model: Tokens::default(),
@@ -114,19 +118,29 @@ impl Buckets {
 
     pub(super) fn add(&mut self, row: &UsageRow, pricing: Option<PriceLookup<'_>>) {
         self.model.add(row);
-        let scope = safe_key(&row.scope, &self.by_scope);
+        let scope = bounded_key(&row.scope, &self.by_scope, super::MAP_LIMIT);
         *self.by_scope.entry(scope.clone()).or_default() += 1;
         self.by_scope_usage
             .entry(scope.clone())
             .or_default()
             .add(row);
-        let model_key = row.model.to_string();
+        let model_key = row.model.clone();
         self.by_model.entry(model_key).or_default().add(row);
-        let phase = row.phase.as_deref().unwrap_or(&scope);
-        let phase_key = safe_key(phase, &self.by_phase);
+        let phase = row.phase.as_ref().unwrap_or(&scope);
+        let phase_key = bounded_key(phase, &self.by_phase, super::MAP_LIMIT);
         self.by_phase.entry(phase_key).or_default().add(row);
         let provider = provider_id(&row.model);
-        let provider_key = safe_key_with_limit(&provider, &self.providers, PROVIDER_LIMIT);
+        let provider_key = self
+            .providers
+            .get_key_value(provider)
+            .map(|(key, _)| key.clone())
+            .unwrap_or_else(|| {
+                Arc::from(if self.providers.len() < PROVIDER_LIMIT {
+                    provider
+                } else {
+                    "__other__"
+                })
+            });
         self.providers.entry(provider_key).or_default().add(row);
         self.missing_key += u64::from(!row.has_cache_key);
         self.missing_retention += u64::from(!row.has_retention);
@@ -138,7 +152,7 @@ impl Buckets {
 
     fn add_sections(&mut self, row: &UsageRow) {
         for section in &row.sections {
-            let section_key = safe_key(&section.id, &self.by_section);
+            let section_key = bounded_key(&section.id, &self.by_section, super::MAP_LIMIT);
             let bucket = self.by_section.entry(section_key).or_default();
             bucket.0 += 1;
             bucket.1 += section.chars;
@@ -152,7 +166,7 @@ impl Buckets {
         };
         let price = self
             .prices
-            .entry(event.model.clone())
+            .entry(row.model.clone())
             .or_insert_with(|| pricing(&event.model));
         self.cost.add(&event, price.as_ref());
         let work = work_kind(&row.scope);
@@ -167,7 +181,7 @@ impl Buckets {
         self.missing_key += other.missing_key;
         self.missing_retention += other.missing_retention;
         for (key, value) in &other.by_scope {
-            let key = safe_key(key, &self.by_scope);
+            let key = bounded_key(key, &self.by_scope, super::MAP_LIMIT);
             *self.by_scope.entry(key).or_default() += value;
         }
         for (target, source, limit) in [
@@ -181,12 +195,12 @@ impl Buckets {
             (&mut self.providers, &other.providers, PROVIDER_LIMIT),
         ] {
             for (key, value) in source {
-                let key = safe_key_with_limit(key, target, limit);
+                let key = bounded_key(key, target, limit);
                 target.entry(key).or_default().merge(value);
             }
         }
         for (key, value) in &other.by_section {
-            let key = safe_key(key, &self.by_section);
+            let key = bounded_key(key, &self.by_section, super::MAP_LIMIT);
             let target = self.by_section.entry(key).or_default();
             target.0 += value.0;
             target.1 += value.1;
@@ -245,26 +259,32 @@ impl Buckets {
             "promptCache".into(),
             json!({ "missingKeyCount": self.missing_key, "missingRetentionCount": self.missing_retention }),
         );
-        (value, self.providers.clone())
+        (
+            value,
+            self.providers
+                .iter()
+                .map(|(key, value)| (key.to_string(), value.clone()))
+                .collect(),
+        )
     }
 }
 
-fn map_tokens(values: &BTreeMap<String, Tokens>) -> Value {
+fn map_tokens(values: &BTreeMap<Arc<str>, Tokens>) -> Value {
     Value::Object(
         values
             .iter()
-            .map(|(key, value)| (key.clone(), value.value()))
+            .map(|(key, value)| (key.to_string(), value.value()))
             .collect(),
     )
 }
 
-fn map_sections(values: &BTreeMap<String, (u64, f64, f64)>) -> Value {
+fn map_sections(values: &BTreeMap<Arc<str>, (u64, f64, f64)>) -> Value {
     Value::Object(
         values
             .iter()
             .map(|(key, (requests, chars, tokens))| {
                 (
-                    key.clone(),
+                    key.to_string(),
                     json!({
                         "requestCount": requests, "chars": chars, "estimatedTokens": tokens
                     }),
@@ -303,4 +323,16 @@ fn work_kind(scope: &str) -> &'static str {
     } else {
         "other"
     }
+}
+
+fn bounded_key<T>(name: &Arc<str>, values: &BTreeMap<Arc<str>, T>, limit: usize) -> Arc<str> {
+    if values.contains_key(name) || values.len() < limit {
+        name.clone()
+    } else {
+        Arc::from("__other__")
+    }
+}
+/// Internal work requires affirmative provenance from a known telemetry owner.
+pub(super) fn internal_work(scope: &str) -> bool {
+    work_kind(scope) == "memory"
 }

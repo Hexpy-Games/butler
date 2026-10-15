@@ -18,6 +18,7 @@ pub(super) struct SectionRow {
 /// The fields of a `metrics/prompt-cache-usage.jsonl` row the monitor reports.
 pub(super) struct UsageRow {
     pub(super) ts: f64,
+    pub(super) turn_id: Option<Arc<str>>,
     /// The row's whole-millisecond time; rows without one are not priced.
     ts_ms: Option<i64>,
     pub(super) model: Arc<str>,
@@ -65,6 +66,11 @@ impl UsageRow {
             .map(|value| names.get(value.trim()));
         Some(Self {
             ts,
+            turn_id: event
+                .get("turnId")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+                .map(Arc::from),
             ts_ms: event.get("ts").and_then(Value::as_i64),
             model: names.get(model),
             scope: names.get(scope),
@@ -124,4 +130,35 @@ fn sections(event: &Value, names: &mut Names) -> Box<[SectionRow]> {
             })
         })
         .collect()
+}
+
+/// Append-only row storage without a whole-log realloc or power-of-two slack.
+/// Stable numeric indices are shared by the global and per-scope slot indexes.
+#[derive(Default)]
+pub(super) struct Rows {
+    chunks: Vec<Vec<UsageRow>>,
+    len: usize,
+}
+const ROWS_PER_CHUNK: usize = 1024;
+impl Rows {
+    pub(super) fn len(&self) -> usize {
+        self.len
+    }
+    pub(super) fn clear(&mut self) {
+        self.chunks.clear();
+        self.len = 0;
+    }
+    pub(super) fn push(&mut self, row: UsageRow) {
+        let chunk = self.len / ROWS_PER_CHUNK;
+        if chunk == self.chunks.len() {
+            self.chunks.push(Vec::with_capacity(ROWS_PER_CHUNK));
+        }
+        self.chunks[chunk].push(row);
+        self.len += 1;
+    }
+    pub(super) fn get(&self, index: usize) -> Option<&UsageRow> {
+        self.chunks
+            .get(index / ROWS_PER_CHUNK)?
+            .get(index % ROWS_PER_CHUNK)
+    }
 }

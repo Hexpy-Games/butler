@@ -25,7 +25,7 @@ pub async fn read_context_tool(
         .await
 }
 
-pub use usage::{UsageMonitor, UsageMonitorSources};
+pub use usage::{UsageMonitor, UsageMonitorSources, UsageSessionTurns};
 
 /// The `read_usage` tool: one runtime session's usage.
 pub fn read_usage_tool(data_root: &Path, session_id: &str, since_ts: Option<f64>) -> Value {
