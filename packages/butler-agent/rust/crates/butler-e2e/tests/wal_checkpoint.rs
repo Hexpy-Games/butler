@@ -15,6 +15,9 @@ use std::{
     time::Duration,
 };
 
+#[path = "wal_checkpoint/sustained.rs"]
+mod sustained;
+
 const JOURNAL_LIMIT: u64 = 16_777_216;
 
 static SERIAL: Mutex<()> = Mutex::new(());
@@ -31,8 +34,9 @@ thread_local! {
 
 fn pause_after_backfill(event: sqlite::CheckpointEvent) {
     if matches!(event, sqlite::CheckpointEvent::WalCommitted(_)) {
-        // The hook runs after COMMIT and before requesting maintenance. Pin
-        // the first snapshot: PASSIVE can finish, but the writer cannot reset.
+        // Pin the first committed snapshot through the next write, preventing
+        // reset. Release it inside that commit's hook so stock PASSIVE can
+        // backfill the final small tail before the commit call returns.
         READER.with(|reader| {
             let reader = reader.borrow();
             let reader = reader.as_ref().unwrap();
@@ -40,6 +44,8 @@ fn pause_after_backfill(event: sqlite::CheckpointEvent) {
                 reader
                     .execute_batch("BEGIN; SELECT id FROM t LIMIT 1;")
                     .unwrap();
+            } else {
+                reader.execute_batch("ROLLBACK").unwrap();
             }
         });
     }
@@ -69,7 +75,7 @@ fn observe(event: sqlite::CheckpointEvent) {
             MAX_PASS_US.fetch_max(u64::try_from(elapsed.as_micros()).unwrap(), SeqCst);
             if elapsed > Duration::from_millis(300) {
                 eprintln!(
-                    "background pass elapsed={elapsed:?} last_commit={}",
+                    "background index sync elapsed={elapsed:?} last_commit={}",
                     LAST.load(SeqCst)
                 );
             }
@@ -228,6 +234,7 @@ fn bursts_restart_bound_wal_and_leave_zero_idle_checkpoint_writes()
         for _ in 0..200 {
             store.insert();
             committed += 1;
+            largest = largest.max(store.bytes());
         }
         sleep(Duration::from_millis(300));
         largest = largest.max(store.bytes());
@@ -239,15 +246,13 @@ fn bursts_restart_bound_wal_and_leave_zero_idle_checkpoint_writes()
         RESTARTS.load(SeqCst),
         store.bytes()
     );
-    // SQLite limits retained space when a WAL resets, not the active frame
-    // span. A slow PASSIVE checkpoint may span the entire burst workload;
-    // require restart after draining, not within the fixed quiet gaps. Even a
-    // complete backfill keeps the file until the next writer resets it.
-    // https://www.sqlite.org/pragma.html#pragma_journal_size_limit
-    // https://www.sqlite.org/c3ref/wal_checkpoint_v2.html
-    // insert() checks every observed reset. Keep the peak as diagnostic evidence
-    // and require full quiet-tail backfill plus reset below, without issuing a
-    // checkpoint from the test (which could hide a stranded-tail regression).
+    // Retention applies at reset, but active growth still needs a hard bound.
+    // With small transactions and no pinned reader, stock autocheckpoint
+    // resets near 1,000 frames, comfortably inside the 16 MiB journal budget.
+    assert!(
+        largest <= JOURNAL_LIMIT,
+        "active burst WAL grew to {largest}"
+    );
     let page_size: u64 = store
         .db
         .pragma_query_value(None, "page_size", |row| row.get(0))
@@ -260,13 +265,16 @@ fn bursts_restart_bound_wal_and_leave_zero_idle_checkpoint_writes()
         store.insert();
         committed += 1;
     }
-    // Close only drains requests already sent by commits; it never requests a
-    // final pass. The maintenance connection disables checkpoint-on-close, so
-    // this completion barrier cannot repair a stranded tail for the test.
+    // Close only drains index-sync requests already sent by commits. The
+    // maintenance connection disables checkpoint-on-close and never backfills,
+    // so this completion barrier cannot repair a stranded tail for the test.
     owner.close().unwrap();
     let (log, done) = frames(&store.path);
     assert_eq!(done, log, "quiet tail was stranded after the last request");
-    eprintln!("maximum background pass: {} us", MAX_PASS_US.load(SeqCst));
+    eprintln!(
+        "maximum background index sync: {} us",
+        MAX_PASS_US.load(SeqCst)
+    );
     let idle_owner = store.worker();
     let passes = PASSES.load(SeqCst);
     let bytes = store.bytes();
@@ -350,24 +358,22 @@ fn final_small_commit_after_backfill_cannot_strand_a_wal_tail()
     let (log, done) = frames(&store.path);
     assert!(log >= 1000);
     assert_eq!(done, log);
-    // Keep the reader pinned while appending a sub-threshold tail. A moving
-    // wake threshold would not enqueue this commit, even though WAL >= 1000.
+    // The pinned snapshot prevents a reset when this write begins. Its hook
+    // releases the snapshot, then must checkpoint even this small tail because
+    // the whole WAL remains above threshold.
     store.insert();
     let (tail, _) = frames(&store.path);
     assert!(tail > log && tail - log < 1000);
     READER.with(|reader| {
-        reader
-            .borrow_mut()
-            .take()
-            .unwrap()
-            .execute_batch("ROLLBACK")
-            .unwrap();
+        assert!(reader.borrow_mut().take().unwrap().is_autocommit());
     });
     release.send(()).unwrap();
     owner.close().unwrap();
+    let (_, backfilled) = frames(&store.path);
+    assert_eq!(backfilled, tail);
     store.reset_after_quiet();
     store.counts(2002);
-    eprintln!("final small commit: before={log} after={tail} backfilled={tail}");
+    eprintln!("final small commit: before={log} after={tail} backfilled={backfilled}");
     Ok(())
 }
 
