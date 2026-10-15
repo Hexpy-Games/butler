@@ -4,11 +4,12 @@ import { Clock3, FileText, Sparkles } from "../Icons";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
 import { Clickable } from "./Clickable";
+import { ToggleRows, toggleRowTitle } from "./Clickable.showcaseParts";
 
 export const meta: ShowcaseMeta = {
   title: "Clickable",
   category: "Action",
-  tags: ["role-button", "nested-action", "row", "text"],
+  tags: ["role-button", "nested-action", "row", "text", "toggle", "bleed"],
   status: "stable",
 };
 
@@ -69,6 +70,12 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
+    name: "Toggle rows with inline bleed (settings card)",
+    states: ["selected", "hover", "focus-visible"],
+    widths: ["320", "375", "app"],
+    render: (context) => <ToggleRows context={context} />,
+  },
+  {
     name: "Artifact row",
     render: (context) => (
       <Clickable aria-current="true" onClick={() => undefined} aria-label={text(context).artifact}>
@@ -89,11 +96,22 @@ export const stories: ShowcaseStory[] = [
 ];
 
 export const stateMatrix: ShowcaseStateMatrix = {
-  states: ["default", "hover", "focus-visible", "active", "disabled"],
-  variants: ["row", "text"],
-  render: (context) => context.variant === "text" ? (
-    <Clickable variant="text" disabled={context.state === "disabled"} onClick={() => undefined}>
-      <Typo.Label weight="medium" tone="primary">{text(context).artifact}</Typo.Label>
-    </Clickable>
-  ) : <Suggestion context={context} disabled={context.state === "disabled"} />,
+  states: ["default", "hover", "focus-visible", "active", "selected", "disabled"],
+  variants: ["row", "text", "toggle"],
+  render: (context) => {
+    const disabled = context.state === "disabled";
+    if (context.variant === "text") {
+      return (
+        <Clickable variant="text" disabled={disabled} onClick={() => undefined}>
+          <Typo.Label weight="medium" tone="primary">{text(context).artifact}</Typo.Label>
+        </Clickable>
+      );
+    }
+    if (context.variant !== "toggle") return <Suggestion context={context} disabled={disabled} />;
+    return (
+      <Clickable bleed="inline" stretch selected={context.state === "selected"} disabled={disabled} onClick={() => undefined}>
+        <Typo.Text truncate>{toggleRowTitle(context)}</Typo.Text>
+      </Clickable>
+    );
+  },
 };
