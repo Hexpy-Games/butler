@@ -15,7 +15,7 @@ import {
 import { ChromeFloatingToggleLayer } from "../../ChromeFrame";
 import { NavRow } from "../../NavRow";
 import { NavSection } from "../../NavSection";
-import { SidebarBrand, SidebarShell, SidebarTrafficSpace } from "../../SidebarShell";
+import { SidebarShell, SidebarTrafficSpace } from "../../SidebarShell";
 import { TitlebarShell } from "../../TitlebarShell";
 import { Wallpaper } from "../../Wallpaper";
 import { BrowserDemo, type BrowserDemoProps } from "./BrowserDemo";
@@ -34,8 +34,7 @@ export function DemoSidebar({ locale, collapsed = false }: { locale: Locale; col
   const copy = SIDEBAR[locale];
   const icons = [<PencilLine key="n" />, <Search key="s" />, <Clock3 key="c" />, <Globe2 key="g" />, <Library key="l" />];
   return (
-    <SidebarShell ariaLabel="Sidebar" scrollFade={false} titlebar={<SidebarTrafficSpace />} collapsed={collapsed}
-      header={<SidebarBrand><Typo.AppTitle>Butler</Typo.AppTitle></SidebarBrand>}>
+    <SidebarShell ariaLabel="Sidebar" scrollFade={false} titlebar={<SidebarTrafficSpace />} collapsed={collapsed}>
       <Stack gap="lg">
         <Stack gap="xs">{copy.nav.map((label, index) => <NavRow key={label} icon={icons[index]} label={label} onClick={() => undefined} />)}</Stack>
         <NavSection title={copy.spaces}>

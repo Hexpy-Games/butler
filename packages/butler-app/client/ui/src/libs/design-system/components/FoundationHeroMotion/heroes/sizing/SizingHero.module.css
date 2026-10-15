@@ -316,6 +316,11 @@
   min-inline-size: 0;
 }
 
+/* The empty sidebar titlebar row: the full row height, measured. */
+.measureRow {
+  align-self: stretch;
+}
+
 .windowToggle {
   position: absolute;
   top: var(--chrome-floating-toggle-top);
