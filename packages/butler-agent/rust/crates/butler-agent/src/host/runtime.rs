@@ -69,7 +69,7 @@ impl AgentRuntime {
         worker_profiles: Arc<dyn butler_turn::btcc::WorkerProfileReader>,
         app: startup_trace::AppStartup<'_>,
     ) -> Result<Self, BtccError> {
-        let (app_endpoint, stop, correction) = app;
+        let (app_endpoint, stop, timing) = app;
         let mut startup = startup_trace::Trace::new();
         stores::check_startup(stop)?;
         validate_data_installation_boundary(&paths.data_root, &paths.installation_root)?;
@@ -81,18 +81,18 @@ impl AgentRuntime {
         let continuation_limits =
             btcc::select_turn_continuation_budget(|key| host_environment.get(key).cloned())?;
         let mcp_client = mcp_owner::for_runtime(&paths, &host_environment, writes.clone());
-        let process_services = web_owner::open(
+        let web_owner::ProcessWebServices { models, web_access } = web_owner::open(
             &paths,
             environment.model,
             &writes,
             &collation,
             mcp_client.clone(),
-        )?;
-        let models = self::models::with_moved_credentials(process_services.models).await;
-        let web_access = process_services.web_access;
+            &mut startup,
+        )
+        .await?;
         let (prompt_clock, date_parser) = process_clocks()?;
         let metric_files = Arc::new(MetricFiles::new(paths.data_root.clone()));
-        startup.phase("configuration_and_models");
+        startup.phase("process_clocks");
         let (coordinator, embedding, vectors, fresh_memory, memory_management) =
             memory_bootstrap::open(&paths, &environment.cognition_paths).await?;
         startup.phase("memory_preflight");
@@ -103,7 +103,7 @@ impl AgentRuntime {
         let (skills, capabilities, catalog) = skills_owner::open(&paths, &files, &mutations)?;
         startup.phase("skills");
         let stores =
-            RuntimeStores::open(&paths.data_root, collation.clone(), stop, correction).await?;
+            RuntimeStores::open(&paths.data_root, &collation, stop, timing, &startup).await?;
         startup.phase("canonical_stores");
         let response_language =
             defaults::initialize(&paths, &app_database_path, &installation).await?;
