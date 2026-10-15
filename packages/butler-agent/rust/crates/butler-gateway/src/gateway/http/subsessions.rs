@@ -139,7 +139,7 @@ fn session_page(
     })
 }
 
-fn decorate_window(
+pub(super) fn decorate_window(
     mut data: Value,
     session_id: &str,
     page: &AppSessionViewPage,
