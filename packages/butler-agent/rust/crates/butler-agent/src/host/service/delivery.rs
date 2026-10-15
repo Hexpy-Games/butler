@@ -37,6 +37,7 @@ impl IngressDelivery for AppDelivery {
         let writer = self.writer.clone();
         let progress = self.progress.clone();
         Box::pin(async move {
+            let timing = crate::host::guided::command::timing::CommandTiming::new("app_delivery");
             if action["transport"] != "app" {
                 return Err(IngressError::new(
                     "native_transport_unavailable",
@@ -61,6 +62,7 @@ impl IngressDelivery for AppDelivery {
                 )
                 .with_source(error)
             })?;
+            timing.mark("progress_reconciled");
             // Source App adapter acknowledges locally. Projection consumes the
             // durable outbound/delivery pair; no HTTP send is hidden here.
             let delivery = json!({"ok": true, "transportMessageId": format!("app:{action_id}")});
@@ -73,6 +75,7 @@ impl IngressDelivery for AppDelivery {
                 )
                 .await
                 .map_err(|e| IngressError::new(e.code(), e.message()))?;
+            timing.mark("transcript_committed");
             Ok(true)
         })
     }

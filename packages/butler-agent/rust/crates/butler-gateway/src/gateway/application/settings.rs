@@ -320,8 +320,11 @@ impl super::AppApplication {
         input: Value,
         origin: WallpaperOrigin,
     ) -> Result<(Value, Value), crate::gateway::GatewayApplicationError> {
+        let timing = crate::gateway::command_timing::CommandTiming::new("settings_patch");
         let _update = self.settings_update_lock.lock().await;
+        timing.mark("lock_acquired");
         self.dependencies.settings_facts.refresh().await?;
+        timing.mark("facts_refreshed");
         let facts = self.dependencies.settings_facts.snapshot()?;
         let current_root = self.project_creation.workspace_root();
         let view_root = current_root.clone();
@@ -339,6 +342,7 @@ impl super::AppApplication {
             selected.ok_or_else(crate::gateway::GatewayApplicationError::internal)
         })?;
         self.validate_wallpaper_patch(&prepared.patch).await?;
+        timing.mark("patch_prepared");
         if prepared.workspace_root.is_none()
             && update::unchanged_preferences(&prepared.patch, &current)
         {
@@ -351,7 +355,9 @@ impl super::AppApplication {
             .settings_mutations
             .apply(prepared.patch.clone(), prepared.projection)
             .await?;
+        timing.mark("mutation_applied");
         self.dependencies.settings_facts.refresh().await?;
+        timing.mark("facts_reloaded");
         let refreshed = self.dependencies.settings_facts.snapshot()?;
         let workspace_root = prepared.workspace_root.unwrap_or(current_root);
         let projection =
