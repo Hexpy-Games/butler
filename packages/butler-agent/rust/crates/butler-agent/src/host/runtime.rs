@@ -26,7 +26,6 @@ use super::{
 };
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
-use crate::host::memory_jobs::recall_metrics::RecallMetrics;
 use crate::host::runtime::environment::ProcessEnvironment;
 use crate::host::runtime::stores::RuntimeStores;
 use boundary::{setup, validate_data_installation_boundary};
@@ -112,6 +111,7 @@ impl AgentRuntime {
             &environment.cognition_paths,
             metric_files.clone(),
             &stores,
+            embedding.clone(),
         )
         .await?;
         let memory_sync = boundary::MemoryStartup {
@@ -202,16 +202,14 @@ impl AgentRuntime {
         let tool_artifacts = Arc::new(super::ToolArtifactReader::new(tool_output.clone()));
         let (memory_query, conversation_reference) =
             owners::memory_source_readers(&paths.data_root, &environment.cognition_paths);
-        let memory_recall = Arc::new(
-            recall::configured_recall(
-                &paths,
-                &environment.cognition_paths,
-                &models,
-                date_parser.clone(),
-                collation.clone(),
-            )
-            .with_metric_sink(Arc::new(RecallMetrics::new(metric_files.clone())))
-            .with_vector_port(vectors),
+        let memory_recall = recall::configured_recall(
+            &paths,
+            &environment.cognition_paths,
+            &models,
+            date_parser.clone(),
+            collation.clone(),
+            metric_files.clone(),
+            vectors,
         );
         let conversation_context = ContextConversation::new(
             stores.conversations.clone(),

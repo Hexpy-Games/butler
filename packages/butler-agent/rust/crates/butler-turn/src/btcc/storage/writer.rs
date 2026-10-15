@@ -50,8 +50,7 @@ pub(super) fn run_connection_lane(
         .send(Ok((owner.owner_id().to_owned(), owner.generation())))
         .is_err()
     {
-        owner.close(&connection)?;
-        return Ok(());
+        return close(connection, &owner, checkpoint);
     }
     while let Some(operation) = receiver.blocking_recv() {
         operation(&mut connection, &owner);
@@ -59,35 +58,47 @@ pub(super) fn run_connection_lane(
     close(connection, &owner, checkpoint)
 }
 
-fn close(
+pub(super) fn close(
     connection: sqlite::Connection,
     owner: &RuntimeOwner,
     checkpoint: Option<super::checkpoint::CheckpointOwner>,
 ) -> StorageResult<()> {
-    if let Some(checkpoint) = checkpoint {
-        checkpoint.close()?;
-    }
-    owner.close(&connection)?;
-    if !connection.is_autocommit() {
-        return Err(StorageError::new(
+    let checkpoint = checkpoint.map_or(Ok(()), super::checkpoint::CheckpointOwner::close);
+    // Evaluate every step before combining results; the earliest failure wins.
+    let released = owner.close(&connection);
+    let transaction = if connection.is_autocommit() {
+        Ok(())
+    } else {
+        Err(StorageError::new(
             StorageCode::SqliteTransactionOpenAtClose,
             "BTCC database transaction remained open at close",
-        ));
-    }
+        ))
+    };
     // NORMAL commits are durable once the WAL is synced. Keep it for recovery
     // instead of copying and syncing the same pages again at final close.
-    sqlite::sync_wal(&connection).map_err(|error| {
+    let synced = sqlite::sync_wal(&connection).map_err(|error| {
         StorageError::new(StorageCode::SqliteWalSyncFailed, error.to_string()).with_source(error)
-    })?;
-    connection
-        .set_db_config(
-            rusqlite::config::DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE,
-            true,
-        )
-        .map_err(StorageError::sqlite)?;
-    connection
+    });
+    let configured = if synced.is_ok() {
+        connection
+            .set_db_config(
+                rusqlite::config::DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE,
+                true,
+            )
+            .map(|_| ())
+            .map_err(StorageError::sqlite)
+    } else {
+        Ok(())
+    };
+    let closed = connection
         .close()
-        .map_err(|(_, error)| StorageError::sqlite(error))
+        .map_err(|(_, error)| StorageError::sqlite(error));
+    checkpoint
+        .and(released)
+        .and(transaction)
+        .and(synced)
+        .and(configured)
+        .and(closed)
 }
 
 pub(super) fn configure(connection: &Connection, profile: StorageProfile) -> StorageResult<()> {

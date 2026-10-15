@@ -242,7 +242,7 @@ pub(in crate::host) fn render(context: Option<&WorkContext>) -> Option<String> {
             ));
         }
     }
-    rows.push("Guardrail: follow the current Work policy, stay within the original request and governing checks, and settle the bound Work with a truthful disposition before reporting.".into());
+    rows.push("Guardrail: follow the current Work policy, serve the original request's goal and governing checks, and settle the bound Work with a truthful disposition before reporting.".into());
     if let Some(plan) = plan {
         rows.push(format!(
             "Executable action keys: {}",

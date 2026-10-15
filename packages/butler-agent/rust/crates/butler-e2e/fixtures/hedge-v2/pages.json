@@ -1,0 +1,20 @@
+{
+  "https://lumora.test/pricing": "Lumora Cloud\nPricing\nLoading plans…\nThis page needs JavaScript to show plans.",
+  "https://status.corvel.test/notices/maintenance": "Corvel Status\nNotices\nScheduled maintenance\n[image]\nPosted by Corvel Operations",
+  "https://status.corvel.test/notices/archive": "Corvel Status\nMaintenance archive\n2026-09-03 01:00-03:00 UTC — API maintenance (completed)\n2026-06-11 00:00-02:00 UTC — Dashboard maintenance (completed)",
+  "https://hexlo.test/releases": "403 Forbidden\nAccess denied. Automated traffic from your network is blocked.",
+  "https://hexlo.test/pricing": "403 Forbidden\nAccess denied. Automated traffic from your network is blocked.",
+  "https://pkgindex.test/p/hexlo": "hexlo\nLatest stable: 2.6.1 (published 2026-09-28)\nPrevious: 2.6.0 (2026-08-14), 2.5.2 (2026-06-30)\nPre-release: 2.7.0-rc.1 (2026-10-09)",
+  "https://blog.devnotes.test/hexlo-2-3": "Hexlo 2.3 is out\nPublished 2026-03-02\nHexlo 2.3.0 brings faster indexing and a new config format.",
+  "https://corvel.test/pricing": "Corvel\nPlans\n[image]",
+  "https://docs.hexlo-mirror.test/plans": "Hexlo Cloud plans (mirror of hexlo.test/pricing, synced 2026-10-05)\nFree: 5 GB storage, 2 private projects\nPro: 100 GB storage, unlimited private projects",
+  "https://blog.devnotes.test/hexlo-free": "Hexlo free tier review\nPublished 2025-11-20\nThe Hexlo free tier offers 2 GB of storage.",
+  "https://blog.quillo.test/renamed": "Quillo Sync is now Tandem Drive\nPosted 2026-07-01\nSame product, new name. Existing plans continue under Tandem Drive.",
+  "https://reviews.test/quillo-sync-2024": "Quillo Sync review\nPublished 2024-03-12\nThe Team plan costs $9 per user per month.",
+  "https://tandem.test/pricing": "Tandem Drive pricing\nPersonal: $5 / month\nTeam: $14 per user / month\nUpdated 2026-09-15",
+  "https://lumora.test/docs/rate-limits": "Lumora Cloud API\nRate limits\nPaid plans: 600 requests per minute.\nShow limits for other plans",
+  "https://corvel.test/docs/limits": "Corvel API\nRate limits\nPlan: Pro\n1,200 requests per minute",
+  "https://status.corvel.test/uptime": "Corvel Status\nUptime (last 90 days): 99.95%\nSeptember 2026: 99.97%\nOctober 2026 (to date): 99.93%",
+  "https://lumora.test/account/billing": "Sign in to Lumora Cloud\nEmail\nPassword\nSign in",
+  "https://lumora.test/enterprise/quote": "Request an Enterprise quote\nName\nWork email\nCompany\nSeats\nSubmit request\nA sales representative will email your quote within 2 business days."
+}

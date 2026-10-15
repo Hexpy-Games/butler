@@ -1,159 +1,108 @@
-import { useAppLocale } from "@/app/copy.ts";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "@/app/api.ts";
-import { appCopy } from "@/app/copy.ts";
-import type { UsageMonitorView } from "@/app/types.ts";
-import { Button, ButtonContainer, Stack, type SettingsSectionState } from "@/butler-ds";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { api } from "@/app/api";
+import { appCopy, useAppLocale } from "@/app/copy";
+import type { UsageMonitorView } from "@/app/types";
+import { RefreshCcw, IconButton, Inline, SegmentedControl, Stack, Typo, UsageBars } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
-import { UsageBucketPanel } from "./UsageBucketPanel";
-import { UsageMonitorMetrics } from "./UsageMonitorMetrics";
+import { UsageReadout } from "../usage/UsageReadout";
+import { usageClock, usageShare, usageReadout, usageSeries, usageTimeline, usageTokens } from "../usage/usageTimeline";
+import { UsageBreakdown } from "./UsageBreakdown";
+import { UsageSessionSelect, usageSessionTitle } from "./UsageSessionSelect";
 import { UsageProviderPanel } from "./UsageProviderPanel";
-import { UsageSectionPanel } from "./UsageSectionPanel";
-import { UsageToolPanel } from "./UsageToolPanel";
-import { formatTimestamp, usageRows } from "./usageSettingsFormat";
 
-const rangeOptions = () => [
-  { id: "24h", label: appCopy.interfaceDetails.day, hours: 24 },
-  { id: "7d", label: appCopy.interfaceDetails.week, hours: 24 * 7 },
-  { id: "all", label: appCopy.interfaceDetails.all, hours: null },
-] as const;
+/** Keep one scoped view and the all-chat view per range, rather than every visited chat. */
+function rememberView(views: Map<string, UsageMonitorView>, key: string, next: UsageMonitorView) {
+  const updated = new Map(views);
+  const range = key.split("/")[0]!;
+  if (key !== `${range}/`) {
+    for (const stored of updated.keys()) if (stored.startsWith(`${range}/`) && stored !== `${range}/`) updated.delete(stored);
+  }
+  return updated.set(key, next);
+}
 
-type UsageRange = ReturnType<typeof rangeOptions>[number]["id"];
+function useUsageRange(hours: number, session: string | null, revision: number) {
+  const key = `${hours}/${session ?? ""}`;
+  const [views, setViews] = useState(() => new Map<string, UsageMonitorView>());
+  const allRevisions = useRef(new Map<number, number>());
+  const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setPending(key); setError(null);
+    const params = new URLSearchParams({ since_hours: String(hours) });
+    if (session) params.set("session_id", session);
+    const needsAll = allRevisions.current.get(hours) !== revision;
+    const requests = session && needsAll ? [[`${hours}/`, new URLSearchParams({ since_hours: String(hours) })], [key, params]] as const : session || needsAll ? [[key, params]] as const : [];
+    Promise.all(requests.map(async ([requestKey, query]) => {
+      const next = await api<UsageMonitorView>(`/usage-monitor?${query}`);
+      if (cancelled) return;
+      if (requestKey === `${hours}/`) allRevisions.current.set(hours, revision);
+      setViews(previous => rememberView(previous, requestKey, next));
+    })).catch(() => { if (!cancelled) setError(key); })
+      .finally(() => { if (!cancelled) setPending(null); });
+    return () => { cancelled = true; };
+  }, [hours, session, revision, key]);
+  return { view: views.get(key) ?? null, allView: views.get(`${hours}/`) ?? null, loading: pending === key, error: error === key };
+}
 
-/** The last view of each range, so reopening the page shows it at once while it refreshes. */
-const lastViews = new Map<UsageRange, UsageMonitorView>();
-
-export function resetUsageSettingsCache(): void {
-  lastViews.clear();
+function periodDelta(view: UsageMonitorView | null, hours: number): string | undefined {
+  if (!view) return undefined;
+  const copy = appCopy.composer.usage;
+  if (view.model.totalTokens === 0) return copy.emptyRange;
+  const previous = view.previousPeriod?.totalTokens;
+  const label = copy.previousPeriod(hours);
+  if (!previous) return copy.previousEmpty(label);
+  const delta = (view.model.totalTokens - previous) / previous * 100;
+  return Math.abs(delta) < 1 ? copy.similar : copy.delta(label, String(Math.round(Math.abs(delta))), delta > 0);
 }
 
 export function UsageSettings() {
-  useAppLocale();
-  const [range, setRange] = useState<UsageRange>("24h");
-  const [views, setViews] = useState<Partial<Record<UsageRange, UsageMonitorView>>>(() => Object.fromEntries(lastViews));
-  const view = views[range] ?? null;
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-  const selected = rangeOptions().find((item) => item.id === range)!;
-
-  const refresh = useCallback(async () => {
-    const asked = range;
-    const params = new URLSearchParams();
-    if (selected.hours !== null) params.set("since_hours", String(selected.hours));
-    setLoading(true);
-    setError(false);
-    try {
-      const query = params.toString();
-      const next = await api<UsageMonitorView>(query ? `/usage-monitor?${query}` : "/usage-monitor");
-      lastViews.set(asked, next);
-      setViews((previous) => ({ ...previous, [asked]: next }));
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [range, selected.hours]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  const scopeRows = useMemo(
-    () => usageRows(view?.model.byScopeUsage ?? {}),
-    [view],
-  );
-  const modelRows = useMemo(() => usageRows(view?.model.byModel ?? {}), [view]);
-  const sectionRows = useMemo(
-    () =>
-      Object.entries(view?.model.bySection ?? {})
-        .sort((left, right) =>
-          right[1].estimatedTokens - left[1].estimatedTokens ||
-          right[1].chars - left[1].chars ||
-          left[0].localeCompare(right[0]),
-        )
-        .slice(0, 12),
-    [view],
-  );
-  const toolRows = useMemo(
-    () =>
-      Object.entries(view?.tools.byTool ?? {})
-        .sort((left, right) => right[1].calls - left[1].calls)
-        .slice(0, 8),
-    [view],
-  );
-  const providerUsage = view?.providerUsage;
-
-  const copy = appCopy.interfaceDetails;
-  const empty = appCopy.settings.descriptions.usageMonitorEmpty;
-  const listState = (count: number): SettingsSectionState =>
-    view === null ? (error ? "error" : "loading") : count === 0 ? "empty" : "ready";
-  const listProps = (count: number) => ({
-    kind: "list" as const,
-    state: listState(count),
-    emptyMessage: empty,
-    errorMessage: appCopy.interfacePanels.usageFailed,
-    onRetry: () => void refresh(),
-  });
-
-  return (
-    <SettingsPage>
-      <SettingsSection
-        id="usage-overview"
-        kind="status"
-        title={appCopy.settings.pageSections.usageOverview}
-        description={[
-          appCopy.settings.descriptions.usageMonitor,
-          view?.generated_at ? formatTimestamp(view.generated_at) : null,
-        ].filter(Boolean).join(" · ")}
-        state={view === null ? (error ? "error" : "loading") : "ready"}
-        errorMessage={appCopy.interfacePanels.usageFailed}
-        onRetry={() => void refresh()}
-        actions={
-          <Stack align="row" gap="sm" wrap>
-            <ButtonContainer size="sm">
-              {rangeOptions().map((option) => (
-                <Button
-                  key={option.id}
-                  type="button"
-                  size="sm"
-                  variant={range === option.id ? "default" : "outline"}
-                  aria-pressed={range === option.id}
-                  onClick={() => setRange(option.id)}
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </ButtonContainer>
-            <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void refresh()}>
-              {appCopy.common.refresh}
-            </Button>
-          </Stack>
-        }
-      >
-        <UsageMonitorMetrics view={view} />
-      </SettingsSection>
-      <SettingsSection
-        id="usage-providers"
-        title={copy.apiProviderUsage}
-        description={providerUsage?.activeProviderId
-          ? appCopy.interfaceTemplates.activeProvider(providerUsage.activeProviderId)
-          : undefined}
-        {...listProps(providerUsage?.providers.length ?? 0)}
-      >
-        <UsageProviderPanel providers={providerUsage?.providers ?? []} />
-      </SettingsSection>
-      <SettingsSection id="usage-scope-tokens" title={copy.scopeTokens} {...listProps(scopeRows.length)}>
-        <UsageBucketPanel rows={scopeRows} />
-      </SettingsSection>
-      <SettingsSection id="usage-model-tokens" title={copy.modelTokens} {...listProps(modelRows.length)}>
-        <UsageBucketPanel rows={modelRows} />
-      </SettingsSection>
-      <SettingsSection id="usage-prompt-sections" title={copy.contextEstimates} {...listProps(sectionRows.length)}>
-        <UsageSectionPanel rows={sectionRows} />
-      </SettingsSection>
-      <SettingsSection id="usage-tools" title={copy.callsByTool} {...listProps(toolRows.length)}>
-        <UsageToolPanel rows={toolRows} />
-      </SettingsSection>
-    </SettingsPage>
-  );
+  const locale = useAppLocale();
+  const [hours, setHours] = useState(24);
+  const [session, setSession] = useState<string | null>(null);
+  const pickerTrigger = useRef<HTMLButtonElement>(null);
+  const showAll = () => { pickerTrigger.current?.focus(); setPickerOpen(true); };
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const refresh = () => setRevision(v => v + 1);
+  const result = useUsageRange(hours, session, revision);
+  const [selection, setSelection] = useState<{ scope: string; index: number | null }>({ scope: "", index: null });
+  const scope = `${hours}/${session}/${result.view?.generated_at}`;
+  const selected = selection.scope === scope ? selection.index : null;
+  const timeline = useMemo(() => usageTimeline(result.view, 31), [result.view, locale]);
+  const bucket = selected === null ? undefined : timeline.buckets[selected];
+  const copy = appCopy.composer.usage;
+  const ranges = [{ value: "24", label: copy.day }, { value: "168", label: copy.week }, { value: "720", label: copy.month }];
+  const sessions = [...(result.allView?.topSessions ?? result.view?.topSessions ?? [])];
+  const selectedSession = result.view?.topSessions.find(item => item.sessionId === session);
+  if (selectedSession && !sessions.some(item => item.sessionId === session)) sessions.push(selectedSession);
+  sessions.sort((a, b) => b.totalTokens - a.totalTokens);
+  const label = `${session ? usageSessionTitle(sessions.find(s => s.sessionId === session)) : copy.all} · ${copy.recent(ranges.find(r => r.value === String(hours))!.label)}`;
+  return <SettingsPage>
+    <SettingsSection id="usage-overview" kind="status"
+      state={result.error && !result.view ? "error" : "ready"} errorMessage={appCopy.interfacePanels.usageFailed} onRetry={refresh}>
+      <Stack gap="lg">
+        <Inline justify="between" cross="start" gap="md" wrap>
+          <Stack grow basis="md" gap="xs" minWidth="0"><Typo.Caption>{copy.chats}</Typo.Caption>
+            <UsageSessionSelect triggerRef={pickerTrigger} open={pickerOpen} onOpenChange={setPickerOpen} range={ranges.find(r => r.value === String(hours))!.label} sessions={sessions} value={session} onChange={setSession} /></Stack>
+          <Stack gap="xs" grow><Typo.Caption>{copy.period}</Typo.Caption>
+            <Inline justify="between" cross="center" gap="md">
+              <SegmentedControl ariaLabel={copy.period} size="default" options={ranges} value={String(hours)} onValueChange={v => setHours(Number(v))} />
+              <Inline gap="xs" cross="center" wrap={false}><Typo.Caption>{result.view ? copy.updated(usageClock(Date.parse(result.view.generated_at))) : "—"}</Typo.Caption>
+                <IconButton label={appCopy.common.refresh} disabled={result.loading} onClick={refresh}><RefreshCcw size="sm" /></IconButton></Inline>
+            </Inline></Stack>
+        </Inline>
+        <UsageReadout view={result.view} values={usageReadout(result.view, bucket)} label={bucket?.label ?? label}
+          panel selected={Boolean(bucket)} showCost delta={periodDelta(result.view, hours)} share={session && result.allView?.model.totalTokens
+            ? usageShare((result.view?.model.totalTokens ?? 0) / result.allView.model.totalTokens) : undefined} />
+        <UsageBars {...timeline} series={usageSeries()} size="panel" yTicks={{ format: usageTokens }} selectedIndex={selected}
+          onSelect={index => setSelection({ scope, index })} state={!result.view ? "loading" : "ready"}
+          emptyLabel={copy.noUsage} loadingLabel={copy.loading} ariaLabel={copy.chartLabel} />
+        <UsageBreakdown loading={!result.view} onShowAll={showAll} view={result.view} sessions={sessions} allTotal={result.allView?.model.totalTokens ?? 0} selected={session} onSelect={setSession} />
+      </Stack>
+    </SettingsSection>
+    {(result.allView ?? result.view)?.providerUsage.providers.length ? <SettingsSection id="usage-providers" title={copy.remaining} kind="status" state={!result.view ? "loading" : "ready"}>
+      <UsageProviderPanel providers={(result.allView ?? result.view)?.providerUsage.providers ?? []} />
+    </SettingsSection> : null}
+  </SettingsPage>;
 }

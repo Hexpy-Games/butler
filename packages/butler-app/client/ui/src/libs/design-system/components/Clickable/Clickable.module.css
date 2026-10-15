@@ -1,4 +1,6 @@
 .clickable {
+  --clickable-padding-inline: 10px;
+
   box-sizing: border-box;
   display: flex;
   width: max-content;
@@ -6,8 +8,8 @@
   min-height: 30px;
   min-width: 0;
   align-items: center;
-  padding-right: 10px;
-  padding-left: 10px;
+  padding-right: var(--clickable-padding-inline);
+  padding-left: var(--clickable-padding-inline);
   border-radius: var(--radius-control);
   cursor: pointer;
   outline: none;
@@ -33,6 +35,17 @@
   width: 100%;
 }
 
+/* Inline bleed: the row reaches into the gutter by its own padding, so its
+   content lines up with sibling content and the fills extend past it. */
+.clickable[data-bleed="inline"] {
+  max-width: calc(100% + 2 * var(--clickable-padding-inline));
+  margin-inline: calc(-1 * var(--clickable-padding-inline));
+}
+
+.clickable[data-bleed="inline"][data-stretch="true"] {
+  width: calc(100% + 2 * var(--clickable-padding-inline));
+}
+
 .clickable:hover:not([data-disabled="true"]) {
   background: var(--selection);
 }
@@ -46,6 +59,24 @@
 .clickable:active:not([data-disabled="true"], [data-stretch="true"]) {
   scale: var(--motion-scale-press);
   transition-duration: var(--motion-instant);
+}
+
+/* Toggle rows (selected set): a lighter hover, the strong fill while pressed
+   or selected, and fills that fade between states. */
+.clickable[data-selected] {
+  transition:
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    scale var(--motion-fast) var(--motion-ease-standard);
+}
+
+.clickable[data-selected]:hover:not([data-disabled="true"]) {
+  background: color-mix(in srgb, var(--selection) 60%, transparent);
+}
+
+.clickable[data-selected="true"],
+.clickable[data-selected="true"]:hover:not([data-disabled="true"]),
+.clickable[data-selected]:hover:active:not([data-disabled="true"]) {
+  background: var(--selection-strong);
 }
 
 /* Text variant: a bare text target (a title that opens its source). */

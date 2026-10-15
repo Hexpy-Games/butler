@@ -38,7 +38,13 @@ pub(in crate::host) fn structured_raw(name: &str, raw: &str) -> Result<String, B
         artifact::project(name, candidate)
     } else if matches!(
         ToolName::parse(name),
-        Some(ToolName::RunCommand | ToolName::GrepFiles | ToolName::ReadConversationContext)
+        Some(
+            ToolName::RunCommand
+                | ToolName::GrepFiles
+                | ToolName::ReadConversationContext
+                | ToolName::WebSearch
+                | ToolName::WebRead
+        )
     ) && candidate.trim_start().starts_with('{')
     {
         retained::project(name, candidate)
@@ -52,18 +58,7 @@ pub(super) fn fit(
     references: &OperationResultMessageReferences,
     original: String,
 ) -> Result<String, BtccError> {
-    let specialized = work::supports(&result.name)
-        || matches!(
-            ToolName::parse(result.name.as_str()),
-            Some(
-                ToolName::ReadOperationResults
-                    | ToolName::RunCommand
-                    | ToolName::GrepFiles
-                    | ToolName::ReadConversationContext
-                    | ToolName::ReadToolOutputArtifact
-                    | ToolName::ReadToolEvidenceArtifact
-            )
-        );
+    let specialized = specialized(&result.name);
     let output = result.output.as_ref();
     let partial_exact = result.name != ToolName::ReadOperationResults
         && references.exact_read.is_some()
@@ -131,6 +126,23 @@ pub(super) fn fit(
     } else {
         Ok(encoded)
     }
+}
+
+fn specialized(name: &str) -> bool {
+    work::supports(name)
+        || matches!(
+            ToolName::parse(name),
+            Some(
+                ToolName::ReadOperationResults
+                    | ToolName::WebSearch
+                    | ToolName::WebRead
+                    | ToolName::RunCommand
+                    | ToolName::GrepFiles
+                    | ToolName::ReadConversationContext
+                    | ToolName::ReadToolOutputArtifact
+                    | ToolName::ReadToolEvidenceArtifact
+            )
+        )
 }
 
 fn keys(name: &str) -> &'static [&'static str] {

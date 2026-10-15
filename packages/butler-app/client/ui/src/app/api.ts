@@ -504,6 +504,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   if (method === "GET" && url.pathname === "/usage-monitor") {
     return await callBridge<T>(bridge, "getUsageMonitor", {
+      // Preserve the joint session/range filter for the native bridge as well as HTTP.
       sessionId: url.searchParams.get("session_id") ?? url.searchParams.get("sessionId"),
       sinceHours: numericSearchParam(url.searchParams, "since_hours") ??
         numericSearchParam(url.searchParams, "sinceHours"),

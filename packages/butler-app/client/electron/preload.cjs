@@ -1348,6 +1348,10 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/artifacts?${params.toString()}`);
   },
+  getMessageFileView: ({ fileId } = {}) => {
+    if (typeof fileId !== "string" || !/^file-[0-9a-f-]{36}$/iu.test(fileId)) throw new Error("Invalid file");
+    return requestBridgeResult(`/message-files/${encodeURIComponent(fileId)}/view`);
+  },
   getOutputView: ({ outputId, revision } = {}) => {
     if (typeof outputId !== "string" || !/^[a-f0-9]{64}$/u.test(outputId)) throw new Error("Invalid output");
     const params = new URLSearchParams();

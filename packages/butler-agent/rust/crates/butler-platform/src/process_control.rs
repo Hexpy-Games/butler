@@ -16,7 +16,7 @@
 //! `instance::request_stop`).
 
 #[cfg(feature = "test-support")]
-mod test_support;
+pub mod test_support;
 #[cfg(feature = "test-support")]
 pub use test_support::fixture_profile_environment;
 pub mod usage;

@@ -67,6 +67,19 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
             "{name} offered: {tools:?}"
         );
     }
+    for index in [0, 2, 3] {
+        for key in [
+            "evidence_receipts",
+            "evidence_capability_receipts",
+            "public_web_evidence_items",
+        ] {
+            assert!(
+                outputs[index].get(key).is_none(),
+                "{key}: {}",
+                outputs[index]
+            );
+        }
+    }
     let search = &outputs[0];
     let ids = search["results"]
         .as_array()
@@ -140,7 +153,15 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
             .unwrap()
             .contains("Spring tides alpha")
     );
-    eprintln!("{}", model::step_bytes(&s.sandbox.data, &turn));
+    eprintln!(
+        "{}",
+        model::step_bytes(
+            &s.sandbox.data,
+            &turn,
+            &outputs,
+            &fixture.output_bytes.lock().unwrap()
+        )
+    );
     if let Some(dir) = std::env::var_os("BUTLER_SEARCH_BROWSER_EVIDENCE") {
         std::fs::write(
             std::path::Path::new(&dir).join("model-tools.json"),

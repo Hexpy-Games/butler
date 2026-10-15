@@ -55,8 +55,6 @@ type CheckpointResult<T> = Result<T, CheckpointError>;
 struct Hook {
     observer: Option<CheckpointObserver>,
     pages: i32,
-    next_pages: i32,
-    last_pages: i32,
     wake: mpsc::SyncSender<()>,
 }
 thread_local! { static HOOK: RefCell<Option<Hook>> = const { RefCell::new(None) }; }
@@ -107,8 +105,6 @@ impl CheckpointOwner {
             *hook.borrow_mut() = Some(Hook {
                 observer,
                 pages,
-                next_pages: pages,
-                last_pages: 0,
                 wake,
             });
         });
@@ -138,28 +134,22 @@ impl Drop for CheckpointOwner {
 
 fn committed(wal: &rusqlite::hooks::Wal, pages: i32) -> rusqlite::Result<()> {
     HOOK.with(|hook| {
-        let mut hook = hook.borrow_mut();
-        let Some(hook) = hook.as_mut() else { return };
+        let hook = hook.borrow();
+        let Some(hook) = hook.as_ref() else { return };
         if let Some(observer) = hook.observer {
             observer(CheckpointEvent::WalCommitted(pages));
         }
-        if pages < hook.last_pages {
-            hook.next_pages = hook.pages;
-        }
-        hook.last_pages = pages;
-        if pages < hook.next_pages {
-            return;
-        }
-        // Accumulate a threshold of new frames instead of checkpointing every
-        // commit while an earlier pass is catching up with a growing WAL.
-        match hook.wake.try_send(()) {
-            Ok(()) | Err(mpsc::TrySendError::Full(())) => {
-                hook.next_pages = pages.saturating_add(hook.pages);
-            }
-            Err(mpsc::TrySendError::Disconnected(())) => {
-                // A failed maintenance owner retains SQLite's stock behavior.
-                // The owner-thread join still reports that failure on close.
-                let _ = wal.checkpoint();
+        if pages >= hook.pages {
+            // Every commit above the threshold must leave a pending pass. A
+            // moving threshold strands a sub-threshold tail after each burst,
+            // preventing the next transaction from restarting the WAL.
+            match hook.wake.try_send(()) {
+                Ok(()) | Err(mpsc::TrySendError::Full(())) => {}
+                Err(mpsc::TrySendError::Disconnected(())) => {
+                    // Retain SQLite's stock recovery behavior after worker loss.
+                    // Closing the owner still reports the maintenance failure.
+                    let _ = wal.checkpoint();
+                }
             }
         }
     });
@@ -185,10 +175,10 @@ fn run(
     let _ = ready.send(Ok(()));
     while requests.recv().is_ok() {
         let started = Instant::now();
-        let result = connection.execute_batch("PRAGMA wal_checkpoint(PASSIVE)");
+        let result = backfill(&connection);
         let synced = sqlite::sync_wal_index(&connection);
         // SQLite's automatic hook ignores checkpoint errors after COMMIT. Keep
-        // that behavior; the next committed threshold crossing requests a pass.
+        // that behavior; the next commit above the threshold requests a pass.
         if let Some(observer) = observer {
             observer(CheckpointEvent::Finished {
                 elapsed: started.elapsed(),
@@ -199,6 +189,22 @@ fn run(
     connection
         .close()
         .map_err(|(_, error)| CheckpointError::from(error))
+}
+
+fn backfill(connection: &Connection) -> rusqlite::Result<()> {
+    let mut previous = -1;
+    loop {
+        let (busy, log, checkpointed): (i32, i32, i32) =
+            connection.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?;
+        if busy != 0 || checkpointed >= log || checkpointed <= previous {
+            // PASSIVE reports busy=0 even when a reader pins the unbackfilled
+            // tail. Stop on no progress as well; only new commits wake us.
+            return Ok(());
+        }
+        previous = checkpointed;
+    }
 }
 
 fn open(

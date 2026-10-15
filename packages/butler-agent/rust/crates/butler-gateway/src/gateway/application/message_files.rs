@@ -55,8 +55,24 @@ impl AppApplication {
         &self,
         id: String,
     ) -> Result<AppFileDownload, GatewayApplicationError> {
-        let row = self
-            .storage
+        let row = self.message_file_row(id).await?;
+        let file = read_model::message_file_ref(&row).map_err(app_error)?;
+        let bytes = self.dependencies.message_files.read_original(row).await?;
+        Ok(AppFileDownload { file, bytes })
+    }
+    pub(super) async fn message_file_metadata(
+        &self,
+        id: String,
+    ) -> Result<MessageFileRef, GatewayApplicationError> {
+        let row = self.message_file_row(id).await?;
+        read_model::message_file_ref(&row).map_err(app_error)
+    }
+
+    async fn message_file_row(
+        &self,
+        id: String,
+    ) -> Result<AppMessageFileSnapshot, GatewayApplicationError> {
+        self.storage
             .execute(move |db| downloadable(db, &id))
             .await
             .map_err(|error| {
@@ -65,10 +81,7 @@ impl AppApplication {
                 } else {
                     app_error(error)
                 }
-            })?;
-        let file = read_model::message_file_ref(&row).map_err(app_error)?;
-        let bytes = self.dependencies.message_files.read_original(row).await?;
-        Ok(AppFileDownload { file, bytes })
+            })
     }
 }
 

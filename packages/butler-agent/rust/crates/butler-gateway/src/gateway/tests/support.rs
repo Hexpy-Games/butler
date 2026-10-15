@@ -265,6 +265,9 @@ impl GatewayApplication for TestApplication {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 
+    fn message_file_metadata(&self, _: String) -> ApplicationFuture<MessageFileRef> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn download_message_file(&self, _: String) -> ApplicationFuture<AppFileDownload> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
