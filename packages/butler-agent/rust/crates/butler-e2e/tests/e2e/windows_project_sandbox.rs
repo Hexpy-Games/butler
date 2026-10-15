@@ -108,12 +108,40 @@ async fn auto_mutation_waits_for_approval_without_running() -> Result<(), Harnes
     approval_fallback().await
 }
 
+#[tokio::test]
+async fn missing_helper_preserves_cli_startup_and_approval() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows missing helper");
+    for opt_in in ["", "1"] {
+        approval_fallback_with_helper(true, Some(opt_in)).await?;
+    }
+    Ok(())
+}
+
 pub(super) async fn approval_fallback() -> Result<(), HarnessError> {
+    approval_fallback_with_helper(false, None).await
+}
+
+async fn approval_fallback_with_helper(
+    missing_helper: bool,
+    opt_in: Option<&str>,
+) -> Result<(), HarnessError> {
     let (url, script, server) = stub::start().await?;
-    let setup = Setup::new("WINDOWS-AUTO-MUTATION-FALLBACK")?
+    let mut setup = Setup::new("WINDOWS-AUTO-MUTATION-FALLBACK")?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url);
+    if let Some(opt_in) = opt_in {
+        setup = setup.env("BUTLER_WINDOWS_PROJECT_SANDBOX", opt_in);
+    }
+    if missing_helper {
+        std::fs::remove_file(setup.sandbox.binary.with_file_name("butler-sandbox.exe"))?;
+        let launch = butler_e2e::e2e::agent::Launch::new(&setup.sandbox)?;
+        for argument in ["--version", "--help"] {
+            let output = launch.command().arg(argument).output()?;
+            assert!(output.status.success(), "{output:?}");
+        }
+    }
     let folder = setup.sandbox.home.join("project");
     std::fs::create_dir_all(&folder)?;
     let mut s = setup.start().await?;
@@ -123,7 +151,7 @@ pub(super) async fn approval_fallback() -> Result<(), HarnessError> {
     script
         .rounds
         .lock()
-        .map_err(|error| std::io::Error::other(error.to_string()))?
+        .map_err(|_| std::io::Error::other("stub rounds lock poisoned"))?
         .insert(
             prompt.into(),
             vec![stub::call(
