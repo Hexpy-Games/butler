@@ -231,8 +231,10 @@ impl Reader {
                 .get(offset + 12..offset + 12 + length)
                 .ok_or_else(|| io::Error::other("short name"))?;
             let wide: Vec<_> = name
-                .chunks_exact(2)
-                .map(|b| u16::from_le_bytes([b[0], b[1]]))
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|b| u16::from_le_bytes(*b))
                 .collect();
             let path = self.root.join(OsString::from_wide(&wide));
             match action {
