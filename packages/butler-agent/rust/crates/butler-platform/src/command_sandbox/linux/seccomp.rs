@@ -8,25 +8,29 @@ use seccompiler::{
 use super::Error;
 
 fn socketpair_denials() -> Result<Vec<SeccompRule>, Error> {
-    // Only anonymous AF_UNIX streams: multiprocessing.Pipe and similar local
-    // workers need duplex IPC. Connected streams cannot reconnect/sendto an
-    // external peer. Datagram pairs can, so those are deliberately excluded.
-    let types = [
+    // Only anonymous connected AF_UNIX pairs: multiprocessing.Pipe and similar
+    // local workers need duplex IPC, and Rust's process spawning (Cargo) passes
+    // a pidfd over a SEQPACKET pair. Connected stream/seqpacket sockets ignore
+    // a sendto address and cannot reconnect (connect is denied). Datagram
+    // pairs can address an external peer, so those are deliberately excluded.
+    let flags = [
         0,
         libc::SOCK_CLOEXEC,
         libc::SOCK_NONBLOCK,
         libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
-    ]
-    .into_iter()
-    .map(|flags| -> Result<_, Error> {
-        Ok(SeccompCondition::new(
-            1,
-            SeccompCmpArgLen::Dword,
-            SeccompCmpOp::Ne,
-            u64::try_from(libc::SOCK_STREAM | flags)?,
-        )?)
-    })
-    .collect::<Result<Vec<_>, _>>()?;
+    ];
+    let types = [libc::SOCK_STREAM, libc::SOCK_SEQPACKET]
+        .into_iter()
+        .flat_map(|kind| flags.map(|flags| kind | flags))
+        .map(|kind| -> Result<_, Error> {
+            Ok(SeccompCondition::new(
+                1,
+                SeccompCmpArgLen::Dword,
+                SeccompCmpOp::Ne,
+                u64::try_from(kind)?,
+            )?)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(vec![
         SeccompRule::new(vec![SeccompCondition::new(
             0,
@@ -62,12 +66,19 @@ fn ioctl_denials() -> Result<Vec<SeccompRule>, Error> {
     Ok(vec![SeccompRule::new(conditions)?])
 }
 
-pub(super) fn filter() -> Result<BpfProgram, Error> {
+/// `metadata` allows chmod/chown/utimes/xattr calls. Landlock does not
+/// mediate them, so only a namespace whose mounts outside the writable roots
+/// are all read-only (M+) may allow them; the VFS then refuses them there.
+pub(super) fn filter(metadata: bool) -> Result<BpfProgram, Error> {
     let ioctl = ioctl_denials()?;
-    let mut rules = metadata_syscalls()
-        .into_iter()
-        .map(|number| (number, vec![]))
-        .collect::<Vec<_>>();
+    let mut rules = if metadata {
+        Vec::new()
+    } else {
+        metadata_syscalls()
+            .into_iter()
+            .map(|number| (number, vec![]))
+            .collect::<Vec<_>>()
+    };
     // No socket() family is required for filesystem observations. In
     // particular, NETLINK is not read-only: it can mutate kernel state.
     rules.extend([
@@ -75,6 +86,17 @@ pub(super) fn filter() -> Result<BpfProgram, Error> {
         (libc::SYS_setpgid, vec![]),
         (libc::SYS_unshare, vec![]),
         (libc::SYS_setns, vec![]),
+        (libc::SYS_mount, vec![]),
+        (libc::SYS_umount2, vec![]),
+        (libc::SYS_move_mount, vec![]),
+        (libc::SYS_open_tree, vec![]),
+        (libc::SYS_fsopen, vec![]),
+        (libc::SYS_fsconfig, vec![]),
+        (libc::SYS_fspick, vec![]),
+        (libc::SYS_fsmount, vec![]),
+        (libc::SYS_mount_setattr, vec![]),
+        (libc::SYS_pivot_root, vec![]),
+        (libc::SYS_chroot, vec![]),
         (libc::SYS_clone, super::process::clone_denials()?),
         (libc::SYS_socket, vec![]),
         // Anonymous pairs need no connect(). Deny it even on inherited fds.
@@ -144,8 +166,8 @@ fn metadata_syscalls() -> Vec<i64> {
     calls.into_iter().chain(legacy).collect()
 }
 
-pub(super) fn apply() -> Result<(), Error> {
+pub(super) fn apply(metadata: bool) -> Result<(), Error> {
     super::process::apply()?;
-    seccompiler::apply_filter(&filter()?)?;
+    seccompiler::apply_filter(&filter(metadata)?)?;
     Ok(())
 }

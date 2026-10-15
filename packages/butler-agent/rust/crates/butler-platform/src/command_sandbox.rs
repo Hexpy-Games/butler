@@ -4,8 +4,12 @@
 //! trampoline. Unsupported hosts keep exact-action approval behavior.
 
 mod denial;
-pub use denial::{isolation_failure, isolation_failure_exit, sandbox_denial};
+pub use denial::{
+    EXECUTION_TIMEOUT_EXIT, EXECUTION_TIMEOUT_MARKER, execution_timeout, execution_timeout_exit,
+    isolation_failure, isolation_failure_exit, sandbox_denial,
+};
 mod credentials;
+pub mod mxc_policy;
 mod project_secrets;
 pub use credentials::secret_name;
 pub use project_secrets::{discover_project_secrets, sweep_new_secrets};
@@ -24,9 +28,9 @@ use std::path::Path;
 mod macos;
 #[cfg(target_os = "macos")]
 use macos as sandbox;
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 mod unsandboxed;
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 use unsandboxed as sandbox;
 
 #[cfg(unix)]
@@ -37,11 +41,16 @@ use unix as shell;
 mod windows;
 #[cfg(windows)]
 use windows as shell;
+#[cfg(windows)]
+use windows::mxc as sandbox;
 
 #[cfg(feature = "test-support")]
 mod test_support;
 #[cfg(feature = "test-support")]
-pub use test_support::{UnixSocketProbe, linux_syscall_probe, linux_test_host};
+pub use test_support::{
+    UnixSocketProbe, linux_syscall_probe, linux_test_host, windows_prepare_project_write,
+    windows_recovery_contract, wsl_test_host,
+};
 
 mod host_capabilities;
 pub use host_capabilities::{Level, SandboxCapabilities, capabilities};
@@ -61,6 +70,36 @@ pub fn project_write_available() -> bool {
     capabilities().project_write_available()
 }
 
+/// Mechanism used by project-write containment; availability is probed separately.
+pub const fn project_write_mechanism() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "seatbelt"
+    } else if cfg!(target_os = "linux") {
+        "landlock"
+    } else if cfg!(windows) {
+        "mxc_base_container"
+    } else {
+        "unavailable"
+    }
+}
+
+/// Host-specific limits reported after a failed contained command.
+pub fn project_write_limits() -> &'static str {
+    #[cfg(target_os = "linux")]
+    if linux::metadata_tier_available() {
+        return "This command ran contained to the project folder: no writes elsewhere, no network, and existing secrets are masked. New secret names are swept after the run. If it needs more access, run it again with sandbox \"none\"; the user will be asked.";
+    }
+    #[cfg(target_os = "linux")]
+    if linux::mount_tier_available() {
+        return "This command ran contained to the project folder: no writes elsewhere, no network, and existing secrets are masked. New secret names are swept after the run. Metadata changes are blocked. If it needs more access, run it again with sandbox \"none\"; the user will be asked.";
+    }
+    if cfg!(target_os = "linux") || cfg!(target_os = "macos") {
+        "This command ran contained to the project folder: no writes elsewhere (including .git and existing secrets) and no network. Creating, deleting or renaming top-level project entries is also blocked. If it needs those, run it again with sandbox \"none\"; the user will be asked."
+    } else {
+        "This command ran contained to the project folder: no writes elsewhere (including .git and existing secrets) and no network. New secret names are swept after the run. If it needs more access, run it again with sandbox \"none\"; the user will be asked."
+    }
+}
+
 /// Entry point of the single-threaded trampoline, never called by the agent.
 #[cfg(target_os = "linux")]
 pub fn trampoline() -> Result<(), Box<dyn std::error::Error>> {
@@ -73,6 +112,11 @@ pub fn copy_command_helper(source: &Path, destination: &Path) -> std::io::Result
     std::fs::copy(
         source.join("butler-sandbox"),
         destination.join("butler-sandbox"),
+    )?;
+    #[cfg(windows)]
+    std::fs::copy(
+        source.join("butler-sandbox.exe"),
+        destination.join("butler-sandbox.exe"),
     )?;
     let _ = (source, destination);
     Ok(())
@@ -236,4 +280,65 @@ pub fn is_registry_path(path: &str) -> bool {
 /// such as a quoted `printf` newline as a filesystem separator.
 pub fn normalize_path_token(path: &str) -> String {
     shell::normalize_path_token(path)
+}
+
+/// Reclaims helper-owned drive mappings after reap or at startup; call off async workers.
+pub fn reconcile_project_write(data: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    return windows::mxc::reconcile(data);
+    #[cfg(not(windows))]
+    {
+        let _ = data;
+        Ok(())
+    }
+}
+/// Windows helper entry point; the agent never calls PSEC directly.
+#[cfg(windows)]
+pub fn windows_sandbox_helper() -> Result<i32, Box<dyn std::error::Error>> {
+    windows::mxc::launch::main()
+}
+
+/// Holds a project-write setup/cleanup lease across the command lifetime.
+pub struct ProjectWritePreparation {
+    #[cfg(target_os = "linux")]
+    _lease: nix::fcntl::Flock<std::fs::File>,
+}
+
+impl ProjectWritePreparation {
+    /// Consumes the preparation, releasing any platform lease after cleanup.
+    pub fn release(self) {}
+}
+
+/// Prepares declared generated directories where the project root is withheld.
+pub fn prepare_project_write(root: &Path, data: &Path) -> std::io::Result<ProjectWritePreparation> {
+    #[cfg(target_os = "linux")]
+    return linux::prepare_project_write(root, data);
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (root, data);
+        Ok(ProjectWritePreparation {})
+    }
+}
+
+/// Namespace aliases for kernel-boundary E2E checks.
+#[cfg(feature = "test-support")]
+pub fn project_mount_aliases(root: &Path) -> std::io::Result<Vec<std::path::PathBuf>> {
+    #[cfg(target_os = "linux")]
+    return linux::project_mount_aliases(root);
+    #[cfg(not(target_os = "linux"))]
+    Ok(vec![root.to_path_buf()])
+}
+
+/// Releases per-command preparation after execution or when the helper never starts.
+/// Call off runtime workers; running helpers retain ownership of their files.
+pub fn cleanup_prepared_invocation(invocation: &Invocation) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        windows::mxc::prepare::cleanup_invocation(invocation)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = invocation;
+        Ok(())
+    }
 }

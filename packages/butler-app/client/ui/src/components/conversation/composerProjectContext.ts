@@ -1,14 +1,12 @@
 import type { NavigationView } from "@/app/types.ts";
-import { isDraftChatId, parseDraftChatId } from "@/app/utils.ts";
+import { draftSessionTarget, isDraftChatId } from "@/app/utils.ts";
 
 export function activeProjectId(
   navigation: NavigationView,
   activeChatId: string,
 ): string | null {
   if (activeChatId.startsWith("dashboard:")) return activeChatId.slice("dashboard:".length);
-  const draft = parseDraftChatId(activeChatId);
-  if (draft.kind === "project") return draft.projectId ?? null;
-  if (isDraftChatId(activeChatId)) return null;
+  if (isDraftChatId(activeChatId)) return draftSessionTarget(navigation, activeChatId).projectId ?? null;
   for (const project of navigation.projects ?? []) {
     if ((project.sessions ?? []).some((session) => session.id === activeChatId)) {
       return project.id;

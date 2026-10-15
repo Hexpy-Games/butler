@@ -10,7 +10,9 @@
 
 mod command_sandbox;
 mod instance;
+mod mxc_policy;
 mod process_control;
+mod project_secrets;
 mod secrets;
 mod secure_fs;
 

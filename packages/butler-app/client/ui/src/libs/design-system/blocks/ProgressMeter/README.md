@@ -64,5 +64,4 @@ It renders a 12px `Spinner` in a secondary `IconSlot` beside one secondary
 caption (`label · meta`), with no track and no percentage. The slot is one
 caption line tall and aligns to the first line when the caption wraps. The
 row is `role="status"`; `ariaLabel` overrides the announced name. Motion is
-the Spinner's own: under reduced motion it stops rotating and breathes
-slowly. Switch to a `value` as soon as the total is known.
+the Spinner's own: it keeps rotating under reduced motion. Switch to a `value` as soon as the total is known.

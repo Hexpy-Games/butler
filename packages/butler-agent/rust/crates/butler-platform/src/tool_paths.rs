@@ -1,7 +1,7 @@
 //! Shared parsing of user-entered file paths and command directories.
 use std::{
     io,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 /// Expand a home prefix and apply native rooted-path semantics before joining a workspace.
@@ -17,6 +17,33 @@ pub fn parse(root: &Path, requested: &str) -> io::Result<PathBuf> {
     let expanded = windows_rooted(&root.to_string_lossy(), &expanded)?.replace('/', "\\");
     let _ = root;
     Ok(PathBuf::from(expanded))
+}
+
+/// The exact target of a user-entered path: parsed as [`parse`], joined to
+/// `root`, then `.` and `..` resolved lexically in native separators. Links
+/// are not followed, matching how file tools resolve a request before their
+/// access checks, so approvals show the path those checks and writes use.
+pub fn resolve(root: &Path, requested: &str) -> io::Result<PathBuf> {
+    Ok(lexical(&root.join(parse(root, requested)?)))
+}
+
+/// Drop `.` and resolve `..` against the preceding name, never above a root.
+pub fn lexical(path: &Path) -> PathBuf {
+    let mut clean = PathBuf::new();
+    for part in path.components() {
+        match part {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if matches!(clean.components().next_back(), Some(Component::Normal(_))) {
+                    clean.pop();
+                } else if !clean.has_root() {
+                    clean.push(part);
+                }
+            }
+            other => clean.push(other),
+        }
+    }
+    clean
 }
 
 /// Expand only `~`, `~/` and `~\` (never another user's `~name`).

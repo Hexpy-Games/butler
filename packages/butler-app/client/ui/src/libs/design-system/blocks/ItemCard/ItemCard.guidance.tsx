@@ -3,12 +3,13 @@ import type { ShowcaseGuidance } from "../../showcase";
 import { Card } from "../../components/Card";
 import { CopyButton } from "../../components/CopyButton";
 import { Grid } from "../../components/Grid";
-import { IconButton } from "../../components/IconButton";
+import { DoneIconButton } from "../../components/DoneIconButton";
 import { Scrap } from "../../components/Icons";
 import { MediaFrame } from "../../components/MediaFrame";
 import { fixturePicture } from "../../components/MediaFrame/fixtures";
 import { Typo } from "../../components/Typo";
 import { settleGrid } from "../../lib/gridSettle";
+import { fixtureSave } from "./fixtures";
 import { ItemCard } from "./ItemCard";
 import { ItemCardSkeleton } from "./ItemCardSkeleton";
 
@@ -16,7 +17,7 @@ import { ItemCardSkeleton } from "./ItemCardSkeleton";
 function FoundItems() {
   const actions = (title: string) => (
     <>
-      <IconButton label="Save to library"><Scrap size="sm" /></IconButton>
+      <DoneIconButton icon={<Scrap size="sm" />} label="Save to library" doneLabel="Saved to library" onAction={fixtureSave} />
       <CopyButton label="Copy" copiedLabel="Copied" text={title} />
     </>
   );
@@ -86,7 +87,7 @@ export const guidance: ShowcaseGuidance = {
     "The card is an article labelled by its title. The title is its one button and its target covers the whole card, so a click anywhere opens the item.",
     "With onMediaOpen the picture is its own button (named by mediaLabel) that opens the image viewer; without it the picture is part of the card target.",
     "The source line, Show more and the actions keep their own actions; the card's hover drops while the pointer is on one of them.",
-    "The source line is a button named by source.label (site and read time). Actions are labelled IconButtons.",
+    "The source line is a button named by source.label (site and read time). Actions are labelled IconButtons; save is a DoneIconButton, so it confirms like copy.",
     "wasLabel is read before the struck-through amount. Show more carries aria-expanded and aria-controls.",
     "ItemCardSkeleton is aria-hidden unless it gets a label; label one skeleton (role status) so loading is announced once.",
   ],

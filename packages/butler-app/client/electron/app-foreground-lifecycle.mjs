@@ -229,7 +229,8 @@ export function writeAppForegroundStartupFailure(
     failed_at: now().toISOString(),
     raw_text_included: false,
   };
-  atomicWriteJson(appForegroundStartupFailurePath(butlerData), record);
+  // Without an accepted data root (`null`) the record is returned but not kept.
+  if (butlerData) atomicWriteJson(appForegroundStartupFailurePath(butlerData), record);
   return record;
 }
 

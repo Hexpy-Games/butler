@@ -314,7 +314,7 @@ export const enUsCopy: AppCopy = {
     back: "Back", forward: "Forward", reload: "Reload", stop: "Stop", loading: "Loading", crashed: "Tab crashed", empty: "Open a new tab", conversationEmpty: "Pages Butler opens show here",
     updateRequired: "Update Butler", restartRequired: "Restart Butler", failed: "Could not open page", openOutput: "Open in Browser",
     output: "Output", show: "Show browser", hide: "Hide browser", active: "Butler is browsing", openConversation: "Open conversation",
-    moveToConversation: "Move to a conversation", newConversation: "New conversation", bringTab: "Bring in a tab", resizeChat: "Resize conversation",
+    moveToConversation: "Move to a conversation", newConversation: "New chat", bringTab: "Bring in a tab", resizeChat: "Resize conversation",
     pick: "Pick elements", scrap: "Scrap", bookmarks: "Bookmarks", bookmarkAdd: "Add bookmark", bookmarked: "Bookmarked",
     manageBookmarks: "Manage bookmarks", downloads: "Downloads", downloading: "Downloading", showInFolder: "Show in folder", more: "More",
     findInPage: "Find in page", zoom: "Zoom", print: "Print", openExternal: "Open in default browser", settings: "Browser settings",
@@ -425,7 +425,7 @@ export const enUsCopy: AppCopy = {
     document: "Document",
     active: "Active", other: "Other", roadmap: "Roadmap",
     sourceDetails: "Source details", readOnly: "Read-only view of the original document.", referenceAction: "Reference in conversation",
-    statuses: { draft: "Draft", proposed: "Proposed", active: "Active", in_progress: "In progress", todo: "To do", planned: "Planned", review: "In review", blocked: "Blocked", done: "Done", completed: "Completed", cancelled: "Cancelled", archived: "Archived", superseded: "Superseded", deprecated: "Deprecated" },
+    statuses: { draft: "Draft", proposed: "Proposed", active: "Active", in_progress: "In progress", todo: "To do", planned: "Planned", review: "In review", blocked: "Blocked", done: "Done", completed: "Completed", skipped: TASK_GRAPH_COPY["en-US"].status.skipped, cancelled: "Cancelled", archived: "Archived", superseded: "Superseded", deprecated: "Deprecated" },
     labels: { id: "ID", kind: "Document type", status: "Document status", updatedAt: "Last updated", source: "Source location", revision: "Revision", migratedFrom: "Migrated from", parent: "Parent", owner: "Owner", priority: "Priority", acceptance: "Acceptance", validation: "Validation", review: "Review", report: "Report", implementation: "Implementation" },
   },
   guided: {
@@ -573,7 +573,7 @@ export const enUsCopy: AppCopy = {
     pendingApprovals: count => `${count} pending ${count === 1 ? "approval" : "approvals"}`, allowedCount: count => `${count} allowed`, revoke: title => `${title} — Revoke`,
     approvalRequest: {
       browserMode: { signed_out: "Without signing in", signed_in: "Signed in" },
-      signInStep: reason => ({mfa: "Two-step verification", passkey: "Passkey", captcha: "CAPTCHA", secure_keypad: "Security keypad", unknown_form: "Check sign-in form"} as Record<string, string>)[reason] ?? "Check sign-in form",
+      signInStep: reason => ({ mfa: "Two-step verification", passkey: "Passkey", captcha: "CAPTCHA", secure_keypad: "Security keypad", unknown_form: "Check sign-in form" } as Record<string, string>)[reason] ?? "Check sign-in form",
       waitHandoff: reason => ({ sign_in: "Sign-in needed", secure_field: "Your input needed", secure_keypad: "Security keypad needs you", captcha: "CAPTCHA needs you" } as Record<string, string>)[reason] ?? "Needs you in the tab",
       payStep: reason => ({ secure_keypad: "Security keypad", app_auth: "Card app approval", otp: "Verification code", three_ds: "Card issuer check", captcha: "CAPTCHA" } as Record<string, string>)[reason] ?? "Check the payment page",
       payHandoff: "Payment needs you",
@@ -711,13 +711,13 @@ export const enUsCopy: AppCopy = {
     success: "Successes",
     failures: "Failures",
   },
-  clearChat: { archiveCount: (count: number) => `Archive (${count})`, title: "Clear chat", description: "This chat moves to Archive and you start fresh. Instructions and memories stay.", memory: "", manageMemory: "Manage memory ›", clear: "Clear", busy: "Wait for pending work to finish.", failed: "Could not clear chat.", archivedTitle: (date: string) => `General · ${date}` },
+  clearChat: { archiveCount: (count: number) => `Archive (${count})`, title: "Clear chat", description: "This chat moves to Archive and you start fresh. Instructions and memories stay.", memory: "", manageMemory: "Manage memory ›", clear: "Clear", busy: "Wait for pending work to finish.", failed: "Could not clear chat.", archivedTitle: (date: string) => `Chats · ${date}` },
   space: {
-    general: "General",
+    general: "Chats",
     space: "Space",
     reference: "Reference in message",
     dashboard: "Project dashboard",
-    newChat: "New conversation",
+    newChat: "New chat",
     subgroup: "Create subgroup",
     rename: "Rename",
     moveMenu: "Move…",
@@ -773,6 +773,7 @@ export const enUsCopy: AppCopy = {
 rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${title}.`, relocationDescription: (source, target) => `Move ${source} to ${target}. Conversation history and existing files are preserved. Future work will use the new workspace and project knowledge. Active work must finish before moving.`,
   },
   interfaceStatus: {
+    generalCategory: "General",
     countSummary: (kind, count, truncated) => `${({ filesRead: "Files read", files: "Files", matches: "Matches", documents: "Documents", results: "Results" })[kind]} · ${count}${truncated ? " · Partial results" : ""}`,
     bytes: (count) => `${count.toLocaleString("en-US")} bytes`,
     lines: (range) => `line ${range}`,
@@ -1002,7 +1003,9 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       collapseHistoryLabel: (label, count) => count <= 1 ? `Collapse ${label} details` : `Collapse ${label} and ${count - 1} more activities`,
       viewAllLabel: (count) => `View all (${count})`,
       collapseLabel: "Collapse",
-      showDetailsLabel: "Show details",
+      disclosureLabel: (status, latest, earlier) => earlier > 0
+        ? `${status}, ${latest}, ${earlier} earlier ${earlier === 1 ? "record" : "records"}`
+        : `${status}, ${latest}`,
       webSearchSummary: (count) => `Web search ${count} queries`,
       toolStepsSummary: (name, count) => `${name} ${count} steps`,
       webSearchDetail: (value) => `Web search: ${value}`,

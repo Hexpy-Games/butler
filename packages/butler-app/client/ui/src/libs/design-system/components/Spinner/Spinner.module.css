@@ -47,24 +47,8 @@
   }
 }
 
-@keyframes spinner-pulse {
-  from {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0.45;
-  }
-}
-
-/* Reduced motion: the static arc only breathes, slowly. */
-@media (prefers-reduced-motion: reduce) {
-  .orbit {
-    animation: none;
-  }
-
-  .spinner {
-    animation: spinner-pulse calc(var(--pulse-duration) * 2)
-      var(--spinner-easing) infinite alternate;
-  }
-}
+/* Reduced-motion exemption (owner decision): a turning spinner is a status
+   signal, not decorative motion. It keeps rotating under the OS preference
+   and the App's data-motion="reduced" scope, so this file has no
+   prefers-reduced-motion rule for the build plugin to copy into that scope
+   (file-exact REDUCED_MOTION_EXEMPT in scripts/lint/motion-lint.ts). */

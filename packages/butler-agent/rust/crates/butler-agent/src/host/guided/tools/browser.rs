@@ -14,6 +14,8 @@ mod observe_after;
 mod open;
 mod pay;
 mod preview;
+mod reached;
+pub(super) use reached::discover as discover_reached;
 mod signin;
 mod upload;
 use super::{GuidedTools, dispatch::encoded};

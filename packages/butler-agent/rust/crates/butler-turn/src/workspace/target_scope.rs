@@ -36,6 +36,34 @@ pub fn classify_targets(roots: &ScopeRoots<'_>, base: &Path, targets: &[&str]) -
         .max()
         .unwrap_or(TargetScope::NoTarget)
 }
+/// How a file tool should spell `requested` so the access check, the
+/// approval card and the operation name the place the OS reaches, resolved
+/// as [`classify`] resolves it: relative to `root` when it really lies inside
+/// though spelled another way (another spelling of the root, a link into
+/// it), or the real absolute path when a link or alias leads somewhere other
+/// than its spelling says. None when the spelling already names that place
+/// (an in-folder path stays as written) or the path does not parse.
+pub fn real_target(root: &Path, requested: &str) -> Option<PathBuf> {
+    let lexical = butler_platform::tool_paths::resolve(root, requested).ok()?;
+    let real = realpath_or_nearest(&lexical);
+    let root_real = realpath_or_nearest(root);
+    if path_is_within(&real, &root_real) {
+        // An ambiguous spelling stays as written: classification keeps it
+        // outside rather than trusting its containment.
+        if ambiguous_path(&lexical)
+            || path_is_within(&lexical, &butler_platform::tool_paths::lexical(root))
+        {
+            return None;
+        }
+        let relative = inside_relative(&root_real, &real)?;
+        return Some(if relative.as_os_str().is_empty() {
+            PathBuf::from(".")
+        } else {
+            relative
+        });
+    }
+    (real != lexical).then_some(real)
+}
 fn classify(
     roots: &ScopeRoots<'_>,
     base: &Path,
@@ -75,7 +103,7 @@ fn classify(
         // A hard link may alias a file outside the project (for example a
         // key linked in by a command); treat it like the outside original.
         || std::fs::symlink_metadata(&real)
-            .is_ok_and(|metadata| butler_platform::secure_fs::has_other_links(&metadata))
+            .is_ok_and(|metadata| butler_platform::secure_fs::has_other_links(&real, &metadata))
     {
         TargetScope::Protected
     } else {
