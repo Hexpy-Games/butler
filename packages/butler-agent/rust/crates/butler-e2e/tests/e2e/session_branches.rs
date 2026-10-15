@@ -1,6 +1,7 @@
 //! App branch requests (`POST /space/branches`): a new conversation or
 //! project from a settled answer, seeded with a summary of the source. The
 //! native cutover dropped the route; project sessions are valid sources.
+//! `POST /space/branch-source` leads a branch back to that source answer.
 //!
 //! The model is a loopback stand-in (`e2e::fake_servers`) registered as the
 //! default local model, so the source turns and the branch summary need no
@@ -235,4 +236,101 @@ async fn branch_02_invalid_requests_are_refused() -> Result<(), HarnessError> {
         );
     }
     s.finish().await
+}
+
+/// BRANCH-03 — `POST /space/branch-source` takes a branch conversation back to
+/// its source answer in General: the source session's message page ending at
+/// that answer, with a forward cursor for the newer messages. After a General
+/// clear the answer is found in its archive session. A session that is not a
+/// branch answers 404 `branch_origin_unavailable`; a missing id answers 400.
+#[tokio::test]
+async fn branch_03_branch_returns_to_its_source_answer() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let server = FakeServer::local_models(ChatBehavior {
+        answer: "Loam is a common type of garden soil.".into(),
+        chunk_delay: Duration::from_millis(5),
+        ..ChatBehavior::default()
+    })
+    .await?;
+    let s = start("BRANCH-03", &server).await?;
+    let (_, chat, answer) = branch_source(&s).await?;
+    let reply =
+        s.gw.post(
+            "/space/branches",
+            branch_body(
+                &chat,
+                &answer,
+                "branch-back",
+                "Beds chat",
+                &json!({"kind": "chat"}),
+            ),
+        )
+        .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let branch = reply.data()["session"]["id"].as_str().unwrap().to_owned();
+    s.turn(&chat, "And a second type?").await?;
+
+    let view = source_view(&s, &branch, &chat, &answer).await?;
+    let last = view["messages"]
+        .as_array()
+        .unwrap()
+        .last()
+        .cloned()
+        .unwrap();
+    assert_eq!(last["id"], answer.as_str(), "page must end at the answer");
+    assert!(
+        view["message_window"]["next_cursor_token"].is_string(),
+        "{}",
+        view["message_window"]
+    );
+
+    let cleared =
+        s.gw.post("/sessions/general/clear", json!({"title": "Soil"}))
+            .await?;
+    assert_eq!(cleared.status, 200, "{}", cleared.text);
+    let archive = cleared.data()["archived_session"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    source_view(&s, &branch, &archive, &answer).await?;
+
+    for (body, status, code) in [
+        (json!({"sessionId": chat}), 404, "branch_origin_unavailable"),
+        (
+            json!({"sessionId": "chat-missing"}),
+            404,
+            "branch_origin_unavailable",
+        ),
+        (json!({}), 400, "session_required"),
+    ] {
+        let reply = s.gw.post("/space/branch-source", body.clone()).await?;
+        assert_eq!(reply.status, status, "{body}: {}", reply.text);
+        assert_eq!(reply.error_code(), Some(code), "{body}: {}", reply.text);
+    }
+    s.finish().await
+}
+
+/// The source view for `branch`, checked to be `owner`'s page holding `answer`.
+async fn source_view(
+    s: &Scenario,
+    branch: &str,
+    owner: &str,
+    answer: &str,
+) -> Result<Value, HarnessError> {
+    let reply =
+        s.gw.post("/space/branch-source", json!({"sessionId": branch}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let data = reply.data();
+    assert_eq!(data["messageId"], answer, "{}", reply.text);
+    let view = data["view"].clone();
+    assert_eq!(view["session_id"], owner, "{}", reply.text);
+    let ids = view["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|message| message["id"].as_str().unwrap_or_default())
+        .collect::<Vec<_>>();
+    assert!(ids.contains(&answer), "answer missing from {ids:?}");
+    Ok(view)
 }
