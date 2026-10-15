@@ -41,6 +41,55 @@ pub struct SubsessionResumeRequest {
 }
 
 impl SubsessionService {
+    /// Whether the child's latest turn still runs: admitted and without a saved
+    /// result. An interrupted turn closed with a failed result stays `admitted`
+    /// in the turn store but no longer holds back a direction.
+    async fn child_turn_running(&self, child_session: &str) -> Result<bool, BtccError> {
+        let Some((turn, state)) = self
+            .repository
+            .latest_turn(child_session.to_owned())
+            .await
+            .map_err(BtccError::from)?
+        else {
+            return Ok(false);
+        };
+        if state != "admitted" {
+            return Ok(false);
+        }
+        Ok(!self
+            .repository
+            .has_turn_result(child_session.to_owned(), turn)
+            .await
+            .map_err(BtccError::from)?)
+    }
+
+    /// Enqueues the child's pending direction once its latest turn has ended.
+    pub(super) async fn release_pending_direction(
+        &self,
+        child_session: &str,
+    ) -> Result<(), BtccError> {
+        let Some(relation) = self
+            .repository
+            .by_child(child_session.to_owned())
+            .await
+            .map_err(BtccError::from)?
+        else {
+            return Ok(());
+        };
+        let Some(direction) = self
+            .repository
+            .pending_direction(relation.relation_id.clone())
+            .await
+            .map_err(BtccError::from)?
+        else {
+            return Ok(());
+        };
+        if self.child_turn_running(child_session).await? {
+            return Ok(());
+        }
+        self.enqueue_direction(&relation, &direction).await
+    }
+
     /// Resumes a subsession.
     pub async fn resume(&self, request: SubsessionResumeRequest) -> Result<Value, BtccError> {
         let relation = self
@@ -177,12 +226,7 @@ impl SubsessionService {
         if direction.instruction_id != instruction_id || direction.instruction != instruction {
             return Err(error(BtccCode::StewardDirectionIdentityConflict));
         }
-        let latest = self
-            .repository
-            .latest_turn(relation.child_session_id.clone())
-            .await
-            .map_err(BtccError::from)?;
-        if latest.as_ref().is_none_or(|(_, state)| state != "admitted") {
+        if !self.child_turn_running(&relation.child_session_id).await? {
             self.enqueue_direction(&relation, &direction).await?;
         }
         Ok(
@@ -276,12 +320,7 @@ impl SubsessionService {
                 .await
                 .map_err(BtccError::from)?
                 .ok_or_else(|| error(BtccCode::SubsessionDirectionRelationMissing))?;
-            let latest = self
-                .repository
-                .latest_turn(relation.child_session_id.clone())
-                .await
-                .map_err(BtccError::from)?;
-            if latest.as_ref().is_none_or(|(_, state)| state != "admitted") {
+            if !self.child_turn_running(&relation.child_session_id).await? {
                 self.enqueue_direction(&relation, &direction).await?;
             }
         }

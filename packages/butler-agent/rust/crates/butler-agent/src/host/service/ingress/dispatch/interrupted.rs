@@ -17,6 +17,8 @@ use butler_turn::workspace::SessionBindingStore;
 
 /// The stable code an interrupted internal child turn reports to its parent.
 const CHILD_INTERRUPTED: &str = "child_turn_interrupted";
+/// Metadata naming the child failure a retained record still has to save.
+const CHILD_FAILURE_PENDING: &str = "childFailurePending";
 
 /// A turn that a crashed process (dead queue claim owner) was running.
 pub(super) fn by_crash(record: &QueuedInboundEvent) -> bool {
@@ -82,8 +84,37 @@ pub(super) async fn settle_returning_child(
     subsessions: &SubsessionService,
     status: &str,
 ) -> Option<IngressPoll> {
-    super::rejected::close_child(item, bindings, subsessions, CHILD_INTERRUPTED).await;
+    let code = item
+        .record
+        .metadata
+        .get(CHILD_FAILURE_PENDING)
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or(CHILD_INTERRUPTED)
+        .to_owned();
+    if super::rejected::close_child(item, bindings, subsessions, &code).await
+        == super::rejected::ChildClose::Pending
+    {
+        return Some(retry_child_close(item, queue, &code).await);
+    }
     settle(item, queue, bindings, delivery, status).await
+}
+
+/// The child's failed result could not be saved yet. The record stays queued
+/// as report-only (its turn never runs again), and a later claim saves the
+/// result: the same durable deferral an undeliverable interruption report uses.
+pub(super) async fn retry_child_close(
+    item: &ClaimedInboundEvent,
+    queue: &InboundQueue,
+    code: &str,
+) -> IngressPoll {
+    let mut retained = item.clone();
+    let metadata = &mut retained.record.metadata;
+    metadata.insert("recoveredFromRuntimeInterruption".into(), true.into());
+    metadata.insert(CHILD_FAILURE_PENDING.into(), code.into());
+    let _ = queue
+        .defer_async(retained, "child_result_pending".into())
+        .await;
+    IngressPoll::default()
 }
 
 /// Reports the interrupted turn to the App as failed and retryable

@@ -5,7 +5,36 @@ use super::*;
 /// to settle, not caveats to forward.
 const RELAY: &str = "\nDeliver this to the user as your answer, outcome first. Its open or unconfirmed items are work, not caveats: settle any that one quick lookup can settle, and keep only what still matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines about what was not re-checked or what the result does not prove or guarantee, or how the work was recorded.";
 
+/// The result identity of one child turn: each turn has at most one result.
+pub(crate) fn turn_result_id(session: &str, turn: &str) -> String {
+    format!(
+        "result-{}",
+        crate::btcc::digest_identity(&format!("btcc.subsession.result.v1\0{session}\0{turn}"))
+    )
+}
+
 impl SqliteSubsessionRepository {
+    /// Whether the child turn's result is saved (a primary-key lookup).
+    pub(crate) async fn has_turn_result(
+        &self,
+        session: String,
+        turn: String,
+    ) -> Result<bool, StorageError> {
+        let id = turn_result_id(&session, &turn);
+        self.storage
+            .execute(move |db| {
+                db.query_row(
+                    "SELECT 1 FROM btcc_steward_results WHERE result_id=?1",
+                    [id],
+                    |_| Ok(()),
+                )
+                .optional()
+                .map(|row| row.is_some())
+                .map_err(StorageError::sqlite)
+            })
+            .await
+    }
+
     pub(crate) async fn commit_result(
         &self,
         completion: ChildCompletion,
@@ -23,7 +52,7 @@ impl SqliteSubsessionRepository {
         } = completion;
         self.storage.execute(move |db| {
             let delegation = read(db,"r.child_session_id=?1",&child_session)?.ok_or_else(|| StorageError::new(StorageCode::SubsessionRelationMissing,"Subsession relation is missing"))?;
-            let result_id = format!("result-{}", crate::btcc::digest_identity(&format!("btcc.subsession.result.v1\0{child_session}\0{child_turn}")));
+            let result_id = turn_result_id(&child_session, &child_turn);
             let packet = &delegation.packet;
             let model = packet.model_ref.as_str();
             let reasoning = packet.reasoning_effort.as_str();
@@ -34,7 +63,13 @@ impl SqliteSubsessionRepository {
             let evidence_json=serde_json::to_string(&evidence_refs).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;
             let code = failure_code.as_ref().map(|_| "steward_execution_failed")
                 .or(handoff.as_ref().map(|_| "capability_unavailable_in_child"));
-            tx.execute("INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,?6,?10,?7,?8,'[]',?9)",params![result_id,delegation.relation_id,delegation.task_id,child_session,child_turn,status,summary,evidence_json,now,code]).map_err(StorageError::sqlite)?;
+            let inserted = tx.execute("INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,?6,?10,?7,?8,'[]',?9)",params![result_id,delegation.relation_id,delegation.task_id,child_session,child_turn,status,summary,evidence_json,now,code]).map_err(StorageError::sqlite)?;
+            // One result per child turn: closing a turn whose result is already
+            // saved (a restart after a crash between commit and queue settlement)
+            // changes nothing, so a success is never re-keyed or delivered twice.
+            if inserted == 0 {
+                return Ok(());
+            }
             let feedback = delegation_feedback(&tx, &delegation, &result_id, failure_reason.as_deref())?;
             let mut text = format!("Delegated result\nstatus: {status}\nsummary: {summary}\nevidence_refs: {evidence_json}{feedback}");
             text.push_str(&super::assets::delivery_assets(&tx, &child_turn)?);
