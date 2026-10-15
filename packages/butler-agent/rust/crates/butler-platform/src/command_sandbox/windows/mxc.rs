@@ -66,6 +66,8 @@ pub(in crate::command_sandbox) fn project_write(
 #[cfg(feature = "test-support")]
 pub(in crate::command_sandbox) fn verify_recovery_contract() {
     drive::verify_inaccessible_process();
+    let mapped = drive::verify_long_mapping();
+    assert!(mapped.is_ok(), "{mapped:?}");
     sdk::verify_output_failures();
     launch::verify_cleanup_status();
 }

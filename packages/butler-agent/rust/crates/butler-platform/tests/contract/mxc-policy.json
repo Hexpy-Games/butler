@@ -46,8 +46,8 @@
       "PYTHONIOENCODING=utf-8",
       "PYTHONUTF8=1",
       "SYSTEMROOT=C:\\Windows",
-      "TEMP=c:\\users\\person\\.butler\\tmp\\project-write\\command\\temp",
-      "TMP=c:\\users\\person\\.butler\\tmp\\project-write\\command\\temp",
+      "TEMP=c:\\users\\person\\.butler\\tmp\\project-write\\command\\t",
+      "TMP=c:\\users\\person\\.butler\\tmp\\project-write\\command\\t",
       "USERPROFILE=c:\\users\\person\\.butler\\tmp\\project-write\\command\\home"
     ],
     "inheritDefaultEnv": false,

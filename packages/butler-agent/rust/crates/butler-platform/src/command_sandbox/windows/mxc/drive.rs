@@ -83,6 +83,34 @@ impl Drive {
         }
         Err("no_free_drive".into())
     }
+    pub(super) fn claim_scratch(
+        data: &Path,
+        scratch: &Path,
+        policy: &Path,
+    ) -> Result<(Self, String), Error> {
+        let scratch = fs::canonicalize(scratch)?;
+        // subst itself has a legacy target-length limit. Alias the nearest
+        // usable ancestor; grants remain on the exact physical command scratch.
+        // Keep the mapping target alive when invocation cleanup removes scratch
+        // before crash reconciliation has removed this helper's drive.
+        let target = scratch
+            .parent()
+            .ok_or("scratch_parent_missing")?
+            .ancestors()
+            .find(|path| {
+                path.as_os_str().to_string_lossy().encode_utf16().count() <= MAX_SUBST_TARGET_UNITS
+            })
+            .ok_or("subst_target_too_long")?;
+        let tail = scratch.strip_prefix(target)?.join("t");
+        let tail = tail.to_str().ok_or("invalid_scratch_path")?;
+        // Include the drive prefix, separator, longest policy-test name and NUL.
+        if 3 + tail.encode_utf16().count() + 1 + 38 >= 260 {
+            return Err("scratch_temp_path_too_long".into());
+        }
+        let drive = Self::claim(data, target, policy)?;
+        let temporary = format!("{}:\\{tail}", drive.letter);
+        Ok((drive, temporary))
+    }
     fn matches(&self) -> io::Result<bool> {
         let root = format!("{}:\\", self.letter);
         match same_file::is_same_file(root, &self.entry.target) {
@@ -229,4 +257,57 @@ pub(in crate::command_sandbox) fn verify_inaccessible_process() {
         Ok(None)
     ));
     assert!(inaccessible_process(co::ERROR::INVALID_HANDLE).is_err());
+}
+
+#[cfg(feature = "test-support")]
+pub(in crate::command_sandbox) fn verify_long_mapping() -> Result<(), Error> {
+    let base = std::env::temp_dir().join(format!(
+        "butler-drive-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos()
+    ));
+    let mut target = base.clone();
+    while target.as_os_str().to_string_lossy().encode_utf16().count() <= 320 {
+        target = target.join("a".repeat(50));
+    }
+    fs::create_dir_all(target.join("t"))?;
+    let result = (|| {
+        let (drive, temporary) = Drive::claim_scratch(&base, &target, &base.join("policy.json"))?;
+        eprintln!(
+            "Windows scratch physical_utf16={} temporary_utf16={}",
+            target.as_os_str().to_string_lossy().encode_utf16().count(),
+            temporary.encode_utf16().count()
+        );
+        let shell = PathBuf::from(std::env::var("SYSTEMROOT")?)
+            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        let output = Command::new(shell)
+            .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+                "$ErrorActionPreference='Stop'; $ExecutionContext.SessionState.LanguageMode; $p=[IO.Path]::Combine([IO.Path]::GetTempPath(),'__PSScriptPolicyTest_roundtrip.ps1'); [IO.File]::WriteAllText($p,'complete'); [IO.File]::ReadAllText($p); [IO.File]::Delete($p)"])
+            .env("TEMP", &temporary)
+            .env("TMP", &temporary)
+            .output();
+        // Parent-side recovery can remove command scratch before drive recovery.
+        fs::remove_dir_all(&target)?;
+        let cleaned = drive.cleanup();
+        let output = output?;
+        cleaned?;
+        assert_eq!(
+            winsafe::GetLogicalDrives() & (1 << (drive.letter as u8 - b'A')),
+            0
+        );
+        assert!(output.status.success(), "{output:?}");
+        let text = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            text.lines().any(|line| line == "FullLanguage"),
+            "{output:?}"
+        );
+        assert!(text.lines().any(|line| line == "complete"), "{output:?}");
+        assert_eq!(fs::read_dir(base.join("sandbox/drives"))?.count(), 0);
+        Ok(())
+    })();
+    let cleanup = fs::remove_dir_all(base);
+    cleanup?;
+    result
 }

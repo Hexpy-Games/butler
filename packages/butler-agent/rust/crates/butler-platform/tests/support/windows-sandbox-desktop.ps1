@@ -10,41 +10,8 @@ $resultFile = Join-Path $resultRoot ($pins.revision + $suffix + '.json')
 $diagnostic = Join-Path $resultRoot ($pins.revision + '.diagnostic.json')
 $result = @{ diagnostic=$diagnostic; revision=$pins.revision; status='FAIL'; probe=$null; desktop=$null; testExit=$null }
 $profile = Join-Path $bundle ('tmp-' + [guid]::NewGuid().ToString('N').Substring(0,8))
-function RegistrySnapshot {
-    # These are the only registry paths reached by the contained write attempt
-    # or by Butler registration. Store hashes, never registry values in evidence.
-    $registry = @{}
-    foreach ($key in @('HKCU\Software\ButlerSandboxDenied','HKCU\Software\Classes\butler','HKCU\Software\Microsoft\Windows\CurrentVersion\Run')) {
-        $previous=$ErrorActionPreference
-        $ErrorActionPreference='Continue'
-        $text = (& reg query $key /s 2>$null | Out-String)
-        $ErrorActionPreference=$previous
-        $sha = [Security.Cryptography.SHA256]::Create()
-        try { $registry[$key] = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($text))) } finally { $sha.Dispose() }
-    }
-    return $registry
-}
-function HostSnapshot {
-    $registry = RegistrySnapshot
-    # XML pins actions, triggers and settings; LastRunTime is intentionally not
-    # part of a task definition and can change independently during this run.
-    $tasks = @{}
-    foreach ($task in (Get-ScheduledTask -ErrorAction Stop)) {
-        $name = $task.TaskPath + $task.TaskName
-        $xml = Export-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -ErrorAction Stop
-        $sha = [Security.Cryptography.SHA256]::Create()
-        try { $tasks[$name] = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($xml))) } finally { $sha.Dispose() }
-    }
-    return @{registry=$registry;tasks=$tasks}
-}
-function SameMap($a,$b) {
-    if ($a.Count -ne $b.Count) { return $false }
-    foreach ($key in $a.Keys) { if ($a[$key] -ne $b[$key]) { return $false } }
-    return $true
-}
-function RegistryDiff($a,$b) {
-    return @(@($a.Keys) + @($b.Keys) | Sort-Object -Unique | Where-Object { $a[$_] -ne $b[$_] })
-}
+$installedApp = Join-Path $env:LOCALAPPDATA 'butler-app\Butler.exe'
+$script:installedProtocolHash = $null
 $before = $null
 $result.rows = @(0..16 | ForEach-Object {
     if ($_ -eq 13) { @{row=$_;status='MANUAL_REQUIRED';reason='admin_wfp_diff'} }
@@ -58,6 +25,7 @@ try {
             throw ('binary_hash_mismatch: ' + $pin.name)
         }
     }
+    . (Join-Path $bundle 'windows-host-snapshot.ps1')
     # whoami supplies the integrity SID; refuse anything other than Medium IL.
     $groups = (& whoami /groups | Out-String)
     if ($groups -notmatch 'S-1-16-8192\b' -or $groups -match 'S-1-16-(12288|16384)\b') {
@@ -73,6 +41,10 @@ try {
     $env:TEMP = Join-Path $profile 'temp'
     $env:TMP = $env:TEMP
     New-Item -ItemType Directory -Force $env:HOME,$env:BUTLER_DATA,$env:APPDATA,$env:LOCALAPPDATA,$env:TEMP | Out-Null
+    Add-Type -TypeDefinition (Get-Content -Raw (Join-Path $bundle 'windows-registry-snapshot.cs'))
+    if (Test-Path -LiteralPath $installedApp -PathType Leaf) {
+        $script:installedProtocolHash = InstalledProtocolHash $installedApp
+    }
     Remove-Item Env:BUTLER_WINDOWS_PROJECT_SANDBOX -ErrorAction SilentlyContinue
     $env:BUTLER_APP_DISABLE_SHELL_REGISTRATION = '1'
     $env:BUTLER_E2E_WINDOWS_POLICY_PROBE = Join-Path $profile 'windows-policy-probe.exe'
@@ -147,7 +119,7 @@ public static class ButlerDesktop {
         $case = if ($row -eq 15) { $entry[1] } else { 'windows_sandbox::' + $entry[1] }
         $env:BUTLER_E2E_PERF = if ($row -eq 14) { '1' } else { '0' }
         $log = Join-Path $resultRoot ($pins.revision + $suffix + '.row-' + $row + '.log')
-        $rowBefore = RegistrySnapshot
+        $rowBefore = HostSnapshot
         $item = @{row=$row;status='FAIL';test=$case;log=$log;startedUtc=[DateTime]::UtcNow.ToString('o')}
         try {
             $listed = & (Join-Path $bundle 'e2e.exe') $case --exact --list
@@ -174,14 +146,17 @@ public static class ButlerDesktop {
                 }
             }
         } catch { $item.error = $_.Exception.Message }
-        $rowAfter = RegistrySnapshot
+        $rowAfter = HostSnapshot
         $item.finishedUtc = [DateTime]::UtcNow.ToString('o')
-        $item.registryBefore = $rowBefore
-        $item.registryAfter = $rowAfter
-        $item.registryChangedKeys = @(RegistryDiff $rowBefore $rowAfter)
-        if ($item.registryChangedKeys.Count -gt 0) {
+        $item.registryBefore = $rowBefore.registry
+        $item.registryAfter = $rowAfter.registry
+        $changes = HostChanges $rowBefore $rowAfter
+        $item.registryChanges = $changes.registry
+        $item.registryChangedKeys = @($changes.registry | ForEach-Object { $_.name })
+        $item.scheduledTaskChanges = $changes.tasks
+        if ($changes.unattributed) {
             $item.testStatus = $item.status
-            $item.status='FAIL'; $item.error='host_state_changed_during_row'
+            $item.status='FAIL'; $item.error='unattributed_host_state_changed_during_row'
         }
         $result.rows = @($result.rows | Where-Object { $_.row -ne $row }) + @($item)
         Write-Host ('Row ' + $row + ': ' + $item.status)
@@ -213,12 +188,14 @@ public static class ButlerDesktop {
             $after = HostSnapshot
             $result.registryBefore = $before.registry
             $result.registryAfter = $after.registry
-            $result.registryChangedKeys = @(RegistryDiff $before.registry $after.registry)
-            $result.registryUnchanged = SameMap $before.registry $after.registry
-            $result.scheduledTasksUnchanged = SameMap $before.tasks $after.tasks
-            if (!$result.registryUnchanged -or !$result.scheduledTasksUnchanged) {
-                $result.status='FAIL'; $result.error='host_state_changed'
-                # Preserve row results: a global interval does not identify its writer.
+            $changes = HostChanges $before $after
+            $result.registryChanges = $changes.registry
+            $result.registryChangedKeys = @($changes.registry | ForEach-Object { $_.name })
+            $result.registryUnchanged = $changes.registry.Count -eq 0
+            $result.scheduledTaskChanges = $changes.tasks
+            $result.scheduledTasksUnchanged = $changes.tasks.Count -eq 0
+            if ($changes.unattributed) {
+                $result.status='FAIL'; $result.error='unattributed_host_state_changed'
             }
         } catch { $result.status='FAIL'; $result.error='host_snapshot_failed: ' + $_.Exception.Message }
     }

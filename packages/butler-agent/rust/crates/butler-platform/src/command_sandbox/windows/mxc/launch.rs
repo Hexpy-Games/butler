@@ -67,18 +67,43 @@ fn execute(file: &Path, payload: &mut PolicyFile) -> Result<sdk::RunOutcome, Err
     let relative = relative.to_str().ok_or("invalid cwd")?.to_owned();
     let drive = Drive::claim(&payload.data, &payload.project, file)?;
     let result = (|| {
-        rewrite_git_config(payload, drive.letter)?;
-        probe::rewrite_drive(&mut payload.request, drive.letter, &relative)?;
-        sdk::run(&payload.request)
+        let (temporary, path) = Drive::claim_scratch(&payload.data, &payload.scratch, file)?;
+        let result = run_mapped(payload, drive.letter, &path, &relative);
+        finish_cleanup(result, temporary.cleanup())
     })();
     finish_cleanup(result, drive.cleanup())
+}
+
+fn run_mapped(
+    payload: &mut PolicyFile,
+    project_drive: char,
+    temporary: &str,
+    relative: &str,
+) -> Result<sdk::RunOutcome, Error> {
+    // Only the environment uses the short alias: all filesystem grants still
+    // name the exact physical command scratch. Both mappings share crash recovery.
+    let env = payload
+        .request
+        .pointer_mut("/process/env")
+        .and_then(serde_json::Value::as_array_mut)
+        .ok_or("missing environment")?;
+    for item in env {
+        if let Some(key) = item.as_str().and_then(|s| s.split_once('=').map(|p| p.0))
+            && matches!(key, "TEMP" | "TMP")
+        {
+            *item = format!("{key}={temporary}").into();
+        }
+    }
+    rewrite_git_config(payload, project_drive)?;
+    probe::rewrite_drive(&mut payload.request, project_drive, relative)?;
+    sdk::run(&payload.request)
 }
 pub(super) fn files(payload: &PolicyFile, drive: char) -> Result<(), Error> {
     let scratch = &payload.scratch;
     for name in [
         "home/AppData/Roaming",
         "home/AppData/Local",
-        "temp",
+        "t",
         "bin",
         "npm-cache",
     ] {

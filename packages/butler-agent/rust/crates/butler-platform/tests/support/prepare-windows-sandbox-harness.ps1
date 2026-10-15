@@ -18,9 +18,11 @@ foreach ($pair in @(@($Agent,'butler-agent.exe'),@($Helper,'butler-sandbox.exe')
 $evidence = Join-Path $Destination 'ssh-row16.json'
 Copy-Item -LiteralPath $SshEvidence -Destination $evidence
 $binaries += @{name='ssh-row16.json';sha256=(Get-FileHash -Algorithm SHA256 $evidence).Hash.ToLowerInvariant()}
-$policySource = Join-Path $Destination 'windows-policy-probe.cs'
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'windows-policy-probe.cs') -Destination $policySource
-$binaries += @{name='windows-policy-probe.cs';sha256=(Get-FileHash -Algorithm SHA256 $policySource).Hash.ToLowerInvariant()}
+foreach ($name in @('windows-policy-probe.cs','windows-registry-snapshot.cs','windows-host-snapshot.ps1')) {
+    $target = Join-Path $Destination $name
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $target
+    $binaries += @{name=$name;sha256=(Get-FileHash -Algorithm SHA256 $target).Hash.ToLowerInvariant()}
+}
 $manifest = @{revision=$Revision;binaries=$binaries}
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 (Join-Path $Destination 'pins.json')
 $runner = Join-Path $Destination 'windows-sandbox-desktop.ps1'
