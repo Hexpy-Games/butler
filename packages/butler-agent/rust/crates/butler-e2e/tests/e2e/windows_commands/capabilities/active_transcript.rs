@@ -33,6 +33,14 @@ pub(super) fn seed(data: &Path, chat: &str) -> Result<Expected, HarnessError> {
         output.write_all(&line)?;
     }
     output.flush()?;
+    // Settled history was acknowledged by an earlier process. Make that true
+    // on disk too: its first new append must not fsync 290 MB of fixture writes.
+    let sync_started = std::time::Instant::now();
+    output.get_ref().sync_all()?;
+    eprintln!(
+        "APPROVAL-HISTORY sync_us={}",
+        sync_started.elapsed().as_micros()
+    );
     let bytes = rows * line.len() as u64;
     let identity = butler_platform::secure_fs::identity(&fs::metadata(&path)?);
     let (device, inode) = identity.id.map_or((0, 0), |id| (id.device, id.inode));

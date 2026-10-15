@@ -3,6 +3,8 @@ use super::*;
 
 #[path = "refusal_scale.rs"]
 mod scale;
+#[path = "startup.rs"]
+mod startup;
 
 const SAMPLES: usize = 20;
 

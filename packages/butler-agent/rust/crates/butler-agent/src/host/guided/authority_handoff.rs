@@ -81,10 +81,13 @@ impl AuthorityHandoff {
         let document =
             JsonDocument::from_value(&envelope).map_err(GatewayApplicationError::internal_from)?;
         self.queue
-            .enqueue_async(document)
+            // The decision and original message are committed in BTCC. Startup
+            // retry_decided reconstructs a lost pending file; the queue still
+            // persists its processing lease before allowing execution.
+            .enqueue_reconstructible_async(document)
             .await
             .map_err(GatewayApplicationError::internal_from)?;
-        timing.mark("queue_committed");
+        timing.mark("queue_published");
         Ok(())
     }
 }
