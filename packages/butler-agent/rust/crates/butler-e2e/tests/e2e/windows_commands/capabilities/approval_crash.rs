@@ -2,16 +2,35 @@
 use super::*;
 use rusqlite::Connection;
 
+#[path = "approval_retry.rs"]
+mod retry;
+
 #[tokio::test]
 async fn decision_and_message_survive_kill_before_resume_publication() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     for action in ["allow", "deny"] {
-        crash_after_decision(action).await?;
+        crash_after_decision(action, None).await?;
     }
     Ok(())
 }
 
-async fn crash_after_decision(action: &str) -> Result<(), HarnessError> {
+#[tokio::test]
+async fn corrupt_pending_resumes_rebuild_once_without_executing_denials() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    for content in [
+        b"".as_slice(),
+        b"garbage",
+        br#"{"version":1,"queueId":"torn"#,
+    ] {
+        for action in ["allow", "deny"] {
+            crash_after_decision(action, Some(content)).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn crash_after_decision(action: &str, corrupt: Option<&[u8]>) -> Result<(), HarnessError> {
     let (mut s, chat, script, server) = setup(Access::AskAlways).await?;
     s.agent.terminate().await?;
     let release = s.sandbox.root.join("publication-release");
@@ -53,6 +72,15 @@ async fn crash_after_decision(action: &str) -> Result<(), HarnessError> {
     let _ = request.await;
     assert_decision(&s, &reference, action, &id)?;
     assert!(!s.sandbox.root.join("decision-survived.txt").exists());
+    if let Some(bytes) = corrupt {
+        std::fs::write(
+            s.sandbox
+                .data
+                .join("runtime/inbound-events/pending")
+                .join(format!("idempotent-app_resume_{reference}.json")),
+            bytes,
+        )?;
+    }
     s.agent
         .launch
         .env
@@ -83,6 +111,15 @@ async fn crash_after_decision(action: &str) -> Result<(), HarnessError> {
         script.result.lock().unwrap().is_some(),
         "provider receives resumed result"
     );
+    let processed = s
+        .sandbox
+        .data
+        .join("runtime/inbound-events/processed")
+        .join(format!("idempotent-app_resume_{reference}.json"));
+    wait_for(&processed, true).await?;
+    let record: Value = serde_json::from_slice(&std::fs::read(&processed)?)?;
+    assert_eq!(record["attempts"], 1, "resume executes exactly once");
+    assert_eq!(record["envelope"]["message"]["text"], provider::PROMPT);
     s.finish().await?;
     server.abort();
     Ok(())

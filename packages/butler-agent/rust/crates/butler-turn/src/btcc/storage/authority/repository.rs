@@ -64,13 +64,15 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
         self.db
             .pragma_update(None, "synchronous", synchronous.max(2))
             .map_err(query::sql)?;
-        let result = write::decide(self.db, write);
+        let result =
+            butler_platform::sqlite::with_fullfsync(self.db, |db| write::decide(db, write))
+                .map_err(query::sql);
         let restored = self
             .db
             .pragma_update(None, "synchronous", synchronous)
             .map_err(query::sql);
         restored?;
-        result
+        result?
     }
     fn settle_question_followup(&mut self, request_ref: &str) -> AuthorityResult<()> {
         write::settle_question_followup(self.db, request_ref)

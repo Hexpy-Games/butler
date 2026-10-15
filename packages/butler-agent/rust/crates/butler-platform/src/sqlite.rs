@@ -3,8 +3,10 @@
 use rusqlite::{OpenFlags, Result};
 mod checkpoint;
 mod connection;
+mod durability;
 pub use checkpoint::{CheckpointError, CheckpointEvent, CheckpointObserver, CheckpointOwner};
 pub use connection::Connection;
+pub use durability::{FULLFSYNC_REQUIRED, with_fullfsync};
 use std::path::Path;
 
 /// Startup scans can traverse overflow pages without a copy per page. macOS

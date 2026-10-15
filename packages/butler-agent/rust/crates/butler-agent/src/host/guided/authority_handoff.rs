@@ -261,8 +261,13 @@ impl AppAuthorityHandoff for AuthorityHandoff {
             {
                 if let Some(input) = decision.question_followup {
                     followups.push((decision.owner_session_id, decision.request_ref, input));
-                } else {
-                    owner.enqueue(&decision.request_ref).await?;
+                } else if let Err(error) = owner.enqueue(&decision.request_ref).await {
+                    // Keep the durable decision pending, and give every
+                    // later entry its own recovery attempt.
+                    eprintln!(
+                        "[authority-recovery] request={} resume enqueue failed: {error:?}",
+                        decision.request_ref
+                    );
                 }
             }
             Ok(followups)
@@ -289,10 +294,6 @@ fn public_values<T: serde::Serialize>(
         .map_err(GatewayApplicationError::internal_from)
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn authority_error(error: AuthorityError) -> GatewayApplicationError {
     let (status, public_code, message) = match error.code() {
         "authority_modify_input_missing" | "authority_modify_input_too_large" => {
@@ -319,7 +320,7 @@ fn authority_error(error: AuthorityError) -> GatewayApplicationError {
             "authority_request_not_found",
             "Authority request not found.",
         ),
-        _ => return GatewayApplicationError::internal(),
+        _ => return GatewayApplicationError::internal_from(error),
     };
     GatewayApplicationError::Public {
         status,
