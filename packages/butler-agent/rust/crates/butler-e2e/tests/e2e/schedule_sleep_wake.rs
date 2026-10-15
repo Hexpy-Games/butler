@@ -447,7 +447,7 @@ async fn sched_14_failed_dispatch_retries_without_notification() -> Result<(), H
     assert_eq!(runs(&s).await?, [] as [Value; 0]);
     error_event_fault(&s.sandbox.data, false).await?;
     wake_scheduler(&s).await?;
-    let mut previous_read_observed =
+    let previous_read_observed =
         tokio::time::timeout(butler_core::wall_clock::MAX_WAIT_SLICE, async {
             while scheduler_errors(&s.sandbox.data).await? == 0 {
                 tokio::time::sleep(Duration::from_millis(50)).await;
@@ -456,24 +456,23 @@ async fn sched_14_failed_dispatch_retries_without_notification() -> Result<(), H
         })
         .await
         .map_err(|_| HarnessError("scheduler did not observe the dispatch failure".into()))??;
-    // Each new lookup follows a failed retry; the first failure is still sleeping.
+    assert_eq!(scheduler_errors(&s.sandbox.data).await?, 1);
+    // Only this step waits a natural slice: no notification is sent while the
+    // dispatch fault remains installed. Each new lookup follows a failed retry.
     let last = scheduler_reads(&s).await?;
-    for expected in [last + 1, last + 2] {
-        previous_read_observed = wait_scheduler_reads(&s, expected, previous_read_observed).await?;
-        assert_eq!(scheduler_errors(&s.sandbox.data).await?, 1);
-        assert_eq!(runs(&s).await?, [] as [Value; 0]);
-    }
-    dispatch_fault(&s.sandbox.data, false).await?;
-    // Removing the storage fault emits no scheduler notification.
     let started = Instant::now();
-    let last = scheduler_reads(&s).await?;
     wait_scheduler_reads(&s, last + 1, previous_read_observed).await?;
-    assert_next(&s, "2026-10-14T22:00:00.000Z").await?;
-    assert_eq!(runs(&s).await?.len(), 1);
+    assert_eq!(scheduler_reads(&s).await?, last + 1);
+    assert_eq!(scheduler_errors(&s.sandbox.data).await?, 1);
+    assert_eq!(runs(&s).await?, [] as [Value; 0]);
     eprintln!(
-        "SCHED-14 retry_observation_ms={}",
+        "SCHED-14 unnotified_retry_ms={}",
         started.elapsed().as_millis()
     );
+    dispatch_fault(&s.sandbox.data, false).await?;
+    wake_scheduler(&s).await?;
+    assert_next(&s, "2026-10-14T22:00:00.000Z").await?;
+    assert_eq!(runs(&s).await?.len(), 1);
     assert_eq!(scheduler_errors(&s.sandbox.data).await?, 1);
     dispatch_fault(&s.sandbox.data, true).await?;
     jump(address, "2026-10-14T22:00:00.000Z").await?;
@@ -488,6 +487,6 @@ async fn sched_14_failed_dispatch_retries_without_notification() -> Result<(), H
     .map_err(|_| HarnessError("successful dispatch did not clear the error streak".into()))??;
     assert_eq!(scheduler_errors(&s.sandbox.data).await?, 2);
     assert_eq!(runs(&s).await?.len(), 1);
-    eprintln!("SCHED-14 persistent retries=2 streak_errors=1 after_success_errors=2");
+    eprintln!("SCHED-14 persistent retries=1 streak_errors=1 after_success_errors=2");
     s.finish().await
 }
