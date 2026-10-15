@@ -9,6 +9,8 @@ mod delegation;
 mod operation;
 #[path = "capabilities/refusal_latency.rs"]
 mod refusal_latency;
+#[path = "capabilities/transport_control.rs"]
+mod transport_control;
 use super::capability_stub::{self as provider, Case};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use butler_e2e::e2e::{
@@ -303,14 +305,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
         "WINDOWS-BASIC {access:?}: 16 complete cases in {:?}",
         started.elapsed()
     );
-    for line in s
-        .agent
-        .logs()
-        .lines()
-        .filter(|line| line.starts_with("command_"))
-    {
-        eprintln!("{line}");
-    }
+    operation::diagnostic_logs(&s, &script);
     s.finish().await?;
     server.abort();
     Ok(())

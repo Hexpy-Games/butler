@@ -13,11 +13,13 @@ pub(super) async fn operation(
         case.tool, case.refused, case.args
     );
     script.select(case.clone());
+    let live = butler_e2e::e2e::events::LiveEvents::subscribe(&s.gw, 0).await?;
     let accepted = s.gw.say(chat, provider::PROMPT).await?;
     script.mark("say_returned");
     let id = accepted_turn_id(&accepted)?;
-    let turn =
-        s.gw.wait_turn(
+    let turn = live
+        .wait_turn(
+            &s.gw,
             chat,
             &id,
             &["waiting_for_form", "delivered", "failed"],
@@ -139,7 +141,15 @@ pub(super) async fn operation(
             script.result.lock().unwrap()
         );
     }
-    let terminal = s.gw.wait_terminal(chat, &id, Duration::from_secs(15)).await;
+    let terminal = live
+        .wait_turn(
+            &s.gw,
+            chat,
+            &id,
+            butler_e2e::e2e::gateway::TERMINAL,
+            Duration::from_secs(15),
+        )
+        .await;
     if terminal.is_err() {
         super::super::log_approval_timeout_diagnostics(s, chat, &id).await?;
     }
@@ -161,15 +171,8 @@ pub(super) async fn operation(
                 "command_provider_callback step={step} received_us={received} matched_us={matched} logged_us={logged}"
             );
         }
-        for line in s
-            .agent
-            .logs()
-            .lines()
-            .filter(|line| line.starts_with("command_"))
-        {
-            eprintln!("{line}");
-        }
     }
+    diagnostic_logs(s, script);
     let budget = Duration::from_secs(if case.refused { 1 } else { 5 });
     butler_e2e::assert_wall_clock_budget!(elapsed, budget, case.tool);
     if case.refused {
@@ -190,4 +193,19 @@ pub(super) async fn operation(
         elapsed.as_secs_f64() * 1000.
     );
     Ok((output, elapsed))
+}
+
+// Emit each captured diagnostic once; preserve complete source logs in the harness.
+pub(super) fn diagnostic_logs(s: &Scenario, script: &provider::Script) {
+    use std::sync::atomic::Ordering;
+    let logs = s.agent.logs();
+    let lines = logs.lines().count();
+    let previous = script.diagnostic_log_lines.swap(lines, Ordering::Relaxed);
+    for line in logs
+        .lines()
+        .skip(previous)
+        .filter(|line| line.starts_with("command_"))
+    {
+        eprintln!("{line}");
+    }
 }

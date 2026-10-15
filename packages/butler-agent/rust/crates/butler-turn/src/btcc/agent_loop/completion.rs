@@ -39,6 +39,7 @@ pub(super) async fn record_result(
     check: OutcomeCheck,
     restored_call_id: Option<&str>,
 ) -> Result<Option<ToolOutcome>, AgentLoopError> {
+    let timing = super::command_timing::CommandTiming::new("tool_settlement");
     if let Some(error) = &mut result.error {
         let identity = crate::btcc::identity::stable_json(&serde_json::json!([
             call.name,
@@ -71,11 +72,13 @@ pub(super) async fn record_result(
             ..Default::default()
         }
     };
+    timing.mark("references_loaded");
     let message = input
         .policy
         .tool_result_message(input.turn, &result, &references)
         .await
         .map_err(propagated)?;
+    timing.mark("message_prepared");
     state.messages.push(message);
     super::state::identify_messages(&mut state.messages, &mut state.next_item_ordinal);
     emit(
@@ -101,6 +104,7 @@ pub(super) async fn after_batch(
     results: &[ToolResult],
     iteration: u32,
 ) -> Result<BatchDisposition, AgentLoopError> {
+    let _timing = super::command_timing::CommandTiming::new("after_tool_batch");
     input
         .policy
         .after_tool_batch(GuidedInvocation::from(input), calls, results, iteration)
