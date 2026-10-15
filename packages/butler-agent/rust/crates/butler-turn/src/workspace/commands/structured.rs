@@ -4,7 +4,10 @@
 use std::process::{ExitStatus, Stdio};
 use std::time::{Duration, SystemTime};
 
-use butler_platform::{command_sandbox, process_control};
+use butler_platform::{
+    command_sandbox::{self, Invocation},
+    process_control,
+};
 use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tokio::sync::{mpsc, oneshot};
@@ -14,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::decode::Utf8Decoder;
 use super::process::{FORCE_SETTLEMENT_GRACE, GroupSignal, ProcessHost, TERMINATION_GRACE};
-use super::{CommandError, CommandStep, StructuredCommandInput, StructuredCommandOutput};
+use super::{CommandError, StructuredCommandInput, StructuredCommandOutput};
 
 mod invocation;
 mod result;
@@ -143,7 +146,7 @@ fn plan_empty() -> CommandError {
 fn plan_steps(
     input: &StructuredCommandInput,
     started: SystemTime,
-) -> Result<Vec<CommandStep>, StructuredCommandOutput> {
+) -> Result<Vec<Invocation>, StructuredCommandOutput> {
     let steps = match invocation_steps(input) {
         Ok(steps) => steps,
         Err(error) if error.code() == CommandCode::LegacyCommandEmpty.as_str() => {
@@ -174,7 +177,7 @@ enum SpawnFailure {
 async fn spawn_steps(
     host: &dyn ProcessHost,
     input: &StructuredCommandInput,
-    steps: &[CommandStep],
+    steps: &[Invocation],
 ) -> Result<(Vec<Child>, Vec<u32>, Vec<Pipes>), SpawnFailure> {
     let directory = match input.cwd.clone() {
         Some(directory) => Some(
@@ -207,11 +210,11 @@ async fn spawn_steps(
 }
 
 fn step_command(
-    step: &CommandStep,
+    step: &Invocation,
     environment: &std::collections::HashMap<String, String>,
     cwd: Option<&std::path::Path>,
 ) -> Command {
-    let mut command = Command::new(&step.executable);
+    let mut command = Command::new(&step.program);
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -222,14 +225,7 @@ fn step_command(
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
     }
-    command_sandbox::add_arguments(
-        command.as_std_mut(),
-        &command_sandbox::Invocation {
-            program: step.executable.clone(),
-            arguments: step.arguments.clone(),
-            ..Default::default()
-        },
-    );
+    command_sandbox::add_arguments(command.as_std_mut(), step);
     process_control::isolate_group(command.as_std_mut());
     command
 }
