@@ -1,6 +1,7 @@
 //! Capability-only content origin: never dispatches an API route or authenticates cookies.
 mod capability;
 mod headers;
+pub(super) mod message_file;
 pub(super) mod preview;
 use super::{HttpError, HttpState, error::error_response};
 use axum::{
@@ -86,6 +87,13 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
     };
     let mut response = result.unwrap_or_else(|e| error_response(&e));
     response.headers_mut().extend(headers::build(&state));
+    if response
+        .extensions_mut()
+        .remove::<message_file::Preview>()
+        .is_some()
+    {
+        headers::sandbox_file(&mut response);
+    }
     response
 }
 async fn serve(state: &HttpState, request: Request<Body>) -> Result<Response, HttpError> {
@@ -104,6 +112,9 @@ async fn serve(state: &HttpState, request: Request<Body>) -> Result<Response, Ht
     let (cap, path) = path.split_once('/').ok_or_else(refused)?;
     let token = state.security.token().ok_or_else(refused)?;
     let (id, revision) = capability::verify(&token, cap, now()).ok_or_else(refused)?;
+    if let Some(id) = id.strip_prefix("message-file-") {
+        return message_file::serve(state, id, revision, path).await;
+    }
     let decoded = decode_path(path)?;
     let outputs = store(state)?;
     let file = decoded.clone();

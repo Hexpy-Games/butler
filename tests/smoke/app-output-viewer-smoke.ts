@@ -1,4 +1,5 @@
 // Real stub Turn → output store → isolated listener → the shared App UI.
+import { htmlArtifactSmoke, htmlArtifactFixture } from "../support/html-artifact-smoke.ts";
 import { strict as assert } from "node:assert";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -15,6 +16,8 @@ const electronOnly = process.env.BUTLER_SMOKE_ELECTRON_ONLY === "1";
 const baseline = process.env.BUTLER_SMOKE_BASELINE === "1";
 if (screenshots) mkdirSync(screenshots, { recursive: true });
 const marker = "Publish browser output";
+const sessionTitle = "Output task";
+let sessionId = "";
 // The virtual HTTPS fixture has no public certificate. Restricted Chromium
 // uses a certificate exception and DNS mapping only for these local fixtures.
 const browser = await launchSmokeBrowser(["--ignore-certificate-errors", "--host-resolver-rules=MAP butler.example.info 127.0.0.1, MAP outputs.example.info 127.0.0.1"]);
@@ -22,7 +25,7 @@ const browser = await launchSmokeBrowser(["--ignore-certificate-errors", "--host
 async function waitForOutput(server: NativeAppServerHandle): Promise<{ id: string }> {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    const { artifacts } = await server.api<{ artifacts: Array<{ id: string; kind: string }> }>("/artifacts?session_id=general");
+    const { artifacts } = await server.api<{ artifacts: Array<{ id: string; kind: string }> }>(`/artifacts?session_id=${sessionId}`);
     const output = artifacts.find(item => item.kind === "web");
     if (output) return output;
     await new Promise(done => setTimeout(done, 100));
@@ -31,7 +34,7 @@ async function waitForOutput(server: NativeAppServerHandle): Promise<{ id: strin
 }
 async function openViewer(page: Page, server: NativeAppServerHandle) {
   await page.goto(server.url, { waitUntil:"commit" });
-  const general = page.locator('[data-test-class="app-sidebar"]').getByText(appCopy.space.general, { exact: true });
+  const general = page.locator('[data-test-class="app-sidebar"]').getByText(sessionTitle, { exact: true });
   const showSidebar = page.getByRole("button", { name:appCopy.titlebar.showLeftPanel, exact:true });
   await showSidebar.or(page.getByRole("button", { name:appCopy.titlebar.hideLeftPanel, exact:true })).waitFor();
   if (await showSidebar.isVisible()) await showSidebar.click();
@@ -149,8 +152,8 @@ async function electronClient(server: NativeAppServerHandle, language: string) {
     page = await electronPage(port);
     await page.waitForFunction(()=>document.readyState === "complete" && Boolean((window as unknown as { butlerApp?:unknown }).butlerApp));
     await page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="app-sidebar"]')));
-    await page.waitForFunction(()=>Array.from(document.querySelectorAll('[data-test-class="app-sidebar"] *')).some(e=>e.textContent?.trim() === "General" || e.textContent?.trim() === "일반"));
-    await page.clickText(appCopy.space.general, '[data-test-class="app-sidebar"] *');
+    await page.waitForFunction(()=>Array.from(document.querySelectorAll('[data-test-class="app-sidebar"] *')).some(e=>e.textContent?.trim() === "Output task"));
+    await page.clickText(sessionTitle, '[data-test-class="app-sidebar"] *');
     await page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="message-artifact-list"] [aria-label="Output"]')));
     await page.clickText("Output", '[data-test-class="message-artifact-list"] *');
     await page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="artifact-viewer"] iframe')));
@@ -192,21 +195,28 @@ try {
         round++;
         if (round === 1) return { name: "write_file", arguments: { path: "site/index.html", content: "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><h1>Output</h1><p>Published page</p><script src='./app.js'></script>", create_parents:true } };
         if (round === 2) return { name: "write_file", arguments: { path: "site/app.js", content: `localStorage.setItem('output','ready');document.querySelector('h1').textContent='Ready';fetch('${apiOrigin}/health').then(()=>document.body.dataset.api='allowed').catch(()=>document.body.dataset.api='blocked');`, create_parents:true } };
-        if (round === 3 || round === 5) return { name: "output_publish", arguments: { path: "site", title: "Output" } };
+        if (round === 3) return { name: "write_file", arguments: { path: "standalone.HTML", content: htmlArtifactFixture(apiOrigin), create_parents: true } };
+        if (round === 4 || round === 6) return { name: "output_publish", arguments: { path: "site", title: "Output" } };
         return null;
       },
     });
     try {
       apiOrigin = new URL(server.url).origin;
+      sessionId = (await server.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: sessionTitle }) })).session.id;
       await server.api("/settings", { method:"PATCH", body:JSON.stringify({ access_mode:"full_access" }) });
-      await server.api("/messages", { method: "POST", body: JSON.stringify({ chat_id:"general", text:marker, client_message_id:crypto.randomUUID() }) });
+      await server.api("/messages", { method: "POST", body: JSON.stringify({ chat_id:sessionId, text:marker, client_message_id:crypto.randomUUID() }) });
       const output = await waitForOutput(server);
-      await server.api("/messages", { method:"POST", body:JSON.stringify({ chat_id:"general", text:`${marker} again`, client_message_id:crypto.randomUUID() }) });
+      await server.api("/messages", { method:"POST", body:JSON.stringify({ chat_id:sessionId, text:`${marker} again`, client_message_id:crypto.randomUUID() }) });
       const deadline = Date.now()+30_000;
       while ((await server.api<{ revision:number }>(`/outputs/${output.id}/view`)).revision < 2) {
         assert(Date.now()<deadline, "republish reached revision 2");
         await new Promise(done=>setTimeout(done, 100));
       }
+      if (process.env.BUTLER_SMOKE_OUTPUT_CASE === "html-file") {
+        await htmlArtifactSmoke(server, browser, baseline, sessionId, sessionTitle);
+        break;
+      }
+      if (!baseline && !electronOnly && language === "en") await htmlArtifactSmoke(server, browser, false, sessionId, sessionTitle);
       const { secret } = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8"));
       if (!electronOnly) {
         for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const wallpaper of [false, true]) {
@@ -217,6 +227,6 @@ try {
       if (!baseline && !electronOnly) await remoteClients(server, language, { ...server.authHeaders, "x-butler-admin":secret });
     } finally { await server.stop(); }
   }
-  console.log(baseline ? "Baseline viewer/settings matrix captured (KO/EN, desktop/390px, themes/wallpaper)" : electronOnly ? "Electron output viewer: KO/EN passed" : "Output viewer: JS, localStorage, API isolation, message chips, reload/revision, settings, desktop/390px, KO/EN, LAN/HTTPS fixture passed");
+  console.log(process.env.BUTLER_SMOKE_OUTPUT_CASE === "html-file" ? `HTML file ${baseline ? "source reproduced" : "rendering and isolation passed"}` : baseline ? "Baseline viewer/settings matrix captured (KO/EN, desktop/390px, themes/wallpaper)" : electronOnly ? "Electron output viewer: KO/EN passed" : "Output viewer: JS, localStorage, API isolation, message chips, reload/revision, settings, desktop/390px, KO/EN, LAN/HTTPS fixture passed");
 } catch (error) { console.error(error); throw error; }
 finally { await browser.close(); }

@@ -54,7 +54,7 @@ export function ArtifactViewer({
     path: file.path,
     refreshFileUrls,
   });
-  useFreshFrameSource(file, mode === "pdf", refreshFileUrls);
+  useFreshFrameSource(file, mode === "pdf" || mode === "html", refreshFileUrls);
 
   const meta = [artifactDescription(artifact), artifactMeta(artifact)]
     .filter(Boolean)
@@ -102,6 +102,11 @@ function renderPreview(input: {
         onLoad={file.onLoad}
       />
     );
+  }
+  if (input.mode === "html") {
+    const url = new URL(file.src, window.location.href);
+    url.searchParams.set("render", "html");
+    return <ArtifactPreviewFrame src={url.href} title={input.title} sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" />;
   }
   if (input.mode === "pdf") {
     return <ArtifactPreviewFrame src={file.src} title={input.title} />;

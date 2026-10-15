@@ -62,6 +62,14 @@ pub(super) async fn route(
         .ok_or_else(not_found)?;
     let id = decode_file_id(encoded)?;
     let download = state.application.download_message_file(id).await?;
+    if super::query(request.uri())
+        .get("render")
+        .map(String::as_str)
+        == Some("html")
+        && super::content::message_file::is_html(&download.file)
+    {
+        return super::content::message_file::redirect(&state, &request, &download.file.file_id);
+    }
     let size = download.bytes.len();
     let rendering = FileRendering::of(&download.file.mime_type);
     let mut response = Response::new(Body::from(download.bytes));
