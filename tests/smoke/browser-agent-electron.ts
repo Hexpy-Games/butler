@@ -1,3 +1,4 @@
+// test-category: race
 /** P2a-2 public guided tools, ownership, authority and native hand-back in the real App. */
 import { Database } from "bun:sqlite";
 import { strict as assert } from "node:assert";
@@ -52,9 +53,10 @@ let agentTab!: Tab;
 try {
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", appearance_theme: "light", access_mode: "full_access" }) });
   await app.call("open");
+  // Repeated boundary actions must change observable state under the loop guard.
   stub.set([
     () => ({ name: "write_file", arguments: { path: "browser-site/index.html", create_parents: true,
-      content: '<!doctype html><meta charset="utf-8"><title>Browser task</title><style>body{font:18px system-ui;background:#f3f5fa;color:#172033;padding:48px}main{background:white;border-radius:20px;padding:32px;max-width:600px}button{font:inherit;padding:12px 24px;background:#365bf5;color:white;border:0;border-radius:12px}</style><main><h1>Conversation browser</h1><p>Trusted ref input proof</p><button id="confirm" onclick="document.querySelector(\'#result\').textContent=\'Confirmed\'">Confirm</button><p id="result">Ready</p></main>' } }),
+      content: '<!doctype html><meta charset="utf-8"><title>Browser task</title><style>body{font:18px system-ui;background:#f3f5fa;color:#172033;padding:48px}main{background:white;border-radius:20px;padding:32px;max-width:600px}button{font:inherit;padding:12px 24px;background:#365bf5;color:white;border:0;border-radius:12px}</style><main><h1>Conversation browser</h1><p>Trusted ref input proof</p><button id="confirm" onclick="const count=document.getElementById(\'count\');count.value=String(Number(count.value)+1);document.querySelector(\'#result\').textContent=\'Confirmed\'">Confirm</button><p id="result">Ready</p><input id="count" aria-label="Confirmation count" value="0" readonly></main>' } }),
     () => ({ name: "output_publish", arguments: { path: "browser-site", title: "Browser task" } }),
   ]);
   await send("Publish browser fixture"); await delivered();
@@ -68,12 +70,14 @@ try {
   await browserContextCheck(app,evidence);
   agentTab = (await state()).tabs.find(tab=>tab.agent && tab.owner === "conversation:general")!; assert.ok(agentTab, JSON.stringify({ nativeError: await app.main("globalThis.browserAgentError"), toolRounds: stub.results.length }));
   assert.equal(agentTab.profile, "signed_out");
+  const initialClicks = await app.main<string>(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(agentTab.id)}).view.webContents.executeJavaScript("document.getElementById('count').value")`);
+  assert.equal(initialClicks, "2", "both initial native clicks changed the fixture");
   if(process.env.BUTLER_BROWSER_CONTEXT_BYTES==='1') await browserProviderByteCheck(app,stub,agentTab.id,evidence,send,delivered);
   await app.call("activate", { id: agentTab.id });
   await app.page.reload();
   const proof = await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(agentTab.id)}).view.webContents.executeJavaScript("({result:document.querySelector('#result').textContent,width:innerWidth,height:innerHeight})")`);
   assert.deepEqual(proof, { result: "Confirmed", width: 1280, height: 800 }); traces.push({ proof });
-  writeFileSync(join(evidence,"native-proof.json"),JSON.stringify({proof,loadAverage1m:loadavg()[0]}));
+  writeFileSync(join(evidence,"native-proof.json"),JSON.stringify({proof,initialClicks,loadAverage1m:loadavg()[0]}));
   if (process.env.BUTLER_BROWSER_SOAK === "1") await soakBrowser(app,stub,agentTab.id,evidence,send,delivered);
   const sessionView = await app.gateway.api<Record<string,unknown>>("/session-view?session_id=general");
   writeFileSync(join(evidence,"message-projection.json"),JSON.stringify({messages:(sessionView.messages as Array<Record<string,unknown>>).map(m=>({keys:Object.keys(m),role:m.role,turn:m.turn_id,updated:m.updated_at,rows:m.turn_activity_rows})),latest:sessionView.latest_turn},null,2));
@@ -137,6 +141,10 @@ try {
   await delivered();
   const stale = await internal("tab.prepare", agentTab.id, { observation: observation.obs, steps: [{ action: "click", ref: observation.nodes.find((n:{name:string})=>n.name==="Confirm").ref }] });
   assert.equal(stale.reason, "stale_ref");
+  const fresh = await internal("tab.observe", agentTab.id);
+  const recovered = await internal("tab.prepare", agentTab.id, { observation: fresh.obs, steps: [{ action: "click", ref: fresh.nodes.find((n:{name:string})=>n.name==="Confirm").ref }] });
+  assert.equal(recovered.status, "ok", "a fresh observation recovers after stale_ref without a cached refusal");
+  writeFileSync(join(evidence, "stale-ref-recovery.json"), JSON.stringify({ stale, recovered }, null, 2));
   await app.call("control", {id:agentTab.id,holder:"user",sticky:true});
   await waitBrowser(async()=>(await internal("tab.observe",agentTab.id)).reason === "user_control", "Rust mirror before hand-back race");
   await app.main(`(()=>{const browser=globalThis.browserAgentSubject;const execute=browser.execute;browser.execute=async function(frame){const result=await execute.call(this,frame);if(frame.op==='tab.wait'){this.execute=execute;this.control(frame.tab,'agent');}return result}})()`);

@@ -30,14 +30,18 @@ export async function browserBoundaryChecks(app: App, tab: string, evidence: str
   const removed=await app.main<any>(`${subject}.execute({op:'tab.observe',session:'general',tab:${id},args:{}})`);
   assert.ok(!removed.nodes.some((node:any)=>node.name==='Closed action'),"removed closed roots never survive the newest observation");
   await app.main(`${subject}.tabs.get(${id}).view.webContents.executeJavaScript("document.body.insertAdjacentHTML('beforeend','<button id=disabled-fixture aria-disabled=true>Disabled action</button>')")`);
-  const disabled=await app.main<any>(`(async()=>{const b=${subject},o=await b.execute({op:'tab.observe',session:'general',tab:${id},args:{}});const node=o.nodes.find(n=>n.name==='Disabled action');return {node,receipt:await b.execute({op:'tab.prepare',session:'general',tab:${id},args:{observation:o.obs,steps:[{action:'click',ref:node.ref}]}})}})()`);
+  const disabled=await app.main<any>(`(async()=>{const b=${subject},o=await b.execute({op:'tab.observe',session:'general',tab:${id},args:{}});const node=o.nodes.find(n=>n.name==='Disabled action');const frame={op:'tab.prepare',session:'general',tab:${id},args:{observation:o.obs,steps:[{action:'click',ref:node.ref}]}};return {node,receipt:await b.execute(frame),repeated:await b.execute(frame)}})()`);
   assert.equal(disabled.node.actionable,false);assert.equal(disabled.receipt.reason,'not_actionable');
+  assert.equal(disabled.repeated.status,'refused');assert.equal(disabled.repeated.reason,'repeated_refusal');
+  assert.equal(disabled.repeated.previous_reason,'not_actionable','valid target refusals remain cached');
   writeFileSync(join(evidence,'aria-disabled-ref.json'),JSON.stringify(disabled,null,2));
   await app.main(`${subject}.tabs.get(${id}).view.webContents.executeJavaScript("document.getElementById('disabled-fixture').remove()")`);
   const keypadMarkup='<div id="keypad-fixture" class="nxkey" style="position:fixed;top:10px;left:700px;z-index:100"><button>Key seven</button></div>';
   await app.main(`${subject}.tabs.get(${id}).view.webContents.executeJavaScript(${JSON.stringify(`document.body.insertAdjacentHTML('beforeend',${JSON.stringify(keypadMarkup)})`)})`);
   const keypad=await app.main<any>(`(async()=>{const b=${subject},o=await b.execute({op:'tab.observe',session:'general',tab:${id},args:{}});const node=o.nodes.find(n=>n.name==='Key seven');return {node,receipt:await b.execute({op:'tab.prepare',session:'general',tab:${id},args:{observation:o.obs,steps:[{action:'click',ref:node.ref}]}})}})()`);
-  assert.equal(keypad.node.secure,true);assert.equal(keypad.node.actionable,false);assert.equal(keypad.receipt.reason,'secure_field');
+  assert.equal(keypad.node.secure,true);assert.equal(keypad.node.actionable,false);
+  assert.equal(keypad.node.keypad,true);assert.equal(keypad.receipt.status,'refused');
+  assert.equal(keypad.receipt.reason,'user_required');assert.equal(keypad.receipt.user_required,'secure_keypad');
   writeFileSync(join(evidence,'secure-keypad-descendant.json'),JSON.stringify(keypad,null,2));
   await app.main(`${subject}.tabs.get(${id}).view.webContents.executeJavaScript("document.getElementById('keypad-fixture').remove()")`);
   const addons=await app.main<any>(`(async()=>{const b=${subject},t=b.tabs.get(${id}),wc=t.view.webContents;await wc.executeJavaScript("document.body.insertAdjacentHTML('beforeend','<label id=addon-fixture><input type=checkbox id=addon-check>Bonus gift</label>')");const o=await b.execute({op:'tab.observe',session:'general',tab:t.id,args:{}}),ref=o.nodes.find(n=>n.name==='Confirm').ref;await wc.executeJavaScript("document.getElementById('addon-check').checked=true");const args={observation:o.obs,steps:[{action:'click',ref}]},p=await b.execute({op:'tab.prepare',session:'general',tab:t.id,args});await wc.executeJavaScript("document.getElementById('addon-check').checked=false");const receipt=await b.execute({op:'tab.act',session:'general',tab:t.id,args:{...args,prepared_steps:p.steps}});await wc.executeJavaScript("document.getElementById('addon-fixture').remove()");return {prepared:p,receipt}})()`);
@@ -46,11 +50,11 @@ export async function browserBoundaryChecks(app: App, tab: string, evidence: str
   writeFileSync(join(evidence,'changed-addons-receipt.json'),JSON.stringify(addons,null,2));
   const oopif=process.env.BUTLER_BROWSER_OOPIF_URL;
   if(oopif) await checkOopif(app,tab,oopif,evidence);
-  const receipt=await app.main<any>(`(async()=>{const browser=${subject},tab=browser.tabs.get(${id});const o=await browser.execute({op:'tab.observe',session:'general',tab:${id},args:{}});const ref=o.nodes.find(n=>n.name==='Confirm').ref;const args={observation:o.obs,steps:[{action:'click',ref},{action:'click',ref}]};const prepared=await browser.execute({op:'tab.prepare',session:'general',tab:${id},args});const contents=tab.view.webContents,send=contents.sendInputEvent;contents.sendInputEvent=function(input){send.call(this,input);if(input.type==='mouseUp'){this.sendInputEvent=send;browser.move({tabId:tab.id,toGroupId:'mine',index:0})}};try{return await browser.execute({op:'tab.act',session:'general',tab:${id},args:{...args,prepared_steps:prepared.steps}})}finally{contents.sendInputEvent=send;browser.move({tabId:tab.id,toGroupId:'conversation:general',index:0})}})()`);
+  const receipt=await app.main<any>(`(async()=>{const browser=${subject},tab=browser.tabs.get(${id});const o=await browser.execute({op:'tab.observe',session:'general',tab:${id},args:{}});const ref=o.nodes.find(n=>n.name==='Confirm').ref;const args={observation:o.obs,steps:[{action:'click',ref},{action:'click',ref}]};const prepared=await browser.execute({op:'tab.prepare',session:'general',tab:${id},args});const contents=tab.view.webContents,send=contents.sendInputEvent;contents.sendInputEvent=function(input){send.call(this,input);if(input.type==='mouseUp'){this.sendInputEvent=send;browser.move({tabId:tab.id,toGroupId:'mine',index:0})}};try{const receipt=await browser.execute({op:'tab.act',session:'general',tab:${id},args:{...args,prepared_steps:prepared.steps}});return {...receipt,prepared}}finally{contents.sendInputEvent=send;browser.move({tabId:tab.id,toGroupId:'conversation:general',index:0})}})()`);
+  writeFileSync(join(evidence,"mid-batch-handover.json"),JSON.stringify(receipt,null,2));
   assert.equal(receipt.steps[0].status,"completed");
   assert.equal(receipt.steps[1].status,"not_dispatched");
   assert.equal(receipt.steps[1].reason,"owner_changed");
-  writeFileSync(join(evidence,"mid-batch-handover.json"),JSON.stringify(receipt,null,2));
 }
 
 /** Explicit public fixture only; regular stub smokes have no network dependency. */

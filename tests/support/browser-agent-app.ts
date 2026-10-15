@@ -57,6 +57,9 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
     await main(`(() => { ${win}.show();${win}.focus();${win}.webContents.focus(); })()`);
     const versions = await main<Record<string, string>>("process.versions");
     assert.equal(versions.electron, "44.5.1");
+    // Native compositor captures require an awake desktop for the entire matrix.
+    // The sleep blocker is released when the isolated App exits.
+    await main(`${module}('electron').powerSaveBlocker.start('prevent-display-sleep')`);
     writeFileSync(join(evidence, "electron-versions.json"), JSON.stringify(versions, null, 2));
     await main(`(() => { const make=${module}(${JSON.stringify(join(electronRoot, "browser/tabs.mjs"))}).createUserBrowser;
       const dummy=make({getPath:()=>${JSON.stringify(dir)},on:()=>{}},()=>null); const proto=Object.getPrototypeOf(dummy); const publish=proto.publish; const execute=proto.execute;
@@ -68,6 +71,7 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
     const shot = async (name: string, preservePointer = false) => {
       // An occluded Electron renderer can pause rAF; focus before awaiting paint.
       await main(`${module}('electron').app.focus({steal:true});${win}.show();${win}.focus();${win}.moveTop();${win}.webContents.focus()`);
+      await waitBrowser(() => main<boolean>(`${win}.isFocused()`), "foreground App window for native capture (desktop must be unlocked)");
       if (!preservePointer) await page!.movePointer(900, 24);
       await waitBrowser(()=>page!.expression("!document.querySelector('[data-slot=tooltip-content]')"), "tooltip closed before screenshot");
       await page!.evaluate(() => new Promise<void>(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done()))));

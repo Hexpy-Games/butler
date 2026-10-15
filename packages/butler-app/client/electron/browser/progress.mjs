@@ -62,6 +62,8 @@ export function repeatRefusal(tab, args, prepared) {
 // by the page state and the exact steps; resending it unchanged gets the same
 // refusal at once, with what was hit and a pointer to choose differently.
 function refusalKey(tab, args) {
+  // A stale observation is recoverable by observing again, not a refused target.
+  if (tab.observation?.obs !== args.observation || tab.observation?.epoch !== tab.epoch) return null;
   const state = tab.progressHistory?.at(-1);
   return state && state.obs === args.observation ? `${state.fingerprint}\n${JSON.stringify(args.steps)}` : null;
 }
