@@ -5,7 +5,7 @@
     reason = "E2E fixture assertions shared by the integration scenarios"
 )]
 use rusqlite::{Connection, params};
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::path::Path;
 
 pub(super) fn seed(path: &Path) {
@@ -82,13 +82,14 @@ pub(super) fn verify_rows(
 
 fn verify_message_updates(db: &Connection, turn: &str, deltas: &[&str]) {
     let mut query = db.prepare("SELECT payload_json,created_at FROM events WHERE turn_id=?1 AND type='message.updated' ORDER BY id").unwrap();
-    let updates = query
+    let mut updates = query
         .query_map([turn], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
+    let (terminal, terminal_at) = updates.pop().unwrap();
     assert_eq!(updates.len(), deltas.len());
     let mut text = String::new();
     let mut identity = None;
@@ -107,6 +108,18 @@ fn verify_message_updates(db: &Connection, turn: &str, deltas: &[&str]) {
             None => identity = Some(message),
         }
     }
+    // Completion publishes a separate, decorated delivery snapshot after every delta.
+    let mut terminal = serde_json::from_str::<Value>(&terminal).unwrap()["message"].clone();
+    assert_eq!(terminal["text"], text);
+    assert_eq!(terminal["updated_at"], terminal_at);
+    let mut expected = identity.unwrap();
+    expected["status"] = json!("delivered");
+    expected["work_blocks"] = json!([]);
+    expected["turn_activity_rows"] = json!([]);
+    let fields = terminal.as_object_mut().unwrap();
+    fields.remove("text");
+    fields.remove("updated_at");
+    assert_eq!(terminal, expected);
 }
 
 /// The public detail and summary views must agree on the complete latest fact.
