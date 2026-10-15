@@ -136,6 +136,9 @@ fn visit(
         return Ok(Vec::new());
     };
     let entries: Vec<_> = entries.collect();
+    if root_identity(&path)? != pinned.key {
+        return Err(io::Error::other("ledger directory changed during listing"));
+    }
     let inline_files = entries.len() <= 64;
     let mut children = Vec::new();
     for entry in entries {
@@ -203,10 +206,7 @@ fn inspect(
     if info.file_attributes() & u64::from(co::FILE_ATTRIBUTE::DIRECTORY.raw()) != 0 {
         return Ok(true);
     }
-    #[cfg(feature = "test-support")]
-    {
-        inventory.opened_files += 1;
-    }
+    inventory.opened_files += 1;
     if info.number_of_links() > 1 {
         inventory.insert(
             path.to_owned(),

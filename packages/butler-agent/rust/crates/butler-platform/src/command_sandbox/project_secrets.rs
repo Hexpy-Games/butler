@@ -38,3 +38,13 @@ pub fn sweep_new_secrets(
         Ok(Vec::new())
     }
 }
+
+/// Begin project inventory preparation before the first command. Best effort:
+/// admission still checks readiness and fails closed if preparation failed.
+/// Call from a blocking worker, because watcher setup opens directory handles.
+pub fn prewarm_project(root: &Path) {
+    #[cfg(windows)]
+    let _ = super::windows::mxc::ledger::prewarm(root);
+    #[cfg(not(windows))]
+    let _ = root;
+}

@@ -18,6 +18,16 @@ impl WindowsLedger {
             Err(io::Error::other("Windows required"))
         }
     }
+    /// Exercises writable-root changes through the production registry.
+    pub fn admit_with_roots(root: &Path, scratch: &[PathBuf]) -> io::Result<()> {
+        #[cfg(windows)]
+        return super::super::windows::mxc::ledger::admit(root, scratch, &[], &[]);
+        #[cfg(not(windows))]
+        {
+            let _ = (root, scratch);
+            Err(io::Error::other("Windows required"))
+        }
+    }
     /// Forces the same full verify used by age-based admission and post-run work.
     pub fn force_verify(root: &Path) -> io::Result<()> {
         Self::operate(root, "verify")
@@ -29,6 +39,10 @@ impl WindowsLedger {
     /// Ages verified_at past the production 120-second threshold.
     pub fn age(root: &Path) -> io::Result<()> {
         Self::operate(root, "age")
+    }
+    /// Drives native watcher limits or loses the replay journal in an isolated fixture.
+    pub fn exercise(root: &Path, operation: &str) -> io::Result<()> {
+        Self::operate(root, operation)
     }
     fn operate(root: &Path, operation: &str) -> io::Result<()> {
         #[cfg(windows)]
@@ -49,7 +63,7 @@ impl WindowsLedger {
             Err(io::Error::other("Windows required"))
         }
     }
-    /// Milliseconds since full verify and whether a full verify is currently in flight.
+    /// Milliseconds since the last committed scan STARTED, and whether a scan is in flight.
     pub fn snapshot(root: &Path) -> io::Result<(u64, bool)> {
         #[cfg(windows)]
         return support::snapshot(root);

@@ -92,3 +92,21 @@ impl Feed {
     }
 }
 pub(super) use notify_windows_ledger::Change as Event;
+
+#[cfg(feature = "test-support")]
+impl Feed {
+    pub(super) fn exercise(&self, kind: &str) -> io::Result<()> {
+        self.roots
+            .first()
+            .ok_or_else(|| io::Error::other("missing watch root"))?
+            .watch
+            .exercise(kind)
+    }
+    pub(super) fn lose_journal(&self) -> io::Result<()> {
+        self.journal
+            .lock()
+            .map_err(|_| io::Error::other("journal poisoned"))?
+            .take();
+        Ok(())
+    }
+}

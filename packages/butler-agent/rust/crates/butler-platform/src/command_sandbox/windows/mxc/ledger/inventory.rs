@@ -20,7 +20,6 @@ impl Group {
 }
 #[derive(Default)]
 pub(super) struct Inventory {
-    #[cfg(feature = "test-support")]
     pub(super) opened_files: usize,
     pub groups: HashMap<FileKey, Group>,
     pub names: HashMap<PathBuf, FileKey>,
@@ -64,10 +63,7 @@ impl Inventory {
         self.secrets.retain(|p| !removed(p));
     }
     pub(super) fn merge(&mut self, other: Self) {
-        #[cfg(feature = "test-support")]
-        {
-            self.opened_files += other.opened_files;
-        }
+        self.opened_files += other.opened_files;
         self.secrets.extend(other.secrets);
         for (key, group) in other.groups {
             for path in group.public {

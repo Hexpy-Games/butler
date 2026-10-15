@@ -348,7 +348,8 @@ def vendored_components():
         ("JavaScriptCore V8 Date.parse adaptation", "2026-09-19", "BSD-2-Clause", "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt"),
         ("Unicode CLDR timezone names", "ICU 78.1 / TZ 2026c", "Unicode-3.0", "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt"),
     ]
-    return [record("vendored", name, version, license_id, path, list(TARGETS.values()),
+    return [record("vendored", name, version, license_id, path,
+                   [TARGETS["x86_64-pc-windows-msvc"]] if name == "notify Windows ledger backend" else list(TARGETS.values()),
                    [(path, (ROOT / path).read_text())]) for name, version, license_id, path in entries]
 
 

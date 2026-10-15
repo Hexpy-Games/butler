@@ -4,11 +4,15 @@ pub(in crate::command_sandbox) fn operate(root: &Path, operation: &str) -> io::R
     let ledger = registry::get(root, &[])?;
     match operation {
         "verify" => {
-            let mut state = current(&ledger, false)?;
+            let mut state = current(&ledger, false, false)?;
             state.verified_at = Instant::now().checked_sub(VERIFY_INTERVAL);
             drop(state);
-            drop(current(&ledger, true)?);
+            drop(current(&ledger, true, false)?);
         }
+        "native-overflow" | "completions" | "changes" => lock(&ledger)?
+            .feed
+            .exercise(operation.strip_prefix("native-").unwrap_or(operation))?,
+        "lose-journal" => lock(&ledger)?.feed.lose_journal()?,
         "overflow" => lock(&ledger)?.stale = Some("injected notification overflow".into()),
         "age" => lock(&ledger)?.verified_at = Instant::now().checked_sub(VERIFY_INTERVAL),
         _ => return Err(io::Error::other("unknown ledger fixture operation")),
@@ -49,7 +53,7 @@ pub(in crate::command_sandbox) fn admit(root: &Path, denied: &[PathBuf]) -> io::
         .iter()
         .map(|p| super::super::prepare::physical(p).map_err(|e| io::Error::other(e.to_string())))
         .collect::<io::Result<Vec<_>>>()?;
-    super::admit(root, &[], &[], &denied).map(|_| ())
+    super::admit(root, &[], &[], &denied)
 }
 pub(in crate::command_sandbox) fn tree(root: &Path) -> io::Result<Vec<PathBuf>> {
     Ok(

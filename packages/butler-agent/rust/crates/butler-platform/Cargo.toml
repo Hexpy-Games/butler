@@ -67,7 +67,7 @@ windows-permissions = "=0.2.4"
 
 [features]
 # Fixture values for tests of other crates (e.g. archive entry modes).
-test-support = []
+test-support = ["notify-windows-ledger/test-support"]
 
 [dev-dependencies]
 # Integration contracts use the fixture helpers through the library target.

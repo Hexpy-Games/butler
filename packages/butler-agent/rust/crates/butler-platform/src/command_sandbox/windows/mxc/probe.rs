@@ -236,20 +236,7 @@ pub(super) fn rewrite_drive(request: &mut Value, drive: char, relative: &str) ->
     Ok(())
 }
 
-// .NET checks the window station visibility flag, including service sessions.
-// This runs once in the cached helper probe, never on the command hot path.
+// Query the current process window station directly; never launch a host shell.
 fn interactive_desktop() -> Result<bool, Error> {
-    let shell = std::path::PathBuf::from(std::env::var("SYSTEMROOT")?)
-        .join("System32/WindowsPowerShell/v1.0/powershell.exe");
-    let output = Command::new(shell)
-        .args([
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "[Environment]::UserInteractive",
-        ])
-        .stdin(Stdio::null())
-        .output()?;
-    Ok(output.status.success() && output.stdout.trim_ascii() == b"True")
+    Ok(notify_windows_ledger::interactive_desktop()?)
 }

@@ -216,9 +216,8 @@ fn save_policy(
         .skip(1)
         .map(|p| PathBuf::from(p.as_str()))
         .collect();
-    let admission = super::ledger::admit(root, &link_roots, &plan.credentials, &plan.secrets)?;
+    super::ledger::admit(root, &link_roots, &plan.credentials, &plan.secrets)?;
     // Admission synchronizes both inventories immediately before policy publication.
-    let _ = (admission.secrets, admission.generation);
     canonical_grants(&mut request)?;
     let (pid, started) = super::drive::identity()?;
     let payload = PolicyFile {

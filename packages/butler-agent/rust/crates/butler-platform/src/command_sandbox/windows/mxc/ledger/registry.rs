@@ -81,12 +81,12 @@ pub(super) fn get(root: &Path, scratch: &[PathBuf]) -> io::Result<Arc<Ledger>> {
         drop(entries);
         registry.changed.notify_one();
         if replace {
-            let mut state = current(&ledger, false)?;
+            let mut state = current(&ledger, false, true)?;
             state.feed = Feed::start(&roots)?;
             state.roots = roots;
             state.stale = Some("ledger writable roots changed".into());
         } else if !additional.is_empty() {
-            let mut state = current(&ledger, false)?;
+            let mut state = current(&ledger, false, true)?;
             state.feed.extend(&additional)?;
             state.roots.extend(additional.clone());
             let result = scan::walk(&additional, &state.roots, &state.protected);
@@ -97,7 +97,6 @@ pub(super) fn get(root: &Path, scratch: &[PathBuf]) -> io::Result<Arc<Ledger>> {
                     return Err(error);
                 }
             }
-            sync(&mut state)?;
         }
         return Ok(ledger);
     }
@@ -113,7 +112,7 @@ pub(super) fn get(root: &Path, scratch: &[PathBuf]) -> io::Result<Arc<Ledger>> {
             verified_at: None,
             verifying: false,
             stale: None,
-            generation: 0,
+            scan_rate: None,
             last_used: Instant::now(),
         }),
         completed: Condvar::new(),

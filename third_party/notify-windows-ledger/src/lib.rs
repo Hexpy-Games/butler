@@ -1,4 +1,6 @@
 //! Minimal directory-only adaptation of notify 8.2.0's Windows backend.
+#[cfg(feature = "test-support")]
+mod fixtures;
 mod native;
 use std::{
     io,
@@ -28,6 +30,8 @@ type Reply = mpsc::Sender<io::Result<Vec<Change>>>;
 enum Request {
     Drain(Reply),
     Stop,
+    #[cfg(feature = "test-support")]
+    Exercise(String, mpsc::Sender<io::Result<()>>),
 }
 
 /// Owns and joins its dedicated drain thread. No raw handles escape the backend.
@@ -103,6 +107,11 @@ fn run(reader: &mut native::Reader, wake: usize, receiver: mpsc::Receiver<Reques
         while let Ok(request) = receiver.try_recv() {
             match request {
                 Request::Stop => return,
+                #[cfg(feature = "test-support")]
+                Request::Exercise(kind, reply) => {
+                    let result = fixtures::exercise(reader, &kind, &mut pending);
+                    let _ = reply.send(result);
+                }
                 Request::Drain(reply) => {
                     if reader.drain(&mut pending).is_err() {
                         pending.push(Change::Lost);
@@ -114,5 +123,23 @@ fn run(reader: &mut native::Reader, wake: usize, receiver: mpsc::Receiver<Reques
         if !reader.alive() {
             return;
         }
+    }
+}
+
+/// Whether the process window station is visible to an interactive user.
+pub fn interactive_desktop() -> io::Result<bool> {
+    native::interactive_desktop()
+}
+
+#[cfg(feature = "test-support")]
+impl Watch {
+    /// Drives real kernel completions deterministically in isolated fixture roots.
+    pub fn exercise(&self, kind: &str) -> io::Result<()> {
+        let (tx, rx) = mpsc::channel();
+        self.sender
+            .send(Request::Exercise(kind.to_owned(), tx))
+            .map_err(|_| io::Error::other("watcher lost"))?;
+        self.wake.signal()?;
+        rx.recv().map_err(|_| io::Error::other("watcher lost"))?
     }
 }

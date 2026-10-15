@@ -16,12 +16,13 @@ use std::{
 };
 use watch::{Event, Feed};
 
-// Inside-root aliases are refused at the very next admission. An outside-root
-// alias of an in-project file is refused at the next admission >= T after the
-// last full verify, or after the next post-run verify. The contained process
-// itself cannot create such a link. This is the accepted external-alias window.
+// Each successful admission uses a full scan that STARTED at most T ago, plus
+// one event barrier. Changes after that barrier belong to the accepted
+// admission-to-launch gap. External aliases are detected by the next full scan.
+// A contained command retains its grant until it exits, even beyond T.
 const VERIFY_INTERVAL: Duration = Duration::from_secs(120);
 const WAIT: Duration = Duration::from_secs(2);
+const MAX_WAIT: Duration = Duration::from_secs(30);
 struct Ledger {
     inner: Mutex<State>,
     completed: Condvar,
@@ -36,12 +37,8 @@ struct State {
     verified_at: Option<Instant>,
     verifying: bool,
     stale: Option<String>,
-    generation: u64,
+    scan_rate: Option<Duration>,
     last_used: Instant,
-}
-pub(in crate::command_sandbox) struct Admission {
-    pub secrets: Vec<PathBuf>,
-    pub generation: u64,
 }
 fn pending() -> io::Error {
     io::Error::new(io::ErrorKind::WouldBlock, "project write inventory pending")
@@ -58,9 +55,9 @@ pub(in crate::command_sandbox) fn admit(
     scratch: &[PathBuf],
     protected: &[WinPath],
     denied: &[WinPath],
-) -> io::Result<Admission> {
+) -> io::Result<()> {
     let ledger = registry::get(root, scratch)?;
-    let mut state = current(&ledger, true)?;
+    let mut state = current(&ledger, true, false)?;
     let _phase = super::timing::Phase::start("ledger_sync");
     state.protected = protected.to_vec();
     let roots = state.roots.clone();
@@ -79,15 +76,18 @@ pub(in crate::command_sandbox) fn admit(
             return Err(io::Error::other("secret inventory changed"));
         }
     }
-    Ok(Admission {
-        secrets,
-        generation: state.generation,
-    })
+    if state
+        .verified_at
+        .is_none_or(|at| at.elapsed() >= VERIFY_INTERVAL)
+    {
+        return Err(pending());
+    }
+    Ok(())
 }
 
 pub(in crate::command_sandbox) fn secrets(root: &Path) -> io::Result<Vec<PathBuf>> {
     let ledger = registry::get(root, &[])?;
-    let mut state = current(&ledger, false)?;
+    let mut state = current(&ledger, false, false)?;
     let _phase = super::timing::Phase::start("ledger_sync");
     sync(&mut state)?;
     project_secrets(root, &state)
@@ -102,9 +102,21 @@ fn project_secrets(root: &Path, state: &State) -> io::Result<Vec<PathBuf>> {
         .map(|p| root.join(p))
         .collect())
 }
-fn current(ledger: &Arc<Ledger>, verify_age: bool) -> io::Result<std::sync::MutexGuard<'_, State>> {
-    let deadline = Instant::now() + WAIT;
+fn current(
+    ledger: &Arc<Ledger>,
+    verify_age: bool,
+    wait_background: bool,
+) -> io::Result<std::sync::MutexGuard<'_, State>> {
     let mut state = lock(ledger)?;
+    // Previous measured scan rate times its file count, with scheduling headroom.
+    // The first scan has no count yet; project-open prewarming uses the bounded cap.
+    let budget = state.scan_rate.map_or(MAX_WAIT, |rate| {
+        let count = u32::try_from(state.inventory.opened_files.max(1)).unwrap_or(u32::MAX);
+        rate.saturating_mul(count)
+            .saturating_mul(2)
+            .clamp(WAIT, MAX_WAIT)
+    });
+    let deadline = Instant::now() + budget;
     state.last_used = Instant::now();
     let needs = state.stale.is_some()
         || state.verified_at.is_none()
@@ -115,7 +127,7 @@ fn current(ledger: &Arc<Ledger>, verify_age: bool) -> io::Result<std::sync::Mute
     if needs && !state.verifying {
         start_verify(ledger, &mut state)?;
     }
-    while state.verifying {
+    while (needs || wait_background) && state.verifying {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
             return Err(pending());
@@ -128,6 +140,13 @@ fn current(ledger: &Arc<Ledger>, verify_age: bool) -> io::Result<std::sync::Mute
     }
     if let Some(reason) = &state.stale {
         return Err(io::Error::other(reason.clone()));
+    }
+    if verify_age
+        && state
+            .verified_at
+            .is_none_or(|at| at.elapsed() >= VERIFY_INTERVAL)
+    {
+        return Err(pending());
     }
     Ok(state)
 }
@@ -153,25 +172,28 @@ fn start_verify(ledger: &Arc<Ledger>, state: &mut State) -> io::Result<()> {
             });
             #[cfg(feature = "test-support")]
             support::wait(&roots, false);
+            let started = Instant::now();
             let result = std::panic::catch_unwind(|| scan::walk(&roots, &roots, &protected))
                 .unwrap_or_else(|_| Err(io::Error::other("ledger build panic")));
+            let scan_time = started.elapsed();
             #[cfg(feature = "test-support")]
             support::wait(&roots, true);
             if let Ok(mut state) = lock(&ledger) {
                 let result = result.and_then(|inventory| {
                     // Keep the old inventory until the full scan AND queued delta succeed.
-                    #[cfg(feature = "test-support")]
                     let verified_files = inventory.opened_files;
                     let mut fresh = inventory;
+                    state.feed.drain()?;
                     let replay = state.feed.finish_verify()?;
-                    apply(&state.feed, &roots, &protected, &mut fresh, replay)?;
+                    apply(&roots, &protected, &mut fresh, replay)?;
                     state.inventory = fresh;
                     #[cfg(feature = "test-support")]
                     {
                         state.verified_files = verified_files;
                     }
-                    state.verified_at = Some(Instant::now());
-                    state.generation += 1;
+                    state.verified_at = Some(started);
+                    let count = u32::try_from(verified_files.max(1)).unwrap_or(u32::MAX);
+                    state.scan_rate = Some(scan_time / count);
                     Ok(())
                 });
                 state.stale = result.err().map(|e| e.to_string());
@@ -190,74 +212,56 @@ fn sync(state: &mut State) -> io::Result<()> {
     if let Some(reason) = &state.stale {
         return Err(io::Error::other(reason.clone()));
     }
-    let result = apply(
-        &state.feed,
-        &state.roots,
-        &state.protected,
-        &mut state.inventory,
-        Vec::new(),
-    );
+    let result = state
+        .feed
+        .drain()
+        .and_then(|events| apply(&state.roots, &state.protected, &mut state.inventory, events));
     if let Err(error) = &result {
         state.stale = Some(error.to_string());
-    }
-    if result.is_ok() {
-        state.generation += 1;
     }
     result
 }
 fn apply(
-    feed: &Feed,
     roots: &[PathBuf],
     protected: &[WinPath],
     inventory: &mut Inventory,
-    mut events: Vec<Event>,
+    events: Vec<Event>,
 ) -> io::Result<()> {
-    let deadline = Instant::now() + WAIT;
-    loop {
-        if events.is_empty() {
-            events = feed.drain()?;
-        }
-        if events.is_empty() {
-            return Ok(());
-        }
-        if Instant::now() >= deadline {
-            return Err(pending());
-        }
-        let changes_phase = super::timing::Phase::start("ledger_changes");
-        let mut added = HashSet::new();
-        let mut removed = HashSet::new();
-        for event in std::mem::take(&mut events) {
-            match event {
-                Event::Added(path) => {
-                    removed.insert(path.as_os_str().to_owned());
-                    added.insert(path.into_os_string());
-                }
-                Event::Removed(path) => {
-                    removed.insert(path.as_os_str().to_owned());
-                    added.retain(|p| !Path::new(p).starts_with(&path));
-                }
-                Event::Rescan => return Err(io::Error::other("ledger notification overflow")),
-                Event::Lost => return Err(io::Error::other("ledger watcher lost")),
+    let changes_phase = super::timing::Phase::start("ledger_changes");
+    let mut added = HashSet::new();
+    let mut removed = HashSet::new();
+    for event in events {
+        match event {
+            Event::Added(path) => {
+                removed.insert(path.as_os_str().to_owned());
+                added.insert(path.into_os_string());
             }
+            Event::Removed(path) => {
+                removed.insert(path.as_os_str().to_owned());
+                added.retain(|p| !Path::new(p).starts_with(&path));
+            }
+            Event::Rescan => return Err(io::Error::other("ledger notification overflow")),
+            Event::Lost => return Err(io::Error::other("ledger watcher lost")),
         }
-        inventory.remove_all(&removed);
-        // Directory renames remove the old prefix and rescan the new prefix.
-        // Coalesce descendants already covered by an added directory.
-        let paths: Vec<_> = added
-            .iter()
-            .filter(|p| {
-                !Path::new(p)
-                    .ancestors()
-                    .skip(1)
-                    .take_while(|a| !roots.iter().any(|r| r == a))
-                    .any(|a| added.contains(a.as_os_str()))
-            })
-            .map(PathBuf::from)
-            .collect();
-        drop(changes_phase);
-        let _scan_phase = super::timing::Phase::start("ledger_delta_scan");
-        inventory.merge(scan::walk(&paths, roots, protected)?);
     }
+    inventory.remove_all(&removed);
+    // Directory renames remove the old prefix and rescan the new prefix.
+    // Coalesce descendants already covered by an added directory.
+    let paths: Vec<_> = added
+        .iter()
+        .filter(|p| {
+            !Path::new(p)
+                .ancestors()
+                .skip(1)
+                .take_while(|a| !roots.iter().any(|r| r == a))
+                .any(|a| added.contains(a.as_os_str()))
+        })
+        .map(PathBuf::from)
+        .collect();
+    drop(changes_phase);
+    let _scan_phase = super::timing::Phase::start("ledger_delta_scan");
+    inventory.merge(scan::walk(&paths, roots, protected)?);
+    Ok(())
 }
 fn refresh_aliases(state: &mut State) -> io::Result<()> {
     let paths: Vec<_> = state.inventory.aliases().into_iter().flatten().collect();
@@ -305,8 +309,19 @@ pub(in crate::command_sandbox) fn sweep(
             || state
                 .verified_at
                 .is_none_or(|at| at.elapsed() >= VERIFY_INTERVAL))
+        && let Err(error) = start_verify(&ledger, &mut state)
     {
-        start_verify(&ledger, &mut state)?;
+        state.stale = Some(error.to_string());
     }
     result
+}
+
+/// Starts the first inventory when a session resolves its project, off Tokio workers.
+pub(in crate::command_sandbox) fn prewarm(root: &Path) -> io::Result<()> {
+    let ledger = registry::get(root, &[])?;
+    let mut state = lock(&ledger)?;
+    if state.verified_at.is_none() && !state.verifying {
+        start_verify(&ledger, &mut state)?;
+    }
+    Ok(())
 }
