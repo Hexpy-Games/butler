@@ -19,11 +19,15 @@ impl BtccStorage {
         T: Send + 'static,
         F: FnOnce(&mut Connection, &RuntimeOwner) -> StorageResult<T> + Send + 'static,
     {
+        let timing = crate::btcc::agent_loop::command_timing::CommandTiming::new("sqlite_lane");
+        timing.mark(std::any::type_name::<F>());
         let (completion_tx, completion_rx) = oneshot::channel();
         let changes = self.inner.changes.clone();
         let job: DatabaseOperation = Box::new(move |connection, owner| {
+            timing.mark("dequeued");
             let before = connection.total_changes();
             let result = operation(connection, owner);
+            timing.mark("statements_done");
             let synced = if connection.total_changes() == before {
                 Ok(())
             } else {
@@ -32,6 +36,7 @@ impl BtccStorage {
                         .with_source(error)
                 })
             };
+            timing.mark("wal_index_synced");
             if connection.total_changes() != before {
                 changes.send_replace(());
             }

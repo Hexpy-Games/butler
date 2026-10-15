@@ -197,6 +197,8 @@ async fn consume<F>(
 where
     F: FnMut(&str) -> Result<Option<Value>, Box<ProviderRequestError>>,
 {
+    let timing = super::timing::Timing::new();
+    let mut observed_chunk = false;
     let mut stream = response.bytes_stream();
     let mut buffer = Vec::<u8>::new();
     let mut start = 0;
@@ -204,6 +206,10 @@ where
     let mut size = frame_size::FrameSize::default();
     let mut first_chunk = true;
     while let Some(chunk) = stream.next().await {
+        if !observed_chunk {
+            timing.mark("first_sse_chunk");
+            observed_chunk = true;
+        }
         let chunk = chunk
             .map_err(|error| Box::new(diagnostics::network(provider, api, &error.to_string())))?;
         buffer.extend_from_slice(&chunk);

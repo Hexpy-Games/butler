@@ -32,11 +32,13 @@ impl AuthorityHandoff {
     }
 
     async fn enqueue(&self, request_ref: &str) -> Result<(), GatewayApplicationError> {
+        let timing = super::command::timing::CommandTiming::new("approval_enqueue");
         let source = self
             .authority
             .resume_source(request_ref.to_owned())
             .await
             .map_err(authority_error)?;
+        timing.mark("source_loaded");
         let Some(source) = source else {
             return Ok(());
         };
@@ -82,6 +84,7 @@ impl AuthorityHandoff {
             .enqueue_async(document)
             .await
             .map_err(GatewayApplicationError::internal_from)?;
+        timing.mark("queue_committed");
         Ok(())
     }
 }
@@ -217,6 +220,7 @@ impl AppAuthorityHandoff for AuthorityHandoff {
     fn decide(&self, input: AppAuthorityDecisionInput) -> ApplicationFuture<AppAuthorityDecision> {
         let owner = self.clone();
         Box::pin(async move {
+            let timing = super::command::timing::CommandTiming::new("approval_handoff");
             let decision = owner
                 .authority
                 .decide(AuthorityDecisionInput {
@@ -229,6 +233,7 @@ impl AppAuthorityHandoff for AuthorityHandoff {
                 })
                 .await
                 .map_err(authority_error)?;
+            timing.mark("decision_committed");
             if decision.question_followup.is_none() {
                 owner.enqueue(&decision.request_ref).await?;
             }

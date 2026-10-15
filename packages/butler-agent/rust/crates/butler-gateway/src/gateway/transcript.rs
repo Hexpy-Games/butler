@@ -82,6 +82,29 @@ impl TranscriptWriter {
         self.submit(session_id, events).await
     }
 
+    /// Flush a bounded session page together, retaining each outbound/delivery
+    /// pair and acknowledging the whole page only after its durable append.
+    pub async fn append_outbound_batch(
+        &self,
+        session_id: String,
+        deliveries: Vec<(Value, Value, Value)>,
+    ) -> TranscriptResult<()> {
+        let mut events = Vec::new();
+        for (action, delivery, metadata) in deliveries {
+            events.extend(event::outbound(
+                self.clock.as_ref(),
+                &session_id,
+                action,
+                delivery,
+                metadata,
+            )?);
+        }
+        if events.is_empty() {
+            return Ok(());
+        }
+        self.submit(session_id, events).await
+    }
+
     pub async fn append_lifecycle(
         &self,
         session_id: String,
