@@ -11,7 +11,6 @@ import { useSpaceDrag } from "@/app/space/drag";
 import { projectSpace, spaceChildren } from "@/app/space/projection";
 import { spaceActivity } from "@/app/space/activity";
 import { SpaceHeader } from "./SpaceHeader";
-import { SpaceBrand } from "./SpaceBrand";
 import { SpaceBrowseHeader } from "./SpaceBrowseHeader";
 import { SpaceRow } from "./SpaceRow";
 import { SpaceDialogs } from "./SpaceDialogs";
@@ -90,11 +89,7 @@ export function SpaceSidebar() {
     <>
       <SidebarShell
         collapsed={!leftOpen}
-        titlebar={
-          window.butlerApp ? (
-            <SidebarTrafficSpace />
-          ) : <SpaceBrand />
-        }
+        titlebar={<SidebarTrafficSpace />}
         scrollRef={scrollRef}
         ariaLabel={appCopy.space.navigation}
         scrollHeader={<SpaceHeader rows={rows} />}

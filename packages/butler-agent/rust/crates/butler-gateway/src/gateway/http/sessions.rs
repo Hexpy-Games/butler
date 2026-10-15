@@ -109,6 +109,7 @@ fn parse_request(value: &Value) -> Option<AppCreateSessionRequest> {
         "project_id",
         "session_hint",
         "idempotency_key",
+        "group_id",
     ] {
         if object.get(field).is_some_and(|value| !value.is_string()) {
             return None;
@@ -121,6 +122,7 @@ fn parse_request(value: &Value) -> Option<AppCreateSessionRequest> {
             title: string("title"),
             project_id: string("project_id"),
             session_hint: string("session_hint"),
+            group_id: string("group_id"),
         },
         workspace_mode,
     })

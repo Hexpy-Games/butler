@@ -90,7 +90,7 @@ export async function captureAllowedHosts(browser: Browser, url: string, output:
       await input.fill("one.example.com"); await panel.getByRole("button", { name: copy.addHost, exact: true }).first().click();
       await row.getByText(copy.hostCount(1), { exact: true }).waitFor();
       await settledInput(input);
-      assert.equal(await input.evaluate(node => document.activeElement === node), false, "button save does not move focus to input");
+      assert(await input.evaluate(node => document.activeElement === node), "button save restores input focus");
       assert.equal(await panel.evaluate(node => node.scrollWidth > node.clientWidth + 1), false, key);
       assert.deepEqual(saves, [["one.example.com", "two.example.com"], ["one.example.com"], [], ["one.example.com"]], "whole lists saved; duplicate does not save");
       const contentInput = panel.getByRole("textbox", { name: copy.contentHosts, exact: true });

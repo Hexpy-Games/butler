@@ -13,7 +13,10 @@ mod contained_read;
 mod exact_name;
 pub use exact_name::exact_entry_exists;
 mod fault;
+mod replacement;
+mod timing;
 pub use fault::{abort_point, checkpoint as fault_checkpoint, hold_point, write as fault_write};
+pub use replacement::replace_private;
 
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
@@ -153,8 +156,8 @@ pub fn creation_mode(options: &mut OpenOptions, mode: FileMode) -> Option<&mut O
 
 /// Whether a regular file has other hard links, so its content may also be
 /// reachable under a name outside the folder that holds this one.
-pub fn has_other_links(metadata: &Metadata) -> bool {
-    sys::has_other_links(metadata)
+pub fn has_other_links(path: &Path, metadata: &Metadata) -> bool {
+    sys::has_other_links(path, metadata)
 }
 
 /// The permission mode of a file; `None` without [`PERMISSION_MODES`].
@@ -267,49 +270,6 @@ pub fn sync_directory(path: &Path) -> Option<io::Result<()>> {
 /// request write-through independently of directory flush support.
 pub fn sync_path(path: impl AsRef<Path>) -> io::Result<()> {
     sys::sync_path(path.as_ref())
-}
-
-/// Atomically replaces `path` with a private file: Unix creation modes or
-/// Windows ACLs restrict the empty staging file before `write` fills it. The
-/// temporary file next to `path` is
-/// is synced, renamed over `path`, and the rename is synced where
-/// [`DIRECTORY_SYNC`]. On failure before the rename, the temporary file is
-/// removed and `path` is untouched; an entry this call did not create is
-/// never removed. `write` reports its own errors; `io_error` converts the
-/// I/O failures of creating, syncing and renaming.
-pub fn replace_private<E>(
-    path: &Path,
-    write: impl FnOnce(&mut File) -> Result<(), E>,
-    io_error: impl Fn(io::Error) -> E,
-) -> Result<(), E> {
-    let parent = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    let temporary = unique_temporary(path);
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    let _ = owner_only(&mut options);
-    let mut file = options.open(&temporary).map_err(&io_error)?;
-    // On ACL hosts an existing parent may still have explicit broad ACEs.
-    // Restrict the empty staging file before any secret content is written.
-    let private = if OWNER_ONLY {
-        Ok(())
-    } else {
-        restrict_file(&temporary)
-            .unwrap_or(Ok(()))
-            .map_err(&io_error)
-    };
-    let written = private.and_then(|()| write(&mut file)).and_then(|()| {
-        file.sync_all().map_err(&io_error)?;
-        drop(file);
-        rename(&temporary, path).map_err(&io_error)
-    });
-    if let Err(error) = written {
-        let _ = fs::remove_file(&temporary);
-        return Err(error);
-    }
-    sync_directory(parent).unwrap_or(Ok(())).map_err(io_error)
 }
 
 /// Renames `from` to `to`, replacing a file at `to`, like [`fs::rename`].

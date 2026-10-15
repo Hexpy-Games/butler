@@ -40,7 +40,6 @@ impl SandboxCapabilities {
     /// Whether project mutations can run without exact-action approval.
     pub fn project_write_available(&self) -> bool {
         matches!(self.project_write, Level::Enforced | Level::Partial(_))
-            && self.read_only.is_enforced()
             && self.network_deny.is_enforced()
     }
 
@@ -70,7 +69,9 @@ fn probe() -> SandboxCapabilities {
     };
     #[cfg(target_os = "linux")]
     return super::linux::probe();
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(windows)]
+    return super::windows::mxc::probe();
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
     unavailable("no command sandbox on this host")
 }
 

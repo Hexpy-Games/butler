@@ -6,6 +6,19 @@ use serde_json::{Value, json};
 
 use super::{HarnessError, harness_error};
 
+fn timing_route(path: &str) -> &'static str {
+    match path.split('?').next().unwrap_or("") {
+        "/health" => "health",
+        "/runtime-readiness" => "readiness",
+        "/settings" => "settings",
+        "/turns" => "turns",
+        "/messages" => "messages",
+        "/authority-requests" => "authority_list",
+        p if p.starts_with("/authority-requests/") => "authority_decision",
+        _ => "other",
+    }
+}
+
 #[derive(Clone)]
 pub struct Gateway {
     pub base: String,
@@ -105,7 +118,9 @@ impl Gateway {
         token: Option<&str>,
         headers: &[(&str, &str)],
     ) -> Result<Reply, HarnessError> {
-        let mut request = self.client.request(method, format!("{}{path}", self.base));
+        let mut request = self
+            .client
+            .request(method.clone(), format!("{}{path}", self.base));
         if let Some(token) = token {
             request = request.bearer_auth(token);
         }
@@ -117,7 +132,9 @@ impl Gateway {
                 .header("content-type", "application/json")
                 .body(body);
         }
-        let observe = path.starts_with("/session-view?");
+        let debug = std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+            == Some(std::ffi::OsStr::new("1"));
+        let observe = path.starts_with("/session-view?") || debug;
         let started = observe.then(Instant::now);
         let response = request.send().await?;
         let headers = started.map(|start| start.elapsed());
@@ -136,6 +153,16 @@ impl Gateway {
             .zip(download)
             .zip(started)
             .map(|((headers, download), start)| [headers, download, start.elapsed()]);
+        if debug && let Some(phases) = &phases {
+            // Fixed route classes disambiguate requests without exposing identifiers.
+            let route = timing_route(path);
+            eprintln!(
+                "command_http_timing method={method} route={route} status={status} headers_us={} body_us={} parse_us={}",
+                phases[0].as_micros(),
+                phases[1].as_micros(),
+                phases[2].as_micros()
+            );
+        }
         Ok(Reply {
             status,
             body,
@@ -235,7 +262,16 @@ impl Gateway {
                     "turn {turn_id} did not reach {states:?} within {timeout:?}; last: {last}"
                 )));
             }
+            let poll = Instant::now();
             tokio::time::sleep(Duration::from_millis(100)).await;
+            if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+                == Some(std::ffi::OsStr::new("1"))
+            {
+                eprintln!(
+                    "command_poll_timing requested_us=100000 actual_us={}",
+                    poll.elapsed().as_micros()
+                );
+            }
         }
     }
 

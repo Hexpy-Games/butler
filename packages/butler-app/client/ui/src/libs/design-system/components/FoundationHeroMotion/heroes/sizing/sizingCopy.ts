@@ -12,9 +12,9 @@ export const SIZING_COPY = {
     ] as IntroLead,
     pointer: "pointer", touch: "touch",
     tag: "Filter", period: "Period", day: "Day", week: "Week", model: "Model", auto: "Automatic", find: "Find", save: "Save", cancel: "Cancel",
-    product: "Butler", session: "Weekly report", project: "Workspace", local: "Local",
+    session: "Weekly report", project: "Workspace", local: "Local",
     sessionMenu: "Session menu", rightPanel: "Show right panel", showSidebar: "Show sidebar", hideSidebar: "Hide sidebar",
-    newConversation: "New conversation", search: "Search", general: "General",
+    newConversation: "New chat", search: "Search", general: "Chats",
   },
   ko: {
     title: "Sizing",
@@ -25,9 +25,9 @@ export const SIZING_COPY = {
     ] as IntroLead,
     pointer: "포인터", touch: "터치",
     tag: "필터", period: "기간", day: "일", week: "주", model: "모델", auto: "자동", find: "찾기", save: "저장", cancel: "취소",
-    product: "Butler", session: "주간 리포트", project: "워크스페이스", local: "로컬",
+    session: "주간 리포트", project: "워크스페이스", local: "로컬",
     sessionMenu: "세션 메뉴", rightPanel: "오른쪽 패널 보기", showSidebar: "사이드바 보기", hideSidebar: "사이드바 숨기기",
-    newConversation: "새 대화", search: "검색", general: "일반",
+    newConversation: "새 대화", search: "검색", general: "대화",
   },
 } satisfies Record<FoundationHeroLang, unknown>;
 

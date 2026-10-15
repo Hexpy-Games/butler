@@ -32,8 +32,8 @@ export function SecurityAllowedHostsField({
     }
   }, [disabled]);
 
-  async function save(nextHosts: string[]) {
-    restoreFocus.current = document.activeElement === inputRef.current;
+  async function save(nextHosts: string[], focusInput = document.activeElement === inputRef.current) {
+    restoreFocus.current = focusInput;
     return onSave(nextHosts);
   }
 
@@ -43,7 +43,10 @@ export function SecurityAllowedHostsField({
       setInvalid(true);
       return;
     }
-    if (hosts.includes(host) || await save([...hosts, host])) setDraft("");
+    if (hosts.includes(host)) {
+      setDraft("");
+      inputRef.current?.focus();
+    } else if (await save([...hosts, host], true)) setDraft("");
   }
 
   return (

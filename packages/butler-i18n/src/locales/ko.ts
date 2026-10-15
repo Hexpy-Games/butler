@@ -423,7 +423,7 @@ export const koKrCopy: AppCopy = {
     document: "문서",
     active: "진행 중", other: "기타", roadmap: "로드맵",
     sourceDetails: "원본 식별 정보", readOnly: "원본 문서를 읽기 전용으로 보고 있습니다.", referenceAction: "대화에 참조하기",
-    statuses: { draft: "초안", proposed: "제안됨", active: "진행 중", in_progress: "진행 중", todo: "할 일", planned: "예정", review: "검토 중", blocked: "진행이 막힘", done: "완료", completed: "완료", cancelled: "취소됨", archived: "보관됨", superseded: "대체됨", deprecated: "사용 중단" },
+    statuses: { draft: "초안", proposed: "제안됨", active: "진행 중", in_progress: "진행 중", todo: "할 일", planned: "예정", review: "검토 중", blocked: "진행이 막힘", done: "완료", completed: "완료", skipped: TASK_GRAPH_COPY["ko-KR"].status.skipped, cancelled: "취소됨", archived: "보관됨", superseded: "대체됨", deprecated: "사용 중단" },
     labels: { id: "ID", kind: "문서 종류", status: "문서 상태", updatedAt: "최근 수정", source: "원본 위치", revision: "리비전", migratedFrom: "이전 위치", parent: "상위 항목", owner: "담당자", priority: "우선순위", acceptance: "수락 기준", validation: "검증", review: "리뷰", report: "보고", implementation: "구현" },
   },
   guided: {
@@ -571,7 +571,7 @@ export const koKrCopy: AppCopy = {
     pendingApprovals: count => `허용 대기 ${count}개`, allowedCount: count => `허용 ${count}개`, revoke: title => `${title} — 해제`,
     approvalRequest: {
       browserMode: { signed_out: "로그인 없이", signed_in: "로그인 사용" },
-      signInStep: reason => ({mfa: "2단계 인증", passkey: "패스키", captcha: "보안 문자", secure_keypad: "보안 키패드", unknown_form: "로그인 양식 확인"} as Record<string, string>)[reason] ?? "로그인 양식 확인",
+      signInStep: reason => ({ mfa: "2단계 인증", passkey: "패스키", captcha: "보안 문자", secure_keypad: "보안 키패드", unknown_form: "로그인 양식 확인" } as Record<string, string>)[reason] ?? "로그인 양식 확인",
       waitHandoff: reason => ({ sign_in: "로그인 필요", secure_field: "직접 입력 필요", secure_keypad: "보안 키패드 입력 필요", captcha: "보안 문자 입력 필요" } as Record<string, string>)[reason] ?? "직접 확인 필요",
       payStep: reason => ({ secure_keypad: "보안 키패드", app_auth: "카드사 앱 인증", otp: "인증번호", three_ds: "카드사 본인 인증", captcha: "보안 문자" } as Record<string, string>)[reason] ?? "결제 화면 확인",
       payHandoff: "결제 확인 필요",
@@ -708,9 +708,9 @@ export const koKrCopy: AppCopy = {
     success: "성공",
     failures: "실패",
   },
-  clearChat: { archiveCount: (count: number) => `아카이브 (${count})`, title: "대화 비우기", description: "지금까지의 대화는 아카이브에 보관되고, 빈 화면에서 새로 시작합니다.", memory: "지침과 대화 기억은 그대로 유지됩니다.", manageMemory: "지침·기억 관리 ›", clear: "비우기", busy: "진행 중인 작업이 끝나면 비울 수 있습니다.", failed: "대화를 비우지 못했습니다.", archivedTitle: (date: string) => `일반 · ${date}` },
+  clearChat: { archiveCount: (count: number) => `아카이브 (${count})`, title: "대화 비우기", description: "지금까지의 대화는 아카이브에 보관되고, 빈 화면에서 새로 시작합니다.", memory: "지침과 대화 기억은 그대로 유지됩니다.", manageMemory: "지침·기억 관리 ›", clear: "비우기", busy: "진행 중인 작업이 끝나면 비울 수 있습니다.", failed: "대화를 비우지 못했습니다.", archivedTitle: (date: string) => `대화 · ${date}` },
   space: {
-    general: "일반",
+    general: "대화",
     space: "스페이스",
     reference: "작성 중인 메시지에 참조",
     dashboard: "프로젝트 대시보드",
@@ -770,6 +770,7 @@ export const koKrCopy: AppCopy = {
 rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으로 정리했습니다.`, relocationDescription: (source, target) => `${source} 대화를 ${target}(으)로 이동합니다. 대화 기록과 기존 파일은 보존되며, 이후 작업은 새 소속의 작업 폴더와 프로젝트 지식을 사용합니다. 진행 중인 작업이 있으면 완료한 뒤 이동할 수 있습니다.`,
   },
   interfaceStatus: {
+    generalCategory: "일반",
     countSummary: (kind, count, truncated) => `${({ filesRead: "파일 읽기", files: "파일 목록", matches: "검색 결과", documents: "문서 목록", results: "조회 결과" })[kind]} · ${count}${kind === "matches" ? "건" : "개"}${truncated ? " · 일부 결과" : ""}`,
     bytes: (count) => `${count.toLocaleString("ko-KR")}바이트`,
     lines: (range) => `${range}줄`,
@@ -1008,7 +1009,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
           : `${primaryLabel} 외 ${count - 1}개 진행 내역 닫기`,
       viewAllLabel: (count) => `전체 보기 (${count})`,
       collapseLabel: "접기",
-      showDetailsLabel: "자세히 보기",
+      disclosureLabel: (status, latest, earlier) =>
+        earlier > 0 ? `${status}, ${latest}, 이전 기록 ${earlier}개` : `${status}, ${latest}`,
       toolchainRegionLabel: (label) => `${label} 도구 실행 내역`,
       detailsRegionLabel: (label) => `${label} 세부 내역`,
       webSearchSummary: (count) => `웹 검색 ${count}회`,

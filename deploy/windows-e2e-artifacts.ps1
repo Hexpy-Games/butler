@@ -10,7 +10,11 @@ if ($Mode -eq 'Export') {
             Copy-Item $record.executable "$artifacts/$($record.target.name).exe"
         }
     }
-    Copy-Item "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe" $artifacts
+    foreach ($binary in @('butler-agent.exe', 'butler-sandbox.exe')) {
+        $source = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/$binary"
+        if (!(Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing Windows E2E binary: $source" }
+        Copy-Item -LiteralPath $source -Destination $artifacts
+    }
 } else {
     if ($env:BUTLER_E2E_TIER -ne 'stub') { throw 'Compiled Windows verification requires BUTLER_E2E_TIER=stub' }
     foreach ($test in $Tests) {

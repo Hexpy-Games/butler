@@ -1,5 +1,6 @@
 import { retainAnswerBlocks } from "./stableAnswerBlocks";
 import { sessionDisplayTitle } from "./sessionTitle.ts";
+import { draftGroup, draftGroupId } from "./draftGroup.ts";
 import { ACTIVE_TURN_STATES } from "./constants.ts";
 import { reasoningEffortLabel } from "../../../../../butler-i18n/src/index.ts";
 import { appCopy, getAppLocale, interfaceText } from "./copy.ts";
@@ -1656,6 +1657,17 @@ export function activeChatFromNavigation(
   fallbackTitle?: string,
 ): ActiveChatView {
   const draft = parseDraftChatId(activeChatId);
+  const groupId = draftGroupId(activeChatId);
+  if (groupId) {
+    const group = draftGroup(navigation, groupId);
+    const projectName = group?.projectName;
+    return {
+      title: projectName ? appCopy.interfaceTemplates.projectHomeTitle(projectName) : appCopy.interfaceTemplates.homeTitle,
+      shortTitle: projectName ? appCopy.interfaceFeedback.newProjectChat : appCopy.interfaceFeedback.newChat,
+      project: projectName ?? "",
+      location: group?.location,
+    };
+  }
   if (draft.kind === "chat") {
     return {
       title: appCopy.interfaceTemplates.homeTitle,
@@ -1730,11 +1742,11 @@ export function activeTitleForView(
     return { title: appCopy.automations.title };
   if (view.kind === "project-dashboard")
     return { title: appCopy.sidebar.projectDashboard };
-  return { title: activeChat.shortTitle, subtitle: activeChat.project };
+  return { title: activeChat.shortTitle, subtitle: activeChat.location ?? activeChat.project };
 }
 
 export function isDraftChatId(value: string): boolean {
-  return value === "draft:chat" || value?.startsWith("draft:project:");
+  return value === "draft:chat" || value?.startsWith("draft:project:") || Boolean(draftGroupId(value));
 }
 
 export function parseDraftChatId(value: string): {
@@ -1746,6 +1758,17 @@ export function parseDraftChatId(value: string): {
   }
   if (value === "draft:chat") return { kind: "chat" };
   return {};
+}
+
+/** The session a draft creates: its kind, project and sidebar group. */
+export function draftSessionTarget(
+  navigation: NavigationView,
+  value: string,
+): { kind?: "chat" | "project"; projectId?: string; groupId?: string } {
+  const groupId = draftGroupId(value);
+  if (!groupId) return parseDraftChatId(value);
+  const projectId = draftGroup(navigation, groupId)?.projectId;
+  return { kind: projectId ? "project" : "chat", projectId, groupId };
 }
 
 export function projectDraftId(projectId: string): string {

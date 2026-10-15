@@ -358,8 +358,9 @@ fn project_write_result(
         "project_write_contained"
     }
     .into();
+    value["containment"] = butler_platform::command_sandbox::project_write_mechanism().into();
     if value["ok"] == false {
-        value["next_action"] = "This command ran contained to the project folder: no writes elsewhere (including .git and existing secrets) and no network. Creating, deleting or renaming top-level project entries is also blocked. If it needs those, run it again with sandbox \"none\"; the user will be asked.".into();
+        value["next_action"] = butler_platform::command_sandbox::project_write_limits().into();
     }
     butler_core::json::JsonDocument::from_value(&value).map_err(failure)
 }

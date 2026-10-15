@@ -19,6 +19,7 @@ pub(super) async fn route(
     request: Request<Body>,
     uri: &Uri,
 ) -> Result<Response, HttpError> {
+    let timing = crate::gateway::command_timing::CommandTiming::new("authority_http");
     let method = request.method().clone();
     let path = uri.path();
     let session_id = authority_session_id(uri);
@@ -26,6 +27,7 @@ pub(super) async fn route(
         .application
         .runtime_session_hint(session_id.clone())
         .await?;
+    timing.mark("owner_hint_resolved");
 
     if path == "/authority-permissions" && method == Method::GET {
         return super::authority_permissions::list(&state).await;
@@ -62,6 +64,7 @@ pub(super) async fn route(
             "modify" => (None, Some(modify_input(request).await?)),
             _ => (None, None),
         };
+        timing.mark("input_parsed");
         let decision = state
             .application
             .authority_decide(AppAuthorityDecisionInput {
@@ -72,6 +75,7 @@ pub(super) async fn route(
                 alternative_input,
             })
             .await?;
+        timing.mark("decision_done");
         return json(
             StatusCode::ACCEPTED,
             ApiEnvelope {

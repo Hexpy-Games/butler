@@ -20,7 +20,6 @@ import type { SpaceRowData } from "@/app/space/projection";
 import { BrowserEntry } from "../browser/BrowserEntry";
 import { LibraryEntry } from "../browser/LibraryEntry";
 import { SpaceRow } from "./SpaceRow";
-import { SpaceBrand } from "./SpaceBrand";
 
 /** These entry actions and shortcuts scroll away before the browse tabs stick. */
 export function SpaceHeader({ rows }: { rows: Map<string, SpaceRowData> }) {
@@ -30,29 +29,26 @@ export function SpaceHeader({ rows }: { rows: Map<string, SpaceRowData> }) {
   const favorites = [...rows.values()].filter((r) => r.pinned);
   return (
     <Stack gap="2xl">
-      <Stack gap="xs">
-        {window.butlerApp && <SpaceBrand />}
-        <SidebarNav ariaLabel={appCopy.space.primaryActions}>
-          <NavRow
-            icon={<PencilLine />}
-            label={appCopy.space.newChat}
-            active={active === "draft:chat"}
-            onClick={() => useButlerStore.getState().openNewChat()}
-          />
-          <NavRow
-            icon={<Search />}
-            label={appCopy.space.search}
-            onClick={() => useButlerStore.getState().setCommandOpen(true)}
-          />
-          <NavRow
-            icon={<IconSlot size="sidebar" minHeight="line"><Clock3 /></IconSlot>}
-            label={appCopy.space.automations}
-            onClick={() => useButlerStore.getState().setView({ kind: "automations" })}
-          />
-          <BrowserEntry />
-          <LibraryEntry />
-        </SidebarNav>
-      </Stack>
+      <SidebarNav ariaLabel={appCopy.space.primaryActions}>
+        <NavRow
+          icon={<PencilLine />}
+          label={appCopy.space.newChat}
+          active={active === "draft:chat"}
+          onClick={() => useButlerStore.getState().openNewChat()}
+        />
+        <NavRow
+          icon={<Search />}
+          label={appCopy.space.search}
+          onClick={() => useButlerStore.getState().setCommandOpen(true)}
+        />
+        <NavRow
+          icon={<IconSlot size="sidebar" minHeight="line"><Clock3 /></IconSlot>}
+          label={appCopy.space.automations}
+          onClick={() => useButlerStore.getState().setView({ kind: "automations" })}
+        />
+        <BrowserEntry />
+        <LibraryEntry />
+      </SidebarNav>
       <Stack gap="sm">
         <NavSectionHeading title={appCopy.space.favorites} />
         <Stack gap="xs">

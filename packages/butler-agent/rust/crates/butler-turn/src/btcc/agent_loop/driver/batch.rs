@@ -305,7 +305,9 @@ pub(super) async fn refuse_call(
         .record_unexecuted(GuidedInvocation::from(input), call, &result)
         .await
         .map_err(propagated)?;
-    super::super::progress::authority_terminal(input.progress, call, Status::Cancelled).await;
+    super::super::progress::authority_terminal(input.progress, call, Status::Cancelled)
+        .await
+        .map_err(propagated)?;
     Ok(result)
 }
 
@@ -342,8 +344,14 @@ async fn park_batch(
         state.tool_results = completed;
         for (index, call) in batch.calls.iter().enumerate().skip(start) {
             if index == start || pending.get(index) == Some(&true) {
-                super::super::progress::authority_terminal(input.progress, call, Status::Failed)
-                    .await;
+                super::super::progress::report_unpublished(
+                    super::super::progress::authority_terminal(
+                        input.progress,
+                        call,
+                        Status::Failed,
+                    )
+                    .await,
+                );
             }
         }
     }
@@ -426,6 +434,7 @@ pub(super) async fn settle_batch(
     batch: &ToolBatch<'_>,
     results: &[ToolResult],
 ) -> Result<Step, AgentLoopError> {
+    let _timing = super::super::command_timing::CommandTiming::new("batch_settlement");
     match after_batch(input, batch.calls, results, batch.iteration).await? {
         BatchDisposition::Continue => Ok(Step::Continue),
         BatchDisposition::FinalReport => {

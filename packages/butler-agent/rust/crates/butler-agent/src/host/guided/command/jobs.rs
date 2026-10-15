@@ -64,6 +64,7 @@ impl CommandJobs {
             };
             state.active = active;
         }
+        timing.mark("permit_acquired");
         let active = Active(Arc::clone(&self.inner));
         tokio::task::spawn_blocking(move || {
             timing.mark("inside_job");

@@ -234,7 +234,8 @@ interface ConversationWorkCopy {
   collapseHistoryLabel: (primaryLabel: string, count: number) => string;
   viewAllLabel: CountFormatter;
   collapseLabel: string;
-  showDetailsLabel: string;
+  /** A work block's disclosure: run state, latest activity and the earlier records inside. */
+  disclosureLabel: (status: string, latest: string, earlier: number) => string;
   toolchainRegionLabel: (label: string) => string;
   detailsRegionLabel: (label: string) => string;
   webSearchSummary: CountFormatter;
@@ -739,6 +740,7 @@ export interface AppCopy {
     relocationDescription: (source: string, target: string) => string;
   };
   interfaceStatus: {
+    generalCategory: string;
     countSummary: (kind: "filesRead" | "files" | "matches" | "documents" | "results", count: string | number, truncated?: boolean) => string;
     bytes: (count: number) => string;
     lines: (range: string | number) => string;

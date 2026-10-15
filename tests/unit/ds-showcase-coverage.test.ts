@@ -23,7 +23,7 @@ const kinds = ["components", "blocks"] as const;
 /** Interactive items whose item page must show a states matrix. */
 const REQUIRES_STATE_MATRIX = [
   "components/Breadcrumb", "components/Button", "components/Card", "components/Clickable", "components/ColorSwatchInput",
-  "components/CopyButton", "components/IconButton", "components/Input", "components/NativeSelect", "components/PillButton",
+  "components/CopyButton", "components/DoneIconButton", "components/IconButton", "components/Input", "components/NativeSelect", "components/PillButton",
   "components/SegmentedControl", "components/Select", "components/Slider", "components/Switch", "components/Tabs",
   "components/Textarea", "blocks/ComposerControl", "blocks/DisclosureRow", "blocks/NavRow", "blocks/OptionMenu",
   "blocks/SplitButton", "blocks/ChoiceCard", "blocks/TabStrip",
@@ -50,7 +50,17 @@ async function loadShowcases(): Promise<Array<{ id: string; module: ShowcaseModu
   return Promise.all(folderIds().map(async (id) => ({ id, module: (await import(showcasePath(id))) as ShowcaseModule })));
 }
 
-const EMPTY_PLACEHOLDER = /<([a-z][\w-]*)\b[^>]*\bdata-ds-fixture="[^"]*"[^>]*>\s*<\/\1>|<[a-z][\w-]*\b[^>]*\bdata-ds-fixture="[^"]*"[^>]*\/>/u;
+function hasEmptyPlaceholder(markup: string): boolean {
+  // Scan each opening tag once. The combined placeholder regex spent seconds
+  // searching large SVG data-URI attributes for absent fixtures.
+  for (const opening of markup.matchAll(/<([a-z][\w-]*)\b[^>]*>/gu)) {
+    if (!/\bdata-ds-fixture="[^"]*"/u.test(opening[0])) continue;
+    if (opening[0].endsWith("/>")) return true;
+    const rest = markup.slice(opening.index + opening[0].length);
+    if (/^\s*<\/([a-z][\w-]*)>/u.exec(rest)?.[1] === opening[1]) return true;
+  }
+  return false;
+}
 
 function renderer() {
   const requireFromUi = createRequire(join(uiRoot, "package.json"));
@@ -60,11 +70,29 @@ function renderer() {
   return (render: () => unknown) => renderToStaticMarkup(createElement(render));
 }
 
-// Catalog-wide tests import and render every DS item in one test (~1 s idle),
-// which crosses the 5 s default on a loaded machine.
+// Keep one catalog-wide budget while covering every item in both locales.
 const CATALOG_TIMEOUT_MS = 30_000;
 
 describe("design-system showcase coverage", () => {
+  // test-category: pure-logic
+  test("empty-placeholder detection preserves content and tag matching with large attributes", () => {
+    const image = `data:image/svg+xml,${"x".repeat(100_000)}`;
+    const cases: Array<[string, boolean]> = [
+      ['<div data-ds-fixture="demo"></div>', true],
+      ['<custom-tag data-ds-fixture=""> \n\t</custom-tag>', true],
+      ['<div><span data-ds-fixture="demo" /></div>', true],
+      ['<div data-ds-fixture="demo">content</div>', false],
+      ['<div data-ds-fixture="demo"><span></span></div>', false],
+      ['<div data-ds-fixture="demo"></span>', false],
+      ['<div data-ds-fixture-canvas="demo"></div>', false],
+      [`<img src="${image}"/>`, false],
+      [`<div style="${image}" data-ds-fixture="demo"></div>`, true],
+      [`<div data-ds-fixture="demo" style="${image}">content</div>`, false],
+      [`<img src="${image}"/><div data-ds-fixture="demo"></div>`, true],
+    ];
+    expect(cases.map(([markup]) => hasEmptyPlaceholder(markup))).toEqual(cases.map(([, empty]) => empty));
+  });
+
   test("every component and block folder has a showcase and a README (no gaps)", () => {
     const missing = folderIds().filter((id) => !existsSync(showcasePath(id)) || !existsSync(join(designSystemRoot, id, "README.md")));
     expect(missing).toEqual([]);
@@ -102,7 +130,7 @@ describe("design-system showcase coverage", () => {
       for (const story of module.stories) {
         for (const locale of ["en-US", "ko-KR"] as const) {
           const markup = render(() => story.render({ locale }));
-          if (!markup.trim() || EMPTY_PLACEHOLDER.test(markup)) empty.push(`${id}#${story.name}`);
+          if (!markup.trim() || hasEmptyPlaceholder(markup)) empty.push(`${id}#${story.name}`);
           if (locale === "en-US" && /[가-힣]/u.test(markup.replace(/<[^>]*>/gu, " "))) korean.push(`${id}#${story.name}`);
         }
       }

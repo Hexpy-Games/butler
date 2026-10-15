@@ -31,6 +31,7 @@ pub(super) fn app_error(error: AppStorageError) -> GatewayApplicationError {
         | "authority_queue_immutable"
         | "queued_message_cas_conflict"
         | "turn_not_cancellable"
+        | "space_project_boundary"
         | "library_group_exists" => public(409, error.code(), &error.detail()),
         "message_file_wrong_session" => public(403, error.code(), &error.detail()),
         "session_not_found"
@@ -40,7 +41,8 @@ pub(super) fn app_error(error: AppStorageError) -> GatewayApplicationError {
         | "turn_not_found"
         | "library_group_not_found"
         | "library_item_not_found"
-        | "library_tag_not_found" => public(404, error.code(), &error.detail()),
+        | "library_tag_not_found"
+        | "space_group_not_found" => public(404, error.code(), &error.detail()),
         "turn_control_resolution_invalid" => public(500, error.code(), &error.detail()),
         _ => GatewayApplicationError::internal_from(error),
     }

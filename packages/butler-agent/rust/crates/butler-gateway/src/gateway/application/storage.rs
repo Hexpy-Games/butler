@@ -2,6 +2,7 @@
 pub(in crate::gateway) mod history;
 
 mod cached;
+mod checkpoint;
 mod error;
 mod lane;
 pub(super) mod metrics;
@@ -309,7 +310,7 @@ fn run_connection_lane(
     initialized: oneshot::Sender<StorageResult<()>>,
     metrics: &Arc<metrics::Metrics>,
 ) -> StorageResult<()> {
-    let setup: StorageResult<sqlite::Connection> = (|| {
+    let setup: StorageResult<(sqlite::Connection, Option<sqlite::CheckpointOwner>)> = (|| {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| {
                 AppStorageError::new(
@@ -332,9 +333,10 @@ fn run_connection_lane(
             .map_err(AppStorageError::sqlite)?;
         event_outbox::install(&connection, metrics.clone());
         metrics::configure(&connection)?;
-        Ok(connection)
+        let checkpoint = checkpoint::start(&connection)?;
+        Ok((connection, checkpoint))
     })();
-    let mut connection = match setup {
+    let (mut connection, checkpoint) = match setup {
         Ok(connection) => connection,
         Err(error) => {
             let _closed_opener = initialized.send(Err(error.clone()));
@@ -346,9 +348,12 @@ fn run_connection_lane(
             .with_source(error)
     })?;
     if initialized.send(Ok(())).is_err() {
+        checkpoint::close(checkpoint)?;
         return close_connection(connection);
     }
-    lane::run(&mut connection, receiver)?;
+    let result = lane::run(&mut connection, receiver);
+    checkpoint::close(checkpoint)?;
+    result?;
     metrics.save(path)?;
     close_connection(connection)
 }

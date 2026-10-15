@@ -1,8 +1,8 @@
 import { useMemo } from "react";
-import { Copy, IconButton, ImageViewer, Library, Popup, type ImageViewerImage } from "@/butler-ds";
+import { Copy, DoneIconButton, IconButton, ImageViewer, Library, Popup, type ImageViewerImage } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { faviconSrc } from "@/app/favicons";
-import { runAnswerAction } from "../conversation/answerBlockActions";
+import { answerActionFailed, runAnswerAction } from "../conversation/answerBlockActions";
 import { checkedLabel, copyViewerImage, openViewerSource, saveViewerImage, siteOf } from "./imageActions";
 import { closeImageViewer, useImageViewerState, type ViewerImage } from "./imageViewerState";
 
@@ -27,8 +27,10 @@ export function ImageViewerHost() {
       runAnswerAction(async () => { await openViewerSource(current); });
     }}><Popup size="sm" /></IconButton> : null}
     {/* A 서랍 scrap belongs to a page; a picture without one is copied, not saved. */}
-    {current.source ? <IconButton label={blocks.saveToLibrary} onClick={() => runAnswerAction(() => saveViewerImage(current))}><Library size="sm" /></IconButton> : null}
-    <IconButton label={copy.copyImage} onClick={() => runAnswerAction(() => copyViewerImage(current))}><Copy size="sm" /></IconButton>
+    {current.source ? <DoneIconButton key={index} icon={<Library size="sm" />} label={blocks.saveToLibrary} doneLabel={blocks.savedToLibrary}
+      announce={false} onAction={() => saveViewerImage(current)} onError={answerActionFailed} /> : null}
+    <DoneIconButton key={`copy-${index}`} icon={<Copy size="sm" />} label={copy.copyImage} doneLabel={copy.imageCopied}
+      announce={false} onAction={() => copyViewerImage(current)} onError={answerActionFailed} />
   </> : undefined;
   return <ImageViewer images={shown} index={index} onIndexChange={(next) => useImageViewerState.setState({ index: next })}
     onClose={closeImageViewer} actions={actions}

@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Cargo snapshot trust, retention and actual release freshness checks."""
 import contextlib
+import errno
 import hashlib
 import importlib.util
 import json
 import io
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -182,11 +184,19 @@ class TargetSnapshot(unittest.TestCase):
     def test_chunk_order_roundtrip_and_retention(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            archive = root / 'cache.tar.zst'
-            archive.write_bytes(b'full snapshot contents')
-            with patch.object(snapshots, 'CHUNK_BYTES', 8):
-                chunks = snapshots.split(archive, root, '42-1')
-            self.assertEqual(b''.join((root / name).read_bytes() for name in chunks), archive.read_bytes())
+            for contents in [b'full snapshot contents', b'16 byte payload!']:
+                parts = cache.Parts(root, lambda index: f'{len(contents)}-1-{index:04}.zst', 8)
+                for offset in range(0, len(contents), 5):
+                    parts.write(contents[offset:offset + 5])
+                parts.close()
+                chunks = snapshots.recorded_parts(root, f'{len(contents)}-1')
+                self.assertEqual(chunks, parts.names)  # An exact multiple leaves no empty trailing part.
+                self.assertEqual(len(chunks), -(-len(contents) // 8))
+                self.assertEqual(b''.join((root / name).read_bytes() for name in chunks), contents)
+                self.assertEqual(parts.hash.hexdigest(), hashlib.sha256(contents).hexdigest())
+            (root / '22-1-0001.zst').unlink()
+            with self.assertRaisesRegex(ValueError, 'parts'):
+                snapshots.recorded_parts(root, '22-1')
             versions = [dict(id=run, metadata={'container': {'tags': [f'fixture--{run}-1']}}) for run in [41,42,43]]
             versions[0]['metadata']['container']['tags'].append('fixture')  # An older producer finished last.
             versions += [dict(id=1, metadata={'container': {'tags': ['other-key--1-1']}})]
@@ -207,22 +217,24 @@ class TargetSnapshot(unittest.TestCase):
             layout = root / 'oci'
             producer = root / 'producer'
             producer.mkdir()
-            (producer / 'cache.tar.zst').write_bytes(b'complete compressed archive')
+            archive = b'complete compressed archive'
+            parts = cache.Parts(producer, lambda index: f'42-1-{index:04}.zst', 8)
+            parts.write(archive)
+            parts.close()
             (producer / 'sources.json').write_text('[]')
             expected = dict(schema=2, platform='linux-x64', kind='native')
             metadata = dict(identity=expected, run_id=42, run_attempt=1, sha='a' * 40,
-                            sha256=cache.digest(producer / 'cache.tar.zst'), sources_sha256=cache.digest(producer / 'sources.json'))
+                            sha256=parts.hash.hexdigest(), sources_sha256=cache.digest(producer / 'sources.json'))
             (producer / 'cache.json').write_text(json.dumps(metadata))
             with patch.dict(os.environ, BUTLER_OCI_LAYOUT='1', RUNNER_TEMP=str(root)), \
-                    patch.object(snapshots.ci_oci, 'REGISTRY', str(layout)), \
-                    patch.object(snapshots, 'trusted'), patch.object(snapshots, 'CHUNK_BYTES', 8):
+                    patch.object(snapshots.ci_oci, 'REGISTRY', str(layout)), patch.object(snapshots, 'trusted'):
                 snapshots.publish(producer, 42)
                 published = snapshots.release(snapshots.tag_name(expected))
                 consumer = root / 'consumer'
                 consumer.mkdir()
                 manifest = snapshots.generations(published['assets'])[0]
                 snapshots.fetch_snapshot(published, manifest, consumer, expected)
-                self.assertEqual((consumer / 'cache.tar.zst').read_bytes(), (producer / 'cache.tar.zst').read_bytes())
+                self.assertEqual((consumer / 'cache.tar.zst').read_bytes(), archive)
                 with patch.object(snapshots, 'restore_tree') as adopt:
                     nearest = dict(expected, lock='changed dependency resolution')
                     self.assertTrue(snapshots.restore(nearest))
@@ -242,6 +254,65 @@ class TargetSnapshot(unittest.TestCase):
                 (producer / 'cache.json').write_text(json.dumps(metadata))
                 with self.assertRaisesRegex(ValueError, 'cannot be overwritten'):
                     snapshots.publish(producer, 42)
+
+    # test-category: security
+    def test_publish_holds_one_compressed_copy_and_restores_the_identical_tree(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            produced, runner, registry = root / 'work/target', root / 'runner', root / 'registry'
+            for path in [produced / 'debug/deps', produced / 'debug/incremental', runner, registry]:
+                path.mkdir(parents=True)
+            for index in range(6):  # Incompressible, so the archive is as large as the outputs.
+                (produced / f'debug/deps/libunit{index}.rlib').write_bytes(os.urandom(96 * 1024))
+            (produced / 'debug/incremental/session').write_bytes(b'never archived')
+            expected = dict(schema=2, platform='linux-x64', kind='dev')
+            peak = []
+
+            def push(reference, paths):
+                peak.append(sum(path.stat().st_size for path in runner.rglob('*') if path.is_file()))
+                for path in paths:
+                    shutil.copyfile(path, registry / path.name)
+            env = dict(RUNNER_TEMP=str(runner), GITHUB_RUN_ID='42', GITHUB_RUN_ATTEMPT='1', BUTLER_OCI_LAYOUT='1',
+                       GITHUB_OUTPUT=str(root / 'output'), GITHUB_WORKSPACE=str(root / 'work'), CARGO_TARGET_DIR=str(produced))
+            with patch.dict(os.environ, env), patch.object(tempfile, 'tempdir', str(runner)), \
+                    patch.object(cache, 'identity', return_value=expected), patch.object(cache, 'output', return_value='a' * 40), \
+                    patch.object(cache.source_times, 'capture', return_value=[]), patch.object(snapshots, 'trusted'), \
+                    patch.object(snapshots.ci_oci, 'manifest', return_value=None), patch.object(snapshots.ci_oci, 'checked'), \
+                    patch.object(snapshots.ci_oci, 'push', side_effect=push), patch.object(snapshots, 'CHUNK_BYTES', 128 * 1024):
+                snapshots.publish_lane('linux-x64', 'prebuilt-ort', 'dev')
+            chunks = json.loads((registry / '42-1.json').read_text())['chunks']
+            compressed = sum((registry / name).stat().st_size for name in chunks)
+            self.assertGreater(len(chunks), 2)
+            # Only one compressed copy (plus tiny metadata) ever exists, never a second split copy.
+            self.assertLess(peak[0], compressed + 64 * 1024)
+            self.assertEqual(list(runner.iterdir()), [])
+            consumer, restored = root / 'consumer', root / 'restored/target'
+            consumer.mkdir()
+            published = {'assets': [{'name': path.name} for path in registry.iterdir()]}
+            with patch.object(snapshots, 'trusted'), patch.object(cache.source_times, 'restore'), \
+                    patch.dict(os.environ, CARGO_TARGET_DIR=str(restored), GITHUB_WORKSPACE=str(root / 'work')), \
+                    patch.object(snapshots, 'download', side_effect=lambda entry, destination:
+                                 shutil.copyfile(registry / entry['name'], destination)):
+                snapshots.fetch_snapshot(published, {'name': '42-1.json'}, consumer, expected)
+                snapshots.restore_tree(consumer, expected)
+
+            def tree(base):
+                return {str(path.relative_to(base)): path.read_bytes() for path in base.rglob('*') if path.is_file()}
+            self.assertEqual(tree(restored), {name: value for name, value in tree(produced).items()
+                                              if not name.startswith('debug/incremental')})
+
+    # test-category: race
+    def test_part_write_failure_stops_compression_with_the_disk_error(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            produced = Path(temporary) / 'target'
+            produced.mkdir()
+            (produced / 'large').write_bytes(os.urandom(4 * 1024**2))  # Fills every pipe buffer.
+
+            def full(parts, block):
+                raise OSError(errno.ENOSPC, 'No space left on device')
+            with patch.object(cache.Parts, 'write', full), self.assertRaises(OSError) as raised:
+                cache.compress(produced, 'target', cache.Parts(Path(temporary), lambda index: 'part', 1024))
+            self.assertEqual(raised.exception.errno, errno.ENOSPC)
 
     # test-category: pure-logic
     def test_imports_leave_watched_recipe_directory_unchanged(self):

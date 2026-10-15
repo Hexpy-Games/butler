@@ -8,7 +8,7 @@ import { notifyStatus } from "@/app/notifications.ts";
 import { Blocks, Button, InspectorInset, TaskGraphPanel } from "@/butler-ds";
 import { ProjectDocumentDialog } from "@/components/management/ProjectDocumentDialog.tsx";
 import { TaskGraphView } from "./TaskGraphView.tsx";
-import { graphCounts } from "./taskGraphPresentation.ts";
+import { graphMeta } from "./taskGraphPresentation.ts";
 
 export function TasksPanel() {
   useAppLocale();
@@ -34,7 +34,7 @@ function SessionTasksPanel({ sessionId }: { sessionId: string }) {
   return <>
     <TaskGraphPanel title={c.title} icon={<Blocks size="md" />} description={single?.title}
       empty={state.graphs.length === 0} emptyLabel={state.loading ? appCopy.settings.sectionState.loading : state.error ? appCopy.settings.sectionState.error : c.empty}
-      headerMeta={single ? graphCounts(single) : state.graphs.length ? c.graphsSummary(state.graphs.length, state.graphs.filter(g => g.state === "running").length) : undefined}>
+      headerMeta={single ? graphMeta(single) : state.graphs.length ? c.graphsSummary(state.graphs.length, state.graphs.filter(g => g.state === "running").length) : undefined}>
       {state.graphs.map(graph => <TaskGraphView key={graph.graph_id} graph={graph} selected={state.selected}
         single={Boolean(single)} open={Boolean(state.open[graph.graph_id])} visible={visible}
         onToggle={() => update(sessionId, { open: { ...state.open, [graph.graph_id]: !state.open[graph.graph_id] } })}

@@ -153,12 +153,14 @@ async fn run_iteration(
     prepared: &PreparedPolicy,
     context: &dyn TurnContextProjection,
 ) -> Result<Step, AgentLoopError> {
+    let timing = super::command_timing::CommandTiming::new("loop_iteration");
     cancelled(&input.cancellation)?;
     let iteration = state.begin_iteration();
     let resumed_batch = state.resumed_batch.take();
     if !state.is_replaying(resumed_batch.as_ref()) {
         observe_steering(input, state).await?;
     }
+    timing.mark("steering_done");
     let mut surface = match &resumed_batch {
         Some(batch) => ToolSurface {
             tools: batch.tools.clone(),
@@ -170,6 +172,7 @@ async fn run_iteration(
             .await
             .map_err(propagated)?,
     };
+    timing.mark("tools_resolved");
     let reply = match &resumed_batch {
         Some(batch) => Reply {
             nonfinal: false,

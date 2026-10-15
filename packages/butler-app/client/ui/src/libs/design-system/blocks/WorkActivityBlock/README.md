@@ -30,6 +30,48 @@ of the group. Collapsed order is button then related content; expanded order is
 button, ordered operation rows, then related content, without duplication.
 Product state is injected through this slot, never read by DS.
 
+### Live dot
+
+`live` marks the newest activity of work that is still running: its timeline
+dot fills with `--text-primary` and breathes slowly (opacity, one cycle per
+`--motion-live-pulse`, 1.6s). Set it on one row only, the last. Completed work
+has no live row. Reduced motion (OS or the app setting) sets
+`--motion-loop-count` to 0, so the dot stays filled and still. A row with an
+`icon` has no dot and ignores `live`.
+
+### WorkActivityDisclosure
+
+A work card whose full timeline opens in place. Collapsed, the status line
+and the timeline tail form one disclosure button:
+
+- the previous activity, one line fading toward the top (top fade: a mask from
+  20% to 75% opacity, and a timeline line that rises out of nothing);
+- the latest activity on the same dot and line as the expanded timeline
+  (`live` pulses its dot);
+- a `"+N ›"` Tag (`iconEnd` chevron) at the trailing edge with the records
+  beyond the latest; with none, only the chevron.
+
+Expanded, the tail folds away with the Collapsible exit (`--motion-exit-base`,
+accelerate) while the details open (`--motion-base`, standard), so there is
+only one timeline: the one inside the details. A collapse chevron fades in at
+the status line's trailing edge. Collapsing reverses both. The tail's gap to
+the status line folds with it, so the card never jumps.
+
+```tsx
+<WorkActivityDisclosure status="Working" latest="Compare performance · Web search"
+  previous="Check prices" hiddenCount={3} live expanded={open} onToggle={toggle}
+  label="Working, Compare performance · Web search, 3 earlier records"
+  detailsId={id} detailsLabel="Price research details">
+  <ScrollArea maxHeight="sm">{timeline}</ScrollArea>
+</WorkActivityDisclosure>
+```
+
+The caller bounds the details (`ScrollArea maxHeight="sm"`, 320px with edge
+fades) and passes the accessible `label`; the tail is `aria-hidden`. Tail rows
+truncate to one line; timeline rows inside the details still wrap.
+Touch: collapsed, the toggle is 66px tall on desktop and 74px on a phone;
+expanded, an invisible strip keeps it at `--control-hit-target` (30px, 44px).
+
 ## Who Can Use This Component
 
 Any Butler client agent or developer rendering conversation work state.

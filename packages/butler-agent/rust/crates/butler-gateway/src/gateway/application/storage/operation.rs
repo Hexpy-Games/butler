@@ -20,10 +20,13 @@ where
     F: FnOnce(&mut Connection) -> StorageResult<T> + Send + 'static,
 {
     let started = Instant::now();
+    let timing = crate::gateway::command_timing::CommandTiming::new("app_sqlite_operation");
+    timing.mark(std::any::type_name::<F>());
     Operation {
         inspect,
         barrier,
         run: Box::new(move |connection, admission| {
+            timing.mark("dequeued");
             let admitted = Instant::now();
             if !inspect {
                 metrics.write_phase("queue", started.elapsed());
@@ -38,6 +41,7 @@ where
             if !inspect {
                 metrics.write_phase("sql", admitted.elapsed());
             }
+            timing.mark("sql_done");
             let ready = Instant::now();
             let complete: Completion = Box::new(move |commit| {
                 let result = result.and_then(|value| commit.map(|()| value));
@@ -49,6 +53,7 @@ where
                     metrics.busy();
                 }
                 let _cancelled_observer = completion.send(result);
+                timing.mark("committed");
             });
             complete
         }),
@@ -60,6 +65,7 @@ fn apply<T>(
     metrics: &Metrics,
 ) -> StorageResult<T> {
     let baseline = metrics::baseline();
+    let timing = crate::gateway::command_timing::CommandTiming::new("app_sqlite_apply");
     let snapshot = event_outbox::snapshot();
     if !baseline {
         db.execute_batch("SAVEPOINT app_operation")
@@ -67,13 +73,16 @@ fn apply<T>(
     }
     let started = Instant::now();
     let refreshed = super::super::monitoring::materialized::refresh(db);
+    timing.mark("monitor_before_done");
     metrics.write_phase("monitor_before", started.elapsed());
     let started = Instant::now();
     let result = refreshed.and_then(|()| operation(db));
+    timing.mark("operation_done");
     metrics.write_phase("operation", started.elapsed());
     let started = Instant::now();
     let result = result
         .and_then(|value| super::super::monitoring::materialized::refresh(db).map(|()| value));
+    timing.mark("monitor_after_done");
     metrics.write_phase("monitor_after", started.elapsed());
     if !baseline {
         if result.is_ok() {

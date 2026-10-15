@@ -2,9 +2,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
 mod authority;
 mod auto;
+mod link_targets;
 pub(super) use authority::{approve, assert_counts, delivered, paused};
 mod sandbox_data_reads;
 pub(super) mod stub;
+mod web_found;
 mod web_guard;
 use butler_e2e::e2e::{
     HarnessError,
@@ -77,7 +79,18 @@ async fn ask_first_reads_the_project_and_asks_for_the_rest() -> Result<(), Harne
     let mixed_started = Instant::now();
     let id = paused(&s, &chat, MIXED).await?;
     let expected = if linked { 2 } else { 1 };
-    assert_eq!(s.gw.approval_requests(&chat).await?.len(), expected);
+    let cards = s.gw.approval_requests(&chat).await?;
+    assert_eq!(cards.len(), expected);
+    if linked {
+        // The read through a link shows the real file it reads, as the
+        // outside read does.
+        let real = json!([butler_platform::secure_fs::canonicalize(&outside)?]);
+        let shown = cards
+            .iter()
+            .filter(|card| card["approval"]["examples"] == real)
+            .count();
+        assert_eq!(shown, 2, "{cards:?}");
+    }
     assert_eq!(script.requests_for(MIXED).len(), 1);
     assert_counts(&s, &id, expected as u64, expected as u64)?;
     approve(&s, &chat, "allow").await?;
