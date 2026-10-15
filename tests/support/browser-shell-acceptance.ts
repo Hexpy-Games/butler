@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { strict as assert } from "node:assert";
@@ -7,9 +8,13 @@ export type ShellApp = Awaited<ReturnType<typeof browserAgentApp>>;
 export const toggle = '[data-test-class="titlebar-browser-toggle"]';
 export const pane = '[data-slot="browser-pane"]';
 
+export function generalChannelTitle(locale: string): string {
+  return getAppCopy(locale === "ko" ? "ko-KR" : "en-US").space.general;
+}
+
 export async function shellReady(app: ShellApp, locale: string) {
   await waitBrowser(() => app.page.expression(`document.documentElement.lang === ${JSON.stringify(locale === "ko" ? "ko-KR" : "en-US")} &&
-    [...document.querySelectorAll('[data-test-class="app-sidebar"] *')].some(n => n.textContent?.trim() === ${JSON.stringify(locale === "ko" ? "일반" : "General")})`), "localized navigation loaded");
+    [...document.querySelectorAll('[data-test-class="app-sidebar"] *')].some(n => n.textContent?.trim() === ${JSON.stringify(generalChannelTitle(locale))})`), "localized navigation loaded");
 }
 
 export async function togglePane(app: ShellApp, open: boolean) {
@@ -37,7 +42,10 @@ export async function nativeAligned(app: ShellApp) {
     if(!t?.attached || t.covered) return false;
     const r=await w.webContents.executeJavaScript("document.querySelector('[data-slot=native-view-frame]')?.getBoundingClientRect().toJSON()");
     const n=t.view.getBounds(); return r && ['x','y','width','height'].every(k=>Math.abs(r[k]-n[k])<=1);
-  })()`), "native view follows the page card");
+  })()`), "native view follows the page card").catch(async error => {
+    const geometry = await app.main(`(async()=>{const b=globalThis.browserAgentSubject,t=b.tabs.get(b.activeId),w=${app.win};return {areaVisible:b.areaVisible,covered:t?.covered,nativeCovers:b.nativeCovers,attached:t?.attached===w,windowVisible:w.isVisible(),layout:t?.layoutBounds,bounds:t?.bounds,native:t?.view?.getBounds(),frame:await w.webContents.executeJavaScript("document.querySelector('[data-slot=native-view-frame]')?.getBoundingClientRect().toJSON()")}})()`);
+    throw new Error(`${error.message}: ${JSON.stringify(geometry)}`, { cause: error });
+  });
 }
 
 export async function shellGeometry(app: ShellApp, width: number, evidence: string) {

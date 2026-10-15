@@ -1,3 +1,4 @@
+import { generalChannelTitle, shellReady } from "./browser-shell-acceptance";
 import { strict as assert } from "node:assert";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -9,8 +10,8 @@ export async function browserOutputEntry(app:App,evidence:string) {
   await app.gateway.api("/settings",{method:"PATCH",body:JSON.stringify({language:"en",appearance_theme:"light"})});
   await app.page.reload();
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="app-sidebar"]')));
-  await app.page.waitForFunction(()=>document.documentElement.lang==='en-US' && Array.from(document.querySelectorAll('[data-test-class="app-sidebar"] *')).some(node=>node.textContent?.trim()==='General'));
-  await app.page.clickText("General",'[data-test-class="app-sidebar"] *');
+  await shellReady(app, "en");
+  await app.page.clickText(generalChannelTitle("en"),'[data-test-class="app-sidebar"] *');
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="message-artifact-list"] [aria-label="Browser task"]')));
   await app.page.clickText("Browser task",'[data-test-class="message-artifact-list"] *');
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="artifact-viewer"] iframe')));

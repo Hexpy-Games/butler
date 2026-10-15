@@ -38,7 +38,7 @@ try {
   await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-slot=page-card]'))"), "card mounted");
   await nativeAligned(app); await holder("none");
   // Presenter fixture for capture isolation; input blocking below uses a real held native call.
-  await app.main(`globalThis.browserAgentSubject.execute({op:'use.started',id:'s3-presentation',session:'general',tab:${JSON.stringify(tab)}})`);
+  await app.main(`globalThis.browserAgentSubject.execute({op:'use.started',id:'s3-presentation',turn_id:'s3-presentation',session:'general',tab:${JSON.stringify(tab)}})`);
   await holder("butler");
   await pointerAction(app, tab, "click");
   await waitBrowser(() => app.main(`Boolean(globalThis.browserAgentSubject.pointer.ready && globalThis.browserAgentSubject.pointer.attached)`), "native overlay attached");
@@ -53,10 +53,10 @@ try {
     fs.writeFileSync(${JSON.stringify(join(evidence, "observation-without-overlay.png"))},hidden);
     return {equal:visible.equals(hidden),bytes:visible.length};
   })()`); assert.equal(isolation.equal, true);
-  await app.main("globalThis.browserAgentSubject.execute({op:'use.ended',args:{id:'s3-presentation'}})"); await holder("none");
+  await app.main("globalThis.browserAgentSubject.execute({op:'use.finished',session:'general',turn_id:'s3-presentation',args:{}})"); await holder("none");
   // Hold a real observe call at native ingress so actual user input hits a busy Butler page.
   await app.main(`(()=>{const t=${subject()},debug=t.view.webContents.debugger,send=debug.sendCommand.bind(debug);globalThis.controlSend=send;debug.sendCommand=(method,...args)=>method==='Page.getFrameTree'?new Promise(resolve=>{debug.sendCommand=send;globalThis.controlRelease=()=>send(method,...args).then(resolve)}):send(method,...args)})()`);
-  const pending = app.internal("tab.observe", tab);
+  const pending = app.internal("tab.observe", tab, {}, "general", "s3-busy");
   await waitBrowser(() => app.main("Boolean(globalThis.controlRelease)"), "held native observation");
   assert.equal(await app.page.expression("document.querySelector('[data-slot=page-band-actions] button').getAttribute('data-variant')"), "default");
   const blocked = await app.main(`(async()=>{const t=${subject()},p=globalThis.browserAgentSubject.pointer.view;await t.view.webContents.executeJavaScript("document.getElementById('result').textContent='Ready'");p.webContents.sendInputEvent({type:'mouseDown',x:80,y:172,button:'left',clickCount:1});p.webContents.sendInputEvent({type:'mouseUp',x:80,y:172,button:'left',clickCount:1});await new Promise(done=>setTimeout(done,50));return {text:await t.view.webContents.executeJavaScript("document.getElementById('result').textContent"),holder:t.holder}})()`);
@@ -65,7 +65,9 @@ try {
   await app.click("Take over"); await holder("user");
   await app.main(`(()=>{${subject()}.view.webContents.debugger.sendCommand=globalThis.controlSend;globalThis.controlRelease()})()`);
   assert.equal((await pending).reason, "user_control");
-  await app.click("Give back to Butler"); await holder("none");
+  await app.click("Give back to Butler");
+  await app.main("globalThis.browserAgentSubject.execute({op:'use.finished',session:'general',turn_id:'s3-busy',args:{}})");
+  await holder("none");
   await app.call("control", { id: tab, holder: "user" });
   app.stub.set([describeBrowser, () => bridgeBrowser("browser_wait_for_user", { tab })]);
   await app.send("Wait for the user, then stop this task");
@@ -79,7 +81,7 @@ try {
     await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-slot=page-card]'))"), "card mounted"); await nativeAligned(app);
     await app.call("control", { id: tab, holder: "agent" });
     const prefix = `${language}-${theme}-${width}`;
-    await app.main(`globalThis.browserAgentSubject.execute({op:'use.started',id:'s3-presentation',session:'general',tab:${JSON.stringify(tab)}})`);
+    await app.main(`globalThis.browserAgentSubject.execute({op:'use.started',id:'s3-presentation',turn_id:'s3-presentation',session:'general',tab:${JSON.stringify(tab)}})`);
     const release = await holdObservation(app, tab);
     await holder("butler");
     await waitBrowser(() => app.page.expression("document.querySelector('[data-slot=page-band-actions] button').dataset.variant === 'default'"), "busy takeover emphasis");
@@ -104,11 +106,12 @@ try {
     assert.equal(await app.main(`${overlay}.executeJavaScript("getComputedStyle(document.querySelector('[data-slot=agent-pointer] > :last-child')).transitionDuration")`), "0s");
     await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ reduce_motion: false }) });
     await app.click(language === "ko" ? "작업 중지" : "Stop task");
-    await app.main("globalThis.browserAgentSubject.execute({op:'use.ended',args:{id:'s3-presentation'}})");
+    await app.main("globalThis.browserAgentSubject.execute({op:'use.finished',session:'general',turn_id:'s3-presentation',args:{}})");
     await hub(language); await app.call("activate", { id: mine }); await holder("none"); await app.shot(`${prefix}-none`);
   }
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, elapsedMs: Date.now() - started, isolation, notes }, null, 2));
 } catch (error) {
+  writeFileSync(join(evidence, "pointer-failure.json"), JSON.stringify(await app.main(`(()=>{const b=globalThis.browserAgentSubject,p=b.pointer,t=b.tabs.get(b.activeId),w=p.view?.webContents;return {ready:p.ready,attached:Boolean(p.attached),pointer:t?.pointer,layout:t?.layoutBounds,bounds:t?.bounds,url:w?.getURL(),loading:w?.isLoading(),destroyed:w?.isDestroyed(),pageAttached:t?.attached===${app.win},areaVisible:b.areaVisible}})()`)));
   writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), native: await app.main("globalThis.browserAgentError").catch(() => null), state: await app.call("state"), dom: await app.page.expression("document.body.innerText").catch(() => null), diagnostics: await app.page.diagnostics() }));
   await app.shot("failure").catch(() => {}); throw error;
 } finally { await app.stop(); }

@@ -100,9 +100,12 @@ class UserBrowser {
   sync(tab) {
     if (tab?.popupWindow) { syncPopup(this, tab); return; }
     const win = this.getWindow();
+    const bounds = tab.layoutBounds ?? tab.bounds;
     const visible = win && !win.isDestroyed() && win.isVisible() && this.areaVisible && tab.id === this.activeId &&
-      tab.bounds?.visible && !tab.covered && !tab.dialog && this.nativeCovers === 0 && tab.status !== "crashed";
+      bounds?.visible && !tab.covered && !tab.dialog && this.nativeCovers === 0 && tab.status !== "crashed";
     if (!visible || !tab.view) { this.detach(tab); backgroundTab(this, tab); return; }
+    // Background emulation uses logical bounds; retain the renderer's layout across occlusion.
+    tab.bounds = bounds;
     viewedTab(this, tab, true);
     // Occlusion can clear while the floating preview moves. Reattaching the page
     // above the overlay also cancels its native capture; wait for the real release.
@@ -198,7 +201,7 @@ class UserBrowser {
     const tab = { id: shortId("t", id => this.tabs.has(id)), owner, profile, popup: Boolean(popupSource), opener: popupSource?.id, popupParentUrl: popupSource?.url, stills: this.stillPreferences.get(owner) !== false, partition: input.partition ?? (profile === "signed_in" ? "persist:butler-web" : this.conversationPartitions.get(partitionOwner)),
       preview: input.preview_id ?? (url && new URL(url).pathname.startsWith("/__p/") ? new URL(url).pathname.slice(5) : undefined),
       agent: input.agent === true, policy: input.policy ?? {}, epoch: 1, holder: owner === "mine" ? "user" : "agent", sticky: false, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
-      still: "", view: null, attached: null, bounds: null, covered: false, capture: null };
+      still: "", view: null, attached: null, bounds: null, layoutBounds: null, covered: false, capture: null };
     this.tabs.set(tab.id, tab);
     if (owner === "mine") this.restore.changed();
     if (activateTab) this.activate(tab.id);
@@ -282,7 +285,7 @@ class UserBrowser {
     }
     if (op === "bounds") {
       if (!value || ![value.x, value.y, value.width, value.height].every(Number.isFinite) || value.width < 0 || value.height < 0) throw new Error("invalid_bounds");
-      tab.bounds = value; this.sync(tab); return;
+      tab.layoutBounds = value; tab.bounds = value; this.sync(tab); return;
     }
     if (op === "covered") { tab.covered = value === true; this.sync(tab); return; }
     if (op === "still") return this.capture(tab);

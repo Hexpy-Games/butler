@@ -4,7 +4,7 @@ import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { loadavg } from "node:os";
 import { join, resolve } from "node:path";
-import { nativeAligned } from "../support/browser-shell-acceptance";
+import { generalChannelTitle, nativeAligned, shellReady } from "../support/browser-shell-acceptance";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { browserStub, describeBrowser, bridgeBrowser, latestBrowser, actConfirm } from "../support/browser-agent-stub";
 import { launchSmokeBrowser } from "../support/smoke-browser";
@@ -37,12 +37,12 @@ async function internal(op: string, tab?: string, args = {}, session = "general"
 async function settings(language: string, theme: string) {
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language, appearance_theme: theme }) });
   await app.page.reload();
-  await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="app-sidebar"]')));
+  await shellReady(app, language);
   await app.click(language === "ko" ? "브라우저" : "Browser");
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="browser-area"]')));
-  await nativeAligned(app);
   await app.call("activate", { id: agentTab.id });
-  await waitBrowser(()=>app.page.expression(`document.querySelector('[data-slot="titlebar-leading"] button')?.textContent.trim() === ${JSON.stringify(language === "ko" ? "일반" : "General")}`), "owned hub conversation button");
+  await nativeAligned(app);
+  await waitBrowser(()=>app.page.expression(`document.querySelector('[data-slot="titlebar-leading"] button')?.textContent.trim() === ${JSON.stringify(generalChannelTitle(language))}`), "owned hub conversation button");
   await app.page.clickSelector('[data-slot="titlebar-leading"] button');
   await nativeAligned(app);
   try { await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="message assistant"]'))); }
@@ -152,7 +152,7 @@ try {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
     await app.gateway.signIn(context); const phone = await context.newPage(); await phone.goto(app.gateway.url);
     await phone.getByRole("button", {name:"Show sidebar",exact:true}).click();
-    await phone.getByText("General", { exact: true }).first().click();
+    await phone.getByText(generalChannelTitle("en"), { exact: true }).first().click();
     await phone.getByText("Confirm", { exact: false }).first().waitFor();
     assert.equal(await phone.locator('[data-test-class="browser-step-still"]').count(),0);
     assert.equal(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,"390px approval fits");
@@ -160,7 +160,7 @@ try {
       await app.gateway.api("/settings",{method:"PATCH",body:JSON.stringify({language,appearance_theme:theme})});
       await phone.reload();
       await phone.getByRole("button",{name:language==="ko"?"사이드바 보기":"Show sidebar",exact:true}).click();
-      await phone.getByText(language==="ko"?"일반":"General",{exact:true}).first().click();
+      await phone.getByText(generalChannelTitle(language),{exact:true}).first().click();
       await phone.getByRole("button",{name:language==="ko"?"이번만 허용":"Allow once",exact:true}).waitFor();
       await phone.getByText(language==="ko"?"127.0.0.1 · 로그인 없이":"127.0.0.1 · Without signing in",{exact:true}).waitFor();
       const cardText = await phone.locator('[data-test-class="composer-authority-decision"]').innerText();

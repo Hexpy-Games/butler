@@ -1,4 +1,5 @@
 // Page dialogs in a hidden agent tab stay in the in-app dialog flow and never show an OS window.
+// test-category: race
 // Run: HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d) <electron 44> tests/smoke/browser-hidden-dialog-electron.mjs
 import { app, BrowserWindow } from "electron";
 import assert from "node:assert/strict";
@@ -23,6 +24,28 @@ const wait = async (read, label, ms = 10_000) => {
   throw new Error(`Timed out: ${label}`);
 };
 
+async function checkOcclusion(browser, tab, main) {
+  const bounds = { x: 10, y: 20, width: 320, height: 200, scale: 0.25, visible: true };
+  browser.areaVisible = true;
+  browser.activate(tab.id);
+  browser.commandTab("covered", tab.id, true);
+  browser.commandTab("bounds", tab.id, bounds);
+  for (let cycle = 0; cycle < 2; cycle += 1) {
+    browser.commandTab("covered", tab.id, false);
+    assert.equal(tab.attached, main, "uncovered page returns to its card without another layout event");
+    assert.deepEqual(tab.view.getBounds(), { x: 10, y: 20, width: 320, height: 200 });
+    assert.equal(tab.bounds.scale, 0.25);
+    assert.deepEqual(await tab.view.webContents.executeJavaScript("[innerWidth, innerHeight]"), [1280, 800]);
+    browser.commandTab("covered", tab.id, true);
+    assert.equal(tab.attached, browser.agentWindow);
+    assert.equal(tab.bounds.scale, 1, "hidden operations use logical viewport coordinates");
+    assert.deepEqual(tab.view.getBounds(), { x: 0, y: 0, width: 1280, height: 800 });
+  }
+  browser.hide();
+  browser.commandTab("covered", tab.id, false);
+  assert.equal(tab.attached, browser.agentWindow, "hidden browser stays in the background");
+}
+
 app.whenReady().then(async () => {
   const server = createServer((_request, response) => { response.writeHead(200, { "content-type": "text/html; charset=utf-8" }); response.end(page); });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -42,6 +65,7 @@ app.whenReady().then(async () => {
   connectDebugger(browser, tab);
   await tab.identityReady; await tab.view.webContents.loadURL(url);
   const contents = tab.view.webContents;
+  await checkOcclusion(browser, tab, main);
   assert.ok(browser.agentWindow && !browser.agentWindow.isVisible(), "agent window starts hidden");
   const events = () => browser.events?.get("conversation:s1") ?? [];
   const results = {};

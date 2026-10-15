@@ -392,6 +392,8 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
         CODEX_HOME: join(home, ".codex"),
         TMPDIR: tmpdir(),
         BUTLER_DATA: butlerData,
+        // This standalone fixture has no payload manifest; expose the App version explicitly.
+        BUTLER_APP_VERSION: JSON.parse(readFileSync(join(repositoryRoot, "packages/butler-app/client/electron/package.json"), "utf8")).version,
         BUTLER_APP_FOREGROUND_LEASE: "1",
         BUTLER_APP_BUNDLED_SUPERVISOR: "1",
         BUTLER_APP_SERVER_HOST: "127.0.0.1",

@@ -25,8 +25,8 @@ export async function redesignApp(evidence: string, options: NativeAppServerOpti
   const output = artifacts.artifacts.find((item) => item.kind === "web"); assert.ok(output);
   const view = await app.gateway.api<{ url: string }>(`/outputs/${output.id}/view`);
   const admin = JSON.parse(await Bun.file(join(app.gateway.butlerData, "app/runtime/auth/local-admin.json")).text()).secret as string;
-  const internal = async (op: string, tab?: string, args = {}, session = "general") => {
-    const response = await fetch(`${app.gateway.url}/internal/browser/calls`, { method: "POST", headers: { ...app.gateway.authHeaders, "x-butler-admin": admin, "content-type": "application/json" }, body: JSON.stringify({ op, session, tab, args }) });
+  const internal = async (op: string, tab?: string, args = {}, session = "general", turn_id?: string) => {
+    const response = await fetch(`${app.gateway.url}/internal/browser/calls`, { method: "POST", headers: { ...app.gateway.authHeaders, "x-butler-admin": admin, "content-type": "application/json" }, body: JSON.stringify({ op, session, tab, args, turn_id }) });
     assert.equal(response.status, 200); return response.json() as Promise<any>;
   };
   const settings = async (language: string, theme: string, width: number) => {

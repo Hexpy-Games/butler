@@ -8,7 +8,11 @@ import type { browserAgentApp } from "./browser-agent-app";
 
 /** Provider context folds old observations; durable tool results stay complete. */
 export async function browserContextCheck(app:Awaited<ReturnType<typeof browserAgentApp>>,evidence:string) {
-  const request=app.gateway.stubModelCalls.filter(call=>call.stream).at(-1)!;
+  const requests=app.visionRequests ?? app.gateway.stubModelCalls;
+  // Title/summary calls can follow delivery; inspect the final tool-enabled round.
+  const request=requests.filter(call=>call.stream && Array.isArray(call.body.tools) && call.body.tools.length>0).at(-1);
+  assert.ok(request, "the active provider stub received a tool-enabled streaming request");
+  writeFileSync(join(evidence,"context-request-summary.json"),JSON.stringify(requests.map(call=>({stream:call.stream,tools:Array.isArray(call.body.tools)?call.body.tools.length:0,messages:call.messages.length,selected:call===request})),null,2));
   const messages=request.messages.filter(message=>(message as {role?:string}).role==='tool') as Array<{content:string}>;
   const full=messages.map(message=>JSON.parse(message.content)).filter(value=>value.output?.schema==='butler.browser-observation.v1' && value.output?.status!=='superseded');
   const old=messages.map(message=>JSON.parse(message.content)).filter(value=>value.output?.status==='superseded');
@@ -42,9 +46,10 @@ export async function browserProviderByteCheck(app:Awaited<ReturnType<typeof bro
       });
     }
     stub.set(calls);
-    const start=app.gateway.stubModelCalls.length;
+    const callsBefore=app.visionRequests ?? app.gateway.stubModelCalls;
+    const start=callsBefore.length;
     await send(`Observe and perform exactly ${count} hover steps by fresh refs.`);await delivered();
-    const requests=app.gateway.stubModelCalls.slice(start);
+    const requests=callsBefore.slice(start);
     assertBrowserBodies(requests);
     const view=await app.gateway.api<{latest_turn:{id:string}}>("/session-view?session_id=general");
     const receipts=journalSteps(app.gateway.butlerData,view.latest_turn.id);
