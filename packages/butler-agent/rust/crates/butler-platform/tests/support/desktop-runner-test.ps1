@@ -50,7 +50,14 @@ if (!(Test-Path (Join-Path $Root 'requests\not-a-revision.req'))) { throw 'inval
 # A second console cannot acquire the file lock.
 $lock = [IO.File]::Open((Join-Path $Root 'desktop-runner.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
 try {
-    & "$PSHOME\powershell.exe" -NoLogo -NoProfile -ExecutionPolicy Bypass -File $runner -Root $Root -Once 2>$null
-    if ($LASTEXITCODE -eq 0) { throw 'duplicate_runner_accepted' }
+    $child = Start-Process -FilePath "$PSHOME\powershell.exe" -NoNewWindow -PassThru `
+        -ArgumentList @('-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',
+            ('"' + $runner + '"'),'-Root',('"' + $Root + '"'),'-Once') `
+        -RedirectStandardOutput (Join-Path $Root 'lock.stdout') -RedirectStandardError (Join-Path $Root 'lock.stderr')
+    try {
+        $null = $child.Handle
+        $child.WaitForExit()
+        if ($child.ExitCode -eq 0) { throw 'duplicate_runner_accepted' }
+    } finally { $child.Dispose() }
 } finally { $lock.Dispose() }
 Write-Output 'DESKTOP_RUNNER_PROTOCOL=PASS tamper,contents,ack,once,invalid,lock'
