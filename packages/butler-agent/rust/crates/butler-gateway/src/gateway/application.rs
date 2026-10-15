@@ -149,6 +149,7 @@ pub use relocation_port::{
     AppRelocationHost, AppRelocationSnapshot, AppRelocationTransportBinding,
     AppRelocationWorkspaceMarker, AppRelocationWorkspacePlan, AppRelocationWorkspaceRequest,
 };
+pub use session_branches::AppBranchSourceLocation;
 pub(crate) use session_branches::{AppSessionBranchDestination, AppSessionBranchRequest};
 pub use session_branches::{AppSessionBranchResult, AppStartTopicConversationRequest};
 pub use session_controls::{AppSessionControlUpdate, AppSessionControlsView};
