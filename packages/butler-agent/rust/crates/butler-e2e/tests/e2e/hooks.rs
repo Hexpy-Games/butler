@@ -11,6 +11,8 @@ use super::delegate_followup::stub as child_stub;
 mod idle;
 #[path = "hooks/limits.rs"]
 mod limits;
+#[path = "hooks/progress.rs"]
+mod progress;
 #[path = "hooks/stub.rs"]
 mod stub;
 use butler_e2e::e2e::{
