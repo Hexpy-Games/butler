@@ -10,7 +10,7 @@ $resultFile = Join-Path $resultRoot ($pins.revision + $suffix + '.json')
 $diagnostic = Join-Path $resultRoot ($pins.revision + '.diagnostic.json')
 $result = @{ diagnostic=$diagnostic; revision=$pins.revision; status='FAIL'; probe=$null; desktop=$null; testExit=$null }
 $profile = Join-Path $bundle ('tmp-' + [guid]::NewGuid().ToString('N').Substring(0,8))
-function HostSnapshot {
+function RegistrySnapshot {
     # These are the only registry paths reached by the contained write attempt
     # or by Butler registration. Store hashes, never registry values in evidence.
     $registry = @{}
@@ -22,6 +22,10 @@ function HostSnapshot {
         $sha = [Security.Cryptography.SHA256]::Create()
         try { $registry[$key] = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($text))) } finally { $sha.Dispose() }
     }
+    return $registry
+}
+function HostSnapshot {
+    $registry = RegistrySnapshot
     # XML pins actions, triggers and settings; LastRunTime is intentionally not
     # part of a task definition and can change independently during this run.
     $tasks = @{}
@@ -142,7 +146,7 @@ public static class ButlerDesktop {
         $case = if ($row -eq 15) { $entry[1] } else { 'windows_sandbox::' + $entry[1] }
         $env:BUTLER_E2E_PERF = if ($row -eq 14) { '1' } else { '0' }
         $log = Join-Path $resultRoot ($pins.revision + $suffix + '.row-' + $row + '.log')
-        $rowBefore = HostSnapshot
+        $rowBefore = RegistrySnapshot
         $item = @{row=$row;status='FAIL';test=$case;log=$log;startedUtc=[DateTime]::UtcNow.ToString('o')}
         try {
             $listed = & (Join-Path $bundle 'e2e.exe') $case --exact --list
@@ -169,13 +173,12 @@ public static class ButlerDesktop {
                 }
             }
         } catch { $item.error = $_.Exception.Message }
-        $rowAfter = HostSnapshot
+        $rowAfter = RegistrySnapshot
         $item.finishedUtc = [DateTime]::UtcNow.ToString('o')
-        $item.registryBefore = $rowBefore.registry
-        $item.registryAfter = $rowAfter.registry
-        $item.registryChangedKeys = @(RegistryDiff $rowBefore.registry $rowAfter.registry)
-        $item.scheduledTasksUnchanged = SameMap $rowBefore.tasks $rowAfter.tasks
-        if ($item.registryChangedKeys.Count -gt 0 -or !$item.scheduledTasksUnchanged) {
+        $item.registryBefore = $rowBefore
+        $item.registryAfter = $rowAfter
+        $item.registryChangedKeys = @(RegistryDiff $rowBefore $rowAfter)
+        if ($item.registryChangedKeys.Count -gt 0) {
             $item.testStatus = $item.status
             $item.status='FAIL'; $item.error='host_state_changed_during_row'
         }
