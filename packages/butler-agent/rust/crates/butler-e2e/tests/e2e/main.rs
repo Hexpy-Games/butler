@@ -160,6 +160,7 @@ mod update_progress;
 mod updates;
 mod usage;
 mod usage_scale;
+mod usage_timeline;
 mod user_work;
 mod wall_clock_budget;
 mod wallpaper_writes;

@@ -4,6 +4,7 @@ pub(super) mod activity;
 mod conversation;
 pub(super) mod materialized;
 mod sessions;
+mod usage;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::{Value, json};
@@ -28,6 +29,17 @@ pub struct AppUsageMonitorQuery {
     /// usage rows of a conversation are keyed by it.
     pub runtime_session_id: Option<String>,
     pub since_ts: Option<f64>,
+    pub until_ts: Option<f64>,
+    /// An unbound selector may refer directly to a telemetry scope.
+    pub usage_scope: Option<String>,
+    /// Schedule-run bindings for this window, read once by the App owner.
+    pub schedule_turns: std::collections::HashSet<String>,
+}
+
+/// Native usage projection plus schedule classification used by App metadata.
+pub struct AppUsageMonitorView {
+    pub view: Value,
+    pub scheduled_sessions: std::collections::HashSet<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -83,7 +95,7 @@ pub struct AppWorkStatusConversationFact {
 /// File-backed monitor reads remain owned by the native Host projection.
 pub trait AppMonitoringPort: Send + Sync + 'static {
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>>;
-    fn usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<Value>;
+    fn usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<AppUsageMonitorView>;
     fn system_events(&self, page: AppMonitorPage) -> ApplicationFuture<Value>;
     fn developer_logs(&self, query: AppDeveloperLogsQuery) -> ApplicationFuture<Value>;
     /// The provider's latest subscription quota, polled first when
@@ -451,11 +463,32 @@ impl super::AppApplication {
     ) -> crate::gateway::ApplicationFuture<Value> {
         let this = self.clone_handle();
         Box::pin(async move {
-            query.runtime_session_id = match query.session_id.as_deref() {
-                Some(chat) => Some(this.runtime_hint(chat).await?),
-                None => None,
-            };
-            this.dependencies.monitoring.usage_monitor(query).await
+            let id = query.session_id.clone();
+            let since = query.since_ts;
+            let (binding, schedule_turns) = this
+                .storage
+                .read(move |db| {
+                    let binding = id
+                        .as_deref()
+                        .map(|id| usage::runtime_session(db, id))
+                        .transpose()?;
+                    Ok((binding, usage::schedule_turns(db, since)?))
+                })
+                .await
+                .map_err(super::app_error)?;
+            if let Some((runtime, scope)) = binding {
+                query.runtime_session_id = Some(runtime);
+                query.usage_scope = scope;
+            }
+            query.schedule_turns = schedule_turns;
+            let mut view = this.dependencies.monitoring.usage_monitor(query).await?;
+            this.storage
+                .read(move |db| {
+                    usage::enrich(db, &mut view.view, &view.scheduled_sessions)?;
+                    Ok(view.view)
+                })
+                .await
+                .map_err(super::app_error)
         })
     }
 }

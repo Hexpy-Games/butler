@@ -171,6 +171,24 @@ impl UsageTotals {
         }
     }
 
+    /// Combines independently accumulated windows without repricing requests.
+    pub fn merge(&mut self, other: &Self) {
+        self.request_count += other.request_count;
+        self.input_tokens += other.input_tokens;
+        self.cached_input_tokens += other.cached_input_tokens;
+        self.cache_write_tokens += other.cache_write_tokens;
+        self.output_tokens += other.output_tokens;
+        if let Some(value) = other.reasoning_tokens {
+            *self.reasoning_tokens.get_or_insert(0) += value;
+        }
+        self.last_ts = self.last_ts.max(other.last_ts);
+        self.usd += other.usd;
+        self.priced.extend(other.priced.iter().cloned());
+        self.unpriced.extend(other.unpriced.iter().cloned());
+        self.reason = self.reason.max(other.reason);
+        self.as_of = self.as_of.clone().max(other.as_of.clone());
+    }
+
     /// The cost estimate over everything added.
     pub fn cost(&self) -> UsageCostView {
         let available = self.reason.is_none();
