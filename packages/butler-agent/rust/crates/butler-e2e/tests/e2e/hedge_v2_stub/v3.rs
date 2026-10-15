@@ -90,6 +90,37 @@ async fn judgment_and_recall_scoring_preserves_required_facts() -> Result<(), Ha
             "Yes, she is 13-15 weeks old now. Book a vet appointment.",
             true,
         ),
+        // Either answer language scores the same facts.
+        (
+            "R1",
+            "I recommend deploying candidate b: recall 0.889, precision 0.842.",
+            true,
+        ),
+        (
+            "J1",
+            "The October 8 deployment is the likely cause: p95 rose from 209 ms to 338 ms. Compare it in a canary.",
+            true,
+        ),
+        (
+            "J1",
+            "We cannot confirm the deployment caused it: 209 ms to 338 ms.",
+            false,
+        ),
+        (
+            "J2",
+            "네, 지금 생후 13~15주쯤이라 12주 접종을 맞을 수 있어요. 동물병원 예약을 잡으세요.",
+            true,
+        ),
+        (
+            "U1",
+            "Bori is about 16 weeks old now, so book the next vaccine.",
+            true,
+        ),
+        (
+            "U2",
+            "11월 3일 오전 10시 50분에 집에서 나가면 돼요. 비행기 출발이 13시 40분이니까요.",
+            true,
+        ),
     ] {
         let mut row = json!({"case":case,"final_text":answer,"delivered":true});
         v2::score::score(&mut row);

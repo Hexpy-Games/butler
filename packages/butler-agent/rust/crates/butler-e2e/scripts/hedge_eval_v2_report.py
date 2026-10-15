@@ -155,6 +155,12 @@ def pair_stats(verdicts, key):
     return {"main": main, "branch": branch, "non_tie_branch_rate": branch / max(1, main + branch), "cases": dict(wins)}
 
 
+def language_mismatches(rows):
+    """Rows whose recorded response language is not their case's language."""
+    return [(r["side"], r["case"], r["round"]) for r in rows
+            if r.get("response_language") != r.get("lang")]
+
+
 def report(main, branch, verdicts=None, owner=None, key=None):
     m, b = side_stats(main), side_stats(branch)
     common = sorted(set(m["cases"]) & set(b["cases"]))
@@ -173,6 +179,7 @@ def report(main, branch, verdicts=None, owner=None, key=None):
     judgment = ("J1", "J2", "U1", "U2")
     complete = all(c in mc and c in bc for c in judgment)
     result["gates"]["access_mode"] = access_modes(main) == access_modes(branch) == {"ask_except_reads"}
+    result["gates"]["response_language"] = not language_mismatches(main + branch)
     result["gates"]["judgment_recall"] = complete and (
         rate([r for r in branch if r["case"] in judgment]) -
         rate([r for r in main if r["case"] in judgment]) >= .15 - 1e-12
@@ -272,6 +279,8 @@ def main():
         print(f"{name}: {'PASS' if passed else 'FAIL'}")
     if not result["gates"]["access_mode"]:
         raise SystemExit("eval access modes differ or are missing")
+    if not result["gates"]["response_language"]:
+        raise SystemExit(f"response language differs from the case language: {language_mismatches(m + b)}")
 
 
 if __name__ == "__main__":

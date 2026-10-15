@@ -26,6 +26,10 @@ pub(super) async fn run(mode: &str, case: &str) -> Result<(Value, Vec<Value>), H
     fixtures::stub_codex_auth(&setup.sandbox.codex_home())?;
     let s = setup.start().await?;
     v2::configure(&s, &search.base).await?;
+    let language = {
+        let case = v2::cases::CASES.iter().find(|c| c.id == case).unwrap();
+        v2::response_language(&s, case).await?
+    };
     let browser = mode != "M1" && !mode.starts_with("delegated") && !mode.starts_with('U');
     let (log, server) = if browser {
         let host = v2::host::Host::attach(v2::preflight::admin(&s)).await?;
@@ -38,7 +42,9 @@ pub(super) async fn run(mode: &str, case: &str) -> Result<(Value, Vec<Value>), H
     if let Some(server) = server {
         server.abort();
     }
-    let record = result?;
+    let mut record = result?;
+    record["response_language"] = json!(language);
+    assert_eq!(record["response_language"], record["lang"], "{record}");
     let requests = model.requests.lock().unwrap().clone();
     for field in [
         "side",

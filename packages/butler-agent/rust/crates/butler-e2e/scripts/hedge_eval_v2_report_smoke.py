@@ -14,10 +14,12 @@ spec = importlib.util.spec_from_file_location("report", script)
 report = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(report)
 CASES = "W1 W2 W3 W3N W3D M1 M1D A1 D1 D2 L1 L2 P1 C1 C2 C3 C4 C5 R1 J1 J2 U1 U2 U3".split()
+KO = {"R1", "J1", "U1"}
 
 
 def rows(side):
     return [dict(side=side, case=case, round=round, access_mode="ask_except_reads",
+                 lang="ko" if case in KO else "en", response_language="ko" if case in KO else "en",
                  kind="control" if case.startswith("C") or case == "U3" else "trap",
                  route="named", delivered=True, timed_out=False, not_run_reason=None,
                  tool_calls={"total": 1}, latency_ms=1, plan_checks=[],
@@ -42,7 +44,7 @@ def check(directory):
     result = report.report(main, branch)
     assert result["main"]["external_url_runs"] == {"web": 1, "workspace": 0}
     assert result["branch"]["external_url_runs"] == {"web": 0, "workspace": 1}
-    for name in ("judgment_recall", "defensive", "confident_error_controls", "access_mode"):
+    for name in ("judgment_recall", "defensive", "confident_error_controls", "access_mode", "response_language"):
         assert result["gates"][name], name
     assert result["branch"]["u1_memory_tool_use_rate"] == 1
     assert result["branch"]["judge_diagnostic_means"] == {"d1_defensive": .1, "d2_no_judgment": .2}
@@ -71,6 +73,9 @@ def check(directory):
     bad = copy.deepcopy(branch)
     bad[0]["access_mode"] = "ask_first"
     assert not gates(main, bad)["access_mode"]
+    bad = copy.deepcopy(branch)
+    next(row for row in bad if row["case"] == "J1")["response_language"] = "en"
+    assert not gates(main, bad)["response_language"]
     directory.mkdir(parents=True, exist_ok=True)
     for side, data in (("main", main), ("branch", branch)):
         report.write_jsonl(directory / f"{side}.jsonl", data)
@@ -79,7 +84,7 @@ def check(directory):
     saved = json.loads((directory / "report.json").read_text())
     for side in ("main", "branch"):
         assert saved[side]["external_url_runs"] == result[side]["external_url_runs"]
-    print("D5v3 report: gates 5–7 PASS and FAIL variants verified; 240 synthetic rows")
+    print("D5v3 report: gates 5–8 PASS and FAIL variants verified; 240 synthetic rows")
 
 
 if __name__ == "__main__":

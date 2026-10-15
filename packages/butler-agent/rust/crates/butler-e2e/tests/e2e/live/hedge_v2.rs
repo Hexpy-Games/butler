@@ -66,6 +66,7 @@ async fn live_12_hedge_v2() -> Result<(), HarnessError> {
             .env("BUTLER_BROWSER_DOWNLOAD_BASE", "http://127.0.0.1:9/");
         let s = setup.start().await?;
         configure(&s, &search.base).await?;
+        let language = response_language(&s, case).await?;
         let image = preflight::image_input(&s).await?;
         let checker = if case.group == "workspace" {
             preflight::output(&s).await?
@@ -98,6 +99,7 @@ async fn live_12_hedge_v2() -> Result<(), HarnessError> {
         if case.id == "D1" && !image {
             record["not_scored"] = json!(["corvel"]);
         }
+        record["response_language"] = json!(language);
         preflight::artifacts(&s, &mut record).await?;
         score::score(&mut record);
         record["reference"] = json!(case.reference);
@@ -120,6 +122,34 @@ pub(crate) async fn configure(
         std::fs::write(path, serde_json::to_vec(&config)?)?;
         Ok(())
     }).await.map_err(|e| HarnessError(e.to_string()))?
+}
+/// Answers in the case's language, as an owner with that response language
+/// would get (LIVE-01): both sides set it identically and record what resolved.
+pub(crate) async fn response_language(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    case: &Case,
+) -> Result<String, HarnessError> {
+    let reply =
+        s.gw.patch("/personalization", json!({"response_language": case.lang}))
+            .await?;
+    if reply.status != 200 {
+        return Err(HarnessError(format!(
+            "response_language update failed: {}",
+            reply.text
+        )));
+    }
+    let view = s.gw.get("/personalization").await?;
+    let language = view.data()["response_language"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    if language != case.lang {
+        return Err(HarnessError(format!(
+            "{} resolved response language {language:?}, expected {}",
+            case.id, case.lang
+        )));
+    }
+    Ok(language)
 }
 fn not_run(case: &Case, reason: &str) -> Value {
     json!({"side":std::env::var("BUTLER_E2E_HEDGE_SIDE").unwrap_or_else(|_|"branch".into()),
