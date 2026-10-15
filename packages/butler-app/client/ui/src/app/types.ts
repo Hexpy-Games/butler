@@ -871,6 +871,8 @@ export interface ActiveChatView {
   title: string;
   shortTitle: string;
   project: string;
+  /** Where a new chat lands when it is not the project root (`Project › Group`). */
+  location?: string;
 }
 
 export interface MessageFileRef {
