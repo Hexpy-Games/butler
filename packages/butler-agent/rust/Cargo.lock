@@ -1124,6 +1124,7 @@ dependencies = [
  "apple-native-keyring-store",
  "atomicwrites",
  "base64 0.22.1",
+ "butler-platform",
  "cbc 0.1.2",
  "des",
  "dunce",
