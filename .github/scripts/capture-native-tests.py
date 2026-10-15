@@ -70,4 +70,7 @@ def capture(log, command):
 
 
 if __name__ == '__main__':
+    # A narrow Windows console encoding must not interrupt raw-byte capture or
+    # replace the native exit code when an error or artifact path is Unicode.
+    sys.stdout.reconfigure(errors='backslashreplace')
     sys.exit(capture(sys.argv[1], sys.argv[2:]))
