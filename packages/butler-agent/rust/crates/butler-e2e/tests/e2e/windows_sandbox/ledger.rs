@@ -22,6 +22,30 @@ fn refused(f: &Fixture, groups: usize) {
     assert_eq!(Ledger::aliases(&f.root).unwrap().len(), groups);
 }
 #[test]
+fn ledger_replaced_root_fails_closed_and_rebuilds() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows ledger");
+    let f = Fixture::new("WIN-LEDGER-ROOT")?;
+    fs::write(f.root.join("public.txt"), b"complete")?;
+    admit(&f)?;
+    let previous = f.root.with_file_name("previous-project");
+    fs::rename(&f.root, &previous)?;
+    fs::create_dir(&f.root)?;
+    fs::write(f.root.join("public.txt"), b"replacement")?;
+    fs::hard_link(f.root.join("public.txt"), f.root.join(".env"))?;
+    let error = Ledger::admit(&f.root, &[]).unwrap_err();
+    assert!(
+        error.to_string().contains("ledger watched root replaced"),
+        "{error}"
+    );
+    refused(&f, 1);
+    fs::remove_file(f.root.join(".env"))?;
+    admit(&f)?;
+    assert_eq!(fs::read(f.root.join("public.txt"))?, b"replacement");
+    f.finish();
+    Ok(())
+}
+#[test]
 fn ledger_inside_secret_aliases_and_removal() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows ledger");

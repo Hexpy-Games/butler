@@ -60,6 +60,7 @@ if-addrs.workspace = true
 sysinfo.workspace = true
 win32job.workspace = true
 same-file = "1.0.6"
+winapi-util = "=0.1.11"
 atomicwrites.workspace = true
 filedescriptor = "0.8.3"
 windows-permissions = "=0.2.4"

@@ -5,16 +5,18 @@ use std::{
     collections::{HashMap, VecDeque},
     ffi::OsString,
     fs, io,
-    os::windows::fs::MetadataExt,
+    os::windows::fs::{MetadataExt, OpenOptionsExt},
     path::{Path, PathBuf},
     sync::{Arc, Condvar, Mutex},
     thread,
 };
-use winsafe::{HFILE, co};
+use winapi_util::file::{Information, information};
+use winsafe::co;
 const THREADS: usize = 16;
-struct Pin {
-    _handle: Mutex<winsafe::guard::CloseHandleGuard<HFILE>>,
+pub(super) struct Pin {
+    _handle: fs::File,
     _parent: Option<Arc<Pin>>,
+    pub(super) key: inventory::FileKey,
 }
 struct Entry {
     path: PathBuf,
@@ -144,7 +146,10 @@ fn visit(
             continue;
         };
         let child = entry.path();
-        let child_secret = child_secret(&child, secret.as_deref());
+        let child_secret = secret.clone().or_else(|| {
+            crate::command_sandbox::secret_name(&entry.file_name().to_string_lossy())
+                .then(|| child.clone())
+        });
         // Find data is already cached by DirEntry on Windows; no per-entry stat.
         if metadata.file_attributes() & 0x400 != 0 {
             if let Some(secret) = child_secret {
@@ -192,44 +197,60 @@ fn inspect(
     if let Some(secret) = secret {
         inventory.secrets.insert(secret.to_owned());
     }
-    if info.dwFileAttributes.has(co::FILE_ATTRIBUTE::REPARSE_POINT) {
+    if info.file_attributes() & u64::from(co::FILE_ATTRIBUTE::REPARSE_POINT.raw()) != 0 {
         return Ok(false);
     }
-    if info.dwFileAttributes.has(co::FILE_ATTRIBUTE::DIRECTORY) {
+    if info.file_attributes() & u64::from(co::FILE_ATTRIBUTE::DIRECTORY.raw()) != 0 {
         return Ok(true);
     }
     #[cfg(feature = "test-support")]
     {
         inventory.opened_files += 1;
     }
-    if info.nNumberOfLinks > 1 {
+    if info.number_of_links() > 1 {
         inventory.insert(
             path.to_owned(),
-            (info.dwVolumeSerialNumber, info.nFileIndex()),
-            info.nNumberOfLinks,
+            file_key(&info)?,
+            u32::try_from(info.number_of_links()).map_err(io::Error::other)?,
             inventory::private(path, roots, protected),
         );
     }
     Ok(false)
 }
-fn open(path: &Path) -> io::Result<winsafe::BY_HANDLE_FILE_INFORMATION> {
-    let (handle, _) = HFILE::CreateFile(
-        path.to_str()
-            .ok_or_else(|| io::Error::other("non_unicode_path"))?,
-        co::GENERIC::default(),
-        Some(co::FILE_SHARE::READ | co::FILE_SHARE::WRITE | co::FILE_SHARE::DELETE),
-        None,
-        co::DISPOSITION::OPEN_EXISTING,
-        co::FILE_ATTRIBUTE::NORMAL,
-        Some(co::FILE_FLAG::OPEN_REPARSE_POINT | co::FILE_FLAG::BACKUP_SEMANTICS),
-        None,
-        None,
-    )
-    .map_err(native_error)?;
-    handle.GetFileInformationByHandle().map_err(native_error)
+fn open_file(path: &Path, share: co::FILE_SHARE) -> io::Result<fs::File> {
+    // The standard Windows open accepts OsStr directly; avoid converting every
+    // full pathname to UTF-8 and back. Zero access, OPEN_EXISTING, no contents.
+    fs::OpenOptions::new()
+        .access_mode(0)
+        .share_mode(share.raw())
+        .custom_flags((co::FILE_FLAG::OPEN_REPARSE_POINT | co::FILE_FLAG::BACKUP_SEMANTICS).raw())
+        .open(path)
 }
-fn native_error(error: co::ERROR) -> io::Error {
-    io::Error::from_raw_os_error(error.raw().cast_signed())
+fn open(path: &Path) -> io::Result<Information> {
+    information(&open_file(
+        path,
+        co::FILE_SHARE::READ | co::FILE_SHARE::WRITE | co::FILE_SHARE::DELETE,
+    )?)
+}
+fn file_key(info: &Information) -> io::Result<inventory::FileKey> {
+    Ok((
+        u32::try_from(info.volume_serial_number()).map_err(io::Error::other)?,
+        info.file_index(),
+    ))
+}
+pub(super) fn root_identity(path: &Path) -> io::Result<inventory::FileKey> {
+    directory_key(&open(path)?)
+}
+fn directory_key(info: &Information) -> io::Result<inventory::FileKey> {
+    if info.file_attributes() & u64::from(co::FILE_ATTRIBUTE::REPARSE_POINT.raw()) != 0
+        || info.file_attributes() & u64::from(co::FILE_ATTRIBUTE::DIRECTORY.raw()) == 0
+    {
+        return Err(io::Error::other("ledger directory changed"));
+    }
+    file_key(info)
+}
+pub(super) fn pin_root(path: &Path) -> io::Result<Arc<Pin>> {
+    pin(path, None)
 }
 pub(super) fn surviving<T>(result: io::Result<T>) -> io::Result<Option<T>> {
     match result {
@@ -247,28 +268,13 @@ pub(super) fn surviving<T>(result: io::Result<T>) -> io::Result<Option<T>> {
 // Keep every ancestor pinned until all queued descendant opens finish. A
 // pathname must not become a junction between the no-follow check and read_dir.
 fn pin(path: &Path, parent: Option<Arc<Pin>>) -> io::Result<Arc<Pin>> {
-    let (handle, _) = HFILE::CreateFile(
-        path.to_str()
-            .ok_or_else(|| io::Error::other("non_unicode_path"))?,
-        co::GENERIC::default(),
-        Some(co::FILE_SHARE::READ),
-        None,
-        co::DISPOSITION::OPEN_EXISTING,
-        co::FILE_ATTRIBUTE::NORMAL,
-        Some(co::FILE_FLAG::OPEN_REPARSE_POINT | co::FILE_FLAG::BACKUP_SEMANTICS),
-        None,
-        None,
-    )
-    .map_err(native_error)?;
-    let info = handle.GetFileInformationByHandle().map_err(native_error)?;
-    if info.dwFileAttributes.has(co::FILE_ATTRIBUTE::REPARSE_POINT)
-        || !info.dwFileAttributes.has(co::FILE_ATTRIBUTE::DIRECTORY)
-    {
-        return Err(io::Error::other("ledger directory changed"));
-    }
+    let handle = open_file(path, co::FILE_SHARE::READ)?;
+    let info = information(&handle)?;
+    let key = directory_key(&info)?;
     Ok(Arc::new(Pin {
-        _handle: Mutex::new(handle),
+        _handle: handle,
         _parent: parent,
+        key,
     }))
 }
 fn entries(paths: &[PathBuf], roots: &[PathBuf]) -> io::Result<VecDeque<Entry>> {
