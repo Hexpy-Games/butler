@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll};
 
+use butler_platform::command_sandbox::command_fixtures;
 use tokio::io::AsyncWrite;
 use tokio::process::{Child, Command};
 use tokio::sync::{Notify, watch};
@@ -113,6 +114,24 @@ impl AsyncWrite for FailingSink {
     }
 }
 
+/// Runtime roots and the caller's isolated profile, without private host values.
+fn fixture_environment() -> HashMap<String, String> {
+    butler_platform::process_control::SYSTEM_ENVIRONMENT
+        .iter()
+        .copied()
+        .chain([
+            "HOME",
+            "USERPROFILE",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "TEMP",
+            "TMP",
+            "TMPDIR",
+        ])
+        .filter_map(|name| std::env::var(name).ok().map(|value| (name.into(), value)))
+        .collect()
+}
+
 struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {
@@ -122,10 +141,7 @@ impl Fixture {
         Self(path)
     }
     fn guided(&self, command: &str) -> GuidedCommandInput {
-        let mut host_environment = HashMap::from([("PATH".into(), "/usr/bin:/bin".into())]);
-        if let Some(home) = butler_platform::user_dirs::home_dir() {
-            host_environment.insert("HOME".into(), home.to_string_lossy().into_owned());
-        }
+        let host_environment = fixture_environment();
         GuidedCommandInput {
             command: command.into(),
             cwd: None,
@@ -141,7 +157,10 @@ impl Fixture {
         StructuredCommandInput {
             steps,
             cwd: Some(self.0.clone()),
-            environment: HashMap::new(),
+            environment: fixture_environment()
+                .into_iter()
+                .map(|(key, value)| (key, Some(value)))
+                .collect(),
             host_environment: HashMap::new(),
             inherit_environment: false,
             stdin: String::new(),
@@ -188,7 +207,7 @@ async fn caller_drop_does_not_cancel_owned_child() {
     let fixture = Fixture::new();
     let owner = Commands::new();
     let marker = fixture.0.join("done");
-    let command = format!("sleep 0.05; printf x > '{}'", marker.display());
+    let command = command_fixtures::delayed_marker(&marker);
     drop(owner.submit_guided(fixture.guided(&command)).unwrap());
     butler_test_support::eventually("the dropped command to finish", || {
         owner.active_count() == 0
@@ -199,18 +218,13 @@ async fn caller_drop_does_not_cancel_owned_child() {
     assert_eq!(owner.active_count(), 0);
 }
 
+// test-category: race
 #[tokio::test]
 async fn structured_utf8_fragments_and_spawn_failure() {
     let fixture = Fixture::new();
     let owner = Commands::new();
     let output = owner
-        .submit_structured(fixture.structured(vec![CommandStep {
-            executable: "/bin/sh".into(),
-            arguments: vec![
-                "-c".into(),
-                "printf '\\342'; sleep 0.02; printf '\\202\\254'".into(),
-            ],
-        }]))
+        .submit_structured(fixture.structured(vec![shell_step(command_fixtures::utf8_fragments())]))
         .unwrap()
         .await
         .unwrap();
@@ -226,6 +240,14 @@ async fn structured_utf8_fragments_and_spawn_failure() {
     assert_eq!(failed.error.unwrap().code(), "command_spawn_failed");
     assert_eq!(failed.exit_code, None);
     owner.close().await;
+}
+
+fn shell_step(command: &str) -> CommandStep {
+    let invocation = command_fixtures::shell(command);
+    CommandStep {
+        executable: invocation.program,
+        arguments: invocation.arguments,
+    }
 }
 
 mod lifecycle;

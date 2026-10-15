@@ -44,6 +44,10 @@ use windows as shell;
 #[cfg(windows)]
 use windows::mxc as sandbox;
 
+/// Native shell fixtures for command lifecycle tests.
+#[cfg(feature = "test-support")]
+#[path = "command_sandbox/test_support/commands.rs"]
+pub mod command_fixtures;
 #[cfg(feature = "test-support")]
 mod test_support;
 #[cfg(feature = "test-support")]
