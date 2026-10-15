@@ -14,6 +14,8 @@ use butler_turn::conversation::{
     ConversationObserverFuture,
 };
 
+mod prewarm;
+
 const CAPACITY: usize = 64;
 
 enum Job {
@@ -46,17 +48,21 @@ impl ConversationObserver {
         paths: &CognitionPathEnvironment,
         clock: Arc<dyn ConversationIdentityClock>,
         metric_files: Arc<MetricFiles>,
+        embedding: Option<Arc<crate::host::EmbeddingOwner>>,
     ) -> std::io::Result<Self> {
         let (sender, mut receiver) = mpsc::channel(CAPACITY);
         let now_iso = Arc::new(move || clock.now_iso());
         let publisher = CompletionPublisher::new(data_root, paths, now_iso);
         let metrics = ConversationMetrics::new(metric_files);
+        let data_root = data_root.to_owned();
+        let paths = paths.clone();
         let worker = std::thread::Builder::new()
             .name("butler-completion-observer".into())
             .spawn(move || {
                 while let Some(job) = receiver.blocking_recv() {
                     match job {
                         Job::Admission(input, result) => {
+                            prewarm::on_admission(&input, &data_root, &paths, embedding.as_deref());
                             metrics.admission(AdmissionMeasure {
                                 session_id: &input.session_id,
                                 session_role: &input.session_role,

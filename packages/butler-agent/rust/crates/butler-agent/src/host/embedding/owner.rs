@@ -28,9 +28,12 @@ use butler_memory::cognition::{
 mod execute;
 mod queue;
 mod readiness;
+mod supervision;
 
 use execute::run_item;
 use queue::PendingResponse;
+#[cfg(test)]
+mod readiness_tests;
 #[cfg(test)]
 mod tests;
 mod wire;
@@ -91,13 +94,11 @@ impl EmbeddingOwner {
         });
         let (completion_tx, completion) = watch::channel(None);
         let actor_inner = inner.clone();
-        let actor = tokio::spawn(async move {
-            let completed = AssertUnwindSafe(run_actor(actor_inner))
-                .catch_unwind()
-                .await
-                .is_ok();
-            completion_tx.send_replace(Some(completed));
-        });
+        let actor = tokio::spawn(supervision::supervise(
+            inner.clone(),
+            completion_tx,
+            run_actor(actor_inner),
+        ));
         Ok(Self {
             inner,
             actor: Mutex::new(Some(actor)),
@@ -295,6 +296,7 @@ impl Inner {
             return;
         }
         state.closed = true;
+        self.warm.store(false, Ordering::Release);
         for pending in state.interactive.drain(..) {
             pending
                 .response
@@ -345,9 +347,13 @@ impl Drop for AdmissionGuard {
 async fn run_actor(inner: Arc<Inner>) {
     let mut child: Option<WorkerChild> = None;
     initialize_for_ownership_test(&inner, &mut child).await;
+    run_loop(&inner, &mut child).await;
+}
+
+async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>) {
     loop {
         if inner.release.swap(false, Ordering::AcqRel) {
-            kill_and_reap(&mut child).await;
+            kill_and_reap(child).await;
             inner.warm.store(false, Ordering::Release);
         }
         inner.released.send_replace(child.is_none());
@@ -360,7 +366,7 @@ async fn run_actor(inner: Arc<Inner>) {
             }
         };
         if let Some(item) = next {
-            let result = run_item(&inner, &mut child, &item).await;
+            let result = run_item(inner, child, &item).await;
             let ready = child.as_ref().is_some_and(|process| process.initialized);
             if inner.warm.swap(ready, Ordering::AcqRel) != ready && ready {
                 butler_core::diagnostic!("[embedding-worker] ready");
@@ -379,7 +385,7 @@ async fn run_actor(inner: Arc<Inner>) {
             tokio::select! {
                 () = inner.notify.notified() => {},
                 () = inner.shutdown.cancelled() => {},
-                _ = process.child.wait() => { child = None; inner.warm.store(false, Ordering::Release); },
+                _ = process.child.wait() => { *child = None; inner.warm.store(false, Ordering::Release); },
             }
         } else {
             tokio::select! {
@@ -388,7 +394,7 @@ async fn run_actor(inner: Arc<Inner>) {
             }
         }
     }
-    kill_and_reap(&mut child).await;
+    kill_and_reap(child).await;
     inner.warm.store(false, Ordering::Release);
     inner.released.send_replace(true);
 }

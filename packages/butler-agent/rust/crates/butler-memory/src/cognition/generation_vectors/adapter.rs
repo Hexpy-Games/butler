@@ -42,6 +42,22 @@ impl GenerationVectorAdapter {
         }
     }
 
+    /// Indexed turn-start probe, called on a blocking lane before requesting a load.
+    pub fn has_recall_vectors(
+        data_root: &std::path::Path,
+        paths: &CognitionPathEnvironment,
+    ) -> CognitionResult<bool> {
+        let generation = crate::cognition::resolve_active_generation(data_root, paths)?;
+        let Some(expected) = &generation.embedding else {
+            return Ok(false);
+        };
+        compatibility::preflight(expected)?;
+        let graph = crate::cognition::graph::GraphRecallReader::open(&generation.graph_path)?;
+        let result = graph.has_completed_vectors();
+        graph.close()?;
+        result
+    }
+
     async fn query(
         &self,
         generation: &MemoryGenerationHandle,
@@ -128,7 +144,14 @@ impl RecallVectorPort for GenerationVectorAdapter {
             if let Some(expected) = &generation.embedding {
                 compatibility::preflight(expected)?;
             }
-            self.embedding.ready(deadline_at).await
+            let result = self.embedding.ready(deadline_at).await;
+            if !self.embedding.enabled() {
+                return Err(CognitionError::new(
+                    CognitionCode::VectorUnavailable,
+                    "embedding_disabled",
+                ));
+            }
+            result
         })
     }
 

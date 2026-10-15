@@ -144,9 +144,9 @@ impl Operation {
             vector.code = Some(EMBEDDING_DISABLED.into());
             return Ok(vector);
         }
-        // Initialization is owned background work. Keep a search window for
-        // text retrieval if the optional vector lane cannot become ready.
-        let vector_deadline = self.deadline_at.saturating_sub(750);
+        // Even after admission delay, optional vector work must leave 500 ms
+        // for text candidates and 750 ms each for graph and source reads.
+        let vector_deadline = self.deadline_at.saturating_sub(2_000);
         let mut initialization_ms = 0;
         let result = tokio::select! {
             () = self.shutdown.cancelled() => return Err(closed()),
@@ -185,13 +185,19 @@ impl Operation {
         // path starts the owner without delaying text recall for model readiness.
         if generation.embedding.is_some() {
             let started = (self.clock)();
-            let remaining = u64::try_from(deadline_at.saturating_sub(started)).unwrap_or_default();
+            // Warm-file loads measured 1,642–1,916 ms. 2,250 ms gives the
+            // slowest sample 17% headroom without spending 4,250 ms on
+            // disk-cold loads (3,856–12,721 ms). The owner keeps loading.
+            let ready_deadline = deadline_at.min(started.saturating_add(2_250));
+            let remaining =
+                u64::try_from(ready_deadline.saturating_sub(started)).unwrap_or_default();
             let ready = tokio::time::timeout(
                 std::time::Duration::from_millis(remaining),
-                port.ready(generation, deadline_at),
+                port.ready(generation, ready_deadline),
             )
             .await;
             *initialization_ms = (self.clock)().saturating_sub(started).max(0);
+            butler_core::diagnostic!("[memory-recall] readiness_wait_ms={}", *initialization_ms);
             ready.map_err(|_| {
                 CognitionError::new(CognitionCode::VectorUnavailable, "vector_unavailable")
             })??;

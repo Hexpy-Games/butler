@@ -175,11 +175,17 @@ fn select(
     clocks: Clocks<'_>,
 ) -> CognitionResult<Selection> {
     let graph_started = Instant::now();
-    // Preserve each stage's work window after initialization, without extending
-    // the overall recall deadline when little time remains for text fallback.
-    let stage_end = read.deadline_at.saturating_add(read.initialization_ms);
-    let candidate_deadline = (stage_end - 3_500).min(read.deadline_at);
-    let graph_deadline = (stage_end - 2_000).min(read.deadline_at);
+    // Shift candidate work past initialization, reserving at least 750 ms
+    // each for graph expansion and source hydration. Neither stage may
+    // consume the next stage's reserve after a capped readiness wait.
+    let shifted = read.deadline_at.saturating_add(read.initialization_ms);
+    let now = (clocks.now_millis)();
+    let candidate_deadline = (shifted - 3_500)
+        .max(now.saturating_add(500))
+        .min(read.deadline_at - 1_500);
+    let graph_deadline = (shifted - 2_000)
+        .max(candidate_deadline.saturating_add(750))
+        .min(read.deadline_at - 750);
     let memory_root = read.environment.memory_root(read.data_root);
     let selected = selection::run(selection::RecallSelectionInput {
         graph: sources.graph,

@@ -14,6 +14,13 @@ const COLD_AGAIN: &str =
 const ASK: &str = "How do I unlock my bicycle security cable? Call recall_memory with cue bicycle security cable combination.";
 
 pub(super) fn setup(name: &str) -> Result<(Setup, String, String), HarnessError> {
+    setup_with_provider_delay(name, 0)
+}
+
+pub(super) fn setup_with_provider_delay(
+    name: &str,
+    delay_ms: u64,
+) -> Result<(Setup, String, String), HarnessError> {
     let code = nonce();
     let mut cassette = Cassette::load("MEM-01")?;
     let remember = cassette.exchanges[0].request.key.user_request.clone();
@@ -27,6 +34,7 @@ pub(super) fn setup(name: &str) -> Result<(Setup, String, String), HarnessError>
         call.response = memory_response(&json!({"type":"function_call","id":"fc_recall",
             "call_id":"call_recall","name":"recall_memory","status":"completed",
             "arguments":json!({"cue":cue}).to_string()}));
+        call.response.chunks[0].delay_ms = delay_ms;
         let mut answer = cassette.exchanges[1].clone();
         answer.request.key.user_request = ask.into();
         cassette.exchanges.extend([call, answer]);
@@ -185,16 +193,21 @@ async fn mem_05_vector_batch_finds_chat_a_fact_by_paraphrase_in_chat_b() -> Resu
         memory_stubs::unit_states(&s.sandbox.data)?.1,
         drained.elapsed().as_millis()
     );
-    // Once reaped, an ordinary turn with a pinned identity still must not reload it.
+    // A new user turn preloads the existing vector generation before recall.
     let (_, turn) = s
         .turn("general", "I will read a book this evening.")
         .await?;
     assert_eq!(turn_state(&turn), "delivered");
     memory_stubs::text_complete(&s.sandbox.data, 6).await?;
     if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
-        assert_eq!(workers, [] as [u32; 0]);
+        assert_eq!(
+            workers.len(),
+            1,
+            "turn-start prefetch must reload the worker"
+        );
     }
-    assert!(memory_stubs::unit_states(&s.sandbox.data)?.0 > 0);
+    memory_stubs::vectors_complete(&s.sandbox.data, 6).await?;
+    assert_eq!(memory_stubs::unit_states(&s.sandbox.data)?.0, 0);
     let first_after_idle = recall(&s, "general", COLD_AGAIN).await?;
     assert!(first_after_idle.to_string().contains(&code));
     memory_stubs::vectors_complete(&s.sandbox.data, 7).await?;
