@@ -11,23 +11,27 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     context: &ProjectionContext,
     chat_id: &str,
 ) -> Result<bool, GatewayApplicationError> {
+    let timing = crate::gateway::command_timing::CommandTiming::new("projection_record");
     let chat = chat_id.to_owned();
     let session_id = context
         .storage
         .read(move |db| super::super::sessions::identity::runtime_hint(db, &chat))
         .await
         .map_err(app_error)?;
+    timing.mark("session_loaded");
     let path = context
         .butler_data
         .join("transcripts")
         .join(transcript_name(&session_id));
     let prior = previous_checkpoint(context, chat_id).await?;
+    timing.mark("checkpoint_loaded");
     let path_for_read = path.clone();
     let prior_for_read = prior.clone();
     let state =
         tokio::task::spawn_blocking(move || read_state(&path_for_read, prior_for_read.as_ref()))
             .await
             .map_err(GatewayApplicationError::internal_from)??;
+    timing.mark("file_state_read");
     let Some((state, reusable)) = state else {
         return Ok(false);
     };
@@ -60,17 +64,11 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     {
         let _ = tokio::fs::remove_file(PathBuf::from(&stale.spool_path)).await;
     }
-    let mut read = tokio::task::spawn_blocking(move || {
-        super::byte_window::read_record(checkpoint, state.size, state.modified_at_ms)
-    })
-    .await
-    .map_err(GatewayApplicationError::internal_from)?
-    .map_err(app_error)?;
+    let mut read = read_window(checkpoint, &state).await?;
+    timing.mark("record_read");
     if read.checkpoint.spool_bytes == 0 {
         read.checkpoint.spool_path.clear();
     }
-    let pending = read.pending;
-    let completed = read.completed_spool.clone();
     let advanced = match read.event {
         // A sweep over a chat whose file has not changed writes nothing.
         None if prior.as_ref() == Some(&read.checkpoint) => true,
@@ -80,12 +78,24 @@ pub(in crate::gateway::application) async fn sync_chat_once(
         }
         Some(event) => super::project_event(context, chat_id, event, read.checkpoint).await?,
     };
-    if let Some(path) = completed {
+    timing.mark("event_projected");
+    if let Some(path) = read.completed_spool {
         let _ = tokio::fs::remove_file(path).await;
     }
     // An unproven old claim retains its original event and yields this sync.
     // Reporting pending here would replay that same record in a tight loop.
-    Ok(advanced && pending)
+    Ok(advanced && read.pending)
+}
+
+async fn read_window(
+    checkpoint: Checkpoint,
+    state: &FileState,
+) -> Result<super::byte_window::ReadRecord, GatewayApplicationError> {
+    let (size, modified) = (state.size, state.modified_at_ms);
+    tokio::task::spawn_blocking(move || super::byte_window::read_record(checkpoint, size, modified))
+        .await
+        .map_err(GatewayApplicationError::internal_from)?
+        .map_err(app_error)
 }
 
 // Boundary validation opens and reads the file, so it belongs on a blocking worker.

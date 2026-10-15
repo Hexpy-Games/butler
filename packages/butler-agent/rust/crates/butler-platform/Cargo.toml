@@ -67,6 +67,10 @@ windows-permissions = "=0.2.4"
 # Fixture values for tests of other crates (e.g. archive entry modes).
 test-support = []
 
+[dev-dependencies]
+# Integration contracts use the fixture helpers through the library target.
+butler-platform = { path = ".", features = ["test-support"] }
+
 [lints]
 workspace = true
 

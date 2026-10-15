@@ -94,27 +94,53 @@ async fn filesystem_preparation_normalizes_search_separators() -> Result<(), Har
 async fn auto_mutation_waits_for_approval_without_running() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows approval fallback");
+    approval_fallback(false, "1").await
+}
+
+#[tokio::test]
+async fn missing_helper_preserves_cli_startup_and_approval() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows missing helper");
+    for opt_in in ["", "1"] {
+        approval_fallback(true, opt_in).await?;
+    }
+    Ok(())
+}
+
+async fn approval_fallback(missing_helper: bool, opt_in: &str) -> Result<(), HarnessError> {
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("WINDOWS-AUTO-MUTATION-FALLBACK")?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url)
-        .env("BUTLER_WINDOWS_PROJECT_SANDBOX", "1");
+        .env("BUTLER_WINDOWS_PROJECT_SANDBOX", opt_in);
+    if missing_helper {
+        std::fs::remove_file(setup.sandbox.binary.with_file_name("butler-sandbox.exe"))?;
+        let launch = butler_e2e::e2e::agent::Launch::new(&setup.sandbox)?;
+        for argument in ["--version", "--help"] {
+            let output = launch.command().arg(argument).output()?;
+            assert!(output.status.success(), "{output:?}");
+        }
+    }
     let folder = setup.sandbox.home.join("project");
     std::fs::create_dir_all(&folder)?;
     let mut s = setup.start().await?;
     let chat = super::project_workspace::bind_project(&mut s, &folder).await?;
     let project = folder.join("작업 Project");
     let prompt = "Create the project output.";
-    script.rounds.lock().unwrap().insert(
-        prompt.into(),
-        vec![stub::call(
-            "make",
-            "run_command",
-            &json!({"command":"echo complete > made.txt",
+    script
+        .rounds
+        .lock()
+        .map_err(|_| std::io::Error::other("stub rounds lock poisoned"))?
+        .insert(
+            prompt.into(),
+            vec![stub::call(
+                "make",
+                "run_command",
+                &json!({"command":"echo complete > made.txt",
             "summary":"Create output", "state_effect":"mutation"}),
-        )],
-    );
+            )],
+        );
     let turn = super::access_tiers::paused(&s, &chat, prompt).await?;
     super::access_tiers::assert_counts(&s, &turn, 1, 1)?;
     assert!(!project.join("made.txt").exists());

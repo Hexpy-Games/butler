@@ -2,14 +2,15 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
-use butler_gateway::gateway::{TranscriptWriter, normalize_committed_turn_event};
+use butler_gateway::gateway::TranscriptWriter;
 use butler_turn::btcc::{
-    BtccError, CommittedProgressEvent, EventVisibility, PeerKind, StorageProgressPublication,
+    BtccError, CommittedProgressEvent, EventVisibility, StorageProgressPublication,
     SubsessionService,
 };
+
+mod payload;
 
 const PAGE_SIZE: usize = 32;
 
@@ -68,23 +69,19 @@ impl ProgressPublisher {
                 break;
             }
             let page_len = page.len();
-            for event in page {
-                after = Some((event.session_id.clone(), event.session_sequence));
-                if blocked.contains(&event.session_id) {
+            after = page
+                .last()
+                .map(|event| (event.session_id.clone(), event.session_sequence));
+            for events in page.chunk_by(|left, right| left.session_id == right.session_id) {
+                let session = &events[0].session_id;
+                if blocked.contains(session) {
                     continue;
                 }
-                summary.attempted += 1;
-                if self.publish(&event).await.is_ok()
-                    && self.invalidate_child(&event).await.is_ok()
-                    && self
-                        .repository
-                        .mark_published(&event.event_id)
-                        .await
-                        .is_ok()
-                {
-                    summary.published += 1;
-                } else {
-                    blocked.insert(event.session_id);
+                let (attempted, published) = self.publish_session(events).await;
+                summary.attempted += attempted;
+                summary.published += published;
+                if published < events.len() {
+                    blocked.insert(session.clone());
                 }
             }
             if page_len < PAGE_SIZE {
@@ -105,93 +102,44 @@ impl ProgressPublisher {
         Ok(())
     }
 
-    async fn publish(&self, event: &CommittedProgressEvent) -> Result<(), BtccError> {
-        let destination = &event.destination;
-        if destination.transport != "app" {
-            return Err(BtccError::relayed(
-                "progress_transport_unavailable",
-                "No enabled progress publisher for this transport",
-            ));
+    async fn publish_session(&self, events: &[CommittedProgressEvent]) -> (usize, usize) {
+        let mut deliveries = Vec::new();
+        let mut attempted = 0;
+        for event in events {
+            attempted += 1;
+            let Ok(delivery) = payload::prepare(event) else {
+                break;
+            };
+            deliveries.push(delivery);
         }
-        let visibility = match event.event.visibility.unwrap_or(EventVisibility::Public) {
-            EventVisibility::Public => "public",
-            EventVisibility::Internal => "internal",
-        };
-        let payload = normalize_committed_turn_event(
-            &event.event.kind,
-            visibility,
-            event.event.payload.as_ref(),
-        )
-        .map_err(|source| {
-            BtccError::relayed(
-                "progress_event_projection_failed",
-                "Progress event is invalid",
-            )
-            .with_source(source)
-        })?;
-        let mut public_event = json!({
-            "id":event.event_id,
-            "kind":event.event.kind,
-            "visibility":visibility,
-            "sessionSequence":event.session_sequence,
-            "turnSequence":event.turn_sequence,
-            "createdAt":event.event.created_at,
-            "payload":payload,
-        });
-        // The source projection omits these identities from the outbound event
-        // object; the enclosing action owns its Turn/session routing fields.
-        if public_event["createdAt"].is_null() {
-            butler_core::json::object_mut(&mut public_event).remove("createdAt");
-        }
-        let peer = if destination.peer.kind == PeerKind::Thread {
-            json!({
-                "kind":"thread",
-                "id":destination.peer.parent_id.as_deref().unwrap_or(&destination.peer.id),
-                "threadId":destination.peer.id,
-            })
-        } else {
-            json!({"kind":destination.peer.kind,"id":destination.peer.id})
-        };
-        let mut action_metadata = json!({
-            "kind":"turn_event",
-            "turnId":event.turn_id,
-            "event":public_event,
-            "source":"gateway/native-butler/projection-and-lifecycle.ts#turn-event",
-        });
-        if let Some(claim) = destination
-            .app_queue_claim_id
-            .as_ref()
-            .filter(|claim| !claim.is_empty())
+        let prepared = deliveries.len();
+        if prepared == 0
+            || self
+                .writer
+                .append_outbound_batch(events[0].session_id.clone(), deliveries)
+                .await
+                .is_err()
         {
-            action_metadata["appQueueClaimId"] = Value::String(claim.clone());
+            return (attempted, 0);
         }
-        let action = json!({
-            "actionId":event.action_id,
-            "transport":"app",
-            "accountId":destination.account_id,
-            "peer":peer,
-            "message":{"text":"","replyToMessageId":destination.reply_to_message_id},
-            "metadata":action_metadata,
-        });
-        let delivery = json!({
-            "ok":true,
-            "transportMessageId":format!("app:{}",event.action_id),
-        });
-        let metadata = json!({
-            "source":"gateway/native-butler/projection-and-lifecycle.ts#progress",
-            "kind":"turn_event",
-            "turnId":event.turn_id,
-            "eventId":event.event_id,
-            "actionId":event.action_id,
-            "sessionSequence":event.session_sequence,
-            "turnSequence":event.turn_sequence,
-        });
-        self.writer
-            .append_outbound(event.session_id.clone(), action, delivery, metadata)
+        // Acknowledge only the durable, successfully invalidated prefix. A
+        // failed suffix remains pending; stable action IDs make replay safe.
+        let mut acknowledged = Vec::new();
+        for event in &events[..prepared] {
+            if self.invalidate_child(event).await.is_err() {
+                break;
+            }
+            acknowledged.push(event.event_id.clone());
+        }
+        let published = acknowledged.len();
+        if self
+            .repository
+            .mark_published_batch(acknowledged)
             .await
-            .map_err(|source| {
-                BtccError::relayed("progress_delivery_failed", "Progress delivery failed")
-                    .with_source(source)
-            })
+            .is_err()
+        {
+            return (attempted, 0);
+        }
+        (attempted, published)
     }
 }

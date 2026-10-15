@@ -26,7 +26,9 @@ impl BtccStorage {
     // Queue reservation and close ordering do not depend on the query or result
     // type. Share this state machine instead of compiling it for every SQL job.
     pub(super) async fn admit(&self, job: DatabaseOperation) -> StorageResult<()> {
+        let timing = crate::btcc::agent_loop::command_timing::CommandTiming::new("sqlite_admit");
         let lane = self.inner.lane.lock().await;
+        timing.mark("lock_acquired");
         let sender = lane.sender.as_ref().ok_or_else(|| {
             StorageError::new(
                 StorageCode::SqliteOwnerClosed,
@@ -40,6 +42,7 @@ impl BtccStorage {
             )
             .with_source(source)
         })?;
+        timing.mark("queue_reserved");
         permit.send(job);
         drop(lane);
         Ok(())
