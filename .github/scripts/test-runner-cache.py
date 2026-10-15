@@ -4,10 +4,12 @@ import contextlib
 import errno
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -17,15 +19,17 @@ snapshots = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(snapshots)
 
 MAX_PATH = 260
-PREFIX = '\\\\?\\'
+# POSIX keeps exactly two leading slashes through joins and directory listings,
+# as Windows keeps `\\?\` on every path built from an extended one.
+PREFIX = '/'
 
 
 @contextlib.contextmanager
 def windows_max_path():
     """Off Windows, reject plain paths past MAX_PATH the way Win32 does.
 
-    `extended()` gains a marker prefix that the guarded calls strip, so only
-    calls routed through it reach long paths. On Windows the OS enforces this.
+    `extended()` gains a marker prefix (`//`) that the guarded calls accept, so
+    only calls routed through it reach long paths. On Windows the OS enforces this.
     """
     if os.name == 'nt':
         yield
@@ -35,11 +39,9 @@ def windows_max_path():
         if not isinstance(path, (str, os.PathLike)):
             return path
         value = os.fspath(path)
-        if value.startswith(PREFIX):
-            return value[len(PREFIX):]
-        if len(value) >= MAX_PATH:
-            raise FileNotFoundError(errno.ENOENT, '[WinError 3] emulated MAX_PATH', value)
-        return path
+        if value.startswith('//') or len(value) < MAX_PATH:
+            return path
+        raise FileNotFoundError(errno.ENOENT, '[WinError 3] emulated MAX_PATH', value)
 
     def guard(real):
         def call(*args, **kwargs):
@@ -56,6 +58,7 @@ def windows_max_path():
             stack.enter_context(patch.object(shutil, '_rmtree_impl', shutil._rmtree_unsafe))
         stack.enter_context(patch('builtins.open', guard(open)))
         stack.enter_context(patch('io.open', guard(io.open)))
+        stack.enter_context(patch.object(tarfile, 'bltn_open', guard(tarfile.bltn_open)))
         stack.enter_context(patch.object(snapshots.runner_cache, 'extended', lambda path: PREFIX + str(path)))
         yield
 
@@ -267,6 +270,41 @@ class RunnerEviction(unittest.TestCase):
                 snapshots.restore_tree(root / 'snapshot', expected)
                 self.assertFalse(snapshots.runner_cache.lexists(target / 'debug'))
                 self.assertEqual((target / 'release' / 'app').read_bytes(), b'restored outputs')
+
+    # test-category: security
+    def test_snapshot_record_reads_target_past_windows_max_path(self):
+        """Persistent owner targets put the longest Cargo unit paths past MAX_PATH."""
+        def unit(profile, name, value, mtime):
+            directory = profile / '.fingerprint' / name
+            directory.mkdir(parents=True)
+            (directory / 'lib-x.json').write_text(json.dumps(dict(rustc=1, profile=2, local=[], deps=[])))
+            (directory / 'lib-x').write_text(value)
+            os.utime(directory / 'lib-x', (mtime, mtime))
+            (directory / 'dep-lib-datafusion_functions_aggregate').write_bytes(b'dep info')
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            subprocess.run(['git', 'init', '-q', str(root)], check=True)
+            target = root.joinpath('runner-cache', *(['long-directory-name'] * 6), 'compatible-windows-x64')
+            profile = target / 'x86_64-pc-windows-msvc' / 'release'
+            unit(profile, 'datafusion-functions-aggregate-' + 'a' * 16, '1' * 16, 200)
+            unit(profile, 'datafusion-functions-aggregate-' + 'b' * 16, '2' * 16, 100)  # Superseded.
+            live = 'x86_64-pc-windows-msvc/release/.fingerprint/datafusion-functions-aggregate-' + 'a' * 16
+            self.assertGreater(len(str(target / live / 'dep-lib-datafusion_functions_aggregate')), MAX_PATH)
+            env = dict(GITHUB_WORKSPACE=str(root), GITHUB_OUTPUT=str(root / 'output'))
+            with windows_max_path(), patch.dict(os.environ, env), \
+                    patch.object(snapshots.cache, 'output', return_value='a' * 40), \
+                    contextlib.redirect_stdout(io.StringIO()) as messages:
+                snapshots.cache.record(root / 'snapshot', dict(platform='windows-x64'), target=target)
+            self.assertNotIn('Keeping every Cargo unit', messages.getvalue())
+            with subprocess.Popen(['zstd', '-d', '-c', str(root / 'snapshot' / 'cache.tar.zst')],
+                                  stdout=subprocess.PIPE) as stream, \
+                    tarfile.open(fileobj=stream.stdout, mode='r|') as archive:
+                archived = {member.name: archive.extractfile(member).read() if member.isfile() else None
+                            for member in archive}
+            self.assertEqual(archived[f'target/{live}/dep-lib-datafusion_functions_aggregate'], b'dep info')
+            self.assertEqual(archived[f'target/{live}/lib-x'], b'1' * 16)
+            superseded = live.replace('a' * 16, 'b' * 16)
+            self.assertFalse([name for name in archived if name.startswith(f'target/{superseded}')])
 
 
 if __name__ == '__main__':

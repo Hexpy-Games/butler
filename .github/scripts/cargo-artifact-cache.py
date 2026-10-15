@@ -28,6 +28,8 @@ source_spec.loader.exec_module(source_times)
 units_spec = importlib.util.spec_from_file_location('cargo_units', Path(__file__).with_name('cargo_units.py'))
 cargo_units = importlib.util.module_from_spec(units_spec)
 units_spec.loader.exec_module(cargo_units)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import runner_cache
 
 
 def output(*args):
@@ -221,7 +223,10 @@ def stream_digest(paths):
 
 def compress(target, root, parts):
     """Pack `target` as `root` through zstd into `parts` without a temporary archive."""
-    stale = cargo_units.stale(Path(target))
+    # Persistent owner targets nest deep enough that Cargo unit paths pass
+    # Windows MAX_PATH, so the walk, reads and archive all use the extended form.
+    target = Path(runner_cache.extended(os.path.abspath(target)))
+    stale = cargo_units.stale(target)
 
     def selected(member):
         if ('incremental' in Path(member.name).parts or 'cargo-timings' in Path(member.name).parts
