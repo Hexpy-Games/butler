@@ -217,23 +217,30 @@ fn usage(s: &Scenario) -> Result<(), HarnessError> {
     Ok(())
 }
 
-#[tokio::test]
-async fn anthropic_cache_turns_rounds_ttls_and_endpoint_gate() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    for (ttl, master, verified) in [
-        ("1h", "on", true),
-        ("5m", "on", true),
-        ("off", "on", true),
-        ("invalid", "on", true),
-        ("1h", "OFF", true),
-        ("1h", "0", true),
-        ("1h", "FaLsE", true),
-        ("1h", "No", true),
-        ("1h", "on", false),
-    ] {
-        run(ttl, master, verified).await?;
-    }
-    Ok(())
+/// One test per configuration: each starts its own agent and sandbox, so the
+/// cases run independently instead of in series inside one test's watchdog.
+macro_rules! cache_case {
+    ($name:ident, $ttl:literal, $master:literal, $verified:literal) => {
+        #[tokio::test]
+        async fn $name() -> Result<(), HarnessError> {
+            butler_e2e::gate!();
+            run($ttl, $master, $verified).await
+        }
+    };
+}
+
+mod anthropic_cache_turns_rounds_ttls_and_endpoint_gate {
+    use super::{HarnessError, run};
+
+    cache_case!(ttl_1h, "1h", "on", true);
+    cache_case!(ttl_5m, "5m", "on", true);
+    cache_case!(ttl_off, "off", "on", true);
+    cache_case!(ttl_invalid, "invalid", "on", true);
+    cache_case!(master_off_upper, "1h", "OFF", true);
+    cache_case!(master_zero, "1h", "0", true);
+    cache_case!(master_false_mixed_case, "1h", "FaLsE", true);
+    cache_case!(master_no, "1h", "No", true);
+    cache_case!(unverified_endpoint, "1h", "on", false);
 }
 
 #[tokio::test]
