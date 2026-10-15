@@ -23,6 +23,10 @@ async fn owner_scale_cold_startup_with_and_without_indexes() -> Result<(), Harne
     };
     super::super::operation::observe_operation(&s, &chat, &script, &case, Access::FullAccess)
         .await?;
+    // The shared App seed includes pending retention. Settle it before testing
+    // cold starts; the exact retained-event assertion remains unchanged.
+    crate::app_storage_scale::wait_retention_settled(&s).await;
+    let mut ordinary = Duration::ZERO;
     for missing_indexes in [false, true] {
         s.agent.terminate().await?;
         if missing_indexes {
@@ -36,9 +40,13 @@ async fn owner_scale_cold_startup_with_and_without_indexes() -> Result<(), Harne
             .map_err(|error| HarnessError(error.to_string()))??;
         let started = Instant::now();
         s.gw = s.agent.start_again().await?;
+        let elapsed = started.elapsed();
+        if !missing_indexes {
+            ordinary = elapsed;
+        }
         eprintln!(
             "APPROVAL-STARTUP missing_indexes={missing_indexes} files={files} elapsed_us={}",
-            started.elapsed().as_micros()
+            elapsed.as_micros()
         );
         for line in s
             .agent
@@ -64,6 +72,11 @@ async fn owner_scale_cold_startup_with_and_without_indexes() -> Result<(), Harne
         );
     }
     scale::assert_complete(&s, history).await?;
+    butler_e2e::assert_wall_clock_budget!(
+        ordinary,
+        Duration::from_secs(5),
+        "owner-scale cold startup with current indexes"
+    );
     s.finish().await?;
     server.abort();
     Ok(())
