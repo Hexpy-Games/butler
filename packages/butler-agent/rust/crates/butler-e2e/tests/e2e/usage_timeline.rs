@@ -214,7 +214,23 @@ fn usage_exact_range_boundaries_and_rotation() -> Result<(), HarnessError> {
         )
         .unwrap();
     }
+    writeln!(
+        file,
+        "{}",
+        json!({"ts":since,"scope":"s","model":"m",
+        "promptTokens":20,"cachedTokens":3,"totalTokens":25})
+    )?;
     drop(file);
+    let mut searches = fs::File::create(directory.join("metrics/web-search-usage.jsonl"))?;
+    for ts in [until, since, until - 1, since - 1] {
+        writeln!(
+            searches,
+            "{}",
+            json!({"ts":ts,"provider":format!("provider-{ts}")})
+        )?;
+        write_tools(&directory, "s", ts);
+    }
+    drop(searches);
     let view = monitor.read_at(
         &directory,
         Some("s"),
@@ -223,9 +239,42 @@ fn usage_exact_range_boundaries_and_rotation() -> Result<(), HarnessError> {
         until as f64,
         None,
     );
+    assert_eq!(view["tools"]["calls"], 2);
+    assert_eq!(view["tools"]["failures"], 2);
+    assert_eq!(view["webSearch"]["requestCount"], 2);
+    assert_eq!(
+        view["webSearch"]["lastProvider"],
+        format!("provider-{}", until - 1)
+    );
     assert_timeline(&view);
     assert_eq!(view["model"]["requestCount"], 2);
     assert_eq!(view["previousPeriod"]["totalTokens"], 24.0);
+    let global = monitor.read_at(
+        &directory,
+        None,
+        None,
+        Some(since as f64),
+        until as f64,
+        None,
+    );
+    let entries = global["topSessions"].as_array().unwrap();
+    assert_eq!(entries.len(), 1, "raw and guided aliases must merge");
+    assert_eq!(entries[0]["sessionId"], "s");
+    assert_eq!(entries[0]["totalTokens"], 49.0);
+    assert_eq!(entries[0]["requests"], 3);
+    assert_eq!(entries[0]["kind"], "chat");
+    let scoped = monitor.read_at(
+        &directory,
+        None,
+        Some("s"),
+        Some(since as f64),
+        until as f64,
+        None,
+    );
+    assert_eq!(
+        scoped["model"]["requestCount"], 2,
+        "guided scope takes precedence"
+    );
     fs::write(
         &path,
         format!(
@@ -262,7 +311,7 @@ async fn usage_schedule_kind_uses_recorded_runs() -> Result<(), HarnessError> {
         format!(
             "{}\n",
             json!({"ts":now.timestamp_millis()-1000,"scope":"btcc-guided:opaque-runtime-id","model":"m",
-            "promptTokens":10,"cachedTokens":3,"totalTokens":12})
+            "promptTokens":10,"cachedTokens":3,"totalTokens":12,"turnId":"scheduled-turn"})
         ),
     )?;
     let s = setup.start().await?;
@@ -272,17 +321,51 @@ async fn usage_schedule_kind_uses_recorded_runs() -> Result<(), HarnessError> {
         VALUES('opaque-chat-id','Daily report','chat','opaque-runtime-id','2026-01-01','2026-01-01');
         INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,state,last_run_state,created_at,updated_at)
         VALUES('a','Daily report','Report','chat','opaque-chat-id',3600,'paused','delivered','2026-01-01','2026-01-01');").unwrap();
-    db.execute("INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at)
-        VALUES('r','a','opaque-chat-id','delivered','scheduled',?1)",[(now - chrono::Duration::hours(25)).to_rfc3339()]).unwrap();
+    db.execute("INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,turn_id)
+        VALUES('r','a','opaque-chat-id','delivered','scheduled',?1,'unrelated-turn')",[(now - chrono::Duration::hours(25)).to_rfc3339()]).unwrap();
+    // A schedule targeting this chat is insufficient: the actual usage turn must match.
+    let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
+    assert_eq!(reply.data()["topSessions"][0]["kind"], "chat");
+    db.execute(
+        "UPDATE app_automation_runs SET turn_id='scheduled-turn'",
+        [],
+    )
+    .unwrap();
     let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
     let entry = &reply.data()["topSessions"][0];
     assert_eq!(entry["sessionId"], "opaque-chat-id");
     assert_eq!(entry["title"], "Daily report");
     assert_eq!(entry["kind"], "schedule");
-    // Merely configuring a schedule does not change a chat's classification.
-    db.execute("DELETE FROM app_automation_runs", []).unwrap();
-    let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
+    // The same chat can contain interactive and schedule turns. Any interactive
+    // usage in the requested window keeps the combined entry classified as chat.
+    let path = s.sandbox.data.join("metrics/prompt-cache-usage.jsonl");
+    let mut log = fs::OpenOptions::new().append(true).open(&path)?;
+    writeln!(
+        log,
+        "{}",
+        json!({"ts":now.timestamp_millis()-25*3_600_000,
+        "scope":"btcc-guided:opaque-runtime-id","model":"m","promptTokens":10,
+        "cachedTokens":3,"totalTokens":12,"turnId":"interactive-turn"})
+    )?;
+    drop(log);
+    let reply = s.gw.get("/usage-monitor?since_hours=30").await?;
     assert_eq!(reply.data()["topSessions"][0]["kind"], "chat");
+    assert_eq!(reply.data()["topSessions"][0]["requests"], 2);
+    let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
+    assert_eq!(reply.data()["topSessions"][0]["kind"], "schedule");
+    // Deleted chats retain conversation provenance without inventing Butler work.
+    db.execute("DELETE FROM app_automation_runs", []).unwrap();
+    db.execute("DELETE FROM app_automations", []).unwrap();
+    db.execute("DELETE FROM chats WHERE id='opaque-chat-id'", [])
+        .unwrap();
+    let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
+    let entry = &reply.data()["topSessions"][0];
+    assert_eq!(entry["sessionId"], "opaque-runtime-id");
+    assert_eq!(entry["kind"], "chat");
+    assert!(entry["title"].is_null());
     drop(db);
     s.finish().await
 }
+
+#[path = "usage_kind.rs"]
+mod kind;

@@ -43,7 +43,23 @@ pub struct UsageMonitor {
     transcripts: Mutex<TranscriptActivityCache>,
 }
 
+/// Private Host/App companion facts, never serialized into the HTTP response.
+#[derive(Default)]
+pub struct UsageSessionTurns {
+    /// Telemetry session id before App metadata enrichment.
+    pub session_id: String,
+    /// Recorded usage turn ids in the requested window.
+    pub turn_ids: Vec<std::sync::Arc<str>>,
+    /// Usage without a turn binding cannot be attributed to a schedule.
+    pub missing_turn: bool,
+}
+
 impl UsageMonitor {
+    /// Turn provenance for returned sessions, read from the existing scope index.
+    pub fn session_turns(&self, view: &Value) -> Vec<UsageSessionTurns> {
+        self.log.lock().session_turns(view)
+    }
+
     /// The usage view of `session_id` (a runtime session id; all sessions
     /// when `None`) since `since_ts`. Transcripts are read only for the
     /// selected view; every file scan resumes from its last complete line.
@@ -188,13 +204,12 @@ fn safe_key_with_limit<T>(key: &str, values: &BTreeMap<String, T>, limit: usize)
     }
 }
 
-fn provider_id(model: &str) -> String {
+fn provider_id(model: &str) -> &str {
     model
         .split_once('/')
         .map(|(provider, _)| provider)
         .filter(|provider| !provider.is_empty())
         .unwrap_or("custom")
-        .into()
 }
 
 fn remaining(provider: &str, sources: Option<&UsageMonitorSources<'_>>) -> Value {

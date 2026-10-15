@@ -83,7 +83,7 @@ pub use application::{
     AppSettingsFacts, AppSettingsFactsProvider, AppSettingsMutationPort, AppSourceDocument,
     AppSourceSnapshotRequest, AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin,
     AppStartTopicConversationRequest, AppSubsessionPort, AppTaskGraphQuery, AppTurn,
-    AppUsageMonitorQuery, AppWorkOperationalNoticeFact, AppWorkProgress,
+    AppUsageMonitorQuery, AppUsageMonitorView, AppWorkOperationalNoticeFact, AppWorkProgress,
     AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
     AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest, ClaimedNativeSnapshot,

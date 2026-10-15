@@ -9,8 +9,12 @@
     reason = "test assertions"
 )]
 
+#[path = "usage_scale/memory.rs"]
+mod memory;
 #[path = "usage_scale/timeline.rs"]
 mod timeline;
+#[path = "usage_scale/tools.rs"]
+mod tools;
 
 use std::fmt::Write as _;
 use std::fs;

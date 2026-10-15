@@ -267,7 +267,8 @@ impl ActivityAccumulator {
         self.summary.tools.failures = self.summary.tools.failures.saturating_add(tools.failures);
         for (name, bucket) in &other.summary.by_tool {
             let key = if self.summary.by_tool.contains_key(name)
-                || self.summary.by_tool.len() < MAX_TOOL_KEYS
+                || self.summary.by_tool.len()
+                    < MAX_TOOL_KEYS - usize::from(!self.summary.by_tool.contains_key("__other__"))
             {
                 name.as_str()
             } else {

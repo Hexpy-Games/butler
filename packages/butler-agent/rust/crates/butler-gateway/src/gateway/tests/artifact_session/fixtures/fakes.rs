@@ -53,7 +53,10 @@ impl crate::gateway::AppMonitoringPort for TestMonitoring {
     fn work_status(&self) -> ApplicationFuture<Vec<crate::gateway::AppBoundWorkStatusFact>> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    fn usage_monitor(&self, _: crate::gateway::AppUsageMonitorQuery) -> ApplicationFuture<Value> {
+    fn usage_monitor(
+        &self,
+        _: crate::gateway::AppUsageMonitorQuery,
+    ) -> ApplicationFuture<crate::gateway::AppUsageMonitorView> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn system_events(&self, _: crate::gateway::AppMonitorPage) -> ApplicationFuture<Value> {
