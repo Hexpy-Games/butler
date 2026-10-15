@@ -71,11 +71,15 @@ fn seed(data: &Path) -> Result<(), HarnessError> {
     Ok(())
 }
 
-/// Explicit `bench_usage_` selection, outside the budget-enforcing `perf_` suite.
+/// Opt in with `BUTLER_E2E_BENCH=1` and select `bench_usage_` tests.
 /// All-time counters supported by both binaries for per-million growth evidence.
 #[tokio::test]
 async fn bench_usage_comparable_million_tools() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        std::env::var("BUTLER_E2E_BENCH").as_deref() == Ok("1"),
+        "BUTLER_E2E_BENCH=1 not set"
+    );
     let setup = Setup::new("usage-comparable-tools")?;
     seed(&setup.sandbox.data)?;
     let s = setup.start().await?;

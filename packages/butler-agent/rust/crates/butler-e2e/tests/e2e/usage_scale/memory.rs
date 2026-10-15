@@ -45,7 +45,7 @@ impl PeakMemory {
         let (_, peak) = self.measure();
         if !equivalent {
             eprintln!(
-                "SKIP absolute footprint budget: platform supplies PSS/RSS, not physical footprint; no comparable main baseline"
+                "butler-e2e: SKIPPED (absolute footprint budget: platform supplies PSS/RSS, not physical footprint; no comparable main baseline)"
             );
             return;
         }

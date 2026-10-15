@@ -228,12 +228,16 @@ async fn perf_usage_timeline_300k_ranges() -> Result<(), HarnessError> {
     s.finish().await
 }
 
-/// Explicit bench selection: `cargo test -p butler-e2e --test e2e bench_usage_`.
+/// Opt in with `BUTLER_E2E_BENCH=1` and select `bench_usage_` tests.
 /// Legacy-field correctness for baseline binary comparisons; excluded from `perf_`.
 /// BUTLER_E2E_BIN can select main without depending on the new JSON fields.
 #[tokio::test]
 async fn bench_usage_comparable_300k() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        std::env::var("BUTLER_E2E_BENCH").as_deref() == Ok("1"),
+        "BUTLER_E2E_BENCH=1 not set"
+    );
     let setup = Setup::new("usage-comparable")?;
     let base = chrono_now().div_euclid(SLOT_MS) * SLOT_MS - SLOT_MS / 2;
     seed(&setup.sandbox.data, base)?;
