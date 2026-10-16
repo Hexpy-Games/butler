@@ -2,7 +2,7 @@ import { frameWorlds, evaluateWorld, hitFrame, framePoint } from "./frame-worlds
 import { perceptionSource, resolveSource, selectSource } from "./page/snapshot.mjs";
 import { accessibleName, nameObservation } from "./accessibility.mjs";
 import { contentRegions } from "./layout.mjs";
-import { observationImage } from "./capture.mjs";
+import { observationBitmap, observationImage } from "./capture.mjs";
 import { noteProgress } from "./progress.mjs";
 import { frameClass, signedInPolicy } from "./signed-in.mjs";
 import { routeTarget } from "./frame-input.mjs";
@@ -142,6 +142,7 @@ async function observeOnce(tab, args) {
   // "auto" attaches pixels only to a page that is mostly visual (see visualPage).
   const pixels = args.include_image === true || args.include_image === "auto" && visual;
   const image = pixels ? await observationImage(tab) : {};
+  if (!pixels) await observationBitmap(tab);
   // This observation is already the newest one, so name it: earlier ids are stale.
   if (pixels && !image.image) return { status: "refused", reason: image.image_status ?? "image_unavailable", obs,
     recovery: `The page was observed as ${obs}, which replaced every earlier observation id, but no screenshot could be made. Observe again; look "never" returns a text-only observation.` };

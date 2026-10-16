@@ -99,7 +99,7 @@ function domOnly(previous, batch) {
 // Pixels decide when both observations carry a thumbnail: a button that pans
 // or zooms a map changes pixels, not the DOM.
 function samePixels(before, after) {
-  if (!before || !after || before.length !== after.length) return true;
+  if (!before || !after || before.length !== after.length) return false;
   let changed = 0;
   for (let index = 0; index < before.length; index += 4) {
     const delta = Math.abs(before[index] - after[index]) + Math.abs(before[index + 1] - after[index + 1]) + Math.abs(before[index + 2] - after[index + 2]);

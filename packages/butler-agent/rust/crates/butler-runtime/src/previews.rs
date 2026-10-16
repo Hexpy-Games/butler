@@ -83,8 +83,8 @@ impl Previews {
         let process = PreviewProcess::start(input.command.into(), input.cwd.clone())
             .await
             .map_err(|_| "preview_spawn_failed")?;
-        if let Err((reason, process)) = self.register(input, process) {
-            process.stop().await;
+        if let Err((reason, mut process)) = self.register(input, process) {
+            process.stop().await.map_err(|_| "preview_stop_failed")?;
             return Err(reason);
         }
         drop(start); // Readiness must not block another agent's start or archive.
@@ -222,7 +222,7 @@ impl Previews {
             .unwrap_or_default()
     }
     pub async fn stop(&self, session: &str, agent: &str, id: &str) -> Result<Value, &'static str> {
-        let entry = {
+        let mut entry = {
             let mut entries = self.entries.lock().map_err(|_| "preview_unavailable")?;
             if entries
                 .get(id)
@@ -233,7 +233,11 @@ impl Previews {
             entries.remove(id).ok_or("not_your_preview")?
         };
         let log = entry.process.log();
-        entry.process.stop().await;
+        entry
+            .process
+            .stop()
+            .await
+            .map_err(|_| "preview_stop_failed")?;
         Ok(json!({"status":"ok","preview_id":id,"untrusted_log":log}))
     }
     pub fn close(&self, session: &str) {
@@ -256,7 +260,7 @@ impl Previews {
             closed.remove(session);
         }
     }
-    pub async fn stop_closed(&self, session: &str) {
+    pub async fn stop_closed(&self, session: &str) -> Result<(), &'static str> {
         let _start = self.starts.lock().await;
         let _stop = self.stops.lock().await;
         let removed: Vec<_> = self
@@ -271,13 +275,23 @@ impl Previews {
                     .map(|(id, _)| id.clone())
                     .collect();
                 ids.into_iter()
-                    .filter_map(|id| entries.remove(&id))
+                    .filter_map(|id| entries.remove(&id).map(|entry| (id, entry)))
                     .collect()
             })
             .unwrap_or_default();
-        for entry in removed {
-            entry.process.stop().await;
+        let mut result = Ok(());
+        for (id, mut entry) in removed {
+            if entry.process.stop().await.is_err() {
+                result = Err("preview_stop_failed");
+                // An event cleanup may run before the HTTP lifecycle cleanup.
+                // Keep the failed receipt so the latter cannot report success.
+                self.entries
+                    .lock()
+                    .map_err(|_| "preview_unavailable")?
+                    .insert(id, entry);
+            }
         }
+        result
     }
     pub fn shutdown(&self) {
         if let Ok(entries) = self.entries.lock() {

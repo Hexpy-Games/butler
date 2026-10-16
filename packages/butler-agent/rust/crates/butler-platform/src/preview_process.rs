@@ -16,6 +16,9 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
+#[cfg(target_os = "linux")]
+mod linux;
+
 /// Combined log tail capacity, in bytes.
 pub const LOG_CAPACITY: usize = 64 * 1024;
 /// Owns a server tree. Dropping the handle requests tree termination.
@@ -23,7 +26,7 @@ pub struct PreviewProcess {
     pid: u32,
     log: Arc<Mutex<VecDeque<u8>>>,
     cancel: CancellationToken,
-    running: watch::Receiver<bool>,
+    running: watch::Receiver<Option<Result<(), String>>>,
 }
 impl PreviewProcess {
     /// Start exactly the reviewed shell command in the reviewed directory.
@@ -55,7 +58,7 @@ impl PreviewProcess {
         let err = tokio::spawn(drain(stderr, log.clone()));
         let cancel = CancellationToken::new();
         let stopped = cancel.clone();
-        let (send, running) = watch::channel(true);
+        let (send, running) = watch::channel(None);
         tokio::spawn(async move {
             tokio::select! {
                 _ = child.wait() => {},
@@ -63,10 +66,14 @@ impl PreviewProcess {
             }
             stopped.cancel();
             drop(tree); // Includes descendants after a launcher exits.
+            #[cfg(target_os = "linux")]
+            let result = linux::wait_for_group(pid).await;
+            #[cfg(not(target_os = "linux"))]
+            let result = Ok::<(), io::Error>(());
             let _ = child.wait().await;
             out.abort();
             err.abort();
-            let _ = send.send(false);
+            let _ = send.send(Some(result.map_err(|error| error.to_string())));
         });
         Ok(Self {
             pid,
@@ -81,7 +88,7 @@ impl PreviewProcess {
     }
     /// Whether the containment supervisor has finished.
     pub fn is_running(&self) -> bool {
-        *self.running.borrow()
+        self.running.borrow().is_none()
     }
     /// Signal shared by proxy connections and the tree owner.
     pub fn cancellation(&self) -> CancellationToken {
@@ -102,12 +109,13 @@ impl PreviewProcess {
         text.get(start..).unwrap_or_default().to_owned()
     }
     /// Resolve after tree termination and child reaping.
-    pub async fn stop(mut self) {
+    pub async fn stop(&mut self) -> io::Result<()> {
         self.cancel.cancel();
-        while *self.running.borrow_and_update() {
-            if self.running.changed().await.is_err() {
-                break;
+        loop {
+            if let Some(result) = self.running.borrow_and_update().clone() {
+                return result.map_err(io::Error::other);
             }
+            self.running.changed().await.map_err(io::Error::other)?;
         }
     }
 }
