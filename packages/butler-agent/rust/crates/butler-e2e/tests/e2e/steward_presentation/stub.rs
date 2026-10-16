@@ -13,6 +13,7 @@ use tokio::sync::Notify;
 
 pub(crate) const OWNER: &str = "Delegate reading and comparing a.txt and b.txt.";
 pub(crate) const DIRECTION: &str = "Use approach B and read b.txt next.";
+pub(crate) const DIRECTION_2: &str = "Also compare a.txt line by line.";
 
 pub(crate) const HOLD_PARENT: &str = "Keep this turn open while the work runs.";
 pub(crate) const QUEUED: &str = "Note the status for later.";
@@ -33,6 +34,8 @@ pub(crate) struct Script {
     pub parent_held: Notify,
     pub hold_seen: AtomicUsize,
     pub release: Notify,
+    pub hold_direction: AtomicBool,
+    pub direction_held: Notify,
 }
 
 pub(crate) async fn start()
@@ -57,6 +60,13 @@ async fn reply(
     let key = matching::key("/codex/responses", &body, &Placeholders::default());
     script.requests.lock().unwrap().push(body.clone());
     let child = child_lane(&body);
+    if child
+        && script.hold_direction.load(Ordering::SeqCst)
+        && key.user_request.starts_with(DIRECTION)
+    {
+        script.direction_held.notify_one();
+        return std::future::pending::<axum::response::Response>().await;
+    }
     if !child && key.user_request == HOLD_PARENT {
         script.hold_seen.fetch_add(1, Ordering::SeqCst);
         script.parent_held.notify_one();
@@ -72,6 +82,7 @@ async fn reply(
     if !child
         && key.user_request != OWNER
         && key.user_request != DIRECTION
+        && key.user_request != DIRECTION_2
         && !key.user_request.contains("Delegated result")
     {
         return ([("content-type", "text/event-stream")], wire(message("{}"))).into_response();
@@ -89,12 +100,13 @@ async fn reply(
     }
     let item = if child {
         child_item(step, &body, &script)
-    } else if key.user_request == DIRECTION {
+    } else if key.user_request == DIRECTION || key.user_request == DIRECTION_2 {
         if key.round.is_empty() {
+            let id = if key.user_request == DIRECTION { "steer" } else { "steer-2" };
             call(
-                "steer",
+                id,
                 "steer_steward",
-                &json!({"relation_id":*script.relation.lock().unwrap(),"instruction":DIRECTION}),
+                &json!({"relation_id":*script.relation.lock().unwrap(),"instruction":key.user_request}),
             )
         } else {
             message("Direction delivered.")
