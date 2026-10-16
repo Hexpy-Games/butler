@@ -86,6 +86,13 @@ pub(super) fn verify_rows(
             "{} frames",
             texts.len()
         );
+        assert!(
+            texts.iter().all(|text| text.starts_with("delta-"))
+                && texts[..texts.len() - 1]
+                    .iter()
+                    .all(|text| text.ends_with(' ')),
+            "frame split a delta: {texts:?}"
+        );
         assert_eq!(texts.concat().trim_end(), answer);
         verify_message_updates(&db, turn, &texts);
         assert!(
