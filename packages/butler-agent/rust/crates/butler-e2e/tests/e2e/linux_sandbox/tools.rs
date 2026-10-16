@@ -9,6 +9,7 @@ fn invoke(command: &str, root: &Path, setup: &Setup) -> Invocation {
         root,
         &[&setup.sandbox.data.join("tmp/project-write")],
         &[&setup.sandbox.data],
+        None,
     )
     .unwrap()
 }

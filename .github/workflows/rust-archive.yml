@@ -11,6 +11,10 @@ on:
       clippy:
         type: boolean
         default: false
+      smoke-in-place:
+        description: Run PR workspace smoke in the build VM without a transport archive
+        type: boolean
+        default: false
       fixtures:
         description: Build fixture binaries and provenance for consumers and warm snapshots
         type: boolean
@@ -68,6 +72,7 @@ jobs:
       - name: Build the complete workspace once
         env:
           ORT_MODE: ${{ inputs.ort-mode }}
+          SMOKE_IN_PLACE: ${{ inputs.smoke-in-place && github.event_name == 'pull_request' }}
           BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
         run: |
           export GITHUB_REF_NAME="$BUILD_VERSION_REF"
@@ -80,7 +85,23 @@ jobs:
           # nextest builds test harnesses, not the Agent CLI. Build all targets
           # together so the ordinary Agent and every test share dependencies.
           python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --workspace --all-targets --locked "${args[@]}"
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo nextest archive --workspace --all-targets --locked "${args[@]}" --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst"
+          if [ "$SMOKE_IN_PLACE" != true ]; then
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo nextest archive --workspace --all-targets --locked "${args[@]}" --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst"
+          fi
+      - name: Run PR workspace smoke in the build VM
+        if: inputs.smoke-in-place && github.event_name == 'pull_request'
+        env:
+          ORT_MODE: ${{ inputs.ort-mode }}
+          BUILD_VERSION_REF: v0.1.0-preview.99
+        run: |
+          export GITHUB_REF_NAME="$BUILD_VERSION_REF"
+          args=(--workspace --all-targets --locked -E 'not package(=butler-e2e)')
+          if [ "$ORT_MODE" = static-ort ]; then
+            args+=(--no-default-features --features butler-agent/static-ort)
+          fi
+          isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
+          python3 "$isolate" cargo nextest list "${args[@]}"
+          python3 "$isolate" cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run "${args[@]}" --no-fail-fast --retries 0
       - name: Upload Cargo build timings
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
@@ -90,7 +111,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Archive tests and record every selection
-        # Validate selections and the complete compiled inventory on every tier.
+        if: ${{ !(inputs.smoke-in-place && github.event_name == 'pull_request') }}
+        # Transport inventory is validated on main/release and other archive consumers.
         run: |
           isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
           args=(--archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst" --workspace-remap "$PWD")
@@ -147,6 +169,7 @@ jobs:
           python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" record "$RUNNER_TEMP/rust-archive" "$PLATFORM" "$ORT_MODE" dev "$version"
       # Test jobs need this bundle even when the later snapshot publish fails.
       - uses: actions/upload-artifact@v4
+        if: ${{ !(inputs.smoke-in-place && github.event_name == 'pull_request') }}
         with:
           name: rust-${{ inputs.platform }}
           path: ${{ runner.temp }}/rust-archive/*

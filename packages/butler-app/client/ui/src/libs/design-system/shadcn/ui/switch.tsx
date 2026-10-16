@@ -4,7 +4,7 @@ import type { DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 import * as SwitchPrimitive from "@radix-ui/react-switch";
 
-import { Tooltip } from "./tooltip";
+import { Tooltip, type TooltipAlign, type TooltipSide } from "./tooltip";
 import { cn } from "../../lib/utils";
 import styles from "../../components/Switch/Switch.module.css";
 
@@ -16,6 +16,14 @@ interface SwitchProps extends DsBaseProps<React.ComponentPropsWithoutRef<typeof 
    * it wins over `disabled`.
    */
   disabledReason?: string;
+  /**
+   * Side the disabledReason tooltip opens on. Default `right`: a switch sits
+   * under its label and description (SettingsField) or after them in a row,
+   * so its right side is where the tooltip covers neither.
+   */
+  disabledReasonSide?: TooltipSide;
+  /** Alignment of the disabledReason tooltip along that side (default `center`). */
+  disabledReasonAlign?: TooltipAlign;
 }
 
 function Switch({
@@ -23,6 +31,8 @@ function Switch({
   size = "default",
   disabled,
   disabledReason,
+  disabledReasonSide = "right",
+  disabledReasonAlign = "center",
   onClick,
   ...props
 }: SwitchProps) {
@@ -42,7 +52,9 @@ function Switch({
         className={styles.thumb} />
     </SwitchPrimitive.Root>
   );
-  return blocked ? <Tooltip label={disabledReason}>{control}</Tooltip> : control;
+  return blocked ? (
+    <Tooltip label={disabledReason} side={disabledReasonSide} align={disabledReasonAlign}>{control}</Tooltip>
+  ) : control;
 }
 
 export { Switch };

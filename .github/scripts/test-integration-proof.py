@@ -30,6 +30,22 @@ def assert_active_gates(states):
 
 
 class IntegrationProof(unittest.TestCase):
+    # test-category: security
+    def test_dispatch_gate_proves_release_without_using_pr_context(self):
+        for event, expected in [('push', 'gate'), ('workflow_dispatch', 'dispatch gate')]:
+            run = dict(event=event)
+            for name in ['gate', 'dispatch gate']:
+                for result in ['success', 'failure', 'cancelled', 'skipped']:
+                    jobs = [dict(name=name, conclusion=result)]
+                    self.assertEqual(proof.gate_passed('rust-quality.yml', run, jobs),
+                                     name == expected and result == 'success')
+                    self.assertEqual(proof.gate_passed('rust-quality.yml', run, jobs, 'failure'),
+                                     name == expected and result == 'failure')
+        for workflow, name in proof.GATES.items():
+            if workflow != 'rust-quality.yml':
+                self.assertTrue(proof.gate_passed(workflow, dict(event='workflow_dispatch'),
+                                                 [dict(name=name, conclusion='success')]))
+
     # test-category: pure-logic
     def test_gate_workflows_are_active(self):
         fixture = json.loads((ROOT / 'fixtures' / 'integration-workflow-states.json').read_text())
@@ -184,6 +200,11 @@ class IntegrationProof(unittest.TestCase):
             self.assertTrue(branch.valid(name), name)
         for name in ['codex/git-flow', 'claude/fix', 'batch/preview-11', 'main', 'foo/bar', 'ci/a/b', 'release/latest', 'dependabot/npm/foo']:
             self.assertFalse(branch.valid(name), name)
+
+
+# Derived local/CI parity checks share this existing CI entry point.
+from prepush_tests import PrepushChecks
+from prepush_git_tests import PrepushGitChecks
 
 
 if __name__ == '__main__':

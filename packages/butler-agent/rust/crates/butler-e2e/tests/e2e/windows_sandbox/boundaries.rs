@@ -101,6 +101,7 @@ fn row07_alias_escapes() -> Result<(), HarnessError> {
         &f.root,
         &f.scratch.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
         &secrets.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
+        super::toolchain_roots().as_ref(),
     );
     assert!(
         invocation.is_err(),

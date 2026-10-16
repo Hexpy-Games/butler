@@ -47,7 +47,7 @@ class Paths(unittest.TestCase):
         }
         workflow = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
         lint = workflow.split('  lint:\n', 1)[1].split('  gate:\n', 1)[0]
-        self.assertIn("    if: needs.changes.outputs.tier != 'integration'", lint)  # PRs always run the tracked-document guard.
+        self.assertIn("fromJSON(needs.changes.outputs.jobs).lint", lint)  # PRs always run the tracked-document guard.
         self.assertIn('work-docs-lint.py', lint)
         for path, expected in cases.items():
             with self.subTest(path=path):
@@ -121,10 +121,10 @@ jobs:
             self.assertEqual(derived['.github/scripts/verify.py'], native | {'install'})
 
     # test-category: pure-logic
-    def test_windows_native_smoke_follows_rust_and_windows_inputs_only(self):
+    def test_windows_native_smoke_follows_windows_inputs_only(self):
         for path, expected in {
-            'packages/butler-agent/rust/crates/butler-core/src/lib.rs': True,
-            'packages/butler-agent/rust/Cargo.lock': True,
+            'packages/butler-agent/rust/crates/butler-core/src/lib.rs': False,
+            'packages/butler-agent/rust/Cargo.lock': False,
             'deploy/windows-preview-quality.ps1': True,
             '.github/workflows/windows-preview-smoke.yml': True,
             '.github/actions/build-windows-debug-agent/action.yml': True,
@@ -134,7 +134,7 @@ jobs:
             '.github/scripts/ci-changes.py': False,
             '.github/pull_request_template.md': False,
             'deploy/install.sh': False,
-            'packages/butler-app/client/electron/src/main.ts': True,
+            'packages/butler-app/client/electron/src/main.ts': False,
             'packages/butler-agent/rust/docs/install-layout.md': False,
             'README.md': False,
         }.items():
@@ -223,6 +223,7 @@ class Trust(unittest.TestCase):
                 with patch.dict(os.environ, env), patch.object(changes, 'command', return_value='checkout'), \
                      patch.object(changes, 'changed', return_value=['packages/butler-app/client/ui/src/app.tsx']), \
                      patch.object(changes, 'previous', return_value=iter([])), \
+                     patch.object(changes, 'main_base', return_value=None if event.get('before') == '0' * 40 else 'base'), \
                      patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
                     changes.select(event, 'rust-quality.yml')
                 output = (Path(temporary) / 'output').read_text()
@@ -240,15 +241,15 @@ class Trust(unittest.TestCase):
         for event_name, ref, event, paths, expected in [
             ('pull_request', 'refs/pull/12/merge', pr, ['docs/notes.md', workflow], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['deploy/install.sh', 'packages/butler-npm/index.js'], none),
-            ('pull_request', 'refs/pull/12/merge', pr, [rust], native),
-            ('pull_request', 'refs/pull/12/merge', pr, ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], native),
-            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], native),
-            ('pull_request', 'refs/pull/12/merge', pr, ['.github/actions/build-windows-agent/action.yml'], native),
-            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-installer.yml'], native),
+            ('pull_request', 'refs/pull/12/merge', pr, [rust], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/actions/build-windows-agent/action.yml'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-installer.yml'], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/scripts/ci-changes.py'], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/releases/v1.2.3.md'], none),
-            ('pull_request', 'refs/pull/12/merge', pr, ['deploy/windows-preview-smoke.ps1'], native),
-            ('workflow_dispatch', 'refs/heads/main', {}, [], dict.fromkeys(none, True)),
+            ('pull_request', 'refs/pull/12/merge', pr, ['deploy/windows-preview-smoke.ps1'], none),
+            ('workflow_dispatch', 'refs/heads/main', {}, [], native),
         ]:
             with self.subTest(event=event_name, paths=paths), tempfile.TemporaryDirectory() as temporary:
                 env = dict(GITHUB_EVENT_NAME=event_name, GITHUB_REF=ref, GITHUB_REPOSITORY='owner/repo',
@@ -274,7 +275,7 @@ class Trust(unittest.TestCase):
         workflow = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
         groups = json.loads(re.search(r"groups: '([^']+)'", workflow).group(1))
         # Evaluate the actual gate's selection policy, without its result loop.
-        policy = (ROOT / 'check-gate.py').read_text().split("if 'lint' in jobs")[0]
+        policy = (ROOT / 'check-gate.py').read_text().split("for name, enabled in selected.items():")[0]
         flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds', 'licenses', 'signing']
         for values in itertools.product(['false', 'true'], repeat=len(flags)):
             outputs = dict(zip(flags, values), tier='smoke', workflows='true')
@@ -347,26 +348,6 @@ class Trust(unittest.TestCase):
         self.assertEqual(artifacts, [dict(name='agent-linux-x64', run=7),
                                      dict(name='butler-npm-x64', run=7)])
 
-    # test-category: security
-    def test_hash_match_required_even_with_prior_success(self):
-        state = dict(schema=1, repository='owner/repo', workflow='rust-quality.yml', pr=12,
-                     run=1, hashes={'rust': 'rust-before', 'ui': 'ui-before'})
-        event = {'pull_request': {'number': 12, 'base': {'sha': 'base'}}}
-        for current, expected in [({'rust': 'rust-before', 'ui': 'ui-after'}, ('false', 'true')),
-                                  ({'rust': 'rust-after', 'ui': 'ui-before'}, ('true', 'false')),
-                                  ({'rust': 'rust-after', 'ui': 'ui-after'}, ('true', 'true'))]:
-            with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
-                env = dict(GITHUB_EVENT_NAME='pull_request', GITHUB_REPOSITORY='owner/repo',
-                           GITHUB_RUN_ID='2', GITHUB_OUTPUT=str(Path(temporary) / 'output'),
-                           GITHUB_STEP_SUMMARY=str(Path(temporary) / 'summary'))
-                with patch.dict(os.environ, env), patch.object(changes, 'command', return_value='checkout'), \
-                     patch.object(changes, 'changed', return_value=['.github/workflows/rust-quality.yml']), \
-                     patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'other') | current), \
-                     patch.object(changes, 'previous', return_value=iter([state])):
-                    changes.select(event, 'rust-quality.yml')
-                output = (Path(temporary) / 'output').read_text()
-                self.assertIn('rust=' + expected[0], output)
-                self.assertIn('ui=' + expected[1], output)
 
 
 class WorkflowScheduling(unittest.TestCase):
@@ -451,7 +432,7 @@ class TrimContracts(unittest.TestCase):
                 env = dict(os.environ, RESULTS=json.dumps(jobs))
                 actual = subprocess.run(['python3', ROOT / 'check-gate.py'], env=env, capture_output=True)
                 passed = outcome == ('success' if enabled else 'skipped')
-                self.assertEqual(actual.returncode == 0, passed and (tier == 'integration' or enabled), actual.stderr)
+                self.assertEqual(actual.returncode == 0, passed, actual.stderr)
                 with patch.dict(os.environ, env | {'RUNNER_TEMP': temp, 'JOB_GROUPS': '{"licenses":["lint"]}'}), \
                      patch.object(changes.ci_parts, 'inventory', return_value={}):
                     changes.record()
@@ -482,66 +463,10 @@ class TrimContracts(unittest.TestCase):
         self.assertFalse(changes.matches('packages/butler-app/client/ui/src/app.tsx', tuple(globs)))
 
 
-class Precision(unittest.TestCase):
-    # test-category: pure-logic
-    def test_package_only_inputs_do_not_build_test_archives(self):
-        flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds']
-        for values in itertools.product(['false', 'true'], repeat=4):
-            outputs = dict.fromkeys(flags, 'false') | dict(zip(flags[:4], values), tier='smoke')
-            jobs = changes.rust_jobs(outputs, 'pull_request')
-            for platform in ['linux', 'macos', 'linux-arm64']:
-                self.assertEqual(jobs[f'{platform}-archive'], outputs['rust'] == 'true')
-            self.assertEqual(jobs['linux-native'], 'true' in values[2:])
-            self.assertEqual(jobs['linux-package-x64'], outputs['linux-package'] == 'true')
-            self.assertEqual(jobs['install-x64'], outputs['install'] == 'true')
-
-    # test-category: pure-logic
-    def test_only_unshipped_harness_inputs_omit_packaging(self):
-        root = 'packages/butler-agent/rust/'
-        cases = {
-            'crates/butler-e2e/tests/e2e/new.rs': False,
-            'crates/butler-e2e/fixtures/new/input.json': False,
-            'crates/butler-e2e/src/lib.rs': True,
-            'crates/butler-e2e/Cargo.toml': True,
-            'crates/butler-platform/src/lib.rs': True,
-            'scripts/package-standalone-agent.py': True,
-            'Cargo.lock': True,
-        }
-        for path, package in cases.items():
-            groups = changes.categories(root + path)
-            self.assertIn('rust', groups)
-            for group in ['package', 'install', 'linux-package']:
-                self.assertEqual(group in groups, package, (path, group))
-
-    # test-category: pure-logic
-    def test_ds_follows_viewer_build_and_smoke_inputs(self):
-        for path, expected in {
-            'packages/butler-app/client/ui/vite.ds-site.config.ts': True,
-            'tests/smoke/ds-site-smoke.ts': True,
-            'tests/smoke/font-assets-check.ts': True,
-            'tests/support/smoke-browser.ts': True,
-            'tests/support/ds-viewer-mobile-checks.ts': True,
-            'package.json': True,
-            'tools/validate.ts': True,
-            'tests/unit/queue.test.ts': True,
-            'packages/project-ledger/src/index.ts': True,
-            'packages/butler-app/client/electron/src/main.ts': True,
-        }.items():
-            self.assertEqual('ds' in changes.categories(path), expected, path)
-
-    # test-category: pure-logic
-    def test_license_lock_patterns_do_not_match_source_names(self):
-        for name, expected in {
-            'Cargo.lock': True, 'bun.lockb': True, 'package-lock.json': True,
-            'npm-shrinkwrap.json': False, 'block.rs': False, 'clock.ts': False,
-            'instance_lock.rs': False,
-        }.items():
-            path = 'packages/butler-agent/rust/crates/butler-core/src/' + name
-            self.assertEqual('licenses' in changes.categories(path), expected, path)
-
-
 # Keep the derived dependency checks in the existing CI-script test entrypoint.
+from ci_windows_cascade_tests import WindowsCascade
 from ci_input_tests import DerivedInputs
+from ci_tier_tests import Precision, ApprovedTiers
 
 
 if __name__ == '__main__':

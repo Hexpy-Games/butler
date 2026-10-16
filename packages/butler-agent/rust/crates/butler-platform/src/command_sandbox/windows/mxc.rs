@@ -60,11 +60,19 @@ pub(in crate::command_sandbox) fn project_write(
     root: &Path,
     writable: &[&Path],
     denied: &[&Path],
+    toolchain_roots: Option<&crate::command_sandbox::ToolchainRoots>,
 ) -> Result<Invocation, SandboxError> {
     if !super::super::project_write_available() {
         return Err(SandboxError::ProjectWriteUnavailable);
     }
-    prepare::invocation(invocation, environment, root, writable, denied)
+    prepare::invocation(
+        invocation,
+        environment,
+        root,
+        writable,
+        denied,
+        toolchain_roots,
+    )
 }
 
 #[cfg(feature = "test-support")]

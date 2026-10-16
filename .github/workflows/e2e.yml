@@ -37,7 +37,7 @@ jobs:
     # Explicit recording dispatch is an integration operation, never PR smoke.
     if: needs.changes.outputs.tier == 'integration' || (github.event_name == 'workflow_dispatch' && inputs.record_cassettes)
     name: E2E live tier
-    runs-on: [self-hosted, Windows, X64, butler-win]
+    runs-on: [self-hosted, Windows, X64, butler-win, butler-win-release]
     timeout-minutes: 150
     environment: live-e2e
     concurrency:

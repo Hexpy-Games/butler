@@ -45,6 +45,7 @@ async fn project_on_wsl_windows_drive() -> Result<(), HarnessError> {
             root,
             &[&scratch],
             &[&setup.sandbox.data],
+            None,
         )
         .unwrap()
     };

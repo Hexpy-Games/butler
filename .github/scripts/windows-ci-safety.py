@@ -5,6 +5,7 @@ rejects absolute drive paths even for reads: installed tools use environment
 variables, while all CI-owned writes belong to the workspace or runner temp.
 """
 import ast
+import json
 import importlib.util
 import re
 from pathlib import Path
@@ -193,7 +194,9 @@ def local_sources(root, path, source, seen, owner_input=False):
             # This exact selector reaches butler-win only when runner != hosted.
             selector = "inputs.runner == 'hosted' && 'windows-latest'"
             runner = re.search(r'^\s*runs-on:\s*(.+)$', source, re.M)
-            bound_owner = runner and selector in runner[1] and 'fromJSON(\'["self-hosted", "butler-win"]\')' in runner[1] and re.search(
+            labels = re.search(r"fromJSON\('([^']+)'\)", runner[1]) if runner else None
+            owner = labels and {'self-hosted', 'butler-win'} <= set(json.loads(labels[1]))
+            bound_owner = runner and selector in runner[1] and owner and re.search(
                 r"owner-runner:\s*\$\{\{ inputs\.runner != 'hosted' \}\}", step[0])
         yield from local_sources(root, candidate, candidate.read_text(), seen, bool(bound_owner))
 

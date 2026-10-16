@@ -116,7 +116,9 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
                        "subprocess.run(['gh', 'api', endpoint])"]:
             self.assertTrue(any('GitHub CLI' in hazard for _, hazard in windows_safety.hazards(source)))
         workflow = (ROOT.parent / 'workflows/windows-preview-smoke.yml').read_text()
-        self.assertEqual(workflow.count('uses: ./.github/actions/publish-windows-target\n        continue-on-error: true'), 2)
+        self.assertEqual(workflow.count('uses: ./.github/actions/publish-windows-target\n        continue-on-error: true'), 1)
+        preview = (ROOT.parent / 'actions/windows-preview-build/action.yml').read_text()
+        self.assertIn('uses: ./.github/actions/publish-windows-target\n      continue-on-error: true', preview)
         setup = (ROOT.parent / 'actions/windows-owner-setup/action.yml').read_text()
         for entry in ['GIT_CONFIG_COUNT=1', 'GIT_CONFIG_KEY_0=safe.directory', 'GIT_CONFIG_VALUE_0=$workspace']:
             self.assertIn(entry, setup)
