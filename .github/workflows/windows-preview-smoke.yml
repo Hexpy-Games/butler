@@ -1,20 +1,7 @@
 name: Unsigned Windows preview smoke
 on:
-  # A paths filter blocks labeled events too. For ci:windows-native on other PRs:
+  # Native coverage runs on main/release or explicit branch dispatch.
   # gh workflow run windows-preview-smoke.yml --ref <head-branch>
-  # Dispatch runs stub + hosted; unsigned release builds stay release-only.
-  pull_request:
-    paths:
-      - 'deploy/windows**'
-      - '.github/workflows/**windows**'
-      - '.github/actions/**windows**/**'
-      - '.github/actions/rust-agent-setup/**'
-      - '.github/scripts/**windows**'
-      - 'windows**'
-      - '**/windows**'
-      - '**/windows**/**'
-      - 'packages/butler-agent/rust/crates/butler-platform/**'
-      - 'packages/butler-agent/rust/crates/butler-e2e/tests/e2e/windows_**'
   push:
     branches: [main, 'release/**']
   workflow_dispatch:

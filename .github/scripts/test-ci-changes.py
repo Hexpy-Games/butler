@@ -243,12 +243,12 @@ class Trust(unittest.TestCase):
             ('pull_request', 'refs/pull/12/merge', pr, ['deploy/install.sh', 'packages/butler-npm/index.js'], none),
             ('pull_request', 'refs/pull/12/merge', pr, [rust], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], none),
-            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], native),
-            ('pull_request', 'refs/pull/12/merge', pr, ['.github/actions/build-windows-agent/action.yml'], native),
-            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-installer.yml'], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/actions/build-windows-agent/action.yml'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-installer.yml'], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/scripts/ci-changes.py'], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/releases/v1.2.3.md'], none),
-            ('pull_request', 'refs/pull/12/merge', pr, ['deploy/windows-preview-smoke.ps1'], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['deploy/windows-preview-smoke.ps1'], none),
             ('workflow_dispatch', 'refs/heads/main', {}, [], native),
         ]:
             with self.subTest(event=event_name, paths=paths), tempfile.TemporaryDirectory() as temporary:

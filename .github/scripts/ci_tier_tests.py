@@ -45,6 +45,29 @@ def selection(paths, event='pull_request', workflow='rust-quality.yml', labels=(
 
 class ApprovedTiers(unittest.TestCase):
     # test-category: pure-logic
+    def test_every_pr_shape_selects_only_hosted_fast_lane(self):
+        from ci_policy import PR_FAST_JOBS
+        shapes = [
+            ['packages/butler-agent/rust/crates/butler-core/src/lib.rs'],
+            ['packages/butler-agent/rust/crates/butler-platform/src/lib.rs', 'Cargo.toml'],
+            ['deploy/install.sh', 'VERSION'],
+            ['packages/butler-app/client/ui/src/app.tsx'],
+            ['.github/workflows/rust-quality.yml'],
+        ]
+        # Derive all orchestrators that publish selections; test policy ingress,
+        # including unknown CI inputs (the fail-closed superset).
+        workflows = [p.name for p in (ROOT.parent / 'workflows').glob('*.yml')
+                     if "workflow: " + p.name in p.read_text()]
+        self.assertIn('rust-quality.yml', workflows)
+        for paths, workflow in itertools.product(shapes, workflows):
+            outputs = selection(paths, workflow=workflow)
+            selected = {name for name, enabled in json.loads(outputs['jobs']).items() if enabled}
+            allowed = PR_FAST_JOBS if workflow == 'rust-quality.yml' else set()
+            self.assertLessEqual(selected, allowed, (paths, workflow, selected))
+            if workflow == 'rust-quality.yml':
+                self.assertFalse(json.loads(outputs['parts'])['ui']['macos'])
+
+    # test-category: pure-logic
     def test_packaging_and_arm64_destinations_and_gate(self):
         rust = 'packages/butler-agent/rust/crates/butler-core/src/lib.rs'
         exceptions = ['VERSION', 'deploy/install.sh', 'Cargo.toml',
@@ -57,7 +80,7 @@ class ApprovedTiers(unittest.TestCase):
                 output = selection([path], event)
                 jobs = json.loads(output['jobs'])
                 for name in moved:
-                    self.assertEqual(jobs[name], event != 'pull_request' or path != rust, (event, path, name))
+                    self.assertEqual(jobs[name], event != 'pull_request', (event, path, name))
                 self.assertEqual(jobs['linux-arm64-archive'], event != 'pull_request' and output['rust'] == 'true')
                 results = {'changes': {'result': 'success', 'outputs': output}}
                 results.update({name: {'result': 'success' if enabled else 'skipped'} for name, enabled in jobs.items()})
@@ -75,9 +98,9 @@ class ApprovedTiers(unittest.TestCase):
         windows = 'packages/butler-agent/rust/crates/butler-platform/src/process.rs'
         for event, paths, labels, native in [
             ('pull_request', [rust], (), False),
-            ('pull_request', [windows], (), True),
-            ('pull_request', ['packages/butler-agent/rust/crates/butler-core/src/windows/native.rs'], (), True),
-            ('pull_request', [rust], ('ci:windows-native',), True),
+            ('pull_request', [windows], (), False),
+            ('pull_request', ['packages/butler-agent/rust/crates/butler-core/src/windows/native.rs'], (), False),
+            ('pull_request', [rust], ('ci:windows-native',), False),
             ('push', [rust], (), True), ('push', ['README.md'], (), False),
             ('workflow_dispatch', [], (), True),
         ]:
@@ -118,7 +141,7 @@ class ApprovedTiers(unittest.TestCase):
                 output = selection([path], event)
                 jobs = json.loads(output['jobs'])
                 for name in ('macos-archive', 'macos-tests'):
-                    self.assertEqual(jobs[name], on_pr if event == 'pull_request' else output['rust'] == 'true', (path, event))
+                    self.assertEqual(jobs[name], False if event == 'pull_request' else output['rust'] == 'true', (path, event))
                 self.assertEqual(jobs['linux-tests'], output['rust'] == 'true')
         source = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
         for name in ('macos-archive', 'macos-tests'):
@@ -143,7 +166,7 @@ class ApprovedTiers(unittest.TestCase):
             'packages/butler-app/client/electron/scripts/prepare-native-agent.mjs': True,
             '.github/workflows/bun-unit.yml': True, 'bun.lock': True, 'bunfig.toml': True,
         }.items():
-            self.assertEqual(json.loads(selection([path])['parts'])['ui']['macos'], expected, path)
+            self.assertEqual(json.loads(selection([path])['parts'])['ui']['macos'], False, path)
         # No other fast-unit file has a Darwin-only host guard.
         repository = ROOT.parents[1]
         guards = [p.name for p in (repository / 'tests/unit').glob('*.test.ts')
@@ -204,8 +227,8 @@ class ApprovedTiers(unittest.TestCase):
     # test-category: pure-logic
     def test_windows_trigger_and_selector_match_concrete_paths(self):
         source = (ROOT.parent / 'workflows/windows-preview-smoke.yml').read_text()
-        trigger = source.split('  pull_request:\n')[1].split('  push:')[0]
-        patterns = re.findall(r"- '([^']+)'", trigger)
+        self.assertNotIn('  pull_request:', source)
+        patterns = changes.WINDOWS
         cases = {
             'windows.rs': True, 'windows/nested/input.rs': True,
             'src/windows.rs': True, 'src/windows/nested/input.rs': True,
@@ -226,7 +249,7 @@ class ApprovedTiers(unittest.TestCase):
         }
         for path, expected in cases.items():
             with self.subTest(path=path):
-                github = any(github_path_match(path, pattern) for pattern in patterns)
+                github = changes.matches(path, patterns)
                 self.assertEqual(github, expected)
                 self.assertEqual(changes.windows_native(path), github)
 
@@ -349,9 +372,9 @@ class Precision(unittest.TestCase):
             for platform in ['linux', 'macos', 'linux-arm64']:
                 self.assertEqual(jobs[f'{platform}-archive'],
                                  outputs['rust'] == 'true' and platform == 'linux')
-            self.assertEqual(jobs['linux-native'], 'true' in values[2:])
-            self.assertEqual(jobs['linux-package-x64'], outputs['linux-package'] == 'true')
-            self.assertEqual(jobs['install-x64'], outputs['install'] == 'true')
+            self.assertEqual(jobs['linux-native'], False)
+            self.assertEqual(jobs['linux-package-x64'], False)
+            self.assertEqual(jobs['install-x64'], False)
 
     # test-category: pure-logic
     def test_only_unshipped_harness_inputs_omit_packaging(self):

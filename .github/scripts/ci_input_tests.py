@@ -212,7 +212,7 @@ class DerivedInputs(unittest.TestCase):
                         self.assertEqual(output[group], 'false')
                 jobs = json.loads(output['jobs'])
                 for name in ('shellcheck', 'selftest'):
-                    self.assertEqual(jobs[name], signing or output['package'] == 'true')
+                    self.assertFalse(jobs[name])
         for name in ('shellcheck', 'selftest'):
             self.assertEqual(changes.job_groups(workflow)[name], ['package', 'signing'])
             block = re.split(r'\n  [a-z]', source.split(f'  {name}:\n', 1)[1], maxsplit=1)[0]

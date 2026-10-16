@@ -412,14 +412,17 @@ def select(event, workflow):
     # Smoke uses the full workspace inventory; E2E is disabled separately.
     if level == 'smoke' and workflow == 'rust-quality.yml':
         parts = {name: dict(workspace=True, e2e=ci_parts.E2E, perf=ci_parts.PERF) for name in ci_parts.inventory(workflow)}
-        parts['ui'] = dict(macos=outputs['package'] == 'true' or outputs['signing'] == 'true' or
-                           any(matches(p, BUN_MACOS + SHARED) for p in paths))
+        parts['ui'] = dict(macos=os.environ['GITHUB_EVENT_NAME'] != 'pull_request' and
+                           (outputs['package'] == 'true' or outputs['signing'] == 'true' or
+                            any(matches(p, BUN_MACOS + SHARED) for p in paths)))
     restored = {artifact['name'] for artifact in artifacts}
     artifacts += [artifact for artifact in part_artifacts if artifact['name'] not in restored]
     if level == 'smoke' and workflow == 'windows-preview-smoke.yml':
         parts = {'hosted': ci_parts.HOSTED}
         native = outputs['package'] == 'true' and native_required
         jobs = windows_preview_jobs(dict(outputs, windows=str(native).lower()), os.environ['GITHUB_EVENT_NAME'])
+    if os.environ['GITHUB_EVENT_NAME'] == 'pull_request' and workflow != 'rust-quality.yml':
+        jobs = dict.fromkeys(jobs, False)
     outputs.update({'parts': json.dumps(parts), 'docs-only': str(not required).lower(), 'electron': outputs['package'],
                     'tier': level, 'candidate': candidate, 'jobs': json.dumps(jobs),
                     'artifacts': json.dumps(artifacts)})

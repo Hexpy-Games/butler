@@ -1,6 +1,10 @@
 """Shared smoke job policy; integration uses per-job receipt selection."""
 
 
+# linux-archive is the input producer for the Linux workspace smoke tests.
+PR_FAST_JOBS = frozenset(('lint', 'windows-check', 'linux-clippy', 'linux-archive',
+                          'linux-tests', 'ui', 'site', 'ds'))
+
 def rust_jobs(outputs, event):
     rust = outputs['rust'] == 'true'
     package = outputs['package'] == 'true'
@@ -26,11 +30,13 @@ def rust_jobs(outputs, event):
         'site': outputs['site'] == 'true' and (event != 'push' or integration),
         'ds': outputs['ds'] == 'true' and (event != 'push' or integration),
     }
+    if event == 'pull_request':
+        selected = {name: enabled and name in PR_FAST_JOBS for name, enabled in selected.items()}
     return selected
 
 
 def windows_preview_jobs(outputs, event):
     """Native smoke runs on Windows PRs, main and dispatch; builds are release-only."""
-    native = outputs['windows'] == 'true'
+    native = outputs['windows'] == 'true' and event != 'pull_request'
     installer = outputs['package'] == 'true' and outputs.get('tier') == 'integration'
     return {'build': installer, 'stub': native, 'release': installer and native, 'hosted': native}
