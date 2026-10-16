@@ -37,7 +37,7 @@ pub(crate) enum Mode {
 }
 
 pub(crate) fn check(root: &Path, sources: &[PathBuf], mode: Mode) -> Result<bool, String> {
-    let production = production_files(root)?;
+    let production = production_files(root, modules::load)?;
     let mut packages = BTreeMap::<PathBuf, Entries>::new();
     for source in sources {
         let relative = source.strip_prefix(root).unwrap_or(source);
@@ -77,8 +77,11 @@ pub(crate) fn check(root: &Path, sources: &[PathBuf], mode: Mode) -> Result<bool
 
 /// Canonical paths of the files production builds compile: the module trees
 /// of every package's library, binaries and build script without its
-/// `cfg(test)` modules, skipping the [`TEST_PACKAGES`].
-fn production_files(root: &Path) -> Result<BTreeSet<PathBuf>, String> {
+/// `cfg(test)` modules (as `load` finds them), skipping the [`TEST_PACKAGES`].
+pub(crate) fn production_files(
+    root: &Path,
+    load: fn(&Path) -> Result<Vec<modules::Module>, String>,
+) -> Result<BTreeSet<PathBuf>, String> {
     let mut files = BTreeSet::new();
     for group in ["crates", "tools"] {
         for package in directories(&root.join(group))? {
@@ -86,7 +89,7 @@ fn production_files(root: &Path) -> Result<BTreeSet<PathBuf>, String> {
                 continue;
             }
             for entry in crate_roots(&package)? {
-                for module in modules::load(&entry)? {
+                for module in load(&entry)? {
                     files.insert(canonical(&module.file)?);
                 }
             }
@@ -137,7 +140,7 @@ fn sorted_entries(directory: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(paths)
 }
 
-fn canonical(path: &Path) -> Result<PathBuf, String> {
+pub(crate) fn canonical(path: &Path) -> Result<PathBuf, String> {
     fs::canonicalize(path).map_err(|error| format!("cannot resolve {}: {error}", path.display()))
 }
 
