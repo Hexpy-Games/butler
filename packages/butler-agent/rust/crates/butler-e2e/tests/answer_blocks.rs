@@ -1,4 +1,5 @@
 //! One fixture table for the standalone T2 contract, before the T3 tool exists.
+use butler_e2e::e2e::binary::fixture_binary;
 use std::{path::Path, process::Command};
 
 use serde_json::Value;
@@ -34,7 +35,7 @@ fn answer_blocks_fixture_table() -> Result<(), Box<dyn std::error::Error>> {
     }
     let input = Path::new(&std::env::var("BUTLER_DATA")?).join("answer-blocks-input.json");
     std::fs::write(&input, serde_json::to_vec(&requests)?)?;
-    let output = Command::new(env!("CARGO_BIN_EXE_e2e-answer-blocks"))
+    let output = Command::new(fixture_binary("e2e-answer-blocks")?)
         .stdin(std::fs::File::open(&input)?)
         .output()?;
     assert!(
@@ -64,7 +65,7 @@ fn answer_blocks_fixture_table() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
     }
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../..");
+    let root = butler_e2e::e2e::binary::manifest_dir().join("../../../../..");
     let output = Command::new("bun")
         .arg(root.join("tests/contracts/answer-blocks.ts"))
         .current_dir(root)
@@ -154,7 +155,7 @@ fn run_stream_requests(requests: &[Value]) -> Result<Vec<Value>, Box<dyn std::er
     let input = Path::new(&std::env::var("BUTLER_DATA")?)
         .join(format!("stream-{}.json", uuid::Uuid::new_v4()));
     std::fs::File::create(&input)?.write_all(&serde_json::to_vec(requests)?)?;
-    let output = Command::new(env!("CARGO_BIN_EXE_e2e-answer-blocks"))
+    let output = Command::new(fixture_binary("e2e-answer-blocks")?)
         .stdin(std::fs::File::open(&input)?)
         .output()?;
     assert!(

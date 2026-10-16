@@ -49,7 +49,7 @@ mod transitions;
 mod wake;
 mod work;
 
-pub(crate) use authority::SqliteAuthorityRepository;
+pub(crate) use authority::{SqliteAuthorityReader, SqliteAuthorityRepository};
 pub use bootstrap::{
     begin_storage_startup, bootstrap_fresh_storage, read_activated_storage_manifest,
     storage_error_is_corruption, storage_scan_delay, validate_storage_background,
@@ -120,7 +120,7 @@ pub struct BtccStorageConfig {
     pub process_liveness: Arc<dyn ProcessLiveness>,
 }
 
-/// The BTCC SQLite store; every operation runs on its single owner thread.
+/// The BTCC SQLite store: serialized writes and independent committed reads.
 #[derive(Clone)]
 pub struct BtccStorage {
     inner: Arc<StorageInner>,

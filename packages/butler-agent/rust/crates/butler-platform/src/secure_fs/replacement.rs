@@ -20,6 +20,30 @@ pub fn replace_private<E>(
     write: impl FnOnce(&mut File) -> Result<(), E>,
     io_error: impl Fn(io::Error) -> E,
 ) -> Result<(), E> {
+    replace(path, write, io_error, true)
+}
+
+/// Atomically publishes a private, reconstructible copy without explicit file
+/// or directory synchronization. Platform rename guarantees still apply.
+/// The caller must already hold a durable source and recover this
+/// copy if it is missing or incomplete after a crash. Never use for acceptance
+/// of new user data or for a source of truth.
+pub fn replace_private_reconstructible<E>(
+    path: &Path,
+    write: impl FnOnce(&mut File) -> Result<(), E>,
+    io_error: impl Fn(io::Error) -> E,
+) -> Result<(), E> {
+    #[cfg(feature = "test-support")]
+    super::hold_point("reconstructible_file_publish", || false).map_err(&io_error)?;
+    replace(path, write, io_error, false)
+}
+
+fn replace<E>(
+    path: &Path,
+    write: impl FnOnce(&mut File) -> Result<(), E>,
+    io_error: impl Fn(io::Error) -> E,
+    durable: bool,
+) -> Result<(), E> {
     let timing = timing::Timing::new();
     let parent = path
         .parent()
@@ -42,8 +66,10 @@ pub fn replace_private<E>(
     };
     let written = private.and_then(|()| write(&mut file)).and_then(|()| {
         timing.mark("written");
-        file.sync_all().map_err(&io_error)?;
-        timing.mark("synced");
+        if durable {
+            file.sync_all().map_err(&io_error)?;
+            timing.mark("synced");
+        }
         drop(file);
         rename(&temporary, path).map_err(&io_error)?;
         timing.mark("renamed");
@@ -53,5 +79,8 @@ pub fn replace_private<E>(
         let _ = fs::remove_file(&temporary);
         return Err(error);
     }
-    sync_directory(parent).unwrap_or(Ok(())).map_err(io_error)
+    if durable {
+        sync_directory(parent).unwrap_or(Ok(())).map_err(io_error)?;
+    }
+    Ok(())
 }

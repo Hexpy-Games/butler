@@ -1924,7 +1924,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       contentHostPlaceholder: "content.example.com",
       contentHostsDescription: "결과물을 원격에서 열 때 쓰는 터널 이름입니다.",
       hostsDescription: "터널이나 프록시가 쓰는 이름입니다.",
-      noHosts: "없음",
+      hostCount: (n) => n === 0 ? "없음" : `${n}개`,
       hostPlaceholder: "butler.example.com",
       addHost: "추가",
       removeHost: (host) => `${host} 삭제`,

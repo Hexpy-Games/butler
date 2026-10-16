@@ -1665,7 +1665,7 @@ export interface AppCopy {
       contentHosts: string;
       contentHostsDescription: string;
       contentHostPlaceholder: string;
-      noHosts: string;
+      hostCount: (n: number) => string;
       hostPlaceholder: string;
       addHost: string;
       removeHost: (host: string) => string;

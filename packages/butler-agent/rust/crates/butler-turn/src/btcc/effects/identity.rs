@@ -75,6 +75,7 @@ fn invalid(error: EffectFailure) -> EffectFailure {
 
 pub(super) fn resolve(input: &ExecuteEffect) -> EffectResult<Resolved> {
     // Plan revisions are tracking metadata, never execution authority.
+    // An empty revision means no plan for every work scope.
     let plan_revision_id = input
         .work
         .current_plan

@@ -38,7 +38,9 @@ pub fn workspace_root() -> PathBuf {
 
 /// `packages/butler-agent/resources` as shipped next to the binary.
 pub fn resource_source() -> PathBuf {
-    workspace_root().join("../resources")
+    nonempty("BUTLER_E2E_RESOURCES")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| workspace_root().join("../resources"))
 }
 
 pub fn agent_binary() -> Result<PathBuf, HarnessError> {
@@ -108,8 +110,15 @@ fn locate() -> Result<PathBuf, String> {
 /// Nextest remaps non-test executables when consuming an archive. Prefer its
 /// runtime path; cargo test puts this fixture next to the deps directory.
 pub fn mcp_fixture_binary() -> Result<PathBuf, HarnessError> {
-    if let Some(path) = nonempty("NEXTEST_BIN_EXE_e2e-mcp-fixture")
-        .or_else(|| nonempty("NEXTEST_BIN_EXE_e2e_mcp_fixture"))
+    fixture_binary("e2e-mcp-fixture")
+}
+
+/// A `butler-e2e` companion binary. Compile-time `CARGO_BIN_EXE_*` paths name
+/// the build machine, so archived nextest runs elsewhere use its runtime
+/// `NEXTEST_BIN_EXE_*` path; cargo test puts the binary next to `deps`.
+pub fn fixture_binary(name: &str) -> Result<PathBuf, HarnessError> {
+    if let Some(path) = nonempty(&format!("NEXTEST_BIN_EXE_{name}"))
+        .or_else(|| nonempty(&format!("NEXTEST_BIN_EXE_{}", name.replace('-', "_"))))
     {
         return Ok(PathBuf::from(path));
     }
@@ -118,10 +127,10 @@ pub fn mcp_fixture_binary() -> Result<PathBuf, HarnessError> {
         .parent()
         .and_then(Path::parent)
         .ok_or_else(|| harness_error("test executable has no profile directory"))?;
-    let path = profile.join(format!("e2e-mcp-fixture{}", std::env::consts::EXE_SUFFIX));
+    let path = profile.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
     if !path.is_file() {
         return Err(harness_error(format!(
-            "MCP fixture missing: {}",
+            "fixture binary missing: {}",
             path.display()
         )));
     }

@@ -7,6 +7,7 @@
 //! now" is attended and asks as usual.
 mod sandbox_setting;
 mod unattended;
+use unattended::run_where;
 
 use super::stub::{self, Script, call};
 use super::{approve, assert_counts, delivered, outputs, paused};
@@ -52,6 +53,11 @@ async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), Harn
         &outside.with_file_name("linked-out"),
         &project.join("out-link"),
     )?;
+    if super::super::windows_sandbox::setup_only() {
+        super::super::windows_sandbox::finish_setup(s).await?;
+        server.abort();
+        return Ok(());
+    }
     let contained = butler_platform::command_sandbox::project_write_available();
 
     sandbox_setting::verify(&s, &chat, &script, &project).await?;
@@ -137,22 +143,32 @@ async fn sandbox_holds(
     script: &Arc<Script>,
     project: &Path,
 ) -> Result<(), HarnessError> {
-    let body = "echo escaped > ../escape.txt\necho changed > .git/config\n";
+    let (path, body, command, publish) = if butler_platform::command_sandbox::POSIX_SHELL {
+        (
+            "build.sh",
+            "echo started > src/sandbox-started.txt\necho escaped > ../escape.txt\necho changed > .git/config\n",
+            "sh build.sh",
+            "true",
+        )
+    } else {
+        (
+            "build.cmd",
+            "@echo off\r\necho started>src\\sandbox-started.txt\r\necho escaped>..\\escape.txt\r\necho changed>.git\\config\r\n",
+            "cmd /c build.cmd",
+            "cmd /c exit 0",
+        )
+    };
     script.rounds.lock().unwrap().insert(
         ESCAPE.into(),
         vec![
-            call(
-                "script",
-                "write_file",
-                &json!({"path":"build.sh","content":body}),
-            ),
-            mutation("build", "sh build.sh"),
+            call("script", "write_file", &json!({"path":path,"content":body})),
+            mutation("build", command),
             // Declared outputs must not copy protected files into artifacts
             // that the next contained command can read.
             call(
                 "publish",
                 "run_command",
-                &json!({"command":"true","summary":"Publish","state_effect":"mutation",
+                &json!({"command":publish,"summary":"Publish","state_effect":"mutation",
                     "output_paths":[".git/config"]}),
             ),
         ],
@@ -164,6 +180,11 @@ async fn sandbox_holds(
     assert!(
         !published.exists() || std::fs::read_dir(&published)?.next().is_none(),
         "a protected project file was published"
+    );
+    assert_eq!(
+        std::fs::read_to_string(project.join("src/sandbox-started.txt"))?.trim(),
+        "started",
+        "project script did not execute"
     );
     let parent = project.parent().unwrap();
     assert!(
@@ -468,31 +489,4 @@ async fn unattended_schedule(
     assert_eq!(std::fs::read_to_string(outside)?, "outside-marker");
     eprintln!("PERM-02 run-now: attended=asked authority_count=1");
     Ok(())
-}
-
-async fn run_where(
-    s: &Scenario,
-    schedule: &str,
-    matches: impl Fn(&Value) -> bool,
-) -> Result<Value, HarnessError> {
-    let deadline = Instant::now() + Duration::from_secs(20);
-    loop {
-        let reply = s.gw.get(&format!("/automations/{schedule}/runs")).await?;
-        assert_eq!(reply.status, 200, "{}", reply.text);
-        if let Some(run) = reply.data()["runs"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|run| matches(run))
-        {
-            return Ok(run.clone());
-        }
-        assert!(
-            Instant::now() < deadline,
-            "no matching run: {}\n{}",
-            reply.text,
-            s.agent.logs()
-        );
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
 }

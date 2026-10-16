@@ -1920,7 +1920,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       contentHostPlaceholder: "content.example.com",
       contentHostsDescription: "Tunnel hostname for opening outputs remotely.",
       hostsDescription: "Names a tunnel or proxy uses.",
-      noHosts: "None",
+      hostCount: (n) => n === 0 ? "None" : n === 1 ? "1 host" : `${n} hosts`,
       hostPlaceholder: "butler.example.com",
       addHost: "Add",
       removeHost: (host) => `Remove ${host}`,

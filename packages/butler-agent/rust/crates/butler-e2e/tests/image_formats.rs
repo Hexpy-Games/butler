@@ -5,6 +5,7 @@
     clippy::panic,
     reason = "E2E assertions"
 )]
+use butler_e2e::e2e::binary::fixture_binary;
 use std::{
     io::Write,
     process::{Command, Output, Stdio},
@@ -16,7 +17,7 @@ const SVG: &[u8] = include_bytes!("e2e/browser_headless/images/plain.svg");
 const EXTERNAL: &str = include_str!("e2e/browser_headless/images/external.svg");
 
 fn normalize(bytes: &[u8]) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_e2e-image-normalize"))
+    let mut child = Command::new(fixture_binary("e2e-image-normalize").unwrap())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

@@ -182,7 +182,12 @@ async fn execute_prepared(
     let mut summary = summary(exit_code, signal_name(status), timed_out);
     let payload_source = running
         .paths
-        .complete(running.capture, &mut summary, CaptureEnd::Drained)
+        .complete(
+            running.capture,
+            &mut summary,
+            CaptureEnd::Drained,
+            input.access,
+        )
         .await?;
     Ok(Some(GuidedCommandOutput {
         summary,
@@ -367,7 +372,12 @@ async fn complete(
     mut summary: GuidedSummary,
 ) -> Result<GuidedCommandOutput, CommandError> {
     paths
-        .complete(capture, &mut summary, CaptureEnd::Stopped)
+        .complete(
+            capture,
+            &mut summary,
+            CaptureEnd::Stopped,
+            GuidedAccess::FullAccessContained,
+        )
         .await
         .map(|payload_source| GuidedCommandOutput {
             summary,

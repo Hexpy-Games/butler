@@ -1,5 +1,6 @@
-//! Startup and deferred validation must share the existing corruption exit path.
+//! Physical corruption fails closed; logical reference findings remain diagnostic.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
+mod effects;
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use rusqlite::Connection;
 use std::time::{Duration, Instant};
@@ -248,6 +249,8 @@ async fn btcc_every_start_applies_migrations_with_existing_user_version() -> Res
     let db = Connection::open(&path)?;
     db.execute_batch(
         "PRAGMA user_version=1;
+        CREATE INDEX idx_btcc_graph_plan ON btcc_subsession_delegations(
+        json_extract(packet_json,'$.parent_work_ref.plan_revision_id'));
         INSERT INTO btcc_guided_works(work_id,session_id,scope_kind,scope_ref,origin_turn_id,
         origin_message_id,objective,status,created_at,updated_at)
         VALUES('stable','fixture','session','fixture','fixture','fixture','changed','completed','now','now');
@@ -280,6 +283,15 @@ async fn btcc_every_start_applies_migrations_with_existing_user_version() -> Res
             |r| r.get(0),
         )?;
         assert_eq!(indexes, 1);
+        let obsolete_indexes: i64 = db.query_row(
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name='idx_btcc_graph_plan'",
+            [],
+            |r| r.get(0),
+        )?;
+        assert_eq!(
+            obsolete_indexes, 0,
+            "retired index must stay absent on restart"
+        );
         let identity: String = db.query_row(
             "SELECT activity_worker_id FROM btcc_session_relations WHERE relation_id='identity'",
             [],
@@ -307,35 +319,33 @@ async fn btcc_verdict_recheck_preserves_reference_failure_and_repair() -> Result
     drop(db);
     let verdict = path.with_extension("sqlite.corrupt");
     std::fs::write(&verdict, "agent_btcc_migration_reference_check_failed")?;
-    s.agent.start_process()?;
-    let start = Instant::now();
-    while s.agent.is_running() && start.elapsed() < Duration::from_secs(5) {
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    assert!(!s.agent.is_running());
-    assert!(
-        !s.agent
-            .reap()
-            .expect("failed reference startup exits")
-            .success()
-    );
+    s.gw = s.agent.start_again().await?;
+    assert!(s.gw.healthy().await);
     let log = std::fs::read_to_string(s.sandbox.logs.join("agent-2.log"))?;
-    assert!(log.contains("storage_bootstrap_failed"), "{log}");
     assert!(
-        log.contains("agent_btcc_migration_reference_check_failed"),
+        log.contains(
+            "warning agent_btcc_migration_reference_check_failed rule=turn_inbox orphan_count=1"
+        ),
         "{log}"
     );
-    assert!(!log.contains("[native-butler] ready"), "{log}");
-    assert!(verdict.exists());
-    let db = Connection::open(path)?;
+    assert!(!log.contains("storage_bootstrap_failed"), "{log}");
+    assert!(log.contains("[native-butler] ready"), "{log}");
+    assert!(!verdict.exists());
+    let findings = path.with_extension("sqlite.findings");
+    assert!(std::fs::read_to_string(&findings)?.contains("rule=turn_inbox orphan_count=1"));
+    s.agent.terminate().await?;
+    let db = Connection::open(&path)?;
     db.execute_batch(
         "INSERT INTO btcc_inbound_inbox(inbox_id,session_id,trigger_key,turn_id,
         admission_input_hash,command_json,status)
         VALUES('missing','fixture','reference','reference','fixture','{}','constructed')",
     )?;
     drop(db);
+    std::fs::remove_file(path.with_extension("sqlite.verified"))?;
     s.gw = s.agent.start_again().await?;
+    effects::wait_scan(&s, &path).await?;
     assert!(s.gw.healthy().await);
     assert!(!verdict.exists());
+    assert!(!findings.exists());
     s.finish().await
 }

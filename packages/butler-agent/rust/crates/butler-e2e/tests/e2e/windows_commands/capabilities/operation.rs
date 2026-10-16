@@ -8,6 +8,20 @@ pub(super) async fn operation(
     case: &Case,
     access: Access,
 ) -> Result<(Value, Duration), HarnessError> {
+    let result = observe_operation(s, chat, script, case, access).await?;
+    let budget = Duration::from_secs(if case.refused { 1 } else { 5 });
+    butler_e2e::assert_wall_clock_budget!(result.1, budget, case.tool);
+    Ok(result)
+}
+
+/// The sampler checks the maximum of all observations against the same budget.
+pub(super) async fn observe_operation(
+    s: &Scenario,
+    chat: &str,
+    script: &provider::Script,
+    case: &Case,
+    access: Access,
+) -> Result<(Value, Duration), HarnessError> {
     eprintln!(
         "Starting Windows capability: access={access:?} tool={} refused={} args={}",
         case.tool, case.refused, case.args
@@ -173,8 +187,14 @@ pub(super) async fn operation(
         }
     }
     diagnostic_logs(s, script);
-    let budget = Duration::from_secs(if case.refused { 1 } else { 5 });
-    butler_e2e::assert_wall_clock_budget!(elapsed, budget, case.tool);
+    // Keep discovery's own counts and elapsed time even when the end-to-end
+    // budget fails before verify() can inspect the complete result.
+    if case.tool == "list_files" {
+        eprintln!(
+            "WINDOWS-BASIC discovery metrics={} truncated={} stopped_by={}",
+            output["metrics"], output["truncated"], output["stopped_by"]
+        );
+    }
     if case.refused {
         let expected = if case.tool == "write_file" {
             "parent_traversal_not_allowed"

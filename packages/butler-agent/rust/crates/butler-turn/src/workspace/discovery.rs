@@ -111,6 +111,7 @@ pub enum WorkspaceListOutcome {
 }
 
 pub(super) fn list_blocking(input: &WorkspaceListInput) -> std::io::Result<WorkspaceListOutcome> {
+    let timing = super::file_timing::Timing::new("list_files");
     let mut guard = resolve_workspace_path_guard(GuardInput {
         root: &input.root,
         requested: &input.requested_root,
@@ -118,6 +119,7 @@ pub(super) fn list_blocking(input: &WorkspaceListInput) -> std::io::Result<Works
         allow_directories: true,
         protected_roots: &input.protected_roots,
     })?;
+    timing.mark("root_guarded");
     let not_directory = match guard.accepted() {
         Some((absolute, selected)) => {
             !std::fs::symlink_metadata(absolute)?.is_dir()
@@ -166,7 +168,9 @@ pub(super) fn list_blocking(input: &WorkspaceListInput) -> std::io::Result<Works
         last_file_path: None,
         last_path: None,
     };
+    timing.mark("walk_started");
     walk.visit(root_path, 0)?;
+    timing.mark("walk_finished");
     walk.entries
         .sort_by(|left, right| utf16_cmp(&left.path, &right.path));
     let elapsed_ms = walk.elapsed();

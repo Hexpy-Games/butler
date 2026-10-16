@@ -1,3 +1,4 @@
+import { appLocaleFromLanguage, getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: security
 /** S4 through the real Electron App and durable public approval lane; stub only. */
 import { strict as assert } from "node:assert";
@@ -202,7 +203,7 @@ try {
   for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) for (const width of [1440, 1100]) {
     await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: locale, appearance_theme: theme }) });
     await app.main(`${app.win}.setContentSize(${width},900)`); await app.page.reload();
-    await app.click(locale === "ko" ? "일반" : "General");
+    await app.click(getAppCopy(appLocaleFromLanguage(locale)).space.general);
     await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="composer-authority-decision"]')));
     assert.equal(await app.main(`[...globalThis.browserAgentSubject.tabs.values()].some(t=>t.attached===${app.win})`), false, "no native page obscures the conversation approval");
     await app.shot(`${locale}-${theme}-${width}-agent-confirm-approval`);
@@ -215,7 +216,7 @@ try {
       await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: locale, appearance_theme: theme }) });
       await phone.goto(app.gateway.url);
       await phone.getByRole("button", { name: locale === "ko" ? "사이드바 보기" : "Show sidebar", exact: true }).click();
-      await phone.getByText(locale === "ko" ? "일반" : "General", { exact: true }).first().click();
+      await phone.getByRole("button", { name: getAppCopy(appLocaleFromLanguage(locale)).space.general, exact: true }).click();
       await phone.getByRole("button", { name: locale === "ko" ? "이번만 허용" : "Allow once", exact: true }).waitFor();
       assert.ok((await phone.locator('[data-test-class="composer-authority-decision"]').innerText()).includes("Continue?"));
       assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

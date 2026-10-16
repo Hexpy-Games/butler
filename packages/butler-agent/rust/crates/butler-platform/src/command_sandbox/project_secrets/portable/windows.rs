@@ -39,7 +39,7 @@ pub(super) fn entries(dir: &Directory) -> io::Result<Vec<(OsString, bool)>> {
     fs::read_dir(dir)?
         .map(|entry| {
             let entry = entry?;
-            let metadata = fs::symlink_metadata(entry.path())?;
+            let metadata = entry.metadata()?;
             Ok((entry.file_name(), metadata.is_dir() && !reparse(&metadata)))
         })
         .collect()

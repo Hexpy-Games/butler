@@ -8,6 +8,10 @@ use serde_json::{Value, json};
 #[ignore = "LIVE tier"]
 async fn live_11_proactive_answers() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        std::env::var("BUTLER_E2E_HEDGE_EVAL").as_deref() == Ok("1"),
+        "on-demand hedge eval requires BUTLER_E2E_HEDGE_EVAL=1"
+    );
     let Some((s, _)) = start("LIVE-11").await? else {
         return Ok(());
     };

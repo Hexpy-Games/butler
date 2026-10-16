@@ -242,6 +242,7 @@ pub(super) fn read_only_contained(
             .to_string_lossy()
             .into_owned(),
         arguments,
+        ..Default::default()
     })
 }
 
@@ -308,6 +309,7 @@ pub(super) fn project_write(
             .to_string_lossy()
             .into_owned(),
         arguments,
+        ..Default::default()
     })
 }
 
@@ -448,6 +450,10 @@ pub(super) fn project_mount_aliases(root: &Path) -> std::io::Result<Vec<PathBuf>
 
 pub(super) fn cleanup_generated(root: &Path, data: &Path) -> std::io::Result<()> {
     generated::cleanup(root, data, false)
+}
+
+pub(super) fn remember_probe(data: &Path) {
+    mountns::remember(data);
 }
 
 pub(super) fn mount_tier_available() -> bool {

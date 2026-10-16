@@ -7,7 +7,9 @@
 // Every screen is walked with the keyboard (Tab, and arrow keys inside menus
 // and lists). At each stop the focus indicator's rectangle must sit inside
 // every ancestor that clips its painting (overflow, clip-path, mask including
-// the scroll-edge fades) and the viewport. Light and dark, wallpaper and
+// the scroll-edge fades) and the viewport. Each screen's overflowing scrollers
+// are also scrolled so an edge fade is on, then the control at that edge takes
+// focus and is probed frame by frame (#1017). Light and dark, wallpaper and
 // plain, desktop and phone width.
 //
 // BUTLER_FOCUS_RING_SHOTS=<dir> saves a capture of each clipped stop.
@@ -19,7 +21,7 @@ import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import type { AnswerBlocks } from "../../packages/butler-app/client/shared/app-contracts";
 import type { MessageRecord } from "../../packages/butler-app/client/ui/src/app/types";
 import { launchSmokeBrowser } from "../support/smoke-browser";
-import { auditTabOrder, formatClips, probeFocusRing, type FocusRingClip } from "../support/focus-ring-clipping";
+import { auditTabOrder, formatClips, probeFocusRing, probeFocusRingFrames, type FocusRingClip } from "../support/focus-ring-clipping";
 
 const root = process.cwd();
 const copy = getAppCopy("ko-KR");
@@ -50,6 +52,7 @@ const browser = await launchSmokeBrowser();
 const errors: string[] = [];
 const failures: string[] = [];
 let checked = 0;
+let scrolledStops = 0;
 
 type Cell = { width: number; height: number; theme: "light" | "dark"; background: "plain" | "wallpaper" };
 let fixture: { messages: MessageRecord[]; background: string } = { messages: [answer], background: "plain" };
@@ -107,6 +110,7 @@ async function auditScope(page: Page, cell: Cell, screen: string, selector: stri
   const result = await auditTabOrder(page, { within: selector, maxStops });
   record(cell, screen, result);
   if (result.clipped.length) await capture(page, `${screen}-${cell.width}-${cell.theme}-${cell.background}`);
+  await auditScrolledFades(page, cell, screen, selector);
 }
 
 /** Arrow keys walk a menu or list whose items take focus (or aria-activedescendant). */
@@ -123,6 +127,61 @@ async function auditArrows(page: Page, cell: Cell, screen: string, steps: number
   }
   record(cell, screen, { stops, clipped });
   if (clipped.length) await capture(page, `${screen}-${cell.width}-${cell.theme}-${cell.background}`);
+}
+
+/**
+ * Scrolled scrollers: each scroll-fade scroller in `scope` that overflows and
+ * holds keyboard stops is scrolled to one end, so the other edge's fade is on,
+ * then the control at that faded edge takes keyboard focus (Tab in from before,
+ * Shift+Tab from after) and focus scrolls it back to its edge. Its ring is
+ * probed on every frame from focus on, while the fade catches up, and settled.
+ */
+async function auditScrolledFades(page: Page, cell: Cell, screen: string, scope: string) {
+  const count = await page.evaluate((scope) => {
+    const tabbable = 'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
+    const scrollers = [...document.querySelectorAll<HTMLElement>(`${scope} [data-scroll-fade]`)].filter((element) => {
+      const x = element.dataset.scrollFade === "x";
+      const overflow = x ? element.scrollWidth - element.clientWidth : element.scrollHeight - element.clientHeight;
+      return overflow > 1 && element.getClientRects().length > 0 && element.querySelector(tabbable);
+    });
+    scrollers.forEach((element, index) => element.setAttribute("data-focus-audit-scroller", String(index)));
+    return scrollers.length;
+  }, scope);
+  for (let index = 0; index < count; index += 1) {
+    for (const edge of ["start", "end"] as const) {
+      const scroller = `[data-focus-audit-scroller="${index}"]`;
+      // Scroll to the far end; the edge entered next then has its fade on.
+      await page.evaluate(({ scroller, edge }) => {
+        const element = document.querySelector<HTMLElement>(scroller)!;
+        const far = edge === "start" ? 1e6 : 0;
+        if (element.dataset.scrollFade === "x") element.scrollLeft = far;
+        else element.scrollTop = far;
+      }, { scroller, edge });
+      await page.waitForTimeout(120);
+      const faded = await page.evaluate(({ scroller, edge }) => Number.parseFloat(getComputedStyle(document.querySelector(scroller)!)
+        .getPropertyValue(`--scroll-fade-${edge}`)) > 0, { scroller, edge });
+      assert(faded, `${screen}: ${scroller} scrolled away from its ${edge} has no ${edge} fade`);
+      await page.evaluate(({ scroller, edge }) => {
+        const element = document.querySelector(scroller)!;
+        const anchor = document.createElement("span");
+        anchor.tabIndex = -1;
+        anchor.style.position = "absolute";
+        element.parentElement!.insertBefore(anchor, edge === "start" ? element : element.nextSibling);
+        anchor.focus();
+        anchor.addEventListener("blur", () => anchor.remove(), { once: true });
+      }, { scroller, edge });
+      const clipped = await probeFocusRingFrames(page, () => page.keyboard.press(edge === "start" ? "Tab" : "Shift+Tab"));
+      if (!await page.evaluate((scroller) => Boolean(document.activeElement?.closest(scroller)), scroller)) continue;
+      await page.waitForTimeout(100);
+      clipped.push(...(await probeFocusRing(page))?.clips ?? []);
+      scrolledStops += 1;
+      // The same cut on several frames is reported once.
+      const unique = [...new Map(clipped.map((clip) => [`${clip.target} ${clip.clippedBy} ${JSON.stringify(clip.cut)}`, clip])).values()];
+      record(cell, `${screen} scrolled to its ${edge === "start" ? "end" : "start"}`, { stops: 1, clipped: unique });
+      if (clipped.length) await capture(page, `${screen}-scrolled-${index}-${edge}-${cell.width}-${cell.theme}-${cell.background}`);
+    }
+  }
+  await page.evaluate(() => document.querySelectorAll("[data-focus-audit-scroller]").forEach((element) => element.removeAttribute("data-focus-audit-scroller")));
 }
 
 async function auditCell(page: Page, cell: Cell) {
@@ -203,7 +262,8 @@ try {
       }
     }
   }
-  console.log(JSON.stringify({ stops: checked, clippedScreens: failures.length, rendererErrors: errors.length }));
+  console.log(JSON.stringify({ stops: checked, scrolledStops, clippedScreens: failures.length, rendererErrors: errors.length }));
+  assert(scrolledStops > 0, "no scrolled scroller with keyboard stops was audited");
   assert.deepEqual(failures, [], `focus rings are clipped:\n${failures.join("\n")}`);
   assert.deepEqual(errors, [], "no uncaught renderer errors");
 } finally {

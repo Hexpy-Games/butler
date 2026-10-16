@@ -12,7 +12,7 @@ use super::GuidedTools;
 
 pub(crate) struct MonitoringReaders {
     data_root: PathBuf,
-    pub(super) app_database_path: PathBuf,
+    pub(in crate::host::guided) app_database_path: PathBuf,
     configuration: Arc<butler_models::models::ModelConfiguration>,
     catalog: Arc<butler_models::models::ModelCatalog>,
     memory_health: Arc<butler_memory::cognition::MemoryHealthService>,

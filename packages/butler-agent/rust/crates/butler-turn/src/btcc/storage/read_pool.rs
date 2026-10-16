@@ -345,7 +345,7 @@ pub(super) async fn open(
         })?
 }
 impl super::BtccStorage {
-    pub(super) async fn read<T, F>(&self, operation: F) -> StorageResult<T>
+    pub(in crate::btcc) async fn read<T, F>(&self, operation: F) -> StorageResult<T>
     where
         T: Send + 'static,
         F: FnOnce(&Connection) -> StorageResult<T> + Send + 'static,
