@@ -2,7 +2,8 @@
 """Verified rolling OCI Cargo snapshots from existing main/release build jobs.
 
 Immutable generation tags commit all chunks atomically. The compatibility tag
-selects the latest generation; two generations per key survive package pruning.
+selects the latest generation; four generations per key survive package pruning,
+so a restore can fall back past producers that are still running or failed.
 """
 import importlib.util
 import json
@@ -27,7 +28,11 @@ spec = importlib.util.spec_from_file_location('cargo_cache', SCRIPTS / 'cargo-ar
 cache = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cache)
 CHUNK_BYTES = 1800 * 1024**2
-KEEP = 2
+KEEP = 4
+# Older generations a restore checks after the tagged one: one manifest lookup each.
+WALK_BACK = KEEP - 1
+# Registry or GitHub API transport failures (HTTPError, URLError, timeouts, oras exits); never trust errors.
+TRANSIENT = (OSError, RuntimeError, subprocess.TimeoutExpired)
 
 
 class UnsuccessfulProducer(ValueError):
@@ -103,13 +108,22 @@ def download(entry, destination):
     ci_oci.fetch(entry, destination)
 
 
-def fetch_snapshot(published, manifest, directory, expected, compatible=False):
+def checked_generation(manifest, directory, expected, compatible):
+    """Read a generation manifest; prefer an exact identity when `compatible` is None."""
     download(manifest, directory / 'generation.json')
     generation = json.loads((directory / 'generation.json').read_text())
     metadata = generation['metadata']
+    if compatible is None:
+        compatible = not cache.matches(metadata['identity'], expected)
     if not cache.matches(metadata['identity'], expected, compatible):
         raise ValueError('Cargo snapshot identity mismatch')
+    if manifest['name'] != f'{int(metadata["run_id"])}-{int(metadata.get("run_attempt", 1))}.json':
+        raise ValueError('Cargo snapshot generation tag does not match its producer run')
     trusted(metadata)
+    return generation, compatible
+
+
+def fetch_chunks(published, manifest, generation, directory):
     if not generation['chunks'] or len(set(generation['chunks'])) != len(generation['chunks']):
         raise ValueError('Cargo snapshot chunks are incomplete or duplicated')
     assets = {entry['name']: entry for entry in published['assets']}
@@ -123,38 +137,108 @@ def fetch_snapshot(published, manifest, directory, expected, compatible=False):
             (directory / 'chunk').unlink()
     source_name = manifest['name'][:-5] + '-sources.json'
     download(assets[source_name], directory / 'sources.json')
-    (directory / 'cache.json').write_text(json.dumps(metadata))
+    (directory / 'cache.json').write_text(json.dumps(generation['metadata']))
+
+
+def fetch_snapshot(published, manifest, directory, expected, compatible=False):
+    generation, _ = checked_generation(manifest, directory, expected, compatible)
+    fetch_chunks(published, manifest, generation, directory)
     cache.verify(directory, expected, compatible)
 
 
-def restore(expected):
-    local = persistent_target(expected)
-    if local and restore_local(local, expected):
-        return True
+def older_generations(expected, tried):
+    """Generation suffixes under this compatibility key, newest first, minus the tried one."""
+    prefix = compatible_tag(expected) + '--'
+    suffixes = {tag.removeprefix(prefix) for tag in ci_oci.tags(f'{ci_oci.REGISTRY}/cargo-target')
+                if tag.startswith(prefix) and re.fullmatch(r'\d+-\d+', tag.removeprefix(prefix))}
+    suffixes.discard(tried['name'][:-5])
+    return sorted(suffixes, key=lambda value: tuple(map(int, value.split('-'))), reverse=True)
+
+
+def walk_back(expected, tried, directory):
+    """Newest finished green generation, exact identity first; None when there is none."""
+    prefix = compatible_tag(expected) + '--'
+    older = older_generations(expected, tried)
+    if len(older) > WALK_BACK:
+        print(f'Checking the newest {WALK_BACK} of {len(older)} older Cargo snapshots.')
+    fallback = None
+    for suffix in older[:WALK_BACK]:
+        try:
+            published = release(prefix + suffix)
+            manifest = next((entry for entry in published['assets'] if entry['name'] == suffix + '.json'),
+                            None) if published else None
+            if manifest is None:
+                print(f'Cargo snapshot {suffix} was pruned; skipping it.')
+                continue
+            generation, compatible = checked_generation(manifest, directory, expected, None)
+        except UnsuccessfulProducer as error:
+            print(f'Cargo snapshot {suffix} skipped: {error}.')
+            continue
+        except TRANSIENT as error:
+            if not fallback:
+                raise
+            print(f'Cargo snapshot {suffix} could not be checked ({error}); keeping the compatible fallback.')
+            return fallback
+        if not compatible:
+            return published, manifest, generation, compatible
+        fallback = fallback or (published, manifest, generation, compatible)
+    return fallback
+
+
+def tagged_release(expected):
+    """The tag a restore tries first: exact, then the legacy profile key, then compatible."""
     published = release(tag_name(expected))
-    selected_identity = expected
-    compatible = False
-    if not published and 'profile_config' in expected:
+    if published:
+        return published, expected, False
+    if 'profile_config' in expected:
         # Existing snapshots already pin the exact manifest digest, which
         # proves these same profile settings. Keep that safe warm upgrade path.
         legacy = dict(expected, runtime=os.environ.get('ORT_LIB_PATH', ''))
         legacy.pop('profile_config')
         published = release(tag_name(legacy))
         if published:
-            selected_identity = legacy
-    if not published:
-        published = release(compatible_tag(expected))
-        compatible = True
+            return published, legacy, False
+    return release(compatible_tag(expected)), expected, True
+
+
+def describe(generation, compatible):
+    metadata = generation['metadata']
+    match = 'compatible' if compatible else 'exact'
+    return f'run {int(metadata["run_id"])} attempt {int(metadata.get("run_attempt", 1))}, {match} identity'
+
+
+def restore(expected):
+    local = persistent_target(expected)
+    if local and restore_local(local, expected):
+        return True
+    published, selected_identity, compatible = tagged_release(expected)
     candidates = generations(published['assets']) if published else []
     if not candidates:
         print('No persistent CI snapshot for this lane; cold Cargo build follows.')
         return False
     with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
         directory = Path(temporary)
+        manifest, walked_back = candidates[0], False
         try:
-            fetch_snapshot(published, candidates[0], directory, selected_identity, compatible)
-        except UnsuccessfulProducer:
-            print('Cargo snapshot producer is not successful yet; cold Cargo build follows.')
+            generation, _ = checked_generation(manifest, directory, selected_identity, compatible)
+            reason = 'tagged generation; producer lane finished green'
+        except UnsuccessfulProducer as error:
+            print(f'Newest Cargo snapshot {manifest["name"][:-5]} skipped: {error}.')
+            found = walk_back(expected, manifest, directory)
+            if not found:
+                print('No finished green Cargo snapshot for this lane; cold Cargo build follows.')
+                return False
+            published, manifest, generation, compatible = found
+            selected_identity, walked_back = expected, True
+            reason = 'newest older generation whose producer lane finished green'
+        print(f'Selected Cargo snapshot {manifest["name"][:-5]} ({describe(generation, compatible)}): {reason}.')
+        try:
+            fetch_chunks(published, manifest, generation, directory)
+        except RuntimeError as error:
+            if not walked_back:
+                raise
+            # Older generations can be pruned mid-download; the target is still untouched.
+            print(f'Cargo snapshot {manifest["name"][:-5]} download failed ({error}); cold Cargo build follows.')
             return False
         restore_tree(directory, selected_identity, compatible)
     return True
