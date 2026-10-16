@@ -7,6 +7,7 @@ use butler_e2e::e2e::{HarnessError, fixtures, nonce};
 use butler_platform::process_control::usage;
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 const WARM: &str = "What is my bike lock code? Call recall_memory with cue bike lock code.";
 const COLD_AGAIN: &str =
@@ -194,21 +195,31 @@ async fn mem_05_vector_batch_finds_chat_a_fact_by_paraphrase_in_chat_b() -> Resu
         drained.elapsed().as_millis()
     );
     // A new user turn preloads the existing vector generation before recall.
+    // Read only new log bytes, so the first load cannot satisfy the reload wait.
+    let mut worker_log = tokio::fs::File::open(s.agent.launch.logs.join("agent-1.log")).await?;
+    worker_log.seek(std::io::SeekFrom::End(0)).await?;
     let reload = Instant::now();
     let (_, turn) = s
         .turn("general", "I will read a book this evening.")
         .await?;
     assert_eq!(turn_state(&turn), "delivered");
-    // Prewarming can drain vectors before the text-only waiter observes them.
-    // Await the durable completed state, including semantic and hot-cache work.
-    memory_stubs::vectors_complete(&s.sandbox.data, 6).await?;
-    if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
-        assert_eq!(
-            workers.len(),
-            1,
-            "turn-start prefetch must reload the worker"
-        );
-    }
+    // Turn delivery and text projection can precede worker initialization.
+    // Observe the new ready event before any recall can trigger a load itself.
+    // Share the existing vector-completion deadline with the readiness wait.
+    tokio::time::timeout(Duration::from_secs(90), async {
+        let mut appended = String::new();
+        loop {
+            worker_log.read_to_string(&mut appended).await?;
+            if appended.contains("[embedding-worker] ready") {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        // Prewarming can finish before the text-only waiter sees pending units.
+        memory_stubs::vectors_complete(&s.sandbox.data, 6).await
+    })
+    .await
+    .expect("turn-start prefetch must reload the worker and complete vectors")?;
     assert_eq!(memory_stubs::unit_states(&s.sandbox.data)?.0, 0);
     eprintln!(
         "EMBED-RELOAD complete_turns=6 elapsed_ms={}",

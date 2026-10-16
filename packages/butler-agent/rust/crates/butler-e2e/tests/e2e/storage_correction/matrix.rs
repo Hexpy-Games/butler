@@ -6,17 +6,22 @@ use butler_platform::secure_fs;
 use rusqlite::Connection;
 use std::time::Duration;
 mod failures;
+mod trace;
+use trace::phase;
 
 #[tokio::test]
 async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let mut s = fault_setup("CORR-STORAGE")?
-        .env("BUTLER_E2E_STARTUP_TRACE", "1")
-        .start()
-        .await?;
+    let mut s = phase("setup/copy/initial startup", async {
+        fault_setup("CORR-STORAGE")?
+            .env("BUTLER_E2E_STARTUP_TRACE", "1")
+            .start()
+            .await
+    })
+    .await?;
     s.agent.terminate().await?;
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
-    let (snapshot, active) = offline(&path, |path| {
+    let seeded = offline(&path, |path| {
         let db = Connection::open(path)?;
         db.execute_batch("INSERT INTO btcc_inbound_inbox(inbox_id,session_id,trigger_key,turn_id,admission_input_hash,command_json,status) VALUES('corr-active','general','corr-active','corr-active','fixture','{}','constructed');
         INSERT INTO btcc_turns(turn_id,session_id,inbox_id,trigger_key,original_message_id,original_message,admission_snapshot_ref,model_selection_json,context_json,semantic_state,revision,execution_fence) VALUES('corr-active','general','corr-active','corr-active','corr-active','Synthetic admitted','fixture','{}','{}','admitted',1,1);")?;
@@ -27,7 +32,8 @@ async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError>
         db.execute("INSERT INTO btcc_model_round_acceptances(acceptance_id,turn_id,round_id,route_digest,candidate_index,checkpoint_id,checkpoint_revision,model_ref,transport_attempt,normalized_response_json,created_at) SELECT 'active-'||rowid,'corr-active','active-'||rowid,route_digest,candidate_index,checkpoint_id,checkpoint_revision,model_ref,transport_attempt,normalized_response_json,created_at FROM btcc_model_round_acceptances LIMIT 3", [])?;
         drop(db);
         Ok((seed::snapshot(path)?, seed::admitted(path, "corr-active")?))
-    }).await?;
+    });
+    let (snapshot, active) = phase("seed/snapshot", seeded).await?;
     let baseline = s.sandbox.root.join("legacy.sqlite");
     std::fs::copy(&path, &baseline)?;
     let (watcher, missing, sidecar_events) = watch(&path)?;
@@ -38,13 +44,25 @@ async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError>
         "after_link",
         "after_rename",
     ] {
-        super::restore(&path, &baseline)?;
+        phase(&format!("{point}: restore"), async {
+            super::restore(&path, &baseline)
+        })
+        .await?;
         s.agent.launch.set_env("BUTLER_E2E_ABORT_POINT", point);
         assert!(
-            s.agent.start_again().await.is_err(),
+            phase(&format!("{point}: abort startup"), s.agent.start_again())
+                .await
+                .is_err(),
             "did not abort at {point}"
         );
-        s.agent.reap();
+        phase(&format!("{point}: reap"), async {
+            assert!(
+                s.agent.reap().is_some_and(|status| !status.success()),
+                "fault child must exit unsuccessfully"
+            );
+            Ok(())
+        })
+        .await?;
         assert!(path.exists());
         if point == "reclaim_chunk" {
             assert_reclaim_rolled_back(&path)?;
@@ -53,8 +71,12 @@ async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError>
             assert_eq!(offline(&path, seed::snapshot).await?, snapshot);
         }
         s.agent.launch.remove_env("BUTLER_E2E_ABORT_POINT");
-        s.gw = s.agent.start_again().await?;
-        verify(&path, &active, &snapshot).await?;
+        s.gw = phase(&format!("{point}: recovery startup"), s.agent.start_again()).await?;
+        phase(
+            &format!("{point}: verify"),
+            verify(&path, &active, &snapshot),
+        )
+        .await?;
         s.agent.terminate().await?;
     }
     failures::exercise(&mut s, &path, &baseline, &active, &snapshot).await?;
@@ -64,14 +86,14 @@ async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError>
     s.agent
         .launch
         .set_env("BUTLER_E2E_DISK_AVAILABLE_BYTES", "1");
-    s.gw = s.agent.start_again().await?;
+    s.gw = phase("queue/space startup", s.agent.start_again()).await?;
     assert_eq!(secure_fs::identity(&std::fs::metadata(&path)?).id, original);
     assert_eq!(state(&path)?, "pending_space");
     assert_eq!(seed::admitted(&path, "corr-active")?, active);
     s.agent.terminate().await?;
     s.agent.launch.remove_env("BUTLER_E2E_DISK_AVAILABLE_BYTES");
-    s.gw = s.agent.start_again().await?;
-    verify(&path, &active, &snapshot).await?;
+    s.gw = phase("queue/space startup", s.agent.start_again()).await?;
+    phase("queue/space verify", verify(&path, &active, &snapshot)).await?;
     assert!(sidecar_events.load(std::sync::atomic::Ordering::SeqCst));
     for session in 0..120 {
         let view =
@@ -88,7 +110,7 @@ async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError>
         [],
     )?;
     s.agent.terminate().await?;
-    s.gw = s.agent.start_again().await?;
+    s.gw = phase("queue/space startup", s.agent.start_again()).await?;
     assert_eq!(seed::admitted(&path, "corr-active")?, active);
     // Settlement queues the three rows in the same transition transaction.
     Connection::open(&path)?.execute(
@@ -96,7 +118,7 @@ async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError>
         [],
     )?;
     s.agent.terminate().await?;
-    s.gw = s.agent.start_again().await?;
+    s.gw = phase("queue/space startup", s.agent.start_again()).await?;
     assert_eq!(seed::admitted(&path, "corr-active")?, ["{}", "{}", "{}"]);
     assert!(
         !path
@@ -107,13 +129,21 @@ async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError>
     );
     assert!(!sidecar_events.load(std::sync::atomic::Ordering::SeqCst));
     s.agent.terminate().await?;
-    s.gw = s.agent.start_again().await?;
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    s.gw = phase("queue/space startup", s.agent.start_again()).await?;
+    phase("idle settle", async {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        Ok(())
+    })
+    .await?;
     let pinned =
         super::super::data_perf::wal::Wal::pin(&s.sandbox.data, "agent-runtime/btcc.sqlite")?;
     let before = pinned.sample()?;
     let files = offline(path.parent().unwrap(), fingerprint).await?;
-    tokio::time::sleep(Duration::from_secs(30)).await;
+    phase("idle observation", async {
+        tokio::time::sleep(Duration::from_secs(30)).await;
+        Ok(())
+    })
+    .await?;
     assert_eq!(pinned.delta(before)?, (0, 0));
     assert_eq!(offline(path.parent().unwrap(), fingerprint).await?, files);
     drop(pinned);
