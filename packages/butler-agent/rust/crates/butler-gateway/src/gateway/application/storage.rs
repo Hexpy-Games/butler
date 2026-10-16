@@ -10,6 +10,7 @@ mod operation;
 mod read_pool;
 mod schema;
 mod tuning;
+mod writer;
 
 use butler_platform::sqlite;
 pub(super) use cached::CachedSql;
@@ -72,16 +73,18 @@ impl AppStorage {
         let read_path = path.clone();
         let metrics = Arc::new(metrics::Metrics::default());
         let lane_metrics = metrics.clone();
+        let runtime = tokio::runtime::Handle::current();
         let thread = std::thread::Builder::new()
-            .name("butler-app-sqlite".to_owned())
+            .name("app-sqlite-owner".to_owned())
             .spawn(move || {
-                run_connection_lane(
+                writer::run(
                     &path,
                     butler_data.as_ref(),
                     &initialized_at,
                     receiver,
                     initialized_tx,
                     &lane_metrics,
+                    &runtime,
                 )
             })
             .map_err(|error| {
@@ -300,62 +303,6 @@ impl Drop for StorageInner {
             lane.thread.take();
         }
     }
-}
-
-fn run_connection_lane(
-    path: &std::path::Path,
-    butler_data: Option<&PathBuf>,
-    initialized_at: &str,
-    receiver: mpsc::Receiver<DatabaseOperation>,
-    initialized: oneshot::Sender<StorageResult<()>>,
-    metrics: &Arc<metrics::Metrics>,
-) -> StorageResult<()> {
-    let setup: StorageResult<(sqlite::Connection, Option<sqlite::CheckpointOwner>)> = (|| {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|error| {
-                AppStorageError::new(
-                    AppStorageCode::AppSqliteParentCreateFailed,
-                    error.to_string(),
-                )
-                .with_source(error)
-            })?;
-        }
-        let mut connection = sqlite::open(path).map_err(AppStorageError::sqlite)?;
-        tuning::configure(&connection)?;
-        schema::migrate(&mut connection, butler_data.map(PathBuf::as_path))?;
-        schema::seed(&connection, initialized_at)?;
-        schema::migrate_legacy_schedules(&mut connection, butler_data.map(PathBuf::as_path))?;
-        tuning::analyze_at_open(&connection)?;
-        super::monitoring::materialized::refresh(&connection)?;
-        // Recovery and startup seeding precede normal runtime checkpoints.
-        connection
-            .pragma_update(None, "wal_autocheckpoint", 1000)
-            .map_err(AppStorageError::sqlite)?;
-        event_outbox::install(&connection, metrics.clone());
-        metrics::configure(metrics, &connection)?;
-        let checkpoint = checkpoint::start(&connection)?;
-        Ok((connection, checkpoint))
-    })();
-    let (mut connection, checkpoint) = match setup {
-        Ok(connection) => connection,
-        Err(error) => {
-            let _closed_opener = initialized.send(Err(error.clone()));
-            return Err(error);
-        }
-    };
-    sqlite::sync_wal_index(&connection).map_err(|error| {
-        AppStorageError::new(AppStorageCode::AppSqliteWalSyncFailed, error.to_string())
-            .with_source(error)
-    })?;
-    if initialized.send(Ok(())).is_err() {
-        let drained = checkpoint::close(checkpoint);
-        return drained.and(close_connection(connection));
-    }
-    let result = lane::run(&mut connection, receiver);
-    let drained = checkpoint::close(checkpoint);
-    let saved = metrics.save(path);
-    let closed = close_connection(connection);
-    result.and(drained).and(saved).and(closed)
 }
 
 fn close_connection(connection: sqlite::Connection) -> StorageResult<()> {

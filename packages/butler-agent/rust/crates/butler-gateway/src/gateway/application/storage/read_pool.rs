@@ -190,10 +190,50 @@ impl ReadPool {
         work: &WorkQueue,
         mut connection: Option<butler_platform::sqlite::Connection>,
     ) {
+        let mut first = None;
+        loop {
+            if connection.is_some() || first.is_some() {
+                // Dropping only the connection leaves its freed pages in this
+                // thread's allocator arena. Retire the execution thread too.
+                let result = std::thread::scope(|scope| {
+                    std::thread::Builder::new()
+                        .name("app-sqlite-read".into())
+                        .spawn_scoped(scope, || {
+                            Self::run_session(path, work, connection.take(), first.take());
+                        })
+                        .map_err(|error| error.to_string())?
+                        .join()
+                        .map_err(|_| "SQLite reader thread panicked".to_owned())
+                });
+                if let Err(error) = result {
+                    if connection.take().is_some() {
+                        work.reader_closed();
+                    }
+                    if let Some(Job { completed, .. }) = first.take() {
+                        let _completed = completed.send(Err(AppStorageError::new(
+                            super::AppStorageCode::AppSqliteJoinFailed,
+                            error,
+                        )));
+                    }
+                }
+            }
+            match work.next(None) {
+                Work::Read(job) => first = Some(job),
+                Work::Stop => return,
+                Work::Retire => {}
+            }
+        }
+    }
+    fn run_session(
+        path: &Path,
+        work: &WorkQueue,
+        mut connection: Option<butler_platform::sqlite::Connection>,
+        mut first: Option<Job>,
+    ) {
         let mut last_used = Instant::now();
         loop {
             let deadline = connection.as_ref().map(|_| last_used + SPARE_RETENTION);
-            match work.next(deadline) {
+            match first.take().map_or_else(|| work.next(deadline), Work::Read) {
                 Work::Stop => {
                     if connection.take().is_some() {
                         work.reader_closed();
@@ -201,8 +241,9 @@ impl ReadPool {
                     return;
                 }
                 Work::Retire => {
-                    connection = None;
+                    drop(connection);
                     work.reader_closed();
+                    return;
                 }
                 Work::Read(Job {
                     operation,

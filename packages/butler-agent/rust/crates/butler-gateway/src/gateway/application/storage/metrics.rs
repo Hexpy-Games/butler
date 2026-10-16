@@ -17,6 +17,7 @@ pub(in crate::gateway::application) struct Metrics {
     write_phases: Mutex<std::collections::BTreeMap<&'static str, Vec<u64>>>,
     busy: AtomicU64,
     page_size: AtomicU64,
+    wal_frames: Mutex<(u64, u64)>,
 }
 pub(in crate::gateway::application) struct ViewMeasurement {
     metrics: std::sync::Arc<Metrics>,
@@ -80,12 +81,15 @@ impl Metrics {
     pub(super) fn busy(&self) {
         self.busy.fetch_add(1, Ordering::Relaxed);
     }
+    pub(super) fn retire_writer(&self) {
+        *self.wal_frames.lock() = WAL_FRAMES.with(std::cell::Cell::get);
+    }
     pub(super) fn save(&self, database: &Path) -> StorageResult<()> {
         if !enabled() {
             return Ok(());
         }
         // WAL bytes written: header plus every appended frame (page + 24-byte header).
-        let frames = WAL_FRAMES.with(|cell| cell.get().1);
+        let frames = self.wal_frames.lock().1;
         let bytes = 32 + frames * (self.page_size.load(Ordering::Relaxed) + 24);
         let operations = self.operations.lock();
         let bounds = [
@@ -132,6 +136,7 @@ pub(super) fn enabled() -> bool {
 /// Records the writer's page size; the WAL keeps its ordinary checkpoints.
 pub(super) fn configure(metrics: &Metrics, db: &Connection) -> StorageResult<()> {
     if enabled() {
+        WAL_FRAMES.with(|cell| cell.set(*metrics.wal_frames.lock()));
         let page_size: u64 = db
             .query_row("PRAGMA page_size", [], |row| row.get(0))
             .map_err(AppStorageError::sqlite)?;

@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 
 const BATCH_WINDOW: Duration = Duration::from_millis(2);
 const BATCH_OPS: usize = 32;
+const IDLE_RETENTION: Duration = Duration::from_secs(10);
 
 type Run = Box<dyn FnOnce(&mut Connection, StorageResult<()>) -> Completion + Send>;
 pub(super) struct Operation {
@@ -19,11 +20,22 @@ pub(super) struct Operation {
 
 pub(super) fn run(
     db: &mut Connection,
-    mut receiver: mpsc::Receiver<Operation>,
+    receiver: &mut mpsc::Receiver<Operation>,
+    runtime: &tokio::runtime::Handle,
+    mut first: Option<Operation>,
 ) -> StorageResult<()> {
     let mut opened = None;
-    while let Some(first) = receiver.blocking_recv() {
-        batch(db, first, &mut receiver, &mut opened)?;
+    loop {
+        let operation = first.take().or_else(|| {
+            runtime.block_on(async {
+                tokio::time::timeout(IDLE_RETENTION, receiver.recv())
+                    .await
+                    .ok()
+                    .flatten()
+            })
+        });
+        let Some(operation) = operation else { break };
+        batch(db, operation, receiver, &mut opened)?;
     }
     commit(db, &mut opened)
 }
