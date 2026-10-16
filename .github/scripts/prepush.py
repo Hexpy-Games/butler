@@ -20,7 +20,8 @@ WINDOWS = 'x86_64-pc-windows-msvc'
 def output(*args):
     if args[0] == 'git':
         args = ('git', '--work-tree=' + str(ROOT), *args[1:])
-    return subprocess.check_output(args, cwd=ROOT, text=True).rstrip('\n')
+    cwd = RUST if args[0] in ('rustc', 'rustup') else ROOT
+    return subprocess.check_output(args, cwd=cwd, text=True).rstrip('\n')
 
 
 def changed_paths(base=None, tip=None):

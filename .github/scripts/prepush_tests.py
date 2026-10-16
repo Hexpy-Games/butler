@@ -52,6 +52,15 @@ class PrepushChecks(unittest.TestCase):
         self.assertIn('isolated.py python3 .github/scripts/prepush.py', entry)
 
     # test-category: pure-logic
+    def test_rust_toolchain_discovery_uses_pinned_workspace(self):
+        with patch.object(prepush.subprocess, 'check_output', return_value='installed\n') as call:
+            for command in [('rustc', '-vV'), ('rustup', 'target', 'list', '--installed')]:
+                self.assertEqual(prepush.output(*command), 'installed')
+                self.assertEqual(call.call_args.kwargs['cwd'], prepush.RUST)
+            prepush.output('git', 'rev-parse', 'HEAD')
+            self.assertEqual(call.call_args.kwargs['cwd'], prepush.ROOT)
+
+    # test-category: pure-logic
     def test_path_selection_and_deleted_inputs(self):
         docs = prepush.selection(['AGENTS.md'])
         self.assertTrue(docs['docs'])
