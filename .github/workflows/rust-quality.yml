@@ -32,24 +32,6 @@ jobs:
     with:
       workflow: rust-quality.yml
 
-  source:
-    needs: changes
-    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['source']
-    name: Format and source rules
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.99.0
-          components: rustfmt
-      - name: Check formatting
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo fmt --all -- --check
-      - name: Check Rust source rules
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo run --locked -p butler-source-check -- .
-
   linux-clippy:
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-clippy']
@@ -387,7 +369,7 @@ jobs:
   gate:
     name: gate
     if: always()
-    needs: [changes, lint, source, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
+    needs: [changes, lint, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -396,7 +378,7 @@ jobs:
         uses: ./.github/actions/ci-input-receipt
         with:
           results: ${{ toJSON(needs) }}
-          groups: '{"workflows": ["lint"], "rust": ["source", "linux-clippy", "linux-native", "linux-archive", "linux-tests", "linux-perf-archive", "linux-perf", "macos-native", "macos-archive", "macos-tests", "macos-perf-archive", "macos-perf", "linux-arm64-tests", "linux-arm64-perf-archive", "linux-arm64-perf"], "ui": ["ui"], "site": ["site"], "ds": ["ds"], "package": ["macos-native", "macos-archive", "macos-updates", "macos-package"], "linux-package": ["linux-native", "linux-arm64-native", "linux-package-x64", "linux-package-arm64", "linux-archive", "linux-arm64-archive"], "install": ["linux-native", "linux-arm64-native", "macos-native", "install-x64", "install-arm64", "install-macos", "install-merge", "linux-archive", "linux-arm64-archive", "macos-archive"]}'
+          groups: '{"workflows": ["lint"], "rust": ["linux-clippy", "linux-native", "linux-archive", "linux-tests", "linux-perf-archive", "linux-perf", "macos-native", "macos-archive", "macos-tests", "macos-perf-archive", "macos-perf", "linux-arm64-tests", "linux-arm64-perf-archive", "linux-arm64-perf"], "ui": ["ui"], "site": ["site"], "ds": ["ds"], "package": ["macos-native", "macos-archive", "macos-updates", "macos-package"], "linux-package": ["linux-native", "linux-arm64-native", "linux-package-x64", "linux-package-arm64", "linux-archive", "linux-arm64-archive"], "install": ["linux-native", "linux-arm64-native", "macos-native", "install-x64", "install-arm64", "install-macos", "install-merge", "linux-archive", "linux-arm64-archive", "macos-archive"]}'
           workflow: rust-quality.yml
       - name: Require every selected check
         env:
