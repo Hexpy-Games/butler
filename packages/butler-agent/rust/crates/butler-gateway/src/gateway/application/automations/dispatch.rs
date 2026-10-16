@@ -25,7 +25,7 @@ impl AppApplication {
     pub(crate) async fn dispatch_due_request(
         &self,
     ) -> Result<AutomationRunListView, GatewayApplicationError> {
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "e2e-fixtures")]
         self.inject_dispatch_fault().await?;
         self.dispatch_due_owned().await
     }

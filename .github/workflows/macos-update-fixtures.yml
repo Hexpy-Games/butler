@@ -28,7 +28,7 @@ jobs:
           set -euo pipefail
           for version in 0.1.0-preview.90 0.1.0-preview.91; do
             export GITHUB_REF_NAME="v$version"
-            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort,e2e-fixtures
             out="$RUNNER_TEMP/update-agent-builds/$version"
             mkdir -p "$out"
             cp target/release/butler-agent "$out/butler-agent"

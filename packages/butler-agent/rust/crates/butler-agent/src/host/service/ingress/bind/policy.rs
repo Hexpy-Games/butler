@@ -322,12 +322,5 @@ fn required_action_tools(mode: &AccessMode, facts: &ActionToolFacts<'_>) -> Vec<
     {
         tools.push(ToolName::ForgetExplicitMemory.as_str());
     }
-    #[cfg(debug_assertions)]
-    if matches!(mode, AccessMode::FullAccess)
-        && std::env::var_os("BUTLER_E2E_ENABLE_SCHEDULE_CREATE_TOOL").is_some()
-    {
-        // Keep the schedule creation tool available only to this E2E fixture.
-        tools.push(ToolName::CreateAutomation.as_str());
-    }
     tools
 }

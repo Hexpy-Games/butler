@@ -18,7 +18,7 @@ async fn btcc_startup_scale_ready() -> Result<(), HarnessError> {
         .unwrap_or(DEFAULT_ROWS);
     assert!(rows >= DEFAULT_ROWS);
     let label = std::env::var("BUTLER_BTCC_STARTUP_LABEL").unwrap_or_else(|_| "after".into());
-    let setup = Setup::new("BTCC-STARTUP-SCALE")?.env("BUTLER_E2E_STARTUP_TRACE", "1");
+    let setup = Setup::new("BTCC-STARTUP-SCALE")?.env("BUTLER_STARTUP_TRACE", "1");
     let current = setup.sandbox.root.join("current-agent");
     butler_e2e::e2e::executable::copy(&setup.sandbox.binary, &current)?;
     let baseline_db = std::env::var("BUTLER_BTCC_BASELINE_DB").ok();

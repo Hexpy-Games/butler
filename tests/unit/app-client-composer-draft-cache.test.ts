@@ -1,4 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
+// test-category: pure-logic
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
   composerDraftSnapshot,
   newestComposerDraft,
@@ -11,17 +12,20 @@ import {
 import { APP_CACHE_BUDGET } from
   "../../packages/butler-app/client/ui/src/app/cacheBudget.ts";
 
-const previousLocalStorage = globalThis.localStorage;
-const previousWindow = globalThis.window;
+// Restore descriptors, not just values: defining an absent global defaults to
+// writable:false, which otherwise leaks into later files in Bun's shared VM.
+const browserGlobals = ["localStorage", "window"] as const;
+let savedGlobals: (PropertyDescriptor | undefined)[];
+
+beforeEach(() => {
+  savedGlobals = browserGlobals.map(name => Object.getOwnPropertyDescriptor(globalThis, name));
+});
 
 afterEach(() => {
-  Object.defineProperty(globalThis, "localStorage", {
-    configurable: true,
-    value: previousLocalStorage,
-  });
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: previousWindow,
+  browserGlobals.forEach((name, index) => {
+    const descriptor = savedGlobals[index];
+    if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+    else Reflect.deleteProperty(globalThis, name);
   });
 });
 

@@ -7,6 +7,8 @@ license.workspace = true
 publish.workspace = true
 
 [features]
+# E2E fault, clock and instrumentation hooks; never enabled in shipped binaries.
+e2e-fixtures = []
 default = ["prebuilt-ort"]
 prebuilt-ort = ["butler-memory/prebuilt-ort"]
 static-ort = ["butler-memory/static-ort"]
@@ -53,6 +55,8 @@ zip.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+# The file-store interruption cases arm the platform's fixture fault points.
+butler-platform = { path = "../butler-platform", features = ["e2e-fixtures"] }
 butler-models = { path = "../butler-models", features = ["test-support"] }
 butler-test-support = { path = "../butler-test-support" }
 tokio = { workspace = true, features = ["test-util"] }

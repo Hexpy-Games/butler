@@ -30,6 +30,22 @@ def assert_active_gates(states):
 
 
 class IntegrationProof(unittest.TestCase):
+    # test-category: security
+    def test_dispatch_gate_proves_release_without_using_pr_context(self):
+        for event, expected in [('push', 'gate'), ('workflow_dispatch', 'dispatch gate')]:
+            run = dict(event=event)
+            for name in ['gate', 'dispatch gate']:
+                for result in ['success', 'failure', 'cancelled', 'skipped']:
+                    jobs = [dict(name=name, conclusion=result)]
+                    self.assertEqual(proof.gate_passed('rust-quality.yml', run, jobs),
+                                     name == expected and result == 'success')
+                    self.assertEqual(proof.gate_passed('rust-quality.yml', run, jobs, 'failure'),
+                                     name == expected and result == 'failure')
+        for workflow, name in proof.GATES.items():
+            if workflow != 'rust-quality.yml':
+                self.assertTrue(proof.gate_passed(workflow, dict(event='workflow_dispatch'),
+                                                 [dict(name=name, conclusion='success')]))
+
     # test-category: pure-logic
     def test_gate_workflows_are_active(self):
         fixture = json.loads((ROOT / 'fixtures' / 'integration-workflow-states.json').read_text())
@@ -43,6 +59,20 @@ class IntegrationProof(unittest.TestCase):
         with patch.dict(proof.GATES, {'windows.yml': 'windows gate'}):
             with self.assertRaisesRegex(ValueError, 'windows.yml'):
                 assert_active_gates(fixture)
+
+    # test-category: format-pin
+    def test_consolidated_gate_owns_release_checks(self):
+        self.assertEqual(proof.GATES['rust-quality.yml'], 'gate')
+        self.assertTrue({'post-merge-ci.yml', 'licenses.yml', 'macos-signing.yml'}.isdisjoint(proof.GATES))
+        groups = proof.changes.job_groups('rust-quality.yml', integration=True)
+        self.assertIn('rust', groups['windows-check'])
+        self.assertIn('package', groups['shellcheck'])
+        self.assertIn('package', groups['selftest'])
+        self.assertIn('licenses', groups['lint'])
+        source = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
+        gate = source.split('  gate:\n', 1)[1].split('  legacy-gates:\n', 1)[0]
+        for job in ('windows-check', 'shellcheck', 'selftest', 'lint'):
+            self.assertIn(job, gate.split('    runs-on:', 1)[0])
 
     # test-category: security
     def test_green_receipt_reused_missing_and_failed_cases(self):
@@ -170,6 +200,11 @@ class IntegrationProof(unittest.TestCase):
             self.assertTrue(branch.valid(name), name)
         for name in ['codex/git-flow', 'claude/fix', 'batch/preview-11', 'main', 'foo/bar', 'ci/a/b', 'release/latest', 'dependabot/npm/foo']:
             self.assertFalse(branch.valid(name), name)
+
+
+# Derived local/CI parity checks share this existing CI entry point.
+from prepush_tests import PrepushChecks
+from prepush_git_tests import PrepushGitChecks
 
 
 if __name__ == '__main__':

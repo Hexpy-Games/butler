@@ -1,6 +1,7 @@
 //! Source-compatible durable inbound queue for the standalone native owner.
 
 mod error;
+#[cfg(feature = "e2e-fixtures")]
 mod fixture;
 mod observers;
 mod record;
@@ -96,6 +97,7 @@ impl InboundQueue {
         item: ClaimedInboundEvent,
         metadata: Value,
     ) -> QueueResult<bool> {
+        #[cfg(feature = "e2e-fixtures")]
         fixture::before_settlement(&self.root).await?;
         self.blocking(move |queue| queue.complete(&item, metadata))
             .await

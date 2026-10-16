@@ -104,6 +104,17 @@ per package in `os-specific-baseline.txt`; the counts may only shrink, and `--bl
 
 The parser source notice is retained in [agent/THIRD_PARTY_NOTICES.md](agent/THIRD_PARTY_NOTICES.md). Final binary packaging must carry these notices; the current library checks do not prove distribution closure.
 
+## Diagnostics
+
+These settings print content-free phase diagnostics to the Agent's stderr log and
+change nothing else. Each is off unless set to `1`.
+
+| Setting | Output |
+| --- | --- |
+| `BUTLER_STARTUP_TRACE` | Startup phase timings, and a resource sample after a startup timeout |
+| `BUTLER_SHUTDOWN_TRACE` | Shutdown phase begin/end markers (the desktop App sets it) |
+| `BUTLER_MEMORY_SYNC_TRACE` | Memory sync wakes, source revisions and vector scheduling |
+
 ## User command hooks
 
 Settings → Hooks manages `$BUTLER_DATA/hooks.json`. No hooks are installed by

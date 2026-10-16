@@ -11,7 +11,7 @@ mod failures;
 async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("CORR-STORAGE")?
-        .env("BUTLER_E2E_STARTUP_TRACE", "1")
+        .env("BUTLER_STARTUP_TRACE", "1")
         .start()
         .await?;
     s.agent.terminate().await?;

@@ -15,7 +15,21 @@ struct Manifest {
     sources: Vec<String>,
 }
 fn manifest() -> Manifest {
-    // Explicit stub-tier hook: fixed filenames, local HTTP only; production hashes stay frozen.
+    #[cfg(feature = "e2e-fixtures")]
+    if let Some(fixture) = fixture_manifest() {
+        return fixture;
+    }
+    Manifest {
+        assets: pinned_assets(),
+        sources: vec![
+            format!("https://huggingface.co/Xenova/bge-m3/resolve/{REVISION}"),
+            "https://github.com/Hexpy-Games/butler/releases/download/models-bge-m3-4de13258".into(),
+        ],
+    }
+}
+/// E2E fixture sources: fixed filenames, local HTTP only; production hashes stay frozen.
+#[cfg(feature = "e2e-fixtures")]
+fn fixture_manifest() -> Option<Manifest> {
     if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
         && let Ok(raw) = std::env::var("BUTLER_E2E_EMBED_MANIFEST")
         && let Ok(value) = serde_json::from_str::<Manifest>(&raw)
@@ -29,7 +43,7 @@ fn manifest() -> Manifest {
                 .is_ok_and(|url| url.scheme() == "http" && url.host_str() == Some("127.0.0.1"))
         })
     {
-        return value;
+        return Some(value);
     }
     let stub_sources = std::env::var("BUTLER_E2E_EMBED_SOURCES")
         .ok()
@@ -38,19 +52,10 @@ fn manifest() -> Manifest {
                 && reqwest::Url::parse(url)
                     .is_ok_and(|u| u.scheme() == "http" && u.host_str() == Some("127.0.0.1"))
         });
-    if let Some(source) = stub_sources {
-        return Manifest {
-            assets: pinned_assets(),
-            sources: vec![source],
-        };
-    }
-    Manifest {
+    stub_sources.map(|source| Manifest {
         assets: pinned_assets(),
-        sources: vec![
-            format!("https://huggingface.co/Xenova/bge-m3/resolve/{REVISION}"),
-            "https://github.com/Hexpy-Games/butler/releases/download/models-bge-m3-4de13258".into(),
-        ],
-    }
+        sources: vec![source],
+    })
 }
 pub(super) async fn run(root: PathBuf, state: watch::Sender<MemoryModelProgress>) {
     let manifest = manifest();
@@ -73,14 +78,6 @@ pub(super) async fn run(root: PathBuf, state: watch::Sender<MemoryModelProgress>
         cleanup_complete_staging(&root, &root.join(MODEL_ROOT))
     } else {
         match reqwest::Client::builder()
-            // Fixture servers must never redirect a stub run onto a real model host.
-            .redirect(
-                if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub") {
-                    reqwest::redirect::Policy::none()
-                } else {
-                    reqwest::redirect::Policy::default()
-                },
-            )
             .connect_timeout(Duration::from_secs(15))
             .read_timeout(Duration::from_secs(30))
             .build()

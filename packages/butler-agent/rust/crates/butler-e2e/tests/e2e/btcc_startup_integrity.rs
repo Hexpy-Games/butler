@@ -31,7 +31,7 @@ async fn corruption(clean: bool, page: bool, extra: bool) -> Result<(), HarnessE
     } else {
         "BTCC-DIRTY-CORRUPT"
     })?
-    .env("BUTLER_E2E_STARTUP_TRACE", "1")
+    .env("BUTLER_STARTUP_TRACE", "1")
     .start()
     .await?;
     if clean {
@@ -182,7 +182,7 @@ async fn btcc_busy_scan_retries_without_stopping_service() -> Result<(), Harness
     let setup = Setup::new("BTCC-SCAN-BUSY")?;
     let marker = setup.sandbox.root.join("busy-injected");
     let mut s = setup
-        .env("BUTLER_E2E_STARTUP_TRACE", "1")
+        .env("BUTLER_STARTUP_TRACE", "1")
         .env("BUTLER_E2E_FILE_FAULT", "btcc_scan_busy")
         .env("BUTLER_E2E_FILE_FAULT_MARKER", marker.to_string_lossy())
         .start()

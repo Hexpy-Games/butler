@@ -13,10 +13,7 @@ impl Trace {
         Self {
             started,
             previous: started,
-            enabled: matches!(
-                std::env::var("BUTLER_E2E_TIER").as_deref(),
-                Ok("stub" | "perf")
-            ) && std::env::var("BUTLER_E2E_STARTUP_TRACE").as_deref() == Ok("1"),
+            enabled: std::env::var("BUTLER_STARTUP_TRACE").as_deref() == Ok("1"),
         }
     }
 

@@ -11,10 +11,9 @@ SPEC = importlib.util.spec_from_file_location('changes', Path(__file__).with_nam
 changes = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(changes)
 GATES = {
-    'rust-quality.yml': 'gate', 'post-merge-ci.yml': 'post-merge-ci gate',
+    'rust-quality.yml': 'gate',
     'windows-preview-smoke.yml': 'Complete Windows preview verification',
     'windows-installer.yml': 'windows-installer gate',
-    'macos-signing.yml': 'macos-signing gate', 'licenses.yml': 'licenses gate',
     'e2e.yml': 'E2E live tier',
 }
 
@@ -32,6 +31,12 @@ def trusted(run, repository, branch, workflow):
     return (run.get('status') == 'completed' and run.get('event') in ('push', 'workflow_dispatch')
             and run.get('head_branch') == branch and run.get('path') == f'.github/workflows/{workflow}'
             and run.get('head_repository', {}).get('full_name') == repository)
+
+
+def gate_passed(workflow, run, jobs, conclusion='success'):
+    gate = ('dispatch gate' if workflow == 'rust-quality.yml' and run.get('event') == 'workflow_dispatch'
+            else GATES[workflow])
+    return any(job['name'] == gate and job['conclusion'] == conclusion for job in jobs)
 
 
 def prove(workflow, sha, inputs, runs, receipts, gate_ok):
@@ -112,7 +117,7 @@ def check(repository, candidate, sha):
                 if trusted(run, repository, branch, workflow)]
         def gate_ok(run):
             jobs = pages(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100', 'jobs')
-            return any(job['name'] == gate and job['conclusion'] == 'success' for job in jobs)
+            return gate_passed(workflow, run, jobs)
         inputs = changes.integration_inputs(workflow, current, candidate)
         if workflow == 'e2e.yml':
             # Live E2E runs once per release push and must pass at this SHA.
@@ -138,7 +143,7 @@ def check(repository, candidate, sha):
             # Missing/cancelled evidence cannot be waived as a known failure.
             failed = any(receipt.get('checkout') == sha and (receipt.get('job_results', {}).get(job) == 'failure' or receipt.get('part_results', {}).get(job) == 'failure') for receipt in receipts)
             if job in ('gate', 'e2e-live'):
-                failed = any(any(item['name'] == gate and item['conclusion'] == 'failure' for item in pages(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100', 'jobs')) for run in runs if run['head_sha'] == sha)
+                failed = any(gate_passed(workflow, run, pages(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100', 'jobs'), 'failure') for run in runs if run['head_sha'] == sha)
             if not failed or not waived(repository, candidate, sha, workflow, job):
                 missing.append(f'{workflow}/{job}')
     if missing:

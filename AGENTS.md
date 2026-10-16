@@ -36,12 +36,10 @@ This routine requires Ledger access and publication authorization. Codex workers
   - For Rust-only changes, skip all Bun checks. E2E and real-app verification remain the primary evidence.
 - **Root causes.** Fix the cause, not the symptom. Never skip, weaken or retry tests to get green. Never raise timeouts or loosen performance budgets. If you can't reproduce a failure, say so; don't claim a cause you haven't shown.
 - **No special cases (zero tolerance).** Production code must never contain domain-specific or test-specific cases. That means no branches, strings, paths or names keyed to a test fixture, cassette, E2E command, acceptance scenario, site, app, owner value (host name, user name, folder) or CI environment. A fix must be a general rule that would also be correct for inputs no test uses. If only a special case makes a test pass, stop and report. Every Codex PR gets an independent review for this.
+- **Scope discipline.** Do only the task. Report a problem only with evidence on the task's path (a reproduced failure or a measured number); no hypothetical or "potential" issues. Something clearly broken outside the task gets one line in the final message under "Out of scope, not touched"; no investigation, no fix. Touch only the files the task needs: no extra refactors, renames, cleanups or tests. Don't tune differences within noise (tens of ms or under ~5%) unless the task's stated budget is missed.
 - **Performance without cutting quality.** Meet a latency or throughput budget by doing less *work*, never by returning less *content*. Truncating, dropping fields, skipping items, lowering fidelity or serving stale cached data to pass a budget is a failure. Every timed perf check must also assert that the response is complete and correct (counts, order, latest state).
 - **Flaky tests.** Don't retry, skip, or mark tests ignored to get green. A test that fails on main without a code change gets a GitHub issue the same day and a fix within 48 hours. Re-run CI only with that issue linked in a PR comment.
-- **Before pushing:**
-  - `git fetch origin` and merge your base (`origin/main` or the named `origin/release/<v>`) if it moved;
-  - run `cargo fmt`, `clippy -D warnings` on touched crates, and `cargo run -p butler-source-check -- .`;
-  - if TS or UI changed, follow the TypeScript validation rule above, isolated as above.
+- **Before pushing:** Fetch origin and merge your base if it moved, then run `scripts/prepush`; it must pass; if TS/UI changed, also follow the TypeScript validation rule.
 - **Pushing.** Push only when the task allows it. When the task includes a PR, after pushing confirm with `gh pr checks <n>` that checks started. GitHub runs no `pull_request` checks while a PR has merge conflicts.
 - **Final message:**
   - what changed;
@@ -65,6 +63,9 @@ This routine requires Ledger access and publication authorization. Codex workers
 ## Recurring mistakes (feedback log)
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
+
+- **2026-10-16: Stay on the task; no invented issues, no noise-level tuning, no scope expansion.** Out-of-scope findings are one line, untouched.
+  - What happened: worker runs repeatedly reported issues that did not exist, tuned 10-20 ms differences, and widened changes beyond the task's purpose.
 
 - **2026-10-14: Focus rings must never be clipped.** A container that clips its content (overflow, clip-path, mask or edge fades) must leave `--focus-ring-room` for focus rings, and a card that clips its own content must draw the ring on the card. Run `bun run app:focus-ring:smoke` for any UI change.
   - What happened: the sidebar "새 대화" ring was cut on its left edge by the scroll frame. The same cut came back each time a new clipping container was added.
