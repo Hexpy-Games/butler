@@ -44,11 +44,21 @@ async fn hooks_unpublished_tool_row_interrupts_turn_and_retry_delivers() -> Resu
     db.busy_timeout(Duration::from_secs(5))?;
     db.execute_batch("BEGIN IMMEDIATE")?;
     release.now()?;
-    // Outlast the BTCC writer's 5 s lock wait, so the row's append fails, then
-    // release: later writes succeed, and a dropped row lets the turn deliver.
+    // Hold the lock until the turn reports the interruption: the row's append
+    // fails once the BTCC writer's 5 s lock wait runs out, however long the
+    // agent takes to reach it after the hook returns. Then release: later
+    // writes succeed, and a dropped row would have let the turn deliver.
     let locked = Instant::now();
+    let deadline = locked + Duration::from_secs(30);
     let interrupted = format!("interrupted turn_id={turn_id} ");
-    while locked.elapsed() < Duration::from_secs(7) && !s.agent.logs().contains(&interrupted) {
+    while !s.agent.logs().contains(&interrupted) {
+        if Instant::now() >= deadline {
+            db.execute_batch("ROLLBACK")?;
+            panic!(
+                "turn was not interrupted while its row append was locked out:\n{}",
+                s.agent.logs()
+            );
+        }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     db.execute_batch("ROLLBACK")?;

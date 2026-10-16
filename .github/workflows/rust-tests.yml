@@ -143,6 +143,10 @@ jobs:
           else
             cp "$RUNNER_TEMP/rust-archive/shard-$SHARD.txt" "$RUNNER_TEMP/rust-archive/install.txt"
           fi
+      - name: Supply the prebuilt web read probe
+        run: |
+          chmod +x "$RUNNER_TEMP/rust-archive/web-access-smoke"
+          echo "BUTLER_E2E_WEB_PROBE_BIN=$RUNNER_TEMP/rust-archive/web-access-smoke" >> "$GITHUB_ENV"
       - uses: ./.github/actions/e2e-stub
         with:
           archive-file: ${{ runner.temp }}/rust-archive/tests.tar.zst
