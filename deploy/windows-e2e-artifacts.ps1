@@ -37,8 +37,10 @@ if ($Mode -eq 'Export') {
             }
             # Probe the shipped helper on the actual hosted machine; do not disable MXC.
             $probe = "$env:PREVIEW_ROOT/logs/without-mxc-probe.txt"
-            cmd /d /c "`"$artifacts/butler-sandbox.exe`" --probe > `"$probe`" 2> `"$probe.stderr`""
+            $ErrorActionPreference = 'Continue'
+            & "$artifacts/butler-sandbox.exe" --probe > $probe 2>&1
             $probeCode = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
             $reason = (Get-Content -LiteralPath $probe -Raw).Trim()
             if ($probeCode -ne 0 -or $reason -notin @('mxc_api_missing','base_container_unavailable',
                 'native_deny_unsupported','dacl_fallback_required','non_interactive_desktop','privilege_not_held')) {

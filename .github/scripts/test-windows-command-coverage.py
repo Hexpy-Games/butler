@@ -41,7 +41,7 @@ class WindowsCommandCoverage(unittest.TestCase):
             'windows_command_tool_native_matrix',
         ):
             self.assertIn('windows_commands::' + case, runner)
-        self.assertIn('butler-sandbox.exe`" --probe', runner)
+        self.assertIn('& "$artifacts/butler-sandbox.exe" --probe > $probe 2>&1', runner)
         self.assertIn('test $case ... ok', runner)
         install = (repository / '.github/workflows/install-smoke.yml').read_text()
         tarball = install.split('      - name: Keep the tarball for the smoke', 1)[1].split('  smoke:', 1)[0]
