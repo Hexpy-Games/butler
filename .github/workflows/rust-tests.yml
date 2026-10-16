@@ -188,6 +188,8 @@ jobs:
         run: |
           chmod +x "$RUNNER_TEMP/fault-agent/butler-agent"
           echo "BUTLER_E2E_FAULT_BIN=$RUNNER_TEMP/fault-agent/butler-agent" >> "$GITHUB_ENV"
+      # Budgeted browser preview scenarios start their fixture servers with Bun.
+      - uses: ./.github/actions/bun-setup
       - uses: actions/download-artifact@v4
         with:
           name: agent-payload-${{ inputs.platform }}
