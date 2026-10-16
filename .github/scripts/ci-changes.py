@@ -14,6 +14,7 @@ import tempfile
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ci_policy import rust_jobs, windows_preview_jobs
 import ci_parts
+import ci_rust_inputs
 from urllib.parse import urlencode
 
 GROUPS = ('rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses', 'signing')
@@ -30,9 +31,9 @@ PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/elect
 # These harness inputs are never shipped in a production Agent payload.
 RUST_TEST_ONLY = ('packages/butler-agent/rust/crates/butler-e2e/tests/*',
                   'packages/butler-agent/rust/crates/butler-e2e/fixtures/*')
-DS_CHECK_INPUTS = ('tests/smoke/ds-site-*', 'tests/smoke/font-assets-check.ts',
-                   'tests/support/smoke-browser.ts', 'tests/support/ds-viewer-mobile-checks.ts')
-SIGNING = ('deploy/macos/*', 'deploy/macos*', 'packages/butler-app/scripts/release/*',
+SITE_CHECK_INPUTS = ('tests/smoke/ds-site-*', 'tests/smoke/font-assets-check.ts',
+                     'tests/support/smoke-browser.ts', 'tests/support/ds-viewer-mobile-checks.ts')
+SIGNING = ('deploy/macos*', 'packages/butler-app/scripts/release/*',
            'packages/butler-app/client/electron/*', '.github/workflows/macos-signing.yml',
            'packages/butler-agent/rust/scripts/package-standalone-agent.py',
            'VERSION', 'package.json', 'bun.lock', 'bun.lockb')
@@ -50,6 +51,7 @@ CI_LINT_ONLY = (
     '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py',
     '.github/scripts/publish-release-checksums.py', '.github/scripts/test-*.py',
     '.github/scripts/ci-changes.py', '.github/scripts/ci_policy.py', '.github/scripts/ci_parts.py',
+    '.github/scripts/ci_rust_inputs.py', '.github/scripts/ci_input_tests.py',
     '.github/scripts/check-gate.py', '.github/scripts/ci-check-selected.py',
     '.github/scripts/cargo-target-release.py', '.github/scripts/cargo-artifact-cache.py',
     '.github/scripts/runner_cache.py', '.github/scripts/ds-approval.py',
@@ -103,13 +105,14 @@ def categories(path):
         return github_categories(path)
     notice = re.match(r'^(licen[cs]e|copying|notice|copyright)([._-]|$)', Path(path).name, re.I)
     license_input = path in LICENSE_INPUTS or bool(notice)
+    external_rust = ci_rust_inputs.consumes(path, Path(__file__).resolve().parents[2])
     runtime_markdown = (path.startswith('packages/butler-agent/resources/') or
                         (path.startswith('packages/butler-agent/rust/') and '/crates/' in path and '/docs/' not in path)) and not path.endswith('/README.md')
     # Repository and CI lint is unconditional in rust-quality.yml, including docs-only PRs.
-    if path.endswith('.md') and not path.startswith('packages/butler-site/') and not runtime_markdown and not license_input:
+    if path.endswith('.md') and not path.startswith('packages/butler-site/') and not runtime_markdown and not license_input and not external_rust:
         return set()
     result = set()
-    rust = path.startswith(('packages/butler-agent/rust/', 'packages/butler-agent/resources/', '.cargo/', '.config/')) or matches(path, ('Cargo.*', '**/Cargo.toml', '**/Cargo.lock', 'rust-toolchain*'))
+    rust = external_rust or path.startswith(('packages/butler-agent/rust/', 'packages/butler-agent/resources/', '.cargo/', '.config/')) or matches(path, ('Cargo.*', '**/Cargo.toml', '**/Cargo.lock', 'rust-toolchain*'))
     package = matches(path, PACKAGING)
     shared = matches(path, SHARED)
     ui = path.startswith(('packages/butler-app/client/', 'packages/butler-i18n/'))
@@ -117,13 +120,15 @@ def categories(path):
         result.add('rust')
     if (rust and not matches(path, RUST_TEST_ONLY)) or package or path == 'VERSION':
         result.update(('package', 'install', 'linux-package'))
-    bun_source = path.startswith('packages/') and not rust and path.endswith(('.ts', '.tsx', '.js', '.jsx', '.mjs'))
+    bun_source = path.startswith('packages/') and not path.startswith('packages/butler-agent/rust/') and path.endswith(('.ts', '.tsx', '.js', '.jsx', '.mjs'))
     manifest = path.startswith('packages/') and path.endswith('/package.json')
     if ui or shared or bun_source or manifest or path.startswith(('tests/', 'tools/')) or (path.startswith('packages/') and not rust and not package and not path.startswith('packages/butler-site/')):
         result.add('ui')
-    if path.startswith(('packages/butler-site/', 'packages/butler-app/client/ui/', 'packages/butler-i18n/')) or shared or matches(path, DS_CHECK_INPUTS):
+    if path.startswith(('packages/butler-site/', 'packages/butler-app/client/ui/', 'packages/butler-i18n/')) or shared or matches(path, SITE_CHECK_INPUTS):
         result.add('site')
-    if path.startswith('packages/butler-app/client/ui/') or shared or matches(path, DS_CHECK_INPUTS):
+    # DS showcase/config/smoke imports can reach any UI-check input. Retain the
+    # conservative UI implication until its complete input graph is selected.
+    if 'ui' in result:
         result.add('ds')
     if license_input or matches(path, ('*.lock', '*.lockb', '*-lock.json', 'Cargo.lock', 'Cargo.toml', '**/Cargo.toml', '**/package.json', 'deploy/licenses/*', '**/licenses/*', 'LICENSE*')):
         result.add('licenses')

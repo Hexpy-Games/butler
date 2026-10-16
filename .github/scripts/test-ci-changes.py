@@ -23,8 +23,8 @@ class Paths(unittest.TestCase):
     def test_responsible_jobs_and_workflow_fail_closed(self):
         cases = {
             'packages/butler-app/client/ui/src/app.tsx': {'ui', 'site', 'ds'},
-            'packages/butler-i18n/src/locale.ts': {'ui', 'site'},
-            'packages/project-ledger/src/index.ts': {'ui'},
+            'packages/butler-i18n/src/locale.ts': {'ui', 'site', 'ds'},
+            'packages/project-ledger/src/index.ts': {'ui', 'ds'},
             'bun.lock': {'ui', 'site', 'ds', 'licenses', 'signing'},
             'bun.lockb': {'ui', 'site', 'ds', 'licenses', 'signing'},
             'packages/butler-agent/rust/crates/butler-core/src/lib.rs': {'rust', 'package', 'install', 'linux-package'},
@@ -32,14 +32,14 @@ class Paths(unittest.TestCase):
             'Cargo.toml': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'new-crate/Cargo.toml': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'new-crate/Cargo.lock': {'rust', 'package', 'install', 'linux-package', 'licenses'},
-            'packages/butler-app/client/electron/src/main.ts': {'ui', 'package', 'install', 'linux-package', 'signing'},
+            'packages/butler-app/client/electron/src/main.ts': {'rust', 'ui', 'ds', 'package', 'install', 'linux-package', 'signing'},
             'deploy/install.sh': {'package', 'install', 'linux-package'},
             'packages/butler-site/src/pages/index.astro': {'site'},
             'README.md': set(),
             'packages/butler-agent/rust/docs/install-layout.md': set(),
             'packages/butler-agent/resources/skills/status/SKILL.md': {'rust', 'package', 'install', 'linux-package'},
             'packages/butler-agent/rust/crates/butler-e2e/fixtures/memory/rule.md': {'rust'},
-            'packages/butler-app/scripts/release/package-versions.ts': {'ui', 'package', 'install', 'linux-package', 'signing'},
+            'packages/butler-app/scripts/release/package-versions.ts': {'rust', 'ui', 'ds', 'package', 'install', 'linux-package', 'signing'},
             'notes.md': set(),
             '.github/pull_request_template.md': set(),
             '.github/workflows/windows.yml': {'package'},
@@ -105,7 +105,7 @@ class Paths(unittest.TestCase):
             '.github/scripts/ci-changes.py': False,
             '.github/pull_request_template.md': False,
             'deploy/install.sh': False,
-            'packages/butler-app/client/electron/src/main.ts': False,
+            'packages/butler-app/client/electron/src/main.ts': True,
             'packages/butler-agent/rust/docs/install-layout.md': False,
             'README.md': False,
         }.items():
@@ -365,10 +365,10 @@ class Precision(unittest.TestCase):
             'tests/support/smoke-browser.ts': True,
             'tests/support/ds-viewer-mobile-checks.ts': True,
             'package.json': True,
-            'tools/validate.ts': False,
-            'tests/unit/queue.test.ts': False,
-            'packages/project-ledger/src/index.ts': False,
-            'packages/butler-app/client/electron/src/main.ts': False,
+            'tools/validate.ts': True,
+            'tests/unit/queue.test.ts': True,
+            'packages/project-ledger/src/index.ts': True,
+            'packages/butler-app/client/electron/src/main.ts': True,
         }.items():
             self.assertEqual('ds' in changes.categories(path), expected, path)
 
@@ -408,6 +408,10 @@ class Precision(unittest.TestCase):
                 self.assertEqual(json.loads(output['jobs']), dict(shellcheck=expected, selftest=expected))
         self.assertEqual(changes.job_groups('macos-signing.yml'),
                          dict(shellcheck=['signing'], selftest=['signing']))
+
+
+# Keep the derived dependency checks in the existing CI-script test entrypoint.
+from ci_input_tests import DerivedInputs
 
 
 if __name__ == '__main__':
