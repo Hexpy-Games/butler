@@ -80,7 +80,12 @@ pub(super) fn verify_rows(
             .filter(|v| v["event"]["kind"] == "model.stream.text_delta")
             .map(|v| v["event"]["payload"]["textDelta"].as_str().unwrap())
             .collect::<Vec<_>>();
-        assert_eq!(texts.len(), deltas);
+        // The relay coalesces provider deltas into bounded frames, never splits them.
+        assert!(
+            (1..=deltas).contains(&texts.len()),
+            "{} frames",
+            texts.len()
+        );
         assert_eq!(texts.concat().trim_end(), answer);
         verify_message_updates(&db, turn, &texts);
         assert!(
