@@ -184,7 +184,7 @@ if (process.platform === "win32") {
   app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
 }
 if (windowsSquirrelLaunch.handled) {
-  if (!shellRegistrationAllowed()) process.exit(0);
+  if (process.env.BUTLER_APP_DISABLE_SHELL_REGISTRATION === "1") process.exit(0);
   let squirrelExitCode = 0;
   let squirrelErrorCode = null;
   let squirrelResult = null;
@@ -196,11 +196,13 @@ if (windowsSquirrelLaunch.handled) {
         writeShortcut: (path, options) => shell.writeShortcutLink(path, "create", options),
         runPowerShell: spawnSync,
       }),
-      setLoginItemSettings: (settings) => app.setLoginItemSettings(settings),
+      setLoginItemSettings: (settings) => {
+        if (shellRegistrationAllowed()) app.setLoginItemSettings(settings);
+      },
       registerProtocol: (scheme, executable, args) =>
-        app.setAsDefaultProtocolClient(scheme, executable, args),
+        !shellRegistrationAllowed() || app.setAsDefaultProtocolClient(scheme, executable, args),
       unregisterProtocol: (scheme, executable, args) =>
-        app.removeAsDefaultProtocolClient(scheme, executable, args),
+        !shellRegistrationAllowed() || app.removeAsDefaultProtocolClient(scheme, executable, args),
       cleanupOperationalState: () =>
         removeWindowsOperationalState({ butlerData: appWritableDataRoot }),
     });
