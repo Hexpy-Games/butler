@@ -11,11 +11,11 @@ try {
   const results = await app.main<Array<{ stage: string; ending: string; mode: string; status?: string; stepStatus?: string; reason?: string; requested: boolean; settled: boolean; title: string; image: boolean; listeners: number[]; baseline: number[]; stale: boolean }>>(`(async()=>{
     const require=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json');
     const {BrowserWindow}=require('electron');
-    const {stepStill}=require(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/stills.mjs"))});
+    const {stepStill,comparisonThumbnail}=require(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/stills.mjs"))});
     const {prepareBatch,actBatch}=require(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/act.mjs"))});
     const {beginDialog,answerDialog}=require(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/dialogs.mjs"))});
     const rows=[];
-    for(const ending of ['navigation','crash','destroy']) for(const stage of ['paint','capture']) for(const mode of ending==='destroy'?['still','act','answer']:['still']) {
+    for(const ending of ['navigation','crash','destroy']) for(const stage of ['paint','capture']) for(const mode of ending==='destroy'?['still','comparison','act','answer']:['still','comparison']) {
       const window=new BrowserWindow({show:true,webPreferences:{backgroundThrottling:false}});
       const contents=window.webContents,dbg=contents.debugger;
       const events=['did-start-navigation','render-process-gone','destroyed'];
@@ -33,7 +33,7 @@ try {
         let paintRequested;
         const ready=new Promise(done=>{paintRequested=done});
         const held=()=>{requested=true;paintRequested();return new Promise(done=>{release=done})};
-        contents.executeJavaScriptInIsolatedWorld=stage==='paint'?held:async()=>true;
+        contents.executeJavaScriptInIsolatedWorld=(world,scripts)=>scripts.some(s=>s.code.startsWith('new Promise(done=>requestAnimationFrame')) ? (stage==='paint'?held():Promise.resolve(true)) : originalPaint(world,scripts);
         if(stage==='capture')contents.capturePage=held;
         tab.afterCapture=()=>{stale=true};
         const args={steps:[{action:'wait',value:'50'}]};
@@ -42,8 +42,8 @@ try {
           beginDialog(browser,tab,{type:'confirm',message:'First'},()=>{});
           tab.pendingBatch=[{status:'unknown',reason:'dialog_pending'}];
         }
-        pending=(mode==='act'?actBatch(tab,args,'s1'):mode==='answer'?answerDialog(browser,tab,{dialog:tab.dialog.id,accept:true}):stepStill(tab))
-          .then(result=>{value=result;image=Boolean(mode==='still'?result:result.steps[0].still);settled=true});
+        pending=(mode==='act'?actBatch(tab,args,'s1'):mode==='answer'?answerDialog(browser,tab,{dialog:tab.dialog.id,accept:true}):mode==='comparison'?comparisonThumbnail(tab):stepStill(tab))
+          .then(result=>{value=result;image=Boolean(['still','comparison'].includes(mode)?result:result.steps[0].still);settled=true});
         await ready;
         if(ending==='navigation')await contents.loadURL('data:text/html,<title>After</title><body style="background:lime">After');
         else if(ending==='destroy') {
@@ -73,7 +73,7 @@ try {
     assert.equal(result.image, false, `${result.ending}/${result.stage}: no stale image is returned`);
     assert.equal(result.stale, false, `${result.stage}: no old bitmap reaches live frames`);
     assert.deepEqual(result.listeners, result.baseline, `${result.ending}/${result.stage}/${result.mode}: listeners return to baseline`);
-    if (result.mode !== "still") {
+    if (!["still", "comparison"].includes(result.mode)) {
       assert.equal(result.status, "ok");
       assert.equal(result.stepStatus, "completed", "destroying the contents does not rewrite a completed step");
       assert.equal(result.reason, undefined);
@@ -82,12 +82,12 @@ try {
   const dialogs = await app.main<Array<{ mode: string; source: string; waiting: boolean; pending: boolean; nextDialog?: string; requested: number; image: boolean; stale: boolean; status?: string; reason?: string; existingImage: boolean; existingRequested: number; listeners: number[]; baseline: number[]; elapsedMs: number }>>(`(async()=>{
     const require=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json');
     const {BrowserWindow}=require('electron');
-    const {stepStill}=require(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/stills.mjs"))});
+    const {stepStill,comparisonThumbnail}=require(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/stills.mjs"))});
     const {prepareBatch,actBatch}=require(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/act.mjs"))});
     const {wireDialogs,resolveDialog,answerDialog}=require(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/dialogs.mjs"))});
     const {wireUserDialogs}=require(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/user-dialogs.mjs"))});
     const rows=[];
-    for(const source of ['cdp','electron']) for(const mode of ['still','act','answer']) {
+    for(const source of ['cdp','electron']) for(const mode of ['still','comparison','act','answer']) {
       const window=new BrowserWindow({show:true,webPreferences:{backgroundThrottling:false}});
       const contents=window.webContents,dbg=contents.debugger;
       const originalPaint=contents.executeJavaScriptInIsolatedWorld.bind(contents);
@@ -112,6 +112,7 @@ try {
         // Open a real native dialog in the first frame, before the paint promise's
         // second frame can run. The original production paint script still runs.
         contents.executeJavaScriptInIsolatedWorld=(world,scripts)=>{
+          if(!scripts.some(s=>s.code.startsWith('new Promise(done=>requestAnimationFrame')))return originalPaint(world,scripts);
           requested++;
           return originalPaint(world,scripts.map(script=>({...script,
             code:"requestAnimationFrame(()=>confirm('Paint wait'));"+script.code})));
@@ -120,15 +121,15 @@ try {
         const prepared=await prepareBatch(tab,args);args.prepared_steps=prepared.steps;
         const started=Date.now();
         const value=await Promise.race([
-          mode==='act'?actBatch(tab,args,'s1'):mode==='answer'?answerDialog(browser,tab,{dialog:tab.dialog.id,accept:true}):stepStill(tab),
+          mode==='act'?actBatch(tab,args,'s1'):mode==='answer'?answerDialog(browser,tab,{dialog:tab.dialog.id,accept:true}):mode==='comparison'?comparisonThumbnail(tab):stepStill(tab),
           new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Dialog blocked the still wait')),5000)}),
         ]);
         clearTimeout(timer);
         const elapsedMs=Date.now()-started;
         if(!tab.dialog)throw Error('The real page dialog did not open');
-        const existingImage=Boolean(await stepStill(tab));
+        const existingImage=Boolean(await (mode==='comparison'?comparisonThumbnail(tab):stepStill(tab)));
         const existingRequested=requested;
-        const row={mode,source,waiting:tab.waiting,pending:Boolean(tab.pendingBatch),nextDialog:value?.dialog?.message,requested,image:Boolean(mode==='still'?value:value.steps[0].still),
+        const row={mode,source,waiting:tab.waiting,pending:Boolean(tab.pendingBatch),nextDialog:value?.dialog?.message,requested,image:Boolean(['still','comparison'].includes(mode)?value:value.steps[0].still),
           status:value?.status,reason:value?.steps?.[0]?.reason,existingImage,existingRequested,
           listeners:listeners(),baseline,elapsedMs};
         contents.executeJavaScriptInIsolatedWorld=originalPaint;
@@ -153,12 +154,52 @@ try {
     assert.equal(result.existingImage, false, "an existing dialog returns no image");
     assert.equal(result.existingRequested, 1, "an existing dialog never asks the blocked renderer to paint");
     assert.deepEqual(result.listeners, result.baseline, `${result.mode}: lifecycle and debugger listeners are removed`);
-    if (result.mode !== "still") {
+    if (!["still", "comparison"].includes(result.mode)) {
       assert.equal(result.status, "dialog_pending");
       assert.equal(result.pending, true, "the batch is retained for the pending dialog");
       assert.equal(result.nextDialog, "Paint wait");
       if (result.mode === "act") assert.equal(result.reason, "dialog_pending");
     }
   }
+  const comparison = await app.main<{ reused: boolean; captures: number; rejectedEmpty: boolean; changedFresh: boolean; observed: boolean }>(`(async()=>{
+    const require=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json');
+    const {BrowserWindow}=require('electron');
+    const {stepStill,comparisonThumbnail}=require(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/stills.mjs"))});
+    const window=new BrowserWindow({show:true,webPreferences:{backgroundThrottling:false}}),contents=window.webContents;
+    const tab={id:'comparison',epoch:1,holder:'agent',url:'about:blank',frameAttachPromises:new Map(),frameSessions:new Map(),view:{webContents:contents}};
+    let captures=0;
+    const original=contents.capturePage.bind(contents);
+    const originalWorld=contents.executeJavaScriptInIsolatedWorld.bind(contents);
+    try {
+      await contents.loadURL('data:text/html,<body style="background:red">Comparison');
+      if(contents.isLoading())await new Promise(done=>contents.once('did-stop-loading',done));
+      contents.capturePage=(...args)=>{captures++;return original(...args)};
+      contents.executeJavaScriptInIsolatedWorld=(world,scripts)=>originalWorld(world,scripts.map(script=>({...script,
+        code:script.code.replace('requestAnimationFrame(()=>receipt.current=false)', 'globalThis.__expireStill=()=>receipt.current=false')})));
+      await stepStill(tab);
+      const cached=tab.comparisonStill.thumb;
+      const reused=(await comparisonThumbnail(tab)).equals(cached);
+      const count=captures;
+      contents.executeJavaScriptInIsolatedWorld=originalWorld;
+      await stepStill(tab);
+      await contents.executeJavaScript("document.head.innerHTML='<style>body{background:red}</style>';document.body.removeAttribute('style');document.styleSheets[0].cssRules[0].style.backgroundColor='lime'");
+      await originalWorld(9001,[{code:'new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(true))))'}]);
+      const changed=await comparisonThumbnail(tab);
+      const changedFresh=captures===count+2&&!changed.equals(cached);
+      contents.capturePage=async()=>{throw Error('Capture rejected')};
+      const rejectedEmpty=(await comparisonThumbnail(tab))===undefined;
+      contents.debugger.attach('1.3');
+      const {observeTab}=require(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/observe.mjs"))});
+      const observation=await observeTab(tab,{include_image:false,scope:"text"});
+      const observed=observation.status==='ok'&&tab.observation.thumb===undefined&&observation.text.includes('Comparison');
+      return {reused,captures:count,rejectedEmpty,changedFresh,observed};
+    } finally {window.destroy()}
+  })()`);
+  assert.equal(comparison.reused, true);
+  assert.equal(comparison.captures, 1, "a settled still avoids a second capture");
+  assert.equal(comparison.changedFresh, true, "a later frame with CSSOM changes invalidates the cached still");
+  assert.equal(comparison.rejectedEmpty, true, "capture rejection leaves private evidence empty");
+  assert.equal(comparison.observed, true, "text observation survives a rejected private capture");
+  writeFileSync(join(evidence, "comparison-results.json"), JSON.stringify(comparison, null, 2));
   console.log(`PASS ${results.length} lifecycle and ${dialogs.length} dialog rows: destruction preserves completed steps; both dialog sources release waits; second dialogs stay pending`);
 } finally { await app.stop(); }

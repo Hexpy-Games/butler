@@ -10,6 +10,8 @@ use reqwest::Method;
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+mod failures;
+
 fn port() -> u16 {
     std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()

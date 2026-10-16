@@ -9,6 +9,7 @@ use std::{
     path::{Path, PathBuf},
     process::Stdio,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
@@ -16,11 +17,21 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
+#[cfg(feature = "test-support")]
+mod fixtures;
 #[cfg(target_os = "linux")]
 mod linux;
 
 /// Combined log tail capacity, in bytes.
 pub const LOG_CAPACITY: usize = 64 * 1024;
+/// SIGKILL completion budget, not a graceful-shutdown allowance. The supervisor
+/// retains the child and exit handles after expiry so cleanup can still finish.
+pub const STOP_WAIT_LIMIT: Duration = Duration::from_secs(3);
+/// Whether the pidfd fallback fixture is exercised on this host.
+#[cfg(feature = "test-support")]
+pub fn has_group_exit_notifications() -> bool {
+    cfg!(target_os = "linux")
+}
 /// Owns a server tree. Dropping the handle requests tree termination.
 pub struct PreviewProcess {
     pid: u32,
@@ -66,14 +77,22 @@ impl PreviewProcess {
             }
             stopped.cancel();
             drop(tree); // Includes descendants after a launcher exits.
-            #[cfg(target_os = "linux")]
-            let result = linux::wait_for_group(pid).await;
-            #[cfg(not(target_os = "linux"))]
-            let result = Ok::<(), io::Error>(());
-            let _ = child.wait().await;
+            let completion = finish(&mut child, pid);
+            tokio::pin!(completion);
+            let result = tokio::time::timeout(STOP_WAIT_LIMIT, &mut completion).await;
+            match result {
+                Ok(result) => {
+                    let _ = send.send(Some(result.map_err(|error| error.to_string())));
+                }
+                Err(_) => {
+                    let _ = send.send(Some(Err("Preview kill completion timed out".into())));
+                    // Dropping a registry entry must not abandon an unreaped child
+                    // or the pinned descendants whose exit is still outstanding.
+                    let _ = completion.await;
+                }
+            }
             out.abort();
             err.abort();
-            let _ = send.send(Some(result.map_err(|error| error.to_string())));
         });
         Ok(Self {
             pid,
@@ -109,15 +128,29 @@ impl PreviewProcess {
         text.get(start..).unwrap_or_default().to_owned()
     }
     /// Resolve after tree termination and child reaping.
-    pub async fn stop(&mut self) -> io::Result<()> {
+    pub async fn stop(&self) -> io::Result<()> {
         self.cancel.cancel();
+        let mut running = self.running.clone();
         loop {
-            if let Some(result) = self.running.borrow_and_update().clone() {
+            if let Some(result) = running.borrow_and_update().clone() {
                 return result.map_err(io::Error::other);
             }
-            self.running.changed().await.map_err(io::Error::other)?;
+            running.changed().await.map_err(io::Error::other)?;
         }
     }
+}
+async fn finish(child: &mut tokio::process::Child, pid: u32) -> io::Result<()> {
+    #[cfg(target_os = "linux")]
+    let result = linux::wait_for_group(pid).await;
+    #[cfg(not(target_os = "linux"))]
+    let result = {
+        let _ = pid;
+        Ok::<(), io::Error>(())
+    };
+    let reaped = child.wait().await;
+    #[cfg(feature = "test-support")]
+    fixtures::completion().await?;
+    result.and(reaped.map(|_| ()))
 }
 impl Drop for PreviewProcess {
     fn drop(&mut self) {
