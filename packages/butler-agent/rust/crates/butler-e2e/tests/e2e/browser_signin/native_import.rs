@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 
 const CANARY: &str = "canary-native-723ac8";
 fn fixture(name: &str, file: &str, destination: &Path) -> Result<(), HarnessError> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let path = butler_e2e::e2e::binary::manifest_dir()
         .join("fixtures/browser-import")
         .join(name)
         .join(file);
