@@ -50,6 +50,7 @@ zip.workspace = true
 # contain command trees, paths without a needless `\\?\` prefix, and the
 # system time zone's IANA name.
 [target.'cfg(windows)'.dependencies]
+notify-windows-ledger = { path = "../../../../../third_party/notify-windows-ledger" }
 mxc-sdk = { git = "https://github.com/microsoft/mxc", rev = "2366ee9b1e0bed3a0f950ec49a509f92285239cf", default-features = false }
 windows-dpapi = "=0.2.0"
 aes-gcm = { version = "0.10", features = ["zeroize"] }
@@ -59,13 +60,14 @@ if-addrs.workspace = true
 sysinfo.workspace = true
 win32job.workspace = true
 same-file = "1.0.6"
+winapi-util = "=0.1.11"
 atomicwrites.workspace = true
 filedescriptor = "0.8.3"
 windows-permissions = "=0.2.4"
 
 [features]
 # Fixture values for tests of other crates (e.g. archive entry modes).
-test-support = []
+test-support = ["notify-windows-ledger/test-support"]
 
 [dev-dependencies]
 # Integration contracts use the fixture helpers through the library target.

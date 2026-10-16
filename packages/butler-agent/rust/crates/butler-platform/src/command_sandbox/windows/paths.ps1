@@ -3,7 +3,7 @@
 # See microsoft/referencesource mscorlib/system/AppContext/AppContextSwitches.cs.
 & {
     try {
-        if ($PSVersionTable.PSEdition -eq 'Desktop') {
+        if ($ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage' -and $PSVersionTable.PSEdition -eq 'Desktop') {
             $context = [System.AppContext].Assembly.GetType('System.AppContextSwitches', $true)
             foreach ($name in @('UseLegacyPathHandling', 'BlockLongPaths')) {
                 $cacheName = '_' + $name.Substring(0, 1).ToLowerInvariant() + $name.Substring(1)
@@ -15,7 +15,7 @@
         }
         if ($env:BUTLER_COMMAND_CWD) {
             $directory = $env:BUTLER_COMMAND_CWD.Replace('/', '\')
-            if ($PSVersionTable.PSEdition -eq 'Desktop' -and [System.IO.Path]::GetFullPath($directory).Length -ge 248) {
+            if ($ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage' -and $PSVersionTable.PSEdition -eq 'Desktop' -and [System.IO.Path]::GetFullPath($directory).Length -ge 248) {
                 # The provider treats \\?\C:\ as an incomplete UNC root and
                 # drops its first child. DosDevices retains the logon's drive
                 # lookup while giving the provider a complete extended root.
@@ -34,7 +34,7 @@
             Remove-Item Env:BUTLER_COMMAND_CWD -ErrorAction Stop
         }
     } catch {
-        [Console]::Error.WriteLine($_.Exception.Message)
+        Write-Error -Message $_.Exception.Message -ErrorAction Continue
         exit 1
     }
 }
