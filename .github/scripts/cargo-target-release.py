@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import urllib.request
 
@@ -31,8 +32,8 @@ CHUNK_BYTES = 1800 * 1024**2
 KEEP = 4
 # Older generations a restore checks after the tagged one: one manifest lookup each.
 WALK_BACK = KEEP - 1
-# Registry or GitHub API transport failures (HTTPError, URLError, timeouts, oras exits); never trust errors.
-TRANSIENT = (OSError, RuntimeError, subprocess.TimeoutExpired)
+# Transport and decompression failures; content/trust validation errors are never transient.
+TRANSIENT = (OSError, RuntimeError, subprocess.TimeoutExpired, tarfile.ReadError, EOFError)
 
 
 class UnsuccessfulProducer(ValueError):
@@ -208,6 +209,14 @@ def describe(generation, compatible):
 
 
 def restore(expected):
+    try:
+        return restore_snapshot(expected)
+    except TRANSIENT as error:
+        print(f'::warning::Cargo snapshot restore failed ({error}); cold Cargo build follows.')
+        return False
+
+
+def restore_snapshot(expected):
     local = persistent_target(expected)
     if local and restore_local(local, expected):
         return True
@@ -218,7 +227,7 @@ def restore(expected):
         return False
     with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
         directory = Path(temporary)
-        manifest, walked_back = candidates[0], False
+        manifest = candidates[0]
         try:
             generation, _ = checked_generation(manifest, directory, selected_identity, compatible)
             reason = 'tagged generation; producer lane finished green'
@@ -229,17 +238,10 @@ def restore(expected):
                 print('No finished green Cargo snapshot for this lane; cold Cargo build follows.')
                 return False
             published, manifest, generation, compatible = found
-            selected_identity, walked_back = expected, True
+            selected_identity = expected
             reason = 'newest older generation whose producer lane finished green'
         print(f'Selected Cargo snapshot {manifest["name"][:-5]} ({describe(generation, compatible)}): {reason}.')
-        try:
-            fetch_chunks(published, manifest, generation, directory)
-        except RuntimeError as error:
-            if not walked_back:
-                raise
-            # Older generations can be pruned mid-download; the target is still untouched.
-            print(f'Cargo snapshot {manifest["name"][:-5]} download failed ({error}); cold Cargo build follows.')
-            return False
+        fetch_chunks(published, manifest, generation, directory)
         restore_tree(directory, selected_identity, compatible)
     return True
 
