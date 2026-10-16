@@ -3,10 +3,13 @@ use super::{AppStorageCode, AppStorageError, StorageResult};
 use butler_platform::sqlite;
 
 pub(super) fn start(db: &rusqlite::Connection) -> StorageResult<Option<sqlite::CheckpointOwner>> {
-    let observer = (std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
-        == Some(std::ffi::OsStr::new("1")))
-    .then_some(observe as sqlite::CheckpointObserver);
+    let observer = (command_timings() || super::metrics::enabled())
+        .then_some(observe as sqlite::CheckpointObserver);
     sqlite::CheckpointOwner::start(db, observer).map_err(error)
+}
+
+fn command_timings() -> bool {
+    std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref() == Some(std::ffi::OsStr::new("1"))
 }
 
 pub(super) fn close(owner: Option<sqlite::CheckpointOwner>) -> StorageResult<()> {
@@ -17,7 +20,12 @@ pub(super) fn close(owner: Option<sqlite::CheckpointOwner>) -> StorageResult<()>
 }
 
 fn observe(event: sqlite::CheckpointEvent) {
-    if let sqlite::CheckpointEvent::Finished { elapsed, succeeded } = event {
+    if let sqlite::CheckpointEvent::WalCommitted(frames) = event {
+        super::metrics::wal_committed(frames);
+    }
+    if let sqlite::CheckpointEvent::Finished { elapsed, succeeded } = event
+        && command_timings()
+    {
         crate::gateway::command_timing::CommandTiming::report_duration(
             "app_sqlite_checkpoint",
             if succeeded {

@@ -334,7 +334,7 @@ fn run_connection_lane(
             .pragma_update(None, "wal_autocheckpoint", 1000)
             .map_err(AppStorageError::sqlite)?;
         event_outbox::install(&connection, metrics.clone());
-        metrics::configure(&connection)?;
+        metrics::configure(metrics, &connection)?;
         let checkpoint = checkpoint::start(&connection)?;
         Ok((connection, checkpoint))
     })();
