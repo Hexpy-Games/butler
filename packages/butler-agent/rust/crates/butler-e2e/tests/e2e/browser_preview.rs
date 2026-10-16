@@ -58,6 +58,29 @@ async fn listening(port: u16) {
     .await
     .expect("fixture child is listening");
 }
+async fn logged(
+    admin: &AdminClient,
+    session: &str,
+    args: Value,
+    mut snapshot: Value,
+) -> Result<Value, HarnessError> {
+    let pid = snapshot["pid"].clone();
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            assert_eq!(snapshot["status"], "ok");
+            assert_eq!(snapshot["pid"], pid, "log polling must reuse the process");
+            let log = snapshot["untrusted_log"].as_str().unwrap();
+            assert!(log.len() <= 65536);
+            if log.ends_with("TAIL") {
+                return Ok(snapshot);
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            snapshot = call(admin, session, "preview.start", args.clone()).await?;
+        }
+    })
+    .await
+    .expect("fixture stdout is collected")
+}
 #[tokio::test]
 async fn preview_registry_proxies_only_registered_ports_and_archive_kills_descendants()
 -> Result<(), HarnessError> {
@@ -141,6 +164,15 @@ Bun.serve({hostname:"127.0.0.1",port,fetch(request,server){
     )
     .await?;
     assert_eq!(started["status"], "ok", "{}", started["reason"]);
+    // Listening and pipe drainage are independent. Read the idempotent registry
+    // snapshot until the complete fixture tail arrives, without starting again.
+    let started = logged(
+        &admin,
+        &session,
+        args("preview-first", first, child),
+        started,
+    )
+    .await?;
     assert!(started["untrusted_log"].as_str().unwrap().len() <= 65536);
     assert!(started["untrusted_log"].as_str().unwrap().ends_with("TAIL"));
     assert_eq!(
