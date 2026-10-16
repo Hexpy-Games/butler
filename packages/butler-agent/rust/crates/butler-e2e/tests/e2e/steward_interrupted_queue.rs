@@ -63,15 +63,15 @@ async fn started(id: &str, url: &str, script: &stub::Script) -> Result<Scenario,
     Ok(s)
 }
 
-fn db(s: &Scenario) -> Connection {
+pub(super) fn db(s: &Scenario) -> Connection {
     Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap()
 }
 
-fn count(db: &Connection, sql: &str, relation: &str) -> i64 {
+pub(super) fn count(db: &Connection, sql: &str, relation: &str) -> i64 {
     db.query_row(sql, [relation], |row| row.get(0)).unwrap()
 }
 
-fn records(root: &Path, state: &str) -> Vec<PathBuf> {
+pub(super) fn records(root: &Path, state: &str) -> Vec<PathBuf> {
     std::fs::read_dir(root.join(state))
         .unwrap()
         .map(|entry| entry.unwrap().path())
@@ -79,7 +79,7 @@ fn records(root: &Path, state: &str) -> Vec<PathBuf> {
         .collect()
 }
 
-fn read_record(path: &Path) -> Value {
+pub(super) fn read_record(path: &Path) -> Value {
     serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap()
 }
 
@@ -244,7 +244,7 @@ async fn assert_drained(
     }
 }
 
-fn request_text(body: &Value) -> String {
+pub(super) fn request_text(body: &Value) -> String {
     butler_e2e::e2e::matching::key("/codex/responses", body, &Default::default()).user_request
 }
 
