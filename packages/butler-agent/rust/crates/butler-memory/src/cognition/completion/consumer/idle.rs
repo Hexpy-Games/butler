@@ -32,6 +32,7 @@ impl MemorySyncConsumer {
     /// Canonical inventory changes invalidate the catch-up interval, preserving missed notices.
     pub fn source_changed(&self) {
         *self.catchup_at.lock() = None;
+        self.inventory_due.store(true, Ordering::Release);
     }
 
     /// In-process notices and shutdown retain their coalesced wakeups. The host also

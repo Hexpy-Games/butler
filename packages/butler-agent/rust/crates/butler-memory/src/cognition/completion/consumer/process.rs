@@ -131,6 +131,9 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     // itself must invalidate the interval before the consumer can park again.
     if queued {
         input.catchup_at.lock().take();
+        input
+            .inventory_due
+            .store(true, std::sync::atomic::Ordering::Release);
     }
     // The inventory mirror is independent of the queue and catch-up; their
     // failures must not keep it behind.
