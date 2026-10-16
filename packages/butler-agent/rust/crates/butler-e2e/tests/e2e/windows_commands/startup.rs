@@ -149,15 +149,18 @@ fn shell_phase_timings_require_invocation_opt_in() -> Result<(), HarnessError> {
         add_arguments(&mut command, &invocation);
         let output = command.output()?;
         assert_eq!(output.status.code(), Some(17), "{output:?}");
-        assert_eq!(String::from_utf8(output.stdout)?, "한글 출력\r\n");
-        let stderr = String::from_utf8(output.stderr)?;
+        assert_eq!(
+            String::from_utf8(output.stdout).expect("UTF-8 stdout"),
+            "한글 출력\r\n"
+        );
+        let stderr = String::from_utf8(output.stderr).expect("UTF-8 stderr");
         if value == Some(Some("1")) {
             let lines = stderr.lines().collect::<Vec<_>>();
             assert_eq!(lines.len(), 3, "{stderr}");
             for (line, phase) in lines.iter().zip(["script_started", "modules_ready"]) {
                 let prefix = format!("command_shell_phase phase={phase} utc_ticks=");
                 let ticks = line.strip_prefix(&prefix).expect("phase diagnostic");
-                assert!(ticks.parse::<u64>()? > 0);
+                assert!(ticks.parse::<u64>().expect("UTC ticks") > 0);
             }
             assert_eq!(lines[2], "command-error");
         } else {
