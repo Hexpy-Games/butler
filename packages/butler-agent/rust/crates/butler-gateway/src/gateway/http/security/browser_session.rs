@@ -37,7 +37,7 @@ pub(in crate::gateway::http) struct ConnectionLink {
 /// Pending one-time codes and the session cookie of one gateway listener.
 pub(in crate::gateway::http) struct BrowserSessions {
     pairing: Mutex<Option<Pairing>>,
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "e2e-fixtures")]
     clock_offset: std::sync::atomic::AtomicU64,
     pending: Mutex<HashMap<[u8; 32], SystemTime>>,
 }
@@ -47,20 +47,20 @@ impl BrowserSessions {
         Self {
             pending: Mutex::new(HashMap::new()),
             pairing: Mutex::new(None),
-            #[cfg(debug_assertions)]
+            #[cfg(feature = "e2e-fixtures")]
             clock_offset: std::sync::atomic::AtomicU64::new(0),
         }
     }
 
     pub(in crate::gateway::http) fn now(&self) -> SystemTime {
         let now = SystemTime::now();
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "e2e-fixtures")]
         let now =
             now + Duration::from_secs(self.clock_offset.load(std::sync::atomic::Ordering::Relaxed));
         now
     }
 
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "e2e-fixtures")]
     pub(in crate::gateway::http) fn advance(&self, seconds: u64) {
         self.clock_offset
             .fetch_add(seconds, std::sync::atomic::Ordering::Relaxed);

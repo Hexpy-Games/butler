@@ -46,11 +46,21 @@ pub(super) async fn connect(uri: &Path) -> lancedb::Result<Connection> {
 }
 
 fn portable_file_required() -> bool {
-    !butler_platform::secure_fs::TEMPFILE_LONG_PATH_PERSISTENCE
-        || matches!(
-            std::env::var("BUTLER_E2E_TIER").as_deref(),
-            Ok("stub" | "perf")
-        ) && std::env::var("BUTLER_E2E_PORTABLE_LANCE").as_deref() == Ok("1")
+    !butler_platform::secure_fs::TEMPFILE_LONG_PATH_PERSISTENCE || portable_file_fixture()
+}
+
+/// E2E fixture builds can select the portable store on any platform.
+#[cfg(feature = "e2e-fixtures")]
+fn portable_file_fixture() -> bool {
+    matches!(
+        std::env::var("BUTLER_E2E_TIER").as_deref(),
+        Ok("stub" | "perf")
+    ) && std::env::var("BUTLER_E2E_PORTABLE_LANCE").as_deref() == Ok("1")
+}
+
+#[cfg(not(feature = "e2e-fixtures"))]
+fn portable_file_fixture() -> bool {
+    false
 }
 
 pub(super) async fn open(connection: &Connection, name: &str) -> lancedb::Result<Table> {

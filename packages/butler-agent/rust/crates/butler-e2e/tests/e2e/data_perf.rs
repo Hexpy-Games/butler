@@ -34,7 +34,7 @@ async fn perf_terminal_history_idle_and_turn_wal() -> Result<(), HarnessError> {
     );
     let setup = Setup::new("PERF-DATA")?
         .env("BUTLER_E2E_TIER", "stub")
-        .env("BUTLER_E2E_STARTUP_TRACE", "1")
+        .env("BUTLER_STARTUP_TRACE", "1")
         .cassette("TURN-01")
         .replay_only();
     let graph = memory_fixture::initialize_empty(&setup.sandbox.data)?;
@@ -148,7 +148,7 @@ async fn perf_replay_turn_wal_small_history() -> Result<(), HarnessError> {
     );
     let setup = Setup::new("PERF-WAL")?
         .env("BUTLER_E2E_TIER", "stub")
-        .env("BUTLER_E2E_STARTUP_TRACE", "1")
+        .env("BUTLER_STARTUP_TRACE", "1")
         .cassette("TURN-01")
         .replay_only();
     let graph = memory_fixture::initialize_empty(&setup.sandbox.data)?;

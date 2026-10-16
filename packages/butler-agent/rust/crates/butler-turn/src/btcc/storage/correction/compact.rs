@@ -19,7 +19,7 @@ pub(super) fn run(
     }
     sidecar(path, "compact", run)?;
     set(&db, "compacting", true, &serde_json::json!({}))?;
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "e2e-fixtures")]
     secure_fs::fault_checkpoint("correction_counts").map_err(io_error)?;
     run.hook(&db);
     let counts = match counts(&db) {

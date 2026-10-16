@@ -1,4 +1,5 @@
-//! Stub-only, one-shot failure points for real filesystem E2E requests.
+//! E2E fixture failure points for real filesystem requests. Without the
+//! `e2e-fixtures` feature every point is inert.
 
 use std::{
     fs::File,
@@ -14,6 +15,7 @@ pub fn write(file: &mut File, bytes: &[u8], point: &str) -> io::Result<()> {
 /// Returns a one-shot I/O error when the harness selects `point` and a fresh
 /// marker path. Ordinary runs never enable an injection.
 pub fn checkpoint(point: &str) -> io::Result<()> {
+    #[cfg(feature = "e2e-fixtures")]
     if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
         && std::env::var("BUTLER_E2E_FILE_FAULT").as_deref() == Ok(point)
         && let Some(marker) = std::env::var_os("BUTLER_E2E_FILE_FAULT_MARKER")
@@ -21,12 +23,14 @@ pub fn checkpoint(point: &str) -> io::Result<()> {
     {
         return Err(io::Error::other("injected file replacement interruption"));
     }
+    #[cfg(not(feature = "e2e-fixtures"))]
+    let _ = point;
     Ok(())
 }
 
-/// Debug-only process interruption at an explicitly selected correction boundary.
+/// Fixture-only process interruption at an explicitly selected correction boundary.
 pub fn abort_point(point: &str) {
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "e2e-fixtures")]
     if matches!(
         std::env::var("BUTLER_E2E_TIER").as_deref(),
         Ok("stub" | "perf")
@@ -34,13 +38,13 @@ pub fn abort_point(point: &str) {
     {
         std::process::abort();
     }
-    #[cfg(not(debug_assertions))]
+    #[cfg(not(feature = "e2e-fixtures"))]
     let _ = point;
 }
 
-/// Debug-only storage pause, bounded by the caller's stop token and deadline.
+/// Fixture-only storage pause, bounded by the caller's stop token and deadline.
 pub fn hold_point(point: &str, stopped: impl Fn() -> bool) -> io::Result<()> {
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "e2e-fixtures")]
     if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
         && std::env::var("BUTLER_E2E_HOLD_POINT").as_deref() == Ok(point)
         && let Some(release) = std::env::var_os("BUTLER_E2E_HOLD_RELEASE")
@@ -51,7 +55,7 @@ pub fn hold_point(point: &str, stopped: impl Fn() -> bool) -> io::Result<()> {
             std::thread::sleep(std::time::Duration::from_millis(25));
         }
     }
-    #[cfg(not(debug_assertions))]
+    #[cfg(not(feature = "e2e-fixtures"))]
     let _ = (point, stopped);
     Ok(())
 }

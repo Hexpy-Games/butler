@@ -66,8 +66,10 @@ filedescriptor = "0.8.3"
 windows-permissions = "=0.2.4"
 
 [features]
+# E2E fault, clock and instrumentation hooks; never enabled in shipped binaries.
+e2e-fixtures = []
 # Fixture values for tests of other crates (e.g. archive entry modes).
-test-support = ["notify-windows-ledger/test-support"]
+test-support = ["e2e-fixtures", "notify-windows-ledger/test-support"]
 
 [dev-dependencies]
 # Integration contracts use the fixture helpers through the library target.

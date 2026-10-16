@@ -116,7 +116,7 @@ impl Observer {
                 };
                 let signal = event.need_rescan()
                     || event.paths.iter().any(|path| self.signals.contains(path));
-                if std::env::var("BUTLER_E2E_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+                if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
                     butler_core::diagnostic!(
                         "[file-watch-trace] kind={:?} durable={durable} signal={signal}",
                         event.kind

@@ -1,10 +1,14 @@
-//! Deterministic App clock for stub E2E boundary scenarios in either profile.
+//! The App identity clock. E2E fixture builds can fix it for boundary scenarios.
 use crate::host::SystemIdentity;
 use butler_gateway::gateway::AppIdentityClock;
+#[cfg(feature = "e2e-fixtures")]
 use parking_lot::RwLock;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
+#[cfg(feature = "e2e-fixtures")]
+use std::sync::OnceLock;
 
 pub(in crate::host) fn clock() -> Arc<dyn AppIdentityClock> {
+    #[cfg(feature = "e2e-fixtures")]
     if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
         && let Ok(now) = std::env::var("BUTLER_E2E_APP_NOW")
         && chrono::DateTime::parse_from_rfc3339(&now).is_ok()
@@ -13,7 +17,6 @@ pub(in crate::host) fn clock() -> Arc<dyn AppIdentityClock> {
         return CLOCK
             .get_or_init(|| {
                 let clock = Arc::new(FixedClock(RwLock::new(now)));
-                #[cfg(feature = "e2e-fixtures")]
                 if let Ok(address) = std::env::var("BUTLER_E2E_APP_CLOCK_ADDRESS") {
                     start_control(clock.clone(), &address);
                 }
@@ -62,7 +65,9 @@ fn start_control(clock: Arc<FixedClock>, address: &str) {
         });
 }
 
+#[cfg(feature = "e2e-fixtures")]
 struct FixedClock(RwLock<String>);
+#[cfg(feature = "e2e-fixtures")]
 impl AppIdentityClock for FixedClock {
     fn new_uuid(&self) -> String {
         uuid::Uuid::new_v4().to_string()

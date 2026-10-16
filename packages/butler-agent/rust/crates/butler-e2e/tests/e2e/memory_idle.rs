@@ -145,7 +145,7 @@ async fn mem_idle_daily_cycle_and_crash_recovery() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("MEM-IDLE-RECOVERY")?
         .fixture(Fixture::Empty)
-        .env("BUTLER_E2E_MEMORY_SYNC_TRACE", "1");
+        .env("BUTLER_MEMORY_SYNC_TRACE", "1");
     let graph = initialize_empty(&setup.sandbox.data)?;
     let mut s = setup.start().await?;
     tokio::time::sleep(Duration::from_secs(3)).await;
@@ -338,7 +338,7 @@ async fn mem_idle_catches_changed_source_without_restart() -> Result<(), Harness
     butler_e2e::gate!();
     let setup = Setup::new("MEM-IDLE-CHANGE")?
         .fixture(Fixture::Empty)
-        .env("BUTLER_E2E_MEMORY_SYNC_TRACE", "1");
+        .env("BUTLER_MEMORY_SYNC_TRACE", "1");
     let graph = initialize_empty(&setup.sandbox.data)?;
     let s = setup.start().await?;
     // Let the service's initial empty-source poll settle before changing it.
