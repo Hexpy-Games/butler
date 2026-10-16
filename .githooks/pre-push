@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-root="$(git rev-parse --show-toplevel)"
-exec "$root/scripts/prepush"
+# Resolve before isolation clears Git's hook-local repository environment.
+root="$(git rev-parse --show-toplevel 2>/dev/null || git --work-tree="$PWD" rev-parse --show-toplevel)"
+exec "$root/scripts/prepush" --hook

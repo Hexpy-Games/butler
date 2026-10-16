@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Path-selected local checks; CI remains the authority for Clippy arguments."""
+import argparse
 import os
 from pathlib import Path
 import re
@@ -17,15 +18,37 @@ WINDOWS = 'x86_64-pc-windows-msvc'
 
 
 def output(*args):
+    if args[0] == 'git':
+        args = ('git', '--work-tree=' + str(ROOT), *args[1:])
     return subprocess.check_output(args, cwd=ROOT, text=True).rstrip('\n')
 
 
-def changed_paths():
-    base = output('git', 'merge-base', 'origin/main', 'HEAD')
+def changed_paths(base=None, tip=None):
+    base = base or output('git', 'merge-base', 'origin/main', tip or 'HEAD')
     # --no-renames retains both sides of moves across check boundaries.
-    paths = output('git', 'diff', '--name-only', '--no-renames', '-z', base).split('\0')
-    paths += output('git', 'ls-files', '--others', '--exclude-standard', '-z').split('\0')
+    paths = output('git', 'diff', '--name-only', '--no-renames', '-z', base, *([tip] if tip else [])).split('\0')
+    if tip is None:
+        paths += output('git', 'ls-files', '--others', '--exclude-standard', '-z').split('\0')
     return base, sorted(set(paths) - {''})
+
+
+def push_ranges(lines):
+    ranges = []
+    for line in lines:
+        local_ref, local_sha, remote_ref, remote_sha = line.split()
+        if set(local_sha) == {'0'} or not remote_ref.startswith('refs/heads/'):
+            continue
+        base = remote_sha
+        if set(base) == {'0'}:
+            base = output('git', 'merge-base', 'origin/main', local_sha)
+        else:
+            # A remote's old tip need not be in the local object database.
+            try:
+                output('git', 'cat-file', '-e', base + '^{commit}')
+            except subprocess.CalledProcessError:
+                base = output('git', 'merge-base', 'origin/main', local_sha)
+        ranges.append((base, local_sha, remote_ref.removeprefix('refs/heads/')))
+    return ranges
 
 
 def clippy_lines(path):
@@ -89,7 +112,8 @@ def python_tests(paths):
                 tests.add(sibling.relative_to(ROOT).as_posix())
     # The derived prepush tests are also loaded by the existing CI entry point.
     inputs = {'scripts/prepush', '.githooks/pre-push', '.github/scripts/prepush.py',
-              '.github/scripts/prepush_tests.py', 'deploy/windows-preview-quality.ps1'}
+              '.github/scripts/prepush_tests.py', '.github/scripts/prepush_git_tests.py',
+              '.github/scripts/isolated.py', 'deploy/windows-preview-quality.ps1'}
     if inputs.intersection(paths) or any(p.startswith('.github/workflows/') for p in paths):
         tests.add('.github/scripts/test-integration-proof.py')
     return sorted(tests)
@@ -98,7 +122,11 @@ def python_tests(paths):
 def run(label, command, cwd=ROOT):
     print(f'prepush: {label}: {shlex.join(map(str, command))}', flush=True)
     # Each check gets its own HOME/BUTLER_DATA, preserving the caller's caches.
-    return subprocess.call([sys.executable, str(ISOLATE), *map(str, command)], cwd=cwd) == 0
+    started = time.monotonic()
+    passed = subprocess.call([sys.executable, str(ISOLATE), *map(str, command)], cwd=cwd) == 0
+    print(f'prepush: {label}: {"PASS" if passed else "FAIL"} '
+          f'{time.monotonic() - started:.2f}s', flush=True)
+    return passed
 
 
 def rust_checks():
@@ -137,14 +165,16 @@ def powershell_check(paths):
     return success
 
 
-def main():
+def check_range(base=None, tip=None, branch=None):
     started = time.monotonic()
-    base, paths = changed_paths()
+    base, paths = changed_paths(base, tip)
     selected = selection(paths)
     print(f'prepush: {len(paths)} changed paths vs {base}', flush=True)
-    success = run('branch-name', ['python3', '.github/scripts/branch-name.py',
-                                 output('git', 'symbolic-ref', '--short', 'HEAD')])
-    success = run('whitespace', ['git', 'diff', '--check', base]) and success
+    if branch is None:
+        branch = output('git', 'symbolic-ref', '--quiet', '--short', 'HEAD')
+    success = run('branch-name', ['python3', '.github/scripts/branch-name.py', branch])
+    success = run('whitespace', ['git', '--work-tree=' + str(ROOT), 'diff', '--check',
+                                 base, *([tip] if tip else [])]) and success
     if selected['docs']:
         success = run('work-docs', ['python3', '.github/scripts/work-docs-lint.py']) and success
     if selected['workflows']:
@@ -164,6 +194,21 @@ def main():
         success = rust_checks() and success
     print(f'prepush: {"PASS" if success else "FAIL"} in {time.monotonic() - started:.2f}s', flush=True)
     return 0 if success else 1
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--hook', action='store_true', help='read pre-push ref updates from stdin')
+    parser.add_argument('--base', help='override the comparison base for local checks')
+    parser.add_argument('--head', help='compare committed trees rather than local work')
+    args = parser.parse_args(argv)
+    if args.hook:
+        ranges = push_ranges(sys.stdin)
+        if not ranges:
+            print('prepush: no branch updates; no checks')
+        results = [check_range(base, tip, branch) for base, tip, branch in ranges]
+        return 0 if all(result == 0 for result in results) else 1
+    return check_range(args.base, args.head)
 
 
 if __name__ == '__main__':

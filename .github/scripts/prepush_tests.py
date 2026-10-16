@@ -121,20 +121,20 @@ class PrepushChecks(unittest.TestCase):
                 patch.object(prepush, 'run', return_value=True), \
                 patch.object(prepush.shutil, 'which', return_value=None), \
                 contextlib.redirect_stderr(io.StringIO()) as errors:
-            self.assertEqual(prepush.main(), 1)
+            self.assertEqual(prepush.main([]), 1)
             self.assertIn('go install github.com/rhysd/actionlint', errors.getvalue())
             self.assertTrue(prepush.powershell_check(['deploy/test.ps1']))
             self.assertIn('WARNING: pwsh', errors.getvalue())
         with patch.object(prepush, 'changed_paths', return_value=('HEAD', [])), \
                 patch.object(prepush, 'output', return_value='ci/checks'), \
                 patch.object(prepush, 'run', return_value=False):
-            self.assertEqual(prepush.main(), 1)
+            self.assertEqual(prepush.main([]), 1)
 
     # test-category: format-pin
     def test_hook_is_executable_and_cannot_silently_skip_checks(self):
         hook = ROOT / '.githooks/pre-push'
         self.assertTrue(os.access(hook, os.X_OK))
-        self.assertEqual(hook.read_text().splitlines()[-1], 'exec "$root/scripts/prepush"')
+        self.assertEqual(hook.read_text().splitlines()[-1], 'exec "$root/scripts/prepush" --hook')
         self.assertNotRegex(hook.read_text(), r'\|\| true|SKIP|NO_VERIFY')
         tests = prepush.python_tests(['scripts/prepush', '.github/scripts/prepush.py'])
         self.assertIn('.github/scripts/test-integration-proof.py', tests)

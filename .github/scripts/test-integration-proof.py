@@ -188,6 +188,7 @@ class IntegrationProof(unittest.TestCase):
 
 # Derived local/CI parity checks share this existing CI entry point.
 from prepush_tests import PrepushChecks
+from prepush_git_tests import PrepushGitChecks
 
 
 if __name__ == '__main__':

@@ -1,0 +1,134 @@
+"""Exercise the installed hook in disposable main and linked Git worktrees."""
+import contextlib
+import io
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from prepush_tests import ROOT, prepush
+
+
+class PrepushGitChecks(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name) / 'main'
+        self.root.mkdir()
+        self.remote = Path(self.temp.name) / 'remote.git'
+        self.git(self.root, 'init', '-q', '-b', 'ci/main-check')
+        self.git(self.root, 'config', 'user.name', 'Test')
+        self.git(self.root, 'config', 'user.email', 'test@example.invalid')
+        files = ['.githooks/pre-push', 'scripts/prepush',
+                 '.github/scripts/isolated.py', '.github/scripts/prepush.py',
+                 '.github/scripts/branch-name.py', '.github/scripts/ci_rust_inputs.py']
+        for name in files:
+            destination = self.root / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / name, destination)
+        self.commit(self.root, 'base')
+        self.base = self.git(self.root, 'rev-parse', 'HEAD').strip()
+        self.git(self.root, 'init', '-q', '--bare', str(self.remote))
+        self.git(self.root, 'remote', 'add', 'origin', str(self.remote))
+        self.git(self.root, 'push', '-q', 'origin', 'HEAD:refs/heads/main')
+        self.git(self.root, 'config', 'core.hooksPath', '.githooks')
+        self.linked = Path(self.temp.name) / 'linked'
+        self.git(self.root, 'worktree', 'add', '-qb', 'ci/linked', str(self.linked))
+        # Commit scripts before installing the hook; test pushes only change payload.
+        for worktree in (self.root, self.linked):
+            (worktree / 'payload').write_text('committed\n')
+            self.commit(worktree, 'payload')
+            (worktree / 'not-pushed.rs').write_text('untracked\n')
+
+    def git(self, worktree, *args):
+        return subprocess.check_output(['git', *(['--work-tree=' + str(worktree)]
+                                              if args[0] != 'init' else []), *args],
+                                       cwd=worktree, text=True, stderr=subprocess.STDOUT)
+
+    def commit(self, worktree, message):
+        self.git(worktree, 'add', '.')
+        self.git(worktree, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', message)
+
+    def push(self, worktree, ref):
+        return self.git(worktree, 'push', '--dry-run', 'origin', ref)
+
+    # test-category: pure-logic
+    def test_main_and_linked_new_branch_push_without_upstream(self):
+        for worktree, name in ((self.root, 'ci/main-check'), (self.linked, 'ci/linked')):
+            with self.subTest(worktree=worktree):
+                result = self.push(worktree, 'HEAD:refs/heads/' + name)
+                self.assertIn('prepush: 1 changed paths vs ' + self.base, result)
+                self.assertIn('branch-name.py ' + name, result)
+                self.assertIn('prepush: PASS', result)
+                self.assertNotIn('prepush: fmt:', result)
+
+    # test-category: pure-logic
+    def test_existing_remote_tip_and_pushed_commit_instead_of_head(self):
+        self.git(self.root, '-c', 'core.hooksPath=/dev/null', 'push', '-q',
+                 'origin', 'HEAD:refs/heads/ci/existing')
+        tip = self.git(self.root, 'rev-parse', 'HEAD').strip()
+        (self.root / 'later').write_text('later\n')
+        self.commit(self.root, 'later')
+        result = self.push(self.root, tip + ':refs/heads/ci/new-tip')
+        self.assertIn('prepush: 1 changed paths', result)
+        result = self.push(self.root, 'HEAD:refs/heads/ci/existing')
+        self.assertIn('prepush: 2 changed paths vs ' + tip, result)
+
+    # test-category: pure-logic
+    def test_detached_head_push_uses_destination_branch(self):
+        self.git(self.linked, 'checkout', '-q', '--detach')
+        result = self.push(self.linked, 'HEAD:refs/heads/ci/detached')
+        self.assertIn('branch-name.py ci/detached', result)
+        self.assertIn('prepush: PASS', result)
+
+    # test-category: pure-logic
+    def test_delete_and_annotated_tag_push_run_no_checks(self):
+        self.git(self.root, '-c', 'core.hooksPath=/dev/null', 'push', '-q',
+                 'origin', 'HEAD:refs/heads/ci/delete')
+        self.git(self.root, 'tag', '-am', 'tag', 'test-tag')
+        for ref in (':refs/heads/ci/delete', 'refs/tags/test-tag'):
+            result = self.push(self.root, ref)
+            self.assertIn('prepush: no branch updates; no checks', result)
+            self.assertNotIn('prepush: branch-name:', result)
+
+    # test-category: security
+    def test_inherited_git_state_is_removed_before_nested_repo_and_cargo(self):
+        gitdir = self.git(self.linked, 'rev-parse', '--absolute-git-dir').strip()
+        command = ['python3', str(ROOT / '.github/scripts/isolated.py'), 'python3', '-c',
+                   'import os, subprocess, tempfile; '
+                   'assert not any(k.startswith("GIT_") for k in os.environ); '
+                   'd=tempfile.mkdtemp(); subprocess.run(["git", "init", "-q", d], check=True); '
+                   'assert subprocess.check_output(["git", "-C", d, "rev-parse", '
+                   '"--show-toplevel"], text=True).strip() == d; '
+                   'assert os.environ["HOME"] != os.environ["BUTLER_DATA"]']
+        env = dict(os.environ, GIT_DIR=gitdir, GIT_WORK_TREE=str(self.linked),
+                   GIT_INDEX_FILE=gitdir + '/index', GIT_COMMON_DIR=str(self.root / '.git'),
+                   GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='user.name', GIT_CONFIG_VALUE_0='Test')
+        subprocess.run(command, cwd=self.linked, env=env, check=True)
+        result = subprocess.check_output(
+            [str(self.linked / '.githooks/pre-push')], input=(
+                f'HEAD {self.git(self.linked, "rev-parse", "HEAD").strip()} '
+                f'refs/heads/ci/exported {"0" * 40}\n'), cwd=self.linked, env=env, text=True)
+        self.assertIn('prepush: PASS', result)
+
+    # test-category: pure-logic
+    def test_shared_bare_config_does_not_break_linked_hook(self):
+        self.git(self.root, 'config', 'core.bare', 'true')
+        result = self.push(self.linked, 'HEAD:refs/heads/ci/bare-config')
+        self.assertIn('prepush: PASS', result)
+
+    # test-category: pure-logic
+    def test_missing_remote_tip_falls_back_and_multiple_updates_are_checked(self):
+        tip = self.git(self.linked, 'rev-parse', 'HEAD').strip()
+        lines = f'HEAD {tip} refs/heads/ci/one {"1" * 40}\n'
+        lines += f'HEAD {tip} refs/heads/ci/two {"0" * 40}\n'
+        with patch.object(prepush, 'ROOT', self.linked), \
+                patch('sys.stdin', io.StringIO(lines)), \
+                patch.object(prepush, 'check_range', side_effect=[1, 0]) as check, \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(prepush.main(['--hook']), 1)
+        self.assertEqual(check.call_args_list[0].args, (self.base, tip, 'ci/one'))
+        self.assertEqual(check.call_args_list[1].args, (self.base, tip, 'ci/two'))
