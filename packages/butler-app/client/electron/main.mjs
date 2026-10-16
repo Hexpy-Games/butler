@@ -184,7 +184,10 @@ if (process.platform === "win32") {
   app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
 }
 if (windowsSquirrelLaunch.handled) {
-  if (!shellRegistrationAllowed()) process.exit(0);
+  if (process.env.BUTLER_APP_DISABLE_SHELL_REGISTRATION === "1") process.exit(0);
+  // Shortcuts belong to the install itself; only the global protocol and
+  // startup registrations are reserved for the default profile.
+  const profileOwnsShell = shellRegistrationAllowed();
   let squirrelExitCode = 0;
   let squirrelErrorCode = null;
   let squirrelResult = null;
@@ -196,10 +199,10 @@ if (windowsSquirrelLaunch.handled) {
         writeShortcut: (path, options) => shell.writeShortcutLink(path, "create", options),
         runPowerShell: spawnSync,
       }),
-      setLoginItemSettings: (settings) => app.setLoginItemSettings(settings),
-      registerProtocol: (scheme, executable, args) =>
+      setLoginItemSettings: (settings) => profileOwnsShell && app.setLoginItemSettings(settings),
+      registerProtocol: (scheme, executable, args) => !profileOwnsShell ||
         app.setAsDefaultProtocolClient(scheme, executable, args),
-      unregisterProtocol: (scheme, executable, args) =>
+      unregisterProtocol: (scheme, executable, args) => !profileOwnsShell ||
         app.removeAsDefaultProtocolClient(scheme, executable, args),
       cleanupOperationalState: () =>
         removeWindowsOperationalState({ butlerData: appWritableDataRoot }),
