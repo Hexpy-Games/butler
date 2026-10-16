@@ -140,8 +140,42 @@ jobs:
         run: |
           chmod +x "$RUNNER_TEMP"/update-agent-builds/*/butler-agent
           echo "BUTLER_UPDATE_SMOKE_AGENT_BUILDS=$RUNNER_TEMP/update-agent-builds" >> "$GITHUB_ENV"
-      - name: Compare new-chat surfaces with preview.6 and prove onboarding
+
+      # Package and upload first so a comparison smoke failure still leaves a
+      # Mac test build. The upload runs only after packaging succeeds; every
+      # smoke below still runs and still fails the job.
+      - name: Package the native App release
+        id: package
         if: ${{ !inputs.published-candidate }}
+        run: |
+          set -euo pipefail
+          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          export GITHUB_REF_NAME=v${{ inputs.candidate-version || '0.1.0-preview.99' }}
+          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
+          bun run release:app:package -- \
+            --platform=darwin-arm64 --out dist/release/app \
+            --artifact-base-url "https://example.invalid/butler/pr-${{ github.event.number }}"
+
+      - name: Upload the unsigned darwin-arm64 App test build
+        if: ${{ !inputs.published-candidate }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: butler-app-darwin-arm64-unsigned
+          path: |
+            dist/release/app/butler-app-*-darwin-arm64.dmg
+            dist/release/app/butler-app-*-darwin-arm64.dmg.sha256
+            dist/release/app/butler-app-*-darwin-arm64.zip
+            dist/release/app/butler-app-*-darwin-arm64.zip.sha256
+            dist/release/app/app-release-manifest.json
+            dist/release/app/app-update-manifest.json
+          if-no-files-found: error
+          retention-days: 14
+
+      # Same run condition as before packaging moved ahead: every earlier step
+      # succeeded, whatever packaging or the upload returned.
+      - name: Compare new-chat surfaces with preview.6 and prove onboarding
+        if: ${{ !cancelled() && !inputs.published-candidate && steps.package.outcome != 'skipped' }}
         run: |
           set -euo pipefail
           export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/butler-smoke-browsers"
@@ -171,7 +205,7 @@ jobs:
             .tmp/settings-release-comparison/
           if-no-files-found: error
 
-      - name: Package and smoke the native App release
+      - name: Smoke the native App release
         if: ${{ !inputs.published-candidate }}
         run: |
           set -euo pipefail
@@ -179,9 +213,6 @@ jobs:
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
           export GITHUB_REF_NAME=v${{ inputs.candidate-version || '0.1.0-preview.99' }}
           trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
-          bun run release:app:package -- \
-            --platform=darwin-arm64 --out dist/release/app \
-            --artifact-base-url "https://example.invalid/butler/pr-${{ github.event.number }}"
           bun run release:app:smoke -- --platform=darwin-arm64 --out dist/release/app
 
       - name: Packaged preview App update through Settings
