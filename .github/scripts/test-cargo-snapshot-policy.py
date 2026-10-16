@@ -76,6 +76,28 @@ class SnapshotPolicy(unittest.TestCase):
             remote.assert_not_called()
             record.assert_not_called()
 
+    # test-category: pure-logic
+    def test_prune_retires_keys_after_fourteen_days_without_a_new_generation(self):
+        def version(number, key, days, aliases=()):
+            return dict(id=number, created_at=(datetime.now(timezone.utc) - timedelta(days=days)).isoformat(),
+                        metadata={'container': {'tags': [key + f'--{number}-1', *aliases]}})
+        active, old, warm = 'compatible-active', 'compatible-old', 'compatible-warm'
+        versions = [version(1, old, 16, ('exact-old', old)), version(2, old, 15),
+                    version(3, warm, 20), version(4, warm, 1), version(5, active, 30)]
+        # A version carrying a live key cannot be removed with an old key.
+        shared = version(6, old, 16, (warm + '--6-1',))
+        versions.append(shared)
+        with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'), \
+                patch.object(snapshots, 'api', side_effect=[versions, None, None]) as api, \
+                contextlib.redirect_stdout(io.StringIO()) as output:
+            snapshots.prune(active, '5-1', 12345)
+        deleted = [call.args[0].rsplit('/', 1)[-1] for call in api.call_args_list if call.kwargs.get('method') == 'DELETE']
+        self.assertEqual(deleted, ['1', '2'])
+        self.assertIn('compressed bytes=12345', output.getvalue())
+        # One new generation protects every generation of that key from retirement.
+        versions.append(version(7, old, 1))
+        self.assertEqual(snapshots.policy.retired_versions(versions, active), [])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -36,3 +36,23 @@ def report(operation, expected, key, generation, match, compressed, started, out
 def compressed_bytes(directory):
     directory = Path(runner_cache.extended(directory))
     return sum(path.stat().st_size for path in directory.glob('*.zst'))
+
+
+def retired_versions(versions, active_tag):
+    """Retire whole compatibility keys only when their newest generation is 14 days old."""
+    import re
+    keys = {}
+    for entry in versions:
+        for tag in entry['metadata']['container']['tags']:
+            match = re.fullmatch(r'(compatible-.+)--\d+-\d+', tag)
+            if match:
+                keys.setdefault(match[1], []).append(entry)
+    retired = set()
+    for key, entries in keys.items():
+        timestamps = [entry.get('created_at') for entry in entries]
+        if key != active_tag and all(timestamps) and min(map(age_hours, timestamps)) >= 14 * 24:
+            retired.add(key)
+    return [entry for entry in versions
+            if (tags := entry['metadata']['container']['tags'])
+            and (owners := {tag.split('--', 1)[0] for tag in tags if '--' in tag})
+            and owners <= retired]

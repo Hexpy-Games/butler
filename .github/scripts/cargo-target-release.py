@@ -373,14 +373,19 @@ def report_free_disk(label):
     print(f'Free disk {label}: {usage.free / 1024**3:.1f} of {usage.total / 1024**3:.1f} GiB.', flush=True)
 
 
-def prune(tag, prefix):
+def prune(tag, prefix, compressed=0):
     # GHCR does not implement registry manifest deletion. Package version
     # deletion uses the same workflow token, with package admin access inherited
-    # from the linked repository. Never delete another compatibility key.
+    # from the linked repository. Other keys retire only after 14 inactive days.
     repository = os.environ['GITHUB_REPOSITORY']
     owner = repository.split('/')[0]
     endpoint = f'orgs/{owner}/packages/container/butler-ci%2Fcargo-target/versions'
     pages = api(endpoint + '?per_page=100')
+    print(f'Cargo prune: key={tag}; generation={prefix}; compressed bytes={compressed}')
+    retired = policy.retired_versions(pages, tag)
+    for entry in retired:
+        print(f'Retiring Cargo key tags={entry["metadata"]["container"]["tags"]}')
+        api(endpoint + '/' + str(entry['id']), method='DELETE')
     versions = []
     for entry in pages:
         tags = entry['metadata']['container']['tags']
@@ -424,7 +429,7 @@ def publish(directory, run_id):
     ci_oci.checked('tag', reference, tag, anonymous=False)
     ci_oci.checked('tag', reference, tag_name(metadata['identity']), anonymous=False)
     if os.environ.get('BUTLER_OCI_LAYOUT') != '1':
-        prune(tag, prefix)
+        prune(tag, prefix, sum((directory / name).stat().st_size for name in chunks))
 
 
 def should_publish(expected):
