@@ -240,11 +240,15 @@ pub(super) async fn regressions() {
     ];
     let mut failed = Vec::new();
     for (name, case) in cases {
+        let started = Instant::now();
         let result = AssertUnwindSafe(tokio::time::timeout(Duration::from_secs(5), case))
             .catch_unwind()
             .await;
         let passed = matches!(result, Ok(Ok(())));
-        eprintln!("PREWARM-RACE {name}: {passed}");
+        eprintln!(
+            "PREWARM-RACE {name}: {result:?} elapsed_ms={}",
+            started.elapsed().as_millis()
+        );
         if !passed {
             failed.push(name);
         }

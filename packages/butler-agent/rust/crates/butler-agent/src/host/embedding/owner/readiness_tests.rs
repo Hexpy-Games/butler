@@ -56,7 +56,7 @@ fn loading_owner() -> EmbeddingOwner {
             child,
             initialized: false,
         });
-        run_loop(&actor_inner, &mut process).await;
+        run_loop(&actor_inner, &mut process, || {}).await;
         assert!(process.is_none(), "close/off must reap the worker");
     })
 }

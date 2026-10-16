@@ -364,10 +364,15 @@ async fn run_actor(inner: Arc<Inner>) {
     let mut child: Option<WorkerChild> = None;
     #[cfg(feature = "e2e-fixtures")]
     initialize_for_ownership_test(&inner, &mut child).await;
-    run_loop(&inner, &mut child).await;
+    run_loop(
+        &inner,
+        &mut child,
+        butler_memory::cognition::signal_memory_work,
+    )
+    .await;
 }
 
-async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>) {
+async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>, signal_memory_work: impl Fn()) {
     loop {
         if inner.release.swap(false, Ordering::AcqRel) {
             inner.readiness.clear();
@@ -392,7 +397,7 @@ async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>) {
                 && !inner.shutdown.is_cancelled()
                 && child.as_ref().is_some_and(|process| process.initialized);
             if inner.readiness.publish(ready) {
-                butler_memory::cognition::signal_memory_work();
+                signal_memory_work();
             }
             if ready && child.as_ref().and_then(|process| process.child.id()) != previous_worker {
                 butler_core::diagnostic!("[embedding-worker] ready");

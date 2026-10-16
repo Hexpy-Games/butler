@@ -5,7 +5,6 @@ use super::*;
 use butler_memory::cognition::{
     CandidateSearchInput, CognitionVectorSearch, GenerationVectorAdapter,
 };
-use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_platform::process_control::test_support::{clone_peer_input, gated_lines_peer};
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -13,7 +12,14 @@ use tokio::process::{ChildStderr, ChildStdin};
 
 mod vector_fixture;
 
-fn owner(responses: &[String]) -> (Arc<EmbeddingOwner>, ChildStdin, BufReader<ChildStderr>) {
+fn owner(
+    responses: &[String],
+) -> (
+    Arc<EmbeddingOwner>,
+    ChildStdin,
+    BufReader<ChildStderr>,
+    Arc<AtomicU64>,
+) {
     let mut child = gated_lines_peer(&responses.iter().map(String::as_str).collect::<Vec<_>>())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -32,11 +38,16 @@ fn owner(responses: &[String]) -> (Arc<EmbeddingOwner>, ChildStdin, BufReader<Ch
     });
     let inner = readiness_tests::inner();
     let actor_inner = inner.clone();
+    let wakes = Arc::new(AtomicU64::new(0));
+    let actor_wakes = wakes.clone();
     let owner = readiness_tests::owner(inner, async move {
-        run_loop(&actor_inner, &mut process).await;
+        run_loop(&actor_inner, &mut process, || {
+            actor_wakes.fetch_add(1, Ordering::Relaxed);
+        })
+        .await;
         assert!(process.is_none());
     });
-    (Arc::new(owner), gate, reader)
+    (Arc::new(owner), gate, reader, wakes)
 }
 
 fn ready_response(id: u64) -> String {
@@ -64,12 +75,22 @@ async fn load(owner: &EmbeddingOwner, gate: &mut ChildStdin, reader: &mut BufRea
 }
 
 pub(super) async fn background_candidates() {
+    let started = Instant::now();
+    eprintln!("VERIFY-CANDIDATES phase=fixture");
     let fixture = vector_fixture::Fixture::new().await;
+    eprintln!(
+        "VERIFY-CANDIDATES phase=load elapsed_ms={}",
+        started.elapsed().as_millis()
+    );
     let responses = [ready_response(1), ready_response(2), fixture.response(3)];
-    let (owner, mut gate, mut reader) = owner(&responses);
+    let (owner, mut gate, mut reader, _) = owner(&responses);
     load(&owner, &mut gate, &mut reader).await;
     owner.start_loading();
     received(&mut reader).await;
+    eprintln!(
+        "VERIFY-CANDIDATES phase=search elapsed_ms={}",
+        started.elapsed().as_millis()
+    );
     let adapter =
         GenerationVectorAdapter::new(fixture.root.clone(), Default::default(), owner.clone());
     let search = adapter.search(CandidateSearchInput {
@@ -85,16 +106,21 @@ pub(super) async fn background_candidates() {
     gate.write_all(b"\n").await.unwrap();
     let result = match first {
         std::task::Poll::Ready(result) => result,
-        std::task::Poll::Pending => {
-            received(&mut reader).await;
-            gate.write_all(b"\n").await.unwrap();
-            search.await
-        }
+        // Keep driving the caller while waiting for its worker request. An
+        // error/deadline can complete it without the peer receiving a request.
+        std::task::Poll::Pending => tokio::select! {
+            result = &mut search => result,
+            () = received(&mut reader) => {
+                eprintln!("VERIFY-CANDIDATES phase=vector-read elapsed_ms={}", started.elapsed().as_millis());
+                gate.write_all(b"\n").await.unwrap();
+                search.await
+            }
+        },
     };
     owner.close().await.unwrap();
     // Projection's caller defaults vector failures to no candidates. Exercise
     // the actual adapter, persisted vector, and current-unit receipt filter.
-    let hits = result.unwrap_or_default();
+    let hits = result.expect("candidate search must succeed during healthy verification");
     assert_eq!(hits.len(), 1, "verification lost the semantic candidate");
     assert_eq!(hits[0].owner_id, "existing-entity");
     assert_eq!(hits[0].rank, 1);
@@ -103,7 +129,7 @@ pub(super) async fn background_candidates() {
 }
 
 pub(super) async fn readiness() {
-    let (owner, mut gate, mut reader) = owner(&[ready_response(1), ready_response(2)]);
+    let (owner, mut gate, mut reader, _) = owner(&[ready_response(1), ready_response(2)]);
     load(&owner, &mut gate, &mut reader).await;
     owner.start_loading();
     received(&mut reader).await;
@@ -124,17 +150,16 @@ pub(super) async fn readiness() {
 }
 
 pub(super) async fn memory_wakes() {
-    let coordinator =
-        CognitionWriteCoordinator::new(Arc::new(crate::host::SystemIdentity)).unwrap();
     let mut deltas = Vec::new();
     for _ in 0..2 {
-        let before = coordinator.inventory_revision();
-        let (owner, mut gate, mut reader) =
+        // Count only this actor's signals. Inventory revisions also include
+        // unrelated process-wide source publications from concurrent tests.
+        let (owner, mut gate, mut reader, wakes) =
             owner(&[ready_response(1), ready_response(2), ready_response(4)]);
         load(&owner, &mut gate, &mut reader).await;
-        deltas.push(coordinator.inventory_revision() - before);
+        deltas.push(wakes.load(Ordering::Relaxed));
         for _ in 0..2 {
-            let before = coordinator.inventory_revision();
+            let before = wakes.load(Ordering::Relaxed);
             owner.start_loading();
             received(&mut reader).await;
             let ready = owner.ready(deadline());
@@ -142,7 +167,7 @@ pub(super) async fn memory_wakes() {
             assert!(futures_util::poll!(ready.as_mut()).is_pending());
             gate.write_all(b"\n").await.unwrap();
             ready.await.unwrap();
-            deltas.push(coordinator.inventory_revision() - before);
+            deltas.push(wakes.load(Ordering::Relaxed) - before);
         }
         owner.close().await.unwrap();
     }
