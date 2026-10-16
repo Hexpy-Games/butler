@@ -194,11 +194,14 @@ async fn mem_05_vector_batch_finds_chat_a_fact_by_paraphrase_in_chat_b() -> Resu
         drained.elapsed().as_millis()
     );
     // A new user turn preloads the existing vector generation before recall.
+    let reload = Instant::now();
     let (_, turn) = s
         .turn("general", "I will read a book this evening.")
         .await?;
     assert_eq!(turn_state(&turn), "delivered");
-    memory_stubs::text_complete(&s.sandbox.data, 6).await?;
+    // Prewarming can drain vectors before the text-only waiter observes them.
+    // Await the durable completed state, including semantic and hot-cache work.
+    memory_stubs::vectors_complete(&s.sandbox.data, 6).await?;
     if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
         assert_eq!(
             workers.len(),
@@ -206,10 +209,27 @@ async fn mem_05_vector_batch_finds_chat_a_fact_by_paraphrase_in_chat_b() -> Resu
             "turn-start prefetch must reload the worker"
         );
     }
-    memory_stubs::vectors_complete(&s.sandbox.data, 6).await?;
     assert_eq!(memory_stubs::unit_states(&s.sandbox.data)?.0, 0);
+    eprintln!(
+        "EMBED-RELOAD complete_turns=6 elapsed_ms={}",
+        reload.elapsed().as_millis()
+    );
     let first_after_idle = recall(&s, "general", COLD_AGAIN).await?;
-    assert!(first_after_idle.to_string().contains(&code));
+    assert_eq!(
+        first_after_idle["output"]["coverage"]["vectors"]["state"], "ok",
+        "{first_after_idle}"
+    );
+    assert!(
+        first_after_idle["output"]["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item.to_string().contains(&code)
+                && item["channels"]
+                    .as_array()
+                    .is_some_and(|channels| channels.iter().any(|channel| channel == "vector"))),
+        "{first_after_idle}"
+    );
     memory_stubs::vectors_complete(&s.sandbox.data, 7).await?;
     assert_eq!(
         s.agent.logs().matches("[embedding-worker] ready").count(),
