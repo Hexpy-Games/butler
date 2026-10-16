@@ -79,7 +79,8 @@ export function SettingsSelect({
   );
   const selectControl = (
     <Select value={value} onValueChange={onChange} disabled={inactive}>
-      {disabledReason ? <Tooltip label={disabledReason}>{trigger}</Tooltip> : trigger}
+      {/* Beside the trigger, clear of the label and description stacked above it. */}
+      {disabledReason ? <Tooltip label={disabledReason} side="right">{trigger}</Tooltip> : trigger}
       <SelectContent>
         <SelectGroup>
           {options.map((option) => (

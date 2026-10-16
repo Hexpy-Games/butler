@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
+import { SettingsField, SettingsFieldScopeProvider } from "../../blocks/SettingsField";
 import { Field, FieldContent, FieldDescription, FieldLabel } from "../Field";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
@@ -18,12 +19,18 @@ const labels = {
     developer: "Developer mode", developerHint: "Only available in development builds.",
     reduceMotion: "Reduce motion", followsSystem: "Follows the system setting",
     on: "On", off: "Off", motion: "The thumb moves on --motion-base with the spring easing; reduced motion switches at once.",
+    sandbox: "Command sandbox", sandboxHint: "Runs commands that change files in an isolated environment.",
+    unavailable: "Not available on this device",
+    reasonHint: "Hover or focus the switch: the reason opens to its right, clear of the label and description.",
   },
   "ko-KR": {
     fallback: "예비 모델 사용", fallbackHint: "기본 모델이 실패하면 목록의 다음 모델로 다시 시도합니다.",
     developer: "개발자 모드", developerHint: "개발 빌드에서만 사용할 수 있습니다.",
     reduceMotion: "동작 줄이기", followsSystem: "시스템 설정을 따릅니다",
     on: "켜짐", off: "꺼짐", motion: "손잡이는 --motion-base 동안 스프링 이징으로 움직이고, 동작 줄이기에서는 바로 바뀝니다.",
+    sandbox: "명령 격리", sandboxHint: "파일을 바꾸는 명령을 격리된 환경에서 실행합니다.",
+    unavailable: "이 기기에서는 사용할 수 없습니다",
+    reasonHint: "스위치에 올려 두거나 포커스하면 이유가 오른쪽에 열려 이름과 설명을 가리지 않습니다.",
   },
 } as const;
 
@@ -79,6 +86,20 @@ export const stories: ShowcaseStory[] = [
       <Stack align="row" cross="center" gap="md">
         <Switch aria-label={text(context).reduceMotion} checked disabledReason={text(context).followsSystem} />
         <Typo.Caption tone="secondary">{text(context).reduceMotion}</Typo.Caption>
+      </Stack>
+    ),
+  },
+  {
+    // DefaultPermissionFields: the command sandbox switch on a device without containment.
+    name: "Unavailable setting: reason opens to the right",
+    states: ["disabled"],
+    render: (context) => (
+      <Stack gap="md">
+        <SettingsFieldScopeProvider>
+          <SettingsField id={`ds-switch-sandbox-${context.locale}`} label={text(context).sandbox} description={text(context).sandboxHint}
+            control={<Switch id={`ds-switch-sandbox-${context.locale}`} checked={false} disabledReason={text(context).unavailable} />} />
+        </SettingsFieldScopeProvider>
+        <Typo.Caption tone="secondary">{text(context).reasonHint}</Typo.Caption>
       </Stack>
     ),
   },
