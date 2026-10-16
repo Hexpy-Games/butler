@@ -202,6 +202,7 @@ mod project_workspace;
 mod schedule_handoff;
 mod session_folder;
 mod storage_concurrency;
+mod storage_idle;
 mod supervisor_ownership;
 #[path = "support/transcript_scale.rs"]
 #[allow(clippy::unwrap_used, reason = "test fixture assertions")]

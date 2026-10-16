@@ -17,6 +17,16 @@ impl AppApplication {
         match fault.as_str() {
             "lane" => self.storage.exclusive(panic_lane).await.map_err(app_error),
             "owner" => self.automation_runs.inject_panic().await,
+            "runtime_shutdown" => {
+                let path = std::env::var_os("BUTLER_E2E_RUNTIME_STORAGE_PATH")
+                    .ok_or_else(GatewayApplicationError::internal)?;
+                tokio::task::spawn_blocking(move || {
+                    super::storage::retirement_fixture::runtime_shutdown(path.into())
+                })
+                .await
+                .map_err(GatewayApplicationError::internal_from)?
+                .map_err(app_error)
+            }
             "closing" => self.storage.close().await.map_err(app_error),
             _ => Ok(()),
         }

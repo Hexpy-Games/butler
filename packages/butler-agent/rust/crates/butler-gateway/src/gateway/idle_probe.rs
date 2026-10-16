@@ -30,3 +30,32 @@ pub(super) fn transcript_open() {
 pub(super) fn transcript_opens() -> Option<u64> {
     enabled().then(|| TRANSCRIPT_OPENS.load(Ordering::Relaxed))
 }
+
+static WRITER_RETIREMENTS: AtomicU64 = AtomicU64::new(0);
+static READER_RETIREMENTS: AtomicU64 = AtomicU64::new(0);
+static WRITER_ADMISSIONS: AtomicU64 = AtomicU64::new(0);
+
+pub(super) fn writer_retired() {
+    if enabled() {
+        WRITER_RETIREMENTS.fetch_add(1, Ordering::Relaxed);
+    }
+}
+pub(super) fn reader_retired() {
+    if enabled() {
+        READER_RETIREMENTS.fetch_add(1, Ordering::Relaxed);
+    }
+}
+pub(super) fn writer_admitted() {
+    if enabled() {
+        WRITER_ADMISSIONS.fetch_add(1, Ordering::Relaxed);
+    }
+}
+pub(super) fn storage() -> Option<serde_json::Value> {
+    enabled().then(|| {
+        serde_json::json!({
+            "writer_retirements": WRITER_RETIREMENTS.load(Ordering::Relaxed),
+            "reader_retirements": READER_RETIREMENTS.load(Ordering::Relaxed),
+            "writer_admissions": WRITER_ADMISSIONS.load(Ordering::Relaxed),
+        })
+    })
+}

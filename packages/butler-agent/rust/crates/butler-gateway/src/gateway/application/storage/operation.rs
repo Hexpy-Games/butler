@@ -25,13 +25,13 @@ where
     Operation {
         inspect,
         barrier,
-        run: Box::new(move |connection, admission| {
+        run: Box::new(move |admission| {
             timing.mark("dequeued");
             let admitted = Instant::now();
             if !inspect {
                 metrics.write_phase("queue", started.elapsed());
             }
-            let result = admission.and_then(|()| {
+            let result = admission.and_then(|connection| {
                 if inspect {
                     operation(connection)
                 } else {

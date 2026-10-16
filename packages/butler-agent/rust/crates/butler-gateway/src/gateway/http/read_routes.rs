@@ -158,6 +158,7 @@ pub(super) fn health() -> Result<Response, HttpError> {
     if let Some(opens) = crate::gateway::idle_probe::transcript_opens() {
         let mut probe = serde_json::to_value(data).map_err(|_| HttpError::Internal)?;
         probe["transcript_read_opens"] = serde_json::json!(opens);
+        probe["storage"] = crate::gateway::idle_probe::storage().unwrap_or_default();
         return json(
             StatusCode::OK,
             ApiEnvelope {
