@@ -281,5 +281,49 @@ class Trust(unittest.TestCase):
                 self.assertIn('ui=' + expected[1], output)
 
 
+class WorkflowScheduling(unittest.TestCase):
+    # test-category: pure-logic
+    def test_installer_verify_condition_truth_table(self):
+        source = (ROOT.parent / 'workflows/windows-installer.yml').read_text()
+        verify = source.split('\n  verify:\n', 1)[1].split('\n  gate:', 1)[0]
+        expression = re.search(r'^    if: \$\{\{ (.*) \}\}$', verify, re.M)[1]
+        results = ('success', 'failure', 'cancelled', 'skipped')
+        cases = itertools.product(results, ('smoke', 'integration'), (False, True),
+                                  ('', '123'), (False, True), results)
+        for build, tier, cancelled, reuse, selected, changes_result in cases:
+            with self.subTest(build=build, tier=tier, cancelled=cancelled,
+                              reuse=reuse, selected=selected, changes=changes_result):
+                condition = expression
+                values = {'cancelled()': cancelled, 'always()': True,
+                          'needs.changes.result': changes_result,
+                          'needs.build.result': build, 'inputs.reuse-run': reuse,
+                          'needs.changes.outputs.tier': tier,
+                          'fromJSON(needs.changes.outputs.jobs).verify': selected}
+                for name, value in values.items():
+                    condition = condition.replace(name, repr(value))
+                condition = re.sub(r'!(?!=)', 'not ', condition)
+                condition = condition.replace('&&', 'and').replace('||', 'or')
+                if cancelled or changes_result != 'success':
+                    expected = False
+                elif tier == 'integration':
+                    expected = selected and build in ('success', 'skipped')
+                else:
+                    expected = build == 'success' or bool(reuse)
+                self.assertEqual(bool(eval(condition, {'__builtins__': {}})), expected)
+
+    # test-category: format-pin
+    def test_release_keeps_job_locks_without_workflow_pending_cancellation(self):
+        source = (ROOT.parent / 'workflows/release.yml').read_text()
+        self.assertNotRegex(source, r'(?m)^concurrency:')
+        groups = {'agent-windows-build': 'windows-release-${{ github.ref }}',
+                  'app-windows': 'windows-app-release-${{ github.ref }}',
+                  'recover-release': 'release-publication-recovery'}
+        for job, group in groups.items():
+            block = source.split(f'\n  {job}:\n', 1)[1]
+            block = re.split(r'\n  [a-z][a-z0-9-]*:\n', block, maxsplit=1)[0]
+            self.assertIn(f'    concurrency:\n      group: {group}\n'
+                          '      cancel-in-progress: false', block)
+
+
 if __name__ == '__main__':
     unittest.main()

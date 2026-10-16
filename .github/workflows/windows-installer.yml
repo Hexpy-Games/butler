@@ -94,7 +94,7 @@ jobs:
   verify:
     name: Verify Windows install update uninstall
     needs: [changes, build]
-    if: ${{ always() && needs.changes.result == 'success' && (needs.build.result == 'success' || inputs.reuse-run) && (needs.changes.outputs.tier != 'integration' || fromJSON(needs.changes.outputs.jobs).verify) }}
+    if: ${{ !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier != 'integration' && (needs.build.result == 'success' || inputs.reuse-run)) || (needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs).verify && (needs.build.result == 'success' || needs.build.result == 'skipped'))) }}
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
