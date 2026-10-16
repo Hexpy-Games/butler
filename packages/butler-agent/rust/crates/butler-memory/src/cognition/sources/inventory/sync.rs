@@ -38,7 +38,9 @@ fn source_position(
 }
 
 /// The stored state when it still describes this store: the same identity
-/// and a change log that still continues from its watermark.
+/// and a change log that still holds its watermark and the head seen when
+/// its rows were read (a store restored from a copy older than either is
+/// rebuilt).
 fn current(
     state: Option<InventoryState>,
     reader: &ConversationSourceReader,
@@ -49,6 +51,9 @@ fn current(
             if state.identity == identity
                 && reader
                     .source_change_holds(&state.mark)
+                    .map_err(unavailable)?
+                && reader
+                    .source_change_holds(&state.seen)
                     .map_err(unavailable)? =>
         {
             Ok(Some(state))
@@ -104,12 +109,18 @@ pub(in crate::cognition) fn sync_step(
             deletes: Vec::new(),
             state: InventoryState {
                 identity,
-                mark: head,
+                mark: head.clone(),
+                seen: head,
                 phase: InventoryPhase::Outcomes(None),
             },
         })?;
         return Ok(true);
     };
+    let mut write = write;
+    // Read after the sources: no row reflects a change past this head.
+    if let Some((_, seen)) = source_position(reader)? {
+        write.state.seen = seen;
+    }
     let more = write.state.phase != InventoryPhase::Ready || write.state.mark.seq < head.seq;
     graph.write_canonical_inventory(&write)?;
     Ok(more)

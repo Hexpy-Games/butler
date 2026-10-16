@@ -78,6 +78,9 @@ pub(in crate::cognition) struct InventoryState {
     /// Every change up to this log position is reflected in the rows;
     /// during the initial build, the position at which it began.
     pub mark: SourceChangeMark,
+    /// The log head read after the rows' sources were last read: no row
+    /// reflects a change past it, so the store must still hold it.
+    pub seen: SourceChangeMark,
     pub phase: InventoryPhase,
 }
 
@@ -230,10 +233,10 @@ fn state(db: &Connection) -> CognitionResult<Option<InventoryState>> {
     if read_key(db, "canonical_inventory_format")?.as_deref() != Some(FORMAT) || !installed(db)? {
         return Ok(None);
     }
-    let (Some(identity), Some(seq), Some(key), Some(phase)) = (
+    let (Some(identity), Some(mark), Some(seen), Some(phase)) = (
         read_key(db, "canonical_inventory_identity")?,
-        read_key(db, "canonical_inventory_seq")?.and_then(|seq| seq.parse().ok()),
-        read_key(db, "canonical_inventory_seq_key")?,
+        read_mark(db, "canonical_inventory_seq")?,
+        read_mark(db, "canonical_inventory_seen")?,
         read_key(db, "canonical_inventory_phase")?,
     ) else {
         return Ok(None);
@@ -247,7 +250,8 @@ fn state(db: &Connection) -> CognitionResult<Option<InventoryState>> {
     };
     Ok(Some(InventoryState {
         identity,
-        mark: SourceChangeMark { seq, key },
+        mark,
+        seen,
         phase,
     }))
 }
@@ -262,6 +266,8 @@ fn save_state(tx: &Transaction<'_>, state: &InventoryState) -> CognitionResult<(
         ("canonical_inventory_identity", state.identity.as_str()),
         ("canonical_inventory_seq", &state.mark.seq.to_string()),
         ("canonical_inventory_seq_key", state.mark.key.as_str()),
+        ("canonical_inventory_seen", &state.seen.seq.to_string()),
+        ("canonical_inventory_seen_key", state.seen.key.as_str()),
         ("canonical_inventory_phase", phase),
         ("canonical_inventory_cursor", cursor.unwrap_or_default()),
     ] {
@@ -272,6 +278,15 @@ fn save_state(tx: &Transaction<'_>, state: &InventoryState) -> CognitionResult<(
         .map_err(db_error)?;
     }
     Ok(())
+}
+
+/// A log position stored under `key` (its sequence) and `{key}_key`.
+fn read_mark(db: &Connection, key: &str) -> CognitionResult<Option<SourceChangeMark>> {
+    let seq = read_key(db, key)?.and_then(|seq| seq.parse().ok());
+    let entry = read_key(db, &format!("{key}_key"))?;
+    Ok(seq
+        .zip(entry)
+        .map(|(seq, key)| SourceChangeMark { seq, key }))
 }
 
 fn read_key(db: &Connection, key: &str) -> CognitionResult<Option<String>> {

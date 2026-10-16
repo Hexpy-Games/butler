@@ -90,6 +90,9 @@ fn incremental(
         || !reader
             .source_change_holds(&state.mark)
             .map_err(unavailable)?
+        || !reader
+            .source_change_holds(&state.seen)
+            .map_err(unavailable)?
     {
         return Ok(None);
     }

@@ -25,6 +25,9 @@ const DONE_PROJECT: &str = "coverage-scale-done-project";
 /// Chat whose sources still wait for projection, in another project.
 const BACKLOG: &str = "coverage-scale-backlog";
 const BACKLOG_PROJECT: &str = "coverage-scale-backlog-project";
+/// A small projected chat: the full scan still reads the whole store, yet
+/// stays within the candidate deadline, so its coverage is compared.
+const SMALL: &str = "coverage-scale-small";
 /// Canonical turns in all (each with a request and an answer), half per chat.
 const TURNS: u64 = 10_000;
 /// Candidate selection (graph read stage) per recall, debug build, on a
@@ -56,6 +59,10 @@ fn variants() -> Vec<Variant> {
             prompt: "Coverage recall of the projected project.",
             arguments: arguments(json!({"project_filter":"selected","project_ids":[DONE_PROJECT]})),
         },
+        Variant {
+            prompt: "Coverage recall of the small chat.",
+            arguments: arguments(json!({"session_ids":[SMALL]})),
+        },
     ]
 }
 
@@ -81,6 +88,11 @@ fn seed(data: &std::path::Path, count: u64) {
         let at = format!("2026-02-{:02}T00:00:00.000Z", 1 + n % 28);
         turn(&tx, chat, n, &text, &at);
     }
+    session(&tx, SMALL, None);
+    for n in 1..=20 {
+        let at = format!("2026-02-{n:02}T00:00:00.000Z");
+        turn(&tx, SMALL, n, &format!("Small chat fact {n}."), &at);
+    }
     published(&tx);
     tx.commit().unwrap();
 }
@@ -91,19 +103,19 @@ fn seed(data: &std::path::Path, count: u64) {
 fn project_done_chat(data: &std::path::Path) {
     graph(data).execute(r#"
         UPDATE memory_projection_jobs SET semantic_graph_state=CASE WHEN episode_id IN
-          (SELECT episode_id FROM memory_canonical_inventory WHERE session_id=?1)
+          (SELECT episode_id FROM memory_canonical_inventory WHERE session_id IN (?1,?3))
           THEN '{"state":"complete"}' ELSE '{"state":"pending"}' END
-        WHERE episode_id IN (SELECT episode_id FROM memory_canonical_inventory WHERE session_id IN (?1,?2))"#,
-        [DONE, BACKLOG],
+        WHERE episode_id IN (SELECT episode_id FROM memory_canonical_inventory WHERE session_id IN (?1,?2,?3))"#,
+        [DONE, BACKLOG, SMALL],
     ).unwrap();
     graph(data).execute_batch(&format!(r#"
         INSERT INTO memory_chunks(memory_chunk_id,source_key,current_revision,origin_kind,status,source_hash,created_at,updated_at)
           SELECT episode_id,'conversation_turn:'||entity_id,revision,'user_input','active','seed','2026-02-01T00:00:00Z','2026-02-01T00:00:00Z'
-          FROM memory_canonical_inventory i WHERE eligible=1 AND covered=0 AND session_id='{DONE}'
+          FROM memory_canonical_inventory i WHERE eligible=1 AND covered=0 AND session_id IN ('{DONE}','{SMALL}')
             AND NOT EXISTS(SELECT 1 FROM memory_chunks c WHERE c.memory_chunk_id=i.episode_id);
         INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,created_at)
           SELECT 'scale-'||episode_id,episode_id,revision,'v3','synthetic','stub','low','[]','{{"state":"complete"}}','{{"state":"complete"}}','{{"state":"complete"}}','{{"state":"complete"}}','{{"state":"complete"}}','2026-02-01T00:00:00Z'
-          FROM memory_canonical_inventory WHERE eligible=1 AND covered=0 AND session_id='{DONE}';
+          FROM memory_canonical_inventory WHERE eligible=1 AND covered=0 AND session_id IN ('{DONE}','{SMALL}');
     "#)).unwrap();
     let uncovered = |chat: &str| -> i64 {
         graph(data)
@@ -111,6 +123,7 @@ fn project_done_chat(data: &std::path::Path) {
             .unwrap()
     };
     assert_eq!(uncovered(DONE), 0);
+    assert_eq!(uncovered(SMALL), 0);
     assert_eq!(uncovered(BACKLOG), i64::try_from(turns() / 2).unwrap());
 }
 
@@ -135,7 +148,7 @@ async fn mem_coverage_scale_reads_the_mirror() -> Result<(), HarnessError> {
     let count = turns();
     let s = start("MEM-COVERAGE-SCALE", &variants()).await?;
     let data = s.sandbox.data.clone();
-    let chats = chats(&s, 4).await?;
+    let chats = chats(&s, 5).await?;
     s.turn("general", variants()[0].prompt).await?;
     seed(&data, count);
     let built = Instant::now();
@@ -179,7 +192,8 @@ async fn mem_coverage_scale_reads_the_mirror() -> Result<(), HarnessError> {
     // The full scan reads the same stores; when it outruns the candidate
     // deadline it can only report its inventory partial.
     let cut = json!(["ingestion_inventory_partial"]);
-    if full["output"]["coverage"]["source"]["codes"] == cut {
+    let done_cut = full["output"]["coverage"]["source"]["codes"] == cut;
+    if done_cut {
         assert_eq!(
             full["output"]["coverage"]["graph"]["codes"][0], cut[0],
             "{full}"
@@ -187,6 +201,25 @@ async fn mem_coverage_scale_reads_the_mirror() -> Result<(), HarnessError> {
     } else {
         assert_eq!(coverage(&full), coverage(&projected), "{full}");
     }
+    // The small chat's full scan finishes in time: its coverage is compared.
+    let (small, _) = recall_in(&s, &chats[4], &v[3]).await?;
+    let phase = hide_mirror(&data);
+    let (small_full, small_full_ms) = recall_in(&s, &chats[4], &v[3]).await?;
+    show_mirror(&data, &phase);
+    assert_ne!(
+        small_full["output"]["coverage"]["source"]["codes"], cut,
+        "{small_full}"
+    );
+    assert_eq!(coverage(&small_full), coverage(&small), "{small_full}");
+    assert!(!pending(&small), "{small}");
+    eprintln!(
+        "MEM-COVERAGE-SCALE full_scan_branch projected_chat={} small_chat=compared small_full_scan_ms={small_full_ms:.1}",
+        if done_cut {
+            "deadline_partial"
+        } else {
+            "compared"
+        }
+    );
 
     // A turn the mirror has not applied yet is still reported.
     let at = "2026-02-28T00:00:00.000Z";
