@@ -37,6 +37,10 @@ permissions:
   contents: write
   actions: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   integration-proof:
     if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') }}
