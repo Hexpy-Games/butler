@@ -1,12 +1,9 @@
-//! Stub-only ordering of cancellation before the connection select is created.
+//! E2E fixture: orders cancellation before the connection select is created.
 
 use std::{future::Future, path::Path, task::Poll};
 use tokio_util::sync::CancellationToken;
 
 pub(super) async fn before_wait(data_root: &Path, shutdown: &CancellationToken) {
-    if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub") {
-        return;
-    }
     let Ok(order) = std::env::var("BUTLER_E2E_CONTROL_SHUTDOWN_ORDER") else {
         return;
     };
@@ -32,9 +29,7 @@ pub(super) async fn before_wait(data_root: &Path, shutdown: &CancellationToken) 
 
 /// Mark only after the real frame read has been polled and returned Pending.
 pub(super) async fn read_started<T>(data_root: &Path, read: impl Future<Output = T>) -> T {
-    if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub")
-        || std::env::var("BUTLER_E2E_CONTROL_SHUTDOWN_ORDER").as_deref() != Ok("read")
-    {
+    if std::env::var("BUTLER_E2E_CONTROL_SHUTDOWN_ORDER").as_deref() != Ok("read") {
         return read.await;
     }
     tokio::pin!(read);

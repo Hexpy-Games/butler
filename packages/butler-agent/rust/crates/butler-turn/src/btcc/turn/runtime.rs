@@ -230,8 +230,10 @@ impl TurnRuntime {
             let permit = self.supervisor.enter(&turn.turn_id, turn.semantic_state)?;
             let attempt = async {
                 let claim = self.store.acquire_state_claim(&turn).await?;
+                #[cfg(feature = "e2e-fixtures")]
                 hold_stub_delivery("before", &turn.turn_id).await?;
                 let message_id = self.messages.insert(&turn).await?;
+                #[cfg(feature = "e2e-fixtures")]
                 hold_stub_delivery("after", &turn.turn_id).await?;
                 permit.assert_active()?;
                 self.store
@@ -467,7 +469,8 @@ fn explain_runtime_failure(turn: &TurnRecord, result: &mut super::contracts::Age
         });
 }
 
-/// Stub-only crash windows around the durable canonical insert transaction.
+/// E2E fixture crash windows around the durable canonical insert transaction.
+#[cfg(feature = "e2e-fixtures")]
 async fn hold_stub_delivery(phase: &str, turn_id: &str) -> Result<(), BtccError> {
     if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub")
         || std::env::var("BUTLER_E2E_HOLD_DELIVERY").as_deref() != Ok(phase)

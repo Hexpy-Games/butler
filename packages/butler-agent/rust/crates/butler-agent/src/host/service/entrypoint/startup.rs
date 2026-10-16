@@ -65,11 +65,7 @@ async fn wait_ready(
 /// Sample only after startup has already failed its original deadline. This
 /// adds no polling or resource work to successful startup or runtime idle.
 async fn trace_timeout() {
-    if !matches!(
-        std::env::var("BUTLER_E2E_TIER").as_deref(),
-        Ok("stub" | "perf")
-    ) || std::env::var("BUTLER_E2E_STARTUP_TRACE").as_deref() != Ok("1")
-    {
+    if std::env::var("BUTLER_STARTUP_TRACE").as_deref() != Ok("1") {
         return;
     }
     let resources = tokio::task::spawn_blocking(|| {

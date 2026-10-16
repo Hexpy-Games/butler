@@ -23,12 +23,14 @@ impl AppApplication {
     pub(super) async fn all_authority_permissions(
         &self,
     ) -> Result<Vec<AppGrantView>, GatewayApplicationError> {
+        #[cfg(feature = "e2e-fixtures")]
         let started = std::time::Instant::now();
         let mut grants = self
             .dependencies
             .authority_handoff
             .list_all_permissions()
             .await?;
+        #[cfg(feature = "e2e-fixtures")]
         let authority_us = started.elapsed().as_micros();
         let owners: Vec<_> = grants
             .iter()
@@ -40,6 +42,7 @@ impl AppApplication {
         let metadata = self
             .storage
             .read(move |db| {
+                #[cfg(feature = "e2e-fixtures")]
                 let started = std::time::Instant::now();
                 // Stale one-chat statistics must not turn this batch into 600 table scans.
                 let mut metadata = HashMap::new();
@@ -63,6 +66,7 @@ impl AppApplication {
                         metadata.insert(owner, row);
                     }
                 }
+                #[cfg(feature = "e2e-fixtures")]
                 if std::env::var("BUTLER_E2E_STORAGE_METRICS").as_deref() == Ok("1") {
                     eprintln!(
                         "approvals-profile metadata_sql_us={}",
@@ -73,6 +77,7 @@ impl AppApplication {
             })
             .await
             .map_err(app_error)?;
+        #[cfg(feature = "e2e-fixtures")]
         let metadata_us = started.elapsed().as_micros() - authority_us;
         for grant in &mut grants {
             let row = metadata.get(&grant.session_id);
@@ -80,6 +85,7 @@ impl AppApplication {
             grant.project_id = row.and_then(|r| r.1.clone());
             grant.project_name = row.and_then(|r| r.2.clone());
         }
+        #[cfg(feature = "e2e-fixtures")]
         if std::env::var("BUTLER_E2E_STORAGE_METRICS").as_deref() == Ok("1") {
             eprintln!(
                 "approvals-profile authority_us={authority_us} metadata_us={metadata_us} application_us={}",

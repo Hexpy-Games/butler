@@ -55,7 +55,7 @@ async function packageVersion(version: string) {
   const cached = cache ? join(cache, version, "Butler.app") : null;
   if (cached && await Bun.file(join(cached, "Contents/Info.plist")).exists()) return cached;
   const tagEnv = { GITHUB_REF_NAME: `v${version}`, CARGO_PROFILE_DEV_DEBUG: "0", CARGO_PROFILE_DEV_INCREMENTAL: "false" };
-  if (!agentBuilds) await run("cargo", ["build", "--locked", "--profile", profile, "-p", "butler-agent", "--bin", "butler-agent", "--no-default-features", "--features", "static-ort"], tagEnv, rust);
+  if (!agentBuilds) await run("cargo", ["build", "--locked", "--profile", profile, "-p", "butler-agent", "--bin", "butler-agent", "--no-default-features", "--features", "static-ort,e2e-fixtures"], tagEnv, rust);
   const work = join(dir, version);
   mkdirSync(work);
   const binary = join(work, "butler-agent");
@@ -223,7 +223,7 @@ async function smoke() {
   const session = created.session;
   assert.ok(session?.id, "Created chat ID is missing.");
   if (mode === "background-quit") {
-    // Real background bootstrap is held by the existing stub-tier hook.
+    // Real background bootstrap is held by the E2E fixture hook of these test-only agents.
     assert.ok(await Bun.file(join(data, "cognition/memory/fresh-initialization.json")).exists());
     assert.equal(await Bun.file(join(data, "cognition/memory/active-generation.json")).exists(), false);
     // An enabled future schedule is configuration, not running user work.

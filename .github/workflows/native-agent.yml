@@ -53,6 +53,23 @@ jobs:
           if [[ "${{ inputs.platform }}" == linux-* ]]; then
             cp target/release/butler-sandbox "$RUNNER_TEMP/agent-payload/butler-sandbox"
           fi
+      - name: Build the perf E2E agent from the same recipe
+        env:
+          ORT_MODE: ${{ inputs.ort-mode }}
+          BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
+        run: |
+          export GITHUB_REF_NAME="$BUILD_VERSION_REF"
+          if [[ "$BUILD_VERSION_REF" == release/* ]]; then export GITHUB_REF_NAME="v${BUILD_VERSION_REF#release/}"; fi
+          # Perf scenarios arm E2E probes that shipped binaries do not contain.
+          # Only the e2e-fixtures feature differs from the production build above.
+          feature=prebuilt-ort
+          if [ "$ORT_MODE" = static-ort ]; then feature=static-ort; fi
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox --no-default-features --features "$feature,e2e-fixtures"
+          mkdir -p "$RUNNER_TEMP/agent-perf-fixture"
+          cp target/release/butler-agent "$RUNNER_TEMP/agent-perf-fixture/butler-agent"
+          if [[ "${{ inputs.platform }}" == linux-* ]]; then
+            cp target/release/butler-sandbox "$RUNNER_TEMP/agent-perf-fixture/butler-sandbox"
+          fi
       - name: Upload Cargo build timings
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
@@ -71,6 +88,13 @@ jobs:
           if [[ "$version" == release/* ]]; then version="v${version#release/}"; fi
           if [[ "$version" != v[0-9]* && "$version" != 0.1.0-preview.99 ]]; then version=0.1.0-dev; fi
           python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" record "$RUNNER_TEMP/agent-payload" "$PLATFORM" "$ORT_MODE" release "${version#v}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-perf-fixture-${{ inputs.platform }}
+          path: ${{ runner.temp }}/agent-perf-fixture/*
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 14 }}
+          compression-level: 0
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: agent-payload-${{ inputs.platform }}

@@ -20,7 +20,7 @@ use errors::app_error;
 mod browser_stills;
 mod devices;
 mod event_reads;
-#[cfg(debug_assertions)]
+#[cfg(feature = "e2e-fixtures")]
 mod faults;
 mod gateway_dashboard_impl;
 mod gateway_impl;

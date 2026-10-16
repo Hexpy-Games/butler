@@ -37,7 +37,7 @@ use crate::host::{
     SystemIdentity,
 };
 use security_store::AppSecurityStore;
-#[cfg(debug_assertions)]
+#[cfg(feature = "e2e-fixtures")]
 mod startup_hold;
 
 pub(crate) struct AppServer {

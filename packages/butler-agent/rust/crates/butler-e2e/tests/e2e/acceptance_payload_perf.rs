@@ -14,7 +14,7 @@ async fn acceptance_payload_perf_corr() -> Result<(), HarnessError> {
         return Ok(());
     };
     let mut s = Setup::new("PERF-CORR")?
-        .env("BUTLER_E2E_STARTUP_TRACE", "1")
+        .env("BUTLER_STARTUP_TRACE", "1")
         .start()
         .await?;
     s.agent.terminate().await?;

@@ -30,7 +30,7 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
         .access(Access::FullAccess)
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url)
-        .env("BUTLER_E2E_STARTUP_TRACE", "1")
+        .env("BUTLER_STARTUP_TRACE", "1")
         .start()
         .await?;
     let id = accepted_turn_id(&s.gw.say("general", stub::REQUEST).await?)?;
