@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import { spawnElectron, stopElectronChild } from "../support/electron-child";
 /** Public Browser area on an isolated, real Electron App and stub gateway. */
 import { type ChildProcess } from "node:child_process";
@@ -179,8 +180,8 @@ async function artifact(page: Page) {
     return publication.latest_turn?.state === "delivered" && publication.messages.some(message=>message.artifacts?.some(item=>item.id===outputId));
   }, "delivered output message");
   await page.reload();
-  await waitUntil(() => page.expression(`Array.from(document.querySelectorAll('[data-test-class="app-sidebar"] *')).some(e=>e.textContent?.trim()===${JSON.stringify(appCopy.space.general)})`), "general navigation loaded");
-  await page.clickText(appCopy.space.general, '[data-test-class="app-sidebar"] *');
+  await waitUntil(() => page.expression(`Array.from(document.querySelectorAll('[data-test-class="app-sidebar"] button, [data-test-class="app-sidebar"] [role="button"]')).some(e=>e.textContent?.trim()===${JSON.stringify(appCopy.space.general)})`), "general navigation loaded");
+  await page.clickText(appCopy.space.general, '[data-test-class="app-sidebar"] button, [data-test-class="app-sidebar"] [role="button"]');
   await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="message-artifact-list"] [aria-label="Output"]')));
   await page.clickText("Output", '[data-test-class="message-artifact-list"] *');
   await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="artifact-viewer"] iframe')));
@@ -241,7 +242,7 @@ try {
   await page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="browser-entry"]')));
   await shot(page, "before-en-light-workspace");
   assert.equal(await main<number>(`${electronModule}.webContents.getAllWebContents().length`), 1, "no web tab process before Browser activation");
-  await page.clickText("General", '[data-test-class="app-sidebar"] *');
+  await page.clickText(getAppCopy("en-US").space.general, '[data-test-class="app-sidebar"] button, [data-test-class="app-sidebar"] [role="button"]');
   await click(page, "Browser");
   await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Address");
   assert.equal((await state(page)).tabs.length, 1, "hub creates exactly one new tab");
@@ -263,7 +264,7 @@ try {
   await click(page, "Back"); await waitTitle(page, "Fixture");
   await click(page, "Forward"); await waitTitle(page, "Second");
   await click(page, "Reload"); await waitTitle(page, "Second");
-  await page.clickText("General", '[data-test-class="app-sidebar"] *');
+  await page.clickText(getAppCopy("en-US").space.general, '[data-test-class="app-sidebar"] button, [data-test-class="app-sidebar"] [role="button"]');
   await click(page, "Browser");
   await waitTitle(page, "Second");
   await alignment(page, main, win, evidence);

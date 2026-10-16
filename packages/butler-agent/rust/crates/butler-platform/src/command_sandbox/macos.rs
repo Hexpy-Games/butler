@@ -55,6 +55,7 @@ pub(super) fn project_write(
     root: &Path,
     writable: &[&Path],
     denied: &[&Path],
+    _toolchain_roots: Option<&crate::command_sandbox::ToolchainRoots>,
 ) -> Result<Invocation, SandboxError> {
     let mut profile = ["(version 1)", "(allow default)", "(deny file-write*)"].join("\n");
     let rule = |profile: &mut String, rule: &str, paths: &[&Path]| {
@@ -147,5 +148,6 @@ fn sandboxed(profile: String, invocation: Invocation) -> Invocation {
     Invocation {
         program: SANDBOX_EXEC.into(),
         arguments,
+        ..Default::default()
     }
 }

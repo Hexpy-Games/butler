@@ -346,6 +346,7 @@ impl Drop for AdmissionGuard {
 
 async fn run_actor(inner: Arc<Inner>) {
     let mut child: Option<WorkerChild> = None;
+    #[cfg(feature = "e2e-fixtures")]
     initialize_for_ownership_test(&inner, &mut child).await;
     run_loop(&inner, &mut child).await;
 }
@@ -400,11 +401,10 @@ async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>) {
 }
 
 // Exercise the normal native owner/worker protocol during a held CPU load.
-// A stub-only fault flag allows supervision E2Es to cover startup ownership.
+// An E2E fixture flag allows supervision E2Es to cover startup ownership.
+#[cfg(feature = "e2e-fixtures")]
 async fn initialize_for_ownership_test(inner: &Inner, child: &mut Option<WorkerChild>) {
-    if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub")
-        || std::env::var_os("BUTLER_E2E_EMBED_INIT_BARRIER").is_none()
-    {
+    if std::env::var_os("BUTLER_E2E_EMBED_INIT_BARRIER").is_none() {
         return;
     }
     let Ok(process) = spawn_worker(&inner.executable, &inner.data_root, false).await else {

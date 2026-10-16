@@ -261,7 +261,7 @@ pub(super) async fn trace(
     read: std::time::Duration,
     summary: std::time::Duration,
 ) {
-    if std::env::var("BUTLER_E2E_STARTUP_TRACE").as_deref() == Ok("1") {
+    if std::env::var("BUTLER_STARTUP_TRACE").as_deref() == Ok("1") {
         let _ = tokio::task::spawn_blocking(move || {
             eprintln!(
                 "[history-projection] elapsed_us={} read_us={} summary_us={}",

@@ -3,7 +3,7 @@ use std::{io, path::Path};
 
 /// Free bytes on the most specific mounted volume containing `path`.
 pub fn available_bytes(path: &Path) -> io::Result<u64> {
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "e2e-fixtures")]
     if matches!(
         std::env::var("BUTLER_E2E_TIER").as_deref(),
         Ok("stub" | "perf")

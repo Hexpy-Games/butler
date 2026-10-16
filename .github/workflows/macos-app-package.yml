@@ -40,7 +40,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: macos-app-package-${{ github.ref }}
+  group: macos-app-package-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -150,7 +150,9 @@ jobs:
           "$isolate" bun tests/smoke/app-newchat-visual-smoke.ts
           BUTLER_SMOKE_SCREENSHOTS="$PWD/.tmp/newchat-regression/onboarding" "$isolate" bun tests/smoke/app-onboarding-visual-smoke.ts
           "$isolate" bun tests/smoke/app-update-choice-smoke.ts
-          "$isolate" bun tests/smoke/app-update-work-stream.ts
+          # Holding the background bootstrap needs an E2E fixture agent; the update fixtures are one.
+          BUTLER_NATIVE_AGENT_EXECUTABLE="${BUTLER_UPDATE_SMOKE_AGENT_BUILDS:?update-fixture agents required}/0.1.0-preview.91/butler-agent" \
+            "$isolate" bun tests/smoke/app-update-work-stream.ts
           "$isolate" bun tests/smoke/quick-fixes-smoke.ts
           "$isolate" bun tests/smoke/quick-fixes-compare.ts
           "$isolate" bun tests/smoke/app-memory-smoke.ts

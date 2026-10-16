@@ -37,7 +37,7 @@ jobs:
     # Explicit recording dispatch is an integration operation, never PR smoke.
     if: needs.changes.outputs.tier == 'integration' || (github.event_name == 'workflow_dispatch' && inputs.record_cassettes)
     name: E2E live tier
-    runs-on: [self-hosted, Windows, X64, butler-win]
+    runs-on: [self-hosted, Windows, X64, butler-win, butler-win-release]
     timeout-minutes: 150
     environment: live-e2e
     concurrency:
@@ -107,7 +107,7 @@ jobs:
         run: |
           $env:RUSTFLAGS = '-C target-feature=+crt-static'
           $ErrorActionPreference = 'Continue'
-          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --locked --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --locked --no-default-features --features static-ort,butler-agent/e2e-fixtures,butler-platform/test-support --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox
           $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "BUTLER_E2E_BIN=$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append

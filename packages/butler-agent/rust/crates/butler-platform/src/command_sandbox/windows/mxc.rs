@@ -1,9 +1,13 @@
-//! Opt-in Windows project writes; observations keep exact-action approval.
+//! Probed Windows project writes; observations keep exact-action approval.
 mod drive;
 pub(crate) mod launch;
+pub(in crate::command_sandbox) mod ledger;
 pub(in crate::command_sandbox) mod prepare;
 mod probe;
+mod recovery;
 mod sdk;
+mod shell;
+mod timing;
 use super::super::{Invocation, ProtectError, Protection, SandboxCapabilities, SandboxError};
 use std::{
     collections::HashMap,
@@ -12,6 +16,8 @@ use std::{
 pub(super) type Error = Box<dyn std::error::Error>;
 pub(in crate::command_sandbox) use drive::reconcile;
 pub(in crate::command_sandbox) use probe::probe;
+#[cfg(feature = "test-support")]
+pub(in crate::command_sandbox) use shell::verify as verify_shell;
 
 pub(super) fn helper() -> std::io::Result<PathBuf> {
     #[cfg(feature = "test-support")]
@@ -54,15 +60,26 @@ pub(in crate::command_sandbox) fn project_write(
     root: &Path,
     writable: &[&Path],
     denied: &[&Path],
+    toolchain_roots: Option<&crate::command_sandbox::ToolchainRoots>,
 ) -> Result<Invocation, SandboxError> {
     if !super::super::project_write_available() {
         return Err(SandboxError::ProjectWriteUnavailable);
     }
-    prepare::invocation(invocation, environment, root, writable, denied)
+    prepare::invocation(
+        invocation,
+        environment,
+        root,
+        writable,
+        denied,
+        toolchain_roots,
+    )
 }
 
 #[cfg(feature = "test-support")]
 pub(in crate::command_sandbox) fn verify_recovery_contract() {
     drive::verify_inaccessible_process();
+    let mapped = drive::verify_long_mapping();
+    assert!(mapped.is_ok(), "{mapped:?}");
+    sdk::verify_output_failures();
     launch::verify_cleanup_status();
 }

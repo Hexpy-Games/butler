@@ -1,28 +1,28 @@
 {
   "inputs": {
     "bun.lock": "c897d780149e0002b1c6fb43ed2704741b92c3cf4d2c0e34c39c044b5382f98d",
-    "deploy/licenses/disclosure.py": "f8fc02a9b2784a36865a953654827e6a687ad461d2d33bcf9fd906bcb3a78cb9",
+    "deploy/licenses/disclosure.py": "d475fcaf9165e2eaea2e45885258684539880e3b2245617e6bfbe8faa3e2029d",
     "deploy/licenses/generate.mjs": "eb413c424649cc6ef3bc734cb1a9479cf8ddffb3af398601a974268c229d7c34",
-    "deploy/licenses/inputs.mjs": "da35f54527aa98b6a7ced018b1d0172c5f997d7eb10842ae2914e23c036868e1",
-    "deploy/licenses/refresh.py": "a5a071d68dc8b01eb066be507fdeccf9985e03976964725d439cca9d3b7d094b",
-    "packages/butler-agent/rust/Cargo.lock": "ffcc56be2d66d852e4b00a86feb285b3555c535145935d3eaf62f87d3b27d1ca",
+    "deploy/licenses/inputs.mjs": "f9a38331fa5a8f26f9d745f0cf3bfaea028f2d5dc7c8e8aa4d7af1b923cb5124",
+    "deploy/licenses/refresh.py": "bddecf7f564eb6da112439c87fca94158f22497a5094dd53d9389ff918ced71b",
+    "packages/butler-agent/rust/Cargo.lock": "f339867c4b6a6af9ebdaa0555a2764d03a6f90928f5dfa42ecf9cfe9ea81fa70",
     "packages/butler-agent/rust/Cargo.toml": "d74d0251e354c1ec916d057d396badfcd600ad811b0e7a06fa8a90407c34a7f5",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
-    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "6c76c4b5d9f708217bb74e2fa0826550581a5b415ebaf843c1bf5fb57606fea9",
+    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "5f6af87c40278561369e206b94e41a8db2e9ec2752b5a59b3cb7a77d2ad08d80",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs": "f11dc3b1952a178092fbf7da589b8c39e28021c4975f884e236cd71c78c8d7a9",
     "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "b8a781872e8e48a1b1e02c6ab77f37ee31bf1237b6f68b03faa68b10b1e4270e",
     "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt": "a0af5aa0d38e4c35e56c8e42a43a4b1e462619a26332e43249bb0772ad06a3e2",
     "packages/butler-agent/rust/crates/butler-e2e/Cargo.toml": "1436d89961453eef30ec0ad57f4facaea0335f9e64588965e6580542e77ef2c5",
-    "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "64246c476221932f38c297b1b6e7c4fc367b2008af9ce324f3cc88e4d0533349",
+    "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "1df2938b10164b399c8ce5ef755937c243d11537b411546df1a9bf122d03274a",
     "packages/butler-agent/rust/crates/butler-ledger/Cargo.toml": "ccc46a2a8bb225eebcdf7858d73f5bddd3742ea57477e0208ca3c16464815b54",
-    "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "6823161ebcffd1ab5c100a48c5891a4a754273fce5b7f13b78a10fab1dc9a3d9",
+    "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "1ed619a531163d7d3975002c6e25b933e8c89a701b97979e6bcba78dcdcfd82a",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "5fe4bdcbf7943033762f4efb6e3a299dbe0c52a631ead27fc4bf150076e51591",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "6ac2ceefd558c7be96a1b15da080aa3c45f7b6c5183be7df932ac3e0c504912e",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "0b1332f0f43eb9296972675176176393546de2e442ce2b72c8dbf141135ec7f8",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "15317b3544cdbcfacc5d46ab5b1cbddb1faa34c50ceca49221fdea0fa35a4592",
-    "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "50642adee7e1bb7434332d26311b3e467cf868a688033571f77e4273cbf2d4b7",
+    "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "1121b5e874a32434af0cc3662e26b47883d66446c7ec302b1a52ead90dc56070",
     "packages/butler-agent/rust/rust-toolchain.toml": "2ad6f15416572b4836585087f1d4abc53b8fa2dbd616f8dacfaa587ed6714228",
     "packages/butler-agent/rust/scripts/static-ort.lock.json": "a1aee730fc0773ca02d23bad8da95c0efe56a07ded67dc36d251f475a90369b2",
     "packages/butler-agent/rust/tools/source-check/Cargo.toml": "e50cffe7e1c5a79f1fe76bf689eb65fb682a29cd8425ae3609c35cfa1f56603c",
@@ -30,7 +30,9 @@
     "packages/butler-app/client/ui/package.json": "2bf91d383db65633acf08715f188ce069c047178c7091108b519a00999d91499",
     "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE": "3d1d0a9fe82fdc1492422398bfac65d2205a9326eebf619e238b84e9b6376d36",
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",
-    "packages/butler-npm/package.json": "5436bca586a3f28ad67b715bc34fd2d66a4dfac9577d7415442b88f1f085fdb4"
+    "packages/butler-npm/package.json": "5436bca586a3f28ad67b715bc34fd2d66a4dfac9577d7415442b88f1f085fdb4",
+    "third_party/notify-windows-ledger/Cargo.toml": "d3badd5e47fb7b50cb83af425266e1dd89f14cd324d6598d7cb2d6d66a01baac",
+    "third_party/notify-windows-ledger/LICENSE": "29f359024dacaa3361dcddf5a9316e8458028ff062b63105a61e04a16566f968"
   },
   "components": [
     {
@@ -31105,6 +31107,26 @@
       "copyright": [
         "Copyright © 1991-2026 Unicode, Inc."
       ]
+    },
+    {
+      "id": "vendored:notify Windows ledger backend@8.2.0",
+      "name": "notify Windows ledger backend",
+      "version": "8.2.0",
+      "license": "CC0-1.0",
+      "source": "third_party/notify-windows-ledger/LICENSE",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "29f359024dacaa3361dcddf5a9316e8458028ff062b63105a61e04a16566f968"
+      ],
+      "files": [
+        "third_party/notify-windows-ledger/LICENSE"
+      ],
+      "links": [
+        "https://github.com/notify-rs/notify/blob/a1d7c2d8f80786679d58ec6d5986a1d4278bc8cf/notify/LICENSE-CC0"
+      ],
+      "copyright": []
     }
   ]
 }

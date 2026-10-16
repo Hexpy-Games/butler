@@ -1,6 +1,6 @@
 /** Deferred updates follow real committed work events, including the full FIFO. */
 import { strict as assert } from "node:assert";
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { createNativeAppServer } from "../support/native-app-server.ts";
@@ -58,6 +58,9 @@ try {
   assert.ok(await confirmAppForegroundQuit({ snapshot: idle,
     showMessageBox: async () => { throw new Error("background bootstrap prompted quit"); },
   }));
+  // The idle proof only counts while the real bootstrap is held (an E2E fixture agent).
+  assert.ok(existsSync(join(server.butlerData, "cognition/memory/fresh-initialization.json")));
+  assert.equal(existsSync(join(server.butlerData, "cognition/memory/active-generation.json")), false);
   writeFileSync(join(server.butlerData, "state/e2e-memory-bootstrap-release"), "");
   const { session } = await server.api<{ session: { id: string } }>("/sessions", {
     method: "POST", body: JSON.stringify({ kind: "chat", title: "Update work" }),

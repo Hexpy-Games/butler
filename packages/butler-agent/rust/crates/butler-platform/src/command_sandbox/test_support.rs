@@ -9,6 +9,7 @@ pub fn windows_prepare_project_write(
     root: &Path,
     writable: &[&Path],
     denied: &[&Path],
+    toolchain_roots: Option<&super::ToolchainRoots>,
 ) -> Result<super::Invocation, super::SandboxError> {
     #[cfg(windows)]
     {
@@ -18,11 +19,19 @@ pub fn windows_prepare_project_write(
             root,
             writable,
             denied,
+            toolchain_roots,
         )
     }
     #[cfg(not(windows))]
     {
-        let _ = (command, environment, root, writable, denied);
+        let _ = (
+            command,
+            environment,
+            root,
+            writable,
+            denied,
+            toolchain_roots,
+        );
         Err(super::SandboxError::ProjectWriteUnavailable)
     }
 }
@@ -40,6 +49,7 @@ pub fn linux_syscall_probe(
                 "-c".into(),
                 include_str!("test_support/linux_probe.py").into(),
             ],
+            ..Default::default()
         },
         environment,
         &[],
@@ -106,3 +116,14 @@ pub fn windows_recovery_contract() {
     #[cfg(windows)]
     super::windows::mxc::verify_recovery_contract();
 }
+
+/// Executes contained shell file transport with native PowerShell, without MXC.
+pub fn windows_shell_file_contract() {
+    #[cfg(windows)]
+    {
+        let result = super::windows::mxc::verify_shell();
+        assert!(result.is_ok(), "{result:?}");
+    }
+}
+
+pub(super) mod ledger;

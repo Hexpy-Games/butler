@@ -2,6 +2,11 @@ name: Bun unit tests
 
 on:
   workflow_call:
+    inputs:
+      macos-native:
+        description: Retain the host-specific native payload fixture tests
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -13,7 +18,7 @@ concurrency:
 jobs:
   fast-unit:
     name: Fast Bun unit suite
-    runs-on: macos-15
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -28,6 +33,24 @@ jobs:
       - name: Run fast unit suite
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun run test:unit:fast
 
+      - name: Assert tests left the runner home untouched
+        if: always()
+        uses: ./.github/actions/assert-home-untouched
+
+  macos-native:
+    name: macOS native payload fixtures
+    if: inputs.macos-native
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/bun-setup
+        with:
+          bun-version: 1.3.11
+      - name: Install dependencies
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun install --frozen-lockfile
+      - name: Run macOS host-specific fixture tests
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun test tests/unit/prepare-native-agent-script.test.ts
       - name: Assert tests left the runner home untouched
         if: always()
         uses: ./.github/actions/assert-home-untouched

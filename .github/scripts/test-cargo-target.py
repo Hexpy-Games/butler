@@ -10,6 +10,8 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -28,12 +30,14 @@ class TargetSnapshot(unittest.TestCase):
         legacy = dict(expected)
         legacy.pop('profile_config')
         published = {'assets': [{'name': '42-1.json'}]}
+        generation = dict(metadata=dict(run_id=42, run_attempt=1))
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, RUNNER_TEMP=temporary, ORT_LIB_PATH=''), \
                 patch.object(snapshots, 'release', side_effect=[None, published]) as lookup, \
-                patch.object(snapshots, 'fetch_snapshot') as fetch, patch.object(snapshots, 'restore_tree') as adopt:
+                patch.object(snapshots, 'checked_generation', return_value=(generation, False)) as check, \
+                patch.object(snapshots, 'fetch_chunks'), patch.object(snapshots, 'restore_tree') as adopt:
             self.assertTrue(snapshots.restore(expected))
             self.assertEqual(lookup.call_args.args[0], snapshots.tag_name(legacy))
-            self.assertEqual(fetch.call_args.args[3:], (legacy, False))
+            self.assertEqual(check.call_args.args[2:], (legacy, False))
             self.assertEqual(adopt.call_args.args[1:], (legacy, False))
 
     # test-category: security
@@ -161,14 +165,16 @@ class TargetSnapshot(unittest.TestCase):
                 snapshots.trusted(metadata)
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, RUNNER_TEMP=temporary), \
                 patch.object(snapshots, 'release', return_value={'assets': [{'name': '42-1.json'}]}), \
-                patch.object(snapshots, 'fetch_snapshot', side_effect=snapshots.UnsuccessfulProducer('pending')), \
+                patch.object(snapshots, 'checked_generation', side_effect=snapshots.UnsuccessfulProducer('pending')), \
+                patch.object(snapshots.ci_oci, 'tags', return_value=[]), \
                 patch.object(snapshots, 'restore_tree') as adopt:
             self.assertFalse(snapshots.restore({'platform': 'linux-x64'}))
             adopt.assert_not_called()
 
     # test-category: pure-logic
     def test_key_changes_for_each_compatibility_input(self):
-        with patch.object(cache, 'output', return_value='rustc 1.99\nhost: x86_64-unknown-linux-gnu'), \
+        with patch.dict(os.environ, RUSTFLAGS='-C link-arg=-fuse-ld=mold'), \
+                patch.object(cache, 'output', return_value='rustc 1.99\nhost: x86_64-unknown-linux-gnu'), \
                 patch.object(cache, 'digest', return_value='locked'):
             expected = cache.identity('linux-x64', 'prebuilt-ort', 'native')
             for variable in ['RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'CARGO_PROFILE_RELEASE_LTO',
@@ -197,17 +203,18 @@ class TargetSnapshot(unittest.TestCase):
             (root / '22-1-0001.zst').unlink()
             with self.assertRaisesRegex(ValueError, 'parts'):
                 snapshots.recorded_parts(root, '22-1')
-            versions = [dict(id=run, metadata={'container': {'tags': [f'fixture--{run}-1']}}) for run in [41,42,43]]
+            runs = range(43 - snapshots.KEEP, 44)  # One generation past retention.
+            versions = [dict(id=run, metadata={'container': {'tags': [f'fixture--{run}-1']}}) for run in runs]
             versions[0]['metadata']['container']['tags'].append('fixture')  # An older producer finished last.
             versions += [dict(id=1, metadata={'container': {'tags': ['other-key--1-1']}})]
             with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'), \
                     patch.object(snapshots, 'api', side_effect=[versions, None]) as lookup, \
                     patch.object(snapshots.ci_oci, 'checked') as promote, \
                     patch.object(cache, 'output', side_effect=AssertionError('gh is unavailable')):
-                snapshots.prune('fixture', '41-1')
+                snapshots.prune('fixture', f'{runs[0]}-1')
                 self.assertEqual(promote.call_args.args, ('tag', snapshots.ci_oci.REGISTRY + '/cargo-target:fixture--43-1', 'fixture'))
                 self.assertEqual(lookup.call_count, 2)
-                self.assertTrue(lookup.call_args.args[0].endswith('/41'))
+                self.assertTrue(lookup.call_args.args[0].endswith(f'/{runs[0]}'))
                 self.assertEqual(lookup.call_args.kwargs, {'method': 'DELETE'})
 
     # test-category: security
@@ -240,6 +247,24 @@ class TargetSnapshot(unittest.TestCase):
                     self.assertTrue(snapshots.restore(nearest))
                     self.assertEqual(adopt.call_args.args[1:], (nearest, True))
                 self.assertEqual(len(published['assets']), 6)  # Four chunks, sources, manifest.
+                newer = root / 'newer'
+                shutil.copytree(producer, newer)
+                for part in newer.glob('42-1-*.zst'):
+                    part.rename(newer / part.name.replace('42-1-', '43-1-'))
+                (newer / 'cache.json').write_text(json.dumps(dict(metadata, run_id=43)))
+                snapshots.publish(newer, 43)  # Its producer is still running when the next build restores.
+                self.assertEqual(snapshots.generations(snapshots.release(snapshots.tag_name(expected))['assets'])[0]['name'], '43-1.json')
+
+                def pending(value):
+                    if value['run_id'] == 43:
+                        raise snapshots.UnsuccessfulProducer('pending')
+                chosen = []
+                with patch.object(snapshots, 'trusted', side_effect=pending), \
+                        patch.object(snapshots, 'restore_tree', side_effect=lambda directory, *_: chosen.append(
+                            json.loads((directory / 'cache.json').read_text())['run_id'])) as adopt:
+                    self.assertTrue(snapshots.restore(expected))
+                self.assertEqual(chosen, [42])  # Listed by `oras repo tags`, then the older green generation.
+                self.assertEqual(adopt.call_args.args[1:], (expected, False))
                 snapshots.publish(producer, 42)  # An existing generation is never pushed again.
                 with patch.object(snapshots.ci_oci, 'push', side_effect=AssertionError('overwrite')):
                     snapshots.publish(producer, 42)
@@ -386,6 +411,60 @@ class TargetSnapshot(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'digest mismatch'):
                     snapshots.restore_tree(root / 'snapshot', expected)
                 self.assertEqual((target / 'release/app').read_bytes(), before)
+
+    # test-category: race
+    def test_extract_drains_paced_record_boundary_padding_and_rejects_tail(self):
+        data = io.BytesIO()
+        with tarfile.open(fileobj=data, mode='w|', format=tarfile.PAX_FORMAT) as archive:
+            directory = tarfile.TarInfo('target')
+            directory.type = tarfile.DIRTYPE
+            archive.addfile(directory)
+            member = tarfile.TarInfo('target/x')
+            member.size = 8704
+            archive.addfile(member, io.BytesIO(b'a' * member.size))
+        # Two headers + data end at block 19; the first zero is block 20.
+        self.assertEqual(2 * 512 + member.size, tarfile.RECORDSIZE - 512)
+        self.assertEqual(len(data.getvalue()), 2 * tarfile.RECORDSIZE)
+        real_popen = subprocess.Popen
+        writer = ('import pathlib,sys,time\n'
+                  'data=pathlib.Path(sys.argv[1]).read_bytes()\n'
+                  'try:\n'
+                  ' for start in range(0,len(data),4096):\n'
+                  '  sys.stdout.buffer.write(data[start:start+4096]); sys.stdout.buffer.flush(); time.sleep(.01)\n'
+                  'except BrokenPipeError:\n'
+                  ' sys.exit(17)\n')
+        with tempfile.TemporaryDirectory() as temporary, contextlib.chdir(temporary):
+            root = Path(temporary)
+            source = root / 'decompressed.tar'
+            processes = []
+
+            def paced(*args, **kwargs):
+                process = real_popen([sys.executable, '-c', writer, str(source)], **kwargs)
+                processes.append(process)
+                return process
+
+            # Include a non-NUL in tarfile's read-ahead buffer and in a later record.
+            for tail in [None, tarfile.RECORDSIZE + 1, len(data.getvalue()) - 1, 1537]:
+                payload = bytearray(data.getvalue())
+                if tail == 1537:
+                    # A small archive leaves its tail in tarfile's internal buffer.
+                    small = io.BytesIO()
+                    with tarfile.open(fileobj=small, mode='w|') as archive:
+                        member = tarfile.TarInfo('target/x')
+                        archive.addfile(member)
+                    payload = bytearray(small.getvalue())
+                if tail is not None:
+                    payload[tail] = 1
+                source.write_bytes(payload)
+                with patch.object(cache.subprocess, 'Popen', side_effect=paced):
+                    if tail is None:
+                        cache.extract(root)
+                        self.assertEqual((root / 'target/x').read_bytes(), b'a' * member.size)
+                        self.assertEqual(processes[-1].returncode, 0)
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'Non-NUL'):
+                            cache.extract(root)
+                self.assertIsNotNone(processes[-1].returncode)
 
     def build(self, root):
         return subprocess.check_output(['python3', str(Path(__file__).with_name('isolated.py').resolve()),

@@ -30,12 +30,19 @@ fn project_write_shell(
             vec![data.as_path()]
         };
     denied.extend(secrets.iter().map(PathBuf::as_path));
+    let toolchain_roots =
+        butler_platform::account_dirs::account_dirs().map(|dirs| command_sandbox::ToolchainRoots {
+            home: dirs.home,
+            app_data: dirs.app_data,
+            local_app_data: dirs.local_app_data,
+        });
     command_sandbox::project_write_shell(
         &input.command,
         environment,
         &input.workspace_root,
         &writable,
         &denied,
+        toolchain_roots.as_ref(),
     )
 }
 

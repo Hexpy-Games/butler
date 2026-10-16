@@ -17,7 +17,7 @@ pub(super) async fn admit(
     let Some(generation) = generation else {
         return Ok(false);
     };
-    if std::env::var("BUTLER_E2E_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
         butler_core::diagnostic!(
             "[memory-sync-trace] vector warm={} batch={} text_advanced={text_advanced}",
             input

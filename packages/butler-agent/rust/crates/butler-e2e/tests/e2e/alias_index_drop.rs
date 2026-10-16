@@ -235,7 +235,7 @@ fn owner_scale_posting_queries_keep_plans_and_results() -> Result<(), HarnessErr
     let mut setup = Setup::new("ALIAS-DROP-AUDIT")?;
     let directory = setup.sandbox.data.join("audit");
     let script =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/alias-index-drop-benchmark.py");
+        butler_e2e::e2e::binary::manifest_dir().join("../../scripts/alias-index-drop-benchmark.py");
     let output = std::process::Command::new("python3")
         .arg(script)
         .arg(format!("--prepare={}", directory.display()))

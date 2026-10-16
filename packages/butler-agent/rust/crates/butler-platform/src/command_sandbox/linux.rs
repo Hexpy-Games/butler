@@ -242,6 +242,7 @@ pub(super) fn read_only_contained(
             .to_string_lossy()
             .into_owned(),
         arguments,
+        ..Default::default()
     })
 }
 
@@ -258,6 +259,7 @@ pub(super) fn project_write(
     root: &Path,
     writable: &[&Path],
     denied: &[&Path],
+    _toolchain_roots: Option<&crate::command_sandbox::ToolchainRoots>,
 ) -> Result<Invocation, SandboxError> {
     if !super::project_write_available() {
         return Err(SandboxError::ProjectWriteUnavailable);
@@ -308,6 +310,7 @@ pub(super) fn project_write(
             .to_string_lossy()
             .into_owned(),
         arguments,
+        ..Default::default()
     })
 }
 

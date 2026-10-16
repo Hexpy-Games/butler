@@ -131,7 +131,7 @@ class ArtifactTrust(unittest.TestCase):
     def test_exact_identity_and_digest_required(self):
         expected = dict(schema=1, sha='a' * 40, platform='linux-x64', version='0.1.0-preview.99',
                         native_mode='static-ort', profile='release', toolchain='1.99.0',
-                        debug_assertions='true', overflow_checks='true', rustflags='mold',
+                        debug_assertions='true', overflow_checks='true', rustflags='-C link-arg=-fuse-ld=mold',
                         lto='', codegen_units='')
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
@@ -164,26 +164,37 @@ class ArtifactTrust(unittest.TestCase):
 class Gate(unittest.TestCase):
     # test-category: pure-logic
     def test_every_selected_job_must_succeed(self):
-        jobs = ['source', 'linux-clippy', 'linux-archive', 'linux-tests', 'linux-native', 'linux-perf-archive', 'linux-perf', 'macos-archive', 'macos-tests', 'macos-native', 'macos-perf-archive', 'macos-perf',
+        jobs = ['lint', 'windows-check', 'shellcheck', 'selftest',
+                'linux-clippy', 'linux-archive', 'linux-tests', 'linux-native', 'linux-perf-archive', 'linux-perf', 'macos-archive', 'macos-tests', 'macos-native', 'macos-perf-archive', 'macos-perf',
                 'macos-package', 'macos-updates', 'linux-arm64-archive', 'linux-arm64-tests', 'linux-package-x64',
                 'linux-package-arm64', 'linux-arm64-native', 'linux-arm64-perf-archive', 'linux-arm64-perf', 'install-x64', 'install-arm64', 'install-macos', 'install-merge', 'ui', 'site', 'ds']
         outputs = dict.fromkeys(['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds'], 'true')
-        results = {job: {'result': 'success'} for job in jobs}
-        outputs['tier'] = 'smoke'
+        from ci_policy import rust_jobs
         integration_only = ['linux-perf-archive', 'linux-perf', 'macos-native', 'macos-perf-archive', 'macos-perf', 'macos-package', 'macos-updates', 'install-macos', 'install-merge', 'linux-arm64-tests', 'linux-arm64-perf', 'linux-arm64-perf-archive']
-        for name in integration_only:
-            results[name]['result'] = 'skipped'
-        results['changes'] = dict(result='success', outputs=outputs)
-        env = dict(os.environ, EVENT='pull_request', RESULTS=json.dumps(results))
-        self.assertEqual(subprocess.run([sys.executable, ROOT / 'check-gate.py'], env=env, capture_output=True).returncode, 0)
-        for job in jobs:
-            if job in integration_only:
-                continue
-            for outcome in ['failure', 'cancelled', 'skipped']:
-                changed = json.loads(json.dumps(results))
-                changed[job]['result'] = outcome
-                env['RESULTS'] = json.dumps(changed)
-                self.assertNotEqual(subprocess.run([sys.executable, ROOT / 'check-gate.py'], env=env, capture_output=True).returncode, 0, (job, outcome))
+        for event, platform in [('pull_request', False), ('pull_request', True), ('push', False)]:
+            outputs.update(tier='smoke', macos=str(platform).lower())
+            selected = rust_jobs(outputs, event) | {'lint': True}
+            outputs['jobs'] = json.dumps(selected)
+            disabled = set(integration_only)
+            if event == 'push':
+                disabled.update(('site', 'ds'))
+            if event == 'pull_request':
+                disabled.update(('linux-tests', 'linux-arm64-archive', 'macos-archive', 'macos-tests',
+                                 'linux-native', 'linux-arm64-native', 'linux-package-x64',
+                                 'linux-package-arm64', 'install-x64', 'install-arm64',
+                                 'shellcheck', 'selftest'))
+            self.assertEqual({name for name, enabled in selected.items() if not enabled}, disabled)
+            results = {job: {'result': 'skipped' if job in disabled else 'success'} for job in jobs}
+            results['changes'] = dict(result='success', outputs=outputs)
+            env = dict(os.environ, EVENT=event, RESULTS=json.dumps(results))
+            self.assertEqual(subprocess.run([sys.executable, ROOT / 'check-gate.py'], env=env, capture_output=True).returncode, 0)
+            for job in jobs:
+                outcomes = ['success', 'failure', 'cancelled'] if job in disabled else ['failure', 'cancelled', 'skipped']
+                for outcome in outcomes:
+                    changed = json.loads(json.dumps(results))
+                    changed[job]['result'] = outcome
+                    env['RESULTS'] = json.dumps(changed)
+                    self.assertNotEqual(subprocess.run([sys.executable, ROOT / 'check-gate.py'], env=env, capture_output=True).returncode, 0, (event, platform, job, outcome))
 
     # test-category: pure-logic
     def test_smoke_cannot_reach_e2e_or_perf_on_pr_or_main(self):
@@ -206,6 +217,33 @@ class Gate(unittest.TestCase):
                 self.assertFalse(eval(condition), (event, name, condition))
         for name in ['linux-tests', 'macos-tests']:
             self.assertIn("e2e: ${{ needs.changes.outputs.tier == 'integration' }}", blocks[name])
+        for name in ['linux-archive', 'linux-arm64-archive', 'macos-archive']:
+            expression = re.search(r'^      fixtures: \$\{\{ (.*) \}\}$', blocks[name], re.M)[1]
+            for tier, event, expected in [('smoke', 'pull_request', False),
+                                          ('smoke', 'push', True),
+                                          ('integration', 'push', True),
+                                          ('integration', 'pull_request', True)]:
+                condition = expression.replace('needs.changes.outputs.tier', repr(tier))
+                condition = condition.replace('github.event_name', repr(event)).replace('||', 'or')
+                self.assertEqual(eval(condition), expected, (name, tier, event))
+        archive = (ROOT.parent / 'workflows/rust-archive.yml').read_text()
+        steps = {step.splitlines()[0]: step for step in archive.split('      - name: ')[1:]}
+        selections = steps['Archive tests and record every selection']
+        expression = re.search(r'^        if: \$\{\{ (.*) \}\}$', selections, re.M)[1]
+        for event in ['pull_request', 'push', 'workflow_dispatch']:
+            for in_place in [False, True]:
+                condition = expression.replace('inputs.smoke-in-place', repr(in_place))
+                condition = condition.replace('github.event_name', repr(event))
+                condition = condition.replace('!', 'not ').replace('&&', 'and')
+                self.assertEqual(eval(condition), not (in_place and event == 'pull_request'))
+        for command in ['cargo nextest list', 'balance-e2e.py', 'test-ci-invariants.py']:
+            self.assertIn(command, selections)
+        fixture = steps['Build E2E fixture Agent']
+        self.assertIn('        if: inputs.fixtures', fixture)
+        self.assertIn('butler-agent/e2e-fixtures', fixture)
+        self.assertIn('cp target/debug/butler-agent', fixture)
+        self.assertIn('cp target/debug/butler-sandbox', fixture)
+        self.assertIn('        if: inputs.fixtures', steps['Record native Agent provenance'])
         tests = (ROOT.parent / 'workflows/rust-tests.yml').read_text()
         self.assertIn('!inputs.performance-only && inputs.e2e', tests)
 

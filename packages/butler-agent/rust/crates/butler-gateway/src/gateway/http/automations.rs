@@ -20,7 +20,7 @@ pub(super) async fn route(
 ) -> Result<Response, HttpError> {
     let method = request.method().clone();
     let path = uri.path();
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "e2e-fixtures")]
     if scheduler_counter_route(&method, path) {
         return json(
             StatusCode::OK,
@@ -72,7 +72,7 @@ pub(super) async fn route(
     route_item(state, request, method, suffix).await
 }
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "e2e-fixtures")]
 fn scheduler_counter_route(method: &Method, path: &str) -> bool {
     method == Method::GET
         && path == "/automations/_test/scheduler-next-due-reads"

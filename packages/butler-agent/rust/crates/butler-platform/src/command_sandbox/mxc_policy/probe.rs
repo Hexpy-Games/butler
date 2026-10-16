@@ -14,6 +14,7 @@ pub fn request(
     let command = command_line(&Invocation {
         program: exe.as_str().into(),
         arguments: vec!["--probe-child".into(), nonce.into()],
+        ..Default::default()
     })?;
     Ok(json!({
         "version":"1.0.0", "containment":"processcontainer",

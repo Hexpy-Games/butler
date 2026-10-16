@@ -25,7 +25,7 @@ permissions:
   actions: read
 concurrency:
   group: windows-installer-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/heads/release/') }}
 jobs:
   changes:
     uses: ./.github/workflows/ci-changes.yml
@@ -36,7 +36,7 @@ jobs:
     needs: changes
     if: ${{ !inputs.reuse-run && (needs.changes.outputs.tier != 'integration' || fromJSON(needs.changes.outputs.jobs).build) }}
     name: Build Windows Squirrel artifacts
-    runs-on: [self-hosted, butler-win]
+    runs-on: [self-hosted, butler-win, butler-win-release]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -94,7 +94,7 @@ jobs:
   verify:
     name: Verify Windows install update uninstall
     needs: [changes, build]
-    if: ${{ always() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs).verify) || (needs.changes.outputs.tier != 'integration' && (needs.build.result == 'success' || inputs.reuse-run))) }}
+    if: ${{ !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier != 'integration' && (needs.build.result == 'success' || inputs.reuse-run)) || (needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs).verify && (needs.build.result == 'success' || needs.build.result == 'skipped'))) }}
     runs-on: windows-latest
     timeout-minutes: 20
     steps:

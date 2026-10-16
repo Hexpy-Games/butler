@@ -1,0 +1,33 @@
+name: Build unsigned Windows preview
+description: Build, publish and clean up the release-tier Windows agent
+inputs:
+  native-cache:
+    description: Owner-runner Cargo cache namespace
+    default: windows-agent-v1
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/windows-owner-setup
+      with:
+        workflow: ${{ inputs.native-cache }}
+    - uses: ./.github/actions/build-windows-agent
+      with:
+        owner-runner: 'true'
+        profile: ci-fast
+        cache-key: windows-preview
+        artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+    - uses: actions/upload-artifact@v4
+      with:
+        name: agent-windows-x64
+        path: dist/release/agent/*
+        if-no-files-found: error
+    - uses: ./.github/actions/publish-windows-target
+      continue-on-error: true
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    - uses: ./.github/actions/prepare-windows-release-target
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    - name: Check owner registration and remove job profile
+      if: always()
+      working-directory: .
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      run: ./deploy/windows-owner-cleanup.ps1

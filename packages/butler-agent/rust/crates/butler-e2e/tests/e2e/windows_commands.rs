@@ -50,6 +50,17 @@ fn recovery_errors_preserve_command_outcomes() -> Result<(), HarnessError> {
     Ok(())
 }
 
+#[test]
+fn contained_shell_file_transport() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        !butler_platform::command_sandbox::POSIX_SHELL,
+        "Windows required"
+    );
+    butler_platform::command_sandbox::windows_shell_file_contract();
+    Ok(())
+}
+
 async fn log_approval_timeout_diagnostics(
     scenario: &Scenario,
     chat_id: &str,

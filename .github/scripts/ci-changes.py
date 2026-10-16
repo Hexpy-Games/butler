@@ -14,9 +14,12 @@ import tempfile
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ci_policy import rust_jobs, windows_preview_jobs
 import ci_parts
+import ci_rust_inputs
+import ci_receipts
+from ci_main_baseline import latest_main_run
 from urllib.parse import urlencode
 
-GROUPS = ('rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses')
+GROUPS = ('rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses', 'signing')
 SHARED = ('VERSION', 'LICENSE', 'package.json', 'bun.lock*', 'bunfig.toml', 'tsconfig*.json',
           '*eslint*', '*stylelint*', '*prettier*')
 PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/electron/*',
@@ -27,9 +30,97 @@ PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/elect
              'tests/support/update-work*', 'tests/support/electron-page-cdp*',
              'packages/butler-app/client/ui/src/components/layout/SessionObserverTimeline.tsx',
              'packages/butler-app/client/ui/src/components/settings/Update*')
+# PR packaging exceptions; main/release still exercise every Rust payload change.
+PR_PACKAGING = PACKAGING + ('VERSION', 'Cargo.toml', 'Cargo.lock', '**/Cargo.toml',
+                            '**/Cargo.lock', 'packages/butler-agent/rust/scripts/*',
+                            'packages/butler-agent/rust/crates/butler-platform/**')
+BUN_MACOS = ('tests/unit/prepare-native-agent-script.test.ts',
+             'tests/unit/run-fast-unit-tests.sh', 'tools/validation/*',
+             '.github/workflows/bun-unit.yml')
+MACOS = ('packages/butler-agent/rust/crates/butler-platform/**',
+         '**/*macos*', '**/*darwin*', 'deploy/macos*')
+# These harness inputs are never shipped in a production Agent payload.
+RUST_TEST_ONLY = ('packages/butler-agent/rust/crates/butler-e2e/tests/*',
+                  'packages/butler-agent/rust/crates/butler-e2e/fixtures/*')
+SITE_CHECK_INPUTS = ('tests/smoke/ds-site-*', 'tests/smoke/font-assets-check.ts',
+                     'tests/support/smoke-browser.ts', 'tests/support/ds-viewer-mobile-checks.ts')
+SIGNING = ('deploy/macos*', 'packages/butler-app/scripts/release/*',
+           'packages/butler-app/client/electron/*',
+           'packages/butler-agent/rust/scripts/package-standalone-agent.py',
+           'VERSION', 'package.json', 'bun.lock', 'bun.lockb')
 # Native Windows smoke inputs beyond Rust; other CI configuration stays out.
-WINDOWS = ('deploy/windows*', '.github/workflows/windows-preview-smoke.yml', '.github/actions/*windows*',
-           '.github/actions/rust-agent-setup/*', '.github/scripts/*windows*')
+WINDOWS = ('deploy/windows**', '.github/workflows/**windows**', '.github/actions/**windows**/**',
+           '.github/actions/rust-agent-setup/**', '.github/scripts/**windows**',
+           'windows**', '**/windows**', '**/windows**/**',
+           'packages/butler-agent/rust/crates/butler-platform/**',
+           'packages/butler-agent/rust/crates/butler-e2e/tests/e2e/windows_**')
+
+# Lint-only inputs have no product consumer. Matching consumer rules below also
+# apply: integration reuse hashes must observe release-only workflow changes.
+CI_LINT_ONLY = (
+    '.github/workflows/ci-windows-main-failure.yml',
+    '.github/workflows/release*.yml', '.github/workflows/npm-publish.yml',
+    '.github/workflows/post-release-verify.yml', '.github/workflows/macos-release-recovery.yml',
+    '.github/workflows/e2e.yml', '.github/workflows/branch-name.yml',
+    '.github/workflows/ds-approval.yml', '.github/workflows/ci-store-maintenance.yml',
+    '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py',
+    '.github/scripts/publish-release-checksums.py', '.github/scripts/test-*.py',
+    '.github/scripts/ci-changes.py', '.github/scripts/ci_parts.py',
+    '.github/scripts/ci_consumer_test_support.py',
+    '.github/scripts/ci_rust_inputs.py', '.github/scripts/ci_input_tests.py',
+    '.github/scripts/ci_tier_tests.py', '.github/scripts/ci_receipts.py',
+    '.github/scripts/ci_main_failure.py', '.github/scripts/ci_main_baseline.py',
+    '.github/scripts/ci-main-gate.py', '.github/scripts/ci_windows_cascade_tests.py',
+    '.github/scripts/ci-check-selected.py', '.github/scripts/ds-approval.py',
+)
+# Integration packaging keys include Rust/UI and transitive producer inputs.
+NATIVE_CI = ('rust', 'ui', 'package', 'install', 'linux-package')
+CI_CONSUMERS = (
+    # Lint publishes both workflow and license receipts. Its tested scripts and
+    # their transitive imports must invalidate the license receipt as well.
+    (('licenses',), (
+        '.github/scripts/test-*.py', '.github/scripts/ds-approval.py',
+        '.github/scripts/cargo-artifact-cache.py', '.github/scripts/agent-provenance.py',
+        '.github/scripts/integration-proof.py', '.github/scripts/check-gate.py',
+        '.github/scripts/ci-check-selected.py', '.github/scripts/cargo-target-release.py',
+        '.github/scripts/runner_cache.py', '.github/scripts/ci-changes.py',
+        '.github/scripts/ci_policy.py', '.github/scripts/ci_parts.py',
+        '.github/scripts/ci_consumer_test_support.py', '.github/scripts/ci_rust_inputs.py',
+        '.github/scripts/ci_input_tests.py', '.github/scripts/ci_tier_tests.py',
+        '.github/scripts/ci_receipts.py', '.github/scripts/ci_main_failure.py',
+        '.github/scripts/ci_main_baseline.py', '.github/scripts/ci-main-gate.py',
+        '.github/scripts/ci_windows_cascade_tests.py',
+        '.github/scripts/prepare-windows-zstd.py',
+        '.github/scripts/*windows*safety.py')),
+    (('rust',), ('.github/workflows/rust-*.yml',)),
+    (NATIVE_CI, (
+        '.github/workflows/rust-archive.yml', '.github/workflows/rust-tests.yml',
+        '.github/actions/e2e-stub/*', '.github/workflows/native-agent.yml',
+        '.github/actions/publish-cargo-target/*', '.github/workflows/install-smoke.yml',
+        '.github/workflows/merge-agent-manifests.yml',
+        '.github/scripts/test-ci-invariants.py', '.github/scripts/test-native-archive-safety.py',
+        '.github/scripts/test-windows-ci-safety.py',
+        '.github/scripts/test-windows-command-coverage.py')),
+    (NATIVE_CI + ('workflows',), (
+        '.github/scripts/agent-provenance.py', '.github/scripts/cargo-artifact-cache.py',
+        '.github/scripts/cargo-target-release.py', '.github/scripts/runner_cache.py',
+        '.github/scripts/check-gate.py', '.github/scripts/ci_policy.py',
+        '.github/actions/rust-agent-setup/*', '.github/actions/build-agent-archive/*',
+        '.github/workflows/linux-packages.yml', '.github/workflows/macos-app-package.yml',
+        '.github/scripts/*windows*safety.py', '.github/scripts/prepare-windows-zstd.py')),
+    (NATIVE_CI, ('.github/workflows/macos-*.yml',)),
+    (('ui',), ('.github/workflows/bun-*.yml',)),
+    (NATIVE_CI + ('site', 'ds', 'workflows'), ('.github/actions/bun-setup/*',)),
+    (('site', 'ds', 'workflows'), ('.github/workflows/*site*.yml',)),
+    (('rust', 'ui', 'package'), ('.github/workflows/*windows*.yml',
+                               '.github/actions/*windows*/**', '.github/scripts/*windows*')),
+    (('workflows',), ('.github/actions/build-windows-agent/*',
+                      '.github/actions/package-windows-app/*',
+                      '.github/actions/windows-owner-*/*',
+                      '.github/actions/windows-preview-gate/*',
+                      '.github/workflows/windows-powershell-diagnostics.yml',
+                      '.github/workflows/windows-released-smoke.yml')),
+)
 
 # The locked inventory declares the non-manifest inputs it fingerprints too.
 # Read the checkout, never an owner's runtime data directory.
@@ -41,37 +132,54 @@ def matches(path, patterns):
     return any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
 
 
-def categories(path):
-    if path.startswith('.github/'):
+def github_categories(path):
+    if path.endswith('.md') or path.startswith('.github/releases/'):
+        return set()
+    # This orchestrator owns all groups, unlike the reusable rust-* jobs.
+    if path == '.github/workflows/rust-quality.yml':
         return set(GROUPS)
+    groups = {group for consumers, patterns in CI_CONSUMERS
+              if matches(path, patterns) for group in consumers}
+    if matches(path, CI_LINT_ONLY):
+        groups.add('workflows')
+    return groups or set(GROUPS)  # Unknown CI inputs fail closed.
+
+
+def categories(path, event=None):
+    if path.startswith('.github/'):
+        return github_categories(path)
     notice = re.match(r'^(licen[cs]e|copying|notice|copyright)([._-]|$)', Path(path).name, re.I)
     license_input = path in LICENSE_INPUTS or bool(notice)
+    external_rust = ci_rust_inputs.consumes(path, Path(__file__).resolve().parents[2])
     runtime_markdown = (path.startswith('packages/butler-agent/resources/') or
                         (path.startswith('packages/butler-agent/rust/') and '/crates/' in path and '/docs/' not in path)) and not path.endswith('/README.md')
     # Repository and CI lint is unconditional in rust-quality.yml, including docs-only PRs.
-    if path.endswith('.md') and not path.startswith('packages/butler-site/') and not runtime_markdown and not license_input:
+    if path.endswith('.md') and not path.startswith('packages/butler-site/') and not runtime_markdown and not license_input and not external_rust:
         return set()
     result = set()
-    rust = path.startswith(('packages/butler-agent/rust/', 'packages/butler-agent/resources/', '.cargo/', '.config/')) or matches(path, ('Cargo.*', '**/Cargo.toml', '**/Cargo.lock', 'rust-toolchain*'))
+    rust = external_rust or path.startswith(('packages/butler-agent/rust/', 'packages/butler-agent/resources/', '.cargo/', '.config/')) or matches(path, ('Cargo.*', '**/Cargo.toml', '**/Cargo.lock', 'rust-toolchain*'))
     package = matches(path, PACKAGING)
     shared = matches(path, SHARED)
     ui = path.startswith(('packages/butler-app/client/', 'packages/butler-i18n/'))
     if rust or path == 'VERSION':
         result.add('rust')
-    if rust or package or path == 'VERSION':
+    if (rust and not matches(path, RUST_TEST_ONLY) and
+            (event != 'pull_request' or matches(path, PR_PACKAGING))) or package or path == 'VERSION':
         result.update(('package', 'install', 'linux-package'))
-    bun_source = path.startswith('packages/') and not rust and path.endswith(('.ts', '.tsx', '.js', '.jsx', '.mjs'))
+    bun_source = path.startswith('packages/') and not path.startswith('packages/butler-agent/rust/') and path.endswith(('.ts', '.tsx', '.js', '.jsx', '.mjs'))
     manifest = path.startswith('packages/') and path.endswith('/package.json')
     if ui or shared or bun_source or manifest or path.startswith(('tests/', 'tools/')) or (path.startswith('packages/') and not rust and not package and not path.startswith('packages/butler-site/')):
         result.add('ui')
-    if path.startswith(('packages/butler-site/', 'packages/butler-app/client/ui/', 'packages/butler-i18n/')) or shared or matches(path, ('tests/smoke/ds-site-*',)):
+    if path.startswith(('packages/butler-site/', 'packages/butler-app/client/ui/', 'packages/butler-i18n/')) or shared or matches(path, SITE_CHECK_INPUTS):
         result.add('site')
-    if path.startswith('packages/butler-app/client/ui/') or shared or matches(path, ('tests/smoke/ds-site-*',)):
-        result.add('ds')
-    if license_input or matches(path, ('*lock*', 'Cargo.toml', '**/Cargo.toml', '**/package.json', 'deploy/licenses/*', '**/licenses/*', 'LICENSE*')):
-        result.add('licenses')
+    # DS showcase/config/smoke imports can reach any UI-check input. Retain the
+    # conservative UI implication until its complete input graph is selected.
     if 'ui' in result:
-        result.add('ds')  # Every UI/Bun owner retains the existing renderer browser smokes.
+        result.add('ds')
+    if license_input or matches(path, ('*.lock', '*.lockb', '*-lock.json', 'Cargo.lock', 'Cargo.toml', '**/Cargo.toml', '**/package.json', 'deploy/licenses/*', '**/licenses/*', 'LICENSE*')):
+        result.add('licenses')
+    if matches(path, SIGNING):
+        result.add('signing')
     # Unknown executable/configuration inputs fail closed, rather than silently
     # leaving a new package or tool untested. Assets/readme are product assets.
     if not result and not path.startswith('assets/readme/'):
@@ -80,7 +188,7 @@ def categories(path):
 
 
 def windows_native(path):
-    return matches(path, WINDOWS) or ('rust' in categories(path) and not path.startswith('.github/'))
+    return matches(path, WINDOWS)
 
 
 def command(*args):
@@ -105,12 +213,7 @@ def hashes(base):
     return {group: digest.hexdigest() for group, digest in digests.items()}
 
 
-def trusted_run(run, repository, pr, workflow, branch=None):
-    release = pr is None and branch and branch.startswith('release/')
-    scope = (run['event'] in ('push', 'workflow_dispatch') and run.get('head_branch') == branch) if release else (run['event'] == 'pull_request' and any(p['number'] == pr for p in run['pull_requests']))
-    return (run['status'] == 'completed' and run['conclusion'] in ('success', 'failure')
-            and scope and run['path'] == f'.github/workflows/{workflow}'
-            and run['head_repository']['full_name'] == repository)
+trusted_run = ci_receipts.trusted_run
 
 
 def api_items(path, key):
@@ -118,29 +221,8 @@ def api_items(path, key):
     return [item for page in pages for item in page[key]]
 
 
-def previous(repository, pr, workflow, branch=None):
-    query = dict(per_page=100) if pr is None else dict(event='pull_request', per_page=100)
-    if branch:
-        query['branch'] = branch
-    runs = api_items(f'repos/{repository}/actions/workflows/{workflow}/runs?{urlencode(query)}', 'workflow_runs')
-    for run in runs:
-        if not trusted_run(run, repository, pr, workflow, branch):
-            continue
-        artifacts = api_items(f'repos/{repository}/actions/runs/{run["id"]}/artifacts?per_page=100', 'artifacts')
-        name = f'ci-inputs-{workflow}-{run["run_attempt"]}'
-        if not any(a['name'] == name and not a['expired'] for a in artifacts):
-            continue
-        # A failed overall run may still have completely successful categories.
-        # Require successful publication by our gate, never an interrupted write.
-        jobs = api_items(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100', 'jobs')
-        if not any(any(s['name'] == 'Publish successful inputs' and s['conclusion'] == 'success'
-                       for s in j.get('steps', [])) for j in jobs):
-            continue
-        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as directory:
-            subprocess.run(['gh', 'run', 'download', str(run['id']), '--name', name, '--dir', directory], check=True, stdout=subprocess.DEVNULL)
-            receipt = json.loads((Path(directory) / 'inputs.json').read_text())
-        if receipt.get('schema') == 1 and receipt.get('pr') == pr and receipt.get('repository') == repository and receipt.get('workflow') == workflow and receipt.get('run') == run['id'] and (pr is not None or (receipt.get('tier') == 'integration' and receipt.get('branch') == branch and receipt.get('checkout') == run['head_sha'])):
-            yield receipt
+def previous(repository, pr, workflow, branch=None, base_ref=None, current_head=None):
+    return ci_receipts.previous(repository, pr, workflow, branch, base_ref, api_items, current_head)
 
 
 def tier():
@@ -158,10 +240,8 @@ def job_groups(workflow, integration=False):
     groups = json.loads(match[1]) if match else {}
     mapping = {name: {group for group, names in groups.items() if name in names}
                for names in groups.values() for name in names}
-    if not integration:
-        return {name: sorted(inputs) for name, inputs in mapping.items()}
     for name, inputs in mapping.items():
-        if inputs & {'package', 'install', 'linux-package'}:
+        if integration and inputs & {'package', 'install', 'linux-package'}:
             inputs.update(('rust', 'ui'))
     dependencies = {}
     for block in re.split(r'(?=^  [a-z][a-z0-9-]*:\n)', source, flags=re.M):
@@ -186,11 +266,11 @@ ARTIFACTS = {
     'linux-perf-archive': ['perf-rust-linux-x64'],
     'macos-perf-archive': ['perf-rust-darwin-arm64'],
     'linux-arm64-perf-archive': ['perf-rust-linux-arm64'],
-    'linux-native': ['agent-payload-linux-x64'],
-    'macos-native': ['agent-payload-darwin-arm64'],
-    'linux-arm64-native': ['agent-payload-linux-arm64'],
+    'linux-native': ['agent-payload-linux-x64', 'agent-perf-fixture-linux-x64'],
+    'macos-native': ['agent-payload-darwin-arm64', 'agent-perf-fixture-darwin-arm64'],
+    'linux-arm64-native': ['agent-payload-linux-arm64', 'agent-perf-fixture-linux-arm64'],
     'macos-updates': ['macos-update-agent-builds'],
-    'install-x64': ['agent-linux-x64'], 'install-arm64': ['agent-linux-arm64'],
+    'install-x64': ['agent-linux-x64', 'butler-npm-x64'], 'install-arm64': ['agent-linux-arm64'],
     'install-macos': ['agent-darwin-arm64'],
     'build': ['agent-windows-x64'], 'stub': ['windows-e2e'],
     'release': ['windows-completed-installed'],
@@ -226,54 +306,102 @@ def reuse_inputs(repository, pr, workflow, branch, current, job_inputs, receipts
                     if name in seen or receipt.get('job_inputs', {}).get(name) != digest:
                         continue
                     seen.add(name)
-                    if receipt.get('job_hashes', {}).get(name) == digest:
+                    if (receipt.get('job_hashes', {}).get(name) == digest
+                            and (pr is None or ci_receipts.passed_job(receipt, name))):
                         job_reuse[name] = receipt['run']
             else:
                 for group, digest in current.items():
                     if receipt['hashes'].get(group) == digest:
                         reuse.setdefault(group, receipt['run'])
-    except (subprocess.CalledProcessError, ValueError, OSError, KeyError) as error:
+    except (subprocess.CalledProcessError, ValueError, OSError, KeyError, TypeError) as error:
         print(f'Reuse unavailable ({type(error).__name__}); unmatched checks will run.')
     return reuse, job_reuse
+
+
+def main_base(workflow):
+    """Include merges whose selecting workflow was superseded before completion."""
+    try:
+        run = latest_main_run(workflow, os.environ['GITHUB_REPOSITORY'], command,
+                              exclude_sha=os.environ.get('GITHUB_SHA'))
+        if run is None:
+            return None
+        base = run['head_sha']
+        if not re.fullmatch(r'[0-9a-f]{40}', base):
+            return None
+        command('git', 'merge-base', '--is-ancestor', base, 'HEAD')
+        return base
+    except (subprocess.CalledProcessError, ValueError, OSError, KeyError, TypeError):
+        print('Main baseline unavailable; all checks will run.')
+    return None
+
+
+def selection_base(event, workflow):
+    if (os.environ['GITHUB_EVENT_NAME'] == 'push'
+            and os.environ.get('GITHUB_REF') == 'refs/heads/main'):
+        return main_base(workflow)
+    return (event.get('pull_request', {}).get('base', {}).get('sha')
+            or event.get('merge_group', {}).get('base_sha') or event.get('before'))
 
 
 def select(event, workflow):
     level, candidate = tier()
     pr = event.get('pull_request', {})
-    base = pr.get('base', {}).get('sha') or event.get('merge_group', {}).get('base_sha') or event.get('before')
+    base = selection_base(event, workflow)
     full = level == 'integration' or not base or set(base) == {'0'}
     if not full:
         command('git', 'cat-file', '-e', f'{base}^{{commit}}')
     paths = [] if full else changed(base)
-    required = set(GROUPS) if full else set().union(*(categories(p) for p in paths))
+    required = set(GROUPS) if full else set().union(*(categories(p, os.environ['GITHUB_EVENT_NAME']) for p in paths))
     current = hashes(base or 'full')
+    native_required = (full or any(windows_native(path) for path in paths) or
+                       any(label['name'] == 'ci:windows-native' for label in pr.get('labels', [])) or
+                       (os.environ['GITHUB_EVENT_NAME'] != 'pull_request' and 'rust' in required))
+    # Windows stub receipts use the package group, including all Rust harness inputs.
+    if workflow == 'windows-preview-smoke.yml':
+        if native_required:
+            required.add('package')
+        current['package'] = hashlib.sha256(
+            json.dumps([current['package'], current['rust']]).encode()).hexdigest()
     repository = os.environ['GITHUB_REPOSITORY']
     branch = os.environ.get('GITHUB_REF', '').removeprefix('refs/heads/') if candidate else pr.get('head', {}).get('ref')
-    job_inputs = integration_inputs(workflow, current, candidate) if candidate else {}
+    smoke_pr = bool(pr and pr.get('head', {}).get('repo', {}).get('full_name') == repository
+                    and pr.get('base', {}).get('repo', {}).get('full_name') == repository
+                    and branch and pr.get('base', {}).get('ref'))
+    job_inputs = (integration_inputs(workflow, current, candidate) if candidate else
+                  ci_receipts.smoke_inputs(workflow, current, job_groups(workflow), command) if smoke_pr else {})
     receipts = None
-    if candidate:
+    if candidate or smoke_pr:
         try:
-            receipts = list(previous(repository, None, workflow, branch))
-        except (subprocess.CalledProcessError, ValueError, OSError, KeyError) as error:
+            receipts = list(previous(repository, pr.get('number'), workflow, branch,
+                                     pr.get('base', {}).get('ref'), pr.get('head', {}).get('sha')))
+        except (subprocess.CalledProcessError, ValueError, OSError, KeyError, TypeError) as error:
             print(f'Reuse unavailable ({type(error).__name__}); unmatched checks will run.')
             receipts = []
-    reuse, job_reuse = reuse_inputs(repository, pr.get('number'), workflow, branch, current, job_inputs, receipts) if pr or candidate else ({}, {})
+    reuse, job_reuse = reuse_inputs(repository, pr.get('number'), workflow, branch, current, job_inputs, receipts) if smoke_pr or candidate else ({}, {})
     parts, part_reuse, part_artifacts = ci_parts.select(workflow, job_inputs, receipts or []) if candidate else ({}, {}, [])
     outputs = {group: str(group in required and group not in reuse).lower() for group in GROUPS}
     jobs = {name: name not in job_reuse for name in job_inputs}
     if level == 'smoke':
-        jobs = rust_jobs(dict(outputs, tier=level), os.environ['GITHUB_EVENT_NAME']) | {'lint': True} if workflow == 'rust-quality.yml' else {name: any(outputs[group] == 'true' for group in groups) for name, groups in job_groups(workflow).items()}
+        jobs = rust_jobs(dict(outputs, tier=level, macos=str(full or any(matches(p, MACOS) for p in paths)).lower()), os.environ['GITHUB_EVENT_NAME']) | {'lint': True} if workflow == 'rust-quality.yml' else {name: any(outputs[group] == 'true' for group in groups) for name, groups in job_groups(workflow).items()}
+    if level == 'smoke':
+        jobs = {name: enabled and name not in job_reuse for name, enabled in jobs.items()}
     artifacts = [dict(name=artifact, run=run) for name, run in job_reuse.items()
-                 for artifact in producer_artifacts(workflow, name)]
+                 for artifact in producer_artifacts(workflow, name)
+                 if candidate or (name == 'linux-archive' and jobs.get('linux-tests'))]
     # Smoke uses the full workspace inventory; E2E is disabled separately.
     if level == 'smoke' and workflow == 'rust-quality.yml':
         parts = {name: dict(workspace=True, e2e=ci_parts.E2E, perf=ci_parts.PERF) for name in ci_parts.inventory(workflow)}
+        parts['ui'] = dict(macos=os.environ['GITHUB_EVENT_NAME'] != 'pull_request' and
+                           (outputs['package'] == 'true' or outputs['signing'] == 'true' or
+                            any(matches(p, BUN_MACOS + SHARED) for p in paths)))
     restored = {artifact['name'] for artifact in artifacts}
     artifacts += [artifact for artifact in part_artifacts if artifact['name'] not in restored]
     if level == 'smoke' and workflow == 'windows-preview-smoke.yml':
         parts = {'hosted': ci_parts.HOSTED}
-        native = outputs['package'] == 'true' and (full or any(windows_native(path) for path in paths))
+        native = outputs['package'] == 'true' and native_required
         jobs = windows_preview_jobs(dict(outputs, windows=str(native).lower()), os.environ['GITHUB_EVENT_NAME'])
+    if os.environ['GITHUB_EVENT_NAME'] == 'pull_request' and workflow != 'rust-quality.yml':
+        jobs = dict.fromkeys(jobs, False)
     outputs.update({'parts': json.dumps(parts), 'docs-only': str(not required).lower(), 'electron': outputs['package'],
                     'tier': level, 'candidate': candidate, 'jobs': json.dumps(jobs),
                     'artifacts': json.dumps(artifacts)})
@@ -281,6 +409,7 @@ def select(event, workflow):
                  run=int(os.environ['GITHUB_RUN_ID']), base=base, checkout=command('git', 'rev-parse', 'HEAD'), hashes=current,
                  outputs=outputs, reuse=reuse, paths=paths, previous_paths=None,
                  head=pr.get('head', {}).get('sha'), tier=level, branch=branch,
+                 base_ref=pr.get('base', {}).get('ref'), head_repository=pr.get('head', {}).get('repo', {}).get('full_name'),
                  job_inputs=job_inputs, job_reuse=job_reuse, part_reuse=part_reuse)
     with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
         for key, value in outputs.items():
@@ -315,7 +444,7 @@ def record():
         if jobs[name]['result'] == ('skipped' if name in state['job_reuse'] else 'success') and jobs[name].get('outputs', {}).get('compile') != 'failure':
             job_passed[name] = digest
     part_state = {}
-    if state.get('job_inputs') and ci_parts.inventory(state['workflow']):
+    if state.get('tier') == 'integration' and state.get('job_inputs') and ci_parts.inventory(state['workflow']):
         actual = api_items(f'repos/{state["repository"]}/actions/runs/{state["run"]}/attempts/{os.environ["GITHUB_RUN_ATTEMPT"]}/jobs?per_page=100', 'jobs')
         part_state = ci_parts.record(state, actual)
     directory = Path(os.environ['RUNNER_TEMP']) / 'ci-inputs'

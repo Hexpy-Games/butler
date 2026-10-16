@@ -83,8 +83,7 @@ impl Launch {
             _port_reservation: std::sync::Arc::new(reservation),
             token,
             env: vec![
-                // Child commands clear inherited environment. The product's
-                // fixed App/scheduler clock is enabled only on the stub tier.
+                // Child commands clear inherited environment; fixture clocks need the stub tier.
                 (
                     "BUTLER_E2E_TIER".into(),
                     super::config::nonempty("BUTLER_E2E_TIER").unwrap_or_else(|| "stub".into()),
@@ -94,6 +93,7 @@ impl Launch {
                     "BUTLER_E2E_EMBED_SOURCES".into(),
                     "http://127.0.0.1:9".into(),
                 ),
+                ("BUTLER_SHUTDOWN_TRACE".into(), "1".into()), // as the App sets it
                 ("BUTLER_APP_LOCAL_AUTH_REQUIRED".into(), "1".into()),
                 (
                     "BUTLER_APP_LOCAL_AUTH_FILE".into(),

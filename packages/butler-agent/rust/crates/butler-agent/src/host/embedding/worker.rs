@@ -143,6 +143,7 @@ async fn handle(
         }
         WorkerOperation::Initialize | WorkerOperation::Embed | WorkerOperation::Tokenize => {
             if engine.is_none() {
+                #[cfg(feature = "e2e-fixtures")]
                 initialization_barrier();
                 if let Err(code) = assets::ensure(data_root).await {
                     return WorkerResponse::error(id, code);
@@ -208,10 +209,8 @@ async fn write_response(
 }
 
 // Hold a native worker at the CPU initialization boundary for owner-death E2Es.
+#[cfg(feature = "e2e-fixtures")]
 fn initialization_barrier() {
-    if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub") {
-        return;
-    }
     if let Some(path) = std::env::var_os("BUTLER_E2E_EMBED_INIT_BARRIER")
         && std::fs::write(path, std::process::id().to_string()).is_ok()
     {

@@ -8,6 +8,11 @@ name: DS approval
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths:
+      - 'packages/butler-app/client/ui/src/libs/design-system/components/**'
+      - 'packages/butler-app/client/ui/src/libs/design-system/blocks/**'
+      - 'packages/butler-app/client/ui/src/libs/design-system/shadcn/**'
+      - 'packages/butler-app/client/ui/src/libs/design-system/*.css'
 
 permissions:
   contents: read

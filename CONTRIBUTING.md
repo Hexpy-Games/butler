@@ -153,7 +153,12 @@ Specs, plans, decisions, implementation reports and experiment evidence belong i
 
 Work branches use `<type>/<slug>` with type `feat`, `fix`, `perf`, `refactor`, `ci`, `build`, `docs`, `test`, `chore` or `research`. Tool-named prefixes (`codex/`, `claude/`) and `batch/` are forbidden. PRs target `main`; candidate fixes use `fix/<v>-<slug>` from `release/<v>` and target that release branch. Merge commits everywhere; the coordinator admin-merges after smoke gates pass. There is no merge queue. Fetch and merge the base before pushing; never rebase a pushed branch.
 
-PRs and main pushes run checks selected by changed paths, workspace tests, UI tests and packaging/install smoke checks, with **no E2E or perf**. Release pushes run integration: all groups, E2E, perf, live E2E (only `openai/gpt-6-luna`), Mac test packages and Windows smoke/installer builds. No nightly CI runs. After a release fix, only jobs with changed inputs or failed results run; successful unchanged jobs and matrix shards are reused through input receipts. Unchanged producer artifacts are restored for consumers. Integration receipts never reuse smoke results.
+PRs require only hosted fast checks: repository/CI lint, Linux x64 and hosted Windows Clippy, Linux x64 workspace smoke tests (with their archive producer), Ubuntu Bun fast units, and applicable Ubuntu DS/site/UI checks. No platform, manifest or packaging path enables heavy PR jobs. The three legacy gate contexts follow the consolidated gate.
+
+While main CI is red, unrelated PRs to main are blocked. Exemptions: the `ci:main-fix` label, a `fix/revert-pr-*` branch from this repository, or a link to an open reporter issue matching the current failing main run for that workflow.
+The gate fails open with a warning if the main-run Actions API lookup is unavailable. A PR whose gate passed before main turned red keeps that result; main failures do not retroactively rerun PR gates.
+
+Heavy archives/tests, native Windows stub/shards, signing and packaging/install smoke coverage runs on main pushes at smoke tier and release integration. Run `gh workflow run rust-quality.yml --ref <branch>` for the moved Rust/macOS/packaging/install/signing checks, and `gh workflow run windows-preview-smoke.yml --ref <branch>` for native Windows stub/shards. Dispatch selects the full smoke set regardless of changed paths. Same-repository PR re-pushes reuse only successful completed receipts from the same PR, head branch and base ref with identical merged-tree job inputs; uncertainty runs the job. Release integration additionally runs E2E, perf, live E2E (only `openai/gpt-6-luna`) and test packages; unchanged successful integration jobs/shards reuse input receipts and restore producer artifacts.
 
 Release branches are `release/X.Y.Z` or `release/X.Y.Z-preview.N`. New features stay on main. Nothing syncs automatically: when asked, cherry-pick a main change with `-x` onto a release fix branch. After tagging, merge the release branch back to main as a merge commit, then delete it. A published-preview hotfix ships as the next preview, cut from the last tag or ready main.
 
@@ -175,7 +180,7 @@ A release is a `vX.Y.Z` (or `vX.Y.Z-preview.N`) tag on a proven commit of `relea
 6. After complete integration proof and real-machine approval, the coordinator tags that exact SHA `v<v>`. Previews have standing approval; stable tags require the owner's explicit confirmation. `release.yml` blocks builds until every integration workflow gate, including live E2E on that SHA, is green directly or through matching integration receipts.
 7. The tag builds all release platforms and publishes only after the assets and checksums exist. Stable npm publication runs through `.github/workflows/npm-publish.yml`; previews can be published by dispatching that workflow after desktop verification. After the first successful OIDC publish, the owner may delete the `NPM_ACCESS_TOKEN` repository secret. Dispatch `post-release-verify.yml` with the previous tag as baseline, then merge the release branch back to main as a merge commit.
 
-Windows tag evidence comes from `windows-preview-smoke.yml` ("Complete Windows preview verification"), `windows-installer.yml` ("windows-installer gate"), and `e2e.yml` ("E2E live tier"). `windows.yml` is disabled manually and is not a release gate.
+Windows tag evidence comes from `windows-preview-smoke.yml` ("Complete Windows preview verification"), `windows-installer.yml` ("windows-installer gate"), and `e2e.yml` ("E2E live tier").
 
 Known-flaky failures can be waived by the coordinator for previews; stable waivers need the owner. On the linked **open issue**, post a comment containing exactly this JSON (fill in the values):
 
@@ -243,8 +248,3 @@ is needed. Public visibility requires this one-time settings action because
 GitHub's documented REST package API does not expose a visibility update.
 
 Dispatch `native-deps.yml` on main and verify all four public targets first.
-Then dispatch `ci-store-maintenance.yml` on main. It anonymously downloads every
-current SDK and checks its outer and inner digests before deleting the four
-original `native-deps-*` releases/tags and any `cargo-target-*` releases/orphan
-tags. Any missing, private or corrupt SDK stops cleanup before the first deletion.
-The maintenance job leaves model mirrors and product releases untouched.

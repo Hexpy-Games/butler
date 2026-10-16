@@ -366,11 +366,7 @@ async fn open_or_create(root: &Path, schema: &SchemaRef) -> CognitionResult<Tabl
 }
 
 fn unavailable(source: lancedb::Error) -> CognitionError {
-    if matches!(
-        std::env::var("BUTLER_E2E_TIER").as_deref(),
-        Ok("stub" | "perf")
-    ) && std::env::var("BUTLER_E2E_MEMORY_SYNC_TRACE").as_deref() == Ok("1")
-    {
+    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
         butler_core::diagnostic!("[memory-vector-store-trace] {source:?}");
     }
     error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source)

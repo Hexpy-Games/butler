@@ -47,6 +47,8 @@ jobs:
         run: |
           chmod +x "$RUNNER_TEMP/rust-archive/butler-agent"
           python3 .github/scripts/isolated.py bun install --frozen-lockfile
+          # Keep Electron's first-install stdout out of the executable path below.
+          python3 .github/scripts/isolated.py node packages/butler-app/client/electron/node_modules/electron/install.js
           python3 .github/scripts/isolated.py bun run app:ui:build
       - name: Run canvas and route fixtures with stub model responses
         env:
@@ -122,6 +124,10 @@ jobs:
         with:
           name: rust-${{ inputs.platform }}
           path: ${{ runner.temp }}/rust-archive
+      # The answer-blocks fixture table also runs its TypeScript contract.
+      - uses: ./.github/actions/bun-setup
+      - name: Install the TypeScript contract dependencies
+        run: python3 .github/scripts/isolated.py bun install --frozen-lockfile
       - name: Select measured shard
         env:
           SHARD: ${{ matrix.shard }}
@@ -178,12 +184,13 @@ jobs:
           echo "BUTLER_E2E_FAULT_BIN=$RUNNER_TEMP/fault-agent/butler-agent" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
-          name: agent-payload-${{ inputs.platform }}
-          path: ${{ runner.temp }}/production-agent
+          name: agent-perf-fixture-${{ inputs.platform }}
+          path: ${{ runner.temp }}/perf-agent
       - uses: ./.github/actions/e2e-stub
         with:
           archive-file: ${{ runner.temp }}/rust-archive/tests.tar.zst
-          agent-binary: ${{ runner.temp }}/production-agent/butler-agent
+          # The shipped native recipe plus only the e2e-fixtures feature.
+          agent-binary: ${{ runner.temp }}/perf-agent/butler-agent
           enforce-budgets: "true"
           exclude-perf: "false"
           filter-file: ${{ matrix.shard != 'idle' && format('{0}/rust-archive/perf-{1}.txt', runner.temp, matrix.shard) || '' }}

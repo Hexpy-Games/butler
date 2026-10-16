@@ -40,6 +40,12 @@ The harness builds `butler-agent` itself with `butler-agent/e2e-fixtures` unless
 `BUTLER_E2E_BIN` names a binary or `BUTLER_E2E_SKIP_BUILD=1`. Prebuilt agents used
 for browser import scenarios also need this feature to inject isolated profile
 and key sources. Never enable it in shipped agents.
+
+Every fault, barrier, fixed clock and storage/idle probe that a scenario arms with a
+`BUTLER_E2E_*` variable exists only in that fixture build (`e2e-fixtures` in each
+product crate). Shipped binaries contain none of them, and `butler-source-check`
+ratchets any such name in shipped code (`source-check-e2e-hooks.txt`). Perf scenarios
+use an optimized fixture build for the same reason.
 `BUTLER_E2E_WORKSPACE_ROOT` selects the Rust workspace containing resources,
 fixtures and cassettes when running a compiled harness on a different machine.
 
@@ -78,6 +84,25 @@ selected with `BUTLER_E2E_CODEX_AUTH_JSON`. A Butler test login
 the harness falls back to the read-only Codex CLI file and LIVE-10 is
 SKIPPED. Run the live tier with `--test-threads=1`; CI also serializes live
 jobs across release branches so refreshes of the one profile cannot race.
+
+## On-demand hedge evaluations
+
+Like the perf scenarios (`BUTLER_E2E_PERF=1`), hedge evaluations require a
+separate opt-in: `BUTLER_E2E_HEDGE_EVAL=1`. Without it, LIVE-11, LIVE-12
+and the hedge-only `prewarm_shared_chromium` utility report `SKIPPED` even
+when the live tier selects ignored tests. With it, their existing tier,
+credential and browser-cache requirements apply. These are owner-run metrics,
+not release CI gates.
+
+```sh
+BUTLER_E2E_TIER=live BUTLER_E2E_HEDGE_EVAL=1 \
+  crates/butler-e2e/scripts/isolated-run.sh \
+  cargo test -p butler-e2e --test e2e live::hedge -- --ignored --test-threads=1
+```
+
+`scripts/hedge_eval_v2.sh prepare <main_sha>` and `run --rounds N` set
+`BUTLER_E2E_HEDGE_EVAL=1` for the prewarm and paired evaluation runs.
+LIVE-12 and prewarm also need `BUTLER_E2E_BROWSER_CACHE`; the runner supplies it.
 
 ## Quota polling
 

@@ -1,5 +1,5 @@
 name: Windows preview completion evidence
-description: Require the unchanged complete installed harness inventory
+description: Require the complete selected installed and hosted harness inventory
 inputs:
   results:
     description: Producer and consumer job results
@@ -35,7 +35,7 @@ runs:
         NEEDS_JSON: ${{ inputs.results }}
       shell: pwsh
       run: |
-        # Native and hosted command matrices each retain their completion record.
+        # Command matrix records cover both hosted/debug and installed/release binaries.
         # Integration rehydrates reused producers' records, so it requires them all.
         $harnesses = @{
           release = @('windows_startup_xml','installed_preview','windows_commands','projection_settlement')

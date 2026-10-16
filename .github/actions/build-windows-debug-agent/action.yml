@@ -1,5 +1,5 @@
 name: Build owner Windows debug agent
-description: Build the existing stub agent and retain successful Cargo fingerprints
+description: Build the E2E fixture agent and retain successful Cargo fingerprints
 runs:
   using: composite
   steps:
@@ -15,7 +15,7 @@ runs:
         $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
         $ErrorActionPreference = 'Continue'
-        cargo build --timings -j 8 --locked --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox 2>&1 |
+        cargo build --timings -j 8 --locked --no-default-features --features static-ort,butler-agent/e2e-fixtures,butler-platform/test-support --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox 2>&1 |
           Tee-Object "$env:PREVIEW_ROOT/logs/debug-build.log"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" save-local windows-x64 static-ort dev

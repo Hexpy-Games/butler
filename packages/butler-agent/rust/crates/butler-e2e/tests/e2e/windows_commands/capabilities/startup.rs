@@ -14,7 +14,7 @@ async fn owner_scale_cold_startup_with_and_without_indexes() -> Result<(), Harne
     s.agent
         .launch
         .env
-        .push(("BUTLER_E2E_STARTUP_TRACE".into(), "1".into()));
+        .push(("BUTLER_STARTUP_TRACE".into(), "1".into()));
     let history = scale::prepare(&mut s, &chat).await?;
     let case = Case {
         tool: "read_file",

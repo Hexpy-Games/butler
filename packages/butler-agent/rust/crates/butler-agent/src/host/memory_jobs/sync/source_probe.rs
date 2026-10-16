@@ -55,7 +55,7 @@ impl SourceProbe {
         );
         let changed = self.revision.as_ref() != Some(&revision);
         self.revision = Some(revision);
-        if std::env::var("BUTLER_E2E_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
             butler_core::diagnostic!(
                 "[memory-source-trace] committed_revision={} changed={changed}",
                 self.revision.as_ref().map_or(0, |(_, revision)| *revision)
