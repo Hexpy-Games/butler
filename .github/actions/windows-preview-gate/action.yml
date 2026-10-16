@@ -23,25 +23,35 @@ runs:
         $needs = ConvertFrom-Json $env:NEEDS_JSON -AsHashtable
         $selected = ConvertFrom-Json $needs.changes.outputs.jobs -AsHashtable
         foreach ($job in $needs.GetEnumerator() | Where-Object { $_.Key -ne 'changes' }) {
-          $expected = if ($needs.changes.outputs.tier -eq 'integration' -and !$selected[$job.Key]) { 'skipped' } else { 'success' }
+          $expected = if (!$selected[$job.Key]) { 'skipped' } else { 'success' }
           if ($job.Value.result -ne $expected) { throw "Incomplete Windows job: $($job.Key)=$($job.Value.result)" }
         }
     - uses: actions/download-artifact@v4
       with:
         pattern: windows-completed-*
         path: ${{ runner.temp }}/windows-completion
-    - name: Require every hosted verification harness
+    - name: Require every selected verification harness
+      env:
+        NEEDS_JSON: ${{ inputs.results }}
       shell: pwsh
       run: |
         # Native and hosted command matrices each retain their completion record.
-        $expected = @('windows_commands','windows_startup_xml','installed_preview','cli_surface','gateway_remote','gateway_pairing','cli_remote',
-          'windows_commands','projection_settlement','project_workspace','queue_notifications','queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
-        $actual = @(Get-ChildItem "$env:RUNNER_TEMP/windows-completion" -Recurse -Filter completed-harnesses.txt |
+        # Integration rehydrates reused producers' records, so it requires them all.
+        $harnesses = @{
+          release = @('windows_startup_xml','installed_preview','windows_commands','projection_settlement')
+          hosted = @('cli_surface','gateway_remote','gateway_pairing','cli_remote','windows_commands','project_workspace',
+            'queue_notifications','queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
+        }
+        $needs = ConvertFrom-Json $env:NEEDS_JSON -AsHashtable
+        $selected = ConvertFrom-Json $needs.changes.outputs.jobs -AsHashtable
+        $integration = $needs.changes.outputs.tier -eq 'integration'
+        $expected = @($harnesses.Keys | Where-Object { $integration -or $selected[$_] } | ForEach-Object { $harnesses[$_] })
+        $actual = @(Get-ChildItem "$env:RUNNER_TEMP/windows-completion" -Recurse -Filter completed-harnesses.txt -ErrorAction SilentlyContinue |
           ForEach-Object { Get-Content $_.FullName })
-        if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
+        if ($actual.Count -ne $expected.Count -or ($expected.Count -and (Compare-Object $expected $actual))) {
           throw "Incomplete verification: completed=$($actual -join ',')"
         }
-        "Verified all 15 required harnesses in 16 invocations: $($actual -join ',')"
+        "Verified $($expected.Count) selected harness invocations: $($actual -join ',')"
     - name: Remove completion check directories
       if: always()
       shell: pwsh

@@ -32,7 +32,7 @@ defaults:
 
 concurrency:
   group: windows-preview-${{ github.ref }}
-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/heads/release/') }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/release/') }}
 
 jobs:
   changes:
@@ -47,7 +47,7 @@ jobs:
       packages: write
     needs: changes
     name: Build unsigned Windows preview
-    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['build']) || (needs.changes.outputs.tier != 'integration' && (needs.changes.outputs.package == 'true' && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))))
+    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['build']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['build'] && !inputs.native-loop && !inputs.diagnose-powershell && github.event_name != 'pull_request'))
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
     steps:
@@ -83,7 +83,7 @@ jobs:
       packages: write
     needs: changes
     name: Platform contracts and debug stub chat
-    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['stub']) || (needs.changes.outputs.tier != 'integration' && (needs.changes.outputs.package == 'true' && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))))
+    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['stub']) || (needs.changes.outputs.tier != 'integration' && (fromJSON(needs.changes.outputs.jobs)['stub'] && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))))
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
     env:
@@ -315,7 +315,7 @@ jobs:
 
   release:
     name: Installed unsigned Windows preview
-    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['release']) || (needs.changes.outputs.tier != 'integration' && (!inputs.native-loop)))
+    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['release']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['release'] && !inputs.native-loop && github.event_name != 'pull_request'))
     needs: [changes, build, stub]
     runs-on: windows-latest
     timeout-minutes: 30
@@ -412,7 +412,7 @@ jobs:
 
   hosted:
     name: Hosted Windows E2E (${{ matrix.shard }})
-    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted']) || (needs.changes.outputs.tier != 'integration' && (!inputs.native-loop)))
+    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted'] && !inputs.native-loop))
     needs: [changes, stub]
     runs-on: windows-latest
     timeout-minutes: 30
@@ -484,7 +484,7 @@ jobs:
       - name: Require selected preview checks
         env:
           RESULTS: ${{ toJSON(needs) }}
-          CHECK_GROUPS: '{"build":["package"],"stub":["package"],"release":["package"],"hosted":["package"]}'
+          CHECK_GROUPS: '{"build":"jobs","stub":"jobs","release":"jobs","hosted":"jobs"}'
         run: python .github/scripts/isolated.py python .github/scripts/ci-check-selected.py
       - uses: ./.github/actions/windows-preview-gate
         if: ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
