@@ -5,6 +5,7 @@
 //! the classifier. A scheduled (unattended) run never waits: the step Auto
 //! would ask about fails fast with a reason, and the run is flagged; "run
 //! now" is attended and asks as usual.
+mod sandbox_setting;
 mod unattended;
 use unattended::run_where;
 
@@ -59,6 +60,8 @@ async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), Harn
     }
     let contained = butler_platform::command_sandbox::project_write_available();
 
+    sandbox_setting::verify(&s, &chat, &script, &project).await?;
+
     // In-folder edit and a project-contained command: no card (macOS); the
     // command asks where no project-write sandbox exists.
     script.rounds.lock().unwrap().insert(
@@ -91,6 +94,12 @@ async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), Harn
     assert!(project.join("src/made.txt").exists());
     let output = outputs(&s, &chat, &id, &script, EDIT).await?;
     assert!(output.iter().any(|v| v.contains("project-marker")));
+    if contained {
+        assert!(
+            output.iter().any(|v| v.contains("project_write_contained")),
+            "{output:?}"
+        );
+    }
     eprintln!(
         "PERM-02 edit: elapsed_ms={} contained={contained} authority_count={asked}",
         started.elapsed().as_millis()

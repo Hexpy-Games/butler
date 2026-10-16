@@ -60,7 +60,7 @@ pub use test_support::{
 };
 
 mod host_capabilities;
-pub use host_capabilities::{Level, SandboxCapabilities, capabilities};
+pub use host_capabilities::{Level, SandboxCapabilities, cached_capabilities, capabilities};
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
