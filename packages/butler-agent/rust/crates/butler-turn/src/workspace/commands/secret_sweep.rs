@@ -47,16 +47,7 @@ pub(super) async fn before_run(input: &GuidedCommandInput) -> Result<Prepared, C
     })
     .await
     .map_err(|error| CommandError::io(std::io::Error::other(error)))?
-    .map_err(|error: std::io::Error| {
-        if error.kind() == std::io::ErrorKind::WouldBlock {
-            CommandError::new(
-                super::CommandCode::CommandObservationIsolationUnavailable,
-                error.to_string(),
-            )
-        } else {
-            CommandError::io(error)
-        }
-    })
+    .map_err(CommandError::io)
 }
 
 pub(super) async fn after_run(

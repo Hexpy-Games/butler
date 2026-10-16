@@ -19,24 +19,13 @@ pub(super) fn member_access_dot(ch: char, previous: Option<char>, quoted: bool) 
 }
 
 pub(super) fn path_script(command: &str) -> &str {
-    cmd::script(command)
-        .or_else(|| explicit_script(command))
-        .unwrap_or(command)
+    explicit_script(command).unwrap_or(command)
 }
 
 /// `cmd.exe /d /s /c <command>` takes the command verbatim: with `/s`, `cmd`
 /// strips the first and the last quote of the line and runs what is between.
 pub(super) fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
     use std::os::windows::process::CommandExt;
-    if let Some(shell) = &invocation.shell_program {
-        command.env("BUTLER_COMMAND_SHELL", shell);
-        if let Some(script) = &invocation.shell_script {
-            command.env("BUTLER_COMMAND_SCRIPT", script);
-        }
-        if let Some(directory) = command.get_current_dir().map(std::path::Path::to_path_buf) {
-            command.env("BUTLER_COMMAND_CWD", directory);
-        }
-    }
     if let Some(text) = cmd::raw_argument(invocation) {
         command.args(["/d", "/s", "/c"]).raw_arg(text);
     } else {
@@ -93,16 +82,13 @@ pub(super) fn legacy_shell(
     // cmd/CRT/PowerShell argument reparsing. Set both console and pipeline
     // encodings; native reg/cmd output follows the console code page.
     let modules = default_modules();
-    let shell_started = phase_marker("script_started", environment);
-    let language = include_str!("windows/language.ps1");
-    let modules_ready = phase_marker("modules_ready", environment);
+    let shell_started = phase_marker("script_started");
+    let modules_ready = phase_marker("modules_ready");
     // Enter the admitted short CWD with process-local .NET path compatibility.
     // Long folders retain an extended provider root and real parent traversal.
     let paths = include_str!("windows/paths.ps1");
-    // Invoke-Expression otherwise resets $? after non-terminating errors.
-    // Preserve the direct -EncodedCommand transport's final-status behavior.
     let script = format!(
-        "{language}{shell_started}{modules}{modules_ready}{paths}{command}\nif (!$?) {{ exit 1 }}\n"
+        "{shell_started}[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {modules}{modules_ready}{paths}{command}"
     );
     let encoded = STANDARD.encode(
         script
@@ -110,7 +96,7 @@ pub(super) fn legacy_shell(
             .flat_map(u16::to_le_bytes)
             .collect::<Vec<_>>(),
     );
-    let invocation = Invocation {
+    Invocation {
         program,
         arguments: [
             "-NoLogo",
@@ -125,62 +111,19 @@ pub(super) fn legacy_shell(
         ]
         .map(str::to_owned)
         .to_vec(),
-        ..Default::default()
-    };
-    code_page_shell(invocation, script, environment)
+    }
 }
 
-fn code_page_shell(
-    mut invocation: Invocation,
-    script: String,
-    environment: &HashMap<String, Option<String>>,
-) -> Invocation {
-    // cmd sets the console code page before PowerShell caches its output
-    // encoding. This also works when policy prohibits Console setters in CLM.
-    // Expand the path once from the environment, with delayed expansion off:
-    // spaces, percent signs and exclamation marks retain their literal values.
-    if invocation.program.contains(['\0', '"', '\r', '\n']) {
-        return invocation;
-    }
-    // Environment transport avoids cmd's 8191-character command-line limit.
-    // Invoke-Expression obeys the current language policy, including CLM.
-    // Suppress module-autoload progress before Remove-Item loads Management;
-    // the inner script's preference is too late for this outer bootstrap.
-    let bootstrap = "$ProgressPreference='SilentlyContinue'; $butlerCommandText=$env:BUTLER_COMMAND_SCRIPT; Remove-Item Env:BUTLER_COMMAND_SCRIPT; Invoke-Expression $butlerCommandText";
-    let encoded = STANDARD.encode(
-        bootstrap
-            .encode_utf16()
-            .flat_map(u16::to_le_bytes)
-            .collect::<Vec<_>>(),
-    );
-    if let Some(argument) = invocation.arguments.last_mut() {
-        *argument = encoded;
-    }
-    let text = format!(
-        "\"%BUTLER_COMMAND_SHELL%\" {}",
-        invocation.arguments.join(" ")
-    );
-    let mut wrapper = cmd::shell(&text, environment);
-    wrapper.arguments.insert(1, "/v:off".into());
-    wrapper.shell_program = Some(invocation.program);
-    wrapper.shell_script = Some(script);
-    wrapper
-}
-
-fn phase_marker(phase: &str, environment: &HashMap<String, Option<String>>) -> String {
-    // Parent diagnostics must not contaminate captured command output. Only an
-    // explicit opt-in on this invocation may add shell diagnostics to stderr.
-    if environment
-        .get("BUTLER_DEBUG_COMMAND_TIMINGS")
-        .and_then(Option::as_deref)
-        != Some("1")
+fn phase_marker(phase: &str) -> String {
+    if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+        != Some(std::ffi::OsStr::new("1"))
     {
         return String::new();
     }
     // Opt-in diagnostics contain no command, path, environment or output data.
     // UTC ticks correlate shell startup/imports with the parent spawn interval.
     format!(
-        "if ($ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage') {{ [Console]::Error.WriteLine('command_shell_phase phase={phase} utc_ticks=' + [DateTime]::UtcNow.Ticks) }}; "
+        "[Console]::Error.WriteLine('command_shell_phase phase={phase} utc_ticks=' + [DateTime]::UtcNow.Ticks); "
     )
 }
 

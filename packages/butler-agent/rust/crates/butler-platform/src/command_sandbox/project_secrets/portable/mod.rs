@@ -21,7 +21,6 @@ use std::time::SystemTime;
 
 /// Finds protected entries before installing a project-write policy. A bounded
 /// walk fails closed rather than granting an incompletely inspected hierarchy.
-#[cfg(unix)]
 pub(super) fn discover_project_secrets(root: &Path) -> std::io::Result<Vec<PathBuf>> {
     Ok(tree::walk(root, true)?
         .into_iter()
@@ -34,28 +33,15 @@ pub(super) fn discover_project_secrets(root: &Path) -> std::io::Result<Vec<PathB
 /// time by a clock tick, so the inventory is the authority for new names.
 /// Directories the walk cannot inspect are quarantined whole. One failed move
 /// never leaves later entries in place: all are attempted, then it reports.
-#[cfg(unix)]
 pub(super) fn sweep_new_secrets(
     root: &Path,
     since: &[PathBuf],
     data: &Path,
 ) -> std::io::Result<Vec<PathBuf>> {
-    let found = tree::walk(root, false)?
+    let existing: HashSet<_> = since.iter().cloned().collect();
+    let secrets: Vec<_> = tree::walk(root, false)?
         .into_iter()
         .map(|relative| root.join(relative))
-        .collect();
-    quarantine_new(root, since, data, found)
-}
-
-pub(in crate::command_sandbox) fn quarantine_new(
-    root: &Path,
-    since: &[PathBuf],
-    data: &Path,
-    found: Vec<PathBuf>,
-) -> std::io::Result<Vec<PathBuf>> {
-    let existing: HashSet<_> = since.iter().cloned().collect();
-    let secrets: Vec<_> = found
-        .into_iter()
         .filter(|path| !existing.contains(path))
         .collect();
     if secrets.is_empty() {

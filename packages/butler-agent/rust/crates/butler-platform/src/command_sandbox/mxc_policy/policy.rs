@@ -51,21 +51,12 @@ impl Plan {
         }
         *temporary = command_scratch.clone();
         let cwd = WinPath::new(&format!("{drive}:\\"))?;
-        let mut env = environment::build(
+        let env = environment::build(
             &self.host_environment,
             scratch.first().ok_or("scratch root missing")?,
             &self.tools,
             &cwd,
         )?;
-        if let Some(shell) = &invocation.shell_program {
-            if shell.contains(['\0', '"', '\r', '\n']) {
-                return Err("invalid shell program");
-            }
-            env.insert("BUTLER_COMMAND_SHELL".into(), shell.clone());
-            if let Some(script) = &invocation.shell_script {
-                env.insert("BUTLER_COMMAND_SCRIPT".into(), script.clone());
-            }
-        }
         let system = WinPath::new(
             environment::get(&self.host_environment, "SYSTEMROOT").ok_or("SYSTEMROOT required")?,
         )?;
@@ -88,7 +79,6 @@ impl Plan {
             }
         }
         self.validate(&write, &read, &deny, &scratch)?;
-        let read = minimal_read_grants(&read, &write, &deny);
         let env: Vec<_> = env
             .iter()
             .map(|(key, value)| format!("{key}={value}"))
@@ -118,9 +108,6 @@ impl Plan {
             )?);
         }
         for grant in write.iter().chain(read) {
-            if self.project.is_within(grant) && grant != &self.project {
-                return Err("project ancestor grant");
-            }
             if grant.is_drive_root() {
                 return Err("drive root grant");
             }
@@ -155,26 +142,4 @@ impl Plan {
         };
         Ok(grant == &cargo && self.tools.readonly.contains(grant))
     }
-}
-
-// A descendant read rule adds nothing when an ancestor already grants reads,
-// unless an intervening write or deny rule changes the inherited permission.
-// Validate all input grants first: simplification must never hide a rejection.
-fn minimal_read_grants(read: &[WinPath], write: &[WinPath], deny: &[WinPath]) -> Vec<WinPath> {
-    read.iter()
-        .enumerate()
-        .filter(|(index, child)| {
-            !read.iter().enumerate().any(|(other, ancestor)| {
-                if ancestor == *child {
-                    return other < *index;
-                }
-                child.is_within(ancestor)
-                    && !write
-                        .iter()
-                        .chain(deny)
-                        .any(|barrier| barrier.is_within(ancestor) && child.is_within(barrier))
-            })
-        })
-        .map(|(_, path)| path.clone())
-        .collect()
 }

@@ -155,7 +155,6 @@ impl SpoolPaths {
         capture: Capture,
         summary: &mut GuidedSummary,
         end: CaptureEnd,
-        access: super::GuidedAccess,
     ) -> Result<SpooledPayload, CommandError> {
         if let Err(error) = capture.finish(end).await {
             self.discard().await;
@@ -178,11 +177,21 @@ impl SpoolPaths {
                 ));
             }
         }
-        if access == super::GuidedAccess::ProjectWrite
-            && let Err(error) = self.apply_helper_status(summary).await
-        {
-            self.discard().await;
-            return Err(error);
+        if butler_platform::command_sandbox::execution_timeout_exit(summary.exit_code) {
+            let mut file = File::open(&self.stderr).await.map_err(CommandError::io)?;
+            let size = file.metadata().await.map_err(CommandError::io)?.len();
+            file.seek(std::io::SeekFrom::Start(size.saturating_sub(128)))
+                .await
+                .map_err(CommandError::io)?;
+            let mut tail = Vec::new();
+            file.take(128)
+                .read_to_end(&mut tail)
+                .await
+                .map_err(CommandError::io)?;
+            if butler_platform::command_sandbox::execution_timeout(summary.exit_code, &tail) {
+                summary.timed_out = true;
+                summary.exit_code = None;
+            }
         }
         let result = self.write_payload(summary).await;
         if result.is_err() {
@@ -198,55 +207,6 @@ impl SpoolPaths {
             return Err(CommandError::io(error));
         }
         result
-    }
-
-    async fn apply_helper_status(&self, summary: &mut GuidedSummary) -> Result<(), CommandError> {
-        if !butler_platform::command_sandbox::execution_timeout_exit(summary.exit_code)
-            && !butler_platform::command_sandbox::execution_failure_exit(summary.exit_code)
-        {
-            return Ok(());
-        }
-        let mut file = File::open(&self.stderr).await.map_err(CommandError::io)?;
-        let size = file.metadata().await.map_err(CommandError::io)?.len();
-        file.seek(std::io::SeekFrom::Start(size.saturating_sub(128)))
-            .await
-            .map_err(CommandError::io)?;
-        let mut tail = Vec::new();
-        file.take(128)
-            .read_to_end(&mut tail)
-            .await
-            .map_err(CommandError::io)?;
-        if butler_platform::command_sandbox::execution_failure(summary.exit_code, &tail) {
-            return Err(CommandError::new(
-                CommandCode::CommandCaptureFailed,
-                "Sandbox execution or output capture failed; the command may have run",
-            ));
-        }
-        if butler_platform::command_sandbox::execution_timeout(summary.exit_code, &tail) {
-            let marker_start = tail
-                .windows(butler_platform::command_sandbox::EXECUTION_TIMEOUT_MARKER.len())
-                .rposition(|bytes| {
-                    bytes == butler_platform::command_sandbox::EXECUTION_TIMEOUT_MARKER.as_bytes()
-                })
-                .ok_or_else(|| CommandError::io(std::io::Error::other("timeout marker missing")))?;
-            let line_start = tail
-                .get(..marker_start)
-                .unwrap_or_default()
-                .iter()
-                .rposition(|b| *b == b'\n')
-                .unwrap_or(marker_start);
-            OpenOptions::new()
-                .write(true)
-                .open(&self.stderr)
-                .await
-                .map_err(CommandError::io)?
-                .set_len(size - tail.len() as u64 + line_start as u64)
-                .await
-                .map_err(CommandError::io)?;
-            summary.timed_out = true;
-            summary.exit_code = None;
-        }
-        Ok(())
     }
 
     async fn write_payload(&self, summary: &GuidedSummary) -> Result<SpooledPayload, CommandError> {

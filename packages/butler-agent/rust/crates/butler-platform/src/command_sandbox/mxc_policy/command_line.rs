@@ -21,11 +21,6 @@ pub fn command_line(invocation: &Invocation) -> Result<String, &'static str> {
         && [d.as_str(), s.as_str(), c.as_str()] == ["/d", "/s", "/c"]
     {
         line.push_str(&format!(" /d /s /c \"{text}\""));
-    } else if cmd
-        && let [d, v, s, c, text] = invocation.arguments.as_slice()
-        && [d.as_str(), v.as_str(), s.as_str(), c.as_str()] == ["/d", "/v:off", "/s", "/c"]
-    {
-        line.push_str(&format!(" /d /v:off /s /c \"{text}\""));
     } else {
         for arg in &invocation.arguments {
             line.push(' ');

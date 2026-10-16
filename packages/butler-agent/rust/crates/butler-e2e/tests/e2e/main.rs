@@ -170,7 +170,6 @@ mod wallpaper_writes;
 mod wallpapers;
 mod windows_commands;
 mod windows_project_sandbox;
-mod windows_sandbox;
 mod windows_startup_xml;
 mod workspace;
 

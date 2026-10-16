@@ -1,24 +1,16 @@
 use std::collections::HashMap;
 
-use butler_platform::command_sandbox::{self, Invocation, ProtectError, Protection};
+use butler_platform::command_sandbox::{self, ProtectError, Protection};
 
 use crate::workspace::CommandCode;
-use crate::workspace::commands::{CommandError, StructuredCommandInput};
+use crate::workspace::commands::{CommandError, CommandStep, StructuredCommandInput};
 use crate::workspace::path_guard::lexical_absolute;
 
 pub(super) fn invocation_steps(
     input: &StructuredCommandInput,
-) -> Result<Vec<Invocation>, CommandError> {
+) -> Result<Vec<CommandStep>, CommandError> {
     let Some(legacy) = &input.legacy else {
-        return Ok(input
-            .steps
-            .iter()
-            .map(|step| Invocation {
-                program: step.executable.clone(),
-                arguments: step.arguments.clone(),
-                ..Default::default()
-            })
-            .collect());
+        return Ok(input.steps.clone());
     };
     let command = butler_core::public_text::trim_js_whitespace(&legacy.command);
     if command.is_empty() {
@@ -40,7 +32,10 @@ pub(super) fn invocation_steps(
         }
         None => shell,
     };
-    Ok(vec![shell])
+    Ok(vec![CommandStep {
+        executable: shell.program,
+        arguments: shell.arguments,
+    }])
 }
 
 fn protect_failed(error: ProtectError) -> CommandError {

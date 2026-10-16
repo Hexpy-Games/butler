@@ -10,7 +10,6 @@ pub(super) fn isolated_command(program: &Path, home: &Path) -> Command {
     command
         .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
         .env("HOME", home)
-        .envs(butler_platform::process_control::fixture_profile_environment(home))
         .env(
             "BUTLER_TEST_SECRET_STORE",
             home.parent()

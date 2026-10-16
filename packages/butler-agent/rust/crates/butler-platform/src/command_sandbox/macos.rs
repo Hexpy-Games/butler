@@ -147,6 +147,5 @@ fn sandboxed(profile: String, invocation: Invocation) -> Invocation {
     Invocation {
         program: SANDBOX_EXEC.into(),
         arguments,
-        ..Default::default()
     }
 }

@@ -39,17 +39,10 @@ fn root(env: &BTreeMap<String, String>, key: &str) -> Result<Option<WinPath>, Er
         .transpose()
 }
 fn collect(env: &BTreeMap<String, String>) -> Result<Toolchain, Error> {
-    let account = crate::account_dirs::account_dirs();
     let mut input = Discovery {
         system_root: root(env, "SYSTEMROOT")?,
-        app_data: account
-            .as_ref()
-            .and_then(|a| physical(&a.app_data).ok())
-            .or(root(env, "APPDATA")?),
-        local_app_data: account
-            .as_ref()
-            .and_then(|a| physical(&a.local_app_data).ok())
-            .or(root(env, "LOCALAPPDATA")?),
+        app_data: root(env, "APPDATA")?,
+        local_app_data: root(env, "LOCALAPPDATA")?,
         cargo_home: root(env, "CARGO_HOME")?,
         rustup_home: root(env, "RUSTUP_HOME")?,
         ..Discovery::default()
@@ -59,12 +52,7 @@ fn collect(env: &BTreeMap<String, String>) -> Result<Toolchain, Error> {
             input.program_files.push(root);
         }
     }
-    let home = account
-        .as_ref()
-        .and_then(|a| physical(&a.home).ok())
-        .or(root(env, "USERPROFILE")?)
-        .ok_or("profile required")?;
-    input.user_profile = Some(home.clone());
+    let home = root(env, "USERPROFILE")?.ok_or("profile required")?;
     if input.cargo_home.is_none() {
         input.cargo_home = existing(&home.join(".cargo")?);
     }
@@ -79,16 +67,9 @@ fn collect(env: &BTreeMap<String, String>) -> Result<Toolchain, Error> {
     .into_iter()
     .flatten()
     {
-        for relative in [
-            "scoop\\apps",
-            "nvm",
-            ".nvm",
-            "Author Software\\nvm",
-            "Microsoft\\WinGet\\Packages",
-        ] {
-            let expected = base.join(relative)?;
-            if existing(&expected).as_ref() == Some(&expected) {
-                input.install_roots.push(expected);
+        for relative in ["scoop\\apps", "nvm\\installs", ".nvm\\installs"] {
+            if let Some(root) = existing(&base.join(relative)?) {
+                input.install_roots.push(root);
             }
         }
     }
@@ -171,8 +152,48 @@ pub(super) fn git_settings(
 
 mod msvc;
 
-mod search_path;
-use search_path::add_path;
+fn add_path(env: &BTreeMap<String, String>, input: &mut Discovery) -> Result<(), Error> {
+    for dir in environment::get(env, "PATH")
+        .unwrap_or("")
+        .split(';')
+        .filter(|s| !s.is_empty())
+    {
+        let path = Path::new(dir);
+        if !path.is_dir() {
+            continue;
+        }
+        let lexical = WinPath::search_directory(dir)
+            .map_err(|reason| WinPath::rejection(dir, "PATH entry", reason))?;
+        if lexical.as_str().ends_with("\\windowsapps") {
+            continue;
+        }
+        let canonical = physical_for(path, "PATH entry")?;
+        if lexical.as_str().ends_with("\\.nodejs") {
+            input.shim_dirs.push(canonical.clone());
+        }
+        if path.join("node.exe").is_file() && input.real_node.is_none() {
+            let node = physical(&path.join("node.exe"))?
+                .parent()
+                .ok_or("node parent")?;
+            if input
+                .program_files
+                .iter()
+                .chain(&input.install_roots)
+                .any(|r| node.is_within(r))
+            {
+                input.real_node = Some(node);
+            }
+        }
+        if path.join("git.exe").is_file()
+            && canonical.as_str().ends_with("\\cmd")
+            && input.git_exe.is_none()
+        {
+            input.git_exe = Some(physical(&path.join("git.exe"))?);
+        }
+        input.path.push(canonical);
+    }
+    Ok(())
+}
 
 // Installation discovery is cached; credential names and token-bearing
 // configuration are current at each admission, with no idle polling.

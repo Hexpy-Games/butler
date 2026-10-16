@@ -1,20 +1,4 @@
-//! Isolated child profiles and native protocol peers for lifecycle tests.
-use std::path::{Path, PathBuf};
-
-/// The caller creates these directories before launching the child.
-pub fn fixture_profile_environment(home: &Path) -> Vec<(&'static str, PathBuf)> {
-    #[cfg(windows)]
-    return vec![
-        ("USERPROFILE", home.to_owned()),
-        ("APPDATA", home.join("AppData/Roaming")),
-        ("LOCALAPPDATA", home.join("AppData/Local")),
-    ];
-    #[cfg(not(windows))]
-    {
-        let _ = home;
-        Vec::new()
-    }
-}
+//! Native protocol peers for owner lifecycle tests.
 
 /// Reads one line, replies after 200 ms, then stays alive until its owner stops it.
 /// The caller owns stdio and must kill and reap the child on every exit path.
