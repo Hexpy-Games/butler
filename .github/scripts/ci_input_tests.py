@@ -130,7 +130,7 @@ class DerivedInputs(unittest.TestCase):
                 self.assertIn('rust', groups)
                 outputs = {g: str(g in groups).lower() for g in changes.GROUPS}
                 jobs = changes.rust_jobs(dict(outputs, tier='smoke'), 'pull_request')
-                for platform in ('linux', 'macos', 'linux-arm64'):
+                for platform in ('linux', 'macos'):
                     self.assertTrue(jobs[platform + '-archive'])
         print(f'Rust external inputs: {len(external)} files')
 

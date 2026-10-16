@@ -28,6 +28,9 @@ PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/elect
              'tests/support/update-work*', 'tests/support/electron-page-cdp*',
              'packages/butler-app/client/ui/src/components/layout/SessionObserverTimeline.tsx',
              'packages/butler-app/client/ui/src/components/settings/Update*')
+# PR packaging exceptions; main/release still exercise every Rust payload change.
+PR_PACKAGING = PACKAGING + ('VERSION', 'Cargo.toml', 'Cargo.lock', '**/Cargo.toml',
+                            '**/Cargo.lock', 'packages/butler-agent/rust/crates/butler-platform/**')
 # These harness inputs are never shipped in a production Agent payload.
 RUST_TEST_ONLY = ('packages/butler-agent/rust/crates/butler-e2e/tests/*',
                   'packages/butler-agent/rust/crates/butler-e2e/fixtures/*')
@@ -53,6 +56,7 @@ CI_LINT_ONLY = (
     '.github/scripts/ci-changes.py', '.github/scripts/ci_parts.py',
     '.github/scripts/ci_consumer_test_support.py',
     '.github/scripts/ci_rust_inputs.py', '.github/scripts/ci_input_tests.py',
+    '.github/scripts/ci_tier_tests.py',
     '.github/scripts/ci-check-selected.py', '.github/scripts/ds-approval.py',
 )
 # Integration packaging keys include Rust/UI and transitive producer inputs.
@@ -68,7 +72,8 @@ CI_CONSUMERS = (
         '.github/scripts/runner_cache.py', '.github/scripts/ci-changes.py',
         '.github/scripts/ci_policy.py', '.github/scripts/ci_parts.py',
         '.github/scripts/ci_consumer_test_support.py', '.github/scripts/ci_rust_inputs.py',
-        '.github/scripts/ci_input_tests.py', '.github/scripts/prepare-windows-zstd.py',
+        '.github/scripts/ci_input_tests.py', '.github/scripts/ci_tier_tests.py',
+        '.github/scripts/prepare-windows-zstd.py',
         '.github/scripts/*windows*safety.py')),
     (('rust',), ('.github/workflows/rust-*.yml',)),
     (NATIVE_CI, (
@@ -123,7 +128,7 @@ def github_categories(path):
     return groups or set(GROUPS)  # Unknown CI inputs fail closed.
 
 
-def categories(path):
+def categories(path, event=None):
     if path.startswith('.github/'):
         return github_categories(path)
     notice = re.match(r'^(licen[cs]e|copying|notice|copyright)([._-]|$)', Path(path).name, re.I)
@@ -141,7 +146,8 @@ def categories(path):
     ui = path.startswith(('packages/butler-app/client/', 'packages/butler-i18n/'))
     if rust or path == 'VERSION':
         result.add('rust')
-    if (rust and not matches(path, RUST_TEST_ONLY)) or package or path == 'VERSION':
+    if (rust and not matches(path, RUST_TEST_ONLY) and
+            (event != 'pull_request' or matches(path, PR_PACKAGING))) or package or path == 'VERSION':
         result.update(('package', 'install', 'linux-package'))
     bun_source = path.startswith('packages/') and not path.startswith('packages/butler-agent/rust/') and path.endswith(('.ts', '.tsx', '.js', '.jsx', '.mjs'))
     manifest = path.startswith('packages/') and path.endswith('/package.json')
@@ -330,7 +336,7 @@ def select(event, workflow):
     if not full:
         command('git', 'cat-file', '-e', f'{base}^{{commit}}')
     paths = [] if full else changed(base)
-    required = set(GROUPS) if full else set().union(*(categories(p) for p in paths))
+    required = set(GROUPS) if full else set().union(*(categories(p, os.environ['GITHUB_EVENT_NAME']) for p in paths))
     current = hashes(base or 'full')
     # Windows stub receipts use the package group, including all Rust harness inputs.
     if workflow == 'windows-preview-smoke.yml':
