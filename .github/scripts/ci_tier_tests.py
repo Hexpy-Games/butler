@@ -96,6 +96,26 @@ class ApprovedTiers(unittest.TestCase):
         self.assertTrue(json.loads(selection([rust])['jobs'])['windows-check'])
 
 
+    # test-category: pure-logic
+    def test_macos_archive_and_workspace_follow_platform_paths(self):
+        root = 'packages/butler-agent/rust/crates/'
+        for path, on_pr in [(root + 'butler-core/src/lib.rs', False),
+                            (root + 'butler-platform/src/lib.rs', True),
+                            (root + 'butler-core/src/macos.rs', True),
+                            (root + 'butler-core/src/darwin.rs', True),
+                            ('deploy/macos-build.sh', False)]:
+            for event in ('pull_request', 'push'):
+                output = selection([path], event)
+                jobs = json.loads(output['jobs'])
+                for name in ('macos-archive', 'macos-tests'):
+                    self.assertEqual(jobs[name], on_pr if event == 'pull_request' else output['rust'] == 'true', (path, event))
+                self.assertEqual(jobs['linux-tests'], output['rust'] == 'true')
+        source = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
+        for name in ('macos-archive', 'macos-tests'):
+            block = re.split(r'^  [\w-]+:', source.split('  ' + name + ':')[1], maxsplit=1, flags=re.M)[0]
+            self.assertIn("fromJSON(needs.changes.outputs.jobs)['" + name + "']", block)
+
+
 class Precision(unittest.TestCase):
     # test-category: pure-logic
     def test_package_only_inputs_do_not_build_test_archives(self):
@@ -105,7 +125,7 @@ class Precision(unittest.TestCase):
             jobs = changes.rust_jobs(outputs, 'pull_request')
             for platform in ['linux', 'macos', 'linux-arm64']:
                 self.assertEqual(jobs[f'{platform}-archive'],
-                                 outputs['rust'] == 'true' and platform != 'linux-arm64')
+                                 outputs['rust'] == 'true' and platform == 'linux')
             self.assertEqual(jobs['linux-native'], 'true' in values[2:])
             self.assertEqual(jobs['linux-package-x64'], outputs['linux-package'] == 'true')
             self.assertEqual(jobs['install-x64'], outputs['install'] == 'true')

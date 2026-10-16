@@ -31,6 +31,8 @@ PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/elect
 # PR packaging exceptions; main/release still exercise every Rust payload change.
 PR_PACKAGING = PACKAGING + ('VERSION', 'Cargo.toml', 'Cargo.lock', '**/Cargo.toml',
                             '**/Cargo.lock', 'packages/butler-agent/rust/crates/butler-platform/**')
+MACOS = ('packages/butler-agent/rust/crates/butler-platform/**',
+         '**/*macos*', '**/*darwin*', 'deploy/macos*')
 # These harness inputs are never shipped in a production Agent payload.
 RUST_TEST_ONLY = ('packages/butler-agent/rust/crates/butler-e2e/tests/*',
                   'packages/butler-agent/rust/crates/butler-e2e/fixtures/*')
@@ -365,7 +367,7 @@ def select(event, workflow):
     outputs = {group: str(group in required and group not in reuse).lower() for group in GROUPS}
     jobs = {name: name not in job_reuse for name in job_inputs}
     if level == 'smoke':
-        jobs = rust_jobs(dict(outputs, tier=level), os.environ['GITHUB_EVENT_NAME']) | {'lint': True} if workflow == 'rust-quality.yml' else {name: any(outputs[group] == 'true' for group in groups) for name, groups in job_groups(workflow).items()}
+        jobs = rust_jobs(dict(outputs, tier=level, macos=str(full or any(matches(p, MACOS) for p in paths)).lower()), os.environ['GITHUB_EVENT_NAME']) | {'lint': True} if workflow == 'rust-quality.yml' else {name: any(outputs[group] == 'true' for group in groups) for name, groups in job_groups(workflow).items()}
     artifacts = [dict(name=artifact, run=run) for name, run in job_reuse.items()
                  for artifact in producer_artifacts(workflow, name)]
     # Smoke uses the full workspace inventory; E2E is disabled separately.
