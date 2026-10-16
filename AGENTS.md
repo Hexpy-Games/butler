@@ -38,10 +38,7 @@ This routine requires Ledger access and publication authorization. Codex workers
 - **No special cases (zero tolerance).** Production code must never contain domain-specific or test-specific cases. That means no branches, strings, paths or names keyed to a test fixture, cassette, E2E command, acceptance scenario, site, app, owner value (host name, user name, folder) or CI environment. A fix must be a general rule that would also be correct for inputs no test uses. If only a special case makes a test pass, stop and report. Every Codex PR gets an independent review for this.
 - **Performance without cutting quality.** Meet a latency or throughput budget by doing less *work*, never by returning less *content*. Truncating, dropping fields, skipping items, lowering fidelity or serving stale cached data to pass a budget is a failure. Every timed perf check must also assert that the response is complete and correct (counts, order, latest state).
 - **Flaky tests.** Don't retry, skip, or mark tests ignored to get green. A test that fails on main without a code change gets a GitHub issue the same day and a fix within 48 hours. Re-run CI only with that issue linked in a PR comment.
-- **Before pushing:**
-  - `git fetch origin` and merge your base (`origin/main` or the named `origin/release/<v>`) if it moved;
-  - run `cargo fmt`, `clippy -D warnings` on touched crates, and `cargo run -p butler-source-check -- .`;
-  - if TS or UI changed, follow the TypeScript validation rule above, isolated as above.
+- **Before pushing:** Fetch origin and merge your base if it moved, then run `scripts/prepush`; it must pass.
 - **Pushing.** Push only when the task allows it. When the task includes a PR, after pushing confirm with `gh pr checks <n>` that checks started. GitHub runs no `pull_request` checks while a PR has merge conflicts.
 - **Final message:**
   - what changed;

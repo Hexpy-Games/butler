@@ -186,6 +186,10 @@ class IntegrationProof(unittest.TestCase):
             self.assertFalse(branch.valid(name), name)
 
 
+# Derived local/CI parity checks share this existing CI entry point.
+from prepush_tests import PrepushChecks
+
+
 if __name__ == '__main__':
     if len(sys.argv) == 3 and sys.argv[1] == '--active-workflows':
         responses = json.loads(Path(sys.argv[2]).read_text())
