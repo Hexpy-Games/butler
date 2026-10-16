@@ -24,7 +24,8 @@ class PrepushGitChecks(unittest.TestCase):
         self.git(self.root, 'config', 'user.email', 'test@example.invalid')
         files = ['.githooks/pre-push', 'scripts/prepush',
                  '.github/scripts/isolated.py', '.github/scripts/prepush.py',
-                 '.github/scripts/branch-name.py', '.github/scripts/ci_rust_inputs.py']
+                 '.github/scripts/branch-name.py', '.github/scripts/ci_rust_inputs.py',
+                 '.github/scripts/prepush_cross.py']
         for name in files:
             destination = self.root / name
             destination.parent.mkdir(parents=True, exist_ok=True)

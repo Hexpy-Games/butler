@@ -11,6 +11,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import prepush_cross
+
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location('prepush', ROOT / '.github/scripts/prepush.py')
 prepush = importlib.util.module_from_spec(SPEC)
@@ -111,17 +113,85 @@ class PrepushChecks(unittest.TestCase):
         self.assertTrue(prepush.run('isolation 2', command))
 
     # test-category: pure-logic
-    def test_missing_targets_fail_without_installing(self):
+    def test_cross_targets_skip_missing_prerequisites_but_host_runs(self):
         calls = []
-        def output(*args):
-            return 'host: x86_64-unknown-linux-gnu' if args[0] == 'rustc' else ''
-        with patch.object(prepush, 'output', side_effect=output), \
+        host = 'aarch64-apple-darwin'
+        with patch.object(prepush, 'output', side_effect=['host: ' + host, host]), \
+                patch.object(prepush, 'prerequisites', return_value=['C compiler missing']), \
                 patch.object(prepush, 'run', side_effect=lambda *a: calls.append(a) or True), \
-                contextlib.redirect_stderr(io.StringIO()) as errors:
-            self.assertFalse(prepush.rust_checks())
-        for target in ('x86_64-unknown-linux-gnu', prepush.ARM, prepush.WINDOWS):
-            self.assertIn('rustup target add ' + target, errors.getvalue())
-        self.assertEqual([c[0] for c in calls], ['fmt', 'source-check'])
+                contextlib.redirect_stderr(io.StringIO()) as errors, \
+                contextlib.redirect_stdout(io.StringIO()) as summary:
+            self.assertTrue(prepush.rust_checks())
+        self.assertEqual(len(errors.getvalue().splitlines()), 2)
+        self.assertIn('WARNING: SKIP ' + prepush.ARM + ': C compiler missing', errors.getvalue())
+        self.assertIn('cargo-zigbuild/zig', errors.getvalue())
+        self.assertIn('xwin', errors.getvalue())
+        self.assertIn('ran 0, skipped 2 (CI still checks them)', summary.getvalue())
+        self.assertTrue(all(c[0] in ('fmt', 'source-check', 'clippy ' + host) for c in calls))
+
+    # test-category: pure-logic
+    def test_ready_cross_targets_run_and_lint_or_build_failure_fails(self):
+        host = 'aarch64-apple-darwin'
+        for passed in (True, False):
+            with self.subTest(passed=passed), \
+                    patch.object(prepush, 'output', side_effect=['host: ' + host, host]), \
+                    patch.object(prepush, 'prerequisites', return_value=[]), \
+                    patch.object(prepush, 'run', side_effect=lambda label, *a:
+                                 passed if label == 'clippy ' + prepush.ARM else True) as run, \
+                    contextlib.redirect_stdout(io.StringIO()) as summary:
+                self.assertEqual(prepush.rust_checks(), passed)
+                self.assertIn('ran 2, skipped 0', summary.getvalue())
+                self.assertIn('clippy ' + prepush.ARM, [c.args[0] for c in run.call_args_list])
+
+    # test-category: pure-logic
+    def test_cross_probe_checks_std_compiler_linker_and_headers(self):
+        target = prepush.ARM
+        with patch.dict(os.environ, {}, clear=True), \
+                patch.object(prepush_cross.shutil, 'which', return_value=None):
+            missing = prepush_cross.prerequisites(target, set(), ROOT)
+            self.assertIn('rustup target add ' + target, missing[0])
+            self.assertIn('C compiler unavailable', missing[1])
+        env = {'CC_' + target.replace('-', '_'): 'clang',
+               'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER': 'missing-ld'}
+        with patch.dict(os.environ, env, clear=True), \
+                patch.object(prepush_cross.shutil, 'which', side_effect=lambda c: c != 'missing-ld'):
+            self.assertEqual(prepush_cross.probe_c_toolchain(target, ROOT),
+                             'linker unavailable: missing-ld')
+        for code in (0, 1):
+            with patch.dict(os.environ, {'CC_' + target: 'clang'}, clear=True), \
+                    patch.object(prepush_cross.shutil, 'which', return_value='clang'), \
+                    patch.object(prepush_cross.subprocess, 'run', return_value=
+                                 subprocess.CompletedProcess([], code, '', 'fatal: stdlib.h missing')) as run:
+                reason = prepush_cross.probe_c_toolchain(target, ROOT)
+                self.assertEqual(bool(reason), bool(code))
+                if code:
+                    self.assertIn('stdlib.h missing', reason)
+                self.assertIn('--target=' + target, run.call_args.args[0])
+
+    # test-category: pure-logic
+    def test_cross_compiler_env_precedence_and_linker_driver(self):
+        target = prepush.ARM
+        env = {'CC': 'cc', 'TARGET_CC': 'target-cc',
+               'CC_' + target.replace('-', '_'): 'underscore-cc',
+               'CC_' + target: 'clang', 'CFLAGS': '-O1', 'TARGET_CFLAGS': '-O2',
+               'CFLAGS_' + target.replace('-', '_'): '-O3'}
+        with patch.dict(os.environ, env, clear=True):
+            self.assertEqual(prepush_cross.compiler_command(target),
+                             ['clang', '--target=' + target, '-O1', '-O2', '-O3'])
+        with patch.dict(os.environ, {
+                'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER': '/cross/bin/aarch64-linux-gnu-gcc'
+                }, clear=True):
+            self.assertEqual(prepush_cross.compiler_command(target), ['/cross/bin/aarch64-linux-gnu-gcc'])
+
+    # test-category: pure-logic
+    def test_clippy_lint_and_non_lint_exit_codes_both_fail(self):
+        for code in (1, 101):
+            with self.subTest(code=code), \
+                    patch.object(prepush.subprocess, 'call', return_value=code), \
+                    contextlib.redirect_stderr(io.StringIO()) as errors, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertFalse(prepush.run('clippy', ['cargo', 'clippy']))
+                self.assertIn(f'exit {code}; diagnostics above', errors.getvalue())
 
     # test-category: pure-logic
     def test_required_tool_failure_propagates_and_powershell_warns(self):

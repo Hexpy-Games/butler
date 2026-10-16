@@ -10,6 +10,8 @@ import subprocess
 import sys
 import time
 
+from prepush_cross import enable_hint, prerequisites
+
 ROOT = Path(__file__).resolve().parents[2]
 RUST = ROOT / 'packages/butler-agent/rust'
 ISOLATE = ROOT / '.github/scripts/isolated.py'
@@ -114,6 +116,7 @@ def python_tests(paths):
     # The derived prepush tests are also loaded by the existing CI entry point.
     inputs = {'scripts/prepush', '.githooks/pre-push', '.github/scripts/prepush.py',
               '.github/scripts/prepush_tests.py', '.github/scripts/prepush_git_tests.py',
+              '.github/scripts/prepush_cross.py',
               '.github/scripts/isolated.py', 'deploy/windows-preview-quality.ps1'}
     if inputs.intersection(paths) or any(p.startswith('.github/workflows/') for p in paths):
         tests.add('.github/scripts/test-integration-proof.py')
@@ -124,7 +127,10 @@ def run(label, command, cwd=ROOT):
     print(f'prepush: {label}: {shlex.join(map(str, command))}', flush=True)
     # Each check gets its own HOME/BUTLER_DATA, preserving the caller's caches.
     started = time.monotonic()
-    passed = subprocess.call([sys.executable, str(ISOLATE), *map(str, command)], cwd=cwd) == 0
+    code = subprocess.call([sys.executable, str(ISOLATE), *map(str, command)], cwd=cwd)
+    passed = code == 0
+    if not passed:
+        print(f'prepush: {label}: exit {code}; diagnostics above', file=sys.stderr)
     print(f'prepush: {label}: {"PASS" if passed else "FAIL"} '
           f'{time.monotonic() - started:.2f}s', flush=True)
     return passed
@@ -136,13 +142,25 @@ def rust_checks():
                                  'butler-source-check', '--', '.'], RUST) and success
     host = output('rustc', '-vV').split('host: ', 1)[1].splitlines()[0]
     installed = set(output('rustup', 'target', 'list', '--installed').splitlines())
-    missing = {host, ARM, WINDOWS} - installed
-    for target in sorted(missing):
-        print(f'prepush: missing Rust std; run: rustup target add {target}', file=sys.stderr)
+    ran, skipped = set(), set()
+    availability = {}
     for target, command in clippy_commands(host):
-        if target not in missing:
+        if target == host:
             success = run('clippy ' + target, command, RUST) and success
-    return success and not missing
+            continue
+        if target not in availability:
+            missing = prerequisites(target, installed, RUST)
+            availability[target] = not missing
+            if missing:
+                skipped.add(target)
+                print(f'prepush: WARNING: SKIP {target}: {"; ".join(missing)}; '
+                      f'{enable_hint(target)}', file=sys.stderr)
+        if availability[target]:
+            ran.add(target)
+            success = run('clippy ' + target, command, RUST) and success
+    print(f'cross-target clippy: ran {len(ran)}, skipped {len(skipped)} (CI still checks them)',
+          flush=True)
+    return success
 
 
 def powershell_check(paths):
