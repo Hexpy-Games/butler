@@ -1,3 +1,4 @@
+import { appLocaleFromLanguage, getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { strict as assert } from "node:assert";
@@ -9,7 +10,7 @@ export const pane = '[data-slot="browser-pane"]';
 
 export async function shellReady(app: ShellApp, locale: string) {
   await waitBrowser(() => app.page.expression(`document.documentElement.lang === ${JSON.stringify(locale === "ko" ? "ko-KR" : "en-US")} &&
-    [...document.querySelectorAll('[data-test-class="app-sidebar"] *')].some(n => n.textContent?.trim() === ${JSON.stringify(locale === "ko" ? "일반" : "General")})`), "localized navigation loaded");
+    [...document.querySelectorAll('[data-test-class="app-sidebar"] button, [data-test-class="app-sidebar"] [role="button"]')].some(n => n.textContent?.trim() === ${JSON.stringify(getAppCopy(appLocaleFromLanguage(locale)).space.general)})`), "localized navigation loaded");
 }
 
 export async function togglePane(app: ShellApp, open: boolean) {

@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: security
 /** Pick → Scrap → 서랍 → open, through the real App with native OS input: the scrap opens as exactly its clipped part. */
 import { strict as assert } from "node:assert";
@@ -73,7 +74,7 @@ async function viewerFacts() {
 }
 
 try {
-  await app.page.reload(); await shellReady(app, "en"); await app.click("General");
+  await app.page.reload(); await shellReady(app, "en"); await app.click(getAppCopy("en-US").space.general);
   await app.call("open");
   tab = await app.call<string>("create", { owner: "conversation:general", profile: "signed_out", url: `${server.url.href}card-font` });
   await app.click("Show browser"); await app.call("activate", { id: tab }); await nativeAligned(app);

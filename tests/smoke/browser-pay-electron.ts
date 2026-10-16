@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: security
 /** Saved card and autofill fills in the real App with offline fixtures; stub only, no model calls.
  * Main types the values with native text input into cc-* fields, a PG-style
@@ -352,7 +353,7 @@ async function profileApproval(id: string) {
     return Boolean(request.request_ref);
   }, "profile approval");
   assert.ok(request.approval.operation.targets.includes(fields.join(", ")));
-  await app.click("일반");
+  await app.click(getAppCopy("ko-KR").space.general);
   await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=composer-authority-decision]'))"), "approval card visible");
   const card = await app.page.expression<string>("document.querySelector('[data-test-class=composer-authority-decision]').textContent");
   for (const field of fields) assert.ok(card.includes(field), "approval lists each sensitive field kind");
@@ -369,7 +370,7 @@ async function profileApprovalShots(fields: string[]) {
     for (const theme of ["light", "dark"]) {
       await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme }) });
       await app.page.reload();
-      await app.click("일반");
+      await app.click(getAppCopy("ko-KR").space.general);
       await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=composer-authority-decision]'))"), "approval card visible");
       await app.main(`${winExpression()}.setContentSize(1440,900)`);
       await app.shot(`autofill-approval-${theme}`);
