@@ -69,7 +69,12 @@ pub(super) fn verify_rows(
             .filter(|v| v["event"]["kind"] == "model.stream.text_delta")
             .map(|v| v["event"]["payload"]["textDelta"].as_str().unwrap())
             .collect::<Vec<_>>();
-        assert_eq!(texts.len(), deltas);
+        // The relay coalesces provider deltas into bounded frames, never splits them.
+        assert!(
+            (1..=deltas).contains(&texts.len()),
+            "{} frames",
+            texts.len()
+        );
         assert_eq!(texts.concat().trim_end(), answer);
         verify_message_updates(&db, turn, &texts);
         assert!(
@@ -89,7 +94,20 @@ fn verify_message_updates(db: &Connection, turn: &str, deltas: &[&str]) {
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
-    assert_eq!(updates.len(), deltas.len());
+    // One streaming update per relayed frame. The final status change is its
+    // own update unless the projection folds it into the last frame.
+    assert!(
+        (deltas.len()..=deltas.len() + 1).contains(&updates.len()),
+        "{} updates for {} frames",
+        updates.len(),
+        deltas.len()
+    );
+    if let Some((payload, created_at)) = updates.get(deltas.len()) {
+        let message = &serde_json::from_str::<Value>(payload).unwrap()["message"];
+        assert_eq!(message["text"], deltas.concat());
+        assert_eq!(message["updated_at"], *created_at);
+        assert_eq!(message["status"], "delivered");
+    }
     let mut text = String::new();
     let mut identity = None;
     for ((payload, created_at), delta) in updates.iter().zip(deltas) {
