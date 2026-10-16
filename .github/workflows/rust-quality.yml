@@ -66,7 +66,8 @@ jobs:
     with:
       runner: ubuntu-24.04
       platform: linux-x64
-      ort-mode: ${{ github.event_name == 'push' && 'static-ort' || 'prebuilt-ort' }}
+      # Match the trusted main snapshot; a different ORT mode forces cold PR builds.
+      ort-mode: static-ort
 
   linux-archive:
     permissions:
@@ -124,7 +125,7 @@ jobs:
     with:
       runner: ubuntu-24.04-arm
       platform: linux-arm64
-      ort-mode: ${{ github.event_name == 'push' && 'static-ort' || 'prebuilt-ort' }}
+      ort-mode: static-ort
 
   linux-arm64-archive:
     permissions:
@@ -362,6 +363,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           python3 .github/scripts/isolated.py python3 .github/scripts/test-cargo-target.py
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-cargo-target-walk-back.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-cargo-units.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-runner-cache.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-native-deps.py

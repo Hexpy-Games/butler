@@ -1,3 +1,4 @@
+import { shellRegistrationAllowed as profileAllowsShellRegistration } from "./shell-registration.mjs";
 import { watchStorageCorrection } from "./app-storage-correction.mjs";
 import { isLifecycleWindow } from "./lifecycle-window.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
@@ -183,7 +184,7 @@ if (process.platform === "win32") {
   app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
 }
 if (windowsSquirrelLaunch.handled) {
-  if (process.env.BUTLER_APP_DISABLE_SHELL_REGISTRATION === "1") process.exit(0);
+  if (!shellRegistrationAllowed()) process.exit(0);
   let squirrelExitCode = 0;
   let squirrelErrorCode = null;
   let squirrelResult = null;
@@ -1244,19 +1245,26 @@ function configureAppIdentity() {
   });
 }
 
+function shellRegistrationAllowed() {
+  if (!profileAllowsShellRegistration({
+    isPackaged: app.isPackaged, env: process.env, home: userHome, dataRoot: butlerDataRoot,
+  })) return false;
+  if (process.platform !== "win32") return true;
+  const settings = windowsLoginItemSettings({
+    openAtLogin: false, platform: process.platform,
+    isPackaged: app.isPackaged, execPath: process.execPath,
+  });
+  return existsSync(settings.path) && existsSync(join(dirname(settings.path), "Update.exe"));
+}
+
 function configureWindowsProtocolRegistration() {
-  if (!isWindows || !app.isPackaged ||
-      process.env.BUTLER_APP_DISABLE_SHELL_REGISTRATION === "1") return false;
+  if (!isWindows || !shellRegistrationAllowed()) return false;
   const settings = windowsLoginItemSettings({
     openAtLogin: false,
     platform: process.platform,
     isPackaged: app.isPackaged,
     execPath: process.execPath,
   });
-  // A portable App has no Squirrel stub; registering that missing executable
-  // would replace the user's protocol association with a temporary path.
-  if (!existsSync(settings.path) ||
-      !existsSync(join(dirname(settings.path), "Update.exe"))) return false;
   return app.setAsDefaultProtocolClient(
     WINDOWS_APP_PROTOCOL,
     settings.path,
@@ -1279,7 +1287,7 @@ function getButlerLoginItemSettings() {
 }
 
 function setButlerLoginItemSettings(openAtLogin) {
-  if (process.env.BUTLER_APP_DISABLE_SHELL_REGISTRATION === "1") return;
+  if (!shellRegistrationAllowed()) return;
   app.setLoginItemSettings(windowsLoginItemSettings({
     openAtLogin,
     platform: process.platform,

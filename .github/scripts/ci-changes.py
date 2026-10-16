@@ -12,7 +12,7 @@ import tempfile
 
 # Also importable by pure-logic tests loaded from an absolute file path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from ci_policy import rust_jobs
+from ci_policy import rust_jobs, windows_preview_jobs
 import ci_parts
 from urllib.parse import urlencode
 
@@ -27,6 +27,9 @@ PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/elect
              'tests/support/update-work*', 'tests/support/electron-page-cdp*',
              'packages/butler-app/client/ui/src/components/layout/SessionObserverTimeline.tsx',
              'packages/butler-app/client/ui/src/components/settings/Update*')
+# Native Windows smoke inputs beyond Rust; other CI configuration stays out.
+WINDOWS = ('deploy/windows*', '.github/workflows/windows-preview-smoke.yml', '.github/actions/*windows*',
+           '.github/actions/rust-agent-setup/*', '.github/scripts/*windows*')
 
 # The locked inventory declares the non-manifest inputs it fingerprints too.
 # Read the checkout, never an owner's runtime data directory.
@@ -74,6 +77,10 @@ def categories(path):
     if not result and not path.startswith('assets/readme/'):
         result = set(GROUPS) - {'workflows'}
     return result
+
+
+def windows_native(path):
+    return matches(path, WINDOWS) or ('rust' in categories(path) and not path.startswith('.github/'))
 
 
 def command(*args):
@@ -265,6 +272,8 @@ def select(event, workflow):
     artifacts += [artifact for artifact in part_artifacts if artifact['name'] not in restored]
     if level == 'smoke' and workflow == 'windows-preview-smoke.yml':
         parts = {'hosted': ci_parts.HOSTED}
+        native = outputs['package'] == 'true' and (full or any(windows_native(path) for path in paths))
+        jobs = windows_preview_jobs(dict(outputs, windows=str(native).lower()), os.environ['GITHUB_EVENT_NAME'])
     outputs.update({'parts': json.dumps(parts), 'docs-only': str(not required).lower(), 'electron': outputs['package'],
                     'tier': level, 'candidate': candidate, 'jobs': json.dumps(jobs),
                     'artifacts': json.dumps(artifacts)})
