@@ -5,7 +5,11 @@
 #   cargo run -p butler-source-check -- --bless .
 # package<TAB>hooks
 crates/butler-agent	64
-crates/butler-gateway	28
+# butler-gateway: 29 is the tree's true count. The 28 from #1130 was a merge race:
+# #1130's baseline was computed without #1079, which added the
+# BUTLER_E2E_SCHEDULER_INSTRUMENTATION hook in gateway/http/automations.rs.
+# That hook goes away with the #1127 (B) work (still present on main today).
+crates/butler-gateway	29
 crates/butler-memory	10
 crates/butler-platform	11
 crates/butler-runtime	1
