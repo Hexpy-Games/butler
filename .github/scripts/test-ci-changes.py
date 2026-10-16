@@ -333,6 +333,20 @@ class Trust(unittest.TestCase):
                 actual = subprocess.run(['python3', ROOT / 'ci-check-selected.py'], env=env, capture_output=True)
                 self.assertEqual(actual.returncode == 0, result == ('success' if selected else 'skipped'))
 
+    # test-category: pure-logic
+    def test_reused_x64_install_restores_shared_npm_tarball(self):
+        workflow = 'rust-quality.yml'
+        inputs = changes.integration_inputs(workflow, dict.fromkeys(changes.GROUPS, 'hash'),
+                                            '0.1.0-preview.11')
+        receipt = dict(run=7, job_inputs=inputs, job_hashes={'install-x64': inputs['install-x64']})
+        _, reused = changes.reuse_inputs('owner/repo', None, workflow, 'release/0.1.0-preview.11',
+                                         {}, inputs, receipts=[receipt])
+        artifacts = [dict(name=artifact, run=run) for name, run in reused.items()
+                     for artifact in changes.producer_artifacts(workflow, name)]
+        self.assertEqual(reused, {'install-x64': 7})
+        self.assertEqual(artifacts, [dict(name='agent-linux-x64', run=7),
+                                     dict(name='butler-npm-x64', run=7)])
+
     # test-category: security
     def test_hash_match_required_even_with_prior_success(self):
         state = dict(schema=1, repository='owner/repo', workflow='rust-quality.yml', pr=12,

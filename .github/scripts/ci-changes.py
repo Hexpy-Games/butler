@@ -268,7 +268,7 @@ ARTIFACTS = {
     'macos-native': ['agent-payload-darwin-arm64'],
     'linux-arm64-native': ['agent-payload-linux-arm64'],
     'macos-updates': ['macos-update-agent-builds'],
-    'install-x64': ['agent-linux-x64'], 'install-arm64': ['agent-linux-arm64'],
+    'install-x64': ['agent-linux-x64', 'butler-npm-x64'], 'install-arm64': ['agent-linux-arm64'],
     'install-macos': ['agent-darwin-arm64'],
     'build': ['agent-windows-x64'], 'stub': ['windows-e2e'],
     'release': ['windows-completed-installed'],

@@ -18,6 +18,14 @@ on:
       merge-manifests:
         type: boolean
         default: true
+      pack:
+        description: Produce the shared npm tarball and validate publishing once
+        type: boolean
+        default: true
+      npm-artifact:
+        description: Existing tarball artifact when pack is false
+        type: string
+        default: ''
       shared-agents:
         type: boolean
         default: false
@@ -33,6 +41,7 @@ concurrency:
 
 jobs:
   npm-pack:
+    if: ${{ toJSON(inputs.pack) != 'false' }}
     name: Lint scripts and dry-run the npm package
     runs-on: ubuntu-latest
     steps:
@@ -74,11 +83,12 @@ jobs:
           name: butler-npm-${{ inputs.label || 'all' }}
           path: ${{ runner.temp }}/hexpygames-butler-*.tgz
           if-no-files-found: error
-          retention-days: 7
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 7 }}
 
   smoke:
     name: Install smoke (${{ matrix.platform }})
     needs: npm-pack
+    if: ${{ !cancelled() && (needs.npm-pack.result == 'success' || (toJSON(inputs.pack) == 'false' && needs.npm-pack.result == 'skipped')) }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
     strategy:
@@ -100,7 +110,7 @@ jobs:
       - name: Download the npm tarball
         uses: actions/download-artifact@v4
         with:
-          name: butler-npm-${{ inputs.label || 'all' }}
+          name: ${{ toJSON(inputs.pack) == 'false' && inputs.npm-artifact || format('butler-npm-{0}', inputs.label || 'all') }}
           path: ${{ runner.temp }}/npm
 
       - name: Install, run headless, reinstall
