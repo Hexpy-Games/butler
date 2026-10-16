@@ -93,9 +93,9 @@ pub(super) fn legacy_shell(
     // cmd/CRT/PowerShell argument reparsing. Set both console and pipeline
     // encodings; native reg/cmd output follows the console code page.
     let modules = default_modules();
-    let shell_started = phase_marker("script_started");
+    let shell_started = phase_marker("script_started", environment);
     let language = include_str!("windows/language.ps1");
-    let modules_ready = phase_marker("modules_ready");
+    let modules_ready = phase_marker("modules_ready", environment);
     // Enter the admitted short CWD with process-local .NET path compatibility.
     // Long folders retain an extended provider root and real parent traversal.
     let paths = include_str!("windows/paths.ps1");
@@ -165,9 +165,13 @@ fn code_page_shell(
     wrapper
 }
 
-fn phase_marker(phase: &str) -> String {
-    if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
-        != Some(std::ffi::OsStr::new("1"))
+fn phase_marker(phase: &str, environment: &HashMap<String, Option<String>>) -> String {
+    // Parent diagnostics must not contaminate captured command output. Only an
+    // explicit opt-in on this invocation may add shell diagnostics to stderr.
+    if environment
+        .get("BUTLER_DEBUG_COMMAND_TIMINGS")
+        .and_then(Option::as_deref)
+        != Some("1")
     {
         return String::new();
     }

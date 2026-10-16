@@ -44,7 +44,11 @@ try {
     # Publish the trusted manifest last; the queue cannot discover a partial build.
     Copy-Item -LiteralPath (Join-Path $bundle 'pins.json') -Destination (Join-Path $Destination ('pins\' + $Revision + '.json'))
     foreach ($name in @('desktop-runner.ps1','desktop-runner-job.cs','bundle-common.ps1','start-desktop-runner.cmd','README.md')) {
-        Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $Destination $name) -Force
+        $source = Join-Path $PSScriptRoot $name
+        $target = Join-Path $Destination $name
+        if ((Test-Path -LiteralPath $target -PathType Leaf) -and
+            (Get-FileHash -LiteralPath $source).Hash -eq (Get-FileHash -LiteralPath $target).Hash) { continue }
+        Copy-Item -LiteralPath $source -Destination $target -Force
     }
     Write-Host "$Revision bundle ready"
 } finally {

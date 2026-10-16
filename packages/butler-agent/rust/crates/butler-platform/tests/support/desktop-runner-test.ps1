@@ -94,4 +94,4 @@ Start-Sleep -Seconds 60
     }
 }
 Check-ExitCleanup
-Write-Output 'DESKTOP_RUNNER_PROTOCOL=PASS tamper,contents,ack,once,invalid,lock,exit-cleanup' 
+Write-Output 'DESKTOP_RUNNER_PROTOCOL=PASS tamper,contents,ack,once,invalid,lock,exit-cleanup'
