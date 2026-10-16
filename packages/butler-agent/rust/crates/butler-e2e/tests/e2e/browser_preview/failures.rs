@@ -7,6 +7,12 @@ fn setup(name: &str) -> Result<Setup, HarnessError> {
         "PATH",
         std::env::var("PATH").expect("runner PATH is required"),
     );
+    // The injected stop and pidfd failures exist only in a test-support Agent.
+    // The perf tier runs the production Agent, so these use the test-support
+    // Agent CI supplies there, as the steward and sandbox fixtures do.
+    if let Some(binary) = std::env::var_os("BUTLER_E2E_FAULT_BIN") {
+        butler_e2e::e2e::executable::copy(std::path::Path::new(&binary), &setup.sandbox.binary)?;
+    }
     std::fs::write(
         setup.sandbox.workspace.join("server.mjs"),
         "Bun.serve({hostname:'127.0.0.1',port:Number(process.argv[2]),fetch(){return new Response('ready')}});",
