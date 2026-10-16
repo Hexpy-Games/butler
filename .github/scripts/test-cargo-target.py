@@ -10,6 +10,8 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -408,6 +410,60 @@ class TargetSnapshot(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'digest mismatch'):
                     snapshots.restore_tree(root / 'snapshot', expected)
                 self.assertEqual((target / 'release/app').read_bytes(), before)
+
+    # test-category: race
+    def test_extract_drains_paced_record_boundary_padding_and_rejects_tail(self):
+        data = io.BytesIO()
+        with tarfile.open(fileobj=data, mode='w|', format=tarfile.PAX_FORMAT) as archive:
+            directory = tarfile.TarInfo('target')
+            directory.type = tarfile.DIRTYPE
+            archive.addfile(directory)
+            member = tarfile.TarInfo('target/x')
+            member.size = 8704
+            archive.addfile(member, io.BytesIO(b'a' * member.size))
+        # Two headers + data end at block 19; the first zero is block 20.
+        self.assertEqual(2 * 512 + member.size, tarfile.RECORDSIZE - 512)
+        self.assertEqual(len(data.getvalue()), 2 * tarfile.RECORDSIZE)
+        real_popen = subprocess.Popen
+        writer = ('import pathlib,sys,time\n'
+                  'data=pathlib.Path(sys.argv[1]).read_bytes()\n'
+                  'try:\n'
+                  ' for start in range(0,len(data),4096):\n'
+                  '  sys.stdout.buffer.write(data[start:start+4096]); sys.stdout.buffer.flush(); time.sleep(.01)\n'
+                  'except BrokenPipeError:\n'
+                  ' sys.exit(17)\n')
+        with tempfile.TemporaryDirectory() as temporary, contextlib.chdir(temporary):
+            root = Path(temporary)
+            source = root / 'decompressed.tar'
+            processes = []
+
+            def paced(*args, **kwargs):
+                process = real_popen([sys.executable, '-c', writer, str(source)], **kwargs)
+                processes.append(process)
+                return process
+
+            # Include a non-NUL in tarfile's read-ahead buffer and in a later record.
+            for tail in [None, tarfile.RECORDSIZE + 1, len(data.getvalue()) - 1, 1537]:
+                payload = bytearray(data.getvalue())
+                if tail == 1537:
+                    # A small archive leaves its tail in tarfile's internal buffer.
+                    small = io.BytesIO()
+                    with tarfile.open(fileobj=small, mode='w|') as archive:
+                        member = tarfile.TarInfo('target/x')
+                        archive.addfile(member)
+                    payload = bytearray(small.getvalue())
+                if tail is not None:
+                    payload[tail] = 1
+                source.write_bytes(payload)
+                with patch.object(cache.subprocess, 'Popen', side_effect=paced):
+                    if tail is None:
+                        cache.extract(root)
+                        self.assertEqual((root / 'target/x').read_bytes(), b'a' * member.size)
+                        self.assertEqual(processes[-1].returncode, 0)
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'Non-NUL'):
+                            cache.extract(root)
+                self.assertIsNotNone(processes[-1].returncode)
 
     def build(self, root):
         return subprocess.check_output(['python3', str(Path(__file__).with_name('isolated.py').resolve()),
