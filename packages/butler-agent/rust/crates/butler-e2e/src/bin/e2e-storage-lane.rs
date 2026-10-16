@@ -245,6 +245,47 @@ fn verify_barrier(mut completion: Completion, published: &Published, path: &Path
     assert_eq!(events, ["committed", "barrier"]);
 }
 
+/// Queue the operations whose batch COMMIT fails on a deferred foreign key and
+/// return their completions in wait order.
+fn queue_failure(
+    initial: &mut Vec<Operation>,
+    events: &Events,
+    published: &Published,
+    path: &Path,
+    barrier: Option<Completion>,
+) -> Vec<Pending> {
+    // verify_barrier opens a fresh reader, which can outlast the lane's batch
+    // window. After a barrier, one operation therefore owns the whole failing
+    // transaction instead of relying on two operations sharing a batch.
+    let alone = barrier.is_some();
+    let uncommitted = events.clone();
+    let flushed = published.clone();
+    let read_path = path.to_owned();
+    let (write, completion) = Operation::new(false, false, move |db| {
+        if let Some(barrier) = barrier {
+            verify_barrier(barrier, &flushed, &read_path);
+        }
+        db.execute_batch("INSERT INTO parent VALUES(2)")?;
+        uncommitted.append(db, "rolled-back").unwrap();
+        if alone {
+            db.execute_batch("INSERT INTO child VALUES(99)")?;
+        }
+        Ok(())
+    });
+    initial.push(write);
+    let completion = pending(completion);
+    if alone {
+        return vec![completion];
+    }
+    let earlier = completion.clone();
+    let (invalid, invalid_result) = Operation::new(false, false, move |db| {
+        assert_pending(&earlier);
+        db.execute_batch("INSERT INTO child VALUES(99)")
+    });
+    initial.push(invalid);
+    vec![pending(invalid_result), completion]
+}
+
 fn failed_commit(path: &Path, with_barrier: bool) {
     prepare(path);
     let (events, published, _subscription) = event_stream();
@@ -252,30 +293,16 @@ fn failed_commit(path: &Path, with_barrier: bool) {
     let mut successes = Vec::new();
     let barrier_completion =
         with_barrier.then(|| queue_barrier(&mut initial, &mut successes, &events, &published));
-    let uncommitted = events.clone();
-    let flushed = published.clone();
-    let read_path = path.to_owned();
-    let (write, completion) = Operation::new(false, false, move |db| {
-        if let Some(barrier) = barrier_completion {
-            verify_barrier(barrier, &flushed, &read_path);
-        }
-        db.execute_batch("INSERT INTO parent VALUES(2)")?;
-        uncommitted.append(db, "rolled-back").unwrap();
-        Ok(())
-    });
-    let completion = pending(completion);
-    let earlier = completion.clone();
-    let (invalid, invalid_result) = Operation::new(false, false, move |db| {
-        assert_pending(&earlier);
-        db.execute_batch("INSERT INTO child VALUES(99)")
-    });
-    initial.extend([write, invalid]);
+    let failures = queue_failure(&mut initial, &events, &published, path, barrier_completion);
     let (sender, thread) = storage_testing::start(path.to_owned(), initial).unwrap();
-    let invalid_error = invalid_result.wait().unwrap_err();
+    let errors: Vec<_> = failures
+        .into_iter()
+        .map(|failure| result(failure).unwrap_err())
+        .collect();
     for success in successes {
         result(success).unwrap();
     }
-    for error in [result(completion).unwrap_err(), invalid_error] {
+    for error in errors {
         assert!(error.contains("FOREIGN KEY constraint failed"), "{error}");
     }
     let expected = if with_barrier {
