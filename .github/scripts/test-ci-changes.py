@@ -276,7 +276,8 @@ class Trust(unittest.TestCase):
         policy = (ROOT / 'check-gate.py').read_text().split("if 'lint' in jobs")[0]
         flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds']
         for values in itertools.product(['false', 'true'], repeat=len(flags)):
-            outputs = dict(zip(flags, values), tier='smoke', workflows='false')
+            outputs = dict(zip(flags, values), tier='smoke', workflows='true')
+            outputs['jobs'] = json.dumps(changes.rust_jobs(outputs, 'pull_request') | {'lint': True})
             jobs = {'changes': {'result': 'success', 'outputs': outputs}}
             with patch.dict(os.environ, RESULTS=json.dumps(jobs), EVENT='pull_request'):
                 scope = {}
@@ -395,6 +396,72 @@ class WorkflowScheduling(unittest.TestCase):
             block = re.split(r'\n  [a-z][a-z0-9-]*:\n', block, maxsplit=1)[0]
             self.assertIn(f'    concurrency:\n      group: {group}\n'
                           '      cancel-in-progress: false', block)
+
+class TrimContracts(unittest.TestCase):
+    # test-category: security
+    def test_gate_uses_exported_job_selection_even_without_path_flags(self):
+        for tier in ['smoke', 'integration']:
+            for enabled in [True, False]:
+                for result in ['success', 'failure', 'cancelled', 'skipped']:
+                    outputs = {'tier': tier, 'jobs': json.dumps({'linux-clippy': enabled})}
+                    jobs = {'changes': {'result': 'success', 'outputs': outputs},
+                            'linux-clippy': {'result': result}}
+                    env = dict(os.environ, RESULTS=json.dumps(jobs))
+                    actual = subprocess.run(['python3', ROOT / 'check-gate.py'], env=env, capture_output=True)
+                    self.assertEqual(actual.returncode == 0,
+                                     result == ('success' if enabled else 'skipped'),
+                                     (tier, enabled, result, actual.stderr))
+
+    # test-category: security
+    def test_license_step_outcomes_keep_gate_and_receipt_semantics(self):
+        source = (ROOT.parent / 'workflows/licenses.yml').read_text()
+        templates = re.findall(r'(?:results|RESULTS): >-\n((?:            .+\n)+)', source)
+        self.assertEqual(len(templates), 2)
+        self.assertEqual(templates[0], templates[1])
+        for tier, enabled, outcome in itertools.product(
+                ['smoke', 'integration'], [True, False], ['success', 'failure', 'cancelled', 'skipped']):
+            with self.subTest(tier=tier, enabled=enabled, outcome=outcome), tempfile.TemporaryDirectory() as temp:
+                outputs = {'tier': tier, 'licenses': str(enabled or tier == 'integration').lower(),
+                           'jobs': json.dumps({'licenses': enabled})}
+                state = dict(schema=1, workflow='licenses.yml', hashes={'licenses': 'complete'}, outputs=dict(outputs), reuse={},
+                             job_inputs={'licenses': 'job-hash'} if tier == 'integration' else {},
+                             job_reuse={'licenses': 1} if tier == 'integration' and not enabled else {})
+                outputs['selection'] = json.dumps(state)
+                rendered = templates[0].replace('${{ steps.paths.outcome }}', 'success')
+                rendered = rendered.replace('${{ toJSON(steps.paths.outputs) }}', json.dumps(outputs))
+                rendered = rendered.replace('${{ steps.licenses.outcome }}', outcome)
+                jobs = json.loads(rendered)
+                env = dict(os.environ, RESULTS=json.dumps(jobs), CHECK_GROUPS='{"licenses":"jobs"}')
+                actual = subprocess.run(['python3', ROOT / 'ci-check-selected.py'], env=env, capture_output=True)
+                passed = outcome == ('success' if enabled else 'skipped')
+                self.assertEqual(actual.returncode == 0, passed, actual.stderr)
+                with patch.dict(os.environ, env | {'RUNNER_TEMP': temp, 'JOB_GROUPS': '{"licenses":["licenses"]}'}):
+                    changes.record()
+                receipt = json.loads((Path(temp) / 'ci-inputs/inputs.json').read_text())
+                self.assertEqual(receipt['hashes'], {'licenses': 'complete'}
+                                 if passed and outputs['licenses'] == 'true' else {})
+                self.assertEqual(receipt['job_hashes'], {'licenses': 'job-hash'}
+                                 if passed and tier == 'integration' else {})
+
+    # test-category: format-pin
+    def test_empty_artifact_matrix_is_deselected_before_expansion(self):
+        source = (ROOT.parent / 'workflows/ci-changes.yml').read_text().split('  artifacts:\n    needs: paths')[1]
+        self.assertIn("if: needs.paths.outputs.artifacts != '[]'", source)
+        self.assertIn('artifact: ${{ fromJSON(needs.paths.outputs.artifacts) }}', source)
+        self.assertNotIn('"run":0', source)
+
+    # test-category: format-pin
+    def test_ds_filter_covers_every_protected_directory_and_root_css(self):
+        source = (ROOT.parent / 'workflows/ds-approval.yml').read_text()
+        spec = importlib.util.spec_from_file_location('ds_approval', ROOT / 'ds-approval.py')
+        ds = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ds)
+        globs = re.findall(r"^      - '([^']+)'$", source, re.M)
+        for path in ['components/button.tsx', 'blocks/nested/card.ts', 'shadcn/nested/token.css', 'tokens.css']:
+            protected = ds.protected([ds.DS + path])
+            self.assertTrue(protected)
+            self.assertTrue(changes.matches(protected[0], tuple(globs)), protected)
+        self.assertFalse(changes.matches('packages/butler-app/client/ui/src/app.tsx', tuple(globs)))
 
 
 if __name__ == '__main__':
