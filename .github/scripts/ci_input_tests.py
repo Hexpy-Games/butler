@@ -148,7 +148,7 @@ class DerivedInputs(unittest.TestCase):
     # test-category: pure-logic
     def test_nested_include_arguments_resolve_or_fail(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             crate = root / ci_rust_inputs.RUST / 'crates/example'
             (crate / 'src/nested').mkdir(parents=True)
             (root / ci_rust_inputs.RUST / 'Cargo.toml').touch()
