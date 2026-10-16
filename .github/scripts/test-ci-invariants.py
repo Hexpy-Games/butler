@@ -204,8 +204,17 @@ class Gate(unittest.TestCase):
                 condition = condition.replace('always()', 'True').replace('!cancelled()', 'True')
                 condition = condition.replace('&&', 'and').replace('||', 'or')
                 self.assertFalse(eval(condition), (event, name, condition))
-        for name in ['linux-tests', 'macos-tests', 'linux-archive', 'linux-arm64-archive', 'macos-archive']:
+        for name in ['linux-tests', 'macos-tests']:
             self.assertIn("e2e: ${{ needs.changes.outputs.tier == 'integration' }}", blocks[name])
+        for name in ['linux-archive', 'linux-arm64-archive', 'macos-archive']:
+            expression = re.search(r'^      fixtures: \$\{\{ (.*) \}\}$', blocks[name], re.M)[1]
+            for tier, event, expected in [('smoke', 'pull_request', False),
+                                          ('smoke', 'push', True),
+                                          ('integration', 'push', True),
+                                          ('integration', 'pull_request', True)]:
+                condition = expression.replace('needs.changes.outputs.tier', repr(tier))
+                condition = condition.replace('github.event_name', repr(event)).replace('||', 'or')
+                self.assertEqual(eval(condition), expected, (name, tier, event))
         archive = (ROOT.parent / 'workflows/rust-archive.yml').read_text()
         steps = {step.splitlines()[0]: step for step in archive.split('      - name: ')[1:]}
         selections = steps['Archive tests and record every selection']
@@ -213,11 +222,11 @@ class Gate(unittest.TestCase):
         for command in ['cargo nextest list', 'balance-e2e.py', 'test-ci-invariants.py']:
             self.assertIn(command, selections)
         fixture = steps['Build E2E fixture Agent']
-        self.assertIn('        if: inputs.e2e', fixture)
+        self.assertIn('        if: inputs.fixtures', fixture)
         self.assertIn('butler-agent/e2e-fixtures', fixture)
         self.assertIn('cp target/debug/butler-agent', fixture)
         self.assertIn('cp target/debug/butler-sandbox', fixture)
-        self.assertIn('        if: inputs.e2e', steps['Record native Agent provenance'])
+        self.assertIn('        if: inputs.fixtures', steps['Record native Agent provenance'])
         tests = (ROOT.parent / 'workflows/rust-tests.yml').read_text()
         self.assertIn('!inputs.performance-only && inputs.e2e', tests)
 

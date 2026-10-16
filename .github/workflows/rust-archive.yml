@@ -11,7 +11,8 @@ on:
       clippy:
         type: boolean
         default: false
-      e2e:
+      fixtures:
+        description: Build fixture binaries and provenance for consumers and warm snapshots
         type: boolean
         default: true
       ort-mode:
@@ -99,8 +100,8 @@ jobs:
           python3 "$GITHUB_WORKSPACE/.github/scripts/balance-e2e.py" "$RUNNER_TEMP/rust-archive/list.json" "$RUNNER_TEMP/rust-archive" "$RUNNER_TEMP/rust-archive/perf-list.json"
           python3 "$isolate" python3 "$GITHUB_WORKSPACE/.github/scripts/test-ci-invariants.py" "$RUNNER_TEMP/rust-archive"
       - name: Build E2E fixture Agent
-        # Only integration consumes the fixture Agent; smoke keeps all checks.
-        if: inputs.e2e
+        # PR smoke skips fixtures; publishers keep release snapshots warm.
+        if: inputs.fixtures
         env:
           ORT_MODE: ${{ inputs.ort-mode }}
           BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
@@ -133,7 +134,7 @@ jobs:
             python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --workspace --doc --locked "${args[@]}"
           fi
       - name: Record native Agent provenance
-        if: inputs.e2e
+        if: inputs.fixtures
         env:
           PLATFORM: ${{ inputs.platform }}
           ORT_MODE: ${{ inputs.ort-mode }}
