@@ -7,9 +7,6 @@ use std::{
 };
 use tokio::sync::mpsc;
 
-#[cfg(feature = "test-support")]
-pub(super) mod testing;
-
 const BATCH_WINDOW: Duration = Duration::from_millis(2);
 const BATCH_OPS: usize = 32;
 
@@ -158,6 +155,7 @@ fn drain(
             }
             complete(completions, &Ok(()));
         }
+        let barrier = operation.barrier;
         if operation.inspect || super::metrics::baseline() {
             perform(db, operation, Ok(()), completions);
             if super::metrics::baseline() {
@@ -173,6 +171,10 @@ fn drain(
                 *opened = Some(Instant::now());
             }
             perform(db, operation, Ok(()), completions);
+        }
+        if barrier {
+            event_outbox::flush();
+            complete(completions, &Ok(()));
         }
         if index + 1 == BATCH_OPS || started.elapsed() >= BATCH_WINDOW || super::metrics::baseline()
         {
