@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 HOMEPAGES = {
+    "notify Windows ledger backend": "https://github.com/notify-rs/notify/blob/a1d7c2d8f80786679d58ec6d5986a1d4278bc8cf/notify/LICENSE-CC0",
     "Noto Sans KR": "https://github.com/google/fonts/blob/main/ofl/notosanskr/OFL.txt",
     "SQLite": "https://www.sqlite.org/copyright.html",
     "IBM Plex Mono": "https://github.com/IBM/plex/blob/2f9ba1b25957d958db71a849e85d72e3ecfb845a/LICENSE.txt",
