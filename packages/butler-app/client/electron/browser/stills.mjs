@@ -6,6 +6,9 @@ export async function stepStill(tab) {
   if (tab.dialog) return undefined;
   if (tab.stills === false || !tab.view || tab.view.webContents.isDestroyed()) { tab.afterCapture?.(); return undefined; }
   const contents = tab.view.webContents;
+  const dbg = contents.debugger;
+  // EventEmitter cleanup remains valid after Electron destroys the native wrapper.
+  const removeListener = contents.removeListener.bind(contents);
   let current = true, cancel;
   const ended = new Promise(resolve => { cancel = () => { current = false; resolve(undefined); }; });
   const navigate = details => { if (details.isMainFrame && !details.isSameDocument) cancel(); };
@@ -13,7 +16,9 @@ export async function stepStill(tab) {
   contents.on("did-start-navigation", navigate);
   contents.on("render-process-gone", cancel);
   contents.on("destroyed", cancel);
-  contents.debugger.on("message", dialog);
+  dbg.on("message", dialog);
+  const dialogWaiters = tab.dialogWaiters ??= new Set();
+  dialogWaiters.add(cancel);
   try {
     // A renderer promise or compositor readback can outlive its document.
     // Navigation ends that capture; the next observation owns the new page.
@@ -21,10 +26,11 @@ export async function stepStill(tab) {
     return await Promise.race([captureStill(tab, contents, () => current), ended]);
   } finally {
     current = false;
-    contents.removeListener("did-start-navigation", navigate);
-    contents.removeListener("render-process-gone", cancel);
-    contents.removeListener("destroyed", cancel);
-    contents.debugger.removeListener("message", dialog);
+    removeListener("did-start-navigation", navigate);
+    removeListener("render-process-gone", cancel);
+    removeListener("destroyed", cancel);
+    dbg.removeListener("message", dialog);
+    dialogWaiters.delete(cancel);
   }
 }
 
