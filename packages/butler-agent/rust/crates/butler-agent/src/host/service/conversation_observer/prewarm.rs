@@ -32,7 +32,6 @@ impl Prewarm {
         if !input.admitted
             || input.event_kind != "inbound.accepted"
             || !embedding.enabled()
-            || embedding.is_warm()
             || self
                 .probe
                 .as_ref()

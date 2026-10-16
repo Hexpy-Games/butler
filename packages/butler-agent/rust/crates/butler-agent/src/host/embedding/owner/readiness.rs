@@ -13,7 +13,12 @@ impl EmbeddingOwner {
         let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let cancellation = CancellationToken::new();
         let (sender, receiver) = oneshot::channel();
-        self.enqueue_readiness(id, cancellation.clone(), deadline, sender)?;
+        self.enqueue_readiness(
+            id,
+            cancellation.clone(),
+            deadline,
+            PendingResponse::Ready(sender),
+        )?;
         let _guard = AdmissionGuard {
             inner: self.inner.clone(),
             id,
@@ -28,12 +33,12 @@ impl EmbeddingOwner {
 
     /// Best-effort turn prefetch; queue ownership keeps loading after this returns.
     pub(crate) fn start_loading(&self) {
-        if !self.enabled() || self.is_warm() || self.inner.state.lock().queued_requests != 0 {
+        if !self.enabled() {
             return;
         }
         let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
-        let (sender, _) = oneshot::channel();
-        let _ = self.enqueue_readiness(id, CancellationToken::new(), None, sender);
+        let _ =
+            self.enqueue_readiness(id, CancellationToken::new(), None, PendingResponse::Prewarm);
     }
 
     fn enqueue_readiness(
@@ -41,7 +46,7 @@ impl EmbeddingOwner {
         id: u64,
         cancellation: CancellationToken,
         deadline: Option<Instant>,
-        sender: oneshot::Sender<CognitionResult<()>>,
+        response: PendingResponse,
     ) -> CognitionResult<()> {
         self.inner.enqueue(
             Pending {
@@ -56,7 +61,7 @@ impl EmbeddingOwner {
                 max_embeddings: None,
                 cancellation,
                 deadline,
-                response: PendingResponse::Ready(sender),
+                response,
             },
             EmbeddingRequestClass::Interactive,
         )

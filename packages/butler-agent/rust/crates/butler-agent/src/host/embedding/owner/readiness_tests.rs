@@ -170,3 +170,64 @@ pub(super) async fn worker_loop_panic_closes_queue_and_future_readiness_fails_fa
         "embed_worker_unavailable"
     );
 }
+
+/// Hold the actor after OS exit, before its child-wait branch clears warm.
+/// The missing replacement executable makes a cold-start attempt observable
+/// without loading a model; real replacement is covered by MEM-05.
+pub(super) async fn prewarm_survives_unobserved_worker_exit() {
+    let inner = inner();
+    let mut child = butler_platform::process_control::test_support::slow_line_peer("")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let mut process = Some(WorkerChild {
+        stdin: child.stdin.take().unwrap(),
+        stdout: child.stdout.take().unwrap(),
+        child,
+        initialized: true,
+    });
+    inner.warm.store(true, Ordering::Release);
+    let (resume, held) = oneshot::channel();
+    let (observed, result) = oneshot::channel();
+    let actor_inner = inner.clone();
+    // The peer never receives a line: no timed delay participates in this race.
+    process.as_mut().unwrap().child.kill().await.unwrap();
+    let owner = owner(inner.clone(), async move {
+        held.await.unwrap();
+        let item = actor_inner.state.lock().take_next().unwrap();
+        let outcome = run_item(&actor_inner, &mut process, &item).await;
+        observed.send(outcome.map(|_| ())).unwrap();
+        kill_and_reap(&mut process).await;
+    });
+    assert!(owner.is_warm(), "exit has not been observed by the actor");
+    std::thread::scope(|scope| {
+        for _ in 0..8 {
+            scope.spawn(|| owner.start_loading());
+        }
+    });
+    let queued = inner.state.lock().queued_requests;
+    if queued != 1 {
+        owner.actor.lock().as_ref().unwrap().abort();
+    }
+    assert_eq!(queued, 1, "stale warm must not drop or duplicate prewarm");
+    resume.send(()).unwrap();
+    assert_eq!(
+        result.await.unwrap().unwrap_err().code(),
+        "embed_worker_unavailable",
+        "the queued prewarm must attempt a replacement executable"
+    );
+    assert!(!owner.is_warm());
+    owner.close().await.unwrap();
+
+    let owner = loading_owner();
+    owner.inner.enabled.store(false, Ordering::Release);
+    owner.start_loading();
+    assert_eq!(
+        owner.inner.state.lock().queued_requests,
+        0,
+        "off never loads"
+    );
+    owner.close().await.unwrap();
+}
