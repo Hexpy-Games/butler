@@ -170,6 +170,14 @@ jobs:
           $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"
           $agent = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe"
           ../../../deploy/windows-basic-capabilities.ps1 -Agent $agent
+      - name: Upload Windows basic capability log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-basic-capabilities-log
+          path: ${{ runner.temp }}/windows-basic-capabilities.log
+          if-no-files-found: warn
+          retention-days: 14
       - name: Check owner registration and remove job profile
         if: always() && inputs.runner != 'hosted'
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
