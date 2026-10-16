@@ -70,7 +70,7 @@ CI_LINT_ONLY = (
     '.github/scripts/ci_rust_inputs.py', '.github/scripts/ci_input_tests.py',
     '.github/scripts/ci_tier_tests.py', '.github/scripts/ci_receipts.py',
     '.github/scripts/ci_main_failure.py', '.github/scripts/ci_main_baseline.py',
-    '.github/scripts/ci-main-gate.py',
+    '.github/scripts/ci-main-gate.py', '.github/scripts/ci_windows_cascade_tests.py',
     '.github/scripts/ci-check-selected.py', '.github/scripts/ds-approval.py',
 )
 # Integration packaging keys include Rust/UI and transitive producer inputs.
@@ -89,6 +89,7 @@ CI_CONSUMERS = (
         '.github/scripts/ci_input_tests.py', '.github/scripts/ci_tier_tests.py',
         '.github/scripts/ci_receipts.py', '.github/scripts/ci_main_failure.py',
         '.github/scripts/ci_main_baseline.py', '.github/scripts/ci-main-gate.py',
+        '.github/scripts/ci_windows_cascade_tests.py',
         '.github/scripts/prepare-windows-zstd.py',
         '.github/scripts/*windows*safety.py')),
     (('rust',), ('.github/workflows/rust-*.yml',)),

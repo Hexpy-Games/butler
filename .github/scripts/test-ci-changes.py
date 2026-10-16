@@ -464,6 +464,7 @@ class TrimContracts(unittest.TestCase):
 
 
 # Keep the derived dependency checks in the existing CI-script test entrypoint.
+from ci_windows_cascade_tests import WindowsCascade
 from ci_input_tests import DerivedInputs
 from ci_tier_tests import Precision, ApprovedTiers
 

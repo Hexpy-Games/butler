@@ -290,7 +290,7 @@ jobs:
         run: ./deploy/windows-owner-cleanup.ps1
   release:
     name: Installed unsigned Windows preview
-    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['release']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['release'] && !inputs.native-loop && github.event_name != 'pull_request'))
+    if: always() && !cancelled() && needs.changes.result == 'success' && (needs.build.result == 'success' || (needs.build.result == 'skipped' && contains(fromJSON(needs.changes.outputs.artifacts).*.name, 'agent-windows-x64'))) && (needs.stub.result == 'success' || (needs.stub.result == 'skipped' && contains(fromJSON(needs.changes.outputs.artifacts).*.name, 'windows-e2e'))) && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['release']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['release'] && !inputs.native-loop && github.event_name != 'pull_request'))
     needs: [changes, build, stub]
     runs-on: windows-latest
     timeout-minutes: 30
@@ -380,7 +380,7 @@ jobs:
           Remove-Item $env:PREVIEW_ROOT -Recurse -Force
   hosted:
     name: Hosted Windows E2E (${{ matrix.shard }})
-    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted'] && !inputs.native-loop))
+    if: always() && !cancelled() && needs.changes.result == 'success' && (needs.stub.result == 'success' || (needs.stub.result == 'skipped' && contains(fromJSON(needs.changes.outputs.artifacts).*.name, 'windows-e2e'))) && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted'] && !inputs.native-loop))
     needs: [changes, stub]
     runs-on: windows-latest
     timeout-minutes: 30
