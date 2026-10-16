@@ -146,11 +146,15 @@ jobs:
           sha256sum -c ./*.sha256
           for deb in ./*.deb; do
             dpkg-deb --info "$deb"
-            dpkg-deb --contents "$deb" | grep -E ' \./(usr/bin/butler-app|opt/butler/Butler-linux-[a-z0-9]+/resources/bundled-agent/bin/butler-agent)$'
+            listing="$(dpkg-deb --contents "$deb")"
+            for path in usr/bin/butler usr/bin/butler-app opt/butler/Butler-${{ matrix.target }}/resources/bundled-agent/bin/butler-agent; do
+              grep -Eq " \\./${path}$" <<< "$listing"
+            done
           done
           for pkg in ./*.pkg.tar.zst; do
             [ -e "$pkg" ] || continue
             bsdtar -tf "$pkg" | grep -qx '.PKGINFO'
+            bsdtar -tf "$pkg" | grep -qx 'usr/bin/butler'
             bsdtar -tf "$pkg" | grep -qx 'opt/butler/Butler-linux-x64/resources/bundled-agent/bin/butler-agent'
           done
           ls -l
