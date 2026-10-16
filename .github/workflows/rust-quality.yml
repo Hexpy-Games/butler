@@ -293,20 +293,26 @@ jobs:
       platforms: '[{"platform":"linux-x64","runner":"ubuntu-24.04"}]'
 
   install-arm64:
-    needs: [changes, linux-arm64-native]
+    needs: [changes, linux-arm64-native, install-x64]
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['install-arm64']
     uses: ./.github/workflows/install-smoke.yml
     with:
+      # Common package checks and tarball are produced by install-x64.
+      pack: false
+      npm-artifact: butler-npm-x64
       shared-agents: true
       merge-manifests: false
       label: arm64
       platforms: '[{"platform":"linux-arm64","runner":"ubuntu-24.04-arm"}]'
 
   install-macos:
-    needs: [changes, macos-native]
+    needs: [changes, macos-native, install-x64]
     if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['install-macos']
     uses: ./.github/workflows/install-smoke.yml
     with:
+      # Common package checks and tarball are produced by install-x64.
+      pack: false
+      npm-artifact: butler-npm-x64
       shared-agents: true
       merge-manifests: false
       label: macos

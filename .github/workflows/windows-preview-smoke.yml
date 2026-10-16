@@ -97,7 +97,7 @@ jobs:
       - uses: ./.github/actions/windows-owner-setup
         with:
           workflow: ${{ inputs.native-cache || 'windows-agent-v1' }}
-      - name: Windows native stderr, formatting, clippy and source policy
+      - name: Windows native stderr and clippy
         env:
           GH_TOKEN: ${{ github.token }}
         run: ../../../deploy/windows-preview-quality.ps1
@@ -208,24 +208,9 @@ jobs:
             & "$env:GITHUB_WORKSPACE/deploy/windows-test-log.ps1" -Log "$env:PREVIEW_ROOT/logs/long-paths.log"
             exit $testCode
           }
-      # Command matrix is read-only outside its own isolated fixtures. Run it
-      # natively before the disposable hosted installer/registry confirmation.
       - name: Native Windows command regression matrix
-        run: |
-          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
-          $env:BUTLER_E2E_PERF = '1'
-          $ErrorActionPreference = 'Continue'
-          cmd /d /c "cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e windows_commands:: -- --test-threads=1 --nocapture > `"$env:PREVIEW_ROOT/logs/command-matrix.log`" 2>&1"
-          $testCode = $LASTEXITCODE
-          $ErrorActionPreference = 'Stop'
-          Remove-Item Env:BUTLER_E2E_PERF
-          if ($testCode -ne 0) {
-            & "$env:GITHUB_WORKSPACE/deploy/windows-test-log.ps1" -Log "$env:PREVIEW_ROOT/logs/command-matrix.log"
-            exit $testCode
-          }
+        if: inputs.native-loop && needs.changes.outputs.tier != 'integration'
+        run: ../../../deploy/windows-command-matrix.ps1
       - name: Selected project workspace and approval E2E
         run: |
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
@@ -364,12 +349,6 @@ jobs:
         run: |
           $env:BUTLER_E2E_BIN = Join-Path $env:BUTLER_E2E_INSTALLED_ROOT 'butler-agent.exe'
           ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests installed_preview
-      - name: Native command tool environment, Unicode and Downloads chat
-        if: ${{ !cancelled() }}
-        run: |
-          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
-          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests windows_commands
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Hosted terminal settlement live-event regression
         if: ${{ !cancelled() }}
         run: |
@@ -378,7 +357,7 @@ jobs:
       - name: Require installed verification harnesses
         if: ${{ !cancelled() }}
         run: |
-          $expected = @('windows_startup_xml','installed_preview','windows_commands','projection_settlement')
+          $expected = @('windows_startup_xml','installed_preview','projection_settlement')
           $actual = @(Get-Content "$env:PREVIEW_ROOT/logs/completed-harnesses.txt")
           if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
             throw "Incomplete verification: completed=$($actual -join ',')"
@@ -490,9 +469,10 @@ jobs:
     name: Complete Windows preview verification
     if: ${{ always() && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     needs: [changes, build, stub, release, hosted]
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     defaults:
       run:
+        shell: bash
         working-directory: .
     steps:
       - uses: actions/checkout@v4
@@ -500,7 +480,7 @@ jobs:
         env:
           RESULTS: ${{ toJSON(needs) }}
           CHECK_GROUPS: '{"build":"jobs","stub":"jobs","release":"jobs","hosted":"jobs"}'
-        run: python .github/scripts/isolated.py python .github/scripts/ci-check-selected.py
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/ci-check-selected.py
       - uses: ./.github/actions/windows-preview-gate
         if: ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
         with:

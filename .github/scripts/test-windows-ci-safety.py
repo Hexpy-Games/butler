@@ -37,7 +37,6 @@ class WindowsSafety(unittest.TestCase):
             'Platform and portable crate tests',
             'Compile existing Windows E2E harness', 'Existing stub chat E2E',
             'Stub chat and durable config under a long data path',
-            'Native Windows command regression matrix',
             'Read-only real-profile Downloads command',
             'Native service recovery, full shutdown queue and memory reset',
         }
@@ -46,6 +45,13 @@ class WindowsSafety(unittest.TestCase):
             step = next(step for step in steps if step.splitlines()[0] == name)
             with self.subTest(step=name):
                 self.assert_raw_log_command(step, 'exit $testCode')
+        matrix = next(step for step in steps if step.startswith('Native Windows command regression matrix\n'))
+        self.assertIn("if: inputs.native-loop && needs.changes.outputs.tier != 'integration'", matrix)
+        self.assertIn('run: ../../../deploy/windows-command-matrix.ps1', matrix)
+        source = (repository / 'deploy/windows-command-matrix.ps1').read_text()
+        logged_sources.append(source)
+        self.assertNotIn('Tee-Object', source)
+        self.assert_raw_log_command(source, 'exit $testCode')
         for filename in ['windows-e2e-artifacts.ps1', 'windows-basic-capabilities.ps1']:
             source = (repository / 'deploy' / filename).read_text()
             logged_sources.append(source)
