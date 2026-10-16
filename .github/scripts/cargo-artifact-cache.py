@@ -62,9 +62,9 @@ def identity(platform, mode, kind):
     compiler = output('rustc', '-vV')
     target = os.environ.get('CARGO_BUILD_TARGET', compiler.split('host: ')[1].splitlines()[0])
     native_compiler = native_identity(platform, compiler.split('host: ')[1].splitlines()[0])
-    profile = os.environ.get('TARGET_SNAPSHOT_PROFILE', 'debug' if kind == 'dev' else 'release')
+    profile = os.environ.get('TARGET_SNAPSHOT_PROFILE', 'debug' if kind in ('dev', 'clippy') else 'release')
     features = os.environ.get('TARGET_SNAPSHOT_FEATURES',
-                              'workspace-defaults' if kind == 'dev' and mode != 'static-ort'
+                              'workspace-check' if kind == 'clippy' else 'workspace-defaults' if kind == 'dev' and mode != 'static-ort'
                               else 'workspace-no-defaults,butler-agent/static-ort' if kind == 'dev'
                               else 'butler-agent/' + mode if kind != 'perf' else 'butler-e2e/defaults')
     configs = {str(path): digest(path) for path in [Path('Cargo.toml'), Path('rust-toolchain.toml'),
@@ -111,9 +111,11 @@ def valid_producer(run, jobs, repository, platform, kind):
         return False
     names = dict(dev=['Build archives', 'Build target snapshot'], perf=['Build perf harness'],
                  native=['Build native Agent', 'Build Linux Agent archive', 'Build target snapshot'],
-                 ort=['Build native Agent', 'Build Linux Agent archive'])[kind]
+                 ort=['Build native Agent', 'Build Linux Agent archive'], clippy=[])[kind]
     return any(((kind in ['dev', 'native', 'perf'] and job['name'].startswith('Build target snapshot ') and job['name'].endswith(f'({platform})'))
                 or any(job['name'].endswith(f'{name} ({platform})') for name in names)
+                or (kind == 'clippy' and platform == 'windows-x64'
+                    and job['name'].split(' / ')[-1] == 'Windows Clippy check (x86_64-pc-windows-msvc)')
                 or (kind == 'native' and platform == 'windows-x64'
                     and job['name'] == 'Prepare Windows release target')
                 or (kind in ['native', 'ort'] and platform == 'darwin-arm64'

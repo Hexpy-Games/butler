@@ -33,6 +33,22 @@ class WindowsSnapshotLanes(unittest.TestCase):
         self.assertNotIn('prepare-release-target', gate)
         self.assertIn('needs: [changes, build, stub, release, hosted]', gate)
 
+    # test-category: format-pin
+    def test_hosted_clippy_restores_on_pr_and_publishes_only_main(self):
+        workflow = (ROOT / '.github/workflows/rust-windows-check.yml').read_text()
+        self.assertIn('artifact-cache-kind: clippy', workflow)
+        self.assertIn('snapshot-target: x86_64-pc-windows-msvc', workflow)
+        self.assertIn('packages: write', workflow)
+        publish = workflow.split('      - name: Publish hosted Windows clippy snapshot', 1)[1].split('      - name: Summarize', 1)[0]
+        self.assertIn("if: github.event_name == 'push' && github.ref == 'refs/heads/main'", publish)
+        self.assertIn('kind: clippy', publish)
+        self.assertIn('producer: Windows Clippy check (x86_64-pc-windows-msvc)', publish)
+        self.assertIn('cargo clippy --workspace --all-targets', workflow)
+        setup = (ROOT / '.github/actions/rust-agent-setup/action.yml').read_text()
+        self.assertLess(setup.index('Pin hosted Windows clippy linker'), setup.index('Restore persistent main Cargo'))
+        flags = setup.split('    - name: Configure Windows snapshot compiler flags', 1)[1].split('    # The quota', 1)[0]
+        self.assertIn("inputs.artifact-cache-kind != 'clippy'", flags)
+
 
 if __name__ == '__main__':
     unittest.main()

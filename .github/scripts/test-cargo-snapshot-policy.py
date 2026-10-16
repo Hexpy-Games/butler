@@ -98,6 +98,33 @@ class SnapshotPolicy(unittest.TestCase):
         versions.append(version(7, old, 1))
         self.assertEqual(snapshots.policy.retired_versions(versions, active), [])
 
+    # test-category: security
+    def test_hosted_clippy_has_its_own_identity_and_exact_producer(self):
+        cache = snapshots.cache
+        with patch.object(cache, 'output', return_value='rustc 1.99\nhost: x86_64-pc-windows-msvc'), \
+                patch.object(cache, 'native_identity', return_value={}), patch.object(cache, 'digest', return_value='locked'), \
+                patch.dict(os.environ, {}, clear=True):
+            clippy = cache.identity('windows-x64', 'prebuilt-ort', 'clippy')
+            self.assertEqual((clippy['profile'], clippy['features']), ('debug', 'workspace-check'))
+            for kind in ('native', 'dev'):
+                self.assertNotEqual(snapshots.tag_name(clippy),
+                                    snapshots.tag_name(cache.identity('windows-x64', 'prebuilt-ort', kind)))
+        metadata = dict(run_id=42, sha='a' * 40, producer_name='Windows Clippy check (x86_64-pc-windows-msvc)',
+                        identity=clippy)
+        run = dict(head_repository={'full_name': 'owner/repo'}, event='push', head_branch='main',
+                   head_sha=metadata['sha'], status='completed')
+        jobs = [dict(name='windows-check / ' + metadata['producer_name'], status='completed', conclusion='success')]
+        with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'):
+            with patch.object(snapshots, 'api', side_effect=[run, {'jobs': jobs}]):
+                snapshots.trusted(metadata)
+            self.assertTrue(cache.valid_producer(run, jobs, 'owner/repo', 'windows-x64', 'clippy'))
+            for producer in ['Build unsigned Windows preview', 'Windows compile check (x86_64-pc-windows-msvc)']:
+                with patch.object(snapshots, 'api', side_effect=[run, {'jobs': jobs}]):
+                    with self.assertRaises(snapshots.UnsuccessfulProducer):
+                        snapshots.trusted(dict(metadata, producer_name=producer))
+                self.assertFalse(cache.valid_producer(run, [dict(jobs[0], name=producer)],
+                                                     'owner/repo', 'windows-x64', 'clippy'))
+
 
 if __name__ == '__main__':
     unittest.main()

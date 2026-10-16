@@ -95,7 +95,8 @@ def trusted(metadata, publishing=False):
     allowed = {'native': [f'Build native Agent ({platform})', 'Build unsigned Windows preview',
                            'Prepare Windows release target'],
                'dev': [f'Build archives ({platform})', 'Platform contracts and debug stub chat'],
-               'perf': [f'Build perf harness ({platform})']}[identity['kind']]
+               'perf': [f'Build perf harness ({platform})'],
+               'clippy': ['Windows Clippy check (x86_64-pc-windows-msvc)'] if platform == 'windows-x64' else []}[identity['kind']]
     if producer not in allowed or ('Windows' in producer or 'stub chat' in producer) and platform != 'windows-x64':
         raise UnsuccessfulProducer('Cargo snapshot producer lane is invalid')
     matches = [job for job in jobs if job['name'] == producer or job['name'].endswith(' / ' + producer)]

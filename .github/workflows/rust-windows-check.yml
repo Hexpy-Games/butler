@@ -4,6 +4,7 @@ on:
 permissions:
   contents: read
   actions: read
+  packages: write
 jobs:
   check:
     name: Windows Clippy check (x86_64-pc-windows-msvc)
@@ -23,16 +24,25 @@ jobs:
         with:
           native-deps: prebuilt-ort
           cache-key: windows-check
+          artifact-cache-kind: clippy
+          artifact-cache-platform: windows-x64
+          snapshot-target: x86_64-pc-windows-msvc
+          components: clippy
       - name: Lint the workspace
         id: check
         run: |
           set -o pipefail
-          # Git Bash puts its coreutils link.exe ahead of MSVC's on PATH; name the MSVC linker explicitly.
-          linker="${VCToolsInstallDir}bin\\HostX64\\x64\\link.exe"
-          test -f "$linker" || { echo "MSVC link.exe not found at $linker" >&2; exit 1; }
-          export CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER="$linker"
           python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going --target x86_64-pc-windows-msvc \
             --message-format short -- -D warnings 2>&1 | tee "$RUNNER_TEMP/windows-check.log"
+      - name: Publish hosted Windows clippy snapshot
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        uses: ./.github/actions/publish-cargo-target
+        with:
+          platform: windows-x64
+          mode: prebuilt-ort
+          kind: clippy
+          producer: Windows Clippy check (x86_64-pc-windows-msvc)
       - name: Summarize
         if: always()
         env:

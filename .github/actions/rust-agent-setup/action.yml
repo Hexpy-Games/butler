@@ -26,7 +26,7 @@ inputs:
     description: Native producer platform for the persistent target snapshot.
     default: ""
   artifact-cache-kind:
-    description: Native production, debug workspace, or release E2E cache.
+    description: Native production, debug workspace, release E2E, or hosted clippy cache.
     default: native
   components:
     description: Extra rustup components, comma separated (for example "clippy").
@@ -147,7 +147,7 @@ runs:
         echo 'RUSTFLAGS=-C link-arg=-fuse-ld=mold' >> "$GITHUB_ENV"
 
     - name: Configure Windows snapshot compiler flags
-      if: runner.os == 'Windows' && inputs.snapshot-target != ''
+      if: runner.os == 'Windows' && inputs.snapshot-target != '' && inputs.artifact-cache-kind != 'clippy'
       shell: bash
       env:
         SNAPSHOT_PROFILE: ${{ inputs.snapshot-profile }}
@@ -172,12 +172,20 @@ runs:
         save-if: ${{ github.ref == 'refs/heads/main' && inputs.save-cargo-cache == 'true' }}
         cache-on-failure: false
 
+    - name: Pin hosted Windows clippy linker before snapshot selection
+      if: runner.os == 'Windows' && inputs.artifact-cache-kind == 'clippy'
+      shell: bash
+      run: |
+        linker="${VCToolsInstallDir}bin\HostX64\x64\link.exe"
+        test -f "$linker" || { echo "MSVC link.exe not found at $linker" >&2; exit 1; }
+        echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" >> "$GITHUB_ENV"
+
     - name: Select Cargo target snapshot lane
       shell: bash
       env:
         SNAPSHOT_PLATFORM: ${{ inputs.artifact-cache-platform || (runner.os == 'Windows' && 'windows-x64' || runner.os == 'macOS' && 'darwin-arm64' || runner.arch == 'ARM64' && 'linux-arm64' || 'linux-x64') }}
-        SNAPSHOT_PROFILE: ${{ inputs.snapshot-profile || (inputs.artifact-cache-kind == 'dev' && 'debug' || 'release') }}
-        SNAPSHOT_FEATURES: ${{ inputs.snapshot-features || (inputs.artifact-cache-kind == 'perf' && 'butler-e2e/defaults' || inputs.artifact-cache-kind == 'dev' && (inputs.native-deps == 'static-ort' && 'workspace-no-defaults,butler-agent/static-ort' || 'workspace-defaults') || format('butler-agent/{0}', inputs.native-deps)) }}
+        SNAPSHOT_PROFILE: ${{ inputs.snapshot-profile || ((inputs.artifact-cache-kind == 'dev' || inputs.artifact-cache-kind == 'clippy') && 'debug' || 'release') }}
+        SNAPSHOT_FEATURES: ${{ inputs.snapshot-features || (inputs.artifact-cache-kind == 'clippy' && 'workspace-check' || inputs.artifact-cache-kind == 'perf' && 'butler-e2e/defaults' || inputs.artifact-cache-kind == 'dev' && (inputs.native-deps == 'static-ort' && 'workspace-no-defaults,butler-agent/static-ort' || 'workspace-defaults') || format('butler-agent/{0}', inputs.native-deps)) }}
         SNAPSHOT_TARGET: ${{ inputs.snapshot-target }}
       run: |
         echo "TARGET_SNAPSHOT_PLATFORM=$SNAPSHOT_PLATFORM" >> "$GITHUB_ENV"

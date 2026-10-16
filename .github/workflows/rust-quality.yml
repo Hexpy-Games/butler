@@ -38,6 +38,10 @@ jobs:
       workflow: rust-quality.yml
 
   windows-check:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['windows-check']
     uses: ./.github/workflows/rust-windows-check.yml
@@ -415,6 +419,8 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           python3 .github/scripts/isolated.py python3 .github/scripts/test-cargo-target.py
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-cargo-snapshot-policy.py
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-windows-snapshot-lanes.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-cargo-target-walk-back.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-cargo-units.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-runner-cache.py
