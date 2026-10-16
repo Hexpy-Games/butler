@@ -16,7 +16,7 @@ def trusted_run(run, repository, pr, workflow, branch=None):
     else:
         scope = (run['event'] == 'pull_request' and any(p['number'] == pr for p in run['pull_requests'])
                  and (branch is None or run.get('head_branch') == branch))
-        conclusions = ('success',)
+        conclusions = ('success', 'failure')
     return (run['status'] == 'completed' and run['conclusion'] in conclusions
             and scope and run['path'] == f'.github/workflows/{workflow}'
             and run['head_repository']['full_name'] == repository)
@@ -34,7 +34,18 @@ def receipt_scope(receipt, run, repository, pr, workflow, branch, base_ref):
             and receipt.get('head_repository') == repository and receipt.get('head') == run['head_sha'])
 
 
-def previous(repository, pr, workflow, branch, base_ref, api_items):
+def unchanged_ci(run, current_head):
+    if not current_head:
+        raise ValueError('Current PR head is required for receipt verification')
+    # Receipt producers are PR-controlled. Verify their code with Git, not
+    # producer-supplied hashes, before trusting any claimed job result.
+    for args in [('fetch', '--no-tags', 'origin', run['head_sha']),
+                 ('diff', '--quiet', run['head_sha'], current_head, '--', '.github')]:
+        subprocess.run(['git', *args], check=True, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+
+
+def previous(repository, pr, workflow, branch, base_ref, api_items, current_head=None):
     query = dict(per_page=100) if pr is None else dict(event='pull_request', per_page=100)
     if branch:
         query['branch'] = branch
@@ -42,6 +53,8 @@ def previous(repository, pr, workflow, branch, base_ref, api_items):
     for run in runs:
         if not trusted_run(run, repository, pr, workflow, branch):
             continue
+        if pr is not None:
+            unchanged_ci(run, current_head)
         artifacts = api_items(f'repos/{repository}/actions/runs/{run["id"]}/artifacts?per_page=100', 'artifacts')
         name = f'ci-inputs-{workflow}-{run["run_attempt"]}'
         if not any(a['name'] == name and not a['expired'] for a in artifacts):

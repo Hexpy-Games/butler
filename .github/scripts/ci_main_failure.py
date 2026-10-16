@@ -20,18 +20,18 @@ def api(path, method='GET', data=None):
 
 
 def pages(path):
-    result = []
     for page in range(1, 10001):
         value = api(f'{path}{"&" if "?" in path else "?"}per_page=100&page={page}')
         items = value if isinstance(value, list) else value.get('workflow_runs', value.get('jobs', []))
-        result.extend(items)
+        yield from items
         if len(items) < 100:
-            return result
+            return
     raise ValueError('Incomplete API pagination')
 
 
 def trusted(run, repository):
-    return (run.get('event') == 'push' and run.get('head_branch') == 'main'
+    return (run.get('name') != 'Main CI failure follow-up'
+            and run.get('event') == 'push' and run.get('head_branch') == 'main'
             and run.get('repository', {}).get('full_name', repository) == repository
             and run.get('head_repository', {}).get('full_name') == repository)
 
@@ -80,9 +80,9 @@ def draft_revert(repository, run, merges, prs, marker, body):
         return
     sha, number = merges[0]
     slug = hashlib.sha256(marker.encode()).hexdigest()[:16]
-    branch = f'revert/pr-{number}-{slug}'
-    existing = pages(f'repos/{repository}/pulls?state=all&head={repository.split("/")[0]}:{branch}')
-    if existing:
+    branch = f'fix/revert-pr-{number}-{slug}'
+    path = f'repos/{repository}/pulls?state=all&head={repository.split("/")[0]}:{branch}'
+    if next(iter(pages(path)), None):
         return
     git('switch', '-C', branch, 'origin/main')
     git('-c', 'user.name=github-actions[bot]', '-c', 'user.email=41898282+github-actions[bot]@users.noreply.github.com',
@@ -95,14 +95,20 @@ def draft_revert(repository, run, merges, prs, marker, body):
             raise ValueError('Existing revert branch differs; refusing to overwrite')
     else:
         git('push', 'origin', f'HEAD:refs/heads/{branch}')
+    # Recheck after Git work: another workflow may have proposed this range.
+    if next(iter(pages(path)), None):
+        return
+    body += ('\n\nThis draft was opened with GITHUB_TOKEN, which does not start pull_request workflows; '
+             'required checks may stay Expected.\nTo run CI, push an empty commit from a real account '
+             '(`git commit --allow-empty -m "Run CI" && git push`), or close and reopen this PR.\n')
     api(f'repos/{repository}/pulls', 'POST', dict(title=f'Revert #{number}: investigate main failure',
         head=branch, base='main', draft=True, body=body))
 
 
 def report(repository, run):
-    if not trusted(run, repository):
+    if not trusted(run, repository) or run.get('conclusion') in ('success', 'skipped'):
         return
-    jobs = pages(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs')
+    jobs = list(pages(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs'))
     if not any(job['conclusion'] == 'failure' for job in jobs):
         return
     try:
@@ -113,15 +119,22 @@ def report(repository, run):
     # Different workflows may share the same baseline and failing SHA. Keep
     # one issue and one draft branch for that range, with separate evidence.
     marker = f'<!-- main-ci-range:{base}:{run["head_sha"]} -->'
-    existing = next((i for i in pages(f'repos/{repository}/issues?state=all')
-                     if not i.get('pull_request') and marker in (i.get('body') or '')), None)
     start, end = f'<!-- workflow:{run["workflow_id"]} -->', f'<!-- /workflow:{run["workflow_id"]} -->'
     section = issue_body(run, base, commits, merges, prs, jobs, start) + '\n' + end
+    # Query the marker at the mutation boundary, after range discovery.
+    existing = next((i for i in pages(f'repos/{repository}/issues?state=all')
+                     if not i.get('pull_request') and marker in (i.get('body') or '')), None)
+    if existing is None:
+        existing = next((i for i in pages(f'repos/{repository}/issues?state=all')
+                         if not i.get('pull_request') and marker in (i.get('body') or '')), None)
     body = (existing.get('body') or marker) if existing else marker
     pattern = re.escape(start) + '.*?' + re.escape(end)
     body = re.sub(pattern, lambda match: section, body, flags=re.S) if start in body else body + '\n\n' + section
     if existing:
-        api(f'repos/{repository}/issues/{existing["number"]}', 'PATCH', dict(body=body))
+        path = f'repos/{repository}/issues/{existing["number"]}'
+        if existing.get('state') == 'closed':
+            api(path, 'PATCH', dict(state='open'))
+        api(path, 'PATCH', dict(body=body))
     else:
         api(f'repos/{repository}/issues', 'POST', dict(
             title=f'Main CI failure: {base[:8]}..{run["head_sha"][:8]}', body=body))

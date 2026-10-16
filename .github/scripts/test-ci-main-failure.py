@@ -71,8 +71,11 @@ class Followup(unittest.TestCase):
             failure.draft_revert(REPO, RUN, [('merge', 7)], {7: PR}, 'marker', 'body')
             data = api.call_args.args[2]
             self.assertTrue(data['draft'])
-            self.assertTrue(data['head'].startswith('revert/'))
+            self.assertTrue(data['head'].startswith('fix/revert-pr-7-'))
             self.assertEqual(data['base'], 'main')
+            self.assertIn('GITHUB_TOKEN', data['body'])
+            self.assertIn('git commit --allow-empty', data['body'])
+            self.assertIn('close and reopen', data['body'])
             self.assertTrue(any('revert' in call.args for call in git.call_args_list))
             git.reset_mock()
             api.reset_mock()
@@ -135,6 +138,56 @@ class Followup(unittest.TestCase):
             self.assertEqual(api.call_args.args[1], 'POST')
             self.assertIn('No proven green baseline', api.call_args.args[2]['body'])
             git.assert_not_called()
+
+    # test-category: pure-logic
+    def test_pagination_stops_at_first_matching_item(self):
+        with patch.object(failure, 'api', return_value=[dict(number=n) for n in range(100)]) as api:
+            match = next(i for i in failure.pages('repos/owner/repo/issues') if i['number'] == 3)
+            self.assertEqual(match['number'], 3)
+            api.assert_called_once()
+
+    # test-category: security
+    def test_recheck_prevents_pr_created_during_git_work(self):
+        with patch.object(failure, 'pages', side_effect=[[], [dict(number=3, body='marker')]]), \
+             patch.object(failure, 'git', return_value=''), patch.object(failure, 'api') as api:
+            failure.draft_revert(REPO, RUN, [('merge', 7)], {7: PR}, 'marker', 'body')
+            api.assert_not_called()
+
+    # test-category: security
+    def test_closed_matching_issue_reopens_before_body_update(self):
+        marker = '<!-- main-ci-range:green:bad -->'
+        def pages(path):
+            if '/issues?' in path:
+                return [dict(number=2, body=marker, state='closed')]
+            return [dict(name='failed', html_url='job-url', conclusion='failure')]
+        with patch.object(failure, 'failure_range', return_value=('green', [])), \
+             patch.object(failure, 'pages', side_effect=pages), patch.object(failure, 'api') as api:
+            failure.report(REPO, RUN)
+        self.assertEqual(api.call_args_list[0].args[2], dict(state='open'))
+        self.assertIn('body', api.call_args_list[1].args[2])
+
+    # test-category: security
+    def test_success_skipped_and_self_runs_never_query_or_write(self):
+        for update in [dict(conclusion='success'), dict(conclusion='skipped'),
+                       dict(name='Main CI failure follow-up')]:
+            with patch.object(failure, 'pages') as pages, patch.object(failure, 'api') as api:
+                failure.report(REPO, dict(RUN, **update))
+                pages.assert_not_called()
+                api.assert_not_called()
+
+    # test-category: security
+    def test_issue_marker_is_rechecked_before_creation(self):
+        marker = '<!-- main-ci-range:green:bad -->'
+        issues = iter([[], [dict(number=2, body=marker)]])
+        def pages(path):
+            if '/issues?' in path:
+                return next(issues)
+            return iter([dict(name='failed', html_url='job-url', conclusion='failure')])
+        with patch.object(failure, 'failure_range', return_value=('green', [])), \
+             patch.object(failure, 'pages', side_effect=pages), patch.object(failure, 'api') as api:
+            failure.report(REPO, RUN)
+        self.assertEqual(api.call_args.args[:2], ('repos/owner/repo/issues/2', 'PATCH'))
+        self.assertIn('job-url', api.call_args.args[2]['body'])
 
 
 if __name__ == '__main__':

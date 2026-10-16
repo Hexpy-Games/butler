@@ -217,8 +217,8 @@ def api_items(path, key):
     return [item for page in pages for item in page[key]]
 
 
-def previous(repository, pr, workflow, branch=None, base_ref=None):
-    return ci_receipts.previous(repository, pr, workflow, branch, base_ref, api_items)
+def previous(repository, pr, workflow, branch=None, base_ref=None, current_head=None):
+    return ci_receipts.previous(repository, pr, workflow, branch, base_ref, api_items, current_head)
 
 
 def tier():
@@ -378,7 +378,7 @@ def select(event, workflow):
     if candidate or smoke_pr:
         try:
             receipts = list(previous(repository, pr.get('number'), workflow, branch,
-                                     pr.get('base', {}).get('ref')))
+                                     pr.get('base', {}).get('ref'), pr.get('head', {}).get('sha')))
         except (subprocess.CalledProcessError, ValueError, OSError, KeyError, TypeError) as error:
             print(f'Reuse unavailable ({type(error).__name__}); unmatched checks will run.')
             receipts = []

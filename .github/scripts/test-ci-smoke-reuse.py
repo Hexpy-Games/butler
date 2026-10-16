@@ -34,9 +34,9 @@ def receipt():
 
 class SmokeReuse(unittest.TestCase):
     # test-category: security
-    def test_run_and_receipt_identity_reject_forks_other_prs_and_failures(self):
+    def test_run_and_receipt_identity_reject_forks_other_prs_and_incomplete_runs(self):
         self.assertTrue(ci_receipts.trusted_run(RUN, REPO, 12, WORKFLOW, 'fix/example'))
-        for update in [dict(conclusion='failure'), dict(conclusion='cancelled'), dict(status='in_progress'),
+        for update in [dict(conclusion='cancelled'), dict(status='in_progress'),
                        dict(head_repository=dict(full_name='fork/repo')), dict(pull_requests=[dict(number=13)]),
                        dict(head_branch='fix/other')]:
             self.assertFalse(ci_receipts.trusted_run(dict(RUN, **update), REPO, 12, WORKFLOW, 'fix/example'))
@@ -62,7 +62,7 @@ class SmokeReuse(unittest.TestCase):
                      patch.object(changes, 'hashes', return_value=current), \
                      patch.object(changes, 'previous', return_value=[state]) as previous:
                     changes.select({'pull_request': PR}, WORKFLOW)
-                previous.assert_called_once_with(REPO, 12, WORKFLOW, 'fix/example', 'main')
+                previous.assert_called_once_with(REPO, 12, WORKFLOW, 'fix/example', 'main', 'head')
                 outputs = dict(line.split('=', 1) for line in Path(env['GITHUB_OUTPUT']).read_text().splitlines())
                 jobs = json.loads(outputs['jobs'])
                 self.assertEqual(jobs['linux-clippy'], expected)
@@ -122,10 +122,73 @@ class SmokeReuse(unittest.TestCase):
                 return dict(workflow_runs=[RUN], artifacts=[dict(name='ci-inputs-'+WORKFLOW+'-1', expired=False)],
                             jobs=[dict(steps=[dict(name='Publish successful inputs', conclusion=publication)])])[key]
             def download(args, **kwargs):
-                (Path(args[-1]) / 'inputs.json').write_text(json.dumps(state))
+                if args[0] == 'gh':
+                    (Path(args[-1]) / 'inputs.json').write_text(json.dumps(state))
             with patch.object(ci_receipts.subprocess, 'run', side_effect=download):
-                found = list(ci_receipts.previous(REPO, 12, WORKFLOW, 'fix/example', 'main', items))
+                found = list(ci_receipts.previous(REPO, 12, WORKFLOW, 'fix/example', 'main', items, 'head'))
                 self.assertEqual(bool(found), publication == 'success')
+
+    # test-category: security
+    def test_forged_receipt_hashes_cannot_hide_changed_ci_or_missing_commit(self):
+        state = receipt()  # Attacker claims exactly the current trusted hashes.
+        with tempfile.TemporaryDirectory() as directory:
+            def git(*args):
+                return subprocess.check_output(['git', '-C', directory, *args], text=True).strip()
+            git('init', '-q')
+            git('config', 'user.name', 'Fixture')
+            git('config', 'user.email', 'fixture@example.invalid')
+            ci = Path(directory) / '.github'
+            ci.mkdir()
+            script = ci / 'ci_receipts.py'
+            script.write_text('forge all hashes and successful results')
+            git('add', '.')
+            git('commit', '-qm', 'forged producer')
+            forged = git('rev-parse', 'HEAD')
+            script.write_text('trusted producer')
+            git('commit', '-qam', 'restore trusted producer')
+            current = git('rev-parse', 'HEAD')
+            git('remote', 'add', 'origin', directory)
+            real_run = subprocess.run
+            for prior, accepted in [(forged, False), ('0' * 40, False), (current, True)]:
+                run = dict(RUN, head_sha=prior)
+                claimed = dict(state, head=prior)
+                def items(path, key):
+                    return dict(workflow_runs=[run], artifacts=[dict(
+                        name='ci-inputs-'+WORKFLOW+'-1', expired=False)], jobs=[dict(steps=[dict(
+                        name='Publish successful inputs', conclusion='success')])])[key]
+                def execute(args, **kwargs):
+                    if args[0] == 'git':
+                        return real_run(args, cwd=directory, **kwargs)
+                    (Path(args[-1]) / 'inputs.json').write_text(json.dumps(claimed))
+                with patch.object(ci_receipts.subprocess, 'run', side_effect=execute):
+                    if accepted:
+                        found = list(ci_receipts.previous(REPO, 12, WORKFLOW, 'fix/example',
+                                                         'main', items, current))
+                        self.assertEqual(found, [claimed])
+                    else:
+                        with self.assertRaises(subprocess.CalledProcessError):
+                            list(ci_receipts.previous(REPO, 12, WORKFLOW, 'fix/example',
+                                                      'main', items, current))
+
+    # test-category: security
+    def test_pass_then_fail_same_inputs_then_repush_does_not_reuse(self):
+        passed = receipt()
+        failed = dict(passed, run=2, job_results=dict.fromkeys(passed['job_inputs'], 'failure'))
+        runs = [dict(RUN, id=2, conclusion='failure'), RUN]
+        def items(path, key):
+            return dict(workflow_runs=runs, artifacts=[dict(
+                name='ci-inputs-'+WORKFLOW+'-1', expired=False)], jobs=[dict(steps=[dict(
+                name='Publish successful inputs', conclusion='success')])])[key]
+        def execute(args, **kwargs):
+            if args[0] == 'gh':
+                value = failed if args[3] == '2' else passed
+                (Path(args[-1]) / 'inputs.json').write_text(json.dumps(value))
+        with patch.object(ci_receipts.subprocess, 'run', side_effect=execute):
+            receipts = list(ci_receipts.previous(REPO, 12, WORKFLOW, 'fix/example', 'main', items, 'head'))
+        self.assertEqual([r['run'] for r in receipts], [2, 1])
+        _, reused = changes.reuse_inputs(REPO, 12, WORKFLOW, 'fix/example', {},
+                                         passed['job_inputs'], receipts=receipts)
+        self.assertEqual(reused, {})
 
 
 if __name__ == '__main__':

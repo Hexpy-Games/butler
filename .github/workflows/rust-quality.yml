@@ -14,7 +14,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ${{ startsWith(github.ref, 'refs/heads/release/') && format('integration-{0}', github.ref) || format('rust-quality-{0}', github.head_ref || github.ref_name) }}
+  group: ${{ github.event_name == 'workflow_dispatch' && format('rust-quality-dispatch-{0}', github.run_id) || startsWith(github.ref, 'refs/heads/release/') && format('integration-{0}', github.ref) || format('rust-quality-{0}', github.head_ref || github.ref_name) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/release/') }}
 
 env:
@@ -426,7 +426,7 @@ jobs:
           python3 .github/scripts/isolated.py "$lint_dir/actionlint" -shellcheck= -pyflakes=
 
   gate:
-    name: gate
+    name: ${{ github.event_name == 'workflow_dispatch' && 'dispatch gate' || 'gate' }}
     if: always()
     needs: [changes, lint, windows-check, shellcheck, selftest, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
     runs-on: ubuntu-latest
