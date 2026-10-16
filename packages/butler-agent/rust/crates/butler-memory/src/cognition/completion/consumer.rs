@@ -69,7 +69,7 @@ pub struct MemorySyncConsumer {
     catchup_progress: Arc<Mutex<Option<(PathBuf, crate::cognition::graph::CatchupState)>>>,
     probe: Arc<probe::ProbeReader>,
     vector_batch: Arc<AtomicBool>,
-    inventory_due: Arc<AtomicBool>,
+    inventory: Arc<inventory::InventoryWake>,
 }
 
 impl MemorySyncConsumer {
@@ -110,7 +110,7 @@ impl MemorySyncConsumer {
             catchup_progress: Arc::new(Mutex::new(None)),
             probe: Arc::new(probe::ProbeReader::default()),
             vector_batch: Arc::new(AtomicBool::new(false)),
-            inventory_due: Arc::new(AtomicBool::new(true)),
+            inventory: Arc::new(inventory::InventoryWake::started()),
         }
     }
 
@@ -199,7 +199,7 @@ impl MemorySyncConsumer {
             catchup_at: self.catchup_at.clone(),
             unclean_start: self.unclean_start.clone(),
             catchup_progress: self.catchup_progress.clone(),
-            inventory_due: self.inventory_due.clone(),
+            inventory: self.inventory.clone(),
             probe: self.probe.clone(),
             vector_batch: self.vector_batch.clone(),
             daily_batch,
@@ -267,7 +267,7 @@ impl MemorySyncConsumer {
             catchup_at: self.catchup_at.clone(),
             unclean_start: self.unclean_start.clone(),
             catchup_progress: self.catchup_progress.clone(),
-            inventory_due: self.inventory_due.clone(),
+            inventory: self.inventory.clone(),
             probe: self.probe.clone(),
             vector_batch: self.vector_batch.clone(),
             daily_batch: false,

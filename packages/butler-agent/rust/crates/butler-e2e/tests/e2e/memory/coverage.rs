@@ -1,9 +1,11 @@
 //! MEM-COVERAGE: recall's projection coverage read from the graph's canonical
 //! inventory mirror equals a full canonical scan after every kind of source
-//! mutation: appended and regenerated turns, recovered messages, compacted
-//! messages, project moves, deleted sessions and turns; while changes are
-//! only in the store (overlay) and after the mirror applied them (rows), and
-//! for an existing store whose mirror has never been built.
+//! mutation: appended and regenerated turns, recovered messages (added and
+//! attached to a turn), compacted and edited messages, turn status changes,
+//! deleted outcomes, turns and sessions (soft and hard), project moves;
+//! while changes are only in the store (overlay) and after the mirror
+//! applied them (rows), and for an existing store whose mirror was never
+//! built.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -17,49 +19,76 @@ use super::coverage_support::{
     release_gate, settle, start,
 };
 use butler_e2e::e2e::HarnessError;
+use butler_e2e::e2e::scenario::Scenario;
 use serde_json::json;
+use std::path::Path;
 
 const S1: &str = "coverage-s1";
 const S2: &str = "coverage-s2";
 const S3: &str = "coverage-s3";
 /// Keeps the first project selectable after the other sessions leave it.
 const S4: &str = "coverage-s4";
+/// The recovered message's chat.
+const S5: &str = "coverage-s5";
+/// A first-project chat that is hard-deleted.
+const S6: &str = "coverage-s6";
 const P1: &str = "coverage-p1";
 const P2: &str = "coverage-p2";
 const MARCH: &str = "2026-03-10T00:00:00.000Z";
 
+/// Pending ingestion per variant: both seeded chats, the first project,
+/// unassigned seeded chats, March, every chat, the recovered chat.
+///
+/// "Every chat" is always pending: it includes the recall chats, whose own
+/// turns are not projected while the gate is held. The recovered chat stays
+/// pending once its message is registered: that job never completes on main
+/// (it is rebuilt with the episode revision as the parts hash), so the
+/// registered-job check keeps reporting it.
+type Pending = [bool; 6];
+
 fn variants() -> Vec<Variant> {
+    let variant = |prompt, arguments| Variant { prompt, arguments };
+    let off = false;
     vec![
-        Variant {
-            prompt: "Coverage recall over both seeded chats.",
-            arguments: json!({"cue":"seeded","session_ids":[S1,S2],"include_vector":false}),
-        },
-        Variant {
-            prompt: "Coverage recall over the first project.",
-            arguments: json!({"cue":"seeded","project_filter":"selected","project_ids":[P1],"include_vector":false}),
-        },
-        Variant {
-            prompt: "Coverage recall over unassigned seeded chats.",
-            arguments: json!({"cue":"seeded","project_filter":"unassigned","session_ids":[S1,S2],"include_vector":false}),
-        },
-        Variant {
-            prompt: "Coverage recall over March conversations.",
-            arguments: json!({"cue":"seeded","session_ids":[S1,S2],"include_vector":false,
-                "time":{"basis":"conversation","from":"2026-03-01T00:00:00.000Z","to":"2026-04-01T00:00:00.000Z"}}),
-        },
-        Variant {
-            prompt: "Coverage recall over every chat.",
-            arguments: json!({"cue":"seeded","scope":"all_user_sessions","include_vector":false}),
-        },
+        variant(
+            "Coverage recall over both seeded chats.",
+            json!({"cue":"seeded","session_ids":[S1,S2],"include_vector":off}),
+        ),
+        variant(
+            "Coverage recall over the first project.",
+            json!({"cue":"seeded","project_filter":"selected","project_ids":[P1],"include_vector":off}),
+        ),
+        variant(
+            "Coverage recall over unassigned seeded chats.",
+            json!({"cue":"seeded","project_filter":"unassigned","session_ids":[S1,S2],"include_vector":off}),
+        ),
+        variant(
+            "Coverage recall over March conversations.",
+            json!({"cue":"seeded","session_ids":[S1,S2],"include_vector":off,
+            "time":{"basis":"conversation","from":"2026-03-01T00:00:00.000Z","to":"2026-04-01T00:00:00.000Z"}}),
+        ),
+        variant(
+            "Coverage recall over every chat.",
+            json!({"cue":"seeded","scope":"all_user_sessions","include_vector":off}),
+        ),
+        variant(
+            "Coverage recall over the recovered chat.",
+            json!({"cue":"seeded","session_ids":[S5],"include_vector":off}),
+        ),
     ]
 }
 
-fn seed(data: &std::path::Path) {
+fn seed(data: &Path) {
     let db = canonical(data);
-    session(&db, S1, Some(P1));
-    session(&db, S2, None);
-    session(&db, S3, Some(P1));
-    session(&db, S4, Some(P1));
+    for (id, project) in [
+        (S1, Some(P1)),
+        (S2, None),
+        (S3, Some(P1)),
+        (S4, Some(P1)),
+        (S5, None),
+    ] {
+        session(&db, id, project);
+    }
     for n in 1..=4 {
         let one = format!("seeded fact {n} in one");
         turn(&db, S1, n, &one, "2026-02-10T00:00:00.000Z");
@@ -72,6 +101,122 @@ fn seed(data: &std::path::Path) {
         "seeded fact in three",
         "2026-02-11T00:00:00.000Z",
     );
+    turn(
+        &db,
+        S5,
+        1,
+        "seeded fact in five",
+        "2026-02-11T00:00:00.000Z",
+    );
+}
+
+/// Mutates the store with `change`, then asserts both readings agree and
+/// report `expected`.
+async fn step(
+    s: &Scenario,
+    chats: &[String],
+    name: &str,
+    expected: Pending,
+    change: impl FnOnce(&rusqlite::Connection),
+) -> Result<(), HarnessError> {
+    change(&canonical(&s.sandbox.data));
+    let pending = compare(s, &variants(), chats, name).await?;
+    assert_eq!(pending, expected, "{name}");
+    Ok(())
+}
+
+fn execute(db: &rusqlite::Connection, sql: &str, id: &str) {
+    db.execute(sql, [id]).unwrap();
+}
+
+/// Appends, regenerates, moves, compacts and recovers while the mirror is
+/// held behind.
+async fn first_changes(s: &Scenario, chats: &[String]) -> Result<(), HarnessError> {
+    let t = true;
+    let f = false;
+    step(s, chats, "appended", [t, t, f, t, t, f], |db| {
+        turn(
+            db,
+            S1,
+            5,
+            "seeded fact appended",
+            "2026-03-12T00:00:00.000Z",
+        );
+    })
+    .await?;
+    step(s, chats, "regenerated_moved", [t, f, t, t, t, f], |db| {
+        regenerate(db, S2, 1, "seeded fact 1 in two, answered again", MARCH);
+        db.execute(
+            "UPDATE conversation_sessions SET project_id=?1 WHERE id=?2",
+            [P2, S1],
+        )
+        .unwrap();
+    })
+    .await?;
+    step(s, chats, "compacted_recovered", [t, f, f, t, t, t], |db| {
+        let answer = format!("{S2}-turn-1-assistant-2");
+        execute(
+            db,
+            "UPDATE conversation_messages SET status='compacted' WHERE id=?1",
+            &answer,
+        );
+        recovered(
+            db,
+            S5,
+            10,
+            "seeded recovered fact",
+            "2026-02-12T00:00:00.000Z",
+        );
+    })
+    .await
+}
+
+/// Edits, status changes, outcome and session deletes and a recovered
+/// message gaining a turn, while the mirror is held behind.
+async fn second_changes(s: &Scenario, chats: &[String]) -> Result<(), HarnessError> {
+    let (t, f) = (true, false);
+    let part = "UPDATE conversation_parts SET content_json='{\"text\":\"seeded fact 2 in two, edited\"}' WHERE message_id=?1";
+    step(s, chats, "part_edited", [t, f, t, t, t, t], |db| {
+        execute(db, part, &format!("{S2}-turn-2-assistant"));
+    })
+    .await?;
+    step(s, chats, "status_changed", [f, f, f, f, t, t], |db| {
+        execute(
+            db,
+            "UPDATE conversation_turns SET status='running' WHERE id=?1",
+            &format!("{S2}-turn-2"),
+        );
+    })
+    .await?;
+    step(s, chats, "p1_appended", [f, t, f, f, t, t], |db| {
+        turn(db, S4, 1, "seeded fact in four", "2026-02-20T00:00:00.000Z");
+    })
+    .await?;
+    step(s, chats, "outcome_deleted", [f, f, f, f, t, t], |db| {
+        execute(
+            db,
+            "DELETE FROM conversation_turn_outcomes WHERE turn_id=?1",
+            &format!("{S4}-turn-1"),
+        );
+    })
+    .await?;
+    step(s, chats, "session_appended", [f, t, f, f, t, t], |db| {
+        session(db, S6, Some(P1));
+        turn(db, S6, 1, "seeded fact in six", "2026-02-21T00:00:00.000Z");
+    })
+    .await?;
+    step(s, chats, "session_deleted", [f, f, f, f, t, t], |db| {
+        execute(db, "DELETE FROM conversation_sessions WHERE id=?1", S6);
+    })
+    .await?;
+    step(s, chats, "recovered_attached", [f, f, f, f, t, t], |db| {
+        db.execute(
+            "UPDATE conversation_messages SET turn_id=?1 WHERE id=?2",
+            [format!("{S5}-turn-1"), format!("{S5}-recovered-10")],
+        )
+        .unwrap();
+    })
+    .await
 }
 
 #[tokio::test]
@@ -83,7 +228,9 @@ async fn mem_coverage_mirror_matches_full_scan() -> Result<(), HarnessError> {
     s.turn("general", "Coverage recall over every chat.")
         .await?;
     seed(&data);
-    settle(&data, &[S1, S2, S3]).await;
+    let projected = [S1, S2, S3];
+    settle(&data, &[S1, S2, S3, S5]).await;
+    let (t, f) = (true, false);
 
     // Migration: an existing store whose mirror was never built.
     let gate = hold_gate(&data);
@@ -93,7 +240,7 @@ async fn mem_coverage_mirror_matches_full_scan() -> Result<(), HarnessError> {
     ).unwrap();
     let (first, _) = recall(&s, &variants()[0]).await?;
     release_gate(&gate);
-    settle(&data, &[S1, S2, S3]).await;
+    settle(&data, &projected).await;
     let gate = hold_gate(&data);
     let (rebuilt, _) = recall(&s, &variants()[0]).await?;
     assert_eq!(
@@ -101,91 +248,44 @@ async fn mem_coverage_mirror_matches_full_scan() -> Result<(), HarnessError> {
         coverage(&rebuilt),
         "recall before the mirror was built"
     );
-    let v = variants();
-    assert_eq!(compare(&s, &v, &chats, "settled").await?[..4], [false; 4]);
-
-    // Store-only changes: the mirror is behind, recall overlays the changes.
-    turn(
-        &canonical(&data),
-        S1,
-        5,
-        "seeded fact appended",
-        "2026-03-12T00:00:00.000Z",
-    );
-    assert_eq!(
-        compare(&s, &v, &chats, "appended").await?[..4],
-        [true, true, false, true]
-    );
-    {
-        let db = canonical(&data);
-        regenerate(&db, S2, 1, "seeded fact 1 in two, answered again", MARCH);
-        db.execute(
-            "UPDATE conversation_sessions SET project_id=?1 WHERE id=?2",
-            [P2, S1],
-        )
-        .unwrap();
-    }
-    assert_eq!(
-        compare(&s, &v, &chats, "regenerated_moved").await?[..4],
-        [true, false, true, true]
-    );
-    {
-        let db = canonical(&data);
-        db.execute(
-            "UPDATE conversation_messages SET status='compacted' WHERE id=?1",
-            [format!("{S2}-turn-1-assistant-2")],
-        )
-        .unwrap();
-        recovered(
-            &db,
-            S3,
-            10,
-            "seeded recovered fact",
-            "2026-02-12T00:00:00.000Z",
-        );
-    }
-    assert_eq!(
-        compare(&s, &v, &chats, "compacted_recovered").await?[..4],
-        [true, true, false, true]
-    );
+    step(&s, &chats, "settled", [f, f, f, f, t, f], |_| {}).await?;
+    first_changes(&s, &chats).await?;
     release_gate(&gate);
 
-    // The mirror applies the changes; catch-up registers and projection
-    // completes the new turn. The compacted turn is out. The recovered
-    // message never finishes projection (its job is rebuilt with the episode
-    // revision as the parts hash), so the first project is only compared.
-    settle(&data, &[S1, S2]).await;
+    // The mirror applies the changes; catch-up registers the new turn.
+    settle(&data, &projected).await;
     let gate = hold_gate(&data);
     eprintln!("MEM-COVERAGE incomplete jobs: {:?}", incomplete_jobs(&data));
-    let applied = compare(&s, &v, &chats, "applied").await?;
-    assert_eq!([applied[0], applied[2], applied[3]], [false; 3]);
-    {
-        let db = canonical(&data);
-        db.execute(
+    step(&s, &chats, "applied", [f, f, f, f, t, t], |_| {}).await?;
+    second_changes(&s, &chats).await?;
+    release_gate(&gate);
+    settle(&data, &projected).await;
+    let gate = hold_gate(&data);
+    step(&s, &chats, "second_applied", [f, f, f, f, t, t], |_| {}).await?;
+    step(&s, &chats, "deleted", [t, f, t, t, t, t], |db| {
+        execute(
+            db,
             "UPDATE conversation_sessions SET status='deleted' WHERE id=?1",
-            [S3],
-        )
-        .unwrap();
-        db.execute(
+            S3,
+        );
+        execute(
+            db,
             "DELETE FROM conversation_turns WHERE id=?1",
-            [format!("{S1}-turn-2")],
-        )
-        .unwrap();
+            &format!("{S1}-turn-2"),
+        );
         turn(
-            &db,
+            db,
             S2,
             9,
             "seeded fact after deletion",
             "2026-03-20T00:00:00.000Z",
         );
-    }
-    let deleted = compare(&s, &v, &chats, "deleted").await?;
-    assert_eq!([deleted[0], deleted[2], deleted[3]], [true; 3]);
+    })
+    .await?;
     release_gate(&gate);
-    settle(&data, &[S1, S2]).await;
+    settle(&data, &projected).await;
     let gate = hold_gate(&data);
-    let applied = compare(&s, &v, &chats, "deletion_applied").await?;
-    assert_eq!([applied[0], applied[2], applied[3]], [false; 3]);
+    step(&s, &chats, "deletion_applied", [f, f, f, f, t, t], |_| {}).await?;
     release_gate(&gate);
     s.finish().await
 }

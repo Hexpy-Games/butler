@@ -162,7 +162,7 @@ async fn setup(fixture: &Fixture) -> (Input, MemoryGenerationHandle) {
         catchup_at: Arc::default(),
         unclean_start: Arc::new(Default::default()),
         catchup_progress: Arc::default(),
-        inventory_due: Arc::new(true.into()),
+        inventory: Arc::default(),
         probe: Arc::default(),
         vector_batch: Arc::default(),
         daily_batch: false,

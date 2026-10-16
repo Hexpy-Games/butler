@@ -9,10 +9,13 @@
 //! written before its outcome are covered by the outcome's change. Rows are
 //! appended, never rewritten; every 4,096th change drops the changes more
 //! than 65,536 behind, so a reader whose watermark row is gone starts over.
+//! Each row carries a random token: a store restored from an older copy
+//! that logs the same entity at the same sequence again is still told apart.
 
 pub(super) const SQL: &str = r"
 CREATE TABLE IF NOT EXISTS conversation_source_changes (
-  seq INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, entity_id TEXT NOT NULL
+  seq INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, entity_id TEXT NOT NULL,
+  token TEXT NOT NULL DEFAULT (lower(hex(randomblob(8))))
 );
 CREATE TRIGGER IF NOT EXISTS conversation_source_changes_window
 AFTER INSERT ON conversation_source_changes WHEN NEW.seq % 4096 = 0 BEGIN

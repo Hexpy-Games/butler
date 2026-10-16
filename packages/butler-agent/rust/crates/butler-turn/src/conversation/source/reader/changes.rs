@@ -21,10 +21,26 @@ pub struct SourceChange {
     pub seq: u64,
     pub kind: SourceChangeKind,
     pub entity_id: String,
+    /// The row's random token.
+    pub token: String,
+}
+
+impl SourceChange {
+    /// The log position of this change.
+    pub fn mark(&self) -> SourceChangeMark {
+        let kind = match self.kind {
+            SourceChangeKind::Turn => "turn",
+            SourceChangeKind::Message => "message",
+        };
+        SourceChangeMark {
+            seq: self.seq,
+            key: format!("{kind}:{}:{}", self.entity_id, self.token),
+        }
+    }
 }
 
 /// A position in the change log: a sequence and the change logged there
-/// (`kind:entity_id`; empty at sequence 0, before any change).
+/// (`kind:entity_id:token`; empty at sequence 0, before any change).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceChangeMark {
     pub seq: u64,
@@ -45,7 +61,7 @@ pub(super) fn head(db: &Connection) -> ConversationResult<Option<SourceChangeMar
     }
     let latest = db
         .query_row(
-            "SELECT seq,kind||':'||entity_id FROM conversation_source_changes ORDER BY seq DESC LIMIT 1",
+            "SELECT seq,kind||':'||entity_id||':'||token FROM conversation_source_changes ORDER BY seq DESC LIMIT 1",
             [],
             |row| Ok(SourceChangeMark { seq: row.get(0)?, key: row.get(1)? }),
         )
@@ -70,7 +86,7 @@ pub(super) fn holds(db: &Connection, mark: &SourceChangeMark) -> ConversationRes
         )
     } else {
         db.query_row(
-            "SELECT EXISTS(SELECT 1 FROM conversation_source_changes WHERE seq=?1 AND kind||':'||entity_id=?2)",
+            "SELECT EXISTS(SELECT 1 FROM conversation_source_changes WHERE seq=?1 AND kind||':'||entity_id||':'||token=?2)",
             params![mark.seq, mark.key],
             |row| row.get(0),
         )
@@ -86,7 +102,7 @@ pub(super) fn after(
 ) -> ConversationResult<Vec<SourceChange>> {
     let mut statement = db
         .prepare(
-            "SELECT seq,kind,entity_id FROM conversation_source_changes WHERE seq>?1 ORDER BY seq LIMIT ?2",
+            "SELECT seq,kind,entity_id,token FROM conversation_source_changes WHERE seq>?1 ORDER BY seq LIMIT ?2",
         )
         .map_err(ConversationError::sqlite)?;
     let rows = statement
@@ -97,13 +113,14 @@ pub(super) fn after(
                     row.get::<_, u64>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
                 ))
             },
         )
         .map_err(ConversationError::sqlite)?;
     let mut changes = Vec::new();
     for row in rows {
-        let (seq, kind, entity_id) = row.map_err(ConversationError::sqlite)?;
+        let (seq, kind, entity_id, token) = row.map_err(ConversationError::sqlite)?;
         let kind = match kind.as_str() {
             "turn" => SourceChangeKind::Turn,
             "message" => SourceChangeKind::Message,
@@ -118,6 +135,7 @@ pub(super) fn after(
             seq,
             kind,
             entity_id,
+            token,
         });
     }
     Ok(changes)

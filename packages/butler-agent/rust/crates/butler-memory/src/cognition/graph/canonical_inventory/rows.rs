@@ -3,7 +3,9 @@
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params, params_from_iter};
 
 use super::{COVERED, db_error};
-use crate::cognition::sources::{CandidateKind, EligibleSource, InventoryCandidate, SourceFault};
+use crate::cognition::sources::{
+    CandidateKind, EligibleSource, FaultScope, InventoryCandidate, SourceFault,
+};
 use crate::cognition::{CognitionCode, CognitionError, CognitionResult};
 
 /// Which uncovered rows a recall reads.
@@ -41,12 +43,12 @@ pub(super) fn visit_uncovered(
     mut visit: impl FnMut(InventoryCandidate) -> CognitionResult<bool>,
 ) -> CognitionResult<()> {
     let mut sql = String::from(
-        "SELECT kind,entity_id,session_id,request_message_id,assistant_message_id,episode_id,revision,created_at_json,fault,fault_every_recall \
+        "SELECT kind,entity_id,session_id,request_message_id,assistant_message_id,episode_id,revision,created_at_json,fault,fault_scope \
          FROM memory_canonical_inventory WHERE eligible=1 AND covered=0",
     );
     if let Some(sessions) = uncovered.sessions {
         sql.push_str(&format!(
-            " AND (session_id IN ({}) OR fault_every_recall=1)",
+            " AND (session_id IN ({}) OR fault_scope='every_recall')",
             vec!["?"; sessions.len()].join(",")
         ));
     }
@@ -72,7 +74,11 @@ fn candidate(row: &Row<'_>) -> CognitionResult<InventoryCandidate> {
         .map(|message| -> CognitionResult<SourceFault> {
             Ok(SourceFault {
                 message,
-                every_recall: row.get(9).map_err(db_error)?,
+                scope: scope_from(
+                    row.get::<_, Option<String>>(9)
+                        .map_err(db_error)?
+                        .as_deref(),
+                )?,
             })
         })
         .transpose()?;
@@ -105,11 +111,11 @@ pub(super) fn upsert(tx: &Transaction<'_>, candidate: &InventoryCandidate) -> Co
     let created_at = serde_json::to_string(&eligible.map_or(&[][..], |e| &e.created_at[..]))
         .map_err(format_error)?;
     tx.execute(
-        "INSERT INTO memory_canonical_inventory(source_key,kind,entity_id,session_id,request_message_id,assistant_message_id,eligible,episode_id,revision,created_at_json,fault,fault_every_recall) \
+        "INSERT INTO memory_canonical_inventory(source_key,kind,entity_id,session_id,request_message_id,assistant_message_id,eligible,episode_id,revision,created_at_json,fault,fault_scope) \
          VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12) ON CONFLICT(source_key) DO UPDATE SET kind=excluded.kind,entity_id=excluded.entity_id,\
          session_id=excluded.session_id,request_message_id=excluded.request_message_id,assistant_message_id=excluded.assistant_message_id,\
          eligible=excluded.eligible,episode_id=excluded.episode_id,revision=excluded.revision,created_at_json=excluded.created_at_json,\
-         fault=excluded.fault,fault_every_recall=excluded.fault_every_recall",
+         fault=excluded.fault,fault_scope=excluded.fault_scope",
         params![
             key,
             kind_name(candidate.kind),
@@ -122,7 +128,7 @@ pub(super) fn upsert(tx: &Transaction<'_>, candidate: &InventoryCandidate) -> Co
             eligible.and_then(|e| e.revision.as_ref()),
             created_at,
             candidate.fault.as_ref().map(|fault| &fault.message),
-            candidate.fault.as_ref().is_some_and(|fault| fault.every_recall),
+            candidate.fault.as_ref().map(|fault| scope_name(fault.scope)),
         ],
     )
     .map_err(db_error)?;
@@ -146,6 +152,26 @@ pub(super) fn referencing(db: &Connection, message_id: &str) -> CognitionResult<
         .map_err(db_error)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(db_error)
+}
+
+fn scope_name(scope: FaultScope) -> &'static str {
+    match scope {
+        FaultScope::EveryRecall => "every_recall",
+        FaultScope::AdmittedSession => "admitted_session",
+        FaultScope::AdmittedInTime => "admitted_in_time",
+    }
+}
+
+fn scope_from(value: Option<&str>) -> CognitionResult<FaultScope> {
+    match value {
+        Some("every_recall") => Ok(FaultScope::EveryRecall),
+        Some("admitted_session") => Ok(FaultScope::AdmittedSession),
+        Some("admitted_in_time") => Ok(FaultScope::AdmittedInTime),
+        _ => Err(CognitionError::new(
+            CognitionCode::MemoryGraphUnavailable,
+            "canonical_inventory_fault_scope_invalid",
+        )),
+    }
 }
 
 fn kind_name(kind: CandidateKind) -> &'static str {

@@ -112,12 +112,14 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     let root = input.environment.memory_root(&input.data_root);
     let mut processed = false;
     let mut queued = false;
+    let mut head = None;
     let mut queue_error = None;
     let queue_root = root.clone();
     match super::blocking::run(move || super::super::queue::peek(&queue_root)).await {
         Ok(Some(entry)) => {
             queued = true;
             let request: SyncRequest = crate::lenient::view(&entry);
+            head = request.job_id.valid().cloned();
             match process_entry(&input, &root, &request).await {
                 Ok(did_process) => processed = did_process,
                 Err(error) => queue_error = Some(error),
@@ -131,10 +133,8 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     // itself must invalidate the interval before the consumer can park again.
     if queued {
         input.catchup_at.lock().take();
-        input
-            .inventory_due
-            .store(true, std::sync::atomic::Ordering::Release);
     }
+    input.inventory.queue_head(head.as_deref(), processed);
     // The inventory mirror is independent of the queue and catch-up; their
     // failures must not keep it behind.
     let indexing = inventory::run(&input).await;
@@ -152,13 +152,15 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
         return Err(error);
     }
     let projected = projection::process(&input).await?;
-    Ok(if processed || caught_up || indexing || projected {
-        MemorySyncPoll::Processed
-    } else if queued {
-        MemorySyncPoll::Deferred
-    } else {
-        MemorySyncPoll::Idle
-    })
+    Ok(
+        if processed || caught_up || indexing == inventory::Step::More || projected {
+            MemorySyncPoll::Processed
+        } else if queued || indexing == inventory::Step::Busy {
+            MemorySyncPoll::Deferred
+        } else {
+            MemorySyncPoll::Idle
+        },
+    )
 }
 
 /// Registers the conversation turn a v3 request names once its completion

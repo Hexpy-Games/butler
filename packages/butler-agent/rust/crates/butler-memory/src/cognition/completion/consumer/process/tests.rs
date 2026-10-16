@@ -265,7 +265,7 @@ async fn malformed_queue_head_keeps_its_error_after_canonical_catchup() {
         catchup_at: Arc::new(parking_lot::Mutex::new(None::<Instant>)),
         unclean_start: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         catchup_progress: Arc::new(parking_lot::Mutex::new(None)),
-        inventory_due: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        inventory: Arc::new(super::super::inventory::InventoryWake::started()),
         probe: Arc::default(),
         vector_batch: Arc::default(),
         daily_batch: false,

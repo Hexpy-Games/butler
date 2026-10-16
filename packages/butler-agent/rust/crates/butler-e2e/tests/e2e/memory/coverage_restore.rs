@@ -9,12 +9,13 @@
     reason = "test assertions"
 )]
 
-use super::coverage_seed::{back_up, restore, session, turn, unreadable_turn};
+use super::coverage_seed::{back_up, churn, restore, session, turn, unreadable_turn};
 use super::coverage_support::{
     Variant, canonical, canonical_path, canonical_position, chats, compare, graph, hold_gate,
     mirror_settled, release_gate, settle, start,
 };
 use butler_e2e::e2e::HarnessError;
+use butler_e2e::e2e::scenario::Scenario;
 use serde_json::json;
 
 const KEPT: &str = "restore-kept";
@@ -42,6 +43,33 @@ fn mirror_mark(data: &std::path::Path) -> (i64, String) {
             |row| Ok((row.get::<_, String>(0)?.parse().unwrap(), row.get(1)?)),
         )
         .unwrap()
+}
+
+/// The mirror falls more than the log's window of 65,536 changes behind:
+/// its watermark row is pruned, so recall scans the store and the mirror
+/// rebuilds.
+async fn fall_behind_the_log(s: &Scenario, chats: &[String]) -> Result<(), HarnessError> {
+    let data = &s.sandbox.data;
+    mirror_settled(data).await;
+    let (behind, _) = mirror_mark(data);
+    let gate = hold_gate(data);
+    churn(&canonical(data), KEPT, &format!("{KEPT}-turn-1"), 70_000);
+    let kept: bool = canonical(data)
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM conversation_source_changes WHERE seq=?1)",
+            [behind],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(!kept, "the log still holds the mirror's watermark");
+    compare(s, &variants(), chats, "pruned").await?;
+    release_gate(&gate);
+    mirror_settled(data).await;
+    assert!(
+        mirror_mark(data).0 > behind + 65_536,
+        "the mirror did not catch up"
+    );
+    Ok(())
 }
 
 #[tokio::test]
@@ -114,6 +142,8 @@ async fn mem_coverage_restore_and_unreadable_sources() -> Result<(), HarnessErro
         lost, 0,
         "the rebuilt mirror still holds turns the restore removed"
     );
+
+    fall_behind_the_log(&s, &chats).await?;
 
     // An unreadable turn in a deleted chat: the full scan never reads it,
     // and the mirror keeps it as a fault row instead of stopping.

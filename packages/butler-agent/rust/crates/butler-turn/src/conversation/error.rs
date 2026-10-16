@@ -119,6 +119,30 @@ impl ConversationError {
         }
     }
 
+    /// The stored data itself cannot be read (malformed JSON, an invalid
+    /// stored value or column type), as opposed to the store failing to
+    /// read it (busy, I/O, memory), which may succeed on a retry.
+    pub fn is_unreadable_data(&self) -> bool {
+        match self {
+            Self::Json { .. } => true,
+            Self::Detected { code, .. } => matches!(
+                code,
+                ConversationCode::ConversationValueInvalid
+                    | ConversationCode::ConversationRoleInvalid
+                    | ConversationCode::ConversationOriginInvalid
+                    | ConversationCode::ConversationProvenanceInvalid
+            ),
+            Self::Sqlite { source } => matches!(
+                **source,
+                rusqlite::Error::FromSqlConversionFailure(..)
+                    | rusqlite::Error::InvalidColumnType(..)
+                    | rusqlite::Error::IntegralValueOutOfRange(..)
+                    | rusqlite::Error::Utf8Error(..)
+            ),
+            Self::Port { .. } | Self::Failed { .. } => false,
+        }
+    }
+
     pub(crate) fn sqlite(error: rusqlite::Error) -> Self {
         Self::Sqlite {
             source: Arc::new(error),
