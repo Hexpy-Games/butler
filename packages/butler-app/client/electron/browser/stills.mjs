@@ -3,23 +3,28 @@ import { maskSecure } from "./capture.mjs";
 /** Bounded desktop timeline still; never attached to model context. After a
  * saved card or profile fill, the filled fields are masked like a screenshot. */
 export async function stepStill(tab) {
+  if (tab.dialog) return undefined;
   if (tab.stills === false || !tab.view || tab.view.webContents.isDestroyed()) { tab.afterCapture?.(); return undefined; }
   const contents = tab.view.webContents;
   let current = true, cancel;
   const ended = new Promise(resolve => { cancel = () => { current = false; resolve(undefined); }; });
   const navigate = details => { if (details.isMainFrame && !details.isSameDocument) cancel(); };
+  const dialog = (_event, method) => { if (method === "Page.javascriptDialogOpening") cancel(); };
   contents.on("did-start-navigation", navigate);
   contents.on("render-process-gone", cancel);
   contents.on("destroyed", cancel);
+  contents.debugger.on("message", dialog);
   try {
     // A renderer promise or compositor readback can outlive its document.
     // Navigation ends that capture; the next observation owns the new page.
+    // A native dialog pauses renderer scripts; fence paint without blocking approval.
     return await Promise.race([captureStill(tab, contents, () => current), ended]);
   } finally {
     current = false;
     contents.removeListener("did-start-navigation", navigate);
     contents.removeListener("render-process-gone", cancel);
     contents.removeListener("destroyed", cancel);
+    contents.debugger.removeListener("message", dialog);
   }
 }
 
