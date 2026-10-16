@@ -61,20 +61,42 @@ class SnapshotPolicy(unittest.TestCase):
                 self.assertIn(field, summary)
 
     # test-category: pure-logic
-    def test_free_floor_skips_restore_and_publish_without_remote_calls(self):
-        expected = dict(platform='windows-x64', kind='native', profile='ci-fast')
+    def test_free_floor_skips_all_restores_and_nonrelease_publish_without_remote_calls(self):
         with tempfile.TemporaryDirectory() as temporary, \
                 patch.dict(os.environ, RUNNER_TEMP=temporary, BUTLER_PERSISTENT_TARGET=temporary, GITHUB_RUN_ID='42'), \
                 patch.object(snapshots.runner_cache, 'has_space', return_value=False), \
                 patch.object(snapshots, 'persistent_target', return_value=Path(temporary)), \
                 patch.object(snapshots, 'restore_local', return_value=False), \
                 patch.object(snapshots, 'release') as remote, \
-                patch.object(snapshots.cache, 'identity', return_value=expected), \
                 patch.object(snapshots.cache, 'record') as record:
-            self.assertFalse(snapshots.restore(expected))
-            snapshots.publish_lane('windows-x64', 'static-ort', 'native')
+            for profile in ('ci-fast', 'debug', 'release'):
+                with self.subTest(profile=profile):
+                    expected = dict(platform='windows-x64', kind='native', profile=profile)
+                    self.assertFalse(snapshots.restore(expected))
+                    if profile != 'release':
+                        with patch.object(snapshots.cache, 'identity', return_value=expected):
+                            snapshots.publish_lane('windows-x64', 'static-ort', 'native')
             remote.assert_not_called()
             record.assert_not_called()
+
+    # test-category: pure-logic
+    def test_release_publishes_below_free_floor_even_with_a_fresh_snapshot(self):
+        expected = dict(platform='windows-x64', mode='static-ort', kind='native', profile='release')
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.dict(os.environ, RUNNER_TEMP=temporary, BUTLER_PERSISTENT_TARGET=temporary, GITHUB_RUN_ID='42'), \
+                patch.object(snapshots.runner_cache, 'has_space', return_value=False), \
+                patch.object(snapshots.cache, 'identity', return_value=expected), \
+                patch.object(snapshots, 'release') as remote, \
+                patch.object(snapshots.policy, 'stale', return_value=False), \
+                patch.object(snapshots.cache, 'record') as record, \
+                patch.object(snapshots, 'publish') as publish, \
+                patch.object(snapshots.policy, 'report') as report:
+            snapshots.publish_lane('windows-x64', 'static-ort', 'native')
+            remote.assert_not_called()
+            record.assert_called_once()
+            self.assertEqual(record.call_args.args[1], expected)
+            publish.assert_called_once_with(record.call_args.args[0], '42')
+            self.assertEqual(report.call_args.args[-1], 'published')
 
     # test-category: pure-logic
     def test_prune_retires_keys_after_fourteen_days_without_a_new_generation(self):

@@ -38,7 +38,21 @@ class WindowsSnapshotLanes(unittest.TestCase):
         workflow = (ROOT / '.github/workflows/rust-windows-check.yml').read_text()
         self.assertIn('artifact-cache-kind: clippy', workflow)
         self.assertIn('snapshot-target: x86_64-pc-windows-msvc', workflow)
-        self.assertIn('packages: write', workflow)
+        defaults, jobs = workflow.split('jobs:', 1)
+        self.assertIn('packages: read', defaults)
+        self.assertNotIn('packages: write', defaults)
+        check, main = jobs.split('  check-main:', 1)
+        self.assertIn("if: github.event_name != 'push' || github.ref != 'refs/heads/main'", check)
+        self.assertNotIn('packages: write', check)
+        self.assertIn("if: github.event_name == 'push' && github.ref == 'refs/heads/main'", main)
+        self.assertIn('packages: write', main)
+        for key in ('outputs', 'defaults', 'steps'):
+            self.assertIn(f'{key}: &check-{key}', check)
+            self.assertIn(f'{key}: *check-{key}', main)
+        for job in (check, main):
+            self.assertIn('name: Windows Clippy check (x86_64-pc-windows-msvc)', job)
+            self.assertIn('runs-on: windows-latest', job)
+            self.assertIn('timeout-minutes: 60', job)
         publish = workflow.split('      - name: Publish hosted Windows clippy snapshot', 1)[1].split('      - name: Summarize', 1)[0]
         self.assertIn("if: github.event_name == 'push' && github.ref == 'refs/heads/main'", publish)
         self.assertIn('kind: clippy', publish)

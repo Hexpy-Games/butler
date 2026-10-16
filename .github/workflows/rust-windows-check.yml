@@ -4,19 +4,21 @@ on:
 permissions:
   contents: read
   actions: read
-  packages: write
+  packages: read
 jobs:
+  # Permissions cannot use expressions. Only one job runs, sharing identical steps.
   check:
+    if: github.event_name != 'push' || github.ref != 'refs/heads/main'
     name: Windows Clippy check (x86_64-pc-windows-msvc)
-    outputs:
+    outputs: &check-outputs
       compile: ${{ steps.check.outcome }}
     runs-on: windows-latest
     timeout-minutes: 60
-    defaults:
+    defaults: &check-defaults
       run:
         shell: bash
         working-directory: packages/butler-agent/rust
-    steps:
+    steps: &check-steps
       - name: Check out repository
         uses: actions/checkout@v4
       - name: Set up Rust and protoc
@@ -79,3 +81,16 @@ jobs:
                   print(f"\n| Errors | By {title} |\n| ---: | --- |")
                   print("\n".join(f"| {count} | `{name}` |" for name, count in counter.most_common(limit)))
           PY
+
+  check-main:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: Windows Clippy check (x86_64-pc-windows-msvc)
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    outputs: *check-outputs
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults: *check-defaults
+    steps: *check-steps

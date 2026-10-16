@@ -462,7 +462,9 @@ def publish_lane(platform, mode, kind, authenticate=False):
     try:
         expected = cache.identity(platform, mode, kind)
         key = compatible_tag(expected)
-        if os.environ.get('BUTLER_PERSISTENT_TARGET') and not runner_cache.has_space(os.environ['BUTLER_PERSISTENT_TARGET']):
+        # Publishing needs one compressed copy; release snapshots always publish.
+        if (expected.get('profile') != 'release' and os.environ.get('BUTLER_PERSISTENT_TARGET')
+                and not runner_cache.has_space(os.environ['BUTLER_PERSISTENT_TARGET'])):
             outcome = 'skipped: free-disk floor'
             return
         if authenticate:
