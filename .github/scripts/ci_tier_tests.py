@@ -22,7 +22,7 @@ def selection(paths, event='pull_request', workflow='rust-quality.yml', labels=(
                    GITHUB_REPOSITORY='owner/repo', GITHUB_RUN_ID='2',
                    GITHUB_OUTPUT=directory + '/output', GITHUB_STEP_SUMMARY=directory + '/summary')
         payload = {'pull_request': {'number': 1, 'base': {'sha': 'base'},
-                                   'labels': [{'name': label} for label in labels]}} if event == 'pull_request' else {'before': 'base'}
+                                   'labels': [{'name': label} for label in labels]}} if event == 'pull_request' else ({} if event == 'workflow_dispatch' else {'before': 'base'})
         with patch.dict(os.environ, env), patch.object(changes, 'command', return_value='head'), \
              patch.object(changes, 'changed', return_value=paths), \
              patch.object(changes, 'previous', return_value=iter([])), \
@@ -54,6 +54,46 @@ class ApprovedTiers(unittest.TestCase):
                 self.assertEqual(run.returncode, 0, run.stderr)
         outputs = dict.fromkeys(changes.GROUPS, 'true') | {'tier': 'integration'}
         self.assertTrue(all(changes.rust_jobs(outputs, 'push').values()))
+
+
+    # test-category: pure-logic
+    def test_windows_destinations_use_selected_jobs_and_hosted_clippy(self):
+        workflow = 'windows-preview-smoke.yml'
+        rust = 'packages/butler-agent/rust/crates/butler-core/src/lib.rs'
+        windows = 'packages/butler-agent/rust/crates/butler-platform/src/process.rs'
+        for event, paths, labels, native in [
+            ('pull_request', [rust], (), False),
+            ('pull_request', [windows], (), True),
+            ('pull_request', ['packages/butler-agent/rust/crates/butler-core/src/windows/native.rs'], (), True),
+            ('pull_request', [rust], ('ci:windows-native',), True),
+            ('push', [rust], (), True), ('push', ['README.md'], (), False),
+            ('workflow_dispatch', [], (), True),
+        ]:
+            output = selection(paths, event, workflow, labels)
+            jobs = json.loads(output['jobs'])
+            self.assertEqual(jobs, dict(build=False, release=False, stub=native, hosted=native))
+            results = {'changes': {'result': 'success', 'outputs': output}}
+            results.update({name: {'result': 'success' if enabled else 'skipped'} for name, enabled in jobs.items()})
+            env = dict(os.environ, RESULTS=json.dumps(results), CHECK_GROUPS=json.dumps(dict.fromkeys(jobs, 'jobs')))
+            run = subprocess.run(['python3', str(ROOT / 'ci-check-selected.py')], env=env, capture_output=True, text=True)
+            self.assertEqual(run.returncode, 0, run.stderr)
+        integration = dict(package='true', windows='true', tier='integration')
+        self.assertTrue(all(changes.windows_preview_jobs(integration, 'push').values()))
+        source = (ROOT.parent / 'workflows' / workflow).read_text()
+        trigger = source.split('  pull_request:\n')[1].split('  push:')[0]
+        self.assertEqual(set(re.findall(r"- '([^']+)'", trigger)), set(changes.WINDOWS))
+        self.assertIn('branches: [main,', source)
+        self.assertIn('gh workflow run windows-preview-smoke.yml --ref <head-branch>', source)
+        # Every required context remains in an unfiltered PR workflow.
+        required = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
+        self.assertIn('  pull_request:\n', required)
+        self.assertNotIn('paths:', required.split('  pull_request:')[1].split('  workflow_dispatch:')[0])
+        self.assertIn('post-merge-ci gate', required)
+        clippy = (ROOT.parent / 'workflows/rust-windows-check.yml').read_text()
+        self.assertIn('runs-on: windows-latest', clippy)
+        self.assertIn('cargo clippy --workspace --all-targets', clippy)
+        self.assertIn('-- -D warnings', clippy)
+        self.assertTrue(json.loads(selection([rust])['jobs'])['windows-check'])
 
 
 class Precision(unittest.TestCase):

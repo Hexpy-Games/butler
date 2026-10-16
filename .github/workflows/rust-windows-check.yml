@@ -1,4 +1,4 @@
-name: Windows compile check
+name: Windows Clippy check
 on:
   workflow_call:
 permissions:
@@ -6,7 +6,7 @@ permissions:
   actions: read
 jobs:
   check:
-    name: Windows compile check (x86_64-pc-windows-msvc)
+    name: Windows Clippy check (x86_64-pc-windows-msvc)
     outputs:
       compile: ${{ steps.check.outcome }}
     runs-on: windows-latest
@@ -23,7 +23,7 @@ jobs:
         with:
           native-deps: prebuilt-ort
           cache-key: windows-check
-      - name: Check the workspace
+      - name: Lint the workspace
         id: check
         run: |
           set -o pipefail
@@ -31,8 +31,8 @@ jobs:
           linker="${VCToolsInstallDir}bin\\HostX64\\x64\\link.exe"
           test -f "$linker" || { echo "MSVC link.exe not found at $linker" >&2; exit 1; }
           export CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER="$linker"
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo check --workspace --locked --keep-going --target x86_64-pc-windows-msvc \
-            --message-format short 2>&1 | tee "$RUNNER_TEMP/windows-check.log"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going --target x86_64-pc-windows-msvc \
+            --message-format short -- -D warnings 2>&1 | tee "$RUNNER_TEMP/windows-check.log"
       - name: Summarize
         if: always()
         env:

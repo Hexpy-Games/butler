@@ -41,12 +41,15 @@ SIGNING = ('deploy/macos*', 'packages/butler-app/scripts/release/*',
            'packages/butler-agent/rust/scripts/package-standalone-agent.py',
            'VERSION', 'package.json', 'bun.lock', 'bun.lockb')
 # Native Windows smoke inputs beyond Rust; other CI configuration stays out.
-WINDOWS = ('deploy/windows*', '.github/workflows/*windows*', '.github/actions/*windows*',
-           '.github/actions/rust-agent-setup/*', '.github/scripts/*windows*')
+WINDOWS = ('deploy/windows*', '.github/workflows/*windows*', '.github/actions/*windows*/**',
+           '.github/actions/rust-agent-setup/*', '.github/scripts/*windows*',
+           '**/windows*', '**/windows*/**', 'packages/butler-agent/rust/crates/butler-platform/**',
+           'packages/butler-agent/rust/crates/butler-e2e/tests/e2e/windows_*')
 
 # Lint-only inputs have no product consumer. Matching consumer rules below also
 # apply: integration reuse hashes must observe release-only workflow changes.
 CI_LINT_ONLY = (
+    '.github/workflows/ci-windows-main-failure.yml',
     '.github/workflows/release*.yml', '.github/workflows/npm-publish.yml',
     '.github/workflows/post-release-verify.yml', '.github/workflows/macos-release-recovery.yml',
     '.github/workflows/e2e.yml', '.github/workflows/branch-name.yml',
@@ -96,7 +99,7 @@ CI_CONSUMERS = (
     (NATIVE_CI + ('site', 'ds', 'workflows'), ('.github/actions/bun-setup/*',)),
     (('site', 'ds', 'workflows'), ('.github/workflows/*site*.yml',)),
     (('rust', 'ui', 'package'), ('.github/workflows/*windows*.yml',
-                               '.github/actions/*windows*', '.github/scripts/*windows*')),
+                               '.github/actions/*windows*/**', '.github/scripts/*windows*')),
     (('workflows',), ('.github/actions/build-windows-agent/*',
                       '.github/actions/package-windows-app/*',
                       '.github/actions/windows-owner-*/*',
@@ -171,7 +174,7 @@ def categories(path, event=None):
 
 
 def windows_native(path):
-    return matches(path, WINDOWS) or ('rust' in categories(path) and not path.startswith('.github/'))
+    return matches(path, WINDOWS)
 
 
 def command(*args):
@@ -338,9 +341,12 @@ def select(event, workflow):
     paths = [] if full else changed(base)
     required = set(GROUPS) if full else set().union(*(categories(p, os.environ['GITHUB_EVENT_NAME']) for p in paths))
     current = hashes(base or 'full')
+    native_required = (full or any(windows_native(path) for path in paths) or
+                       any(label['name'] == 'ci:windows-native' for label in pr.get('labels', [])) or
+                       (os.environ['GITHUB_EVENT_NAME'] != 'pull_request' and 'rust' in required))
     # Windows stub receipts use the package group, including all Rust harness inputs.
     if workflow == 'windows-preview-smoke.yml':
-        if full or any(windows_native(path) and categories(path) & {'rust', 'package'} for path in paths):
+        if native_required:
             required.add('package')
         current['package'] = hashlib.sha256(
             json.dumps([current['package'], current['rust']]).encode()).hexdigest()
@@ -369,7 +375,7 @@ def select(event, workflow):
     artifacts += [artifact for artifact in part_artifacts if artifact['name'] not in restored]
     if level == 'smoke' and workflow == 'windows-preview-smoke.yml':
         parts = {'hosted': ci_parts.HOSTED}
-        native = outputs['package'] == 'true' and (full or any(windows_native(path) for path in paths))
+        native = outputs['package'] == 'true' and native_required
         jobs = windows_preview_jobs(dict(outputs, windows=str(native).lower()), os.environ['GITHUB_EVENT_NAME'])
     outputs.update({'parts': json.dumps(parts), 'docs-only': str(not required).lower(), 'electron': outputs['package'],
                     'tier': level, 'candidate': candidate, 'jobs': json.dumps(jobs),

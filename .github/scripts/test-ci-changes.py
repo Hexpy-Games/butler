@@ -121,10 +121,10 @@ jobs:
             self.assertEqual(derived['.github/scripts/verify.py'], native | {'install'})
 
     # test-category: pure-logic
-    def test_windows_native_smoke_follows_rust_and_windows_inputs_only(self):
+    def test_windows_native_smoke_follows_windows_inputs_only(self):
         for path, expected in {
-            'packages/butler-agent/rust/crates/butler-core/src/lib.rs': True,
-            'packages/butler-agent/rust/Cargo.lock': True,
+            'packages/butler-agent/rust/crates/butler-core/src/lib.rs': False,
+            'packages/butler-agent/rust/Cargo.lock': False,
             'deploy/windows-preview-quality.ps1': True,
             '.github/workflows/windows-preview-smoke.yml': True,
             '.github/actions/build-windows-debug-agent/action.yml': True,
@@ -134,7 +134,7 @@ jobs:
             '.github/scripts/ci-changes.py': False,
             '.github/pull_request_template.md': False,
             'deploy/install.sh': False,
-            'packages/butler-app/client/electron/src/main.ts': True,
+            'packages/butler-app/client/electron/src/main.ts': False,
             'packages/butler-agent/rust/docs/install-layout.md': False,
             'README.md': False,
         }.items():
@@ -240,15 +240,15 @@ class Trust(unittest.TestCase):
         for event_name, ref, event, paths, expected in [
             ('pull_request', 'refs/pull/12/merge', pr, ['docs/notes.md', workflow], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['deploy/install.sh', 'packages/butler-npm/index.js'], none),
-            ('pull_request', 'refs/pull/12/merge', pr, [rust], native),
-            ('pull_request', 'refs/pull/12/merge', pr, ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], native),
+            ('pull_request', 'refs/pull/12/merge', pr, [rust], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], native),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/actions/build-windows-agent/action.yml'], native),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-installer.yml'], native),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/scripts/ci-changes.py'], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/releases/v1.2.3.md'], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['deploy/windows-preview-smoke.ps1'], native),
-            ('workflow_dispatch', 'refs/heads/main', {}, [], dict.fromkeys(none, True)),
+            ('workflow_dispatch', 'refs/heads/main', {}, [], native),
         ]:
             with self.subTest(event=event_name, paths=paths), tempfile.TemporaryDirectory() as temporary:
                 env = dict(GITHUB_EVENT_NAME=event_name, GITHUB_REF=ref, GITHUB_REPOSITORY='owner/repo',
