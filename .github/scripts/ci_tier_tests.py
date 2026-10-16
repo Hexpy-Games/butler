@@ -16,6 +16,17 @@ changes = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(changes)
 
 
+def github_path_match(path, pattern):
+    """GitHub path-filter subset used here: * excludes /, ** includes /.
+
+    https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#filter-pattern-cheat-sheet
+    """
+    tokens = []
+    for part in re.split(r'(\*\*/|\*\*|\*)', pattern):
+        tokens.append({'**/': '(?:.*/)?', '**': '.*', '*': '[^/]*'}.get(part, re.escape(part)))
+    return re.fullmatch(''.join(tokens), path) is not None
+
+
 def selection(paths, event='pull_request', workflow='rust-quality.yml', labels=()):
     with tempfile.TemporaryDirectory() as directory:
         env = dict(GITHUB_EVENT_NAME=event, GITHUB_REF='refs/heads/main',
@@ -25,6 +36,7 @@ def selection(paths, event='pull_request', workflow='rust-quality.yml', labels=(
                                    'labels': [{'name': label} for label in labels]}} if event == 'pull_request' else ({} if event == 'workflow_dispatch' else {'before': 'base'})
         with patch.dict(os.environ, env), patch.object(changes, 'command', return_value='head'), \
              patch.object(changes, 'changed', return_value=paths), \
+             patch.object(changes, 'main_base', return_value='base'), \
              patch.object(changes, 'previous', return_value=iter([])), \
              patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
             changes.select(payload, workflow)
@@ -80,8 +92,6 @@ class ApprovedTiers(unittest.TestCase):
         integration = dict(package='true', windows='true', tier='integration')
         self.assertTrue(all(changes.windows_preview_jobs(integration, 'push').values()))
         source = (ROOT.parent / 'workflows' / workflow).read_text()
-        trigger = source.split('  pull_request:\n')[1].split('  push:')[0]
-        self.assertEqual(set(re.findall(r"- '([^']+)'", trigger)), set(changes.WINDOWS))
         self.assertIn('branches: [main,', source)
         self.assertIn('gh workflow run windows-preview-smoke.yml --ref <head-branch>', source)
         # Every required context remains in an unfiltered PR workflow.
@@ -167,9 +177,127 @@ class ApprovedTiers(unittest.TestCase):
                 if workflow.name == 'release.yml':
                     self.assertIn("inputs.runner == 'hosted' && 'windows-latest'", runner[1])
         self.assertEqual(found, set(expected))
+        plan = (ROOT.parent / 'actions/windows-owner-setup/README.md').read_text()
+        self.assertIn('`yw-pc`: `butler-win-release` only.', plan)
+        self.assertIn('`yw-pc-2`: both `butler-win-shared` and `butler-win-release`.', plan)
         config = (ROOT.parent / 'actionlint.yaml').read_text()
         for lane in ('butler-win-release', 'butler-win-shared'):
             self.assertIn(lane, config)
+
+    # test-category: pure-logic
+    def test_pr_packaging_covers_invoked_packagers(self):
+        repository = ROOT.parents[1]
+        sources = list((ROOT.parent / 'workflows').glob('*.yml'))
+        sources += list((ROOT.parent / 'actions').glob('*/action.yml'))
+        invoked = {name for source in sources for name in re.findall(
+            r'/(package-[\w-]+\.py|release-standalone-agent\.py)', source.read_text())}
+        self.assertTrue(invoked)
+        for name in invoked:
+            path = 'packages/butler-agent/rust/scripts/' + name
+            self.assertTrue((repository / path).is_file(), path)
+            output = selection([path])
+            for group in ('package', 'install', 'linux-package'):
+                self.assertEqual(output[group], 'true', (path, group))
+        # New scripts inherit coverage without another hand-maintained filename.
+        self.assertEqual(selection(['packages/butler-agent/rust/scripts/new-tool.py'])['package'], 'true')
+
+    # test-category: pure-logic
+    def test_windows_trigger_and_selector_match_concrete_paths(self):
+        source = (ROOT.parent / 'workflows/windows-preview-smoke.yml').read_text()
+        trigger = source.split('  pull_request:\n')[1].split('  push:')[0]
+        patterns = re.findall(r"- '([^']+)'", trigger)
+        cases = {
+            'windows.rs': True, 'windows/nested/input.rs': True,
+            'src/windows.rs': True, 'src/windows/nested/input.rs': True,
+            'src/not-windows.rs': False, 'src/windows_extra/deep/file.rs': True,
+            '.github/actions/rust-agent-setup/action.yml': True,
+            '.github/actions/rust-agent-setup/nested/config.json': True,
+            '.github/actions/rust-agent-setup-other/action.yml': False,
+            '.github/actions/windows-owner-setup/action.yml': True,
+            '.github/actions/windows-owner-setup/nested/file.ps1': True,
+            '.github/workflows/rust-windows-check.yml': True,
+            '.github/scripts/test-windows-ci-safety.py': True,
+            '.github/scripts/nested/windows-check.py': True,
+            'deploy/windows-build.ps1': True, 'deploy/windows/nested/file.ps1': True,
+            'packages/butler-agent/rust/crates/butler-platform/src/lib.rs': True,
+            'packages/butler-agent/rust/crates/butler-e2e/tests/e2e/windows_case.rs': True,
+            'packages/butler-agent/rust/crates/butler-core/src/lib.rs': False,
+            'README.md': False,
+        }
+        for path, expected in cases.items():
+            with self.subTest(path=path):
+                github = any(github_path_match(path, pattern) for pattern in patterns)
+                self.assertEqual(github, expected)
+                self.assertEqual(changes.windows_native(path), github)
+
+    # test-category: pure-logic
+    def test_main_api_baseline_skips_cancelled_runs_and_keeps_failures(self):
+        def run(number, conclusion, **extra):
+            return dict(id=number, status='completed', conclusion=conclusion, event='push',
+                        head_branch='main', path='.github/workflows/rust-quality.yml',
+                        head_repository={'full_name': 'owner/repo'},
+                        head_sha=str(number) * 40) | extra
+        # Fixture response includes a superseded merge, an unfinished run and
+        # unrelated runs; success and failure both qualify as completed coverage.
+        fixture = dict(workflow_runs=[run(9, 'cancelled'), run(8, None, status='in_progress'),
+                                      run(7, 'success', head_branch='other'),
+                                      run(6, 'success', head_repository={'full_name': 'fork/repo'}),
+                                      run(5, 'failure'), run(4, 'success')])
+        def command(*args):
+            return json.dumps(fixture) if args[0] == 'gh' else ''
+        env = dict(GITHUB_REPOSITORY='owner/repo', GITHUB_EVENT_NAME='push',
+                   GITHUB_REF='refs/heads/main', GITHUB_SHA='a' * 40)
+        with patch.dict(os.environ, env), patch.object(changes, 'command', side_effect=command) as calls:
+            self.assertEqual(changes.selection_base({'before': '9' * 40}), '5' * 40)
+            self.assertIn('branch=main&event=push&status=completed', calls.call_args_list[0].args[2])
+            self.assertEqual(calls.call_args_list[-1].args,
+                             ('git', 'merge-base', '--is-ancestor', '5' * 40, 'HEAD'))
+            with tempfile.TemporaryDirectory() as directory:
+                outputs = dict(GITHUB_OUTPUT=directory + '/output',
+                               GITHUB_STEP_SUMMARY=directory + '/summary', GITHUB_RUN_ID='10')
+                paths = ['packages/butler-agent/rust/crates/butler-core/src/lib.rs']
+                with patch.dict(os.environ, outputs), \
+                     patch.object(changes, 'changed', return_value=paths) as diff, \
+                     patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
+                    changes.select({'before': '9' * 40}, 'rust-quality.yml')
+                diff.assert_called_once_with('5' * 40)
+                output = dict(line.split('=', 1) for line in Path(outputs['GITHUB_OUTPUT']).read_text().splitlines())
+                jobs = json.loads(output['jobs'])
+                for job in ('linux-native', 'macos-archive', 'macos-tests', 'windows-check'):
+                    self.assertTrue(jobs[job], job)
+            fixture['workflow_runs'][4]['conclusion'] = 'success'
+            self.assertEqual(changes.main_base(), '5' * 40)
+
+    # test-category: pure-logic
+    def test_main_baseline_failure_selects_all_checks(self):
+        for response in ([], [{'id': 1, 'status': 'completed', 'conclusion': 'success',
+                              'event': 'push', 'head_branch': 'main',
+                              'path': '.github/workflows/rust-quality.yml',
+                              'head_repository': {'full_name': 'owner/repo'}, 'head_sha': 'b' * 40}]):
+            for error in (OSError('API unavailable'), None):
+                with tempfile.TemporaryDirectory() as directory:
+                    env = dict(GITHUB_EVENT_NAME='push', GITHUB_REF='refs/heads/main',
+                               GITHUB_REPOSITORY='owner/repo', GITHUB_RUN_ID='3',
+                               GITHUB_OUTPUT=directory + '/output', GITHUB_STEP_SUMMARY=directory + '/summary')
+                    def command(*args):
+                        if args[0] == 'gh':
+                            if error:
+                                raise error
+                            return json.dumps({'workflow_runs': response})
+                        if args[1:3] == ('merge-base', '--is-ancestor'):
+                            raise subprocess.CalledProcessError(1, args)
+                        return 'head'
+                    with patch.dict(os.environ, env), \
+                         patch.object(changes, 'command', side_effect=command), \
+                         patch.object(changes, 'changed') as diff, \
+                         patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
+                        changes.select({'before': 'previous'}, 'rust-quality.yml')
+                    diff.assert_not_called()
+                    output = dict(line.split('=', 1) for line in Path(env['GITHUB_OUTPUT']).read_text().splitlines())
+                    self.assertTrue(all(output[group] == 'true' for group in changes.GROUPS))
+                    self.assertTrue(json.loads(output['jobs'])['macos-archive'])
+                    self.assertTrue(json.loads(output['jobs'])['linux-native'])
+
 
 
 class Precision(unittest.TestCase):

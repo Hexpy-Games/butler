@@ -223,6 +223,7 @@ class Trust(unittest.TestCase):
                 with patch.dict(os.environ, env), patch.object(changes, 'command', return_value='checkout'), \
                      patch.object(changes, 'changed', return_value=['packages/butler-app/client/ui/src/app.tsx']), \
                      patch.object(changes, 'previous', return_value=iter([])), \
+                     patch.object(changes, 'main_base', return_value=None if event.get('before') == '0' * 40 else 'base'), \
                      patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
                     changes.select(event, 'rust-quality.yml')
                 output = (Path(temporary) / 'output').read_text()

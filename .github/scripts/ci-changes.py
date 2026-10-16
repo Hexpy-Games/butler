@@ -30,7 +30,8 @@ PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/elect
              'packages/butler-app/client/ui/src/components/settings/Update*')
 # PR packaging exceptions; main/release still exercise every Rust payload change.
 PR_PACKAGING = PACKAGING + ('VERSION', 'Cargo.toml', 'Cargo.lock', '**/Cargo.toml',
-                            '**/Cargo.lock', 'packages/butler-agent/rust/crates/butler-platform/**')
+                            '**/Cargo.lock', 'packages/butler-agent/rust/scripts/*',
+                            'packages/butler-agent/rust/crates/butler-platform/**')
 BUN_MACOS = ('tests/unit/prepare-native-agent-script.test.ts',
              'tests/unit/run-fast-unit-tests.sh', 'tools/validation/*',
              '.github/workflows/bun-unit.yml')
@@ -46,10 +47,11 @@ SIGNING = ('deploy/macos*', 'packages/butler-app/scripts/release/*',
            'packages/butler-agent/rust/scripts/package-standalone-agent.py',
            'VERSION', 'package.json', 'bun.lock', 'bun.lockb')
 # Native Windows smoke inputs beyond Rust; other CI configuration stays out.
-WINDOWS = ('deploy/windows*', '.github/workflows/*windows*', '.github/actions/*windows*/**',
-           '.github/actions/rust-agent-setup/*', '.github/scripts/*windows*',
-           '**/windows*', '**/windows*/**', 'packages/butler-agent/rust/crates/butler-platform/**',
-           'packages/butler-agent/rust/crates/butler-e2e/tests/e2e/windows_*')
+WINDOWS = ('deploy/windows**', '.github/workflows/**windows**', '.github/actions/**windows**/**',
+           '.github/actions/rust-agent-setup/**', '.github/scripts/**windows**',
+           'windows**', '**/windows**', '**/windows**/**',
+           'packages/butler-agent/rust/crates/butler-platform/**',
+           'packages/butler-agent/rust/crates/butler-e2e/tests/e2e/windows_**')
 
 # Lint-only inputs have no product consumer. Matching consumer rules below also
 # apply: integration reuse hashes must observe release-only workflow changes.
@@ -336,10 +338,44 @@ def reuse_inputs(repository, pr, workflow, branch, current, job_inputs, receipts
     return reuse, job_reuse
 
 
+def main_base():
+    """Include merges whose main quality run was superseded before completion."""
+    repository = os.environ['GITHUB_REPOSITORY']
+    query = urlencode(dict(branch='main', event='push', status='completed', per_page=100))
+    try:
+        # A bounded recent window is enough; no eligible run means ALL.
+        runs = json.loads(command('gh', 'api',
+            f'repos/{repository}/actions/workflows/rust-quality.yml/runs?{query}'))['workflow_runs']
+        runs = sorted(runs, key=lambda run: run['id'], reverse=True)
+        for run in runs:
+            if (run['status'] != 'completed' or run['conclusion'] not in ('success', 'failure')
+                    or run['event'] != 'push' or run['head_branch'] != 'main'
+                    or run['path'] != '.github/workflows/rust-quality.yml'
+                    or run['head_repository']['full_name'] != repository
+                    or run['head_sha'] == os.environ.get('GITHUB_SHA')):
+                continue
+            base = run['head_sha']
+            if not re.fullmatch(r'[0-9a-f]{40}', base):
+                return None
+            command('git', 'merge-base', '--is-ancestor', base, 'HEAD')
+            return base
+    except (subprocess.CalledProcessError, ValueError, OSError, KeyError, TypeError):
+        print('Main baseline unavailable; all checks will run.')
+    return None
+
+
+def selection_base(event):
+    if (os.environ['GITHUB_EVENT_NAME'] == 'push'
+            and os.environ.get('GITHUB_REF') == 'refs/heads/main'):
+        return main_base()
+    return (event.get('pull_request', {}).get('base', {}).get('sha')
+            or event.get('merge_group', {}).get('base_sha') or event.get('before'))
+
+
 def select(event, workflow):
     level, candidate = tier()
     pr = event.get('pull_request', {})
-    base = pr.get('base', {}).get('sha') or event.get('merge_group', {}).get('base_sha') or event.get('before')
+    base = selection_base(event)
     full = level == 'integration' or not base or set(base) == {'0'}
     if not full:
         command('git', 'cat-file', '-e', f'{base}^{{commit}}')

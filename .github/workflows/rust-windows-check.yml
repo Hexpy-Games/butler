@@ -59,7 +59,7 @@ jobs:
               parts = path.split("/")
               crates[parts[1] if parts[0] == "crates" and len(parts) > 1 else parts[0]] += 1
               codes[match["code"] or match["text"][:60]] += 1
-          print("### Windows compile check (x86_64-pc-windows-msvc)")
+          print("### Windows Clippy check (x86_64-pc-windows-msvc)")
           print(f"Outcome: **{os.environ.get('OUTCOME', 'unknown')}**, {errors} errors.")
           if failed:
               print("\nCould not compile (crates that depend on these were not checked):\n")
