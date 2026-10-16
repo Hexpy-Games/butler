@@ -13,7 +13,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-type Pending = Arc<Mutex<Completion>>;
 type Published = Arc<Mutex<Vec<String>>>;
 
 fn main() {
@@ -27,26 +26,11 @@ fn main() {
     }
 }
 
-fn pending(completion: Completion) -> Pending {
-    Arc::new(Mutex::new(completion))
-}
-
-fn assert_pending(completion: &Pending) {
-    assert_eq!(
-        completion.lock().unwrap().try_recv(),
-        Err(tokio::sync::oneshot::error::TryRecvError::Empty),
-        "operations must share the still-unfinished batch"
-    );
-}
-
-fn result(completion: Pending) -> Result<(), String> {
-    Arc::try_unwrap(completion)
-        .ok()
-        .unwrap()
-        .into_inner()
-        .unwrap()
-        .wait()
-}
+// The lane closes a batch once its time window elapses, so operations queued
+// together (even before the writer starts) may land in separate batches. No
+// assertion here depends on batching: each failing transaction is one
+// operation, and cross-operation checks use only order, completion after
+// commit and barrier draining.
 
 fn event_stream() -> (
     Events,
@@ -134,12 +118,7 @@ fn failed_begin(path: &Path) {
         *started.lock().unwrap() = Some(Instant::now());
         Ok(())
     });
-    let read_result = pending(read_result);
-    let earlier = read_result.clone();
-    let (inspect, inspect_result) = Operation::new(true, false, move |_| {
-        assert_pending(&earlier);
-        Ok(())
-    });
+    let (inspect, inspect_result) = Operation::new(true, false, |_| Ok(()));
     let attempted = events.clone();
     let (write, write_result) = Operation::new(false, false, move |db| {
         attempted.append(db, "rejected").unwrap();
@@ -154,7 +133,7 @@ fn failed_begin(path: &Path) {
         elapsed >= Duration::from_secs(5),
         "lock did not outlast busy_timeout"
     );
-    result(read_result).unwrap();
+    read_result.wait().unwrap();
     inspect_result.wait().unwrap();
     // End only the competing connection's transaction. The writer recovers itself.
     lock.lock().unwrap().execute_batch("COMMIT").unwrap();
@@ -180,26 +159,29 @@ fn prepare(path: &Path) {
 
 fn queue_barrier(
     initial: &mut Vec<Operation>,
-    successes: &mut Vec<Pending>,
     events: &Events,
     published: &Published,
 ) -> Completion {
     let committed = events.clone();
-    let (write, completion) = Operation::new(false, false, move |db| {
+    let (write, written) = Operation::new(false, false, move |db| {
         db.execute_batch("INSERT INTO parent VALUES(1)")?;
         committed.append(db, "committed").unwrap();
         Ok(())
     });
-    let completion = pending(completion);
-    let earlier = completion.clone();
-    let (inspect, inspected) = Operation::new(true, false, move |_| {
-        assert_pending(&earlier);
-        Ok(())
-    });
+    let (inspect, inspected) = Operation::new(true, false, |_| Ok(()));
     let barrier_events = published.clone();
     let barrier_outbox = events.clone();
     // Even a caller requesting inspect=false must get an exclusive operation.
     let (barrier, barrier_result) = Operation::new(false, true, move |db| {
+        // Whether or not they shared its batch, earlier operations have
+        // committed, flushed their events and completed before a barrier runs.
+        for mut earlier in [written, inspected] {
+            assert_eq!(
+                earlier.try_recv(),
+                Ok(Ok(())),
+                "barrier ran before an earlier completion"
+            );
+        }
         assert!(db.is_autocommit());
         assert_eq!(*barrier_events.lock().unwrap(), ["committed"]);
         let tx = db.transaction()?;
@@ -210,7 +192,6 @@ fn queue_barrier(
         Ok(())
     });
     initial.extend([write, inspect, barrier]);
-    successes.extend([completion, pending(inspected)]);
     barrier_result
 }
 
@@ -245,19 +226,16 @@ fn verify_barrier(mut completion: Completion, published: &Published, path: &Path
     assert_eq!(events, ["committed", "barrier"]);
 }
 
-/// Queue the operations whose batch COMMIT fails on a deferred foreign key and
-/// return their completions in wait order.
+/// Queue one operation whose batch COMMIT fails on a deferred foreign key.
 fn queue_failure(
     initial: &mut Vec<Operation>,
     events: &Events,
     published: &Published,
     path: &Path,
     barrier: Option<Completion>,
-) -> Vec<Pending> {
-    // verify_barrier opens a fresh reader, which can outlast the lane's batch
-    // window. After a barrier, one operation therefore owns the whole failing
-    // transaction instead of relying on two operations sharing a batch.
-    let alone = barrier.is_some();
+) -> Completion {
+    // One operation owns the whole failing transaction. Separate operations
+    // could commit in separate batches once the lane's batch window closes.
     let uncommitted = events.clone();
     let flushed = published.clone();
     let read_path = path.to_owned();
@@ -267,44 +245,21 @@ fn queue_failure(
         }
         db.execute_batch("INSERT INTO parent VALUES(2)")?;
         uncommitted.append(db, "rolled-back").unwrap();
-        if alone {
-            db.execute_batch("INSERT INTO child VALUES(99)")?;
-        }
-        Ok(())
-    });
-    initial.push(write);
-    let completion = pending(completion);
-    if alone {
-        return vec![completion];
-    }
-    let earlier = completion.clone();
-    let (invalid, invalid_result) = Operation::new(false, false, move |db| {
-        assert_pending(&earlier);
         db.execute_batch("INSERT INTO child VALUES(99)")
     });
-    initial.push(invalid);
-    vec![pending(invalid_result), completion]
+    initial.push(write);
+    completion
 }
 
 fn failed_commit(path: &Path, with_barrier: bool) {
     prepare(path);
     let (events, published, _subscription) = event_stream();
     let mut initial = Vec::new();
-    let mut successes = Vec::new();
-    let barrier_completion =
-        with_barrier.then(|| queue_barrier(&mut initial, &mut successes, &events, &published));
-    let failures = queue_failure(&mut initial, &events, &published, path, barrier_completion);
+    let barrier_completion = with_barrier.then(|| queue_barrier(&mut initial, &events, &published));
+    let failure = queue_failure(&mut initial, &events, &published, path, barrier_completion);
     let (sender, thread) = storage_testing::start(path.to_owned(), initial).unwrap();
-    let errors: Vec<_> = failures
-        .into_iter()
-        .map(|failure| result(failure).unwrap_err())
-        .collect();
-    for success in successes {
-        result(success).unwrap();
-    }
-    for error in errors {
-        assert!(error.contains("FOREIGN KEY constraint failed"), "{error}");
-    }
+    let error = failure.wait().unwrap_err();
+    assert!(error.contains("FOREIGN KEY constraint failed"), "{error}");
     let expected = if with_barrier {
         vec!["committed", "barrier"]
     } else {
