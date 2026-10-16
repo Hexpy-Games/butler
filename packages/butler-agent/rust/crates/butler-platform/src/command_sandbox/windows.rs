@@ -144,7 +144,9 @@ fn code_page_shell(
     }
     // Environment transport avoids cmd's 8191-character command-line limit.
     // Invoke-Expression obeys the current language policy, including CLM.
-    let bootstrap = "$butlerCommandText=$env:BUTLER_COMMAND_SCRIPT; Remove-Item Env:BUTLER_COMMAND_SCRIPT; Invoke-Expression $butlerCommandText";
+    // Suppress module-autoload progress before Remove-Item loads Management;
+    // the inner script's preference is too late for this outer bootstrap.
+    let bootstrap = "$ProgressPreference='SilentlyContinue'; $butlerCommandText=$env:BUTLER_COMMAND_SCRIPT; Remove-Item Env:BUTLER_COMMAND_SCRIPT; Invoke-Expression $butlerCommandText";
     let encoded = STANDARD.encode(
         bootstrap
             .encode_utf16()
