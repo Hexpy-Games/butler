@@ -1,4 +1,5 @@
-import { expect, test } from "bun:test";
+// test-category: pure-logic
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
   mergeMessageListViews,
   messageListCursor,
@@ -6,6 +7,23 @@ import {
   snapshotForCache,
 } from "../../packages/butler-app/client/ui/src/app/messageCache.ts";
 import type { MessageListView } from "../../packages/butler-app/client/ui/src/app/types.ts";
+
+// Restore descriptors, not just values: defining an absent global defaults to
+// writable:false, which otherwise leaks into later files in Bun's shared VM.
+const browserGlobals = ["localStorage", "window"] as const;
+let savedGlobals: (PropertyDescriptor | undefined)[];
+
+beforeEach(() => {
+  savedGlobals = browserGlobals.map(name => Object.getOwnPropertyDescriptor(globalThis, name));
+});
+
+afterEach(() => {
+  browserGlobals.forEach((name, index) => {
+    const descriptor = savedGlobals[index];
+    if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+    else Reflect.deleteProperty(globalThis, name);
+  });
+});
 
 test("message cache snapshots keep completed messages and skip pending rows", () => {
   const snapshot = snapshotForCache("session-a", {
@@ -243,7 +261,6 @@ test("web fallback message cache hydrates localStorage once and then reads memor
     next_cursor: 2,
   };
   items.set("butler:message-cache:v1:session-a", JSON.stringify(cached));
-  const previousStorage = globalThis.localStorage;
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
     value: {
@@ -265,18 +282,11 @@ test("web fallback message cache hydrates localStorage once and then reads memor
   const view = await fresh.readCachedMessageList("session-a");
 
   expect(view?.messages[0]?.id).toBe("assistant-a");
-  Object.defineProperty(globalThis, "localStorage", {
-    configurable: true,
-    value: previousStorage,
-  });
 });
 
 test("electron bridge writes also keep the renderer sync cache warm", async () => {
   const items = new Map<string, string>();
   const bridgeWrites: unknown[] = [];
-  const previousStorage = globalThis.localStorage;
-  const previousWindow = (globalThis as typeof globalThis & { window?: unknown })
-    .window;
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
     value: {
@@ -316,14 +326,6 @@ test("electron bridge writes also keep the renderer sync cache warm", async () =
     "assistant-a",
   );
   expect(bridgeWrites).toHaveLength(1);
-  Object.defineProperty(globalThis, "localStorage", {
-    configurable: true,
-    value: previousStorage,
-  });
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: previousWindow,
-  });
 });
 
 function message(
