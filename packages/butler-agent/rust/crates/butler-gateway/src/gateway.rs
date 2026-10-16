@@ -7,6 +7,8 @@
 mod application;
 pub use application::AppAssetCommand;
 pub use application::storage::history::{AppHistoryCommand, AppHistoryQuery};
+#[cfg(feature = "test-support")]
+pub use application::storage::testing as storage_testing;
 mod file_watch;
 pub use file_watch::FileChangeWatch;
 mod auth;
@@ -41,7 +43,8 @@ pub use crate::gateway::inbound_queue::{
 };
 pub use crate::gateway::message_file_store::AppMessageFiles;
 pub use application::settings::{
-    DiagnosticsSettingsReader, diagnostics_enabled_readonly, stored_ui_language_readonly,
+    DiagnosticsSettingsReader, command_sandbox_enabled, diagnostics_enabled_readonly,
+    stored_ui_language_readonly,
 };
 pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,

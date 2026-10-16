@@ -1,5 +1,6 @@
 // Public UI -> isolated native gateway, with injected transport failures only.
 // UI smoke coverage for #218–#221; all model providers are stubbed.
+import { commandSandboxSettings } from "../support/command-sandbox-settings";
 import { conversationBackgroundFlow } from "../support/conversation-background-flow";
 import { strict as assert } from "node:assert";
 import { spawn } from "node:child_process";
@@ -307,6 +308,7 @@ async function runCase(width: number, theme: "light" | "dark", language: "ko" | 
   await page.locator('[data-test-class~="composer-card"]').waitFor();
   const prefix = `${width}-${language}-${theme}`;
   try {
+    await commandSandboxSettings(page, server, copy);
     await paletteChecks(page, prefix);
     await skillChecks(page, prefix);
     await mcpChecks(page, prefix);

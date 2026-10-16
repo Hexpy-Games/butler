@@ -29,6 +29,7 @@ ALLOW = (
     'packages/butler-agent/resources/templates/*.md',
     'packages/butler-agent/resources/personas/templates/*/*.md',
     'packages/butler-agent/rust/source-check-tests.txt',
+    'packages/butler-agent/rust/source-check-e2e-hooks.txt',
     'packages/butler-agent/rust/crates/*/source-check-baseline.txt',
     'packages/butler-agent/rust/crates/*/os-specific-baseline.txt',
     'packages/butler-agent/rust/crates/*/src/**/wire_codes.txt',

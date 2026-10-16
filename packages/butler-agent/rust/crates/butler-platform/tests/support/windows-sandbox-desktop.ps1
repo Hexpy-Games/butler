@@ -15,7 +15,7 @@ $profile = Join-Path ([IO.Path]::GetTempPath()) ('b-' + [guid]::NewGuid().ToStri
 $installedApp = Join-Path $env:LOCALAPPDATA 'butler-app\Butler.exe'
 $script:installedProtocolHash = $null
 $before = $null
-$result.rows = @(0..16 | ForEach-Object {
+$result.rows = @(0..17 | ForEach-Object {
     if ($_ -eq 13) { @{row=$_;status='MANUAL_REQUIRED';reason='admin_wfp_diff'} }
     else { @{row=$_;status='FAIL';reason='not_run'} }
 })

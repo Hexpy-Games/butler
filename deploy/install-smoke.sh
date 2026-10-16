@@ -75,6 +75,21 @@ if BUTLER_AGENT_HOME="$work/agent-foreign" BUTLER_BIN_DIR="$work/bin-foreign" sh
 fi
 [ "$(sed -n 2p "$work/bin-foreign/butler")" = "echo mine" ] || fail "a foreign butler was overwritten"
 [ ! -e "$work/agent-foreign" ] || fail "files were installed next to a foreign butler"
+# A package-owned launcher is foreign to the CLI installer too.
+mkdir "$work/bin-package"
+cat > "$work/bin-package/butler" <<'EOF'
+#!/bin/sh
+# butler-package-launcher v1
+exec /usr/bin/butler-agent --installation-root /opt/butler --resource-root /opt/butler/resources "$@"
+EOF
+package_launcher_before="$(cksum "$work/bin-package/butler")"
+if BUTLER_ALLOW_ROOT=1 BUTLER_AGENT_HOME="$work/agent-package" BUTLER_BIN_DIR="$work/bin-package" \
+  sh "$here/install.sh" --no-start > "$work/package.out" 2>&1; then
+  fail "install.sh overwrote a package-owned butler"
+fi
+grep -q "not a Butler launcher" "$work/package.out" || { cat "$work/package.out"; fail "no package launcher ownership error"; }
+[ "$package_launcher_before" = "$(cksum "$work/bin-package/butler")" ] || fail "a package-owned butler was overwritten"
+[ ! -e "$work/agent-package" ] || fail "files were installed next to a package-owned butler"
 # A file that only mentions butler.js is not the pre-native launcher.
 mkdir "$work/bin-lookalike"
 printf '#!/bin/sh\necho butler.js\n' > "$work/bin-lookalike/butler"

@@ -7,6 +7,8 @@ use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 
 mod access;
+mod command_sandbox;
+pub use command_sandbox::command_sandbox_enabled;
 mod background_sources;
 mod composer_decoration;
 mod controls;

@@ -9,6 +9,8 @@ pub(super) mod metrics;
 mod operation;
 mod read_pool;
 mod schema;
+#[cfg(feature = "test-support")]
+pub mod testing;
 mod tuning;
 
 use butler_platform::sqlite;
