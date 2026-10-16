@@ -469,10 +469,3 @@ jobs:
     uses: ./.github/workflows/windows-powershell-diagnostics.yml
     with:
       native-cache: ${{ inputs.native-cache }}
-  main-issue:
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.gate.result == 'failure'
-    needs: gate
-    permissions:
-      contents: read
-      issues: write
-    uses: ./.github/workflows/ci-windows-main-failure.yml

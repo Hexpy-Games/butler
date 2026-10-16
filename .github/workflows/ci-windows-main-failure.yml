@@ -1,30 +1,33 @@
-name: Main Windows smoke failure
+name: Main CI failure follow-up
 on:
-  workflow_call:
+  workflow_run:
+    workflows: ['*']
+    types: [completed]
+    branches: [main]
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
   issues: write
+  actions: read
+concurrency:
+  group: main-ci-failure-follow-up
+  cancel-in-progress: false
 jobs:
   report:
-    name: Report main Windows smoke failure
+    if: >-
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.repository.full_name == github.repository &&
+      github.event.workflow_run.conclusion == 'failure'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: write
-    defaults:
-      run:
-        shell: bash
-        working-directory: .
     steps:
-      - name: Open or update issue
+      # Privileged follow-up executes only trusted main code, never PR artifacts.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Report range and propose draft revert
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          number=$(gh issue list --state open --search '"Main Windows smoke failure" in:title' --json number --jq '.[0].number // empty')
-          if [ -n "$number" ]; then
-            gh issue comment "$number" --body "Main Windows smoke failed: $RUN_URL"
-          else
-            gh issue create --title 'Main Windows smoke failure' --body "Main Windows smoke failed: $RUN_URL"
-          fi
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/ci_main_failure.py
