@@ -31,6 +31,18 @@ class WindowsCommandCoverage(unittest.TestCase):
         self.assertIn("'cli_remote','windows_commands','project_workspace'", gate)
         parts = (ROOT / '.github/scripts/ci_parts.py').read_text()
         self.assertIn("dict(shard='basics', tests='windows_commands')", parts)
+        hosted = workflow.split('  hosted:\n', 1)[1]
+        self.assertIn('-RequireUncontained', hosted)
+        runner = (repository / 'deploy/windows-e2e-artifacts.ps1').read_text()
+        for case in (
+            'observation::observation_ask_first_approves_exact_command_then_lists_downloads',
+            'path_messages::home_command_directory_keeps_exact_approval',
+            'capabilities::current_work::sequential_file_capabilities_close_the_current_work',
+            'windows_command_tool_native_matrix',
+        ):
+            self.assertIn('windows_commands::' + case, runner)
+        self.assertIn('butler-sandbox.exe`" --probe', runner)
+        self.assertIn('test $case ... ok', runner)
         install = (repository / '.github/workflows/install-smoke.yml').read_text()
         tarball = install.split('      - name: Keep the tarball for the smoke', 1)[1].split('  smoke:', 1)[0]
         self.assertIn("retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 7 }}", tarball)

@@ -1,6 +1,12 @@
-param([ValidateSet('Export','Run')][string]$Mode, [string[]]$Tests)
+param([ValidateSet('Export','Run')][string]$Mode, [string[]]$Tests, [switch]$RequireUncontained)
 $ErrorActionPreference = 'Stop'
 $artifacts = Join-Path $env:PREVIEW_ROOT 'artifacts'
+$commandRegressions = @(
+    'windows_commands::observation::observation_ask_first_approves_exact_command_then_lists_downloads',
+    'windows_commands::path_messages::home_command_directory_keeps_exact_approval',
+    'windows_commands::capabilities::current_work::sequential_file_capabilities_close_the_current_work',
+    'windows_commands::windows_command_tool_native_matrix'
+)
 if ($Mode -eq 'Export') {
     New-Item -ItemType Directory -Force $artifacts | Out-Null
     $records = Get-Content "$env:PREVIEW_ROOT/logs/harness-compile.log" |
@@ -25,6 +31,20 @@ if ($Mode -eq 'Export') {
         $listed = & "$artifacts/e2e.exe" "$test`::" --list
         $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0 -or !($listed -match ': test$')) { throw "Empty E2E selection: $test" }
+        if ($RequireUncontained -and $test -eq 'windows_commands') {
+            foreach ($case in $commandRegressions) {
+                if ($listed -notcontains "${case}: test") { throw "Missing without-MXC regression: $case" }
+            }
+            # Probe the shipped helper on the actual hosted machine; do not disable MXC.
+            $probe = "$env:PREVIEW_ROOT/logs/without-mxc-probe.txt"
+            cmd /d /c "`"$artifacts/butler-sandbox.exe`" --probe > `"$probe`" 2> `"$probe.stderr`""
+            $probeCode = $LASTEXITCODE
+            $reason = (Get-Content -LiteralPath $probe -Raw).Trim()
+            if ($probeCode -ne 0 -or $reason -notin @('mxc_api_missing','base_container_unavailable',
+                'native_deny_unsupported','dacl_fallback_required','non_interactive_desktop','privilege_not_held')) {
+                throw "Expected an unavailable Windows sandbox, got: $reason"
+            }
+        }
         $savedPerf = $env:BUTLER_E2E_PERF
         $threads = if ($test -eq 'windows_commands') { $env:BUTLER_E2E_PERF = '1'; 1 } else { 8 }
         $log = "$env:PREVIEW_ROOT/logs/$test.log"
@@ -36,6 +56,13 @@ if ($Mode -eq 'Export') {
         if ($testCode -ne 0) {
             & "$PSScriptRoot/windows-test-log.ps1" -Log $log
             throw "E2E failed: $test ($testCode)"
+        }
+        if ($RequireUncontained -and $test -eq 'windows_commands') {
+            foreach ($case in $commandRegressions) {
+                if (!(Select-String -LiteralPath $log -SimpleMatch "test $case ... ok" -Quiet)) {
+                    throw "Without-MXC regression did not pass: $case"
+                }
+            }
         }
         Add-Content "$env:PREVIEW_ROOT/logs/completed-harnesses.txt" $test
     }

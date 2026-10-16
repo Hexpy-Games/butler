@@ -23,7 +23,7 @@ const to = process.env.BUTLER_WINDOWS_SMOKE_TO ?? "0.1.0-preview.91";
 assert.match(from, /^0\.1\.0-preview\.\d+$/u);
 assert.match(to, /^0\.1\.0-preview\.\d+$/u);
 const root = realpathSync.native(mkdtempSync(join(tmpdir(), "butler-installer-e2e-")));
-const data = join(root, "data");
+const data = join(root, "home/.butler");
 const owned = new Set<number>();
 let page: ElectronPage | null = null;
 const calls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
@@ -65,10 +65,10 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request 
 } });
 const debugPort = await freePort();
 const agentPort = await freePort();
-const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERPROFILE: join(root, "home"), BUTLER_DATA: data,
+const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERPROFILE: join(root, "home"), BUTLER_DATA: undefined,
   LOCALAPPDATA: join(root, "home/AppData/Local"), APPDATA: join(root, "home/AppData/Roaming"), BUTLER_SECRET_STORE: "file",
   SQUIRREL_TEMP: join(root, "home/AppData/Local"), TEMP: join(root, "tmp"), TMP: join(root, "tmp"),
-  BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
+  BUTLER_APP_ELECTRON_USER_DATA_DIR: undefined, BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
   OPENAI_API_KEY: "e2e-not-real", OPENAI_BASE_URL: `http://127.0.0.1:${server.port}/v1`,
   ELECTRON_ENABLE_LOGGING: "1", ELECTRON_LOG_FILE: join(root, "electron.log"),
@@ -132,6 +132,7 @@ try {
   await page.expression("setTimeout(() => window.butlerApp.quitApp({confirmed:true}), 50); true");
   page.close(); page = null;
   await waitFor(() => [...owned].every(pid => !alive(pid)), "owned App/Agent shutdown");
+  alternateProfileShortcuts();
   run(updater, ["--uninstall", "--silent"]);
   uninstalled = true;
   await waitFor(() => !existsSync(stub) && !existsSync(agentPath(to)), "uninstalled App removed");
@@ -149,7 +150,7 @@ try {
     leftoverProcesses: 0, durationMs: Date.now() - started }));
 } catch (error) {
   failed = true;
-  preserveInstallerLogs(root, installed, env, phase);
+  preserveInstallerLogs(root, installed, { ...env, BUTLER_DATA: data }, phase);
   console.error(JSON.stringify({ phase, renderer: page ? await page.diagnostics().catch(() => null) : null,
     providerCalls: { chat: calls.chat, memory: calls.memory, speakers: [...calls.memorySpeakers].sort() },
     memoryState: memoryState(),
@@ -184,7 +185,7 @@ async function cleanupInstaller() {
     if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
   } catch (error) { errors.push(error); }
   for (const action of [
-    () => preserveInstallerLogs(root, installed, env, phase, "cleanup"),
+    () => preserveInstallerLogs(root, installed, { ...env, BUTLER_DATA: data }, phase, "cleanup"),
     () => server.stop(true), () => removeProfile(root, env),
   ]) {
     try { action(); } catch (error) { errors.push(error); }
@@ -251,12 +252,12 @@ function prepare() {
     status: "complete", gateway: "any", fields: {}, skipped_fields: [], created_at: now, updated_at: now, completed_at: now }));
 }
 
-function run(command: string, args: string[]) {
+function run(command: string, args: string[], childEnv: NodeJS.ProcessEnv = env) {
   if (command === join(release, `ButlerSetup-${from}-x64.exe`)) {
     const expected = readFileSync(command + ".sha256", "utf8").trim().split(/\s+/u)[0];
     assert.equal(digest(command), expected, "Baseline installer checksum");
   }
-  const child = spawnSync(command, args, { env, encoding: "utf8" });
+  const child = spawnSync(command, args, { env: childEnv, encoding: "utf8" });
   if (child.status !== 0) {
     console.error(JSON.stringify({ phase, command, args, status: child.status,
       error: child.error?.message, stdout: child.stdout, stderr: child.stderr }));
@@ -301,6 +302,34 @@ function shellProof() {
       $item = $folder.ParseName([IO.Path]::GetFileName($env:BUTLER_SHORTCUT))
       @{ aumid = $item.ExtendedProperty('System.AppUserModel.ID'); target = (New-Object -ComObject WScript.Shell).CreateShortcut($env:BUTLER_SHORTCUT).TargetPath } | ConvertTo-Json -Compress`, { ...env, BUTLER_SHORTCUT: path }));
     assert.equal(facts.aumid, "com.squirrel.butler-app.Butler"); assert.equal(facts.target, stub);
+  }
+}
+
+// Alternate data profiles still own their install's shortcuts, but must leave
+// the default profile's protocol and login registrations intact.
+function alternateProfileShortcuts() {
+  phase = "alternate-profile Squirrel lifecycle";
+  const executable = resolve(dirname(agentPath(to)), "../../..", "Butler.exe");
+  const alternate = { ...env, BUTLER_DATA: join(root, "alternate-data"),
+    BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "alternate-electron") };
+  mkdirSync(alternate.BUTLER_DATA, { recursive: true });
+  const registration = () => powershell(`[ordered]@{
+    protocol = (Get-Item 'HKCU:\\Software\\Classes\\butler\\shell\\open\\command').GetValue('')
+    login = (Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run').'com.squirrel.butler-app.Butler'
+  } | ConvertTo-Json -Compress`, env);
+  const before = registration();
+  run(executable, ["--squirrel-uninstall"], { ...alternate, BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1" });
+  assertShortcuts(shortcuts, true);
+  assert.equal(registration(), before);
+  for (const event of ["--squirrel-install", "--squirrel-updated"]) {
+    run(executable, ["--squirrel-uninstall"], alternate);
+    assertShortcuts(shortcuts, false);
+    assert.equal(registration(), before, "Alternate uninstall changed default registrations");
+    run(executable, [event], alternate);
+    assertShortcuts(shortcuts, true);
+    assert.equal(registration(), before, "Alternate install/update changed default registrations");
+    shellProof();
+    console.log(JSON.stringify({ phase, event, alternateData: true, shortcuts: true, registrationsUnchanged: true }));
   }
 }
 
