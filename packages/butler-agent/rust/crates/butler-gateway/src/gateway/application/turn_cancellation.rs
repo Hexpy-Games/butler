@@ -4,6 +4,16 @@ use serde_json::{Value, json};
 use super::*;
 use crate::gateway::application::storage::AppStorageCode;
 
+/// Sent Stops still waiting for their outcome; served by
+/// `app_turn_cancel_outbox_pending_idx`.
+pub(super) const SENT_CANCELS_SQL: &str = "SELECT turns.chat_id,turns.id FROM app_turn_cancel_outbox outbox \
+    JOIN turns ON turns.id=outbox.turn_id WHERE outbox.state IN ('pending','accepted') \
+    AND outbox.queue_id IS NOT NULL AND turns.state='cancelling'";
+const SENT_CANCEL_SQL: &str = "SELECT 1 FROM app_turn_cancel_outbox outbox \
+    JOIN turns ON turns.id=outbox.turn_id WHERE outbox.turn_id=?1 AND turns.chat_id=?2 \
+    AND outbox.state IN ('pending','accepted') AND outbox.queue_id IS NOT NULL \
+    AND turns.state='cancelling'";
+
 impl AppApplication {
     pub(super) async fn recover_turn_cancellations(&self) -> Result<(), GatewayApplicationError> {
         let pending = self
@@ -33,6 +43,70 @@ impl AppApplication {
         for (chat, turn, requested_at, claim) in pending {
             self.dispatch_cancel(chat, turn, requested_at, claim)
                 .await?;
+        }
+        let sent = self
+            .storage
+            .read(|db| {
+                let mut statement = db
+                    .prepare_cached(SENT_CANCELS_SQL)
+                    .map_err(AppStorageError::sqlite)?;
+                let rows = statement
+                    .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+                    .map_err(AppStorageError::sqlite)?;
+                rows.collect::<Result<Vec<(String, String)>, _>>()
+                    .map_err(AppStorageError::sqlite)
+            })
+            .await
+            .map_err(app_error)?;
+        for (chat, turn) in sent {
+            self.settle_confirmed_stop(chat, turn).await?;
+        }
+        Ok(())
+    }
+
+    /// Settles a sent Stop the App is still waiting on once BTCC confirmed it
+    /// (an acknowledgement an earlier version dropped, or a Stop pressed again).
+    async fn settle_confirmed_stop(
+        &self,
+        chat_id: String,
+        turn_id: String,
+    ) -> Result<(), GatewayApplicationError> {
+        let confirmed = self
+            .dependencies
+            .native_ingress
+            .stop_confirmed(turn_id.clone())
+            .await?;
+        if !confirmed {
+            return Ok(());
+        }
+        let now = self.dependencies.identity_clock.now_iso();
+        let subscribers = self.subscribers.clone();
+        let chat = chat_id.clone();
+        let settled = self
+            .storage
+            .execute(move |db| {
+                let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+                let waiting = tx
+                    .query_row(SENT_CANCEL_SQL, params![turn_id, chat], |_| Ok(()))
+                    .optional()
+                    .map_err(AppStorageError::sqlite)?
+                    .is_some();
+                if waiting {
+                    projection::settle_confirmed_stop(&tx, &subscribers, &chat, &turn_id, &now)?;
+                }
+                tx.commit().map_err(AppStorageError::sqlite)?;
+                Ok(waiting)
+            })
+            .await
+            .map_err(app_error)?;
+        if settled {
+            self.queue_wake.chat(chat_id).await?;
+            if self
+                .automation_queued
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
+                self.automation_wake.notify_one();
+            }
         }
         Ok(())
     }
@@ -98,7 +172,10 @@ impl AppApplication {
             })
             .await
             .map_err(app_error)?;
-        if !prepared.2 {
+        if prepared.2 {
+            self.settle_confirmed_stop(prepared.0.clone(), turn_id.clone())
+                .await?;
+        } else {
             self.dispatch_cancel(
                 prepared.0.clone(),
                 turn_id.clone(),

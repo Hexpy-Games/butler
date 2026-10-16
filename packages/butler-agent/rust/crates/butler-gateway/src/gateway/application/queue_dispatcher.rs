@@ -372,7 +372,12 @@ fn queued_chats(db: &Connection) -> Result<Vec<String>, AppStorageError> {
         .collect::<Result<Vec<_>, _>>()
         .map_err(AppStorageError::sqlite)
 }
-fn session_has_active_turn(db: &Connection, chat: &str) -> Result<bool, AppStorageError> {
+/// Whether a turn of `chat` is running; a turn whose input waits queued again
+/// is not, since the queue dispatches it. Schedules wait by the same rule.
+pub(super) fn session_has_active_turn(
+    db: &Connection,
+    chat: &str,
+) -> Result<bool, AppStorageError> {
     db.query_row_cached("SELECT 1 FROM turns t WHERE chat_id=?1 AND NOT EXISTS (SELECT 1 FROM session_queued_messages q WHERE q.chat_id=t.chat_id AND q.turn_id=t.id AND q.state='queued' AND q.state IN ('queued','dispatching')) AND state IN ('accepted','thinking','streaming','waiting_for_form','waiting_for_tool','cancelling','retrying') LIMIT 1", [chat], |_| Ok(()))
         .optional().map(|row| row.is_some()).map_err(AppStorageError::sqlite)
 }

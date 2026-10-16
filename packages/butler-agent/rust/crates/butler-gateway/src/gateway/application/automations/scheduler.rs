@@ -47,6 +47,13 @@ impl AutomationScheduler {
         *self.task.lock() = Some(tokio::spawn(async move {
             let mut dispatch_failing = false;
             let mut read_failing = false;
+            // Due runs admit turns, which first needs the executor, as for
+            // the queue dispatcher; a failed wait leaves dispatch to report.
+            tokio::select! {
+                biased;
+                () = cancel.cancelled() => return,
+                _ = app.dependencies.executor_readiness.wait_ready() => {},
+            }
             // Recovery also dispatches runs queued before a restart.
             let _ = dispatch(&app, &mut dispatch_failing).await;
             loop {

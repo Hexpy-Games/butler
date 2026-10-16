@@ -6,10 +6,11 @@ use super::{
     records::{self, AutomationRow, QueuedRunRow},
     store::publish,
 };
+use crate::gateway::application::queue_dispatcher::session_has_active_turn;
 use crate::gateway::application::settings;
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::{
-    MessageRecord, MessageRole, MessageSendRequest, MessageStatus,
+    MessageSendRequest,
     application::{
         AppApplication, AppStorageError, GatewayApplicationError, SendMessageCommand, app_error,
     },
@@ -58,12 +59,10 @@ impl AppApplication {
             "automation-run-{}",
             self.dependencies.identity_clock.new_uuid()
         );
-        let placeholder_id = format!("message-{}", self.dependencies.identity_clock.new_uuid());
         let message_id = super::super::admission_identity::stable_client_id(
             Some(&json!(format!("automation-{id}-{run_id}"))),
             &*self.dependencies.identity_clock,
         )?;
-        let stored_placeholder_id = placeholder_id.clone();
         let run = run_id.clone();
         let automation_id = id.clone();
         let (row, queued) = self.storage.execute(move |db| {
@@ -81,12 +80,6 @@ impl AppApplication {
                 "INSERT INTO app_automation_run_inputs(message_id,run_id) VALUES(?1,?2)",
                 params![message_id, run],
             ).map_err(AppStorageError::sqlite)?;
-            if busy {
-                db.execute(
-                    "INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at,retryable) VALUES(?1,?2,'automation','Scheduled prompt queued.','pending',?3,?3,0)",
-                    params![stored_placeholder_id,row.target_id,started],
-                ).map_err(AppStorageError::sqlite)?;
-            }
             Ok((row, busy))
         }).await.map_err(app_error)?;
         if queued {
@@ -101,7 +94,7 @@ impl AppApplication {
                     DispatchResult {
                         state: "queued",
                         safe_error: None,
-                        turn_id: Some(placeholder_id),
+                        turn_id: None,
                     },
                 )
                 .await;
@@ -179,16 +172,9 @@ impl AppApplication {
         let completed = self.dependencies.identity_clock.now_iso();
         let subscribers = self.subscribers.clone();
         self.storage.execute(move|db|{
-            record_run(db,&queued.run_id,&result,&completed,queued.placeholder_id.as_deref())?;
+            record_run(db,&queued.run_id,&result,&completed)?;
             if let Some(message_id) = queued.placeholder_id.as_deref() {
-                let message = placeholder_message(db, message_id)?;
-                publish(
-                    db,
-                    &subscribers,
-                    "message.updated",
-                    &json!({"message": message}),
-                    &completed,
-                )?;
+                remove_placeholder(db, &subscribers, message_id, &completed)?;
             }
             db.execute("UPDATE app_automations SET last_run_at=?1,last_run_state=?2,last_safe_error_code=COALESCE(?3,(SELECT safe_error_code FROM app_automation_runs WHERE id=?5)),consecutive_failure_count=CASE WHEN ?2='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?1 WHERE id=?4",params![completed,result.state,result.safe_error,queued.automation.id,queued.run_id]).map_err(AppStorageError::sqlite)?;
             let run=records::run(db,&queued.run_id)?;
@@ -313,8 +299,7 @@ impl AppApplication {
         let subscribers = self.subscribers.clone();
         let trigger = trigger.to_owned();
         self.storage.execute(move|db|{
-            let placeholder=if result.state=="queued"{result.turn_id.as_deref()}else{None};
-            record_run(db,&run_id,&result,&completed,placeholder)?;
+            record_run(db,&run_id,&result,&completed)?;
             db.execute("UPDATE app_automations SET next_run_at=?1,last_run_at=?2,last_run_state=?3,last_safe_error_code=COALESCE(?4,(SELECT safe_error_code FROM app_automation_runs WHERE id=?6)),run_count=run_count+1,consecutive_failure_count=CASE WHEN ?3='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?2,state=CASE WHEN schedule_type='once' THEN 'paused' ELSE state END WHERE id=?5",params![next,completed,result.state,result.safe_error,row.id,run_id]).map_err(AppStorageError::sqlite)?;
             let run=records::run(db,&run_id)?;
             publish(
@@ -333,33 +318,6 @@ impl AppApplication {
             Ok(AutomationRunResult{automation:records::summary(records::active(db,&row.id)?),run})
         }).await.map_err(app_error)
     }
-}
-
-fn session_has_active_turn(
-    db: &rusqlite::Connection,
-    target_id: &str,
-) -> Result<bool, AppStorageError> {
-    let latest = db
-        .query_row(
-            "SELECT state,safe_error_code FROM turns WHERE chat_id=?1 ORDER BY rowid DESC LIMIT 1",
-            [target_id],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
-        )
-        .optional()
-        .map_err(AppStorageError::sqlite)?;
-    Ok(latest.is_some_and(|(state, error)| {
-        error.as_deref() != Some("provider_round_timeout")
-            && matches!(
-                state.as_str(),
-                "accepted"
-                    | "thinking"
-                    | "streaming"
-                    | "waiting_for_form"
-                    | "waiting_for_tool"
-                    | "cancelling"
-                    | "retrying"
-            )
-    }))
 }
 
 pub(super) fn run_event(
@@ -381,50 +339,32 @@ pub(super) fn run_event(
     event
 }
 
-fn placeholder_message(
+/// Removes the chat message an earlier version wrote for a queued run; the
+/// schedule's run list shows a queued run.
+fn remove_placeholder(
     db: &rusqlite::Connection,
+    subscribers: &crate::gateway::application::events::EventSubscribers,
     message_id: &str,
-) -> Result<MessageRecord, AppStorageError> {
-    db.query_row(
-        "SELECT rowid,id,chat_id,text,status,created_at,updated_at,safe_error_code,retryable FROM app_owned_messages WHERE id=?1",
-        [message_id],
-        |row| {
-            let status: String = row.get(4)?;
-            let status = match status.as_str() {
-                "delivered" => MessageStatus::Delivered,
-                "failed" => MessageStatus::Failed,
-                _ => MessageStatus::Pending,
-            };
-            Ok(MessageRecord {
-                content_parts: None,
-                id: row.get(1)?,
-                chat_id: row.get(2)?,
-                turn_id: None,
-                conversation_session_id: None,
-                conversation_turn_id: None,
-                conversation_message_id: None,
-                role: MessageRole::Automation,
-                text: row.get(3)?,
-                status,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
-                safe_error_code: row.get(7)?,
-                delivery_state: None,
-                limitation_codes: None,
-                limitations: None,
-                retryable: row.get::<_, i64>(8)? == 1,
-                cursor: row.get(0)?,
-                attachments: None,
-                artifacts: None,
-                changed_files: None,
-                plan_document: None,
-                answer_blocks: None,
-                work_blocks: None,
-                turn_activity_rows: None,
-            })
-        },
+    now: &str,
+) -> Result<(), AppStorageError> {
+    let chat: Option<String> = db
+        .query_row(
+            "SELECT chat_id FROM app_owned_messages WHERE id=?1 AND role='automation'",
+            [message_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(AppStorageError::sqlite)?;
+    let Some(chat) = chat else { return Ok(()) };
+    db.execute("DELETE FROM messages WHERE id=?1", [message_id])
+        .map_err(AppStorageError::sqlite)?;
+    publish(
+        db,
+        subscribers,
+        "message.deleted",
+        &json!({"message_id":message_id,"chat_id":chat,"role":"automation"}),
+        now,
     )
-    .map_err(AppStorageError::sqlite)
 }
 
 fn record_run(
@@ -432,7 +372,6 @@ fn record_run(
     run_id: &str,
     result: &DispatchResult,
     completed: &str,
-    placeholder: Option<&str>,
 ) -> Result<(), AppStorageError> {
     let turn = if result.state == "queued" {
         None
@@ -441,16 +380,6 @@ fn record_run(
     };
     // An unattended run may report attention (D8) before its dispatch is
     // recorded; the schedule's last code then follows the run's.
-    db.execute("UPDATE app_automation_runs SET state=?1,completed_at=?2,safe_error_code=COALESCE(?3,safe_error_code),queued_message_id=?4,turn_id=?5 WHERE id=?6",params![result.state,completed,result.safe_error,placeholder,turn,run_id]).map_err(AppStorageError::sqlite)?;
-    if let Some(message_id) = placeholder {
-        let (text, status, retryable) = if result.state == "queued" {
-            ("Scheduled prompt queued.", "pending", 0)
-        } else if result.state == "succeeded" {
-            ("Scheduled prompt dispatched.", "delivered", 0)
-        } else {
-            ("Scheduled prompt could not be dispatched.", "failed", 1)
-        };
-        db.execute("UPDATE messages SET text=?1,status=?2,safe_error_code=?3,retryable=?4,updated_at=?5 WHERE id=?6",params![text,status,result.safe_error,retryable,completed,message_id]).map_err(AppStorageError::sqlite)?;
-    }
+    db.execute("UPDATE app_automation_runs SET state=?1,completed_at=?2,safe_error_code=COALESCE(?3,safe_error_code),turn_id=?4 WHERE id=?5",params![result.state,completed,result.safe_error,turn,run_id]).map_err(AppStorageError::sqlite)?;
     Ok(())
 }
