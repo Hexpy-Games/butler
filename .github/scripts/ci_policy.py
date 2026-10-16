@@ -4,13 +4,14 @@
 def rust_jobs(outputs, event):
     rust = outputs['rust'] == 'true'
     package = outputs['package'] == 'true'
+    signing = outputs.get('signing') == 'true'
     install = outputs['install'] == 'true'
     linux_package = outputs['linux-package'] == 'true'
     integration = outputs['tier'] == 'integration'
     arm_tests = rust and integration
     # ARM64 archives also run native Clippy/doctests on Rust smoke changes.
     selected = {
-        'windows-check': rust, 'shellcheck': package, 'selftest': package,
+        'windows-check': rust, 'shellcheck': package or signing, 'selftest': package or signing,
         'linux-clippy': rust, 'linux-archive': rust,
         'linux-tests': rust, 'linux-perf-archive': rust and integration, 'linux-perf': rust and integration, 'linux-native': linux_package or install,
         'macos-archive': rust, 'macos-native': integration and (rust or package or install),

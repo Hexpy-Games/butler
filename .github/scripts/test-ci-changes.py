@@ -25,21 +25,21 @@ class Paths(unittest.TestCase):
             'packages/butler-app/client/ui/src/app.tsx': {'ui', 'site', 'ds'},
             'packages/butler-i18n/src/locale.ts': {'ui', 'site', 'ds'},
             'packages/project-ledger/src/index.ts': {'ui', 'ds'},
-            'bun.lock': {'ui', 'site', 'ds', 'licenses'},
-            'bun.lockb': {'ui', 'site', 'ds', 'licenses'},
+            'bun.lock': {'ui', 'site', 'ds', 'licenses', 'signing'},
+            'bun.lockb': {'ui', 'site', 'ds', 'licenses', 'signing'},
             'packages/butler-agent/rust/crates/butler-core/src/lib.rs': {'rust', 'package', 'install', 'linux-package'},
             'packages/butler-agent/rust/Cargo.lock': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'Cargo.toml': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'new-crate/Cargo.toml': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'new-crate/Cargo.lock': {'rust', 'package', 'install', 'linux-package', 'licenses'},
-            'packages/butler-app/client/electron/src/main.ts': {'rust', 'ui', 'ds', 'package', 'install', 'linux-package'},
+            'packages/butler-app/client/electron/src/main.ts': {'rust', 'ui', 'ds', 'package', 'install', 'linux-package', 'signing'},
             'deploy/install.sh': {'package', 'install', 'linux-package'},
             'packages/butler-site/src/pages/index.astro': {'site'},
             'README.md': set(),
             'packages/butler-agent/rust/docs/install-layout.md': set(),
             'packages/butler-agent/resources/skills/status/SKILL.md': {'rust', 'package', 'install', 'linux-package'},
             'packages/butler-agent/rust/crates/butler-e2e/fixtures/memory/rule.md': {'rust'},
-            'packages/butler-app/scripts/release/package-versions.ts': {'rust', 'ui', 'ds', 'package', 'install', 'linux-package'},
+            'packages/butler-app/scripts/release/package-versions.ts': {'rust', 'ui', 'ds', 'package', 'install', 'linux-package', 'signing'},
             'notes.md': set(),
             '.github/pull_request_template.md': set(),
             '.github/workflows/windows.yml': {'rust', 'ui', 'package'},
@@ -275,7 +275,7 @@ class Trust(unittest.TestCase):
         groups = json.loads(re.search(r"groups: '([^']+)'", workflow).group(1))
         # Evaluate the actual gate's selection policy, without its result loop.
         policy = (ROOT / 'check-gate.py').read_text().split("if 'lint' in jobs")[0]
-        flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds', 'licenses']
+        flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds', 'licenses', 'signing']
         for values in itertools.product(['false', 'true'], repeat=len(flags)):
             outputs = dict(zip(flags, values), tier='smoke', workflows='true')
             outputs['jobs'] = json.dumps(changes.rust_jobs(outputs, 'pull_request') | {'lint': True})

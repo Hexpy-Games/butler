@@ -2,10 +2,12 @@
 import glob
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import ci_rust_inputs
 
@@ -173,3 +175,41 @@ class DerivedInputs(unittest.TestCase):
                         ci_rust_inputs.external_inputs(str(root))
                     with self.assertRaisesRegex(AssertionError, 'Unsupported include argument'):
                         list(independent_includes(source))
+
+
+    # test-category: pure-logic
+    def test_signing_selects_own_inputs_through_workflow_jobs(self):
+        workflow = 'rust-quality.yml'
+        source = (ROOT / '.github/workflows' / workflow).read_text()
+        for path, signing in {
+            'deploy/macos/sign-and-notarize.sh': True,
+            'packages/butler-app/scripts/release/package-app-release.ts': True,
+            'packages/butler-app/client/electron/entitlements.mac.plist': True,
+            'packages/butler-agent/rust/scripts/package-standalone-agent.py': True,
+            'VERSION': True, 'package.json': True, 'bun.lock': True, 'bun.lockb': True,
+            'packages/butler-agent/rust/crates/butler-core/src/lib.rs': False,
+            'deploy/linux-app-smoke.sh': False, 'deploy/install.sh': False,
+            'README.md': False,
+        }.items():
+            with self.subTest(path=path), tempfile.TemporaryDirectory() as temporary:
+                env = dict(GITHUB_EVENT_NAME='pull_request', GITHUB_REF='refs/pull/1/merge',
+                           GITHUB_REPOSITORY='owner/repo', GITHUB_RUN_ID='2',
+                           GITHUB_OUTPUT=str(Path(temporary) / 'output'),
+                           GITHUB_STEP_SUMMARY=str(Path(temporary) / 'summary'))
+                with patch.dict(os.environ, env), patch.object(changes, 'command', return_value='head'), \
+                     patch.object(changes, 'changed', return_value=[path]), \
+                     patch.object(changes, 'previous', return_value=iter([])), \
+                     patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
+                    changes.select({'pull_request': {'number': 1, 'base': {'sha': 'base'}}}, workflow)
+                output = dict(line.split('=', 1) for line in Path(env['GITHUB_OUTPUT']).read_text().splitlines())
+                self.assertEqual(output['signing'], str(signing).lower())
+                if path in ('package.json', 'bun.lock', 'bun.lockb'):
+                    for group in ('package', 'install', 'linux-package'):
+                        self.assertEqual(output[group], 'false')
+                jobs = json.loads(output['jobs'])
+                for name in ('shellcheck', 'selftest'):
+                    self.assertEqual(jobs[name], signing or output['package'] == 'true')
+        for name in ('shellcheck', 'selftest'):
+            self.assertEqual(changes.job_groups(workflow)[name], ['package', 'signing'])
+            block = re.split(r'\n  [a-z]', source.split(f'  {name}:\n', 1)[1], maxsplit=1)[0]
+            self.assertIn(f"fromJSON(needs.changes.outputs.jobs)['{name}']", block)

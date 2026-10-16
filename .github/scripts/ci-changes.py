@@ -17,7 +17,7 @@ import ci_parts
 import ci_rust_inputs
 from urllib.parse import urlencode
 
-GROUPS = ('rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses')
+GROUPS = ('rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses', 'signing')
 SHARED = ('VERSION', 'LICENSE', 'package.json', 'bun.lock*', 'bunfig.toml', 'tsconfig*.json',
           '*eslint*', '*stylelint*', '*prettier*')
 PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/electron/*',
@@ -33,6 +33,10 @@ RUST_TEST_ONLY = ('packages/butler-agent/rust/crates/butler-e2e/tests/*',
                   'packages/butler-agent/rust/crates/butler-e2e/fixtures/*')
 SITE_CHECK_INPUTS = ('tests/smoke/ds-site-*', 'tests/smoke/font-assets-check.ts',
                      'tests/support/smoke-browser.ts', 'tests/support/ds-viewer-mobile-checks.ts')
+SIGNING = ('deploy/macos*', 'packages/butler-app/scripts/release/*',
+           'packages/butler-app/client/electron/*',
+           'packages/butler-agent/rust/scripts/package-standalone-agent.py',
+           'VERSION', 'package.json', 'bun.lock', 'bun.lockb')
 # Native Windows smoke inputs beyond Rust; other CI configuration stays out.
 WINDOWS = ('deploy/windows*', '.github/workflows/*windows*', '.github/actions/*windows*',
            '.github/actions/rust-agent-setup/*', '.github/scripts/*windows*')
@@ -151,6 +155,8 @@ def categories(path):
         result.add('ds')
     if license_input or matches(path, ('*.lock', '*.lockb', '*-lock.json', 'Cargo.lock', 'Cargo.toml', '**/Cargo.toml', '**/package.json', 'deploy/licenses/*', '**/licenses/*', 'LICENSE*')):
         result.add('licenses')
+    if matches(path, SIGNING):
+        result.add('signing')
     # Unknown executable/configuration inputs fail closed, rather than silently
     # leaving a new package or tool untested. Assets/readme are product assets.
     if not result and not path.startswith('assets/readme/'):
