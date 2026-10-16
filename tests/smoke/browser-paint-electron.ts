@@ -1,3 +1,4 @@
+import { appLocaleFromLanguage, getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: race
 /** Native held-button strokes, custom toolbar refs, screenshot crop and one reply image. */
 import { strict as assert } from "node:assert";
@@ -113,7 +114,7 @@ try {
   }
   await app.page.reload();
   await shellReady(app, "ko");
-  await app.click("일반");
+  await app.click(getAppCopy("ko-KR").space.general);
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="markdown-inline-image"]')));
   const count=await app.page.expression<number>("document.querySelectorAll('[data-test-class=markdown-inline-image]').length");assert.equal(count, extraCapture?2:1);
   assert.equal(await app.page.expression("document.querySelectorAll('[data-test-class=message-artifact-list]').length"), baseline?2:1, "image card is removed; web fixture card stays");
@@ -124,7 +125,7 @@ try {
     await app.gateway.api("/settings", { method:"PATCH", body:JSON.stringify({ language, appearance_theme:theme }) });
     await app.main(`${app.win}.setContentSize(${width},900)`);await app.page.reload();
     await shellReady(app, language);
-    await app.click(language === "ko" ? "일반" : "General");
+    await app.click(getAppCopy(appLocaleFromLanguage(language)).space.general);
     await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="markdown-inline-image"]')));
     await app.page.waitForFunction(()=>[...document.querySelectorAll('[data-test-class="markdown-inline-image"]')].every(image=>image instanceof HTMLImageElement && image.complete && image.naturalWidth>0));
     await app.page.expression("Promise.all([...document.querySelectorAll('[data-test-class=markdown-inline-image]')].map(image=>image.decode()))");

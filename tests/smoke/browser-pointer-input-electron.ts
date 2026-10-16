@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: security
 /** Native OS input through the real App overlay; no CDP mouse injection. */
 import { strict as assert } from "node:assert";
@@ -50,7 +51,7 @@ async function dragPick(source: "page" | "bar", destination: string) {
 }
 try {
   const other = await app.gateway.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "Pointer destination" }) });
-  await app.page.reload(); await shellReady(app, "en"); await app.click("General");
+  await app.page.reload(); await shellReady(app, "en"); await app.click(getAppCopy("en-US").space.general);
   await app.call("open");
   tab = await app.call<string>("create", { owner: "conversation:general", profile: "signed_out", url: server.url.href });
   await app.click("Show browser"); await app.call("activate", { id: tab }); await nativeAligned(app);
@@ -94,7 +95,7 @@ try {
     await dragPick(source, row);
     await app.click("Pointer destination");
     await waitBrowser(() => app.page.expression(`document.querySelectorAll('[data-slot=element-chip]').length===${chipCount}`), `${source} to conversation`);
-    await app.click("General"); await app.call("activate", { id: tab }); await nativeAligned(app);
+    await app.click(getAppCopy("en-US").space.general); await app.call("activate", { id: tab }); await nativeAligned(app);
   }
   await app.call("pick", { id: tab, value: false });
   await input("click", await point("#link")); await waitBrowser(() => page("proof.clicks===1"), "forwarded link click");

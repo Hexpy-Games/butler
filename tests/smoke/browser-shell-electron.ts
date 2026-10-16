@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 /** S1 acceptance through the real App shell, isolated gateway and native browser. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -23,7 +24,7 @@ try {
   await app.page.reload(); await shellReady(app, "en");
   if (await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open') === 'false'")) await app.click("Show sidebar");
   await waitBrowser(() => app.page.expression("!document.querySelector('[data-slot=adaptive-shell-sidebar]').getAnimations().some(a=>a.playState==='running')"), "sidebar open motion settles");
-  await app.click("General");
+  await app.click(getAppCopy("en-US").space.general);
   await app.gateway.api("/messages", { method: "POST", body: JSON.stringify({ chat_id: "general", text: "Compare the browser fixture in this conversation.", client_message_id: crypto.randomUUID() }) });
   await waitBrowser(async () => (await app.gateway.api<{ latest_turn?: { state: string } }>("/session-view?session_id=general")).latest_turn?.state === "delivered", "stub conversation delivered");
   await app.call("open");
@@ -77,7 +78,7 @@ try {
   await togglePane(app, true);
   const other = (await app.call<{ activeId: string }>("state")).activeId;
   assert.notEqual(other, second);
-  await app.click("General"); await nativeAligned(app);
+  await app.click(getAppCopy("en-US").space.general); await nativeAligned(app);
   assert.equal((await app.call<{ activeId: string }>("state")).activeId, second);
   await app.click("Show right panel");
   await waitBrowser(() => app.page.expression(`!document.querySelector('${pane}')`), "inspector closes browser");

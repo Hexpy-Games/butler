@@ -72,31 +72,7 @@ fn binary() -> Result<PathBuf, HarnessError> {
     if let Some(path) = std::env::var_os("BUTLER_E2E_ROUND_STORE_BIN") {
         return Ok(path.into());
     }
-    if let Some(path) = std::env::var_os("NEXTEST_BIN_EXE_e2e-round-store")
-        .or_else(|| std::env::var_os("NEXTEST_BIN_EXE_e2e_round_store"))
-    {
-        return Ok(path.into());
-    }
-    if let Some(path) = option_env!("CARGO_BIN_EXE_e2e-round-store") {
-        return Ok(path.into());
-    }
-    let profile = if cfg!(debug_assertions) {
-        "debug"
-    } else {
-        "release"
-    };
-    let target = std::env::var_os("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| butler_e2e::e2e::binary::workspace_root().join("target"));
-    let path = target
-        .join(profile)
-        .join(format!("e2e-round-store{}", std::env::consts::EXE_SUFFIX));
-    if !path.exists() {
-        return Err(butler_e2e::e2e::harness_error(
-            "build butler-e2e --bin e2e-round-store first",
-        ));
-    }
-    Ok(path)
+    butler_e2e::e2e::binary::fixture_binary("e2e-round-store")
 }
 pub(in super::super) async fn wait(
     script: &Arc<stub::Script>,
