@@ -28,6 +28,14 @@ use std::{
     process::{Command, Output},
 };
 
+pub(super) fn toolchain_roots() -> Option<command_sandbox::ToolchainRoots> {
+    butler_platform::account_dirs::account_dirs().map(|dirs| command_sandbox::ToolchainRoots {
+        home: dirs.home,
+        app_data: dirs.app_data,
+        local_app_data: dirs.local_app_data,
+    })
+}
+
 fn desktop() -> bool {
     !command_sandbox::POSIX_SHELL
         && (std::env::var("BUTLER_E2E_WINDOWS_SANDBOX_DESKTOP").as_deref() == Ok("1")
@@ -108,6 +116,7 @@ impl Fixture {
                 .map(PathBuf::as_path)
                 .collect::<Vec<_>>(),
             &secrets.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
+            toolchain_roots().as_ref(),
         )
         .unwrap()
     }

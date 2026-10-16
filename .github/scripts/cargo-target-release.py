@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import urllib.request
@@ -33,8 +34,8 @@ CHUNK_BYTES = 1800 * 1024**2
 KEEP = 4
 # Older generations a restore checks after the tagged one: one manifest lookup each.
 WALK_BACK = KEEP - 1
-# Registry or GitHub API transport failures (HTTPError, URLError, timeouts, oras exits); never trust errors.
-TRANSIENT = (OSError, RuntimeError, subprocess.TimeoutExpired)
+# Transport and decompression failures; content/trust validation errors are never transient.
+TRANSIENT = (OSError, RuntimeError, subprocess.TimeoutExpired, tarfile.ReadError, EOFError)
 
 
 class UnsuccessfulProducer(ValueError):
@@ -239,7 +240,7 @@ def restore_snapshot(expected, result):
         return False
     with tempfile.TemporaryDirectory(dir=runner_cache.extended(os.environ['RUNNER_TEMP'])) as temporary:
         directory = Path(runner_cache.extended(temporary))
-        manifest, walked_back = candidates[0], False
+        manifest = candidates[0]
         try:
             generation, _ = checked_generation(manifest, directory, selected_identity, compatible)
             reason = 'tagged generation; producer lane finished green'
@@ -250,20 +251,18 @@ def restore_snapshot(expected, result):
                 print('No finished green Cargo snapshot for this lane; cold Cargo build follows.')
                 return False
             published, manifest, generation, compatible = found
-            selected_identity, walked_back = expected, True
+            selected_identity = expected
             reason = 'newest older generation whose producer lane finished green'
         print(f'Selected Cargo snapshot {manifest["name"][:-5]} ({describe(generation, compatible)}): {reason}.')
         try:
             fetch_chunks(published, manifest, generation, directory)
-        except RuntimeError as error:
-            if not walked_back:
-                raise
-            # Older generations can be pruned mid-download; the target is still untouched.
-            print(f'Cargo snapshot {manifest["name"][:-5]} download failed ({error}); cold Cargo build follows.')
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+            print(f'::warning::Cargo snapshot transport failed ({type(error).__name__}: {error}); cold Cargo build follows.')
+            return False
+        if restore_tree(directory, selected_identity, compatible) is False:
             return False
         result.update(generation=manifest['name'][:-5], match='compatible' if compatible else 'exact',
                       compressed=policy.compressed_bytes(directory))
-        restore_tree(directory, selected_identity, compatible)
     return True
 
 
@@ -344,13 +343,18 @@ def restore_tree(directory, expected, compatible=False):
         previous = Path.cwd()
         try:
             os.chdir(stage)
-            cache.extract(directory.resolve())
+            try:
+                cache.extract(directory)
+            except (RuntimeError, tarfile.ReadError, EOFError) as error:
+                print(f'::warning::Cargo snapshot decompress failed ({type(error).__name__}: {error}); cold Cargo build follows.')
+                return False
         finally:
             os.chdir(previous)
         os.rename(runner_cache.extended(Path(stage) / 'target'), runner_cache.extended(target))
     cache.source_times.restore(Path(os.environ['GITHUB_WORKSPACE']),
                               json.loads((directory / 'sources.json').read_text()))
     print(f'Restored verified CI Cargo snapshot at {json.loads((directory / "cache.json").read_text())["sha"]}.')
+    return True
 
 
 def tag_name(expected):

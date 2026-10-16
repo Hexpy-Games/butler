@@ -9,6 +9,7 @@ pub fn windows_prepare_project_write(
     root: &Path,
     writable: &[&Path],
     denied: &[&Path],
+    toolchain_roots: Option<&super::ToolchainRoots>,
 ) -> Result<super::Invocation, super::SandboxError> {
     #[cfg(windows)]
     {
@@ -18,11 +19,19 @@ pub fn windows_prepare_project_write(
             root,
             writable,
             denied,
+            toolchain_roots,
         )
     }
     #[cfg(not(windows))]
     {
-        let _ = (command, environment, root, writable, denied);
+        let _ = (
+            command,
+            environment,
+            root,
+            writable,
+            denied,
+            toolchain_roots,
+        );
         Err(super::SandboxError::ProjectWriteUnavailable)
     }
 }

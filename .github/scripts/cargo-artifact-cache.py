@@ -144,46 +144,57 @@ def extract(directory, root='target'):
     if cache_root.is_symlink() or not cache_root.resolve().is_relative_to(Path.cwd().resolve()):
         raise tarfile.FilterError('Escaping cache root')
     with subprocess.Popen(['zstd', '-d', '-c', str(archive)], stdout=subprocess.PIPE) as decompress:
-        with tarfile.open(fileobj=decompress.stdout, mode='r|') as archive_tar:
-            for member in archive_tar:
-                if member.mtime > time.time():
-                    raise ValueError('Cargo output has a future timestamp')
-                path = Path(member.name)
-                if member.name == f'._{root}' and member.isfile():
-                    # BSD tar's legacy AppleDouble root attributes are data,
-                    # not Cargo outputs. Preserve them inside the cache tree;
-                    # they must never create a sibling checkout file.
-                    with archive_tar.extractfile(member) as metadata:
-                        header = metadata.read(8)
-                        if header != b'\x00\x05\x16\x07\x00\x02\x00\x00':
-                            raise ValueError('Invalid AppleDouble cache root metadata')
-                        destination = Path(root) / '._archive_root'
-                        if not destination.resolve().is_relative_to(Path(root).resolve()):
-                            raise tarfile.FilterError('Escaping cache root metadata')
-                        destination.parent.mkdir(parents=True, exist_ok=True)
-                        with destination.open('wb') as saved:
-                            saved.write(header)
-                            shutil.copyfileobj(metadata, saved)
-                    continue
-                if path.is_absolute() or '..' in path.parts or not path.parts or path.parts[0] != root:
-                    raise ValueError(f'Unexpected Cargo cache path: {member.name}')
-                if path != cache_root and not path.parent.resolve().is_relative_to(cache_root.resolve()):
-                    raise tarfile.FilterError(f'Escaping existing cache path: {member.name}')
-                if member.issym() or member.islnk():
-                    link = Path(member.linkname)
-                    destination = path.parent / link if member.issym() else link
-                    if link.is_absolute() or not destination.resolve().is_relative_to(Path(root).resolve()):
-                        raise tarfile.FilterError(f'Unexpected Cargo cache link: {member.name}')
-                if member.islnk():
-                    # Supplementing an existing cache leaves the destination
-                    # present. Python 3.12 then falls back to seeking an earlier
-                    # tar member, which a zstd stream cannot do. Replace only
-                    # the validated in-tree hardlink before recreating it.
-                    path.unlink(missing_ok=True)
-                archive_tar.extract(member, filter='data')
-        decompress.stdout.close()
+        try:
+            extract_stream(decompress.stdout, cache_root, root)
+        finally:
+            decompress.stdout.close()
         if decompress.wait() != 0:
             raise RuntimeError('Cargo build-cache decompression failed')
+
+
+def extract_stream(stream, cache_root, root):
+    with tarfile.open(fileobj=stream, mode='r|') as archive_tar:
+        for member in archive_tar:
+            if member.mtime > time.time():
+                raise ValueError('Cargo output has a future timestamp')
+            path = Path(member.name)
+            if member.name == f'._{root}' and member.isfile():
+                # BSD tar's legacy AppleDouble root attributes are data,
+                # not Cargo outputs. Preserve them inside the cache tree;
+                # they must never create a sibling checkout file.
+                with archive_tar.extractfile(member) as metadata:
+                    header = metadata.read(8)
+                    if header != b'\x00\x05\x16\x07\x00\x02\x00\x00':
+                        raise ValueError('Invalid AppleDouble cache root metadata')
+                    destination = Path(root) / '._archive_root'
+                    if not destination.resolve().is_relative_to(Path(root).resolve()):
+                        raise tarfile.FilterError('Escaping cache root metadata')
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    with destination.open('wb') as saved:
+                        saved.write(header)
+                        shutil.copyfileobj(metadata, saved)
+                continue
+            if path.is_absolute() or '..' in path.parts or not path.parts or path.parts[0] != root:
+                raise ValueError(f'Unexpected Cargo cache path: {member.name}')
+            if path != cache_root and not path.parent.resolve().is_relative_to(cache_root.resolve()):
+                raise tarfile.FilterError(f'Escaping existing cache path: {member.name}')
+            if member.issym() or member.islnk():
+                link = Path(member.linkname)
+                destination = path.parent / link if member.issym() else link
+                if link.is_absolute() or not destination.resolve().is_relative_to(Path(root).resolve()):
+                    raise tarfile.FilterError(f'Unexpected Cargo cache link: {member.name}')
+            if member.islnk():
+                # Supplementing an existing cache leaves the destination
+                # present. Python 3.12 then falls back to seeking an earlier
+                # tar member, which a zstd stream cannot do. Replace only
+                # the validated in-tree hardlink before recreating it.
+                path.unlink(missing_ok=True)
+            archive_tar.extract(member, filter='data')
+        # Read through tarfile's buffer as well as the pipe: a tar end marker
+        # can precede an entire padding record still being written by zstd.
+        while block := archive_tar.fileobj.read(64 * 1024):
+            if block.strip(b'\0'):
+                raise ValueError('Non-NUL Cargo build-cache archive tail')
 
 
 class Parts:

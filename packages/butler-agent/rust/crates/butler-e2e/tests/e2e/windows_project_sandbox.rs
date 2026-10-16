@@ -71,6 +71,7 @@ async fn filesystem_preparation_normalizes_search_separators() -> Result<(), Har
                 .map(std::path::PathBuf::as_path)
                 .collect::<Vec<_>>(),
             &[],
+            super::windows_sandbox::toolchain_roots().as_ref(),
         )
     };
     let invocation = prepare(&env).map_err(|error| std::io::Error::other(error.to_string()))?;
@@ -229,6 +230,7 @@ async fn desktop_project_write_cleans_drive_journal() -> Result<(), HarnessError
             .map(std::path::PathBuf::as_path)
             .collect::<Vec<_>>(),
         &[],
+        super::windows_sandbox::toolchain_roots().as_ref(),
     )
     .map_err(|error| std::io::Error::other(error.to_string()))?;
     // Admission is reproducible over SSH; process launch still requires WinSta0.

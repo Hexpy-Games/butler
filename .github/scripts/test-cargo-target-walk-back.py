@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -19,7 +20,7 @@ spec.loader.exec_module(snapshots)
 class WalkBack(unittest.TestCase):
     lane = dict(schema=2, platform='linux-x64', kind='native', lock='current', configs={'Cargo.toml': 'current'})
 
-    def walk_back(self, states, fetch_error=None):
+    def walk_back(self, states, fetch_error=None, restore_error=None):
         """Restore from generations newest first: (suffix, identity, run status, job conclusion)."""
         expected = self.lane
         generations = {suffix: dict(metadata=dict(identity=identity, run_id=int(suffix.split('-')[0]), run_attempt=1,
@@ -58,12 +59,12 @@ class WalkBack(unittest.TestCase):
                 patch.object(snapshots, 'api', side_effect=api), \
                 patch.object(snapshots.ci_oci, 'tags', return_value=tags) as listing, \
                 patch.object(snapshots, 'fetch_chunks', side_effect=fetch_error) as fetch, \
-                patch.object(snapshots, 'restore_tree') as adopt, contextlib.redirect_stdout(output):
+                patch.object(snapshots, 'restore_tree', side_effect=restore_error) as adopt, contextlib.redirect_stdout(output):
             restored = snapshots.restore(expected)
-        self.assertEqual(listing.call_count, 1)
+        self.assertEqual(listing.call_count, int(states[0][2:] != ('completed', 'success')))
         looked_up = [call.args[0].rsplit('--', 1)[-1] for call in lookup.call_args_list[1:]]
         chosen = fetch.call_args.args[1]['name'][:-5] if adopt.called else None
-        self.assertEqual(restored, adopt.called)
+        self.assertEqual(restored, adopt.called and restore_error is None)
         return restored, chosen, adopt.call_args.args[1:] if adopt.called else None, looked_up, output.getvalue()
 
     # test-category: security
@@ -106,10 +107,12 @@ class WalkBack(unittest.TestCase):
         pruned = RuntimeError('OCI blob failed: manifest unknown')
         restored, _, _, _, output = self.walk_back(states, fetch_error=pruned)
         self.assertFalse(restored)
-        self.assertIn('Cargo snapshot 49-1 download failed (OCI blob failed: manifest unknown); cold Cargo build follows.',
+        self.assertIn('::warning::Cargo snapshot transport failed (RuntimeError: OCI blob failed: manifest unknown); cold Cargo build follows.',
                       output)
-        with self.assertRaisesRegex(RuntimeError, 'manifest unknown'):  # The tagged generation still fails loudly.
-            self.walk_back([('50-1', self.lane, 'completed', 'success')], fetch_error=pruned)
+        restored, _, _, _, output = self.walk_back(
+            [('50-1', self.lane, 'completed', 'success')], fetch_error=pruned)
+        self.assertFalse(restored)
+        self.assertIn('::warning::', output)
 
     # test-category: security
     def test_transient_check_error_keeps_a_found_compatible_fallback(self):
@@ -119,11 +122,73 @@ class WalkBack(unittest.TestCase):
         _, chosen, adopted, _, output = self.walk_back(states)
         self.assertEqual((chosen, adopted), ('49-1', (self.lane, True)))
         self.assertIn('Cargo snapshot 48-1 could not be checked (HTTP Error 404: Not Found); keeping', output)
-        with self.assertRaises(urllib.error.HTTPError):  # Without a fallback the error is not hidden.
+        with self.assertRaises(urllib.error.HTTPError):
             self.walk_back([newest, ('49-1', self.lane, 'deleted', None)])
         fork = dict(older, compiler='other toolchain')  # Trust and identity errors are never swallowed.
         with self.assertRaisesRegex(ValueError, 'identity mismatch'):
             self.walk_back([newest, ('49-1', older, 'completed', 'success'), ('48-1', fork, 'completed', 'success')])
+
+    # test-category: race
+    def test_decompression_failure_builds_cold_but_verified_content_errors_fail(self):
+        states = [('50-1', self.lane, 'in_progress', None), ('49-1', self.lane, 'completed', 'success')]
+        # Exercise restore_tree and extraction with a failing decompressor process.
+        restore_tree = snapshots.restore_tree
+        real_extract = snapshots.cache.extract
+        real_popen = subprocess.Popen
+
+        def failed_decompress(*args, **kwargs):
+            return real_popen([snapshots.sys.executable, '-c',
+                               "import sys; sys.stdout.buffer.write(bytes(10240)); sys.exit(1)"], **kwargs)
+
+        def extract(directory):
+            with patch.object(snapshots.cache.subprocess, 'Popen', side_effect=failed_decompress):
+                real_extract(directory)
+
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.dict(os.environ, CARGO_TARGET_DIR=str(Path(temporary) / 'target')), \
+                patch.object(snapshots.cache, 'verify'), patch.object(snapshots.cache, 'extract', side_effect=extract):
+            restored, _, _, _, output = self.walk_back(states, restore_error=restore_tree)
+        self.assertFalse(restored)
+        self.assertIn('::warning::Cargo snapshot decompress failed (RuntimeError:', output)
+        self.assertIn('Cargo build-cache decompression failed', output)
+        self.assertIn('cold Cargo build follows.', output)
+        for error in ['digest mismatch', 'identity mismatch', 'Non-NUL archive tail']:
+            with self.assertRaisesRegex(ValueError, error):
+                self.walk_back(states, restore_error=ValueError(error))
+
+    # test-category: pure-logic
+    def test_local_filesystem_errors_propagate_and_transport_errors_warn(self):
+        states = [('50-1', self.lane, 'completed', 'success')]
+        error = OSError('local path failure')
+        for phase in ['persistent_target', 'restore_local']:
+            with patch.object(snapshots, 'persistent_target', return_value=Path('local')), \
+                    patch.object(snapshots, phase, side_effect=error), self.assertRaises(OSError):
+                self.walk_back(states)
+        with self.assertRaises(OSError):
+            self.walk_back(states, restore_error=error)
+        restored, _, _, _, output = self.walk_back(states, fetch_error=OSError('connection closed'))
+        self.assertFalse(restored)
+        self.assertIn('::warning::Cargo snapshot transport failed (OSError: connection closed)', output)
+
+    # test-category: pure-logic
+    def test_extract_errors_fall_back_only_for_decompression(self):
+        states = [('50-1', self.lane, 'completed', 'success')]
+        restore_tree = snapshots.restore_tree
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.dict(os.environ, CARGO_TARGET_DIR=str(Path(temporary) / 'target')), \
+                patch.object(snapshots.cache, 'verify'):
+            for error in [snapshots.tarfile.ReadError('invalid tar'), EOFError('truncated stream')]:
+                with self.subTest(error=type(error).__name__), \
+                        patch.object(snapshots.cache, 'extract', side_effect=error):
+                    restored, _, _, _, output = self.walk_back(states, restore_error=restore_tree)
+                self.assertFalse(restored)
+                self.assertIn(f'::warning::Cargo snapshot decompress failed ({type(error).__name__}: {error})', output)
+            for phase in ['delete_tree', 'extract', 'rename']:
+                owner = {'delete_tree': snapshots.runner_cache, 'extract': snapshots.cache, 'rename': os}[phase]
+                with patch.object(snapshots.cache, 'extract'), \
+                        patch.object(owner, phase, side_effect=OSError('local path failure')), \
+                        self.assertRaisesRegex(OSError, 'local path failure'):
+                    self.walk_back(states, restore_error=restore_tree)
 
     # test-category: security
     def test_generation_tag_must_name_its_producer_run(self):

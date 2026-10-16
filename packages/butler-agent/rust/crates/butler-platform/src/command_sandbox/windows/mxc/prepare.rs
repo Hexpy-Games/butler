@@ -51,8 +51,9 @@ pub(in crate::command_sandbox) fn invocation(
     root: &Path,
     writable: &[&Path],
     denied: &[&Path],
+    toolchain_roots: Option<&crate::command_sandbox::ToolchainRoots>,
 ) -> Result<Invocation, SandboxError> {
-    prepare(invocation, host, root, writable, denied).map_err(|e| {
+    prepare(invocation, host, root, writable, denied, toolchain_roots).map_err(|e| {
         if e.downcast_ref::<std::io::Error>()
             .is_some_and(|e| e.kind() == std::io::ErrorKind::WouldBlock)
         {
@@ -68,6 +69,7 @@ fn prepare(
     root: &Path,
     writable: &[&Path],
     denied: &[&Path],
+    toolchain_roots: Option<&crate::command_sandbox::ToolchainRoots>,
 ) -> Result<Invocation, Error> {
     let _phase = super::timing::Phase::start("prepare");
     super::super::cmd::inside_utf8_bootstrap(&mut invocation);
@@ -82,7 +84,7 @@ fn prepare(
     normalize_host_roots(&mut env)?;
     let project = physical_for(root, "project")?;
     let discovery = super::timing::Phase::start("tool_discovery");
-    let mut tools = tools::discover(&env)?;
+    let mut tools = tools::discover(&env, toolchain_roots)?;
     tools.path.retain(|path| !project.is_within(path));
     tools.readonly.retain(|path| !project.is_within(path));
     drop(discovery);
