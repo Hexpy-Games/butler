@@ -81,6 +81,7 @@ pub(super) fn model_unavailable(field: &str) -> GatewayApplicationError {
 pub(super) fn persistence_projection(projection: &Value) -> Value {
     let mut value = projection.as_object().cloned().unwrap_or_default();
     value.remove("model_fallback");
+    value.remove("command_sandbox_available");
     Value::Object(value)
 }
 
@@ -109,6 +110,7 @@ pub(super) fn event_payload(projection: &Value) -> Map<String, Value> {
         "context_window_tokens",
         "max_simultaneous_workers",
         "access_mode",
+        "command_sandbox_enabled",
         "appearance_theme",
         "collapse_message_box",
         "reduce_motion",

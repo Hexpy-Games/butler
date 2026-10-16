@@ -41,8 +41,8 @@ class Paths(unittest.TestCase):
             'packages/butler-agent/rust/crates/butler-e2e/fixtures/memory/rule.md': {'rust', 'package', 'install', 'linux-package'},
             'packages/butler-app/scripts/release/package-versions.ts': {'ui', 'ds', 'package', 'install', 'linux-package'},
             'notes.md': set(),
-            '.github/pull_request_template.md': set(changes.GROUPS),
-            '.github/workflows/windows.yml': set(changes.GROUPS),
+            '.github/pull_request_template.md': set(),
+            '.github/workflows/windows.yml': {'rust', 'ui', 'package'},
             'new-build-config.ini': set(changes.GROUPS) - {'workflows'},
         }
         workflow = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
@@ -52,6 +52,73 @@ class Paths(unittest.TestCase):
         for path, expected in cases.items():
             with self.subTest(path=path):
                 self.assertEqual(changes.categories(path), expected)
+
+    # test-category: pure-logic
+    def test_github_inputs_follow_consumers_and_unknowns_fail_closed(self):
+        from ci_consumer_test_support import consumer_groups
+        for path, groups in consumer_groups(changes.GROUPS).items():
+            with self.subTest(path=path):
+                self.assertGreaterEqual(changes.categories(path), groups)
+        for path in ['.github/workflows/new-check.yml',
+                     '.github/actions/new-setup/action.yml',
+                     '.github/scripts/new-helper.py', '.github/actionlint.yaml']:
+            with self.subTest(path=path):
+                self.assertEqual(changes.categories(path), set(changes.GROUPS))
+        for path in ['.github/releases/v1.2.3.md',
+                     '.github/actions/windows-owner-setup/README.md']:
+            self.assertEqual(changes.categories(path), set())
+
+    # test-category: pure-logic
+    def test_consumer_derivation_follows_reuse_actions_and_python_imports(self):
+        import ci_consumer_test_support as consumers
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = {
+                '.github/workflows/root.yml': """name: Root
+jobs:
+  producer:
+    if: >-
+      needs.changes.outputs.package == 'true'
+    uses: ./.github/workflows/child.yml
+  verifier:
+    needs: producer
+    if: needs.changes.outputs.install == 'true'
+    steps:
+      - run: python3 .github/scripts/verify.py
+  gate:
+    steps:
+      - run: echo receipt
+        groups: '{"package": ["producer"], "install": ["verifier"]}'
+""",
+                '.github/workflows/child.yml': """on:
+  workflow_call:
+jobs:
+  build:
+    steps:
+      - uses: ./.github/actions/setup
+""",
+                '.github/actions/setup/action.yaml': """runs:
+  using: composite
+  steps:
+    - run: python3 .github/scripts/direct.py
+""",
+                '.github/scripts/direct.py': 'import local\n',
+                '.github/scripts/local.py': 'import importlib\nimportlib.import_module("dynamic")\n',
+                '.github/scripts/dynamic.py': 'import direct\n',
+                '.github/scripts/verify.py': 'from local import value\n',
+            }
+            for name, content in files.items():
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
+            with patch.object(consumers, 'ROOT', root):
+                derived = consumers.consumer_groups(changes.GROUPS)
+            native = {'package', 'rust', 'ui'}
+            self.assertEqual(derived['.github/workflows/child.yml'], native)
+            self.assertEqual(derived['.github/actions/setup/action.yaml'], native)
+            self.assertEqual(derived['.github/scripts/direct.py'], native | {'install'})
+            self.assertEqual(derived['.github/scripts/dynamic.py'], native | {'install'})
+            self.assertEqual(derived['.github/scripts/verify.py'], native | {'install'})
 
     # test-category: pure-logic
     def test_windows_native_smoke_follows_rust_and_windows_inputs_only(self):
@@ -174,6 +241,11 @@ class Trust(unittest.TestCase):
             ('pull_request', 'refs/pull/12/merge', pr, ['docs/notes.md', workflow], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['deploy/install.sh', 'packages/butler-npm/index.js'], none),
             ('pull_request', 'refs/pull/12/merge', pr, [rust], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/actions/build-windows-agent/action.yml'], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-installer.yml'], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/scripts/ci-changes.py'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/releases/v1.2.3.md'], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['deploy/windows-preview-smoke.ps1'], native),
             ('workflow_dispatch', 'refs/heads/main', {}, [], dict.fromkeys(none, True)),
         ]:
@@ -281,6 +353,49 @@ class Trust(unittest.TestCase):
                 self.assertIn('rust=' + expected[0], output)
                 self.assertIn('ui=' + expected[1], output)
 
+
+class WorkflowScheduling(unittest.TestCase):
+    # test-category: pure-logic
+    def test_installer_verify_condition_truth_table(self):
+        source = (ROOT.parent / 'workflows/windows-installer.yml').read_text()
+        verify = source.split('\n  verify:\n', 1)[1].split('\n  gate:', 1)[0]
+        expression = re.search(r'^    if: \$\{\{ (.*) \}\}$', verify, re.M)[1]
+        results = ('success', 'failure', 'cancelled', 'skipped')
+        cases = itertools.product(results, ('smoke', 'integration'), (False, True),
+                                  ('', '123'), (False, True), results)
+        for build, tier, cancelled, reuse, selected, changes_result in cases:
+            with self.subTest(build=build, tier=tier, cancelled=cancelled,
+                              reuse=reuse, selected=selected, changes=changes_result):
+                condition = expression
+                values = {'cancelled()': cancelled, 'always()': True,
+                          'needs.changes.result': changes_result,
+                          'needs.build.result': build, 'inputs.reuse-run': reuse,
+                          'needs.changes.outputs.tier': tier,
+                          'fromJSON(needs.changes.outputs.jobs).verify': selected}
+                for name, value in values.items():
+                    condition = condition.replace(name, repr(value))
+                condition = re.sub(r'!(?!=)', 'not ', condition)
+                condition = condition.replace('&&', 'and').replace('||', 'or')
+                if cancelled or changes_result != 'success':
+                    expected = False
+                elif tier == 'integration':
+                    expected = selected and build in ('success', 'skipped')
+                else:
+                    expected = build == 'success' or bool(reuse)
+                self.assertEqual(bool(eval(condition, {'__builtins__': {}})), expected)
+
+    # test-category: format-pin
+    def test_release_keeps_job_locks_without_workflow_pending_cancellation(self):
+        source = (ROOT.parent / 'workflows/release.yml').read_text()
+        self.assertNotRegex(source, r'(?m)^concurrency:')
+        groups = {'agent-windows-build': 'windows-release-${{ github.ref }}',
+                  'app-windows': 'windows-app-release-${{ github.ref }}',
+                  'recover-release': 'release-publication-recovery'}
+        for job, group in groups.items():
+            block = source.split(f'\n  {job}:\n', 1)[1]
+            block = re.split(r'\n  [a-z][a-z0-9-]*:\n', block, maxsplit=1)[0]
+            self.assertIn(f'    concurrency:\n      group: {group}\n'
+                          '      cancel-in-progress: false', block)
 
 class TrimContracts(unittest.TestCase):
     # test-category: security

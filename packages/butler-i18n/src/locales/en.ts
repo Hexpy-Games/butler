@@ -1638,6 +1638,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       localReasoningBudget: "Local reasoning budget",
       contextLimit: "Context limit",
       scheduleAccess: "New schedules",
+      commandSandbox: "Command sandbox",
       chatAccess: "New chats",
       planModeDefault: "Use plan mode by default",
       name: "Name",
@@ -1742,6 +1743,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       runtimeSupportedModelsOnly:
         "Only models from currently runnable providers are shown.",
       scheduleAccess: "New schedules run with this permission.",
+      commandSandbox: "In Auto, commands that change files run in a sandbox. When off, Butler asks first.",
+      commandSandboxUnavailable: "Not available on this device",
       chatAccess: "New chats start with this. Change it in any chat.",
       language: "Sets the Butler App interface language.",
       timezone:

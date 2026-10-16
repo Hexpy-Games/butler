@@ -10,6 +10,7 @@ function Get-MatrixCases {
         @(9,'boundaries::row09_network'), @(10,'tools::row10_toolchains_unicode_long_path'),
         @(11,'project_write::row11_new_secrets_are_swept'),
         @(12,'project_write::row12_timeout_and_agent_kill'), @(14,'latency::row14_latency'),
-        @(15,'access_tiers::auto::auto_works_in_the_project_and_asks_for_risky_steps')
+        @(15,'access_tiers::auto::auto_works_in_the_project_and_asks_for_risky_steps'),
+        @(17,'setting::row17_command_sandbox_setting')
     )
 }
