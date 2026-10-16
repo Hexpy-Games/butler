@@ -102,14 +102,25 @@
       [data-viewport="desktop"],
       [data-viewport="desktop"] *
     ) {
-    width: min(100%, calc(100vw - var(--space-2xl)));
+    /* Sheet: the screen width minus a small gutter (and side safe areas),
+       whatever the content; it stays attached to its trigger's side, so
+       desktop nested-menu offsets (data-nested-menu-align) do not apply. */
+    translate: none;
+    width: calc(
+      100vw - 2 * var(--popover-sheet-gutter) - var(--safe-area-left) -
+        var(--safe-area-right)
+    );
     min-width: 0;
-    max-width: calc(100vw - var(--space-2xl));
-    max-height: calc(
-      var(--adaptive-viewport-block-size) - var(--titlebar-safe-area-top) -
-        var(--safe-area-bottom) - var(--space-2xl)
+    max-width: none;
+    max-height: min(
+      var(--radix-popover-content-available-height, 100vh),
+      calc(
+        var(--adaptive-viewport-block-size) - var(--titlebar-safe-area-top) -
+          var(--safe-area-bottom) - 2 * var(--popover-sheet-gutter)
+      )
     );
     overflow: auto;
+    overscroll-behavior: contain;
   }
 
   .content[data-popover-width="anchor"]:not(
@@ -159,5 +170,54 @@
   to {
     opacity: 0;
     transform: scale(var(--motion-scale-menu));
+  }
+}
+
+/* Mobile sheet motion: enter travels 8px along the side and exits 4px back,
+   with a fade and no scale, so the screen-wide edges never shimmer. Reduced motion zeroes the distance
+   token, leaving the fade. */
+@media (width <= 640px) {
+  .content[data-side="bottom"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
+    --popover-enter-y: calc(-1 * var(--motion-distance-md));
+    --popover-exit-y: calc(-1 * var(--motion-distance-sm));
+  }
+
+  .content[data-side="top"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
+    --popover-enter-y: var(--motion-distance-md);
+    --popover-exit-y: var(--motion-distance-sm);
+  }
+
+  .content[data-state="open"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
+    animation-name: popover-sheet-enter;
+  }
+
+  .content[data-state="closed"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
+    animation-name: popover-sheet-exit;
+  }
+}
+
+@keyframes popover-sheet-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--popover-enter-y));
+  }
+}
+
+@keyframes popover-sheet-exit {
+  to {
+    opacity: 0;
+    transform: translateY(var(--popover-exit-y, 0));
   }
 }
