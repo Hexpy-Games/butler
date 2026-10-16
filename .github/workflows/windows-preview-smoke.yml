@@ -110,7 +110,7 @@ jobs:
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $ErrorActionPreference = 'Continue'
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-core -p butler-models *> "$env:PREVIEW_ROOT/logs/crate-tests.log"
+          cmd /d /c "cargo test --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-core -p butler-models > `"$env:PREVIEW_ROOT/logs/crate-tests.log`" 2>&1"
           $testCode = $LASTEXITCODE
           $ErrorActionPreference = 'Stop'
           if ($testCode -ne 0) {
@@ -135,8 +135,7 @@ jobs:
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $ErrorActionPreference = 'Continue'
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e `
-            --test e2e --no-run --message-format=json *> "$env:PREVIEW_ROOT/logs/harness-compile.log"
+          cmd /d /c "cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e --no-run --message-format=json > `"$env:PREVIEW_ROOT/logs/harness-compile.log`" 2>&1"
           $testCode = $LASTEXITCODE
           $ErrorActionPreference = 'Stop'
           if ($testCode -ne 0) {
@@ -163,8 +162,7 @@ jobs:
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
           $ErrorActionPreference = 'Continue'
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e `
-            turn::turn_01_reply_is_delivered_persisted_and_survives_restart -- --exact --test-threads=8 --nocapture *> "$env:PREVIEW_ROOT/logs/stub-chat.log"
+          cmd /d /c "cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e turn::turn_01_reply_is_delivered_persisted_and_survives_restart -- --exact --test-threads=8 --nocapture > `"$env:PREVIEW_ROOT/logs/stub-chat.log`" 2>&1"
           $testCode = $LASTEXITCODE
           $ErrorActionPreference = 'Stop'
           if ($testCode -ne 0) {
@@ -203,8 +201,7 @@ jobs:
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
           $ErrorActionPreference = 'Continue'
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e long_paths:: `
-            -- --test-threads=8 --nocapture *> "$env:PREVIEW_ROOT/logs/long-paths.log"
+          cmd /d /c "cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e long_paths:: -- --test-threads=8 --nocapture > `"$env:PREVIEW_ROOT/logs/long-paths.log`" 2>&1"
           $testCode = $LASTEXITCODE
           $ErrorActionPreference = 'Stop'
           if ($testCode -ne 0) {
@@ -221,7 +218,7 @@ jobs:
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
           $env:BUTLER_E2E_PERF = '1'
           $ErrorActionPreference = 'Continue'
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e windows_commands:: -- --test-threads=1 --nocapture *> "$env:PREVIEW_ROOT/logs/command-matrix.log"
+          cmd /d /c "cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e windows_commands:: -- --test-threads=1 --nocapture > `"$env:PREVIEW_ROOT/logs/command-matrix.log`" 2>&1"
           $testCode = $LASTEXITCODE
           $ErrorActionPreference = 'Stop'
           Remove-Item Env:BUTLER_E2E_PERF
@@ -252,9 +249,7 @@ jobs:
           $env:BUTLER_E2E_PERF = '1'
           try {
             $ErrorActionPreference = 'Continue'
-            cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e `
-              windows_commands::profile_observation::profile_downloads_with_external_data_in_both_access_modes `
-              -- --exact --test-threads=1 --nocapture *> "$env:PREVIEW_ROOT/logs/real-profile.log"
+            cmd /d /c "cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e windows_commands::profile_observation::profile_downloads_with_external_data_in_both_access_modes -- --exact --test-threads=1 --nocapture > `"$env:PREVIEW_ROOT/logs/real-profile.log`" 2>&1"
             $testCode = $LASTEXITCODE
             $ErrorActionPreference = 'Stop'
             if ($testCode -ne 0) {
@@ -290,8 +285,7 @@ jobs:
               default { "$test`::" }
             }
             $ErrorActionPreference = 'Continue'
-            cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e $filter `
-              -- --test-threads=8 --nocapture *> "$env:PREVIEW_ROOT/logs/$test.log"
+            cmd /d /c "cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e `"$filter`" -- --test-threads=8 --nocapture > `"$env:PREVIEW_ROOT/logs/$test.log`" 2>&1"
             $testCode = $LASTEXITCODE
             $ErrorActionPreference = 'Stop'
             if ($testCode -ne 0) {
