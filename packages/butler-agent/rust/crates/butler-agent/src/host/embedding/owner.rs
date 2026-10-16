@@ -33,6 +33,8 @@ mod supervision;
 use execute::run_item;
 use queue::PendingResponse;
 #[cfg(test)]
+mod prewarm_tests;
+#[cfg(test)]
 mod readiness_tests;
 #[cfg(test)]
 mod tests;
@@ -270,8 +272,15 @@ impl Inner {
         if state.closed {
             return Err(error(CognitionCode::EmbedOwnerClosed));
         }
-        // Prefetch shares queued/active work; admission and dedup are atomic.
-        if matches!(pending.response, PendingResponse::Prewarm) && state.queued_requests != 0 {
+        // Only another queued, owner-owned prewarm guarantees a future check/load.
+        // Active work can be failing; caller-owned work can expire or cancel.
+        if matches!(pending.response, PendingResponse::Prewarm)
+            && state
+                .interactive
+                .iter()
+                .chain(&state.background)
+                .any(|item| matches!(item.response, PendingResponse::Prewarm))
+        {
             return Ok(());
         }
         if state.queued_requests >= MAX_QUEUE_REQUESTS
@@ -370,11 +379,17 @@ async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>) {
             }
         };
         if let Some(item) = next {
+            let previous_worker = child
+                .as_ref()
+                .filter(|process| process.initialized)
+                .and_then(|process| process.child.id());
             let result = run_item(inner, child, &item).await;
             let ready = child.as_ref().is_some_and(|process| process.initialized);
             if inner.warm.swap(ready, Ordering::AcqRel) != ready && ready {
-                butler_core::diagnostic!("[embedding-worker] ready");
                 butler_memory::cognition::signal_memory_work();
+            }
+            if ready && child.as_ref().and_then(|process| process.child.id()) != previous_worker {
+                butler_core::diagnostic!("[embedding-worker] ready");
             }
             item.response.send(result);
             let mut state = inner.state.lock();

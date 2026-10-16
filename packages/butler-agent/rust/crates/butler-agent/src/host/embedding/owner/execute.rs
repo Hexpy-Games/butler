@@ -65,10 +65,11 @@ async fn ensure_initialized(
     // accepts work, instead of treating an initialized process handle as ready.
     if matches!(item.response, PendingResponse::Prewarm)
         && let Some(process) = child.as_mut().filter(|process| process.initialized)
-        && initialize_owned(inner, process, item.id).await.is_err()
     {
-        kill_and_reap(child).await;
         inner.warm.store(false, Ordering::Release);
+        if initialize_owned(inner, process, item.id).await.is_err() {
+            kill_and_reap(child).await;
+        }
     }
     if child.is_none() {
         if !inner.enabled.load(Ordering::Acquire) {

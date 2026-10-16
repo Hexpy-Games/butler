@@ -39,6 +39,12 @@ impl Prewarm {
         {
             return;
         }
+        // A warm observation avoids the graph probe, but never the owner check:
+        // the child may have exited before the actor observes its exit.
+        if embedding.is_warm() {
+            embedding.start_loading();
+            return;
+        }
         let data_root = self.data_root.clone();
         let paths = self.paths.clone();
         let embedding = embedding.clone();

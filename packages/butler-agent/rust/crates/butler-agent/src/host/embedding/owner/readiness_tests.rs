@@ -8,7 +8,7 @@
 use super::*;
 use std::process::Stdio;
 
-fn inner() -> Arc<Inner> {
+pub(super) fn inner() -> Arc<Inner> {
     Arc::new(Inner {
         data_root: PathBuf::new(),
         executable: PathBuf::new(),
@@ -24,7 +24,7 @@ fn inner() -> Arc<Inner> {
     })
 }
 
-fn owner(
+pub(super) fn owner(
     inner: Arc<Inner>,
     work: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> EmbeddingOwner {
