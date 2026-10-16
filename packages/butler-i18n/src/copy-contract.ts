@@ -1422,7 +1422,6 @@ export interface AppCopy {
       /** Settings → General → Default permission: the new-chat field. */
       chatAccess: string;
       scheduleAccess: string;
-      commandSandbox: string;
       planModeDefault: string;
       name: string;
       job: string;
@@ -1524,8 +1523,6 @@ export interface AppCopy {
       runtimeSupportedModelsOnly: string;
       chatAccess: string;
       scheduleAccess: string;
-      commandSandbox: string;
-      commandSandboxUnavailable: string;
       language: string;
       timezone: string;
       consolidationModel: string;

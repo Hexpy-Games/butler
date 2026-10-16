@@ -15,8 +15,6 @@ mod process_control;
 mod project_secrets;
 mod secrets;
 mod secure_fs;
-#[cfg(windows)]
-mod windows_language;
 
 use std::fs;
 use std::path::{Path, PathBuf};

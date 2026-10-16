@@ -38,9 +38,7 @@ pub fn workspace_root() -> PathBuf {
 
 /// `packages/butler-agent/resources` as shipped next to the binary.
 pub fn resource_source() -> PathBuf {
-    nonempty("BUTLER_E2E_RESOURCES")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| workspace_root().join("../resources"))
+    workspace_root().join("../resources")
 }
 
 pub fn agent_binary() -> Result<PathBuf, HarnessError> {

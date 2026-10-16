@@ -51,7 +51,6 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
                     program: environment.get("COMSPEC").cloned().unwrap_or("cmd.exe".into()),
                     arguments: vec!["/d".into(), "/s".into(), "/c".into(),
                         format!("chcp 65001>nul & {script}")],
-                    ..Default::default()
                 }
             } else {
                 login_shell(script, ShellAccess::Full, &environment).unwrap()
@@ -117,55 +116,5 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
         assert!(!long_directory.join("renamed marker.txt").exists());
         assert!(!long_directory.join("plain.txt").exists());
     }).await.map_err(|error| HarnessError(error.to_string()))?;
-    Ok(())
-}
-
-#[test]
-fn shell_phase_timings_require_invocation_opt_in() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    butler_e2e::skip_unless!(
-        !butler_platform::command_sandbox::POSIX_SHELL,
-        "Windows shell diagnostics"
-    );
-    let setup = Setup::new("SHELL-TIMING-OUTPUT")?;
-    for value in [None, Some(None), Some(Some("0")), Some(Some("1"))] {
-        let mut environment = HashMap::new();
-        if let Some(value) = value {
-            environment.insert(
-                "BUTLER_DEBUG_COMMAND_TIMINGS".into(),
-                value.map(str::to_owned),
-            );
-        }
-        let invocation = butler_platform::command_sandbox::legacy_shell(
-            "Write-Output '한글 출력'; [Console]::Error.Write('command-error'); exit 17",
-            false,
-            &environment,
-        );
-        let mut command = std::process::Command::new(&invocation.program);
-        command.current_dir(&setup.sandbox.home);
-        // Also exercise ambient diagnostics in the child, independently of the
-        // invocation map. CI enables the same flag in this test's parent.
-        command.env("BUTLER_DEBUG_COMMAND_TIMINGS", "1");
-        add_arguments(&mut command, &invocation);
-        let output = command.output()?;
-        assert_eq!(output.status.code(), Some(17), "{output:?}");
-        assert_eq!(
-            String::from_utf8(output.stdout).expect("UTF-8 stdout"),
-            "한글 출력\r\n"
-        );
-        let stderr = String::from_utf8(output.stderr).expect("UTF-8 stderr");
-        if value == Some(Some("1")) {
-            let lines = stderr.lines().collect::<Vec<_>>();
-            assert_eq!(lines.len(), 3, "{stderr}");
-            for (line, phase) in lines.iter().zip(["script_started", "modules_ready"]) {
-                let prefix = format!("command_shell_phase phase={phase} utc_ticks=");
-                let ticks = line.strip_prefix(&prefix).expect("phase diagnostic");
-                assert!(ticks.parse::<u64>().expect("UTC ticks") > 0);
-            }
-            assert_eq!(lines[2], "command-error");
-        } else {
-            assert_eq!(stderr, "command-error");
-        }
-    }
     Ok(())
 }

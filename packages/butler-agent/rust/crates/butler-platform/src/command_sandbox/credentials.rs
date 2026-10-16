@@ -37,18 +37,10 @@ const SUFFIXES: &[&str] = &[".pem", ".key"];
 
 /// Whether a project path component names private metadata or credentials.
 pub fn secret_name(name: &str) -> bool {
-    let name = name.as_bytes();
-    EXACT
-        .iter()
-        .any(|exact| name.eq_ignore_ascii_case(exact.as_bytes()))
-        || PREFIXES.iter().any(|prefix| {
-            name.get(..prefix.len())
-                .is_some_and(|part| part.eq_ignore_ascii_case(prefix.as_bytes()))
-        })
-        || SUFFIXES.iter().any(|suffix| {
-            name.get(name.len().saturating_sub(suffix.len())..)
-                .is_some_and(|part| part.eq_ignore_ascii_case(suffix.as_bytes()))
-        })
+    let name = name.to_ascii_lowercase();
+    EXACT.contains(&name.as_str())
+        || PREFIXES.iter().any(|prefix| name.starts_with(prefix))
+        || SUFFIXES.iter().any(|suffix| name.ends_with(suffix))
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]

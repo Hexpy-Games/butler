@@ -242,7 +242,6 @@ pub(super) fn read_only_contained(
             .to_string_lossy()
             .into_owned(),
         arguments,
-        ..Default::default()
     })
 }
 
@@ -309,7 +308,6 @@ pub(super) fn project_write(
             .to_string_lossy()
             .into_owned(),
         arguments,
-        ..Default::default()
     })
 }
 

@@ -40,7 +40,6 @@ pub fn linux_syscall_probe(
                 "-c".into(),
                 include_str!("test_support/linux_probe.py").into(),
             ],
-            ..Default::default()
         },
         environment,
         &[],
@@ -107,14 +106,3 @@ pub fn windows_recovery_contract() {
     #[cfg(windows)]
     super::windows::mxc::verify_recovery_contract();
 }
-
-/// Executes contained shell file transport with native PowerShell, without MXC.
-pub fn windows_shell_file_contract() {
-    #[cfg(windows)]
-    {
-        let result = super::windows::mxc::verify_shell();
-        assert!(result.is_ok(), "{result:?}");
-    }
-}
-
-pub(super) mod ledger;

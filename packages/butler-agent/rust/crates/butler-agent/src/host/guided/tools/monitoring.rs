@@ -12,7 +12,6 @@ use super::GuidedTools;
 
 pub(crate) struct MonitoringReaders {
     data_root: PathBuf,
-    pub(in crate::host::guided) app_database_path: PathBuf,
     configuration: Arc<butler_models::models::ModelConfiguration>,
     catalog: Arc<butler_models::models::ModelCatalog>,
     memory_health: Arc<butler_memory::cognition::MemoryHealthService>,
@@ -23,7 +22,6 @@ pub(crate) struct MonitoringReaders {
 impl MonitoringReaders {
     pub(in crate::host) fn new(
         data_root: PathBuf,
-        app_database_path: PathBuf,
         configuration: Arc<butler_models::models::ModelConfiguration>,
         catalog: Arc<butler_models::models::ModelCatalog>,
         memory_health: Arc<butler_memory::cognition::MemoryHealthService>,
@@ -32,7 +30,6 @@ impl MonitoringReaders {
     ) -> Self {
         Self {
             data_root,
-            app_database_path,
             configuration,
             catalog,
             memory_health,
@@ -119,13 +116,7 @@ pub(super) async fn execute(
         .filter(|value| !value.is_empty())
         .unwrap_or(&owner.binding.source_session_id);
     let result = match call.name.as_str() {
-        "list_tool_capabilities" => {
-            let mut value = list_capabilities(owner, call);
-            value["command_sandbox"] = super::access::sandbox_report(owner)
-                .await
-                .map_err(ToolExecutionError::Integrity)?;
-            value
-        }
+        "list_tool_capabilities" => list_capabilities(owner, call),
         "get_context_monitor" => {
             let mut value = owner
                 .monitoring

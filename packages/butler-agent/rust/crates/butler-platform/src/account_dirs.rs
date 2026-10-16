@@ -3,7 +3,7 @@
 //! Reading another app's data (a browser profile, say) must find the folders
 //! that app writes to, even when this process runs with a redirected `HOME`,
 //! `LOCALAPPDATA` or `APPDATA` (an isolated or demo run). So these come from
-//! the account database on Unix and recorded shell folders on Windows, never
+//! the account database on Unix and the known-folder API on Windows, never
 //! from environment variables. Butler's own folders stay in [`crate::user_dirs`].
 
 use std::path::{Path, PathBuf};
@@ -74,7 +74,7 @@ pub fn account_dirs() -> Option<AccountDirs> {
         .map(|home| AccountDirs::under(&home))
 }
 
-/// This account's folders; `None` when a recorded folder is unavailable.
+/// This account's folders; `None` when a known folder is unavailable.
 #[cfg(windows)]
 pub fn account_dirs() -> Option<AccountDirs> {
     use winsafe::{SHGetKnownFolderPath, co};
@@ -84,31 +84,9 @@ pub fn account_dirs() -> Option<AccountDirs> {
             .map(PathBuf::from)
             .filter(|path| path.is_absolute())
     };
-    // Known-folder resolution expands process environment variables for app
-    // data. Read the shell's already-expanded account paths first so a redirected
-    // profile cannot hide the real installations or browser profiles.
     Some(AccountDirs {
         home: known(&co::KNOWNFOLDERID::Profile)?,
-        app_data: recorded_shell_folder("AppData")
-            .or_else(|| known(&co::KNOWNFOLDERID::RoamingAppData))?,
-        local_app_data: recorded_shell_folder("Local AppData")
-            .or_else(|| known(&co::KNOWNFOLDERID::LocalAppData))?,
+        app_data: known(&co::KNOWNFOLDERID::RoamingAppData)?,
+        local_app_data: known(&co::KNOWNFOLDERID::LocalAppData)?,
     })
-}
-
-#[cfg(windows)]
-fn recorded_shell_folder(name: &str) -> Option<PathBuf> {
-    use winsafe::{HKEY, RegistryValue, co};
-    let key = HKEY::CURRENT_USER
-        .RegOpenKeyEx(
-            Some(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"),
-            co::REG_OPTION::NON_VOLATILE,
-            co::KEY::READ,
-        )
-        .ok()?;
-    let RegistryValue::Sz(value) = key.RegQueryValueEx(Some(name)).ok()? else {
-        return None;
-    };
-    let path = PathBuf::from(value);
-    path.is_absolute().then_some(path)
 }

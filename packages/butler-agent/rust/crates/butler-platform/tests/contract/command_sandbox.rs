@@ -36,14 +36,9 @@ fn write_command(targets: &[&Path]) -> String {
 // test-category: security
 #[test]
 fn read_only_commands_run_sandboxed_or_are_refused() {
-    #[cfg(windows)]
-    super::windows_language::verify();
     super::mxc_policy::verify();
     #[cfg(feature = "test-support")]
-    {
-        butler_platform::command_sandbox::windows_recovery_contract();
-        butler_platform::command_sandbox::windows_shell_file_contract();
-    }
+    butler_platform::command_sandbox::windows_recovery_contract();
     timeout_markers_require_both_code_and_trailing_marker();
     super::project_secrets::verify();
     cmd_arguments_remain_verbatim();
@@ -88,15 +83,6 @@ fn read_only_commands_run_sandboxed_or_are_refused() {
 
 fn cmd_arguments_remain_verbatim() {
     let environment = HashMap::from([("ComSpec".into(), Some("cmd.exe".into()))]);
-    let mut contained = cmd::shell("cmd /c echo complete", &environment);
-    cmd::inside_utf8_bootstrap(&mut contained);
-    assert_eq!(contained.arguments.last().unwrap(), "echo complete");
-    let mut quoted = cmd::shell(r#"cmd /c "echo complete""#, &environment);
-    cmd::inside_utf8_bootstrap(&mut quoted);
-    assert_eq!(
-        quoted.arguments.last().unwrap(),
-        r#"cmd /c "echo complete""#
-    );
     for text in [
         r#"cmd.exe /d /c "echo 한국어 출력""#,
         r#"cmd /c dir "%USERPROFILE%\Downloads""#,
@@ -122,7 +108,6 @@ fn cmd_arguments_remain_verbatim() {
     let native = Invocation {
         program: "node.exe".into(),
         arguments: vec!["/d".into(), "/s".into(), "/c".into(), "quoted text".into()],
-        ..Default::default()
     };
     assert_eq!(cmd::raw_argument(&native), None);
     assert_eq!(cmd::script("Write-Output '한국어 출력'"), None);
@@ -188,18 +173,12 @@ fn expected_host_sandbox_is_enforced() {
 
 fn timeout_markers_require_both_code_and_trailing_marker() {
     use butler_platform::command_sandbox::{execution_timeout, execution_timeout_exit};
-    assert_eq!(
-        execution_timeout_exit(Some(124)),
-        !butler_platform::command_sandbox::POSIX_SHELL
-    );
+    assert!(execution_timeout_exit(Some(124)));
     assert!(!execution_timeout_exit(Some(125)));
-    assert_eq!(
-        execution_timeout(
-            Some(124),
-            b"child stderr\nbutler_command_execution_timed_out\n"
-        ),
-        !butler_platform::command_sandbox::POSIX_SHELL
-    );
+    assert!(execution_timeout(
+        Some(124),
+        b"child stderr\nbutler_command_execution_timed_out\n"
+    ));
     assert!(!execution_timeout(
         Some(0),
         b"butler_command_execution_timed_out\n"

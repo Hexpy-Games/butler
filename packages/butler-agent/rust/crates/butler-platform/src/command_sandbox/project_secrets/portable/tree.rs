@@ -28,7 +28,7 @@ impl Walker for Native {
     }
 }
 
-pub(in crate::command_sandbox) fn walk(root: &Path, bounded: bool) -> io::Result<Vec<PathBuf>> {
+pub(super) fn walk(root: &Path, bounded: bool) -> io::Result<Vec<PathBuf>> {
     let dir = Native::root(root)?;
     let mut walk = Walk {
         bounded,

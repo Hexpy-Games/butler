@@ -301,23 +301,3 @@ describe("Windows Squirrel lifecycle", () => {
     })).toThrow("windows_installer_signature_result_invalid");
   });
 });
-
-// test-category: security
-test("alternate App profiles cannot register OS integration", async () => {
-  const { shellRegistrationAllowed } = await import(
-    "../../packages/butler-app/client/electron/shell-registration.mjs",
-  );
-  const home = resolve("owner-profile");
-  const normal = { isPackaged: true, env: {}, home, dataRoot: resolve(home, ".butler") };
-  expect(shellRegistrationAllowed(normal)).toBe(true);
-  for (const override of [
-    { isPackaged: false },
-    { dataRoot: resolve("temporary-data") },
-    { env: { BUTLER_DATA: normal.dataRoot } },
-    { env: { HOME: resolve("temporary-home") } },
-    { env: { BUTLER_APP_ELECTRON_USER_DATA_DIR: resolve("temporary-chromium") } },
-    { env: { BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1" } },
-  ]) {
-    expect(shellRegistrationAllowed({ ...normal, ...override })).toBe(false);
-  }
-});

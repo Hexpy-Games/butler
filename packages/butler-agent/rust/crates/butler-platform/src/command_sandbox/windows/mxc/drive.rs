@@ -5,9 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::os::windows::fs::OpenOptionsExt;
 use std::{
     fs, io,
-    io::Write,
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Command, Stdio},
 };
 use winsafe::co;
 const MAX_SUBST_TARGET_UNITS: usize = 240;
@@ -26,7 +25,6 @@ pub(super) struct Drive {
 }
 impl Drive {
     pub(super) fn claim(data: &Path, target: &Path, policy: &Path) -> Result<Self, Error> {
-        let _phase = super::timing::Phase::start("drive_claim");
         let target = dunce::canonicalize(target)?;
         let text = target.to_str().ok_or("invalid_project_path")?;
         if text.encode_utf16().count() > MAX_SUBST_TARGET_UNITS {
@@ -42,7 +40,7 @@ impl Drive {
         let letters = drive_pick::candidates(winsafe::GetLogicalDrives(), &persistent()?, &[]);
         for letter in letters {
             let journal = directory.join(format!("{letter}.json"));
-            let mut file = match fs::OpenOptions::new()
+            let file = match fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
                 .share_mode(0)
@@ -58,9 +56,8 @@ impl Drive {
                 started,
                 policy: policy.into(),
             };
-            file.write_all(&serde_json::to_vec(&entry)?)?;
-            // Process crashes retain the OS cache; reboot removes DOS devices.
-            // No disk durability is needed for this transient ownership journal.
+            serde_json::to_writer(&file, &entry)?;
+            file.sync_all()?;
             drop(file);
             let drive = Self {
                 letter,
@@ -86,49 +83,6 @@ impl Drive {
         }
         Err("no_free_drive".into())
     }
-    pub(super) fn temporary(
-        data: &Path,
-        scratch: &Path,
-        policy: &Path,
-    ) -> Result<(Option<Self>, String), Error> {
-        let path = dunce::canonicalize(scratch)?.join("t");
-        let text = path.to_str().ok_or("invalid_scratch_path")?;
-        // The in-container bootstrap restores this exact path after MXC's
-        // profile rewrite. A short physical path needs no extra subst process.
-        if text.encode_utf16().count() + 1 + 38 < 260 {
-            return Ok((None, text.to_owned()));
-        }
-        let (drive, temporary) = Self::claim_scratch(data, scratch, policy)?;
-        Ok((Some(drive), temporary))
-    }
-    pub(super) fn claim_scratch(
-        data: &Path,
-        scratch: &Path,
-        policy: &Path,
-    ) -> Result<(Self, String), Error> {
-        let scratch = fs::canonicalize(scratch)?;
-        // subst itself has a legacy target-length limit. Alias the nearest
-        // usable ancestor; grants remain on the exact physical command scratch.
-        // Keep the mapping target alive when invocation cleanup removes scratch
-        // before crash reconciliation has removed this helper's drive.
-        let target = scratch
-            .parent()
-            .ok_or("scratch_parent_missing")?
-            .ancestors()
-            .find(|path| {
-                path.as_os_str().to_string_lossy().encode_utf16().count() <= MAX_SUBST_TARGET_UNITS
-            })
-            .ok_or("subst_target_too_long")?;
-        let tail = scratch.strip_prefix(target)?.join("t");
-        let tail = tail.to_str().ok_or("invalid_scratch_path")?;
-        // Include the drive prefix, separator, longest policy-test name and NUL.
-        if 3 + tail.encode_utf16().count() + 1 + 38 >= 260 {
-            return Err("scratch_temp_path_too_long".into());
-        }
-        let drive = Self::claim(data, target, policy)?;
-        let temporary = format!("{}:\\{tail}", drive.letter);
-        Ok((drive, temporary))
-    }
     fn matches(&self) -> io::Result<bool> {
         let root = format!("{}:\\", self.letter);
         match same_file::is_same_file(root, &self.entry.target) {
@@ -138,60 +92,25 @@ impl Drive {
         }
     }
     pub(super) fn cleanup(&self) -> io::Result<()> {
-        self.start_cleanup()?.finish()
-    }
-    pub(super) fn start_cleanup(&self) -> io::Result<Cleanup<'_>> {
-        let phase = super::timing::Phase::start("drive_cleanup");
-        let child = if self.matches()? {
-            Some(spawn_subst(&[format!("{}:", self.letter), "/D".into()])?)
-        } else {
-            None
-        };
-        Ok(Cleanup {
-            drive: self,
-            child,
-            _phase: phase,
-        })
-    }
-}
-
-/// Scratch deletion can run while subst exits, without another worker thread.
-pub(super) struct Cleanup<'a> {
-    drive: &'a Drive,
-    child: Option<Child>,
-    _phase: super::timing::Phase,
-}
-impl Cleanup<'_> {
-    pub(super) fn finish(mut self) -> io::Result<()> {
-        let status = self.child.as_mut().map(Child::wait).transpose()?;
-        self.child = None;
-        if status.is_some_and(|status| !status.success()) && self.drive.matches()? {
+        if self.matches()?
+            && !subst(&[format!("{}:", self.letter), "/D".into()])?.success()
+            && self.matches()?
+        {
             return Err(io::Error::other("subst_remove_failed"));
         }
-        match fs::remove_file(&self.drive.journal) {
+        match fs::remove_file(&self.journal) {
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
             result => result,
         }
     }
 }
-impl Drop for Cleanup<'_> {
-    fn drop(&mut self) {
-        if let Some(child) = &mut self.child {
-            // Never let a cleanup child outlive its helper on an early return.
-            let _ = child.wait();
-        }
-    }
-}
 fn subst(args: &[String]) -> io::Result<std::process::ExitStatus> {
-    spawn_subst(args)?.wait()
-}
-fn spawn_subst(args: &[String]) -> io::Result<Child> {
     Command::new(system_subst()?)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .spawn()
+        .status()
 }
 fn system_subst() -> io::Result<PathBuf> {
     let root =
@@ -240,7 +159,7 @@ pub(in crate::command_sandbox) fn reconcile(data: &Path) -> io::Result<()> {
     let entries = match fs::read_dir(&directory) {
         Ok(entries) => entries,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return super::recovery::reconcile_policies(data);
+            return super::prepare::reconcile_policies(data);
         }
         Err(e) => return Err(e),
     };
@@ -249,7 +168,7 @@ pub(in crate::command_sandbox) fn reconcile(data: &Path) -> io::Result<()> {
             eprintln!("sandbox drive reconciliation failed: {error}");
         }
     }
-    super::recovery::reconcile_policies(data)
+    super::prepare::reconcile_policies(data)
 }
 
 fn reconcile_entry(item: io::Result<fs::DirEntry>) -> io::Result<()> {
@@ -310,57 +229,4 @@ pub(in crate::command_sandbox) fn verify_inaccessible_process() {
         Ok(None)
     ));
     assert!(inaccessible_process(co::ERROR::INVALID_HANDLE).is_err());
-}
-
-#[cfg(feature = "test-support")]
-pub(in crate::command_sandbox) fn verify_long_mapping() -> Result<(), Error> {
-    let base = std::env::temp_dir().join(format!(
-        "butler-drive-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)?
-            .as_nanos()
-    ));
-    let mut target = base.clone();
-    while target.as_os_str().to_string_lossy().encode_utf16().count() <= 320 {
-        target = target.join("a".repeat(50));
-    }
-    fs::create_dir_all(target.join("t"))?;
-    let result = (|| {
-        let (drive, temporary) = Drive::claim_scratch(&base, &target, &base.join("policy.json"))?;
-        eprintln!(
-            "Windows scratch physical_utf16={} temporary_utf16={}",
-            target.as_os_str().to_string_lossy().encode_utf16().count(),
-            temporary.encode_utf16().count()
-        );
-        let shell = PathBuf::from(std::env::var("SYSTEMROOT")?)
-            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
-        let output = Command::new(shell)
-            .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
-                "$ErrorActionPreference='Stop'; $ExecutionContext.SessionState.LanguageMode; $p=[IO.Path]::Combine([IO.Path]::GetTempPath(),'__PSScriptPolicyTest_roundtrip.ps1'); [IO.File]::WriteAllText($p,'complete'); [IO.File]::ReadAllText($p); [IO.File]::Delete($p)"])
-            .env("TEMP", &temporary)
-            .env("TMP", &temporary)
-            .output();
-        // Parent-side recovery can remove command scratch before drive recovery.
-        fs::remove_dir_all(&target)?;
-        let cleaned = drive.cleanup();
-        let output = output?;
-        cleaned?;
-        assert_eq!(
-            winsafe::GetLogicalDrives() & (1 << (drive.letter as u8 - b'A')),
-            0
-        );
-        assert!(output.status.success(), "{output:?}");
-        let text = String::from_utf8_lossy(&output.stdout);
-        assert!(
-            text.lines().any(|line| line == "FullLanguage"),
-            "{output:?}"
-        );
-        assert!(text.lines().any(|line| line == "complete"), "{output:?}");
-        assert_eq!(fs::read_dir(base.join("sandbox/drives"))?.count(), 0);
-        Ok(())
-    })();
-    let cleanup = fs::remove_dir_all(base);
-    cleanup?;
-    result
 }

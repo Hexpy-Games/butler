@@ -10,7 +10,7 @@ export function verifyRendererModules(modules, catalog) {
   const inventoried = new Set(catalog.components.map(({ id }) => id));
   const seen = new Set();
   for (const id of modules) {
-    if (id.startsWith("\0") || !/[\\/]node_modules[\\/]/.test(id)) continue;
+    if (id.startsWith("\0") || !id.includes("/node_modules/")) continue;
     let directory = dirname(id.split("?")[0]);
     let manifest;
     while (!manifest) {

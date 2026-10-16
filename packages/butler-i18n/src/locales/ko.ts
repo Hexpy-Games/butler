@@ -1642,7 +1642,6 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       localReasoningBudget: "로컬 추론 예산",
       contextLimit: "컨텍스트 한도",
       scheduleAccess: "새 예약 작업",
-      commandSandbox: "명령 격리",
       chatAccess: "새 대화",
       planModeDefault: "기본으로 계획 모드 사용",
       name: "이름",
@@ -1747,8 +1746,6 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       runtimeSupportedModelsOnly:
         "현재 실행 가능한 제공자의 모델만 표시합니다.",
       scheduleAccess: "새 예약 작업이 이 권한으로 실행됩니다.",
-      commandSandbox: "알아서 진행할 때 파일을 바꾸는 명령을 격리된 환경에서 실행합니다. 끄면 실행 전에 확인합니다.",
-      commandSandboxUnavailable: "이 기기에서는 사용할 수 없습니다",
       chatAccess: "새 대화가 이 권한으로 시작합니다. 대화마다 바꿀 수 있습니다.",
       language: "버틀러 앱의 인터페이스 언어를 설정합니다",
       timezone:

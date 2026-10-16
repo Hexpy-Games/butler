@@ -5,15 +5,14 @@
 
 mod denial;
 pub use denial::{
-    EXECUTION_FAILURE_EXIT, EXECUTION_FAILURE_MARKER, EXECUTION_TIMEOUT_EXIT,
-    EXECUTION_TIMEOUT_MARKER, execution_failure, execution_failure_exit, execution_timeout,
-    execution_timeout_exit, isolation_failure, isolation_failure_exit, sandbox_denial,
+    EXECUTION_TIMEOUT_EXIT, EXECUTION_TIMEOUT_MARKER, execution_timeout, execution_timeout_exit,
+    isolation_failure, isolation_failure_exit, sandbox_denial,
 };
 mod credentials;
 pub mod mxc_policy;
 mod project_secrets;
 pub use credentials::secret_name;
-pub use project_secrets::{discover_project_secrets, prewarm_project, sweep_new_secrets};
+pub use project_secrets::{discover_project_secrets, sweep_new_secrets};
 mod environment;
 pub use environment::tool_environment;
 mod operators;
@@ -52,15 +51,13 @@ pub mod command_fixtures;
 #[cfg(feature = "test-support")]
 mod test_support;
 #[cfg(feature = "test-support")]
-pub use test_support::ledger::WindowsLedger;
-#[cfg(feature = "test-support")]
 pub use test_support::{
     UnixSocketProbe, linux_syscall_probe, linux_test_host, windows_prepare_project_write,
-    windows_recovery_contract, windows_shell_file_contract, wsl_test_host,
+    windows_recovery_contract, wsl_test_host,
 };
 
 mod host_capabilities;
-pub use host_capabilities::{Level, SandboxCapabilities, cached_capabilities, capabilities};
+pub use host_capabilities::{Level, SandboxCapabilities, capabilities};
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
@@ -134,33 +131,13 @@ pub fn copy_command_helper(source: &Path, destination: &Path) -> std::io::Result
 pub const POSIX_SHELL: bool = shell::POSIX;
 
 /// A program and its arguments.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Invocation {
     /// The executable to start.
     pub program: String,
     /// Its arguments, in order.
     pub arguments: Vec<String>,
-    /// Inner shell path when the platform needs a process startup wrapper.
-    /// Passed through the environment, never interpolated into shell syntax.
-    pub shell_program: Option<String>,
-    /// Script carried outside the startup wrapper's command line length limit.
-    pub shell_script: Option<String>,
-    /// Keeps per-command preparation live until dispatch and execution finish.
-    pub lease: Option<std::sync::Arc<InvocationLease>>,
 }
-
-/// An opaque preparation lease; closing it permits subsequent reconciliation.
-#[derive(Debug)]
-pub struct InvocationLease {
-    _file: std::fs::File,
-    path: std::path::PathBuf,
-}
-impl PartialEq for InvocationLease {
-    fn eq(&self, other: &Self) -> bool {
-        self.path == other.path
-    }
-}
-impl Eq for InvocationLease {}
 
 /// What a shell command may do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -180,9 +157,6 @@ pub enum SandboxError {
     /// This host cannot contain a mutating command to its project.
     #[error("this host cannot contain commands to the project folder")]
     ProjectWriteUnavailable,
-    /// The project inventory is still building or being verified.
-    #[error("project write inventory pending")]
-    ProjectWritePending,
     /// Filesystem discovery or policy preparation failed; never run uncontained.
     #[error("sandbox filesystem preparation failed: {0}")]
     Filesystem(#[from] std::io::Error),

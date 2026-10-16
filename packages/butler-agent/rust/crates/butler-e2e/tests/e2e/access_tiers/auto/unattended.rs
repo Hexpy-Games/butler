@@ -4,6 +4,7 @@
 //! steward's result, cannot wait either. A full-access schedule is never
 //! blocked.
 use super::super::stub::{self, Script, call};
+use super::run_where;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
@@ -241,31 +242,4 @@ fn authority_requests(s: &Scenario) -> Result<u64, HarnessError> {
             row.get(0)
         })?,
     )
-}
-
-pub(super) async fn run_where(
-    s: &Scenario,
-    schedule: &str,
-    matches: impl Fn(&Value) -> bool,
-) -> Result<Value, HarnessError> {
-    let deadline = Instant::now() + Duration::from_secs(20);
-    loop {
-        let reply = s.gw.get(&format!("/automations/{schedule}/runs")).await?;
-        assert_eq!(reply.status, 200, "{}", reply.text);
-        if let Some(run) = reply.data()["runs"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|run| matches(run))
-        {
-            return Ok(run.clone());
-        }
-        assert!(
-            Instant::now() < deadline,
-            "no matching run: {}\n{}",
-            reply.text,
-            s.agent.logs()
-        );
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
 }

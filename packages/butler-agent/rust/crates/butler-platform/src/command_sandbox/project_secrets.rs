@@ -6,10 +6,8 @@ pub(in crate::command_sandbox) mod portable;
 
 /// Finds existing protected names with a bounded metadata-only walk.
 pub fn discover_project_secrets(root: &Path) -> std::io::Result<Vec<PathBuf>> {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     return portable::discover_project_secrets(root);
-    #[cfg(windows)]
-    return super::windows::mxc::ledger::secrets(root);
     #[cfg(not(any(target_os = "linux", windows)))]
     {
         let _ = root;
@@ -31,20 +29,10 @@ pub fn sweep_new_secrets(
         result.and_then(|paths| cleaned.map(|()| paths))
     }
     #[cfg(windows)]
-    return super::windows::mxc::ledger::sweep(root, since, data);
+    return portable::sweep_new_secrets(root, since, data);
     #[cfg(not(any(target_os = "linux", windows)))]
     {
         let _ = (root, since, data);
         Ok(Vec::new())
     }
-}
-
-/// Begin project inventory preparation before the first command. Best effort:
-/// admission still checks readiness and fails closed if preparation failed.
-/// Call from a blocking worker, because watcher setup opens directory handles.
-pub fn prewarm_project(root: &Path) {
-    #[cfg(windows)]
-    let _ = super::windows::mxc::ledger::prewarm(root);
-    #[cfg(not(windows))]
-    let _ = root;
 }

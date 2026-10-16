@@ -33,8 +33,6 @@ pub enum CapabilityKind {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommandSandbox {
-    /// The user disabled containment, or its preference could not be read.
-    Disabled,
     None,
     ProjectWrite,
 }
@@ -116,9 +114,6 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     let first = auto || *mode == AccessMode::AskExceptReads;
     match request.kind {
         Exempt(_) | InternalRead | ButlerOutput => Allow,
-        CommandMutation {
-            sandbox: CommandSandbox::Disabled,
-        } if auto => Ask(GrantUse::Honor),
         FileRead if first && project => Allow,
         // A folder switch within the consented folder or its repository.
         FolderSwitch | CommandObservation { sandboxed: true } if project => Allow,

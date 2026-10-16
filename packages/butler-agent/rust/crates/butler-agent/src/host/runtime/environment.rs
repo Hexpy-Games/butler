@@ -158,9 +158,3 @@ fn retry_delay(value: f64) -> f64 {
         750.0
     }
 }
-
-/// Capture host inputs and warm kernel capabilities off the runtime/DB workers.
-pub(super) fn initialize_host() -> std::sync::Arc<HashMap<String, String>> {
-    tokio::task::spawn_blocking(butler_platform::command_sandbox::capabilities);
-    std::sync::Arc::new(env::vars().collect())
-}
