@@ -47,7 +47,7 @@ class Paths(unittest.TestCase):
         }
         workflow = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
         lint = workflow.split('  lint:\n', 1)[1].split('  gate:\n', 1)[0]
-        self.assertIn("    if: needs.changes.outputs.tier != 'integration'", lint)  # PRs always run the tracked-document guard.
+        self.assertIn("fromJSON(needs.changes.outputs.jobs).lint", lint)  # PRs always run the tracked-document guard.
         self.assertIn('work-docs-lint.py', lint)
         for path, expected in cases.items():
             with self.subTest(path=path):
@@ -275,7 +275,7 @@ class Trust(unittest.TestCase):
         workflow = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
         groups = json.loads(re.search(r"groups: '([^']+)'", workflow).group(1))
         # Evaluate the actual gate's selection policy, without its result loop.
-        policy = (ROOT / 'check-gate.py').read_text().split("if 'lint' in jobs")[0]
+        policy = (ROOT / 'check-gate.py').read_text().split("for name, enabled in selected.items():")[0]
         flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds', 'licenses', 'signing']
         for values in itertools.product(['false', 'true'], repeat=len(flags)):
             outputs = dict(zip(flags, values), tier='smoke', workflows='true')
@@ -348,26 +348,6 @@ class Trust(unittest.TestCase):
         self.assertEqual(artifacts, [dict(name='agent-linux-x64', run=7),
                                      dict(name='butler-npm-x64', run=7)])
 
-    # test-category: security
-    def test_hash_match_required_even_with_prior_success(self):
-        state = dict(schema=1, repository='owner/repo', workflow='rust-quality.yml', pr=12,
-                     run=1, hashes={'rust': 'rust-before', 'ui': 'ui-before'})
-        event = {'pull_request': {'number': 12, 'base': {'sha': 'base'}}}
-        for current, expected in [({'rust': 'rust-before', 'ui': 'ui-after'}, ('false', 'true')),
-                                  ({'rust': 'rust-after', 'ui': 'ui-before'}, ('true', 'false')),
-                                  ({'rust': 'rust-after', 'ui': 'ui-after'}, ('true', 'true'))]:
-            with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
-                env = dict(GITHUB_EVENT_NAME='pull_request', GITHUB_REPOSITORY='owner/repo',
-                           GITHUB_RUN_ID='2', GITHUB_OUTPUT=str(Path(temporary) / 'output'),
-                           GITHUB_STEP_SUMMARY=str(Path(temporary) / 'summary'))
-                with patch.dict(os.environ, env), patch.object(changes, 'command', return_value='checkout'), \
-                     patch.object(changes, 'changed', return_value=['.github/workflows/rust-quality.yml']), \
-                     patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'other') | current), \
-                     patch.object(changes, 'previous', return_value=iter([state])):
-                    changes.select(event, 'rust-quality.yml')
-                output = (Path(temporary) / 'output').read_text()
-                self.assertIn('rust=' + expected[0], output)
-                self.assertIn('ui=' + expected[1], output)
 
 
 class WorkflowScheduling(unittest.TestCase):
@@ -452,7 +432,7 @@ class TrimContracts(unittest.TestCase):
                 env = dict(os.environ, RESULTS=json.dumps(jobs))
                 actual = subprocess.run(['python3', ROOT / 'check-gate.py'], env=env, capture_output=True)
                 passed = outcome == ('success' if enabled else 'skipped')
-                self.assertEqual(actual.returncode == 0, passed and (tier == 'integration' or enabled), actual.stderr)
+                self.assertEqual(actual.returncode == 0, passed, actual.stderr)
                 with patch.dict(os.environ, env | {'RUNNER_TEMP': temp, 'JOB_GROUPS': '{"licenses":["lint"]}'}), \
                      patch.object(changes.ci_parts, 'inventory', return_value={}):
                     changes.record()

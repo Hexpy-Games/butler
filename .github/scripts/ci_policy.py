@@ -36,7 +36,7 @@ def rust_jobs(outputs, event):
 
 
 def windows_preview_jobs(outputs, event):
-    """Native smoke runs on Windows PRs, main and dispatch; builds are release-only."""
+    """Native smoke runs on main and dispatch; builds are release-only."""
     native = outputs['windows'] == 'true' and event != 'pull_request'
     installer = outputs['package'] == 'true' and outputs.get('tier') == 'integration'
     return {'build': installer, 'stub': native, 'release': installer and native, 'hosted': native}

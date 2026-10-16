@@ -12,7 +12,8 @@ class WindowsCommandCoverage(unittest.TestCase):
         repository = ROOT
         workflow = (repository / '.github/workflows/windows-preview-smoke.yml').read_text()
         triggers = workflow.split('permissions:', 1)[0]
-        self.assertIn('  pull_request:', triggers)
+        self.assertNotIn('  pull_request:', triggers)
+        self.assertIn('  workflow_dispatch:', triggers)
         self.assertIn("branches: [main, 'release/**']", triggers)
         self.assertIn('main', triggers.split('push:', 1)[1].split('workflow_dispatch:', 1)[0])
         release = workflow.split('  release:\n', 1)[1].split('  hosted:\n', 1)[0]

@@ -173,15 +173,16 @@ class Gate(unittest.TestCase):
         integration_only = ['linux-perf-archive', 'linux-perf', 'macos-native', 'macos-perf-archive', 'macos-perf', 'macos-package', 'macos-updates', 'install-macos', 'install-merge', 'linux-arm64-tests', 'linux-arm64-perf', 'linux-arm64-perf-archive']
         for event, platform in [('pull_request', False), ('pull_request', True), ('push', False)]:
             outputs.update(tier='smoke', macos=str(platform).lower())
-            selected = rust_jobs(outputs, event)
+            selected = rust_jobs(outputs, event) | {'lint': True}
             outputs['jobs'] = json.dumps(selected)
             disabled = set(integration_only)
             if event == 'push':
                 disabled.update(('site', 'ds'))
             if event == 'pull_request':
-                disabled.add('linux-arm64-archive')
-                if not platform:
-                    disabled.update(('macos-archive', 'macos-tests'))
+                disabled.update(('linux-arm64-archive', 'macos-archive', 'macos-tests',
+                                 'linux-native', 'linux-arm64-native', 'linux-package-x64',
+                                 'linux-package-arm64', 'install-x64', 'install-arm64',
+                                 'shellcheck', 'selftest'))
             self.assertEqual({name for name, enabled in selected.items() if not enabled}, disabled)
             results = {job: {'result': 'skipped' if job in disabled else 'success'} for job in jobs}
             results['changes'] = dict(result='success', outputs=outputs)
