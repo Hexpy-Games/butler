@@ -117,17 +117,29 @@ impl Metrics {
         )
     }
 }
+/// E2E fixture builds can emulate the pre-batching storage path as a baseline.
+#[cfg(feature = "e2e-fixtures")]
 pub(in crate::gateway::application) fn baseline() -> bool {
     matches!(
         std::env::var("BUTLER_E2E_TIER").as_deref(),
         Ok("stub" | "perf")
     ) && std::env::var_os("BUTLER_E2E_STORAGE_BASELINE").is_some()
 }
+#[cfg(not(feature = "e2e-fixtures"))]
+pub(in crate::gateway::application) fn baseline() -> bool {
+    false
+}
+/// Storage instrumentation exists only in E2E fixture builds.
+#[cfg(feature = "e2e-fixtures")]
 pub(super) fn enabled() -> bool {
     matches!(
         std::env::var("BUTLER_E2E_TIER").as_deref(),
         Ok("stub" | "perf")
     ) && std::env::var_os("BUTLER_E2E_STORAGE_METRICS").is_some()
+}
+#[cfg(not(feature = "e2e-fixtures"))]
+pub(super) fn enabled() -> bool {
+    false
 }
 /// Records the writer's page size; the WAL keeps its ordinary checkpoints.
 pub(super) fn configure(metrics: &Metrics, db: &Connection) -> StorageResult<()> {

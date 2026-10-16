@@ -186,9 +186,9 @@ async fn dispatch_result(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "e2e-fixtures")]
     hold_stub_tool(owner, call).await?;
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "e2e-fixtures")]
     if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
         && std::env::var("BUTLER_E2E_INTERRUPT_TOOL").as_deref() == Ok(call.name.as_str())
         && tokio::fs::remove_file(owner.binding.butler_data.join("e2e-interrupt-tool"))
@@ -221,7 +221,7 @@ async fn dispatch_result(
     }
 }
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "e2e-fixtures")]
 async fn hold_stub_tool(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,

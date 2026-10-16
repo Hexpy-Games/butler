@@ -78,7 +78,7 @@ pub(super) async fn poll_service(
             stop.request();
             break Ok(());
         }
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "e2e-fixtures")]
         if dispatch_ready {
             hold_queue_claims(&config.data_root).await?;
         }
@@ -97,7 +97,7 @@ pub(super) async fn poll_service(
             Ok(delay) => delay,
             Err(error) => break Err(io(error)),
         };
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "e2e-fixtures")]
         if let Err(error) = injected_service_failure(&config.data_root).await {
             break Err(error);
         }
@@ -122,13 +122,14 @@ async fn watch_queue(
     queue: &butler_gateway::gateway::InboundQueue,
     root: &std::path::Path,
 ) -> Result<butler_gateway::gateway::FileChangeWatch, BtccError> {
-    queue
-        .observe_changes(vec![
-            crate::host::service::instance::shutdown_flag_path(root),
-            root.join("e2e-service-exit"),
-        ])
-        .await
-        .map_err(io)
+    #[cfg_attr(
+        not(feature = "e2e-fixtures"),
+        expect(unused_mut, reason = "fixture path")
+    )]
+    let mut paths = vec![crate::host::service::instance::shutdown_flag_path(root)];
+    #[cfg(feature = "e2e-fixtures")]
+    paths.push(root.join("e2e-service-exit"));
+    queue.observe_changes(paths).await.map_err(io)
 }
 
 async fn wait_for_deferred(delay: Option<Duration>) {
@@ -172,9 +173,9 @@ async fn poll_inbound_dispatch(
     data_root: &std::path::Path,
 ) -> Result<IngressPoll, BtccError> {
     if initial_poll {
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "e2e-fixtures")]
         hold_dispatch_readiness(data_root).await?;
-        #[cfg(not(debug_assertions))]
+        #[cfg(not(feature = "e2e-fixtures"))]
         let _ = data_root;
     }
     let summary = dispatcher
@@ -187,7 +188,7 @@ async fn poll_inbound_dispatch(
     Ok(summary)
 }
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "e2e-fixtures")]
 async fn hold_dispatch_readiness(data_root: &std::path::Path) -> Result<(), BtccError> {
     hold_ingress_barrier(
         data_root,
@@ -198,7 +199,7 @@ async fn hold_dispatch_readiness(data_root: &std::path::Path) -> Result<(), Btcc
     .await
 }
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "e2e-fixtures")]
 async fn hold_queue_claims(data_root: &std::path::Path) -> Result<(), BtccError> {
     hold_ingress_barrier(
         data_root,
@@ -217,7 +218,7 @@ async fn hold_queue_claims(data_root: &std::path::Path) -> Result<(), BtccError>
     }
 }
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "e2e-fixtures")]
 async fn hold_ingress_barrier(
     data_root: &std::path::Path,
     switch: &str,
@@ -252,7 +253,7 @@ async fn wait_for_foreground_close(
     }
 }
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "e2e-fixtures")]
 async fn injected_service_failure(data_root: &std::path::Path) -> Result<(), BtccError> {
     if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
         && std::env::var("BUTLER_E2E_FORCE_SERVICE_EXIT").as_deref() == Ok("1")

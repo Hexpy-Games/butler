@@ -102,7 +102,7 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
         .fixture(Fixture::Empty)
         .stub_cassette(cassette)
         .placeholder("NONCE", "5317")
-        .env("BUTLER_E2E_MEMORY_SYNC_TRACE", "1")
+        .env("BUTLER_MEMORY_SYNC_TRACE", "1")
         .env("BUTLER_E2E_PORTABLE_LANCE", "1");
     // Exercise vector persistence with long, spaced, escaped and Unicode paths.
     setup.sandbox.data = setup

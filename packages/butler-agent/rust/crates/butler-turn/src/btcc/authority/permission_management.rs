@@ -16,7 +16,10 @@ impl PrincipalAuthority {
         let collation = self.collation.clone();
         let cache = self.permission_targets.clone();
         self.in_read(move |repo| {
+            #[cfg(feature = "e2e-fixtures")]
             let profile = std::env::var("BUTLER_E2E_STORAGE_METRICS").as_deref() == Ok("1");
+            #[cfg(not(feature = "e2e-fixtures"))]
+            let profile = false;
             let usage = profile.then(|| butler_platform::process_control::sample_usage(std::process::id()).ok().flatten()).flatten();
             let start = std::time::Instant::now();
             let mut grants = repo.list_all_permissions()?;

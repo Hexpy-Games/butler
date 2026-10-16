@@ -20,7 +20,7 @@ async fn effects() -> Result<Scenario, HarnessError> {
     fixtures::stub_codex_auth(&setup.sandbox.codex_home())?;
     let s = setup
         .env("BUTLER_CODEX_BASE_URL", url)
-        .env("BUTLER_E2E_STARTUP_TRACE", "1")
+        .env("BUTLER_STARTUP_TRACE", "1")
         .start()
         .await?;
     let result = s.turn("general", stub::REQUEST).await;

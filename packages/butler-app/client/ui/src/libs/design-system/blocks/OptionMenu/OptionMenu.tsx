@@ -2,7 +2,7 @@ import type { DsPrivateStyleProps, DsBaseProps } from "../../lib/dsProps";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import type { PermissionTone } from "../../lib/permissionTone";
-import { Tooltip } from "../../components/Tooltip";
+import { Tooltip, type TooltipAlign, type TooltipSide } from "../../components/Tooltip";
 import { Typo } from "../../components/Typo";
 import { dsClass } from "../../lib/internal";
 import styles from "./OptionMenu.module.css";
@@ -73,6 +73,10 @@ export interface OptionMenuItemProps extends DsBaseProps<ButtonHTMLAttributes<HT
    * explanation). The item stays hoverable and focusable so the tooltip opens.
    */
   disabledReason?: string;
+  /** Side the disabledReason tooltip opens on (default `top`). */
+  disabledReasonSide?: TooltipSide;
+  /** Alignment of the disabledReason tooltip along that side (default `center`). */
+  disabledReasonAlign?: TooltipAlign;
 }
 
 export function OptionMenuItem({
@@ -84,6 +88,8 @@ export function OptionMenuItem({
   tone = "default",
   permissionTone,
   disabledReason,
+  disabledReasonSide = "top",
+  disabledReasonAlign = "center",
   type = "button",
   className,
   onClick,
@@ -127,5 +133,7 @@ export function OptionMenuItem({
       </span>
     </button>
   );
-  return disabledReason ? <Tooltip label={disabledReason}>{item}</Tooltip> : item;
+  return disabledReason
+    ? <Tooltip label={disabledReason} side={disabledReasonSide} align={disabledReasonAlign}>{item}</Tooltip>
+    : item;
 }
