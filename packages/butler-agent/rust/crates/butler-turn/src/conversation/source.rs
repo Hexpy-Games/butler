@@ -5,8 +5,8 @@ mod scalar;
 
 pub use reader::{
     Archived, CanonicalMemoryReadBinding, ConversationSourceReader, MessageOrigins, PageOrder,
-    PublicMemoryScope, PublicMemorySnapshot, PublicSessionRow, RecallOutcomeRow, SourceChange,
-    SourceChangeKind,
+    PublicMemoryScope, PublicMemorySnapshot, PublicSessionRow, RecallOutcomeEntry,
+    RecallOutcomeRow, SourceChange, SourceChangeKind, SourceChangeMark,
 };
 pub use scalar::{ConversationScalar, decode_message_scalars, scalar_for_part};
 

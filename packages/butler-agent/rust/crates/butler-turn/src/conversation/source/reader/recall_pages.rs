@@ -16,6 +16,16 @@ pub struct RecallOutcomeRow {
     pub public_assistant_message_id: Option<String>,
 }
 
+/// A page row of turn outcomes: its identity, and the row unless its JSON
+/// columns do not parse.
+#[derive(Debug)]
+pub struct RecallOutcomeEntry {
+    pub id: String,
+    pub session_id: String,
+    pub turn_id: String,
+    pub row: ConversationResult<RecallOutcomeRow>,
+}
+
 fn capped(limit: Option<usize>) -> usize {
     limit.unwrap_or(100).clamp(1, 500)
 }
@@ -37,6 +47,17 @@ pub(super) fn outcomes(
     after_id: Option<&str>,
     limit: Option<usize>,
 ) -> ConversationResult<Vec<RecallOutcomeRow>> {
+    outcome_entries(db, after_id, limit)?
+        .into_iter()
+        .map(|entry| entry.row)
+        .collect()
+}
+
+pub(super) fn outcome_entries(
+    db: &Connection,
+    after_id: Option<&str>,
+    limit: Option<usize>,
+) -> ConversationResult<Vec<RecallOutcomeEntry>> {
     let after_row = match after_id {
         Some(id) => db
             .query_row(
@@ -61,19 +82,21 @@ pub(super) fn turn_outcome(
     db: &Connection,
     turn_id: &str,
 ) -> ConversationResult<Option<RecallOutcomeRow>> {
-    Ok(latest_outcomes(
+    latest_outcomes(
         db,
         &format!("{LATEST_OUTCOME} AND turn_id=?1 ORDER BY rowid ASC"),
         params![turn_id],
     )?
-    .pop())
+    .pop()
+    .map(|entry| entry.row)
+    .transpose()
 }
 
 fn latest_outcomes(
     db: &Connection,
     sql: &str,
     params: impl rusqlite::Params,
-) -> ConversationResult<Vec<RecallOutcomeRow>> {
+) -> ConversationResult<Vec<RecallOutcomeEntry>> {
     let mut statement = db.prepare(sql).map_err(ConversationError::sqlite)?;
     let rows = statement
         .query_map(params, |row| {
@@ -96,18 +119,25 @@ fn latest_outcomes(
     for row in rows {
         let (outcome, evidence, unresolved, continuation) =
             row.map_err(ConversationError::sqlite)?;
-        // The source reader parses all three JSON columns before returning a row.
-        let _: serde_json::Value =
-            serde_json::from_str(&evidence).map_err(ConversationError::json)?;
-        let _: serde_json::Value =
-            serde_json::from_str(&unresolved).map_err(ConversationError::json)?;
-        if let Some(continuation) = continuation {
-            let _: serde_json::Value =
-                serde_json::from_str(&continuation).map_err(ConversationError::json)?;
-        }
-        output.push(outcome);
+        output.push(RecallOutcomeEntry {
+            id: outcome.id.clone(),
+            session_id: outcome.session_id.clone(),
+            turn_id: outcome.turn_id.clone(),
+            row: parsed(&evidence, &unresolved, continuation.as_deref()).map(|()| outcome),
+        });
     }
     Ok(output)
+}
+
+/// The source reader parses all three JSON columns before returning a row.
+fn parsed(evidence: &str, unresolved: &str, continuation: Option<&str>) -> ConversationResult<()> {
+    for text in [Some(evidence), Some(unresolved), continuation]
+        .into_iter()
+        .flatten()
+    {
+        let _: serde_json::Value = serde_json::from_str(text).map_err(ConversationError::json)?;
+    }
+    Ok(())
 }
 
 pub(super) fn recovered(

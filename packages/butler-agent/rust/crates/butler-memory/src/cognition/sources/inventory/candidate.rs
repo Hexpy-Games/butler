@@ -28,6 +28,28 @@ pub(in crate::cognition) struct InventoryCandidate {
     pub assistant_message_id: Option<String>,
     /// Set when the source is eligible apart from scope and time.
     pub eligible: Option<EligibleSource>,
+    /// Set when the source could not be read; a recall reports it the way
+    /// the full canonical scan does.
+    pub fault: Option<SourceFault>,
+}
+
+/// A source the store could not read.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(in crate::cognition) struct SourceFault {
+    pub message: String,
+    /// The full scan reads it for every recall (a recall outcome or a
+    /// recovered message page) rather than only once its session is
+    /// admitted (a turn's request and answer).
+    pub every_recall: bool,
+}
+
+impl SourceFault {
+    pub(in crate::cognition) fn error(&self) -> crate::cognition::CognitionError {
+        crate::cognition::CognitionError::new(
+            crate::cognition::CognitionCode::MemorySourceUnavailable,
+            self.message.clone(),
+        )
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -94,7 +116,48 @@ pub(in crate::cognition) fn turn(
         request_message_id: outcome.request_message_id.clone(),
         assistant_message_id: outcome.public_assistant_message_id.clone(),
         eligible,
+        fault: None,
     })
+}
+
+/// [`turn`], keeping a read failure as the candidate's fault.
+pub(in crate::cognition) fn turn_or_fault(
+    reader: &ConversationSourceReader,
+    outcome: &RecallOutcomeRow,
+) -> InventoryCandidate {
+    turn(reader, outcome).unwrap_or_else(|error| InventoryCandidate {
+        request_message_id: outcome.request_message_id.clone(),
+        assistant_message_id: outcome.public_assistant_message_id.clone(),
+        ..faulted(
+            CandidateKind::Turn,
+            &outcome.turn_id,
+            &outcome.session_id,
+            error.message().clone(),
+            false,
+        )
+    })
+}
+
+/// A source whose read failed with `error`.
+pub(in crate::cognition) fn faulted(
+    kind: CandidateKind,
+    id: &str,
+    session_id: &str,
+    message: String,
+    every_recall: bool,
+) -> InventoryCandidate {
+    InventoryCandidate {
+        kind,
+        id: id.to_owned(),
+        session_id: session_id.to_owned(),
+        request_message_id: None,
+        assistant_message_id: None,
+        eligible: None,
+        fault: Some(SourceFault {
+            message,
+            every_recall,
+        }),
+    }
 }
 
 /// One recovered standalone message.
@@ -122,6 +185,7 @@ pub(in crate::cognition) fn recovered(
         request_message_id: None,
         assistant_message_id: None,
         eligible,
+        fault: None,
     })
 }
 

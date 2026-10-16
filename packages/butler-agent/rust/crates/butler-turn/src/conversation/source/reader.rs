@@ -5,12 +5,12 @@ use std::time::Duration;
 mod changes;
 mod public_memory;
 mod recall_pages;
-pub use changes::{SourceChange, SourceChangeKind};
+pub use changes::{SourceChange, SourceChangeKind, SourceChangeMark};
 pub use public_memory::{
     Archived, CanonicalMemoryReadBinding, MessageOrigins, PageOrder, PublicMemoryScope,
     PublicMemorySnapshot, PublicSessionRow,
 };
-pub use recall_pages::RecallOutcomeRow;
+pub use recall_pages::{RecallOutcomeEntry, RecallOutcomeRow};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 
@@ -205,10 +205,15 @@ impl ConversationSourceReader {
         recall_pages::recovered_one(self.connection()?, message_id)
     }
 
-    /// The highest committed source change; `None` for a store that does
-    /// not record changes.
-    pub fn source_change_head(&self) -> ConversationResult<Option<u64>> {
+    /// The latest committed source change; `None` for a store that does
+    /// not log changes.
+    pub fn source_change_head(&self) -> ConversationResult<Option<SourceChangeMark>> {
         changes::head(self.connection()?)
+    }
+
+    /// Whether the change log still continues from `mark` (one indexed read).
+    pub fn source_change_holds(&self, mark: &SourceChangeMark) -> ConversationResult<bool> {
+        changes::holds(self.connection()?, mark)
     }
 
     /// Up to `limit` source changes after `after`, in commit order.
@@ -218,6 +223,16 @@ impl ConversationSourceReader {
         limit: usize,
     ) -> ConversationResult<Vec<SourceChange>> {
         changes::after(self.connection()?, after, limit)
+    }
+
+    /// A page of turn outcomes like [`Self::read_recall_outcome_page`],
+    /// keeping a row whose JSON columns do not parse as a failed entry.
+    pub fn read_recall_outcome_entries(
+        &self,
+        after_id: Option<&str>,
+        limit: Option<usize>,
+    ) -> ConversationResult<Vec<RecallOutcomeEntry>> {
+        recall_pages::outcome_entries(self.connection()?, after_id, limit)
     }
 
     /// A page of recovered source messages.

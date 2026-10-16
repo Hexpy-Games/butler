@@ -14,8 +14,8 @@ use super::{
     recovered_candidate, source_key, turn_candidate, unavailable,
 };
 use crate::cognition::CognitionResult;
-use crate::cognition::graph::{GraphRecallReader, InventoryPhase};
-use crate::cognition::recall::RecallRequest;
+use crate::cognition::graph::{GraphRecallReader, InventoryPhase, Uncovered};
+use crate::cognition::recall::{RecallRequest, RecallScope};
 
 /// The canonical inventory's part of a recall's projection coverage.
 #[derive(Debug)]
@@ -73,8 +73,8 @@ pub(in crate::cognition) fn inventory_coverage(
     })
 }
 
-/// Coverage from the mirror; `None` while it is not built for this store at
-/// a sequence the store has reached.
+/// Coverage from the mirror; `None` while it is not built for this store or
+/// the change log no longer continues from its watermark.
 fn incremental(
     read: &CoverageRead<'_>,
     reader: &ConversationSourceReader,
@@ -82,13 +82,15 @@ fn incremental(
     let Some(state) = read.graph.canonical_inventory_state()? else {
         return Ok(None);
     };
-    let (Some(identity), Some(head)) = (
-        reader.source_identity().map_err(unavailable)?,
-        reader.source_change_head().map_err(unavailable)?,
-    ) else {
+    let Some(identity) = reader.source_identity().map_err(unavailable)? else {
         return Ok(None);
     };
-    if state.phase != InventoryPhase::Ready || identity != state.identity || head < state.seq {
+    if state.phase != InventoryPhase::Ready
+        || identity != state.identity
+        || !reader
+            .source_change_holds(&state.mark)
+            .map_err(unavailable)?
+    {
         return Ok(None);
     }
     let mut pass = Pass {
@@ -102,7 +104,7 @@ fn incremental(
         missing: false,
         partial: false,
     };
-    let changed = pass.changes(state.seq, head)?;
+    let changed = pass.changes(state.mark.seq)?;
     if !pass.partial {
         pass.fresh(&changed)?;
     }
@@ -141,9 +143,9 @@ impl Pass<'_> {
         self.partial
     }
 
-    fn changes(&mut self, mut after: u64, head: u64) -> CognitionResult<Changed> {
+    fn changes(&mut self, mut after: u64) -> CognitionResult<Changed> {
         let mut changed = Changed::default();
-        while after < head && !self.deadline() {
+        while !self.deadline() {
             let page = self
                 .reader
                 .read_source_changes(after, 500)
@@ -176,7 +178,9 @@ impl Pass<'_> {
         Ok(changed)
     }
 
-    /// Reads each changed source as the store holds it now.
+    /// Reads each changed source as the store holds it now, in the full
+    /// scan's order: an outcome or recovered message is read first, a
+    /// turn's messages only once its session is admitted.
     fn fresh(&mut self, changed: &Changed) -> CognitionResult<()> {
         for turn in &changed.turns {
             if self.deadline() {
@@ -211,20 +215,47 @@ impl Pass<'_> {
         Ok(())
     }
 
-    /// The mirror's uncovered rows of unchanged sources.
+    /// The mirror's uncovered rows of unchanged sources, one at a time. Once
+    /// a projection is known missing, only the unreadable rows can still
+    /// change the outcome (into an error).
     fn stored(&mut self, overridden: &HashSet<String>) -> CognitionResult<()> {
-        for candidate in self.read.graph.uncovered_canonical_sources()? {
-            if self.deadline() {
+        let sessions = named_sessions(self.read.input);
+        let graph = self.read.graph;
+        let mut unreadable_only = self.missing;
+        loop {
+            let scope = Uncovered {
+                sessions: sessions.as_deref(),
+                unreadable_only,
+            };
+            let mut found_missing = false;
+            graph.visit_uncovered_canonical_sources(&scope, |candidate| {
+                if self.deadline() {
+                    return Ok(false);
+                }
+                if !overridden.contains(&candidate.key()) {
+                    self.stored_entry(&candidate)?;
+                }
+                found_missing = self.missing && !unreadable_only;
+                Ok(!found_missing)
+            })?;
+            if !found_missing || self.partial {
                 return Ok(());
             }
-            if overridden.contains(&candidate.key())
-                || !self.session_admitted(&candidate.session_id)?
-            {
-                continue;
-            }
-            self.uncovered_entry(&candidate, false)?;
+            unreadable_only = true;
         }
-        Ok(())
+    }
+
+    fn stored_entry(&mut self, candidate: &InventoryCandidate) -> CognitionResult<()> {
+        if let Some(fault) = candidate.fault.as_ref().filter(|fault| fault.every_recall) {
+            return Err(fault.error());
+        }
+        if !self.session_admitted(&candidate.session_id)? {
+            return Ok(());
+        }
+        if let Some(fault) = &candidate.fault {
+            return Err(fault.error());
+        }
+        self.uncovered_entry(candidate, false)
     }
 
     /// Records a missing projection when the recall's time admits the
@@ -252,11 +283,12 @@ impl Pass<'_> {
         let Some(revision) = &eligible.revision else {
             return Err(invalid_generation());
         };
-        if !probe
-            || !self
-                .read
-                .graph
-                .episode_complete(&eligible.episode_id, revision)?
+        if !self.missing
+            && (!probe
+                || !self
+                    .read
+                    .graph
+                    .episode_complete(&eligible.episode_id, revision)?)
         {
             self.missing = true;
         }
@@ -272,4 +304,18 @@ impl Pass<'_> {
             .filter
             .session_admitted(self.sessions.get(session_id).and_then(Option::as_ref)))
     }
+}
+
+/// The only sessions a recall can admit, when it names them.
+fn named_sessions(input: &RecallRequest) -> Option<Vec<String>> {
+    if input.scope == RecallScope::CurrentSession {
+        let current = &input.runtime.session_id;
+        let named = input.session_ids.is_empty() || input.session_ids.contains(current);
+        return Some(if named {
+            vec![current.clone()]
+        } else {
+            Vec::new()
+        });
+    }
+    (!input.session_ids.is_empty()).then(|| input.session_ids.clone())
 }

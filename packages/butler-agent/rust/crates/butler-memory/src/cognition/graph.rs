@@ -47,7 +47,7 @@ use crate::cognition::CognitionCode;
 pub(in crate::cognition) use cache_quantum::{CacheWindow, ClaimedCacheJob};
 pub(in crate::cognition) use candidates::VectorHit;
 pub(in crate::cognition) use canonical_inventory::{
-    InventoryPhase, InventoryState, InventoryWrite,
+    InventoryPhase, InventoryState, InventoryWrite, Uncovered,
 };
 pub(in crate::cognition) use consolidate::GraphConsolidateMetrics;
 pub(in crate::cognition) use internal_supersession::InternalSupersessionInput;
