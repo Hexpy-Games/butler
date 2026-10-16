@@ -18,6 +18,7 @@ mod phase_profile;
 mod preparation;
 mod project_boundaries;
 mod project_write;
+mod setting;
 mod tools;
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use butler_platform::command_sandbox::{self, Invocation};
