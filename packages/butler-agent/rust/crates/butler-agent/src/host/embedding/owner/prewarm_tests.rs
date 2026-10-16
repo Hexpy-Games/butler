@@ -9,7 +9,7 @@ use tokio::process::{ChildStderr, ChildStdin};
 
 fn held_owner() -> EmbeddingOwner {
     let inner = readiness_tests::inner();
-    inner.warm.store(true, Ordering::Release);
+    inner.readiness.publish(true);
     let shutdown = inner.shutdown.clone();
     readiness_tests::owner(inner, shutdown.cancelled_owned())
 }
@@ -53,16 +53,15 @@ async fn live_verification_failure_attempts_replacement() {
     let (mut child, mut gate, mut reader) = peer();
     assert!(child.as_mut().unwrap().child.try_wait().unwrap().is_none());
     let item = take_prewarm(&owner);
-    let (warm_during, result) = {
+    let result = {
         let work = run_item(&owner.inner, &mut child, &item);
         tokio::pin!(work);
         tokio::select! {
             result = &mut work => panic!("verification completed before gate: {:?}", result.map(|_| ())),
             () = received(&mut reader) => {},
         }
-        let warm = owner.is_warm();
         gate.write_all(b"\n").await.unwrap();
-        (warm, work.await)
+        work.await
     };
     // A verification error is embed_model_unavailable. This distinct error
     // proves replacement was attempted using the deliberately absent executable.
@@ -71,11 +70,8 @@ async fn live_verification_failure_attempts_replacement() {
         child.is_none(),
         "failed live child reaped before replacement"
     );
+    assert!(!owner.is_warm(), "failed verification must revoke warmth");
     owner.close().await.unwrap();
-    assert!(
-        !warm_during,
-        "live verification must revoke stale readiness"
-    );
 }
 
 async fn readiness_waits_during_verification() {
@@ -213,6 +209,18 @@ pub(super) async fn regressions() {
     // the other verification, admission, or shutdown failures.
     type Case = std::pin::Pin<Box<dyn std::future::Future<Output = ()>>>;
     let cases: Vec<(&str, Case)> = vec![
+        (
+            "background vector candidates during healthy verification",
+            Box::pin(verification_tests::background_candidates()),
+        ),
+        (
+            "warm-only admission with recall readiness queued",
+            Box::pin(verification_tests::readiness()),
+        ),
+        (
+            "one memory wake per load, none per verification",
+            Box::pin(verification_tests::memory_wakes()),
+        ),
         (
             "live verification replacement",
             Box::pin(live_verification_failure_attempts_replacement()),

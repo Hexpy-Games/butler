@@ -1,12 +1,56 @@
 //! Readiness requests share the bounded owner queue and its single model load.
 use super::*;
 
+const COLD: u8 = 0;
+const WARM: u8 = 1;
+const VERIFYING: u8 = 2;
+
+/// One atomic observation prevents a readiness caller from combining warmth
+/// from before a failed verification with verification completion after it.
+#[derive(Default)]
+pub(super) struct WorkerReadiness(AtomicU8);
+
+impl WorkerReadiness {
+    pub(super) fn is_warm(&self) -> bool {
+        self.0.load(Ordering::Acquire) != COLD
+    }
+
+    fn is_ready(&self) -> bool {
+        self.0.load(Ordering::Acquire) == WARM
+    }
+
+    pub(super) fn clear(&self) {
+        self.0.store(COLD, Ordering::Release);
+    }
+
+    pub(super) fn begin_verification(&self) {
+        let _ = self
+            .0
+            .compare_exchange(WARM, VERIFYING, Ordering::AcqRel, Ordering::Acquire);
+    }
+
+    pub(super) fn finish_verification(&self) {
+        // Off/close may already have revoked warmth while the exchange ran.
+        let _ = self
+            .0
+            .compare_exchange(VERIFYING, WARM, Ordering::AcqRel, Ordering::Acquire);
+    }
+
+    /// True only when a cold worker becomes warm; verification is already warm.
+    pub(super) fn publish(&self, ready: bool) -> bool {
+        self.0
+            .swap(if ready { WARM } else { COLD }, Ordering::AcqRel)
+            == COLD
+            && ready
+    }
+}
+
 impl EmbeddingOwner {
     pub(super) async fn await_ready(&self, deadline_at: i64) -> CognitionResult<()> {
         if !self.enabled() {
             return Err(error(CognitionCode::EmbedWorkerCold));
         }
-        if self.is_warm() {
+        if self.inner.readiness.is_ready() {
             return Ok(());
         }
         let deadline = deadline_instant(Some(deadline_at))?;

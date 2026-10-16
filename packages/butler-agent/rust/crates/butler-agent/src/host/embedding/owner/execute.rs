@@ -43,6 +43,7 @@ pub(super) async fn run_item(
     match outcome {
         Ok(result) => result.map(Some),
         Err(failure) => {
+            inner.readiness.clear();
             kill_and_reap(child).await;
             Err(failure)
         }
@@ -59,17 +60,21 @@ async fn ensure_initialized(
         .is_some_and(|process| process.child.try_wait().ok().flatten().is_some())
     {
         *child = None;
-        inner.warm.store(false, Ordering::Release);
+        inner.readiness.clear();
     }
     // A child can still be alive while disposing its idle model. Confirm it
     // accepts work, instead of treating an initialized process handle as ready.
     if matches!(item.response, PendingResponse::Prewarm)
         && let Some(process) = child.as_mut().filter(|process| process.initialized)
     {
-        inner.warm.store(false, Ordering::Release);
-        if initialize_owned(inner, process, item.id).await.is_err() {
+        inner.readiness.begin_verification();
+        let verified = initialize_owned(inner, process, item.id).await;
+        if verified.is_err() {
+            // Revoke warmth before yielding to reap a worker known to be unusable.
+            inner.readiness.clear();
             kill_and_reap(child).await;
         }
+        inner.readiness.finish_verification();
     }
     if child.is_none() {
         if !inner.enabled.load(Ordering::Acquire) {

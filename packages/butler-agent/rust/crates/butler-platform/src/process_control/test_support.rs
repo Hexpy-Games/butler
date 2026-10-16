@@ -52,22 +52,31 @@ pub fn slow_line_peer(response: &str) -> tokio::process::Command {
 /// line before replying. No timers: the test controls the verification window.
 /// The caller owns stdio and must kill and reap the child.
 pub fn gated_line_peer(response: &str) -> tokio::process::Command {
+    gated_lines_peer(&[response])
+}
+
+/// Repeats the pipe gate for each response, then waits for the owner to stop it.
+pub fn gated_lines_peer(responses: &[&str]) -> tokio::process::Command {
     #[cfg(unix)]
     {
         let mut command = tokio::process::Command::new("/bin/sh");
         command.args([
             "-c",
-            "IFS= read -r line; printf 'received\\n' >&2; IFS= read -r gate; printf '%s\\n' \"$1\"; IFS= read -r stop",
+            "for response do IFS= read -r line; printf 'received\\n' >&2; IFS= read -r gate; printf '%s\\n' \"$response\"; done; IFS= read -r stop",
             "protocol-peer",
-            response,
         ]);
+        command.args(responses);
         command
     }
     #[cfg(windows)]
     {
-        let response = response.replace('\'', "''");
+        let replies = responses
+            .iter()
+            .map(|response| format!("'{}'", response.replace('\'', "''")))
+            .collect::<Vec<_>>()
+            .join(",");
         let script = format!(
-            "[Console]::ReadLine() | Out-Null; [Console]::Error.WriteLine('received'); [Console]::ReadLine() | Out-Null; [Console]::WriteLine('{response}'); [Console]::ReadLine() | Out-Null"
+            "foreach ($response in @({replies})) {{ [Console]::ReadLine() | Out-Null; [Console]::Error.WriteLine('received'); [Console]::ReadLine() | Out-Null; [Console]::WriteLine($response) }}; [Console]::ReadLine() | Out-Null"
         );
         let mut command = tokio::process::Command::new("powershell.exe");
         command.args([

@@ -13,7 +13,7 @@ pub(super) fn inner() -> Arc<Inner> {
         data_root: PathBuf::new(),
         executable: PathBuf::new(),
         next_id: AtomicU64::new(1),
-        warm: AtomicBool::new(false),
+        readiness: WorkerReadiness::default(),
         enabled: AtomicBool::new(true),
         release: AtomicBool::new(false),
         release_signal: Notify::new(),
@@ -144,7 +144,7 @@ pub(super) async fn worker_loop_panic_closes_queue_and_future_readiness_fails_fa
     let actor_inner = inner.clone();
     let owner = owner(inner, async move {
         trigger.notified().await;
-        actor_inner.warm.store(true, Ordering::Release);
+        actor_inner.readiness.publish(true);
         panic!("worker loop failure");
     });
     let started = Instant::now();
@@ -188,7 +188,7 @@ pub(super) async fn prewarm_survives_unobserved_worker_exit() {
         child,
         initialized: true,
     });
-    inner.warm.store(true, Ordering::Release);
+    inner.readiness.publish(true);
     let (resume, held) = oneshot::channel();
     let (observed, result) = oneshot::channel();
     let actor_inner = inner.clone();

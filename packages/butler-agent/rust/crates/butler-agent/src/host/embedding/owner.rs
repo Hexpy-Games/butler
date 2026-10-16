@@ -8,7 +8,7 @@ use std::{
     path::PathBuf,
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
     },
 };
 
@@ -32,12 +32,15 @@ mod supervision;
 
 use execute::run_item;
 use queue::PendingResponse;
+use readiness::WorkerReadiness;
 #[cfg(test)]
 mod prewarm_tests;
 #[cfg(test)]
 mod readiness_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod verification_tests;
 mod wire;
 
 use wire::{WorkerChild, exchange, initialize, kill_and_reap, spawn_worker};
@@ -57,7 +60,7 @@ struct Inner {
     data_root: PathBuf,
     executable: PathBuf,
     next_id: AtomicU64,
-    warm: AtomicBool,
+    readiness: WorkerReadiness,
     /// The user's memory-model choice with the model present; off starts no child.
     enabled: AtomicBool,
     /// A switch to off asks the actor to reap a live child.
@@ -85,7 +88,7 @@ impl EmbeddingOwner {
             data_root,
             executable,
             next_id: AtomicU64::new(1),
-            warm: AtomicBool::new(false),
+            readiness: WorkerReadiness::default(),
             enabled: AtomicBool::new(false),
             release: AtomicBool::new(false),
             release_signal: Notify::new(),
@@ -143,7 +146,7 @@ impl EmbeddingOwner {
     /// (Windows refuses to delete files a live process holds).
     pub(crate) async fn disable(&self) {
         self.inner.enabled.store(false, Ordering::Release);
-        self.inner.warm.store(false, Ordering::Release);
+        self.inner.readiness.clear();
         self.inner.release.store(true, Ordering::Release);
         self.inner.release_signal.notify_waiters();
         self.inner.released.send_replace(false);
@@ -243,7 +246,7 @@ impl Drop for EmbeddingOwner {
 
 impl CognitionEmbeddingPort for EmbeddingOwner {
     fn is_warm(&self) -> bool {
-        self.enabled() && self.inner.warm.load(Ordering::Acquire)
+        self.enabled() && self.inner.readiness.is_warm()
     }
 
     fn enabled(&self) -> bool {
@@ -309,7 +312,7 @@ impl Inner {
             return;
         }
         state.closed = true;
-        self.warm.store(false, Ordering::Release);
+        self.readiness.clear();
         for pending in state.interactive.drain(..) {
             pending
                 .response
@@ -367,8 +370,8 @@ async fn run_actor(inner: Arc<Inner>) {
 async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>) {
     loop {
         if inner.release.swap(false, Ordering::AcqRel) {
+            inner.readiness.clear();
             kill_and_reap(child).await;
-            inner.warm.store(false, Ordering::Release);
         }
         inner.released.send_replace(child.is_none());
         let next = {
@@ -385,8 +388,10 @@ async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>) {
                 .filter(|process| process.initialized)
                 .and_then(|process| process.child.id());
             let result = run_item(inner, child, &item).await;
-            let ready = child.as_ref().is_some_and(|process| process.initialized);
-            if inner.warm.swap(ready, Ordering::AcqRel) != ready && ready {
+            let ready = inner.enabled.load(Ordering::Acquire)
+                && !inner.shutdown.is_cancelled()
+                && child.as_ref().is_some_and(|process| process.initialized);
+            if inner.readiness.publish(ready) {
                 butler_memory::cognition::signal_memory_work();
             }
             if ready && child.as_ref().and_then(|process| process.child.id()) != previous_worker {
@@ -405,7 +410,7 @@ async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>) {
             tokio::select! {
                 () = inner.notify.notified() => {},
                 () = inner.shutdown.cancelled() => {},
-                _ = process.child.wait() => { *child = None; inner.warm.store(false, Ordering::Release); },
+                _ = process.child.wait() => { *child = None; inner.readiness.clear(); },
             }
         } else {
             tokio::select! {
@@ -414,8 +419,8 @@ async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>) {
             }
         }
     }
+    inner.readiness.clear();
     kill_and_reap(child).await;
-    inner.warm.store(false, Ordering::Release);
     inner.released.send_replace(true);
 }
 
