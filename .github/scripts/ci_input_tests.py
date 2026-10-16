@@ -130,8 +130,12 @@ class DerivedInputs(unittest.TestCase):
                 self.assertIn('rust', groups)
                 outputs = {g: str(g in groups).lower() for g in changes.GROUPS}
                 jobs = changes.rust_jobs(dict(outputs, tier='smoke'), 'pull_request')
+                self.assertTrue(jobs['linux-archive'])
+                self.assertFalse(jobs['macos-archive'])
+                self.assertFalse(jobs['linux-arm64-archive'])
+                main_jobs = changes.rust_jobs(dict(outputs, tier='smoke'), 'push')
                 for platform in ('linux', 'macos', 'linux-arm64'):
-                    self.assertTrue(jobs[platform + '-archive'])
+                    self.assertTrue(main_jobs[platform + '-archive'])
         print(f'Rust external inputs: {len(external)} files')
 
     # test-category: pure-logic
@@ -208,7 +212,7 @@ class DerivedInputs(unittest.TestCase):
                         self.assertEqual(output[group], 'false')
                 jobs = json.loads(output['jobs'])
                 for name in ('shellcheck', 'selftest'):
-                    self.assertEqual(jobs[name], signing or output['package'] == 'true')
+                    self.assertFalse(jobs[name])
         for name in ('shellcheck', 'selftest'):
             self.assertEqual(changes.job_groups(workflow)[name], ['package', 'signing'])
             block = re.split(r'\n  [a-z]', source.split(f'  {name}:\n', 1)[1], maxsplit=1)[0]

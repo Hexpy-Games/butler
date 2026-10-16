@@ -1,5 +1,12 @@
-Windows jobs build on `yw-pc` with labels `[self-hosted, butler-win]`.
-Only same-repository PRs can reach it. Installer, protocol, lifecycle and LAN
+Windows jobs use `[self-hosted, butler-win]` plus a lane label.
+The coordinator registers these labels in GitHub runner settings:
+
+- `yw-pc`: `butler-win-release` only.
+- `yw-pc-2`: both `butler-win-shared` and `butler-win-release`.
+
+Release jobs can use both PCs. PR/main jobs use `butler-win-shared`, keeping
+`yw-pc` free for release. Ref-aware dispatch jobs use the corresponding lane.
+Only same-repository PRs can reach the shared lane. Installer, protocol, lifecycle and LAN
 verification runs on disposable `windows-latest` with compiled artifacts.
 No self-hosted job may register protocols, services, login items, shortcuts,
 credentials or firewall rules. A temporary profile does not isolate the registry.

@@ -169,24 +169,32 @@ class Gate(unittest.TestCase):
                 'macos-package', 'macos-updates', 'linux-arm64-archive', 'linux-arm64-tests', 'linux-package-x64',
                 'linux-package-arm64', 'linux-arm64-native', 'linux-arm64-perf-archive', 'linux-arm64-perf', 'install-x64', 'install-arm64', 'install-macos', 'install-merge', 'ui', 'site', 'ds']
         outputs = dict.fromkeys(['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds'], 'true')
-        results = {job: {'result': 'success'} for job in jobs}
-        outputs['tier'] = 'smoke'
         from ci_policy import rust_jobs
-        outputs['jobs'] = json.dumps(rust_jobs(outputs, 'pull_request'))
         integration_only = ['linux-perf-archive', 'linux-perf', 'macos-native', 'macos-perf-archive', 'macos-perf', 'macos-package', 'macos-updates', 'install-macos', 'install-merge', 'linux-arm64-tests', 'linux-arm64-perf', 'linux-arm64-perf-archive']
-        for name in integration_only:
-            results[name]['result'] = 'skipped'
-        results['changes'] = dict(result='success', outputs=outputs)
-        env = dict(os.environ, EVENT='pull_request', RESULTS=json.dumps(results))
-        self.assertEqual(subprocess.run([sys.executable, ROOT / 'check-gate.py'], env=env, capture_output=True).returncode, 0)
-        for job in jobs:
-            if job in integration_only:
-                continue
-            for outcome in ['failure', 'cancelled', 'skipped']:
-                changed = json.loads(json.dumps(results))
-                changed[job]['result'] = outcome
-                env['RESULTS'] = json.dumps(changed)
-                self.assertNotEqual(subprocess.run([sys.executable, ROOT / 'check-gate.py'], env=env, capture_output=True).returncode, 0, (job, outcome))
+        for event, platform in [('pull_request', False), ('pull_request', True), ('push', False)]:
+            outputs.update(tier='smoke', macos=str(platform).lower())
+            selected = rust_jobs(outputs, event) | {'lint': True}
+            outputs['jobs'] = json.dumps(selected)
+            disabled = set(integration_only)
+            if event == 'push':
+                disabled.update(('site', 'ds'))
+            if event == 'pull_request':
+                disabled.update(('linux-tests', 'linux-arm64-archive', 'macos-archive', 'macos-tests',
+                                 'linux-native', 'linux-arm64-native', 'linux-package-x64',
+                                 'linux-package-arm64', 'install-x64', 'install-arm64',
+                                 'shellcheck', 'selftest'))
+            self.assertEqual({name for name, enabled in selected.items() if not enabled}, disabled)
+            results = {job: {'result': 'skipped' if job in disabled else 'success'} for job in jobs}
+            results['changes'] = dict(result='success', outputs=outputs)
+            env = dict(os.environ, EVENT=event, RESULTS=json.dumps(results))
+            self.assertEqual(subprocess.run([sys.executable, ROOT / 'check-gate.py'], env=env, capture_output=True).returncode, 0)
+            for job in jobs:
+                outcomes = ['success', 'failure', 'cancelled'] if job in disabled else ['failure', 'cancelled', 'skipped']
+                for outcome in outcomes:
+                    changed = json.loads(json.dumps(results))
+                    changed[job]['result'] = outcome
+                    env['RESULTS'] = json.dumps(changed)
+                    self.assertNotEqual(subprocess.run([sys.executable, ROOT / 'check-gate.py'], env=env, capture_output=True).returncode, 0, (event, platform, job, outcome))
 
     # test-category: pure-logic
     def test_smoke_cannot_reach_e2e_or_perf_on_pr_or_main(self):
@@ -221,7 +229,13 @@ class Gate(unittest.TestCase):
         archive = (ROOT.parent / 'workflows/rust-archive.yml').read_text()
         steps = {step.splitlines()[0]: step for step in archive.split('      - name: ')[1:]}
         selections = steps['Archive tests and record every selection']
-        self.assertNotIn('        if:', selections)
+        expression = re.search(r'^        if: \$\{\{ (.*) \}\}$', selections, re.M)[1]
+        for event in ['pull_request', 'push', 'workflow_dispatch']:
+            for in_place in [False, True]:
+                condition = expression.replace('inputs.smoke-in-place', repr(in_place))
+                condition = condition.replace('github.event_name', repr(event))
+                condition = condition.replace('!', 'not ').replace('&&', 'and')
+                self.assertEqual(eval(condition), not (in_place and event == 'pull_request'))
         for command in ['cargo nextest list', 'balance-e2e.py', 'test-ci-invariants.py']:
             self.assertIn(command, selections)
         fixture = steps['Build E2E fixture Agent']

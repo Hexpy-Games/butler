@@ -1,9 +1,9 @@
 name: Unsigned Windows preview smoke
-
 on:
-  pull_request:
+  # Native coverage runs on main/release or explicit branch dispatch.
+  # gh workflow run windows-preview-smoke.yml --ref <head-branch>
   push:
-    branches: ['release/**']
+    branches: [main, 'release/**']
   workflow_dispatch:
     inputs:
       native-cache:
@@ -20,26 +20,21 @@ on:
         required: false
         type: boolean
         default: false
-
 permissions:
   actions: read
   contents: read
-
 defaults:
   run:
     shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
     working-directory: packages/butler-agent/rust
-
 concurrency:
   group: windows-preview-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/release/') }}
-
 jobs:
   changes:
     uses: ./.github/workflows/ci-changes.yml
     with:
       workflow: windows-preview-smoke.yml
-
   build:
     permissions:
       contents: read
@@ -48,33 +43,13 @@ jobs:
     needs: changes
     name: Build unsigned Windows preview
     if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['build']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['build'] && !inputs.native-loop && !inputs.diagnose-powershell && github.event_name != 'pull_request'))
-    runs-on: [self-hosted, butler-win]
+    runs-on: [self-hosted, butler-win, butler-win-release]
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/windows-owner-setup
+      - uses: ./.github/actions/windows-preview-build
         with:
-          workflow: ${{ inputs.native-cache || 'windows-agent-v1' }}
-      - uses: ./.github/actions/build-windows-agent
-        with:
-          owner-runner: 'true'
-          profile: ci-fast
-          cache-key: windows-preview
-          artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: agent-windows-x64
-          path: dist/release/agent/*
-          if-no-files-found: error
-      - uses: ./.github/actions/publish-windows-target
-        continue-on-error: true
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
-      - uses: ./.github/actions/prepare-windows-release-target
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
-      - name: Check owner registration and remove job profile
-        if: always()
-        working-directory: .
-        run: ./deploy/windows-owner-cleanup.ps1
+          native-cache: ${{ inputs.native-cache || 'windows-agent-v1' }}
 
   stub:
     permissions:
@@ -84,7 +59,7 @@ jobs:
     needs: changes
     name: Platform contracts and debug stub chat
     if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['stub']) || (needs.changes.outputs.tier != 'integration' && (fromJSON(needs.changes.outputs.jobs)['stub'] && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))))
-    runs-on: [self-hosted, butler-win]
+    runs-on: [self-hosted, butler-win, "${{ (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/')) && 'butler-win-release' || 'butler-win-shared' }}"]
     timeout-minutes: 90
     env:
       BUTLER_E2E_TIER: stub
@@ -313,10 +288,9 @@ jobs:
         if: always()
         working-directory: .
         run: ./deploy/windows-owner-cleanup.ps1
-
   release:
     name: Installed unsigned Windows preview
-    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['release']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['release'] && !inputs.native-loop && github.event_name != 'pull_request'))
+    if: always() && !cancelled() && needs.changes.result == 'success' && (needs.build.result == 'success' || (needs.build.result == 'skipped' && contains(fromJSON(needs.changes.outputs.artifacts).*.name, 'agent-windows-x64'))) && (needs.stub.result == 'success' || (needs.stub.result == 'skipped' && contains(fromJSON(needs.changes.outputs.artifacts).*.name, 'windows-e2e'))) && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['release']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['release'] && !inputs.native-loop && github.event_name != 'pull_request'))
     needs: [changes, build, stub]
     runs-on: windows-latest
     timeout-minutes: 30
@@ -404,10 +378,9 @@ jobs:
             Remove-Item $env:WINDOWS_PREVIEW_TEMP_ROOT -Recurse -Force
           }
           Remove-Item $env:PREVIEW_ROOT -Recurse -Force
-
   hosted:
     name: Hosted Windows E2E (${{ matrix.shard }})
-    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted'] && !inputs.native-loop))
+    if: always() && !cancelled() && needs.changes.result == 'success' && (needs.stub.result == 'success' || (needs.stub.result == 'skipped' && contains(fromJSON(needs.changes.outputs.artifacts).*.name, 'windows-e2e'))) && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted'] && !inputs.native-loop))
     needs: [changes, stub]
     runs-on: windows-latest
     timeout-minutes: 30
@@ -464,7 +437,6 @@ jobs:
       - name: Remove temporary verification profiles
         if: always()
         run: Remove-Item $env:PREVIEW_ROOT -Recurse -Force
-
   gate:
     name: Complete Windows preview verification
     if: ${{ always() && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
@@ -492,7 +464,6 @@ jobs:
           results: ${{ toJSON(needs) }}
           groups: '{"package": ["build", "stub", "release", "hosted"]}'
           workflow: windows-preview-smoke.yml
-
   diagnostics:
     if: inputs.diagnose-powershell
     uses: ./.github/workflows/windows-powershell-diagnostics.yml

@@ -1,0 +1,35 @@
+name: Main CI failure follow-up
+on:
+  workflow_run:
+    workflows: ['*']
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read
+concurrency:
+  group: main-ci-failure-follow-up-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+jobs:
+  report:
+    if: >-
+      github.event.workflow_run.conclusion != 'success' &&
+      github.event.workflow_run.conclusion != 'skipped' &&
+      github.event.workflow_run.name != 'Main CI failure follow-up' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      # Privileged follow-up executes only trusted main code, never PR artifacts.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Report range and propose draft revert
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/ci_main_failure.py
