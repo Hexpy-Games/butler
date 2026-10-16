@@ -6,6 +6,7 @@ import importlib.util
 import io
 import os
 import json
+import subprocess
 import sys
 from pathlib import Path
 import tempfile
@@ -23,6 +24,56 @@ for name, filename in [('windows_safety', 'windows-ci-safety.py'), ('oras_setup'
 
 
 class WindowsSafety(unittest.TestCase):
+    # test-category: format-pin
+    def test_windows_test_logs_bypass_console_pipeline_and_keep_failure_summary(self):
+        repository = ROOT.parents[1]
+        workflow = (repository / '.github/workflows/windows-preview-smoke.yml').read_text()
+        self.assertNotIn('Tee-Object', workflow)
+        self.assertIn('BUTLER_DEBUG_COMMAND_TIMINGS: "1"', workflow)
+        self.assertIn("matrix.shard == 'basics' && '1'", workflow)
+        self.assertEqual(workflow.count('windows-test-log.ps1'), 7)
+        for filename in ['windows-e2e-artifacts.ps1', 'windows-basic-capabilities.ps1']:
+            source = (repository / 'deploy' / filename).read_text()
+            self.assertNotIn('Tee-Object', source)
+            self.assertIn('*> $log', source)
+            self.assertIn('windows-test-log.ps1', source)
+            self.assertIn('$testCode = $LASTEXITCODE', source)
+        release = (repository / '.github/workflows/release.yml').read_text()
+        self.assertIn('path: ${{ runner.temp }}/windows-basic-capabilities.log', release)
+        wrapper = (repository / 'deploy/windows-test-log.ps1').read_text()
+        self.assertIn('summarize-test-log.py', wrapper)
+        self.assertIn('$summaryCode = $LASTEXITCODE', wrapper)
+
+    # test-category: format-pin
+    def test_failure_summary_keeps_early_failure_blocks_and_exact_last_300_lines(self):
+        spec = importlib.util.spec_from_file_location('summary', ROOT / 'summarize-test-log.py')
+        summary = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(summary)
+        failure = ['test early ... FAILED\n', 'failures:\n', '---- early stdout ----\n',
+                   "thread 'early' panicked at source.rs:1\n", 'assertion details\n',
+                   'failures:\n', '    early\n', 'test result: FAILED. 0 passed; 1 failed\n']
+        noise = [f'timing {index}\n' for index in range(1000)]
+        for lines in [failure + noise, ['test result: ok. 1 passed\n'], []]:
+            output = io.StringIO()
+            summary.summarize(iter(lines), output)
+            report, tail = output.getvalue().split('\nLast 300 lines:\n')
+            self.assertEqual(tail, ''.join(lines[-300:]))
+            self.assertTrue(all(line in report for line in failure) if len(lines) > 300 else True)
+            self.assertNotIn('timing 0\n', report)
+
+    # test-category: format-pin
+    def test_failure_summary_reads_powershell_and_native_log_encodings(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / 'test.log'
+            for encoding in ['utf-16', 'utf-8']:
+                log.write_text('test unicode ... FAILED\nfailures:\nassertion 한글\n'
+                               'test result: FAILED\n', encoding=encoding)
+                result = subprocess.run([sys.executable, str(ROOT / 'summarize-test-log.py'), str(log)],
+                                        capture_output=True, text=True, encoding='utf-8', check=True,
+                                        env={**os.environ, 'PYTHONIOENCODING': 'utf-8'})
+                self.assertIn('assertion 한글', result.stdout)
+                self.assertIn('Last 300 lines:', result.stdout)
+
     # test-category: security
     def test_owner_jobs_reject_github_cli_requirement(self):
         for source in ['gh api repos/owner/repo', "cache.output('gh', 'api', endpoint)",
