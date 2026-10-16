@@ -74,6 +74,11 @@ impl Sandbox {
         ] {
             fs::create_dir_all(dir)?;
         }
+        for (_, path) in
+            butler_platform::process_control::fixture_profile_environment(&sandbox.home)
+        {
+            fs::create_dir_all(path)?;
+        }
         Ok(sandbox)
     }
 
@@ -131,7 +136,14 @@ fn prepare_installation(root: &Path) -> Result<(PathBuf, PathBuf, PathBuf), Harn
             binary.display()
         ))
     })?;
-    copy_tree(&resource_source(), &resources)?;
+    let source = resource_source();
+    copy_tree(&source, &resources).map_err(|error| {
+        harness_error(format!(
+            "copy E2E resources {} to {}: {error}",
+            source.display(),
+            resources.display()
+        ))
+    })?;
     fs::create_dir_all(resources.join("app-client/dist"))?;
     fs::write(
         resources.join("app-client/dist/index.html"),

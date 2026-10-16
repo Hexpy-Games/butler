@@ -17,7 +17,7 @@ runs:
   using: composite
   steps:
     - uses: ./.github/actions/setup-oras
-    - name: Commit complete snapshot and retain two generations
+    - name: Commit complete snapshot and retain four generations
       if: runner.os != 'Windows'
       shell: bash
       working-directory: packages/butler-agent/rust
@@ -29,7 +29,7 @@ runs:
         TARGET_SNAPSHOT_PRODUCER: ${{ inputs.producer }}
       run: |
         python "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python "$GITHUB_WORKSPACE/.github/scripts/ci-store-publish.py" cargo-target "$CACHE_PLATFORM" "$CACHE_MODE" "$CACHE_KIND"
-    - name: Commit complete Windows snapshot and retain two generations
+    - name: Commit complete Windows snapshot and retain four generations
       if: runner.os == 'Windows'
       shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       working-directory: packages/butler-agent/rust

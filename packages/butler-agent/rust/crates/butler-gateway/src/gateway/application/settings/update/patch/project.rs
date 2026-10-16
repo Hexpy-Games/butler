@@ -245,6 +245,7 @@ fn project_simple_fields(
         "translucent_sidebar",
         "smart_grouping_enabled",
         "diagnostics_enabled",
+        "command_sandbox_enabled",
         "desktop_tray_enabled",
         "max_simultaneous_workers",
     ] {

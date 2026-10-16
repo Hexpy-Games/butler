@@ -47,7 +47,7 @@ pub const EXECUTION_TIMEOUT_EXIT: i32 = 124;
 pub const EXECUTION_TIMEOUT_MARKER: &str = "butler_command_execution_timed_out";
 /// Whether an exit needs timeout-marker inspection.
 pub fn execution_timeout_exit(exit_code: Option<i32>) -> bool {
-    exit_code == Some(EXECUTION_TIMEOUT_EXIT)
+    cfg!(windows) && exit_code == Some(EXECUTION_TIMEOUT_EXIT)
 }
 /// Distinguishes an MXC timeout from a command which itself exits 124.
 pub fn execution_timeout(exit_code: Option<i32>, stderr_tail: &[u8]) -> bool {
@@ -55,4 +55,22 @@ pub fn execution_timeout(exit_code: Option<i32>, stderr_tail: &[u8]) -> bool {
         && stderr_tail
             .trim_ascii_end()
             .ends_with(EXECUTION_TIMEOUT_MARKER.as_bytes())
+}
+
+/// Helper execution/capture failure, distinct from a policy setup refusal.
+pub const EXECUTION_FAILURE_EXIT: i32 = 126;
+/// Trailer emitted after reporting a failed wait or incomplete output relay.
+pub const EXECUTION_FAILURE_MARKER: &str = "butler_command_execution_failed";
+/// Recognizes an explicit Windows helper execution failure.
+pub fn execution_failure(exit_code: Option<i32>, tail: &[u8]) -> bool {
+    cfg!(windows)
+        && exit_code == Some(EXECUTION_FAILURE_EXIT)
+        && tail
+            .trim_ascii_end()
+            .ends_with(EXECUTION_FAILURE_MARKER.as_bytes())
+}
+
+/// Whether this host can emit the execution failure protocol.
+pub fn execution_failure_exit(exit_code: Option<i32>) -> bool {
+    cfg!(windows) && exit_code == Some(EXECUTION_FAILURE_EXIT)
 }

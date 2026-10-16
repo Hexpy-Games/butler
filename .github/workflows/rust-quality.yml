@@ -1,12 +1,11 @@
 name: Rust quality
 
 # One required gate covers the selected Linux, macOS, UI and site checks.
-# Windows ownership remains in the existing Windows workflows.
+# Windows compile, signing policy and licenses share this selection and gate.
 on:
   push:
     branches: [main, 'release/**']
   pull_request:
-  merge_group:
   workflow_dispatch:
 
 permissions:
@@ -15,7 +14,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ${{ startsWith(github.ref, 'refs/heads/release/') && 'integration' || format('rust-quality-{0}', github.head_ref || github.ref_name) }}
+  group: ${{ startsWith(github.ref, 'refs/heads/release/') && format('integration-{0}', github.ref) || format('rust-quality-{0}', github.head_ref || github.ref_name) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/release/') }}
 
 env:
@@ -32,23 +31,37 @@ jobs:
     with:
       workflow: rust-quality.yml
 
-  source:
+  windows-check:
     needs: changes
-    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['source']
-    name: Format and source rules
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['windows-check']
+    uses: ./.github/workflows/rust-windows-check.yml
+
+  shellcheck:
+    needs: changes
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['shellcheck']
+    name: shellcheck
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.99.0
-          components: rustfmt
-      - name: Check formatting
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo fmt --all -- --check
-      - name: Check Rust source rules
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo run --locked -p butler-source-check -- .
+      - run: python3 .github/scripts/isolated.py shellcheck deploy/macos/*.sh
+      - run: python3 .github/scripts/isolated.py deploy/macos/policy-selftest.sh
+
+  selftest:
+    needs: changes
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['selftest']
+    name: no-identity and ad-hoc self-test
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: python3 .github/scripts/isolated.py bun install --frozen-lockfile --ignore-scripts
+      - run: python3 .github/scripts/isolated.py deploy/macos/selftest.sh
 
   linux-clippy:
     needs: changes
@@ -78,6 +91,7 @@ jobs:
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-archive']
     uses: ./.github/workflows/rust-archive.yml
     with:
+      fixtures: ${{ needs.changes.outputs.tier == 'integration' || github.event_name != 'pull_request' }}
       ort-mode: prebuilt-ort
 
   linux-perf-archive:
@@ -136,6 +150,7 @@ jobs:
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-arm64-archive']
     uses: ./.github/workflows/rust-archive.yml
     with:
+      fixtures: ${{ needs.changes.outputs.tier == 'integration' || github.event_name != 'pull_request' }}
       runner: ubuntu-24.04-arm
       platform: linux-arm64
       ort-mode: prebuilt-ort
@@ -232,6 +247,7 @@ jobs:
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['macos-archive']
     uses: ./.github/workflows/rust-archive.yml
     with:
+      fixtures: ${{ needs.changes.outputs.tier == 'integration' || github.event_name != 'pull_request' }}
       runner: macos-15
       platform: darwin-arm64
       ort-mode: prebuilt-ort
@@ -293,20 +309,26 @@ jobs:
       platforms: '[{"platform":"linux-x64","runner":"ubuntu-24.04"}]'
 
   install-arm64:
-    needs: [changes, linux-arm64-native]
+    needs: [changes, linux-arm64-native, install-x64]
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['install-arm64']
     uses: ./.github/workflows/install-smoke.yml
     with:
+      # Common package checks and tarball are produced by install-x64.
+      pack: false
+      npm-artifact: butler-npm-x64
       shared-agents: true
       merge-manifests: false
       label: arm64
       platforms: '[{"platform":"linux-arm64","runner":"ubuntu-24.04-arm"}]'
 
   install-macos:
-    needs: [changes, macos-native]
+    needs: [changes, macos-native, install-x64]
     if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['install-macos']
     uses: ./.github/workflows/install-smoke.yml
     with:
+      # Common package checks and tarball are produced by install-x64.
+      pack: false
+      npm-artifact: butler-npm-x64
       shared-agents: true
       merge-manifests: false
       label: macos
@@ -342,6 +364,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@v4
+        if: needs.changes.outputs.licenses == 'true' || needs.changes.outputs.tier == 'integration'
+        with:
+          node-version: 24
+      - name: Validate locked inventory, notices and disclosure
+        if: needs.changes.outputs.licenses == 'true' || needs.changes.outputs.tier == 'integration'
+        working-directory: ${{ github.workspace }}
+        run: |
+          python3 .github/scripts/isolated.py node deploy/licenses/generate.mjs --check
+          python3 .github/scripts/isolated.py node deploy/licenses/check.mjs
+          python3 .github/scripts/isolated.py python3 deploy/licenses/check-disclosure.py
       - name: Whitespace lint
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -363,6 +396,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           python3 .github/scripts/isolated.py python3 .github/scripts/test-cargo-target.py
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-cargo-target-walk-back.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-cargo-units.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-runner-cache.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-native-deps.py
@@ -386,7 +420,7 @@ jobs:
   gate:
     name: gate
     if: always()
-    needs: [changes, lint, source, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
+    needs: [changes, lint, windows-check, shellcheck, selftest, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -395,7 +429,7 @@ jobs:
         uses: ./.github/actions/ci-input-receipt
         with:
           results: ${{ toJSON(needs) }}
-          groups: '{"workflows": ["lint"], "rust": ["source", "linux-clippy", "linux-native", "linux-archive", "linux-tests", "linux-perf-archive", "linux-perf", "macos-native", "macos-archive", "macos-tests", "macos-perf-archive", "macos-perf", "linux-arm64-tests", "linux-arm64-perf-archive", "linux-arm64-perf"], "ui": ["ui"], "site": ["site"], "ds": ["ds"], "package": ["macos-native", "macos-archive", "macos-updates", "macos-package"], "linux-package": ["linux-native", "linux-arm64-native", "linux-package-x64", "linux-package-arm64", "linux-archive", "linux-arm64-archive"], "install": ["linux-native", "linux-arm64-native", "macos-native", "install-x64", "install-arm64", "install-macos", "install-merge", "linux-archive", "linux-arm64-archive", "macos-archive"]}'
+          groups: '{"workflows": ["lint"], "rust": ["linux-clippy", "linux-native", "linux-archive", "linux-tests", "linux-perf-archive", "linux-perf", "macos-native", "macos-archive", "macos-tests", "macos-perf-archive", "macos-perf", "linux-arm64-archive", "linux-arm64-tests", "linux-arm64-perf-archive", "linux-arm64-perf", "windows-check"], "ui": ["ui"], "site": ["site"], "ds": ["ds"], "package": ["macos-native", "macos-archive", "macos-updates", "macos-package", "shellcheck", "selftest"], "linux-package": ["linux-native", "linux-arm64-native", "linux-package-x64", "linux-package-arm64", "linux-archive", "linux-arm64-archive"], "install": ["linux-native", "linux-arm64-native", "macos-native", "install-x64", "install-arm64", "install-macos", "install-merge", "linux-archive", "linux-arm64-archive", "macos-archive"], "licenses": ["lint"], "signing": ["shellcheck", "selftest"]}'
           workflow: rust-quality.yml
       - name: Require every selected check
         env:
@@ -403,6 +437,24 @@ jobs:
           EVENT: ${{ github.event_name }}
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/check-gate.py
+
+  # Keep the old required contexts until the coordinator updates both rulesets.
+  # They remain non-required compatibility checks after that settings change.
+  legacy-gates:
+    name: ${{ matrix.context }}
+    if: always()
+    needs: gate
+    strategy:
+      fail-fast: false
+      matrix:
+        context: ['post-merge-ci gate', 'licenses gate', 'macos-signing gate']
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require consolidated gate
+        working-directory: ${{ runner.temp }}
+        env:
+          RESULT: ${{ needs.gate.result }}
+        run: test "$RESULT" = success
 
   main-issue:
     name: Report main failure

@@ -52,16 +52,23 @@ def checked(*args, **kwargs):
     return result.stdout
 
 
+def absent(result, anonymous):
+    """A missing repository or tag, or a private package for an anonymous reader."""
+    if any(code in result.stderr.lower() for code in ['not found', 'manifest_unknown', 'name_unknown', '404']):
+        return True
+    if anonymous and any(message in result.stderr.lower() for message in
+                         ['requested access to the resource is denied', 'unauthorized: authentication required']):
+        print('OCI package is absent or not public; cold build follows.')
+        return True
+    return False
+
+
 def manifest(reference, *, anonymous=True):
     if os.environ.get('BUTLER_OCI_LAYOUT') == '1' and not Path(reference.rsplit(':', 1)[0]).exists():
         return None
     result = command('manifest', 'fetch', reference, anonymous=anonymous)
     if result.returncode:
-        if any(code in result.stderr.lower() for code in ['not found', 'manifest_unknown', 'name_unknown', '404']):
-            return None
-        if anonymous and any(message in result.stderr.lower() for message in
-                             ['requested access to the resource is denied', 'unauthorized: authentication required']):
-            print('OCI package is absent or not public; cold build follows.')
+        if absent(result, anonymous):
             return None
         raise RuntimeError(f'OCI manifest lookup failed: {result.stderr.strip()}')
     value = json.loads(result.stdout)
@@ -76,6 +83,18 @@ def manifest(reference, *, anonymous=True):
             raise ValueError('OCI file exceeds size bound')
         files[name] = dict(layer, name=name, reference=reference.rsplit(':', 1)[0])
     return dict(manifest=value, assets=list(files.values()))
+
+
+def tags(repository, *, anonymous=True):
+    """Every tag in one repository listing; empty when the repository is absent."""
+    if os.environ.get('BUTLER_OCI_LAYOUT') == '1' and not Path(repository).exists():
+        return []
+    result = command('repo', 'tags', repository, anonymous=anonymous)
+    if result.returncode:
+        if absent(result, anonymous):
+            return []
+        raise RuntimeError(f'OCI tag listing failed: {result.stderr.strip()}')
+    return result.stdout.split()
 
 
 def fetch(entry, destination, *, anonymous=True):

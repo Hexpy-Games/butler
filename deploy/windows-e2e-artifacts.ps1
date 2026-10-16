@@ -27,12 +27,16 @@ if ($Mode -eq 'Export') {
         if ($LASTEXITCODE -ne 0 -or !($listed -match ': test$')) { throw "Empty E2E selection: $test" }
         $savedPerf = $env:BUTLER_E2E_PERF
         $threads = if ($test -eq 'windows_commands') { $env:BUTLER_E2E_PERF = '1'; 1 } else { 8 }
+        $log = "$env:PREVIEW_ROOT/logs/$test.log"
         $ErrorActionPreference = 'Continue'
-        & "$artifacts/e2e.exe" "$test`::" --test-threads=$threads --nocapture
-        $ErrorActionPreference = 'Stop'
+        cmd /d /c "`"$artifacts/e2e.exe`" `"$test`::`" --test-threads=$threads --nocapture > `"$log`" 2>&1"
         $testCode = $LASTEXITCODE
+        $ErrorActionPreference = 'Stop'
         $env:BUTLER_E2E_PERF = $savedPerf
-        if ($testCode -ne 0) { throw "E2E failed: $test ($testCode)" }
+        if ($testCode -ne 0) {
+            & "$PSScriptRoot/windows-test-log.ps1" -Log $log
+            throw "E2E failed: $test ($testCode)"
+        }
         Add-Content "$env:PREVIEW_ROOT/logs/completed-harnesses.txt" $test
     }
 }

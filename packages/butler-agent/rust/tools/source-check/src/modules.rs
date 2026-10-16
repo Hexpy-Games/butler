@@ -16,99 +16,109 @@ pub(crate) struct Module {
 /// Every module reachable from the crate root `entry`, skipping modules that
 /// compile only under `cfg(test)`.
 pub(crate) fn load(entry: &Path) -> Result<Vec<Module>, String> {
+    load_skipping(entry, test_only)
+}
+
+/// Every module a shipped binary compiles from the crate root `entry`:
+/// [`load`] without the modules of the [`FIXTURE_FEATURES`] either.
+pub(crate) fn load_shipped(entry: &Path) -> Result<Vec<Module>, String> {
+    load_skipping(entry, fixture_only)
+}
+
+fn load_skipping(entry: &Path, skip: fn(&[Attribute]) -> bool) -> Result<Vec<Module>, String> {
     let mut modules = Vec::new();
     let file = read(entry)?;
-    visit_modules(
+    let mut ancestors = vec![canonical(entry)?];
+    let mut tree = Tree {
+        skip,
+        modules: &mut modules,
+        ancestors: &mut ancestors,
+    };
+    tree.visit(
         Vec::new(),
         entry,
         entry.parent().ok_or("entry parent missing")?,
         false,
         file.items,
-        &mut modules,
-        &mut vec![canonical(entry)?],
     )?;
     Ok(modules)
 }
 
-fn visit_modules(
-    logical: Vec<String>,
-    file: &Path,
-    directory: &Path,
-    inline: bool,
-    items: Vec<Item>,
-    modules: &mut Vec<Module>,
-    ancestors: &mut Vec<PathBuf>,
-) -> Result<(), String> {
-    for item in &items {
-        let Item::Mod(child) = item else { continue };
-        if test_only(&child.attrs) {
-            continue;
+/// Cargo features that only test builds enable: fixtures for the E2E harness
+/// and for tests of dependent crates. Shipped binaries build without them.
+pub(crate) const FIXTURE_FEATURES: &[&str] = &["e2e-fixtures", "test-support"];
+
+struct Tree<'a> {
+    skip: fn(&[Attribute]) -> bool,
+    modules: &'a mut Vec<Module>,
+    ancestors: &'a mut Vec<PathBuf>,
+}
+
+impl Tree<'_> {
+    fn visit(
+        &mut self,
+        logical: Vec<String>,
+        file: &Path,
+        directory: &Path,
+        inline: bool,
+        items: Vec<Item>,
+    ) -> Result<(), String> {
+        for item in &items {
+            let Item::Mod(child) = item else { continue };
+            if (self.skip)(&child.attrs) {
+                continue;
+            }
+            let mut path = logical.clone();
+            path.push(child.ident.to_string());
+            let child_directory = directory.join(child.ident.to_string());
+            let attribute_base = if inline {
+                directory
+            } else {
+                file.parent().ok_or("module parent missing")?
+            };
+            let override_path =
+                path_attribute(&child.attrs).map(|value| attribute_base.join(value));
+            if let Some((_, children)) = &child.content {
+                let child_directory = override_path.as_deref().unwrap_or(&child_directory);
+                self.visit(path, file, child_directory, true, children.clone())?;
+                continue;
+            }
+            let child_file = match override_path {
+                Some(path) => path,
+                None => module_file(
+                    &directory.join(format!("{}.rs", child.ident)),
+                    &child_directory.join("mod.rs"),
+                    &path,
+                    file,
+                )?,
+            };
+            let contents = read(&child_file)?;
+            if (self.skip)(&contents.attrs) {
+                continue;
+            }
+            let canonical = canonical(&child_file)?;
+            if self.ancestors.contains(&canonical) {
+                return Err(format!("recursive source module {}", child_file.display()));
+            }
+            let directory = if child_file.file_name().is_some_and(|name| name == "mod.rs") {
+                child_file
+                    .parent()
+                    .ok_or("module parent missing")?
+                    .to_owned()
+            } else {
+                child_file.with_extension("")
+            };
+            self.ancestors.push(canonical);
+            self.visit(path, &child_file, &directory, false, contents.items)?;
+            self.ancestors.pop();
         }
-        let mut path = logical.clone();
-        path.push(child.ident.to_string());
-        let child_directory = directory.join(child.ident.to_string());
-        let attribute_base = if inline {
-            directory
-        } else {
-            file.parent().ok_or("module parent missing")?
-        };
-        let override_path = path_attribute(&child.attrs).map(|value| attribute_base.join(value));
-        if let Some((_, children)) = &child.content {
-            let child_directory = override_path.as_deref().unwrap_or(&child_directory);
-            visit_modules(
-                path,
-                file,
-                child_directory,
-                true,
-                children.clone(),
-                modules,
-                ancestors,
-            )?;
-            continue;
-        }
-        let child_file = match override_path {
-            Some(path) => path,
-            None => module_file(
-                &directory.join(format!("{}.rs", child.ident)),
-                &child_directory.join("mod.rs"),
-                &path,
-                file,
-            )?,
-        };
-        let contents = read(&child_file)?;
-        if test_only(&contents.attrs) {
-            continue;
-        }
-        let canonical = canonical(&child_file)?;
-        if ancestors.contains(&canonical) {
-            return Err(format!("recursive source module {}", child_file.display()));
-        }
-        let directory = if child_file.file_name().is_some_and(|name| name == "mod.rs") {
-            child_file
-                .parent()
-                .ok_or("module parent missing")?
-                .to_owned()
-        } else {
-            child_file.with_extension("")
-        };
-        ancestors.push(canonical);
-        visit_modules(
-            path,
-            &child_file,
-            &directory,
-            false,
-            contents.items,
-            modules,
-            ancestors,
-        )?;
-        ancestors.pop();
+        self.modules.push(Module {
+            path: logical,
+            file: file.to_owned(),
+            items,
+        });
+        Ok(())
     }
-    modules.push(Module {
-        path: logical,
-        file: file.to_owned(),
-        items,
-    });
-    Ok(())
 }
 
 /// The value of a `#[path = ".."]` attribute.
@@ -171,11 +181,32 @@ fn read(path: &Path) -> Result<syn::File, String> {
 
 /// Whether `attributes` compile the item only under `cfg(test)`.
 pub(crate) fn test_only(attributes: &[Attribute]) -> bool {
+    disabled(attributes, &|meta| {
+        meta.path().is_ident("test") && matches!(meta, Meta::Path(_))
+    })
+}
+
+/// Whether `attributes` compile the item only under `cfg(test)` or one of the
+/// [`FIXTURE_FEATURES`].
+pub(crate) fn fixture_only(attributes: &[Attribute]) -> bool {
+    disabled(attributes, &|meta| match meta {
+        Meta::Path(path) => path.is_ident("test"),
+        Meta::NameValue(value) => {
+            value.path.is_ident("feature")
+                && matches!(&value.value, syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(name), .. })
+                    if FIXTURE_FEATURES.contains(&name.value().as_str()))
+        }
+        Meta::List(_) => false,
+    })
+}
+
+/// Whether a `cfg` among `attributes` is false whenever every `off` predicate is.
+fn disabled(attributes: &[Attribute], off: &dyn Fn(&Meta) -> bool) -> bool {
     attributes.iter().any(|attribute| {
         attribute.path().is_ident("cfg")
             && attribute
                 .parse_args::<Meta>()
-                .is_ok_and(|meta| test_condition(&meta) == Some(false))
+                .is_ok_and(|meta| condition(&meta, off) == Some(false))
     })
 }
 
@@ -190,16 +221,16 @@ pub(crate) fn test_function(attributes: &[Attribute]) -> bool {
     })
 }
 
-fn test_condition(meta: &Meta) -> Option<bool> {
+fn condition(meta: &Meta, off: &dyn Fn(&Meta) -> bool) -> Option<bool> {
     match meta {
-        Meta::Path(path) if path.is_ident("test") => Some(false),
+        meta if off(meta) => Some(false),
         Meta::List(list) => {
             let children = list
                 .parse_args_with(
                     syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated,
                 )
                 .ok()?;
-            let values: Vec<_> = children.iter().map(test_condition).collect();
+            let values: Vec<_> = children.iter().map(|child| condition(child, off)).collect();
             if list.path.is_ident("all") {
                 if values.contains(&Some(false)) {
                     Some(false)
