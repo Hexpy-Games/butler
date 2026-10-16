@@ -1,7 +1,7 @@
 //! Storage-only restart qualification, independent of App crash-resume policy.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
-use super::{offline, seed};
-use butler_e2e::e2e::{HarnessError, scenario::Setup};
+use super::{fault_setup, offline, seed};
+use butler_e2e::e2e::HarnessError;
 use butler_platform::secure_fs;
 use rusqlite::Connection;
 use std::time::Duration;
@@ -10,7 +10,7 @@ mod failures;
 #[tokio::test]
 async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let mut s = Setup::new("CORR-STORAGE")?
+    let mut s = fault_setup("CORR-STORAGE")?
         .env("BUTLER_E2E_STARTUP_TRACE", "1")
         .start()
         .await?;
@@ -46,6 +46,9 @@ async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError>
         );
         s.agent.reap();
         assert!(path.exists());
+        if point == "reclaim_chunk" {
+            assert_reclaim_rolled_back(&path)?;
+        }
         if point == "after_rename" {
             assert_eq!(offline(&path, seed::snapshot).await?, snapshot);
         }
@@ -120,6 +123,26 @@ async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError>
         "btcc.sqlite was absent"
     );
     s.finish().await
+}
+
+pub(super) fn assert_reclaim_rolled_back(path: &std::path::Path) -> Result<(), HarnessError> {
+    let db = Connection::open(path)?;
+    assert_eq!(state(path)?, "reclaiming");
+    assert_eq!(
+        db.query_row("SELECT count(*) FROM agent_acceptance_reclaims", [], |r| {
+            r.get::<_, u64>(0)
+        })?,
+        120
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT count(*) FROM btcc_model_round_acceptances WHERE payload_state=2",
+            [],
+            |r| r.get::<_, u64>(0)
+        )?,
+        0
+    );
+    Ok(())
 }
 
 fn state(path: &std::path::Path) -> Result<String, HarnessError> {
@@ -205,7 +228,7 @@ fn watch(
 #[tokio::test]
 async fn storage_progress_extends_native_startup_deadline() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let mut s = Setup::new("CORR-STARTUP-DEADLINE")?.start().await?;
+    let mut s = fault_setup("CORR-STARTUP-DEADLINE")?.start().await?;
     s.agent.terminate().await?;
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     offline(&path, |path| {
@@ -253,7 +276,7 @@ async fn storage_progress_extends_native_startup_deadline() -> Result<(), Harnes
 #[tokio::test]
 async fn storage_correction_end_near_deadline_keeps_readiness_grace() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let mut s = Setup::new("CORR-END-DEADLINE")?.start().await?;
+    let mut s = fault_setup("CORR-END-DEADLINE")?.start().await?;
     s.agent.terminate().await?;
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     offline(&path, |path| {
@@ -276,14 +299,17 @@ async fn storage_correction_end_near_deadline_keeps_readiness_grace() -> Result<
         assert!(std::time::Instant::now() < end);
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
+    let progress = path.parent().unwrap().join("storage-correction.json");
+    assert!(progress.exists());
     tokio::time::sleep_until(tokio::time::Instant::from_std(
         started + Duration::from_secs(86),
     ))
     .await;
     tokio::fs::write(release, b"release").await?;
-    let held = s.sandbox.data.join("e2e-startup-held");
+    // Correction completion is sidecar removal. App startup reaches its own
+    // barrier later, after storage open and executor publication.
     let end = started + Duration::from_secs(89);
-    while !held.exists() {
+    while progress.exists() {
         assert!(s.agent.is_running(), "{}", s.agent.logs());
         assert!(
             std::time::Instant::now() < end,
@@ -291,12 +317,9 @@ async fn storage_correction_end_near_deadline_keeps_readiness_grace() -> Result<
         );
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
-    assert!(
-        !path
-            .parent()
-            .unwrap()
-            .join("storage-correction.json")
-            .exists()
+    eprintln!(
+        "correction completed after {}ms",
+        started.elapsed().as_millis()
     );
     tokio::time::sleep_until(tokio::time::Instant::from_std(
         started + Duration::from_secs(94),
@@ -306,6 +329,7 @@ async fn storage_correction_end_near_deadline_keeps_readiness_grace() -> Result<
         s.agent.is_running(),
         "correction end did not extend readiness"
     );
+    assert!(s.sandbox.data.join("e2e-startup-held").exists());
     tokio::fs::write(s.sandbox.data.join("e2e-startup-release"), b"release").await?;
     let end = std::time::Instant::now() + Duration::from_secs(10);
     while !s.gw.healthy().await {
