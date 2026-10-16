@@ -265,6 +265,7 @@ fn boolean_settings(input: &Map<String, Value>, output: &mut Map<String, Value>)
         "collapse_message_box",
         "reduce_motion",
         "diagnostics_enabled",
+        "command_sandbox_enabled",
         "smart_grouping_enabled",
         "desktop_tray_enabled",
     ] {

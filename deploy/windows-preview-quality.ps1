@@ -25,24 +25,11 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort dev
 $ErrorActionPreference = 'Stop'
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-$env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-$env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-$ErrorActionPreference = 'Continue'
-cargo fmt --all -- --check
-$ErrorActionPreference = 'Stop'
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# Formatting and source rules run once in rust-clippy.yml / linux-clippy (Linux).
 $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
 $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
 New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
 $ErrorActionPreference = 'Continue'
 cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-host -p butler-agent -p butler-e2e --tests -- -D warnings
-$ErrorActionPreference = 'Stop'
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-$env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-$env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-$ErrorActionPreference = 'Continue'
-cargo run --locked -p butler-source-check -- .
 $ErrorActionPreference = 'Stop'
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

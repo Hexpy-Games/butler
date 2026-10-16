@@ -93,21 +93,20 @@ jobs:
 
   artifacts:
     needs: paths
+    if: needs.paths.outputs.artifacts != '[]'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        artifact: ${{ fromJSON(needs.paths.outputs.artifacts) [0] && fromJSON(needs.paths.outputs.artifacts) || fromJSON('[{"name":"","run":0}]') }}
+        artifact: ${{ fromJSON(needs.paths.outputs.artifacts) }}
     steps:
       - uses: actions/download-artifact@v4
-        if: matrix.artifact.name != ''
         with:
           github-token: ${{ github.token }}
           run-id: ${{ matrix.artifact.run }}
           name: ${{ matrix.artifact.name }}
           path: ${{ runner.temp }}/receipt-artifact
       - uses: actions/upload-artifact@v4
-        if: matrix.artifact.name != ''
         with:
           name: ${{ matrix.artifact.name }}
           path: ${{ runner.temp }}/receipt-artifact

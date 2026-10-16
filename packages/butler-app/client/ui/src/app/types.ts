@@ -582,6 +582,8 @@ export interface SettingsView {
   access_mode: AccessMode;
   /** A new schedule's access mode, resolved by the gateway (saved, else derived; D7). */
   schedule_access_mode?: AccessMode;
+  command_sandbox_enabled?: boolean;
+  command_sandbox_available?: boolean;
   plan_mode_default: boolean;
   follow_up_behavior: "queue" | "steer";
   multiline_send_behavior:

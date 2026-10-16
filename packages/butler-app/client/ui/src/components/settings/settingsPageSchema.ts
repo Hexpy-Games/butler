@@ -32,7 +32,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "language-region", kind: "form", fields: ["language", "timezone"] },
     { id: "conversation-input", kind: "form", fields: ["follow-up-behavior", "multiline-send", "plan-mode-default"] },
     { id: "sidebar", kind: "form", fields: ["smart-groups"] },
-    { id: "default-permission", kind: "form", fields: ["access-mode"] },
+    { id: "default-permission", kind: "form", fields: ["access-mode", "schedule-access-mode", "command-sandbox"] },
     { id: "notifications", kind: "form", fields: ["desktop-notifications", "notify-assistant-messages", "notify-task-completions"] },
     { id: "notification-permission", kind: "status", fields: ["notification-permission"] },
     { id: "app-behavior", kind: "form", fields: ["desktop-tray", "rerun-setup"] },

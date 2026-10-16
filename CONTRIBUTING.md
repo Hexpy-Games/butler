@@ -175,7 +175,7 @@ A release is a `vX.Y.Z` (or `vX.Y.Z-preview.N`) tag on a proven commit of `relea
 6. After complete integration proof and real-machine approval, the coordinator tags that exact SHA `v<v>`. Previews have standing approval; stable tags require the owner's explicit confirmation. `release.yml` blocks builds until every integration workflow gate, including live E2E on that SHA, is green directly or through matching integration receipts.
 7. The tag builds all release platforms and publishes only after the assets and checksums exist. Stable npm publication runs through `.github/workflows/npm-publish.yml`; previews can be published by dispatching that workflow after desktop verification. After the first successful OIDC publish, the owner may delete the `NPM_ACCESS_TOKEN` repository secret. Dispatch `post-release-verify.yml` with the previous tag as baseline, then merge the release branch back to main as a merge commit.
 
-Windows tag evidence comes from `windows-preview-smoke.yml` ("Complete Windows preview verification"), `windows-installer.yml` ("windows-installer gate"), and `e2e.yml` ("E2E live tier"). `windows.yml` is disabled manually and is not a release gate.
+Windows tag evidence comes from `windows-preview-smoke.yml` ("Complete Windows preview verification"), `windows-installer.yml` ("windows-installer gate"), and `e2e.yml` ("E2E live tier").
 
 Known-flaky failures can be waived by the coordinator for previews; stable waivers need the owner. On the linked **open issue**, post a comment containing exactly this JSON (fill in the values):
 
@@ -243,8 +243,3 @@ is needed. Public visibility requires this one-time settings action because
 GitHub's documented REST package API does not expose a visibility update.
 
 Dispatch `native-deps.yml` on main and verify all four public targets first.
-Then dispatch `ci-store-maintenance.yml` on main. It anonymously downloads every
-current SDK and checks its outer and inner digests before deleting the four
-original `native-deps-*` releases/tags and any `cargo-target-*` releases/orphan
-tags. Any missing, private or corrupt SDK stops cleanup before the first deletion.
-The maintenance job leaves model mirrors and product releases untouched.

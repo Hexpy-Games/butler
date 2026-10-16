@@ -13,20 +13,6 @@ on:
         description: Optional recovery tag; must match the reused run
         required: false
         type: string
-      task-xml-build-run:
-        description: Diagnose an immutable Windows preview Agent archive on disposable Windows
-        required: false
-        type: string
-      macos-process-contract:
-        description: Verify process identity while an exited child is unreaped
-        required: false
-        type: boolean
-        default: false
-      task-startup-contract:
-        description: Run the full startup contract against the immutable Windows Agent archive
-        required: false
-        type: boolean
-        default: false
       runner:
         type: choice
         options: [self, hosted]
@@ -55,62 +41,6 @@ jobs:
           BUTLER_RELEASE_OWNER: ${{ vars.BUTLER_RELEASE_OWNER }}
           BUTLER_RELEASE_COORDINATORS: ${{ vars.BUTLER_RELEASE_COORDINATORS }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/integration-proof.py
-
-  macos-process-contract:
-    if: ${{ !inputs.reuse_run_id && inputs.macos-process-contract }}
-    name: Verify macOS unreaped process identity
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.99.0
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          workspaces: packages/butler-agent/rust
-          shared-key: macos-process-identity
-      - name: Prove live identity and unreaped exit behavior
-        working-directory: packages/butler-agent/rust
-        run: |
-          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
-          isolated=$(mktemp -d)
-          trap 'rm -rf "$isolated"' EXIT
-          mkdir "$isolated/home" "$isolated/data"
-          HOME="$isolated/home" BUTLER_DATA="$isolated/data" cargo test --locked -j 8 -p butler-platform --test contract instance_lock_is_released_when_its_identified_holder_is_terminated -- --nocapture --test-threads=1
-      - name: Check platform contracts
-        working-directory: packages/butler-agent/rust
-        run: |
-          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
-          isolated=$(mktemp -d)
-          trap 'rm -rf "$isolated"' EXIT
-          mkdir "$isolated/home" "$isolated/data"
-          HOME="$isolated/home" BUTLER_DATA="$isolated/data" cargo clippy --locked -j 8 -p butler-platform --all-targets -- -D warnings
-
-  task-xml-contract:
-    if: ${{ !inputs.reuse_run_id && inputs.task-xml-build-run }}
-    name: Verify imported Windows Task Scheduler XML
-    runs-on: windows-latest
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          github-token: ${{ github.token }}
-          run-id: ${{ inputs.task-xml-build-run }}
-          name: agent-windows-x64
-          path: artifacts
-      - name: Compare imported XML and enforce ownership
-        shell: pwsh
-        run: |
-          if ('${{ inputs.task-startup-contract }}' -eq 'true') {
-            ./deploy/windows-task-xml-probe.ps1 -ArchiveDirectory "$pwd/artifacts" -StartupContract
-          } else {
-            ./deploy/windows-task-xml-probe.ps1 -ArchiveDirectory "$pwd/artifacts"
-          }
 
   native-release:
     needs: integration-proof
@@ -170,6 +100,14 @@ jobs:
           $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"
           $agent = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe"
           ../../../deploy/windows-basic-capabilities.ps1 -Agent $agent
+      - name: Upload Windows basic capability log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-basic-capabilities-log
+          path: ${{ runner.temp }}/windows-basic-capabilities.log
+          if-no-files-found: warn
+          retention-days: 14
       - name: Check owner registration and remove job profile
         if: always() && inputs.runner != 'hosted'
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
@@ -304,7 +242,7 @@ jobs:
     if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') }}
     name: Build and smoke Linux App packages
     needs: agent-linux-x64
-    # The reusable workflow declares an issues-writing main/nightly reporter.
+    # The reusable workflow declares an issues-writing main reporter.
     permissions:
       contents: read
       actions: read
