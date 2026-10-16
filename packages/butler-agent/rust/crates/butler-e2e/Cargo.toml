@@ -11,6 +11,7 @@ publish.workspace = true
 # these companions through their process boundary.
 # butler-platform is not product code: it is the OS boundary every crate uses.
 [dependencies]
+butler-gateway = { path = "../butler-gateway", features = ["test-support"] }
 butler-runtime = { path = "../butler-runtime" }
 butler-core = { path = "../butler-core" }
 butler-models = { path = "../butler-models" }

@@ -25,11 +25,15 @@ try {
     $env:BUTLER_SECRET_STORE = 'file'
     $env:BUTLER_PLATFORM_SYSTEM_SECRETS = '0'
     $env:BUTLER_APP_DISABLE_SHELL_REGISTRATION = '1'
+    $log = Join-Path $env:RUNNER_TEMP 'windows-basic-capabilities.log'
     $ErrorActionPreference = 'Continue'
-    cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e `
-        windows_commands:: -- --test-threads=1 --nocapture
+    cmd /d /c "cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e windows_commands:: -- --test-threads=1 --nocapture > `"$log`" 2>&1"
+    $testCode = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
-    if ($LASTEXITCODE -ne 0) { throw "Windows basic capability suite failed ($LASTEXITCODE)" }
+    if ($testCode -ne 0) {
+        & "$PSScriptRoot/windows-test-log.ps1" -Log $log
+        throw "Windows basic capability suite failed ($testCode)"
+    }
 } finally {
     & "$PSScriptRoot/windows-protocol-snapshot.ps1" -Output "$root/after.json"
     $after = Get-Content "$root/after.json" -Raw

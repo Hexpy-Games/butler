@@ -914,6 +914,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "butler-core",
+ "butler-gateway",
  "butler-models",
  "butler-platform",
  "butler-runtime",

@@ -9,6 +9,7 @@ use super::super::{MonitoringReaders, ProcessModels};
 
 pub(super) fn open(
     data_root: &Path,
+    app_database_path: &Path,
     paths: &CognitionPathEnvironment,
     models: &ProcessModels,
     coordinator: Arc<CognitionWriteCoordinator>,
@@ -17,6 +18,7 @@ pub(super) fn open(
 ) -> Arc<MonitoringReaders> {
     Arc::new(MonitoringReaders::new(
         data_root.to_owned(),
+        app_database_path.to_owned(),
         models.configuration.clone(),
         models.catalog.clone(),
         Arc::new(MemoryHealthService::new(
