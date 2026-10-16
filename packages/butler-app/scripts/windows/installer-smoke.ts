@@ -5,10 +5,10 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
+import { electronProfilePage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
-import { alive, assertShortcuts, bridge, click, ownedProcesses, powershell, preserveInstallerLogs, readJson, removeProfile, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
+import { alive, assertShortcuts, bridge, click, ownedProcesses, powershell, preserveInstallerLogs, readJson, removeProfile, shortcutPaths, versionProcesses, waitFor } from "./installer-smoke-support.ts";
 import { smokeProviderReply } from "./smoke-provider.ts";
 import { proveReleasedDownloads, releasedDownloadsReply, type DownloadsProof } from "./released-downloads-smoke.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
@@ -26,6 +26,7 @@ const root = realpathSync.native(mkdtempSync(join(tmpdir(), "butler-installer-e2
 const data = join(root, "data");
 const owned = new Set<number>();
 let page: ElectronPage | null = null;
+let devToolsEndpoint: string | null = null;
 const calls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
 const downloads: DownloadsProof = { requests: 0 };
 const downloadsCalls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
@@ -63,12 +64,14 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request 
   })) });
   return new Response(null, { status: 404 });
 } });
-const debugPort = await freePort();
 const agentPort = await freePort();
 const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERPROFILE: join(root, "home"), BUTLER_DATA: data,
   LOCALAPPDATA: join(root, "home/AppData/Local"), APPDATA: join(root, "home/AppData/Roaming"), BUTLER_SECRET_STORE: "file",
   SQUIRREL_TEMP: join(root, "home/AppData/Local"), TEMP: join(root, "tmp"), TMP: join(root, "tmp"),
-  BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
+  BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"),
+  // Port 0: each launch, including Squirrel's relaunch, binds a fresh DevTools port. A fixed port
+  // stays bound by the update helper, which inherited the old App's listening socket.
+  BUTLER_APP_SMOKE_DEBUG_PORT: "0",
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
   OPENAI_API_KEY: "e2e-not-real", OPENAI_BASE_URL: `http://127.0.0.1:${server.port}/v1`,
   ELECTRON_ENABLE_LOGGING: "1", ELECTRON_LOG_FILE: join(root, "electron.log"),
@@ -98,7 +101,7 @@ try {
   for (const stream of [app.stdout, app.stderr]) stream?.on("data", chunk => appLog.push(String(chunk)));
   app.on("exit", (code, signal) => console.log(JSON.stringify({ appExit: { code, signal }, phase, log: appLog.join("") })));
   if (app.pid) owned.add(app.pid);
-  page = await electronPage(debugPort);
+  page = await appPage();
   await bridge(page, "updateSettings", { language: "en", onboarding: {
     consent_version: FIRST_RUN_CONSENT_VERSION, accepted_at: new Date().toISOString(), completed_at: new Date().toISOString(),
   } });
@@ -119,7 +122,8 @@ try {
   page.close(); page = null;
   await waitFor(() => readJson(join(data, "app/runtime/foreground/instance.json"))?.app_pid !== oldPid &&
     readJson(join(data, "app/runtime/foreground/instance.json"))?.state === "ready", "replacement foreground Agent");
-  page = await electronPage(debugPort);
+  await assertOnlyUpdatedApp();
+  page = await appPage();
   await proof(to);
   assert.notEqual(digest(agentPath(to)), oldHash, "Bundled Agent was not replaced");
   assert.ok(existsSync(oldBinary), "Squirrel rollback version missing");
@@ -225,7 +229,7 @@ async function oneClickLaunch() {
   const setup = readJson(resolve("dist/startup-installer-evidence/install/capture-process.json"));
   console.log(JSON.stringify({ phase, setupDurationMs: setup?.duration_ms, setupExitCode: setup?.exit_code }));
   await waitFor(() => Boolean(readJson(join(data, "app/runtime/foreground/instance.json"))?.app_pid), "normal Setup auto-launch");
-  page = await electronPage(debugPort);
+  page = await appPage();
   await proof(from);
   phase = "normal install reload";
   await page.reload();
@@ -264,9 +268,28 @@ function run(command: string, args: string[]) {
   assert.equal(child.status, 0, `${command}: exit ${child.status}`);
 }
 
-function agentPath(version: string): string {
+function versionFolder(version: string): string {
   const suffix = version.replace(/-preview\.(\d+)$/u, (_, n) => `-preview${n.padStart(10, "0")}`);
-  return join(installed, `app-${suffix}/resources/bundled-agent/bin/butler-agent.exe`);
+  return join(installed, `app-${suffix}`);
+}
+
+function agentPath(version: string): string {
+  return join(versionFolder(version), "resources/bundled-agent/bin/butler-agent.exe");
+}
+
+async function appPage(): Promise<ElectronPage> {
+  const found = await electronProfilePage(env.BUTLER_APP_ELECTRON_USER_DATA_DIR, devToolsEndpoint);
+  devToolsEndpoint = found.endpoint;
+  return found.page;
+}
+
+/** After activation nothing from the replaced version survives, and exactly one updated App runs. */
+async function assertOnlyUpdatedApp() {
+  await waitFor(() => versionProcesses(versionFolder(from), env).length === 0, "replaced App version processes exit");
+  const apps = versionProcesses(versionFolder(to), env).filter(item => item.app);
+  const ready = readJson(join(data, "app/runtime/foreground/instance.json"))!.app_pid;
+  assert.deepEqual(apps.map(item => item.pid), [ready], "Exactly one updated App instance");
+  console.log(JSON.stringify({ phase, replacedVersionProcesses: 0, updatedAppInstances: apps.length }));
 }
 
 function digest(path: string): string { return createHash("sha256").update(readFileSync(path)).digest("hex"); }
@@ -346,7 +369,7 @@ async function windowCloseAndRelaunch(sessionId: string) {
     const instance = readJson(join(data, "app/runtime/foreground/instance.json"));
     return instance?.state === "ready" && instance.app_pid !== previous.app_pid;
   }, "replacement foreground Agent after window close");
-  page = await electronPage(debugPort);
+  page = await appPage();
   await proof(from);
   const messages = (await bridge(page, "listMessages", { chatId: sessionId })).messages;
   assert.equal(messages.length, 2); assert.equal(messages[0].text, "Reply with Windows update ready.");
