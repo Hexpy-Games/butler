@@ -125,12 +125,14 @@ async fn offline_generated_toolchains() -> Result<(), HarnessError> {
                     "fn main() {}\n"
                 );
             }
-            // M+ runs every tool. Tier L creates no top-level names; declared
-            // directories admit Cargo, while npm's cache and venv need chmod,
-            // which only M+ can scope to the project. Those must ask.
+            // M+ runs every tool. Tier L creates no top-level names and denies
+            // chmod/utimensat, so a tool needs a declared directory, and one
+            // whose output needs no chmod: Cargo's target, and npm's symlink
+            // for a `file:` dependency. An undeclared project, and a Python
+            // venv (ensurepip copies modes), must ask.
             let expected = policy["mountns_plus"] == true
-                || (policy["mountns"] == true && tool == "cargo")
-                || (declared && tool == "cargo");
+                || (declared && matches!(tool, "cargo" | "npm"))
+                || (policy["mountns"] == true && tool == "cargo");
             if output.status.success() != expected {
                 failures.push(format!("{tool} declared={declared}: {}", output.status));
             }
@@ -148,6 +150,13 @@ async fn offline_generated_toolchains() -> Result<(), HarnessError> {
                 root.join(generated).exists(),
                 "missing complete {tool} output"
             );
+            if tool == "npm" {
+                // A `file:` dependency is linked, not copied, so it needs no
+                // chmod; the link stays inside the project.
+                let link = root.join("node_modules/local");
+                assert!(std::fs::symlink_metadata(&link)?.file_type().is_symlink());
+                assert_eq!(link.canonicalize()?, root.join("local").canonicalize()?);
+            }
         }
     }
     assert!(failures.is_empty(), "toolchain tier mismatch: {failures:?}");

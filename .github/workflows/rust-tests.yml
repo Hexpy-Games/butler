@@ -124,6 +124,10 @@ jobs:
         with:
           name: rust-${{ inputs.platform }}
           path: ${{ runner.temp }}/rust-archive
+      # The answer-blocks fixture table also runs its TypeScript contract.
+      - uses: ./.github/actions/bun-setup
+      - name: Install the TypeScript contract dependencies
+        run: python3 .github/scripts/isolated.py bun install --frozen-lockfile
       - name: Select measured shard
         env:
           SHARD: ${{ matrix.shard }}
@@ -139,6 +143,10 @@ jobs:
           else
             cp "$RUNNER_TEMP/rust-archive/shard-$SHARD.txt" "$RUNNER_TEMP/rust-archive/install.txt"
           fi
+      - name: Supply the prebuilt web read probe
+        run: |
+          chmod +x "$RUNNER_TEMP/rust-archive/web-access-smoke"
+          echo "BUTLER_E2E_WEB_PROBE_BIN=$RUNNER_TEMP/rust-archive/web-access-smoke" >> "$GITHUB_ENV"
       - uses: ./.github/actions/e2e-stub
         with:
           archive-file: ${{ runner.temp }}/rust-archive/tests.tar.zst
