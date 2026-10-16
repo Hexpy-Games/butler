@@ -184,10 +184,12 @@ if (process.platform === "win32") {
   app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
 }
 if (windowsSquirrelLaunch.handled) {
-  if (process.env.BUTLER_APP_DISABLE_SHELL_REGISTRATION === "1") process.exit(0);
-  // Shortcuts belong to the install itself; only the global protocol and
-  // startup registrations are reserved for the default profile.
-  const profileOwnsShell = shellRegistrationAllowed();
+  if (process.env.BUTLER_APP_DISABLE_SHELL_REGISTRATION === "1" ||
+      !squirrelInstallPresent()) process.exit(0);
+  // Shortcuts belong to the install itself. Global protocol and startup
+  // registrations and the data root's operational state belong to the
+  // default profile only.
+  const profileOwnsShell = profileOwnsShellRegistration();
   let squirrelExitCode = 0;
   let squirrelErrorCode = null;
   let squirrelResult = null;
@@ -204,8 +206,9 @@ if (windowsSquirrelLaunch.handled) {
         app.setAsDefaultProtocolClient(scheme, executable, args),
       unregisterProtocol: (scheme, executable, args) => !profileOwnsShell ||
         app.removeAsDefaultProtocolClient(scheme, executable, args),
-      cleanupOperationalState: () =>
-        removeWindowsOperationalState({ butlerData: appWritableDataRoot }),
+      cleanupOperationalState: () => profileOwnsShell
+        ? removeWindowsOperationalState({ butlerData: appWritableDataRoot })
+        : [],
     });
   } catch (error) {
     squirrelExitCode = 1;
@@ -1249,9 +1252,19 @@ function configureAppIdentity() {
 }
 
 function shellRegistrationAllowed() {
-  if (!profileAllowsShellRegistration({
+  return profileOwnsShellRegistration() && squirrelInstallPresent();
+}
+
+function profileOwnsShellRegistration() {
+  return profileAllowsShellRegistration({
     isPackaged: app.isPackaged, env: process.env, home: userHome, dataRoot: butlerDataRoot,
-  })) return false;
+  });
+}
+
+// A portable App has no Squirrel stub; registering that missing executable
+// would replace the user's associations with a temporary path.
+function squirrelInstallPresent() {
+  if (!app.isPackaged) return false;
   if (process.platform !== "win32") return true;
   const settings = windowsLoginItemSettings({
     openAtLogin: false, platform: process.platform,
