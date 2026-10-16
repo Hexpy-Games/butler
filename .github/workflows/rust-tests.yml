@@ -182,11 +182,15 @@ jobs:
         run: |
           chmod +x "$RUNNER_TEMP/fault-agent/butler-agent"
           echo "BUTLER_E2E_FAULT_BIN=$RUNNER_TEMP/fault-agent/butler-agent" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          name: agent-perf-fixture-${{ inputs.platform }}
+          path: ${{ runner.temp }}/perf-agent
       - uses: ./.github/actions/e2e-stub
         with:
           archive-file: ${{ runner.temp }}/rust-archive/tests.tar.zst
-          # Optimized E2E fixture build: release code plus inert, test-armed hooks.
-          agent-binary: ${{ runner.temp }}/rust-archive/butler-agent
+          # The shipped native recipe plus only the e2e-fixtures feature.
+          agent-binary: ${{ runner.temp }}/perf-agent/butler-agent
           enforce-budgets: "true"
           exclude-perf: "false"
           filter-file: ${{ matrix.shard != 'idle' && format('{0}/rust-archive/perf-{1}.txt', runner.temp, matrix.shard) || '' }}

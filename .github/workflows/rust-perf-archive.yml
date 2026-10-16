@@ -44,12 +44,6 @@ jobs:
           mkdir -p "$out"
           # Include butler-sandbox so the test process probes the same sandbox as the stub archive.
           python3 "$isolate" cargo build --timings --release --tests --locked -j 8 -p butler-e2e -p butler-platform
-          # Perf scenarios arm storage/idle instrumentation, which only E2E fixture builds contain.
-          python3 "$isolate" cargo build --release --locked -j 8 -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox --features butler-platform/test-support,butler-agent/e2e-fixtures
-          cp target/release/butler-agent "$out/butler-agent"
-          if [[ "${{ inputs.platform }}" == linux-* ]]; then
-            cp target/release/butler-sandbox "$out/butler-sandbox"
-          fi
           python3 "$isolate" cargo nextest archive --release --locked -p butler-e2e -p butler-platform --archive-file "$out/tests.tar.zst"
           python3 "$isolate" cargo nextest list --release --locked -p butler-e2e --message-format json > "$out/list.json"
           filter="$(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")"
