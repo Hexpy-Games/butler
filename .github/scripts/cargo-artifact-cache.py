@@ -114,6 +114,8 @@ def valid_producer(run, jobs, repository, platform, kind):
                  ort=['Build native Agent', 'Build Linux Agent archive'])[kind]
     return any(((kind in ['dev', 'native', 'perf'] and job['name'].startswith('Build target snapshot ') and job['name'].endswith(f'({platform})'))
                 or any(job['name'].endswith(f'{name} ({platform})') for name in names)
+                or (kind == 'native' and platform == 'windows-x64'
+                    and job['name'] == 'Prepare Windows release target')
                 or (kind in ['native', 'ort'] and platform == 'darwin-arm64'
                     and job['name'] == 'Build and publish native macOS arm64 artifacts'))
                and job['status'] == 'completed' and job['conclusion'] == 'success'

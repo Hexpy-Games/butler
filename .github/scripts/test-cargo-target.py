@@ -162,6 +162,23 @@ class TargetSnapshot(unittest.TestCase):
                     snapshots.trusted(metadata)
 
     # test-category: security
+    def test_release_preparation_is_a_trusted_windows_native_producer(self):
+        metadata = dict(run_id=42, sha='a' * 40, producer_name='Prepare Windows release target',
+                        identity=dict(platform='windows-x64', kind='native'))
+        run = dict(head_repository={'full_name': 'owner/repo'}, event='push', head_branch='release/1.0.0',
+                   head_sha=metadata['sha'], status='completed')
+        jobs = [dict(name=metadata['producer_name'], status='completed', conclusion='success')]
+        with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'):
+            with patch.object(snapshots, 'api', side_effect=[run, {'jobs': jobs}]):
+                snapshots.trusted(metadata)
+            self.assertTrue(cache.valid_producer(run, jobs, 'owner/repo', 'windows-x64', 'native'))
+            for platform, kind in [('linux-x64', 'native'), ('windows-x64', 'dev')]:
+                metadata['identity'] = dict(platform=platform, kind=kind)
+                with patch.object(snapshots, 'api', side_effect=[run, {'jobs': jobs}]):
+                    with self.assertRaises(snapshots.UnsuccessfulProducer):
+                        snapshots.trusted(metadata)
+
+    # test-category: security
     def test_restore_during_post_build_publish_falls_back_without_touching_target(self):
         metadata = dict(run_id=42, run_attempt=1, sha='a' * 40)
         run = dict(head_repository={'full_name': 'owner/repo'}, event='push', head_branch='main',

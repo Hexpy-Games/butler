@@ -1,5 +1,9 @@
 name: Prepare owner Windows release target
 description: Build and publish the unchanged static ORT release profile for tag reuse
+inputs:
+  align-candidate-tag-ref:
+    description: Reserved for owner-approved candidate tag alignment; not wired by callers
+    default: 'false'
 runs:
   using: composite
   steps:
@@ -16,15 +20,17 @@ runs:
         RUSTFLAGS: -C target-feature=+crt-static
         BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
       run: |
+        if ('${{ inputs.align-candidate-tag-ref }}' -ne 'false') { throw 'Candidate tag ref alignment requires owner approval and is not enabled' }
         $ErrorActionPreference = 'Continue'
         $env:CARGO_TARGET_DIR = python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" target windows-x64 static-ort native
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort native
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --locked --release --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
+        python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --locked --profile release --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" save-local windows-x64 static-ort native
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     - uses: ./.github/actions/publish-windows-target
       with:
         profile: release
+        producer: Prepare Windows release target

@@ -51,6 +51,30 @@ jobs:
         with:
           native-cache: ${{ inputs.native-cache || 'windows-agent-v1' }}
 
+  prepare-release-target:
+    name: Prepare Windows release target
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    runs-on: [self-hosted, butler-win, butler-win-release]
+    timeout-minutes: 90
+    concurrency:
+      group: windows-release-target-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/windows-owner-setup
+        with:
+          workflow: ${{ inputs.native-cache || 'windows-agent-v1' }}
+      - uses: ./.github/actions/prepare-windows-release-target
+      - name: Check owner registration and remove job profile
+        if: always()
+        working-directory: .
+        run: ./deploy/windows-owner-cleanup.ps1
+
   stub:
     permissions:
       contents: read
@@ -281,7 +305,7 @@ jobs:
           retention-days: 14
       - uses: ./.github/actions/publish-windows-target
         continue-on-error: true
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
         with:
           profile: debug
       - name: Check owner registration and remove job profile

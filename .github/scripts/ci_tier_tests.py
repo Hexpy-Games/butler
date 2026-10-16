@@ -184,6 +184,7 @@ class ApprovedTiers(unittest.TestCase):
             ('release.yml', 'agent-windows-build'): 'butler-win-release',
             ('release.yml', 'app-windows'): 'butler-win-release',
             ('windows-preview-smoke.yml', 'build'): 'butler-win-release',
+            ('windows-preview-smoke.yml', 'prepare-release-target'): 'butler-win-release',
             ('windows-preview-smoke.yml', 'stub'): dynamic,
             ('windows-powershell-diagnostics.yml', 'diagnose-native'): dynamic,
             ('native-deps.yml', 'windows-owner'): dynamic,

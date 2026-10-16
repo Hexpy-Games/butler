@@ -1,6 +1,9 @@
 name: Publish owner Windows target
 description: Publish the existing preview or debug tree with its exact build flags
 inputs:
+  producer:
+    description: Exact producer job name (release preparation has its own job)
+    default: ""
   profile:
     description: Existing owner build profile, ci-fast, release or debug
     default: ci-fast
@@ -24,4 +27,4 @@ runs:
         platform: windows-x64
         mode: static-ort
         kind: ${{ inputs.profile == 'debug' && 'dev' || 'native' }}
-        producer: ${{ inputs.profile == 'debug' && 'Platform contracts and debug stub chat' || 'Build unsigned Windows preview' }}
+        producer: ${{ inputs.producer || (inputs.profile == 'debug' && 'Platform contracts and debug stub chat' || 'Build unsigned Windows preview') }}
