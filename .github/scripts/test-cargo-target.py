@@ -28,12 +28,14 @@ class TargetSnapshot(unittest.TestCase):
         legacy = dict(expected)
         legacy.pop('profile_config')
         published = {'assets': [{'name': '42-1.json'}]}
+        generation = dict(metadata=dict(run_id=42, run_attempt=1))
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, RUNNER_TEMP=temporary, ORT_LIB_PATH=''), \
                 patch.object(snapshots, 'release', side_effect=[None, published]) as lookup, \
-                patch.object(snapshots, 'fetch_snapshot') as fetch, patch.object(snapshots, 'restore_tree') as adopt:
+                patch.object(snapshots, 'checked_generation', return_value=(generation, False)) as check, \
+                patch.object(snapshots, 'fetch_chunks'), patch.object(snapshots, 'restore_tree') as adopt:
             self.assertTrue(snapshots.restore(expected))
             self.assertEqual(lookup.call_args.args[0], snapshots.tag_name(legacy))
-            self.assertEqual(fetch.call_args.args[3:], (legacy, False))
+            self.assertEqual(check.call_args.args[2:], (legacy, False))
             self.assertEqual(adopt.call_args.args[1:], (legacy, False))
 
     # test-category: security
@@ -161,10 +163,92 @@ class TargetSnapshot(unittest.TestCase):
                 snapshots.trusted(metadata)
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, RUNNER_TEMP=temporary), \
                 patch.object(snapshots, 'release', return_value={'assets': [{'name': '42-1.json'}]}), \
-                patch.object(snapshots, 'fetch_snapshot', side_effect=snapshots.UnsuccessfulProducer('pending')), \
+                patch.object(snapshots, 'checked_generation', side_effect=snapshots.UnsuccessfulProducer('pending')), \
+                patch.object(snapshots.ci_oci, 'tags', return_value=[]), \
                 patch.object(snapshots, 'restore_tree') as adopt:
             self.assertFalse(snapshots.restore({'platform': 'linux-x64'}))
             adopt.assert_not_called()
+
+    lane = dict(schema=2, platform='linux-x64', kind='native', lock='current', configs={'Cargo.toml': 'current'})
+
+    def walk_back(self, states):
+        """Restore from generations newest first: (suffix, identity, run status, job conclusion)."""
+        expected = self.lane
+        generations = {suffix: dict(metadata=dict(identity=identity, run_id=int(suffix.split('-')[0]), run_attempt=1,
+                                                  sha=suffix * 8, producer_name='Build native Agent (linux-x64)'),
+                                    chunks=[suffix + '-0000.zst'])
+                       for suffix, identity, _, _ in states}
+        runs = {int(suffix.split('-')[0]): (status, conclusion) for suffix, _, status, conclusion in states}
+        prefix = snapshots.compatible_tag(expected) + '--'
+
+        def release(tag):
+            if tag == snapshots.tag_name(expected):
+                return {'assets': [{'name': states[0][0] + '.json'}]}
+            suffix = tag.removeprefix(prefix)
+            return {'assets': [{'name': suffix + '.json'}]} if suffix in generations else None
+
+        def download(entry, destination):
+            destination.write_text(json.dumps(generations[entry['name'][:-5]]))
+
+        def api(endpoint):
+            run_id = int(endpoint.split('/runs/')[1].split('/')[0])
+            status, conclusion = runs[run_id]
+            if '/jobs?' in endpoint:
+                return {'jobs': [dict(name='linux-native / Build native Agent (linux-x64)',
+                                      status=status, conclusion=conclusion)]}
+            return dict(head_repository={'full_name': 'owner/repo'}, event='push', head_branch='main',
+                        head_sha=generations[f'{run_id}-1']['metadata']['sha'], status=status)
+
+        tags = [prefix + suffix for suffix in generations] + [prefix[:-2], 'compatible-other-key--99-1']
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.dict(os.environ, RUNNER_TEMP=temporary, GITHUB_REPOSITORY='owner/repo'), \
+                patch.object(snapshots, 'release', side_effect=release) as lookup, \
+                patch.object(snapshots, 'download', side_effect=download), \
+                patch.object(snapshots, 'api', side_effect=api), \
+                patch.object(snapshots.ci_oci, 'tags', return_value=tags) as listing, \
+                patch.object(snapshots, 'fetch_chunks') as fetch, \
+                patch.object(snapshots, 'restore_tree') as adopt, contextlib.redirect_stdout(output):
+            restored = snapshots.restore(expected)
+        self.assertEqual(listing.call_count, 1)
+        looked_up = [call.args[0].rsplit('--', 1)[-1] for call in lookup.call_args_list[1:]]
+        chosen = fetch.call_args.args[1]['name'][:-5] if fetch.called else None
+        self.assertEqual(restored, adopt.called)
+        return restored, chosen, adopt.call_args.args[1:] if adopt.called else None, looked_up, output.getvalue()
+
+    # test-category: security
+    def test_restore_walks_back_to_the_newest_finished_green_generation(self):
+        expected = self.lane
+        older = dict(expected, lock='older', configs={'Cargo.toml': 'older'})
+        green = ('completed', 'success')
+        newest = ('50-1', expected, 'in_progress', None)
+        # Unfinished newest, newer compatible green, failed exact, exact green, then one past the cap.
+        states = [newest, ('49-1', older, *green), ('48-1', expected, 'completed', 'failure'),
+                  ('47-1', expected, *green), ('46-1', expected, *green)]
+        _, chosen, adopted, looked_up, output = self.walk_back(states)
+        self.assertEqual((chosen, adopted), ('47-1', (expected, False)))
+        self.assertEqual(looked_up, ['49-1', '48-1', '47-1'])  # Newest first, other keys ignored.
+        self.assertIn('Newest Cargo snapshot 50-1 skipped: Cargo snapshot producer is not complete yet', output)
+        self.assertIn('Cargo snapshot 48-1 skipped: Cargo snapshot producer lane did not succeed', output)
+        self.assertIn('Checking the newest 3 of 4 older Cargo snapshots.', output)
+        self.assertIn('Selected Cargo snapshot 47-1 (run 47 attempt 1, exact identity)', output)
+        # Without an exact green generation inside the cap, the newest compatible green one wins.
+        states[3] = ('47-1', expected, 'completed', 'cancelled')
+        _, chosen, adopted, looked_up, _ = self.walk_back(states)
+        self.assertEqual((chosen, adopted), ('49-1', (expected, True)))
+        self.assertEqual(looked_up, ['49-1', '48-1', '47-1'])  # 46-1 lies past the lookup cap.
+        # Never an unfinished or failed producer: no green generation means a cold build.
+        states = [newest, ('49-1', older, 'in_progress', None), ('48-1', expected, 'completed', 'failure')]
+        restored, chosen, adopted, _, output = self.walk_back(states)
+        self.assertEqual((restored, chosen), (False, None))
+        self.assertIn('No finished green Cargo snapshot for this lane; cold Cargo build follows.', output)
+
+    # test-category: security
+    def test_restore_walk_back_rejects_a_foreign_identity_under_the_key(self):
+        states = [('50-1', self.lane, 'in_progress', None),
+                  ('49-1', dict(self.lane, compiler='other toolchain'), 'completed', 'success')]
+        with self.assertRaisesRegex(ValueError, 'identity mismatch'):
+            self.walk_back(states)
 
     # test-category: pure-logic
     def test_key_changes_for_each_compatibility_input(self):
@@ -197,17 +281,18 @@ class TargetSnapshot(unittest.TestCase):
             (root / '22-1-0001.zst').unlink()
             with self.assertRaisesRegex(ValueError, 'parts'):
                 snapshots.recorded_parts(root, '22-1')
-            versions = [dict(id=run, metadata={'container': {'tags': [f'fixture--{run}-1']}}) for run in [41,42,43]]
+            runs = range(43 - snapshots.KEEP, 44)  # One generation past retention.
+            versions = [dict(id=run, metadata={'container': {'tags': [f'fixture--{run}-1']}}) for run in runs]
             versions[0]['metadata']['container']['tags'].append('fixture')  # An older producer finished last.
             versions += [dict(id=1, metadata={'container': {'tags': ['other-key--1-1']}})]
             with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'), \
                     patch.object(snapshots, 'api', side_effect=[versions, None]) as lookup, \
                     patch.object(snapshots.ci_oci, 'checked') as promote, \
                     patch.object(cache, 'output', side_effect=AssertionError('gh is unavailable')):
-                snapshots.prune('fixture', '41-1')
+                snapshots.prune('fixture', f'{runs[0]}-1')
                 self.assertEqual(promote.call_args.args, ('tag', snapshots.ci_oci.REGISTRY + '/cargo-target:fixture--43-1', 'fixture'))
                 self.assertEqual(lookup.call_count, 2)
-                self.assertTrue(lookup.call_args.args[0].endswith('/41'))
+                self.assertTrue(lookup.call_args.args[0].endswith(f'/{runs[0]}'))
                 self.assertEqual(lookup.call_args.kwargs, {'method': 'DELETE'})
 
     # test-category: security
@@ -240,6 +325,24 @@ class TargetSnapshot(unittest.TestCase):
                     self.assertTrue(snapshots.restore(nearest))
                     self.assertEqual(adopt.call_args.args[1:], (nearest, True))
                 self.assertEqual(len(published['assets']), 6)  # Four chunks, sources, manifest.
+                newer = root / 'newer'
+                shutil.copytree(producer, newer)
+                for part in newer.glob('42-1-*.zst'):
+                    part.rename(newer / part.name.replace('42-1-', '43-1-'))
+                (newer / 'cache.json').write_text(json.dumps(dict(metadata, run_id=43)))
+                snapshots.publish(newer, 43)  # Its producer is still running when the next build restores.
+                self.assertEqual(snapshots.generations(snapshots.release(snapshots.tag_name(expected))['assets'])[0]['name'], '43-1.json')
+
+                def pending(value):
+                    if value['run_id'] == 43:
+                        raise snapshots.UnsuccessfulProducer('pending')
+                chosen = []
+                with patch.object(snapshots, 'trusted', side_effect=pending), \
+                        patch.object(snapshots, 'restore_tree', side_effect=lambda directory, *_: chosen.append(
+                            json.loads((directory / 'cache.json').read_text())['run_id'])) as adopt:
+                    self.assertTrue(snapshots.restore(expected))
+                self.assertEqual(chosen, [42])  # Listed by `oras repo tags`, then the older green generation.
+                self.assertEqual(adopt.call_args.args[1:], (expected, False))
                 snapshots.publish(producer, 42)  # An existing generation is never pushed again.
                 with patch.object(snapshots.ci_oci, 'push', side_effect=AssertionError('overwrite')):
                     snapshots.publish(producer, 42)
