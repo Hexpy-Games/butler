@@ -1689,7 +1689,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       profileMigrationDump: "가져온 프로필 내용",
       personaPreset: "페르소나 프리셋",
       persona: "페르소나",
-      eol: "EOL",
+      eol: "얼",
       mcpServerId: "서버 ID",
       mcpServerName: "표시 이름",
       mcpTransport: "연결 방식",
