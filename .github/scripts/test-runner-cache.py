@@ -64,6 +64,53 @@ def windows_max_path():
 
 
 class RunnerEviction(unittest.TestCase):
+    def setUp(self):
+        disk = patch.object(snapshots.runner_cache.shutil, 'disk_usage',
+                            return_value=shutil._ntuple_diskusage(400 * 1024**3, 100 * 1024**3, 300 * 1024**3))
+        disk.start()
+        self.addCleanup(disk.stop)
+
+    # test-category: pure-logic
+    def test_lanes_coexist_retire_legacy_and_only_replace_their_own_identity(self):
+        cache = snapshots.runner_cache
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            ref = 'refs/heads/current'
+            legacy = cache.prepare(root, ref, 'legacy')
+            lanes = [dict(platform='windows-x64', mode='static-ort', kind=kind, profile=profile,
+                          features='workspace' if kind == 'dev' else 'static-ort')
+                     for kind, profile in [('dev', 'debug'), ('native', 'ci-fast'), ('native', 'release')]]
+            targets = [cache.prepare(root, ref, f'lane-{i}', lane=lane) for i, lane in enumerate(lanes)]
+            self.assertFalse(legacy.exists())
+            self.assertTrue(all(target.exists() for target in targets))
+            replacement = cache.prepare(root, ref, 'new-release', lane=lanes[2])
+            self.assertTrue(replacement.exists())
+            self.assertEqual([target.exists() for target in targets], [True, True, False])
+            cache.prepare(root, 'refs/heads/other', 'other', lane=lanes[0])
+            self.assertTrue(all(target.exists() for target in targets[:2]))
+
+    # test-category: pure-logic
+    def test_free_floor_evicts_lru_then_skips_remote_work_without_failing(self):
+        cache = snapshots.runner_cache
+        usage = lambda free: shutil._ntuple_diskusage(400 * 1024**3, 0, free * 1024**3)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            main = self.seed(root, 'refs/heads/main', 1)
+            old = self.seed(root, 'refs/heads/old', 2)
+            newer = self.seed(root, 'refs/heads/new', 3)
+            with patch.object(cache.shutil, 'disk_usage', side_effect=[usage(99), usage(99), usage(101), usage(101)]):
+                cache.prepare(root, 'refs/heads/main', 'compatible-old')
+            self.assertTrue(main.exists())
+            self.assertFalse(old.exists())
+            self.assertTrue(newer.exists())
+            with patch.object(cache.shutil, 'disk_usage', return_value=usage(99)), \
+                    contextlib.redirect_stderr(io.StringIO()) as output:
+                target = cache.prepare(root, 'refs/heads/main', 'compatible-old')
+                self.assertFalse(cache.has_space(target))
+            self.assertTrue(target.exists())
+            self.assertFalse(newer.exists())
+            self.assertIn('skip Cargo restore/publish', output.getvalue())
+
     def seed(self, root, ref, used, size=10, identity='compatible-old', legacy=False):
         directory = root / snapshots.runner_cache.ref_key(ref)
         target = directory / identity

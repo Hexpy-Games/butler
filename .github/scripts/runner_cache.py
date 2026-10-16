@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 import stat
 import sys
@@ -146,20 +147,60 @@ def evict(base, directory, reason):
     log(f'Runner cache evicted {directory.name}: {reason}; bytes freed={freed}')
 
 
-def prune_identities(base, directory, selected=None):
+def lane_identity(expected):
+    return {key: expected.get(key) for key in ('platform', 'mode', 'kind', 'profile', 'features')}
+
+
+def read_lane(directory):
+    marker = directory / 'lane.json'
+    if not lexists(marker):
+        return None
+    if linked(marker):
+        raise ValueError(f'Linked Cargo lane marker: {marker}')
+    with open(extended(marker)) as source:
+        return json.load(source)
+
+
+def write_lane(directory, lane):
+    marker = directory / 'lane.json'
+    if lexists(marker) and linked(marker):
+        raise ValueError(f'Linked Cargo lane marker: {marker}')
+    with open(extended(marker), 'w') as output:
+        json.dump(lane, output)
+
+
+def prune_identities(base, directory, selected=None, lane=None):
     identities = []
     for child in children(directory):
         if linked(child):
             raise ValueError(f'Linked Cargo cache entry: {child}')
         if is_directory(child):
             identities.append(child)
-    keep = selected or (max(identities, key=mtime_ns) if identities else None)
+    keep = {}
+    for child in sorted(identities, key=mtime_ns, reverse=True):
+        marker = read_lane(child)
+        key = json.dumps(marker, sort_keys=True)
+        keep.setdefault(key, child)
+    if selected:
+        keep[json.dumps(lane, sort_keys=True)] = selected
+        # Unmarked pre-lane targets may be retired during migration.
+        keep['null'] = selected
     changed = False
     for child in identities:
-        if child != keep:
+        key = json.dumps(read_lane(child), sort_keys=True)
+        if child != keep[key]:
             evict(base, child, 'obsolete Cargo identity')
             changed = True
     return changed
+
+
+def has_space(path):
+    free = shutil.disk_usage(extended(path)).free
+    floor = budget('BUTLER_RUNNER_MIN_FREE_GB', 100)
+    if free < floor:
+        log(f'::warning::Runner free bytes={free} below floor bytes={floor}; skip Cargo restore/publish')
+        return False
+    return True
 
 
 def budget(variable, default):
@@ -169,7 +210,7 @@ def budget(variable, default):
     return int(value * 1024**3)
 
 
-def prepare(base, ref, identity, known_refs=()):
+def prepare(base, ref, identity, known_refs=(), lane=None):
     base = namespace(base)
     os.makedirs(extended(base), exist_ok=True)
     if Path(identity).name != identity or identity in ('.', '..'):
@@ -198,7 +239,7 @@ def prepare(base, ref, identity, known_refs=()):
         if directory not in keep:
             evict(base, directory, 'ref retention')
             continue
-        changed = prune_identities(base, directory, target if directory == current else None)
+        changed = prune_identities(base, directory, target if directory == current else None, lane)
         metadata = read_marker(directory)
         size = metadata.get('bytes')
         if changed or type(size) is not int or size < 0:
@@ -207,16 +248,19 @@ def prepare(base, ref, identity, known_refs=()):
         retained.append((directory, used, size))
     total = sum(size for _, _, size in retained)
     for directory, _, size in sorted(retained, key=lambda entry: entry[1]):
-        if total <= cap:
+        if total <= cap and shutil.disk_usage(extended(base)).free >= budget('BUTLER_RUNNER_MIN_FREE_GB', 100):
             break
         if directory in (current, base / ref_key('refs/heads/main')):
             continue
-        evict(base, directory, 'namespace size cap')
+        evict(base, directory, 'namespace size cap or free-disk floor')
         total -= size
     log(f'Runner Cargo cache estimated bytes={total}; cap bytes={cap}')
     if total > cap:
         log('::warning::Protected main/current Cargo targets exceed the namespace cap')
     os.makedirs(extended(target), exist_ok=True)
+    if lane is not None:
+        write_lane(target, lane)
+    has_space(base)
     metadata = read_marker(current)
     write_marker(current, dict(metadata, ref=ref))
     os.utime(extended(target), None)

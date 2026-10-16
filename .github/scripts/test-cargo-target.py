@@ -21,6 +21,12 @@ cache = snapshots.cache
 
 
 class TargetSnapshot(unittest.TestCase):
+    def setUp(self):
+        disk = patch.object(snapshots.runner_cache.shutil, 'disk_usage',
+                            return_value=shutil._ntuple_diskusage(400 * 1024**3, 100 * 1024**3, 300 * 1024**3))
+        disk.start()
+        self.addCleanup(disk.stop)
+
     # test-category: security
     def test_upgrade_accepts_only_exact_legacy_manifest_identity(self):
         expected = dict(platform='linux-x64', profile_config={}, runtime='', lock='pinned',
@@ -89,7 +95,9 @@ class TargetSnapshot(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'digest'):
                     snapshots.restore_local(target, expected)
                 self.assertNotEqual(target, snapshots.persistent_target(dict(expected, profile='release')))
-                self.assertFalse(target.exists())
+                self.assertTrue(target.exists())  # Release must not evict the ci-fast lane.
+                snapshots.persistent_target(dict(expected, compiler='new toolchain'))
+                self.assertFalse(target.exists())  # A newer identity in the same lane does evict it.
     # test-category: security
     def test_https_api_without_gh_preserves_pages_and_delete(self):
         def response(value, link=''):

@@ -211,6 +211,8 @@ def restore(expected):
     local = persistent_target(expected)
     if local and restore_local(local, expected):
         return True
+    if local and not runner_cache.has_space(local):
+        return False
     published, selected_identity, compatible = tagged_release(expected)
     candidates = generations(published['assets']) if published else []
     if not candidates:
@@ -268,9 +270,9 @@ def persistent_target(expected):
     if not base:
         return None
     refs = legacy_refs(Path(base))
-    target = runner_cache.prepare(base, os.environ['GITHUB_REF'], compatible_tag(expected), refs)
+    target = runner_cache.prepare(base, os.environ['GITHUB_REF'], compatible_tag(expected), refs, runner_cache.lane_identity(expected))
     os.environ['CARGO_TARGET_DIR'] = str(target)
-    with open(os.environ['GITHUB_ENV'], 'a') as output:
+    with open(runner_cache.extended(os.environ['GITHUB_ENV']), 'a') as output:
         output.write(f'CARGO_TARGET_DIR={target}\n')
     return target
 
@@ -298,6 +300,7 @@ def restore_local(target, expected):
 def save_local(target, expected):
     # Capture only after a successful build. A failed compile must retain the
     # previous digest so changed sources stay dirty on the next checkout.
+    runner_cache.write_lane(target, runner_cache.lane_identity(expected))
     sources = target_path(target / 'ci-local-sources.json')
     sources.write_text(json.dumps(cache.source_times.capture(Path(os.environ['GITHUB_WORKSPACE']))))
     marker = dict(identity=expected, sources_sha256=cache.digest(sources))
@@ -408,6 +411,8 @@ def publish_lane(platform, mode, kind):
     expected = cache.identity(platform, mode, kind)
     run_id = os.environ['GITHUB_RUN_ID']
     prefix = f'{int(run_id)}-{int(os.environ.get("GITHUB_RUN_ATTEMPT", "1"))}'
+    if os.environ.get('BUTLER_PERSISTENT_TARGET') and not runner_cache.has_space(os.environ['BUTLER_PERSISTENT_TARGET']):
+        return
     report_free_disk('before snapshot')
     # The only extra disk is one compressed copy, written directly as upload parts.
     with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
