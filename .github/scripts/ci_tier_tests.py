@@ -116,6 +116,31 @@ class ApprovedTiers(unittest.TestCase):
             self.assertIn("fromJSON(needs.changes.outputs.jobs)['" + name + "']", block)
 
 
+    # test-category: format-pin
+    def test_bun_suite_moves_intact_and_keeps_macos_host_fixtures(self):
+        source = (ROOT.parent / 'workflows/bun-unit.yml').read_text()
+        fast, native = source.split('\n  macos-native:\n', 1)
+        self.assertIn('runs-on: ubuntu-24.04', fast)
+        self.assertIn('bun run test:unit:fast', fast)
+        self.assertNotIn('continue-on-error', source)
+        self.assertEqual(source.count('timeout-minutes: 20'), 2)
+        self.assertIn('runs-on: macos-15', native)
+        self.assertIn('bun test tests/unit/prepare-native-agent-script.test.ts', native)
+        for path, expected in {
+            'packages/butler-app/client/ui/src/app.tsx': False,
+            'tests/unit/prepare-native-agent-script.test.ts': True,
+            'tests/unit/run-fast-unit-tests.sh': True,
+            'packages/butler-app/client/electron/scripts/prepare-native-agent.mjs': True,
+            '.github/workflows/bun-unit.yml': True, 'bun.lock': True, 'bunfig.toml': True,
+        }.items():
+            self.assertEqual(json.loads(selection([path])['parts'])['ui']['macos'], expected, path)
+        # No other fast-unit file has a Darwin-only host guard.
+        repository = ROOT.parents[1]
+        guards = [p.name for p in (repository / 'tests/unit').glob('*.test.ts')
+                  if re.search(r'process.platform [!=]== ["\']darwin["\']', p.read_text())]
+        self.assertEqual(guards, ['prepare-native-agent-script.test.ts'])
+
+
 class Precision(unittest.TestCase):
     # test-category: pure-logic
     def test_package_only_inputs_do_not_build_test_archives(self):

@@ -31,6 +31,9 @@ PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/elect
 # PR packaging exceptions; main/release still exercise every Rust payload change.
 PR_PACKAGING = PACKAGING + ('VERSION', 'Cargo.toml', 'Cargo.lock', '**/Cargo.toml',
                             '**/Cargo.lock', 'packages/butler-agent/rust/crates/butler-platform/**')
+BUN_MACOS = ('tests/unit/prepare-native-agent-script.test.ts',
+             'tests/unit/run-fast-unit-tests.sh', 'tools/validation/*',
+             '.github/workflows/bun-unit.yml')
 MACOS = ('packages/butler-agent/rust/crates/butler-platform/**',
          '**/*macos*', '**/*darwin*', 'deploy/macos*')
 # These harness inputs are never shipped in a production Agent payload.
@@ -373,6 +376,8 @@ def select(event, workflow):
     # Smoke uses the full workspace inventory; E2E is disabled separately.
     if level == 'smoke' and workflow == 'rust-quality.yml':
         parts = {name: dict(workspace=True, e2e=ci_parts.E2E, perf=ci_parts.PERF) for name in ci_parts.inventory(workflow)}
+        parts['ui'] = dict(macos=outputs['package'] == 'true' or outputs['signing'] == 'true' or
+                           any(matches(p, BUN_MACOS + SHARED) for p in paths))
     restored = {artifact['name'] for artifact in artifacts}
     artifacts += [artifact for artifact in part_artifacts if artifact['name'] not in restored]
     if level == 'smoke' and workflow == 'windows-preview-smoke.yml':
