@@ -162,14 +162,29 @@ class SmokeReuse(unittest.TestCase):
                         return real_run(args, cwd=directory, **kwargs)
                     (Path(args[-1]) / 'inputs.json').write_text(json.dumps(claimed))
                 with patch.object(ci_receipts.subprocess, 'run', side_effect=execute):
-                    if accepted:
-                        found = list(ci_receipts.previous(REPO, 12, WORKFLOW, 'fix/example',
-                                                         'main', items, current))
-                        self.assertEqual(found, [claimed])
-                    else:
-                        with self.assertRaises(subprocess.CalledProcessError):
-                            list(ci_receipts.previous(REPO, 12, WORKFLOW, 'fix/example',
-                                                      'main', items, current))
+                    found = list(ci_receipts.previous(REPO, 12, WORKFLOW, 'fix/example',
+                                                     'main', items, current))
+                    self.assertEqual(found, [claimed] if accepted else [])
+
+    # test-category: security
+    def test_changed_ci_run_does_not_discard_other_trusted_receipts(self):
+        state = receipt()
+        runs = [dict(RUN, id=3, head_sha='changed-ci'), RUN,
+                dict(RUN, id=2, head_sha='missing-commit'), dict(RUN, id=4)]
+        def items(path, key):
+            return dict(workflow_runs=runs, artifacts=[dict(
+                name='ci-inputs-'+WORKFLOW+'-1', expired=False)], jobs=[dict(steps=[dict(
+                name='Publish successful inputs', conclusion='success')])])[key]
+        def execute(args, **kwargs):
+            if args[0] == 'git' and any(sha in args for sha in ['changed-ci', 'missing-commit']):
+                raise subprocess.CalledProcessError(1, args)
+            if args[0] == 'gh':
+                (Path(args[-1]) / 'inputs.json').write_text(json.dumps(dict(state, run=int(args[3]))))
+        with patch.object(ci_receipts.subprocess, 'run', side_effect=execute) as calls:
+            found = list(ci_receipts.previous(REPO, 12, WORKFLOW, 'fix/example', 'main', items, 'head'))
+        self.assertEqual([value['run'] for value in found], [1, 4])
+        self.assertEqual([call.args[0][3] for call in calls.call_args_list
+                          if call.args[0][0] == 'gh'], ['1', '4'])
 
     # test-category: security
     def test_pass_then_fail_same_inputs_then_repush_does_not_reuse(self):

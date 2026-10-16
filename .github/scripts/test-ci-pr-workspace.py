@@ -8,6 +8,7 @@ import re
 import shlex
 import subprocess
 import unittest
+from types import SimpleNamespace
 
 import ci_policy
 
@@ -18,6 +19,15 @@ WORKFLOWS = ROOT / '.github/workflows'
 def step(source, name):
     block = source.split('      - name: ' + name + '\n', 1)[1]
     return re.split(r'\n      - (?:name:|uses:|if:)', block, maxsplit=1)[0]
+
+
+def expression(value, **context):
+    # Evaluate the workflow's boolean/string expressions over fixture contexts.
+    value = value.removeprefix('${{').removesuffix('}}').strip()
+    return eval(value.replace('&&', ' and ').replace('||', ' or '),
+                {'__builtins__': {}, 'github': SimpleNamespace(**context),
+                 'always': lambda: True, 'startsWith': lambda text, prefix: text.startswith(prefix),
+                 'format': lambda template, *args: template.format(*args)})
 
 
 class PrWorkspace(unittest.TestCase):
@@ -60,6 +70,37 @@ class PrWorkspace(unittest.TestCase):
                 actual = subprocess.run(['python3', ROOT / '.github/scripts/check-gate.py'],
                                         env=dict(os.environ, RESULTS=json.dumps(jobs)), capture_output=True)
                 self.assertEqual(actual.returncode == 0, result == 'success', actual.stderr)
+
+    # test-category: pure-logic
+    def test_legacy_contexts_follow_release_ruleset_only(self):
+        quality = (WORKFLOWS / 'rust-quality.yml').read_text()
+        legacy = quality.split('\n  legacy-gates:\n')[1]
+        condition = re.search(r'^    if: (.+)$', legacy, re.M)[1]
+        for event in ['pull_request', 'push', 'workflow_dispatch']:
+            for base in ['main', 'release/1.2.3', 'release/1.2.3-preview.13']:
+                for ref in ['refs/heads/main', 'refs/heads/release/1.2.3', 'refs/pull/12/merge']:
+                    expected = ((event == 'pull_request' and base.startswith('release/')) or
+                                (event == 'push' and ref.startswith('refs/heads/release/')))
+                    self.assertEqual(expression(condition, event_name=event, base_ref=base, ref=ref),
+                                     expected, (event, base, ref))
+        self.assertIn('needs: gate', legacy)
+        self.assertIn('run: test "$RESULT" = success', legacy)
+
+    # test-category: pure-logic
+    def test_release_dispatch_and_push_share_integration_concurrency(self):
+        quality = (WORKFLOWS / 'rust-quality.yml').read_text()
+        group = re.search(r'^  group: (.+)$', quality, re.M)[1]
+        for event in ['push', 'workflow_dispatch']:
+            for ref in ['refs/heads/release/1.2.3', 'refs/heads/release/1.2.3-preview.13']:
+                self.assertEqual(expression(group, event_name=event, ref=ref, run_id=123),
+                                 'integration-' + ref)
+        for run in [123, 456]:
+            self.assertEqual(expression(group, event_name='workflow_dispatch',
+                                        ref='refs/heads/main', run_id=run),
+                             'rust-quality-dispatch-' + str(run))
+        self.assertEqual(expression(group, event_name='pull_request', ref='refs/pull/12/merge',
+                                    head_ref='fix/example', ref_name='12/merge'),
+                         'rust-quality-fix/example')
 
     # test-category: format-pin
     def test_only_pr_x64_call_uses_in_place_execution_and_dispatch_is_independent(self):

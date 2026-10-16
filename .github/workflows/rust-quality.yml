@@ -14,7 +14,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ${{ github.event_name == 'workflow_dispatch' && format('rust-quality-dispatch-{0}', github.run_id) || startsWith(github.ref, 'refs/heads/release/') && format('integration-{0}', github.ref) || format('rust-quality-{0}', github.head_ref || github.ref_name) }}
+  group: ${{ startsWith(github.ref, 'refs/heads/release/') && format('integration-{0}', github.ref) || github.event_name == 'workflow_dispatch' && format('rust-quality-dispatch-{0}', github.run_id) || format('rust-quality-{0}', github.head_ref || github.ref_name) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/release/') }}
 
 env:
@@ -449,11 +449,12 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/check-gate.py
 
-  # Keep the old required contexts until the coordinator updates both rulesets.
-  # They remain non-required compatibility checks after that settings change.
+  # Emit compatibility contexts only where a ruleset still requires them:
+  # release ruleset 24548681 (until preview.13); main 17887396 requires gate only.
+  # Dispatch is diagnostic and must never post required legacy contexts.
   legacy-gates:
     name: ${{ matrix.context }}
-    if: always()
+    if: always() && ((github.event_name == 'pull_request' && startsWith(github.base_ref, 'release/')) || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')))
     needs: gate
     strategy:
       fail-fast: false

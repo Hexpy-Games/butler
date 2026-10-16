@@ -54,7 +54,11 @@ def previous(repository, pr, workflow, branch, base_ref, api_items, current_head
         if not trusted_run(run, repository, pr, workflow, branch):
             continue
         if pr is not None:
-            unchanged_ci(run, current_head)
+            try:
+                unchanged_ci(run, current_head)
+            except subprocess.CalledProcessError:
+                # A changed or unavailable producer cannot vouch for this run.
+                continue
         artifacts = api_items(f'repos/{repository}/actions/runs/{run["id"]}/artifacts?per_page=100', 'artifacts')
         name = f'ci-inputs-{workflow}-{run["run_attempt"]}'
         if not any(a['name'] == name and not a['expired'] for a in artifacts):
