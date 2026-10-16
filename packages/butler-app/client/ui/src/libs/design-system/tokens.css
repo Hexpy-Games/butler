@@ -378,7 +378,7 @@
   /* Source color literals. Semantic tokens below must reference these. */
   --neutral-white: #ffffff;
   --neutral-light-text-primary: #222326;
-  --neutral-light-text-secondary: #696d73;
+  --neutral-light-text-secondary: #65696f;
   --neutral-light-text-tertiary: #6d7279;
   --neutral-light-text-disabled: #a7abb0;
   --neutral-light-placeholder: #6a6e74;
