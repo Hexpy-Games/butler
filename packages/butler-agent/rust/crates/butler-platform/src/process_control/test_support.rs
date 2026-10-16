@@ -47,3 +47,66 @@ pub fn slow_line_peer(response: &str) -> tokio::process::Command {
         command
     }
 }
+
+/// Reads a request, acknowledges it on stderr, then waits for a second stdin
+/// line before replying. No timers: the test controls the verification window.
+/// The caller owns stdio and must kill and reap the child.
+pub fn gated_line_peer(response: &str) -> tokio::process::Command {
+    gated_lines_peer(&[response])
+}
+
+/// Repeats the pipe gate for each response, then waits for the owner to stop it.
+pub fn gated_lines_peer(responses: &[&str]) -> tokio::process::Command {
+    #[cfg(unix)]
+    {
+        let mut command = tokio::process::Command::new("/bin/sh");
+        command.args([
+            "-c",
+            "for response do IFS= read -r line; printf 'received\\n' >&2; IFS= read -r gate; printf '%s\\n' \"$response\"; done; IFS= read -r stop",
+            "protocol-peer",
+        ]);
+        command.args(responses);
+        command
+    }
+    #[cfg(windows)]
+    {
+        let replies = responses
+            .iter()
+            .map(|response| format!("'{}'", response.replace('\'', "''")))
+            .collect::<Vec<_>>()
+            .join(",");
+        let script = format!(
+            "foreach ($response in @({replies})) {{ [Console]::ReadLine() | Out-Null; [Console]::Error.WriteLine('received'); [Console]::ReadLine() | Out-Null; [Console]::WriteLine($response) }}; [Console]::ReadLine() | Out-Null"
+        );
+        let mut command = tokio::process::Command::new("powershell.exe");
+        command.args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            &script,
+        ]);
+        command
+    }
+}
+
+/// Duplicates a peer's input pipe so a test can release its gate while the
+/// protocol client owns stdin. Both handles belong to the test.
+///
+/// # Errors
+/// Returns errors duplicating the pipe or registering it with Tokio.
+pub fn clone_peer_input(
+    stdin: &tokio::process::ChildStdin,
+) -> std::io::Result<tokio::process::ChildStdin> {
+    #[cfg(unix)]
+    let owned = {
+        use std::os::fd::AsFd;
+        stdin.as_fd().try_clone_to_owned()?
+    };
+    #[cfg(windows)]
+    let owned = {
+        use std::os::windows::io::AsHandle;
+        stdin.as_handle().try_clone_to_owned()?
+    };
+    tokio::process::ChildStdin::from_std(std::process::ChildStdin::from(owned))
+}
