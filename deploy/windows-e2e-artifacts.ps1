@@ -38,7 +38,7 @@ if ($Mode -eq 'Export') {
             # Probe the shipped helper on the actual hosted machine; do not disable MXC.
             $probe = "$env:PREVIEW_ROOT/logs/without-mxc-probe.txt"
             $ErrorActionPreference = 'Continue'
-            & "$artifacts/butler-sandbox.exe" --probe > $probe 2>&1
+            & "$artifacts/butler-sandbox.exe" --probe > $probe 2> "$probe.stderr"
             $probeCode = $LASTEXITCODE
             $ErrorActionPreference = 'Stop'
             $reason = (Get-Content -LiteralPath $probe -Raw).Trim()
