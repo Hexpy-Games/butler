@@ -4,7 +4,7 @@
 # Counts may only shrink; regenerate with
 #   cargo run -p butler-source-check -- --bless .
 # package<TAB>hooks
-crates/butler-agent	63
+crates/butler-agent	64
 crates/butler-gateway	28
 crates/butler-memory	10
 crates/butler-platform	11

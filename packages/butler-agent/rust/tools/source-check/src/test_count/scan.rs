@@ -197,6 +197,14 @@ mod tests {
                 "fn a() { var(\"BUTLER_SHUTDOWN_TRACE\"); code(\"e2e_failed\"); }",
                 0,
             ),
+            (
+                "fn a() { root.join(\"state/e2e-held\"); nest(\"/_test\"); }",
+                2,
+            ),
+            ("fn a() { std::env::var_os(b\"BUTLER_E2E_X\"); }", 1),
+            ("fn a() { if cfg!(feature = \"e2e-fixtures\") {} }", 0),
+            ("/// Reads `BUTLER_E2E_X`.\nfn a() {}", 0),
+            ("impl A { #[test]\nfn a() { var(\"BUTLER_E2E_X\"); } }", 0),
         ] {
             assert_eq!(
                 crate::e2e_hooks::hooks(body).unwrap().len(),
