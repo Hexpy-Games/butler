@@ -31,6 +31,8 @@ CHUNK_BYTES = 1800 * 1024**2
 KEEP = 4
 # Older generations a restore checks after the tagged one: one manifest lookup each.
 WALK_BACK = KEEP - 1
+# Registry or GitHub API transport failures (HTTPError, URLError, timeouts, oras exits); never trust errors.
+TRANSIENT = (OSError, RuntimeError, subprocess.TimeoutExpired)
 
 
 class UnsuccessfulProducer(ValueError):
@@ -115,6 +117,8 @@ def checked_generation(manifest, directory, expected, compatible):
         compatible = not cache.matches(metadata['identity'], expected)
     if not cache.matches(metadata['identity'], expected, compatible):
         raise ValueError('Cargo snapshot identity mismatch')
+    if manifest['name'] != f'{int(metadata["run_id"])}-{int(metadata.get("run_attempt", 1))}.json':
+        raise ValueError('Cargo snapshot generation tag does not match its producer run')
     trusted(metadata)
     return generation, compatible
 
@@ -159,17 +163,22 @@ def walk_back(expected, tried, directory):
         print(f'Checking the newest {WALK_BACK} of {len(older)} older Cargo snapshots.')
     fallback = None
     for suffix in older[:WALK_BACK]:
-        published = release(prefix + suffix)
-        manifest = next((entry for entry in published['assets'] if entry['name'] == suffix + '.json'),
-                        None) if published else None
-        if manifest is None:
-            print(f'Cargo snapshot {suffix} was pruned; skipping it.')
-            continue
         try:
+            published = release(prefix + suffix)
+            manifest = next((entry for entry in published['assets'] if entry['name'] == suffix + '.json'),
+                            None) if published else None
+            if manifest is None:
+                print(f'Cargo snapshot {suffix} was pruned; skipping it.')
+                continue
             generation, compatible = checked_generation(manifest, directory, expected, None)
         except UnsuccessfulProducer as error:
             print(f'Cargo snapshot {suffix} skipped: {error}.')
             continue
+        except TRANSIENT as error:
+            if not fallback:
+                raise
+            print(f'Cargo snapshot {suffix} could not be checked ({error}); keeping the compatible fallback.')
+            return fallback
         if not compatible:
             return published, manifest, generation, compatible
         fallback = fallback or (published, manifest, generation, compatible)
@@ -209,7 +218,7 @@ def restore(expected):
         return False
     with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
         directory = Path(temporary)
-        manifest = candidates[0]
+        manifest, walked_back = candidates[0], False
         try:
             generation, _ = checked_generation(manifest, directory, selected_identity, compatible)
             reason = 'tagged generation; producer lane finished green'
@@ -220,10 +229,17 @@ def restore(expected):
                 print('No finished green Cargo snapshot for this lane; cold Cargo build follows.')
                 return False
             published, manifest, generation, compatible = found
-            selected_identity = expected
+            selected_identity, walked_back = expected, True
             reason = 'newest older generation whose producer lane finished green'
         print(f'Selected Cargo snapshot {manifest["name"][:-5]} ({describe(generation, compatible)}): {reason}.')
-        fetch_chunks(published, manifest, generation, directory)
+        try:
+            fetch_chunks(published, manifest, generation, directory)
+        except RuntimeError as error:
+            if not walked_back:
+                raise
+            # Older generations can be pruned mid-download; the target is still untouched.
+            print(f'Cargo snapshot {manifest["name"][:-5]} download failed ({error}); cold Cargo build follows.')
+            return False
         restore_tree(directory, selected_identity, compatible)
     return True
 
