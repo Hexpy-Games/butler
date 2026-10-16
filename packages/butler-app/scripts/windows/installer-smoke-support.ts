@@ -45,6 +45,16 @@ export function ownedProcesses(data: string, owned: Set<number>) {
   }
 }
 
+/** Processes started from one installed Squirrel version folder; `app` marks a top-level App (no Chromium child type). */
+export function versionProcesses(folder: string, env: NodeJS.ProcessEnv): Array<{ pid: number; app: boolean }> {
+  return JSON.parse(powershell(`$root = [IO.Path]::GetFullPath($env:BUTLER_VERSION_FOLDER).TrimEnd('\\') + '\\'
+    $exe = Join-Path $root 'Butler.exe'
+    ConvertTo-Json -Compress -InputObject @(Get-CimInstance Win32_Process |
+      Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } |
+      ForEach-Object { @{ pid = $_.ProcessId; app = ($_.ExecutablePath -ieq $exe) -and -not ($_.CommandLine -match '--type=|--butler-browser-host=') } })`,
+  { ...env, BUTLER_VERSION_FOLDER: folder }));
+}
+
 export function alive(pid: number): boolean {
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
