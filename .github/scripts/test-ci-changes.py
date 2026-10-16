@@ -202,7 +202,7 @@ class Trust(unittest.TestCase):
         groups = json.loads(re.search(r"groups: '([^']+)'", workflow).group(1))
         # Evaluate the actual gate's selection policy, without its result loop.
         policy = (ROOT / 'check-gate.py').read_text().split("if 'lint' in jobs")[0]
-        flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds']
+        flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds', 'licenses']
         for values in itertools.product(['false', 'true'], repeat=len(flags)):
             outputs = dict(zip(flags, values), tier='smoke', workflows='true')
             outputs['jobs'] = json.dumps(changes.rust_jobs(outputs, 'pull_request') | {'lint': True})
@@ -285,12 +285,13 @@ class Trust(unittest.TestCase):
 class TrimContracts(unittest.TestCase):
     # test-category: security
     def test_gate_uses_exported_job_selection_even_without_path_flags(self):
-        for tier in ['smoke', 'integration']:
+        for tier, name in itertools.product(['smoke', 'integration'],
+                                            ['linux-clippy', 'windows-check', 'shellcheck', 'selftest']):
             for enabled in [True, False]:
                 for result in ['success', 'failure', 'cancelled', 'skipped']:
-                    outputs = {'tier': tier, 'jobs': json.dumps({'linux-clippy': enabled})}
+                    outputs = {'tier': tier, 'jobs': json.dumps({name: enabled})}
                     jobs = {'changes': {'result': 'success', 'outputs': outputs},
-                            'linux-clippy': {'result': result}}
+                            name: {'result': result}}
                     env = dict(os.environ, RESULTS=json.dumps(jobs))
                     actual = subprocess.run(['python3', ROOT / 'check-gate.py'], env=env, capture_output=True)
                     self.assertEqual(actual.returncode == 0,
@@ -298,34 +299,36 @@ class TrimContracts(unittest.TestCase):
                                      (tier, enabled, result, actual.stderr))
 
     # test-category: security
-    def test_license_step_outcomes_keep_gate_and_receipt_semantics(self):
-        source = (ROOT.parent / 'workflows/licenses.yml').read_text()
-        templates = re.findall(r'(?:results|RESULTS): >-\n((?:            .+\n)+)', source)
-        self.assertEqual(len(templates), 2)
-        self.assertEqual(templates[0], templates[1])
+    def test_license_failure_in_lint_keeps_gate_and_receipt_semantics(self):
+        source = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
+        lint = source.split('  lint:\n', 1)[1].split('  gate:\n', 1)[0]
+        for command in ['node deploy/licenses/generate.mjs --check',
+                        'node deploy/licenses/check.mjs', 'python3 deploy/licenses/check-disclosure.py']:
+            self.assertIn(command, lint)
+        groups = json.loads(re.search(r"groups: '([^']+)'", source)[1])
+        self.assertEqual(groups['licenses'], ['lint'])
         for tier, enabled, outcome in itertools.product(
                 ['smoke', 'integration'], [True, False], ['success', 'failure', 'cancelled', 'skipped']):
             with self.subTest(tier=tier, enabled=enabled, outcome=outcome), tempfile.TemporaryDirectory() as temp:
                 outputs = {'tier': tier, 'licenses': str(enabled or tier == 'integration').lower(),
-                           'jobs': json.dumps({'licenses': enabled})}
-                state = dict(schema=1, workflow='licenses.yml', hashes={'licenses': 'complete'}, outputs=dict(outputs), reuse={},
-                             job_inputs={'licenses': 'job-hash'} if tier == 'integration' else {},
-                             job_reuse={'licenses': 1} if tier == 'integration' and not enabled else {})
+                           'jobs': json.dumps({'lint': enabled})}
+                state = dict(schema=1, workflow='rust-quality.yml', hashes={'licenses': 'complete'},
+                             outputs=dict(outputs), reuse={},
+                             job_inputs={'lint': 'job-hash'} if tier == 'integration' else {},
+                             job_reuse={'lint': 1} if tier == 'integration' and not enabled else {})
                 outputs['selection'] = json.dumps(state)
-                rendered = templates[0].replace('${{ steps.paths.outcome }}', 'success')
-                rendered = rendered.replace('${{ toJSON(steps.paths.outputs) }}', json.dumps(outputs))
-                rendered = rendered.replace('${{ steps.licenses.outcome }}', outcome)
-                jobs = json.loads(rendered)
-                env = dict(os.environ, RESULTS=json.dumps(jobs), CHECK_GROUPS='{"licenses":"jobs"}')
-                actual = subprocess.run(['python3', ROOT / 'ci-check-selected.py'], env=env, capture_output=True)
+                jobs = {'changes': {'result': 'success', 'outputs': outputs}, 'lint': {'result': outcome}}
+                env = dict(os.environ, RESULTS=json.dumps(jobs))
+                actual = subprocess.run(['python3', ROOT / 'check-gate.py'], env=env, capture_output=True)
                 passed = outcome == ('success' if enabled else 'skipped')
-                self.assertEqual(actual.returncode == 0, passed, actual.stderr)
-                with patch.dict(os.environ, env | {'RUNNER_TEMP': temp, 'JOB_GROUPS': '{"licenses":["licenses"]}'}):
+                self.assertEqual(actual.returncode == 0, passed and (tier == 'integration' or enabled), actual.stderr)
+                with patch.dict(os.environ, env | {'RUNNER_TEMP': temp, 'JOB_GROUPS': '{"licenses":["lint"]}'}), \
+                     patch.object(changes.ci_parts, 'inventory', return_value={}):
                     changes.record()
                 receipt = json.loads((Path(temp) / 'ci-inputs/inputs.json').read_text())
                 self.assertEqual(receipt['hashes'], {'licenses': 'complete'}
                                  if passed and outputs['licenses'] == 'true' else {})
-                self.assertEqual(receipt['job_hashes'], {'licenses': 'job-hash'}
+                self.assertEqual(receipt['job_hashes'], {'lint': 'job-hash'}
                                  if passed and tier == 'integration' else {})
 
     # test-category: format-pin

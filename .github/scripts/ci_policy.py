@@ -9,6 +9,7 @@ def rust_jobs(outputs, event):
     integration = outputs['tier'] == 'integration'
     arm_tests = rust and integration
     selected = {
+        'windows-check': rust, 'shellcheck': package, 'selftest': package,
         'linux-clippy': rust, 'linux-archive': rust or linux_package or install,
         'linux-tests': rust, 'linux-perf-archive': rust and integration, 'linux-perf': rust and integration, 'linux-native': linux_package or install,
         'macos-archive': rust or package or install, 'macos-native': integration and (rust or package or install),

@@ -44,6 +44,20 @@ class IntegrationProof(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'windows.yml'):
                 assert_active_gates(fixture)
 
+    # test-category: format-pin
+    def test_consolidated_gate_owns_release_checks(self):
+        self.assertEqual(proof.GATES['rust-quality.yml'], 'gate')
+        self.assertTrue({'post-merge-ci.yml', 'licenses.yml', 'macos-signing.yml'}.isdisjoint(proof.GATES))
+        groups = proof.changes.job_groups('rust-quality.yml', integration=True)
+        self.assertIn('rust', groups['windows-check'])
+        self.assertIn('package', groups['shellcheck'])
+        self.assertIn('package', groups['selftest'])
+        self.assertIn('licenses', groups['lint'])
+        source = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
+        gate = source.split('  gate:\n', 1)[1].split('  legacy-gates:\n', 1)[0]
+        for job in ('windows-check', 'shellcheck', 'selftest', 'lint'):
+            self.assertIn(job, gate.split('    runs-on:', 1)[0])
+
     # test-category: security
     def test_green_receipt_reused_missing_and_failed_cases(self):
         runs = [dict(head_sha='new', conclusion='success')]

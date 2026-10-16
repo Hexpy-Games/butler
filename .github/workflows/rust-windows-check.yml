@@ -1,39 +1,14 @@
-name: Post-merge CI
-
+name: Windows compile check
 on:
-  push:
-    branches: [main, 'release/**']
-  pull_request:
-  workflow_dispatch:
-
+  workflow_call:
 permissions:
-  actions: read
   contents: read
-  pull-requests: read
-
-concurrency:
-  group: post-merge-ci-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
-env:
-  CARGO_TERM_COLOR: always
-
-defaults:
-  run:
-    working-directory: packages/butler-agent/rust
-
+  actions: read
 jobs:
-  changes:
-    uses: ./.github/workflows/ci-changes.yml
-    with:
-      workflow: post-merge-ci.yml
-
-  windows-check:
+  check:
     name: Windows compile check (x86_64-pc-windows-msvc)
-    needs: changes
     outputs:
       compile: ${{ steps.check.outcome }}
-    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['windows-check']) || (needs.changes.outputs.tier != 'integration' && (needs.changes.outputs.rust == 'true')))
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:
@@ -94,56 +69,3 @@ jobs:
                   print(f"\n| Errors | By {title} |\n| ---: | --- |")
                   print("\n".join(f"| {count} | `{name}` |" for name, count in counter.most_common(limit)))
           PY
-
-  main-issue:
-    name: Report main failure
-    if: >-
-      always() &&
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') &&
-      (contains(needs.*.result, 'failure') || needs.windows-check.outputs.compile == 'failure')
-    needs: [changes, windows-check]
-    runs-on: ubuntu-latest
-    concurrency:
-      group: ci-failure-report-${{ github.ref }}
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      issues: write
-    steps:
-      - name: Open or update issue
-        working-directory: ${{ runner.temp }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          EVENT_LABEL: main push
-        run: |
-          title='Main Rust CI failure'
-          body="The $EVENT_LABEL Rust CI failed: $RUN_URL"
-          number="$(gh issue list --state open --limit 1000 --json number,title --jq '.[] | select(.title == "Main Rust CI failure") | .number' | head -1)"
-          if [ -n "$number" ]; then
-            gh issue comment "$number" --body "$body"
-          else
-            gh issue create --title "$title" --body "$body"
-          fi
-
-  gate:
-    name: post-merge-ci gate
-    if: always()
-    needs: [changes, windows-check]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Publish successful inputs
-        if: always() && needs.changes.result == 'success'
-        uses: ./.github/actions/ci-input-receipt
-        with:
-          results: ${{ toJSON(needs) }}
-          groups: '{"rust": ["windows-check"]}'
-          workflow: post-merge-ci.yml
-      - name: Require selected checks
-        env:
-          RESULTS: ${{ toJSON(needs) }}
-          CHECK_GROUPS: '{"windows-check": ["rust"]}'
-        working-directory: ${{ github.workspace }}
-        run: python3 .github/scripts/isolated.py python3 .github/scripts/ci-check-selected.py
