@@ -300,10 +300,10 @@ exit 0
 `;
 }
 
-/** Keep the marker and exec shape in sync with deploy/install.sh's install_launcher. */
+/** Keep the exec shape in sync with deploy/install.sh's install_launcher. */
 function cliLauncherScript(installDir: string): string {
   return `#!/bin/sh
-# butler-native-launcher v1
+# butler-package-launcher v1
 # Managed by Butler: installed by the package manager.
 exec '${installDir}/resources/bundled-agent/bin/butler-agent' --installation-root '${installDir}' --resource-root '${installDir}/resources/bundled-agent/resources' "$@"
 `;

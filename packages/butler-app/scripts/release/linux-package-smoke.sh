@@ -114,7 +114,7 @@ while [ \$i -lt 90 ]; do
   token="\$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' data/app/runtime/auth/local-agent-auth.json 2>/dev/null || true)"
   # The gateway can answer before the service publishes its ready identity.
   if [ -n "\$token" ] && curl -fsS -H "Authorization: Bearer \$token" "http://127.0.0.1:$port/health" > health.json 2>/dev/null &&
-    grep -Eq '"state"[[:space:]]*:[[:space:]]*"ready"' data/state/butler-agent-native-service.json; then
+    grep -Eq '"state"[[:space:]]*:[[:space:]]*"ready"' data/state/butler-agent-native-service.json 2>/dev/null; then
     break
   fi
   i=\$((i + 1))
