@@ -363,7 +363,8 @@ impl GuidedTurnFactoryAdapter {
             language,
             turn.original_message.clone(),
         )?
-        .with_capability_recovery(&phase.authorized_names, self.preparation.journal.clone());
+        .with_capability_recovery(&phase.authorized_names, self.preparation.journal.clone())
+        .with_children(self.subsessions.clone());
         let tools = GuidedWorkTools::new(self.preparation.work.clone(), scope.clone())
             .with_child_tools(
                 (policy.role.as_str() != "butler").then(|| phase.authorized_names.clone()),

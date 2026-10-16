@@ -58,6 +58,10 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
     transaction.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_btcc_turns_authority_waiting ON btcc_turns(session_id)
          WHERE semantic_state='admitted' AND suspension_reason='authority_pending';
+         CREATE INDEX IF NOT EXISTS idx_btcc_turns_worker_waiting ON btcc_turns(session_id)
+         WHERE semantic_state='admitted' AND suspension_reason='waiting_for_worker';
+         CREATE INDEX IF NOT EXISTS idx_btcc_subsession_outbox_parent
+         ON btcc_subsession_outbox(parent_session_id);
          CREATE INDEX IF NOT EXISTS idx_btcc_subsession_outbox_pending
          ON btcc_subsession_outbox(created_at) WHERE status='pending';
          CREATE INDEX IF NOT EXISTS idx_btcc_turn_checkpoint_reference

@@ -145,6 +145,7 @@ mod steward_direction_failure;
 mod steward_interrupted_queue;
 mod steward_presentation;
 mod steward_results;
+mod steward_workers;
 mod storage_resilience;
 mod stream_orders;
 mod streaming;

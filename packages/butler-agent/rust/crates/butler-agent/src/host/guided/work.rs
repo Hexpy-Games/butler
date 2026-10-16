@@ -25,6 +25,7 @@ pub(crate) struct GuidedWorkAdapter {
     response_language: String,
     original_request: String,
     capability_recovery: Option<capability_recovery::CapabilityRecovery>,
+    children: Option<Arc<butler_turn::btcc::SubsessionService>>,
 }
 
 impl GuidedWorkAdapter {
@@ -44,7 +45,45 @@ impl GuidedWorkAdapter {
             response_language,
             original_request,
             capability_recovery: None,
+            children: None,
         })
+    }
+
+    /// The subsessions this turn's waits are checked against.
+    pub(crate) fn with_children(
+        mut self,
+        children: Arc<butler_turn::btcc::SubsessionService>,
+    ) -> Self {
+        self.children = Some(children);
+        self
+    }
+
+    /// A batch that ends in a wait pauses the turn only while a child is
+    /// still outstanding. Children answer with a new turn of this session,
+    /// so a pause with none outstanding would never end.
+    async fn waits_for_child(
+        &self,
+        calls: &[ModelRoundToolCall],
+        results: &[ToolResult],
+    ) -> Result<bool, BtccError> {
+        let (Some(call), Some(result)) = (calls.last(), results.last()) else {
+            return Ok(false);
+        };
+        let field = |name: &str| {
+            result
+                .output
+                .as_ref()
+                .and_then(|output| output.field(name).ok().flatten())
+        };
+        let requested = match ToolName::parse(call.name.as_str()) {
+            Some(ToolName::WaitForWorker) => result.ok && field("status") == Some("\"waiting\""),
+            Some(ToolName::DelegateToSteward) => result.ok || field("wait_for_child") == Some("true"),
+            _ => false,
+        };
+        let Some(children) = self.children.as_ref().filter(|_| requested) else {
+            return Ok(false);
+        };
+        children.should_wait_for_child(&self.scope.session_id).await
     }
 
     pub(crate) fn with_capability_recovery(
@@ -173,18 +212,7 @@ impl WorkPort for GuidedWorkAdapter {
                 && results.last().is_some_and(|result| {
                     result.ok && result.name == ToolName::RecordWorkDisposition
                 });
-            let waiting = calls.last().is_some_and(|call| {
-                matches!(
-                    ToolName::parse(call.name.as_str()),
-                    Some(ToolName::DelegateToSteward | ToolName::WaitForWorker)
-                )
-            }) && results.last().is_some_and(|result| {
-                result.ok
-                    || result.output.as_ref().is_some_and(|output| {
-                        output.field("wait_for_child").ok().flatten() == Some("true")
-                    })
-            });
-            if waiting {
+            if self.waits_for_child(calls, results).await? {
                 return Ok(BatchDisposition::Wait);
             }
             if !final_disposition {

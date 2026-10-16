@@ -212,7 +212,8 @@ impl SubsessionService {
         }
         self.deliver_worker_results().await
     }
-    /// Re-dispatches pending children, directions and worker results after a restart.
+    /// Re-dispatches pending children, directions and worker results after a
+    /// restart, then wakes Stewards whose wait no result will end.
     pub async fn recover_dispatches(&self) -> Result<(), BtccError> {
         for stored in self
             .repository
@@ -224,7 +225,8 @@ impl SubsessionService {
             self.replay(&stored).await?;
         }
         self.recover_directions().await?;
-        self.deliver_worker_results().await
+        self.deliver_worker_results().await?;
+        self.wake_unwoken_waits().await
     }
     /// Whether the parent session has an active child to wait for.
     pub async fn should_wait_for_child(&self, parent: &str) -> Result<bool, BtccError> {
