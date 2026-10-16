@@ -41,6 +41,38 @@ def local_imports(source):
         yield resolved
 
 
+def independent_includes(source):
+    text = source.read_text()
+    string = r'"(?:\\.|[^"\\])*"|r(?P<marks>\#*)".*?"(?P=marks)'
+    for match in re.finditer(r'\binclude(?:_str|_bytes)?!\s*\(', text):
+        level = 1
+        end = match.end()
+        while level and end < len(text):
+            quoted = re.match(string, text[end:], re.DOTALL)
+            if quoted:
+                end += quoted.end()
+                continue
+            level += (text[end] == '(') - (text[end] == ')')
+            end += 1
+        if level:
+            raise AssertionError(f'Unbalanced include in {source}')
+        argument = text[match.end():end - 1].strip().removesuffix(',').strip()
+        if re.search(r'env!\s*\(\s*"OUT_DIR"\s*\)', argument):
+            continue
+        literals = list(re.finditer(string, argument, re.DOTALL))
+        remainder = re.sub(string, 'STRING', argument, flags=re.DOTALL)
+        values = [m.group()[m.group().index('"') + 1:m.group().rindex('"')]
+                  for m in literals]
+        if remainder == 'STRING':
+            yield source.parent / values[0]
+        elif re.fullmatch(r'concat!\s*\(\s*env!\s*\(\s*STRING\s*\)'
+                          r'\s*(?:,\s*STRING\s*)+,?\s*\)', remainder) and values[0] == 'CARGO_MANIFEST_DIR':
+            crate = next(p for p in source.parents if (p / 'Cargo.toml').is_file())
+            yield Path(str(crate) + ''.join(values[1:]))
+        else:
+            raise AssertionError(f'Unsupported include argument in {source}: {argument}')
+
+
 class DerivedInputs(unittest.TestCase):
     # test-category: pure-logic
     def test_ds_entrypoint_import_closure_selects_ds(self):
@@ -72,19 +104,16 @@ class DerivedInputs(unittest.TestCase):
         external = set()
         for source in rust.rglob('*.rs'):
             text = source.read_text()
-            # Resolve literals independently of the selector's include matcher.
-            consumed = text if source.name == 'build.rs' else '\n'.join(
-                re.findall(r'\binclude(?:_str|_bytes)?!\s*\(([^)]*)', text))
-            values = re.findall(r'"([^"\n]+)"', consumed)
-            for value in values:
-                value = value.removeprefix('cargo:rerun-if-changed=')
-                if not value.startswith(('../', 'packages/')):
-                    continue
-                base = ROOT if value.startswith('packages/') else source.parent
-                path = (base / value).resolve()
+            paths = list(independent_includes(source))
+            if source.name == 'build.rs':
+                for value in re.findall(r'"([^"\n]+)"', text):
+                    value = value.removeprefix('cargo:rerun-if-changed=')
+                    if value.startswith(('../', 'packages/')):
+                        base = ROOT if value.startswith('packages/') else source.parent
+                        paths.append(base / value)
+            for path in paths:
+                path = path.resolve()
                 if not path.is_relative_to(ROOT) or path.is_relative_to(rust):
-                    continue
-                if source.name != 'build.rs' and not value.startswith('../'):
                     continue
                 if path.is_file():
                     external.add(path)
@@ -114,3 +143,33 @@ class DerivedInputs(unittest.TestCase):
             for path in ('assets/data.bin', 'generated/catalog/new.json'):
                 self.assertTrue(ci_rust_inputs.consumes(path, root), path)
             self.assertFalse(ci_rust_inputs.consumes('assets/unrelated.bin', root))
+
+
+    # test-category: pure-logic
+    def test_nested_include_arguments_resolve_or_fail(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            crate = root / ci_rust_inputs.RUST / 'crates/example'
+            (crate / 'src/nested').mkdir(parents=True)
+            (root / ci_rust_inputs.RUST / 'Cargo.toml').touch()
+            (crate / 'Cargo.toml').touch()
+            source = crate / 'src/nested/lib.rs'
+            for macro in ('include', 'include_str', 'include_bytes'):
+                with self.subTest(macro=macro):
+                    source.write_text(f'{macro}!(concat!(env!("CARGO_MANIFEST_DIR"), '
+                                      '"/../../../../../assets/", "outside(1).mjs",));\n'
+                                      'include!(concat!(env!("OUT_DIR"), "/generated.rs"));')
+                    ci_rust_inputs.external_inputs.cache_clear()
+                    self.assertEqual(ci_rust_inputs.external_inputs(str(root)),
+                                     frozenset({'assets/outside(1).mjs'}))
+                    self.assertEqual([p.resolve() for p in independent_includes(source)],
+                                     [root / 'assets/outside(1).mjs'])
+            for argument in ('PATH', 'concat!(env!("CARGO_MANIFEST_DIR"), unknown!())',
+                             'concat!(env!("OTHER_DIR"), "/x.mjs")'):
+                with self.subTest(argument=argument):
+                    source.write_text(f'include_str!({argument});')
+                    ci_rust_inputs.external_inputs.cache_clear()
+                    with self.assertRaisesRegex(ValueError, 'Unsupported include argument.*lib.rs'):
+                        ci_rust_inputs.external_inputs(str(root))
+                    with self.assertRaisesRegex(AssertionError, 'Unsupported include argument'):
+                        list(independent_includes(source))
