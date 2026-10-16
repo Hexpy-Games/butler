@@ -45,9 +45,10 @@ class PrepushChecks(unittest.TestCase):
             commands = ci_commands(source)
             self.assertTrue(commands, source)
             for command in commands:
-                if '--target' not in command:
+                if target != host and '--target' not in command:
                     command[2:2] = ['--target', target]
-                self.assertEqual(command[command.index('--target') + 1], target)
+                if target != host:
+                    self.assertEqual(command[command.index('--target') + 1], target)
                 expected.append((target, command))
         self.assertEqual(prepush.clippy_commands(host), expected)
         entry = (ROOT / 'scripts/prepush').read_text()
@@ -194,16 +195,16 @@ class PrepushChecks(unittest.TestCase):
                 self.assertIn(f'exit {code}; diagnostics above', errors.getvalue())
 
     # test-category: pure-logic
-    def test_required_tool_failure_propagates_and_powershell_warns(self):
+    def test_missing_tools_skip_but_real_check_failure_propagates(self):
         with patch.object(prepush, 'changed_paths', return_value=('HEAD', ['.github/workflows/rust-clippy.yml'])), \
                 patch.object(prepush, 'output', return_value='ci/checks'), \
                 patch.object(prepush, 'run', return_value=True), \
                 patch.object(prepush.shutil, 'which', return_value=None), \
                 contextlib.redirect_stderr(io.StringIO()) as errors:
-            self.assertEqual(prepush.main([]), 1)
-            self.assertIn('go install github.com/rhysd/actionlint', errors.getvalue())
+            self.assertEqual(prepush.main([]), 0)
+            self.assertIn('tool missing: actionlint', errors.getvalue())
             self.assertTrue(prepush.powershell_check(['deploy/test.ps1']))
-            self.assertIn('WARNING: pwsh', errors.getvalue())
+            self.assertIn('tool missing: pwsh', errors.getvalue())
         with patch.object(prepush, 'changed_paths', return_value=('HEAD', [])), \
                 patch.object(prepush, 'output', return_value='ci/checks'), \
                 patch.object(prepush, 'run', return_value=False):
@@ -213,7 +214,25 @@ class PrepushChecks(unittest.TestCase):
     def test_hook_is_executable_and_cannot_silently_skip_checks(self):
         hook = ROOT / '.githooks/pre-push'
         self.assertTrue(os.access(hook, os.X_OK))
-        self.assertEqual(hook.read_text().splitlines()[-1], 'exec "$root/scripts/prepush" --hook')
+        self.assertEqual(hook.read_text().splitlines()[-1], 'exec "$root/scripts/prepush" --hook "$@"')
         self.assertNotRegex(hook.read_text(), r'\|\| true|SKIP|NO_VERIFY')
         tests = prepush.python_tests(['scripts/prepush', '.github/scripts/prepush.py'])
         self.assertIn('.github/scripts/test-integration-proof.py', tests)
+
+    # test-category: pure-logic
+    def test_missing_rust_and_node_tools_warn_once_without_running(self):
+        for tool in ('cargo', 'rustc', 'node'):
+            with self.subTest(tool=tool), \
+                    patch.object(prepush, 'MISSING_TOOLS', set()), \
+                    patch.object(prepush.shutil, 'which', side_effect=lambda name:
+                                 None if name == tool else '/tools/' + name), \
+                    patch.object(prepush.subprocess, 'call') as call, \
+                    contextlib.redirect_stderr(io.StringIO()) as errors:
+                for _ in range(2):
+                    if tool == 'node':
+                        self.assertTrue(prepush.run('notices', ['node', 'generate.mjs']))
+                    else:
+                        self.assertTrue(prepush.rust_checks())
+                call.assert_not_called()
+                self.assertEqual(errors.getvalue().splitlines(),
+                                 [f'prepush: WARNING: tool missing: {tool} — skipped, CI checks it'])

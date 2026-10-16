@@ -75,6 +75,7 @@ class PrepushGitChecks(unittest.TestCase):
         self.commit(self.root, 'later')
         result = self.push(self.root, tip + ':refs/heads/ci/new-tip')
         self.assertIn('prepush: 1 changed paths', result)
+        self.assertIn('pushed tip != HEAD', result)
         result = self.push(self.root, 'HEAD:refs/heads/ci/existing')
         self.assertIn('prepush: 2 changed paths vs ' + tip, result)
 
@@ -99,12 +100,12 @@ class PrepushGitChecks(unittest.TestCase):
     def test_inherited_git_state_is_removed_before_nested_repo_and_cargo(self):
         gitdir = self.git(self.linked, 'rev-parse', '--absolute-git-dir').strip()
         command = ['python3', str(ROOT / '.github/scripts/isolated.py'), 'python3', '-c',
-                   'import os, subprocess, tempfile; '
+                   'import os, shutil, subprocess, tempfile; '
                    'assert not any(k.startswith("GIT_") for k in os.environ); '
                    'd=tempfile.mkdtemp(); subprocess.run(["git", "init", "-q", d], check=True); '
                    'assert subprocess.check_output(["git", "-C", d, "rev-parse", '
                    '"--show-toplevel"], text=True).strip() == d; '
-                   'assert os.environ["HOME"] != os.environ["BUTLER_DATA"]']
+                   'shutil.rmtree(d); assert os.environ["HOME"] != os.environ["BUTLER_DATA"]']
         env = dict(os.environ, GIT_DIR=gitdir, GIT_WORK_TREE=str(self.linked),
                    GIT_INDEX_FILE=gitdir + '/index', GIT_COMMON_DIR=str(self.root / '.git'),
                    GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='user.name', GIT_CONFIG_VALUE_0='Test')
@@ -133,3 +134,44 @@ class PrepushGitChecks(unittest.TestCase):
             self.assertEqual(prepush.main(['--hook']), 1)
         self.assertEqual(check.call_args_list[0].args, (self.base, tip, 'ci/one'))
         self.assertEqual(check.call_args_list[1].args, (self.base, tip, 'ci/two'))
+
+    # test-category: pure-logic
+    def test_no_origin_main_uses_upstream_then_remote_head_then_tip(self):
+        self.git(self.root, 'remote', 'rename', 'origin', 'alternate')
+        self.git(self.root, 'update-ref', 'refs/remotes/alternate/trunk', self.base)
+        self.git(self.root, 'update-ref', '-d', 'refs/remotes/alternate/main')
+        self.git(self.root, 'config', 'branch.ci/main-check.remote', 'alternate')
+        self.git(self.root, 'config', 'branch.ci/main-check.merge', 'refs/heads/trunk')
+        ref = 'HEAD:refs/heads/ci/fallback'
+        result = self.git(self.root, 'push', '--dry-run', 'alternate', ref)
+        self.assertIn('changed paths vs ' + self.base, result)
+        self.git(self.root, 'config', '--unset', 'branch.ci/main-check.merge')
+        self.git(self.root, 'symbolic-ref', 'refs/remotes/alternate/HEAD',
+                 'refs/remotes/alternate/trunk')
+        result = self.git(self.root, 'push', '--dry-run', 'alternate', ref)
+        self.assertIn('changed paths vs ' + self.base, result)
+        self.git(self.root, 'symbolic-ref', '--delete', 'refs/remotes/alternate/HEAD')
+        result = self.git(self.root, 'push', '--dry-run', 'alternate', ref)
+        self.assertEqual(result.count('WARNING: no base; CI checks'), 1)
+        self.assertIn('prepush: 1 changed paths', result)
+        self.assertIn('prepush: PASS', result)
+        self.assertNotIn('Traceback', result)
+
+    # test-category: pure-logic
+    def test_unrelated_base_is_skipped_and_dirty_tree_warns(self):
+        self.git(self.root, 'checkout', '-q', '--orphan', 'ci/unrelated')
+        self.git(self.root, 'rm', '-rf', '.')
+        (self.root / 'not-pushed.rs').unlink()
+        (self.root / 'unrelated').write_text('root commit\n')
+        self.commit(self.root, 'unrelated')
+        unrelated = self.git(self.root, 'rev-parse', 'HEAD').strip()
+        with patch.object(prepush, 'ROOT', self.root), \
+                contextlib.redirect_stderr(io.StringIO()) as errors:
+            base, paths = prepush.changed_paths(tip=unrelated)
+        self.assertIsNone(base)
+        self.assertEqual(paths, ['unrelated'])
+        self.assertIn('no base; CI checks', errors.getvalue())
+        (self.linked / 'payload').write_text('dirty\n')
+        result = self.push(self.linked, 'HEAD:refs/heads/ci/dirty')
+        self.assertIn('uncommitted changes may touch checked paths', result)
+        self.assertIn('prepush: PASS', result)

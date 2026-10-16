@@ -17,40 +17,60 @@ RUST = ROOT / 'packages/butler-agent/rust'
 ISOLATE = ROOT / '.github/scripts/isolated.py'
 ARM = 'aarch64-unknown-linux-gnu'
 WINDOWS = 'x86_64-pc-windows-msvc'
+MISSING_TOOLS = set()
 
 
 def output(*args):
     if args[0] == 'git':
         args = ('git', '--work-tree=' + str(ROOT), *args[1:])
     cwd = RUST if args[0] in ('rustc', 'rustup') else ROOT
-    return subprocess.check_output(args, cwd=cwd, text=True).rstrip('\n')
+    return subprocess.check_output(args, cwd=cwd, text=True, stderr=subprocess.PIPE).rstrip('\n')
+
+
+def git_optional(*args):
+    try:
+        return output('git', *args)
+    except subprocess.CalledProcessError:
+        return None
+
+
+def comparison_base(tip='HEAD', local_ref='HEAD', remote='origin'):
+    upstream = git_optional('rev-parse', '--symbolic-full-name', local_ref + '@{upstream}')
+    default = git_optional('symbolic-ref', 'refs/remotes/' + remote + '/HEAD')
+    for ref in ('origin/main', upstream, default):
+        if ref:
+            base = git_optional('merge-base', ref, tip)
+            if base:
+                return base
+    print('prepush: WARNING: no base; CI checks', file=sys.stderr)
+    return None
 
 
 def changed_paths(base=None, tip=None):
-    base = base or output('git', 'merge-base', 'origin/main', tip or 'HEAD')
+    if base is None:
+        base = comparison_base(tip or 'HEAD')
     # --no-renames retains both sides of moves across check boundaries.
-    paths = output('git', 'diff', '--name-only', '--no-renames', '-z', base, *([tip] if tip else [])).split('\0')
+    if base:
+        paths = output('git', 'diff', '--name-only', '--no-renames', '-z',
+                       base, *([tip] if tip else [])).split('\0')
+    else:
+        paths = (git_optional('diff-tree', '--root', '--no-commit-id', '--name-only',
+                              '--no-renames', '-r', '-z', tip or 'HEAD') or '').split('\0')
     if tip is None:
         paths += output('git', 'ls-files', '--others', '--exclude-standard', '-z').split('\0')
     return base, sorted(set(paths) - {''})
 
 
-def push_ranges(lines):
+def push_ranges(lines, remote='origin'):
     ranges = []
     for line in lines:
         local_ref, local_sha, remote_ref, remote_sha = line.split()
         if set(local_sha) == {'0'} or not remote_ref.startswith('refs/heads/'):
             continue
         base = remote_sha
-        if set(base) == {'0'}:
-            base = output('git', 'merge-base', 'origin/main', local_sha)
-        else:
-            # A remote's old tip need not be in the local object database.
-            try:
-                output('git', 'cat-file', '-e', base + '^{commit}')
-            except subprocess.CalledProcessError:
-                base = output('git', 'merge-base', 'origin/main', local_sha)
-        ranges.append((base, local_sha, remote_ref.removeprefix('refs/heads/')))
+        if set(base) == {'0'} or not git_optional('rev-parse', '--verify', base + '^{commit}'):
+            base = comparison_base(local_sha, local_ref, remote)
+        ranges.append((base or '', local_sha, remote_ref.removeprefix('refs/heads/')))
     return ranges
 
 
@@ -79,7 +99,7 @@ def clippy_commands(host):
     host_commands = clippy_lines('.github/workflows/rust-clippy.yml')
     arm_commands = clippy_lines('.github/workflows/rust-archive.yml')
     windows_commands = clippy_lines('deploy/windows-preview-quality.ps1')
-    return [(host, for_target(cmd, host)) for cmd in host_commands] + [
+    return [(host, cmd) for cmd in host_commands] + [
         (ARM, for_target(cmd, ARM)) for cmd in arm_commands] + [
         (WINDOWS, for_target(cmd, WINDOWS)) for cmd in windows_commands]
 
@@ -123,7 +143,18 @@ def python_tests(paths):
     return sorted(tests)
 
 
+def tool_available(tool):
+    if shutil.which(tool):
+        return True
+    if tool not in MISSING_TOOLS:
+        print(f'prepush: WARNING: tool missing: {tool} — skipped, CI checks it', file=sys.stderr)
+        MISSING_TOOLS.add(tool)
+    return False
+
+
 def run(label, command, cwd=ROOT):
+    if not tool_available(str(command[0])):
+        return True
     print(f'prepush: {label}: {shlex.join(map(str, command))}', flush=True)
     # Each check gets its own HOME/BUTLER_DATA, preserving the caller's caches.
     started = time.monotonic()
@@ -137,16 +168,23 @@ def run(label, command, cwd=ROOT):
 
 
 def rust_checks():
+    available = [tool_available(tool) for tool in ('cargo', 'rustc')]
+    if not all(available):
+        return True
     success = run('fmt', ['cargo', 'fmt', '--all', '--', '--check'], RUST)
     success = run('source-check', ['cargo', 'run', '--locked', '-p',
                                  'butler-source-check', '--', '.'], RUST) and success
     host = output('rustc', '-vV').split('host: ', 1)[1].splitlines()[0]
-    installed = set(output('rustup', 'target', 'list', '--installed').splitlines())
+    has_rustup = tool_available('rustup')
+    installed = set(output('rustup', 'target', 'list', '--installed').splitlines()) if has_rustup else set()
     ran, skipped = set(), set()
     availability = {}
     for target, command in clippy_commands(host):
         if target == host:
             success = run('clippy ' + target, command, RUST) and success
+            continue
+        if not has_rustup:
+            skipped.add(target)
             continue
         if target not in availability:
             missing = prerequisites(target, installed, RUST)
@@ -166,9 +204,7 @@ def rust_checks():
 def powershell_check(paths):
     if not paths:
         return True
-    if not shutil.which('pwsh'):
-        print('prepush: WARNING: pwsh unavailable; changed .ps1 files were not parsed',
-              file=sys.stderr)
+    if not tool_available('pwsh'):
         return True
     # Parse only; never execute the changed script. Environment avoids PS quoting.
     expression = ('$t=$null; $e=$null; '
@@ -184,32 +220,39 @@ def powershell_check(paths):
     return success
 
 
+def warn_working_tree(tip):
+    if tip and tip != output('git', 'rev-parse', 'HEAD'):
+        print('prepush: WARNING: pushed tip != HEAD; checks run on the working tree', file=sys.stderr)
+    dirty = output('git', 'status', '--porcelain', '--untracked-files=normal')
+    if dirty:
+        print('prepush: WARNING: uncommitted changes may touch checked paths; '
+              'checks run on the working tree', file=sys.stderr)
+
+
 def check_range(base=None, tip=None, branch=None):
     started = time.monotonic()
     base, paths = changed_paths(base, tip)
     selected = selection(paths)
+    warn_working_tree(tip)
     print(f'prepush: {len(paths)} changed paths vs {base}', flush=True)
     if branch is None:
         branch = output('git', 'symbolic-ref', '--quiet', '--short', 'HEAD')
     success = run('branch-name', ['python3', '.github/scripts/branch-name.py', branch])
-    success = run('whitespace', ['git', '--work-tree=' + str(ROOT), 'diff', '--check',
+    if base:
+        success = run('whitespace', ['git', '--work-tree=' + str(ROOT), 'diff', '--check',
                                  base, *([tip] if tip else [])]) and success
     if selected['docs']:
         success = run('work-docs', ['python3', '.github/scripts/work-docs-lint.py']) and success
     if selected['workflows']:
-        if not shutil.which('actionlint'):
-            print('prepush: actionlint missing; install: go install '
-                  'github.com/rhysd/actionlint/cmd/actionlint@latest', file=sys.stderr)
-            success = False
-        else:
+        if tool_available('actionlint'):
             success = run('actionlint', ['actionlint', *selected['workflows']]) and success
     success = powershell_check(selected['powershell']) and success
     for test in python_tests(paths):
         success = run('CI-script tests', ['python3', test]) and success
-    if selected['licenses']:
+    if base and selected['licenses']:
         success = run('notices', ['node', 'deploy/licenses/generate.mjs', '--check']) and success
         success = run('licenses', ['node', 'deploy/licenses/check.mjs']) and success
-    if selected['rust']:
+    if base and selected['rust']:
         success = rust_checks() and success
     print(f'prepush: {"PASS" if success else "FAIL"} in {time.monotonic() - started:.2f}s', flush=True)
     return 0 if success else 1
@@ -220,9 +263,11 @@ def main(argv=None):
     parser.add_argument('--hook', action='store_true', help='read pre-push ref updates from stdin')
     parser.add_argument('--base', help='override the comparison base for local checks')
     parser.add_argument('--head', help='compare committed trees rather than local work')
+    parser.add_argument('remote', nargs='?', default='origin')
+    parser.add_argument('remote_url', nargs='?')
     args = parser.parse_args(argv)
     if args.hook:
-        ranges = push_ranges(sys.stdin)
+        ranges = push_ranges(sys.stdin, args.remote)
         if not ranges:
             print('prepush: no branch updates; no checks')
         results = [check_range(base, tip, branch) for base, tip, branch in ranges]
