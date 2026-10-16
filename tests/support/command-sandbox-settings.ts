@@ -35,7 +35,24 @@ export async function commandSandboxSettings(page: Page, server: NativeAppServer
   assert.equal(await toggle.isDisabled(), true);
   assert.equal(await toggle.isChecked(), false, "unavailable containment never displays as enabled");
   await toggle.hover();
-  await page.getByRole("tooltip", { name: copy.settings.descriptions.commandSandboxUnavailable, exact: true }).waitFor();
+  const tooltip = page.getByRole("tooltip", { name: copy.settings.descriptions.commandSandboxUnavailable, exact: true });
+  await tooltip.waitFor();
+  await tooltip.evaluate((node) => Promise.all(node.getAnimations().map((animation) => animation.finished)));
+  // The reason opens beside the switch: it covers neither the label nor the description and stays on screen.
+  const field = page.locator('[data-setting-id="command-sandbox"]');
+  const [tip, label, description] = await Promise.all([
+    tooltip.boundingBox(),
+    field.locator("label").first().boundingBox(),
+    field.getByText(copy.settings.descriptions.commandSandbox, { exact: true }).boundingBox(),
+  ]);
+  assert(tip && label && description, "tooltip, label and description are laid out");
+  const overlaps = (a: typeof tip, b: typeof tip) =>
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  assert(!overlaps(tip, label), `sandbox reason covers the label: ${JSON.stringify({ tip, label })}`);
+  assert(!overlaps(tip, description), `sandbox reason covers the description: ${JSON.stringify({ tip, description })}`);
+  const viewport = page.viewportSize()!;
+  assert(tip.x >= 0 && tip.y >= 0 && tip.x + tip.width <= viewport.width && tip.y + tip.height <= viewport.height,
+    `sandbox reason stays on screen: ${JSON.stringify({ tip, viewport })}`);
   await page.unroute(`${server.url}settings`);
   await page.goto(server.url, { waitUntil: "domcontentloaded" });
   await page.locator('[data-test-class~="composer-card"]').waitFor();

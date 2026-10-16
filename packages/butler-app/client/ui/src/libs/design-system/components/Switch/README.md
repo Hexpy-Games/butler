@@ -35,6 +35,19 @@ The switch looks disabled but stays focusable and hoverable
 and shows the reason in a `Tooltip` on hover and keyboard focus. It wins
 over `disabled`. Use plain `disabled` only when no reason is worth showing.
 
+The reason opens to the **right** of the switch by default
+(`disabledReasonSide="right"`, `disabledReasonAlign="center"`). A switch sits
+under its label and description in a `SettingsField`, or after them in a row,
+so its right side is the one place the tooltip covers neither. Without room
+there it flips (see Tooltip "Placement"). Pass another side only when the
+layout puts something the reader needs to the right of the switch:
+
+```tsx
+<Switch aria-label={copy.sync} disabledReason={copy.offline} disabledReasonSide="top" disabledReasonAlign="start" />
+```
+
+On touch screens a tap does not open the tooltip yet.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 

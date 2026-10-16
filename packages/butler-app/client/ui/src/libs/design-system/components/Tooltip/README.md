@@ -21,6 +21,40 @@ import { Tooltip } from "@/butler-ds";
 
 Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
 
+### Placement
+
+`side` (`top` | `right` | `bottom` | `left`, default `top`) picks the side of
+the trigger; `align` (`start` | `center` | `end`, default `center`) lines the
+tooltip up with the trigger's start edge, center or end edge along that side.
+
+```tsx
+<Tooltip label={copy.unavailable} side="right">
+  <SelectTrigger id={id} disabled>…</SelectTrigger>
+</Tooltip>
+```
+
+- When the side has no room, the tooltip flips to the opposite side, then to
+  the cross sides, and else takes the side with the most room. It then shifts
+  to stay 12px inside the viewport and below the titlebar safe area.
+- Pick the side that covers nothing the reader needs. Icon-button names stay
+  `top`. A disabled reason on a control that sits under or after its label and
+  description opens `right` (Switch `disabledReason` does this by default).
+- When the trigger scrolls out of its scroll container, the tooltip hides.
+- `open` controls visibility (documentation and the DS Viewer); product code
+  leaves it unset so hover and keyboard focus drive it.
+- Motion: it enters from the trigger's side on `--motion-enter-menu` and
+  `--motion-distance-sm`, and fades out on `--motion-exit-fast`. Reduced
+  motion zeroes the travel through the tokens.
+
+Controls that show a disabled reason pass placement through:
+`Switch`, `CheckCard`, `OptionMenuItem` and `ComposerSendButton` take
+`disabledReasonSide` and `disabledReasonAlign`.
+
+### Touch
+
+Tooltips open on hover and keyboard focus only; a tap on a phone does not
+open one yet. Never put the only copy of something people need in a tooltip.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 
@@ -36,4 +70,4 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 - Do not lock dimensions to pixel-perfect desktop-only widths. Use responsive containers, intrinsic sizing, and tokens.
 
 ## Tags
-help, hover, accessibility
+help, hover, accessibility, placement

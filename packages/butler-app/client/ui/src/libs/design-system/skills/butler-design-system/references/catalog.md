@@ -979,7 +979,7 @@ A short glass label shown after a hover delay or on keyboard focus.
 - Not for: Content people must read or act on → `Popover`
 - Not for: Inline help under a field → `FieldDescription`
 - Not for: An icon-only button → `IconButton`
-- Tokens: `--tinted-glass-bg`, `--radius-control`, `--motion-enter-menu`, `--z-tooltip`
+- Tokens: `--tinted-glass-bg`, `--radius-control`, `--motion-enter-menu`, `--motion-distance-sm`, `--motion-exit-fast`, `--z-tooltip`
 
 ## Components · Navigation
 
