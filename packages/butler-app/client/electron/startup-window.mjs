@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain } from "electron";
-import { startupTiming } from "./startup-timing.mjs";
+import { startupTiming, startupTimings } from "./startup-timing.mjs";
 export { startupTiming, startupTimings } from "./startup-timing.mjs";
 import { createLifecycleWindow, parkLifecycleWindow } from "./lifecycle-window.mjs";
 import { openLifecycleLog } from "./lifecycle-diagnostics.mjs";
@@ -100,7 +100,7 @@ export function createStartupWindow() {
         startupTiming("retry_stopped");
         app.relaunch(); startupTiming("retry_relaunch_registered");
         if (actions.exit) actions.exit(); else app.exit(0);
-      } else if (action === "log") await openLifecycleLog(state, events, actions.diagnostics?.());
+      } else if (action === "log") await openLifecycleLog(state, startupTimings(), actions.diagnostics?.());
       else if (action === "quit") app.quit();
     },
   });

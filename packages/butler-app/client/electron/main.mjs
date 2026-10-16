@@ -344,7 +344,7 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   butlerData: butlerDataRoot,
   resolveGateway: managedGatewayCommand,
   spawnProcess: (command, args, options) => spawnTracedAgent(command, args, options,
-    (phase, edge) => quitFeedback?.phase(phase, edge)),
+    (phase, edge) => quitFeedback?.phase(phase, edge), appWritableDataRoot),
   healthCheck: healthOk,
   readinessCheck: gatewayReady,
   isPortAvailable,

@@ -70,7 +70,14 @@ try {
   const report = JSON.parse(readFileSync(join(diagnostics, file), "utf8"));
   assert.equal(report.kind, "startup");
   assert.ok(report.failedStage);
-  assert.ok(Array.isArray(report.timings));
+  assert.ok(Array.isArray(report.timings) && report.timings.some((event: { stage?: string }) => event.stage === "failed"));
+  // Open log reveals the App-spawned Agent's own log, which holds the real failure.
+  assert.equal(report.agentLog, "logs/butler-agent-app.log");
+  const agentLog = await waitFor(() => {
+    try { const text = readFileSync(join(fixture.data, report.agentLog), "utf8"); return text.includes("[native-service] failed:") ? text : undefined; }
+    catch { return undefined; }
+  }, "Agent log did not record the startup failure");
+  console.log(JSON.stringify({ agentLogFailure: agentLog.split("\n").find((line) => line.includes("[native-service] failed:"))?.replace(/^\S+ /u, "") }));
   writeFileSync(config, validConfig);
   console.log(JSON.stringify({ failureSupervisor: report.supervisor }));
   console.log(JSON.stringify({ originalFacts: await nativeMainFacts(mainPort, fixture.data) }));
