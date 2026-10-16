@@ -7,6 +7,8 @@
 mod application;
 pub use application::AppAssetCommand;
 pub use application::storage::history::{AppHistoryCommand, AppHistoryQuery};
+#[cfg(feature = "test-support")]
+pub use application::storage::testing as storage_testing;
 mod file_watch;
 pub use file_watch::FileChangeWatch;
 mod auth;
