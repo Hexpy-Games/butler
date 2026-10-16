@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 
 
@@ -67,6 +68,8 @@ def issue_body(run, base, commits, merges, prs, jobs, marker):
     lines += [f'- `{sha}`' for sha in commits]
     lines += ['', 'PRs:'] + [f'- #{n}: {pr["html_url"]}' for n, pr in sorted(prs.items())]
     lines += ['', 'Failing jobs:'] + [f'- [{j["name"]}]({j["html_url"]})' for j in jobs if j['conclusion'] == 'failure']
+    if base == 'unavailable':
+        lines += ['', 'No proven green baseline is available; no revert is proposed.']
     lines += ['', 'Confirm the cause before reverting; no automatic merge.', '```sh']
     lines += [f'git revert -m 1 {sha}' for sha, _ in reversed(merges)]
     return '\n'.join(lines + ['```'])
@@ -97,20 +100,31 @@ def draft_revert(repository, run, merges, prs, marker, body):
 
 
 def report(repository, run):
-    if not trusted(run, repository) or run.get('conclusion') != 'failure':
+    if not trusted(run, repository):
         return
-    base, commits = failure_range(repository, run)
-    merges, prs = range_prs(repository, commits)
-    marker = f'<!-- main-ci-range:{run["workflow_id"]}:{base}:{run["head_sha"]} -->'
     jobs = pages(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs')
-    body = issue_body(run, base, commits, merges, prs, jobs, marker)
+    if not any(job['conclusion'] == 'failure' for job in jobs):
+        return
+    try:
+        base, commits = failure_range(repository, run)
+    except ValueError:
+        base, commits = 'unavailable', []
+    merges, prs = range_prs(repository, commits)
+    # Different workflows may share the same baseline and failing SHA. Keep
+    # one issue and one draft branch for that range, with separate evidence.
+    marker = f'<!-- main-ci-range:{base}:{run["head_sha"]} -->'
     existing = next((i for i in pages(f'repos/{repository}/issues?state=all')
                      if not i.get('pull_request') and marker in (i.get('body') or '')), None)
+    start, end = f'<!-- workflow:{run["workflow_id"]} -->', f'<!-- /workflow:{run["workflow_id"]} -->'
+    section = issue_body(run, base, commits, merges, prs, jobs, start) + '\n' + end
+    body = (existing.get('body') or marker) if existing else marker
+    pattern = re.escape(start) + '.*?' + re.escape(end)
+    body = re.sub(pattern, lambda match: section, body, flags=re.S) if start in body else body + '\n\n' + section
     if existing:
         api(f'repos/{repository}/issues/{existing["number"]}', 'PATCH', dict(body=body))
     else:
         api(f'repos/{repository}/issues', 'POST', dict(
-            title=f'Main CI failure: {run["name"]} {base[:8]}..{run["head_sha"][:8]}', body=body))
+            title=f'Main CI failure: {base[:8]}..{run["head_sha"][:8]}', body=body))
     draft_revert(repository, run, merges, prs, marker, body)
 
 

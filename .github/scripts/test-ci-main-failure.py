@@ -82,9 +82,10 @@ class Followup(unittest.TestCase):
 
     # test-category: security
     def test_issue_range_and_revert_pr_deduplicate(self):
-        marker = '<!-- main-ci-range:4:green:bad -->'
+        marker = '<!-- main-ci-range:green:bad -->'
         def pages(path):
-            return [dict(number=2, body=marker)] if '/issues?' in path else []
+            return ([dict(number=2, body=marker)] if '/issues?' in path else
+                    [dict(name='test', html_url='job-url', conclusion='failure')])
         with patch.object(failure, 'failure_range', return_value=('green', ['merge'])), \
              patch.object(failure, 'range_prs', return_value=([('merge', 7)], {7: PR})), \
              patch.object(failure, 'pages', side_effect=pages), \
@@ -101,9 +102,39 @@ class Followup(unittest.TestCase):
     def test_forks_and_non_main_events_cannot_write(self):
         for update in [dict(event='pull_request'), dict(head_branch='feature'),
                        dict(head_repository={'full_name': 'fork/repo'}), dict(conclusion='success')]:
-            with patch.object(failure, 'failure_range') as ranges:
+            with patch.object(failure, 'failure_range') as ranges, patch.object(failure, 'pages', return_value=[]):
                 failure.report(REPO, dict(RUN, **update))
                 ranges.assert_not_called()
+
+    # test-category: security
+    def test_same_range_across_workflows_updates_one_issue_preserving_evidence(self):
+        marker = '<!-- main-ci-range:green:bad -->'
+        previous = marker + '\n<!-- workflow:3 -->earlier failure<!-- /workflow:3 -->'
+        def pages(path):
+            if '/issues?' in path:
+                return [dict(number=2, body=previous)]
+            return [dict(name='test', html_url='job-url', conclusion='failure')]
+        with patch.object(failure, 'failure_range', return_value=('green', ['merge'])), \
+             patch.object(failure, 'range_prs', return_value=([('merge', 7)], {7: PR})), \
+             patch.object(failure, 'pages', side_effect=pages), \
+             patch.object(failure, 'api') as api, patch.object(failure, 'draft_revert') as revert:
+            failure.report(REPO, RUN)
+            self.assertEqual(api.call_args.args[:2], ('repos/owner/repo/issues/2', 'PATCH'))
+            self.assertIn('earlier failure', api.call_args.args[2]['body'])
+            self.assertIn('<!-- workflow:4 -->', api.call_args.args[2]['body'])
+            self.assertEqual(revert.call_args.args[4], marker)
+
+    # test-category: pure-logic
+    def test_cancelled_run_with_failed_job_and_missing_baseline_still_reports(self):
+        def pages(path):
+            return [] if '/issues?' in path else [dict(name='failed', html_url='job-url', conclusion='failure')]
+        with patch.object(failure, 'failure_range', side_effect=ValueError('No green baseline')), \
+             patch.object(failure, 'pages', side_effect=pages), patch.object(failure, 'api') as api, \
+             patch.object(failure, 'git') as git:
+            failure.report(REPO, dict(RUN, conclusion='cancelled'))
+            self.assertEqual(api.call_args.args[1], 'POST')
+            self.assertIn('No proven green baseline', api.call_args.args[2]['body'])
+            git.assert_not_called()
 
 
 if __name__ == '__main__':
