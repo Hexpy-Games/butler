@@ -118,9 +118,9 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EVENT_LABEL: main push
         run: |
-          title='Main Rust CI failure'
-          body="The $EVENT_LABEL Rust CI failed: $RUN_URL"
-          number="$(gh issue list --state open --limit 1000 --json number,title --jq '.[] | select(.title == "Main Rust CI failure") | .number' | head -1)"
+          title='Main Windows compile failure'
+          body="The $EVENT_LABEL Windows compile checks failed: $RUN_URL"
+          number="$(gh issue list --state open --limit 1000 --json number,title --jq '.[] | select(.title == "Main Windows compile failure") | .number' | head -1)"
           if [ -n "$number" ]; then
             gh issue comment "$number" --body "$body"
           else
