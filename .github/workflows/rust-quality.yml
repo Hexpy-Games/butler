@@ -78,6 +78,7 @@ jobs:
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-archive']
     uses: ./.github/workflows/rust-archive.yml
     with:
+      e2e: ${{ needs.changes.outputs.tier == 'integration' }}
       ort-mode: prebuilt-ort
 
   linux-perf-archive:
@@ -136,6 +137,7 @@ jobs:
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-arm64-archive']
     uses: ./.github/workflows/rust-archive.yml
     with:
+      e2e: ${{ needs.changes.outputs.tier == 'integration' }}
       runner: ubuntu-24.04-arm
       platform: linux-arm64
       ort-mode: prebuilt-ort
@@ -232,6 +234,7 @@ jobs:
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['macos-archive']
     uses: ./.github/workflows/rust-archive.yml
     with:
+      e2e: ${{ needs.changes.outputs.tier == 'integration' }}
       runner: macos-15
       platform: darwin-arm64
       ort-mode: prebuilt-ort

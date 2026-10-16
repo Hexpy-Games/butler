@@ -11,6 +11,9 @@ on:
       clippy:
         type: boolean
         default: false
+      e2e:
+        type: boolean
+        default: true
       ort-mode:
         type: string
         default: prebuilt-ort
@@ -86,6 +89,9 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Archive tests and record every selection
+        # Smoke workspace tests consume only tests.tar.zst. E2E selections and
+        # the fixture Agent are consumed only by integration jobs.
+        if: inputs.e2e
         env:
           ORT_MODE: ${{ inputs.ort-mode }}
           BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
@@ -124,6 +130,7 @@ jobs:
             python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --workspace --doc --locked "${args[@]}"
           fi
       - name: Record native Agent provenance
+        if: inputs.e2e
         env:
           PLATFORM: ${{ inputs.platform }}
           ORT_MODE: ${{ inputs.ort-mode }}
