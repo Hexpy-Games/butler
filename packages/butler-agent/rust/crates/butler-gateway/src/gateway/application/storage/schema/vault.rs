@@ -75,7 +75,8 @@ fn migrate(db: &Connection) -> Result<(), AppStorageError> {
     ).map_err(AppStorageError::sqlite)?;
     db.execute_batch("SAVEPOINT autofill_upgrade;")
         .map_err(AppStorageError::sqlite)?;
-    let result = (|| {
+    // Renames must not re-validate unrelated triggers and views.
+    let result = super::migration::without_schema_revalidation(db, || {
         db.execute_batch(if new {
             "INSERT INTO browser_autofill_profiles
               (id,nickname,details_json,extras_json,created_at,last_used_at)
@@ -98,7 +99,7 @@ fn migrate(db: &Connection) -> Result<(), AppStorageError> {
             UPDATE browser_vault_audit SET kind='profile' WHERE kind='traveler';
             RELEASE autofill_upgrade;",
         )
-    })();
+    });
     if result.is_err() {
         let rollback = db.execute_batch("ROLLBACK TO autofill_upgrade;");
         let release = db.execute_batch("RELEASE autofill_upgrade;");

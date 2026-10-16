@@ -10,6 +10,7 @@ mod answer_blocks;
 mod anthropic_cache;
 mod anthropic_requests;
 mod app_admission_history;
+mod app_db_schema;
 mod app_state;
 mod app_storage_scale;
 mod ask_user;
