@@ -31,36 +31,50 @@ PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/elect
 WINDOWS = ('deploy/windows*', '.github/workflows/*windows*', '.github/actions/*windows*',
            '.github/actions/rust-agent-setup/*', '.github/scripts/*windows*')
 
-# PR lint runs unconditionally; release-only behavior stays in integration.
+# Lint-only inputs have no product consumer. Matching consumer rules below also
+# apply: integration reuse hashes must observe release-only workflow changes.
 CI_LINT_ONLY = (
     '.github/workflows/release*.yml', '.github/workflows/npm-publish.yml',
     '.github/workflows/post-release-verify.yml', '.github/workflows/macos-release-recovery.yml',
-    '.github/workflows/e2e.yml', '.github/workflows/windows-installer.yml',
-    '.github/workflows/branch-name.yml', '.github/workflows/ds-approval.yml',
-    '.github/workflows/post-merge-ci.yml', '.github/workflows/ci-store-maintenance.yml',
+    '.github/workflows/e2e.yml', '.github/workflows/branch-name.yml',
+    '.github/workflows/ds-approval.yml', '.github/workflows/ci-store-maintenance.yml',
     '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py',
     '.github/scripts/publish-release-checksums.py', '.github/scripts/test-*.py',
-    '.github/scripts/ci-changes.py', '.github/scripts/ci_policy.py', '.github/scripts/ci_parts.py',
-    '.github/scripts/check-gate.py', '.github/scripts/ci-check-selected.py',
-    '.github/scripts/cargo-target-release.py', '.github/scripts/cargo-artifact-cache.py',
-    '.github/scripts/runner_cache.py', '.github/scripts/ds-approval.py',
-    '.github/scripts/agent-provenance.py',
+    '.github/scripts/ci-changes.py', '.github/scripts/ci_parts.py',
+    '.github/scripts/ci_consumer_test_support.py',
+    '.github/scripts/ci-check-selected.py', '.github/scripts/ds-approval.py',
 )
-# Shared producers/setup retain every consuming group, including packaging.
+# Integration packaging keys include Rust/UI and transitive producer inputs.
+NATIVE_CI = ('rust', 'ui', 'package', 'install', 'linux-package')
 CI_CONSUMERS = (
-    (('rust',), ('.github/workflows/rust-*.yml', '.github/actions/e2e-stub/*')),
-    (('rust', 'package', 'install', 'linux-package'), (
-        '.github/workflows/native-agent.yml', '.github/actions/rust-agent-setup/*',
-        '.github/actions/publish-cargo-target/*')),
-    (('package', 'install', 'linux-package'), (
-        '.github/workflows/macos-*.yml', '.github/actions/build-agent-archive/*')),
-    (('linux-package',), ('.github/workflows/linux-packages.yml',)),
-    (('install',), ('.github/workflows/install-smoke.yml', '.github/workflows/merge-agent-manifests.yml')),
+    (('rust',), ('.github/workflows/rust-*.yml',)),
+    (NATIVE_CI, (
+        '.github/workflows/rust-archive.yml', '.github/workflows/rust-tests.yml',
+        '.github/actions/e2e-stub/*', '.github/workflows/native-agent.yml',
+        '.github/actions/publish-cargo-target/*', '.github/workflows/install-smoke.yml',
+        '.github/workflows/merge-agent-manifests.yml',
+        '.github/scripts/test-ci-invariants.py', '.github/scripts/test-native-archive-safety.py',
+        '.github/scripts/test-windows-ci-safety.py')),
+    (NATIVE_CI + ('workflows',), (
+        '.github/scripts/agent-provenance.py', '.github/scripts/cargo-artifact-cache.py',
+        '.github/scripts/cargo-target-release.py', '.github/scripts/runner_cache.py',
+        '.github/scripts/check-gate.py', '.github/scripts/ci_policy.py',
+        '.github/actions/rust-agent-setup/*', '.github/actions/build-agent-archive/*',
+        '.github/workflows/linux-packages.yml', '.github/workflows/macos-app-package.yml',
+        '.github/scripts/*windows*safety.py', '.github/scripts/prepare-windows-zstd.py')),
+    (NATIVE_CI, ('.github/workflows/macos-*.yml',)),
+    (('rust',), ('.github/workflows/post-merge-ci.yml',)),
     (('ui',), ('.github/workflows/bun-*.yml',)),
-    (('ui', 'site', 'ds', 'package', 'install', 'linux-package'), ('.github/actions/bun-setup/*',)),
-    (('site', 'ds'), ('.github/workflows/*site*.yml',)),
-    (('package',), ('.github/workflows/*windows*.yml', '.github/actions/*windows*',
-                    '.github/scripts/*windows*')),
+    (NATIVE_CI + ('site', 'ds', 'workflows'), ('.github/actions/bun-setup/*',)),
+    (('site', 'ds', 'workflows'), ('.github/workflows/*site*.yml',)),
+    (('rust', 'ui', 'package'), ('.github/workflows/*windows*.yml',
+                               '.github/actions/*windows*', '.github/scripts/*windows*')),
+    (('workflows',), ('.github/actions/build-windows-agent/*',
+                      '.github/actions/package-windows-app/*',
+                      '.github/actions/windows-owner-*/*',
+                      '.github/actions/windows-preview-gate/*',
+                      '.github/workflows/windows-powershell-diagnostics.yml',
+                      '.github/workflows/windows-released-smoke.yml')),
     (('licenses',), ('.github/workflows/licenses.yml',)),
 )
 
@@ -77,13 +91,13 @@ def matches(path, patterns):
 def github_categories(path):
     if path.endswith('.md') or path.startswith('.github/releases/'):
         return set()
-    if matches(path, CI_LINT_ONLY):
-        return {'workflows'}
     # This orchestrator owns all groups, unlike the reusable rust-* jobs.
     if path == '.github/workflows/rust-quality.yml':
         return set(GROUPS)
     groups = {group for consumers, patterns in CI_CONSUMERS
               if matches(path, patterns) for group in consumers}
+    if matches(path, CI_LINT_ONLY):
+        groups.add('workflows')
     return groups or set(GROUPS)  # Unknown CI inputs fail closed.
 
 
