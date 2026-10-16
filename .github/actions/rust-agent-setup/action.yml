@@ -138,12 +138,18 @@ runs:
           echo "ORT_SKIP_DOWNLOAD=1"
         } >> "$GITHUB_ENV"
 
+    # taiki-e/install-action does not support mold. Upstream provides x64/arm64 prebuilts.
+    - name: Install pinned mold on Linux
+      if: runner.os == 'Linux'
+      uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
+      with:
+        mold-version: '2.30.0'
+        make-default: false
+
     - name: Use mold on Linux
       if: runner.os == 'Linux'
       shell: bash
       run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y mold
         echo 'RUSTFLAGS=-C link-arg=-fuse-ld=mold' >> "$GITHUB_ENV"
 
     - name: Configure Windows snapshot compiler flags

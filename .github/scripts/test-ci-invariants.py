@@ -131,7 +131,7 @@ class ArtifactTrust(unittest.TestCase):
     def test_exact_identity_and_digest_required(self):
         expected = dict(schema=1, sha='a' * 40, platform='linux-x64', version='0.1.0-preview.99',
                         native_mode='static-ort', profile='release', toolchain='1.99.0',
-                        debug_assertions='true', overflow_checks='true', rustflags='mold',
+                        debug_assertions='true', overflow_checks='true', rustflags='-C link-arg=-fuse-ld=mold',
                         lto='', codegen_units='')
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
