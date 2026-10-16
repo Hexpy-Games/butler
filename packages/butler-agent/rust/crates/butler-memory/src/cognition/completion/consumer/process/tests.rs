@@ -287,5 +287,20 @@ async fn malformed_queue_head_keeps_its_error_after_canonical_catchup() {
     assert_eq!(cursor, "outcome");
 }
 
+/// Builds the generation's canonical inventory mirror, so the fixture holds
+/// no change-driven work.
+fn settle_inventory(
+    graph: &mut crate::cognition::graph::GraphRepository,
+    generation: &crate::cognition::MemoryGenerationHandle,
+    input: &Input,
+) {
+    if let Ok(reader) = butler_turn::conversation::ConversationSourceReader::open(
+        &super::canonical_path(generation, &input.data_root),
+    ) {
+        while crate::cognition::sources::inventory_sync_step(graph, &reader).unwrap() {}
+        reader.close().unwrap();
+    }
+}
+
 mod cold;
 mod vector;

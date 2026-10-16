@@ -20,6 +20,18 @@ fn capped(limit: Option<usize>) -> usize {
     limit.unwrap_or(100).clamp(1, 500)
 }
 
+/// The latest outcome of each turn: no other outcome of the turn has a
+/// higher generation, or the same generation and a later row.
+const LATEST_OUTCOME: &str = "SELECT rowid,id,session_id,turn_id,generation,request_message_id,
+      public_assistant_message_id,evidence_refs_json,unresolved_obligations_json,continuation_json
+    FROM conversation_turn_outcomes
+    WHERE NOT EXISTS (
+      SELECT 1 FROM conversation_turn_outcomes newer
+      WHERE newer.turn_id=conversation_turn_outcomes.turn_id
+        AND (newer.generation>conversation_turn_outcomes.generation OR
+          (newer.generation=conversation_turn_outcomes.generation AND newer.rowid>conversation_turn_outcomes.rowid))
+    )";
+
 pub(super) fn outcomes(
     db: &Connection,
     after_id: Option<&str>,
@@ -37,36 +49,48 @@ pub(super) fn outcomes(
             .unwrap_or(0),
         None => 0,
     };
-    let mut statement=db.prepare(
-        "SELECT rowid,id,session_id,turn_id,generation,request_message_id,public_assistant_message_id,
-           evidence_refs_json,unresolved_obligations_json,continuation_json
-         FROM conversation_turn_outcomes
-         WHERE rowid>?1 AND NOT EXISTS (
-           SELECT 1 FROM conversation_turn_outcomes newer
-           WHERE newer.turn_id=conversation_turn_outcomes.turn_id
-             AND (newer.generation>conversation_turn_outcomes.generation OR
-               (newer.generation=conversation_turn_outcomes.generation AND newer.rowid>conversation_turn_outcomes.rowid))
-         ) ORDER BY rowid ASC LIMIT ?2"
-    ).map_err(ConversationError::sqlite)?;
+    latest_outcomes(
+        db,
+        &format!("{LATEST_OUTCOME} AND rowid>?1 ORDER BY rowid ASC LIMIT ?2"),
+        params![after_row, i64::try_from(capped(limit)).unwrap_or(i64::MAX)],
+    )
+}
+
+/// The latest outcome of one turn, as [`outcomes`] pages it.
+pub(super) fn turn_outcome(
+    db: &Connection,
+    turn_id: &str,
+) -> ConversationResult<Option<RecallOutcomeRow>> {
+    Ok(latest_outcomes(
+        db,
+        &format!("{LATEST_OUTCOME} AND turn_id=?1 ORDER BY rowid ASC"),
+        params![turn_id],
+    )?
+    .pop())
+}
+
+fn latest_outcomes(
+    db: &Connection,
+    sql: &str,
+    params: impl rusqlite::Params,
+) -> ConversationResult<Vec<RecallOutcomeRow>> {
+    let mut statement = db.prepare(sql).map_err(ConversationError::sqlite)?;
     let rows = statement
-        .query_map(
-            params![after_row, i64::try_from(capped(limit)).unwrap_or(i64::MAX)],
-            |row| {
-                Ok((
-                    RecallOutcomeRow {
-                        id: row.get(1)?,
-                        session_id: row.get(2)?,
-                        turn_id: row.get(3)?,
-                        generation: row.get(4)?,
-                        request_message_id: row.get(5)?,
-                        public_assistant_message_id: row.get(6)?,
-                    },
-                    row.get::<_, String>(7)?,
-                    row.get::<_, String>(8)?,
-                    row.get::<_, Option<String>>(9)?,
-                ))
-            },
-        )
+        .query_map(params, |row| {
+            Ok((
+                RecallOutcomeRow {
+                    id: row.get(1)?,
+                    session_id: row.get(2)?,
+                    turn_id: row.get(3)?,
+                    generation: row.get(4)?,
+                    request_message_id: row.get(5)?,
+                    public_assistant_message_id: row.get(6)?,
+                },
+                row.get::<_, String>(7)?,
+                row.get::<_, String>(8)?,
+                row.get::<_, Option<String>>(9)?,
+            ))
+        })
         .map_err(ConversationError::sqlite)?;
     let mut output = Vec::new();
     for row in rows {
@@ -119,15 +143,9 @@ pub(super) fn recovered_ids(
         None => 0,
     };
     let mut statement = db
-        .prepare(
-            "SELECT id FROM conversation_messages
-         WHERE rowid>?1 AND turn_id IS NULL AND (
-           (role='user' AND origin_kind='user_input' AND status IN ('complete','failed','compacted')
-             AND provenance IN ('recovered','imported')) OR
-           (role='assistant' AND origin_kind='assistant_public' AND status='complete'
-             AND provenance='recovered')
-         ) ORDER BY rowid LIMIT ?2",
-        )
+        .prepare(&format!(
+            "SELECT id FROM conversation_messages WHERE rowid>?1 AND {RECOVERED} ORDER BY rowid LIMIT ?2"
+        ))
         .map_err(ConversationError::sqlite)?;
     let ids = statement
         .query_map(
@@ -138,4 +156,29 @@ pub(super) fn recovered_ids(
         .collect::<Result<Vec<_>, _>>()
         .map_err(ConversationError::sqlite)?;
     Ok(ids)
+}
+
+/// Standalone messages that recall reads as recovered sources.
+const RECOVERED: &str = "turn_id IS NULL AND (
+    (role='user' AND origin_kind='user_input' AND status IN ('complete','failed','compacted')
+      AND provenance IN ('recovered','imported')) OR
+    (role='assistant' AND origin_kind='assistant_public' AND status='complete'
+      AND provenance='recovered'))";
+
+/// One message when it is a recovered source, as [`recovered`] pages it.
+pub(super) fn recovered_one(
+    db: &Connection,
+    message_id: &str,
+) -> ConversationResult<Option<ConversationMessageWithParts>> {
+    let id = db
+        .query_row(
+            &format!("SELECT id FROM conversation_messages WHERE id=?1 AND {RECOVERED}"),
+            [message_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(ConversationError::sqlite)?;
+    id.map(|id| read_message(db, &id))
+        .transpose()
+        .map(Option::flatten)
 }

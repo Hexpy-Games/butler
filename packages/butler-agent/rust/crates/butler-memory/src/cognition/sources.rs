@@ -13,7 +13,11 @@ mod types;
 pub use context::read_prior_public_context;
 pub use hydration::hydrate_conversation_source;
 pub(in crate::cognition) use identity::projection_hash as projection_hash_for_graph;
-pub(in crate::cognition) use inventory::{CanonicalInventory, read_canonical_inventory};
+pub(in crate::cognition) use inventory::{
+    CandidateKind, CoverageRead, EligibleSource, InventoryCandidate, InventoryCoverage,
+    inventory_coverage, read_canonical_inventory, sync_needed as inventory_sync_needed,
+    sync_step as inventory_sync_step,
+};
 pub(in crate::cognition) use planner::assert_conversation_source_current;
 pub use planner::prepare_conversation_source;
 pub(in crate::cognition) use recall::{

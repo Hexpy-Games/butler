@@ -4,6 +4,7 @@ mod blocking;
 mod catchup;
 mod feedback;
 mod idle;
+mod inventory;
 mod probe;
 mod process;
 mod vector_schedule;
