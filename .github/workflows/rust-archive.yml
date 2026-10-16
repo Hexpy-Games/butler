@@ -89,8 +89,17 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Archive tests and record every selection
-        # Smoke workspace tests consume only tests.tar.zst. E2E selections and
-        # the fixture Agent are consumed only by integration jobs.
+        # Validate selections and the complete compiled inventory on every tier.
+        run: |
+          isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
+          args=(--archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst" --workspace-remap "$PWD")
+          python3 "$isolate" cargo nextest list "${args[@]}" --message-format json > "$RUNNER_TEMP/rust-archive/list.json"
+          perf_filter="$(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")"
+          python3 "$isolate" cargo nextest list "${args[@]}" --message-format json -E "package(=butler-e2e) and ($perf_filter)" > "$RUNNER_TEMP/rust-archive/perf-list.json"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/balance-e2e.py" "$RUNNER_TEMP/rust-archive/list.json" "$RUNNER_TEMP/rust-archive" "$RUNNER_TEMP/rust-archive/perf-list.json"
+          python3 "$isolate" python3 "$GITHUB_WORKSPACE/.github/scripts/test-ci-invariants.py" "$RUNNER_TEMP/rust-archive"
+      - name: Build E2E fixture Agent
+        # Only integration consumes the fixture Agent; smoke keeps all checks.
         if: inputs.e2e
         env:
           ORT_MODE: ${{ inputs.ort-mode }}
@@ -99,12 +108,6 @@ jobs:
           export GITHUB_REF_NAME="$BUILD_VERSION_REF"
           if [[ "$BUILD_VERSION_REF" == release/* ]]; then export GITHUB_REF_NAME="v${BUILD_VERSION_REF#release/}"; fi
           isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
-          args=(--archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst" --workspace-remap "$PWD")
-          python3 "$isolate" cargo nextest list "${args[@]}" --message-format json > "$RUNNER_TEMP/rust-archive/list.json"
-          perf_filter="$(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")"
-          python3 "$isolate" cargo nextest list "${args[@]}" --message-format json -E "package(=butler-e2e) and ($perf_filter)" > "$RUNNER_TEMP/rust-archive/perf-list.json"
-          python3 "$GITHUB_WORKSPACE/.github/scripts/balance-e2e.py" "$RUNNER_TEMP/rust-archive/list.json" "$RUNNER_TEMP/rust-archive" "$RUNNER_TEMP/rust-archive/perf-list.json"
-          python3 "$isolate" python3 "$GITHUB_WORKSPACE/.github/scripts/test-ci-invariants.py" "$RUNNER_TEMP/rust-archive"
           ort=()
           if [ "$ORT_MODE" = static-ort ]; then
             ort=(--no-default-features --features butler-agent/static-ort)
