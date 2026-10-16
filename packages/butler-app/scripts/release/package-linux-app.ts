@@ -165,6 +165,7 @@ function stagePackageRoot(staged: StagedApp, packageRoot: string, format: LinuxP
     mkdirSync(dir, { recursive: true });
   }
   writeExecutable(join(binDir, PACKAGE_NAME), launcherScript(installDir));
+  writeExecutable(join(binDir, "butler"), cliLauncherScript(installDir));
   copyFileSync(join(staged.root, ELECTRON_ROOT, "assets", "icon.png"), join(shareDir, "icons", "hicolor", "512x512", "apps", "butler.png"));
   // Debian policy: the license text is /usr/share/doc/<package>/copyright.
   const license = join(staged.root, "LICENSE");
@@ -280,7 +281,7 @@ package() {
 function pacmanInstallHooks(installDir: string): string {
   return `post_install() {
   chmod 4755 "${installDir}/chrome-sandbox" 2>/dev/null || true
-  echo "Butler installed. Start it from the app menu or run: butler-app"
+  echo "Butler installed. App: butler-app. CLI: butler."
 }
 
 post_upgrade() {
@@ -294,8 +295,17 @@ function postInstallScript(installDir: string): string {
 set -eu
 # Electron's setuid sandbox helper must be root-owned and setuid.
 chmod 4755 "${installDir}/chrome-sandbox" 2>/dev/null || true
-echo "Butler installed. Start it from the app menu or run: butler-app"
+echo "Butler installed. App: butler-app. CLI: butler."
 exit 0
+`;
+}
+
+/** Keep the marker and exec shape in sync with deploy/install.sh's install_launcher. */
+function cliLauncherScript(installDir: string): string {
+  return `#!/bin/sh
+# butler-native-launcher v1
+# Managed by Butler: installed by the package manager.
+exec '${installDir}/resources/bundled-agent/bin/butler-agent' --installation-root '${installDir}' --resource-root '${installDir}/resources/bundled-agent/resources' "$@"
 `;
 }
 
