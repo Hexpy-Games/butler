@@ -4,7 +4,18 @@ use butler_platform::command_sandbox::{
     discover_project_secrets, project_write_mechanism, sweep_new_secrets,
 };
 
+fn credential_names_preserve_ascii_case_and_unicode_boundaries() {
+    use butler_platform::command_sandbox::secret_name;
+    for name in [".GiT", "ID_RSA", ".ENV", ".env.비밀", "é.PEM", "x.kEy"] {
+        assert!(secret_name(name), "{name}");
+    }
+    for name in ["", "a", "env", "git", "x.PEMx", "🔒key", "ıd_rsa"] {
+        assert!(!secret_name(name), "{name}");
+    }
+}
+
 pub(super) fn verify() {
+    credential_names_preserve_ascii_case_and_unicode_boundaries();
     let temp = scratch("secret-sweep");
     let project = temp.join("project");
     let outside = temp.join("outside");
