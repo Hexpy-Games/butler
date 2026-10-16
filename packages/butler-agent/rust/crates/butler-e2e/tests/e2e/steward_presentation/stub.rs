@@ -102,7 +102,11 @@ async fn reply(
         child_item(step, &body, &script)
     } else if key.user_request == DIRECTION || key.user_request == DIRECTION_2 {
         if key.round.is_empty() {
-            let id = if key.user_request == DIRECTION { "steer" } else { "steer-2" };
+            let id = if key.user_request == DIRECTION {
+                "steer"
+            } else {
+                "steer-2"
+            };
             call(
                 id,
                 "steer_steward",

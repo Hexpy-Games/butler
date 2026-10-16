@@ -311,7 +311,7 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
         {
-            if !relations.insert(direction.relation_id.clone()) {
+            if relations.contains(&direction.relation_id) {
                 continue;
             }
             let relation = self
@@ -320,6 +320,21 @@ impl SubsessionService {
                 .await
                 .map_err(BtccError::from)?
                 .ok_or_else(|| error(BtccCode::SubsessionDirectionRelationMissing))?;
+            // A continuation whose result was saved without settling its
+            // direction has ended; settle it so the relation's next one runs.
+            if self
+                .repository
+                .settle_ended_direction(
+                    relation.child_session_id.clone(),
+                    direction.instruction_id.clone(),
+                    (self.now)(),
+                )
+                .await
+                .map_err(BtccError::from)?
+            {
+                continue;
+            }
+            relations.insert(direction.relation_id.clone());
             if !self.child_turn_running(&relation.child_session_id).await? {
                 self.enqueue_direction(&relation, &direction).await?;
             }
@@ -352,10 +367,7 @@ impl SubsessionService {
         } else {
             "steward"
         };
-        let turn_id = format!(
-            "subsession-direction-turn-{}",
-            &crate::btcc::digest_identity(&direction.instruction_id)[..32]
-        );
+        let turn_id = crate::btcc::storage::direction_turn_id(&direction.instruction_id);
         self.queue.enqueue(super::SubsessionEnqueue {
             envelope: json!({
             "eventId":format!("subsession-direction:{}",direction.instruction_id),"transport":"app","accountId":"local",

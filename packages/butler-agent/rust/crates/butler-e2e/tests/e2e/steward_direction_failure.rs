@@ -30,7 +30,9 @@ fn directions(s: &Scenario, relation: &str) -> Vec<Direction> {
         )
         .unwrap();
     statement
-        .query_map([relation], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .query_map([relation], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
         .unwrap()
         .map(Result::unwrap)
         .collect()
@@ -114,13 +116,21 @@ async fn failed_direction_continuation_settles_and_the_next_direction_runs()
     s.turn("general", stub::OWNER).await?;
     let child = steward_presentation::wait_result(&s).await?;
     assert_eq!(child["result"]["status"], "blocked", "{child}");
-    let relation = child["relation"]["relation_id"].as_str().unwrap().to_owned();
+    let relation = child["relation"]["relation_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     *script.relation.lock().unwrap() = relation.clone();
     script.hold_direction.store(true, Ordering::SeqCst);
     s.turn("general", stub::DIRECTION).await?;
     tokio::time::timeout(Duration::from_secs(20), script.direction_held.notified())
         .await
-        .unwrap_or_else(|_| panic!("continuation never reached the provider\n{}", s.agent.logs()));
+        .unwrap_or_else(|_| {
+            panic!(
+                "continuation never reached the provider\n{}",
+                s.agent.logs()
+            )
+        });
     let continuation = match &directions(&s, &relation)[..] {
         [(_, status, Some(turn))] if status == "applied" => turn.clone(),
         other => panic!("continuation did not take its direction: {other:?}"),
@@ -130,9 +140,8 @@ async fn failed_direction_continuation_settles_and_the_next_direction_runs()
     tokio::time::timeout(Duration::from_secs(20), script.parent_held.notified())
         .await
         .unwrap();
-    let queued = s
-        .gw
-        .post(
+    let queued =
+        s.gw.post(
             "/session-queue",
             json!({"chat_id":"general","text":stub::QUEUED,
                 "client_message_id":uuid::Uuid::new_v4().to_string()}),
@@ -184,7 +193,11 @@ async fn first_failure_returned(
         );
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    assert_eq!(interrupted_results(script), 1, "failed result delivered more than once");
+    assert_eq!(
+        interrupted_results(script),
+        1,
+        "failed result delivered more than once"
+    );
     assert_eq!(script.hold_seen.load(Ordering::SeqCst), 1);
     let turn = s.gw.turn("general", held).await?.unwrap();
     assert_eq!(turn["state"], "failed", "{turn}");
@@ -196,7 +209,10 @@ async fn first_failure_returned(
             .pointer("/envelope/routingHints/turnId")
             .and_then(Value::as_str)
             .unwrap();
-        assert!(turn == continuation || turn == held, "unexpected failed record: {record}");
+        assert!(
+            turn == continuation || turn == held,
+            "unexpected failed record: {record}"
+        );
     }
     Ok(())
 }
@@ -229,11 +245,19 @@ async fn second_direction_ran(
     let rows = directions(s, relation);
     assert_eq!(
         rows[0],
-        (stub::DIRECTION.to_owned(), "applied".to_owned(), Some(continuation.to_owned()))
+        (
+            stub::DIRECTION.to_owned(),
+            "applied".to_owned(),
+            Some(continuation.to_owned())
+        )
     );
     assert_eq!(rows[1].0, stub::DIRECTION_2);
     assert_ne!(second, continuation);
-    assert_eq!(child_requests(script, restarted, stub::DIRECTION), 0, "first direction ran again");
+    assert_eq!(
+        child_requests(script, restarted, stub::DIRECTION),
+        0,
+        "first direction ran again"
+    );
     assert!(
         child_requests(script, restarted, stub::DIRECTION_2) >= 1,
         "second direction never reached the child"
@@ -262,7 +286,11 @@ async fn reopened_direction_settles(
         );
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    assert_eq!(child_requests(script, restarted, stub::DIRECTION), 0, "first direction ran again");
+    assert_eq!(
+        child_requests(script, restarted, stub::DIRECTION),
+        0,
+        "first direction ran again"
+    );
     assert_settled_once(s, script, relation);
     Ok(())
 }
@@ -272,11 +300,23 @@ async fn reopened_direction_settles(
 fn assert_settled_once(s: &Scenario, script: &stub::Script, relation: &str) {
     let db = db(s);
     let one = |sql: &str| count(&db, sql, relation);
-    assert_eq!(one("SELECT count(*) FROM btcc_steward_results WHERE relation_id=?1"), 3);
-    assert_eq!(one("SELECT count(*) FROM btcc_subsession_outbox WHERE relation_id=?1"), 3);
     assert_eq!(
-        one("SELECT count(*) FROM btcc_subsession_outbox WHERE relation_id=?1 AND input_json LIKE '%child_turn_interrupted%'"),
+        one("SELECT count(*) FROM btcc_steward_results WHERE relation_id=?1"),
+        3
+    );
+    assert_eq!(
+        one("SELECT count(*) FROM btcc_subsession_outbox WHERE relation_id=?1"),
+        3
+    );
+    assert_eq!(
+        one(
+            "SELECT count(*) FROM btcc_subsession_outbox WHERE relation_id=?1 AND input_json LIKE '%child_turn_interrupted%'"
+        ),
         1
     );
-    assert_eq!(interrupted_results(script), 1, "failed result delivered more than once");
+    assert_eq!(
+        interrupted_results(script),
+        1,
+        "failed result delivered more than once"
+    );
 }
