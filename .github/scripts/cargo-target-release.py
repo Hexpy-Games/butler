@@ -209,14 +209,6 @@ def describe(generation, compatible):
 
 
 def restore(expected):
-    try:
-        return restore_snapshot(expected)
-    except TRANSIENT as error:
-        print(f'::warning::Cargo snapshot restore failed ({error}); cold Cargo build follows.')
-        return False
-
-
-def restore_snapshot(expected):
     local = persistent_target(expected)
     if local and restore_local(local, expected):
         return True
@@ -241,8 +233,13 @@ def restore_snapshot(expected):
             selected_identity = expected
             reason = 'newest older generation whose producer lane finished green'
         print(f'Selected Cargo snapshot {manifest["name"][:-5]} ({describe(generation, compatible)}): {reason}.')
-        fetch_chunks(published, manifest, generation, directory)
-        restore_tree(directory, selected_identity, compatible)
+        try:
+            fetch_chunks(published, manifest, generation, directory)
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+            print(f'::warning::Cargo snapshot transport failed ({type(error).__name__}: {error}); cold Cargo build follows.')
+            return False
+        if restore_tree(directory, selected_identity, compatible) is False:
+            return False
     return True
 
 
@@ -322,13 +319,18 @@ def restore_tree(directory, expected, compatible=False):
         previous = Path.cwd()
         try:
             os.chdir(stage)
-            cache.extract(directory.resolve())
+            try:
+                cache.extract(directory)
+            except (RuntimeError, tarfile.ReadError, EOFError) as error:
+                print(f'::warning::Cargo snapshot decompress failed ({type(error).__name__}: {error}); cold Cargo build follows.')
+                return False
         finally:
             os.chdir(previous)
         os.rename(runner_cache.extended(Path(stage) / 'target'), runner_cache.extended(target))
     cache.source_times.restore(Path(os.environ['GITHUB_WORKSPACE']),
                               json.loads((directory / 'sources.json').read_text()))
     print(f'Restored verified CI Cargo snapshot at {json.loads((directory / "cache.json").read_text())["sha"]}.')
+    return True
 
 
 def tag_name(expected):
