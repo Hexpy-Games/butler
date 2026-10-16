@@ -41,14 +41,52 @@ class Paths(unittest.TestCase):
             'packages/butler-agent/rust/crates/butler-e2e/fixtures/memory/rule.md': {'rust', 'package', 'install', 'linux-package'},
             'packages/butler-app/scripts/release/package-versions.ts': {'ui', 'ds', 'package', 'install', 'linux-package'},
             'notes.md': set(),
-            '.github/pull_request_template.md': set(changes.GROUPS),
-            '.github/workflows/windows.yml': set(changes.GROUPS),
+            '.github/pull_request_template.md': set(),
+            '.github/workflows/windows.yml': {'package'},
             'new-build-config.ini': set(changes.GROUPS) - {'workflows'},
         }
         workflow = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
         lint = workflow.split('  lint:\n', 1)[1].split('  gate:\n', 1)[0]
         self.assertIn("    if: needs.changes.outputs.tier != 'integration'", lint)  # PRs always run the tracked-document guard.
         self.assertIn('work-docs-lint.py', lint)
+        for path, expected in cases.items():
+            with self.subTest(path=path):
+                self.assertEqual(changes.categories(path), expected)
+
+    # test-category: pure-logic
+    def test_github_inputs_follow_consumers_and_unknowns_fail_closed(self):
+        cases = {
+            '.github/releases/v1.2.3.md': set(),
+            '.github/actions/windows-owner-setup/README.md': set(),
+            '.github/workflows/release-macos.yml': {'workflows'},
+            '.github/workflows/e2e.yml': {'workflows'},
+            '.github/workflows/windows-installer.yml': {'workflows'},
+            '.github/workflows/post-merge-ci.yml': {'workflows'},
+            '.github/scripts/integration-proof.py': {'workflows'},
+            '.github/scripts/ci-changes.py': {'workflows'},
+            '.github/scripts/ds-approval.py': {'workflows'},
+            '.github/scripts/test-ci-changes.py': {'workflows'},
+            '.github/workflows/rust-tests.yml': {'rust'},
+            '.github/workflows/rust-perf-archive.yml': {'rust'},
+            '.github/actions/e2e-stub/action.yml': {'rust'},
+            '.github/workflows/native-agent.yml': {'rust', 'package', 'install', 'linux-package'},
+            '.github/actions/rust-agent-setup/action.yml': {'rust', 'package', 'install', 'linux-package'},
+            '.github/actions/publish-cargo-target/action.yml': {'rust', 'package', 'install', 'linux-package'},
+            '.github/workflows/macos-signing.yml': {'package', 'install', 'linux-package'},
+            '.github/workflows/linux-packages.yml': {'linux-package'},
+            '.github/workflows/install-smoke.yml': {'install'},
+            '.github/workflows/bun-unit.yml': {'ui'},
+            '.github/actions/bun-setup/action.yml': {'ui', 'site', 'ds', 'package', 'install', 'linux-package'},
+            '.github/workflows/ds-site.yml': {'site', 'ds'},
+            '.github/workflows/site-check.yml': {'site', 'ds'},
+            '.github/actions/build-windows-agent/action.yml': {'package'},
+            '.github/workflows/licenses.yml': {'licenses'},
+            '.github/workflows/rust-quality.yml': set(changes.GROUPS),
+            '.github/workflows/new-check.yml': set(changes.GROUPS),
+            '.github/actions/new-setup/action.yml': set(changes.GROUPS),
+            '.github/scripts/new-helper.py': set(changes.GROUPS),
+            '.github/actionlint.yaml': set(changes.GROUPS),
+        }
         for path, expected in cases.items():
             with self.subTest(path=path):
                 self.assertEqual(changes.categories(path), expected)
@@ -174,6 +212,11 @@ class Trust(unittest.TestCase):
             ('pull_request', 'refs/pull/12/merge', pr, ['docs/notes.md', workflow], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['deploy/install.sh', 'packages/butler-npm/index.js'], none),
             ('pull_request', 'refs/pull/12/merge', pr, [rust], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/actions/build-windows-agent/action.yml'], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-installer.yml'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/scripts/ci-changes.py'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/releases/v1.2.3.md'], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['deploy/windows-preview-smoke.ps1'], native),
             ('workflow_dispatch', 'refs/heads/main', {}, [], dict.fromkeys(none, True)),
         ]:

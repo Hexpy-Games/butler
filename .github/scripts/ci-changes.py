@@ -28,8 +28,41 @@ PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/elect
              'packages/butler-app/client/ui/src/components/layout/SessionObserverTimeline.tsx',
              'packages/butler-app/client/ui/src/components/settings/Update*')
 # Native Windows smoke inputs beyond Rust; other CI configuration stays out.
-WINDOWS = ('deploy/windows*', '.github/workflows/windows-preview-smoke.yml', '.github/actions/*windows*',
+WINDOWS = ('deploy/windows*', '.github/workflows/*windows*', '.github/actions/*windows*',
            '.github/actions/rust-agent-setup/*', '.github/scripts/*windows*')
+
+# PR lint runs unconditionally; release-only behavior stays in integration.
+CI_LINT_ONLY = (
+    '.github/workflows/release*.yml', '.github/workflows/npm-publish.yml',
+    '.github/workflows/post-release-verify.yml', '.github/workflows/macos-release-recovery.yml',
+    '.github/workflows/e2e.yml', '.github/workflows/windows-installer.yml',
+    '.github/workflows/branch-name.yml', '.github/workflows/ds-approval.yml',
+    '.github/workflows/post-merge-ci.yml', '.github/workflows/ci-store-maintenance.yml',
+    '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py',
+    '.github/scripts/publish-release-checksums.py', '.github/scripts/test-*.py',
+    '.github/scripts/ci-changes.py', '.github/scripts/ci_policy.py', '.github/scripts/ci_parts.py',
+    '.github/scripts/check-gate.py', '.github/scripts/ci-check-selected.py',
+    '.github/scripts/cargo-target-release.py', '.github/scripts/cargo-artifact-cache.py',
+    '.github/scripts/runner_cache.py', '.github/scripts/ds-approval.py',
+    '.github/scripts/agent-provenance.py',
+)
+# Shared producers/setup retain every consuming group, including packaging.
+CI_CONSUMERS = (
+    (('rust',), ('.github/workflows/rust-*.yml', '.github/actions/e2e-stub/*')),
+    (('rust', 'package', 'install', 'linux-package'), (
+        '.github/workflows/native-agent.yml', '.github/actions/rust-agent-setup/*',
+        '.github/actions/publish-cargo-target/*')),
+    (('package', 'install', 'linux-package'), (
+        '.github/workflows/macos-*.yml', '.github/actions/build-agent-archive/*')),
+    (('linux-package',), ('.github/workflows/linux-packages.yml',)),
+    (('install',), ('.github/workflows/install-smoke.yml', '.github/workflows/merge-agent-manifests.yml')),
+    (('ui',), ('.github/workflows/bun-*.yml',)),
+    (('ui', 'site', 'ds', 'package', 'install', 'linux-package'), ('.github/actions/bun-setup/*',)),
+    (('site', 'ds'), ('.github/workflows/*site*.yml',)),
+    (('package',), ('.github/workflows/*windows*.yml', '.github/actions/*windows*',
+                    '.github/scripts/*windows*')),
+    (('licenses',), ('.github/workflows/licenses.yml',)),
+)
 
 # The locked inventory declares the non-manifest inputs it fingerprints too.
 # Read the checkout, never an owner's runtime data directory.
@@ -41,9 +74,22 @@ def matches(path, patterns):
     return any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
 
 
+def github_categories(path):
+    if path.endswith('.md') or path.startswith('.github/releases/'):
+        return set()
+    if matches(path, CI_LINT_ONLY):
+        return {'workflows'}
+    # This orchestrator owns all groups, unlike the reusable rust-* jobs.
+    if path == '.github/workflows/rust-quality.yml':
+        return set(GROUPS)
+    groups = {group for consumers, patterns in CI_CONSUMERS
+              if matches(path, patterns) for group in consumers}
+    return groups or set(GROUPS)  # Unknown CI inputs fail closed.
+
+
 def categories(path):
     if path.startswith('.github/'):
-        return set(GROUPS)
+        return github_categories(path)
     notice = re.match(r'^(licen[cs]e|copying|notice|copyright)([._-]|$)', Path(path).name, re.I)
     license_input = path in LICENSE_INPUTS or bool(notice)
     runtime_markdown = (path.startswith('packages/butler-agent/resources/') or
