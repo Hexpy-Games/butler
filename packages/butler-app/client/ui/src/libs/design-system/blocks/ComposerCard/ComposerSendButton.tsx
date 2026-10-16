@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes } from "react";
 import type { DsBaseProps } from "../../lib/dsProps";
 import { SendHorizontal, Square } from "../../components/Icons";
 import { Spinner } from "../../components/Spinner";
-import { Tooltip } from "../../components/Tooltip";
+import { Tooltip, type TooltipAlign, type TooltipSide } from "../../components/Tooltip";
 import { cn } from "../../lib/utils";
 import styles from "./ComposerCard.module.css";
 
@@ -15,6 +15,10 @@ export interface ComposerSendButtonProps
    * explanation). The button stays hoverable so the tooltip opens.
    */
   disabledReason?: string;
+  /** Side the disabledReason tooltip opens on (default `top`). */
+  disabledReasonSide?: TooltipSide;
+  /** Alignment of the disabledReason tooltip along that side (default `center`). */
+  disabledReasonAlign?: TooltipAlign;
 }
 
 export function ComposerSendButton({
@@ -22,6 +26,8 @@ export function ComposerSendButton({
   busy = false,
   disabled,
   disabledReason,
+  disabledReasonSide = "top",
+  disabledReasonAlign = "center",
   className,
   children,
   onClick,
@@ -42,5 +48,7 @@ export function ComposerSendButton({
       {busy ? <Spinner size={16} /> : children ?? (mode === "stop" ? <Square size="sm" /> : <SendHorizontal size="md" />)}
     </button>
   );
-  return blocked ? <Tooltip label={disabledReason}>{button}</Tooltip> : button;
+  return blocked
+    ? <Tooltip label={disabledReason} side={disabledReasonSide} align={disabledReasonAlign}>{button}</Tooltip>
+    : button;
 }

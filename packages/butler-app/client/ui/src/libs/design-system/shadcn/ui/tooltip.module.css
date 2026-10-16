@@ -4,7 +4,11 @@
   vertical-align: middle;
 }
 
+/* Placed by its top-left corner (tooltipPlacement.ts); it enters from the trigger's side. */
 .tooltip {
+  --tooltip-enter-x: 0;
+  --tooltip-enter-y: var(--motion-distance-sm);
+
   position: fixed;
   z-index: var(--z-tooltip);
   width: max-content;
@@ -17,8 +21,26 @@
   text-align: center;
   white-space: nowrap;
   pointer-events: none;
-  transform: translateX(-50%);
   animation: tooltip-enter var(--motion-enter-menu) var(--motion-ease-enter);
+}
+
+.tooltip[data-side="bottom"] {
+  --tooltip-enter-y: calc(-1 * var(--motion-distance-sm));
+}
+
+.tooltip[data-side="left"] {
+  --tooltip-enter-x: var(--motion-distance-sm);
+  --tooltip-enter-y: 0;
+}
+
+.tooltip[data-side="right"] {
+  --tooltip-enter-x: calc(-1 * var(--motion-distance-sm));
+  --tooltip-enter-y: 0;
+}
+
+/* The trigger scrolled out of its scroll container: hide rather than float over other chrome. */
+.tooltip[data-clipped="true"] {
+  visibility: hidden;
 }
 
 /* Longer labels (an error line) wrap within the max width instead of running past it. */
@@ -36,7 +58,7 @@
 @keyframes tooltip-enter {
   from {
     opacity: 0;
-    transform: translate(-50%, var(--motion-distance-sm));
+    transform: translate(var(--tooltip-enter-x), var(--tooltip-enter-y));
   }
 }
 
