@@ -338,19 +338,19 @@ def reuse_inputs(repository, pr, workflow, branch, current, job_inputs, receipts
     return reuse, job_reuse
 
 
-def main_base():
-    """Include merges whose main quality run was superseded before completion."""
+def main_base(workflow):
+    """Include merges whose selecting workflow was superseded before completion."""
     repository = os.environ['GITHUB_REPOSITORY']
     query = urlencode(dict(branch='main', event='push', status='completed', per_page=100))
     try:
         # A bounded recent window is enough; no eligible run means ALL.
         runs = json.loads(command('gh', 'api',
-            f'repos/{repository}/actions/workflows/rust-quality.yml/runs?{query}'))['workflow_runs']
+            f'repos/{repository}/actions/workflows/{workflow}/runs?{query}'))['workflow_runs']
         runs = sorted(runs, key=lambda run: run['id'], reverse=True)
         for run in runs:
             if (run['status'] != 'completed' or run['conclusion'] not in ('success', 'failure')
                     or run['event'] != 'push' or run['head_branch'] != 'main'
-                    or run['path'] != '.github/workflows/rust-quality.yml'
+                    or run['path'] != f'.github/workflows/{workflow}'
                     or run['head_repository']['full_name'] != repository
                     or run['head_sha'] == os.environ.get('GITHUB_SHA')):
                 continue
@@ -364,10 +364,10 @@ def main_base():
     return None
 
 
-def selection_base(event):
+def selection_base(event, workflow):
     if (os.environ['GITHUB_EVENT_NAME'] == 'push'
             and os.environ.get('GITHUB_REF') == 'refs/heads/main'):
-        return main_base()
+        return main_base(workflow)
     return (event.get('pull_request', {}).get('base', {}).get('sha')
             or event.get('merge_group', {}).get('base_sha') or event.get('before'))
 
@@ -375,7 +375,7 @@ def selection_base(event):
 def select(event, workflow):
     level, candidate = tier()
     pr = event.get('pull_request', {})
-    base = selection_base(event)
+    base = selection_base(event, workflow)
     full = level == 'integration' or not base or set(base) == {'0'}
     if not full:
         command('git', 'cat-file', '-e', f'{base}^{{commit}}')

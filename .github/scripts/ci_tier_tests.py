@@ -248,7 +248,7 @@ class ApprovedTiers(unittest.TestCase):
         env = dict(GITHUB_REPOSITORY='owner/repo', GITHUB_EVENT_NAME='push',
                    GITHUB_REF='refs/heads/main', GITHUB_SHA='a' * 40)
         with patch.dict(os.environ, env), patch.object(changes, 'command', side_effect=command) as calls:
-            self.assertEqual(changes.selection_base({'before': '9' * 40}), '5' * 40)
+            self.assertEqual(changes.selection_base({'before': '9' * 40}, 'rust-quality.yml'), '5' * 40)
             self.assertIn('branch=main&event=push&status=completed', calls.call_args_list[0].args[2])
             self.assertEqual(calls.call_args_list[-1].args,
                              ('git', 'merge-base', '--is-ancestor', '5' * 40, 'HEAD'))
@@ -266,7 +266,46 @@ class ApprovedTiers(unittest.TestCase):
                 for job in ('linux-native', 'macos-archive', 'macos-tests', 'windows-check'):
                     self.assertTrue(jobs[job], job)
             fixture['workflow_runs'][4]['conclusion'] = 'success'
-            self.assertEqual(changes.main_base(), '5' * 40)
+            self.assertEqual(changes.main_base('rust-quality.yml'), '5' * 40)
+
+    # test-category: pure-logic
+    def test_windows_main_includes_rust_merge_after_pending_smoke_cancelled(self):
+        workflow = 'windows-preview-smoke.yml'
+        a, b, c = (letter * 40 for letter in 'abc')
+        def run(number, sha, workflow, conclusion):
+            return dict(id=number, status='completed', conclusion=conclusion,
+                        event='push', head_branch='main', head_sha=sha,
+                        path=f'.github/workflows/{workflow}',
+                        head_repository={'full_name': 'owner/repo'})
+        rust_b = run(4, b, 'rust-quality.yml', 'success')
+        # B changed Rust, but its pending Windows smoke was cancelled. Rust
+        # Quality finished B; the next push C changes only UI. A covered Windows.
+        windows_runs = [rust_b, run(3, b, workflow, 'cancelled'),
+                        run(2, a, workflow, 'success')]
+        queries = []
+        def command(*args):
+            if args[0] == 'gh':
+                queries.append(args[2])
+                runs = windows_runs if f'/workflows/{workflow}/runs?' in args[2] else [rust_b]
+                return json.dumps({'workflow_runs': runs})
+            return c
+        ui = 'packages/butler-app/client/ui/src/app.tsx'
+        rust = 'packages/butler-agent/rust/crates/butler-core/src/lib.rs'
+        with tempfile.TemporaryDirectory() as directory:
+            env = dict(GITHUB_EVENT_NAME='push', GITHUB_REF='refs/heads/main',
+                       GITHUB_REPOSITORY='owner/repo', GITHUB_SHA=c, GITHUB_RUN_ID='5',
+                       GITHUB_OUTPUT=directory + '/output', GITHUB_STEP_SUMMARY=directory + '/summary')
+            with patch.dict(os.environ, env), \
+                 patch.object(changes, 'command', side_effect=command), \
+                 patch.object(changes, 'changed', side_effect=lambda base: [rust, ui] if base == a else [ui]) as diff, \
+                 patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
+                changes.select({'before': b}, workflow)
+            diff.assert_called_once_with(a)
+            self.assertEqual(len(queries), 1)
+            self.assertIn(f'/workflows/{workflow}/runs?', queries[0])
+            output = dict(line.split('=', 1) for line in Path(env['GITHUB_OUTPUT']).read_text().splitlines())
+            self.assertEqual(json.loads(output['jobs']),
+                             dict(build=False, release=False, stub=True, hosted=True))
 
     # test-category: pure-logic
     def test_main_baseline_failure_selects_all_checks(self):
