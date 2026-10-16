@@ -232,7 +232,7 @@ pub(super) async fn report(
         Some(code) => action::rejected(item, &envelope, &binding, code)?,
         None => action::crash_interrupted(item, &envelope, &binding)?,
     };
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "e2e-fixtures")]
     if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
         && let Some(data) = std::env::var_os("BUTLER_DATA")
         && tokio::fs::remove_file(std::path::PathBuf::from(data).join("e2e-interrupt-report"))

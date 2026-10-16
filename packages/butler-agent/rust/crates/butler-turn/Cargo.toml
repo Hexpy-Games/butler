@@ -27,6 +27,8 @@ unicode-normalization.workspace = true
 regress.workspace = true
 
 [features]
+# E2E fault, clock and instrumentation hooks; never enabled in shipped binaries.
+e2e-fixtures = []
 # Exposes BTCC fixtures to scenario tests in dependent crates.
 test-support = ["rusqlite/trace"]
 

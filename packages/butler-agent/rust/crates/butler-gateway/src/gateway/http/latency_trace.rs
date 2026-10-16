@@ -1,6 +1,13 @@
-//! Paired request timings for complete storage E2E responses, absent in ordinary operation.
+//! Paired request timings for complete storage E2E responses, only in E2E fixture builds.
 use axum::{body::Body, http::Request, response::Response};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
+#[cfg(feature = "e2e-fixtures")]
+use std::time::{SystemTime, UNIX_EPOCH};
+#[cfg(not(feature = "e2e-fixtures"))]
+pub(super) fn start(_: &Request<Body>) -> Option<(u128, Instant)> {
+    None
+}
+#[cfg(feature = "e2e-fixtures")]
 pub(super) fn start(request: &Request<Body>) -> Option<(u128, Instant)> {
     if !matches!(
         request.uri().path(),

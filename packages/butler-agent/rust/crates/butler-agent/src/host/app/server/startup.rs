@@ -26,10 +26,10 @@ pub(super) async fn activate(
     // Native admission is initialized. Enable internal recovery without HTTP:
     // the reserved listener still has no accept task.
     listener_ready.store(true, Ordering::Release);
-    #[cfg(not(debug_assertions))]
+    #[cfg(not(feature = "e2e-fixtures"))]
     let _ = data_root;
     let initialization = async {
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "e2e-fixtures")]
         super::startup_hold::wait(data_root).await?;
         super::start_application(&application)
             .await

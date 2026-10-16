@@ -25,7 +25,7 @@ struct Admission {
     sender: Option<mpsc::Sender<Command>>,
 }
 enum Command {
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "e2e-fixtures")]
     E2ePanic { reply: oneshot::Sender<()> },
     Initialize {
         app: Box<AppApplication>,
@@ -42,7 +42,7 @@ enum Command {
 }
 
 impl AutomationRunOwner {
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "e2e-fixtures")]
     pub(crate) async fn inject_panic(&self) -> Result<(), GatewayApplicationError> {
         let (reply, completion) = oneshot::channel();
         self.admit(Command::E2ePanic { reply }).await?;
@@ -133,7 +133,7 @@ async fn run(mut receiver: mpsc::Receiver<Command>) {
     while let Some(command) = receiver.recv().await {
         let operation = async {
             match command {
-                #[cfg(debug_assertions)]
+                #[cfg(feature = "e2e-fixtures")]
                 Command::E2ePanic { reply: _reply } => {
                     super::super::faults::panic_owner();
                 }

@@ -17,6 +17,7 @@ pub(super) async fn with_retries(
     baseline: u64,
     progress: &mut impl FnMut(&str, u64),
 ) -> Result<(), &'static str> {
+    #[cfg(feature = "e2e-fixtures")]
     if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
         && !sources.iter().all(|source| {
             reqwest::Url::parse(source)

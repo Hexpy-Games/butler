@@ -11,7 +11,7 @@ use super::{Agent, Launch};
 use crate::e2e::HarnessError;
 
 const STOP_INTENT_SCHEMA: &str = "butler.agent-stop-intent.v1";
-const STARTUP_TRACE: &str = "BUTLER_E2E_STARTUP_TRACE";
+const STARTUP_TRACE: &str = "BUTLER_STARTUP_TRACE";
 
 impl Launch {
     /// Starts the agent as the Butler App does: the gateway token in D's App

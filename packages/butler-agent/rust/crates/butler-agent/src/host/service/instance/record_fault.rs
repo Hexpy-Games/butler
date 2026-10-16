@@ -1,4 +1,4 @@
-//! Stub-only ordering for a record write that overlaps forced shutdown.
+//! E2E fixture ordering for a record write that overlaps forced shutdown.
 use std::sync::{Condvar, Mutex, PoisonError};
 
 use super::InstanceRecord;
@@ -20,9 +20,7 @@ static ORDER: (Mutex<Order>, Condvar) = (
 );
 
 fn mode() -> Option<String> {
-    (std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub"))
-        .then(|| std::env::var("BUTLER_E2E_RECORD_WRITE_DEADLINE").ok())
-        .flatten()
+    std::env::var("BUTLER_E2E_RECORD_WRITE_DEADLINE").ok()
 }
 
 pub(super) fn hold_write(record: &InstanceRecord) {

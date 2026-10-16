@@ -41,7 +41,8 @@ const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERP
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_SECRET_STORE: "file",
   BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
-  BUTLER_E2E_APP_NOW: "2026-10-03T20:00:00.000Z",
+  // Released agents keep the real clock; a zone where it is afternoon makes the daily briefing due.
+  TZ: afternoonZone(new Date()),
   OPENAI_API_KEY: "e2e-not-real", OPENAI_BASE_URL: `http://127.0.0.1:${server.port}/v1`,
   BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
 };
@@ -129,4 +130,12 @@ async function briefingProof() {
   assert.equal(actual.source.model_ref, "openai/gpt-6-luna");
   assert.equal(actual.source.persona_applied, true);
   assert.equal(actual.raw_text_included, false);
+}
+
+/** An IANA fixed-offset zone whose local time at `now` is 16:00-16:59 (past the 04:00 daily slot). */
+function afternoonZone(now: Date) {
+  let offset = 16 - now.getUTCHours();
+  if (offset > 14) offset -= 24;
+  if (offset < -12) offset += 24;
+  return offset === 0 ? "Etc/UTC" : `Etc/GMT${offset > 0 ? "-" : "+"}${Math.abs(offset)}`;
 }

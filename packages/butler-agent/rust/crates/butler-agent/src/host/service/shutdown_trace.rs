@@ -1,4 +1,4 @@
-//! Monotonic shutdown diagnostics for the desktop and stub E2E tier.
+//! Monotonic shutdown diagnostics, enabled by `BUTLER_SHUTDOWN_TRACE=1`.
 //! A begin without an end identifies the phase still pending at forced exit.
 
 use std::{
@@ -7,23 +7,25 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(feature = "e2e-fixtures")]
 static STOP_REQUESTED: OnceLock<Instant> = OnceLock::new();
 
 pub(crate) fn event(phase: &str) {
+    #[cfg(feature = "e2e-fixtures")]
     if phase == "stop_requested" {
         let _ = STOP_REQUESTED.set(Instant::now());
     }
     emit(phase, "event");
 }
 
+/// Time since stop was requested, for the record-write fixture ordering.
+#[cfg(feature = "e2e-fixtures")]
 pub(crate) fn stop_elapsed() -> Option<std::time::Duration> {
     STOP_REQUESTED.get().map(Instant::elapsed)
 }
 
 fn emit(phase: &str, edge: &str) {
-    if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub")
-        && std::env::var("BUTLER_SHUTDOWN_TRACE").as_deref() != Ok("1")
-    {
+    if std::env::var("BUTLER_SHUTDOWN_TRACE").as_deref() != Ok("1") {
         return;
     }
     static STARTED: OnceLock<Instant> = OnceLock::new();

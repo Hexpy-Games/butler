@@ -16,7 +16,7 @@ impl AppApplication {
             Ok(linked) => linked,
             Err(error) => return Err(self.dispatch_error(&claim, error).await?),
         };
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "e2e-fixtures")]
         self.hold_queue_admission(&message_id).await?;
         self.ensure_dispatch_open(&claim).await?;
         self.enqueue_claimed_turn(&claim, &turn_id, queue_replay)
@@ -203,7 +203,7 @@ impl AppApplication {
     }
 }
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "e2e-fixtures")]
 impl AppApplication {
     /// E2E barrier after durable Turn creation, before native enqueue. It
     /// replaces CPU-dependent SQLite work with the exact shutdown boundary.

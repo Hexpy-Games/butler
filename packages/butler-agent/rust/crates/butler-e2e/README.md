@@ -40,6 +40,12 @@ The harness builds `butler-agent` itself with `butler-agent/e2e-fixtures` unless
 `BUTLER_E2E_BIN` names a binary or `BUTLER_E2E_SKIP_BUILD=1`. Prebuilt agents used
 for browser import scenarios also need this feature to inject isolated profile
 and key sources. Never enable it in shipped agents.
+
+Every fault, barrier, fixed clock and storage/idle probe that a scenario arms with a
+`BUTLER_E2E_*` variable exists only in that fixture build (`e2e-fixtures` in each
+product crate). Shipped binaries contain none of them, and `butler-source-check`
+ratchets any such name in shipped code (`source-check-e2e-hooks.txt`). Perf scenarios
+use an optimized fixture build for the same reason.
 `BUTLER_E2E_WORKSPACE_ROOT` selects the Rust workspace containing resources,
 fixtures and cassettes when running a compiled harness on a different machine.
 

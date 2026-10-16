@@ -106,11 +106,7 @@ fn trace_mapping(db: &Connection, started: std::time::Instant) -> StorageResult<
 
 /// Read-only diagnostics for isolated startup qualification; never logs row data.
 pub(in crate::btcc::storage) fn trace(phase: &str, started: std::time::Instant) {
-    if matches!(
-        std::env::var("BUTLER_E2E_TIER").as_deref(),
-        Ok("stub" | "perf")
-    ) && std::env::var("BUTLER_E2E_STARTUP_TRACE").as_deref() == Ok("1")
-    {
+    if std::env::var("BUTLER_STARTUP_TRACE").as_deref() == Ok("1") {
         butler_core::diagnostic!(
             "[btcc-startup] phase={phase} elapsed_us={}",
             started.elapsed().as_micros()

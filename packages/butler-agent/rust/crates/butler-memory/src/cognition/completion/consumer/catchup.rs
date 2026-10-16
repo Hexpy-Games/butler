@@ -486,7 +486,7 @@ fn error(code: CognitionCode) -> CognitionError {
 }
 
 fn trace(message: &str) {
-    if std::env::var("BUTLER_E2E_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
         butler_core::diagnostic!("[memory-catchup-trace] {message}");
     }
 }
