@@ -205,6 +205,7 @@ impl ReadPool {
                         .join()
                         .map_err(|_| "SQLite reader thread panicked".to_owned())
                 });
+                crate::gateway::idle_probe::reader_retired();
                 if let Err(error) = result {
                     if connection.take().is_some() {
                         work.reader_closed();

@@ -8,8 +8,11 @@ mod lane;
 pub(super) mod metrics;
 mod operation;
 mod read_pool;
+#[cfg(feature = "e2e-fixtures")]
+pub(super) mod retirement_fixture;
 mod schema;
 mod tuning;
+mod wal_index;
 mod writer;
 
 use butler_platform::sqlite;
@@ -73,7 +76,6 @@ impl AppStorage {
         let read_path = path.clone();
         let metrics = Arc::new(metrics::Metrics::default());
         let lane_metrics = metrics.clone();
-        let runtime = tokio::runtime::Handle::current();
         let thread = std::thread::Builder::new()
             .name("app-sqlite-owner".to_owned())
             .spawn(move || {
@@ -84,7 +86,6 @@ impl AppStorage {
                     receiver,
                     initialized_tx,
                     &lane_metrics,
-                    &runtime,
                 )
             })
             .map_err(|error| {
@@ -189,6 +190,7 @@ impl AppStorage {
             .with_source(source)
         })?;
         permit.send(job);
+        crate::gateway::idle_probe::writer_admitted();
         drop(lane);
         Ok(())
     }

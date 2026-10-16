@@ -169,11 +169,16 @@ async fn measure(
             process_usage::load_average()?
         );
         seed::assert_complete(&s.sandbox.data, expected)?;
+        let request_started = std::time::Instant::now();
+        let reply = s.gw.get("/automations").await?;
+        let first_request_us = request_started.elapsed().as_micros();
+        assert_eq!(reply.status, 200, "{}", reply.text);
         assert_eq!(
-            &s.gw.get("/automations").await?.data()["automations"],
+            &reply.data()["automations"],
             schedules,
             "idle schedule content changed"
         );
+        eprintln!("PERF-IDLE window={window} first_request_us={first_request_us}");
         windows.push((before, after));
         before = after;
     }

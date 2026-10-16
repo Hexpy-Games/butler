@@ -12,7 +12,6 @@ struct Owner<'a> {
     data: Option<&'a Path>,
     initialized_at: &'a str,
     metrics: &'a Arc<metrics::Metrics>,
-    runtime: &'a tokio::runtime::Handle,
 }
 
 pub(super) fn run(
@@ -22,14 +21,12 @@ pub(super) fn run(
     mut receiver: mpsc::Receiver<DatabaseOperation>,
     initialized: oneshot::Sender<StorageResult<()>>,
     metrics: &Arc<metrics::Metrics>,
-    runtime: &tokio::runtime::Handle,
 ) -> StorageResult<()> {
     let owner = Owner {
         path,
         data: data.map(std::path::PathBuf::as_path),
         initialized_at,
         metrics,
-        runtime,
     };
     let result = owner.serve(&mut receiver, initialized);
     let saved = metrics.save(path);
@@ -44,13 +41,24 @@ impl Owner<'_> {
     ) -> StorageResult<()> {
         let mut initialized = Some(initialized);
         let mut first = None;
+        let mut keeper = None;
+        let result = self.sessions(receiver, &mut first, &mut initialized, &mut keeper);
+        let closed = keeper.map_or(Ok(()), close_connection);
+        result.and(closed)
+    }
+
+    fn sessions(
+        &self,
+        receiver: &mut mpsc::Receiver<DatabaseOperation>,
+        first: &mut Option<DatabaseOperation>,
+        initialized: &mut Option<oneshot::Sender<StorageResult<()>>>,
+        keeper: &mut Option<sqlite::Connection>,
+    ) -> StorageResult<()> {
         loop {
-            std::thread::scope(|scope| {
+            let result = std::thread::scope(|scope| {
                 std::thread::Builder::new()
                     .name("butler-app-sqlite".into())
-                    .spawn_scoped(scope, || {
-                        self.session(receiver, first.take(), initialized.take())
-                    })
+                    .spawn_scoped(scope, || self.session(receiver, first, initialized, keeper))
                     .map_err(|error| {
                         AppStorageError::new(
                             AppStorageCode::AppSqliteThreadSpawnFailed,
@@ -64,10 +72,29 @@ impl Owner<'_> {
                             "App SQLite execution thread panicked",
                         )
                     })?
-            })?;
-            // The coordinator owns the receiver throughout retirement. A
-            // request arriving during close remains queued for the next owner.
-            first = receiver.blocking_recv();
+            });
+            if let Err(error) = result {
+                if let Some(sender) = initialized.take() {
+                    let _closed_opener = sender.send(Err(error.clone()));
+                    return Err(error);
+                }
+                if first.is_none() {
+                    return Err(error);
+                }
+                // Fail this admitted batch with its actual error, then park.
+                // A later admission gets a fresh attempt instead of a dead lane.
+                let queued = receiver.len();
+                if let Some(operation) = first.take() {
+                    operation.fail(error.clone());
+                }
+                for _ in 0..queued {
+                    if let Ok(operation) = receiver.try_recv() {
+                        operation.fail(error.clone());
+                    }
+                }
+            }
+            crate::gateway::idle_probe::writer_retired();
+            *first = receiver.blocking_recv();
             if first.is_none() {
                 return Ok(());
             }
@@ -77,30 +104,32 @@ impl Owner<'_> {
     fn session(
         &self,
         receiver: &mut mpsc::Receiver<DatabaseOperation>,
-        first: Option<DatabaseOperation>,
-        initialized: Option<oneshot::Sender<StorageResult<()>>>,
+        first: &mut Option<DatabaseOperation>,
+        initialized: &mut Option<oneshot::Sender<StorageResult<()>>>,
+        keeper: &mut Option<sqlite::Connection>,
     ) -> StorageResult<()> {
-        let (mut connection, checkpoint) = match self.open(initialized.is_some()) {
-            Ok(opened) => opened,
-            Err(error) => {
-                if let Some(initialized) = initialized {
-                    let _closed_opener = initialized.send(Err(error.clone()));
-                }
-                return Err(error);
-            }
-        };
+        // The first opener allocates SQLite's initial shared inode/WAL objects. Keep
+        // those allocations out of the writer's heavy startup arena as well.
+        if keeper.is_none() {
+            *keeper = Some(super::wal_index::open(self.path)?);
+        }
+        let (mut connection, checkpoint) = self.open(initialized.is_some())?;
         let ready = sqlite::sync_wal_index(&connection).map_err(|error| {
             AppStorageError::new(AppStorageCode::AppSqliteWalSyncFailed, error.to_string())
                 .with_source(error)
         });
-        let admitted = initialized.is_none_or(|sender| sender.send(ready.clone()).is_ok());
         let result = ready.and_then(|()| {
+            let admitted = initialized
+                .take()
+                .is_none_or(|sender| sender.send(Ok(())).is_ok());
             if admitted {
-                lane::run(&mut connection, receiver, self.runtime, first)
+                lane::run(&mut connection, receiver, first.take())
             } else {
                 Ok(())
             }
         });
+        #[cfg(feature = "e2e-fixtures")]
+        super::retirement_fixture::hold(receiver);
         let drained = checkpoint::close(checkpoint);
         let closed = close_connection(connection);
         self.metrics.retire_writer();
@@ -120,6 +149,8 @@ impl Owner<'_> {
                 .with_source(error)
             })?;
         }
+        #[cfg(feature = "e2e-fixtures")]
+        super::retirement_fixture::opening()?;
         let mut connection = sqlite::open(self.path).map_err(AppStorageError::sqlite)?;
         tuning::configure(&connection)?;
         if initialize {

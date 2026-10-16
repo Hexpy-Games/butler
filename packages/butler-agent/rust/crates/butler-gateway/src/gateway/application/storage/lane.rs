@@ -11,7 +11,7 @@ const BATCH_WINDOW: Duration = Duration::from_millis(2);
 const BATCH_OPS: usize = 32;
 const IDLE_RETENTION: Duration = Duration::from_secs(10);
 
-type Run = Box<dyn FnOnce(&mut Connection, StorageResult<()>) -> Completion + Send>;
+type Run = Box<dyn FnOnce(StorageResult<&mut Connection>) -> Completion + Send>;
 pub(super) struct Operation {
     pub(super) inspect: bool,
     pub(super) barrier: bool,
@@ -21,19 +21,11 @@ pub(super) struct Operation {
 pub(super) fn run(
     db: &mut Connection,
     receiver: &mut mpsc::Receiver<Operation>,
-    runtime: &tokio::runtime::Handle,
     mut first: Option<Operation>,
 ) -> StorageResult<()> {
     let mut opened = None;
     loop {
-        let operation = first.take().or_else(|| {
-            runtime.block_on(async {
-                tokio::time::timeout(IDLE_RETENTION, receiver.recv())
-                    .await
-                    .ok()
-                    .flatten()
-            })
-        });
+        let operation = first.take().or_else(|| receive(receiver, IDLE_RETENTION));
         let Some(operation) = operation else { break };
         batch(db, operation, receiver, &mut opened)?;
     }
@@ -48,7 +40,9 @@ fn perform(
 ) {
     let snapshot = event_outbox::snapshot();
     let exclusive = operation.barrier;
-    let result = catch_unwind(AssertUnwindSafe(|| (operation.run)(db, admission)));
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        (operation.run)(admission.map(|()| &mut *db))
+    }));
     match result {
         Ok(completion) => completions.push(completion),
         Err(payload) => {
@@ -132,4 +126,34 @@ fn batch(
         completion(result.clone());
     }
     result
+}
+
+impl Operation {
+    pub(super) fn fail(self, error: AppStorageError) {
+        (self.run)(Err(error))(Ok(()));
+    }
+}
+
+/// Poll registers the wake before parking; unpark retains a token even when
+/// admission races the park. No runtime or periodic polling is needed.
+fn receive(receiver: &mut mpsc::Receiver<Operation>, timeout: Duration) -> Option<Operation> {
+    struct Wake(std::thread::Thread);
+    impl std::task::Wake for Wake {
+        fn wake(self: std::sync::Arc<Self>) {
+            self.0.unpark();
+        }
+    }
+    let waker = std::task::Waker::from(std::sync::Arc::new(Wake(std::thread::current())));
+    let mut context = std::task::Context::from_waker(&waker);
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let std::task::Poll::Ready(operation) = receiver.poll_recv(&mut context) {
+            return operation;
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return None;
+        }
+        std::thread::park_timeout(remaining);
+    }
 }
