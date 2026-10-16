@@ -9,6 +9,7 @@ fn invoke(command: &str, root: &Path, setup: &Setup) -> Invocation {
         root,
         &[&setup.sandbox.data.join("tmp/project-write")],
         &[&setup.sandbox.data],
+        None,
     )
     .unwrap()
 }
@@ -279,6 +280,7 @@ fn measure_secret_project(setup: &Setup, root: &Path, layout: &str) -> Result<()
             root,
             &[&setup.sandbox.data.join("tmp/project-write")],
             &denied,
+            None,
         )
         .unwrap();
         let parent_setup = start.elapsed();

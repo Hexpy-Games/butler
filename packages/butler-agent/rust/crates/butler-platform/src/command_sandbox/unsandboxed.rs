@@ -23,6 +23,7 @@ pub(super) fn project_write(
     _root: &Path,
     _writable: &[&Path],
     _denied: &[&Path],
+    _toolchain_roots: Option<&crate::command_sandbox::ToolchainRoots>,
 ) -> Result<Invocation, SandboxError> {
     drop(invocation);
     Err(SandboxError::ProjectWriteUnavailable)

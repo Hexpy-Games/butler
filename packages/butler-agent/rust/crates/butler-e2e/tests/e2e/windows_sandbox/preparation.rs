@@ -197,6 +197,7 @@ fn admission_large_generated_tree_keeps_alias_protection() -> Result<(), Harness
         &f.root,
         &f.scratch.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
         &[],
+        super::toolchain_roots().as_ref(),
     )
     .unwrap_err()
     .to_string();
