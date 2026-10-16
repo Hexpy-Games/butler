@@ -83,7 +83,7 @@ jobs:
           name: butler-npm-${{ inputs.label || 'all' }}
           path: ${{ runner.temp }}/hexpygames-butler-*.tgz
           if-no-files-found: error
-          retention-days: 7
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 7 }}
 
   smoke:
     name: Install smoke (${{ matrix.platform }})

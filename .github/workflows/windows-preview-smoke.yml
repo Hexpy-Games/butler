@@ -3,7 +3,7 @@ name: Unsigned Windows preview smoke
 on:
   pull_request:
   push:
-    branches: ['release/**']
+    branches: [main, 'release/**']
   workflow_dispatch:
     inputs:
       native-cache:
@@ -209,7 +209,6 @@ jobs:
             exit $testCode
           }
       - name: Native Windows command regression matrix
-        if: inputs.native-loop && needs.changes.outputs.tier != 'integration'
         run: ../../../deploy/windows-command-matrix.ps1
       - name: Selected project workspace and approval E2E
         run: |
@@ -346,9 +345,10 @@ jobs:
       - name: Pure Task Scheduler XML from compiled harness
         run: ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests windows_startup_xml
       - name: Installed release stub chat
-        run: |
-          $env:BUTLER_E2E_BIN = Join-Path $env:BUTLER_E2E_INSTALLED_ROOT 'butler-agent.exe'
-          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests installed_preview
+        run: ../../../deploy/windows-installed-e2e.ps1 -Tests installed_preview
+      - name: Installed release native command regression matrix
+        if: ${{ !cancelled() }}
+        run: ../../../deploy/windows-installed-e2e.ps1 -Tests windows_commands
       - name: Hosted terminal settlement live-event regression
         if: ${{ !cancelled() }}
         run: |
@@ -357,7 +357,7 @@ jobs:
       - name: Require installed verification harnesses
         if: ${{ !cancelled() }}
         run: |
-          $expected = @('windows_startup_xml','installed_preview','projection_settlement')
+          $expected = @('windows_startup_xml','installed_preview','windows_commands','projection_settlement')
           $actual = @(Get-Content "$env:PREVIEW_ROOT/logs/completed-harnesses.txt")
           if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
             throw "Incomplete verification: completed=$($actual -join ',')"

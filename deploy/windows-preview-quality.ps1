@@ -25,7 +25,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort dev
 $ErrorActionPreference = 'Stop'
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-# Formatting and source rules run once in rust-quality.yml / source (Linux).
+# Formatting and source rules run once in rust-clippy.yml / linux-clippy (Linux).
 $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
 $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
 New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
