@@ -2459,6 +2459,13 @@ Copyright (c) 2014 Mathijs van de Nes
 Copyright (c) 2025 Colin McDonnell
 
 =====
+addr2line 0.25.1
+Apache-2.0 OR MIT
+License: https://github.com/gimli-rs/addr2line/blob/f02db009deb9b441818afa49cb1b17453c1e4243/LICENSE-APACHE
+License: https://github.com/gimli-rs/addr2line/blob/f02db009deb9b441818afa49cb1b17453c1e4243/LICENSE-MIT
+Copyright (c) 2016-2018 The gimli Developers
+
+=====
 adler2 2.0.1
 0BSD OR MIT OR Apache-2.0
 License: https://github.com/oyvindln/adler2/blob/89a031a0f42eeff31c70dc598b398cbf31f1680f/LICENSE-0BSD
@@ -2963,6 +2970,13 @@ axum 0.8.9
 MIT
 License: https://github.com/tokio-rs/axum/blob/c59208c86fded335cd85e388030ad59347b0e5ae/axum/LICENSE
 Copyright (c) 2019 axum Contributors
+
+=====
+backtrace 0.3.76
+MIT OR Apache-2.0
+License: https://github.com/rust-lang/backtrace-rs/blob/775f6a1ba62e7d35a1fac76e64c61d9d4687b5f2/LICENSE-APACHE
+License: https://github.com/rust-lang/backtrace-rs/blob/775f6a1ba62e7d35a1fac76e64c61d9d4687b5f2/LICENSE-MIT
+Copyright (c) 2014 Alex Crichton
 
 =====
 base64 0.13.1
@@ -4224,6 +4238,13 @@ License: https://github.com/image-rs/image-gif/blob/a0127e2acbef333398414bb61d09
 Copyright (c) 2015 nwin
 
 =====
+gimli 0.32.3
+MIT OR Apache-2.0
+License: https://github.com/gimli-rs/gimli/blob/8bc8e622fcb9be20fc9f03c96bc6335d936b869d/LICENSE-APACHE
+License: https://github.com/gimli-rs/gimli/blob/8bc8e622fcb9be20fc9f03c96bc6335d936b869d/LICENSE-MIT
+Copyright (c) 2015 The Rust Project Developers
+
+=====
 gjson 0.8.1
 MIT
 License: https://github.com/tidwall/gjson.rs/blob/950a538f17363971c704e2ce8b507720d8360414/LICENSE
@@ -4666,6 +4687,13 @@ itertools 0.14.0
 MIT OR Apache-2.0
 License: https://github.com/rust-itertools/itertools/blob/a015a6831525ee1637df747d3f530a627d9741bf/LICENSE-APACHE
 License: https://github.com/rust-itertools/itertools/blob/a015a6831525ee1637df747d3f530a627d9741bf/LICENSE-MIT
+Copyright (c) 2015
+
+=====
+itertools 0.15.0
+MIT OR Apache-2.0
+License: https://github.com/rust-itertools/itertools/blob/37bd72aa6d58e594711d127b52418ca5e58b6091/LICENSE-APACHE
+License: https://github.com/rust-itertools/itertools/blob/37bd72aa6d58e594711d127b52418ca5e58b6091/LICENSE-MIT
 Copyright (c) 2015
 
 =====
@@ -5386,6 +5414,13 @@ MIT
 License: https://crates.io/crates/objc2/0.6.5
 
 =====
+object 0.37.3
+Apache-2.0 OR MIT
+License: https://github.com/gimli-rs/object/blob/916c47b90e5c0bea139ca4bdfc53811f7d2c3383/LICENSE-APACHE
+License: https://github.com/gimli-rs/object/blob/916c47b90e5c0bea139ca4bdfc53811f7d2c3383/LICENSE-MIT
+Copyright (c) 2015 The Gimli Developers
+
+=====
 object_store 0.12.5
 MIT OR Apache-2.0
 License: https://crates.io/crates/object_store/0.12.5
@@ -5683,6 +5718,11 @@ Copyright 2023 Jacob Pratt et al.
 Copyright (c) 2023 Jacob Pratt et al.
 
 =====
+pprof-alloc 0.6.0
+Apache-2.0
+License: https://github.com/howardjohn/pprof-alloc/blob/a2d091943abaec1723e5f39492a225fb166d8816/LICENSE
+
+=====
 ppv-lite86 0.2.21
 MIT OR Apache-2.0
 License: https://github.com/cryptocorrosion/cryptocorrosion/blob/000a6cd6bbcb0b091381dc5f8fe6d6efa480b818/utils-simd/ppv-lite86/LICENSE-APACHE
@@ -5713,6 +5753,20 @@ proc-macro2 1.0.107
 MIT OR Apache-2.0
 License: https://github.com/dtolnay/proc-macro2/blob/ed8a5497669cd63db33bf24646f261b012bbbc4a/LICENSE-APACHE
 License: https://github.com/dtolnay/proc-macro2/blob/ed8a5497669cd63db33bf24646f261b012bbbc4a/LICENSE-MIT
+
+=====
+prometheus-client-derive-encode 0.5.1
+Apache-2.0 OR MIT
+License: https://github.com/prometheus/client_rust/blob/3e3d55cda6d1a91bf01dc113cfd422ee71460234/derive-encode/LICENSE-APACHE
+License: https://github.com/prometheus/client_rust/blob/3e3d55cda6d1a91bf01dc113cfd422ee71460234/derive-encode/LICENSE-MIT
+Copyright (c) 2020 Max Inden
+
+=====
+prometheus-client 0.25.1
+Apache-2.0 OR MIT
+License: https://github.com/prometheus/client_rust/blob/3e3d55cda6d1a91bf01dc113cfd422ee71460234/LICENSE-APACHE
+License: https://github.com/prometheus/client_rust/blob/3e3d55cda6d1a91bf01dc113cfd422ee71460234/LICENSE-MIT
+Copyright (c) 2020 Max Inden
 
 =====
 prost-derive 0.14.4
@@ -5755,6 +5809,12 @@ quick-error 2.0.1
 MIT OR Apache-2.0
 License: https://crates.io/crates/quick-error/2.0.1
 Copyright (c) 2015 The quick-error Developers
+
+=====
+quick-xml 0.41.0
+MIT
+License: https://github.com/tafia/quick-xml/blob/4deda08abeffdc188c269360229cf47e12a77a9f/LICENSE-MIT.md
+Copyright (c) 2016 Johann Tuffe
 
 =====
 quote 1.0.47
@@ -6073,6 +6133,13 @@ Copyright (C) 2007 Free Software Foundation, Inc. <http://fsf.org/>
 11 of the WIPO copyright treaty adopted on 20 December 1996, or
 Copyright (C) <year>  <name of author>
 <program>  Copyright (C) <year>  <name of author>
+
+=====
+rustc-demangle 0.1.28
+MIT OR Apache-2.0
+License: https://github.com/rust-lang/rustc-demangle/blob/1fd8a3e2a25e6cb5a75cf7806dc0c421cfd94465/LICENSE-APACHE
+License: https://github.com/rust-lang/rustc-demangle/blob/1fd8a3e2a25e6cb5a75cf7806dc0c421cfd94465/LICENSE-MIT
+Copyright (c) 2014 Alex Crichton
 
 =====
 rustc-hash 2.1.3
