@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# One entry point for the versioned hook and local/agent runners.
+set -euo pipefail
+root="$(git rev-parse --show-toplevel 2>/dev/null || git --work-tree="$PWD" rev-parse --show-toplevel)"
+cd "$root"
+exec python3 .github/scripts/isolated.py python3 .github/scripts/prepush.py "$@"
