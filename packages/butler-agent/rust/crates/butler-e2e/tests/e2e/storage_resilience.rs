@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::{
     HarnessError,
+    events::LiveEvents,
     gateway::turn_state,
     scenario::{Scenario, Setup, turn_timeout},
 };
@@ -159,6 +160,7 @@ async fn closing_storage_reports_service_stopping() -> Result<(), HarnessError> 
 async fn failed_batch_commit_preserves_writer() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("STORAGE-COMMIT")?.start().await?;
+    let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let id = create(&s).await?;
     let path = s.sandbox.data.join("app-server/butler-client.sqlite");
     tokio::task::spawn_blocking(move || -> Result<(), HarnessError> {
@@ -208,5 +210,17 @@ async fn failed_batch_commit_preserves_writer() -> Result<(), HarnessError> {
     assert_eq!(reply.status, 200, "{}", reply.text);
     let item = s.gw.get(&format!("/automations/{id}")).await?;
     assert_eq!(item.data()["automation"]["title"], "Recovered");
+    live.wait_for(Duration::from_secs(10), |event| {
+        event["type"] == "automation.updated"
+            && event["payload"]["automation"]["title"] == "Recovered"
+    })
+    .await?;
+    // The later committed event fences the ordered stream without a sleep.
+    assert!(
+        live.snapshot()
+            .iter()
+            .all(|event| { event["payload"]["automation"]["title"] != "Rejected" }),
+        "rolled-back title reached the live subscriber"
+    );
     s.finish().await
 }

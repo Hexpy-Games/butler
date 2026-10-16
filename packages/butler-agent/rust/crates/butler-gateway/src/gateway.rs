@@ -6,6 +6,8 @@
 
 mod application;
 pub use application::AppAssetCommand;
+#[cfg(feature = "test-support")]
+pub use application::storage::LaneFixture;
 pub use application::storage::history::{AppHistoryCommand, AppHistoryQuery};
 mod file_watch;
 pub use file_watch::FileChangeWatch;

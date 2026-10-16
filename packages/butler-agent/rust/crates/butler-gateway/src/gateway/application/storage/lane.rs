@@ -7,6 +7,9 @@ use std::{
 };
 use tokio::sync::mpsc;
 
+#[cfg(feature = "test-support")]
+pub(super) mod testing;
+
 const BATCH_WINDOW: Duration = Duration::from_millis(2);
 const BATCH_OPS: usize = 32;
 
@@ -22,10 +25,13 @@ pub(super) fn run(
     mut receiver: mpsc::Receiver<Operation>,
 ) -> StorageResult<()> {
     let mut opened = None;
+    // Advance only after a successful sync, so a read-only batch retries failures.
+    let mut synced_changes = db.total_changes();
     while let Some(first) = receiver.blocking_recv() {
-        batch(db, first, &mut receiver, &mut opened);
+        batch(db, first, &mut receiver, &mut opened, &mut synced_changes);
     }
-    commit(db, &mut opened)
+    commit(db, &mut opened)?;
+    sync(db, &mut synced_changes)
 }
 
 fn perform(
@@ -70,25 +76,47 @@ fn commit(db: &Connection, opened: &mut Option<Instant>) -> StorageResult<()> {
     Ok(())
 }
 
+fn sync(db: &Connection, synced_changes: &mut u64) -> StorageResult<()> {
+    if db.total_changes() == *synced_changes {
+        return Ok(());
+    }
+    butler_platform::sqlite::sync_wal_index(db).map_err(|error| {
+        let error = AppStorageError::new(AppStorageCode::AppSqliteWalSyncFailed, error.to_string())
+            .with_source(error);
+        butler_core::diagnostic!(
+            "[app-sqlite] committed; WAL index sync failed: {}: {}",
+            error.code(),
+            error.message()
+        );
+        error
+    })?;
+    *synced_changes = db.total_changes();
+    Ok(())
+}
+
+fn complete(completions: &mut Vec<Completion>, result: &StorageResult<()>) {
+    for completion in completions.drain(..) {
+        completion(result.clone());
+    }
+}
+
 fn batch(
     db: &mut Connection,
     first: Operation,
     receiver: &mut mpsc::Receiver<Operation>,
     opened: &mut Option<Instant>,
+    synced_changes: &mut u64,
 ) {
-    let before = db.total_changes();
     let mut completions = Vec::new();
-    let result = drain(db, first, receiver, opened, &mut completions)
-        .and_then(|()| commit(db, opened))
-        .and_then(|()| {
-            if db.total_changes() == before {
-                return Ok(());
-            }
-            butler_platform::sqlite::sync_wal_index(db).map_err(|error| {
-                AppStorageError::new(AppStorageCode::AppSqliteWalSyncFailed, error.to_string())
-                    .with_source(error)
-            })
-        });
+    let result = drain(
+        db,
+        first,
+        receiver,
+        opened,
+        synced_changes,
+        &mut completions,
+    )
+    .and_then(|()| commit(db, opened));
     if let Err(error) = &result {
         // COMMIT may leave the transaction open (for example, deferred FKs).
         // Report this batch's failure without abandoning subsequent requests.
@@ -98,15 +126,17 @@ fn batch(
         } else {
             db.execute_batch("ROLLBACK")
         };
-        butler_core::diagnostic!(
-            "[app-sqlite] batch failed: {}: {}; rollback={rollback:?}",
-            error.code(),
-            error.message()
-        );
+        event_outbox::flush();
+        if error.code() != AppStorageCode::AppSqliteWalSyncFailed.as_str() {
+            butler_core::diagnostic!(
+                "[app-sqlite] batch failed: {}: {}; rollback={rollback:?}",
+                error.code(),
+                error.message()
+            );
+        }
     }
-    for completion in completions {
-        completion(result.clone());
-    }
+    let result = result.and_then(|()| sync(db, synced_changes));
+    complete(&mut completions, &result);
 }
 
 fn drain(
@@ -114,17 +144,19 @@ fn drain(
     first: Operation,
     receiver: &mut mpsc::Receiver<Operation>,
     opened: &mut Option<Instant>,
+    synced_changes: &mut u64,
     completions: &mut Vec<Completion>,
 ) -> StorageResult<()> {
     let started = Instant::now();
     let mut next = Some(first);
     for index in 0..BATCH_OPS {
         let Some(operation) = next.take() else { break };
-        if operation.barrier
-            && let Err(error) = commit(db, opened)
-        {
-            perform(db, operation, Err(error.clone()), completions);
-            return Err(error);
+        if operation.barrier {
+            if let Err(error) = commit(db, opened).and_then(|()| sync(db, synced_changes)) {
+                perform(db, operation, Err(error.clone()), completions);
+                return Err(error);
+            }
+            complete(completions, &Ok(()));
         }
         if operation.inspect || super::metrics::baseline() {
             perform(db, operation, Ok(()), completions);
@@ -135,8 +167,8 @@ fn drain(
             if opened.is_none() {
                 if let Err(error) = db.execute_batch("BEGIN IMMEDIATE") {
                     let error = AppStorageError::sqlite(error);
-                    perform(db, operation, Err(error.clone()), completions);
-                    return Err(error);
+                    perform(db, operation, Err(error), completions);
+                    return Ok(());
                 }
                 *opened = Some(Instant::now());
             }

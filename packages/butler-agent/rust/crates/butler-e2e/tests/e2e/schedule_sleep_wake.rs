@@ -414,9 +414,10 @@ async fn sched_14_failed_dispatch_retries_without_notification() -> Result<(), H
     .map_err(|_| HarnessError("scheduler did not observe the dispatch failure".into()))??;
     assert_eq!(scheduler_errors(&s.sandbox.data).await?, 1);
     // A notified retry during the same failure streak must not emit another error.
+    let reads_before = scheduler_reads(&s).await?;
     let last = scheduler_attempts(&s).await?;
     wake_scheduler(&s).await?;
-    let dispatch_observed = wait_scheduler_attempt(&s, last).await?;
+    let dispatch_observed = wait_scheduler_attempt(&s, last, reads_before).await?;
     assert_eq!(scheduler_errors(&s.sandbox.data).await?, 1);
     assert_eq!(runs(&s).await?, [] as [Value; 0]);
     dispatch_fault(&s.sandbox.data, false).await?;

@@ -5,6 +5,8 @@ mod cached;
 mod checkpoint;
 mod error;
 mod lane;
+#[cfg(feature = "test-support")]
+pub use lane::testing::LaneFixture;
 pub(super) mod metrics;
 mod operation;
 mod read_pool;
