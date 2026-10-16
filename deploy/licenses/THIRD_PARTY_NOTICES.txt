@@ -7664,3 +7664,8 @@ Unicode CLDR timezone names ICU 78.1 / TZ 2026c
 Unicode-3.0
 License: https://github.com/unicode-org/icu/blob/release-78.1/LICENSE
 Copyright © 1991-2026 Unicode, Inc.
+
+=====
+notify Windows ledger backend 8.2.0
+CC0-1.0
+License: https://github.com/notify-rs/notify/blob/a1d7c2d8f80786679d58ec6d5986a1d4278bc8cf/notify/LICENSE-CC0

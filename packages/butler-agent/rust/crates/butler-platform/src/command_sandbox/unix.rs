@@ -28,6 +28,7 @@ pub(super) fn login_shell(command: &str, _environment: &HashMap<String, String>)
     Invocation {
         program: "/bin/sh".into(),
         arguments: vec!["-lc".into(), command.to_owned()],
+        ..Default::default()
     }
 }
 
@@ -45,6 +46,7 @@ pub(super) fn legacy_shell(
     Invocation {
         program: "/bin/bash".into(),
         arguments,
+        ..Default::default()
     }
 }
 
