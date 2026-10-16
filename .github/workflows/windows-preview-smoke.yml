@@ -349,10 +349,15 @@ jobs:
       - name: Installed release native command regression matrix
         if: ${{ !cancelled() }}
         run: ../../../deploy/windows-installed-e2e.ps1 -Tests windows_commands
+      - name: Hosted terminal settlement live-event regression
+        if: ${{ !cancelled() }}
+        run: |
+          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
+          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests projection_settlement
       - name: Require installed verification harnesses
         if: ${{ !cancelled() }}
         run: |
-          $expected = @('windows_startup_xml','installed_preview','windows_commands')
+          $expected = @('windows_startup_xml','installed_preview','windows_commands','projection_settlement')
           $actual = @(Get-Content "$env:PREVIEW_ROOT/logs/completed-harnesses.txt")
           if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
             throw "Incomplete verification: completed=$($actual -join ',')"

@@ -37,5 +37,8 @@ jobs:
       # and binaries are covered by the workspace all-targets invocation.
       - name: Clippy production libraries with stricter cfg lints
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy -p butler-turn -p butler-models -p butler-runtime -p butler-ledger --lib --locked --keep-going -- -D warnings
+      # E2E hooks compile only into the fixture agent the harness builds.
+      - name: Clippy the E2E fixture agent
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox --features butler-platform/test-support,butler-agent/e2e-fixtures --locked --keep-going -- -D warnings
       - name: Clippy all targets
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings

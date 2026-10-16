@@ -38,7 +38,7 @@ runs:
         # Command matrix records cover both hosted/debug and installed/release binaries.
         # Integration rehydrates reused producers' records, so it requires them all.
         $harnesses = @{
-          release = @('windows_startup_xml','installed_preview','windows_commands')
+          release = @('windows_startup_xml','installed_preview','windows_commands','projection_settlement')
           hosted = @('cli_surface','gateway_remote','gateway_pairing','cli_remote','windows_commands','project_workspace',
             'queue_notifications','queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
         }
