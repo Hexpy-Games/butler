@@ -16,6 +16,7 @@ from ci_policy import rust_jobs, windows_preview_jobs
 import ci_parts
 import ci_rust_inputs
 import ci_receipts
+from ci_main_baseline import latest_main_run
 from urllib.parse import urlencode
 
 GROUPS = ('rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses', 'signing')
@@ -68,7 +69,8 @@ CI_LINT_ONLY = (
     '.github/scripts/ci_consumer_test_support.py',
     '.github/scripts/ci_rust_inputs.py', '.github/scripts/ci_input_tests.py',
     '.github/scripts/ci_tier_tests.py', '.github/scripts/ci_receipts.py',
-    '.github/scripts/ci_main_failure.py',
+    '.github/scripts/ci_main_failure.py', '.github/scripts/ci_main_baseline.py',
+    '.github/scripts/ci-main-gate.py',
     '.github/scripts/ci-check-selected.py', '.github/scripts/ds-approval.py',
 )
 # Integration packaging keys include Rust/UI and transitive producer inputs.
@@ -86,6 +88,7 @@ CI_CONSUMERS = (
         '.github/scripts/ci_consumer_test_support.py', '.github/scripts/ci_rust_inputs.py',
         '.github/scripts/ci_input_tests.py', '.github/scripts/ci_tier_tests.py',
         '.github/scripts/ci_receipts.py', '.github/scripts/ci_main_failure.py',
+        '.github/scripts/ci_main_baseline.py', '.github/scripts/ci-main-gate.py',
         '.github/scripts/prepare-windows-zstd.py',
         '.github/scripts/*windows*safety.py')),
     (('rust',), ('.github/workflows/rust-*.yml',)),
@@ -316,25 +319,16 @@ def reuse_inputs(repository, pr, workflow, branch, current, job_inputs, receipts
 
 def main_base(workflow):
     """Include merges whose selecting workflow was superseded before completion."""
-    repository = os.environ['GITHUB_REPOSITORY']
-    query = urlencode(dict(branch='main', event='push', status='completed', per_page=100))
     try:
-        # A bounded recent window is enough; no eligible run means ALL.
-        runs = json.loads(command('gh', 'api',
-            f'repos/{repository}/actions/workflows/{workflow}/runs?{query}'))['workflow_runs']
-        runs = sorted(runs, key=lambda run: run['id'], reverse=True)
-        for run in runs:
-            if (run['status'] != 'completed' or run['conclusion'] not in ('success', 'failure')
-                    or run['event'] != 'push' or run['head_branch'] != 'main'
-                    or run['path'] != f'.github/workflows/{workflow}'
-                    or run['head_repository']['full_name'] != repository
-                    or run['head_sha'] == os.environ.get('GITHUB_SHA')):
-                continue
-            base = run['head_sha']
-            if not re.fullmatch(r'[0-9a-f]{40}', base):
-                return None
-            command('git', 'merge-base', '--is-ancestor', base, 'HEAD')
-            return base
+        run = latest_main_run(workflow, os.environ['GITHUB_REPOSITORY'], command,
+                              exclude_sha=os.environ.get('GITHUB_SHA'))
+        if run is None:
+            return None
+        base = run['head_sha']
+        if not re.fullmatch(r'[0-9a-f]{40}', base):
+            return None
+        command('git', 'merge-base', '--is-ancestor', base, 'HEAD')
+        return base
     except (subprocess.CalledProcessError, ValueError, OSError, KeyError, TypeError):
         print('Main baseline unavailable; all checks will run.')
     return None

@@ -23,10 +23,12 @@ def step(source, name):
 
 def expression(value, **context):
     # Evaluate the workflow's boolean/string expressions over fixture contexts.
+    context.setdefault('event', SimpleNamespace(action=''))
     value = value.removeprefix('${{').removesuffix('}}').strip()
     return eval(value.replace('&&', ' and ').replace('||', ' or '),
                 {'__builtins__': {}, 'github': SimpleNamespace(**context),
-                 'always': lambda: True, 'startsWith': lambda text, prefix: text.startswith(prefix),
+                 'always': lambda: True, 'fromJSON': json.loads,
+                 'contains': lambda values, value: value in values, 'startsWith': lambda text, prefix: text.startswith(prefix),
                  'format': lambda template, *args: template.format(*args)})
 
 
@@ -101,6 +103,11 @@ class PrWorkspace(unittest.TestCase):
         self.assertEqual(expression(group, event_name='pull_request', ref='refs/pull/12/merge',
                                     head_ref='fix/example', ref_name='12/merge'),
                          'rust-quality-fix/example')
+        for action in ('labeled', 'unlabeled', 'edited'):
+            self.assertEqual(expression(group, event_name='pull_request', ref='refs/pull/12/merge',
+                                        head_ref='fix/example', ref_name='12/merge',
+                                        event=SimpleNamespace(action=action)),
+                             'rust-quality-metadata-fix/example')
 
     # test-category: format-pin
     def test_only_pr_x64_call_uses_in_place_execution_and_dispatch_is_independent(self):

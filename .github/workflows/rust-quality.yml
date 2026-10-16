@@ -1,4 +1,6 @@
 name: Rust quality
+run-name: >-
+  ${{ contains(fromJSON('["labeled", "unlabeled", "edited"]'), github.event.action) && format('Gate re-evaluation #{0}', github.run_id) || format('CI #{0}', github.run_id) }}
 
 # One required gate covers the selected Linux, macOS, UI and site checks.
 # Windows compile, signing policy and licenses share this selection and gate.
@@ -6,15 +8,17 @@ on:
   push:
     branches: [main, 'release/**']
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled, edited]
   workflow_dispatch:
 
 permissions:
   contents: read
   actions: read
   pull-requests: read
+  issues: read
 
 concurrency:
-  group: ${{ startsWith(github.ref, 'refs/heads/release/') && format('integration-{0}', github.ref) || github.event_name == 'workflow_dispatch' && format('rust-quality-dispatch-{0}', github.run_id) || format('rust-quality-{0}', github.head_ref || github.ref_name) }}
+  group: ${{ startsWith(github.ref, 'refs/heads/release/') && format('integration-{0}', github.ref) || github.event_name == 'workflow_dispatch' && format('rust-quality-dispatch-{0}', github.run_id) || contains(fromJSON('["labeled", "unlabeled", "edited"]'), github.event.action) && format('rust-quality-metadata-{0}', github.head_ref || github.ref_name) || format('rust-quality-{0}', github.head_ref || github.ref_name) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/release/') }}
 
 env:
@@ -27,6 +31,8 @@ defaults:
 
 jobs:
   changes:
+    # Metadata re-evaluations run only gate; they cannot cancel a full CI run.
+    if: ${{ !contains(fromJSON('["labeled", "unlabeled", "edited"]'), github.event.action) }}
     uses: ./.github/workflows/ci-changes.yml
     with:
       workflow: rust-quality.yml
@@ -393,7 +399,9 @@ jobs:
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-changes.py
       - name: Validate main failure follow-up
         working-directory: ${{ github.workspace }}
-        run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-main-failure.py
+        run: |
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-main-failure.py
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-main-gate.py
       - name: Validate PR receipt reuse
         working-directory: ${{ github.workspace }}
         run: |
@@ -442,7 +450,20 @@ jobs:
           results: ${{ toJSON(needs) }}
           groups: '{"workflows": ["lint"], "rust": ["linux-clippy", "linux-native", "linux-archive", "linux-tests", "linux-perf-archive", "linux-perf", "macos-native", "macos-archive", "macos-tests", "macos-perf-archive", "macos-perf", "linux-arm64-archive", "linux-arm64-tests", "linux-arm64-perf-archive", "linux-arm64-perf", "windows-check"], "ui": ["ui"], "site": ["site"], "ds": ["ds"], "package": ["macos-native", "macos-archive", "macos-updates", "macos-package", "shellcheck", "selftest"], "linux-package": ["linux-native", "linux-arm64-native", "linux-package-x64", "linux-package-arm64", "linux-archive", "linux-arm64-archive"], "install": ["linux-native", "linux-arm64-native", "macos-native", "install-x64", "install-arm64", "install-macos", "install-merge", "linux-archive", "linux-arm64-archive", "macos-archive"], "licenses": ["lint"], "signing": ["shellcheck", "selftest"]}'
           workflow: rust-quality.yml
+      - name: Require main recovery or a permitted bypass
+        if: always() && github.event_name == 'pull_request' && github.base_ref == 'main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/ci-main-gate.py
+      - name: Preserve existing quality result on metadata edits
+        if: always() && github.event_name == 'pull_request' && contains(fromJSON('["labeled", "unlabeled", "edited"]'), github.event.action)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/ci-main-gate.py quality
       - name: Require every selected check
+        if: always() && !contains(fromJSON('["labeled", "unlabeled", "edited"]'), github.event.action)
         env:
           RESULTS: ${{ toJSON(needs) }}
           EVENT: ${{ github.event_name }}
