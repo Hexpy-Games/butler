@@ -19,12 +19,12 @@ def main(args):
     expected = 2 if args[0] == 'native-deps' else 4
     if len(args) != expected:
         raise SystemExit('Wrong publisher argument count')
-    ci_oci.authenticate()
     if args[0] == 'native-deps':
+        ci_oci.authenticate()
         static_ort_prebuilt.publish(SDK_SCRIPTS / 'prepare-static-ort.py', args[1])
     else:
         subprocess.run([sys.executable, str(ROOT / '.github/scripts/cargo-target-release.py'),
-                        'publish-lane', *args[1:]], check=True, env=os.environ)
+                        'publish-authenticated-lane', *args[1:]], check=True, env=os.environ)
 
 
 if __name__ == '__main__':

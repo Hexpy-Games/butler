@@ -76,6 +76,9 @@ CI_LINT_ONLY = (
 # Integration packaging keys include Rust/UI and transitive producer inputs.
 NATIVE_CI = ('rust', 'ui', 'package', 'install', 'linux-package')
 CI_CONSUMERS = (
+    (('workflows',), ('.github/actions/publish-cargo-target/*',
+                      '.github/actions/prepare-windows-release-target/*',
+                      '.github/actions/publish-windows-target/*')),
     # Lint publishes both workflow and license receipts. Its tested scripts and
     # their transitive imports must invalidate the license receipt as well.
     (('licenses',), (
@@ -83,7 +86,7 @@ CI_CONSUMERS = (
         '.github/scripts/cargo-artifact-cache.py', '.github/scripts/agent-provenance.py',
         '.github/scripts/integration-proof.py', '.github/scripts/check-gate.py',
         '.github/scripts/ci-check-selected.py', '.github/scripts/cargo-target-release.py',
-        '.github/scripts/runner_cache.py', '.github/scripts/ci-changes.py',
+        '.github/scripts/runner_cache.py', '.github/scripts/cargo_snapshot_policy.py', '.github/scripts/ci-changes.py',
         '.github/scripts/ci_policy.py', '.github/scripts/ci_parts.py',
         '.github/scripts/ci_consumer_test_support.py', '.github/scripts/ci_rust_inputs.py',
         '.github/scripts/ci_input_tests.py', '.github/scripts/ci_tier_tests.py',
@@ -103,7 +106,7 @@ CI_CONSUMERS = (
         '.github/scripts/test-windows-command-coverage.py')),
     (NATIVE_CI + ('workflows',), (
         '.github/scripts/agent-provenance.py', '.github/scripts/cargo-artifact-cache.py',
-        '.github/scripts/cargo-target-release.py', '.github/scripts/runner_cache.py',
+        '.github/scripts/cargo-target-release.py', '.github/scripts/runner_cache.py', '.github/scripts/cargo_snapshot_policy.py',
         '.github/scripts/check-gate.py', '.github/scripts/ci_policy.py',
         '.github/actions/rust-agent-setup/*', '.github/actions/build-agent-archive/*',
         '.github/workflows/linux-packages.yml', '.github/workflows/macos-app-package.yml',

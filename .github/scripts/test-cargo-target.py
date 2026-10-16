@@ -312,7 +312,7 @@ class TargetSnapshot(unittest.TestCase):
             for index in range(6):  # Incompressible, so the archive is as large as the outputs.
                 (produced / f'debug/deps/libunit{index}.rlib').write_bytes(os.urandom(96 * 1024))
             (produced / 'debug/incremental/session').write_bytes(b'never archived')
-            expected = dict(schema=2, platform='linux-x64', kind='dev')
+            expected = dict(schema=2, platform='linux-x64', kind='dev', profile='debug')
             peak = []
 
             def push(reference, paths):
@@ -323,6 +323,7 @@ class TargetSnapshot(unittest.TestCase):
                        GITHUB_OUTPUT=str(root / 'output'), GITHUB_WORKSPACE=str(root / 'work'), CARGO_TARGET_DIR=str(produced))
             with patch.dict(os.environ, env), patch.object(tempfile, 'tempdir', str(runner)), \
                     patch.object(cache, 'identity', return_value=expected), patch.object(cache, 'output', return_value='a' * 40), \
+                    patch.object(snapshots, 'should_publish', return_value=True), \
                     patch.object(cache.source_times, 'capture', return_value=[]), patch.object(snapshots, 'trusted'), \
                     patch.object(snapshots.ci_oci, 'manifest', return_value=None), patch.object(snapshots.ci_oci, 'checked'), \
                     patch.object(snapshots.ci_oci, 'push', side_effect=push), patch.object(snapshots, 'CHUNK_BYTES', 128 * 1024):

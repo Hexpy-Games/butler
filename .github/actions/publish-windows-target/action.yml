@@ -1,5 +1,5 @@
 name: Publish owner Windows target
-description: Publish the existing preview or debug tree with its exact build flags
+description: Publish a stale preview/debug lane, or always publish the release lane
 inputs:
   producer:
     description: Exact producer job name (release preparation has its own job)

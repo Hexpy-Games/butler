@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 
 # Build scripts watch the recipe directory; imports must not create new inputs.
@@ -23,6 +24,7 @@ SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS.parents[1] / 'packages/butler-agent/rust/scripts'))
 import ci_oci
 import runner_cache
+import cargo_snapshot_policy as policy
 
 spec = importlib.util.spec_from_file_location('cargo_cache', SCRIPTS / 'cargo-artifact-cache.py')
 cache = importlib.util.module_from_spec(spec)
@@ -209,8 +211,23 @@ def describe(generation, compatible):
 
 
 def restore(expected):
+    started = time.monotonic()
+    result = dict(generation='none', match='exact', compressed=0)
+    try:
+        restored = restore_snapshot(expected, result)
+        policy.report('restore', expected, compatible_tag(expected), result['generation'], result['match'],
+                      result['compressed'], started, 'restored' if restored else 'cold')
+        return restored
+    except Exception:
+        policy.report('restore', expected, compatible_tag(expected), result['generation'], result['match'],
+                      result['compressed'], started, 'failed')
+        raise
+
+
+def restore_snapshot(expected, result):
     local = persistent_target(expected)
     if local and restore_local(local, expected):
+        result.update(generation='runner-local', match='compatible')
         return True
     if local and not runner_cache.has_space(local):
         return False
@@ -219,8 +236,8 @@ def restore(expected):
     if not candidates:
         print('No persistent CI snapshot for this lane; cold Cargo build follows.')
         return False
-    with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
-        directory = Path(temporary)
+    with tempfile.TemporaryDirectory(dir=runner_cache.extended(os.environ['RUNNER_TEMP'])) as temporary:
+        directory = Path(runner_cache.extended(temporary))
         manifest, walked_back = candidates[0], False
         try:
             generation, _ = checked_generation(manifest, directory, selected_identity, compatible)
@@ -243,6 +260,8 @@ def restore(expected):
             # Older generations can be pruned mid-download; the target is still untouched.
             print(f'Cargo snapshot {manifest["name"][:-5]} download failed ({error}); cold Cargo build follows.')
             return False
+        result.update(generation=manifest['name'][:-5], match='compatible' if compatible else 'exact',
+                      compressed=policy.compressed_bytes(directory))
         restore_tree(directory, selected_identity, compatible)
     return True
 
@@ -320,7 +339,7 @@ def restore_tree(directory, expected, compatible=False):
         raise ValueError('Symlink Cargo target directory')
     runner_cache.delete_tree(target)
     os.makedirs(runner_cache.extended(target.parent), exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=target.parent) as stage:
+    with tempfile.TemporaryDirectory(dir=runner_cache.extended(target.parent)) as stage:
         previous = Path.cwd()
         try:
             os.chdir(stage)
@@ -350,7 +369,7 @@ def recorded_parts(directory, prefix):
 
 
 def report_free_disk(label):
-    usage = shutil.disk_usage(os.environ['RUNNER_TEMP'])
+    usage = shutil.disk_usage(runner_cache.extended(os.environ['RUNNER_TEMP']))
     print(f'Free disk {label}: {usage.free / 1024**3:.1f} of {usage.total / 1024**3:.1f} GiB.', flush=True)
 
 
@@ -408,23 +427,59 @@ def publish(directory, run_id):
         prune(tag, prefix)
 
 
-def publish_lane(platform, mode, kind):
-    expected = cache.identity(platform, mode, kind)
+def should_publish(expected):
+    if expected.get('profile') == 'release':
+        return True
+    published = release(tag_name(expected))
+    candidates = generations(published['assets']) if published else []
+    if not candidates:
+        return True
+    with tempfile.TemporaryDirectory(dir=runner_cache.extended(os.environ['RUNNER_TEMP'])) as temporary:
+        directory = Path(runner_cache.extended(temporary))
+        try:
+            generation, _ = checked_generation(candidates[0], directory, expected, False)
+        except UnsuccessfulProducer:
+            found = walk_back(expected, candidates[0], directory)
+            if not found or found[3]:
+                return True
+            generation = found[2]
+        return policy.stale(generation['metadata'], api)
+
+
+def publish_lane(platform, mode, kind, authenticate=False):
+    started = time.monotonic()
+    expected = dict(platform=platform, mode=mode, kind=kind, profile=os.environ.get('TARGET_SNAPSHOT_PROFILE', '?'))
+    key = 'unavailable'
     run_id = os.environ['GITHUB_RUN_ID']
     prefix = f'{int(run_id)}-{int(os.environ.get("GITHUB_RUN_ATTEMPT", "1"))}'
-    if os.environ.get('BUTLER_PERSISTENT_TARGET') and not runner_cache.has_space(os.environ['BUTLER_PERSISTENT_TARGET']):
-        return
-    report_free_disk('before snapshot')
-    # The only extra disk is one compressed copy, written directly as upload parts.
-    with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
-        directory = Path(temporary)
-        cache.record(directory, expected, target=os.environ.get('CARGO_TARGET_DIR', 'target'),
-                     part=(prefix, CHUNK_BYTES))
-        report_free_disk('after compression')
-        publish(directory, run_id)
+    compressed, outcome = 0, 'skipped: fresh'
+    try:
+        expected = cache.identity(platform, mode, kind)
+        key = compatible_tag(expected)
+        if os.environ.get('BUTLER_PERSISTENT_TARGET') and not runner_cache.has_space(os.environ['BUTLER_PERSISTENT_TARGET']):
+            outcome = 'skipped: free-disk floor'
+            return
+        if authenticate:
+            ci_oci.authenticate()
+        if not should_publish(expected):
+            return
+        report_free_disk('before snapshot')
+        with tempfile.TemporaryDirectory(dir=runner_cache.extended(os.environ['RUNNER_TEMP'])) as temporary:
+            directory = Path(runner_cache.extended(temporary))
+            cache.record(directory, expected, target=os.environ.get('CARGO_TARGET_DIR', 'target'),
+                         part=(prefix, CHUNK_BYTES))
+            compressed = policy.compressed_bytes(directory)
+            report_free_disk('after compression')
+            publish(directory, run_id)
+            outcome = 'published'
+    except Exception as error:
+        outcome = 'failed: ' + type(error).__name__
+        print(f'::warning::Cargo snapshot publish failed ({type(error).__name__}); completed build unaffected.')
+    finally:
+        policy.report('publish', expected, key, prefix, 'exact', compressed, started, outcome)
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 5 or sys.argv[1] != 'publish-lane':
+    if len(sys.argv) != 5 or sys.argv[1] not in ('publish-lane', 'publish-authenticated-lane'):
         raise SystemExit('Usage: cargo-target-release.py publish-lane PLATFORM MODE KIND')
-    publish_lane(*sys.argv[2:])
+    publish_lane(*sys.argv[2:], authenticate=sys.argv[1] == 'publish-authenticated-lane')

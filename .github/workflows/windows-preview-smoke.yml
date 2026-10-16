@@ -305,7 +305,7 @@ jobs:
           retention-days: 14
       - uses: ./.github/actions/publish-windows-target
         continue-on-error: true
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
         with:
           profile: debug
       - name: Check owner registration and remove job profile
