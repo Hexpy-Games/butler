@@ -30,7 +30,7 @@ try {
         'preparation::admission_preserves_tool_search_paths', 'project_write::row16_non_interactive_asks')) {
         Invoke-BundleTest $Bundle ('windows_sandbox::' + $case) (Join-Path $Evidence ($case.Replace('::','-') + '.log'))
     }
-    @{revision=$pins.revision;status='PASS';rows=@(0..12)+@(14,15,16,17);
+    @{revision=$pins.revision;status='PASS';rows=@(0..12)+@(14,15,16);
         qualification='Setup and SSH only; interactive matrix pending';sourceWorkspaceAbsent=$true} |
         ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $Evidence 'self-check.json')
     Write-Host "$($pins.revision) bundle self-check PASS"

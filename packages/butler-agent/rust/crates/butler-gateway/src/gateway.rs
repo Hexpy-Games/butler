@@ -43,8 +43,7 @@ pub use crate::gateway::inbound_queue::{
 };
 pub use crate::gateway::message_file_store::AppMessageFiles;
 pub use application::settings::{
-    DiagnosticsSettingsReader, command_sandbox_enabled, diagnostics_enabled_readonly,
-    stored_ui_language_readonly,
+    DiagnosticsSettingsReader, diagnostics_enabled_readonly, stored_ui_language_readonly,
 };
 pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,

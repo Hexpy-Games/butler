@@ -140,7 +140,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 budget,
                 source_revision,
             } = self.preparation.prepare(&start).await?;
-            let workspace_path = self.resolved_workspace(&workspace, &mut phase).await?;
+            let workspace_path = resolved_workspace(&workspace, &mut phase)?;
             let surface = self.tool_surface(&mut phase).await?;
             let policy = &phase.execution_policy;
             let language = resolve_guided_response_language(start.turn, &self.documents).await;
@@ -385,31 +385,18 @@ fn project_folder(
     consented.then(|| PathBuf::from(&policy.workspace_path))
 }
 
-impl GuidedTurnFactoryAdapter {
-    /// Keep the model's policy root and tool reference on the same recovered path.
-    async fn resolved_workspace(
-        &self,
-        workspace: &butler_turn::workspace::WorkspaceReference,
-        phase: &mut butler_turn::btcc::GuidedPhaseSelection,
-    ) -> Result<PathBuf, BtccError> {
-        let path = workspace.get().map_err(|e| error(e.code()))?;
-        phase.execution_policy.workspace_path = path.to_string_lossy().into_owned();
-        if matches!(
-            butler_gateway::gateway::command_sandbox_enabled(
-                self.monitoring.app_database_path.clone()
-            )
-            .await,
-            Ok(true)
-        ) {
-            let inventory_root = path.clone();
-            tokio::task::spawn_blocking(move || {
-                if butler_platform::command_sandbox::project_write_available() {
-                    butler_platform::command_sandbox::prewarm_project(&inventory_root);
-                }
-            });
-        }
-        Ok(path)
-    }
+/// Keep the model's policy root and tool reference on the same recovered path.
+fn resolved_workspace(
+    workspace: &butler_turn::workspace::WorkspaceReference,
+    phase: &mut butler_turn::btcc::GuidedPhaseSelection,
+) -> Result<PathBuf, BtccError> {
+    let path = workspace.get().map_err(|e| error(e.code()))?;
+    phase.execution_policy.workspace_path = path.to_string_lossy().into_owned();
+    let inventory_root = path.clone();
+    tokio::task::spawn_blocking(move || {
+        butler_platform::command_sandbox::prewarm_project(&inventory_root);
+    });
+    Ok(path)
 }
 
 fn bound_turn<'a>(

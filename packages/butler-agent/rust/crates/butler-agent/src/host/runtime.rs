@@ -75,7 +75,8 @@ impl AgentRuntime {
         // All fallible in-memory setup precedes the first store owner.
         let collation = Arc::new(LocaleCollation::new(locale).map_err(setup)?);
         let writes = Arc::new(ConfigurationWrites::new());
-        let host_environment = environment::initialize_host();
+        let host_environment: Arc<std::collections::HashMap<String, String>> =
+            Arc::new(std::env::vars().collect());
         let continuation_limits =
             btcc::select_turn_continuation_budget(|key| host_environment.get(key).cloned())?;
         let mcp_client = mcp_owner::for_runtime(&paths, &host_environment, writes.clone());
@@ -351,7 +352,6 @@ impl AgentRuntime {
             profile: profile.clone(),
             monitoring: monitoring::open(
                 &paths.data_root,
-                &app_database_path,
                 &environment.cognition_paths,
                 &models,
                 coordinator.clone(),
@@ -362,12 +362,15 @@ impl AgentRuntime {
             web_access,
             app_endpoint: app_endpoint.clone(),
         };
-        let agent = owners::agent_loop(
-            &models,
-            &repositories,
-            factory,
-            environment.model_route_retry_base_ms,
-        );
+        let agent = Arc::new(ProductionAgentLoop::native(
+            models.provider.clone(),
+            Arc::new(TurnModelExecutionFactory::new(
+                repositories.clone(),
+                ModelRouteRetryConfig::new(environment.model_route_retry_base_ms),
+            )),
+            Arc::new(factory),
+            None,
+        ));
         let bindings = stores.bindings.clone();
         let conversations = Arc::new(stores.conversations.clone());
         let progress = StorageProgressPublication::new(stores.btcc.clone());

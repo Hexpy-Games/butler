@@ -16,7 +16,6 @@ const UPDATE_KEYS: &[&str] = &[
     "max_simultaneous_workers",
     "access_mode",
     "schedule_access_mode",
-    "command_sandbox_enabled",
     "plan_mode_default",
     "follow_up_behavior",
     "multiline_send_behavior",
@@ -103,10 +102,7 @@ pub(super) fn is_request(value: &Value) -> bool {
     {
         return false;
     }
-    input
-        .get("command_sandbox_enabled")
-        .is_none_or(Value::is_boolean)
-        && input.get("reduce_motion").is_none_or(Value::is_boolean)
+    input.get("reduce_motion").is_none_or(Value::is_boolean)
         && input
             .get("collapse_message_box")
             .is_none_or(Value::is_boolean)

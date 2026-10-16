@@ -262,7 +262,6 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         profile: profile.clone(),
         monitoring: Arc::new(crate::host::MonitoringReaders::new(
             scratch.0.clone(),
-            scratch.0.join("app-server/butler-client.sqlite"),
             output_models.configuration.clone(),
             output_models.catalog.clone(),
             Arc::new(butler_memory::cognition::MemoryHealthService::new(

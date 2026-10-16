@@ -203,7 +203,7 @@ pub(super) fn read(
             .cloned()
             .unwrap_or(json!(10)),
     );
-    insert_access(db, &controls.access, &stored, &mut output)?;
+    insert_access(db, &controls.access, &mut output)?;
     output.insert(
         "plan_mode_default".into(),
         json!(
@@ -259,10 +259,8 @@ pub(super) fn read(
 fn insert_access(
     db: &Connection,
     access: &butler_turn::btcc::AccessMode,
-    stored: &Map<String, Value>,
     output: &mut Map<String, Value>,
 ) -> Result<(), AppStorageError> {
-    super::command_sandbox::project(stored, output);
     output.insert("access_mode".into(), json!(super::access_mode_name(access)));
     let schedule = super::schedule_access_mode(db)?;
     output.insert(
