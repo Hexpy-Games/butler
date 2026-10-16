@@ -16,7 +16,7 @@ from ci_policy import rust_jobs, windows_preview_jobs
 import ci_parts
 from urllib.parse import urlencode
 
-GROUPS = ('rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses')
+GROUPS = ('rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses', 'signing')
 SHARED = ('VERSION', 'LICENSE', 'package.json', 'bun.lock*', 'bunfig.toml', 'tsconfig*.json',
           '*eslint*', '*stylelint*', '*prettier*')
 PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/electron/*',
@@ -27,6 +27,15 @@ PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/elect
              'tests/support/update-work*', 'tests/support/electron-page-cdp*',
              'packages/butler-app/client/ui/src/components/layout/SessionObserverTimeline.tsx',
              'packages/butler-app/client/ui/src/components/settings/Update*')
+# These harness inputs are never shipped in a production Agent payload.
+RUST_TEST_ONLY = ('packages/butler-agent/rust/crates/butler-e2e/tests/*',
+                  'packages/butler-agent/rust/crates/butler-e2e/fixtures/*')
+DS_CHECK_INPUTS = ('tests/smoke/ds-site-*', 'tests/smoke/font-assets-check.ts',
+                   'tests/support/smoke-browser.ts', 'tests/support/ds-viewer-mobile-checks.ts')
+SIGNING = ('deploy/macos/*', 'deploy/macos*', 'packages/butler-app/scripts/release/*',
+           'packages/butler-app/client/electron/*', '.github/workflows/macos-signing.yml',
+           'packages/butler-agent/rust/scripts/package-standalone-agent.py',
+           'VERSION', 'package.json', 'bun.lock', 'bun.lockb')
 # Native Windows smoke inputs beyond Rust; other CI configuration stays out.
 WINDOWS = ('deploy/windows*', '.github/workflows/*windows*', '.github/actions/*windows*',
            '.github/actions/rust-agent-setup/*', '.github/scripts/*windows*')
@@ -77,6 +86,8 @@ def matches(path, patterns):
 def github_categories(path):
     if path.endswith('.md') or path.startswith('.github/releases/'):
         return set()
+    if path == '.github/workflows/macos-signing.yml':
+        return {'signing'}
     if matches(path, CI_LINT_ONLY):
         return {'workflows'}
     # This orchestrator owns all groups, unlike the reusable rust-* jobs.
@@ -104,20 +115,20 @@ def categories(path):
     ui = path.startswith(('packages/butler-app/client/', 'packages/butler-i18n/'))
     if rust or path == 'VERSION':
         result.add('rust')
-    if rust or package or path == 'VERSION':
+    if (rust and not matches(path, RUST_TEST_ONLY)) or package or path == 'VERSION':
         result.update(('package', 'install', 'linux-package'))
     bun_source = path.startswith('packages/') and not rust and path.endswith(('.ts', '.tsx', '.js', '.jsx', '.mjs'))
     manifest = path.startswith('packages/') and path.endswith('/package.json')
     if ui or shared or bun_source or manifest or path.startswith(('tests/', 'tools/')) or (path.startswith('packages/') and not rust and not package and not path.startswith('packages/butler-site/')):
         result.add('ui')
-    if path.startswith(('packages/butler-site/', 'packages/butler-app/client/ui/', 'packages/butler-i18n/')) or shared or matches(path, ('tests/smoke/ds-site-*',)):
+    if path.startswith(('packages/butler-site/', 'packages/butler-app/client/ui/', 'packages/butler-i18n/')) or shared or matches(path, DS_CHECK_INPUTS):
         result.add('site')
-    if path.startswith('packages/butler-app/client/ui/') or shared or matches(path, ('tests/smoke/ds-site-*',)):
+    if path.startswith('packages/butler-app/client/ui/') or shared or matches(path, DS_CHECK_INPUTS):
         result.add('ds')
-    if license_input or matches(path, ('*lock*', 'Cargo.toml', '**/Cargo.toml', '**/package.json', 'deploy/licenses/*', '**/licenses/*', 'LICENSE*')):
+    if license_input or matches(path, ('*.lock', '*.lockb', '*-lock.json', 'Cargo.lock', 'Cargo.toml', '**/Cargo.toml', '**/package.json', 'deploy/licenses/*', '**/licenses/*', 'LICENSE*')):
         result.add('licenses')
-    if 'ui' in result:
-        result.add('ds')  # Every UI/Bun owner retains the existing renderer browser smokes.
+    if matches(path, SIGNING):
+        result.add('signing')
     # Unknown executable/configuration inputs fail closed, rather than silently
     # leaving a new package or tool untested. Assets/readme are product assets.
     if not result and not path.startswith('assets/readme/'):
@@ -293,6 +304,12 @@ def select(event, workflow):
     paths = [] if full else changed(base)
     required = set(GROUPS) if full else set().union(*(categories(p) for p in paths))
     current = hashes(base or 'full')
+    # Windows stub receipts use the package group, including all Rust harness inputs.
+    if workflow == 'windows-preview-smoke.yml':
+        if full or any(windows_native(path) and categories(path) & {'rust', 'package'} for path in paths):
+            required.add('package')
+        current['package'] = hashlib.sha256(
+            json.dumps([current['package'], current['rust']]).encode()).hexdigest()
     repository = os.environ['GITHUB_REPOSITORY']
     branch = os.environ.get('GITHUB_REF', '').removeprefix('refs/heads/') if candidate else pr.get('head', {}).get('ref')
     job_inputs = integration_inputs(workflow, current, candidate) if candidate else {}

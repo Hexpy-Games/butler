@@ -23,23 +23,23 @@ class Paths(unittest.TestCase):
     def test_responsible_jobs_and_workflow_fail_closed(self):
         cases = {
             'packages/butler-app/client/ui/src/app.tsx': {'ui', 'site', 'ds'},
-            'packages/butler-i18n/src/locale.ts': {'ui', 'site', 'ds'},
-            'packages/project-ledger/src/index.ts': {'ui', 'ds'},
-            'bun.lock': {'ui', 'site', 'ds', 'licenses'},
-            'bun.lockb': {'ui', 'site', 'ds', 'licenses'},
+            'packages/butler-i18n/src/locale.ts': {'ui', 'site'},
+            'packages/project-ledger/src/index.ts': {'ui'},
+            'bun.lock': {'ui', 'site', 'ds', 'licenses', 'signing'},
+            'bun.lockb': {'ui', 'site', 'ds', 'licenses', 'signing'},
             'packages/butler-agent/rust/crates/butler-core/src/lib.rs': {'rust', 'package', 'install', 'linux-package'},
             'packages/butler-agent/rust/Cargo.lock': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'Cargo.toml': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'new-crate/Cargo.toml': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'new-crate/Cargo.lock': {'rust', 'package', 'install', 'linux-package', 'licenses'},
-            'packages/butler-app/client/electron/src/main.ts': {'ui', 'ds', 'package', 'install', 'linux-package'},
+            'packages/butler-app/client/electron/src/main.ts': {'ui', 'package', 'install', 'linux-package', 'signing'},
             'deploy/install.sh': {'package', 'install', 'linux-package'},
             'packages/butler-site/src/pages/index.astro': {'site'},
             'README.md': set(),
             'packages/butler-agent/rust/docs/install-layout.md': set(),
             'packages/butler-agent/resources/skills/status/SKILL.md': {'rust', 'package', 'install', 'linux-package'},
-            'packages/butler-agent/rust/crates/butler-e2e/fixtures/memory/rule.md': {'rust', 'package', 'install', 'linux-package'},
-            'packages/butler-app/scripts/release/package-versions.ts': {'ui', 'ds', 'package', 'install', 'linux-package'},
+            'packages/butler-agent/rust/crates/butler-e2e/fixtures/memory/rule.md': {'rust'},
+            'packages/butler-app/scripts/release/package-versions.ts': {'ui', 'package', 'install', 'linux-package', 'signing'},
             'notes.md': set(),
             '.github/pull_request_template.md': set(),
             '.github/workflows/windows.yml': {'package'},
@@ -72,7 +72,7 @@ class Paths(unittest.TestCase):
             '.github/workflows/native-agent.yml': {'rust', 'package', 'install', 'linux-package'},
             '.github/actions/rust-agent-setup/action.yml': {'rust', 'package', 'install', 'linux-package'},
             '.github/actions/publish-cargo-target/action.yml': {'rust', 'package', 'install', 'linux-package'},
-            '.github/workflows/macos-signing.yml': {'package', 'install', 'linux-package'},
+            '.github/workflows/macos-signing.yml': {'signing'},
             '.github/workflows/linux-packages.yml': {'linux-package'},
             '.github/workflows/install-smoke.yml': {'install'},
             '.github/workflows/bun-unit.yml': {'ui'},
@@ -212,6 +212,7 @@ class Trust(unittest.TestCase):
             ('pull_request', 'refs/pull/12/merge', pr, ['docs/notes.md', workflow], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['deploy/install.sh', 'packages/butler-npm/index.js'], none),
             ('pull_request', 'refs/pull/12/merge', pr, [rust], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], native),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], native),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/actions/build-windows-agent/action.yml'], native),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-installer.yml'], none),
@@ -322,6 +323,91 @@ class Trust(unittest.TestCase):
                 output = (Path(temporary) / 'output').read_text()
                 self.assertIn('rust=' + expected[0], output)
                 self.assertIn('ui=' + expected[1], output)
+
+
+class Precision(unittest.TestCase):
+    # test-category: pure-logic
+    def test_package_only_inputs_do_not_build_test_archives(self):
+        flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds']
+        for values in itertools.product(['false', 'true'], repeat=4):
+            outputs = dict.fromkeys(flags, 'false') | dict(zip(flags[:4], values), tier='smoke')
+            jobs = changes.rust_jobs(outputs, 'pull_request')
+            for platform in ['linux', 'macos', 'linux-arm64']:
+                self.assertEqual(jobs[f'{platform}-archive'], outputs['rust'] == 'true')
+            self.assertEqual(jobs['linux-native'], 'true' in values[2:])
+            self.assertEqual(jobs['linux-package-x64'], outputs['linux-package'] == 'true')
+            self.assertEqual(jobs['install-x64'], outputs['install'] == 'true')
+
+    # test-category: pure-logic
+    def test_only_unshipped_harness_inputs_omit_packaging(self):
+        root = 'packages/butler-agent/rust/'
+        cases = {
+            'crates/butler-e2e/tests/e2e/new.rs': False,
+            'crates/butler-e2e/fixtures/new/input.json': False,
+            'crates/butler-e2e/src/lib.rs': True,
+            'crates/butler-e2e/Cargo.toml': True,
+            'crates/butler-platform/src/lib.rs': True,
+            'scripts/package-standalone-agent.py': True,
+            'Cargo.lock': True,
+        }
+        for path, package in cases.items():
+            groups = changes.categories(root + path)
+            self.assertIn('rust', groups)
+            for group in ['package', 'install', 'linux-package']:
+                self.assertEqual(group in groups, package, (path, group))
+
+    # test-category: pure-logic
+    def test_ds_follows_viewer_build_and_smoke_inputs(self):
+        for path, expected in {
+            'packages/butler-app/client/ui/vite.ds-site.config.ts': True,
+            'tests/smoke/ds-site-smoke.ts': True,
+            'tests/smoke/font-assets-check.ts': True,
+            'tests/support/smoke-browser.ts': True,
+            'tests/support/ds-viewer-mobile-checks.ts': True,
+            'package.json': True,
+            'tools/validate.ts': False,
+            'tests/unit/queue.test.ts': False,
+            'packages/project-ledger/src/index.ts': False,
+            'packages/butler-app/client/electron/src/main.ts': False,
+        }.items():
+            self.assertEqual('ds' in changes.categories(path), expected, path)
+
+    # test-category: pure-logic
+    def test_license_lock_patterns_do_not_match_source_names(self):
+        for name, expected in {
+            'Cargo.lock': True, 'bun.lockb': True, 'package-lock.json': True,
+            'npm-shrinkwrap.json': False, 'block.rs': False, 'clock.ts': False,
+            'instance_lock.rs': False,
+        }.items():
+            path = 'packages/butler-agent/rust/crates/butler-core/src/' + name
+            self.assertEqual('licenses' in changes.categories(path), expected, path)
+
+    # test-category: pure-logic
+    def test_signing_selects_own_inputs_through_workflow_jobs(self):
+        for path, expected in {
+            'deploy/macos/sign-and-notarize.sh': True,
+            'packages/butler-app/scripts/release/package-app-release.ts': True,
+            'packages/butler-app/client/electron/entitlements.mac.plist': True,
+            'packages/butler-agent/rust/scripts/package-standalone-agent.py': True,
+            '.github/workflows/macos-signing.yml': True,
+            'VERSION': True, 'bun.lock': True,
+            'packages/butler-agent/rust/crates/butler-core/src/lib.rs': False,
+            'deploy/linux-app-smoke.sh': False, 'deploy/install.sh': False,
+        }.items():
+            with self.subTest(path=path), tempfile.TemporaryDirectory() as temporary:
+                env = dict(GITHUB_EVENT_NAME='pull_request', GITHUB_REF='refs/pull/1/merge',
+                           GITHUB_REPOSITORY='owner/repo', GITHUB_RUN_ID='2',
+                           GITHUB_OUTPUT=str(Path(temporary) / 'output'),
+                           GITHUB_STEP_SUMMARY=str(Path(temporary) / 'summary'))
+                with patch.dict(os.environ, env), patch.object(changes, 'command', return_value='head'), \
+                     patch.object(changes, 'changed', return_value=[path]), \
+                     patch.object(changes, 'previous', return_value=iter([])), \
+                     patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
+                    changes.select({'pull_request': {'number': 1, 'base': {'sha': 'base'}}}, 'macos-signing.yml')
+                output = dict(line.split('=', 1) for line in Path(env['GITHUB_OUTPUT']).read_text().splitlines())
+                self.assertEqual(json.loads(output['jobs']), dict(shellcheck=expected, selftest=expected))
+        self.assertEqual(changes.job_groups('macos-signing.yml'),
+                         dict(shellcheck=['signing'], selftest=['signing']))
 
 
 if __name__ == '__main__':
