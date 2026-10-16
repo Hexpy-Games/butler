@@ -127,7 +127,7 @@ Manifests record `signing: { teamId, notarized }` per artifact (`null` for
 local ad-hoc builds; an empty `teamId` and `notarized: false` for ad-hoc previews). `integrity.signature` stays reserved for a detached signature.
 `release:app:smoke` and `release:agent:smoke` re-check Team ID, hardened
 runtime, timestamp, staple and `spctl` when signing is on.
-`.github/workflows/macos-signing.yml` runs shellcheck and an ad-hoc self-test
+`.github/workflows/rust-quality.yml` runs shellcheck and an ad-hoc self-test
 (`deploy/macos/selftest.sh`) on PRs.
 
 First tag: confirm the `native-release` run shows `sign: notarized ...
@@ -158,10 +158,4 @@ created their temporary keychain; Butler package/gate/smoke commands retain fres
 HOME and data directories. The release records a paired old/current Developer ID
 probe before claiming that profile binding caused a repair (#498).
 
-If a published preview lacks its macOS App, dispatch `macos-release-recovery.yml`
-from a later qualified preview tag with the target and baseline tags. It uses the
-target's immutable product source and checksum-verified published Agent, changes
-only the signing tool, refuses to replace an existing macOS App, preserves all
-existing platform entries, regenerates checksums, and runs the real published
-baseline-to-target update smoke. It cannot run from a branch or stable tag.
 The npm tarball and SHA-256 are release assets; packing never publishes to npm.

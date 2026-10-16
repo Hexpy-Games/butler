@@ -25,39 +25,106 @@ class Paths(unittest.TestCase):
             'packages/butler-app/client/ui/src/app.tsx': {'ui', 'site', 'ds'},
             'packages/butler-i18n/src/locale.ts': {'ui', 'site', 'ds'},
             'packages/project-ledger/src/index.ts': {'ui', 'ds'},
-            'bun.lock': {'ui', 'site', 'ds', 'licenses'},
-            'bun.lockb': {'ui', 'site', 'ds', 'licenses'},
+            'bun.lock': {'ui', 'site', 'ds', 'licenses', 'signing'},
+            'bun.lockb': {'ui', 'site', 'ds', 'licenses', 'signing'},
             'packages/butler-agent/rust/crates/butler-core/src/lib.rs': {'rust', 'package', 'install', 'linux-package'},
             'packages/butler-agent/rust/Cargo.lock': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'Cargo.toml': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'new-crate/Cargo.toml': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'new-crate/Cargo.lock': {'rust', 'package', 'install', 'linux-package', 'licenses'},
-            'packages/butler-app/client/electron/src/main.ts': {'ui', 'ds', 'package', 'install', 'linux-package'},
+            'packages/butler-app/client/electron/src/main.ts': {'rust', 'ui', 'ds', 'package', 'install', 'linux-package', 'signing'},
             'deploy/install.sh': {'package', 'install', 'linux-package'},
             'packages/butler-site/src/pages/index.astro': {'site'},
             'README.md': set(),
             'packages/butler-agent/rust/docs/install-layout.md': set(),
             'packages/butler-agent/resources/skills/status/SKILL.md': {'rust', 'package', 'install', 'linux-package'},
-            'packages/butler-agent/rust/crates/butler-e2e/fixtures/memory/rule.md': {'rust', 'package', 'install', 'linux-package'},
-            'packages/butler-app/scripts/release/package-versions.ts': {'ui', 'ds', 'package', 'install', 'linux-package'},
+            'packages/butler-agent/rust/crates/butler-e2e/fixtures/memory/rule.md': {'rust'},
+            'packages/butler-app/scripts/release/package-versions.ts': {'rust', 'ui', 'ds', 'package', 'install', 'linux-package', 'signing'},
             'notes.md': set(),
-            '.github/pull_request_template.md': set(changes.GROUPS),
-            '.github/workflows/windows.yml': set(changes.GROUPS),
+            '.github/pull_request_template.md': set(),
+            '.github/workflows/windows.yml': {'rust', 'ui', 'package'},
             'new-build-config.ini': set(changes.GROUPS) - {'workflows'},
         }
         workflow = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
         lint = workflow.split('  lint:\n', 1)[1].split('  gate:\n', 1)[0]
-        self.assertIn("    if: needs.changes.outputs.tier != 'integration'", lint)  # PRs always run the tracked-document guard.
+        self.assertIn("fromJSON(needs.changes.outputs.jobs).lint", lint)  # PRs always run the tracked-document guard.
         self.assertIn('work-docs-lint.py', lint)
         for path, expected in cases.items():
             with self.subTest(path=path):
                 self.assertEqual(changes.categories(path), expected)
 
     # test-category: pure-logic
-    def test_windows_native_smoke_follows_rust_and_windows_inputs_only(self):
+    def test_github_inputs_follow_consumers_and_unknowns_fail_closed(self):
+        from ci_consumer_test_support import consumer_groups
+        for path, groups in consumer_groups(changes.GROUPS).items():
+            with self.subTest(path=path):
+                self.assertGreaterEqual(changes.categories(path), groups)
+        for path in ['.github/workflows/new-check.yml',
+                     '.github/actions/new-setup/action.yml',
+                     '.github/scripts/new-helper.py', '.github/actionlint.yaml']:
+            with self.subTest(path=path):
+                self.assertEqual(changes.categories(path), set(changes.GROUPS))
+        for path in ['.github/releases/v1.2.3.md',
+                     '.github/actions/windows-owner-setup/README.md']:
+            self.assertEqual(changes.categories(path), set())
+
+    # test-category: pure-logic
+    def test_consumer_derivation_follows_reuse_actions_and_python_imports(self):
+        import ci_consumer_test_support as consumers
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = {
+                '.github/workflows/root.yml': """name: Root
+jobs:
+  producer:
+    if: >-
+      needs.changes.outputs.package == 'true'
+    uses: ./.github/workflows/child.yml
+  verifier:
+    needs: producer
+    if: needs.changes.outputs.install == 'true'
+    steps:
+      - run: python3 .github/scripts/verify.py
+  gate:
+    steps:
+      - run: echo receipt
+        groups: '{"package": ["producer"], "install": ["verifier"]}'
+""",
+                '.github/workflows/child.yml': """on:
+  workflow_call:
+jobs:
+  build:
+    steps:
+      - uses: ./.github/actions/setup
+""",
+                '.github/actions/setup/action.yaml': """runs:
+  using: composite
+  steps:
+    - run: python3 .github/scripts/direct.py
+""",
+                '.github/scripts/direct.py': 'import local\n',
+                '.github/scripts/local.py': 'import importlib\nimportlib.import_module("dynamic")\n',
+                '.github/scripts/dynamic.py': 'import direct\n',
+                '.github/scripts/verify.py': 'from local import value\n',
+            }
+            for name, content in files.items():
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
+            with patch.object(consumers, 'ROOT', root):
+                derived = consumers.consumer_groups(changes.GROUPS)
+            native = {'package', 'rust', 'ui'}
+            self.assertEqual(derived['.github/workflows/child.yml'], native)
+            self.assertEqual(derived['.github/actions/setup/action.yaml'], native)
+            self.assertEqual(derived['.github/scripts/direct.py'], native | {'install'})
+            self.assertEqual(derived['.github/scripts/dynamic.py'], native | {'install'})
+            self.assertEqual(derived['.github/scripts/verify.py'], native | {'install'})
+
+    # test-category: pure-logic
+    def test_windows_native_smoke_follows_windows_inputs_only(self):
         for path, expected in {
-            'packages/butler-agent/rust/crates/butler-core/src/lib.rs': True,
-            'packages/butler-agent/rust/Cargo.lock': True,
+            'packages/butler-agent/rust/crates/butler-core/src/lib.rs': False,
+            'packages/butler-agent/rust/Cargo.lock': False,
             'deploy/windows-preview-quality.ps1': True,
             '.github/workflows/windows-preview-smoke.yml': True,
             '.github/actions/build-windows-debug-agent/action.yml': True,
@@ -156,6 +223,7 @@ class Trust(unittest.TestCase):
                 with patch.dict(os.environ, env), patch.object(changes, 'command', return_value='checkout'), \
                      patch.object(changes, 'changed', return_value=['packages/butler-app/client/ui/src/app.tsx']), \
                      patch.object(changes, 'previous', return_value=iter([])), \
+                     patch.object(changes, 'main_base', return_value=None if event.get('before') == '0' * 40 else 'base'), \
                      patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
                     changes.select(event, 'rust-quality.yml')
                 output = (Path(temporary) / 'output').read_text()
@@ -173,9 +241,15 @@ class Trust(unittest.TestCase):
         for event_name, ref, event, paths, expected in [
             ('pull_request', 'refs/pull/12/merge', pr, ['docs/notes.md', workflow], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['deploy/install.sh', 'packages/butler-npm/index.js'], none),
-            ('pull_request', 'refs/pull/12/merge', pr, [rust], native),
-            ('pull_request', 'refs/pull/12/merge', pr, ['deploy/windows-preview-smoke.ps1'], native),
-            ('workflow_dispatch', 'refs/heads/main', {}, [], dict.fromkeys(none, True)),
+            ('pull_request', 'refs/pull/12/merge', pr, [rust], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/actions/build-windows-agent/action.yml'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-installer.yml'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/scripts/ci-changes.py'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/releases/v1.2.3.md'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['deploy/windows-preview-smoke.ps1'], none),
+            ('workflow_dispatch', 'refs/heads/main', {}, [], native),
         ]:
             with self.subTest(event=event_name, paths=paths), tempfile.TemporaryDirectory() as temporary:
                 env = dict(GITHUB_EVENT_NAME=event_name, GITHUB_REF=ref, GITHUB_REPOSITORY='owner/repo',
@@ -201,10 +275,11 @@ class Trust(unittest.TestCase):
         workflow = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
         groups = json.loads(re.search(r"groups: '([^']+)'", workflow).group(1))
         # Evaluate the actual gate's selection policy, without its result loop.
-        policy = (ROOT / 'check-gate.py').read_text().split("if 'lint' in jobs")[0]
-        flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds']
+        policy = (ROOT / 'check-gate.py').read_text().split("for name, enabled in selected.items():")[0]
+        flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds', 'licenses', 'signing']
         for values in itertools.product(['false', 'true'], repeat=len(flags)):
-            outputs = dict(zip(flags, values), tier='smoke', workflows='false')
+            outputs = dict(zip(flags, values), tier='smoke', workflows='true')
+            outputs['jobs'] = json.dumps(changes.rust_jobs(outputs, 'pull_request') | {'lint': True})
             jobs = {'changes': {'result': 'success', 'outputs': outputs}}
             with patch.dict(os.environ, RESULTS=json.dumps(jobs), EVENT='pull_request'):
                 scope = {}
@@ -259,26 +334,139 @@ class Trust(unittest.TestCase):
                 actual = subprocess.run(['python3', ROOT / 'ci-check-selected.py'], env=env, capture_output=True)
                 self.assertEqual(actual.returncode == 0, result == ('success' if selected else 'skipped'))
 
+    # test-category: pure-logic
+    def test_reused_x64_install_restores_shared_npm_tarball(self):
+        workflow = 'rust-quality.yml'
+        inputs = changes.integration_inputs(workflow, dict.fromkeys(changes.GROUPS, 'hash'),
+                                            '0.1.0-preview.11')
+        receipt = dict(run=7, job_inputs=inputs, job_hashes={'install-x64': inputs['install-x64']})
+        _, reused = changes.reuse_inputs('owner/repo', None, workflow, 'release/0.1.0-preview.11',
+                                         {}, inputs, receipts=[receipt])
+        artifacts = [dict(name=artifact, run=run) for name, run in reused.items()
+                     for artifact in changes.producer_artifacts(workflow, name)]
+        self.assertEqual(reused, {'install-x64': 7})
+        self.assertEqual(artifacts, [dict(name='agent-linux-x64', run=7),
+                                     dict(name='butler-npm-x64', run=7)])
+
+
+
+class WorkflowScheduling(unittest.TestCase):
+    # test-category: pure-logic
+    def test_installer_verify_condition_truth_table(self):
+        source = (ROOT.parent / 'workflows/windows-installer.yml').read_text()
+        verify = source.split('\n  verify:\n', 1)[1].split('\n  gate:', 1)[0]
+        expression = re.search(r'^    if: \$\{\{ (.*) \}\}$', verify, re.M)[1]
+        results = ('success', 'failure', 'cancelled', 'skipped')
+        cases = itertools.product(results, ('smoke', 'integration'), (False, True),
+                                  ('', '123'), (False, True), results)
+        for build, tier, cancelled, reuse, selected, changes_result in cases:
+            with self.subTest(build=build, tier=tier, cancelled=cancelled,
+                              reuse=reuse, selected=selected, changes=changes_result):
+                condition = expression
+                values = {'cancelled()': cancelled, 'always()': True,
+                          'needs.changes.result': changes_result,
+                          'needs.build.result': build, 'inputs.reuse-run': reuse,
+                          'needs.changes.outputs.tier': tier,
+                          'fromJSON(needs.changes.outputs.jobs).verify': selected}
+                for name, value in values.items():
+                    condition = condition.replace(name, repr(value))
+                condition = re.sub(r'!(?!=)', 'not ', condition)
+                condition = condition.replace('&&', 'and').replace('||', 'or')
+                if cancelled or changes_result != 'success':
+                    expected = False
+                elif tier == 'integration':
+                    expected = selected and build in ('success', 'skipped')
+                else:
+                    expected = build == 'success' or bool(reuse)
+                self.assertEqual(bool(eval(condition, {'__builtins__': {}})), expected)
+
+    # test-category: format-pin
+    def test_release_keeps_job_locks_without_workflow_pending_cancellation(self):
+        source = (ROOT.parent / 'workflows/release.yml').read_text()
+        self.assertNotRegex(source, r'(?m)^concurrency:')
+        groups = {'agent-windows-build': 'windows-release-${{ github.ref }}',
+                  'app-windows': 'windows-app-release-${{ github.ref }}',
+                  'recover-release': 'release-publication-recovery'}
+        for job, group in groups.items():
+            block = source.split(f'\n  {job}:\n', 1)[1]
+            block = re.split(r'\n  [a-z][a-z0-9-]*:\n', block, maxsplit=1)[0]
+            self.assertIn(f'    concurrency:\n      group: {group}\n'
+                          '      cancel-in-progress: false', block)
+
+class TrimContracts(unittest.TestCase):
     # test-category: security
-    def test_hash_match_required_even_with_prior_success(self):
-        state = dict(schema=1, repository='owner/repo', workflow='rust-quality.yml', pr=12,
-                     run=1, hashes={'rust': 'rust-before', 'ui': 'ui-before'})
-        event = {'pull_request': {'number': 12, 'base': {'sha': 'base'}}}
-        for current, expected in [({'rust': 'rust-before', 'ui': 'ui-after'}, ('false', 'true')),
-                                  ({'rust': 'rust-after', 'ui': 'ui-before'}, ('true', 'false')),
-                                  ({'rust': 'rust-after', 'ui': 'ui-after'}, ('true', 'true'))]:
-            with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
-                env = dict(GITHUB_EVENT_NAME='pull_request', GITHUB_REPOSITORY='owner/repo',
-                           GITHUB_RUN_ID='2', GITHUB_OUTPUT=str(Path(temporary) / 'output'),
-                           GITHUB_STEP_SUMMARY=str(Path(temporary) / 'summary'))
-                with patch.dict(os.environ, env), patch.object(changes, 'command', return_value='checkout'), \
-                     patch.object(changes, 'changed', return_value=['.github/workflows/rust-quality.yml']), \
-                     patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'other') | current), \
-                     patch.object(changes, 'previous', return_value=iter([state])):
-                    changes.select(event, 'rust-quality.yml')
-                output = (Path(temporary) / 'output').read_text()
-                self.assertIn('rust=' + expected[0], output)
-                self.assertIn('ui=' + expected[1], output)
+    def test_gate_uses_exported_job_selection_even_without_path_flags(self):
+        for tier, name in itertools.product(['smoke', 'integration'],
+                                            ['linux-clippy', 'windows-check', 'shellcheck', 'selftest']):
+            for enabled in [True, False]:
+                for result in ['success', 'failure', 'cancelled', 'skipped']:
+                    outputs = {'tier': tier, 'jobs': json.dumps({name: enabled})}
+                    jobs = {'changes': {'result': 'success', 'outputs': outputs},
+                            name: {'result': result}}
+                    env = dict(os.environ, RESULTS=json.dumps(jobs))
+                    actual = subprocess.run(['python3', ROOT / 'check-gate.py'], env=env, capture_output=True)
+                    self.assertEqual(actual.returncode == 0,
+                                     result == ('success' if enabled else 'skipped'),
+                                     (tier, enabled, result, actual.stderr))
+
+    # test-category: security
+    def test_license_failure_in_lint_keeps_gate_and_receipt_semantics(self):
+        source = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
+        lint = source.split('  lint:\n', 1)[1].split('  gate:\n', 1)[0]
+        for command in ['node deploy/licenses/generate.mjs --check',
+                        'node deploy/licenses/check.mjs', 'python3 deploy/licenses/check-disclosure.py']:
+            self.assertIn(command, lint)
+        groups = json.loads(re.search(r"groups: '([^']+)'", source)[1])
+        self.assertEqual(groups['licenses'], ['lint'])
+        for tier, enabled, outcome in itertools.product(
+                ['smoke', 'integration'], [True, False], ['success', 'failure', 'cancelled', 'skipped']):
+            with self.subTest(tier=tier, enabled=enabled, outcome=outcome), tempfile.TemporaryDirectory() as temp:
+                outputs = {'tier': tier, 'licenses': str(enabled or tier == 'integration').lower(),
+                           'jobs': json.dumps({'lint': enabled})}
+                state = dict(schema=1, workflow='rust-quality.yml', hashes={'licenses': 'complete'},
+                             outputs=dict(outputs), reuse={},
+                             job_inputs={'lint': 'job-hash'} if tier == 'integration' else {},
+                             job_reuse={'lint': 1} if tier == 'integration' and not enabled else {})
+                outputs['selection'] = json.dumps(state)
+                jobs = {'changes': {'result': 'success', 'outputs': outputs}, 'lint': {'result': outcome}}
+                env = dict(os.environ, RESULTS=json.dumps(jobs))
+                actual = subprocess.run(['python3', ROOT / 'check-gate.py'], env=env, capture_output=True)
+                passed = outcome == ('success' if enabled else 'skipped')
+                self.assertEqual(actual.returncode == 0, passed, actual.stderr)
+                with patch.dict(os.environ, env | {'RUNNER_TEMP': temp, 'JOB_GROUPS': '{"licenses":["lint"]}'}), \
+                     patch.object(changes.ci_parts, 'inventory', return_value={}):
+                    changes.record()
+                receipt = json.loads((Path(temp) / 'ci-inputs/inputs.json').read_text())
+                self.assertEqual(receipt['hashes'], {'licenses': 'complete'}
+                                 if passed and outputs['licenses'] == 'true' else {})
+                self.assertEqual(receipt['job_hashes'], {'lint': 'job-hash'}
+                                 if passed and tier == 'integration' else {})
+
+    # test-category: format-pin
+    def test_empty_artifact_matrix_is_deselected_before_expansion(self):
+        source = (ROOT.parent / 'workflows/ci-changes.yml').read_text().split('  artifacts:\n    needs: paths')[1]
+        self.assertIn("if: needs.paths.outputs.artifacts != '[]'", source)
+        self.assertIn('artifact: ${{ fromJSON(needs.paths.outputs.artifacts) }}', source)
+        self.assertNotIn('"run":0', source)
+
+    # test-category: format-pin
+    def test_ds_filter_covers_every_protected_directory_and_root_css(self):
+        source = (ROOT.parent / 'workflows/ds-approval.yml').read_text()
+        spec = importlib.util.spec_from_file_location('ds_approval', ROOT / 'ds-approval.py')
+        ds = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ds)
+        globs = re.findall(r"^      - '([^']+)'$", source, re.M)
+        for path in ['components/button.tsx', 'blocks/nested/card.ts', 'shadcn/nested/token.css', 'tokens.css']:
+            protected = ds.protected([ds.DS + path])
+            self.assertTrue(protected)
+            self.assertTrue(changes.matches(protected[0], tuple(globs)), protected)
+        self.assertFalse(changes.matches('packages/butler-app/client/ui/src/app.tsx', tuple(globs)))
+
+
+# Keep the derived dependency checks in the existing CI-script test entrypoint.
+from ci_windows_cascade_tests import WindowsCascade
+from ci_input_tests import DerivedInputs
+from ci_tier_tests import Precision, ApprovedTiers
 
 
 if __name__ == '__main__':

@@ -71,6 +71,8 @@ export const EMPTY_SETTINGS: SettingsView = {
   translucent_sidebar: true,
   smart_grouping_enabled: true,
   diagnostics_enabled: false,
+  command_sandbox_enabled: true,
+  command_sandbox_available: false,
   desktop_notifications: {
     enabled: true,
     assistant_messages: true,

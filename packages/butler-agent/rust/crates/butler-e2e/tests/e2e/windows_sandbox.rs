@@ -18,6 +18,7 @@ mod phase_profile;
 mod preparation;
 mod project_boundaries;
 mod project_write;
+mod setting;
 mod tools;
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use butler_platform::command_sandbox::{self, Invocation};
@@ -26,6 +27,14 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Output},
 };
+
+pub(super) fn toolchain_roots() -> Option<command_sandbox::ToolchainRoots> {
+    butler_platform::account_dirs::account_dirs().map(|dirs| command_sandbox::ToolchainRoots {
+        home: dirs.home,
+        app_data: dirs.app_data,
+        local_app_data: dirs.local_app_data,
+    })
+}
 
 fn desktop() -> bool {
     !command_sandbox::POSIX_SHELL
@@ -107,6 +116,7 @@ impl Fixture {
                 .map(PathBuf::as_path)
                 .collect::<Vec<_>>(),
             &secrets.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
+            toolchain_roots().as_ref(),
         )
         .unwrap()
     }

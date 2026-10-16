@@ -1,0 +1,12 @@
+# Test hooks in shipped code, ratcheted by tools/source-check: string literals
+# naming a BUTLER_E2E_* variable, an e2e-* marker file or a /_test/ route.
+# Move each hook to the E2E harness or behind the `e2e-fixtures` feature.
+# Counts may only shrink; regenerate with
+#   cargo run -p butler-source-check -- --bless .
+# package<TAB>hooks
+crates/butler-agent	60
+crates/butler-gateway	28
+crates/butler-memory	10
+crates/butler-platform	11
+crates/butler-runtime	1
+crates/butler-turn	10

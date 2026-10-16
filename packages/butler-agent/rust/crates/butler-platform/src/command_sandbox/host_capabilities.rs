@@ -51,9 +51,15 @@ impl SandboxCapabilities {
     }
 }
 
+static CAPABILITIES: OnceLock<SandboxCapabilities> = OnceLock::new();
+
+/// Read the completed probe without starting or waiting for it.
+pub fn cached_capabilities() -> Option<&'static SandboxCapabilities> {
+    CAPABILITIES.get()
+}
+
 /// Returns the cached host probe. Unsupported hosts retain approval fallback.
 pub fn capabilities() -> &'static SandboxCapabilities {
-    static CAPABILITIES: OnceLock<SandboxCapabilities> = OnceLock::new();
     CAPABILITIES.get_or_init(probe)
 }
 

@@ -1,2 +1,2 @@
 self-hosted-runner:
-  labels: [butler-win]
+  labels: [butler-win, butler-win-release, butler-win-shared]

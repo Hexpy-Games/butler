@@ -235,9 +235,7 @@ async fn run(baseline: bool, measure_latency: bool) -> Result<ScenarioMetrics, H
     } else {
         "STORAGE-AFTER"
     })?
-    .stub_cassette(cassette()?)
-    .env("BUTLER_E2E_INGRESS_CAPACITY", "8")
-    .env("BUTLER_E2E_STREAM_UNCOALESCED", "1");
+    .stub_cassette(cassette()?);
     setup = storage_concurrency_support::instrument(setup);
     if baseline {
         setup = setup.env("BUTLER_E2E_STORAGE_BASELINE", "1");
@@ -366,7 +364,6 @@ async fn final_stream_boundary_survives_an_immediate_crash() -> Result<(), Harne
     butler_e2e::gate!();
     let mut s = Setup::new("STORAGE-BOUNDARY")?
         .stub_cassette(cassette()?)
-        .env("BUTLER_E2E_STREAM_UNCOALESCED", "1")
         .start()
         .await?;
     let accepted = s.gw.say("general", REQUEST).await?;
@@ -377,9 +374,10 @@ async fn final_stream_boundary_survives_an_immediate_crash() -> Result<(), Harne
     assert_eq!(turn_state(&delivered), "delivered");
     s.agent.kill9()?;
     let path = s.sandbox.data.join("app-server/butler-client.sqlite");
+    let sessions = ["general".into()];
     verify_rows(
         &path,
-        &["general".into()],
+        &sessions,
         std::slice::from_ref(&turn),
         DELTAS,
         REQUEST,
@@ -389,7 +387,10 @@ async fn final_stream_boundary_survives_an_immediate_crash() -> Result<(), Harne
     let view = s.gw.get("/session-view?session_id=general").await?;
     assert_eq!(view.status, 200);
     assert_eq!(view.data()["messages"][1]["text"], answer());
+    assert_eq!(view.data()["messages"][1]["status"], "delivered");
     assert_eq!(view.data()["latest_turn"]["state"], "delivered");
+    s.agent.terminate().await?;
+    verify_rows(&path, &sessions, &[turn], DELTAS, REQUEST, &answer());
     s.finish().await
 }
 
@@ -401,7 +402,6 @@ async fn idle_delta_window_flushes_without_a_later_boundary() -> Result<(), Harn
     let mut s = Setup::new("STORAGE-IDLE-WINDOW")?
         .env("BUTLER_E2E_STORAGE_METRICS", "1")
         .stub_cassette(cassette()?)
-        .env("BUTLER_E2E_STREAM_UNCOALESCED", "1")
         .start()
         .await?;
     // Four stream headers plus five deltas, then no completion or tool boundary.

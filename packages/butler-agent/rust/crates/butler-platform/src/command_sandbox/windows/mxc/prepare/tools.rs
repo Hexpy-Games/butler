@@ -1,5 +1,6 @@
 //! Cached toolchain discovery, with canonical install evidence.
 use super::{Error, physical, physical_for};
+use crate::command_sandbox::ToolchainRoots;
 use crate::command_sandbox::mxc_policy::{
     WinPath, environment,
     toolchain::{self, Discovery, Toolchain},
@@ -12,9 +13,12 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-type ToolCache = Option<(BTreeMap<String, String>, Toolchain)>;
+type ToolCache = Option<(BTreeMap<String, String>, Option<ToolchainRoots>, Toolchain)>;
 
-pub(super) fn discover(env: &BTreeMap<String, String>) -> Result<Toolchain, Error> {
+pub(super) fn discover(
+    env: &BTreeMap<String, String>,
+    account: Option<&ToolchainRoots>,
+) -> Result<Toolchain, Error> {
     static CACHE: OnceLock<Mutex<ToolCache>> = OnceLock::new();
     let key: BTreeMap<_, _> = env
         .iter()
@@ -25,11 +29,14 @@ pub(super) fn discover(env: &BTreeMap<String, String>) -> Result<Toolchain, Erro
         .get_or_init(|| Mutex::new(None))
         .lock()
         .map_err(|_| "toolchain_cache_poisoned")?;
-    if let Some((_, tools)) = cache.as_ref().filter(|(cached, _)| cached == &key) {
+    if let Some((_, _, tools)) = cache
+        .as_ref()
+        .filter(|(cached, roots, _)| cached == &key && roots.as_ref() == account)
+    {
         return refresh_credentials(tools.clone());
     }
-    let tools = collect(env)?;
-    *cache = Some((key, tools.clone()));
+    let tools = collect(env, account)?;
+    *cache = Some((key, account.cloned(), tools.clone()));
     refresh_credentials(tools)
 }
 fn root(env: &BTreeMap<String, String>, key: &str) -> Result<Option<WinPath>, Error> {
@@ -38,8 +45,10 @@ fn root(env: &BTreeMap<String, String>, key: &str) -> Result<Option<WinPath>, Er
         .map(|v| physical_for(Path::new(v), key))
         .transpose()
 }
-fn collect(env: &BTreeMap<String, String>) -> Result<Toolchain, Error> {
-    let account = crate::account_dirs::account_dirs();
+fn collect(
+    env: &BTreeMap<String, String>,
+    account: Option<&ToolchainRoots>,
+) -> Result<Toolchain, Error> {
     let mut input = Discovery {
         system_root: root(env, "SYSTEMROOT")?,
         app_data: account

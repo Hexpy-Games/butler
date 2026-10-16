@@ -40,7 +40,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: macos-app-package-${{ github.ref }}
+  group: macos-app-package-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

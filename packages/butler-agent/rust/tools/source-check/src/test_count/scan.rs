@@ -159,6 +159,69 @@ mod tests {
         }
         assert!(tests("fn broken( {").is_err());
 
+        // Shipped test hooks: env reads, marker files and test routes count
+        // unless test-only or behind a fixture feature.
+        for (body, hooks) in [
+            ("fn a() { std::env::var(\"BUTLER_E2E_TIER\"); }", 1),
+            (
+                "fn a() { if matches!(var(\"BUTLER_E2E_X\"), Ok(\"1\")) {} }",
+                1,
+            ),
+            (
+                "fn a() { root.join(\"e2e-held\"); route(\"/a/_test/b\"); }",
+                2,
+            ),
+            (
+                "#[cfg(debug_assertions)]\nfn a() { var(\"BUTLER_E2E_X\"); }",
+                1,
+            ),
+            ("fn a() { #[cfg(debug_assertions)] hold(\"e2e-held\"); }", 1),
+            (
+                "#[cfg(feature = \"e2e-fixtures\")]\nfn a() { var(\"BUTLER_E2E_X\"); }",
+                0,
+            ),
+            (
+                "fn a() { #[cfg(feature = \"e2e-fixtures\")] hold(\"e2e-held\"); }",
+                0,
+            ),
+            (
+                "#[cfg(not(feature = \"e2e-fixtures\"))]\nfn a() { var(\"BUTLER_E2E_X\"); }",
+                1,
+            ),
+            (
+                "#[cfg(test)]\nmod t { fn a() { var(\"BUTLER_E2E_X\"); } }",
+                0,
+            ),
+            ("#[test]\nfn a() { var(\"BUTLER_E2E_X\"); }", 0),
+            (
+                "fn a() { var(\"BUTLER_SHUTDOWN_TRACE\"); code(\"e2e_failed\"); }",
+                0,
+            ),
+            (
+                "fn a() { root.join(\"state/e2e-held\"); nest(\"/_test\"); }",
+                2,
+            ),
+            ("fn a() { std::env::var_os(b\"BUTLER_E2E_X\"); }", 1),
+            ("fn a() { if cfg!(feature = \"e2e-fixtures\") {} }", 0),
+            ("/// Reads `BUTLER_E2E_X`.\nfn a() {}", 0),
+            ("impl A { #[test]\nfn a() { var(\"BUTLER_E2E_X\"); } }", 0),
+        ] {
+            assert_eq!(
+                crate::e2e_hooks::hooks(body).unwrap().len(),
+                hooks,
+                "{body}"
+            );
+        }
+        let counts = |rows: &[(&str, usize)]| -> std::collections::BTreeMap<String, usize> {
+            rows.iter()
+                .map(|(name, count)| ((*name).to_owned(), *count))
+                .collect()
+        };
+        let baseline = counts(&[("kept", 2), ("grown", 2), ("shrunk", 2)]);
+        let found = counts(&[("kept", 2), ("grown", 3), ("shrunk", 1), ("new", 1)]);
+        assert_eq!(crate::e2e_hooks::compare(&found, &baseline, true), 2);
+        assert_eq!(crate::e2e_hooks::compare(&found, &baseline, false), 3);
+
         let budget = "#[tokio::test]\nasync fn scenario() { assert!(started.elapsed() < Duration::from_millis(10)); }";
         assert_eq!(
             raw_budget_assertions(budget).unwrap(),

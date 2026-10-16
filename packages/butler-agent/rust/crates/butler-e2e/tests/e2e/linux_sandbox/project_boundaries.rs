@@ -13,6 +13,7 @@ fn invoke(command: &str, setup: &Setup) -> Invocation {
         root,
         &[&setup.sandbox.data.join("tmp/project-write")],
         &denied,
+        None,
     )
     .unwrap()
 }

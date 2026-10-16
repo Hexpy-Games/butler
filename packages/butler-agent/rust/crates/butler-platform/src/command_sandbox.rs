@@ -60,7 +60,7 @@ pub use test_support::{
 };
 
 mod host_capabilities;
-pub use host_capabilities::{Level, SandboxCapabilities, capabilities};
+pub use host_capabilities::{Level, SandboxCapabilities, cached_capabilities, capabilities};
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
@@ -240,16 +240,31 @@ pub fn login_shell_contained(
     )
 }
 
+/// Account folders supplied by the caller for installed toolchain discovery.
+/// These may differ from the command's redirected profile environment.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ToolchainRoots {
+    /// The account home containing default Cargo and Rustup installations.
+    pub home: std::path::PathBuf,
+    /// Roaming application installations.
+    pub app_data: std::path::PathBuf,
+    /// Machine-local application installations.
+    pub local_app_data: std::path::PathBuf,
+}
+
 /// The login shell of a mutating command contained to `root`: it may write
 /// only inside `root` and the `writable` scratch roots, never below `denied`
 /// or to project metadata and secrets, may not read credential stores, and
 /// has no network. Hosts without [`project_write_available`] refuse it.
+/// `toolchain_roots` names installed tools independently of the command profile;
+/// when unavailable, discovery falls back to the supplied environment.
 pub fn project_write_shell(
     command: &str,
     environment: &HashMap<String, String>,
     root: &Path,
     writable: &[&Path],
     denied: &[&Path],
+    toolchain_roots: Option<&ToolchainRoots>,
 ) -> Result<Invocation, SandboxError> {
     sandbox::project_write(
         shell::login_shell(command, environment),
@@ -257,6 +272,7 @@ pub fn project_write_shell(
         root,
         writable,
         denied,
+        toolchain_roots,
     )
 }
 

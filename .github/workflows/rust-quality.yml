@@ -1,21 +1,24 @@
 name: Rust quality
+run-name: >-
+  ${{ contains(fromJSON('["labeled", "unlabeled", "edited"]'), github.event.action) && format('Gate re-evaluation #{0}', github.run_id) || format('CI #{0}', github.run_id) }}
 
 # One required gate covers the selected Linux, macOS, UI and site checks.
-# Windows ownership remains in the existing Windows workflows.
+# Windows compile, signing policy and licenses share this selection and gate.
 on:
   push:
     branches: [main, 'release/**']
   pull_request:
-  merge_group:
+    types: [opened, synchronize, reopened, labeled, unlabeled, edited]
   workflow_dispatch:
 
 permissions:
   contents: read
   actions: read
   pull-requests: read
+  issues: read
 
 concurrency:
-  group: ${{ startsWith(github.ref, 'refs/heads/release/') && 'integration' || format('rust-quality-{0}', github.head_ref || github.ref_name) }}
+  group: ${{ startsWith(github.ref, 'refs/heads/release/') && format('integration-{0}', github.ref) || github.event_name == 'workflow_dispatch' && format('rust-quality-dispatch-{0}', github.run_id) || contains(fromJSON('["labeled", "unlabeled", "edited"]'), github.event.action) && format('rust-quality-metadata-{0}', github.head_ref || github.ref_name) || format('rust-quality-{0}', github.head_ref || github.ref_name) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/release/') }}
 
 env:
@@ -28,27 +31,43 @@ defaults:
 
 jobs:
   changes:
+    # Metadata re-evaluations run only gate; they cannot cancel a full CI run.
+    if: ${{ !contains(fromJSON('["labeled", "unlabeled", "edited"]'), github.event.action) }}
     uses: ./.github/workflows/ci-changes.yml
     with:
       workflow: rust-quality.yml
 
-  source:
+  windows-check:
     needs: changes
-    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['source']
-    name: Format and source rules
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['windows-check']
+    uses: ./.github/workflows/rust-windows-check.yml
+
+  shellcheck:
+    needs: changes
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['shellcheck']
+    name: shellcheck
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.99.0
-          components: rustfmt
-      - name: Check formatting
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo fmt --all -- --check
-      - name: Check Rust source rules
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo run --locked -p butler-source-check -- .
+      - run: python3 .github/scripts/isolated.py shellcheck deploy/macos/*.sh
+      - run: python3 .github/scripts/isolated.py deploy/macos/policy-selftest.sh
+
+  selftest:
+    needs: changes
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['selftest']
+    name: no-identity and ad-hoc self-test
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: python3 .github/scripts/isolated.py bun install --frozen-lockfile --ignore-scripts
+      - run: python3 .github/scripts/isolated.py deploy/macos/selftest.sh
 
   linux-clippy:
     needs: changes
@@ -78,7 +97,9 @@ jobs:
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-archive']
     uses: ./.github/workflows/rust-archive.yml
     with:
+      fixtures: ${{ needs.changes.outputs.tier == 'integration' || github.event_name != 'pull_request' }}
       ort-mode: prebuilt-ort
+      smoke-in-place: ${{ github.event_name == 'pull_request' }}
 
   linux-perf-archive:
     permissions:
@@ -136,6 +157,7 @@ jobs:
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-arm64-archive']
     uses: ./.github/workflows/rust-archive.yml
     with:
+      fixtures: ${{ needs.changes.outputs.tier == 'integration' || github.event_name != 'pull_request' }}
       runner: ubuntu-24.04-arm
       platform: linux-arm64
       ort-mode: prebuilt-ort
@@ -232,6 +254,7 @@ jobs:
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['macos-archive']
     uses: ./.github/workflows/rust-archive.yml
     with:
+      fixtures: ${{ needs.changes.outputs.tier == 'integration' || github.event_name != 'pull_request' }}
       runner: macos-15
       platform: darwin-arm64
       ort-mode: prebuilt-ort
@@ -293,20 +316,26 @@ jobs:
       platforms: '[{"platform":"linux-x64","runner":"ubuntu-24.04"}]'
 
   install-arm64:
-    needs: [changes, linux-arm64-native]
+    needs: [changes, linux-arm64-native, install-x64]
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['install-arm64']
     uses: ./.github/workflows/install-smoke.yml
     with:
+      # Common package checks and tarball are produced by install-x64.
+      pack: false
+      npm-artifact: butler-npm-x64
       shared-agents: true
       merge-manifests: false
       label: arm64
       platforms: '[{"platform":"linux-arm64","runner":"ubuntu-24.04-arm"}]'
 
   install-macos:
-    needs: [changes, macos-native]
+    needs: [changes, macos-native, install-x64]
     if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['install-macos']
     uses: ./.github/workflows/install-smoke.yml
     with:
+      # Common package checks and tarball are produced by install-x64.
+      pack: false
+      npm-artifact: butler-npm-x64
       shared-agents: true
       merge-manifests: false
       label: macos
@@ -322,6 +351,8 @@ jobs:
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['ui']
     uses: ./.github/workflows/bun-unit.yml
+    with:
+      macos-native: ${{ needs.changes.outputs.tier == 'integration' || fromJSON(needs.changes.outputs.parts).ui.macos }}
 
   site:
     needs: changes
@@ -335,13 +366,24 @@ jobs:
 
   lint:
     needs: changes
-    if: needs.changes.outputs.tier != 'integration' || fromJSON(needs.changes.outputs.jobs).lint
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs).lint
     name: Repository and CI lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@v4
+        if: needs.changes.outputs.licenses == 'true' || needs.changes.outputs.tier == 'integration'
+        with:
+          node-version: 24
+      - name: Validate locked inventory, notices and disclosure
+        if: needs.changes.outputs.licenses == 'true' || needs.changes.outputs.tier == 'integration'
+        working-directory: ${{ github.workspace }}
+        run: |
+          python3 .github/scripts/isolated.py node deploy/licenses/generate.mjs --check
+          python3 .github/scripts/isolated.py node deploy/licenses/check.mjs
+          python3 .github/scripts/isolated.py python3 deploy/licenses/check-disclosure.py
       - name: Whitespace lint
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -355,6 +397,16 @@ jobs:
       - name: Validate workflow selection invariants
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-changes.py
+      - name: Validate main failure follow-up
+        working-directory: ${{ github.workspace }}
+        run: |
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-main-failure.py
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-main-gate.py
+      - name: Validate PR receipt reuse
+        working-directory: ${{ github.workspace }}
+        run: |
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-smoke-reuse.py
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-pr-workspace.py
       - name: Guard shared Windows runner resources
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-invariants.py --windows-safety
@@ -385,9 +437,9 @@ jobs:
           python3 .github/scripts/isolated.py "$lint_dir/actionlint" -shellcheck= -pyflakes=
 
   gate:
-    name: gate
+    name: ${{ github.event_name == 'workflow_dispatch' && 'dispatch gate' || 'gate' }}
     if: always()
-    needs: [changes, lint, source, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
+    needs: [changes, lint, windows-check, shellcheck, selftest, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -396,33 +448,43 @@ jobs:
         uses: ./.github/actions/ci-input-receipt
         with:
           results: ${{ toJSON(needs) }}
-          groups: '{"workflows": ["lint"], "rust": ["source", "linux-clippy", "linux-native", "linux-archive", "linux-tests", "linux-perf-archive", "linux-perf", "macos-native", "macos-archive", "macos-tests", "macos-perf-archive", "macos-perf", "linux-arm64-tests", "linux-arm64-perf-archive", "linux-arm64-perf"], "ui": ["ui"], "site": ["site"], "ds": ["ds"], "package": ["macos-native", "macos-archive", "macos-updates", "macos-package"], "linux-package": ["linux-native", "linux-arm64-native", "linux-package-x64", "linux-package-arm64", "linux-archive", "linux-arm64-archive"], "install": ["linux-native", "linux-arm64-native", "macos-native", "install-x64", "install-arm64", "install-macos", "install-merge", "linux-archive", "linux-arm64-archive", "macos-archive"]}'
+          groups: '{"workflows": ["lint"], "rust": ["linux-clippy", "linux-native", "linux-archive", "linux-tests", "linux-perf-archive", "linux-perf", "macos-native", "macos-archive", "macos-tests", "macos-perf-archive", "macos-perf", "linux-arm64-archive", "linux-arm64-tests", "linux-arm64-perf-archive", "linux-arm64-perf", "windows-check"], "ui": ["ui"], "site": ["site"], "ds": ["ds"], "package": ["macos-native", "macos-archive", "macos-updates", "macos-package", "shellcheck", "selftest"], "linux-package": ["linux-native", "linux-arm64-native", "linux-package-x64", "linux-package-arm64", "linux-archive", "linux-arm64-archive"], "install": ["linux-native", "linux-arm64-native", "macos-native", "install-x64", "install-arm64", "install-macos", "install-merge", "linux-archive", "linux-arm64-archive", "macos-archive"], "licenses": ["lint"], "signing": ["shellcheck", "selftest"]}'
           workflow: rust-quality.yml
+      - name: Require main recovery or a permitted bypass
+        if: always() && github.event_name == 'pull_request' && github.base_ref == 'main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/ci-main-gate.py
+      - name: Preserve existing quality result on metadata edits
+        if: always() && github.event_name == 'pull_request' && contains(fromJSON('["labeled", "unlabeled", "edited"]'), github.event.action)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/ci-main-gate.py quality
       - name: Require every selected check
+        if: always() && !contains(fromJSON('["labeled", "unlabeled", "edited"]'), github.event.action)
         env:
           RESULTS: ${{ toJSON(needs) }}
           EVENT: ${{ github.event_name }}
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/check-gate.py
 
-  main-issue:
-    name: Report main failure
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.gate.result == 'failure'
+  # Emit compatibility contexts only where a ruleset still requires them:
+  # release ruleset 24548681 (until preview.13); main 17887396 requires gate only.
+  # Dispatch is diagnostic and must never post required legacy contexts.
+  legacy-gates:
+    name: ${{ matrix.context }}
+    if: always() && ((github.event_name == 'pull_request' && startsWith(github.base_ref, 'release/')) || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')))
     needs: gate
+    strategy:
+      fail-fast: false
+      matrix:
+        context: ['post-merge-ci gate', 'licenses gate', 'macos-signing gate']
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: write
     steps:
-      - name: Open or update issue
+      - name: Require consolidated gate
+        working-directory: ${{ runner.temp }}
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          number=$(gh issue list --state open --search '"Main Rust CI failure" in:title' --json number --jq '.[0].number // empty')
-          if [ -n "$number" ]; then
-            gh issue comment "$number" --body "Main Rust CI failed: $RUN_URL"
-          else
-            gh issue create --title 'Main Rust CI failure' --body "Main Rust CI failed: $RUN_URL"
-          fi
+          RESULT: ${{ needs.gate.result }}
+        run: test "$RESULT" = success
