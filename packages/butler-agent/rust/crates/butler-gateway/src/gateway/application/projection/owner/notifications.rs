@@ -46,7 +46,14 @@ pub(super) fn settlement_listener(
     })
 }
 
+/// E2E fixture builds can drop filesystem wakes to prove settlement alone suffices.
+#[cfg(feature = "e2e-fixtures")]
 pub(super) fn observe_filesystem() -> bool {
     !(std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
         && std::env::var("BUTLER_E2E_DISABLE_PROJECTION_WATCH").as_deref() == Ok("1"))
+}
+
+#[cfg(not(feature = "e2e-fixtures"))]
+pub(super) fn observe_filesystem() -> bool {
+    true
 }

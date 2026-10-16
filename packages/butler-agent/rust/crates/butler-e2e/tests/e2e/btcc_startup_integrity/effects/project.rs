@@ -11,7 +11,7 @@ async fn project_plan_effects_pass_scan_and_startup() -> Result<(), HarnessError
     let (url, server) = stub::start(file.display().to_string(), true, true).await?;
     let s = setup
         .env("BUTLER_CODEX_BASE_URL", url)
-        .env("BUTLER_E2E_STARTUP_TRACE", "1")
+        .env("BUTLER_STARTUP_TRACE", "1")
         .start()
         .await?;
     let project =
@@ -65,7 +65,7 @@ async fn operation_turn_effects_use_general_empty_plan_rule() -> Result<(), Harn
     let (url, server) = stub::start(file.display().to_string(), false, false).await?;
     let s = setup
         .env("BUTLER_CODEX_BASE_URL", url)
-        .env("BUTLER_E2E_STARTUP_TRACE", "1")
+        .env("BUTLER_STARTUP_TRACE", "1")
         .start()
         .await?;
     let result = s.turn("general", stub::REQUEST).await;

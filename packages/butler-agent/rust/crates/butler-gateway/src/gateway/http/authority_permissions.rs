@@ -17,6 +17,7 @@ pub(super) async fn list(state: &HttpState) -> Result<Response, HttpError> {
         permissions: Vec<AppGrantView>,
     }
     let grants = state.application.authority_permissions().await?;
+    #[cfg(feature = "e2e-fixtures")]
     let started = std::time::Instant::now();
     let response = json(
         StatusCode::OK,
@@ -27,6 +28,7 @@ pub(super) async fn list(state: &HttpState) -> Result<Response, HttpError> {
             },
         },
     );
+    #[cfg(feature = "e2e-fixtures")]
     if std::env::var("BUTLER_E2E_STORAGE_METRICS").as_deref() == Ok("1") {
         eprintln!(
             "approvals-profile serialize_us={}",

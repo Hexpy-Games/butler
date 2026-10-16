@@ -1,4 +1,4 @@
-//! Stub-only synchronization of the post-cutover receipt for the real-route race E2E.
+//! E2E fixture synchronization of the post-cutover receipt for the real-route race E2E.
 use std::{io, path::Path, time::Duration};
 use tokio_util::sync::CancellationToken;
 

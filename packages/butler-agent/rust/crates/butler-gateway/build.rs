@@ -30,17 +30,13 @@ mod manifest;
 
 const MODULES: &str =
     "../../../../butler-app/client/ui/src/libs/design-system/blocks/Wallpaper/modules";
-const E2E_MODULES_ENV: &str = "BUTLER_E2E_WALLPAPER_MODULES_DIR";
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-env-changed={E2E_MODULES_ENV}");
     println!("cargo:rerun-if-changed=src/gateway/wallpaper_modules/manifest.rs");
     println!("cargo:rerun-if-changed=src/gateway/wallpaper_modules/manifest/rendering.rs");
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
-    let root = env::var_os(E2E_MODULES_ENV)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| manifest_dir.join(MODULES));
+    let root = manifest_dir.join(MODULES);
     println!("cargo:rerun-if-changed={}", root.display());
     let entries = entries(&root)
         .map_err(|error| format!("wallpaper modules at {}: {error}", root.display()))?;

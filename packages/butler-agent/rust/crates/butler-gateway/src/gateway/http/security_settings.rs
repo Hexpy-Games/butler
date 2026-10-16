@@ -140,7 +140,7 @@ pub(super) async fn route(
             state.devices.revoke(Some(id.into())).await?;
             ok(serde_json::json!({"revoked": true}))
         }
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "e2e-fixtures")]
         (Method::POST, "/security/pairing/clock") => {
             let seconds = super::query(request.uri())
                 .get("seconds")
