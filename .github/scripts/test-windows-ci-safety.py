@@ -6,6 +6,7 @@ import importlib.util
 import io
 import os
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -31,18 +32,36 @@ class WindowsSafety(unittest.TestCase):
         self.assertNotIn('Tee-Object', workflow)
         self.assertIn('BUTLER_DEBUG_COMMAND_TIMINGS: "1"', workflow)
         self.assertIn("matrix.shard == 'basics' && '1'", workflow)
-        self.assertEqual(workflow.count('windows-test-log.ps1'), 7)
+        logged_steps = {
+            'Platform and portable crate tests',
+            'Compile existing Windows E2E harness', 'Existing stub chat E2E',
+            'Stub chat and durable config under a long data path',
+            'Native Windows command regression matrix',
+            'Read-only real-profile Downloads command',
+            'Native service recovery, full shutdown queue and memory reset',
+        }
+        steps = re.split(r'(?m)^      - name: ', workflow)[1:]
+        for name in logged_steps:
+            step = next(step for step in steps if step.splitlines()[0] == name)
+            with self.subTest(step=name):
+                self.assert_raw_log_command(step, 'exit $testCode')
         for filename in ['windows-e2e-artifacts.ps1', 'windows-basic-capabilities.ps1']:
             source = (repository / 'deploy' / filename).read_text()
             self.assertNotIn('Tee-Object', source)
-            self.assertIn('*> $log', source)
-            self.assertIn('windows-test-log.ps1', source)
-            self.assertIn('$testCode = $LASTEXITCODE', source)
+            self.assert_raw_log_command(source, 'throw ')
         release = (repository / '.github/workflows/release.yml').read_text()
         self.assertIn('path: ${{ runner.temp }}/windows-basic-capabilities.log', release)
         wrapper = (repository / 'deploy/windows-test-log.ps1').read_text()
         self.assertIn('summarize-test-log.py', wrapper)
         self.assertIn('$summaryCode = $LASTEXITCODE', wrapper)
+
+    def assert_raw_log_command(self, source, failure_action):
+        self.assertNotIn('*>', source)
+        self.assertRegex(source, r'cmd /d /(?:s /)?c "[^\n]+ > `"[^\n]+`" 2>&1(?:`")?"'
+                         r'\n\s*\$testCode = \$LASTEXITCODE\n')
+        self.assertRegex(source, r'if \(\$testCode -ne 0\) \{\s*'
+                         r'& "[^"\n]+windows-test-log.ps1" -Log [^\n]+\n\s*'
+                         + re.escape(failure_action))
 
     # test-category: format-pin
     def test_failure_summary_keeps_early_failure_blocks_and_exact_last_300_lines(self):
@@ -53,12 +72,16 @@ class WindowsSafety(unittest.TestCase):
                    "thread 'early' panicked at source.rs:1\n", 'assertion details\n',
                    'failures:\n', '    early\n', 'test result: FAILED. 0 passed; 1 failed\n']
         noise = [f'timing {index}\n' for index in range(1000)]
-        for lines in [failure + noise, ['test result: ok. 1 passed\n'], []]:
+        panic = ["thread 'midstream' panicked at source.rs:42\n"]
+        details = [f'assertion context {index}\n' for index in range(20)]
+        cases = [(failure + noise, failure), (noise + panic + details + noise, panic + details),
+                 (['test result: ok. 1 passed\n'], []), ([], [])]
+        for lines, expected in cases:
             output = io.StringIO()
             summary.summarize(iter(lines), output)
             report, tail = output.getvalue().split('\nLast 300 lines:\n')
             self.assertEqual(tail, ''.join(lines[-300:]))
-            self.assertTrue(all(line in report for line in failure) if len(lines) > 300 else True)
+            self.assertTrue(all(line in report for line in expected))
             self.assertNotIn('timing 0\n', report)
 
     # test-category: format-pin
