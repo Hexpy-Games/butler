@@ -64,19 +64,17 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     {
         let _ = tokio::fs::remove_file(PathBuf::from(&stale.spool_path)).await;
     }
-    let mut read = read_window(checkpoint, &state).await?;
+    let read = read_window(checkpoint, &state).await?;
     timing.mark("record_read");
-    if read.checkpoint.spool_bytes == 0 {
-        read.checkpoint.spool_path.clear();
-    }
-    let advanced = match read.event {
+    let (advanced, pending) = if read.records.is_empty() {
         // A sweep over a chat whose file has not changed writes nothing.
-        None if prior.as_ref() == Some(&read.checkpoint) => true,
-        None => {
+        if prior.as_ref() != Some(&read.checkpoint) {
             super::save_checkpoint(context, read.checkpoint).await?;
-            true
         }
-        Some(event) => super::project_event(context, chat_id, event, read.checkpoint).await?,
+        (true, read.pending)
+    } else {
+        let pass = super::record_batch::project(context, chat_id, read.records).await?;
+        (pass.advanced, pass.projected_bytes < state.size)
     };
     timing.mark("event_projected");
     if let Some(path) = read.completed_spool {
@@ -84,7 +82,7 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     }
     // An unproven old claim retains its original event and yields this sync.
     // Reporting pending here would replay that same record in a tight loop.
-    Ok(advanced && read.pending)
+    Ok(advanced && pending)
 }
 
 async fn read_window(
@@ -92,10 +90,21 @@ async fn read_window(
     state: &FileState,
 ) -> Result<super::byte_window::ReadRecord, GatewayApplicationError> {
     let (size, modified) = (state.size, state.modified_at_ms);
-    tokio::task::spawn_blocking(move || super::byte_window::read_record(checkpoint, size, modified))
-        .await
-        .map_err(GatewayApplicationError::internal_from)?
-        .map_err(app_error)
+    let mut read = tokio::task::spawn_blocking(move || {
+        super::byte_window::read_records(checkpoint, size, modified)
+    })
+    .await
+    .map_err(GatewayApplicationError::internal_from)?
+    .map_err(app_error)?;
+    // A cursor without spooled bytes records no spool path.
+    for cursor in std::iter::once(&mut read.checkpoint)
+        .chain(read.records.iter_mut().map(|record| &mut record.cursor))
+    {
+        if cursor.spool_bytes == 0 {
+            cursor.spool_path.clear();
+        }
+    }
+    Ok(read)
 }
 
 // Boundary validation opens and reads the file, so it belongs on a blocking worker.

@@ -16,6 +16,7 @@ pub(in crate::gateway::application) use non_final::row_from_runtime_event;
 pub(super) use non_final::{FailedProjection, ProjectionIds, project_failed};
 mod observers;
 mod owner;
+mod record_batch;
 mod staging;
 mod terminal_records;
 mod transcript_file;
@@ -160,20 +161,45 @@ async fn project_boundary(
     if !outcome.handled {
         return delivery::terminal(&context, stored_chat, outbound, action, checkpoint).await;
     }
-    if outcome.wake_queue {
-        context.queue_wake.chat(stored_chat).await?;
-    }
-    if let Some(turn) = outcome.terminal_turn {
-        if let Some(work_outcome) = work_outcome {
-            let _ = context
-                .dependencies
-                .work_streams
-                .reconcile_turn(work_outcome)
-                .await;
-        }
-        context.finish_terminal_turn(turn).await?;
-    }
+    context
+        .settle_delivered(Settlement {
+            chat: stored_chat,
+            wake_queue: outcome.wake_queue,
+            terminal_turn: outcome.terminal_turn,
+            work_outcome,
+        })
+        .await?;
     Ok(true)
+}
+
+/// What a committed non-final delivery still owes the queue and work streams.
+struct Settlement {
+    chat: String,
+    wake_queue: bool,
+    terminal_turn: Option<String>,
+    work_outcome: Option<AppWorkStreamTurnOutcome>,
+}
+
+impl ProjectionContext {
+    async fn settle_delivered(
+        &self,
+        settlement: Settlement,
+    ) -> Result<(), GatewayApplicationError> {
+        if settlement.wake_queue {
+            self.queue_wake.chat(settlement.chat).await?;
+        }
+        if let Some(turn) = settlement.terminal_turn {
+            if let Some(work_outcome) = settlement.work_outcome {
+                let _ = self
+                    .dependencies
+                    .work_streams
+                    .reconcile_turn(work_outcome)
+                    .await;
+            }
+            self.finish_terminal_turn(turn).await?;
+        }
+        Ok(())
+    }
 }
 
 async fn project_final(

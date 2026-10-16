@@ -105,6 +105,7 @@ mod personalization_defaults;
 mod process_names;
 mod project_git;
 mod projection_backlog;
+mod projection_batch;
 mod projection_settlement;
 mod projects;
 mod prompt_hedge;

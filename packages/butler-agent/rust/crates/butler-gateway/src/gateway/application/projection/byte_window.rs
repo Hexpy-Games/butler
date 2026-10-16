@@ -11,15 +11,26 @@ use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
 
 const BYTE_WINDOW: usize = 64 * 1024;
 const ANCHOR_BYTES: u64 = 64;
+/// Records one pass projects, in one App transaction. The window is the byte
+/// bound; this bounds the SQL work one pass holds the storage lane for.
+const PASS_RECORDS: usize = 32;
+
+/// One complete transcript line and the cursor just after it.
+pub(super) struct Record {
+    pub event: Option<TranscriptEvent>,
+    pub cursor: Checkpoint,
+}
 
 pub(super) struct ReadRecord {
+    /// The cursor after the last record, or the partial-record state.
     pub checkpoint: Checkpoint,
-    pub event: Option<TranscriptEvent>,
+    pub records: Vec<Record>,
     pub pending: bool,
     pub completed_spool: Option<PathBuf>,
 }
 
-pub(super) fn read_record(
+/// Reads every complete record in one byte window, up to `PASS_RECORDS`.
+pub(super) fn read_records(
     mut checkpoint: Checkpoint,
     size: u64,
     modified_at_ms: f64,
@@ -35,23 +46,17 @@ pub(super) fn read_record(
     )?;
     let mut combined = std::mem::take(&mut checkpoint.trailing);
     combined.extend_from_slice(&chunk);
-    if let Some(newline) = combined.iter().position(|byte| *byte == b'\n') {
-        let event = parse_record(&combined[..newline])?;
-        checkpoint.projected_bytes += newline as u64 + 1;
-        // The rest of the window is read again from the file. Keeping it made
-        // every record store, and grow, the whole unread part of the file.
-        checkpoint.trailing.clear();
-        checkpoint.boundary_anchor = anchor(&checkpoint.path, checkpoint.projected_bytes)?;
-        checkpoint.modified_at_ms = modified_at_ms;
+    checkpoint.modified_at_ms = modified_at_ms;
+    let records = split_records(&mut checkpoint, &combined)?;
+    if !records.is_empty() {
         let pending = checkpoint.projected_bytes < size;
         return Ok(ReadRecord {
             checkpoint,
-            event,
+            records,
             pending,
             completed_spool: None,
         });
     }
-    checkpoint.modified_at_ms = modified_at_ms;
     if read_start + (chunk.len() as u64) < size {
         let spool = PathBuf::from(&checkpoint.spool_path);
         if let Some(parent) = spool.parent() {
@@ -59,10 +64,9 @@ pub(super) fn read_record(
         }
         fs::write(&spool, &combined).map_err(io_error)?;
         checkpoint.spool_bytes = combined.len() as u64;
-        checkpoint.trailing.clear();
         return Ok(ReadRecord {
             checkpoint,
-            event: None,
+            records: Vec::new(),
             pending: true,
             completed_spool: None,
         });
@@ -70,10 +74,58 @@ pub(super) fn read_record(
     checkpoint.trailing = combined;
     Ok(ReadRecord {
         checkpoint,
-        event: None,
+        records: Vec::new(),
         pending: false,
         completed_spool: None,
     })
+}
+
+/// Splits the complete lines at the start of `window`, which begins at the
+/// cursor. The rest of the window is read again from the file next pass:
+/// keeping it made every record store, and grow, the unread part of the file.
+/// A malformed record after the first ends the pass before it, so it fails
+/// its own pass exactly as it did when a pass read one record.
+fn split_records(
+    checkpoint: &mut Checkpoint,
+    window: &[u8],
+) -> Result<Vec<Record>, AppStorageError> {
+    let base = checkpoint.projected_bytes;
+    let prior_anchor = std::mem::take(&mut checkpoint.boundary_anchor);
+    let mut records = Vec::new();
+    let mut consumed = 0;
+    while records.len() < PASS_RECORDS {
+        let Some(newline) = window[consumed..].iter().position(|byte| *byte == b'\n') else {
+            break;
+        };
+        let end = consumed + newline;
+        let event = match parse_record(&window[consumed..end]) {
+            Ok(event) => event,
+            Err(error) if records.is_empty() => return Err(error),
+            Err(_) => break,
+        };
+        consumed = end + 1;
+        checkpoint.projected_bytes = base + consumed as u64;
+        checkpoint.boundary_anchor = next_anchor(&prior_anchor, &window[..consumed]);
+        records.push(Record {
+            event,
+            cursor: checkpoint.clone(),
+        });
+    }
+    if records.is_empty() {
+        checkpoint.boundary_anchor = prior_anchor;
+    }
+    Ok(records)
+}
+
+/// The anchor just after `read`. `prior` is the verified anchor at the
+/// window start, so it holds the file bytes immediately before `read`.
+fn next_anchor(prior: &[u8], read: &[u8]) -> Vec<u8> {
+    let limit = usize::try_from(ANCHOR_BYTES).unwrap_or(usize::MAX);
+    if read.len() >= limit {
+        return read[read.len() - limit..].to_vec();
+    }
+    let kept = &prior[prior.len().saturating_sub(limit - read.len())..];
+    [kept, read].concat()
 }
 
 fn extend_spool(
@@ -100,7 +152,7 @@ fn extend_spool(
         return Ok(ReadRecord {
             pending: start + (chunk.len() as u64) < size,
             checkpoint,
-            event: None,
+            records: Vec::new(),
             completed_spool: None,
         });
     };
@@ -113,8 +165,11 @@ fn extend_spool(
     checkpoint.spool_end_offset = 0;
     let pending = checkpoint.projected_bytes < size;
     Ok(ReadRecord {
+        records: vec![Record {
+            event,
+            cursor: checkpoint.clone(),
+        }],
         checkpoint,
-        event,
         pending,
         completed_spool: Some(completed),
     })

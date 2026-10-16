@@ -18,22 +18,31 @@ pub(super) async fn stage_event(
     action: String,
     cursor: Checkpoint,
 ) -> Result<bool, GatewayApplicationError> {
-    let claim = staging::claim_id_from_event(&event);
     let chat = chat_id.to_owned();
     let now = context.dependencies.identity_clock.now_iso();
     context
         .storage
-        .execute(move |db| {
-            let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
-            if !staging::projected(&tx, &action)? {
-                staging::stage(&tx, &action, &chat, &event, claim.as_deref(), &now)?;
-            }
-            checkpoint::save(&tx, &cursor, &now)?;
-            tx.commit().map_err(AppStorageError::sqlite)
-        })
+        .execute(move |db| stage(db, &chat, &event, &action, &cursor, &now))
         .await
         .map_err(app_error)?;
     Ok(true)
+}
+/// Stages an App outbound and advances the cursor past it, atomically.
+pub(super) fn stage(
+    db: &mut rusqlite::Connection,
+    chat: &str,
+    event: &TranscriptEvent,
+    action: &str,
+    cursor: &Checkpoint,
+    now: &str,
+) -> Result<(), AppStorageError> {
+    let claim = staging::claim_id_from_event(event);
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+    if !staging::projected(&tx, action)? {
+        staging::stage(&tx, action, chat, event, claim.as_deref(), now)?;
+    }
+    checkpoint::save(&tx, cursor, now)?;
+    tx.commit().map_err(AppStorageError::sqlite)
 }
 pub(super) async fn discard(
     context: &ProjectionContext,
@@ -43,15 +52,22 @@ pub(super) async fn discard(
     let now = context.dependencies.identity_clock.now_iso();
     context
         .storage
-        .execute(move |db| {
-            let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
-            staging::delete(&tx, &action)?;
-            checkpoint::save(&tx, &cursor, &now)?;
-            tx.commit().map_err(AppStorageError::sqlite)
-        })
+        .execute(move |db| discard_staged(db, &action, &cursor, &now))
         .await
         .map_err(app_error)
         .map(|()| true)
+}
+/// Retires a failed delivery's staged outbound with the cursor past it.
+pub(super) fn discard_staged(
+    db: &mut rusqlite::Connection,
+    action: &str,
+    cursor: &Checkpoint,
+    now: &str,
+) -> Result<(), AppStorageError> {
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+    staging::delete(&tx, action)?;
+    checkpoint::save(&tx, cursor, now)?;
+    tx.commit().map_err(AppStorageError::sqlite)
 }
 pub(super) async fn non_final(
     context: &ProjectionContext,
