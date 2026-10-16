@@ -19,7 +19,7 @@ use proc_macro2::{TokenStream, TokenTree};
 use syn::visit::{self, Visit};
 
 use crate::function_length::{Mode, canonical, production_files, split_package};
-use crate::modules::{fixture_only, load_shipped, test_function};
+use crate::modules::{FIXTURE_FEATURES, fixture_only, load_shipped, test_function};
 
 const BASELINE_FILE: &str = "source-check-e2e-hooks.txt";
 /// The checker names the patterns it looks for.
@@ -86,9 +86,17 @@ pub(crate) fn hooks(source: &str) -> Result<Vec<(usize, String)>, syn::Error> {
     Ok(finder.hooks)
 }
 
-/// Whether a string literal names the E2E harness.
+/// Whether a string literal names the E2E harness: a `BUTLER_E2E_*` variable,
+/// a path segment naming an `e2e-*` marker file, or a `_test` route segment.
+/// The fixture feature names themselves are how hooks leave shipped code.
 fn hook(value: &str) -> bool {
-    value.contains("BUTLER_E2E_") || value.starts_with("e2e-") || value.contains("/_test/")
+    if FIXTURE_FEATURES.contains(&value) {
+        return false;
+    }
+    value.contains("BUTLER_E2E_")
+        || value
+            .split(['/', '\\'])
+            .any(|segment| segment.starts_with("e2e-") || segment == "_test")
 }
 
 #[derive(Default)]
@@ -98,9 +106,12 @@ struct Finder {
 
 impl Finder {
     fn literal(&mut self, value: &syn::LitStr) {
-        let text = value.value();
+        self.text(value.span().start().line, value.value());
+    }
+
+    fn text(&mut self, line: usize, text: String) {
         if hook(&text) {
-            self.hooks.push((value.span().start().line, text));
+            self.hooks.push((line, text));
         }
     }
 
@@ -109,10 +120,13 @@ impl Finder {
             match token {
                 TokenTree::Group(group) => self.tokens(group.stream()),
                 TokenTree::Literal(literal) => {
-                    if let Ok(value) =
-                        syn::parse2::<syn::LitStr>(TokenStream::from(TokenTree::Literal(literal)))
-                    {
-                        self.literal(&value);
+                    match syn::parse2::<syn::Lit>(TokenStream::from(TokenTree::Literal(literal))) {
+                        Ok(syn::Lit::Str(value)) => self.literal(&value),
+                        Ok(syn::Lit::ByteStr(value)) => self.text(
+                            value.span().start().line,
+                            String::from_utf8_lossy(&value.value()).into_owned(),
+                        ),
+                        _ => {}
                     }
                 }
                 _ => {}
@@ -155,8 +169,25 @@ impl<'ast> Visit<'ast> for Finder {
             visit::visit_stmt(self, statement);
         }
     }
+    fn visit_impl_item_fn(&mut self, item: &'ast syn::ImplItemFn) {
+        if !test_function(&item.attrs) {
+            visit::visit_impl_item_fn(self, item);
+        }
+    }
+    fn visit_attribute(&mut self, attribute: &'ast syn::Attribute) {
+        // Doc comments describe hooks; they never read one.
+        if !attribute.path().is_ident("doc") {
+            visit::visit_attribute(self, attribute);
+        }
+    }
     fn visit_lit_str(&mut self, value: &'ast syn::LitStr) {
         self.literal(value);
+    }
+    fn visit_lit_byte_str(&mut self, value: &'ast syn::LitByteStr) {
+        self.text(
+            value.span().start().line,
+            String::from_utf8_lossy(&value.value()).into_owned(),
+        );
     }
     fn visit_macro(&mut self, value: &'ast syn::Macro) {
         self.tokens(value.tokens.clone());
