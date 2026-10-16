@@ -1,6 +1,7 @@
 //! Future-only conversation reset by staging the shared graph's surviving projection.
 mod cache;
 mod retirement;
+#[cfg(feature = "e2e-fixtures")]
 mod settlement;
 mod survivors;
 mod vectors;
@@ -119,6 +120,7 @@ pub(crate) async fn run(
     result.phase = "complete".into();
     result.sequence += 1;
     result.removal_pending = true;
+    #[cfg(feature = "e2e-fixtures")]
     settlement::test_gate(&root, &token).await?;
     let binding = (root.clone(), paths.clone(), result.clone());
     save_completion(binding, coordinator.clone(), token.clone()).await?;

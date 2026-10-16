@@ -13,7 +13,7 @@ async fn perf_owner_scale_history_assembly_and_idle_writes() -> Result<(), Harne
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url)
         .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
-        .env("BUTLER_E2E_STARTUP_TRACE", "1");
+        .env("BUTLER_STARTUP_TRACE", "1");
     super::super::perf_turn::require_release_agent(&setup)?;
     let mut s = setup.start().await?;
     s.turn("general", "warm owner-scale fixture").await?;

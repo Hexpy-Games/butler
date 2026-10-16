@@ -26,6 +26,7 @@ impl ProfileService {
                     &[&storage::database_path(&root), &lock],
                 )
                 .map_err(storage::io_error)?;
+                #[cfg(feature = "e2e-fixtures")]
                 hold_reset_acquisition(&root, &operation_id, &child)?;
                 let lease = executor
                     .block_on(coordinator.acquire(
@@ -59,7 +60,8 @@ impl ProfileService {
     }
 }
 
-// Deterministic contention on an accepted reset, restricted to isolated stub runs.
+// Deterministic contention on an accepted reset, restricted to E2E fixture builds.
+#[cfg(feature = "e2e-fixtures")]
 fn hold_reset_acquisition(
     root: &std::path::Path,
     operation: &str,

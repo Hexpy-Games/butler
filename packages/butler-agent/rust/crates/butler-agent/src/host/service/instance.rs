@@ -21,7 +21,17 @@ mod gateway_state;
 mod legacy;
 mod probe;
 mod record;
+#[cfg(feature = "e2e-fixtures")]
 mod record_fault;
+/// Shipped binaries order record writes by the record lock alone.
+#[cfg(not(feature = "e2e-fixtures"))]
+mod record_fault {
+    pub(super) fn hold_write(_: &super::InstanceRecord) {}
+    pub(super) fn lock_wait() {}
+    pub(super) fn hold_rename() {}
+    pub(super) fn cancel_rename() {}
+    pub(super) fn write_finished() {}
+}
 mod restart;
 mod stop_intent;
 mod stopping;

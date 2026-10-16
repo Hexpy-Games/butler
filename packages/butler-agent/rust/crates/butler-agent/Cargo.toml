@@ -11,8 +11,15 @@ publish.workspace = true
 name = "butler_agent"
 
 [features]
-# Fixture-only source keychain service; never enabled in shipped binaries.
-e2e-fixtures = ["butler-platform/test-support", "dep:butler-test-support"]
+# E2E fixtures (source keychain service, fault, clock and barrier hooks); never
+# enabled in shipped binaries.
+e2e-fixtures = [
+    "butler-platform/test-support",
+    "butler-gateway/e2e-fixtures",
+    "butler-memory/e2e-fixtures",
+    "butler-turn/e2e-fixtures",
+    "dep:butler-test-support",
+]
 default = ["prebuilt-ort"]
 prebuilt-ort = ["butler-gateway/prebuilt-ort", "butler-memory/prebuilt-ort"]
 static-ort = ["butler-gateway/static-ort", "butler-memory/static-ort"]

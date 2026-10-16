@@ -35,7 +35,7 @@ pub(in crate::gateway::http) struct DeviceRegistry {
     changes: tokio::sync::Mutex<()>,
     shutdown: CancellationToken,
     cookie_name: String,
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "e2e-fixtures")]
     clock_offset: AtomicU64,
 }
 
@@ -66,19 +66,19 @@ impl DeviceRegistry {
             changes: tokio::sync::Mutex::new(()),
             shutdown,
             cookie_name: format!("butler_session_{port}"),
-            #[cfg(debug_assertions)]
+            #[cfg(feature = "e2e-fixtures")]
             clock_offset: AtomicU64::new(0),
         })
     }
 
     fn now(&self) -> u64 {
         let now = super::unix_seconds(std::time::SystemTime::now());
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "e2e-fixtures")]
         let now = now.saturating_add(self.clock_offset.load(Ordering::Relaxed));
         now
     }
 
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "e2e-fixtures")]
     pub(in crate::gateway::http) fn advance(&self, seconds: u64) {
         self.clock_offset.fetch_add(seconds, Ordering::Relaxed);
     }

@@ -1,4 +1,4 @@
-#[cfg(debug_assertions)]
+#[cfg(feature = "e2e-fixtures")]
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{sync::Arc, time::Duration};
 
@@ -9,10 +9,10 @@ use tokio_util::sync::CancellationToken;
 
 use super::super::{AppApplication, GatewayApplicationError};
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "e2e-fixtures")]
 static NEXT_DUE_READS: AtomicUsize = AtomicUsize::new(0);
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "e2e-fixtures")]
 pub(crate) fn next_due_read_count() -> usize {
     NEXT_DUE_READS.load(Ordering::Relaxed)
 }
@@ -40,7 +40,7 @@ impl AutomationScheduler {
     }
 
     pub(crate) fn initialize(&self, app: AppApplication) -> Result<(), GatewayApplicationError> {
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "e2e-fixtures")]
         NEXT_DUE_READS.store(0, Ordering::Relaxed);
         let cancel = self.cancellation.clone();
         let wake = self.wake.clone();
@@ -50,7 +50,7 @@ impl AutomationScheduler {
             // Recovery also dispatches runs queued before a restart.
             let _ = dispatch(&app, &mut dispatch_failing).await;
             loop {
-                #[cfg(debug_assertions)]
+                #[cfg(feature = "e2e-fixtures")]
                 NEXT_DUE_READS.fetch_add(1, Ordering::Relaxed);
                 let lookup = app.next_automation_due().await;
                 let read_failed = lookup.is_err();

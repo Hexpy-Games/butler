@@ -350,6 +350,8 @@ impl super::BtccStorage {
         T: Send + 'static,
         F: FnOnce(&Connection) -> StorageResult<T> + Send + 'static,
     {
+        // E2E fixture builds can measure the single-connection baseline.
+        #[cfg(feature = "e2e-fixtures")]
         if matches!(
             std::env::var("BUTLER_E2E_TIER").as_deref(),
             Ok("stub" | "perf")

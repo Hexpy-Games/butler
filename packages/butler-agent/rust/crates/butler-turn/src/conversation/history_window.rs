@@ -35,11 +35,13 @@ impl AgentConversationStore {
     ) -> ConversationResult<HistoryWindow> {
         let session = session.to_owned();
         self.execute(move |db| {
+            #[cfg(feature = "e2e-fixtures")]
             let before = db.total_changes();
             #[cfg(feature = "test-support")]
             let window = super::db_load::measure(db, "history", |db| read(db, &session, cap))?;
             #[cfg(not(feature = "test-support"))]
             let window = read(db, &session, cap)?;
+            #[cfg(feature = "e2e-fixtures")]
             if std::env::var("BUTLER_E2E_VERIFY_HISTORY_WRITES").as_deref() == Ok("1") {
                 eprintln!(
                     "[history-projection-writes] changes={}",
