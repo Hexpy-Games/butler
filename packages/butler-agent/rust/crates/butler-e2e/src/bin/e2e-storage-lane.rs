@@ -198,15 +198,51 @@ fn queue_barrier(
     });
     let barrier_events = published.clone();
     let barrier_outbox = events.clone();
-    let (barrier, barrier_result) = Operation::new(true, true, move |db| {
+    // Even a caller requesting inspect=false must get an exclusive operation.
+    let (barrier, barrier_result) = Operation::new(false, true, move |db| {
         assert!(db.is_autocommit());
         assert_eq!(*barrier_events.lock().unwrap(), ["committed"]);
-        barrier_outbox.append(db, "barrier").unwrap();
+        let tx = db.transaction()?;
+        tx.execute_batch("INSERT INTO parent VALUES(3)")?;
+        barrier_outbox.append(&tx, "barrier").unwrap();
+        tx.commit()?;
+        eprintln!("writing barrier transaction committed");
         Ok(())
     });
     initial.extend([write, inspect, barrier]);
     successes.extend([completion, pending(inspected)]);
     barrier_result
+}
+
+fn verify_barrier(mut completion: Completion, published: &Published, path: &Path) {
+    assert_eq!(
+        completion.try_recv(),
+        Ok(Ok(())),
+        "barrier must complete before the next group runs"
+    );
+    eprintln!("writing barrier completion observed");
+    assert_eq!(*published.lock().unwrap(), ["committed", "barrier"]);
+    let reader = butler_platform::sqlite::open(path).unwrap();
+    let parents: Vec<i64> = reader
+        .prepare("SELECT id FROM parent ORDER BY id")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert_eq!(
+        parents,
+        [1, 3],
+        "fresh reader must see the barrier's writes"
+    );
+    let events: Vec<String> = reader
+        .prepare("SELECT type FROM events ORDER BY id")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert_eq!(events, ["committed", "barrier"]);
 }
 
 fn failed_commit(path: &Path, with_barrier: bool) {
@@ -218,14 +254,10 @@ fn failed_commit(path: &Path, with_barrier: bool) {
         with_barrier.then(|| queue_barrier(&mut initial, &mut successes, &events, &published));
     let uncommitted = events.clone();
     let flushed = published.clone();
+    let read_path = path.to_owned();
     let (write, completion) = Operation::new(false, false, move |db| {
-        if let Some(mut barrier) = barrier_completion {
-            assert_eq!(
-                barrier.try_recv(),
-                Ok(Ok(())),
-                "barrier must complete before the next group runs"
-            );
-            assert_eq!(*flushed.lock().unwrap(), ["committed", "barrier"]);
+        if let Some(barrier) = barrier_completion {
+            verify_barrier(barrier, &flushed, &read_path);
         }
         db.execute_batch("INSERT INTO parent VALUES(2)")?;
         uncommitted.append(db, "rolled-back").unwrap();
@@ -257,7 +289,7 @@ fn failed_commit(path: &Path, with_barrier: bool) {
             .prepare("SELECT id FROM parent ORDER BY id")?
             .query_map([], |row| row.get(0))?
             .collect::<rusqlite::Result<_>>()?;
-        assert_eq!(parents, if with_barrier { vec![1] } else { vec![] });
+        assert_eq!(parents, if with_barrier { vec![1, 3] } else { vec![] });
         assert_eq!(
             db.query_row("SELECT COUNT(*) FROM child", [], |row| row.get::<_, i64>(0))?,
             0

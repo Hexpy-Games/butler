@@ -77,6 +77,7 @@ fn sync(db: &Connection, synced_changes: &mut u64) -> StorageResult<()> {
     if db.total_changes() == *synced_changes {
         return Ok(());
     }
+    let timing = crate::gateway::command_timing::CommandTiming::new("app_sqlite_wal_sync");
     butler_platform::sqlite::sync_wal_index(db).map_err(|error| {
         let error = AppStorageError::new(AppStorageCode::AppSqliteWalSyncFailed, error.to_string())
             .with_source(error);
@@ -88,6 +89,7 @@ fn sync(db: &Connection, synced_changes: &mut u64) -> StorageResult<()> {
         error
     })?;
     *synced_changes = db.total_changes();
+    timing.mark("synced");
     Ok(())
 }
 
@@ -173,8 +175,9 @@ fn drain(
             perform(db, operation, Ok(()), completions);
         }
         if barrier {
+            let synced = sync(db, synced_changes);
             event_outbox::flush();
-            complete(completions, &Ok(()));
+            complete(completions, &synced);
         }
         if index + 1 == BATCH_OPS || started.elapsed() >= BATCH_WINDOW || super::metrics::baseline()
         {

@@ -1,20 +1,52 @@
 //! Admission and barrier failures exercise the production WAL writer loop.
 use butler_e2e::e2e::binary::fixture_binary;
 
+struct Directory(std::path::PathBuf);
+impl Drop for Directory {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 fn run(scenario: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let directory = std::env::temp_dir().join(format!("storage-lane-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir(&directory)?;
+    let directory =
+        Directory(std::env::temp_dir().join(format!("storage-lane-{}", uuid::Uuid::new_v4())));
+    std::fs::create_dir(&directory.0)?;
     let output = std::process::Command::new(fixture_binary("e2e-storage-lane")?)
         .arg(scenario)
-        .arg(directory.join("app.sqlite"))
+        .arg(directory.0.join("app.sqlite"))
+        .env("BUTLER_DEBUG_COMMAND_TIMINGS", "1")
         .output()?;
-    eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    eprintln!("{stderr}");
     assert!(
         output.status.success(),
         "scenario {scenario}: {}",
         output.status
     );
-    std::fs::remove_dir_all(directory)?;
+    if scenario == "barrier" {
+        assert_barrier_sync(&stderr)?;
+    }
+    Ok(())
+}
+
+fn assert_barrier_sync(stderr: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let (_, after_write) = stderr
+        .split_once("writing barrier transaction committed\n")
+        .ok_or("missing writing barrier marker")?;
+    let (before_next, _) = after_write
+        .split_once("writing barrier completion observed\n")
+        .ok_or("missing barrier completion marker")?;
+    let synced = before_next.lines().position(|line| {
+        line.contains("phase=app_sqlite_wal_sync ") && line.contains("event=synced ")
+    });
+    let completed = before_next.lines().position(|line| {
+        line.contains("phase=app_sqlite_operation ") && line.contains("event=committed ")
+    });
+    assert!(
+        matches!((synced, completed), (Some(sync), Some(complete)) if sync < complete),
+        "writing barrier must sync before completing: {before_next}"
+    );
     Ok(())
 }
 
