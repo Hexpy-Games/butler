@@ -270,6 +270,10 @@ impl Inner {
         if state.closed {
             return Err(error(CognitionCode::EmbedOwnerClosed));
         }
+        // Prefetch shares queued/active work; admission and dedup are atomic.
+        if matches!(pending.response, PendingResponse::Prewarm) && state.queued_requests != 0 {
+            return Ok(());
+        }
         if state.queued_requests >= MAX_QUEUE_REQUESTS
             || state.queued_bytes + pending.bytes > MAX_QUEUE_BYTES
         {
