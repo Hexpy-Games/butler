@@ -32,14 +32,14 @@ class Paths(unittest.TestCase):
             'Cargo.toml': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'new-crate/Cargo.toml': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'new-crate/Cargo.lock': {'rust', 'package', 'install', 'linux-package', 'licenses'},
-            'packages/butler-app/client/electron/src/main.ts': {'ui', 'ds', 'package', 'install', 'linux-package'},
+            'packages/butler-app/client/electron/src/main.ts': {'rust', 'ui', 'ds', 'package', 'install', 'linux-package'},
             'deploy/install.sh': {'package', 'install', 'linux-package'},
             'packages/butler-site/src/pages/index.astro': {'site'},
             'README.md': set(),
             'packages/butler-agent/rust/docs/install-layout.md': set(),
             'packages/butler-agent/resources/skills/status/SKILL.md': {'rust', 'package', 'install', 'linux-package'},
-            'packages/butler-agent/rust/crates/butler-e2e/fixtures/memory/rule.md': {'rust', 'package', 'install', 'linux-package'},
-            'packages/butler-app/scripts/release/package-versions.ts': {'ui', 'ds', 'package', 'install', 'linux-package'},
+            'packages/butler-agent/rust/crates/butler-e2e/fixtures/memory/rule.md': {'rust'},
+            'packages/butler-app/scripts/release/package-versions.ts': {'rust', 'ui', 'ds', 'package', 'install', 'linux-package'},
             'notes.md': set(),
             '.github/pull_request_template.md': set(),
             '.github/workflows/windows.yml': {'rust', 'ui', 'package'},
@@ -134,7 +134,7 @@ jobs:
             '.github/scripts/ci-changes.py': False,
             '.github/pull_request_template.md': False,
             'deploy/install.sh': False,
-            'packages/butler-app/client/electron/src/main.ts': False,
+            'packages/butler-app/client/electron/src/main.ts': True,
             'packages/butler-agent/rust/docs/install-layout.md': False,
             'README.md': False,
         }.items():
@@ -241,6 +241,7 @@ class Trust(unittest.TestCase):
             ('pull_request', 'refs/pull/12/merge', pr, ['docs/notes.md', workflow], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['deploy/install.sh', 'packages/butler-npm/index.js'], none),
             ('pull_request', 'refs/pull/12/merge', pr, [rust], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], native),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], native),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/actions/build-windows-agent/action.yml'], native),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-installer.yml'], native),
@@ -465,6 +466,68 @@ class TrimContracts(unittest.TestCase):
             self.assertTrue(protected)
             self.assertTrue(changes.matches(protected[0], tuple(globs)), protected)
         self.assertFalse(changes.matches('packages/butler-app/client/ui/src/app.tsx', tuple(globs)))
+
+
+class Precision(unittest.TestCase):
+    # test-category: pure-logic
+    def test_package_only_inputs_do_not_build_test_archives(self):
+        flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds']
+        for values in itertools.product(['false', 'true'], repeat=4):
+            outputs = dict.fromkeys(flags, 'false') | dict(zip(flags[:4], values), tier='smoke')
+            jobs = changes.rust_jobs(outputs, 'pull_request')
+            for platform in ['linux', 'macos', 'linux-arm64']:
+                self.assertEqual(jobs[f'{platform}-archive'], outputs['rust'] == 'true')
+            self.assertEqual(jobs['linux-native'], 'true' in values[2:])
+            self.assertEqual(jobs['linux-package-x64'], outputs['linux-package'] == 'true')
+            self.assertEqual(jobs['install-x64'], outputs['install'] == 'true')
+
+    # test-category: pure-logic
+    def test_only_unshipped_harness_inputs_omit_packaging(self):
+        root = 'packages/butler-agent/rust/'
+        cases = {
+            'crates/butler-e2e/tests/e2e/new.rs': False,
+            'crates/butler-e2e/fixtures/new/input.json': False,
+            'crates/butler-e2e/src/lib.rs': True,
+            'crates/butler-e2e/Cargo.toml': True,
+            'crates/butler-platform/src/lib.rs': True,
+            'scripts/package-standalone-agent.py': True,
+            'Cargo.lock': True,
+        }
+        for path, package in cases.items():
+            groups = changes.categories(root + path)
+            self.assertIn('rust', groups)
+            for group in ['package', 'install', 'linux-package']:
+                self.assertEqual(group in groups, package, (path, group))
+
+    # test-category: pure-logic
+    def test_ds_follows_viewer_build_and_smoke_inputs(self):
+        for path, expected in {
+            'packages/butler-app/client/ui/vite.ds-site.config.ts': True,
+            'tests/smoke/ds-site-smoke.ts': True,
+            'tests/smoke/font-assets-check.ts': True,
+            'tests/support/smoke-browser.ts': True,
+            'tests/support/ds-viewer-mobile-checks.ts': True,
+            'package.json': True,
+            'tools/validate.ts': True,
+            'tests/unit/queue.test.ts': True,
+            'packages/project-ledger/src/index.ts': True,
+            'packages/butler-app/client/electron/src/main.ts': True,
+        }.items():
+            self.assertEqual('ds' in changes.categories(path), expected, path)
+
+    # test-category: pure-logic
+    def test_license_lock_patterns_do_not_match_source_names(self):
+        for name, expected in {
+            'Cargo.lock': True, 'bun.lockb': True, 'package-lock.json': True,
+            'npm-shrinkwrap.json': False, 'block.rs': False, 'clock.ts': False,
+            'instance_lock.rs': False,
+        }.items():
+            path = 'packages/butler-agent/rust/crates/butler-core/src/' + name
+            self.assertEqual('licenses' in changes.categories(path), expected, path)
+
+
+# Keep the derived dependency checks in the existing CI-script test entrypoint.
+from ci_input_tests import DerivedInputs
 
 
 if __name__ == '__main__':

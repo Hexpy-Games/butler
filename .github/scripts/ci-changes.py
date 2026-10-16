@@ -14,6 +14,7 @@ import tempfile
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ci_policy import rust_jobs, windows_preview_jobs
 import ci_parts
+import ci_rust_inputs
 from urllib.parse import urlencode
 
 GROUPS = ('rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses')
@@ -27,6 +28,11 @@ PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/elect
              'tests/support/update-work*', 'tests/support/electron-page-cdp*',
              'packages/butler-app/client/ui/src/components/layout/SessionObserverTimeline.tsx',
              'packages/butler-app/client/ui/src/components/settings/Update*')
+# These harness inputs are never shipped in a production Agent payload.
+RUST_TEST_ONLY = ('packages/butler-agent/rust/crates/butler-e2e/tests/*',
+                  'packages/butler-agent/rust/crates/butler-e2e/fixtures/*')
+SITE_CHECK_INPUTS = ('tests/smoke/ds-site-*', 'tests/smoke/font-assets-check.ts',
+                     'tests/support/smoke-browser.ts', 'tests/support/ds-viewer-mobile-checks.ts')
 # Native Windows smoke inputs beyond Rust; other CI configuration stays out.
 WINDOWS = ('deploy/windows*', '.github/workflows/*windows*', '.github/actions/*windows*',
            '.github/actions/rust-agent-setup/*', '.github/scripts/*windows*')
@@ -42,6 +48,7 @@ CI_LINT_ONLY = (
     '.github/scripts/publish-release-checksums.py', '.github/scripts/test-*.py',
     '.github/scripts/ci-changes.py', '.github/scripts/ci_parts.py',
     '.github/scripts/ci_consumer_test_support.py',
+    '.github/scripts/ci_rust_inputs.py', '.github/scripts/ci_input_tests.py',
     '.github/scripts/ci-check-selected.py', '.github/scripts/ds-approval.py',
 )
 # Integration packaging keys include Rust/UI and transitive producer inputs.
@@ -56,7 +63,8 @@ CI_CONSUMERS = (
         '.github/scripts/ci-check-selected.py', '.github/scripts/cargo-target-release.py',
         '.github/scripts/runner_cache.py', '.github/scripts/ci-changes.py',
         '.github/scripts/ci_policy.py', '.github/scripts/ci_parts.py',
-        '.github/scripts/ci_consumer_test_support.py', '.github/scripts/prepare-windows-zstd.py',
+        '.github/scripts/ci_consumer_test_support.py', '.github/scripts/ci_rust_inputs.py',
+        '.github/scripts/ci_input_tests.py', '.github/scripts/prepare-windows-zstd.py',
         '.github/scripts/*windows*safety.py')),
     (('rust',), ('.github/workflows/rust-*.yml',)),
     (NATIVE_CI, (
@@ -115,32 +123,33 @@ def categories(path):
         return github_categories(path)
     notice = re.match(r'^(licen[cs]e|copying|notice|copyright)([._-]|$)', Path(path).name, re.I)
     license_input = path in LICENSE_INPUTS or bool(notice)
+    external_rust = ci_rust_inputs.consumes(path, Path(__file__).resolve().parents[2])
     runtime_markdown = (path.startswith('packages/butler-agent/resources/') or
                         (path.startswith('packages/butler-agent/rust/') and '/crates/' in path and '/docs/' not in path)) and not path.endswith('/README.md')
     # Repository and CI lint is unconditional in rust-quality.yml, including docs-only PRs.
-    if path.endswith('.md') and not path.startswith('packages/butler-site/') and not runtime_markdown and not license_input:
+    if path.endswith('.md') and not path.startswith('packages/butler-site/') and not runtime_markdown and not license_input and not external_rust:
         return set()
     result = set()
-    rust = path.startswith(('packages/butler-agent/rust/', 'packages/butler-agent/resources/', '.cargo/', '.config/')) or matches(path, ('Cargo.*', '**/Cargo.toml', '**/Cargo.lock', 'rust-toolchain*'))
+    rust = external_rust or path.startswith(('packages/butler-agent/rust/', 'packages/butler-agent/resources/', '.cargo/', '.config/')) or matches(path, ('Cargo.*', '**/Cargo.toml', '**/Cargo.lock', 'rust-toolchain*'))
     package = matches(path, PACKAGING)
     shared = matches(path, SHARED)
     ui = path.startswith(('packages/butler-app/client/', 'packages/butler-i18n/'))
     if rust or path == 'VERSION':
         result.add('rust')
-    if rust or package or path == 'VERSION':
+    if (rust and not matches(path, RUST_TEST_ONLY)) or package or path == 'VERSION':
         result.update(('package', 'install', 'linux-package'))
-    bun_source = path.startswith('packages/') and not rust and path.endswith(('.ts', '.tsx', '.js', '.jsx', '.mjs'))
+    bun_source = path.startswith('packages/') and not path.startswith('packages/butler-agent/rust/') and path.endswith(('.ts', '.tsx', '.js', '.jsx', '.mjs'))
     manifest = path.startswith('packages/') and path.endswith('/package.json')
     if ui or shared or bun_source or manifest or path.startswith(('tests/', 'tools/')) or (path.startswith('packages/') and not rust and not package and not path.startswith('packages/butler-site/')):
         result.add('ui')
-    if path.startswith(('packages/butler-site/', 'packages/butler-app/client/ui/', 'packages/butler-i18n/')) or shared or matches(path, ('tests/smoke/ds-site-*',)):
+    if path.startswith(('packages/butler-site/', 'packages/butler-app/client/ui/', 'packages/butler-i18n/')) or shared or matches(path, SITE_CHECK_INPUTS):
         result.add('site')
-    if path.startswith('packages/butler-app/client/ui/') or shared or matches(path, ('tests/smoke/ds-site-*',)):
-        result.add('ds')
-    if license_input or matches(path, ('*lock*', 'Cargo.toml', '**/Cargo.toml', '**/package.json', 'deploy/licenses/*', '**/licenses/*', 'LICENSE*')):
-        result.add('licenses')
+    # DS showcase/config/smoke imports can reach any UI-check input. Retain the
+    # conservative UI implication until its complete input graph is selected.
     if 'ui' in result:
-        result.add('ds')  # Every UI/Bun owner retains the existing renderer browser smokes.
+        result.add('ds')
+    if license_input or matches(path, ('*.lock', '*.lockb', '*-lock.json', 'Cargo.lock', 'Cargo.toml', '**/Cargo.toml', '**/package.json', 'deploy/licenses/*', '**/licenses/*', 'LICENSE*')):
+        result.add('licenses')
     # Unknown executable/configuration inputs fail closed, rather than silently
     # leaving a new package or tool untested. Assets/readme are product assets.
     if not result and not path.startswith('assets/readme/'):
@@ -316,6 +325,12 @@ def select(event, workflow):
     paths = [] if full else changed(base)
     required = set(GROUPS) if full else set().union(*(categories(p) for p in paths))
     current = hashes(base or 'full')
+    # Windows stub receipts use the package group, including all Rust harness inputs.
+    if workflow == 'windows-preview-smoke.yml':
+        if full or any(windows_native(path) and categories(path) & {'rust', 'package'} for path in paths):
+            required.add('package')
+        current['package'] = hashlib.sha256(
+            json.dumps([current['package'], current['rust']]).encode()).hexdigest()
     repository = os.environ['GITHUB_REPOSITORY']
     branch = os.environ.get('GITHUB_REF', '').removeprefix('refs/heads/') if candidate else pr.get('head', {}).get('ref')
     job_inputs = integration_inputs(workflow, current, candidate) if candidate else {}
