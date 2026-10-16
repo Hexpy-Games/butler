@@ -16,6 +16,7 @@ pub(in crate::gateway::application) struct Metrics {
     slow_views: Mutex<Vec<(&'static str, u128, u128)>>,
     write_phases: Mutex<std::collections::BTreeMap<&'static str, Vec<u64>>>,
     busy: AtomicU64,
+    page_size: AtomicU64,
 }
 pub(in crate::gateway::application) struct ViewMeasurement {
     metrics: std::sync::Arc<Metrics>,
@@ -83,11 +84,9 @@ impl Metrics {
         if !enabled() {
             return Ok(());
         }
-        let wal = database.with_file_name(format!(
-            "{}-wal",
-            database.file_name().unwrap_or_default().to_string_lossy()
-        ));
-        let bytes = std::fs::metadata(wal).map_or(0, |value| value.len());
+        // WAL bytes written: header plus every appended frame (page + 24-byte header).
+        let frames = WAL_FRAMES.with(|cell| cell.get().1);
+        let bytes = 32 + frames * (self.page_size.load(Ordering::Relaxed) + 24);
         let operations = self.operations.lock();
         let bounds = [
             100,
@@ -124,16 +123,38 @@ pub(in crate::gateway::application) fn baseline() -> bool {
         Ok("stub" | "perf")
     ) && std::env::var_os("BUTLER_E2E_STORAGE_BASELINE").is_some()
 }
-fn enabled() -> bool {
+pub(super) fn enabled() -> bool {
     matches!(
         std::env::var("BUTLER_E2E_TIER").as_deref(),
         Ok("stub" | "perf")
     ) && std::env::var_os("BUTLER_E2E_STORAGE_METRICS").is_some()
 }
-pub(super) fn configure(db: &Connection) -> StorageResult<()> {
+/// Records the writer's page size; the WAL keeps its ordinary checkpoints.
+pub(super) fn configure(metrics: &Metrics, db: &Connection) -> StorageResult<()> {
     if enabled() {
-        db.pragma_update(None, "wal_autocheckpoint", 0)
+        let page_size: u64 = db
+            .query_row("PRAGMA page_size", [], |row| row.get(0))
             .map_err(AppStorageError::sqlite)?;
+        metrics.page_size.store(page_size, Ordering::Relaxed);
     }
     Ok(())
+}
+
+thread_local! {
+    /// `(frames in the current WAL, frames written)` on this writer thread.
+    static WAL_FRAMES: std::cell::Cell<(u64, u64)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+/// Counts the frames a writer commit appended, across WAL restarts. SQLite
+/// reports the frames now in the WAL; a smaller count means it restarted.
+pub(super) fn wal_committed(frames: i32) {
+    if !enabled() {
+        return;
+    }
+    let frames = u64::try_from(frames).unwrap_or_default();
+    WAL_FRAMES.with(|cell| {
+        let (current, written) = cell.get();
+        let appended = frames.checked_sub(current).unwrap_or(frames);
+        cell.set((frames, written + appended));
+    });
 }
