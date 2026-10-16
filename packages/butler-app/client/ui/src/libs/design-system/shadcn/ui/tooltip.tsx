@@ -14,13 +14,19 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import {
-  TITLEBAR_SAFE_AREA_TOP_PX,
-  clampToTitlebarSafeTop,
-} from "../../lib/floatingConstraints";
+import { TITLEBAR_SAFE_AREA_TOP_PX } from "../../lib/floatingConstraints";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { usePresence } from "../../components/Presence";
 import styles from "./tooltip.module.css";
+import {
+  isTriggerClipped,
+  placeTooltip,
+  type TooltipAlign,
+  type TooltipPlacement,
+  type TooltipSide,
+} from "./tooltipPlacement";
+
+export type { TooltipAlign, TooltipSide } from "./tooltipPlacement";
 
 const TOOLTIP_DELAY_MS = 650;
 const TOOLTIP_OFFSET = 8;
@@ -34,12 +40,20 @@ interface TooltipProps {
   label?: string;
   /** A label longer than a few words (e.g. an error line) wraps within the tooltip's width instead of one clipped line. */
   wrap?: boolean;
+  /**
+   * Side of the trigger the tooltip opens on (default `top`). Without room it
+   * flips to the opposite side, then the cross sides, and shifts to stay on
+   * screen. A disabled reason on a control that sits under or after its label
+   * opens `right`, so it never covers the label or description.
+   */
+  side?: TooltipSide;
+  /** Alignment along that side: the trigger's start edge, its center (default) or its end edge. */
+  align?: TooltipAlign;
+  /** Controlled visibility: shown (or hidden) regardless of hover and focus, e.g. in documentation. */
+  open?: boolean;
 }
 
-interface TooltipPosition {
-  left: number;
-  top: number;
-}
+type TooltipPosition = TooltipPlacement & { clipped: boolean };
 
 interface TooltipTriggerProps {
   ref?: Ref<HTMLElement>;
@@ -50,13 +64,21 @@ interface TooltipTriggerProps {
   onPointerLeave?: PointerEventHandler<HTMLElement>;
 }
 
-export function Tooltip({ children, label, wrap = false }: TooltipProps) {
+export function Tooltip({
+  children,
+  label,
+  wrap = false,
+  side = "top",
+  align = "center",
+  open: openProp,
+}: TooltipProps) {
   const tooltipId = useId();
   const triggerRef = useRef<HTMLElement | null>(null);
   const tooltipRef = useRef<HTMLSpanElement | null>(null);
   const openTimerRef = useRef<number | null>(null);
   const suppressFocusTooltipUntilRef = useRef(0);
-  const [open, setOpen] = useState(false);
+  const [hoverOpen, setOpen] = useState(false);
+  const open = openProp ?? hoverOpen;
   const [position, setPosition] = useState<TooltipPosition | null>(null);
 
   const clearOpenTimer = useCallback(() => {
@@ -68,26 +90,26 @@ export function Tooltip({ children, label, wrap = false }: TooltipProps) {
   const updatePosition = useCallback(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    const tooltipHeight =
-      tooltipRef.current?.getBoundingClientRect().height ??
-      TOOLTIP_FALLBACK_HEIGHT_PX;
-    const tooltipWidth =
-      tooltipRef.current?.getBoundingClientRect().width ??
-      TOOLTIP_FALLBACK_WIDTH_PX;
-    const preferredTop = rect.top - TOOLTIP_OFFSET - tooltipHeight;
-    const preferredLeft = rect.left + rect.width / 2;
-    const minLeft = TOOLTIP_VIEWPORT_PADDING_PX + tooltipWidth / 2;
-    const maxLeft =
-      window.innerWidth - TOOLTIP_VIEWPORT_PADDING_PX - tooltipWidth / 2;
-    setPosition({
-      left: Math.min(Math.max(preferredLeft, minLeft), maxLeft),
-      top:
-        preferredTop >= TITLEBAR_SAFE_AREA_TOP_PX
-          ? preferredTop
-          : clampToTitlebarSafeTop(rect.bottom + TOOLTIP_OFFSET),
-    });
-  }, []);
+    // Layout sizes, so the enter animation's transform does not skew the measurement.
+    const node = tooltipRef.current;
+    const placement = placeTooltip(
+      trigger.getBoundingClientRect(),
+      {
+        width: node?.offsetWidth || TOOLTIP_FALLBACK_WIDTH_PX,
+        height: node?.offsetHeight || TOOLTIP_FALLBACK_HEIGHT_PX,
+      },
+      side,
+      align,
+      {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        padding: TOOLTIP_VIEWPORT_PADDING_PX,
+        safeTop: TITLEBAR_SAFE_AREA_TOP_PX,
+        offset: TOOLTIP_OFFSET,
+      },
+    );
+    setPosition({ ...placement, clipped: isTriggerClipped(trigger) });
+  }, [align, side]);
 
   const showAfterDelay = useCallback(() => {
     if (!label) return;
@@ -139,9 +161,21 @@ export function Tooltip({ children, label, wrap = false }: TooltipProps) {
     };
   }, [open, updatePosition]);
 
+  // Keep the last label and position so the tooltip can fade out after hide.
+  const visible = Boolean(open && label && position);
+  const lastShownRef = useRef<{ label: string; position: TooltipPosition } | null>(null);
+  if (visible && label && position) lastShownRef.current = { label, position };
+  const presence = usePresence(visible);
+  const shown = lastShownRef.current;
+  const setTooltipNode = useCallback((node: HTMLSpanElement | null) => {
+    tooltipRef.current = node;
+    presence.ref(node);
+  }, [presence.ref]);
+
+  // Measure again once the tooltip is mounted, so flipping and shifting use its real size.
   useLayoutEffect(() => {
     if (open) updatePosition();
-  }, [open, label, updatePosition]);
+  }, [open, label, presence.mounted, updatePosition]);
 
   useEffect(() => clearOpenTimer, [clearOpenTimer]);
 
@@ -159,17 +193,6 @@ export function Tooltip({ children, label, wrap = false }: TooltipProps) {
     };
   }, [suppressWindowFocusTooltip]);
 
-  // Keep the last label and position so the tooltip can fade out after hide.
-  const visible = Boolean(open && label && position);
-  const lastShownRef = useRef<{ label: string; position: TooltipPosition } | null>(null);
-  if (visible && label && position) lastShownRef.current = { label, position };
-  const presence = usePresence(visible);
-  const shown = lastShownRef.current;
-  const setTooltipNode = useCallback((node: HTMLSpanElement | null) => {
-    tooltipRef.current = node;
-    presence.ref(node);
-  }, [presence.ref]);
-
   const tooltip =
     presence.mounted && shown
       ? createPortal(
@@ -178,6 +201,8 @@ export function Tooltip({ children, label, wrap = false }: TooltipProps) {
             data-slot="tooltip-content"
             data-glass="popover"
             data-radius="control"
+            data-side={shown.position.side}
+            data-clipped={shown.position.clipped ? "true" : undefined}
             data-state={presence.state}
             data-wrap={wrap ? "true" : undefined}
             id={tooltipId}

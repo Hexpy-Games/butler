@@ -3,7 +3,7 @@ import type { DsBaseProps } from "../../lib/dsProps";
 import { dsClass } from "../../lib/internal";
 import { cn } from "../../lib/utils";
 import { IconSlot } from "../../components/IconSlot";
-import { Tooltip } from "../../components/Tooltip";
+import { Tooltip, type TooltipAlign, type TooltipSide } from "../../components/Tooltip";
 import { Typo } from "../../components/Typo";
 // The card surface, border, radius, padding, hover, focus and selected look are ChoiceCard's own classes.
 import surface from "../ChoiceCard/ChoiceCard.module.css";
@@ -20,6 +20,10 @@ export interface CheckCardProps extends Omit<DsBaseProps<ButtonHTMLAttributes<HT
   disabled?: boolean;
   /** Cannot be picked, with the reason in a tooltip; the card stays focusable so the reason can be read. */
   disabledReason?: string;
+  /** Side the disabledReason tooltip opens on (default `top`, above the card). */
+  disabledReasonSide?: TooltipSide;
+  /** Alignment of the disabledReason tooltip along that side (default `center`). */
+  disabledReasonAlign?: TooltipAlign;
 }
 
 /** CheckIcon's geometry (Hugeicons 24 grid), drawn as a stroke so it can draw in. */
@@ -46,7 +50,7 @@ function Indicator({ checked }: { checked: boolean }) {
  */
 export function CheckCard({
   icon, title, description, checked, onCheckedChange, disabled = false, disabledReason,
-  className, onClick, ...props
+  disabledReasonSide = "top", disabledReasonAlign = "center", className, onClick, ...props
 }: CheckCardProps) {
   const descriptionId = useId();
   const blocked = disabled || Boolean(disabledReason);
@@ -79,7 +83,9 @@ export function CheckCard({
       <span className={styles.slot}><Indicator checked={checked} /></span>
     </button>
   );
-  return disabledReason ? <Tooltip label={disabledReason}>{card}</Tooltip> : card;
+  return disabledReason
+    ? <Tooltip label={disabledReason} side={disabledReasonSide} align={disabledReasonAlign}>{card}</Tooltip>
+    : card;
 }
 
 type ListProps = DsBaseProps<HTMLAttributes<HTMLUListElement>> & {
