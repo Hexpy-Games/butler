@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -13,11 +14,13 @@ SPEC = importlib.util.spec_from_file_location('main_gate', Path(__file__).with_n
 gate = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(gate)
 REPO = 'owner/repo'
-PR = dict(number=7, head=dict(ref='feat/change', sha='a' * 40), base=dict(ref='main'), labels=[], body='')
-RUN = dict(id=9, status='completed', conclusion='failure', head_sha='b' * 40,
+PR = dict(number=7, head=dict(ref='feat/change', sha='a' * 40, repo=dict(full_name=REPO)),
+          base=dict(ref='main', repo=dict(full_name=REPO)), labels=[], body='')
+RUN = dict(id=9, workflow_id=4, status='completed', conclusion='failure', head_sha='b' * 40,
            event='push', head_branch='main', path='.github/workflows/rust-quality.yml',
            head_repository=dict(full_name=REPO), html_url='https://github.com/owner/repo/actions/runs/9')
-ISSUE = dict(state='open', user=dict(login='github-actions[bot]'), body='<!-- main-ci-range:green:bad -->')
+ISSUE = dict(state='open', user=dict(login='github-actions[bot]'), body=f'<!-- main-ci-range:green:{RUN["head_sha"]} -->\n'
+                  '<!-- workflow:4 -->evidence<!-- /workflow:4 -->')
 
 
 class MainGate(unittest.TestCase):
@@ -65,6 +68,8 @@ class MainGate(unittest.TestCase):
         pr = dict(PR, body='Fixes https://github.com/owner/repo/issues/1037')
         for issue, expected in [(ISSUE, 0), (dict(ISSUE, state='closed'), 1),
                                 (dict(ISSUE, body='Main CI failure'), 1),
+                                (dict(ISSUE, body=ISSUE['body'].replace(RUN['head_sha'], 'stale')), 1),
+                                (dict(ISSUE, body=ISSUE['body'].replace('workflow:4', 'workflow:5')), 1),
                                 (dict(ISSUE, user=dict(login='someone')), 1),
                                 (dict(ISSUE, pull_request={"url": "pr"}), 1)]:
             with patch.object(gate, 'api', return_value=issue) as api:
@@ -76,9 +81,43 @@ class MainGate(unittest.TestCase):
             self.assertEqual(self.evaluate([RUN], dict(PR, body='https://github.com/other/repo/issues/1'))[0], 1)
             api.assert_not_called()
 
+    # test-category: security
+    def test_fork_revert_branch_does_not_bypass(self):
+        pr = dict(PR, head=dict(PR['head'], ref='fix/revert-pr-7-abc',
+                               repo=dict(full_name='fork/repo')))
+        self.assertEqual(self.evaluate([RUN], pr)[0], 1)
+
+    # test-category: security
+    def test_failed_issue_lookup_is_not_a_bypass(self):
+        errors = [subprocess.CalledProcessError(1, ['gh', 'api'], stderr='HTTP 404'),
+                  OSError('unavailable'), ValueError('invalid JSON')]
+        for error in errors:
+            with self.subTest(error=error), patch.object(gate, 'api', side_effect=error):
+                result, output, _ = self.evaluate([RUN], dict(PR, body='see #999999'))
+                self.assertEqual(result, 1)
+                self.assertNotIn('::warning::', output)
+        with patch.object(gate, 'api', side_effect=[errors[0], ISSUE]):
+            self.assertEqual(self.evaluate([RUN], dict(PR, body='see #999999 and #1037'))[0], 0)
+
+    # test-category: security
+    def test_issue_must_match_each_failing_workflow(self):
+        with patch.object(gate, 'main_workflows', return_value=['site.yml', 'rust-quality.yml']), \
+             patch.object(gate, 'latest_main_run', side_effect=[RUN, dict(RUN, workflow_id=5)]), \
+             patch.object(gate, 'api', return_value=ISSUE):
+            self.assertEqual(gate.main_gate(dict(pull_request=dict(PR, body='see #1037')),
+                                            REPO, 'pull_request'), 1)
+
+    # test-category: security
+    def test_current_workflow_failing_sha_evidence(self):
+        issue = dict(ISSUE, body='<!-- main-ci-range:green:older -->\n<!-- workflow:4 -->'
+                     f'Workflow green baseline: `green` → `{RUN["head_sha"]}`'
+                     '<!-- /workflow:4 -->')
+        with patch.object(gate, 'api', return_value=issue):
+            self.assertEqual(self.evaluate([RUN], dict(PR, body='see #1037'))[0], 0)
+
     # test-category: pure-logic
     def test_api_error_warns_and_passes(self):
-        result, output, _ = self.evaluate([], error=OSError('unavailable'))
+        result, output, _ = self.evaluate([], error=subprocess.CalledProcessError(1, ['gh', 'api'], stderr='HTTP 503'))
         self.assertEqual(result, 0)
         self.assertIn('::warning::', output)
         self.assertEqual(len(output.splitlines()), 1)
@@ -111,8 +150,9 @@ class MainGate(unittest.TestCase):
         for conclusion in ['success', 'failure', 'skipped', 'cancelled']:
             jobs = dict(total_count=1, jobs=[dict(name='gate', steps=[dict(
                 name='Require every selected check', conclusion=conclusion)])])
-            with patch.object(gate, 'api', side_effect=[dict(workflow_runs=[run]), jobs]):
+            with patch.object(gate, 'api', side_effect=[dict(workflow_runs=[run]), jobs]) as api:
                 self.assertEqual(gate.quality_gate(dict(pull_request=PR), REPO), 0 if conclusion == 'success' else 1)
+                self.assertIn(f'&head_sha={PR["head"]["sha"]}&', api.call_args_list[0].args[0])
         for update in [dict(status='in_progress'), dict(head_sha='old'),
                        dict(pull_requests=[dict(number=8)]), dict(display_title='Gate re-evaluation #12')]:
             with patch.object(gate, 'api', return_value=dict(workflow_runs=[dict(run, **update)])) as api:
