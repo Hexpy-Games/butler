@@ -73,7 +73,8 @@ CI_CONSUMERS = (
         '.github/actions/publish-cargo-target/*', '.github/workflows/install-smoke.yml',
         '.github/workflows/merge-agent-manifests.yml',
         '.github/scripts/test-ci-invariants.py', '.github/scripts/test-native-archive-safety.py',
-        '.github/scripts/test-windows-ci-safety.py')),
+        '.github/scripts/test-windows-ci-safety.py',
+        '.github/scripts/test-windows-command-coverage.py')),
     (NATIVE_CI + ('workflows',), (
         '.github/scripts/agent-provenance.py', '.github/scripts/cargo-artifact-cache.py',
         '.github/scripts/cargo-target-release.py', '.github/scripts/runner_cache.py',
