@@ -142,7 +142,7 @@ class ApprovedTiers(unittest.TestCase):
                 jobs = json.loads(output['jobs'])
                 for name in ('macos-archive', 'macos-tests'):
                     self.assertEqual(jobs[name], False if event == 'pull_request' else output['rust'] == 'true', (path, event))
-                self.assertEqual(jobs['linux-tests'], output['rust'] == 'true')
+                self.assertEqual(jobs['linux-tests'], event != 'pull_request' and output['rust'] == 'true')
         source = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
         for name in ('macos-archive', 'macos-tests'):
             block = re.split(r'^  [\w-]+:', source.split('  ' + name + ':')[1], maxsplit=1, flags=re.M)[0]

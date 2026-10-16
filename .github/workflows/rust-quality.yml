@@ -93,6 +93,7 @@ jobs:
     with:
       fixtures: ${{ needs.changes.outputs.tier == 'integration' || github.event_name != 'pull_request' }}
       ort-mode: prebuilt-ort
+      smoke-in-place: ${{ github.event_name == 'pull_request' }}
 
   linux-perf-archive:
     permissions:
@@ -395,7 +396,9 @@ jobs:
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-main-failure.py
       - name: Validate PR receipt reuse
         working-directory: ${{ github.workspace }}
-        run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-smoke-reuse.py
+        run: |
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-smoke-reuse.py
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-pr-workspace.py
       - name: Guard shared Windows runner resources
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-invariants.py --windows-safety

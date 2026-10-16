@@ -179,7 +179,7 @@ class Gate(unittest.TestCase):
             if event == 'push':
                 disabled.update(('site', 'ds'))
             if event == 'pull_request':
-                disabled.update(('linux-arm64-archive', 'macos-archive', 'macos-tests',
+                disabled.update(('linux-tests', 'linux-arm64-archive', 'macos-archive', 'macos-tests',
                                  'linux-native', 'linux-arm64-native', 'linux-package-x64',
                                  'linux-package-arm64', 'install-x64', 'install-arm64',
                                  'shellcheck', 'selftest'))
@@ -229,7 +229,13 @@ class Gate(unittest.TestCase):
         archive = (ROOT.parent / 'workflows/rust-archive.yml').read_text()
         steps = {step.splitlines()[0]: step for step in archive.split('      - name: ')[1:]}
         selections = steps['Archive tests and record every selection']
-        self.assertNotIn('        if:', selections)
+        expression = re.search(r'^        if: \$\{\{ (.*) \}\}$', selections, re.M)[1]
+        for event in ['pull_request', 'push', 'workflow_dispatch']:
+            for in_place in [False, True]:
+                condition = expression.replace('inputs.smoke-in-place', repr(in_place))
+                condition = condition.replace('github.event_name', repr(event))
+                condition = condition.replace('!', 'not ').replace('&&', 'and')
+                self.assertEqual(eval(condition), not (in_place and event == 'pull_request'))
         for command in ['cargo nextest list', 'balance-e2e.py', 'test-ci-invariants.py']:
             self.assertIn(command, selections)
         fixture = steps['Build E2E fixture Agent']

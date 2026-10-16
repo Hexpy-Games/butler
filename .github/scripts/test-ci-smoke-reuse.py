@@ -66,7 +66,8 @@ class SmokeReuse(unittest.TestCase):
                 outputs = dict(line.split('=', 1) for line in Path(env['GITHUB_OUTPUT']).read_text().splitlines())
                 jobs = json.loads(outputs['jobs'])
                 self.assertEqual(jobs['linux-clippy'], expected)
-                self.assertEqual(jobs['linux-tests'], expected)
+                self.assertFalse(jobs['linux-tests'])
+                self.assertEqual(jobs['linux-archive'], expected)
                 results = dict(changes=dict(result='success', outputs=outputs))
                 results.update({name: dict(result='success' if selected else 'skipped') for name, selected in jobs.items()})
                 check = subprocess.run(['python3', ROOT / 'check-gate.py'],
@@ -110,7 +111,7 @@ class SmokeReuse(unittest.TestCase):
         plumbing = ci_receipts.smoke_inputs(WORKFLOW, current, groups, lambda *a: 'changed-script')
         self.assertNotEqual(baseline['linux-clippy'], plumbing['linux-clippy'])
         changed = ci_receipts.smoke_inputs(WORKFLOW, dict(current, rust='base-moved'), groups, lambda *a: 'tree')
-        self.assertNotEqual(baseline['linux-tests'], changed['linux-tests'])
+        self.assertNotEqual(baseline['linux-archive'], changed['linux-archive'])
         ui = ci_receipts.smoke_inputs(WORKFLOW, dict(current, ui='new-ui'), groups, lambda *a: 'tree')
         self.assertEqual(baseline['linux-clippy'], ui['linux-clippy'])
 
