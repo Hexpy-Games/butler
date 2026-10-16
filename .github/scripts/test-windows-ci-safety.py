@@ -29,6 +29,7 @@ class WindowsSafety(unittest.TestCase):
     def test_windows_test_logs_bypass_console_pipeline_and_keep_failure_summary(self):
         repository = ROOT.parents[1]
         workflow = (repository / '.github/workflows/windows-preview-smoke.yml').read_text()
+        logged_sources = [workflow]
         self.assertNotIn('Tee-Object', workflow)
         self.assertIn('BUTLER_DEBUG_COMMAND_TIMINGS: "1"', workflow)
         self.assertIn("matrix.shard == 'basics' && '1'", workflow)
@@ -47,8 +48,10 @@ class WindowsSafety(unittest.TestCase):
                 self.assert_raw_log_command(step, 'exit $testCode')
         for filename in ['windows-e2e-artifacts.ps1', 'windows-basic-capabilities.ps1']:
             source = (repository / 'deploy' / filename).read_text()
+            logged_sources.append(source)
             self.assertNotIn('Tee-Object', source)
             self.assert_raw_log_command(source, 'throw ')
+        self.assertEqual(sum(source.count('cmd /d ') for source in logged_sources), 9)
         release = (repository / '.github/workflows/release.yml').read_text()
         self.assertIn('path: ${{ runner.temp }}/windows-basic-capabilities.log', release)
         wrapper = (repository / 'deploy/windows-test-log.ps1').read_text()
@@ -57,7 +60,10 @@ class WindowsSafety(unittest.TestCase):
 
     def assert_raw_log_command(self, source, failure_action):
         self.assertNotIn('*>', source)
-        self.assertRegex(source, r'cmd /d /(?:s /)?c "[^\n]+ > `"[^\n]+`" 2>&1(?:`")?"'
+        commands = re.findall(r'(?m)^\s*cmd /d [^\n]+', source)
+        for command in commands:
+            self.assertRegex(command, r'cmd /d /c "(?!`"`")[^\n]+ > `"[^\n]+`" 2>&1"$')
+        self.assertRegex(source, r'cmd /d /c "[^\n]+ > `"[^\n]+`" 2>&1"'
                          r'\n\s*\$testCode = \$LASTEXITCODE\n')
         self.assertRegex(source, r'if \(\$testCode -ne 0\) \{\s*'
                          r'& "[^"\n]+windows-test-log.ps1" -Log [^\n]+\n\s*'

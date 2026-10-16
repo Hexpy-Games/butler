@@ -29,7 +29,7 @@ if ($Mode -eq 'Export') {
         $threads = if ($test -eq 'windows_commands') { $env:BUTLER_E2E_PERF = '1'; 1 } else { 8 }
         $log = "$env:PREVIEW_ROOT/logs/$test.log"
         $ErrorActionPreference = 'Continue'
-        cmd /d /s /c "`"`"$artifacts/e2e.exe`" `"$test`::`" --test-threads=$threads --nocapture > `"$log`" 2>&1`""
+        cmd /d /c "`"$artifacts/e2e.exe`" `"$test`::`" --test-threads=$threads --nocapture > `"$log`" 2>&1"
         $testCode = $LASTEXITCODE
         $ErrorActionPreference = 'Stop'
         $env:BUTLER_E2E_PERF = $savedPerf
