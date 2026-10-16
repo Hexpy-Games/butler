@@ -1,6 +1,10 @@
 //! The `butler-agent` executable. Runtime and argument handling live in the host.
 
 fn main() -> std::process::ExitCode {
+    if let Err(error) = butler_platform::memory::prepare_allocator() {
+        eprintln!("allocator_configuration_failed: {error}");
+        return std::process::ExitCode::FAILURE;
+    }
     if let Err(error) = butler_platform::process_names::name_current() {
         eprintln!("process_name_unavailable: {error}");
         return std::process::ExitCode::FAILURE;

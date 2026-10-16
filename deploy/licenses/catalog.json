@@ -5,7 +5,7 @@
     "deploy/licenses/generate.mjs": "eb413c424649cc6ef3bc734cb1a9479cf8ddffb3af398601a974268c229d7c34",
     "deploy/licenses/inputs.mjs": "da35f54527aa98b6a7ced018b1d0172c5f997d7eb10842ae2914e23c036868e1",
     "deploy/licenses/refresh.py": "a5a071d68dc8b01eb066be507fdeccf9985e03976964725d439cca9d3b7d094b",
-    "packages/butler-agent/rust/Cargo.lock": "8c016bb816d27c0d9d56a9a9c86f404f636409f432bcc60020d9e29d2277a890",
+    "packages/butler-agent/rust/Cargo.lock": "ffcc56be2d66d852e4b00a86feb285b3555c535145935d3eaf62f87d3b27d1ca",
     "packages/butler-agent/rust/Cargo.toml": "d74d0251e354c1ec916d057d396badfcd600ad811b0e7a06fa8a90407c34a7f5",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "6c76c4b5d9f708217bb74e2fa0826550581a5b415ebaf843c1bf5fb57606fea9",
@@ -19,7 +19,7 @@
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "6823161ebcffd1ab5c100a48c5891a4a754273fce5b7f13b78a10fab1dc9a3d9",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "505dd54086c20697773a93e8dfdb4e0d81f451a5d02487bdad79ea84c48a8ac2",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "5fe4bdcbf7943033762f4efb6e3a299dbe0c52a631ead27fc4bf150076e51591",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "0b1332f0f43eb9296972675176176393546de2e442ce2b72c8dbf141135ec7f8",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "15317b3544cdbcfacc5d46ab5b1cbddb1faa34c50ceca49221fdea0fa35a4592",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "50642adee7e1bb7434332d26311b3e467cf868a688033571f77e4273cbf2d4b7",
@@ -11350,32 +11350,6 @@
       ]
     },
     {
-      "id": "rust:addr2line@0.25.1",
-      "name": "addr2line",
-      "version": "0.25.1",
-      "license": "Apache-2.0 OR MIT",
-      "source": "https://github.com/gimli-rs/addr2line/tree/f02db009deb9b441818afa49cb1b17453c1e4243",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent"
-      ],
-      "evidenceSha256": [
-        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
-        "e99d88d232bf57d70f0fb87f6b496d44b6653f99f8a63d250a54c61ea4bcde40"
-      ],
-      "files": [
-        "LICENSE-APACHE",
-        "LICENSE-MIT"
-      ],
-      "links": [
-        "https://github.com/gimli-rs/addr2line/blob/f02db009deb9b441818afa49cb1b17453c1e4243/LICENSE-APACHE",
-        "https://github.com/gimli-rs/addr2line/blob/f02db009deb9b441818afa49cb1b17453c1e4243/LICENSE-MIT"
-      ],
-      "copyright": [
-        "Copyright (c) 2016-2018 The gimli Developers"
-      ]
-    },
-    {
       "id": "rust:adler2@2.0.1",
       "name": "adler2",
       "version": "2.0.1",
@@ -12798,32 +12772,6 @@
       ],
       "copyright": [
         "Copyright (c) 2019 axum Contributors"
-      ]
-    },
-    {
-      "id": "rust:backtrace@0.3.76",
-      "name": "backtrace",
-      "version": "0.3.76",
-      "license": "MIT OR Apache-2.0",
-      "source": "https://github.com/rust-lang/backtrace-rs/tree/775f6a1ba62e7d35a1fac76e64c61d9d4687b5f2",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent"
-      ],
-      "evidenceSha256": [
-        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
-        "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
-      ],
-      "files": [
-        "LICENSE-APACHE",
-        "LICENSE-MIT"
-      ],
-      "links": [
-        "https://github.com/rust-lang/backtrace-rs/blob/775f6a1ba62e7d35a1fac76e64c61d9d4687b5f2/LICENSE-APACHE",
-        "https://github.com/rust-lang/backtrace-rs/blob/775f6a1ba62e7d35a1fac76e64c61d9d4687b5f2/LICENSE-MIT"
-      ],
-      "copyright": [
-        "Copyright (c) 2014 Alex Crichton"
       ]
     },
     {
@@ -17813,32 +17761,6 @@
       ]
     },
     {
-      "id": "rust:gimli@0.32.3",
-      "name": "gimli",
-      "version": "0.32.3",
-      "license": "MIT OR Apache-2.0",
-      "source": "https://github.com/gimli-rs/gimli/tree/8bc8e622fcb9be20fc9f03c96bc6335d936b869d",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent"
-      ],
-      "evidenceSha256": [
-        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
-        "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0"
-      ],
-      "files": [
-        "LICENSE-APACHE",
-        "LICENSE-MIT"
-      ],
-      "links": [
-        "https://github.com/gimli-rs/gimli/blob/8bc8e622fcb9be20fc9f03c96bc6335d936b869d/LICENSE-APACHE",
-        "https://github.com/gimli-rs/gimli/blob/8bc8e622fcb9be20fc9f03c96bc6335d936b869d/LICENSE-MIT"
-      ],
-      "copyright": [
-        "Copyright (c) 2015 The Rust Project Developers"
-      ]
-    },
-    {
       "id": "rust:gjson@0.8.1",
       "name": "gjson",
       "version": "0.8.1",
@@ -19550,32 +19472,6 @@
       "links": [
         "https://github.com/rust-itertools/itertools/blob/a015a6831525ee1637df747d3f530a627d9741bf/LICENSE-APACHE",
         "https://github.com/rust-itertools/itertools/blob/a015a6831525ee1637df747d3f530a627d9741bf/LICENSE-MIT"
-      ],
-      "copyright": [
-        "Copyright (c) 2015"
-      ]
-    },
-    {
-      "id": "rust:itertools@0.15.0",
-      "name": "itertools",
-      "version": "0.15.0",
-      "license": "MIT OR Apache-2.0",
-      "source": "https://github.com/rust-itertools/itertools/tree/37bd72aa6d58e594711d127b52418ca5e58b6091",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent"
-      ],
-      "evidenceSha256": [
-        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
-        "7576269ea71f767b99297934c0b2367532690f8c4badc695edf8e04ab6a1e545"
-      ],
-      "files": [
-        "LICENSE-APACHE",
-        "LICENSE-MIT"
-      ],
-      "links": [
-        "https://github.com/rust-itertools/itertools/blob/37bd72aa6d58e594711d127b52418ca5e58b6091/LICENSE-APACHE",
-        "https://github.com/rust-itertools/itertools/blob/37bd72aa6d58e594711d127b52418ca5e58b6091/LICENSE-MIT"
       ],
       "copyright": [
         "Copyright (c) 2015"
@@ -22344,32 +22240,6 @@
       "copyright": []
     },
     {
-      "id": "rust:object@0.37.3",
-      "name": "object",
-      "version": "0.37.3",
-      "license": "Apache-2.0 OR MIT",
-      "source": "https://github.com/gimli-rs/object/tree/916c47b90e5c0bea139ca4bdfc53811f7d2c3383",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent"
-      ],
-      "evidenceSha256": [
-        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
-        "0b74dfa0bcee5c420c6b7f67b4b2658f9ab8388c97b8e733975f2cecbdd668a6"
-      ],
-      "files": [
-        "LICENSE-APACHE",
-        "LICENSE-MIT"
-      ],
-      "links": [
-        "https://github.com/gimli-rs/object/blob/916c47b90e5c0bea139ca4bdfc53811f7d2c3383/LICENSE-APACHE",
-        "https://github.com/gimli-rs/object/blob/916c47b90e5c0bea139ca4bdfc53811f7d2c3383/LICENSE-MIT"
-      ],
-      "copyright": [
-        "Copyright (c) 2015 The Gimli Developers"
-      ]
-    },
-    {
       "id": "rust:object_store@0.12.5",
       "name": "object_store",
       "version": "0.12.5",
@@ -23560,27 +23430,6 @@
       ]
     },
     {
-      "id": "rust:pprof-alloc@0.6.0",
-      "name": "pprof-alloc",
-      "version": "0.6.0",
-      "license": "Apache-2.0",
-      "source": "https://github.com/howardjohn/pprof-alloc/tree/a2d091943abaec1723e5f39492a225fb166d8816",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent"
-      ],
-      "evidenceSha256": [
-        "2d6960f57983903511a3f517076787ff3701f02860fc3a2c0fdb8d4e0f2418a6"
-      ],
-      "files": [
-        "LICENSE"
-      ],
-      "links": [
-        "https://github.com/howardjohn/pprof-alloc/blob/a2d091943abaec1723e5f39492a225fb166d8816/LICENSE"
-      ],
-      "copyright": []
-    },
-    {
       "id": "rust:ppv-lite86@0.2.21",
       "name": "ppv-lite86",
       "version": "0.2.21",
@@ -23709,58 +23558,6 @@
         "https://github.com/dtolnay/proc-macro2/blob/ed8a5497669cd63db33bf24646f261b012bbbc4a/LICENSE-MIT"
       ],
       "copyright": []
-    },
-    {
-      "id": "rust:prometheus-client-derive-encode@0.5.1",
-      "name": "prometheus-client-derive-encode",
-      "version": "0.5.1",
-      "license": "Apache-2.0 OR MIT",
-      "source": "https://github.com/prometheus/client_rust/tree/3e3d55cda6d1a91bf01dc113cfd422ee71460234",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent"
-      ],
-      "evidenceSha256": [
-        "fdd74ed73cbf384042f37737a63a72641eb52bd8598d29636729229811928b4b",
-        "0fd830000a45d0c472e06b2a3718b070c902ee9a71a6abc1647ce66920de2eb5"
-      ],
-      "files": [
-        "LICENSE-APACHE",
-        "LICENSE-MIT"
-      ],
-      "links": [
-        "https://github.com/prometheus/client_rust/blob/3e3d55cda6d1a91bf01dc113cfd422ee71460234/derive-encode/LICENSE-APACHE",
-        "https://github.com/prometheus/client_rust/blob/3e3d55cda6d1a91bf01dc113cfd422ee71460234/derive-encode/LICENSE-MIT"
-      ],
-      "copyright": [
-        "Copyright (c) 2020 Max Inden"
-      ]
-    },
-    {
-      "id": "rust:prometheus-client@0.25.1",
-      "name": "prometheus-client",
-      "version": "0.25.1",
-      "license": "Apache-2.0 OR MIT",
-      "source": "https://github.com/prometheus/client_rust/tree/3e3d55cda6d1a91bf01dc113cfd422ee71460234",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent"
-      ],
-      "evidenceSha256": [
-        "fdd74ed73cbf384042f37737a63a72641eb52bd8598d29636729229811928b4b",
-        "0fd830000a45d0c472e06b2a3718b070c902ee9a71a6abc1647ce66920de2eb5"
-      ],
-      "files": [
-        "LICENSE-APACHE",
-        "LICENSE-MIT"
-      ],
-      "links": [
-        "https://github.com/prometheus/client_rust/blob/3e3d55cda6d1a91bf01dc113cfd422ee71460234/LICENSE-APACHE",
-        "https://github.com/prometheus/client_rust/blob/3e3d55cda6d1a91bf01dc113cfd422ee71460234/LICENSE-MIT"
-      ],
-      "copyright": [
-        "Copyright (c) 2020 Max Inden"
-      ]
     },
     {
       "id": "rust:prost-derive@0.14.4",
@@ -23938,29 +23735,6 @@
       ],
       "copyright": [
         "Copyright (c) 2015 The quick-error Developers"
-      ]
-    },
-    {
-      "id": "rust:quick-xml@0.41.0",
-      "name": "quick-xml",
-      "version": "0.41.0",
-      "license": "MIT",
-      "source": "https://github.com/tafia/quick-xml/tree/4deda08abeffdc188c269360229cf47e12a77a9f",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent"
-      ],
-      "evidenceSha256": [
-        "f0cf9b1c62bbe3bd3a69f5f79c7158f513f612b4940a0a812d1db39d605318bc"
-      ],
-      "files": [
-        "LICENSE-MIT.md"
-      ],
-      "links": [
-        "https://github.com/tafia/quick-xml/blob/4deda08abeffdc188c269360229cf47e12a77a9f/LICENSE-MIT.md"
-      ],
-      "copyright": [
-        "Copyright (c) 2016 Johann Tuffe"
       ]
     },
     {
@@ -25169,32 +24943,6 @@
         "11 of the WIPO copyright treaty adopted on 20 December 1996, or",
         "Copyright (C) <year>  <name of author>",
         "<program>  Copyright (C) <year>  <name of author>"
-      ]
-    },
-    {
-      "id": "rust:rustc-demangle@0.1.28",
-      "name": "rustc-demangle",
-      "version": "0.1.28",
-      "license": "MIT OR Apache-2.0",
-      "source": "https://github.com/rust-lang/rustc-demangle/tree/1fd8a3e2a25e6cb5a75cf7806dc0c421cfd94465",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent"
-      ],
-      "evidenceSha256": [
-        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
-        "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
-      ],
-      "files": [
-        "LICENSE-APACHE",
-        "LICENSE-MIT"
-      ],
-      "links": [
-        "https://github.com/rust-lang/rustc-demangle/blob/1fd8a3e2a25e6cb5a75cf7806dc0c421cfd94465/LICENSE-APACHE",
-        "https://github.com/rust-lang/rustc-demangle/blob/1fd8a3e2a25e6cb5a75cf7806dc0c421cfd94465/LICENSE-MIT"
-      ],
-      "copyright": [
-        "Copyright (c) 2014 Alex Crichton"
       ]
     },
     {

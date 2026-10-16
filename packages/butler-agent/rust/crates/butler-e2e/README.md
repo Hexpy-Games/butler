@@ -240,7 +240,9 @@ refresh proves the provider path before idle.
 It runs in the opt-in `perf` tier with a release agent. After the existing
 two-minute startup grace and committed memory readiness, ten 60-second samples
 retain the original 100 MB memory and 1 MB/minute read budgets and content
-checks. Every buffered/physical write counter must remain unchanged, as must
+checks. HTTP/content probes run between windows; each window takes a fresh
+counter baseline after those probes. Every buffered/physical write counter must
+remain unchanged, as must
 App/BTCC data versions, all DATA file metadata and native write notifications.
 An opt-in stub-only in-memory counter at projection source opens catches
 cached transcript reads even where the OS exposes only physical reads. Host

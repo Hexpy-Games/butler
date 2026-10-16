@@ -63,7 +63,7 @@ pub(super) fn optimize(connection: &Connection) -> StorageResult<()> {
 }
 
 /// Retention must never wait for foreground readers to release the WAL.
-/// Release bulk-maintenance caches before returning free heap pages to the OS.
+/// Release cached pages and statements after bulk maintenance completes.
 pub(super) fn passive_checkpoint(connection: &Connection) -> StorageResult<()> {
     let _timing = crate::gateway::command_timing::CommandTiming::new("app_sqlite_checkpoint");
     connection
@@ -73,7 +73,6 @@ pub(super) fn passive_checkpoint(connection: &Connection) -> StorageResult<()> {
     connection
         .execute_batch("PRAGMA shrink_memory")
         .map_err(AppStorageError::sqlite)?;
-    butler_platform::memory::release_unused_heap();
     Ok(())
 }
 
