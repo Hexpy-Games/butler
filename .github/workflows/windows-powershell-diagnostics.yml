@@ -14,7 +14,7 @@ defaults:
 jobs:
   diagnose-native:
     name: Isolated native PowerShell startup probe
-    runs-on: [self-hosted, butler-win]
+    runs-on: [self-hosted, butler-win, "${{ (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/')) && 'butler-win-release' || 'butler-win-shared' }}"]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

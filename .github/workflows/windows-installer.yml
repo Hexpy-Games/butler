@@ -36,7 +36,7 @@ jobs:
     needs: changes
     if: ${{ !inputs.reuse-run && (needs.changes.outputs.tier != 'integration' || fromJSON(needs.changes.outputs.jobs).build) }}
     name: Build Windows Squirrel artifacts
-    runs-on: [self-hosted, butler-win]
+    runs-on: [self-hosted, butler-win, butler-win-release]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4

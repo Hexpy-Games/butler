@@ -68,7 +68,7 @@ jobs:
     needs: integration-proof
     name: Build unsigned Windows x64 Agent preview
     if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-preview.') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: ${{ inputs.runner == 'hosted' && 'windows-latest' || fromJSON('["self-hosted", "butler-win"]') }}
+    runs-on: ${{ inputs.runner == 'hosted' && 'windows-latest' || fromJSON('["self-hosted", "butler-win", "butler-win-release"]') }}
     concurrency:
       group: windows-release-${{ github.ref }}
       cancel-in-progress: false
@@ -139,7 +139,7 @@ jobs:
     name: Package unsigned Windows Squirrel App
     needs: agent-windows-build
     if: ${{ !inputs.reuse_run_id && contains(github.ref_name, '-preview.') }}
-    runs-on: ${{ inputs.runner == 'hosted' && 'windows-latest' || fromJSON('["self-hosted", "butler-win"]') }}
+    runs-on: ${{ inputs.runner == 'hosted' && 'windows-latest' || fromJSON('["self-hosted", "butler-win", "butler-win-release"]') }}
     concurrency:
       group: windows-app-release-${{ github.ref }}
       cancel-in-progress: false

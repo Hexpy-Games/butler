@@ -141,6 +141,37 @@ class ApprovedTiers(unittest.TestCase):
         self.assertEqual(guards, ['prepare-native-agent-script.test.ts'])
 
 
+    # test-category: format-pin
+    def test_owner_windows_jobs_reserve_the_release_lane(self):
+        from ci_consumer_test_support import jobs
+        dynamic = "${{ (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/')) && 'butler-win-release' || 'butler-win-shared' }}"
+        expected = {
+            ('e2e.yml', 'e2e-live'): 'butler-win-release',
+            ('windows-installer.yml', 'build'): 'butler-win-release',
+            ('release.yml', 'agent-windows-build'): 'butler-win-release',
+            ('release.yml', 'app-windows'): 'butler-win-release',
+            ('windows-preview-smoke.yml', 'build'): 'butler-win-release',
+            ('windows-preview-smoke.yml', 'stub'): dynamic,
+            ('windows-powershell-diagnostics.yml', 'diagnose-native'): dynamic,
+            ('native-deps.yml', 'windows-owner'): dynamic,
+        }
+        found = set()
+        for workflow in (ROOT.parent / 'workflows').glob('*.yml'):
+            for name, block in jobs(workflow.read_text()).items():
+                runner = re.search(r'^    runs-on: (.+)$', block, re.M)
+                if not runner or 'butler-win' not in runner[1]:
+                    continue
+                key = (workflow.name, name)
+                found.add(key)
+                self.assertIn(expected[key], runner[1], key)
+                if workflow.name == 'release.yml':
+                    self.assertIn("inputs.runner == 'hosted' && 'windows-latest'", runner[1])
+        self.assertEqual(found, set(expected))
+        config = (ROOT.parent / 'actionlint.yaml').read_text()
+        for lane in ('butler-win-release', 'butler-win-shared'):
+            self.assertIn(lane, config)
+
+
 class Precision(unittest.TestCase):
     # test-category: pure-logic
     def test_package_only_inputs_do_not_build_test_archives(self):
@@ -198,5 +229,3 @@ class Precision(unittest.TestCase):
         }.items():
             path = 'packages/butler-agent/rust/crates/butler-core/src/' + name
             self.assertEqual('licenses' in changes.categories(path), expected, path)
-
-
