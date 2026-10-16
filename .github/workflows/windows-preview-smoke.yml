@@ -3,7 +3,7 @@ name: Unsigned Windows preview smoke
 on:
   pull_request:
   push:
-    branches: [main, 'release/**']
+    branches: ['release/**']
   workflow_dispatch:
     inputs:
       native-cache:
