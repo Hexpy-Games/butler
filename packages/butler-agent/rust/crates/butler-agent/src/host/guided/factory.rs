@@ -392,6 +392,10 @@ fn resolved_workspace(
 ) -> Result<PathBuf, BtccError> {
     let path = workspace.get().map_err(|e| error(e.code()))?;
     phase.execution_policy.workspace_path = path.to_string_lossy().into_owned();
+    let inventory_root = path.clone();
+    tokio::task::spawn_blocking(move || {
+        butler_platform::command_sandbox::prewarm_project(&inventory_root);
+    });
     Ok(path)
 }
 

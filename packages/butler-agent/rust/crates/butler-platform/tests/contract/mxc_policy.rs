@@ -11,12 +11,15 @@ use butler_platform::command_sandbox::{
     },
 };
 use std::collections::BTreeMap;
+#[path = "mxc_read_grants.rs"]
+mod read_grants;
 /// Policy planning and admission invariants of the command sandbox contract.
 pub(super) fn verify() {
     probe_policy_keeps_loader_grants_and_redacts_paths();
     golden_policy_has_no_implicit_environment_network_or_fallback();
     policy_rejects_broad_and_overriding_grants();
-    toolchains_replace_shims_and_keep_trusted_path_order();
+    read_grants::verify();
+    toolchains_replace_shims_and_keep_host_path_order();
     environment_redirects_profiles_without_importing_host_credentials();
     drive_picker_and_reconcile_never_remove_other_owners_mapping();
     command_lines_round_trip_crt_arguments_and_preserve_cmd_text();
@@ -85,6 +88,7 @@ fn invocation(args: &[&str]) -> Invocation {
     Invocation {
         program: r"C:\Program Files\tool.exe".into(),
         arguments: args.iter().map(|s| (*s).into()).collect(),
+        ..Default::default()
     }
 }
 fn golden_policy_has_no_implicit_environment_network_or_fallback() {
@@ -171,7 +175,7 @@ fn policy_rejects_broad_and_overriding_grants() {
             .is_err()
     );
 }
-fn toolchains_replace_shims_and_keep_trusted_path_order() {
+fn toolchains_replace_shims_and_keep_host_path_order() {
     let input = Discovery {
         path: [
             r"C:\bad",
@@ -182,6 +186,8 @@ fn toolchains_replace_shims_and_keep_trusted_path_order() {
             r"C:\Users\person\AppData\Roaming\npm",
             r"C:\Users\person\AppData\Local\Programs\Python\Python312",
             r"C:\Users\person\AppData\Local\Programs\Python\untrusted",
+            r"C:\Users\person",
+            r"C:\Users\person\src",
         ]
         .map(path)
         .into(),
@@ -191,6 +197,7 @@ fn toolchains_replace_shims_and_keep_trusted_path_order() {
         cargo_home: Some(path(r"C:\Users\person\.cargo")),
         rustup_home: Some(path(r"C:\Users\person\.rustup")),
         git_exe: Some(path(r"C:\Program Files\Git\cmd\git.exe")),
+        user_profile: Some(path(r"C:\Users\person")),
         app_data: Some(path(r"C:\Users\person\AppData\Roaming")),
         local_app_data: Some(path(r"C:\Users\person\AppData\Local")),
         shim_dirs: vec![path(r"C:\Users\person\.nodejs")],
@@ -206,10 +213,11 @@ fn toolchains_replace_shims_and_keep_trusted_path_order() {
             r"C:\Users\person\nvm\installs\v24",
             r"C:\Users\person\.cargo\bin",
             r"C:\Program Files\Git\cmd",
+            r"C:\Users\person\AppData\Local\Microsoft\WindowsApps",
             r"C:\Windows\System32",
             r"C:\Program Files\other",
             r"C:\Users\person\AppData\Roaming\npm",
-            r"C:\Users\person\AppData\Local\Programs\Python\Python312"
+            r"C:\Users\person\AppData\Local\Programs\Python\Python312",
         ]
         .map(path)
     );
@@ -231,6 +239,9 @@ fn toolchains_replace_shims_and_keep_trusted_path_order() {
             .contains(&path(r"C:\Users\person\.cargo\credentials.backup"))
     );
     let mut untrusted = input.clone();
+    untrusted.cargo_home = input.user_profile.clone();
+    assert!(toolchain::discover(&untrusted).is_err());
+    untrusted = input.clone();
     untrusted.real_node = Some(path(r"C:\untrusted\node"));
     assert!(toolchain::discover(&untrusted).is_err());
     untrusted = input.clone();
@@ -351,6 +362,7 @@ fn command_lines_round_trip_crt_arguments_and_preserve_cmd_text() {
             "/c".into(),
             r#"echo "quoted" & dir "%USERPROFILE%""#.into(),
         ],
+        ..Default::default()
     };
     assert_eq!(
         command_line(&cmd).unwrap(),
