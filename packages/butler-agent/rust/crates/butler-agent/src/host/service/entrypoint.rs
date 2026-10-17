@@ -93,6 +93,9 @@ async fn run(
     ));
     let result = startup::until_ready(service, initialized, timing, &stop).await;
     let result = stop.settle(result, |line| logs.problem(line));
+    if let Err(error) = &result {
+        logs.causes(error);
+    }
     let code = result
         .as_ref()
         .err()
