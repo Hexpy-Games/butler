@@ -7,14 +7,21 @@ pub(super) struct Timing {
     id: u64,
 }
 impl Timing {
+    pub(super) fn enabled() -> bool {
+        static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *ENABLED.get_or_init(|| {
+            std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+                == Some(std::ffi::OsStr::new("1"))
+        })
+    }
+
     pub(super) fn new(phase: &'static str) -> Self {
         use std::sync::atomic::AtomicU64;
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let timing = Self {
             phase,
             id: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-            started: crate::btcc::agent_loop::command_timing::CommandTiming::enabled()
-                .then(Instant::now),
+            started: Self::enabled().then(Instant::now),
         };
         timing.mark("entry");
         timing

@@ -91,7 +91,7 @@ pub(super) fn io(
 }
 
 pub(super) fn record_io(phase: &'static str, error: &std::io::Error) {
-    if crate::btcc::agent_loop::command_timing::CommandTiming::enabled() {
+    if crate::workspace::file_timing::Timing::enabled() {
         eprintln!(
             "command_file_error phase={phase} kind={:?} os_code={:?} utc_us={}",
             error.kind(),
@@ -113,7 +113,7 @@ pub(super) fn inspect_io(phase: &'static str, error: std::io::Error) -> std::io:
 /// Sample attributes only after failure and only with diagnostics enabled.
 /// Never include file names, contents, or ACL identities in the trace.
 pub(super) fn attributes(role: &'static str, path: &std::path::Path) {
-    if !crate::btcc::agent_loop::command_timing::CommandTiming::enabled() {
+    if !crate::workspace::file_timing::Timing::enabled() {
         return;
     }
     match std::fs::symlink_metadata(path) {
