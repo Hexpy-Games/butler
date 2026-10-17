@@ -1,12 +1,11 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
-import { reasoningOptionLabel } from "@/app/utils.ts";
 import type {
   AppModelSummary,
-  ReasoningEffort,
   SettingsView,
 } from "@/app/types.ts";
 import { SettingsSelect } from "./SettingsFormComponents";
+import { ReasoningSelect } from "./ReasoningSelect";
 import { consolidationModelOptionsFrom } from "./PersonalizationSettingsOptions";
 
 export function ButlerConsolidationSettings({
@@ -44,19 +43,12 @@ export function ButlerConsolidationSettings({
           settingsDescriptions.consolidationModelDefault,
         )}
       />
-      <SettingsSelect
+      <ReasoningSelect
         settingId="consolidation-reasoning"
         label={settingsFields.reasoning}
+        model={consolidationModel}
         value={draft.consolidation_reasoning_effort}
-        onChange={(value) =>
-          onUpdate({ consolidation_reasoning_effort: value as ReasoningEffort })
-        }
-        options={(consolidationModel?.reasoning_efforts ?? ["none"]).map(
-          (value) => ({
-            value,
-            label: reasoningOptionLabel(consolidationModel, value),
-          }),
-        )}
+        onChange={(value) => onUpdate({ consolidation_reasoning_effort: value })}
       />
     </>
   );
