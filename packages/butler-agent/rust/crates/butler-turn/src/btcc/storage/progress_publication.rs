@@ -25,7 +25,7 @@ pub struct CommittedProgressEvent {
 /// Publishes committed progress events in source order.
 #[derive(Clone)]
 pub struct StorageProgressPublication {
-    storage: BtccStorage,
+    pub(super) storage: BtccStorage,
 }
 
 impl StorageProgressPublication {
@@ -90,6 +90,19 @@ impl StorageProgressPublication {
         self.storage
             .read(move |connection| pending_page(connection, after, limit))
             .await
+    }
+
+    /// Acknowledge only the prefix covered by a completed transcript sync.
+    pub async fn mark_published_through(
+        &self,
+        session: String,
+        sequence: u64,
+    ) -> StorageResult<()> {
+        self.storage.execute(move |db| {
+            db.execute("UPDATE btcc_progress_events SET status='published' WHERE session_id=?1 AND session_sequence<=?2 AND status='pending'",
+                params![session, sequence]).map_err(StorageError::sqlite)?;
+            Ok(())
+        }).await
     }
 
     /// Marks an event published.

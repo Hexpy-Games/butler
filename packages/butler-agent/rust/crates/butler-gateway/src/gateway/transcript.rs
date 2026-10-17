@@ -3,6 +3,8 @@
 mod error;
 mod event;
 mod file;
+mod visibility;
+pub use visibility::TranscriptVisibility;
 
 pub use error::TranscriptCode;
 pub(crate) use error::TranscriptError;
@@ -23,30 +25,35 @@ pub type TranscriptAppendListener = Arc<dyn Fn(&str) + Send + Sync>;
 struct Job {
     session_id: String,
     events: Vec<event::TranscriptEvent>,
+    durable: bool,
     result: oneshot::Sender<TranscriptResult<()>>,
 }
 struct State {
     sender: Option<mpsc::Sender<Job>>,
-    worker: Option<JoinHandle<()>>,
+    worker: Option<JoinHandle<TranscriptResult<()>>>,
 }
 
 pub struct TranscriptWriter {
     clock: Arc<dyn AppIdentityClock>,
+    pub visibility: TranscriptVisibility,
     state: Mutex<State>,
     listener: Arc<parking_lot::RwLock<Option<TranscriptAppendListener>>>,
 }
 
 impl TranscriptWriter {
-    pub fn new(data_root: PathBuf, clock: Arc<dyn AppIdentityClock>) -> std::io::Result<Self> {
+    pub fn new(mut data_root: PathBuf, clock: Arc<dyn AppIdentityClock>) -> std::io::Result<Self> {
         let (sender, mut receiver) = mpsc::channel::<Job>(CAPACITY);
         let listener = Arc::new(parking_lot::RwLock::new(None::<TranscriptAppendListener>));
         let written = listener.clone();
+        let visibility = TranscriptVisibility::default();
+        data_root.push("transcripts");
+        let mut files = file::Writer::new(data_root, visibility.clone());
         let worker = std::thread::Builder::new()
             .name("butler-transcript-append".into())
             .spawn(move || {
                 while let Some(job) = receiver.blocking_recv() {
-                    let outcome = file::append(&data_root, &job.session_id, &job.events);
-                    if let Ok(file) = &outcome {
+                    let outcome = files.append(&job.session_id, &job.events, job.durable);
+                    if let Ok(Some(file)) = &outcome {
                         let listener = written.read().clone();
                         if let Some(listener) = listener {
                             listener(file);
@@ -54,9 +61,11 @@ impl TranscriptWriter {
                     }
                     let _ = job.result.send(outcome.map(|_| ()));
                 }
+                files.close()
             })?;
         Ok(Self {
             clock,
+            visibility,
             listener,
             state: Mutex::new(State {
                 sender: Some(sender),
@@ -79,12 +88,12 @@ impl TranscriptWriter {
         metadata: Value,
     ) -> TranscriptResult<()> {
         let events = event::outbound(self.clock.as_ref(), &session_id, action, delivery, metadata)?;
-        self.submit(session_id, events).await
+        self.submit(session_id, events, true).await
     }
 
-    /// Flush a bounded session page together, retaining each outbound/delivery
-    /// pair and acknowledging the whole page only after its durable append.
-    pub async fn append_outbound_batch(
+    /// Stage a bounded progress page. The caller must sync the session before
+    /// acknowledging source events or exposing a dependent step boundary.
+    pub async fn stage_outbound_batch(
         &self,
         session_id: String,
         deliveries: Vec<(Value, Value, Value)>,
@@ -102,7 +111,7 @@ impl TranscriptWriter {
         if events.is_empty() {
             return Ok(());
         }
-        self.submit(session_id, events).await
+        self.submit(session_id, events, false).await
     }
 
     pub async fn append_lifecycle(
@@ -121,13 +130,19 @@ impl TranscriptWriter {
             reason.as_deref(),
             metadata,
         )?;
-        self.submit(session_id, events).await
+        self.submit(session_id, events, true).await
+    }
+
+    /// Durably publish all staged records before the dependent boundary.
+    pub async fn sync_session(&self, session_id: String) -> TranscriptResult<()> {
+        self.submit(session_id, Vec::new(), true).await
     }
 
     async fn submit(
         &self,
         session_id: String,
         events: Vec<event::TranscriptEvent>,
+        durable: bool,
     ) -> TranscriptResult<()> {
         let (reply, result) = oneshot::channel();
         let state = self.state.lock().await;
@@ -138,6 +153,7 @@ impl TranscriptWriter {
             .send(Job {
                 session_id,
                 events,
+                durable,
                 result: reply,
             })
             .await
@@ -163,7 +179,7 @@ impl TranscriptWriter {
         if std::thread::Builder::new()
             .name("butler-transcript-drain".into())
             .spawn(move || {
-                let _ = flushed.send(worker.join().is_ok());
+                let _ = flushed.send(worker.join().is_ok_and(|result| result.is_ok()));
             })
             .is_err()
         {
@@ -183,7 +199,7 @@ impl TranscriptWriter {
                         .with_source(error)
                 })?
                 // A panic payload is not an Error; the code records the failure.
-                .map_err(|_panic_payload| closed())?;
+                .map_err(|_panic_payload| closed())??;
         }
         Ok(())
     }

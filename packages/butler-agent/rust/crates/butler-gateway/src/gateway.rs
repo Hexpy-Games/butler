@@ -135,7 +135,9 @@ pub use server::{GatewayConfig, GatewayServer, HeadlessBrowserConfig, serve_gate
 mod error;
 pub use error::{ApplicationFuture, GatewayApplicationError};
 pub use session_references::resolve_session_references;
-pub use transcript::{TranscriptAppendListener, TranscriptCode, TranscriptWriter};
+pub use transcript::{
+    TranscriptAppendListener, TranscriptCode, TranscriptVisibility, TranscriptWriter,
+};
 mod command_timing;
 pub use wallpapers::{
     AppWallpaperAsset, AppWallpaperChange, AppWallpaperFile, AppWallpaperModuleShader,

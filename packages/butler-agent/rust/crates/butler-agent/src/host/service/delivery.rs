@@ -12,19 +12,14 @@ use serde_json::{Value, json};
 
 use crate::host::ProgressPublisher;
 use crate::host::service::ingress::{IngressDelivery, IngressError};
-use butler_gateway::gateway::TranscriptWriter;
 
 pub(in crate::host) struct AppDelivery {
-    writer: Arc<TranscriptWriter>,
     progress: Arc<ProgressPublisher>,
 }
 
 impl AppDelivery {
-    pub(in crate::host) fn new(
-        writer: Arc<TranscriptWriter>,
-        progress: Arc<ProgressPublisher>,
-    ) -> Self {
-        Self { writer, progress }
+    pub(in crate::host) fn new(progress: Arc<ProgressPublisher>) -> Self {
+        Self { progress }
     }
 }
 
@@ -34,7 +29,6 @@ impl IngressDelivery for AppDelivery {
         session_id: String,
         action: Value,
     ) -> Pin<Box<dyn Future<Output = Result<bool, IngressError>> + Send>> {
-        let writer = self.writer.clone();
         let progress = self.progress.clone();
         Box::pin(async move {
             let timing = crate::host::guided::command::timing::CommandTiming::new("app_delivery");
@@ -53,28 +47,21 @@ impl IngressDelivery for AppDelivery {
                         "Action identity unavailable",
                     )
                 })?;
-            // The periodic pass may not have reached the Turn's last events
-            // yet; publish them first so none of them trails this action.
-            progress.reconcile().await.map_err(|error| {
-                IngressError::new(
-                    "native_progress_publication_failed",
-                    "Committed progress could not be published",
-                )
-                .with_source(error)
-            })?;
-            timing.mark("progress_reconciled");
             // Source App adapter acknowledges locally. Projection consumes the
             // durable outbound/delivery pair; no HTTP send is hidden here.
             let delivery = json!({"ok": true, "transportMessageId": format!("app:{action_id}")});
-            writer
-                .append_outbound(
+            progress
+                .deliver(
                     session_id,
                     action,
                     delivery,
                     json!({"source":"transport/delivery-guard.ts","attempts":1}),
                 )
                 .await
-                .map_err(|e| IngressError::new(e.code(), e.message()))?;
+                .map_err(|e| {
+                    IngressError::new("native_progress_publication_failed", e.message())
+                        .with_source(e)
+                })?;
             timing.mark("transcript_committed");
             Ok(true)
         })

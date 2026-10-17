@@ -14,6 +14,8 @@ mod open_reader;
 mod operation;
 #[path = "capabilities/refusal_latency.rs"]
 mod refusal_latency;
+#[path = "capabilities/transcript_steps.rs"]
+mod transcript_steps;
 #[path = "capabilities/transport_control.rs"]
 mod transport_control;
 use super::capability_stub::{self as provider, Case};

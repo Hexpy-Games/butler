@@ -172,6 +172,9 @@ pub trait ProviderStreamObserver: Send + Sync {
     /// Ordered tool identity and arguments, private to the agent relay.
     fn tool_call(&self, _event: &butler_core::tool_protocol::ToolCallStreamEvent) {}
 
+    /// The provider request returned; buffered final text shares the next step boundary.
+    fn round_finished(&self) {}
+
     /// The text streamed in the latest model round is not the answer: the
     /// round called tools, or its answer candidate was sent back or replaced.
     fn round_text_discarded(&self) {}

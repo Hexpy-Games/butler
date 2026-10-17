@@ -135,9 +135,7 @@ pub(super) async fn close_serving(
     let control_close = control_close.map_err(|message| {
         failure("gateway_control_close_failed", message.to_string()).with_source(message)
     });
-    let publication = measure("progress_reconcile", progress.reconcile())
-        .await
-        .map(|_| ());
+    let publication = measure("progress_reconcile", progress.flush_all()).await;
     let app_close = measure("app_close", gateway.close()).await;
     admission
         .and(turns)

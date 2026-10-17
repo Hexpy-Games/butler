@@ -52,6 +52,19 @@ pub(super) async fn prepare(
         writer.clone(),
         runtime.subsessions.clone(),
     ));
+    let weak_progress = Arc::downgrade(&progress);
+    runtime.progress.set_boundary_sink(Arc::new(move |session| {
+        let progress = weak_progress.upgrade();
+        Box::pin(async move {
+            let progress = progress.ok_or_else(|| {
+                failure(
+                    "native_progress_publisher_closed",
+                    "Progress publisher is closed",
+                )
+            })?;
+            progress.flush(session).await
+        })
+    }));
     let queue = runtime.inbound_queue.clone();
     let restart_handoff = Arc::new(RestartHandoff::new(
         runtime.restart_tool_journal.clone(),
@@ -69,7 +82,7 @@ pub(super) async fn prepare(
         runtime.bindings.clone(),
         config.data_root.clone(),
         config.data_root.clone(),
-        Arc::new(AppDelivery::new(writer, progress.clone())),
+        Arc::new(AppDelivery::new(progress.clone())),
         runtime.subsessions.clone(),
         restart_handoff,
     );
@@ -77,6 +90,7 @@ pub(super) async fn prepare(
         .recover_interrupted(stop.cancellation())
         .await
         .map_err(|error| failure(error.code, error.message))?;
+    progress.flush_all().await?;
     stop.check_startup()?;
     Ok(Admission {
         session_id: binding.session_id,

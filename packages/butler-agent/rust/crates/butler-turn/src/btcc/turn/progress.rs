@@ -12,6 +12,10 @@ pub(super) struct TurnProgressScope<'a> {
 }
 
 impl AgentLoopProgress for TurnProgressScope<'_> {
+    fn step_boundary(&self) -> PortFuture<'_, ()> {
+        self.repository.step_boundary(self.session_id.into())
+    }
+
     fn answer_blocks_draft(
         &self,
         stream_id: String,

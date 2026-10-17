@@ -9,7 +9,10 @@
 use butler_core::tool_protocol::ToolCallStreamEvent;
 use parking_lot::Mutex;
 use std::collections::HashSet;
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Duration;
 
 use serde_json::{Map, Value};
@@ -63,9 +66,14 @@ pub struct StreamRelay {
 struct RelayObserver {
     sender: mpsc::UnboundedSender<Relayed>,
     calls: Mutex<HashSet<(String, u64)>>,
+    streaming: Arc<AtomicBool>,
 }
 
 impl ProviderStreamObserver for RelayObserver {
+    fn round_finished(&self) {
+        self.streaming.store(false, Ordering::Release);
+    }
+
     fn event(&self, event: &Value) {
         if matches!(
             event["type"].as_str(),
@@ -91,6 +99,7 @@ impl ProviderStreamObserver for RelayObserver {
         if text.is_empty() {
             return;
         }
+        self.streaming.store(true, Ordering::Release);
         // A closed queue means the loop has finished; late deltas are dropped.
         let _ = self.sender.send(Relayed::Delta {
             stream_id: stream_id.to_owned(),
@@ -148,6 +157,7 @@ impl StreamRelay {
             observer: Arc::new(RelayObserver {
                 sender,
                 calls: Mutex::default(),
+                streaming: Arc::default(),
             }),
             receiver,
             answer_blocks: None,
@@ -173,6 +183,7 @@ impl StreamRelay {
             mut receiver,
             answer_blocks,
         } = self;
+        let streaming = observer.streaming.clone();
         drop(observer);
         // The stream whose text the App shows, until a discard closes it.
         let mut open = None;
@@ -198,7 +209,22 @@ impl StreamRelay {
                 }
             }
             let batch = forward_tools(batch, answer_blocks.as_deref(), progress).await;
-            emit(progress, frames(&mut open, batch)).await;
+            let frames = frames(&mut open, batch);
+            let visible = !frames.is_empty();
+            let discard = frames
+                .iter()
+                .any(|frame| matches!(frame, Frame::Discarded { .. }));
+            emit(progress, frames).await;
+            if visible
+                && !done.is_cancelled()
+                && (discard || streaming.load(Ordering::Acquire))
+                && let Err(error) = progress.step_boundary().await
+            {
+                butler_core::diagnostic!(
+                    "[native-btcc] stream boundary failed code={}",
+                    error.code()
+                );
+            }
         }
         let mut rest = Vec::new();
         while let Ok(item) = receiver.try_recv() {

@@ -156,6 +156,11 @@ impl TurnDeveloperLogExecution for NoopTurnDeveloperLogExecution {
 
 /// Publishes runtime progress events of a running turn.
 pub trait AgentLoopProgress: Send + Sync {
+    /// Complete publication before a model consumes the preceding step's results.
+    fn step_boundary(&self) -> PortFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
+
     /// Publishes one progress event.
     fn emit(&self, event: crate::btcc::RuntimeTurnEventInput) -> PortFuture<'_, ()>;
 
@@ -193,6 +198,11 @@ pub trait CanonicalMessageStore: Send + Sync {
 
 /// Durable progress events of turns.
 pub trait ProgressEventRepository: Send + Sync {
+    /// Flush the session's preceding progress before a dependent step proceeds.
+    fn step_boundary(&self, _session: String) -> PortFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
+
     /// Publishes a validated ephemeral draft, bypassing durable progress.
     fn answer_blocks_draft(&self, _payload: serde_json::Value) {}
     /// Appends one progress event.

@@ -44,9 +44,13 @@ async fn sample(access: Access) -> Result<(), HarnessError> {
     let mut timings = Vec::new();
     let mut slowest = Duration::ZERO;
     let mut receipts = std::collections::HashSet::new();
-    for _ in 0..SAMPLES {
+    for sample_index in 0..SAMPLES {
+        let before = s.agent.current_logs().await?.lines().count();
         let (mut output, elapsed) =
             super::operation::observe_operation(&s, &chat, &script, &case, access).await?;
+        let logs = s.agent.current_logs().await?;
+        let logs = logs.lines().skip(before).collect::<Vec<_>>().join("\n");
+        super::transcript_steps::assert_sample_syncs(&logs, access, sample_index);
         assert_eq!(output["ok"], false);
         assert_eq!(output["exit_code"], 1);
         assert_eq!(output["timed_out"], false);

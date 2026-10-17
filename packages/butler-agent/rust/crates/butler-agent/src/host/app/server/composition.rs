@@ -25,6 +25,7 @@ pub(super) async fn dependencies(
     let session_workspaces = Arc::new(AppSessionWorkspaces::for_runtime(runtime));
     let readiness = AppReadiness::new(owners.receipt.clone(), listener_ready);
     Ok(AppApplicationDependencies {
+        transcript_visibility: owners.writer.visibility.clone(),
         hooks: Some(runtime.hooks.clone()),
         service_shutdown: runtime.service_shutdown.clone(),
         updates: Arc::new(open_updates(data_root, installation)?),
@@ -64,6 +65,7 @@ pub(super) async fn dependencies(
         authority_handoff: Arc::new(AuthorityHandoff::new(
             runtime.authority.clone(),
             owners.queue.clone(),
+            runtime.progress.clone(),
             Arc::new(|| butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity)),
         )),
         session_workspaces: session_workspaces.clone(),

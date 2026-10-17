@@ -27,7 +27,7 @@ pub(super) async fn run_service_maintenance(
         endpoint_changes.borrow_and_update();
         let pass = async {
             let summary = progress.reconcile().await?;
-            let mut retry_pending = summary.attempted > summary.published;
+            let mut retry_pending = summary.retry_pending;
             if let Some(active) = app_endpoint.snapshot() {
                 retry_pending |= deliver_parent_results(
                     &parent_client,

@@ -25,12 +25,7 @@ pub(in crate::gateway::application) async fn sync_chat_once(
         .join(transcript_name(&session_id));
     let prior = previous_checkpoint(context, chat_id).await?;
     timing.mark("checkpoint_loaded");
-    let path_for_read = path.clone();
-    let prior_for_read = prior.clone();
-    let state =
-        tokio::task::spawn_blocking(move || read_state(&path_for_read, prior_for_read.as_ref()))
-            .await
-            .map_err(GatewayApplicationError::internal_from)??;
+    let state = load_state(context, path.clone(), prior.clone()).await?;
     timing.mark("file_state_read");
     let Some((state, reusable)) = state else {
         return Ok(false);
@@ -87,6 +82,30 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     Ok(advanced && read.pending)
 }
 
+async fn load_state(
+    context: &ProjectionContext,
+    path: PathBuf,
+    prior: Option<Checkpoint>,
+) -> Result<Option<(FileState, bool)>, GatewayApplicationError> {
+    let visibility = context.dependencies.transcript_visibility.clone();
+    tokio::task::spawn_blocking(move || {
+        let Some(mut state) = file_state(&path)? else {
+            return Ok(None);
+        };
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+        state.size = visibility.limit(name, state.size);
+        let reusable = prior
+            .as_ref()
+            .is_some_and(|value| super::byte_window::reusable(value, &path, state.size));
+        Ok(Some((state, reusable)))
+    })
+    .await
+    .map_err(GatewayApplicationError::internal_from)?
+}
+
 async fn read_window(
     checkpoint: Checkpoint,
     state: &FileState,
@@ -96,18 +115,6 @@ async fn read_window(
         .await
         .map_err(GatewayApplicationError::internal_from)?
         .map_err(app_error)
-}
-
-// Boundary validation opens and reads the file, so it belongs on a blocking worker.
-fn read_state(
-    path: &std::path::Path,
-    prior: Option<&Checkpoint>,
-) -> Result<Option<(FileState, bool)>, GatewayApplicationError> {
-    let Some(state) = file_state(path)? else {
-        return Ok(None);
-    };
-    let reusable = prior.is_some_and(|value| super::byte_window::reusable(value, path, state.size));
-    Ok(Some((state, reusable)))
 }
 
 fn transcript_name(session_id: &str) -> String {

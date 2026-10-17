@@ -26,6 +26,7 @@ mod operation_input;
 mod operation_results;
 mod payload;
 mod progress;
+mod progress_boundary;
 mod progress_publication;
 mod project_work_runtime;
 mod read_pool;
@@ -129,6 +130,7 @@ pub struct BtccStorage {
 
 struct StorageInner {
     payload: payload::PayloadMemo,
+    boundary: progress_boundary::ProgressBoundary,
     changes: tokio::sync::watch::Sender<()>,
     lane: AsyncMutex<LaneState>,
     readers: Option<Arc<read_pool::ReadPool>>,
@@ -197,6 +199,7 @@ impl BtccStorage {
         Ok(Self {
             inner: Arc::new(StorageInner {
                 payload: Default::default(),
+                boundary: Default::default(),
                 changes,
                 readers,
                 lane: AsyncMutex::new(LaneState {

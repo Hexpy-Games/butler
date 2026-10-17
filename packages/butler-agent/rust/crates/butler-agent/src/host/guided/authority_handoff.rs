@@ -14,6 +14,7 @@ use butler_turn::btcc::{AuthorityDecisionInput, AuthorityError, PrincipalAuthori
 #[derive(Clone)]
 pub(crate) struct AuthorityHandoff {
     authority: Arc<PrincipalAuthority>,
+    progress: butler_turn::btcc::StorageProgressPublication,
     queue: Arc<InboundQueue>,
     now_iso: Arc<dyn Fn() -> String + Send + Sync>,
 }
@@ -22,10 +23,12 @@ impl AuthorityHandoff {
     pub(crate) fn new(
         authority: Arc<PrincipalAuthority>,
         queue: Arc<InboundQueue>,
+        progress: butler_turn::btcc::StorageProgressPublication,
         now_iso: Arc<dyn Fn() -> String + Send + Sync>,
     ) -> Self {
         Self {
             authority,
+            progress,
             queue,
             now_iso,
         }
@@ -109,11 +112,19 @@ impl AppAuthorityHandoff for AuthorityHandoff {
         turns: Vec<String>,
     ) -> ApplicationFuture<(Vec<serde_json::Value>, Vec<serde_json::Value>)> {
         let authority = self.authority.clone();
+        let progress = self.progress.clone();
         Box::pin(async move {
+            let session = owner_session_id.clone();
             let (requests, answers) = authority
                 .session_requests(owner_session_id, turns)
                 .await
                 .map_err(authority_error)?;
+            if !requests.is_empty() {
+                progress
+                    .flush_boundary(session)
+                    .await
+                    .map_err(GatewayApplicationError::internal_from)?;
+            }
             Ok((public_values(requests)?, public_values(answers)?))
         })
     }
@@ -135,6 +146,7 @@ impl AppAuthorityHandoff for AuthorityHandoff {
 
     fn list(&self, owner_session_id: String) -> ApplicationFuture<AppAuthorityPage> {
         let owner = self.authority.clone();
+        let progress = self.progress.clone();
         Box::pin(async move {
             let requests = owner
                 .list(owner_session_id.clone())
@@ -144,6 +156,12 @@ impl AppAuthorityHandoff for AuthorityHandoff {
                 .map(serde_json::to_value)
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(GatewayApplicationError::internal_from)?;
+            if !requests.is_empty() {
+                progress
+                    .flush_boundary(owner_session_id.clone())
+                    .await
+                    .map_err(GatewayApplicationError::internal_from)?;
+            }
             let permissions = owner
                 .list_permissions(owner_session_id)
                 .await

@@ -306,6 +306,7 @@ pub struct VisualAdmissionRequest {
     pub files: Vec<AppMessageFileSnapshot>,
 }
 pub struct AppApplicationDependencies {
+    pub transcript_visibility: super::super::transcript::TranscriptVisibility,
     /// User lifecycle hooks, absent for applications without the host dispatcher.
     pub hooks: Option<Arc<dyn butler_core::hooks::HookPort>>,
     /// Process stop fences queue admission before active turns are interrupted.

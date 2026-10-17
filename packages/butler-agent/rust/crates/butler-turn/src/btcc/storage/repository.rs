@@ -209,6 +209,10 @@ impl CanonicalMessageStore for BtccRepositories {
     }
 }
 impl ProgressEventRepository for BtccRepositories {
+    fn step_boundary(&self, session: String) -> PortFuture<'_, ()> {
+        Box::pin(async move { self.storage.inner.boundary.flush(session).await })
+    }
+
     fn answer_blocks_draft(&self, payload: serde_json::Value) {
         self.answer_drafts.publish(payload);
     }
