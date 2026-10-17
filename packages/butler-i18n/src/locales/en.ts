@@ -1765,6 +1765,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       composerDecoration: "Art behind your text.",
       composerCharacter: "A little friend sits above the message box.",
       themeFollowsWallpaper: "Set by the real-time wallpaper",
+      reasoningFixed: "Set by the model",
       contextLimit: (maxLabel) =>
         `The active Butler context budget. Model maximum: ${maxLabel}.`,
       contextLimitClamped: (value) =>
