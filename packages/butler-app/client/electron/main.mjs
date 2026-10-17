@@ -1,4 +1,5 @@
 import { shellRegistrationAllowed as profileAllowsShellRegistration } from "./shell-registration.mjs";
+import * as desktopShell from "./desktop-shell.mjs";
 import { watchStorageCorrection } from "./app-storage-correction.mjs";
 import { isLifecycleWindow } from "./lifecycle-window.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
@@ -22,6 +23,7 @@ import {
 } from "electron";
 import { openExternalSignIn, openLink, installAppLinks } from "./browser/links.mjs";
 import { installUserBrowser } from "./browser/ipc.mjs";
+import { saveBrowserForQuit } from "./browser/quit.mjs";
 import { prepareAppPackageUpdate } from "./app-package-update.mjs";
 import { appDataRoots } from "./app-legacy-data.mjs";
 import { getDesktopCopy } from "./i18n/desktop-copy.mjs";
@@ -282,6 +284,7 @@ const readyPowerStateWebContents = new WeakSet();
 let tray = null;
 let isQuitting = false;
 let finalQuitAllowed = false;
+let quitExitFallback = null;
 let foregroundInstance = null;
 let foregroundQuitSnapshot = null;
 let quitFeedback = null;
@@ -349,7 +352,7 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   butlerData: butlerDataRoot,
   resolveGateway: managedGatewayCommand,
   spawnProcess: (command, args, options) => spawnTracedAgent(command, args, options,
-    (phase, edge) => quitFeedback?.phase(phase, edge)),
+    (phase, edge) => quitFeedback?.phase(phase, edge), appWritableDataRoot),
   healthCheck: healthOk,
   readinessCheck: gatewayReady,
   isPortAvailable,
@@ -1960,7 +1963,7 @@ async function openNativeNotificationSettings() {
     };
   }
   try {
-    await shell.openExternal(settingsUrl, { activate: true });
+    await desktopShell.openExternal(settingsUrl, { activate: true });
     return {
       opened: true,
       status: await nativeNotificationStatus(),
@@ -2409,7 +2412,7 @@ ipcMain.handle("butler:get-app-info", () => appInfoView());
 
 ipcMain.handle("butler:legacy-data-recovery", async (_event, action) => {
   if (!legacyDataBlocked) return { ok: false };
-  if (action === "open-folder") return { ok: !(await shell.openPath(dirname(butlerDataRoot))) };
+  if (action === "open-folder") return { ok: !(await desktopShell.openPath(dirname(butlerDataRoot))) };
   if (action === "restart") {
     // The preload endpoint is internal state, not an external-server override
     // for the next App. Keep only an override supplied at the original launch.
@@ -2538,6 +2541,7 @@ const appUpdateCoordinator = createAppUpdateCoordinator({
       await reportAppUpdateStage("applying");
       await reportAppUpdateStage("restarting");
     }
+    if (userBrowser) await saveBrowserForQuit(userBrowser);
     const result = await stopServerProcess({ reason: "app_update" });
     if (!result.stopped || (isMac && !result.checkpointed)) throw new Error("update_checkpoint_failed");
     isQuitting = true;
@@ -2850,7 +2854,7 @@ if (appSingleInstanceLock) {
   app
     .whenReady()
     .then(async () => {
-      configureStartupActions({ retry: () => prepareStartupRetry(bundledAgentSupervisor, explicitServerUrl), exit: () => { finalQuitAllowed = true; app.quit(); }, diagnostics: () => bundledAgentSupervisor.diagnostics() });
+      configureStartupActions({ retry: () => prepareStartupRetry(bundledAgentSupervisor, explicitServerUrl), exit: () => { isQuitting = true; finalQuitAllowed = true; app.quit(); }, diagnostics: () => bundledAgentSupervisor.diagnostics() });
       recordAppStartupProgress("electron_ready");
       configureAppIdentity();
       configureWindowsAppUpdater();
@@ -2885,6 +2889,8 @@ app.on("activate", activateButlerApp);
 app.on("before-quit", (event) => {
   storageCorrectionWatch?.close(); storageCorrectionWatch = null;
   if (finalQuitAllowed) {
+    // will-quit work is bounded; this backstop keeps a stuck close from hanging the App.
+    quitExitFallback ??= setTimeout(() => app.exit(0), 5_000).unref();
     mainWindow?.setProgressBar(-1);
     powerStateMonitor?.stop();
     quitFeedback?.destroy();
@@ -2907,19 +2913,19 @@ app.on("before-quit", (event) => {
     feedbackReady = quitFeedback.begin(mainWindow);
   }
   if (isMenuBarHelperProcess) removeMenuBarHelperPid();
-  void Promise.resolve(feedbackReady).then(() => {
+  void Promise.resolve(feedbackReady).then(async () => {
+    // Save while the Agent can still accept visits; browserHost.stop() closes that channel.
+    if (userBrowser) await saveBrowserForQuit(userBrowser);
     browserHost.stop();
     return stopServerProcess({ reason: "app_quit" });
-  }).then(() => {
+  }).catch((error) => {
+    // Quit always exits. The supervisor already terminated an Agent that ignored the stop.
+    console.error(error);
+  }).finally(() => {
     finalQuitAllowed = true;
     // Quit on a later tick: Electron drops an app.quit() made in the same
     // tick as the before-quit it cancelled (the stopped-Agent path is sync).
     setImmediate(() => app.quit());
-  }).catch((error) => {
-    // Keep the owner alive on failure. Exiting would close the foreground
-    // containment while durable cleanup might still be running.
-    quitFeedback?.failed();
-    console.error(error);
   });
 });
 
@@ -2934,13 +2940,10 @@ async function readForegroundActiveWorkSnapshot() {
   return classifyAppForegroundActiveWork({ readFailed: true });
 }
 
-process.once("SIGINT", () => {
-  app.quit();
-});
-
-process.once("SIGTERM", () => {
-  app.quit();
-});
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  // A repeated signal joins the running quit; after it, the App exits now.
+  process.on(signal, () => finalQuitAllowed ? app.exit(0) : app.quit());
+}
 
 async function stopServerProcess({ reason = "app_shutdown" } = {}) {
   appUpdateCoordinator.dispose();
@@ -2948,29 +2951,41 @@ async function stopServerProcess({ reason = "app_shutdown" } = {}) {
     foregroundInstance = transitionAppForeground(foregroundInstance, "stopping");
     writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
   }
-  const stopResult = await bundledAgentSupervisor.stop({ wait: true, preserveWork: true });
+  let stopResult;
+  try {
+    stopResult = await bundledAgentSupervisor.stop({ wait: true, preserveWork: true });
+  } catch (error) {
+    // A stop that failed or was ended by termination still records how this run ended.
+    const treeDead = bundledAgentSupervisor.diagnostics().pid === null;
+    await recordForegroundStopped(reason, { graceful: false, treeDead, groupDead: treeDead, errorCode: error?.message });
+    throw error;
+  }
   if (stopResult.stopped !== true) throw new Error("foreground_stop_incomplete");
   quitFeedback?.phase("port_release");
   const checkpointed = stopResult.stopped && stopResult.containment_released &&
     bundledAgentSupervisor.diagnostics().last_exit?.code === 0;
-  if (usesAppForegroundLifecycle && foregroundInstance?.state === "stopping") {
-    foregroundInstance = transitionAppForeground(foregroundInstance, "stopped", {
-      patch: { clean_exit: isMac ? checkpointed : true },
-    });
-    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
-    writeAppForegroundLastExit(butlerDataRoot, {
-      generation: foregroundInstance.generation,
-      exitReason: reason,
-      graceful: isMac ? checkpointed : true,
-      checkpointResult: isMac && !checkpointed ? "checkpoint_failed" : "native_shutdown",
-      processGroupDead: foregroundInstance.process_group_id !== null &&
-        stopResult.containment_released,
-      processTreeDead: stopResult.containment_released,
-      portReleased: await waitForAppForegroundPortRelease({ port, isPortAvailable }),
-    });
-  }
+  await recordForegroundStopped(reason, {
+    graceful: isMac ? checkpointed : true, treeDead: stopResult.containment_released,
+    groupDead: stopResult.containment_released,
+  });
   foregroundQuitSnapshot = null;
   return { ...stopResult, checkpointed };
+}
+
+async function recordForegroundStopped(reason, { graceful, treeDead, groupDead, errorCode = null }) {
+  if (!usesAppForegroundLifecycle || foregroundInstance?.state !== "stopping") return;
+  foregroundInstance = transitionAppForeground(foregroundInstance, "stopped", { patch: { clean_exit: graceful } });
+  writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+  writeAppForegroundLastExit(butlerDataRoot, {
+    generation: foregroundInstance.generation,
+    exitReason: reason,
+    graceful,
+    checkpointResult: graceful ? "native_shutdown" : "checkpoint_failed",
+    processGroupDead: foregroundInstance.process_group_id !== null && groupDead,
+    processTreeDead: treeDead,
+    portReleased: await waitForAppForegroundPortRelease({ port, isPortAvailable }),
+    errorCode,
+  });
 }
 
 async function appServerFetch(path, init = {}) {
@@ -3175,7 +3190,7 @@ function openAppLink(value) {
     return false;
   }
   if (!["http:", "https:", "mailto:"].includes(url.protocol)) return false;
-  if (url.protocol === "mailto:") void shell.openExternal(url.toString());
+  if (url.protocol === "mailto:") void desktopShell.openExternal(url.toString());
   else void openLink(userBrowser, url.toString()).catch(() => {});
   return true;
 }

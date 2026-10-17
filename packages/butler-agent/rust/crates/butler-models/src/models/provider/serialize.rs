@@ -70,12 +70,18 @@ pub(super) fn body_with_continuation(
     Ok((body, continuation.map(|value| value.successful)))
 }
 
-/// Finish every content projection before placing Anthropic cache breakpoints.
+pub(super) struct PreparedBody {
+    pub body: Value,
+    pub continuation: Option<LegacyProjection>,
+    pub thinking_binding: Option<super::anthropic_thinking::Binding>,
+}
+
+/// Finish content projections and cache breakpoints before validating reasoning.
 pub(super) async fn body_with_visual(
     request: &ModelRoundRequest<'_>,
     config: &ProviderRequestConfig,
     carrier: Carrier,
-) -> Result<(Value, Option<LegacyProjection>), butler_turn::btcc::ModelRoundError> {
+) -> Result<PreparedBody, butler_turn::btcc::ModelRoundError> {
     let (mut body, continuation) = body_with_continuation(request, config, carrier)?;
     super::visual::apply(&mut body, request, carrier).await?;
     if matches!(carrier, Carrier::Anthropic) {
@@ -87,7 +93,13 @@ pub(super) async fn body_with_visual(
                 .and_then(|value| value.prompt_diagnostics.as_ref()),
         );
     }
-    Ok((body, continuation))
+    let thinking_binding = matches!(carrier, Carrier::Anthropic)
+        .then(|| super::anthropic_thinking::enforce(&mut body));
+    Ok(PreparedBody {
+        body,
+        continuation,
+        thinking_binding,
+    })
 }
 
 fn responses(

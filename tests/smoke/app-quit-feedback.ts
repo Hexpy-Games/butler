@@ -8,6 +8,7 @@ import { resolve } from "node:path";
 import { quitFixture } from "./app-quit-fixture.ts";
 import { smokeBrowserArgs } from "../support/smoke-browser-args.ts";
 import { quitPhaseReport } from "./quit-phase-report.ts";
+import { AGENT_STOP_KILL_TIMEOUT_MS } from "../../packages/butler-app/client/electron/app-agent-stop-intent.mjs";
 
 import { nativeSmokeRuntime } from "../support/native-smoke-runtime";
 const nativeExitCode = await nativeSmokeRuntime(import.meta.url);
@@ -34,6 +35,11 @@ async function waitFor(check: () => Promise<boolean>, label: string, timeout = 1
 }
 
 let quitOutput: ((chunk: Buffer) => void) | undefined;
+let agentKillLog = "";
+// The slow caption shows at half the Agent stop grace (QUIT_SLOW_MS); read it before the kill.
+const SLOW_READ_MS = AGENT_STOP_KILL_TIMEOUT_MS * 3 / 4;
+// A stuck Agent: stop grace, then bounded browser save (1.5 s) and close (3 s), plus margin.
+const BLOCKED_EXIT_MS = AGENT_STOP_KILL_TIMEOUT_MS + 1_500 + 3_000 + 2_000;
 
 async function launch() {
   quitOutput = undefined;
@@ -44,6 +50,7 @@ async function launch() {
     pending = lines.pop() ?? "";
     for (const line of lines) {
       if (/\[(native-shutdown|desktop-quit)\]/u.test(line)) phaseLog += `${line}\n`;
+      if (/^agent did not stop in \d+ ms; terminating pid \d+$/u.test(line.trim())) agentKillLog += `${line.trim()}\n`;
     }
   };
   const app = await fileElectronApp({ executablePath, args: [...extraArgs, entry], env: fixture.env, onOutput: chunk => { onOutput(chunk); quitOutput?.(chunk); } });
@@ -60,7 +67,7 @@ async function quit(app: FileElectronApp, holdStorage = blocked) {
   const process = app.process();
   const exited = new Promise<void>((done) => process.once("exit", () => done()));
   const started = performance.now();
-  phaseLog = "";
+  phaseLog = ""; agentKillLog = "";
   const lock = holdStorage ? new Database(resolve(fixture.data, "agent-runtime/btcc.sqlite")) : null;
   lock?.exec("BEGIN IMMEDIATE");
   let slowStatus = "";
@@ -70,9 +77,10 @@ async function quit(app: FileElectronApp, holdStorage = blocked) {
       const surface = BrowserWindow.getAllWindows().find((window) => window.webContents.getURL().includes("/lifecycle/lifecycle.html"));
       return surface ? await surface.webContents.executeJavaScript("document.querySelector('[data-slot=caption]').textContent") as string : "";
     }).then((status) => { slowStatus = status; }, (error: unknown) => { slowFailure = error; }).finally(() => {
-      lock.exec("ROLLBACK"); lock.close(); done();
+      // Storage stays held: the stuck Agent is terminated, and the App still exits.
+      app.detach(); done();
     });
-  }, 15_500)) : Promise.resolve();
+  }, SLOW_READ_MS)) : Promise.resolve();
   let measured: { hidden_ms: number; feedback_ms: number; status: string } | undefined;
   let pending = "";
   quitOutput = (chunk: Buffer) => {
@@ -101,8 +109,11 @@ async function quit(app: FileElectronApp, holdStorage = blocked) {
       void main.webContents.executeJavaScript("window.butlerApp.quitApp({confirmed:true})");
     }
   });
+  // An attached main inspector holds the exiting App until it disconnects.
+  if (!lock) app.detach();
   await exited;
   await released;
+  lock?.exec("ROLLBACK"); lock?.close();
   console.log(JSON.stringify({ phases: quitPhaseReport(phaseLog) }));
   assert.ifError(slowFailure);
   assert.ok(measured, "Quit first frame evidence unavailable");
@@ -113,10 +124,14 @@ async function quit(app: FileElectronApp, holdStorage = blocked) {
   if (!baseline) {
     latencyMeasurements.push(timing);
     assert(timing.status.length > 0);
-    assert.equal(fixture.lastExit().graceful, true);
+    assert.equal(fixture.lastExit().graceful, !holdStorage);
     assert.equal(fixture.lastExit().port_released, true);
     assert.equal(fixture.lastExit().process_tree_dead, true);
-    if (holdStorage) assert(/평소보다 오래|longer than usual/u.test(slowStatus), slowStatus);
+    if (holdStorage) {
+      assert(/평소보다 오래|longer than usual/u.test(slowStatus), slowStatus);
+      assert.match(agentKillLog, /^agent did not stop in \d+ ms; terminating pid \d+$/mu, "stuck Agent termination logged");
+      assert(total < BLOCKED_EXIT_MS, `blocked quit took ${total} ms`);
+    }
   }
 }
 

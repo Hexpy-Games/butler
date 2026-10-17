@@ -1,13 +1,18 @@
 import { createLifecycleWindow } from "./lifecycle-window.mjs";
 import { openLifecycleLog } from "./lifecycle-diagnostics.mjs";
 import { startupTiming, startupTimings } from "./startup-window.mjs";
+import { AGENT_STOP_KILL_TIMEOUT_MS } from "./app-agent-stop-intent.mjs";
 
-export const QUIT_BUDGET_MS = 15_000;
+// Quit ends within the Agent stop grace, so "slow" must show well before it.
+export const QUIT_SLOW_MS = AGENT_STOP_KILL_TIMEOUT_MS / 2;
+// Feedback precedes shutdown, but a quit window that never paints must not hold it.
+export const QUIT_PAINT_WAIT_MS = 500;
 export function createQuitFeedback(BrowserWindow, language = "en", diagnostics = () => ({})) {
   let surface;
   let started;
   let paintResolve;
   const firstPaint = new Promise((resolve) => { paintResolve = resolve; });
+  let paintedOrDue;
   let timer;
   let stageTimer;
   let shown = false;
@@ -24,7 +29,7 @@ export function createQuitFeedback(BrowserWindow, language = "en", diagnostics =
   };
   return {
     begin(mainWindow) {
-      if (started !== undefined) return firstPaint;
+      if (started !== undefined) return paintedOrDue;
       started = performance.now(); startupTiming("quit_start");
       const hideMain = () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide(); trace("main_hidden", started); };
       hideMain();
@@ -35,8 +40,9 @@ export function createQuitFeedback(BrowserWindow, language = "en", diagnostics =
         onAction(action) { if (action === "log") return openLifecycleLog(state, startupTimings(), diagnostics()); },
       });
       timer = setTimeout(() => { clearTimeout(stageTimer); state.state = "timeout"; surface.update(state);
-        displayedAt = performance.now(); displayedStage = state.stage; trace("budget_exceeded", started); }, QUIT_BUDGET_MS);
-      return firstPaint;
+        displayedAt = performance.now(); displayedStage = state.stage; trace("budget_exceeded", started); }, QUIT_SLOW_MS);
+      paintedOrDue = Promise.race([firstPaint, new Promise((resolve) => setTimeout(resolve, QUIT_PAINT_WAIT_MS))]);
+      return paintedOrDue;
     },
     phase(phase, edge = "event") {
       if (!surface) return;
@@ -54,7 +60,6 @@ export function createQuitFeedback(BrowserWindow, language = "en", diagnostics =
       else if (phase === "port_release") state.stage = "finishing";
       publish();
     },
-    failed() { clearTimeout(timer); clearTimeout(stageTimer); state.state = "failed"; surface?.update(state); },
     destroy() { clearTimeout(timer); clearTimeout(stageTimer); surface?.destroy(); startupTiming("quit_end"); },
   };
 }

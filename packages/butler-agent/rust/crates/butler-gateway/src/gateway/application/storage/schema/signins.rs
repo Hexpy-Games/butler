@@ -104,16 +104,28 @@ fn migrate_accounts(db: &Connection) -> Result<(), AppStorageError> {
     if migrated.is_some() {
         return Ok(());
     }
-    db.execute_batch("SAVEPOINT browser_accounts;
-      CREATE TABLE browser_signin_entries_v2 (
-        id TEXT PRIMARY KEY, site TEXT NOT NULL, origins_json TEXT NOT NULL, username TEXT NOT NULL,
-        policy TEXT NOT NULL CHECK(policy IN ('always','ask','never')), source TEXT NOT NULL, created_at TEXT NOT NULL, last_used_at TEXT);
-      INSERT INTO browser_signin_entries_v2 SELECT * FROM browser_signin_entries;
-      DROP TABLE browser_signin_entries;
-      ALTER TABLE browser_signin_entries_v2 RENAME TO browser_signin_entries;
-      CREATE INDEX browser_signin_entries_site ON browser_signin_entries(site,created_at,id);
-      INSERT INTO browser_signin_identity(origin,username,entry_id)
-        SELECT j.value,e.username,e.id FROM browser_signin_entries e,json_each(e.origins_json) j;
-      INSERT INTO browser_import_schema VALUES(2);
-      RELEASE browser_accounts;").map_err(AppStorageError::sqlite)
+    db.execute_batch("SAVEPOINT browser_accounts;")
+        .map_err(AppStorageError::sqlite)?;
+    let result =
+        super::migration::without_schema_revalidation(db, || db.execute_batch(ACCOUNTS_V2));
+    let closed = db.execute_batch(if result.is_ok() {
+        "RELEASE browser_accounts;"
+    } else {
+        "ROLLBACK TO browser_accounts; RELEASE browser_accounts;"
+    });
+    result.and(closed).map_err(AppStorageError::sqlite)
 }
+
+/// The generalized ALTER TABLE procedure: the rebuilt table takes the
+/// original name, so the rename must not re-validate unrelated objects.
+const ACCOUNTS_V2: &str = "
+  CREATE TABLE browser_signin_entries_v2 (
+    id TEXT PRIMARY KEY, site TEXT NOT NULL, origins_json TEXT NOT NULL, username TEXT NOT NULL,
+    policy TEXT NOT NULL CHECK(policy IN ('always','ask','never')), source TEXT NOT NULL, created_at TEXT NOT NULL, last_used_at TEXT);
+  INSERT INTO browser_signin_entries_v2 SELECT * FROM browser_signin_entries;
+  DROP TABLE browser_signin_entries;
+  ALTER TABLE browser_signin_entries_v2 RENAME TO browser_signin_entries;
+  CREATE INDEX browser_signin_entries_site ON browser_signin_entries(site,created_at,id);
+  INSERT INTO browser_signin_identity(origin,username,entry_id)
+    SELECT j.value,e.username,e.id FROM browser_signin_entries e,json_each(e.origins_json) j;
+  INSERT INTO browser_import_schema VALUES(2);";

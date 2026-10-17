@@ -102,6 +102,30 @@ pub(super) fn table_exists(connection: &Connection, table: &str) -> Result<bool,
         .map_err(AppStorageError::sqlite)
 }
 
+/// Runs a table rebuild or rename with `PRAGMA legacy_alter_table=ON`, then
+/// restores the connection's previous setting.
+///
+/// A modern `ALTER TABLE ... RENAME` re-parses every trigger and view in the
+/// database and fails on any that no longer resolves, even one unrelated to
+/// the renamed table. Legacy mode renames only the table with its own indexes
+/// and triggers, which is what SQLite's generalized ALTER TABLE procedure
+/// (create, copy, drop, rename to the original name) needs: nothing else
+/// refers to the temporary name. The caller's savepoint keeps it atomic.
+pub(super) fn without_schema_revalidation<T>(
+    connection: &Connection,
+    operation: impl FnOnce() -> rusqlite::Result<T>,
+) -> rusqlite::Result<T> {
+    let previous: bool = connection.query_row("PRAGMA legacy_alter_table", [], |row| row.get(0))?;
+    connection.execute_batch("PRAGMA legacy_alter_table=ON")?;
+    let result = operation();
+    let restored = connection.execute_batch(if previous {
+        "PRAGMA legacy_alter_table=ON"
+    } else {
+        "PRAGMA legacy_alter_table=OFF"
+    });
+    result.and_then(|value| restored.map(|()| value))
+}
+
 pub(super) fn add_current_columns(connection: &Connection) -> Result<(), AppStorageError> {
     for &(table, column, definition) in COLUMNS {
         ensure_column(connection, table, column, definition)?;
