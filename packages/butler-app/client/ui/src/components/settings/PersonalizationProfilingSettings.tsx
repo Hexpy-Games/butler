@@ -2,12 +2,11 @@ import { Button, SettingsField } from "@/butler-ds";
 import { useButlerStore } from "@/app/store.ts";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
-import { reasoningOptionLabel } from "@/app/utils.ts";
 import type {
   AppModelSummary,
-  ReasoningEffort,
 } from "@/app/types.ts";
 import { SettingsSelect } from "./SettingsFormComponents";
+import { ReasoningSelect } from "./ReasoningSelect";
 import {
   profilingExtractorModelOptionsFrom,
   profilingOptionsFrom,
@@ -88,24 +87,17 @@ export function PersonalizationProfilingSettings({
         )}
         disabled={disabled}
       />
-      <SettingsSelect
+      <ReasoningSelect
         settingId="profiling-reasoning"
         label={settingsFields.reasoning}
+        model={extractorModel}
         value={profilingDraft.extractorReasoningEffort}
         onChange={(extractorReasoningEffort) =>
           setPersonalizationDraft((current) => ({
             ...current,
-            profiling: {
-              ...current.profiling,
-              extractorReasoningEffort:
-                extractorReasoningEffort as ReasoningEffort,
-            },
+            profiling: { ...current.profiling, extractorReasoningEffort },
           }))
         }
-        options={(extractorModel?.reasoning_efforts ?? ["none"]).map((value) => ({
-          value,
-          label: reasoningOptionLabel(extractorModel, value),
-        }))}
         disabled={disabled}
       />
       <SettingsField settingId="memory-link" label={settingsCopy.memory.linkLabel}

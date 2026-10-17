@@ -281,6 +281,9 @@ impl AppNativeIngress for Native {
             })
         })
     }
+    fn stop_confirmed(&self, _: String) -> ApplicationFuture<bool> {
+        Box::pin(async { Ok(false) })
+    }
 }
 
 pub(super) struct Assets;

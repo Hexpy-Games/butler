@@ -1542,6 +1542,8 @@ export interface AppCopy {
       reduceMotionSystem: string;
       wallpaperStill: string;
       themeFollowsWallpaper: string;
+      /** Tooltip on a reasoning control the model leaves no choice in. */
+      reasoningFixed: string;
       contextLimit: (maxLabel: string) => string;
       contextLimitClamped: (value: string) => string;
       responseLanguage: string;

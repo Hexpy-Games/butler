@@ -69,7 +69,7 @@ function harnessModelCatalog(auth: string | null): ModelCatalogView {
 }
 
 export function VisualHarness() {
-  const fixture = (window as Window & { butlerConversationFixture?: { messages: import("@/app/types").MessageRecord[]; background?: string; sessionView?: import("@/app/types").SessionView; navigation?: import("@/app/types").NavigationView } }).butlerConversationFixture;
+  const fixture = (window as Window & { butlerConversationFixture?: { messages: import("@/app/types").MessageRecord[]; background?: string; sessionView?: import("@/app/types").SessionView; navigation?: import("@/app/types").NavigationView; modelCatalog?: ModelCatalogView; settings?: Partial<import("@/app/types").SettingsView> } }).butlerConversationFixture;
   const leftOpen = useButlerStore((state) => state.leftOpen);
   const setLeftOpen = useButlerStore((state) => state.setLeftOpen);
   const rightOpen = useButlerStore((state) => state.rightOpen);
@@ -98,7 +98,7 @@ export function VisualHarness() {
   const ss03Surface =
     new URLSearchParams(window.location.search).get("surface") === "ss03";
   const harnessCatalog = useMemo(
-    () => harnessModelCatalog(new URLSearchParams(window.location.search).get("auth")),
+    () => fixture?.modelCatalog ?? harnessModelCatalog(new URLSearchParams(window.location.search).get("auth")),
     [],
   );
   const worktreeSurface =
@@ -145,7 +145,7 @@ export function VisualHarness() {
     const language = new URLSearchParams(window.location.search).get("locale") === "ko" ? "ko" : EMPTY_SETTINGS.language;
     const background = fixture?.background === "plain" ? { conversation_background: { source: { kind: "none" as const }, overlay: 0 } } : {};
     return visualTheme === EMPTY_SETTINGS.appearance_theme
-      ? { ...EMPTY_SETTINGS, ...background, language, diagnostics_enabled: developerMode, worker_profiles: workerProfiles }
+      ? { ...EMPTY_SETTINGS, ...background, language, diagnostics_enabled: developerMode, worker_profiles: workerProfiles, ...fixture?.settings }
       : {
           ...EMPTY_SETTINGS,
           ...background,
@@ -153,6 +153,7 @@ export function VisualHarness() {
           language,
           diagnostics_enabled: developerMode,
           worker_profiles: workerProfiles,
+          ...fixture?.settings,
         };
   }, [developerMode, visualTheme]);
   const systemPrefersDark = useSystemThemePreference();

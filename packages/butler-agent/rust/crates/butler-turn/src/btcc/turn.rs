@@ -125,15 +125,18 @@ impl TurnFacade {
             &outcome.result,
             TurnOutcomeKind::Cancelled { .. } | TurnOutcomeKind::AlreadyCancelled { .. }
         ) {
-            let persisted = self.store.find_turn(turn_id).await.unwrap_or(None);
-            let Some(turn) =
-                persisted.filter(|turn| turn.semantic_state == TurnSemanticState::Cancelled)
-            else {
-                return if matches!(&outcome.result, TurnOutcomeKind::Cancelled { .. }) {
-                    Ok(fenced(turn_id))
-                } else {
-                    Ok(outcome)
-                };
+            let turn = match self.store.find_turn(turn_id).await {
+                // The Stop was persisted before admission. No turn or progress
+                // destination will be created, but its cancellation is final.
+                Ok(None) => return Ok(outcome),
+                Ok(Some(turn)) if turn.semantic_state == TurnSemanticState::Cancelled => turn,
+                _ => {
+                    return if matches!(&outcome.result, TurnOutcomeKind::Cancelled { .. }) {
+                        Ok(fenced(turn_id))
+                    } else {
+                        Ok(outcome)
+                    };
+                }
             };
             let destination = match turn.progress_destination.clone() {
                 Some(value) => Some(value),

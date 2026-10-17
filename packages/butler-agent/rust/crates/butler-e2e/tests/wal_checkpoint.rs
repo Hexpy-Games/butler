@@ -15,6 +15,15 @@ use std::{
     time::Duration,
 };
 
+#[path = "wal_checkpoint/current_reader.rs"]
+mod current_reader;
+
+#[path = "wal_checkpoint/finish.rs"]
+mod finish;
+
+#[path = "wal_checkpoint/finish_races.rs"]
+mod finish_races;
+
 #[path = "wal_checkpoint/backstop.rs"]
 mod backstop;
 
@@ -31,18 +40,30 @@ static PASSES: AtomicUsize = AtomicUsize::new(0);
 static MAX_PASS_US: AtomicU64 = AtomicU64::new(0);
 type Pause = (mpsc::SyncSender<()>, mpsc::Receiver<()>);
 static PAUSE: Mutex<Option<Pause>> = Mutex::new(None);
+static FINISHED: Mutex<Option<mpsc::SyncSender<()>>> = Mutex::new(None);
+static FINISHES: AtomicUsize = AtomicUsize::new(0);
 thread_local! {
     static READER: RefCell<Option<sqlite::Connection>> = const { RefCell::new(None) };
 }
 
 fn pause_after_backfill(event: sqlite::CheckpointEvent) {
+    pause_backfill(event, false);
+}
+
+fn pause_before_finish_pending(event: sqlite::CheckpointEvent) {
+    pause_backfill(event, true);
+}
+
+fn pause_backfill(event: sqlite::CheckpointEvent, before_pending: bool) {
     if matches!(event, sqlite::CheckpointEvent::WalCommitted(_)) {
         // Pin the first committed snapshot through the next write, preventing
-        // reset. Release it inside that commit's hook so the next PASSIVE pass
-        // can backfill the final small tail.
+        // reset. Release it inside that commit's hook so the writer can
+        // finish the small tail once finish_pending has been published.
         READER.with(|reader| {
             let reader = reader.borrow();
-            let reader = reader.as_ref().unwrap();
+            let Some(reader) = reader.as_ref() else {
+                return;
+            };
             if reader.is_autocommit() {
                 reader
                     .execute_batch("BEGIN; SELECT id FROM t LIMIT 1;")
@@ -52,7 +73,15 @@ fn pause_after_backfill(event: sqlite::CheckpointEvent) {
             }
         });
     }
-    let pause = if matches!(event, sqlite::CheckpointEvent::Finished { .. }) {
+    let should_pause = if before_pending {
+        matches!(
+            event,
+            sqlite::CheckpointEvent::Checkpointed { inline: false, .. }
+        )
+    } else {
+        matches!(event, sqlite::CheckpointEvent::Finished { .. })
+    };
+    let pause = if should_pause {
         PAUSE.lock().unwrap().take()
     } else {
         None
@@ -67,7 +96,10 @@ fn pause_after_backfill(event: sqlite::CheckpointEvent) {
 
 fn observe(event: sqlite::CheckpointEvent) {
     match event {
-        sqlite::CheckpointEvent::Checkpointed { .. } => {}
+        sqlite::CheckpointEvent::Checkpointed { finish: true, .. } => {
+            FINISHES.fetch_add(1, SeqCst);
+        }
+        sqlite::CheckpointEvent::Checkpointed { .. } | sqlite::CheckpointEvent::Started => {}
         sqlite::CheckpointEvent::WalCommitted(pages) => {
             if pages < LAST.swap(pages, SeqCst) {
                 RESTARTS.fetch_add(1, SeqCst);
@@ -84,6 +116,9 @@ fn observe(event: sqlite::CheckpointEvent) {
                 );
             }
             PASSES.fetch_add(1, SeqCst);
+            if let Some(finished) = FINISHED.lock().unwrap().take() {
+                let _ = finished.send(());
+            }
         }
     }
 }
@@ -160,7 +195,7 @@ impl Store {
         self.db
             .pragma_update(None, "wal_autocheckpoint", 1000)
             .unwrap();
-        sqlite::CheckpointOwner::start(&self.db, Some(observe))
+        sqlite::CheckpointOwner::start(&self.db, "test", Some(observe))
             .unwrap()
             .unwrap()
     }
@@ -324,7 +359,13 @@ fn pinned_reader_stops_partial_passes_until_another_commit()
     owner.close().unwrap();
     let (log, done) = frames(&store.path);
     assert!(done < log);
-    assert!(PASSES.load(SeqCst) > 0);
+    let passes = PASSES.load(SeqCst);
+    assert!(passes > 0);
+    assert!(
+        passes <= usize::try_from(log / 1000).unwrap(),
+        "pinned WAL repeated passes without a threshold of new frames"
+    );
+    eprintln!("pinned WAL: log={log} backfilled={done} passes={passes}");
     assert!(
         store.bytes() > JOURNAL_LIMIT,
         "reader did not pin an oversized WAL"
@@ -347,12 +388,13 @@ fn final_small_commit_after_backfill_cannot_strand_a_wal_tail()
 -> Result<(), butler_e2e::e2e::HarnessError> {
     butler_e2e::gate!();
     let _serial = SERIAL.lock().unwrap();
+    FINISHES.store(0, SeqCst);
     let store = Store::new();
     READER.with(|reader| *reader.borrow_mut() = Some(sqlite::open(&store.path).unwrap()));
     let (arrived, backfilled) = mpsc::sync_channel(1);
     let (resume, paused) = mpsc::sync_channel(1);
     *PAUSE.lock().unwrap() = Some((arrived, paused));
-    let owner = sqlite::CheckpointOwner::start(&store.db, Some(pause_after_backfill))
+    let owner = sqlite::CheckpointOwner::start(&store.db, "test", Some(pause_after_backfill))
         .unwrap()
         .unwrap();
     // Drop the sender before the owner on panic, so joining cannot deadlock.
@@ -363,8 +405,7 @@ fn final_small_commit_after_backfill_cannot_strand_a_wal_tail()
     assert!(log >= 1000);
     assert_eq!(done, log);
     // The pinned snapshot prevents a reset when this write begins. Its hook
-    // releases the snapshot, then must request a pass for this small tail
-    // because the whole WAL remains above threshold.
+    // releases the snapshot, then consumes finish_pending to backfill this small tail once.
     store.insert();
     let (tail, _) = frames(&store.path);
     assert!(tail > log && tail - log < 1000);
@@ -372,6 +413,7 @@ fn final_small_commit_after_backfill_cannot_strand_a_wal_tail()
         assert!(reader.borrow_mut().take().unwrap().is_autocommit());
     });
     release.send(()).unwrap();
+    assert_eq!(FINISHES.load(SeqCst), 1);
     owner.close().unwrap();
     let (_, backfilled) = frames(&store.path);
     assert_eq!(backfilled, tail);
