@@ -103,6 +103,10 @@ BUTLER_E2E_TIER=live BUTLER_E2E_HEDGE_EVAL=1 \
 `scripts/hedge_eval_v2.sh prepare <main_sha>` and `run --rounds N` set
 `BUTLER_E2E_HEDGE_EVAL=1` for the prewarm and paired evaluation runs.
 LIVE-12 and prewarm also need `BUTLER_E2E_BROWSER_CACHE`; the runner supplies it.
+`run` reads `HEDGE_EVAL_MODEL` (default `openai/gpt-6.1-sol@medium`) and
+`HEDGE_EVAL_CASES` (space-separated case ids, default all) for both sides.
+Meta-line patterns live in `fixtures/hedge-v2/meta-patterns.json`, shared by
+`src/e2e/hedge.rs` and `scripts/hedge_judge.py`.
 
 ## Quota polling
 

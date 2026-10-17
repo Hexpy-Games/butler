@@ -5,6 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod meta;
 mod model;
 mod regexes;
 mod v3;
@@ -59,6 +60,8 @@ pub(super) async fn run(mode: &str, case: &str) -> Result<(Value, Vec<Value>), H
         "final_text",
         "steward_reports",
         "plan_checks",
+        "plan_intent",
+        "content_request",
         "tools",
         "tool_calls",
         "approvals",

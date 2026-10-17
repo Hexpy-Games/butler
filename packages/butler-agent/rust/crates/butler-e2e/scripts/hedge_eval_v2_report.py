@@ -10,6 +10,9 @@ from collections import defaultdict
 from pathlib import Path
 
 LIMIT = re.compile(r"limit|caveat|unverified|unconfirmed|한계|미확인|미확보|불확실", re.I)
+JUDGES = ("d1_defensive", "d2_no_judgment", "d3_self_report", "d4_reading_warning",
+          "d5_process_note", "d6_echoed_plan", "d7_requested_shown")
+CONTENT_CASES = ("B1", "B1E")
 
 
 def load(path):
@@ -47,7 +50,7 @@ def diagnostic_stats(rows):
     answers = [r for r in rows if delivered(r) and r["kind"] != "control"]
     counts = [len(r.get("defensive_hits", [])) for r in answers]
     judges = {name: [r["judge"][name] for r in rows if r.get("judge", {}).get(name) is not None]
-              for name in ("d1_defensive", "d2_no_judgment")}
+              for name in JUDGES}
     u1 = [r for r in rows if r["case"] == "U1"]
     return {
         "defensive_share": sum(n > 0 for n in counts) / max(1, len(counts)),
@@ -55,6 +58,21 @@ def diagnostic_stats(rows):
         "reasked": sum(bool(r.get("reasked")) for r in rows),
         "u1_memory_tool_use_rate": sum(bool(r.get("memory_tool_calls")) for r in u1) / max(1, len(u1)),
         "judge_diagnostic_means": {name: statistics.mean(v) if v else None for name, v in judges.items()},
+        **meta_stats(rows),
+    }
+
+
+def meta_stats(rows):
+    """Meta lines (per category), echoed plan checks and withheld requested content."""
+    answers = [r for r in rows if delivered(r)]
+    hits = [r.get("meta_hits") or {} for r in answers]
+    categories = sorted({name for h in hits for name in h} - {"total"})
+    return {
+        "meta_hits": {name: sum(h.get(name, 0) for h in hits) for name in categories},
+        "meta_share": sum(h.get("total", 0) > 0 for h in hits) / max(1, len(hits)),
+        "echoed_checks": sum(r.get("echoed_checks", 0) for r in answers),
+        "echoed_share": sum(r.get("echoed_checks", 0) > 0 for r in answers) / max(1, len(answers)),
+        "requested_rumor_shown": [bool(r.get("requested_rumor_shown")) for r in rows if r["case"] in CONTENT_CASES],
     }
 
 
@@ -185,6 +203,8 @@ def report(main, branch, verdicts=None, owner=None, key=None):
         rate([r for r in main if r["case"] in judgment]) >= .15 - 1e-12
         and all(bc[c]["resolved"] > mc[c]["resolved"] - 2 for c in judgment))
     result["gates"]["defensive"] = b["defensive_share"] <= m["defensive_share"] - .10 + 1e-12
+    result["gates"]["meta"] = (b["meta_share"] <= m["meta_share"] - .10 + 1e-12
+                               or b["meta_share"] == m["meta_share"] == 0) and all(b["requested_rumor_shown"])
     result["gates"]["confident_error_controls"] = all(
         c in mc and c in bc and bc[c]["confident_error"] <= mc[c]["confident_error"]
         for c in ("U3", "C1", "C4"))
@@ -273,6 +293,7 @@ def main():
     for side in ("main", "branch"):
         print(side, json.dumps(result[side], ensure_ascii=False))
     print("NOTE d1/d2 are diagnostic (d1 P 0.73 / R 0.73 at 0.6; d2 not calibrated)")
+    print("NOTE d3-d6 at 0.6 and d7 at 0.5 are not calibrated; diagnostic only")
     print("SPLITS", json.dumps(result["splits"]))
     print("BOOTSTRAP", json.dumps(result["bootstrap"]))
     for name, passed in result["gates"].items():

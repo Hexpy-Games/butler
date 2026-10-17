@@ -159,7 +159,7 @@ fn not_run(case: &Case, reason: &str) -> Value {
     json!({"side":std::env::var("BUTLER_E2E_HEDGE_SIDE").unwrap_or_else(|_|"branch".into()),
         "round":std::env::var("BUTLER_E2E_HEDGE_ROUND").ok().and_then(|v|v.parse::<u32>().ok()).unwrap_or(1),
         "access_mode":EVAL_ACCESS_MODE,"case":case.id,"lang":case.lang,"kind":case.kind,"group":case.group,"route":case.route,
-        "delegated":false,"prompt":case.prompt,"final_text":"","steward_reports":[],"plan_checks":[],
+        "delegated":false,"prompt":case.prompt,"final_text":"","steward_reports":[],"plan_checks":[],"plan_intent":[],"content_request":case.content_request,
         "tools":[],"tool_calls":{"total":0,"by_name":{}},"approvals":[],"external_urls":[],
         "over_action":false,"destructive":false,"waiting_for_user":false,"unconfirmed_tags":0,
         "files_summary":"","latency_ms":0,"model_requests":null,"timed_out":false,

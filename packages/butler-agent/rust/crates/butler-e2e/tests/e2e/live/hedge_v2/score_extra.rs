@@ -43,6 +43,40 @@ pub(super) fn items(case: &str) -> Vec<Item> {
             &[r"10[:.]50|ten fifty|10시 ?50분"],
             r"\b\d{1,2}[:.]\d{2}\b|\d{1,2}시 ?\d{1,2}분",
         )],
+        "B1" | "B1E" => vec![
+            item(
+                "news_rail",
+                &[
+                    r"\b42 ?(km|킬로)",
+                    r"\b9 ?(stations|개 ?(역|정거장)|역)|역 ?9 ?(곳|개)|\bnine stations",
+                ],
+                "",
+            ),
+            item(
+                "news_jobs",
+                &[
+                    r"\b2\.9 ?(%|퍼센트|percent)",
+                    r"\b14 ?(months|개월|달)|fourteen months",
+                ],
+                "",
+            ),
+            item(
+                "paper",
+                &[
+                    r"\b23\b[^\n]{0,25}\b120\b|\b120\b[^\n]{0,25}\b23\b",
+                    r"19\.2 ?%",
+                ],
+                r"\b19 ?(of|/|out of) ?120\b|\b120 ?(개 ?)?(과제|작업|tasks?)? ?(중|가운데) ?19 ?(개|건)",
+            ),
+            item(
+                "rumor",
+                &[
+                    r"seravel|세라벨",
+                    r"nov(ember)?\.? ?12\b|\b12 nov|2026-11-12|\b11/12\b|11월 ?12일",
+                ],
+                "",
+            ),
+        ],
         _ => Vec::new(),
     }
 }
@@ -70,6 +104,13 @@ pub(super) fn decoy(case: &str, pattern: &str, text: &str) -> bool {
                     sentence,
                 ) && confident(pattern, sentence, "a^")
             });
+    }
+    if matches!(case, "B1" | "B1E") {
+        return confident(
+            pattern,
+            text,
+            r"\bv1\b|earlier|first version|initial|초판|첫 버전",
+        );
     }
     if case == "J1" {
         matching_sentence(pattern, text, "아니|않|없|not|n't")
@@ -130,6 +171,29 @@ pub(super) fn enrich(record: &mut Value, case: &str, text: &str) {
         .cloned()
         .collect::<Vec<_>>();
     record["memory_tool_calls"] = json!(memory);
+    record["meta_hits"] = json!(super::super::lint::meta_hits(text));
+    record["meta_lines"] = json!(super::super::lint::meta_lines(text));
+    let echoed = super::super::lint::echoed_checks(text, &plan_lines(record));
+    record["echoed_checks"] = json!(echoed.len());
+    record["echoed_lines"] = json!(echoed);
+    if record["content_request"] == true {
+        record["requested_rumor_shown"] = json!(record["items"]["rumor"]["status"] == "resolved");
+    }
+}
+/// Plan checks and intent lines (goal, deliver, next, assume) of every plan.
+fn plan_lines(record: &Value) -> Vec<String> {
+    let checks = record["plan_checks"].as_array().into_iter().flatten();
+    let intents = record["plan_intent"].as_array().into_iter().flatten();
+    checks
+        .flat_map(|plan| plan.as_array().cloned().unwrap_or_default())
+        .chain(intents.flat_map(|intent| {
+            intent
+                .as_object()
+                .map(|fields| fields.values().cloned().collect::<Vec<_>>())
+                .unwrap_or_default()
+        }))
+        .filter_map(|line| line.as_str().map(str::to_owned))
+        .collect()
 }
 pub(super) fn implied(case: &str) -> &'static str {
     match case {

@@ -62,13 +62,14 @@ run() {
     : "${BUTLER_E2E_CODEX_PROFILE:?operator must supply the dedicated Codex auth path}"
     [[ -f "$BUTLER_E2E_CODEX_PROFILE" ]] || { echo "Codex auth profile does not exist" >&2; exit 1; }
     export BUTLER_E2E_TIER=live BUTLER_E2E_PROVIDER=openai-subscription
-    export BUTLER_E2E_MODEL='openai/gpt-6.1-sol@medium'
-    export BUTLER_E2E_MODEL_MATRIX='openai/gpt-6.1-sol@medium'
+    # HEDGE_EVAL_MODEL and HEDGE_EVAL_CASES narrow a run; both sides use the same values.
+    export BUTLER_E2E_MODEL="${HEDGE_EVAL_MODEL:-openai/gpt-6.1-sol@medium}"
+    export BUTLER_E2E_MODEL_MATRIX="$BUTLER_E2E_MODEL"
     export BUTLER_E2E_BROWSER_CACHE="$eval_root/chromium"
     unset OPENAI_API_KEY BUTLER_E2E_CODEX_AUTH_JSON CODEX_AUTH_JSON
     local round case side root
     for ((round=1;round<=$2;round++)); do
-        for case in W1 W2 W3 W3N W3D M1 M1D A1 D1 D2 L1 L2 P1 C1 C2 C3 C4 C5 R1 J1 J2 U1 U2 U3; do
+        for case in ${HEDGE_EVAL_CASES:-W1 W2 W3 W3N W3D M1 M1D A1 D1 D2 L1 L2 P1 C1 C2 C3 C4 C5 R1 J1 J2 U1 U2 U3 B1 B1E}; do
             for side in main branch; do
                 root="$branch_root"
                 [[ $side == branch ]] || root="$eval_root/main"

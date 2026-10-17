@@ -1,0 +1,35 @@
+{
+  "note": "Synthetic and generic meta lines (flag) and content controls (clean) for the meta-line detectors.",
+  "flag": [
+    {"text": "워커 없이 새로 조사한 오늘 브리핑이다냐.", "category": "process_scope"},
+    {"text": "위 주요 뉴스는 개별 기사 본문을 읽고 골랐고, 같은 CPTPP 사안을 여러 건으로 부풀리지 않았다냐.", "category": "self_report_negative"},
+    {"text": "고객과 환경을 모사한 평가이므로 실제 현장 전체의 성공률로 일반화하면 안 된다냐.", "category": "reading_warning"},
+    {"text": "이는 해당 벤치마크의 저자 측 결과이지, 모든 연구 과제를 자율 수행한다는 뜻은 아니다냐.", "category": "reading_warning"},
+    {"text": "이 발견을 암호체계가 깨졌다는 소식으로 해석해서는 안 된다냐.", "category": "reading_warning"},
+    {"text": "기술 글 자체의 정확한 공개 시각은 이번 확인 범위에서 확정하지 않았다냐.", "category": "process_scope"},
+    {"text": "따라서 위의 공식 발표를 유출 정보처럼 소개하거나, 미확인 내용을 채워 넣지 않았다냐.", "category": "self_report_negative"},
+    {"text": "일부 검색 결과가 차단되고 몇몇 기사 페이지가 열리지 않아, 원문을 확인한 범위의 브리핑으로 한정했다냐.", "category": "process_scope"},
+    {"text": "기존 매일 오전 7시 예약은 변경하지 않았다냐.", "category": "self_report_negative"},
+    {"text": "This is today's briefing, researched directly without workers.", "category": "process_scope"},
+    {"text": "I picked the top stories after reading each article, and I did not inflate the same trade story into several items.", "category": "self_report_negative"},
+    {"text": "The evaluation simulates clients and environments, so it should not be generalized to real-world success rates.", "category": "reading_warning"},
+    {"text": "This is the authors' result on that benchmark; that does not mean it can run any research task on its own.", "category": "reading_warning"},
+    {"text": "This should not be read as the cipher being broken.", "category": "reading_warning"},
+    {"text": "The exact publication time of the post was outside the scope of this check.", "category": "process_scope"},
+    {"text": "So I did not present the official announcement as a leak, and I did not fill in unconfirmed details.", "category": "self_report_negative"},
+    {"text": "Some search results were blocked and a few pages did not open, so I limited the briefing to sources I could open.", "category": "process_scope"},
+    {"text": "I left your 7 a.m. daily schedule unchanged.", "category": "self_report_negative"}
+  ],
+  "clean": [
+    "95개 과제 중 최고 구성의 해결 건수는 14개라는 저자 보고다냐.",
+    "MLE-Bench Lite 평균 메달 획득률이 기본 모델 37.9%에서 72.7%로 올랐다고 보고했다냐.",
+    "반론 쪽은 생성 방식을 알아도 후보 중 무엇을 왜 선택했는지까지 증명되지는 않는다는 것이다냐.",
+    "토론 게시 시각은 10월 16일 UTC다냐.",
+    "차기 버전에는 신규 캐릭터 베이라가 추가된다는 유출이 돌고 있다냐(미확정 루머).",
+    "The best configuration solved 14 of 95 tasks, per the authors.",
+    "The authors report that the average MLE-Bench Lite medal rate rose from 37.9% to 72.7% over the base model.",
+    "Critics answer that knowing the generation method still leaves open which candidate was picked and why.",
+    "The discussion was posted on October 16 UTC.",
+    "A leak circulating says the next version adds a new character, Veira (unconfirmed rumor)."
+  ]
+}

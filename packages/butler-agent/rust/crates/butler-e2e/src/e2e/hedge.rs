@@ -1,5 +1,5 @@
 //! Non-gating lint for handback and avoidance language in live answers.
-use std::sync::OnceLock;
+use std::{collections::BTreeMap, sync::OnceLock};
 
 use regex::Regex;
 
@@ -188,13 +188,20 @@ fn defensive_sentences(text: &str) -> Vec<String> {
             prose.push('\n');
         }
     }
+    // A dotted abbreviation such as "a.m." or "e.g." does not end a sentence.
+    static ABBREVIATION: OnceLock<Regex> = OnceLock::new();
+    #[expect(clippy::expect_used, reason = "literal regex pattern is valid")]
+    let abbreviation = ABBREVIATION.get_or_init(|| {
+        Regex::new(r"(^|\s)([A-Za-z]{1,2}\.)+[A-Za-z]{1,2}$").expect("static abbreviation")
+    });
     let mut result = Vec::new();
     let mut start = 0;
     let mut chars = prose.char_indices().peekable();
     while let Some((index, c)) = chars.next() {
         if c == '\n'
             || (matches!(c, '.' | '!' | '?' | '。')
-                && chars.peek().is_some_and(|(_, next)| next.is_whitespace()))
+                && chars.peek().is_some_and(|(_, next)| next.is_whitespace())
+                && !(c == '.' && abbreviation.is_match(&prose[start..index])))
         {
             result.push(prose[start..index + c.len_utf8()].to_owned());
             start = index + c.len_utf8();
@@ -202,6 +209,148 @@ fn defensive_sentences(text: &str) -> Vec<String> {
     }
     result.push(prose[start..].to_owned());
     result
+}
+
+/// Meta-line categories and sentence exclusion, shared with
+/// `scripts/hedge_judge.py` through one fixture.
+struct Meta {
+    exclusion: Regex,
+    categories: Vec<(String, Vec<Regex>)>,
+}
+#[expect(
+    clippy::expect_used,
+    reason = "the bundled fixture is checked by hedge_v2_stub::meta"
+)]
+fn meta() -> &'static Meta {
+    static META: OnceLock<Meta> = OnceLock::new();
+    META.get_or_init(|| {
+        let raw: serde_json::Value =
+            serde_json::from_str(include_str!("../../fixtures/hedge-v2/meta-patterns.json"))
+                .expect("meta pattern fixture");
+        let compile = |pattern: &serde_json::Value| {
+            Regex::new(&format!(
+                "(?i){}",
+                pattern.as_str().expect("pattern string")
+            ))
+            .expect("meta pattern")
+        };
+        let categories = raw["categories"].as_object().expect("meta categories");
+        Meta {
+            exclusion: compile(&raw["exclusion"]),
+            categories: categories
+                .iter()
+                .map(|(name, list)| {
+                    let list = list.as_array().expect("meta pattern list");
+                    (name.clone(), list.iter().map(compile).collect())
+                })
+                .collect(),
+        }
+    })
+}
+
+/// Sentences stating what the assistant did not do, how not to read a
+/// finding, or how it worked and how far it looked, with each category.
+pub fn meta_lines(text: &str) -> Vec<(String, String)> {
+    meta_matches(text)
+        .into_iter()
+        .map(|(_, name, sentence)| (name, sentence))
+        .collect()
+}
+fn meta_matches(text: &str) -> Vec<(usize, String, String)> {
+    let meta = meta();
+    let mut found = Vec::new();
+    for (index, sentence) in defensive_sentences(text).iter().enumerate() {
+        if meta.exclusion.is_match(sentence) {
+            continue;
+        }
+        for (name, patterns) in &meta.categories {
+            if patterns.iter().any(|pattern| pattern.is_match(sentence)) {
+                found.push((index, name.clone(), sentence.trim().to_owned()));
+            }
+        }
+    }
+    found
+}
+
+/// Meta sentences per category, plus `total`: sentences with any category.
+pub fn meta_hits(text: &str) -> BTreeMap<String, usize> {
+    let found = meta_matches(text);
+    let mut counts: BTreeMap<String, usize> = meta()
+        .categories
+        .iter()
+        .map(|(name, _)| (name.clone(), 0))
+        .collect();
+    for (_, name, _) in &found {
+        *counts.entry(name.clone()).or_default() += 1;
+    }
+    let mut sentences: Vec<usize> = found.iter().map(|(index, _, _)| *index).collect();
+    sentences.dedup();
+    counts.insert("total".into(), sentences.len());
+    counts
+}
+
+/// Plan check and intent lines that one answer sentence restates: at least
+/// 60% of the line's content tokens appear in that sentence. Hangul tokens
+/// match on their first two syllables, a crude particle strip; Latin tokens
+/// match a sentence word that starts with them.
+pub fn echoed_checks(text: &str, lines: &[String]) -> Vec<String> {
+    let sentences: Vec<(String, Vec<String>)> = defensive_sentences(text)
+        .iter()
+        .map(|sentence| {
+            let lower = sentence.to_lowercase();
+            let words = words(&lower).map(str::to_owned).collect();
+            (lower, words)
+        })
+        .collect();
+    lines
+        .iter()
+        .filter(|line| {
+            let tokens = content_tokens(line);
+            tokens.len() >= 2
+                && sentences.iter().any(|(sentence, words)| {
+                    let found = tokens
+                        .iter()
+                        .filter(|token| {
+                            if token.is_ascii() {
+                                words.iter().any(|word| word.starts_with(token.as_str()))
+                            } else {
+                                sentence.contains(token.as_str())
+                            }
+                        })
+                        .count();
+                    found * 5 >= tokens.len() * 3
+                })
+        })
+        .cloned()
+        .collect()
+}
+fn words(text: &str) -> impl Iterator<Item = &str> {
+    static WORD: OnceLock<Regex> = OnceLock::new();
+    #[expect(clippy::expect_used, reason = "literal regex pattern is valid")]
+    let word = WORD.get_or_init(|| Regex::new(r"[가-힣]{2,}|[a-z]{2,}").expect("static word"));
+    word.find_iter(text).map(|found| found.as_str())
+}
+fn content_tokens(line: &str) -> Vec<String> {
+    const STOP: [&str; 24] = [
+        "the", "and", "or", "to", "of", "in", "on", "for", "with", "as", "by", "is", "are", "be",
+        "it", "its", "this", "that", "an", "at", "from", "all", "any", "each",
+    ];
+    let lower = line.to_lowercase();
+    let mut tokens: Vec<String> = Vec::new();
+    for word in words(&lower) {
+        let token = if word.is_ascii() {
+            if STOP.contains(&word) {
+                continue;
+            }
+            word.to_owned()
+        } else {
+            word.chars().take(2).collect()
+        };
+        if !tokens.contains(&token) {
+            tokens.push(token);
+        }
+    }
+    tokens
 }
 
 #[cfg(test)]

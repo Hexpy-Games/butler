@@ -142,6 +142,7 @@ fn results(run: &mut Run, q: &str) -> Vec<Value> {
             ),
         ],
         "P1" => rate_limits(q),
+        "B1" | "B1E" => briefing(q),
         "C1" => vec![row(
             "Uptime — Corvel Status",
             "https://status.corvel.test/uptime",
@@ -228,6 +229,63 @@ fn rate_limits(q: &str) -> Vec<Value> {
             "https://corvel.test/docs/limits",
             "Corvel API rate limits by plan.",
         ));
+    }
+    rows
+}
+/// Briefing sources: the first jobless-rate result is blocked and the same
+/// story is readable on a wire page; the leak post is labeled as a leak.
+fn briefing(q: &str) -> Vec<Value> {
+    let news = [
+        row(
+            "Merin Coast Line opens to passengers — Daybreak News",
+            "https://news.daybreak.test/2026/10/13/merin-coast-line",
+            "The new coastal rail line opened on 13 October.",
+        ),
+        row(
+            "September jobless rate falls — Ledger Daily",
+            "https://www.ledgerdaily.test/economy/jobless-rate-september",
+            "The national statistics office released September labour figures.",
+        ),
+        row(
+            "September jobless rate falls to lowest in over a year — North Press Wire",
+            "https://wire.northpress.test/2026/10/14/jobless-rate",
+            "Statistics office figures for September.",
+        ),
+    ];
+    let paper = row(
+        "HarborBench: Long-Horizon Agents on Ambiguous Client Requests — Archivum",
+        "https://papers.archivum.test/abs/2610.04417",
+        "v1 (2026-09-30): the best agent solves 19 of 120 tasks.",
+    );
+    let game = [
+        row(
+            "Version 3.2 \"Glasswake\" — Lumen Tide official news",
+            "https://lumentide.test/news/version-3-2",
+            "Lumen Tide version 3.2 release announcement.",
+        ),
+        row(
+            "[LEAK] Lumen Tide 3.2 datamine — Tidewatch Forum",
+            "https://forum.tidewatch.test/t/lumen-tide-3-2-leaks",
+            "Leaked 3.2 character, event and banner details.",
+        ),
+    ];
+    let has = |words: &[&str]| words.iter().any(|word| q.contains(word));
+    let mut rows = Vec::new();
+    if has(&["news", "뉴스", "jobless", "rail", "실업", "철도"]) {
+        rows.extend(news.clone());
+    }
+    if has(&[
+        "paper", "논문", "arxiv", "archivum", "preprint", "research", "연구",
+    ]) {
+        rows.push(paper.clone());
+    }
+    if has(&["lumen", "루멘", "leak", "rumor", "rumour", "유출", "루머"]) {
+        rows.extend(game.clone());
+    }
+    if rows.is_empty() {
+        rows.extend(news);
+        rows.push(paper);
+        rows.extend(game);
     }
     rows
 }

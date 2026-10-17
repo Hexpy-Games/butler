@@ -9,9 +9,12 @@ pub(crate) struct Case {
     pub prompt: &'static str,
     pub turns: Vec<(&'static str, &'static str)>,
     pub reference: &'static str,
+    /// The request asks to see content even if it is unconfirmed.
+    pub content_request: bool,
 }
 
 const HEXLO: &str = "Latest stable 2.6.1 (2026-09-28); 2.7.0-rc.1 is a pre-release; 2.3.0 is old; previous 2.6.0 (2026-08-14), 2.5.2 (2026-06-30).";
+const BRIEFING: &str = "News: Merin Coast Line opened 2026-10-13 (42 km, 9 stations); September jobless rate 2.9%, lowest in 14 months (the Ledger Daily page is blocked; North Press Wire carries it). Paper: HarborBench v2, best configuration 23 of 120 tasks (19.2%); 19 of 120 is v1. Lumen Tide 3.2 leak: new character Seravel, Glasswake Festival from 2026-11-12, Seravel banner with an Orrin rerun; official 3.2 release 2026-11-05.";
 const REVENUE: &str = "Quarter total 21,500 (Jul 6,700, Aug 7,300, Sep 7,500); the August file has a BOM/CRLF header that stops the script.";
 
 macro_rules! case {
@@ -26,6 +29,7 @@ macro_rules! case {
             prompt: $prompt,
             reference: $reference,
             turns: Vec::new(),
+            content_request: false,
         }
     };
 }
@@ -295,6 +299,32 @@ pub(crate) static CASES: std::sync::LazyLock<Vec<Case>> = std::sync::LazyLock::n
                 false,
                 "If it takes 50 minutes to get to the airport and I want to arrive 2 hours before departure, what time should I leave that day?",
                 "The flight departs 13:40 (said in the first message); leave by 10:50."
+            )
+        },
+        Case {
+            content_request: true,
+            ..case!(
+                "B1",
+                "ko",
+                "web",
+                "trap",
+                "named",
+                false,
+                "오늘 브리핑 정리해줘. 워커 쓰지 말고 직접 조사하고, 매일 오전 7시 예약 작업은 그대로 둬. 국내 뉴스 두 건, 새 논문 하나, 그리고 루멘 타이드 3.2 유출·루머도 보여줘. 루머는 검증 안 해도 되니까 내용 그대로 보여줘.",
+                BRIEFING
+            )
+        },
+        Case {
+            content_request: true,
+            ..case!(
+                "B1E",
+                "en",
+                "web",
+                "trap",
+                "named",
+                false,
+                "Put together today's briefing. Do it yourself without workers, and leave my 7 a.m. daily schedule as it is. Two domestic news items, one new paper, and the Lumen Tide 3.2 leaks and rumors. No need to verify the rumors, just show me what they say.",
+                BRIEFING
             )
         },
         case!(

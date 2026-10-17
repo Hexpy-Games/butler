@@ -191,7 +191,7 @@ fn record(
     json!({"side":std::env::var("BUTLER_E2E_HEDGE_SIDE").unwrap_or_else(|_|"branch".into()),
         "round":std::env::var("BUTLER_E2E_HEDGE_ROUND").ok().and_then(|v|v.parse::<u32>().ok()).unwrap_or(1),
         "access_mode":super::EVAL_ACCESS_MODE,"case":case.id,"lang":case.lang,"kind":case.kind,"group":case.group,"route":case.route,
-        "prompt":case.prompt,"final_text":"","steward_reports":graph["steward_reports"],"plan_checks":graph["plan_checks"],
+        "prompt":case.prompt,"final_text":"","steward_reports":graph["steward_reports"],"plan_checks":graph["plan_checks"],"plan_intent":graph["plan_intent"],"content_request":case.content_request,
         "tools":tools,"tool_calls":{"total":tools.len(),"by_name":counts},"approvals":approvals,
         "external_urls":external_urls(&log.external_urls, &tools),"browser_steps":log.acts,"over_action":log.over_action,"destructive":checks["destructive"],
         "waiting_for_user":false,"unconfirmed_tags":0,"files_summary":checks["files_summary"],

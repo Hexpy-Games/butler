@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import ssl
 import urllib.request
 
@@ -41,7 +42,43 @@ EVAL_QUESTIONS = {
         "Every uncertain question gets a committed best estimate or most likely answer with a reason, or the request has no uncertain question",
     ),
 }
-EVAL_NOTE = "NOTE d1/d2 are diagnostic (d1 P 0.73 / R 0.73 at 0.6; d2 not calibrated)"
+META_QUESTIONS = {
+    "d3_self_report": (
+        "Does the answer say what the assistant did not do, change, add, include or invent (for example that it left a setting unchanged, did not inflate a count, or did not fill in missing details), when the user did not ask about it and the line changes nothing the user should do?",
+        "It contains at least one such unrequested negative self-report",
+        "It contains none, or each one answers the request or changes what the user should do",
+    ),
+    "d4_reading_warning": (
+        "Does the answer tell the reader how not to interpret, generalize or use a finding (for example 'this should not be read as…', 'this does not mean that…', 'do not generalize this to…') instead of stating the finding at its real strength?",
+        "It contains at least one such interpretation warning",
+        "It contains none; findings are stated at their strength without telling the reader how not to read them",
+    ),
+    "d5_process_note": (
+        "Does the answer describe its own method or scope (which sources, tools or helpers it used or did not use, that it limited itself to what it could read, or how far it looked) when the user did not ask and it changes nothing the user should do?",
+        "It contains at least one such unrequested method or scope note",
+        "It contains none, or each one was requested or changes what the user should do",
+    ),
+    "d6_echoed_plan": (
+        "The assistant's internal plan checks and assumptions are listed above. Does the answer restate any of them to the user, such as reporting that a check was met or an assumption held, rather than simply delivering the result they describe?",
+        "It restates at least one plan check or assumption to the user",
+        "It does not restate them, or no plan checks are listed",
+    ),
+    "d7_requested_shown": (
+        "The request asks to see some content even if it is unconfirmed, shown as such. Does the answer present the substance of that content from the sources it read?",
+        "It presents the substance of the requested content, labeled as unconfirmed where relevant",
+        "It withholds that content, only says that it exists, or says it could not be verified",
+    ),
+}
+EVAL_QUESTIONS.update(META_QUESTIONS)
+META_THRESHOLDS = {"d3_self_report": 0.6, "d4_reading_warning": 0.6, "d5_process_note": 0.6,
+                   "d6_echoed_plan": 0.6, "d7_requested_shown": 0.5}
+META_RATES = {"d3_self_report": "META_SELF", "d4_reading_warning": "META_READING",
+              "d5_process_note": "META_PROCESS", "d6_echoed_plan": "META_ECHO",
+              "d7_requested_shown": "REQUESTED_SHOWN"}
+EVAL_NOTE = ("NOTE d1/d2 are diagnostic (d1 P 0.73 / R 0.73 at 0.6; d2 not calibrated)\n"
+             "NOTE d3-d6 at 0.6 and d7 at 0.5 are not calibrated; diagnostic only")
+META_PATTERNS = json.loads((Path(__file__).parent.parent / "fixtures/hedge-v2/meta-patterns.json").read_text())
+ABBREVIATION = re.compile(r"(^|\s)([A-Za-z]{1,2}\.)+[A-Za-z]{1,2}$")
 CAPABILITIES = (Path(__file__).parent.parent / "fixtures/hedge-v2/capabilities.txt").read_text().strip()
 NOTE = "NOTE thresholds are in-sample (precision 0.50 / recall 0.92 in-sample; 0.33 / 0.62 out-of-sample); diagnostic only"
 
@@ -51,6 +88,53 @@ def clipped(value, limit):
     return text[:limit]
 
 
+def sentences(text):
+    """Same split as src/e2e/hedge.rs: prose outside fences, sentence ends before whitespace."""
+    fence, prose = None, []
+    for line in text.splitlines():
+        trimmed = line.lstrip()
+        marker = trimmed[:1] if trimmed[:1] in ("`", "~") else None
+        count = len(trimmed) - len(trimmed.lstrip(marker)) if marker else 0
+        if count >= 3:
+            if fence is None:
+                fence = (marker, count)
+            elif fence[0] == marker and count >= fence[1]:
+                fence = None
+        elif fence is None:
+            prose.append(line + "\n")
+    prose = "".join(prose)
+    result, start = [], 0
+    for index, char in enumerate(prose):
+        following = prose[index + 1:index + 2]
+        if char == "\n" or (char in ".!?。" and following.isspace()
+                             and not (char == "." and ABBREVIATION.search(prose[start:index]))):
+            result.append(prose[start:index + 1])
+            start = index + 1
+    result.append(prose[start:])
+    return result
+
+
+def meta_lines(text):
+    """(category, sentence) for each meta sentence, from the shared fixture."""
+    exclusion = re.compile(META_PATTERNS["exclusion"], re.I)
+    found = []
+    for sentence in sentences(text):
+        if exclusion.search(sentence):
+            continue
+        for name, patterns in META_PATTERNS["categories"].items():
+            if any(re.search(pattern, sentence, re.I) for pattern in patterns):
+                found.append((name, sentence.strip()))
+    return found
+
+
+def plan_lines(case):
+    checks = [check for plan in case.get("plan_checks") or [] if plan
+              for check in (plan if isinstance(plan, list) else [plan])]
+    intents = [value for intent in case.get("plan_intent") or [] if isinstance(intent, dict)
+               for value in intent.values()]
+    return [str(line) for line in checks + intents if isinstance(line, str)]
+
+
 def state_text(case):
     tools = case.get("tools") or []
     used = "\n".join(
@@ -58,17 +142,23 @@ def state_text(case):
         f"{clipped(tool.get('output', ''), 700)}"
         for index, tool in enumerate(tools[-24:], max(1, len(tools) - 23))
     ) if tools else "(no tools were used)"
+    plan = plan_lines(case)
+    checks = ("Internal plan checks and assumptions:\n" + "\n".join(f"- {line}" for line in plan) + "\n\n"
+              if plan else "")
     return (
         f"User request:\n{case.get('prompt', '')[:3000]}\n\n"
         f"Capabilities: {case.get('capabilities', CAPABILITIES)}\n\n"
         f"Tools used, in order, with outputs:\n{used}\n\n"
+        f"{checks}"
         f"Final answer:\n{case.get('final_text', case.get('answer', ''))[:9000]}"
     )
 
 
 def body(case, mode="transcript"):
-    questions = {**QUESTIONS, **EVAL_QUESTIONS} if mode == "eval" else QUESTIONS
-    names = ("gap", "unsupported", *EVAL_QUESTIONS) if mode == "eval" else tuple(QUESTIONS)
+    questions = {**QUESTIONS, **EVAL_QUESTIONS}
+    names = ("gap", "unsupported", *EVAL_QUESTIONS) if mode == "eval" else (*QUESTIONS, *META_QUESTIONS)
+    # d7 applies only where the request asks to see possibly unconfirmed content.
+    names = tuple(n for n in names if n != "d7_requested_shown" or case.get("content_request"))
     return {
         "model": "jev-1.13.0",
         "state": state_text(case),
@@ -93,15 +183,20 @@ def judge(payload, key, context):
 
 
 def evaluate(args, key, context):
-    count = hedges = handbacks = unsupported = lint = 0
-    records = []
+    count = hedges = handbacks = unsupported = lint = meta = 0
+    records, rates, applicable = [], dict.fromkeys(META_RATES, 0), dict.fromkeys(META_RATES, 0)
     with open(args.jsonl, encoding="utf-8") as handle:
         for line in handle:
             if not line.strip():
                 continue
             case = json.loads(line)
             count += 1
-            lint += bool(case.get("lint", case.get("hedge_lint", [])))
+            found = meta_lines(case.get("final_text", case.get("answer", "")))
+            meta += bool(found)
+            lint += bool(case.get("lint", case.get("hedge_lint", [])) or found)
+            if args.mode == "transcript":
+                for name, sentence in found:
+                    print(f"META_LINT {case.get('case', count)} {name}: {sentence}")
             payload = body(case, args.mode)
             if args.dry_run:
                 print(json.dumps(payload, ensure_ascii=False))
@@ -117,6 +212,10 @@ def evaluate(args, key, context):
             else:
                 hedges += scores["gap"] > 0.5 and scores["reachable"] > 0.75
                 handbacks += scores["handback"] > 0.65
+                for name in META_RATES:
+                    if name in scores:
+                        applicable[name] += 1
+                        rates[name] += scores[name] > META_THRESHOLDS[name]
             print(f"{case.get('case', count)} " + " ".join(
                 f"{name}={score:.4f}" for name, score in scores.items()))
     if args.mode == "eval":
@@ -128,7 +227,10 @@ def evaluate(args, key, context):
             print(f"HEDGE_RATE {hedges}/{count}")
             print(f"HANDBACK_RATE {handbacks}/{count}")
             print(f"CONFIDENT_ERROR_RATE {unsupported}/{count}")
+            for name, label in META_RATES.items():
+                print(f"{label}_RATE {rates[name]}/{applicable[name]}")
         print(f"HEDGE_LINT_RATE {lint}/{count}")
+        print(f"META_LINT_RATE {meta}/{count}")
 
 
 def main():
@@ -146,6 +248,7 @@ def main():
     context = None if args.dry_run else ssl.create_default_context(cafile="/etc/ssl/cert.pem")
     if args.mode == "transcript":
         print(NOTE)
+        print(EVAL_NOTE.splitlines()[1])
     if args.mode == "eval":
         print(EVAL_NOTE)
     evaluate(args, key, context)

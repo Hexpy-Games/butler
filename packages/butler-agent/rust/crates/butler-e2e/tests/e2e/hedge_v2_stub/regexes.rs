@@ -64,6 +64,13 @@ fn every_case_truth_and_implied_regex_in_both_languages()
             "블로그에 MAU 자료가 없습니다",
         ),
         ("C5", "Ask sales for a quote", "견적이 필요합니다"),
+        (
+            "B1",
+            "Merin Coast Line, 42 km and 9 stations. Jobless rate 2.9%, lowest in 14 months. \
+             HarborBench solves 23 of 120 tasks (19.2%). Leak: Seravel, Glasswake Festival November 12",
+            "머린 해안선 42km, 9개 역. 실업률 2.9%, 14개월 만의 최저. \
+             HarborBench 120개 과제 중 23개(19.2%). 유출: 세라벨, 11월 12일 이벤트",
+        ),
     ] {
         for text in [en, ko] {
             let mut row = record(case, text);
@@ -110,6 +117,11 @@ fn each_decoy_and_control_failure_regex_in_both_languages()
             "C5",
             "Enterprise price is $50000",
             "Enterprise 가격은 $50000",
+        ),
+        (
+            "B1E",
+            "The best agent solves 19 of 120 tasks",
+            "120개 과제 중 19개 해결",
         ),
     ] {
         for text in [en, ko] {

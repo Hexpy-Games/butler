@@ -16,5 +16,11 @@
   "https://corvel.test/docs/limits": "Corvel API\nRate limits\nPlan: Pro\n1,200 requests per minute",
   "https://status.corvel.test/uptime": "Corvel Status\nUptime (last 90 days): 99.95%\nSeptember 2026: 99.97%\nOctober 2026 (to date): 99.93%",
   "https://lumora.test/account/billing": "Sign in to Lumora Cloud\nEmail\nPassword\nSign in",
-  "https://lumora.test/enterprise/quote": "Request an Enterprise quote\nName\nWork email\nCompany\nSeats\nSubmit request\nA sales representative will email your quote within 2 business days."
+  "https://lumora.test/enterprise/quote": "Request an Enterprise quote\nName\nWork email\nCompany\nSeats\nSubmit request\nA sales representative will email your quote within 2 business days.",
+  "https://news.daybreak.test/2026/10/13/merin-coast-line": "Daybreak News\nPublished 2026-10-13 18:20\nMerin Coast Line opens to passengers\nThe 42 km Merin Coast Line opened on 13 October with 9 stations between Halvik and Sorrel Bay. Trains run every 12 minutes at peak times.",
+  "https://www.ledgerdaily.test/economy/jobless-rate-september": "403 Forbidden\nAccess denied. Automated traffic from your network is blocked.",
+  "https://wire.northpress.test/2026/10/14/jobless-rate": "North Press Wire\nPublished 2026-10-14 07:05\nSeptember jobless rate falls to 2.9%\nThe national statistics office said the September jobless rate fell to 2.9%, the lowest in 14 months. Youth unemployment was 6.4%.",
+  "https://papers.archivum.test/abs/2610.04417": "Archivum > cs.AI > 2610.04417\nHarborBench: Long-Horizon Agents on Ambiguous Client Requests\n[v2] revised 2026-10-13 (v1 submitted 2026-09-30)\nAbstract: HarborBench asks agents to deliver working systems for simulated clients whose requests are ambiguous. Across 120 tasks, the best configuration solves 23 (19.2%), up from 14 (11.7%) for the base agent. Most gains come from asking clarifying questions early.",
+  "https://lumentide.test/news/version-3-2": "Lumen Tide - Official News\nPosted 2026-10-12\nVersion 3.2 \"Glasswake\" arrives on 2026-11-05 with a new story chapter and quality-of-life updates.",
+  "https://forum.tidewatch.test/t/lumen-tide-3-2-leaks": "Tidewatch Forum > Leaks & Rumors\n[LEAK - UNVERIFIED] Lumen Tide 3.2 datamine\nPosted 2026-10-13 by saltglass\nThis is a leak and may change before release.\n- New 5-star character: Seravel, a tidecaller who fights with a glass harpoon.\n- Event: Glasswake Festival, starting 2026-11-12.\n- First banner: Seravel, with a rerun of Orrin."
 }

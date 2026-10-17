@@ -14,10 +14,11 @@ pub(crate) fn snapshot(path: &Path, full: bool) -> Result<Value, HarnessError> {
         return Ok(json!({"delegated":delegated>0,"delegations":delegated,"handback":handback}));
     }
     let mut stmt = db.prepare("SELECT c.arguments_json FROM btcc_guided_tool_calls c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE c.tool_name='replace_work_plan' AND COALESCE(json_extract(t.context_json,'$.executionPolicy.role'),'butler')!='worker' ORDER BY c.rowid")?;
-    let mut plans = Vec::new();
+    let (mut plans, mut intents) = (Vec::new(), Vec::new());
     for row in stmt.query_map([], |r| r.get::<_, String>(0))? {
         let value: Value = serde_json::from_str(&row?).unwrap_or(Value::Null);
         plans.push(value["checks"].clone());
+        intents.push(value["intent"].clone());
     }
     let mut stmt = db.prepare("SELECT s.summary FROM btcc_steward_results s JOIN btcc_subsession_delegations d ON d.relation_id=s.relation_id WHERE json_extract(d.packet_json,'$.child_role')='steward' ORDER BY s.rowid")?;
     let reports = stmt
@@ -29,7 +30,7 @@ pub(crate) fn snapshot(path: &Path, full: bool) -> Result<Value, HarnessError> {
         |r| r.get(0),
     )?;
     Ok(
-        json!({"model_requests":model_requests,"tools":operations::tools(&db)?,"plan_checks":plans,"steward_reports":reports,"delegated":delegated>0,"delegations":delegated,"handback":handback}),
+        json!({"model_requests":model_requests,"tools":operations::tools(&db)?,"plan_checks":plans,"plan_intent":intents,"steward_reports":reports,"delegated":delegated>0,"delegations":delegated,"handback":handback}),
     )
 }
 

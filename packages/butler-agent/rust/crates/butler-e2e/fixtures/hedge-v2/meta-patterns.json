@@ -1,0 +1,31 @@
+{
+  "note": "Meta-line detectors shared by src/e2e/hedge.rs and scripts/hedge_judge.py; matched case-insensitively per sentence.",
+  "exclusion": "미안|죄송|내 실수|제 실수|잘못\\s*(했|이었|된 판단|짚|받아)|sorry|my mistake",
+  "categories": {
+    "self_report_negative": [
+      "(변경|수정|삭제|과장|포장|소개|추가|포함|생성)(하|시키)?지(는|도)? 않았|(부풀리|채워 ?넣|바꾸|건드리|손대|지어내|꾸며내|덧붙이)지(는|도)? 않았",
+      "그대로 (두었|뒀|둡니다|둔다|두고 있)",
+      "\\bI (did not|didn't|didn’t|have not|haven't|haven’t|never) (change|alter|modify|touch|add|include|fill|inflate|invent|pad|present|count|make up|create|edit|delete|remove|overstate)\\b",
+      "\\bleft (it|them|this|that|those|your|the|my)\\b[^!?\\n]{0,60}\\b(unchanged|untouched|alone|as (it|they) (is|was|are|were))\\b",
+      "\\b(nothing|no \\w+) (was|were|has been|have been) (changed|added|invented|filled in|altered)\\b"
+    ],
+    "reading_warning": [
+      "로 (해석|일반화|받아들|이해|읽|보)\\S{0,3}(면|서는|선) 안 ?(된|돼|됩)",
+      "일반화[^.!?\\n]{0,8}(안 ?된|안 ?돼|없|어렵|곤란)",
+      "(라는|다는|이라는) (뜻|의미|말|이야기|증거)(은|는|이|가)? 아니",
+      "\\bshould ?n[o'’]t be (read|taken|interpreted|seen|understood|generalized|extrapolated|treated)\\b",
+      "\\b(does|do|did) ?n[o'’]t (mean|imply|indicate|suggest)\\b",
+      "\\b(is|are|was) not (evidence|proof|a sign|an indication) (that|of)\\b",
+      "\\b(do not|don't|don’t|should not|shouldn't|shouldn’t) (generalize|extrapolate|read (this|it|too much))\\b"
+    ],
+    "process_scope": [
+      "(워커|위임|하위 ?작업|도우미|서브 ?에이전트)(를|은|는)? ?(쓰지 않고|사용하지 않고|없이|안 쓰고)",
+      "이번 (확인|조사|검토|검색|작업) ?범위",
+      "범위[^.!?\\n]{0,15}(한정|제한)",
+      "\\bwithout (using |any |a )?(workers?|delegat\\w*|helpers?|sub-?agents?)\\b",
+      "\\b(limited|restricted|confined) (this|it|myself|the \\w+|my \\w+) to\\b",
+      "\\b(outside|beyond|within|in) (the )?scope of (this|my|the current|the) \\w+",
+      "\\b(sources|pages|articles) I could (open|read|access|reach)\\b"
+    ]
+  }
+}
