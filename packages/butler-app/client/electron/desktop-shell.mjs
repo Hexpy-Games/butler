@@ -2,12 +2,13 @@ import { shell } from "electron";
 import { appendFileSync } from "node:fs";
 
 /**
- * Every desktop open/reveal the App performs goes through here. A harness that sets
- * BUTLER_TEST_SHELL_OPEN_LOG gets one JSONL line ({ action, target }) per request in that file
- * instead of a real Finder/Explorer window or browser on the machine running it.
+ * Every desktop open/reveal the App performs goes through here. A stub-tier harness
+ * (BUTLER_E2E_TIER=stub, like the other App test seams) that sets BUTLER_TEST_SHELL_OPEN_LOG
+ * gets one JSONL line ({ action, target }) per request in that file instead of a real
+ * Finder/Explorer window or browser on the machine running it. Otherwise the variable is ignored.
  */
 function recorded(action, target) {
-  const log = process.env.BUTLER_TEST_SHELL_OPEN_LOG;
+  const log = process.env.BUTLER_E2E_TIER === "stub" ? process.env.BUTLER_TEST_SHELL_OPEN_LOG : undefined;
   if (!log) return false;
   appendFileSync(log, `${JSON.stringify({ action, target })}\n`);
   return true;
