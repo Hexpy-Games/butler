@@ -8,9 +8,7 @@ use std::cell::Cell;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 pub(super) fn install(connection: &Connection) {
-    if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
-        == Some(std::ffi::OsStr::new("1"))
-    {
+    if CommandTiming::enabled() {
         connection.trace_v2(TraceEventCodes::SQLITE_TRACE_PROFILE, Some(profile));
     }
 }
@@ -61,9 +59,7 @@ thread_local! {
 
 pub(super) fn install_writer(connection: &Connection) {
     install(connection);
-    if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
-        != Some(std::ffi::OsStr::new("1"))
-    {
+    if !CommandTiming::enabled() {
         return;
     }
     connection.commit_hook(Some(|| {
@@ -73,9 +69,7 @@ pub(super) fn install_writer(connection: &Connection) {
 }
 
 pub(super) fn wal_committed(pages: i32) {
-    if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
-        != Some(std::ffi::OsStr::new("1"))
-    {
+    if !CommandTiming::enabled() {
         return;
     }
     let prior = LAST_WAL_PAGES.replace(pages);
