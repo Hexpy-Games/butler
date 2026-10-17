@@ -11,7 +11,7 @@ mod waits;
 
 pub(crate) use directions::direction_turn_id;
 pub use records::*;
-pub(crate) use waits::{UnwokenWait, worker_result_turn_id};
+pub(crate) use waits::worker_result_turn_id;
 
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
