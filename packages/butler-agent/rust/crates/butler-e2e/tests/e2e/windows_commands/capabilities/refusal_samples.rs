@@ -40,6 +40,7 @@ struct Storage {
     commit_max: u128,
     decision: u128,
     transcript: u128,
+    transcript_syncs: usize,
     private: u128,
     read_max: u128,
 }
@@ -106,33 +107,43 @@ pub(super) fn print(access: Access, samples: &[Sample], logs: &str) {
         let mut written = HashMap::new();
         for line in logs.lines().filter(|l| l.starts_with("command_")) {
             storage.observe(sample, line);
-            // Transcript sync time excludes serialization and file opening.
+            // Legacy spans start after writing; boundary spans include reopening.
+            // Neither includes serialization.
             let fields: HashMap<_, _> = line
                 .split_whitespace()
                 .filter_map(|f| f.split_once('='))
                 .collect();
             let utc = number(&fields, "utc_us");
-            if fields.get("phase") != Some(&"transcript_append") {
+            let phase = fields.get("phase").copied();
+            if !matches!(phase, Some("transcript_append" | "transcript_sync")) {
                 continue;
             }
             if let Some(id) = fields.get("id") {
-                match fields.get("event").copied() {
-                    Some("written") => {
+                match (phase, fields.get("event").copied()) {
+                    (Some("transcript_append"), Some("written"))
+                    | (Some("transcript_sync"), Some("entry")) => {
                         written.insert(*id, number(&fields, "elapsed_us"));
                     }
-                    Some("synced")
+                    (_, Some("synced"))
                         if utc >= sample.mark("sent") && utc <= sample.mark("result_delivered") =>
                     {
-                        storage.transcript += written.get(id).map_or(0, |start| {
-                            number(&fields, "elapsed_us").saturating_sub(*start)
-                        });
+                        storage.transcript_syncs += 1;
+                        let start = written
+                            .get(id)
+                            .expect("complete transcript sync timing span");
+                        storage.transcript += number(&fields, "elapsed_us").saturating_sub(*start);
                     }
                     _ => {}
                 }
             }
         }
+        assert_eq!(
+            storage.transcript_syncs,
+            if access == Access::AskAlways { 2 } else { 1 },
+            "one sync per card/result boundary before the model receives the result"
+        );
         eprintln!(
-            "REFUSAL-SAMPLE access={access:?} i={i} total_us={} card_us={} allow_us={} resume_us={} ckpt_passes={} ckpt_busy_us={} ckpt_inline_us={} ckpt_inline_count={} ckpt_finish_us={} ckpt_finish_count={} app_commit_sum_us={} app_commit_max_us={} decision_us={} transcript_sync_us={} private_replace_us={} app_read_max_us={}",
+            "REFUSAL-SAMPLE access={access:?} i={i} total_us={} card_us={} allow_us={} resume_us={} ckpt_passes={} ckpt_busy_us={} ckpt_inline_us={} ckpt_inline_count={} ckpt_finish_us={} ckpt_finish_count={} app_commit_sum_us={} app_commit_max_us={} decision_us={} transcript_sync_us={} transcript_sync_count={} private_replace_us={} app_read_max_us={}",
             sample.total,
             sample.delta("sent", "approval_listed"),
             sample.delta("allow_submitted", "allow_returned"),
@@ -147,6 +158,7 @@ pub(super) fn print(access: Access, samples: &[Sample], logs: &str) {
             storage.commit_max,
             storage.decision,
             storage.transcript,
+            storage.transcript_syncs,
             storage.private,
             storage.read_max,
         );
