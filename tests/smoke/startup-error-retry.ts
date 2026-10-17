@@ -2,9 +2,9 @@ import { killOwnedProcessGroup } from "../../packages/butler-app/client/electron
 import { spawnElectron, stopElectronChild } from "../support/electron-child";
 /** Native failure, Open log and real Retry relaunch; no inspector injection or live models. */
 import assert from "node:assert/strict";
-import { type ChildProcess } from "node:child_process";
+import { spawnSync, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { once } from "node:events";
 import { chromium, type Browser } from "playwright";
@@ -32,8 +32,26 @@ let original: ChildProcess | undefined;
 let browser: Browser | undefined;
 let successorPid: number | undefined;
 let phase = "launch";
+// The relaunched App is not our child: its single-instance lock names it as soon as it starts,
+// so every later exit path can stop it (Chromium's SingletonLock links to "<host>-<pid>").
+function successorLock(): number | undefined {
+  try {
+    const pid = Number(readlinkSync(join(env.BUTLER_APP_ELECTRON_USER_DATA_DIR!, "SingletonLock")).split("-").pop());
+    return Number.isSafeInteger(pid) && pid > 0 && pid !== original?.pid ? pid : undefined;
+  } catch { return undefined; }
+}
+// Each Agent leads its own process group: a force-killed App would leave it to the Agent's
+// owner-death watch, so stop every Agent running from this fixture's installation.
+function stopFixtureAgents() {
+  const binary = join(realpathSync(fixture.root), "install/bin/butler-agent");
+  for (const line of (spawnSync("ps", ["-axo", "pid=,command="], { encoding: "utf8" }).stdout ?? "").split("\n")) {
+    const [, pid, command] = /^\s*(\d+)\s+(.*)$/u.exec(line) ?? [];
+    if (command === binary || command?.startsWith(`${binary} `)) { try { killOwnedProcessGroup(Number(pid)); } catch { /* already exited */ } }
+  }
+}
 process.once("exit", () => {
   if (successorPid) { try { killOwnedProcessGroup(successorPid); } catch { /* already exited */ } }
+  try { stopFixtureAgents(); } catch { /* fixture already removed */ }
 });
 async function waitFor<T>(read: () => T | Promise<T>, label: string): Promise<NonNullable<T>> {
   const deadline = performance.now() + 30_000;
@@ -89,13 +107,14 @@ try {
   await waitFor(() => original!.exitCode !== null || original!.signalCode !== null, "Retry did not exit the failed process");
   assert.equal(original.exitCode, 0);
   phase = "original-exit";
+  successorPid = await waitFor(successorLock, "Retry did not start a successor App");
   browser = await connect();
   phase = "successor-inspector";
   const facts = await waitFor(async () => {
     try { const value = await nativeMainFacts(mainPort, fixture.data); return value.pid !== original!.pid ? value : undefined; }
     catch { return undefined; }
   }, "Retried main inspector unavailable");
-  successorPid = facts.pid;
+  assert.equal(facts.pid, successorPid, "The inspected App is the relaunched lock holder");
   console.log(JSON.stringify({ retryProcess: facts }));
   assert.equal(facts.dataIsolated, true, "Retry preserves its isolated data root");
   assert.equal(facts.shellIsolated, true, "Retry preserves disabled shell registration");
@@ -135,6 +154,7 @@ try {
   throw error;
 } finally {
   await browser?.close().catch(() => undefined);
+  if (phase !== "launch") successorPid ??= successorLock();
   if (successorPid) {
     const quit = spawnElectron(executable, [...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory]), "--butler-quit-main-ui"], { env, stdio: "ignore", cleanupPaths: [] });
     const force = setTimeout(() => { try { killOwnedProcessGroup(successorPid!); } catch { /* already exited */ } }, 10_000);
@@ -145,5 +165,6 @@ try {
     successorPid = undefined;
   }
   if (original) await stopElectronChild(original);
+  stopFixtureAgents();
   fixture.cleanup();
 }
