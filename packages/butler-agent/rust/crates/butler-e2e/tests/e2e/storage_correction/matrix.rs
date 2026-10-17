@@ -10,6 +10,7 @@ mod failures;
 #[tokio::test]
 async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    let _serial = super::SERIAL.lock().await;
     let mut s = Setup::new("CORR-STORAGE")?
         .env("BUTLER_E2E_STARTUP_TRACE", "1")
         .start()
@@ -205,6 +206,7 @@ fn watch(
 #[tokio::test]
 async fn storage_progress_extends_native_startup_deadline() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    let _serial = super::SERIAL.lock().await;
     let mut s = Setup::new("CORR-STARTUP-DEADLINE")?.start().await?;
     s.agent.terminate().await?;
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
@@ -253,6 +255,7 @@ async fn storage_progress_extends_native_startup_deadline() -> Result<(), Harnes
 #[tokio::test]
 async fn storage_correction_end_near_deadline_keeps_readiness_grace() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    let _serial = super::SERIAL.lock().await;
     let mut s = Setup::new("CORR-END-DEADLINE")?.start().await?;
     s.agent.terminate().await?;
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");

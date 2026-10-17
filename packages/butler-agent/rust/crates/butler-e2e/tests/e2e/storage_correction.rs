@@ -22,9 +22,15 @@ use std::{
     time::Duration,
 };
 
+// Fixture copies, seeding and scans compete with these startup deadlines.
+// Keep the entire scenario exclusive in libtest, including setup and teardown;
+// the nextest perf job already runs with one test thread.
+static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 #[tokio::test]
 async fn storage_correction_corr_01() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    let _serial = SERIAL.lock().await;
     let setup = Setup::new("CORR-01")?;
     let (url, script, server) = stub::start(setup.sandbox.workspace.display().to_string()).await?;
     let mut s = setup

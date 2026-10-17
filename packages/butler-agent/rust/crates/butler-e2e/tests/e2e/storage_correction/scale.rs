@@ -16,6 +16,7 @@ async fn storage_correction_owner_scale_startups() -> Result<(), HarnessError> {
         std::env::var("BUTLER_E2E_OWNER_SCALE").as_deref() == Ok("1"),
         "requires 800 chats / 300,000 wide turns on disk"
     );
+    let _serial = super::SERIAL.lock().await;
     let mut s = Setup::new("CORR-STARTUP-SCALE")?
         .env("BUTLER_E2E_STARTUP_TRACE", "1")
         .synthetic(Script {
