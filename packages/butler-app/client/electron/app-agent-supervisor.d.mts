@@ -108,6 +108,8 @@ export function createBundledAgentSupervisor(input: {
   startupTimeoutMs?: number | null;
   startupDeadline?: () => number;
   killTimeoutMs?: number;
+  terminateOwnedTree?: (pid: number) => void;
+  log?: (line: string) => void;
   probeTimeoutMs?: number;
   stdio?: string;
   onGatewayStarting?: (gateway: {

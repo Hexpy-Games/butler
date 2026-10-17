@@ -47,6 +47,7 @@
     "app:ui-crash:smoke": "npm --prefix packages/butler-app/client/ui run build && npm --prefix packages/butler-app/client/ui run build -- --mode crash-smoke --outDir ../../../../.tmp/ui-crash-build && ${BUTLER_BUN:-bun} run tests/smoke/app-ui-crash-smoke.ts",
     "app:layout:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-newchat-visual-smoke.ts && ${BUTLER_BUN:-bun} run tests/smoke/focus-ring-clipping-smoke.ts && ${BUTLER_BUN:-bun} run tests/smoke/app-layout-smoke.ts",
     "app:usage:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/usage-redesign-smoke.ts",
+    "app:startup-error:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/startup-error-retry.ts",
     "app:focus-ring:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/focus-ring-clipping-smoke.ts",
     "app:newchat:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-newchat-visual-smoke.ts",
     "app:newchat:scroll:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/newchat-wallpaper-scroll-smoke.ts",
