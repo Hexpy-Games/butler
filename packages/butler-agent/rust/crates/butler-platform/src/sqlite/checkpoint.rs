@@ -285,61 +285,55 @@ fn run(
         }
     };
     let _ = ready.send(Ok(()));
-    let mut pending = false;
-    while pending || requests.recv().is_ok() {
+    let mut follow_up = false;
+    while follow_up || requests.recv().is_ok() {
         let started = Instant::now();
         let guard = checkpoint.lock().unwrap_or_else(PoisonError::into_inner);
         let snapshot = {
             let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
             // A coalesced wake may be left behind a pass that already covered
             // its frames. Do not run another SQL checkpoint for that request.
-            if !pending && !progress.due(pages) {
+            if !follow_up && !progress.due(pages) {
                 continue;
             }
             progress.inline_pending = false;
             progress.attempted = progress.frames;
             (progress.generation, progress.frames)
         };
-        let result = connection.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |row| {
-            Ok((
-                row.get::<_, i32>(0)?,
-                row.get::<_, i32>(1)?,
-                row.get::<_, i32>(2)?,
-            ))
-        });
-        if let Ok((_, log, backfilled)) = result.as_ref() {
+        let result = backfill(&connection, maintenance, started);
+        follow_up = if let Ok((_, log, backfilled)) = result.as_ref() {
             let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
             progress.completed(snapshot, *log, *backfilled);
-        }
-        drop(guard);
-        finish_pass(
-            &connection,
-            maintenance,
-            started,
-            result.as_ref().copied().ok(),
-        );
-        let progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
-        // Only commits observed before this pass finished get an immediate
-        // drain. Later commits must accumulate a new threshold in due().
-        pending = result.as_ref().is_ok_and(|(_, _, backfilled)| {
-            (progress.generation == snapshot.0
+            // Only a due pass may drain commits that raced its backfill. A
+            // follow-up's tail, and commits after this lock, wait for due().
+            !follow_up
+                && progress.generation == snapshot.0
                 && *backfilled >= snapshot.1
-                && progress.frames > *backfilled)
-                || progress.due(pages)
-        });
+                && progress.frames > *backfilled
+        } else {
+            false
+        };
+        drop(guard);
+        finish_pass(&connection, maintenance, started, result.is_ok());
     }
     connection
         .close()
         .map_err(|(_, error)| CheckpointError::from(error))
 }
 
-fn finish_pass(
+fn backfill(
     connection: &sqlite::Connection,
     maintenance: &Maintenance,
     started: Instant,
-    result: Option<(i32, i32, i32)>,
-) {
-    let (busy, log, backfilled) = result.unwrap_or((1, -1, -1));
+) -> rusqlite::Result<(i32, i32, i32)> {
+    let result = connection.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |row| {
+        Ok((
+            row.get::<_, i32>(0)?,
+            row.get::<_, i32>(1)?,
+            row.get::<_, i32>(2)?,
+        ))
+    });
+    let (busy, log, backfilled) = result.as_ref().copied().unwrap_or((1, -1, -1));
     checkpointed(
         maintenance.observer,
         maintenance.label,
@@ -348,12 +342,21 @@ fn finish_pass(
         started.elapsed(),
         busy == 0,
     );
+    result
+}
+
+fn finish_pass(
+    connection: &sqlite::Connection,
+    maintenance: &Maintenance,
+    started: Instant,
+    succeeded: bool,
+) {
     // Preserve mapped WAL-index writeback on macOS, outside the SQL lane.
     let synced = sqlite::sync_wal_index(connection);
     if let Some(observer) = maintenance.observer {
         observer(CheckpointEvent::Finished {
             elapsed: started.elapsed(),
-            succeeded: result.is_some() && synced.is_ok(),
+            succeeded: succeeded && synced.is_ok(),
         });
     }
 }

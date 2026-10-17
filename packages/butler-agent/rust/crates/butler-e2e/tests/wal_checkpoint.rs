@@ -18,6 +18,9 @@ use std::{
 #[path = "wal_checkpoint/current_reader.rs"]
 mod current_reader;
 
+#[path = "wal_checkpoint/follow_up.rs"]
+mod follow_up;
+
 #[path = "wal_checkpoint/backstop.rs"]
 mod backstop;
 
@@ -57,7 +60,10 @@ fn pause_after_backfill(event: sqlite::CheckpointEvent) {
             }
         });
     }
-    let pause = if matches!(event, sqlite::CheckpointEvent::Finished { .. }) {
+    let pause = if matches!(
+        event,
+        sqlite::CheckpointEvent::Checkpointed { inline: false, .. }
+    ) {
         PAUSE.lock().unwrap().take()
     } else {
         None

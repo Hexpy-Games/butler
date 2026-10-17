@@ -1,9 +1,7 @@
 //! A current read mark can prevent restart even after a full backfill.
 use super::*;
 
-static FINISHED: Mutex<Option<mpsc::Sender<()>>> = Mutex::new(None);
-
-fn pin_current_snapshot(event: sqlite::CheckpointEvent) {
+pub(super) fn pin_current_snapshot(event: sqlite::CheckpointEvent) {
     if matches!(event, sqlite::CheckpointEvent::WalCommitted(_)) {
         READER.with(|reader| {
             let reader = reader.borrow();
@@ -17,10 +15,16 @@ fn pin_current_snapshot(event: sqlite::CheckpointEvent) {
         });
     }
     observe(event);
-    if matches!(event, sqlite::CheckpointEvent::Finished { .. })
-        && let Some(finished) = FINISHED.lock().unwrap().as_ref()
-    {
-        let _ = finished.send(());
+}
+
+fn pause_current_pass(event: sqlite::CheckpointEvent) {
+    pin_current_snapshot(event);
+    if matches!(event, sqlite::CheckpointEvent::Finished { .. }) {
+        let pause = PAUSE.lock().unwrap().take();
+        if let Some((arrived, resume)) = pause {
+            arrived.send(()).unwrap();
+            let _ = resume.recv();
+        }
     }
 }
 
@@ -33,15 +37,15 @@ fn current_reader_after_full_pass_waits_for_new_frame_threshold()
     PASSES.store(0, SeqCst);
     let store = Store::new();
     READER.with(|reader| *reader.borrow_mut() = Some(sqlite::open(&store.path).unwrap()));
-    let (finished, passes) = mpsc::channel();
-    *FINISHED.lock().unwrap() = Some(finished);
-    let owner = sqlite::CheckpointOwner::start(&store.db, "test", Some(pin_current_snapshot))
+    let (finished, passes) = mpsc::sync_channel(1);
+    let (resume, paused) = mpsc::sync_channel(1);
+    *PAUSE.lock().unwrap() = Some((finished, paused));
+    let owner = sqlite::CheckpointOwner::start(&store.db, "test", Some(pause_current_pass))
         .unwrap()
         .unwrap();
+    let release = resume;
     store.insert_many(1100);
     passes.recv_timeout(Duration::from_secs(5)).unwrap();
-    // Let the worker finish its completion bookkeeping before the next commit.
-    sleep(Duration::from_millis(20));
     let (initial, done) = frames(&store.path);
     assert_eq!(
         initial, done,
@@ -53,8 +57,8 @@ fn current_reader_after_full_pass_waits_for_new_frame_threshold()
         // hook advances that read mark before waking maintenance, permitting
         // another full pass while preventing the writer from resetting WAL.
         store.insert();
-        let _ = passes.recv_timeout(Duration::from_millis(20));
     }
+    release.send(()).unwrap();
     owner.close().unwrap();
     let (tail, _) = frames(&store.path);
     let new_frames = usize::try_from(tail - initial).unwrap();
@@ -66,7 +70,6 @@ fn current_reader_after_full_pass_waits_for_new_frame_threshold()
     );
     store.counts(1200);
     READER.with(|reader| reader.borrow_mut().take());
-    FINISHED.lock().unwrap().take();
     eprintln!(
         "current-reader WAL: commits={COMMITS} new_frames={new_frames} threshold=1000 passes={background}"
     );
