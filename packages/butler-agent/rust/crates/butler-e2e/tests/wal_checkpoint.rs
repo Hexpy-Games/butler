@@ -38,11 +38,13 @@ thread_local! {
 fn pause_after_backfill(event: sqlite::CheckpointEvent) {
     if matches!(event, sqlite::CheckpointEvent::WalCommitted(_)) {
         // Pin the first committed snapshot through the next write, preventing
-        // reset. Release it inside that commit's hook so the next PASSIVE pass
-        // can backfill the final small tail.
+        // reset. Release it inside that commit's hook so the next threshold
+        // of new frames can be fully backfilled.
         READER.with(|reader| {
             let reader = reader.borrow();
-            let reader = reader.as_ref().unwrap();
+            let Some(reader) = reader.as_ref() else {
+                return;
+            };
             if reader.is_autocommit() {
                 reader
                     .execute_batch("BEGIN; SELECT id FROM t LIMIT 1;")
@@ -160,7 +162,7 @@ impl Store {
         self.db
             .pragma_update(None, "wal_autocheckpoint", 1000)
             .unwrap();
-        sqlite::CheckpointOwner::start(&self.db, Some(observe))
+        sqlite::CheckpointOwner::start(&self.db, "test", Some(observe))
             .unwrap()
             .unwrap()
     }
@@ -264,11 +266,10 @@ fn bursts_restart_bound_wal_and_leave_zero_idle_checkpoint_writes()
     let peak_span = 32 + u64::try_from(MAX.load(SeqCst)).unwrap() * (page_size + 24);
     eprintln!("peak committed WAL span: {peak_span} bytes");
 
-    // End above threshold, so the last quiet period must fully backfill.
-    while LAST.load(SeqCst) < 1000 {
-        store.insert();
-        committed += 1;
-    }
+    // End with a threshold of new frames, so the last request fully backfills.
+    // A sub-threshold tail now deliberately waits for further writes.
+    store.insert_many(1100);
+    committed += 1100;
     // Close only drains requests already sent by commits. The maintenance
     // connection disables checkpoint-on-close, so this completion barrier
     // cannot repair a tail that the last commit failed to enqueue.
@@ -324,7 +325,13 @@ fn pinned_reader_stops_partial_passes_until_another_commit()
     owner.close().unwrap();
     let (log, done) = frames(&store.path);
     assert!(done < log);
-    assert!(PASSES.load(SeqCst) > 0);
+    let passes = PASSES.load(SeqCst);
+    assert!(passes > 0);
+    assert!(
+        passes <= usize::try_from(log / 1000).unwrap(),
+        "pinned WAL repeated passes without a threshold of new frames"
+    );
+    eprintln!("pinned WAL: log={log} backfilled={done} passes={passes}");
     assert!(
         store.bytes() > JOURNAL_LIMIT,
         "reader did not pin an oversized WAL"
@@ -343,7 +350,7 @@ fn pinned_reader_stops_partial_passes_until_another_commit()
 
 // test-category: race
 #[test]
-fn final_small_commit_after_backfill_cannot_strand_a_wal_tail()
+fn threshold_growth_after_backfill_drains_one_coalesced_pass()
 -> Result<(), butler_e2e::e2e::HarnessError> {
     butler_e2e::gate!();
     let _serial = SERIAL.lock().unwrap();
@@ -352,7 +359,7 @@ fn final_small_commit_after_backfill_cannot_strand_a_wal_tail()
     let (arrived, backfilled) = mpsc::sync_channel(1);
     let (resume, paused) = mpsc::sync_channel(1);
     *PAUSE.lock().unwrap() = Some((arrived, paused));
-    let owner = sqlite::CheckpointOwner::start(&store.db, Some(pause_after_backfill))
+    let owner = sqlite::CheckpointOwner::start(&store.db, "test", Some(pause_after_backfill))
         .unwrap()
         .unwrap();
     // Drop the sender before the owner on panic, so joining cannot deadlock.
@@ -362,22 +369,24 @@ fn final_small_commit_after_backfill_cannot_strand_a_wal_tail()
     let (log, done) = frames(&store.path);
     assert!(log >= 1000);
     assert_eq!(done, log);
-    // The pinned snapshot prevents a reset when this write begins. Its hook
-    // releases the snapshot, then must request a pass for this small tail
-    // because the whole WAL remains above threshold.
+    // The pinned snapshot prevents reset. A small tail must not cause another
+    // pass until a threshold of new frames accumulates.
     store.insert();
     let (tail, _) = frames(&store.path);
     assert!(tail > log && tail - log < 1000);
     READER.with(|reader| {
         assert!(reader.borrow_mut().take().unwrap().is_autocommit());
     });
+    store.insert_many(1100);
+    let (tail, _) = frames(&store.path);
+    assert!(tail - log >= 1000);
     release.send(()).unwrap();
     owner.close().unwrap();
     let (_, backfilled) = frames(&store.path);
     assert_eq!(backfilled, tail);
     store.reset_after_quiet();
-    store.counts(2002);
-    eprintln!("final small commit: before={log} after={tail} backfilled={backfilled}");
+    store.counts(3102);
+    eprintln!("threshold growth: before={log} after={tail} backfilled={backfilled}");
     Ok(())
 }
 

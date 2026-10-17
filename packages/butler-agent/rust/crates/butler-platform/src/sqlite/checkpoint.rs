@@ -67,11 +67,47 @@ type CheckpointResult<T> = Result<T, CheckpointError>;
 // SQLite still cannot recycle frames pinned by a reader, or split a transaction.
 const HARD_LIMIT_MULTIPLIER: i32 = 4;
 
-struct Hook {
+struct Maintenance {
     observer: Option<CheckpointObserver>,
+    label: &'static str,
     pages: i32,
+    progress: Mutex<Progress>,
+    checkpoint: Mutex<()>,
+}
+struct Hook {
+    maintenance: Arc<Maintenance>,
     wake: mpsc::SyncSender<()>,
-    checkpoint: Arc<Mutex<()>>,
+}
+// A short metadata lock, never held during SQLite or filesystem work.
+#[derive(Default)]
+struct Progress {
+    frames: i32,
+    generation: u64,
+    backfilled: i32,
+    attempted: i32,
+}
+impl Progress {
+    fn committed(&mut self, frames: i32) {
+        if frames < self.frames {
+            self.generation = self.generation.wrapping_add(1);
+            self.backfilled = 0;
+            self.attempted = 0;
+        }
+        self.frames = frames;
+    }
+    fn due(&self, threshold: i32) -> bool {
+        // A pinned reader may prevent any progress. Retry only after another
+        // threshold of writes, rather than syncing that same WAL each commit.
+        self.frames
+            .saturating_sub(self.backfilled.max(self.attempted))
+            >= threshold
+    }
+    fn completed(&mut self, generation: u64, log: i32, checkpointed: i32) {
+        if self.generation == generation && log >= 0 && checkpointed >= 0 {
+            self.backfilled = checkpointed;
+            self.attempted = log;
+        }
+    }
 }
 thread_local! { static HOOK: RefCell<Option<Hook>> = const { RefCell::new(None) }; }
 
@@ -86,8 +122,10 @@ impl CheckpointOwner {
     /// Replace this thread's single writer connection's automatic WAL hook.
     /// Retain the owner until writer shutdown; close it before the final WAL sync.
     /// Non-WAL connections and explicitly disabled thresholds need no owner.
+    /// The caller supplies a content-free database label for diagnostics.
     pub fn start(
         db: &Connection,
+        label: &'static str,
         observer: Option<CheckpointObserver>,
     ) -> CheckpointResult<Option<Self>> {
         let mode: String = db.query_row("PRAGMA journal_mode", [], |row| row.get(0))?;
@@ -107,8 +145,14 @@ impl CheckpointOwner {
         let cache_size: i64 = db.query_row("PRAGMA cache_size", [], |row| row.get(0))?;
         let (wake, requests) = mpsc::sync_channel(1);
         let (ready, initialized) = mpsc::sync_channel(1);
-        let checkpoint = Arc::new(Mutex::new(()));
-        let background = checkpoint.clone();
+        let maintenance = Arc::new(Maintenance {
+            observer,
+            label,
+            pages,
+            progress: Mutex::new(Progress::default()),
+            checkpoint: Mutex::new(()),
+        });
+        let background = maintenance.clone();
         let thread = thread::Builder::new()
             .name("sqlite-wal-checkpoint".into())
             .spawn(move || {
@@ -118,7 +162,6 @@ impl CheckpointOwner {
                     cache_size,
                     &ready,
                     &requests,
-                    observer,
                     &background,
                 )
             })?;
@@ -130,12 +173,7 @@ impl CheckpointOwner {
             .recv()
             .map_err(|_| CheckpointError::Disconnected)??;
         HOOK.with(|hook| {
-            *hook.borrow_mut() = Some(Hook {
-                observer,
-                pages,
-                wake,
-                checkpoint,
-            });
+            *hook.borrow_mut() = Some(Hook { maintenance, wake });
         });
         db.wal_hook(Some(committed));
         Ok(Some(owner))
@@ -165,9 +203,16 @@ fn committed(wal: &rusqlite::hooks::Wal, pages: i32) -> rusqlite::Result<()> {
     HOOK.with(|hook| {
         let hook = hook.borrow();
         let Some(hook) = hook.as_ref() else { return };
+        let wake = &hook.wake;
+        let hook = &hook.maintenance;
         if let Some(observer) = hook.observer {
             observer(CheckpointEvent::WalCommitted(pages));
         }
+        let mut due = {
+            let mut progress = hook.progress.lock().unwrap_or_else(PoisonError::into_inner);
+            progress.committed(pages);
+            progress.due(hook.pages)
+        };
         if pages >= hook.pages {
             if pages >= hook.pages.saturating_mul(HARD_LIMIT_MULTIPLIER) {
                 // Wait for the owned PASSIVE pass before running the backstop:
@@ -178,20 +223,27 @@ fn committed(wal: &rusqlite::hooks::Wal, pages: i32) -> rusqlite::Result<()> {
                     .checkpoint
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner);
-                let result = wal.checkpoint();
+                // Same PASSIVE backstop as checkpoint(), with result counters.
+                let result = wal.checkpoint_v2(rusqlite::hooks::CheckpointMode::PASSIVE);
+                if let Ok((log, backfilled)) = result.as_ref() {
+                    let mut progress = hook.progress.lock().unwrap_or_else(PoisonError::into_inner);
+                    let generation = progress.generation;
+                    progress.completed(generation, *log, *backfilled);
+                    due = progress.due(hook.pages);
+                }
                 drop(guard);
                 checkpointed(
                     hook.observer,
+                    hook.label,
                     true,
-                    pages,
+                    result.as_ref().copied().unwrap_or((pages, -1)),
                     started.elapsed(),
                     result.is_ok(),
                 );
             }
-            // Every commit above threshold leaves a coalesced request, including
-            // a small final tail behind a pass that has already backfilled.
-            // No timers: quiet or pinned WALs do not cause idle checkpoint work.
-            let _ = hook.wake.try_send(());
+            if due {
+                let _ = wake.try_send(());
+            }
         }
     });
     Ok(())
@@ -203,9 +255,16 @@ fn run(
     cache_size: i64,
     ready: &mpsc::SyncSender<CheckpointResult<()>>,
     requests: &mpsc::Receiver<()>,
-    observer: Option<CheckpointObserver>,
-    checkpoint: &Mutex<()>,
+    maintenance: &Maintenance,
 ) -> CheckpointResult<()> {
+    let Maintenance {
+        observer,
+        checkpoint,
+        progress,
+        pages,
+        label,
+    } = maintenance;
+    let (observer, pages, label) = (*observer, *pages, *label);
     let opened = open(path, synchronous, cache_size);
     let connection = match opened {
         Ok(connection) => connection,
@@ -218,13 +277,40 @@ fn run(
     while requests.recv().is_ok() {
         let started = Instant::now();
         let guard = checkpoint.lock().unwrap_or_else(PoisonError::into_inner);
+        let generation = {
+            let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
+            // A coalesced wake may be left behind a pass that already covered
+            // its frames. Do not run another SQL checkpoint for that request.
+            if !progress.due(pages) {
+                continue;
+            }
+            progress.attempted = progress.frames;
+            progress.generation
+        };
         let result = connection.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |row| {
-            Ok((row.get::<_, i32>(0)?, row.get::<_, i32>(1)?))
+            Ok((
+                row.get::<_, i32>(0)?,
+                row.get::<_, i32>(1)?,
+                row.get::<_, i32>(2)?,
+            ))
         });
+        if let Ok((_, log, backfilled)) = result.as_ref() {
+            progress
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .completed(generation, *log, *backfilled);
+        }
         drop(guard);
         let elapsed = started.elapsed();
-        let (busy, frames) = result.as_ref().copied().unwrap_or((1, -1));
-        checkpointed(observer, false, frames, elapsed, busy == 0);
+        let (busy, log, backfilled) = result.as_ref().copied().unwrap_or((1, -1, -1));
+        checkpointed(
+            observer,
+            label,
+            false,
+            (log, backfilled),
+            elapsed,
+            busy == 0,
+        );
         // Preserve mapped WAL-index writeback on macOS, outside the SQL lane.
         let synced = sqlite::sync_wal_index(&connection);
         if let Some(observer) = observer {
@@ -253,11 +339,13 @@ fn open(
 
 fn checkpointed(
     observer: Option<CheckpointObserver>,
+    label: &'static str,
     inline: bool,
-    frames: i32,
+    counts: (i32, i32),
     elapsed: Duration,
     succeeded: bool,
 ) {
+    let (frames, backfilled) = counts;
     if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
         == Some(std::ffi::OsStr::new("1"))
     {
@@ -266,8 +354,9 @@ fn checkpointed(
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_micros();
+        let start_utc_us = utc_us.saturating_sub(elapsed.as_micros());
         eprintln!(
-            "command_checkpoint_timing mode={mode} utc_us={utc_us} frames={frames} checkpoint_us={} succeeded={succeeded}",
+            "command_checkpoint_timing db={label} mode={mode} utc_us={utc_us} start_utc_us={start_utc_us} frames={frames} log={frames} checkpointed={backfilled} checkpoint_us={} succeeded={succeeded}",
             elapsed.as_micros()
         );
     }

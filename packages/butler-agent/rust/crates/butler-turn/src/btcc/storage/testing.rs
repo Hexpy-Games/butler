@@ -143,10 +143,16 @@ impl Fixture {
             config.process_liveness,
         )
         .expect("register");
+        // Begin with an empty WAL so the small fault-injection transaction
+        // requests background work instead of hitting the inline backstop on
+        // migration frames left by fixture setup.
+        db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+            .expect("settle fixture WAL");
         db.pragma_update(None, "wal_autocheckpoint", 1)
             .expect("threshold");
         let checkpoint = sqlite::CheckpointOwner::start(
             &db,
+            "BTCC",
             Some(|event| {
                 if matches!(event, sqlite::CheckpointEvent::Finished { .. }) {
                     panic!("injected maintenance failure");

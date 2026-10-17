@@ -9,7 +9,7 @@ impl CheckpointOwner {
         let observer = (std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
             == Some(std::ffi::OsStr::new("1")))
         .then_some(observe as sqlite::CheckpointObserver);
-        sqlite::CheckpointOwner::start(db, observer)
+        sqlite::CheckpointOwner::start(db, "BTCC", observer)
             .map(|owner| owner.map(Self))
             .map_err(error)
     }

@@ -5,7 +5,7 @@ use butler_platform::sqlite;
 pub(super) fn start(db: &rusqlite::Connection) -> StorageResult<Option<sqlite::CheckpointOwner>> {
     let observer = (command_timings() || super::metrics::enabled())
         .then_some(observe as sqlite::CheckpointObserver);
-    sqlite::CheckpointOwner::start(db, observer).map_err(error)
+    sqlite::CheckpointOwner::start(db, "App", observer).map_err(error)
 }
 
 fn command_timings() -> bool {
