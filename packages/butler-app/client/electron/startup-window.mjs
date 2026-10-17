@@ -13,6 +13,7 @@ let dwell;
 let displayedAt = 0;
 let state = { kind: "startup", stage: "prepare", failed: false };
 let actions = {};
+let retrying = false;
 let readyResolve;
 const rendererReady = new Promise((resolve) => { readyResolve = resolve; });
 let rendererId;
@@ -95,8 +96,11 @@ export function createStartupWindow() {
     async onAction(action) {
       if (!state.failed) return;
       if (action === "retry") {
+        // Each app.relaunch() starts one more App, so a second click must not register another.
+        if (retrying) return;
+        retrying = true;
         startupTiming("retry_requested");
-        await actions.retry?.();
+        try { await actions.retry?.(); } catch (error) { retrying = false; throw error; }
         startupTiming("retry_stopped");
         app.relaunch(); startupTiming("retry_relaunch_registered");
         if (actions.exit) actions.exit(); else app.exit(0);

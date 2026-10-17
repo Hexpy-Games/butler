@@ -21,12 +21,16 @@ for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
   process.once(signal, () => { killOwnedChildren(); process.exit(code); });
 }
 
-/** The caller must spawn detached; even the deliberately piped EPIPE smoke. */
-export function trackElectronChild(child: ChildProcess, paths: string[] = []): ChildProcess {
+/**
+ * The caller must spawn detached; even the deliberately piped EPIPE smoke.
+ * `relaunches`: the App may relaunch itself (Electron's relauncher stays in this group and starts
+ * the successor after the leader exits), so the group outlives its leader until stopElectronChild.
+ */
+export function trackElectronChild(child: ChildProcess, paths: string[] = [], relaunches = false): ChildProcess {
   const entry = { child, paths };
   children.set(child, entry);
   // Kill helpers while this leader's process group still belongs to us.
-  child.once("exit", () => { if (child.pid) killOwnedProcessGroup(child.pid); });
+  if (!relaunches) child.once("exit", () => { if (child.pid) killOwnedProcessGroup(child.pid); });
   child.once("error", () => { if (!child.pid) {
     for (const path of paths) rmSync(path, { recursive: true, force: true });
     children.delete(child);
@@ -36,9 +40,9 @@ export function trackElectronChild(child: ChildProcess, paths: string[] = []): C
 
 /** File-backed diagnostics survive harness exit without a dangling pipe reader. */
 export function spawnElectron(
-  command: string, args: string[], options: Omit<SpawnOptions, "detached"> & { onOutput?: (bytes: Buffer) => void; cleanupPaths?: string[] },
+  command: string, args: string[], options: Omit<SpawnOptions, "detached"> & { onOutput?: (bytes: Buffer) => void; cleanupPaths?: string[]; relaunches?: boolean },
 ): ChildProcess {
-  const { onOutput: output = () => {}, cleanupPaths, ...spawnOptions } = options;
+  const { onOutput: output = () => {}, cleanupPaths, relaunches = false, ...spawnOptions } = options;
   const profileArg = args.find(arg => arg.startsWith("--user-data-dir="))?.slice("--user-data-dir=".length);
   const profile = profileArg || options.env?.BUTLER_APP_ELECTRON_USER_DATA_DIR || mkdtempSync(join(tmpdir(), "butler-electron-profile-"));
   const paths = cleanupPaths ?? [profile];
@@ -61,7 +65,7 @@ export function spawnElectron(
     rmSync(dir, { recursive: true, force: true });
   };
   try {
-    const child = trackElectronChild(spawn(command, chromiumLaunchArgs(args), { ...spawnOptions, detached: true, env: { ...(options.env ?? process.env), BUTLER_APP_ELECTRON_USER_DATA_DIR: profile }, stdio: ["ignore", writer, writer] }), paths);
+    const child = trackElectronChild(spawn(command, chromiumLaunchArgs(args), { ...spawnOptions, detached: true, env: { ...(options.env ?? process.env), BUTLER_APP_ELECTRON_USER_DATA_DIR: profile }, stdio: ["ignore", writer, writer] }), paths, relaunches);
     child.once("exit", drain);
     child.once("close", cleanup);
     return child;

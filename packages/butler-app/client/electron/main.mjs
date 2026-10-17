@@ -2850,7 +2850,7 @@ if (appSingleInstanceLock) {
   app
     .whenReady()
     .then(async () => {
-      configureStartupActions({ retry: () => prepareStartupRetry(bundledAgentSupervisor, explicitServerUrl), exit: () => { finalQuitAllowed = true; app.quit(); }, diagnostics: () => bundledAgentSupervisor.diagnostics() });
+      configureStartupActions({ retry: () => prepareStartupRetry(bundledAgentSupervisor, explicitServerUrl), exit: () => { isQuitting = true; finalQuitAllowed = true; app.quit(); }, diagnostics: () => bundledAgentSupervisor.diagnostics() });
       recordAppStartupProgress("electron_ready");
       configureAppIdentity();
       configureWindowsAppUpdater();
