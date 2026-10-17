@@ -8,6 +8,7 @@ pub(super) struct PreparedHttp<'a> {
     pub trace: super::super::request_trace::RequestTrace,
     pub continuation: Option<super::super::continuation::LegacyProjection>,
     pub identity: Option<serde_json::Value>,
+    pub thinking_binding: Option<super::super::anthropic_thinking::Binding>,
 }
 
 impl ModelProvider {
@@ -19,8 +20,11 @@ impl ModelProvider {
         include_usage: bool,
     ) -> Result<PreparedHttp<'a>, ModelRoundError> {
         let (carrier, mode, api) = route;
-        let (mut body, continuation) =
-            serialize::body_with_visual(request, config, carrier).await?;
+        let serialize::PreparedBody {
+            mut body,
+            continuation,
+            thinking_binding,
+        } = serialize::body_with_visual(request, config, carrier).await?;
         if !include_usage && let Some(body) = body.as_object_mut() {
             body.remove("stream_options");
         }
@@ -53,6 +57,7 @@ impl ModelProvider {
             admission: physical_admission,
             trace,
             continuation,
+            thinking_binding,
             identity: provider_cache_identity,
         })
     }
@@ -109,6 +114,7 @@ impl ModelProvider {
             prepared: PreparedResponse {
                 carrier,
                 continuation: prepared.continuation,
+                thinking_binding: prepared.thinking_binding,
                 identity: prepared.identity,
                 prefix: prepared.trace.latest().unwrap_or(serde_json::Value::Null),
             },
