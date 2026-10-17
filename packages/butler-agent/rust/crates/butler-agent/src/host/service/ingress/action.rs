@@ -43,6 +43,13 @@ pub(super) fn actions(
     if cancelling && matches!(outcome.result, TurnOutcomeKind::AlreadyDelivered(_)) {
         return Ok(projected);
     }
+    // BTCC cancelled the turn, or stopped it before admission: the turn never
+    // runs again, so its cancellation is reported whatever the App claim.
+    let confirmed_stop = cancelling
+        && matches!(
+            outcome.result,
+            TurnOutcomeKind::Cancelled { .. } | TurnOutcomeKind::AlreadyCancelled { .. }
+        );
 
     let terminal = if cancelling {
         terminal::cancelled(bind::routed_turn_id(envelope))
@@ -57,10 +64,10 @@ pub(super) fn actions(
         && changed_files.is_empty()
         && plan.is_none()
         && terminal.answer_blocks.is_empty();
-    if no_visible && !has_valid_claim(envelope) {
+    if no_visible && !has_valid_claim(envelope) && !confirmed_stop {
         return Ok(projected);
     }
-    projected.push(terminal::action(
+    let mut action = terminal::action(
         item,
         envelope,
         target,
@@ -71,7 +78,11 @@ pub(super) fn actions(
             plan,
             no_visible,
         },
-    ));
+    );
+    if cancelling {
+        action["metadata"]["outcome"] = control::outcome_name(&outcome.result).into();
+    }
+    projected.push(action);
     Ok(projected)
 }
 
