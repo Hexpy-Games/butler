@@ -29,9 +29,9 @@ fn observe(event: sqlite::CheckpointEvent) {
         crate::gateway::command_timing::CommandTiming::report_duration(
             "app_sqlite_checkpoint",
             if succeeded {
-                "background_passive_finished"
+                "background_index_finished"
             } else {
-                "background_passive_failed"
+                "background_index_failed"
             },
             elapsed,
         );
