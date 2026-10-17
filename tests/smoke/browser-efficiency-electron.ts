@@ -40,7 +40,7 @@ try {
   stub.set([
     () => ({ name: "tool_describe", arguments: { ids: ["browser_open", "browser_observe", "browser_act"].map(n => `native:${n}`) } }),
     () => bridgeBrowser("browser_open", { url: page.url }),
-    r => { tabId = String(latestBrowser(r, "tab").tab); return bridgeBrowser("browser_observe", { tab: tabId }); },
+    r => { tabId = String(latestBrowser(r, "tab").tab); return bridgeBrowser("browser_observe", { tab: tabId, look: "always" }); },
     // A point on the unlabeled icon, with a hidden iframe on the page.
     keep(act(r => { slow(true); const found = /\[[^\]]+\] center=\[(\d+),(\d+)\] expect="button icon"/u.exec(text(r)); assert.ok(found, text(r)); return [{ action: "click", point: [Number(found[1]), Number(found[2])], expect: "button icon" }]; })),
     keep(act(r => [{ action: "click", ref: /button "Search" \[([^\]]+)\]/u.exec(text(r))![1] }])),

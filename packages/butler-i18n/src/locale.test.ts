@@ -57,8 +57,11 @@ test("general briefing cards keep the same everyday tasks in both locales", () =
   ]);
 });
 
+// test-category: pure-logic
 test("Korean catalog uses Korean for generic UI words", () => {
   const ko = getAppCopy("ko-KR");
+  expect(ko.interfaceStatus.work).toBe("작업");
+  expect(ko.interfaceStatus.task).toBe("하위 작업");
   expect(ko.composer.workspaceLocal).toBe("로컬");
   expect(ko.composer.workspaceWorktree).toBe("워크트리");
   expect(ko.titlebar.localWorkspace()).toBe("로컬");
@@ -71,7 +74,7 @@ test("Korean catalog uses Korean for generic UI words", () => {
   expect(ko.settings.modelManagement.apiBaseUrl).toBe("API 기본 URL");
   expect(ko.settings.fields.searchProviderApiKey).toBe("API 키");
   expect(ko.settings.wallpaper.none).toBe("없음");
-  expect(ko.settings.developerLogViewer.labels.raw).toBe("원본");
+  expect(ko.settings.developerLogViewer.labels.raw).toBe("원문");
   expect(ko.conversation.work.webSearchSummary(3)).toBe("웹 검색 3회");
   expect(ko.conversation.work.toolStepsSummary("read_file", 2)).toBe("read_file 2단계");
   expect(ko.conversation.work.webSearchDetail("butler")).toBe("웹 검색: butler");

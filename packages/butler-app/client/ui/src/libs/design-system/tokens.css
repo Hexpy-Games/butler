@@ -707,6 +707,9 @@
      the workspace surface with one quiet edge. */
   --shell-bg: var(--sidebar-bg);
   --shell-card-bg: var(--workspace-bg);
+  /* The Settings detail card keeps the settings surface, so its FormSection
+     cards (--settings-panel-bg) lift off it. Dark keeps the card surface. */
+  --shell-settings-card-bg: var(--settings-bg);
   --shell-card-edge: color-mix(in srgb, var(--text-primary) 8%, transparent);
   /* The browser sheet in frame="cards": its ink tint over the card surface and
      the page card's shadow on it. Light keeps both faint, so the sheet's strip
@@ -1117,6 +1120,7 @@
      the workspace surface with one quiet edge. */
   --shell-bg: var(--sidebar-bg);
   --shell-card-bg: var(--workspace-bg);
+  --shell-settings-card-bg: var(--shell-card-bg);
   --shell-card-edge: color-mix(in srgb, var(--text-primary) 6%, transparent);
   --shell-sheet-tint: 2.5%;
   --shell-page-shadow:
@@ -1283,6 +1287,9 @@
      the workspace surface with one quiet edge. */
   --shell-bg: var(--sidebar-bg);
   --shell-card-bg: var(--workspace-bg);
+  /* The Settings detail card keeps the settings surface, so its FormSection
+     cards (--settings-panel-bg) lift off it. Dark keeps the card surface. */
+  --shell-settings-card-bg: var(--settings-bg);
   --shell-card-edge: color-mix(in srgb, var(--text-primary) 8%, transparent);
   /* The browser sheet in frame="cards": its ink tint over the card surface and
      the page card's shadow on it. Light keeps both faint, so the sheet's strip

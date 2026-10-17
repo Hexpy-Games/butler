@@ -17,6 +17,9 @@ use butler_gateway::gateway::{ClaimedInboundEvent, InboundQueue, QueuedInboundEv
 use butler_turn::btcc::{Btcc, StopRequest, TurnOutcomeKind};
 use butler_turn::workspace::SessionBindingStore;
 
+/// The result summary of a child turn its parent cancelled.
+const CANCELLED_SUMMARY: &str = "Delegated work was cancelled by its parent.";
+
 struct Executed {
     delivered: usize,
     eligible_turn_id: Option<String>,
@@ -194,9 +197,17 @@ async fn failed(
     } else {
         "runtime-interrupted"
     };
-    if let Some(poll) =
-        interrupted::settle_returning_child(item, queue, bindings, delivery, subsessions, status)
-            .await
+    let code = interrupted::child_end_code(item, error);
+    if let Some(poll) = interrupted::settle_closing_child(
+        item,
+        queue,
+        bindings,
+        delivery,
+        subsessions,
+        status,
+        code,
+    )
+    .await
     {
         return poll;
     }
@@ -388,12 +399,7 @@ async fn complete_subsession_child(
         TurnOutcomeKind::Cancelled { .. } | TurnOutcomeKind::AlreadyCancelled { .. }
     ) {
         return subsessions
-            .complete_child(
-                session_id,
-                turn_id,
-                "cancelled",
-                "Delegated work was cancelled by its parent.".into(),
-            )
+            .complete_child(session_id, turn_id, "cancelled", CANCELLED_SUMMARY.into())
             .await
             .map_err(|error| {
                 super::IngressError::new("subsession_result_commit_failed", error.code())

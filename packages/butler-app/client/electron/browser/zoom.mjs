@@ -12,7 +12,8 @@ export async function zoomTab(tab, args) {
   const observation = tab.observation, geometry = observation?.imageGeometry, epoch = tab.epoch;
   if (!observation || observation.epoch !== epoch || args.observation && args.observation !== observation.obs) return { status: "refused", reason: "stale_ref", recovery: "Observe first; zoom works on the newest observation." };
   const region = args.region;
-  if (!geometry || !Array.isArray(region) || region.length !== 4 || !region.every(Number.isFinite)) return { status: "refused", reason: "invalid_region" };
+  if (!geometry || !Array.isArray(region) || region.length !== 4 || !region.every(Number.isFinite)) return { status: "refused", reason: "invalid_region",
+    recovery: 'Observe with look:"always" first, then use region [x,y,width,height] in screenshot coordinates.' };
   const [x, y, width, height] = region;
   if (x < 0 || y < 0 || width < 8 || height < 8 || x + width > geometry.width || y + height > geometry.height) return { status: "refused", reason: "invalid_region", image_geometry: geometry,
     recovery: "region is [x,y,width,height] in observation screenshot coordinates, at least 8×8, inside image_geometry." };

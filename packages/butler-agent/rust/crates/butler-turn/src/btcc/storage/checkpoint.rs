@@ -23,9 +23,9 @@ fn observe(event: sqlite::CheckpointEvent) {
         sqlite::CheckpointEvent::Finished { elapsed, succeeded } => CommandTiming::report_duration(
             "sqlite_checkpoint",
             if succeeded {
-                "background_passive_finished"
+                "background_index_finished"
             } else {
-                "background_passive_failed"
+                "background_index_failed"
             },
             elapsed,
         ),

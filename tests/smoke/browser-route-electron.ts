@@ -116,4 +116,4 @@ try {
  const messages=await app.gateway.api<{ messages:Array<{ role:string;attachments?:Array<{ kind:string }> }> }>("/messages?chat_id=general");
  assert.ok(messages.messages.filter(m=>m.role==="assistant").at(-1)?.attachments?.some(a=>a.kind==="image"));
  writeFileSync(join(evidence, "route-result.json"), JSON.stringify({ summary, tab, actions:steps.length }));
-}finally{await app.stop();}
+}finally{writeFileSync(join(evidence, "tool-results-final.json"), JSON.stringify(stub.results));await app.stop();}
