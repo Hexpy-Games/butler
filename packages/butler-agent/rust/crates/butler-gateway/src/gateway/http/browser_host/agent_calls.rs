@@ -284,9 +284,12 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
     super::hand_back::resume_waits(&state, &handed_back).await?;
     super::super::json(StatusCode::OK, json!({"ok":true}))
 }
-pub(in crate::gateway::http) async fn close_owner(state: &HttpState, session: &str) {
+pub(in crate::gateway::http) async fn close_owner(
+    state: &HttpState,
+    session: &str,
+) -> Result<(), HttpError> {
     state.previews.close(session);
-    state.previews.stop_closed(session).await;
+    let stopped = state.previews.stop_closed(session).await;
     if let Some(headless) = state.headless.clone() {
         headless.close_owner(session).await;
     }
@@ -295,6 +298,7 @@ pub(in crate::gateway::http) async fn close_owner(state: &HttpState, session: &s
     {
         let _ = host.try_send(json!({"id":uuid::Uuid::new_v4().to_string(),"op":"owner.closed","session":session,"args":{},"deadline_ms":5000}));
     }
+    stopped.map_err(|reason| error(500, reason))
 }
 
 pub(super) async fn still(state: Arc<HttpState>, mut value: Value) -> Result<Response, HttpError> {

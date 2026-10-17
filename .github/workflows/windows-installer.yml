@@ -24,8 +24,8 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: windows-installer-${{ github.ref }}
-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/heads/release/') }}
+  group: windows-installer-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/') }}
 jobs:
   changes:
     uses: ./.github/workflows/ci-changes.yml

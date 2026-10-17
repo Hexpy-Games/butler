@@ -12,11 +12,14 @@ use serde_json::json;
 
 use super::super::{IngressDelivery, IngressError, IngressPoll, action, bind};
 use butler_gateway::gateway::{ClaimedInboundEvent, InboundQueue, QueuedInboundEvent};
-use butler_turn::btcc::SubsessionService;
+use butler_turn::btcc::{BtccCode, SubsessionService};
 use butler_turn::workspace::SessionBindingStore;
 
 /// The stable code an interrupted internal child turn reports to its parent.
 const CHILD_INTERRUPTED: &str = "child_turn_interrupted";
+/// The child end code of a turn a stop request cancelled: the child's result
+/// is `cancelled`, not failed.
+pub(super) const CHILD_CANCELLED: &str = "turn_cancelled";
 /// Metadata naming the child failure a retained record still has to save.
 const CHILD_FAILURE_PENDING: &str = "childFailurePending";
 
@@ -47,6 +50,29 @@ fn metadata_flag(record: &QueuedInboundEvent, key: &str) -> bool {
 
 fn plain_turn(record: &QueuedInboundEvent) -> bool {
     bind::Envelope::from_record(record).is_ok_and(|envelope| envelope.control.is_none())
+}
+
+/// How the run of an internal child turn that ended with `error` closes the
+/// child. A run a stop request cancelled ends `cancelled`, the same result the
+/// queued stop records (the first saved result is kept), so whichever of the
+/// two settles first answers the parent truthfully. Any other error, and a
+/// failed stop itself, ends the child failed as interrupted.
+pub(super) fn child_end_code(item: &ClaimedInboundEvent, error: &IngressError) -> &'static str {
+    let stopped = error.code == "inbound_turn_interrupted"
+        && error.message == BtccCode::TurnCancelled.as_str()
+        && bind::Envelope::from_record(&item.record).is_ok_and(|envelope| {
+            envelope
+                .control
+                .as_ref()
+                .and_then(|control| control.get("kind"))
+                .and_then(serde_json::Value::as_str)
+                != Some("cancel_turn")
+        });
+    if stopped {
+        CHILD_CANCELLED
+    } else {
+        CHILD_INTERRUPTED
+    }
 }
 
 /// What a failed interruption report means for the queue record.
@@ -84,12 +110,35 @@ pub(super) async fn settle_returning_child(
     subsessions: &SubsessionService,
     status: &str,
 ) -> Option<IngressPoll> {
+    settle_closing_child(
+        item,
+        queue,
+        bindings,
+        delivery,
+        subsessions,
+        status,
+        CHILD_INTERRUPTED,
+    )
+    .await
+}
+
+/// Settles an interrupted turn after ending an internal child turn with
+/// `code` (or the end a retained record still has to save).
+pub(super) async fn settle_closing_child(
+    item: &ClaimedInboundEvent,
+    queue: &InboundQueue,
+    bindings: &SessionBindingStore,
+    delivery: &dyn IngressDelivery,
+    subsessions: &SubsessionService,
+    status: &str,
+    code: &str,
+) -> Option<IngressPoll> {
     let code = item
         .record
         .metadata
         .get(CHILD_FAILURE_PENDING)
         .and_then(serde_json::Value::as_str)
-        .unwrap_or(CHILD_INTERRUPTED)
+        .unwrap_or(code)
         .to_owned();
     if super::rejected::close_child(item, bindings, subsessions, &code).await
         == super::rejected::ChildClose::Pending
@@ -129,7 +178,7 @@ pub(super) async fn settle(
     status: &str,
 ) -> Option<IngressPoll> {
     // Child sessions publish through BTCC and have no App turn delivery
-    // target; their parent receives the failure (settle_returning_child).
+    // target; their parent receives the result (settle_closing_child).
     if let Some(poll) = settle_child(item, queue, bindings).await {
         return Some(poll);
     }

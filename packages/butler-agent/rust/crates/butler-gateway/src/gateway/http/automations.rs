@@ -21,11 +21,8 @@ pub(super) async fn route(
     let method = request.method().clone();
     let path = uri.path();
     #[cfg(feature = "e2e-fixtures")]
-    if scheduler_counter_route(&method, path) {
-        return json(
-            StatusCode::OK,
-            crate::gateway::application::next_due_read_count(),
-        );
+    if let Some(count) = scheduler_counter_route(&method, path) {
+        return json(StatusCode::OK, count);
     }
     if method == Method::GET && path == "/automations" {
         let (target_session_id, include_deleted) = list_query(uri);
@@ -73,10 +70,19 @@ pub(super) async fn route(
 }
 
 #[cfg(feature = "e2e-fixtures")]
-fn scheduler_counter_route(method: &Method, path: &str) -> bool {
-    method == Method::GET
-        && path == "/automations/_test/scheduler-next-due-reads"
-        && std::env::var_os("BUTLER_E2E_SCHEDULER_INSTRUMENTATION").is_some()
+fn scheduler_counter_route(method: &Method, path: &str) -> Option<usize> {
+    if method != Method::GET || std::env::var_os("BUTLER_E2E_SCHEDULER_INSTRUMENTATION").is_none() {
+        return None;
+    }
+    match path {
+        "/automations/_test/scheduler-next-due-reads" => {
+            Some(crate::gateway::application::next_due_read_count())
+        }
+        "/automations/_test/scheduler-dispatch-attempts" => {
+            Some(crate::gateway::application::dispatch_attempt_count())
+        }
+        _ => None,
+    }
 }
 
 async fn route_action(
