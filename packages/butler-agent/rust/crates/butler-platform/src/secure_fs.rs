@@ -16,7 +16,9 @@ mod fault;
 mod replacement;
 mod timing;
 pub use fault::{abort_point, checkpoint as fault_checkpoint, hold_point, write as fault_write};
-pub use replacement::{replace_private, replace_private_reconstructible};
+pub use replacement::{
+    Committed, StagedFile, replace_private, replace_private_reconstructible, stage_private,
+};
 
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
@@ -300,6 +302,17 @@ pub(crate) fn unique_temporary(path: &Path) -> PathBuf {
         ".{name}.{}.{sequence}.{nanos}.tmp",
         std::process::id()
     ))
+}
+
+/// The process that created the staging file `name` of a replacement
+/// ([`stage_private`]), if `name` is one. Only that process can still commit
+/// it; once it is gone the file is abandoned.
+pub fn staging_owner(name: &str) -> Option<u32> {
+    let stem = name.strip_prefix('.')?.strip_suffix(".tmp")?;
+    let mut parts = stem.rsplitn(4, '.');
+    let (_nanos, _sequence) = (parts.next()?, parts.next()?);
+    let pid = parts.next()?.parse().ok()?;
+    parts.next().filter(|name| !name.is_empty()).map(|_| pid)
 }
 
 /// Why two directories were not exchanged.

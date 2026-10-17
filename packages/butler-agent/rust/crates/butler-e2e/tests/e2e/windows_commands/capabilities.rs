@@ -12,6 +12,12 @@ mod delegation;
 mod open_reader;
 #[path = "capabilities/operation.rs"]
 mod operation;
+#[path = "capabilities/queue_crash.rs"]
+#[cfg(debug_assertions)]
+mod queue_crash;
+#[path = "capabilities/queue_lock.rs"]
+#[cfg(debug_assertions)]
+mod queue_lock;
 #[path = "capabilities/refusal_latency.rs"]
 mod refusal_latency;
 #[path = "capabilities/transport_control.rs"]

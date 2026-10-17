@@ -3,13 +3,18 @@
 mod claim;
 mod deferred;
 pub(super) use deferred::next_delay;
+mod enqueue;
 mod identity;
 mod io;
 mod settlement;
 
-pub(super) use claim::{claim, recover_stale};
-pub(super) use identity::{enqueue_idempotent, find_idempotent};
-pub(super) use settlement::{defer, park, recover_runtime_interruptions, settle};
+pub(super) use claim::{recover_stale, select as select_claims, take as take_claims};
+pub(super) use enqueue::{Prepared, commit as commit_enqueue, prepare as prepare_enqueue};
+pub(super) use identity::find_idempotent;
+pub(super) use settlement::{
+    Settlement, defer, park, publish as publish_settlement, recover_runtime_interruptions,
+    release as release_claim, settle,
+};
 
 use std::path::{Path, PathBuf};
 

@@ -8,29 +8,25 @@ use serde::Deserialize;
 use serde_json::{Map, Value, value::RawValue};
 use sha2::{Digest, Sha256};
 
-use super::{
-    STATES,
-    io::{publish, read},
-    record_path,
-};
+use super::{STATES, io::read, record_path};
 use crate::gateway::InboundQueueCode;
 use crate::gateway::inbound_queue::{InboundQueueError, QueueResult, QueuedInboundEvent};
 use butler_core::json::JsonDocument;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct EnvelopeIdentity {
-    event_id: String,
-    routing_hints: Option<RoutingHints>,
+pub(super) struct EnvelopeIdentity {
+    pub(super) event_id: String,
+    pub(super) routing_hints: Option<RoutingHints>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RoutingHints {
-    app_queue_claim_id: Option<String>,
+pub(super) struct RoutingHints {
+    pub(super) app_queue_claim_id: Option<String>,
 }
 
-fn identity(envelope: &JsonDocument) -> QueueResult<EnvelopeIdentity> {
+pub(super) fn identity(envelope: &JsonDocument) -> QueueResult<EnvelopeIdentity> {
     let id: EnvelopeIdentity = envelope.read().map_err(|error| {
         InboundQueueError::new(InboundQueueCode::InboundEnvelopeInvalid, error.to_string())
             .with_source(error)
@@ -67,16 +63,16 @@ fn safe_id(event_id: &str) -> String {
     }
 }
 
-fn canonical_id(event_id: &str) -> String {
+pub(super) fn canonical_id(event_id: &str) -> String {
     format!("idempotent-{}", safe_id(event_id))
 }
 
-fn reconciliation_id(event_id: &str, claim_id: &str) -> String {
+pub(super) fn reconciliation_id(event_id: &str, claim_id: &str) -> String {
     let digest = Sha256::digest(format!("{event_id}\0{claim_id}").as_bytes());
     format!("idempotent-reconcile-{digest:x}")
 }
 
-fn find_queue_id(
+pub(super) fn find_queue_id(
     root: &Path,
     queue_id: &str,
 ) -> QueueResult<Option<(QueuedInboundEvent, &'static str)>> {
@@ -111,63 +107,7 @@ pub(in crate::gateway::inbound_queue) fn find_idempotent(
     Ok(Some(canonical))
 }
 
-pub(in crate::gateway::inbound_queue) fn enqueue_idempotent(
-    root: &Path,
-    envelope: JsonDocument,
-    metadata: Map<String, Value>,
-    durable: bool,
-) -> QueueResult<QueuedInboundEvent> {
-    let id = identity(&envelope)?;
-    let claim = id.routing_hints.and_then(|hints| hints.app_queue_claim_id);
-    let queue_id = canonical_id(&id.event_id);
-    if let Some((mut existing, state)) = find_queue_id(root, &queue_id)? {
-        let old_claim = identity(&existing.envelope)?
-            .routing_hints
-            .and_then(|hints| hints.app_queue_claim_id);
-        if let Some(next_claim) = claim
-            .as_deref()
-            .filter(|claim| Some(*claim) != old_claim.as_deref())
-        {
-            if state == "pending" {
-                existing.envelope =
-                    patch_envelope(&existing.envelope, None, Some(next_claim), None)?;
-                publish(&record_path(root, "pending", &queue_id), &existing, durable)?;
-                return Ok(existing);
-            }
-            let new_id = reconciliation_id(&id.event_id, next_claim);
-            if let Some((record, _)) = find_queue_id(root, &new_id)? {
-                return Ok(record);
-            }
-            let replacement_event = format!("{}:claim:{}", id.event_id, next_claim);
-            let patched = patch_envelope(
-                &envelope,
-                Some(&replacement_event),
-                Some(next_claim),
-                Some(&id.event_id),
-            )?;
-            let mut record = fresh(new_id, patched, metadata);
-            record
-                .metadata
-                .insert("reconciliationOfEventId".into(), id.event_id.into());
-            publish(
-                &record_path(root, "pending", &record.queue_id),
-                &record,
-                durable,
-            )?;
-            return Ok(record);
-        }
-        return Ok(existing);
-    }
-    let record = fresh(queue_id, envelope, metadata);
-    publish(
-        &record_path(root, "pending", &record.queue_id),
-        &record,
-        durable,
-    )?;
-    Ok(record)
-}
-
-fn fresh(
+pub(super) fn fresh(
     queue_id: String,
     envelope: JsonDocument,
     metadata: Map<String, Value>,
@@ -185,7 +125,7 @@ fn fresh(
     }
 }
 
-fn patch_envelope(
+pub(super) fn patch_envelope(
     envelope: &JsonDocument,
     event_id: Option<&str>,
     claim: Option<&str>,
