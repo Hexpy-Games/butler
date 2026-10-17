@@ -68,6 +68,7 @@ mod hedge_v2_stub;
 mod hooks;
 mod idle_resources;
 mod image_errors;
+mod image_limits;
 mod image_only;
 mod install_app;
 mod install_hardening;

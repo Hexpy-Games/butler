@@ -13,4 +13,3 @@ src/models/provider/prompt/serialize/compatible.rs	chat	95
 src/models/provider/serialize/stable.rs	identity	140
 src/models/request_admission.rs	PreparedRequestAdmission::admit_with_snapshot	121
 src/models/transport.rs	execute	119
-src/models/visual_admission.rs	admit_visual_image_request	104
