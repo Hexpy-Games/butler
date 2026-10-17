@@ -23,6 +23,7 @@ pub type TranscriptAppendListener = Arc<dyn Fn(&str) + Send + Sync>;
 struct Job {
     session_id: String,
     events: Vec<event::TranscriptEvent>,
+    points: &'static file::Points,
     result: oneshot::Sender<TranscriptResult<()>>,
 }
 struct State {
@@ -45,7 +46,8 @@ impl TranscriptWriter {
             .name("butler-transcript-append".into())
             .spawn(move || {
                 while let Some(job) = receiver.blocking_recv() {
-                    let outcome = file::append(&data_root, &job.session_id, &job.events);
+                    let outcome =
+                        file::append(&data_root, &job.session_id, &job.events, job.points);
                     if let Ok(file) = &outcome {
                         let listener = written.read().clone();
                         if let Some(listener) = listener {
@@ -71,15 +73,19 @@ impl TranscriptWriter {
         *self.listener.write() = Some(listener);
     }
 
-    pub async fn append_outbound(
+    /// Appends a delivered action after the progress records that must
+    /// precede it, in order, as one write with one sync. The caller
+    /// acknowledges the delivery and that progress only after this returns.
+    pub async fn append_delivery(
         &self,
         session_id: String,
-        action: Value,
-        delivery: Value,
-        metadata: Value,
+        records: Vec<(Value, Value, Value)>,
     ) -> TranscriptResult<()> {
-        let events = event::outbound(self.clock.as_ref(), &session_id, action, delivery, metadata)?;
-        self.submit(session_id, events).await
+        let events = self.outbound_events(&session_id, records)?;
+        if events.is_empty() {
+            return Ok(());
+        }
+        self.submit(session_id, events, &file::DELIVERY).await
     }
 
     /// Flush a bounded session page together, retaining each outbound/delivery
@@ -89,20 +95,29 @@ impl TranscriptWriter {
         session_id: String,
         deliveries: Vec<(Value, Value, Value)>,
     ) -> TranscriptResult<()> {
-        let mut events = Vec::new();
-        for (action, delivery, metadata) in deliveries {
+        let events = self.outbound_events(&session_id, deliveries)?;
+        if events.is_empty() {
+            return Ok(());
+        }
+        self.submit(session_id, events, &file::PROGRESS).await
+    }
+
+    fn outbound_events(
+        &self,
+        session_id: &str,
+        records: Vec<(Value, Value, Value)>,
+    ) -> TranscriptResult<Vec<event::TranscriptEvent>> {
+        let mut events = Vec::with_capacity(records.len() * 2);
+        for (action, delivery, metadata) in records {
             events.extend(event::outbound(
                 self.clock.as_ref(),
-                &session_id,
+                session_id,
                 action,
                 delivery,
                 metadata,
             )?);
         }
-        if events.is_empty() {
-            return Ok(());
-        }
-        self.submit(session_id, events).await
+        Ok(events)
     }
 
     pub async fn append_lifecycle(
@@ -121,13 +136,14 @@ impl TranscriptWriter {
             reason.as_deref(),
             metadata,
         )?;
-        self.submit(session_id, events).await
+        self.submit(session_id, events, &file::LIFECYCLE).await
     }
 
     async fn submit(
         &self,
         session_id: String,
         events: Vec<event::TranscriptEvent>,
+        points: &'static file::Points,
     ) -> TranscriptResult<()> {
         let (reply, result) = oneshot::channel();
         let state = self.state.lock().await;
@@ -138,6 +154,7 @@ impl TranscriptWriter {
             .send(Job {
                 session_id,
                 events,
+                points,
                 result: reply,
             })
             .await

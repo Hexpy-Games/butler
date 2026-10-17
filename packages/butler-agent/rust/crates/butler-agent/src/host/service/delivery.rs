@@ -2,7 +2,8 @@
 //!
 //! Every action enters the transcript after the progress committed before it:
 //! App projection drops progress that arrives once its Turn has settled, and a
-//! Turn commits its events before its outcome is delivered.
+//! Turn commits its events before its outcome is delivered. The action and its
+//! session's pending progress share one write and one sync.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -12,19 +13,15 @@ use serde_json::{Value, json};
 
 use crate::host::ProgressPublisher;
 use crate::host::service::ingress::{IngressDelivery, IngressError};
-use butler_gateway::gateway::TranscriptWriter;
+use crate::host::service::progress_publisher::DeliveryFailure;
 
 pub(in crate::host) struct AppDelivery {
-    writer: Arc<TranscriptWriter>,
     progress: Arc<ProgressPublisher>,
 }
 
 impl AppDelivery {
-    pub(in crate::host) fn new(
-        writer: Arc<TranscriptWriter>,
-        progress: Arc<ProgressPublisher>,
-    ) -> Self {
-        Self { writer, progress }
+    pub(in crate::host) fn new(progress: Arc<ProgressPublisher>) -> Self {
+        Self { progress }
     }
 }
 
@@ -34,7 +31,6 @@ impl IngressDelivery for AppDelivery {
         session_id: String,
         action: Value,
     ) -> Pin<Box<dyn Future<Output = Result<bool, IngressError>> + Send>> {
-        let writer = self.writer.clone();
         let progress = self.progress.clone();
         Box::pin(async move {
             let timing = crate::host::guided::command::timing::CommandTiming::new("app_delivery");
@@ -53,28 +49,25 @@ impl IngressDelivery for AppDelivery {
                         "Action identity unavailable",
                     )
                 })?;
-            // The periodic pass may not have reached the Turn's last events
-            // yet; publish them first so none of them trails this action.
-            progress.reconcile().await.map_err(|error| {
-                IngressError::new(
-                    "native_progress_publication_failed",
-                    "Committed progress could not be published",
-                )
-                .with_source(error)
-            })?;
-            timing.mark("progress_reconciled");
             // Source App adapter acknowledges locally. Projection consumes the
             // durable outbound/delivery pair; no HTTP send is hidden here.
             let delivery = json!({"ok": true, "transportMessageId": format!("app:{action_id}")});
-            writer
-                .append_outbound(
-                    session_id,
-                    action,
-                    delivery,
-                    json!({"source":"transport/delivery-guard.ts","attempts":1}),
-                )
+            let metadata = json!({"source":"transport/delivery-guard.ts","attempts":1});
+            // The periodic pass may not have reached the Turn's last events
+            // yet; they precede this action in the same durable write.
+            progress
+                .publish_with_action(&session_id, (action, delivery, metadata))
                 .await
-                .map_err(|e| IngressError::new(e.code(), e.message()))?;
+                .map_err(|failure| match failure {
+                    DeliveryFailure::Progress(error) => IngressError::new(
+                        "native_progress_publication_failed",
+                        "Committed progress could not be published",
+                    )
+                    .with_source(error),
+                    DeliveryFailure::Transcript { code, message } => {
+                        IngressError::new(code, message)
+                    }
+                })?;
             timing.mark("transcript_committed");
             Ok(true)
         })

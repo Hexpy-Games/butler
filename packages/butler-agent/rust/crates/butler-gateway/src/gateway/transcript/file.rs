@@ -8,10 +8,30 @@ use super::event::TranscriptEvent;
 use super::{TranscriptError, TranscriptResult};
 use crate::gateway::TranscriptCode;
 
+/// Named stub-only E2E interruption points around one append's write and sync.
+pub(super) struct Points {
+    written: &'static str,
+    synced: &'static str,
+}
+
+pub(super) const PROGRESS: Points = Points {
+    written: "transcript_progress_written",
+    synced: "transcript_progress_synced",
+};
+pub(super) const DELIVERY: Points = Points {
+    written: "transcript_delivery_written",
+    synced: "transcript_delivery_synced",
+};
+pub(super) const LIFECYCLE: Points = Points {
+    written: "transcript_lifecycle_written",
+    synced: "transcript_lifecycle_synced",
+};
+
 pub(super) fn append(
     root: &Path,
     session_id: &str,
     events: &[TranscriptEvent],
+    points: &Points,
 ) -> TranscriptResult<String> {
     let timing = crate::gateway::command_timing::CommandTiming::new("transcript_append");
     let directory = root.join("transcripts");
@@ -51,6 +71,7 @@ pub(super) fn append(
     timing.mark("permissions_checked");
     file.write_all(&bytes).map_err(io_error)?;
     timing.mark("written");
+    interrupt(points.written)?;
     file.sync_data().map_err(io_error)?;
     timing.mark("synced");
     if !existed {
@@ -61,7 +82,14 @@ pub(super) fn append(
     if events.len() > 1 {
         butler_platform::secure_fs::fault_checkpoint("transcript_pair").map_err(io_error)?;
     }
+    interrupt(points.synced)?;
     Ok(name)
+}
+
+fn interrupt(point: &str) -> TranscriptResult<()> {
+    butler_platform::secure_fs::hold_point(point, || false).map_err(io_error)?;
+    butler_platform::secure_fs::abort_point(point);
+    Ok(())
 }
 
 fn io_error(error: std::io::Error) -> TranscriptError {

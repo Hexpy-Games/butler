@@ -49,7 +49,7 @@ pub(super) async fn prepare(
     require_model_ref(&binding)?;
     let progress = Arc::new(ProgressPublisher::new(
         runtime.progress.clone(),
-        writer.clone(),
+        writer,
         runtime.subsessions.clone(),
     ));
     let queue = runtime.inbound_queue.clone();
@@ -69,7 +69,7 @@ pub(super) async fn prepare(
         runtime.bindings.clone(),
         config.data_root.clone(),
         config.data_root.clone(),
-        Arc::new(AppDelivery::new(writer, progress.clone())),
+        Arc::new(AppDelivery::new(progress.clone())),
         runtime.subsessions.clone(),
         restart_handoff,
     );

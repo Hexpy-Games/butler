@@ -153,6 +153,7 @@ mod token_cache;
 mod token_metrics;
 mod tools;
 mod tools_effects;
+mod transcript_sync;
 mod turn;
 mod turn_continuation;
 mod turn_faults;
