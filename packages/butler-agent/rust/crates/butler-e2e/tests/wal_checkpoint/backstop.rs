@@ -39,7 +39,7 @@ fn stalled_worker_uses_inline_ceiling_and_recovers_after_reader_release()
     let (arrived, paused) = mpsc::sync_channel(1);
     let (resume, release) = mpsc::sync_channel(1);
     *PAUSE.lock().unwrap() = Some((arrived, release));
-    let owner = sqlite::CheckpointOwner::start(&store.db, Some(pause_worker))
+    let owner = sqlite::CheckpointOwner::start(&store.db, "test", Some(pause_worker))
         .unwrap()
         .unwrap();
     // Release maintenance before joining it even if an assertion panics.
@@ -89,5 +89,41 @@ fn stalled_worker_uses_inline_ceiling_and_recovers_after_reader_release()
     );
     release_worker.send(()).unwrap();
     owner.close().unwrap();
+    Ok(())
+}
+
+// test-category: race
+#[test]
+fn reader_pinned_partial_pass_waits_for_a_threshold_of_new_frames()
+-> Result<(), butler_e2e::e2e::HarnessError> {
+    butler_e2e::gate!();
+    let _serial = SERIAL.lock().unwrap();
+    PASSES.store(0, SeqCst);
+    let store = Store::new();
+    let reader = sqlite::open(&store.path).unwrap();
+    reader.execute_batch("BEGIN; SELECT * FROM t").unwrap();
+    let (arrived, backfilled) = mpsc::sync_channel(1);
+    let (resume, paused) = mpsc::sync_channel(1);
+    *PAUSE.lock().unwrap() = Some((arrived, paused));
+    let owner = sqlite::CheckpointOwner::start(&store.db, "test", Some(pause_worker))
+        .unwrap()
+        .unwrap();
+    let release = resume;
+    store.insert_many(1100);
+    backfilled.recv().unwrap();
+    let (log, done) = frames(&store.path);
+    assert!(done < log);
+    for _ in 0..100 {
+        store.insert();
+    }
+    let (tail, _) = frames(&store.path);
+    assert!(tail > log && tail - log < 1000);
+    release.send(()).unwrap();
+    owner.close().unwrap();
+    assert_eq!(PASSES.load(SeqCst), 1, "partial pass retried small commits");
+    assert_eq!(frames(&store.path), (tail, done));
+    reader.execute_batch("ROLLBACK").unwrap();
+    store.counts(1200);
+    eprintln!("pinned subthreshold WAL: before={log} tail={tail} passes=1");
     Ok(())
 }

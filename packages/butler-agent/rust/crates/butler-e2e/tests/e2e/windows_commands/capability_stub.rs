@@ -32,10 +32,12 @@ pub(super) struct Script {
     pub diagnostics: Mutex<Vec<[u128; 4]>>,
     pub diagnostic_log_lines: AtomicUsize,
     selected: Mutex<Instant>,
+    pub marks: Mutex<Vec<(&'static str, u128)>>,
 }
 
 impl Script {
     pub(super) fn mark(&self, event: &'static str) {
+        self.marks.lock().unwrap().push((event, utc_us()));
         let elapsed = self
             .sent
             .lock()
@@ -55,6 +57,7 @@ impl Script {
         *self.result.lock().unwrap() = None;
         *self.disposition.lock().unwrap() = None;
         self.diagnostics.lock().unwrap().clear();
+        self.marks.lock().unwrap().clear();
         *self.selected.lock().unwrap() = Instant::now();
     }
 }
@@ -76,6 +79,7 @@ pub(super) async fn start(
         diagnostics: Mutex::new(Vec::new()),
         diagnostic_log_lines: AtomicUsize::new(0),
         selected: Mutex::new(Instant::now()),
+        marks: Mutex::new(Vec::new()),
     });
     let router = Router::new()
         .route("/codex/responses", post(reply))
@@ -145,12 +149,7 @@ async fn reply(
     if step == 4 {
         let output = outputs.last().expect("tool result").clone();
         let elapsed = script.sent.lock().unwrap().unwrap().elapsed();
-        eprintln!(
-            "command_provider_timing event=result_delivered refused={} elapsed_us={} utc_us={}",
-            case.refused,
-            elapsed.as_micros(),
-            utc_us()
-        );
+        script.mark("result_delivered");
         *script.result.lock().unwrap() = Some((output, elapsed));
     }
     if step == 5 {
@@ -172,11 +171,7 @@ async fn reply(
         ),
         3 => {
             *script.sent.lock().unwrap() = Some(Instant::now());
-            eprintln!(
-                "command_provider_timing event=sent refused={} utc_us={}",
-                case.refused,
-                utc_us()
-            );
+            script.mark("sent");
             call("operation", case.tool, &case.args)
         }
         4 if !delegated && !work => message("파일 확인 완료"),

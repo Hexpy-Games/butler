@@ -11,10 +11,17 @@ struct ActiveTiming {
 }
 
 impl CommandTiming {
+    pub(crate) fn enabled() -> bool {
+        static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *ENABLED.get_or_init(|| {
+            std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+                == Some(std::ffi::OsStr::new("1"))
+        })
+    }
+
     pub(crate) fn new(phase: &'static str) -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(0);
-        let enabled = std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
-            == Some(std::ffi::OsStr::new("1"));
+        let enabled = Self::enabled();
         let timing = Self(enabled.then(|| {
             Box::new(ActiveTiming {
                 phase,
