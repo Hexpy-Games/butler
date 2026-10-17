@@ -51,6 +51,7 @@ export function installAppLinks(win, browser) {
   const receive = (event, op, url, point) => {
     if (event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame || !webUrl(url)) return;
     if (op === "open") void openLink(browser, url).catch(() => {});
+    if (op === "external") void openExternalLink(url)?.catch(() => {});
     if (op === "menu") void menu(url, point, true);
   };
   ipcMain.on("butler-app:link", receive);
