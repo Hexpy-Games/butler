@@ -97,12 +97,9 @@ impl Progress {
         self.frames = frames;
     }
     fn due(&self, threshold: i32) -> bool {
-        // Fully backfilled passes drain racing commits immediately. Only partial
-        // passes wait for another threshold, avoiding retries on pinned readers.
+        // Commits after a completed pass wait for new frames even when a
+        // current reader prevents SQLite from restarting a fully backfilled WAL.
         self.inline_pending
-            || (self.attempted > 0
-                && self.backfilled == self.attempted
-                && self.frames > self.attempted)
             || self
                 .frames
                 .saturating_sub(self.backfilled.max(self.attempted))
@@ -273,13 +270,12 @@ fn run(
     maintenance: &Maintenance,
 ) -> CheckpointResult<()> {
     let Maintenance {
-        observer,
         checkpoint,
         progress,
         pages,
-        label,
+        ..
     } = maintenance;
-    let (observer, pages, label) = (*observer, *pages, *label);
+    let pages = *pages;
     let opened = open(path, synchronous, cache_size);
     let connection = match opened {
         Ok(connection) => connection,
@@ -291,14 +287,13 @@ fn run(
     let _ = ready.send(Ok(()));
     let mut pending = false;
     while pending || requests.recv().is_ok() {
-        pending = false;
         let started = Instant::now();
         let guard = checkpoint.lock().unwrap_or_else(PoisonError::into_inner);
         let snapshot = {
             let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
             // A coalesced wake may be left behind a pass that already covered
             // its frames. Do not run another SQL checkpoint for that request.
-            if !progress.due(pages) {
+            if !pending && !progress.due(pages) {
                 continue;
             }
             progress.inline_pending = false;
@@ -315,31 +310,52 @@ fn run(
         if let Ok((_, log, backfilled)) = result.as_ref() {
             let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
             progress.completed(snapshot, *log, *backfilled);
-            pending = progress.due(pages);
         }
         drop(guard);
-        let elapsed = started.elapsed();
-        let (busy, log, backfilled) = result.as_ref().copied().unwrap_or((1, -1, -1));
-        checkpointed(
-            observer,
-            label,
-            false,
-            (log, backfilled),
-            elapsed,
-            busy == 0,
+        finish_pass(
+            &connection,
+            maintenance,
+            started,
+            result.as_ref().copied().ok(),
         );
-        // Preserve mapped WAL-index writeback on macOS, outside the SQL lane.
-        let synced = sqlite::sync_wal_index(&connection);
-        if let Some(observer) = observer {
-            observer(CheckpointEvent::Finished {
-                elapsed: started.elapsed(),
-                succeeded: result.is_ok() && synced.is_ok(),
-            });
-        }
+        let progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
+        // Only commits observed before this pass finished get an immediate
+        // drain. Later commits must accumulate a new threshold in due().
+        pending = result.as_ref().is_ok_and(|(_, _, backfilled)| {
+            (progress.generation == snapshot.0
+                && *backfilled >= snapshot.1
+                && progress.frames > *backfilled)
+                || progress.due(pages)
+        });
     }
     connection
         .close()
         .map_err(|(_, error)| CheckpointError::from(error))
+}
+
+fn finish_pass(
+    connection: &sqlite::Connection,
+    maintenance: &Maintenance,
+    started: Instant,
+    result: Option<(i32, i32, i32)>,
+) {
+    let (busy, log, backfilled) = result.unwrap_or((1, -1, -1));
+    checkpointed(
+        maintenance.observer,
+        maintenance.label,
+        false,
+        (log, backfilled),
+        started.elapsed(),
+        busy == 0,
+    );
+    // Preserve mapped WAL-index writeback on macOS, outside the SQL lane.
+    let synced = sqlite::sync_wal_index(connection);
+    if let Some(observer) = maintenance.observer {
+        observer(CheckpointEvent::Finished {
+            elapsed: started.elapsed(),
+            succeeded: result.is_some() && synced.is_ok(),
+        });
+    }
 }
 
 fn open(

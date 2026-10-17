@@ -15,6 +15,9 @@ use std::{
     time::Duration,
 };
 
+#[path = "wal_checkpoint/current_reader.rs"]
+mod current_reader;
+
 #[path = "wal_checkpoint/backstop.rs"]
 mod backstop;
 
