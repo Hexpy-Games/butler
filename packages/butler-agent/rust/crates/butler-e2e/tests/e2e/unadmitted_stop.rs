@@ -14,7 +14,8 @@ use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::gateway::turn_state;
-use butler_e2e::e2e::scenario::{Scenario, Setup, turn_timeout};
+use butler_e2e::e2e::provider::Pacing;
+use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id, turn_timeout};
 use butler_platform::sqlite;
 use serde_json::{Value, json};
 
@@ -67,6 +68,14 @@ fn stop_rows(s: &Scenario, turn: &str) -> (String, Option<String>, String, bool)
 /// waits `queued` again (the shape a dispatch-lease recovery leaves) and that
 /// BTCC never received, then stops it while dispatch readiness is held.
 async fn stop_unadmitted_turn(s: &mut Scenario) -> Result<String, HarnessError> {
+    // Queue behind a running turn so its completion wakes dispatch, and
+    // establishes the binding needed for BTCC to confirm the later Stop.
+    s.provider()?.set_pacing(Pacing {
+        scale: 1.0,
+        cap_ms: 300,
+        min_ms: 200,
+    });
+    let first = accepted_turn_id(&s.gw.say("general", NUMBERS).await?)?;
     let queued =
         s.gw.post(
             "/session-queue",
@@ -74,6 +83,11 @@ async fn stop_unadmitted_turn(s: &mut Scenario) -> Result<String, HarnessError> 
         )
         .await?;
     assert_eq!(queued.status, 202, "{}", queued.text);
+    let delivered = s
+        .gw
+        .wait_terminal("general", &first, Duration::from_secs(turn_timeout()))
+        .await?;
+    assert_eq!(turn_state(&delivered), "delivered", "{delivered}");
     wait_file(s, "e2e-queue-admission-held").await;
     let turns = s.gw.turns("general").await?;
     let turn = turns
@@ -207,6 +221,8 @@ async fn assert_schedule_delivers(s: &Scenario, id: &str) -> Result<(), HarnessE
 async fn q_02_stop_of_an_unadmitted_turn_settles() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("Q-02-UNADMITTED-STOP")?
+        .cassette("TURN-01")
+        .replay_only()
         .env("BUTLER_E2E_TIER", "stub")
         .env("BUTLER_E2E_HOLD_QUEUE_MESSAGE", HELD)
         .start()
@@ -214,7 +230,8 @@ async fn q_02_stop_of_an_unadmitted_turn_settles() -> Result<(), HarnessError> {
     let turn = stop_unadmitted_turn(&mut s).await?;
     let settled =
         s.gw.wait_terminal("general", &turn, Duration::from_secs(20))
-            .await?;
+            .await
+            .unwrap_or_else(|error| panic!("{error}\n{}", s.agent.logs()));
     assert_eq!(turn_state(&settled), "cancelled", "{settled}");
     assert_settled(&s, &turn, true);
     assert_never_admitted(&s, &turn);
@@ -243,7 +260,8 @@ async fn q_02_restart_settles_a_left_stop_and_runs_the_schedule() -> Result<(), 
         .await?;
     let turn = stop_unadmitted_turn(&mut s).await?;
     s.gw.wait_terminal("general", &turn, Duration::from_secs(20))
-        .await?;
+        .await
+        .unwrap_or_else(|error| panic!("{error}\n{}", s.agent.logs()));
     let schedule = create_schedule(&s).await?;
     s.agent.terminate().await?;
     // The App state an earlier version left: BTCC answered, the App dropped it.
@@ -266,7 +284,7 @@ async fn q_02_restart_settles_a_left_stop_and_runs_the_schedule() -> Result<(), 
     assert_schedule_delivers(&s, &schedule).await?;
     // The schedule's input resumed the queue the Stop paused.
     assert_settled(&s, &turn, false);
-    assert_eq!(s.provider()?.served(), 1);
+    assert_eq!(s.provider()?.served(), 2);
     s.finish().await
 }
 
