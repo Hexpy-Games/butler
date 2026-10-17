@@ -10,6 +10,7 @@ This file holds the standing repository and agent rules. Each feedback-log entry
 - **E2E auth:** stub/replay only; authorized live cassette recording uses only `openai/gpt-6-luna` with the owner's `~/.butler-e2e-auth` profile.
 - **UI copy:** a few words, disabled state with tooltip, or brief toast; no banners. Korean: “예약 작업” (never “자동화”), “버틀러”. English: “schedule”.
 - **Security:** never print tokens or widen access defaults. Approval cards show the exact action.
+- **Issue links:** a PR body names each issue with a closing keyword (`Fixes #N`), or `Part of #N` / `Related #N` when it stays open; never a bare `#N` or `Refs #N`. The `issue-links` PR check reports violations, and merging into `release/**` also closes the `Fixes` issues.
 - **Native dependencies:** static ORT recipe: [Rust README](packages/butler-agent/rust/README.md) and #293.
 - **Windows owner runners:** `butler-win` uses only the existing toolchain and job files in the workspace or `RUNNER_TEMP`; never run installer/setup actions, machine/user package installs, or registry, startup, service or PATH writes. Missing required tools must fail clearly, without installation.
 - **Owner-machine procedure:** touch the live install, owner data, or port 18765 only when explicitly requested and the owner is present. Back up DBs first; stop gracefully with `butler-agent stop --data ~/.butler`. Never `pkill`/`killall`.
