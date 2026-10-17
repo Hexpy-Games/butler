@@ -5,6 +5,8 @@ use butler_platform::command_sandbox::{
 };
 use std::{collections::HashMap, time::Instant};
 
+const POWERSHELL_STARTUP_P50_MS: u64 = 1000;
+
 #[tokio::test]
 async fn native_shell_startup_has_complete_unicode_output() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -13,8 +15,8 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
         "Windows native shell"
     );
     let setup = Setup::new("SHELL-STARTUP")?;
+    // Keep the App's PSModulePath: module discovery cost is part of startup.
     let mut environment = tool_environment(&std::env::vars().collect::<HashMap<_, _>>());
-    let inherited_module_path = environment.remove("PSModulePath");
     for (name, path) in [
         ("HOME", setup.sandbox.home.clone()),
         ("USERPROFILE", setup.sandbox.home.clone()),
@@ -79,9 +81,15 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
             let first = timings[0];
             timings.sort_by(f64::total_cmp);
             eprintln!("SHELL-STARTUP shell={shell} n=20 first_ms={first:.3} p50_ms={:.3} p95_ms={:.3} max_ms={:.3} output_verified=20", timings[9], timings[18], timings[19]);
-        }
-        if let Some(path) = inherited_module_path {
-            environment.insert("PSModulePath".into(), path);
+            if shell == "powershell" {
+                // Shipped invocation, inherited module path: a module scan per
+                // command (about 22 s on hosted runners) must fail this check.
+                butler_e2e::assert_wall_clock_budget!(
+                    std::time::Duration::from_secs_f64(timings[9] / 1000.),
+                    std::time::Duration::from_millis(POWERSHELL_STARTUP_P50_MS),
+                    "PowerShell command startup p50",
+                );
+            }
         }
         let mut long_directory = spaced.join("한국어 Directory");
         for _ in 0..6 {

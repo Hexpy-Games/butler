@@ -1,6 +1,7 @@
 //! Correction failures preserve the original inode and still reach gateway readiness.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 use super::super::{offline, seed};
+use super::trace::phase;
 use butler_e2e::e2e::{HarnessError, scenario::Scenario};
 use butler_platform::secure_fs;
 use rusqlite::Connection;
@@ -24,13 +25,13 @@ pub(super) async fn exercise(
         s.agent
             .launch
             .set_env("BUTLER_E2E_FILE_FAULT_MARKER", marker.to_string_lossy());
-        s.gw = s.agent.start_again().await?;
+        s.gw = phase(&format!("{point}: startup"), s.agent.start_again()).await?;
         assert!(marker.exists(), "fault was not reached: {point}");
         assert_eq!(super::state(path)?, expected);
         intact(s, path, original, active, snapshot).await?;
         s.agent.launch.remove_env("BUTLER_E2E_FILE_FAULT");
         s.agent.launch.remove_env("BUTLER_E2E_FILE_FAULT_MARKER");
-        s.gw = s.agent.start_again().await?;
+        s.gw = phase(&format!("{point}: startup"), s.agent.start_again()).await?;
         assert!(s.gw.healthy().await);
         if point == "correction_drain" {
             super::verify(path, active, snapshot).await?;
@@ -47,7 +48,7 @@ pub(super) async fn exercise(
     s.agent
         .launch
         .set_env("BUTLER_E2E_DISK_AVAILABLE_BYTES", "unavailable");
-    s.gw = s.agent.start_again().await?;
+    s.gw = phase("failure recovery startup", s.agent.start_again()).await?;
     assert_eq!(super::state(path)?, "failed_space");
     intact(s, path, original, active, snapshot).await?;
     s.agent.launch.remove_env("BUTLER_E2E_DISK_AVAILABLE_BYTES");
@@ -55,7 +56,7 @@ pub(super) async fn exercise(
     let link = path.with_extension("sqlite.precompact");
     std::fs::hard_link(path, &link)?;
     assert!(!path.with_extension("sqlite.compact-tmp").exists());
-    s.gw = s.agent.start_again().await?;
+    s.gw = phase("failure recovery startup", s.agent.start_again()).await?;
     assert!(s.gw.healthy().await);
     assert!(!link.exists());
     assert_eq!(super::state(path)?, "failed_space");
@@ -63,7 +64,7 @@ pub(super) async fn exercise(
     // Cleanup errors (including opened()) must also leave a serving original.
     let tmp = path.with_extension("sqlite.compact-tmp");
     std::fs::create_dir(&tmp)?;
-    s.gw = s.agent.start_again().await?;
+    s.gw = phase("failure recovery startup", s.agent.start_again()).await?;
     assert!(tmp.exists());
     assert_eq!(super::state(path)?, "failed_correction");
     intact(s, path, original, active, snapshot).await?;
@@ -74,8 +75,22 @@ pub(super) async fn exercise(
         .launch
         .set_env("BUTLER_E2E_ABORT_POINT", "after_link");
     for attempt in 1..=2 {
-        assert!(s.agent.start_again().await.is_err());
-        s.agent.reap();
+        assert!(
+            phase(
+                &format!("after_link attempt {attempt}: abort startup"),
+                s.agent.start_again()
+            )
+            .await
+            .is_err()
+        );
+        phase("after_link: reap", async {
+            assert!(
+                s.agent.reap().is_some_and(|status| !status.success()),
+                "fault child must exit unsuccessfully"
+            );
+            Ok(())
+        })
+        .await?;
         assert_eq!(super::state(path)?, "compacting");
         assert_eq!(
             Connection::open(path)?.query_row(
@@ -88,7 +103,7 @@ pub(super) async fn exercise(
         assert_eq!(secure_fs::identity(&std::fs::metadata(path)?).id, original);
     }
     s.agent.launch.remove_env("BUTLER_E2E_ABORT_POINT");
-    s.gw = s.agent.start_again().await?;
+    s.gw = phase("failure recovery startup", s.agent.start_again()).await?;
     assert_eq!(super::state(path)?, "failed_copy");
     assert!(!link.exists());
     intact(s, path, original, active, snapshot).await
@@ -126,7 +141,7 @@ async fn preserve_failed_copy(
     s.agent
         .launch
         .set_env("BUTLER_E2E_FILE_FAULT_MARKER", marker.to_string_lossy());
-    s.gw = s.agent.start_again().await?;
+    s.gw = phase("failure recovery startup", s.agent.start_again()).await?;
     assert!(marker.exists());
     assert_eq!(super::state(path)?, "failed_copy");
     assert_eq!(
@@ -140,7 +155,7 @@ async fn preserve_failed_copy(
     intact(s, path, original, active, snapshot).await?;
     s.agent.launch.remove_env("BUTLER_E2E_FILE_FAULT");
     s.agent.launch.remove_env("BUTLER_E2E_FILE_FAULT_MARKER");
-    s.gw = s.agent.start_again().await?;
+    s.gw = phase("failure recovery startup", s.agent.start_again()).await?;
     assert_eq!(super::state(path)?, "failed_copy");
     assert_eq!(
         Connection::open(path)?.query_row(

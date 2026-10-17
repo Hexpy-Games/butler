@@ -132,23 +132,30 @@ def verify(directory, expected, compatible=False, parts=('cache.tar.zst',)):
         raise ValueError('Cargo source identity digest mismatch')
 
 
-def extract(directory, root='target'):
+def extract(directory, root='target', base=None):
+    """Extract under `base` (default: cwd) by explicit paths, never cwd-relative names.
+
+    Windows applies MAX_PATH to cwd plus a relative name, so a caller restoring
+    deep Cargo units passes the extended form of its destination as `base`.
+    """
     # The producer uploads only its target directory. Reject an unexpected
     # archive root before extraction, even for a same-repository artifact.
     archive = directory / 'cache.tar.zst'
-    cache_root = Path(root)
-    if cache_root.is_symlink() or not cache_root.resolve().is_relative_to(Path.cwd().resolve()):
+    base = Path(base) if base is not None else Path.cwd()
+    cache_root = base / root
+    if cache_root.is_symlink() or not cache_root.resolve().is_relative_to(base.resolve()):
         raise tarfile.FilterError('Escaping cache root')
     with subprocess.Popen(['zstd', '-d', '-c', str(archive)], stdout=subprocess.PIPE) as decompress:
         try:
-            extract_stream(decompress.stdout, cache_root, root)
+            extract_stream(decompress.stdout, base, root)
         finally:
             decompress.stdout.close()
         if decompress.wait() != 0:
             raise RuntimeError('Cargo build-cache decompression failed')
 
 
-def extract_stream(stream, cache_root, root):
+def extract_stream(stream, base, root):
+    cache_root = base / root
     with tarfile.open(fileobj=stream, mode='r|') as archive_tar:
         for member in archive_tar:
             if member.mtime > time.time():
@@ -162,8 +169,8 @@ def extract_stream(stream, cache_root, root):
                     header = metadata.read(8)
                     if header != b'\x00\x05\x16\x07\x00\x02\x00\x00':
                         raise ValueError('Invalid AppleDouble cache root metadata')
-                    destination = Path(root) / '._archive_root'
-                    if not destination.resolve().is_relative_to(Path(root).resolve()):
+                    destination = cache_root / '._archive_root'
+                    if not destination.resolve().is_relative_to(cache_root.resolve()):
                         raise tarfile.FilterError('Escaping cache root metadata')
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     with destination.open('wb') as saved:
@@ -172,20 +179,25 @@ def extract_stream(stream, cache_root, root):
                 continue
             if path.is_absolute() or '..' in path.parts or not path.parts or path.parts[0] != root:
                 raise ValueError(f'Unexpected Cargo cache path: {member.name}')
-            if path != cache_root and not path.parent.resolve().is_relative_to(cache_root.resolve()):
+            if path != Path(root) and not (base / path.parent).resolve().is_relative_to(cache_root.resolve()):
                 raise tarfile.FilterError(f'Escaping existing cache path: {member.name}')
             if member.issym() or member.islnk():
                 link = Path(member.linkname)
-                destination = path.parent / link if member.issym() else link
-                if link.is_absolute() or not destination.resolve().is_relative_to(Path(root).resolve()):
+                destination = base / (path.parent / link if member.issym() else link)
+                if link.is_absolute() or not destination.resolve().is_relative_to(cache_root.resolve()):
                     raise tarfile.FilterError(f'Unexpected Cargo cache link: {member.name}')
             if member.islnk():
-                # Supplementing an existing cache leaves the destination
-                # present. Python 3.12 then falls back to seeking an earlier
-                # tar member, which a zstd stream cannot do. Replace only
-                # the validated in-tree hardlink before recreating it.
-                path.unlink(missing_ok=True)
-            archive_tar.extract(member, filter='data')
+                # Link the validated source directly. tarfile joins the raw
+                # `/` linkname (unconverted under Windows `\\?\`) and, missing
+                # that source or meeting an existing name, seeks back in the
+                # stream, which zstd cannot do. Replace only this in-tree name.
+                created = runner_cache.extended(base / path)
+                if os.path.lexists(created):
+                    os.unlink(created)
+                os.makedirs(os.path.dirname(created), exist_ok=True)
+                os.link(runner_cache.extended(destination.resolve()), created)
+                continue
+            archive_tar.extract(member, path=base, filter='data')
         # Read through tarfile's buffer as well as the pipe: a tar end marker
         # can precede an entire padding record still being written by zstd.
         while block := archive_tar.fileobj.read(64 * 1024):

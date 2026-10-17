@@ -254,10 +254,14 @@ pub(crate) fn instruction_section(request: &Value) -> String {
         .filter_map(|part| part["text"].as_str())
         .find(|text| text.contains("## Active Rules"))
         .unwrap_or_default();
+    // The section ends at the next document heading or at the first turn
+    // context entry that follows the volatile documents: the default project
+    // folder (every App turn) or the scope.
     prompt
         .split("## Active Rules")
         .nth(1)
         .and_then(|section| section.split("\n\n## ").next())
+        .and_then(|section| section.split("\n\nUser's default project folder: ").next())
         .and_then(|section| section.split("\n\nCurrent scope:").next())
         .unwrap_or_default()
         .to_owned()

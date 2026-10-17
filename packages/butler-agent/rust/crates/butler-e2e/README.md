@@ -46,6 +46,8 @@ Every fault, barrier, fixed clock and storage/idle probe that a scenario arms wi
 product crate). Shipped binaries contain none of them, and `butler-source-check`
 ratchets any such name in shipped code (`source-check-e2e-hooks.txt`). Perf scenarios
 use an optimized fixture build for the same reason.
+`BUTLER_E2E_WEB_PROBE_BIN` names a prebuilt `butler-runtime` `web-access-smoke`
+example; without it the web read scenario builds the example first.
 `BUTLER_E2E_WORKSPACE_ROOT` selects the Rust workspace containing resources,
 fixtures and cassettes when running a compiled harness on a different machine.
 
