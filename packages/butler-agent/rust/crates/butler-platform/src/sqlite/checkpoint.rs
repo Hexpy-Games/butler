@@ -285,15 +285,15 @@ fn run(
         }
     };
     let _ = ready.send(Ok(()));
-    let mut chain: Option<i32> = None;
-    while chain.is_some() || requests.recv().is_ok() {
+    let mut chain = false;
+    while chain || requests.recv().is_ok() {
         let started = Instant::now();
         let guard = checkpoint.lock().unwrap_or_else(PoisonError::into_inner);
         let snapshot = {
             let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
             // A coalesced wake may be left behind a pass that already covered
             // its frames. Do not run another SQL checkpoint for that request.
-            if chain.is_none() && !progress.due(pages) {
+            if !chain && !progress.due(pages) {
                 continue;
             }
             progress.inline_pending = false;
@@ -302,20 +302,16 @@ fn run(
         };
         let result = backfill(&connection, maintenance, started);
         chain = match result.as_ref() {
-            Ok((_, log, backfilled)) => {
+            Ok((0, log, backfilled)) => {
                 let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
                 progress.completed(snapshot, *log, *backfilled);
-                // Always drain the due pass's raced tail; continue only while
-                // later tails halve. Decide before releasing the progress lock.
-                let raced = progress.frames - backfilled;
-                let converging = chain.is_none_or(|prev| raced.saturating_mul(2) <= prev);
-                (progress.generation == snapshot.0
+                // Fully backfilled passes drain any commits that raced them.
+                // Decide before releasing the progress lock, before finish_pass.
+                progress.generation == snapshot.0
                     && *backfilled >= snapshot.1
-                    && raced > 0
-                    && converging)
-                    .then_some(raced)
+                    && progress.frames > *backfilled
             }
-            Err(_) => None,
+            _ => false,
         };
         drop(guard);
         finish_pass(&connection, maintenance, started, result.is_ok());

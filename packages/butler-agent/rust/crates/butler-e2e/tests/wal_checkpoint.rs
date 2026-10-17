@@ -44,8 +44,8 @@ thread_local! {
 fn pause_after_backfill(event: sqlite::CheckpointEvent) {
     if matches!(event, sqlite::CheckpointEvent::WalCommitted(_)) {
         // Pin the first committed snapshot through the next write, preventing
-        // reset. Release it inside that commit's hook so the next threshold
-        // of new frames can be fully backfilled.
+        // reset. Release it inside that commit's hook so the raced follow-up
+        // can fully backfill the final small tail.
         READER.with(|reader| {
             let reader = reader.borrow();
             let Some(reader) = reader.as_ref() else {
@@ -275,22 +275,17 @@ fn bursts_restart_bound_wal_and_leave_zero_idle_checkpoint_writes()
     let peak_span = 32 + u64::try_from(MAX.load(SeqCst)).unwrap() * (page_size + 24);
     eprintln!("peak committed WAL span: {peak_span} bytes");
 
-    // The commit that makes a pass due and its raced tail always drain.
-    // Later tails drain only while converging; otherwise they stay below one
-    // threshold until the next due pass.
+    // End above threshold, so the last quiet period must fully backfill.
+    while LAST.load(SeqCst) < 1000 {
+        store.insert();
+        committed += 1;
+    }
+    // Close only drains requests already sent by commits. The maintenance
+    // connection disables checkpoint-on-close, so this completion barrier
+    // cannot repair a tail that the last commit failed to enqueue.
     owner.close().unwrap();
     let (log, done) = frames(&store.path);
-    assert!(log - done < 1000, "quiet tail: log={log} backfilled={done}");
-    eprintln!(
-        "burst quiet tail: log={log} backfilled={done} tail={}",
-        log - done
-    );
-    let owner = store.worker();
-    store.insert_many(1000);
-    committed += 1000;
-    owner.close().unwrap();
-    let (log, done) = frames(&store.path);
-    assert_eq!(done, log, "due commit did not drain the quiet tail");
+    assert_eq!(done, log, "quiet tail was stranded after the last request");
     eprintln!(
         "maximum background checkpoint/index sync: {} us",
         MAX_PASS_US.load(SeqCst)

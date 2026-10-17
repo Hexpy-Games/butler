@@ -1,4 +1,4 @@
-//! Raced tails drain after a due pass, then only while halving.
+//! Fully backfilled passes chain only while commits race them.
 use super::*;
 
 fn pause_backfill(event: sqlite::CheckpointEvent) {
@@ -22,7 +22,7 @@ fn pause_next_pass() -> (mpsc::Receiver<()>, mpsc::SyncSender<()>) {
     (paused, resume)
 }
 
-fn raced_passes(wait_for_threshold: bool) {
+fn raced_passes(race_follow_up: bool) {
     PASSES.store(0, SeqCst);
     let store = Store::new();
     READER.with(|reader| *reader.borrow_mut() = Some(sqlite::open(&store.path).unwrap()));
@@ -44,78 +44,38 @@ fn raced_passes(wait_for_threshold: bool) {
     let (drained, done) = frames(&store.path);
     assert!(drained > initial);
     assert_eq!(drained, done, "due pass did not drain its raced tail");
-    store.insert();
-    let (tail, done) = frames(&store.path);
-    assert!(tail > done && tail - drained < 1000);
-    assert!(2 * (tail - drained) > drained - initial);
+    if race_follow_up {
+        store.insert();
+        let (tail, done) = frames(&store.path);
+        assert!(tail > done && tail - drained < 1000);
+        // This tail does not halve: any raced full pass must chain again.
+        assert!(2 * (tail - drained) > drained - initial);
+    }
+    let (tail, _) = frames(&store.path);
     release_follow_up.send(()).unwrap();
-    if wait_for_threshold {
-        store.insert_many(1000);
-    }
     owner.close().unwrap();
-    let expected = if wait_for_threshold { 3 } else { 2 };
+    let expected = if race_follow_up { 3 } else { 2 };
     assert_eq!(PASSES.load(SeqCst), expected);
-    if wait_for_threshold {
-        let (log, done) = frames(&store.path);
-        assert_eq!(log, done, "new threshold did not backfill the tail");
-    } else {
-        assert_eq!(frames(&store.path), (tail, done), "follow-up chained again");
-    }
-    store.counts(if wait_for_threshold { 2102 } else { 1102 });
+    assert_eq!(frames(&store.path), (tail, tail));
+    store.counts(if race_follow_up { 1102 } else { 1101 });
     READER.with(|reader| reader.borrow_mut().take());
-    eprintln!("raced due/follow-up: threshold={wait_for_threshold} passes={expected}");
+    eprintln!("raced due/follow-up: raced_follow_up={race_follow_up} passes={expected}");
 }
 
 // test-category: race
 #[test]
-fn raced_due_pass_has_only_one_follow_up_until_new_frame_threshold()
--> Result<(), butler_e2e::e2e::HarnessError> {
+fn raced_follow_up_chains_again() -> Result<(), butler_e2e::e2e::HarnessError> {
     butler_e2e::gate!();
     let _serial = SERIAL.lock().unwrap();
-    raced_passes(false);
     raced_passes(true);
     Ok(())
 }
 
 // test-category: race
 #[test]
-fn halving_raced_tail_chains_another_follow_up() -> Result<(), butler_e2e::e2e::HarnessError> {
+fn follow_up_without_raced_commit_ends_chain() -> Result<(), butler_e2e::e2e::HarnessError> {
     butler_e2e::gate!();
     let _serial = SERIAL.lock().unwrap();
-    PASSES.store(0, SeqCst);
-    let store = Store::new();
-    READER.with(|reader| *reader.borrow_mut() = Some(sqlite::open(&store.path).unwrap()));
-    let (due, resume_due) = pause_next_pass();
-    let owner = sqlite::CheckpointOwner::start(&store.db, "test", Some(pause_backfill))
-        .unwrap()
-        .unwrap();
-    let release_due = resume_due;
-    store.insert_many(1100);
-    due.recv_timeout(Duration::from_secs(5)).unwrap();
-    let (initial, done) = frames(&store.path);
-    assert_eq!(initial, done);
-    store.insert_many(50);
-    let (follow_up, resume_follow_up) = pause_next_pass();
-    release_due.send(()).unwrap();
-    follow_up.recv_timeout(Duration::from_secs(5)).unwrap();
-    let release_follow_up = resume_follow_up;
-    let (drained, done) = frames(&store.path);
-    assert!(drained > initial);
-    assert_eq!(drained, done);
-    store.insert();
-    let (tail, _) = frames(&store.path);
-    assert!(tail > drained);
-    assert!(2 * (tail - drained) <= drained - initial);
-    release_follow_up.send(()).unwrap();
-    owner.close().unwrap();
-    assert_eq!(PASSES.load(SeqCst), 3);
-    assert_eq!(frames(&store.path), (tail, tail));
-    store.counts(1151);
-    READER.with(|reader| reader.borrow_mut().take());
-    eprintln!(
-        "halving raced tails: first={} second={} passes=3 log={tail} backfilled={tail}",
-        drained - initial,
-        tail - drained
-    );
+    raced_passes(false);
     Ok(())
 }
