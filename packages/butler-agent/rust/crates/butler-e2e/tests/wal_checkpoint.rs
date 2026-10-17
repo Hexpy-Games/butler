@@ -15,6 +15,9 @@ use std::{
     time::Duration,
 };
 
+#[path = "wal_checkpoint/backstop.rs"]
+mod backstop;
+
 #[path = "wal_checkpoint/sustained.rs"]
 mod sustained;
 
@@ -35,8 +38,8 @@ thread_local! {
 fn pause_after_backfill(event: sqlite::CheckpointEvent) {
     if matches!(event, sqlite::CheckpointEvent::WalCommitted(_)) {
         // Pin the first committed snapshot through the next write, preventing
-        // reset. Release it inside that commit's hook so stock PASSIVE can
-        // backfill the final small tail before the commit call returns.
+        // reset. Release it inside that commit's hook so the next PASSIVE pass
+        // can backfill the final small tail.
         READER.with(|reader| {
             let reader = reader.borrow();
             let reader = reader.as_ref().unwrap();
@@ -64,6 +67,7 @@ fn pause_after_backfill(event: sqlite::CheckpointEvent) {
 
 fn observe(event: sqlite::CheckpointEvent) {
     match event {
+        sqlite::CheckpointEvent::Checkpointed { .. } => {}
         sqlite::CheckpointEvent::WalCommitted(pages) => {
             if pages < LAST.swap(pages, SeqCst) {
                 RESTARTS.fetch_add(1, SeqCst);
@@ -247,8 +251,8 @@ fn bursts_restart_bound_wal_and_leave_zero_idle_checkpoint_writes()
         store.bytes()
     );
     // Retention applies at reset, but active growth still needs a hard bound.
-    // With small transactions and no pinned reader, stock autocheckpoint
-    // resets near 1,000 frames, comfortably inside the 16 MiB journal budget.
+    // With small transactions and no pinned reader, the checkpoint backstop
+    // keeps active growth inside the 16 MiB journal budget.
     assert!(
         largest <= JOURNAL_LIMIT,
         "active burst WAL grew to {largest}"
@@ -265,14 +269,14 @@ fn bursts_restart_bound_wal_and_leave_zero_idle_checkpoint_writes()
         store.insert();
         committed += 1;
     }
-    // Close only drains index-sync requests already sent by commits. The
-    // maintenance connection disables checkpoint-on-close and never backfills,
-    // so this completion barrier cannot repair a stranded tail for the test.
+    // Close only drains requests already sent by commits. The maintenance
+    // connection disables checkpoint-on-close, so this completion barrier
+    // cannot repair a tail that the last commit failed to enqueue.
     owner.close().unwrap();
     let (log, done) = frames(&store.path);
     assert_eq!(done, log, "quiet tail was stranded after the last request");
     eprintln!(
-        "maximum background index sync: {} us",
+        "maximum background checkpoint/index sync: {} us",
         MAX_PASS_US.load(SeqCst)
     );
     let idle_owner = store.worker();
@@ -359,8 +363,8 @@ fn final_small_commit_after_backfill_cannot_strand_a_wal_tail()
     assert!(log >= 1000);
     assert_eq!(done, log);
     // The pinned snapshot prevents a reset when this write begins. Its hook
-    // releases the snapshot, then must checkpoint even this small tail because
-    // the whole WAL remains above threshold.
+    // releases the snapshot, then must request a pass for this small tail
+    // because the whole WAL remains above threshold.
     store.insert();
     let (tail, _) = frames(&store.path);
     assert!(tail > log && tail - log < 1000);

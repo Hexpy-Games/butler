@@ -1,4 +1,4 @@
-//! Stock commit-path checkpoints with coalesced background WAL-index writeback.
+//! Change-driven background checkpoints with a serialized commit-path backstop.
 use super as sqlite;
 use rusqlite::{Connection, OpenFlags, config::DbConfig};
 use std::{
@@ -6,7 +6,7 @@ use std::{
     marker::PhantomData,
     path::PathBuf,
     rc::Rc,
-    sync::mpsc,
+    sync::{Arc, Mutex, PoisonError, mpsc},
     thread,
     time::{Duration, Instant},
 };
@@ -39,11 +39,22 @@ pub enum CheckpointError {
 pub enum CheckpointEvent {
     /// The writer committed this many frames into its current WAL.
     WalCommitted(i32),
-    /// A background WAL-index sync finished.
+    /// A measured SQLite checkpoint completed on either owner thread.
+    Checkpointed {
+        /// Whether this work delayed the committing writer.
+        inline: bool,
+        /// Checkpoint time, including backstop serialization with a running pass.
+        elapsed: Duration,
+        /// Frames in the WAL when the checkpoint was requested or observed.
+        frames: i32,
+        /// The checkpoint call returned success (readers may still pin frames).
+        succeeded: bool,
+    },
+    /// A background checkpoint and WAL-index sync finished.
     Finished {
         /// Time spent performing this maintenance pass.
         elapsed: Duration,
-        /// WAL-index writeback returned success.
+        /// SQLite and WAL-index writeback returned success.
         succeeded: bool,
     },
 }
@@ -52,10 +63,15 @@ pub enum CheckpointEvent {
 pub type CheckpointObserver = fn(CheckpointEvent);
 type CheckpointResult<T> = Result<T, CheckpointError>;
 
+// Bound small-transaction growth even when continuous appends outrun PASSIVE.
+// SQLite still cannot recycle frames pinned by a reader, or split a transaction.
+const HARD_LIMIT_MULTIPLIER: i32 = 4;
+
 struct Hook {
     observer: Option<CheckpointObserver>,
     pages: i32,
     wake: mpsc::SyncSender<()>,
+    checkpoint: Arc<Mutex<()>>,
 }
 thread_local! { static HOOK: RefCell<Option<Hook>> = const { RefCell::new(None) }; }
 
@@ -91,9 +107,21 @@ impl CheckpointOwner {
         let cache_size: i64 = db.query_row("PRAGMA cache_size", [], |row| row.get(0))?;
         let (wake, requests) = mpsc::sync_channel(1);
         let (ready, initialized) = mpsc::sync_channel(1);
+        let checkpoint = Arc::new(Mutex::new(()));
+        let background = checkpoint.clone();
         let thread = thread::Builder::new()
             .name("sqlite-wal-checkpoint".into())
-            .spawn(move || run(&path, synchronous, cache_size, &ready, &requests, observer))?;
+            .spawn(move || {
+                run(
+                    &path,
+                    synchronous,
+                    cache_size,
+                    &ready,
+                    &requests,
+                    observer,
+                    &background,
+                )
+            })?;
         let owner = Self {
             thread: Some(thread),
             _owner_thread: PhantomData,
@@ -106,6 +134,7 @@ impl CheckpointOwner {
                 observer,
                 pages,
                 wake,
+                checkpoint,
             });
         });
         db.wal_hook(Some(committed));
@@ -140,14 +169,28 @@ fn committed(wal: &rusqlite::hooks::Wal, pages: i32) -> rusqlite::Result<()> {
             observer(CheckpointEvent::WalCommitted(pages));
         }
         if pages >= hook.pages {
-            // Match SQLite's stock automatic hook: checkpoint before returning
-            // from COMMIT, ignoring errors because the transaction committed.
-            // A concurrent PASSIVE worker can hold the checkpoint lock while
-            // writers keep appending, so checkpoint only on this writer lane.
-            let _ = wal.checkpoint();
-            // SQLite does not flush mapped WAL-index pages on macOS. Coalesce
-            // that separate writeback off the SQL lane, with no idle wakeups.
-            // Full means a sync is pending; close reports a disconnected worker.
+            if pages >= hook.pages.saturating_mul(HARD_LIMIT_MULTIPLIER) {
+                // Wait for the owned PASSIVE pass before running the backstop:
+                // racing it would return BUSY and let continuous appends escape
+                // the ceiling. Normal commits never take this mutex.
+                let started = Instant::now();
+                let guard = hook
+                    .checkpoint
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner);
+                let result = wal.checkpoint();
+                drop(guard);
+                checkpointed(
+                    hook.observer,
+                    true,
+                    pages,
+                    started.elapsed(),
+                    result.is_ok(),
+                );
+            }
+            // Every commit above threshold leaves a coalesced request, including
+            // a small final tail behind a pass that has already backfilled.
+            // No timers: quiet or pinned WALs do not cause idle checkpoint work.
             let _ = hook.wake.try_send(());
         }
     });
@@ -161,6 +204,7 @@ fn run(
     ready: &mpsc::SyncSender<CheckpointResult<()>>,
     requests: &mpsc::Receiver<()>,
     observer: Option<CheckpointObserver>,
+    checkpoint: &Mutex<()>,
 ) -> CheckpointResult<()> {
     let opened = open(path, synchronous, cache_size);
     let connection = match opened {
@@ -173,11 +217,20 @@ fn run(
     let _ = ready.send(Ok(()));
     while requests.recv().is_ok() {
         let started = Instant::now();
+        let guard = checkpoint.lock().unwrap_or_else(PoisonError::into_inner);
+        let result = connection.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |row| {
+            Ok((row.get::<_, i32>(0)?, row.get::<_, i32>(1)?))
+        });
+        drop(guard);
+        let elapsed = started.elapsed();
+        let (busy, frames) = result.as_ref().copied().unwrap_or((1, -1));
+        checkpointed(observer, false, frames, elapsed, busy == 0);
+        // Preserve mapped WAL-index writeback on macOS, outside the SQL lane.
         let synced = sqlite::sync_wal_index(&connection);
         if let Some(observer) = observer {
             observer(CheckpointEvent::Finished {
                 elapsed: started.elapsed(),
-                succeeded: synced.is_ok(),
+                succeeded: result.is_ok() && synced.is_ok(),
             });
         }
     }
@@ -196,4 +249,34 @@ fn open(
     connection.pragma_update(None, "cache_size", cache_size)?;
     connection.set_db_config(DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, true)?;
     Ok(connection)
+}
+
+fn checkpointed(
+    observer: Option<CheckpointObserver>,
+    inline: bool,
+    frames: i32,
+    elapsed: Duration,
+    succeeded: bool,
+) {
+    if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+        == Some(std::ffi::OsStr::new("1"))
+    {
+        let mode = if inline { "inline" } else { "background" };
+        let utc_us = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_micros();
+        eprintln!(
+            "command_checkpoint_timing mode={mode} utc_us={utc_us} frames={frames} checkpoint_us={} succeeded={succeeded}",
+            elapsed.as_micros()
+        );
+    }
+    if let Some(observer) = observer {
+        observer(CheckpointEvent::Checkpointed {
+            inline,
+            elapsed,
+            frames,
+            succeeded,
+        });
+    }
 }
