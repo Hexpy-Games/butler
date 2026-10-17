@@ -4658,7 +4658,7 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_steward",
-        "description": "Pass the request unchanged after Plan Review. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance. Child excludes Butler persona, receives immutable project context and bounded parent conversation, and returns a canonical terminal result. Optional safe_title; otherwise the request's first line. Children receive only granted tools. Schedule CRUD: direct Tier 0, including research prompts. For a new request after a prior delegation has closed, start a fresh reviewed Work in this same turn and set previous_relation_id to attach the original request and canonical results. Do not ask the user to restart.",
+        "description": "After Plan Review, pass the user's whole current objective and every constraint they set, including earlier in the chat, in their words; add none. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance. Child excludes Butler persona, receives immutable project context and bounded parent conversation, and returns a canonical terminal result. Optional safe_title; otherwise the request's first line. Children receive only granted tools. Schedule CRUD: direct Tier 0, including research prompts. For a new request after a prior delegation has closed, start a fresh reviewed Work in this same turn and set previous_relation_id to attach the original request and canonical results. Do not ask the user to restart.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4666,7 +4666,8 @@
             "request": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 8000
+              "maxLength": 8000,
+              "description": "The user's objective with all their constraints (scope, sources, Workers or not), readable without the chat."
             },
             "safe_title": {
               "type": "string",
@@ -4976,7 +4977,7 @@
       "definition": {
         "type": "function",
         "name": "replace_work_plan",
-        "description": "Open or revise the Plan for the Work explicitly selected by start_work or continue_work. Revision starts planning from any current stage without a prior result review; retain completed action keys and results. Use start_new only as a compatibility translation when older callers cannot use start_work. Ordinary tools never select Work; choose start_work or continue_work before this Plan operation. Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints. Choose execution_mode during planning: Butler uses steward for substantial execution or direct for a genuinely small direct action; Steward uses direct or workers; Worker uses direct. Planning, management, integration, review, validation, and reporting stay with the current role. Do not use this for simple conversation, stable knowledge, or a single-step read-only lookup. Use it for multi-source or multi-step research with a synthesized deliverable, even when source tools are read-only.",
+        "description": "Open or revise the Plan for the Work explicitly selected by start_work or continue_work. Revision starts planning from any current stage without a prior result review; retain completed action keys and results. Use start_new only as a compatibility translation when older callers cannot use start_work. Ordinary tools never select Work; choose start_work or continue_work before this Plan operation. Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints. Choose execution_mode during planning: Butler uses steward for substantial execution, including when the user declines Workers, or direct for a genuinely small action or when the user explicitly says not to hand off; Steward uses workers when the user asks for Workers, direct when they decline them, otherwise its own judgment; Worker uses direct. Planning, management, integration, review, validation, and reporting stay with the current role. Do not use this for simple conversation, stable knowledge, or a single-step read-only lookup. Use it for multi-source or multi-step research with a synthesized deliverable, even when source tools are read-only.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5007,7 +5008,7 @@
                 "steward",
                 "workers"
               ],
-              "description": "Who executes Plan actions: direct = this role, steward = Butler delegates to Steward, workers = Steward delegates to Workers. Preserve completed action keys when revising ownership on an existing Plan."
+              "description": "Who executes Plan actions: direct = this role, steward = Butler delegates to Steward, workers = Steward delegates to Workers. A user's Worker preference governs Steward's choice, not Butler's. Preserve completed action keys when revising ownership on an existing Plan."
             },
             "actions": {
               "type": "array",
@@ -7457,7 +7458,7 @@
     "replace_work_plan": {
       "type": "function",
       "name": "replace_work_plan",
-      "description": "Open or revise the Plan for the Work explicitly selected by start_work or continue_work. Revision starts planning from any current stage without a prior result review; retain completed action keys and results. Use start_new only as a compatibility translation when older callers cannot use start_work. Ordinary tools never select Work; choose start_work or continue_work before this Plan operation. Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints. Choose execution_mode during planning: Butler uses steward for substantial execution or direct for a genuinely small direct action; Steward uses direct or workers; Worker uses direct. Planning, management, integration, review, validation, and reporting stay with the current role. Do not use this for simple conversation, stable knowledge, or a single-step read-only lookup. Use it for multi-source or multi-step research with a synthesized deliverable, even when source tools are read-only.",
+      "description": "Open or revise the Plan for the Work explicitly selected by start_work or continue_work. Revision starts planning from any current stage without a prior result review; retain completed action keys and results. Use start_new only as a compatibility translation when older callers cannot use start_work. Ordinary tools never select Work; choose start_work or continue_work before this Plan operation. Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints. Choose execution_mode during planning: Butler uses steward for substantial execution, including when the user declines Workers, or direct for a genuinely small action or when the user explicitly says not to hand off; Steward uses workers when the user asks for Workers, direct when they decline them, otherwise its own judgment; Worker uses direct. Planning, management, integration, review, validation, and reporting stay with the current role. Do not use this for simple conversation, stable knowledge, or a single-step read-only lookup. Use it for multi-source or multi-step research with a synthesized deliverable, even when source tools are read-only.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -7488,7 +7489,7 @@
               "steward",
               "workers"
             ],
-            "description": "Who executes Plan actions: direct = this role, steward = Butler delegates to Steward, workers = Steward delegates to Workers. Preserve completed action keys when revising ownership on an existing Plan."
+            "description": "Who executes Plan actions: direct = this role, steward = Butler delegates to Steward, workers = Steward delegates to Workers. A user's Worker preference governs Steward's choice, not Butler's. Preserve completed action keys when revising ownership on an existing Plan."
           },
           "actions": {
             "type": "array",
