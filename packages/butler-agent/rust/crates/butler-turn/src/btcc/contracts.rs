@@ -233,6 +233,24 @@ pub enum AdmissionKind {
 pub struct RuntimeFailure {
     pub code: String,
     pub retryable: bool,
+    /// The provider's HTTP status, when a provider refused the request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_code: Option<u16>,
+    /// The provider's own (redacted, bounded) error text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cause: Option<String>,
+}
+
+impl RuntimeFailure {
+    /// A failure without provider details.
+    pub fn new(code: impl Into<String>, retryable: bool) -> Self {
+        Self {
+            code: code.into(),
+            retryable,
+            status_code: None,
+            cause: None,
+        }
+    }
 }
 
 /// A file a turn produced for the user.

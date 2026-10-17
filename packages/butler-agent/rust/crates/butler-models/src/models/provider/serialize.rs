@@ -327,13 +327,14 @@ fn chat(
     {
         body.insert("max_tokens".into(), max.into());
     }
+    // OpenAI-compatible servers reject `tool_choice` without `tools`.
     if !request.tools.is_empty() {
         body.insert(
             "tools".into(),
             Value::Array(request.tools.iter().map(chat_tool).collect()),
         );
+        body.insert("tool_choice".into(), choice(request.tool_choice).into());
     }
-    body.insert("tool_choice".into(), choice(request.tool_choice).into());
     body.insert("stream".into(), stream.into());
     if stream {
         body.insert(

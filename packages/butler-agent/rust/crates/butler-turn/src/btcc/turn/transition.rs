@@ -90,10 +90,7 @@ fn final_content(turn: &TurnRecord, result: &super::contracts::AgentLoopResult) 
     }
     runtime_failure_message(
         &turn.original_message,
-        &crate::btcc::RuntimeFailure {
-            code: "runtime_error".into(),
-            retryable: false,
-        },
+        &crate::btcc::RuntimeFailure::new("runtime_error", false),
     )
 }
 
