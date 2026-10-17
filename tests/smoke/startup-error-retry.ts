@@ -1,5 +1,4 @@
-import { killOwnedProcessGroup } from "../../packages/butler-app/client/electron/butler-platform/process-group.mjs";
-import { spawnElectron, stopElectronChild } from "../support/electron-child";
+import { discoverOwnedGroups, killAdoptedProcessGroups, spawnElectron, stopElectronChild } from "../support/electron-child";
 /**
  * Startup error surface, both buttons, per Agent death: a failed start (repeated Retry), an Agent
  * crash and a user stop while startup is pending. Real relaunches; no inspector injection or live models.
@@ -7,7 +6,7 @@ import { spawnElectron, stopElectronChild } from "../support/electron-child";
 import assert from "node:assert/strict";
 import { spawnSync, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { once } from "node:events";
 import { chromium, type Browser, type Page } from "playwright";
@@ -60,6 +59,9 @@ async function scenario(fixture: Fixture, death: Death, retries: number) {
       return Number.isSafeInteger(pid) && pid > 0 && pid !== exclude && alive(pid) ? pid : undefined;
     } catch { return undefined; }
   };
+  // Relaunched Apps and each Agent lead their own process groups: adopt them as they appear, so
+  // every harness exit path kills them, even one that fires before a wait below names them.
+  let discovery: NodeJS.Timeout | undefined;
   const connect = async () => {
     await waitFor(async () => {
       try { return (await fetch(`http://127.0.0.1:${debugPort}/json/version`)).ok; } catch { return false; }
@@ -109,6 +111,7 @@ async function scenario(fixture: Fixture, death: Death, retries: number) {
     if (death === "failed") writeFileSync(config, "{invalid config");
     original = spawnElectron(executable, [`--inspect=${mainPort}`, ...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory])], { env, relaunches: true });
     appPid = original.pid!;
+    discovery = setInterval(discoverOwnedGroups, 100);
     if (death !== "failed") await induce();
     for (let attempt = 1; attempt <= retries; attempt += 1) {
       phase = `error-${attempt}`;
@@ -157,30 +160,27 @@ async function scenario(fixture: Fixture, death: Death, retries: number) {
     throw error;
   } finally {
     await browser?.close().catch(() => undefined);
-    if (appPid && appPid !== original?.pid && alive(appPid)) {
-      // Quit a relaunched App through its own Quit so its Agent stops; the group kill below is the backstop.
+    clearInterval(discovery);
+    discoverOwnedGroups();
+    const successor = lockHolder(original?.pid);
+    if (successor) {
+      // Quit a relaunched App through its own Quit so its Agent stops; its adopted group is then killed.
       const quit = spawnElectron(executable, [...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory]), "--butler-quit-main-ui"], { env, cleanupPaths: [] });
-      const force = setTimeout(() => { try { process.kill(appPid!, "SIGKILL"); } catch { /* already exited */ } }, 10_000);
-      try { await once(quit, "exit"); await waitFor(() => !alive(appPid!), "Retry cleanup did not exit the successor"); }
-      finally { clearTimeout(force); }
+      try { await Promise.race([once(quit, "exit"), new Promise((done) => setTimeout(done, 10_000))]); await waitFor(() => !alive(successor), "Retry cleanup did not exit the successor", 10_000); }
+      catch { /* killed below */ } finally { await stopElectronChild(quit); }
     }
+    killAdoptedProcessGroups();
     if (original) await stopElectronChild(original);
-    stopFixtureAgents(fixture);
     writeFileSync(config, validConfig);
-  }
-}
-// Each Agent leads its own process group: stop every Agent still running from this fixture's installation.
-function stopFixtureAgents(fixture: Fixture) {
-  const binary = join(realpathSync(fixture.root), "install/bin/butler-agent");
-  for (const line of (spawnSync("ps", ["-axo", "pid=,command="], { encoding: "utf8" }).stdout ?? "").split("\n")) {
-    const [, pid, command] = /^\s*(\d+)\s+(.*)$/u.exec(line) ?? [];
-    if (command === binary || command?.startsWith(`${binary} `)) { try { killOwnedProcessGroup(Number(pid)); } catch { /* already exited */ } }
   }
 }
 
 const deaths: Array<[Death, number]> = [["failed", 2], ["crash", 1], ["stopped", 1]];
 const fixture = await quitFixture();
-try {
-  for (const [death, retries] of deaths) if (!only || only.includes(death)) await scenario(fixture, death, retries);
-} finally { fixture.cleanup(); }
+let cleaned = false;
+const cleanup = () => { if (!cleaned) { cleaned = true; fixture.cleanup(); } };
+// Every exit path, after the harness's own exit hook (registered first) has killed the Apps.
+process.once("exit", cleanup);
+for (const [death, retries] of deaths) if (!only || only.includes(death)) await scenario(fixture, death, retries);
+cleanup();
 console.log("PASS: startup error Open log and Retry after a failed start (repeated Retry), an Agent crash and a user stop");
