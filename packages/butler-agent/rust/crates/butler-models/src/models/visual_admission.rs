@@ -33,10 +33,15 @@ pub struct ImageCapabilityEvidence {
     pub route_health: String,
     pub input_modalities: Vec<String>,
     pub accepted_mime_types: Vec<String>,
-    pub max_inline_image_bytes: f64,
-    pub max_width: f64,
-    pub max_height: f64,
-    pub max_pixels: f64,
+    /// An absent numeric cap means the catalog imposes no limit for that field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_inline_image_bytes: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_width: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_height: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_pixels: Option<f64>,
     pub source_url: String,
     pub verified_at: String,
     pub evidence_revision: String,
@@ -220,10 +225,10 @@ fn evidence_from_catalog(
             .unwrap_or_else(|| "unchecked".into()),
         input_modalities: entry.image_input_modalities.clone().unwrap_or_default(),
         accepted_mime_types: entry.image_accepted_mime_types.clone().unwrap_or_default(),
-        max_inline_image_bytes: entry.image_max_inline_bytes.unwrap_or(0.0),
-        max_width: entry.image_max_width.unwrap_or(0.0),
-        max_height: entry.image_max_height.unwrap_or(0.0),
-        max_pixels: entry.image_max_pixels.unwrap_or(0.0),
+        max_inline_image_bytes: entry.image_max_inline_bytes,
+        max_width: entry.image_max_width,
+        max_height: entry.image_max_height,
+        max_pixels: entry.image_max_pixels,
         source_url: source_url.to_owned(),
         verified_at: verified_at.to_owned(),
         evidence_revision: tuple.catalog_capability_revision.clone(),
@@ -287,6 +292,71 @@ pub fn admit_visual_image_request(
     capability: ImageCapabilityEvidence,
     manifests: &[VisualAttachmentManifest],
 ) -> ImageAdmissionResult<VisualImageAdmissionResult> {
+    assert_frozen_capability(&tuple, &capability)?;
+    if manifests.is_empty() {
+        return Err(error("image_manifest_invalid", "manifest_missing"));
+    }
+    let mut ordered = manifests.to_vec();
+    ordered.sort_by_key(|manifest| manifest.position);
+    for (position, manifest) in ordered.iter().enumerate() {
+        if manifest.kind != "image"
+            || manifest.position != position
+            || manifest.file_id.is_empty()
+            || manifest.source_digest.len() != 64
+            || manifest.derivative_digest.len() != 64
+            || manifest.manifest_digest.len() != 64
+            || manifest.derivative_size_bytes == 0
+            || manifest.width == 0
+            || manifest.height == 0
+            || manifest.pixel_count == 0
+            || manifest.storage_revision.is_empty()
+            || manifest.sniffed_magic.is_empty()
+            || manifest.sniffed_mime_type.is_empty()
+        {
+            return Err(error("image_manifest_invalid", "manifest_shape_invalid"));
+        }
+        if !capability
+            .accepted_mime_types
+            .iter()
+            .any(|mime| mime.to_lowercase() == manifest.derivative_mime_type.to_lowercase())
+        {
+            return Err(error("image_model_unsupported", "mime_not_admitted"));
+        }
+        if exceeds_image_limits(manifest, &capability) {
+            return Err(error("image_payload_invalid", "image_limit_exceeded"));
+        }
+    }
+    Ok(VisualImageAdmissionResult {
+        tuple,
+        capability,
+        manifests: ordered,
+    })
+}
+
+/// Catalog limits are optional; the internal byte cap applies independently.
+fn exceeds_image_limits(
+    manifest: &VisualAttachmentManifest,
+    capability: &ImageCapabilityEvidence,
+) -> bool {
+    capability
+        .max_inline_image_bytes
+        .is_some_and(|max| manifest.derivative_size_bytes as f64 > max)
+        || manifest.derivative_size_bytes > INTERNAL_DEFAULT_MAX_INLINE_IMAGE_BYTES
+        || capability
+            .max_width
+            .is_some_and(|max| f64::from(manifest.width) > max)
+        || capability
+            .max_height
+            .is_some_and(|max| f64::from(manifest.height) > max)
+        || capability
+            .max_pixels
+            .is_some_and(|max| manifest.pixel_count as f64 > max)
+}
+
+fn assert_frozen_capability(
+    tuple: &ImageCarrierTuple,
+    capability: &ImageCapabilityEvidence,
+) -> ImageAdmissionResult<()> {
     if tuple.provider_id.is_empty()
         || tuple.model_id.is_empty()
         || tuple.carrier_protocol.is_empty()
@@ -342,47 +412,5 @@ pub fn admit_visual_image_request(
     {
         return Err(error("image_model_unsupported", "image_modality_missing"));
     }
-    if manifests.is_empty() {
-        return Err(error("image_manifest_invalid", "manifest_missing"));
-    }
-    let mut ordered = manifests.to_vec();
-    ordered.sort_by_key(|manifest| manifest.position);
-    for (position, manifest) in ordered.iter().enumerate() {
-        if manifest.kind != "image"
-            || manifest.position != position
-            || manifest.file_id.is_empty()
-            || manifest.source_digest.len() != 64
-            || manifest.derivative_digest.len() != 64
-            || manifest.manifest_digest.len() != 64
-            || manifest.derivative_size_bytes == 0
-            || manifest.width == 0
-            || manifest.height == 0
-            || manifest.pixel_count == 0
-            || manifest.storage_revision.is_empty()
-            || manifest.sniffed_magic.is_empty()
-            || manifest.sniffed_mime_type.is_empty()
-        {
-            return Err(error("image_manifest_invalid", "manifest_shape_invalid"));
-        }
-        if !capability
-            .accepted_mime_types
-            .iter()
-            .any(|mime| mime.to_lowercase() == manifest.derivative_mime_type.to_lowercase())
-        {
-            return Err(error("image_model_unsupported", "mime_not_admitted"));
-        }
-        if (manifest.derivative_size_bytes as f64) > capability.max_inline_image_bytes
-            || manifest.derivative_size_bytes > INTERNAL_DEFAULT_MAX_INLINE_IMAGE_BYTES
-            || f64::from(manifest.width) > capability.max_width
-            || f64::from(manifest.height) > capability.max_height
-            || (manifest.pixel_count as f64) > capability.max_pixels
-        {
-            return Err(error("image_payload_invalid", "image_limit_exceeded"));
-        }
-    }
-    Ok(VisualImageAdmissionResult {
-        tuple,
-        capability,
-        manifests: ordered,
-    })
+    Ok(())
 }

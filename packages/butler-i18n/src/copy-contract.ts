@@ -946,9 +946,8 @@ export interface AppCopy {
     allProviders: string;
     noModels: string;
     modelLoading: string;
-    modelUnavailable: string;
-    modelError: string;
-    modelErrorHint: string;
+    modelNone: string;
+    modelNoneHint: string;
     gitMissingTitle: string;
     gitMissingMessage: string;
     gitInstallAction: string;
