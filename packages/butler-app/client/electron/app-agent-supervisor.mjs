@@ -522,12 +522,10 @@ export function createBundledAgentSupervisor({
     const intent = recordAppStopIntent(stopping, reason);
     if (preserveWork) {
       // EOF is the portable App-owned graceful request. Windows kill() is not.
-      const graceful = activeGateway?.foregroundHost === true && stopping.stdin?.writable === true;
-      if (graceful) stopping.stdin.end();
-      // Quit never outlives the Agent: a stop it ignores ends in termination.
-      if (child === stopping) {
-        shutdownKillTimer = setKillTimer(() => forceTerminate(stopping, graceful ? killTimeoutMs : 0), graceful ? killTimeoutMs : 0);
-      }
+      if (activeGateway?.foregroundHost === true && stopping.stdin?.writable === true) stopping.stdin.end();
+      else if (!deliverSignal(stopping, "SIGTERM") && intent) safeRetractStopIntent(intent);
+      // The stop always ends: an Agent that ignores it past the grace is terminated.
+      shutdownKillTimer = setKillTimer(() => forceTerminate(stopping, killTimeoutMs), killTimeoutMs);
     } else {
       // Non-Quit controllers retain their existing signal/deadline policy.
       if (!deliverSignal(stopping, "SIGTERM") && intent) safeRetractStopIntent(intent);

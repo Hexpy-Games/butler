@@ -70,7 +70,7 @@ async function quit(app: FileElectronApp, holdStorage = blocked) {
       const surface = BrowserWindow.getAllWindows().find((window) => window.webContents.getURL().includes("/lifecycle/lifecycle.html"));
       return surface ? await surface.webContents.executeJavaScript("document.querySelector('[data-slot=caption]').textContent") as string : "";
     }).then((status) => { slowStatus = status; }, (error: unknown) => { slowFailure = error; }).finally(() => {
-      lock.exec("ROLLBACK"); lock.close(); done();
+      app.detach(); lock.exec("ROLLBACK"); lock.close(); done();
     });
   }, 15_500)) : Promise.resolve();
   let measured: { hidden_ms: number; feedback_ms: number; status: string } | undefined;
@@ -101,6 +101,8 @@ async function quit(app: FileElectronApp, holdStorage = blocked) {
       void main.webContents.executeJavaScript("window.butlerApp.quitApp({confirmed:true})");
     }
   });
+  // An attached main inspector holds the exiting App until it disconnects.
+  if (!lock) app.detach();
   await exited;
   await released;
   console.log(JSON.stringify({ phases: quitPhaseReport(phaseLog) }));
