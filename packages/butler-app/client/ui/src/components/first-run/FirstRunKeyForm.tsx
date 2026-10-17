@@ -1,4 +1,4 @@
-import { faviconSrc } from "@/app/favicons.ts";
+import { openExternalSignIn } from "@/app/openExternalSignIn";
 import {
   Button,
   CheckIcon,
@@ -10,7 +10,7 @@ import {
   SetupWizardStepAction,
   Spinner,
   Stack,
-  InlineReference,
+  Globe2,
   Tooltip,
   Typo,
 } from "@/butler-ds";
@@ -24,6 +24,7 @@ import type { FirstRunFlow } from "./useFirstRunFlow";
 export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: FirstRunFlow }) {
   const { copy } = flow;
   const spec = PROVIDER_CARDS[cardId];
+  const keyUrl = spec.keyUrl;
   const name = copy.providerNames[cardId];
   const key = useKeyVerification({
     providerId: spec.providerId ?? cardId,
@@ -56,7 +57,11 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
         <KeyStatusLine copy={copy} status={connected ? "valid" : connecting ? "checking" : key.status} onRetry={key.retry} />
       </Field>
       <Inline gap="md">
-        {spec.keyUrl ? <Typo.Body as="span"><InlineReference kind="external" href={spec.keyUrl} iconSrc={faviconSrc(spec.keyUrl)}>{copy.getKey}</InlineReference></Typo.Body> : null}
+        {keyUrl ? (
+          <Button type="button" variant="link" iconStart={<Globe2 size="sm" />} onClick={() => openExternalSignIn(keyUrl)}>
+            {copy.getKey}
+          </Button>
+        ) : null}
         <Typo.Caption tone="tertiary">{copy.keyStored}</Typo.Caption>
       </Inline>
     </FirstRunStepCard>
