@@ -4,6 +4,7 @@ import { requestClose } from "./dialogs.mjs";
 import { answerUserDialog } from "./user-dialogs.mjs";
 import { ipcMain, session } from "electron";
 import { createUserBrowser } from "./tabs.mjs";
+import { installQuitClose } from "./quit.mjs";
 import { clearOffer, installSignInOffers, saveOffer } from "./signin-offer.mjs";
 
 /** "이 사이트 로그아웃": the site's cookies and storage leave the signed-in profile. */
@@ -70,15 +71,6 @@ export function installUserBrowser(app, getWindow, getLanguage) {
     if (event.sender !== browser.pointer.view?.webContents || event.senderFrame !== event.sender.mainFrame || id !== browser.activeId) return;
     browser.selection.chrome = rect && [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) ? rect : null;
   });
-  let flushed = false;
-  app.on("will-quit", (event) => {
-    if (flushed) return;
-    event.preventDefault();
-    void (async () => { await Promise.all([...browser.tabs.values()].map(tab => tab.flushHistory?.())); await browser.history?.flush(); await browser.flush(); })().catch(() => {}).then(() => browser.dispose()).finally(() => {
-      flushed = true;
-      // Electron ignores a same-tick quit after cancelling will-quit.
-      setImmediate(() => app.quit());
-    });
-  });
+  installQuitClose(app, browser);
   return browser;
 }

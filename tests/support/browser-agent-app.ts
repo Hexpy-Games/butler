@@ -44,6 +44,8 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
     return (await inspectorClient).evaluate<T>(expression, false, timeoutMs);
   };
   let page: Awaited<ReturnType<typeof electronPage>> | undefined;
+  // An attached main inspector holds a quitting App at exit until it disconnects.
+  const detachMain = async () => { const client = inspectorClient; inspectorClient = undefined; (await client?.catch(()=>undefined))?.close(); };
   const stop = async () => {
     page?.close();
     (await inspectorClient?.catch(()=>undefined))?.close();
@@ -94,7 +96,7 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
       })()`), `button ${name}`);
       await page!.clickText(name, 'button,[role="button"]');
     };
-    return { gateway, visionRequests: visionStub?.requests, page, main, win, call, shot, click, stop, debug, lastMain: () => lastExpression };
+    return { gateway, visionRequests: visionStub?.requests, page, main, detachMain, win, call, shot, click, stop, debug, lastMain: () => lastExpression };
   } catch (error) {
     const state = await main(`({windows:${module}('electron').BrowserWindow.getAllWindows().map(w=>({url:w.webContents.getURL(),visible:w.isVisible()})),ready:${module}('electron').app.isReady(),lock:${module}('electron').app.hasSingleInstanceLock(),path:${module}('electron').app.getPath('userData')})`).catch(()=>null);
     writeFileSync(join(evidence, "startup-failure.json"), JSON.stringify({ state, exitCode:child.exitCode, signal:child.signalCode }));
