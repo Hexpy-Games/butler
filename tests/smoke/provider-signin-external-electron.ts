@@ -39,7 +39,8 @@ try {
   app = await firstRunElectron(server, stub.url);
   const { page, main } = app;
   const module = `process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve("packages/butler-app/client/electron/package.json"))})`;
-  await main(`(()=>{globalThis.externalLinks=[];${module}('electron').shell.openExternal=async url=>{globalThis.externalLinks.push(url)}})()`);
+  const recorder = `(()=>{"use strict";const shell=${module}('electron').shell;globalThis.externalLinks=[];const record=async url=>{globalThis.externalLinks.push(url)};shell.openExternal=record;return shell.openExternal===record})()`;
+  assert.equal(await main<boolean>(recorder), true, "external opens are recorded, never sent to the real browser");
   const copy = getAppCopy("ko-KR");
   await page.locator("#first-run-language").selectOption("ko");
   await page.getByRole("button", { name: copy.firstRun.start, exact: true }).click();
