@@ -50,6 +50,7 @@ mod context_telemetry;
 mod conversation_background;
 mod credential_store;
 mod credentials;
+mod custom_model_errors;
 mod default_model;
 mod downloads_live;
 mod durable_configuration;

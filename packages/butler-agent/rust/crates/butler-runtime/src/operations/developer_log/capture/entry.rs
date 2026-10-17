@@ -156,10 +156,9 @@ pub(super) fn terminal_entry(
 }
 
 fn failure_from_runtime(failure: Option<&RuntimeFailure>) -> FailureSnapshot {
-    let failure = failure.cloned().unwrap_or(RuntimeFailure {
-        code: "gateway_failed".into(),
-        retryable: true,
-    });
+    let failure = failure
+        .cloned()
+        .unwrap_or_else(|| RuntimeFailure::new("gateway_failed", true));
     let code = failure.code.clone();
     let message = "Butler could not complete this turn.".to_owned();
     let value = json!({"code": code, "message": message, "retryable": failure.retryable});
