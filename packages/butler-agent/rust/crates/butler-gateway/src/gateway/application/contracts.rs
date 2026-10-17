@@ -47,6 +47,10 @@ pub trait AppNativeIngress: Send + Sync + 'static {
     fn enqueue_cancel(&self, _cancel: AppCancellation) -> ApplicationFuture<EnqueueReceipt> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
+    /// Whether the native runtime settled a Stop of the turn for good.
+    fn stop_confirmed(&self, _turn_id: String) -> ApplicationFuture<bool> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
 }
 
 #[derive(Clone, Debug)]

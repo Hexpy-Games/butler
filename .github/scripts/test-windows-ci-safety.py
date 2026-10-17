@@ -50,6 +50,10 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
         self.assertNotIn('if:', matrix)  # Every selected stub keeps its native proof.
         self.assertIn('run: ../../../deploy/windows-command-matrix.ps1', matrix)
         source = (repository / 'deploy/windows-command-matrix.ps1').read_text()
+        self.assertIn("$env:BUTLER_E2E_PERF = '1'", source)  # Owner-PC matrix enforces the budgets.
+        hosted = (repository / 'deploy/windows-e2e-artifacts.ps1').read_text()
+        self.assertNotIn("BUTLER_E2E_PERF = '1'", hosted)  # Hosted run records timings only.
+        self.assertIn("$env:BUTLER_E2E_PERF = '0'", hosted)
         logged_sources.append(source)
         self.assertNotIn('Tee-Object', source)
         self.assert_raw_log_command(source, 'exit $testCode')

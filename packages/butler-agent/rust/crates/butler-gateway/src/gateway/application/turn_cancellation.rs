@@ -4,6 +4,16 @@ use serde_json::{Value, json};
 use super::*;
 use crate::gateway::application::storage::AppStorageCode;
 
+/// Sent Stops still waiting for their outcome; served by
+/// `app_turn_cancel_outbox_pending_idx`.
+pub(super) const SENT_CANCELS_SQL: &str = "SELECT turns.chat_id,turns.id FROM app_turn_cancel_outbox outbox \
+    JOIN turns ON turns.id=outbox.turn_id WHERE outbox.state IN ('pending','accepted') \
+    AND outbox.queue_id IS NOT NULL AND turns.state='cancelling'";
+const SENT_CANCEL_SQL: &str = "SELECT 1 FROM app_turn_cancel_outbox outbox \
+    JOIN turns ON turns.id=outbox.turn_id WHERE outbox.turn_id=?1 AND turns.chat_id=?2 \
+    AND outbox.state IN ('pending','accepted') AND outbox.queue_id IS NOT NULL \
+    AND turns.state='cancelling'";
+
 impl AppApplication {
     pub(super) async fn recover_turn_cancellations(&self) -> Result<(), GatewayApplicationError> {
         let pending = self
@@ -34,6 +44,70 @@ impl AppApplication {
             self.dispatch_cancel(chat, turn, requested_at, claim)
                 .await?;
         }
+        let sent = self
+            .storage
+            .read(|db| {
+                let mut statement = db
+                    .prepare_cached(SENT_CANCELS_SQL)
+                    .map_err(AppStorageError::sqlite)?;
+                let rows = statement
+                    .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+                    .map_err(AppStorageError::sqlite)?;
+                rows.collect::<Result<Vec<(String, String)>, _>>()
+                    .map_err(AppStorageError::sqlite)
+            })
+            .await
+            .map_err(app_error)?;
+        for (chat, turn) in sent {
+            self.settle_confirmed_stop(chat, turn).await?;
+        }
+        Ok(())
+    }
+
+    /// Settles a sent Stop the App is still waiting on once BTCC confirmed it
+    /// (an acknowledgement an earlier version dropped, or a Stop pressed again).
+    async fn settle_confirmed_stop(
+        &self,
+        chat_id: String,
+        turn_id: String,
+    ) -> Result<(), GatewayApplicationError> {
+        let confirmed = self
+            .dependencies
+            .native_ingress
+            .stop_confirmed(turn_id.clone())
+            .await?;
+        if !confirmed {
+            return Ok(());
+        }
+        let now = self.dependencies.identity_clock.now_iso();
+        let subscribers = self.subscribers.clone();
+        let chat = chat_id.clone();
+        let settled = self
+            .storage
+            .execute(move |db| {
+                let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+                let waiting = tx
+                    .query_row(SENT_CANCEL_SQL, params![turn_id, chat], |_| Ok(()))
+                    .optional()
+                    .map_err(AppStorageError::sqlite)?
+                    .is_some();
+                if waiting {
+                    projection::settle_confirmed_stop(&tx, &subscribers, &chat, &turn_id, &now)?;
+                }
+                tx.commit().map_err(AppStorageError::sqlite)?;
+                Ok(waiting)
+            })
+            .await
+            .map_err(app_error)?;
+        if settled {
+            self.queue_wake.chat(chat_id).await?;
+            if self
+                .automation_queued
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
+                self.automation_wake.notify_one();
+            }
+        }
         Ok(())
     }
 
@@ -46,59 +120,13 @@ impl AppApplication {
         let turn = turn_id.clone();
         let prepared = self
             .storage
-            .execute(move |db| {
-                let row = db
-                    .query_row(
-                        "SELECT chat_id,state,cancellable FROM turns WHERE id=?1",
-                        [&turn],
-                        |row| {
-                            Ok((
-                                row.get::<_, String>(0)?,
-                                row.get::<_, String>(1)?,
-                                row.get::<_, bool>(2)?,
-                            ))
-                        },
-                    )
-                    .optional()
-                    .map_err(AppStorageError::sqlite)?
-                    .ok_or_else(|| {
-                        AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found.")
-                    })?;
-                if row.1 == "cancelled" {
-                    return Ok((row.0, None, true));
-                }
-                if (!row.2 && row.1 != "cancelling")
-                    || matches!(row.1.as_str(), "delivered" | "failed" | "runtime_fault")
-                {
-                    return Err(AppStorageError::new(
-                        AppStorageCode::TurnNotCancellable,
-                        "Turn is not cancellable.",
-                    ));
-                }
-                let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
-                mark_cancelling(&tx, &row.0, &turn, &stored_at)?;
-                let queued = tx
-                    .query_row(
-                        "SELECT queue_id FROM app_turn_cancel_outbox WHERE turn_id=?1",
-                        [&turn],
-                        |row| row.get::<_, Option<String>>(0),
-                    )
-                    .map_err(AppStorageError::sqlite)?;
-                let claim = tx
-                    .query_row(
-                        "SELECT claim_id FROM session_queued_messages WHERE chat_id=?1 AND turn_id=?2 AND state='dispatching'",
-                        params![row.0, turn],
-                        |row| row.get::<_, Option<String>>(0),
-                    )
-                    .optional()
-                    .map_err(AppStorageError::sqlite)?
-                    .flatten();
-                tx.commit().map_err(AppStorageError::sqlite)?;
-                Ok((row.0, claim, queued.is_some()))
-            })
+            .execute(move |db| prepare_cancel(db, &turn, &stored_at))
             .await
             .map_err(app_error)?;
-        if !prepared.2 {
+        if prepared.2 {
+            self.settle_confirmed_stop(prepared.0.clone(), turn_id.clone())
+                .await?;
+        } else {
             self.dispatch_cancel(
                 prepared.0.clone(),
                 turn_id.clone(),
@@ -147,6 +175,59 @@ impl AppApplication {
             .await
             .map_err(app_error)
     }
+}
+
+fn prepare_cancel(
+    db: &mut rusqlite::Connection,
+    turn: &str,
+    stored_at: &str,
+) -> Result<(String, Option<String>, bool), AppStorageError> {
+    let row = db
+        .query_row(
+            "SELECT chat_id,state,cancellable FROM turns WHERE id=?1",
+            [turn],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, bool>(2)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(AppStorageError::sqlite)?
+        .ok_or_else(|| AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found."))?;
+    if row.1 == "cancelled" {
+        return Ok((row.0, None, true));
+    }
+    if (!row.2 && row.1 != "cancelling")
+        || matches!(row.1.as_str(), "delivered" | "failed" | "runtime_fault")
+    {
+        return Err(AppStorageError::new(
+            AppStorageCode::TurnNotCancellable,
+            "Turn is not cancellable.",
+        ));
+    }
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+    mark_cancelling(&tx, &row.0, turn, stored_at)?;
+    let queued = tx
+        .query_row(
+            "SELECT queue_id FROM app_turn_cancel_outbox WHERE turn_id=?1",
+            [turn],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .map_err(AppStorageError::sqlite)?;
+    let claim = tx
+        .query_row(
+            "SELECT claim_id FROM session_queued_messages WHERE chat_id=?1 AND turn_id=?2 AND state='dispatching'",
+            params![row.0, turn],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .map_err(AppStorageError::sqlite)?
+        .flatten();
+    tx.commit().map_err(AppStorageError::sqlite)?;
+    Ok((row.0, claim, queued.is_some()))
 }
 
 /// Marks the turn cancelling, queues its cancel outbox entry and pauses the

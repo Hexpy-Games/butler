@@ -11,18 +11,17 @@ import {
 import { EMPTY_MODEL_CATALOG } from "@/app/constants.ts";
 import {
   modelDisplayName,
-  reasoningOptionLabel,
   tokenWindowLabel,
 } from "@/app/utils.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import { SettingsSelect } from "./SettingsFormComponents";
+import { ReasoningSelect } from "./ReasoningSelect";
 import { WorkerProfileTaskFields } from "./WorkerProfileTaskFields";
 import { selectWorkerProfileModel } from "./workerProfileUpdates";
 import { workerProfileTextPatch } from "./workerProfileTextPatch";
 import type {
   AppModelSummary,
-  ReasoningEffort,
   WorkerProfile,
 } from "@/app/types.ts";
 import { ProviderMark } from "./ProviderMark";
@@ -110,20 +109,13 @@ export function WorkerProfileEditor({
             icon: <ProviderMark providerId={model.provider_id} platform={model.platform} />,
           }))}
         />
-        <SettingsSelect
+        <ReasoningSelect
           settingId="worker-reasoning"
           label={settingsFields.reasoning}
           disabled={saving}
+          model={selectedModel}
           value={profile.reasoning_effort}
-          onChange={(value) =>
-            onUpdate({ reasoning_effort: value as ReasoningEffort })
-          }
-          options={(selectedModel?.reasoning_efforts ?? ["none"]).map(
-            (value) => ({
-              value,
-              label: reasoningOptionLabel(selectedModel, value),
-            }),
-          )}
+          onChange={(value) => onUpdate({ reasoning_effort: value })}
         />
         {!isDefault && (
           <Stack align="row" justify="end">

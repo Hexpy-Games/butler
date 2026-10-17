@@ -1098,9 +1098,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     allProviders: "전체",
     noModels: "모델을 찾을 수 없습니다",
     modelLoading: "모델 확인 중",
-    modelUnavailable: "선택한 모델 사용 불가",
-    modelError: "모델 상태 오류",
-    modelErrorHint: "모델 목록을 불러오지 못했습니다. 설정의 모델에서 확인해 주세요.",
+    modelNone: "모델 없음",
+    modelNoneHint: "설정에서 모델을 추가해 주세요.",
     gitMissingTitle: "Git이 설치되어 있지 않습니다",
     gitMissingMessage:
       "버틀러는 계속 사용할 수 있지만 브랜치와 커밋 기능은 사용할 수 없습니다.",
@@ -1769,6 +1768,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       composerDecoration: "글자 뒤에 그림을 깝니다.",
       composerCharacter: "입력창 위에 작은 친구가 앉습니다.",
       themeFollowsWallpaper: "실시간 월페이퍼가 정해요",
+      reasoningFixed: "모델이 정해요",
       contextLimit: (maxLabel) =>
         `실제 버틀러 컨텍스트 예산입니다. 모델 최대값: ${maxLabel}.`,
       contextLimitClamped: (value) =>

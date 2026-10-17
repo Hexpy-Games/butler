@@ -6,6 +6,8 @@ use std::collections::BTreeSet;
 use super::lookup::provider_auth_methods;
 use super::*;
 
+mod image_admission;
+
 fn catalog() -> StaticCatalog {
     StaticCatalog::load().unwrap()
 }
@@ -240,6 +242,7 @@ fn supported_image_models_carry_sourced_known_capability_limits() {
         if model.image_input_support.as_deref() != Some("supported") {
             continue;
         }
+        image_admission::assert_admits_small_png(model);
         let name = &model.model_ref;
         for field in [
             &model.image_carrier_protocol,
