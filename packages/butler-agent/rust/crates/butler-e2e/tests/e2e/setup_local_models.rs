@@ -26,7 +26,10 @@ use serde_json::{Value, json};
 
 /// A fresh install that finds `ollama` (and no LM Studio: its address is a
 /// closed port), with first-conversation onboarding already done.
-async fn with_local_server(id: &str, ollama: &FakeServer) -> Result<Scenario, HarnessError> {
+pub(crate) async fn with_local_server(
+    id: &str,
+    ollama: &FakeServer,
+) -> Result<Scenario, HarnessError> {
     let closed = format!("http://127.0.0.1:{}", free_port()?);
     let setup = Setup::new(id)?
         .fixture(Fixture::Empty)
@@ -38,7 +41,10 @@ async fn with_local_server(id: &str, ollama: &FakeServer) -> Result<Scenario, Ha
 }
 
 /// Registers the server's model as setup does and makes it the default.
-async fn use_local_model(s: &Scenario, server_url: &str) -> Result<String, HarnessError> {
+pub(crate) async fn use_local_model(
+    s: &Scenario,
+    server_url: &str,
+) -> Result<String, HarnessError> {
     let reply =
         s.gw.post(
             "/model-catalog/local-models",

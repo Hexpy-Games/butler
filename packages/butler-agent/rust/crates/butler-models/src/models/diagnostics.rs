@@ -79,11 +79,17 @@ pub(super) fn http(
         identity,
         &["message", "error_message", "errorMessage", "detail"],
     );
-    let normalized = normalized_code(
-        provider_code.as_deref(),
-        provider_type.as_deref(),
-        detail.as_deref(),
-    );
+    let tools_refused = matches!(status, 400 | 422)
+        && refuses_tools(string(identity, &["param"]).as_deref(), detail.as_deref());
+    let normalized = if tools_refused {
+        Some("provider_tools_unsupported")
+    } else {
+        normalized_code(
+            provider_code.as_deref(),
+            provider_type.as_deref(),
+            detail.as_deref(),
+        )
+    };
     let context = detail.as_deref().is_some_and(is_context_limit);
     let code = normalized.unwrap_or({
         if context {
@@ -97,31 +103,7 @@ pub(super) fn http(
         }
     });
     let retryable = normalized.is_none() && !context && (status == 429 || status >= 500);
-    let message = match code {
-        "provider_quota_exhausted" => {
-            "Model provider reported that the configured quota, credit, or billing limit is exhausted."
-        }
-        "provider_model_not_found" => {
-            "Model provider reported that the configured model was not found."
-        }
-        "provider_model_retired" => "Model provider reported that the configured model is retired.",
-        "provider_model_unavailable" => {
-            "Model provider reported that the configured model is unavailable."
-        }
-        "provider_unsupported_model" => {
-            "Model provider reported that the configured model is unsupported."
-        }
-        "provider_context_limit_exceeded" => {
-            "Model provider context limit was exceeded. Compact or reduce the session context, then retry."
-        }
-        "provider_auth_error" => {
-            "Model provider authentication failed. Check the configured provider credentials."
-        }
-        "provider_rate_limited" => {
-            "Model provider API rate limit was reached. Retry after provider readiness."
-        }
-        _ => "Model provider API request failed.",
-    };
+    let message = http_message(code);
     let mut failure = error(code, message, provider, api, retryable);
     failure.status_code = Some(status);
     failure.provider_error_code = provider_code;
@@ -148,6 +130,38 @@ pub(super) fn http(
         })));
     }
     failure
+}
+
+/// The safe message for a normalized HTTP failure `code`.
+fn http_message(code: &str) -> &'static str {
+    match code {
+        "provider_quota_exhausted" => {
+            "Model provider reported that the configured quota, credit, or billing limit is exhausted."
+        }
+        "provider_model_not_found" => {
+            "Model provider reported that the configured model was not found."
+        }
+        "provider_model_retired" => "Model provider reported that the configured model is retired.",
+        "provider_model_unavailable" => {
+            "Model provider reported that the configured model is unavailable."
+        }
+        "provider_unsupported_model" => {
+            "Model provider reported that the configured model is unsupported."
+        }
+        "provider_tools_unsupported" => {
+            "Model provider reported that the configured model or server does not support tool calls."
+        }
+        "provider_context_limit_exceeded" => {
+            "Model provider context limit was exceeded. Compact or reduce the session context, then retry."
+        }
+        "provider_auth_error" => {
+            "Model provider authentication failed. Check the configured provider credentials."
+        }
+        "provider_rate_limited" => {
+            "Model provider API rate limit was reached. Retry after provider readiness."
+        }
+        _ => "Model provider API request failed.",
+    }
 }
 
 fn error(
@@ -272,6 +286,32 @@ fn normalized_code(
     } else {
         None
     }
+}
+
+/// Whether a rejected request names its tools as the reason: the standard
+/// OpenAI error `param` is `tools` or `tool_choice`, or the message says
+/// tool calls are unsupported or need enabling on the server.
+fn refuses_tools(param: Option<&str>, message: Option<&str>) -> bool {
+    let param = param.unwrap_or("").to_ascii_lowercase();
+    if ["tools", "tool_choice", "functions", "function_call"].contains(&param.as_str()) {
+        return true;
+    }
+    let message = message.unwrap_or("").to_ascii_lowercase();
+    [
+        "tool choice",
+        "tool_choice",
+        "tool call",
+        "tool_call",
+        "tool use",
+        "function call",
+        "function_call",
+        "tools",
+    ]
+    .iter()
+    .any(|term| message.contains(term))
+        && ["not support", "unsupported", "not enabled", "requires"]
+            .iter()
+            .any(|term| message.contains(term))
 }
 
 fn signal(value: Option<&str>) -> String {
