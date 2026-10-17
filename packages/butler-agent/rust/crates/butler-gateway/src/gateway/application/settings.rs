@@ -151,7 +151,7 @@ pub(super) fn resolve_for_message_send(
         .flatten()
         .and_then(|v| v.as_object().cloned())
         .unwrap_or_default();
-    let mut controls = inherited_controls(&settings, &stored, facts, explicit);
+    let mut controls = inherited_controls(&settings, &stored, facts);
     // A per-message override applies to this message only: the session keeps
     // its own controls (PATCH /sessions/{id}/controls changes those).
     let message_override = has_message_override(request);

@@ -787,7 +787,8 @@ export type ModelCatalogState =
   | "unavailable"
   | "error";
 
-export type ComposerModelState = ModelCatalogState;
+// The composer has no error state: a failed read falls back, never locks the picker.
+export type ComposerModelState = Exclude<ModelCatalogState, "error">;
 
 export type ControlsLoadState = "loading" | "ready" | "error";
 
