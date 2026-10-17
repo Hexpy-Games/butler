@@ -54,7 +54,7 @@ try {
   stub.set([
     () => ({ name: "tool_describe", arguments: { ids: ["browser_open", "browser_observe", "browser_act"].map(n => `native:${n}`) } }),
     () => bridgeBrowser("browser_open", { url: page.url }),
-    r => bridgeBrowser("browser_observe", { tab: latestBrowser(r, "tab").tab }),
+    r => bridgeBrowser("browser_observe", { tab: latestBrowser(r, "tab").tab, look: "always" }),
     r => { const o = latestBrowser(r, "obs"); return bridgeBrowser("browser_observe", { tab: o.tab, region: [30, 90, 160, 50], scale: 3 }); },
     act(r => [{ action: "click", ref: ref(r, /element "Pencil" \[([^\]]+)\]/u) }]),
     act(r => [{ action: "click", ref: ref(r, /link "Next page" \[([^\]]+)\]/u) }]),

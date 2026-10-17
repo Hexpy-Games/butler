@@ -92,12 +92,17 @@ export async function maskSecure(tab, image, marks) {
   return markedImage(image, marks.map(mark => ({ ...mark, rect: { x: mark.rect.x * sx, y: mark.rect.y * sy, width: mark.rect.width * sx, height: mark.rect.height * sy } })));
 }
 
-export async function observationImage(tab) {
-  const epoch = tab.epoch;
+/** Private progress evidence is independent of whether the model requested pixels. */
+export async function observationBitmap(tab) {
   const image = await tab.view.webContents.capturePage(undefined, { stayHidden: true });
   tab.afterCapture?.(image);
-  // A tiny unmarked thumbnail lets progress notes tell a pixel-only change from none.
   if (!image.isEmpty()) tab.observation.thumb = image.resize({ width: 160, height: 100 }).toBitmap();
+  return image;
+}
+
+export async function observationImage(tab) {
+  const epoch = tab.epoch;
+  const image = await observationBitmap(tab);
   const captured = encode(await markedImage(image, await bitmapMarks(tab, image, await boxes(tab))));
   if (epoch !== tab.epoch || tab.holder !== "agent") return { image_status: "control_changed" };
   if (captured.image) {

@@ -158,6 +158,7 @@ function batchResult(tab, steps, failed) {
   return result;
 }
 export async function actBatch(tab, args, session) {
+  tab.comparisonStill = undefined;
   const epoch = tab.epoch, steps = [];
   let failed = false;
   const deadline = Date.now() + Math.min(Number(args.deadline_ms) || 30000, 30000);

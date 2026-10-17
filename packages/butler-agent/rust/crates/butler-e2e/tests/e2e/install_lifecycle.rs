@@ -337,6 +337,64 @@ async fn ins_02_install_update_rollback_uninstall() -> Result<(), HarnessError> 
     Ok(())
 }
 
+/// INS-03 — package-owned command launchers are preserved by CLI updates and uninstall.
+#[tokio::test]
+async fn ins_03_package_launcher_is_foreign_to_cli_update_and_uninstall() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    let mut world = World::new("INS-03-PACKAGE-LAUNCHER")?;
+    world.launch.set_env(
+        "BUTLER_BIN_DIR",
+        world.sandbox.home.join(".local/bin").display().to_string(),
+    );
+    let [v1, v2] = world.archives()?;
+    world.offer(&[(Some(release_platform()), &v2)])?;
+
+    ok(&world.dev(&[
+        "install",
+        "--from",
+        &v1.path.display().to_string(),
+        "--sha256",
+        &v1.sha256,
+        "--no-restart",
+        "--json",
+    ])?)?;
+    let native_launcher = fs::read_to_string(world.launcher())?;
+    let package_launcher = native_launcher.replacen(
+        "# butler-native-launcher v1",
+        "# butler-package-launcher v1",
+        1,
+    );
+    assert_ne!(
+        package_launcher, native_launcher,
+        "native marker was missing"
+    );
+    fs::write(world.launcher(), &package_launcher)?;
+
+    let updated = ok(&world.butler(&["update", "--apply", "--yes", "--json"])?)?;
+    assert_eq!(
+        updated["data"]["launchers"]["command"]["state"], "kept-foreign",
+        "{updated}"
+    );
+    assert_eq!(fs::read_to_string(world.launcher())?, package_launcher);
+
+    let removed = ok(&world.butler(&[
+        "uninstall",
+        "--keep-data",
+        "--yes",
+        "--files-only",
+        "--json",
+    ])?)?;
+    assert_eq!(
+        removed["data"]["launchers"]["command"], "kept-foreign",
+        "{removed}"
+    );
+    assert_eq!(fs::read_to_string(world.launcher())?, package_launcher);
+    assert!(!world.agent_home.exists(), "the Agent home is still there");
+    world.sandbox.mark_success();
+    Ok(())
+}
+
 /// `service install | status | uninstall` write, report and remove the
 /// login-start definition, and run nothing.
 fn login_start_registration(world: &World) -> Result<(), HarnessError> {
