@@ -288,30 +288,39 @@ fn normalized_code(
     }
 }
 
-/// Whether a rejected request names its tools as the reason: the standard
-/// OpenAI error `param` is `tools` or `tool_choice`, or the message says
-/// tool calls are unsupported or need enabling on the server.
+/// Whether a rejected request says the server or model cannot take tools:
+/// the standard OpenAI error `param` is `tools` or `tool_choice`, or the
+/// message states that tool calling as a whole is unsupported or disabled.
+/// Errors about a particular tool call or history stay ordinary API errors
+/// the model can act on.
 fn refuses_tools(param: Option<&str>, message: Option<&str>) -> bool {
     let param = param.unwrap_or("").to_ascii_lowercase();
     if ["tools", "tool_choice", "functions", "function_call"].contains(&param.as_str()) {
         return true;
     }
     let message = message.unwrap_or("").to_ascii_lowercase();
-    [
-        "tool choice",
-        "tool_choice",
-        "tool call",
-        "tool_call",
-        "tool use",
-        "function call",
-        "function_call",
+    const SUBJECTS: [&str; 6] = [
         "tools",
-    ]
-    .iter()
-    .any(|term| message.contains(term))
-        && ["not support", "unsupported", "not enabled", "requires"]
-            .iter()
-            .any(|term| message.contains(term))
+        "tool calls",
+        "tool calling",
+        "tool use",
+        "function calling",
+        "function calls",
+    ];
+    SUBJECTS.iter().any(|subject| {
+        [
+            format!("does not support {subject}"),
+            format!("doesn't support {subject}"),
+            format!("do not support {subject}"),
+            format!("{subject} is not supported"),
+            format!("{subject} are not supported"),
+            format!("{subject} is not enabled"),
+            format!("{subject} are not enabled"),
+            format!("{subject} not supported"),
+        ]
+        .iter()
+        .any(|phrase| message.contains(phrase.as_str()))
+    })
 }
 
 fn signal(value: Option<&str>) -> String {
@@ -359,10 +368,22 @@ fn safe_text(value: &str) -> Option<String> {
     }
     static SECRET: LazyLock<Regex> = LazyLock::new(|| {
         fixed_regex(
-            r"(?i)\b(api[_-]?key|token|secret|password|authorization)\s*[:=]\s*\S+|Bearer\s+[A-Za-z0-9._~+/=-]+",
+            r"(?i)\b(api[_-]?key|token|secret|password|authorization)\s*[:=]\s*\S+|Bearer\s+[A-Za-z0-9._~+/=-]+|\b(sk|pk|rk|key)[-_][A-Za-z0-9_-]{6,}",
         )
     });
-    Some(bounded(&SECRET.replace_all(&words, "[redacted]"), 500))
+    // Long opaque runs mixing letters and digits (echoed keys, tokens).
+    static OPAQUE: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"[A-Za-z0-9_+/=-]{32,}"));
+    let named = SECRET.replace_all(&words, "[redacted]");
+    let opaque = OPAQUE.replace_all(&named, |found: &regex::Captures<'_>| {
+        let text = &found[0];
+        if text.chars().any(|c| c.is_ascii_digit()) && text.chars().any(|c| c.is_ascii_alphabetic())
+        {
+            "[redacted]".to_owned()
+        } else {
+            text.to_owned()
+        }
+    });
+    Some(bounded(&opaque, 500))
 }
 
 fn header(headers: Option<&HeaderMap>, names: &[&str]) -> Option<String> {

@@ -75,8 +75,8 @@ pub struct ChatBehavior {
     /// (a slow retry the test can stop the turn during).
     pub hold_later_streams: Duration,
     /// Refuse any request carrying `tools` or `tool_choice` with HTTP 400
-    /// and this error message, in vLLM's error shape.
-    pub refuse_tools: Option<String>,
+    /// and this JSON error body.
+    pub refuse_tools: Option<Value>,
 }
 
 impl Default for ChatBehavior {
@@ -266,14 +266,10 @@ fn is_stream_request(seen: &Seen) -> bool {
 fn chat_completion(chat: &ChatBehavior, body: &str, first_stream: bool) -> Response<Body> {
     let request: Value = serde_json::from_str(body).unwrap_or(Value::Null);
     let model = request["model"].as_str().unwrap_or(LOCAL_MODEL).to_owned();
-    if let Some(message) = &chat.refuse_tools
+    if let Some(error) = &chat.refuse_tools
         && (request.get("tools").is_some() || request.get("tool_choice").is_some())
     {
-        return json_response(
-            400,
-            &json!({"object": "error", "type": "BadRequestError", "param": null, "code": 400,
-                    "message": message}),
-        );
+        return json_response(400, error);
     }
     if request["stream"] != true {
         return json_response(
