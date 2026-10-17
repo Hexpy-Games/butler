@@ -7,7 +7,9 @@ for (const type of ["click", "contextmenu"]) globalThis.window?.addEventListener
     .find(node => node instanceof HTMLElement && node.hasAttribute("data-butler-link"))?.getAttribute("data-butler-link") : null);
   if (!value || !/^https?:/iu.test(value)) return;
   event.preventDefault(); event.stopImmediatePropagation();
-  ipcRenderer.send("butler-app:link", type === "click" ? "open" : "menu", value, { x: event.clientX, y: event.clientY });
+  // Links marked for the user's own browser (account pages that need existing sessions) skip the in-app tab.
+  const op = type === "click" ? (link?.closest("[data-butler-link-target='external']") ? "external" : "open") : "menu";
+  ipcRenderer.send("butler-app:link", op, value, { x: event.clientX, y: event.clientY });
 }, true);
 
 const port = Number(process.env.BUTLER_APP_SERVER_PORT ?? "18765");
