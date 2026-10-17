@@ -65,6 +65,8 @@ jobs:
           python3 .github/scripts/isolated.py bun tests/smoke/browser-batch-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/round2"
           python3 .github/scripts/isolated.py bun tests/smoke/browser-round2-electron.ts
+          export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/still-lifecycle"
+          python3 .github/scripts/isolated.py bun tests/smoke/browser-still-lifecycle-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/gaps"
           python3 .github/scripts/isolated.py bun tests/smoke/browser-gaps-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/busy"
@@ -143,6 +145,10 @@ jobs:
           else
             cp "$RUNNER_TEMP/rust-archive/shard-$SHARD.txt" "$RUNNER_TEMP/rust-archive/install.txt"
           fi
+      - name: Supply the prebuilt web read probe
+        run: |
+          chmod +x "$RUNNER_TEMP/rust-archive/web-access-smoke"
+          echo "BUTLER_E2E_WEB_PROBE_BIN=$RUNNER_TEMP/rust-archive/web-access-smoke" >> "$GITHUB_ENV"
       - uses: ./.github/actions/e2e-stub
         with:
           archive-file: ${{ runner.temp }}/rust-archive/tests.tar.zst
@@ -182,6 +188,8 @@ jobs:
         run: |
           chmod +x "$RUNNER_TEMP/fault-agent/butler-agent"
           echo "BUTLER_E2E_FAULT_BIN=$RUNNER_TEMP/fault-agent/butler-agent" >> "$GITHUB_ENV"
+      # Budgeted browser preview scenarios start their fixture servers with Bun.
+      - uses: ./.github/actions/bun-setup
       - uses: actions/download-artifact@v4
         with:
           name: agent-perf-fixture-${{ inputs.platform }}

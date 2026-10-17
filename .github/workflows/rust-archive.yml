@@ -138,6 +138,9 @@ jobs:
           # The E2E agent needs the harness's fixture build (crates/butler-e2e README).
           python3 "$isolate" cargo build -j 8 --locked "${ort[@]}" -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox --features butler-platform/test-support,butler-agent/e2e-fixtures
           cp target/debug/butler-agent "$RUNNER_TEMP/rust-archive/butler-agent"
+          # The workspace build above includes examples; ship the web read probe
+          # so E2E jobs run it instead of compiling it inside the test.
+          cp target/debug/examples/web-access-smoke "$RUNNER_TEMP/rust-archive/web-access-smoke"
           if [[ "${{ inputs.platform }}" == linux-* ]]; then
             cp target/debug/butler-sandbox "$RUNNER_TEMP/rust-archive/butler-sandbox"
           fi

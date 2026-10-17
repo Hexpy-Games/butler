@@ -2,6 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 use super::storage_correction_seed as seed;
 mod matrix;
+mod scale;
 mod stub;
 use super::data_perf::wal;
 use butler_e2e::e2e::{
@@ -24,7 +25,7 @@ use std::{
 #[tokio::test]
 async fn storage_correction_corr_01() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let setup = Setup::new("CORR-01")?;
+    let setup = fault_setup("CORR-01")?;
     let (url, script, server) = stub::start(setup.sandbox.workspace.display().to_string()).await?;
     let mut s = setup
         .access(Access::FullAccess)
@@ -195,6 +196,9 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
         );
         s.agent.reap();
         assert!(path.exists());
+        if point == "reclaim_chunk" {
+            matrix::assert_reclaim_rolled_back(&path)?;
+        }
         if point == "after_rename" {
             // Before normal open changes owners/claims, compare EVERY table.
             let after = offline(&path, seed::snapshot).await?;
@@ -256,6 +260,15 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
     s.finish().await?;
     server.abort();
     Ok(())
+}
+
+/// Fault scenarios need debug hooks even when perf CI supplies a release Agent.
+fn fault_setup(id: &str) -> Result<Setup, HarnessError> {
+    let setup = Setup::new(id)?;
+    if let Some(binary) = std::env::var_os("BUTLER_E2E_FAULT_BIN") {
+        butler_e2e::e2e::executable::copy(std::path::Path::new(&binary), &setup.sandbox.binary)?;
+    }
+    Ok(setup)
 }
 
 pub(super) fn assert_snapshot(
