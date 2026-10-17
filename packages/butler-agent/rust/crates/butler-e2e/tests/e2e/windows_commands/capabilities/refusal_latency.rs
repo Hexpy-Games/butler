@@ -1,6 +1,8 @@
 //! Repeated lexical refusals retain their complete result without running a shell.
 use super::*;
 
+#[path = "refusal_samples.rs"]
+mod samples;
 #[path = "refusal_scale.rs"]
 mod scale;
 #[path = "startup.rs"]
@@ -40,6 +42,7 @@ async fn sample(access: Access) -> Result<(), HarnessError> {
                 "state_effect":effect,"cwd":".","output_mode":"full"}),
         refused: true,
     };
+    let mut observations = Vec::new();
     let mut expected = None;
     let mut timings = Vec::new();
     let mut slowest = Duration::ZERO;
@@ -72,6 +75,7 @@ async fn sample(access: Access) -> Result<(), HarnessError> {
         } else {
             expected = Some(output);
         }
+        observations.push(samples::Sample::new(&script, elapsed));
         timings.push(elapsed.as_micros());
         slowest = slowest.max(elapsed);
     }
@@ -94,6 +98,7 @@ async fn sample(access: Access) -> Result<(), HarnessError> {
             "refusal entered shell work: {logs}"
         );
     }
+    samples::print(access, &observations, &logs);
     timings.sort_unstable();
     eprintln!(
         "REFUSAL-SAMPLES access={access:?} n={SAMPLES} p50_us={} max_us={}",
