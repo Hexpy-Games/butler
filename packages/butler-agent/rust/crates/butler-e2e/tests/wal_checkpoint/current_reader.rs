@@ -5,7 +5,9 @@ pub(super) fn pin_current_snapshot(event: sqlite::CheckpointEvent) {
     if matches!(event, sqlite::CheckpointEvent::WalCommitted(_)) {
         READER.with(|reader| {
             let reader = reader.borrow();
-            let reader = reader.as_ref().unwrap();
+            let Some(reader) = reader.as_ref() else {
+                return;
+            };
             if !reader.is_autocommit() {
                 reader.execute_batch("ROLLBACK").unwrap();
             }

@@ -34,6 +34,8 @@ struct Storage {
     busy: u128,
     inline: u128,
     inline_passes: u128,
+    finish: u128,
+    finish_passes: u128,
     commit_sum: u128,
     commit_max: u128,
     decision: u128,
@@ -66,6 +68,9 @@ impl Storage {
             if fields.get("mode") == Some(&"background") {
                 self.passes += 1;
                 self.busy += overlap;
+            } else if fields.get("mode") == Some(&"finish") {
+                self.finish_passes += 1;
+                self.finish += overlap;
             } else {
                 self.inline_passes += 1;
                 self.inline += overlap;
@@ -91,6 +96,11 @@ impl Storage {
     }
 }
 pub(super) fn print(access: Access, samples: &[Sample], logs: &str) {
+    let resets = logs
+        .lines()
+        .filter(|line| line.starts_with("command_wal_timing event=restarted "))
+        .count();
+    eprintln!("REFUSAL-WAL access={access:?} db=BTCC resets={resets}");
     for (i, sample) in samples.iter().enumerate() {
         let mut storage = Storage::default();
         let mut written = HashMap::new();
@@ -122,7 +132,7 @@ pub(super) fn print(access: Access, samples: &[Sample], logs: &str) {
             }
         }
         eprintln!(
-            "REFUSAL-SAMPLE access={access:?} i={i} total_us={} card_us={} allow_us={} resume_us={} ckpt_passes={} ckpt_busy_us={} ckpt_inline_us={} ckpt_inline_count={} app_commit_sum_us={} app_commit_max_us={} decision_us={} transcript_sync_us={} private_replace_us={} app_read_max_us={}",
+            "REFUSAL-SAMPLE access={access:?} i={i} total_us={} card_us={} allow_us={} resume_us={} ckpt_passes={} ckpt_busy_us={} ckpt_inline_us={} ckpt_inline_count={} ckpt_finish_us={} ckpt_finish_count={} app_commit_sum_us={} app_commit_max_us={} decision_us={} transcript_sync_us={} private_replace_us={} app_read_max_us={}",
             sample.total,
             sample.delta("sent", "approval_listed"),
             sample.delta("allow_submitted", "allow_returned"),
@@ -131,6 +141,8 @@ pub(super) fn print(access: Access, samples: &[Sample], logs: &str) {
             storage.busy,
             storage.inline,
             storage.inline_passes,
+            storage.finish,
+            storage.finish_passes,
             storage.commit_sum,
             storage.commit_max,
             storage.decision,

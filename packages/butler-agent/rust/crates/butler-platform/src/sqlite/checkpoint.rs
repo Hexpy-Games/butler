@@ -43,6 +43,8 @@ pub enum CheckpointEvent {
     Checkpointed {
         /// Whether this work delayed the committing writer.
         inline: bool,
+        /// This writer pass finishes a fully backfilled background snapshot.
+        finish: bool,
         /// Checkpoint time, including backstop serialization with a running pass.
         elapsed: Duration,
         /// Frames in the WAL when the checkpoint was requested or observed.
@@ -85,7 +87,7 @@ struct Progress {
     generation: u64,
     backfilled: i32,
     attempted: i32,
-    inline_pending: bool,
+    finish_pending: bool,
 }
 impl Progress {
     fn committed(&mut self, frames: i32) {
@@ -93,29 +95,20 @@ impl Progress {
             self.generation = self.generation.wrapping_add(1);
             self.backfilled = 0;
             self.attempted = 0;
+            self.finish_pending = false;
         }
         self.frames = frames;
     }
     fn due(&self, threshold: i32) -> bool {
-        // Commits after a completed pass wait for new frames even when a
-        // current reader prevents SQLite from restarting a fully backfilled WAL.
-        self.inline_pending
-            || self
-                .frames
-                .saturating_sub(self.backfilled.max(self.attempted))
-                >= threshold
+        // A pinned reader waits for a threshold of new frames after its attempt.
+        self.frames
+            .saturating_sub(self.backfilled.max(self.attempted))
+            >= threshold
     }
-    fn completed(&mut self, snapshot: (u64, i32), log: i32, checkpointed: i32) {
-        let (generation, attempted) = snapshot;
+    fn completed(&mut self, generation: u64, log: i32, checkpointed: i32) {
         if self.generation == generation && log >= 0 && checkpointed >= 0 {
             self.backfilled = checkpointed;
-            // SQLite may report a log larger than the snapshot it backfilled.
-            // Only a pass blocked before its starting snapshot waits a threshold.
-            self.attempted = if checkpointed >= attempted {
-                checkpointed
-            } else {
-                log
-            };
+            self.attempted = log;
         }
     }
 }
@@ -218,47 +211,51 @@ fn committed(wal: &rusqlite::hooks::Wal, pages: i32) -> rusqlite::Result<()> {
         if let Some(observer) = hook.observer {
             observer(CheckpointEvent::WalCommitted(pages));
         }
-        let mut due = {
+        let (mut due, finish) = {
             let mut progress = hook.progress.lock().unwrap_or_else(PoisonError::into_inner);
             progress.committed(pages);
-            progress.due(hook.pages)
+            let finish = std::mem::take(&mut progress.finish_pending);
+            (progress.due(hook.pages), finish)
         };
-        if pages >= hook.pages {
-            if pages >= hook.pages.saturating_mul(HARD_LIMIT_MULTIPLIER) {
-                // Wait for the owned PASSIVE pass before running the backstop:
-                // racing it would return BUSY and let continuous appends escape
-                // the ceiling. Normal commits never take this mutex.
-                let started = Instant::now();
-                let guard = hook
-                    .checkpoint
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner);
-                // Same PASSIVE backstop as checkpoint(), with result counters.
-                let result = wal.checkpoint_v2(rusqlite::hooks::CheckpointMode::PASSIVE);
-                if let Ok((log, backfilled)) = result.as_ref() {
-                    let mut progress = hook.progress.lock().unwrap_or_else(PoisonError::into_inner);
-                    let generation = progress.generation;
-                    progress.completed((generation, pages), *log, *backfilled);
-                    // The worker still owns WAL-index sync after an inline pass.
-                    progress.inline_pending |= log == backfilled;
-                    due = progress.due(hook.pages);
-                }
-                drop(guard);
-                checkpointed(
-                    hook.observer,
-                    hook.label,
-                    true,
-                    result.as_ref().copied().unwrap_or((pages, -1)),
-                    started.elapsed(),
-                    result.is_ok(),
-                );
-            }
-            if due {
-                let _ = wake.try_send(());
-            }
+        if finish || pages >= hook.pages.saturating_mul(HARD_LIMIT_MULTIPLIER) {
+            due = writer_pass(wal, pages, hook, finish);
+        }
+        if due {
+            let _ = wake.try_send(());
         }
     });
     Ok(())
+}
+
+fn writer_pass(wal: &rusqlite::hooks::Wal, pages: i32, hook: &Maintenance, finish: bool) -> bool {
+    // Serialize with maintenance so PASSIVE cannot return BUSY at the ceiling.
+    // The writer owns this hook, so no later commit can race the finish pass.
+    let started = Instant::now();
+    let guard = hook
+        .checkpoint
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    let result = wal.checkpoint_v2(rusqlite::hooks::CheckpointMode::PASSIVE);
+    let due = {
+        let mut progress = hook.progress.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Ok((log, backfilled)) = result.as_ref() {
+            let generation = progress.generation;
+            progress.completed(generation, *log, *backfilled);
+            // A background pass may have completed while acquiring the lock.
+            // This writer pass has already consumed that work, even if pinned.
+            progress.finish_pending = false;
+        }
+        progress.due(hook.pages)
+    };
+    drop(guard);
+    checkpointed(
+        hook,
+        if finish { "finish" } else { "inline" },
+        result.as_ref().copied().unwrap_or((pages, -1)),
+        started.elapsed(),
+        result.is_ok(),
+    );
+    due
 }
 
 fn run(
@@ -285,34 +282,27 @@ fn run(
         }
     };
     let _ = ready.send(Ok(()));
-    let mut chain = false;
-    while chain || requests.recv().is_ok() {
+    while requests.recv().is_ok() {
         let started = Instant::now();
         let guard = checkpoint.lock().unwrap_or_else(PoisonError::into_inner);
         let snapshot = {
             let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
             // A coalesced wake may be left behind a pass that already covered
             // its frames. Do not run another SQL checkpoint for that request.
-            if !chain && !progress.due(pages) {
+            if !progress.due(pages) {
                 continue;
             }
-            progress.inline_pending = false;
             progress.attempted = progress.frames;
             (progress.generation, progress.frames)
         };
         let result = backfill(&connection, maintenance, started);
-        chain = match result.as_ref() {
-            Ok((0, log, backfilled)) => {
-                let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
-                progress.completed(snapshot, *log, *backfilled);
-                // Fully backfilled passes drain any commits that raced them.
-                // Decide before releasing the progress lock, before finish_pass.
-                progress.generation == snapshot.0
-                    && *backfilled >= snapshot.1
-                    && progress.frames > *backfilled
+        if let Ok((0, log, backfilled)) = result.as_ref() {
+            let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
+            progress.completed(snapshot.0, *log, *backfilled);
+            if progress.generation == snapshot.0 && *backfilled >= snapshot.1 {
+                progress.finish_pending = true;
             }
-            _ => false,
-        };
+        }
         drop(guard);
         finish_pass(&connection, maintenance, started, result.is_ok());
     }
@@ -335,9 +325,8 @@ fn backfill(
     });
     let (busy, log, backfilled) = result.as_ref().copied().unwrap_or((1, -1, -1));
     checkpointed(
-        maintenance.observer,
-        maintenance.label,
-        false,
+        maintenance,
+        "background",
         (log, backfilled),
         started.elapsed(),
         busy == 0,
@@ -374,20 +363,21 @@ fn open(
 }
 
 fn checkpointed(
-    observer: Option<CheckpointObserver>,
-    label: &'static str,
-    inline: bool,
+    maintenance: &Maintenance,
+    mode: &str,
     counts: (i32, i32),
     elapsed: Duration,
     succeeded: bool,
 ) {
     let (frames, backfilled) = counts;
+    let Maintenance {
+        observer, label, ..
+    } = maintenance;
     static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     if *ENABLED.get_or_init(|| {
         std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
             == Some(std::ffi::OsStr::new("1"))
     }) {
-        let mode = if inline { "inline" } else { "background" };
         let utc_us = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -400,7 +390,8 @@ fn checkpointed(
     }
     if let Some(observer) = observer {
         observer(CheckpointEvent::Checkpointed {
-            inline,
+            inline: mode != "background",
+            finish: mode == "finish",
             elapsed,
             frames,
             succeeded,

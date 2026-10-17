@@ -143,7 +143,11 @@ impl Fixture {
             config.process_liveness,
         )
         .expect("register");
-        db.pragma_update(None, "wal_autocheckpoint", 1)
+        // Begin from a backfilled WAL, then cross the worker threshold without
+        // hitting the 4x writer backstop that would consume its pending work.
+        db.execute_batch("PRAGMA wal_checkpoint(PASSIVE)")
+            .expect("backfill");
+        db.pragma_update(None, "wal_autocheckpoint", 1000)
             .expect("threshold");
         let checkpoint = sqlite::CheckpointOwner::start(
             &db,
@@ -157,8 +161,8 @@ impl Fixture {
         .expect("start")
         .expect("worker");
         db.execute_batch(
-            "BEGIN IMMEDIATE; CREATE TABLE close_committed(value);
-             INSERT INTO close_committed VALUES(42); COMMIT;",
+            "BEGIN IMMEDIATE; CREATE TABLE close_committed(value, padding);
+             INSERT INTO close_committed VALUES(42, zeroblob(4500000)); COMMIT;",
         )
         .expect("commit");
         let result = writer::close(db, &owner, Some(checkpoint::CheckpointOwner(checkpoint)));
