@@ -1,8 +1,9 @@
 // #1186: a reasoning select never renders empty. The built app's visual
 // harness over an offline gateway stub (no model calls, no native agent):
-// Settings → Models with a custom model that offers only "none", and with a
-// stored effort the model does not offer. Each select is disabled, shows the
-// effort the runtime uses, and names why in a tooltip. Light and dark, desktop.
+// Settings → Models with a custom model that offers only "none" (disabled,
+// named why in a tooltip), and with a stored effort the model does not offer
+// (enabled so the owner can pick a valid one). Both show the effort the
+// runtime uses. Light and dark, desktop.
 // Run `npm --prefix packages/butler-app/client/ui run build` first
 // (`bun run app:reasoning-select:smoke`). BUTLER_REASONING_SHOTS=<dir> saves captures.
 import assert from "node:assert/strict";
@@ -37,8 +38,8 @@ const limited = custom("two-step", ["low", "high"], "high");
 const catalog: ModelCatalogView = { ...HARNESS_MODEL_CATALOG, models: [...HARNESS_MODEL_CATALOG.models, noReasoning, limited],
   providers: [...HARNESS_MODEL_CATALOG.providers, { provider_id: "custom", provider_label: "Custom", latest_model_ref: noReasoning.model_ref, models: [noReasoning, limited] }] };
 const cases = [
-  { name: "single-option", model: noReasoning, stored: "high", effective: "none" },
-  { name: "stored-not-offered", model: limited, stored: "none", effective: "high" },
+  { name: "single-option", model: noReasoning, stored: "high", effective: "none", fixed: true },
+  { name: "stored-not-offered", model: limited, stored: "none", effective: "high", fixed: false },
 ] as const;
 
 const browser = await launchSmokeBrowser();
@@ -80,14 +81,22 @@ try {
       await trigger.scrollIntoViewIfNeeded();
       await trigger.hover({ force: true });
       const tooltip = page.getByRole("tooltip").filter({ hasText: copy.settings.descriptions.reasoningFixed });
-      const shown = await tooltip.first().waitFor({ timeout: 3000 }).then(() => true, () => false);
+      const shown = await tooltip.first().waitFor({ timeout: item.fixed ? 3000 : 500 }).then(() => true, () => false);
       if (shots) await page.screenshot({ path: join(shots, `models-${item.name}-${theme}.png`) });
       const label = reasoningEffortLabel(item.effective, "ko-KR");
       const where = `${item.name} ${theme}`;
-      if (!await trigger.isDisabled()) failures.push(`${where}: reasoning select is enabled`);
+      if (await trigger.isDisabled() !== item.fixed) failures.push(`${where}: select ${item.fixed ? "enabled" : "disabled"}`);
       const text = (await trigger.innerText()).trim();
       if (text !== label) failures.push(`${where}: shows "${text}", not the effective "${label}"`);
-      if (!shown) failures.push(`${where}: no tooltip`);
+      if (shown !== item.fixed) failures.push(`${where}: tooltip ${shown ? "shown" : "missing"}`);
+      if (!item.fixed) {
+        // The owner can pick: the list holds exactly the model's efforts.
+        await trigger.click();
+        const offered = await page.getByRole("option").allInnerTexts();
+        const expected = item.model.reasoning_efforts.map((effort) => reasoningEffortLabel(effort, "ko-KR"));
+        if (JSON.stringify(offered.map((text) => text.trim())) !== JSON.stringify(expected)) failures.push(`${where}: offers ${offered.join(", ")}`);
+        await page.keyboard.press("Escape");
+      }
       checked += 1;
     }
   }

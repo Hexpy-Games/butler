@@ -15,9 +15,9 @@ export function effectiveReasoningEffort(
 }
 
 /**
- * A reasoning select for `model`. With no choice to make (one option, or a
- * stored effort the model does not offer) it shows the effective effort,
- * disabled, and says why in a tooltip; it is never empty.
+ * A reasoning select for `model`. It always shows the effective effort, so it
+ * is never empty; with no choice to make (one option or none) it is disabled
+ * and says why in a tooltip.
  */
 export function ReasoningSelect({
   model,
@@ -34,7 +34,7 @@ export function ReasoningSelect({
   triggerTestClass?: string;
 }) {
   const efforts = model?.reasoning_efforts ?? ["none"];
-  const fixed = efforts.length <= 1 || !efforts.includes(value);
+  const fixed = efforts.length <= 1;
   return (
     <SettingsSelect
       {...field}
