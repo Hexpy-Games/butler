@@ -315,18 +315,27 @@ def restore_tree(directory, expected, compatible=False):
         raise ValueError('Symlink Cargo target directory')
     runner_cache.delete_tree(target)
     os.makedirs(runner_cache.extended(target.parent), exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=target.parent) as stage:
-        previous = Path.cwd()
+    stage = Path(tempfile.mkdtemp(dir=runner_cache.extended(target.parent)))
+    try:
+        # Windows applies MAX_PATH to cwd plus a relative name, and Cargo units
+        # nest past it below the stage: extract to the extended stage instead.
         try:
-            os.chdir(stage)
-            try:
-                cache.extract(directory)
-            except (RuntimeError, tarfile.ReadError, EOFError) as error:
-                print(f'::warning::Cargo snapshot decompress failed ({type(error).__name__}: {error}); cold Cargo build follows.')
-                return False
-        finally:
-            os.chdir(previous)
-        os.rename(runner_cache.extended(Path(stage) / 'target'), runner_cache.extended(target))
+            cache.extract(directory, base=stage)
+        except (RuntimeError, tarfile.ReadError, EOFError) as error:
+            print(f'::warning::Cargo snapshot decompress failed ({type(error).__name__}: {error}); cold Cargo build follows.')
+            restored = False
+        else:
+            os.rename(stage / 'target', runner_cache.extended(target))
+            restored = True
+    except BaseException as error:
+        try:
+            runner_cache.delete_tree(stage)
+        except OSError as cleanup:  # Report the restore failure, not its cleanup.
+            error.add_note(f'Cargo snapshot stage cleanup also failed: {cleanup}')
+        raise
+    runner_cache.delete_tree(stage)
+    if not restored:
+        return False
     cache.source_times.restore(Path(os.environ['GITHUB_WORKSPACE']),
                               json.loads((directory / 'sources.json').read_text()))
     print(f'Restored verified CI Cargo snapshot at {json.loads((directory / "cache.json").read_text())["sha"]}.')

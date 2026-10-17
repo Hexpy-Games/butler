@@ -35,9 +35,14 @@ export function updateFixtureWord(messages: Array<{ role?: string; content?: unk
     if (typeof message.content === "string") return message.content;
     return Array.isArray(message.content) ? message.content.map(part => part?.text ?? "").join("\n") : "";
   });
-  const text = texts.findLast(text => text.includes("User request:")) ?? texts.at(-1) ?? "";
-  const start = text.lastIndexOf("User request:");
-  const request = (start < 0 ? text : text.slice(start + "User request:".length)).split("Current scope:")[0];
+  const headings = ["## Current request\n", "User request:"];
+  const requestStart = (text: string) => Math.max(-1, ...headings.map(heading => {
+    const start = text.lastIndexOf(heading);
+    return start < 0 ? -1 : start + heading.length;
+  }));
+  const text = texts.findLast(text => requestStart(text) >= 0) ?? texts.at(-1) ?? "";
+  const start = requestStart(text);
+  const request = (start < 0 ? text : text.slice(start)).split("Current scope:")[0];
   return /Reply with exactly the word: (one|waiting|done)/u.exec(request)?.[1];
 }
 

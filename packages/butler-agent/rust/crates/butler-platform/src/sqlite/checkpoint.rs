@@ -1,4 +1,4 @@
-//! Coalesced PASSIVE checkpoints on an owned connection, outside the SQL lane.
+//! Stock commit-path checkpoints with coalesced background WAL-index writeback.
 use super as sqlite;
 use rusqlite::{Connection, OpenFlags, config::DbConfig};
 use std::{
@@ -39,11 +39,11 @@ pub enum CheckpointError {
 pub enum CheckpointEvent {
     /// The writer committed this many frames into its current WAL.
     WalCommitted(i32),
-    /// A background PASSIVE checkpoint and WAL-index sync finished.
+    /// A background WAL-index sync finished.
     Finished {
         /// Time spent performing this maintenance pass.
         elapsed: Duration,
-        /// Both SQLite and WAL-index writeback returned success.
+        /// WAL-index writeback returned success.
         succeeded: bool,
     },
 }
@@ -140,17 +140,15 @@ fn committed(wal: &rusqlite::hooks::Wal, pages: i32) -> rusqlite::Result<()> {
             observer(CheckpointEvent::WalCommitted(pages));
         }
         if pages >= hook.pages {
-            // Every commit above the threshold must leave a pending pass. A
-            // moving threshold strands a sub-threshold tail after each burst,
-            // preventing the next transaction from restarting the WAL.
-            match hook.wake.try_send(()) {
-                Ok(()) | Err(mpsc::TrySendError::Full(())) => {}
-                Err(mpsc::TrySendError::Disconnected(())) => {
-                    // Retain SQLite's stock recovery behavior after worker loss.
-                    // Closing the owner still reports the maintenance failure.
-                    let _ = wal.checkpoint();
-                }
-            }
+            // Match SQLite's stock automatic hook: checkpoint before returning
+            // from COMMIT, ignoring errors because the transaction committed.
+            // A concurrent PASSIVE worker can hold the checkpoint lock while
+            // writers keep appending, so checkpoint only on this writer lane.
+            let _ = wal.checkpoint();
+            // SQLite does not flush mapped WAL-index pages on macOS. Coalesce
+            // that separate writeback off the SQL lane, with no idle wakeups.
+            // Full means a sync is pending; close reports a disconnected worker.
+            let _ = hook.wake.try_send(());
         }
     });
     Ok(())
@@ -175,36 +173,17 @@ fn run(
     let _ = ready.send(Ok(()));
     while requests.recv().is_ok() {
         let started = Instant::now();
-        let result = backfill(&connection);
         let synced = sqlite::sync_wal_index(&connection);
-        // SQLite's automatic hook ignores checkpoint errors after COMMIT. Keep
-        // that behavior; the next commit above the threshold requests a pass.
         if let Some(observer) = observer {
             observer(CheckpointEvent::Finished {
                 elapsed: started.elapsed(),
-                succeeded: result.is_ok() && synced.is_ok(),
+                succeeded: synced.is_ok(),
             });
         }
     }
     connection
         .close()
         .map_err(|(_, error)| CheckpointError::from(error))
-}
-
-fn backfill(connection: &Connection) -> rusqlite::Result<()> {
-    let mut previous = -1;
-    loop {
-        let (busy, log, checkpointed): (i32, i32, i32) =
-            connection.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-            })?;
-        if busy != 0 || checkpointed >= log || checkpointed <= previous {
-            // PASSIVE reports busy=0 even when a reader pins the unbackfilled
-            // tail. Stop on no progress as well; only new commits wake us.
-            return Ok(());
-        }
-        previous = checkpointed;
-    }
 }
 
 fn open(

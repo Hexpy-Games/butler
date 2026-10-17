@@ -3,6 +3,7 @@ import { perceptionSource, resolveSource, selectSource } from "./page/snapshot.m
 import { accessibleName, nameObservation } from "./accessibility.mjs";
 import { contentRegions } from "./layout.mjs";
 import { observationImage } from "./capture.mjs";
+import { comparisonThumbnail } from "./stills.mjs";
 import { noteProgress } from "./progress.mjs";
 import { frameClass, signedInPolicy } from "./signed-in.mjs";
 import { routeTarget } from "./frame-input.mjs";
@@ -86,6 +87,7 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 /** After an action, wait for loading, the page's own requests and DOM updates
  * (suggestions, recalculated results) to settle. Quiet pages return at once. */
 export async function settle(tab, maxMs = 5000) {
+  tab.comparisonStill = undefined;
   const deadline = Date.now() + maxMs, contents = tab.view.webContents;
   for (let round = 0; round < 3 && Date.now() < deadline; round++) {
     while (busy(tab) && Date.now() < deadline) await pause(100);
@@ -141,7 +143,10 @@ async function observeOnce(tab, args) {
   tab.observation = { obs, epoch, main:frames[0], frames, bindings, nodes, fields, payment, paymentFrames, addons, complete: selected.length === frames.length };
   // "auto" attaches pixels only to a page that is mostly visual (see visualPage).
   const pixels = args.include_image === true || args.include_image === "auto" && visual;
+  const observation = tab.observation;
   const image = pixels ? await observationImage(tab) : {};
+  if (!pixels) observation.thumb = await comparisonThumbnail(tab);
+  if (epoch !== tab.epoch || tab.holder !== "agent" || tab.observation !== observation) return changed(tab);
   // This observation is already the newest one, so name it: earlier ids are stale.
   if (pixels && !image.image) return { status: "refused", reason: image.image_status ?? "image_unavailable", obs,
     recovery: `The page was observed as ${obs}, which replaced every earlier observation id, but no screenshot could be made. Observe again; look "never" returns a text-only observation.` };
