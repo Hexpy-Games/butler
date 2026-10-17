@@ -157,6 +157,7 @@ mod tools_effects;
 mod turn;
 mod turn_continuation;
 mod turn_faults;
+mod unadmitted_stop;
 mod unicode_delivery;
 mod update_channels;
 mod update_discovery;

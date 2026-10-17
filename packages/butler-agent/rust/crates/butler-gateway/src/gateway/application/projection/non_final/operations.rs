@@ -110,6 +110,20 @@ pub(super) fn project_cancelled(
     Ok(())
 }
 
+/// Ends a Stop BTCC confirmed but the App never settled: the turn, its cancel
+/// request and its queued input end cancelled together. Returns whether the
+/// queued input was settled.
+pub(in crate::gateway::application) fn settle_confirmed_stop(
+    db: &Connection,
+    subscribers: &EventSubscribers,
+    chat: &str,
+    turn: &str,
+    now: &str,
+) -> Result<bool, AppStorageError> {
+    project_cancelled(db, subscribers, chat, turn, &Map::new(), now, "")?;
+    queue::settle_stopped(db, subscribers, chat, turn, now)
+}
+
 pub(super) fn project_cancellation_ack(
     db: &Connection,
     turn: &str,
@@ -229,8 +243,14 @@ pub(super) fn settle_if_claimed(
     code: &str,
     now: &str,
 ) -> Result<bool, AppStorageError> {
-    if queue::claim_status(db, chat, turn, claim)? == QueuedTurnClaimStatus::Unlinked {
+    let status = queue::claim_status(db, chat, turn, claim)?;
+    if status == QueuedTurnClaimStatus::Unlinked {
         return Ok(false);
+    }
+    // A cancellation projected over a stale link is BTCC's confirmed Stop
+    // (`claim_status`): a cancelled turn keeps no live queued input.
+    if status == QueuedTurnClaimStatus::Stale && code == "turn_cancelled" {
+        return queue::settle_stopped(db, subscribers, chat, turn, now);
     }
     let Some(claim) = claim else { return Ok(false) };
     if !queue::settle(db, chat, turn, claim, None, Some(code), now)? {
