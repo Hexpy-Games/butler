@@ -144,9 +144,10 @@ fn code_page_shell(
     }
     // Environment transport avoids cmd's 8191-character command-line limit.
     // Invoke-Expression obeys the current language policy, including CLM.
-    // Suppress module-autoload progress before Remove-Item loads Management;
-    // the inner script's preference is too late for this outer bootstrap.
-    let bootstrap = "$ProgressPreference='SilentlyContinue'; $butlerCommandText=$env:BUTLER_COMMAND_SCRIPT; Remove-Item Env:BUTLER_COMMAND_SCRIPT; Invoke-Expression $butlerCommandText";
+    let bootstrap = format!(
+        "{}$butlerCommandText=$env:BUTLER_COMMAND_SCRIPT; Remove-Item Env:BUTLER_COMMAND_SCRIPT; Invoke-Expression $butlerCommandText",
+        bootstrap_modules()
+    );
     let encoded = STANDARD.encode(
         bootstrap
             .encode_utf16()
@@ -188,7 +189,20 @@ fn default_modules() -> &'static str {
     // Load trusted built-ins before changing provider location or path policy.
     // Initialize them while the normal filesystem drives are still active.
     // Preserve PSModulePath for explicitly requested custom modules.
-    "Import-Module -Name \"$PSHOME\\Modules\\Microsoft.PowerShell.Utility\\Microsoft.PowerShell.Utility.psd1\"; Import-Module -Name \"$PSHOME\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1\"; "
+    // Single quotes keep this usable inside a double-quoted -Command argument.
+    "Import-Module -Name ($PSHOME + '\\Modules\\Microsoft.PowerShell.Utility\\Microsoft.PowerShell.Utility.psd1'); Import-Module -Name ($PSHOME + '\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1'); "
+}
+
+/// Prefix for every outer bootstrap that calls a built-in cmdlet before the
+/// command script runs. Resolving `Remove-Item` or `Invoke-Expression` by
+/// name first would auto-discover modules across the whole PSModulePath on
+/// every command. Importing the two built-ins from `$PSHOME` avoids that scan.
+/// Progress is suppressed first: the script's own preference applies too late.
+pub(super) fn bootstrap_modules() -> String {
+    format!(
+        "$ProgressPreference='SilentlyContinue'; {}",
+        default_modules()
+    )
 }
 
 // The tool accepts the common cmd-style `powershell.exe -Command "script"`.

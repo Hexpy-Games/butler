@@ -236,6 +236,8 @@ impl Btcc {
 
     /// Fences shutdown execution without cancelling the durable turn. Await the
     /// active run before closing dependencies; its state remains retryable.
+    /// Any other caller must first queue the turn's `cancel_turn` stop, which
+    /// owns its durable cancellation.
     pub fn interrupt_turn(&self, turn_id: &str) {
         self.inner.interrupt_turn(turn_id);
     }

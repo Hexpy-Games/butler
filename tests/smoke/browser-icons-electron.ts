@@ -52,7 +52,7 @@ try {
   stub.set([
     () => ({ name: "tool_describe", arguments: { ids: ["browser_open", "browser_observe", "browser_act"].map(n => `native:${n}`) } }),
     () => bridgeBrowser("browser_open", { url: page.url }),
-    r => { tabId = String(latestBrowser(r, "tab").tab); return bridgeBrowser("browser_observe", { tab: tabId }); },
+    r => { tabId = String(latestBrowser(r, "tab").tab); return bridgeBrowser("browser_observe", { tab: tabId, look: "always" }); },
     ...clicks.map(([, where, expect], index) => (r: StubModelRequest) => { if (index === 0) first = text(r); return point(where, expect)(r); }),
     // A point on plain text beside a control.
     point(at(170, 210), "button"),

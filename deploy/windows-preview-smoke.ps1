@@ -182,6 +182,13 @@ try {
     $current = (Get-Content "$env:LOCALAPPDATA/Butler/agent/current" -Raw).Trim()
     "BUTLER_E2E_INSTALLED_ROOT=$env:LOCALAPPDATA/Butler/agent/$current" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
     'PASS installed ZIP: version, start, single instance, status, browser UI/assets, cookie auth, private DATA/tokens, restart, stop'
+} catch {
+    # The fixture DATA is removed after the job; keep the service's own logs
+    # with the uploaded diagnostics so a lifecycle failure shows its cause.
+    if ($env:PREVIEW_ROOT) {
+        Copy-Item -LiteralPath "$env:BUTLER_DATA/logs" -Destination "$env:PREVIEW_ROOT/logs/installed-zip-service" -Recurse -ErrorAction SilentlyContinue
+    }
+    throw
 } finally {
     $stopCode = 0
     if (Test-Path $launcher) {

@@ -78,7 +78,7 @@
   padding-top: var(--space-2xl);
   border: var(--border-hairline) solid var(--shell-card-edge);
   border-radius: var(--shell-card-radius);
-  background: var(--shell-card-bg);
+  background: var(--shell-settings-card-bg);
   box-shadow: var(--shell-card-shadow);
 }
 
