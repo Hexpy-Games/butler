@@ -26,13 +26,15 @@ if ($Mode -eq 'Export') {
         $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0 -or !($listed -match ': test$')) { throw "Empty E2E selection: $test" }
         $savedPerf = $env:BUTLER_E2E_PERF
-        $threads = if ($test -eq 'windows_commands') { $env:BUTLER_E2E_PERF = '1'; 1 } else { 8 }
+        # The hosted run records command timings; the owner-PC matrix (windows-command-matrix.ps1) enforces the budgets.
+        $env:BUTLER_E2E_PERF = '0'
+        $threads = if ($test -eq 'windows_commands') { 1 } else { 8 }
         $log = "$env:PREVIEW_ROOT/logs/$test.log"
         $ErrorActionPreference = 'Continue'
         cmd /d /c "`"$artifacts/e2e.exe`" `"$test`::`" --test-threads=$threads --nocapture > `"$log`" 2>&1"
         $testCode = $LASTEXITCODE
         $ErrorActionPreference = 'Stop'
-        $env:BUTLER_E2E_PERF = $savedPerf
+        if ($null -eq $savedPerf) { Remove-Item Env:BUTLER_E2E_PERF -ErrorAction SilentlyContinue } else { $env:BUTLER_E2E_PERF = $savedPerf }
         if ($testCode -ne 0) {
             & "$PSScriptRoot/windows-test-log.ps1" -Log $log
             throw "E2E failed: $test ($testCode)"

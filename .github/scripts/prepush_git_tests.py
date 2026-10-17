@@ -103,8 +103,10 @@ class PrepushGitChecks(unittest.TestCase):
                    'import os, shutil, subprocess, tempfile; '
                    'assert not any(k.startswith("GIT_") for k in os.environ); '
                    'd=tempfile.mkdtemp(); subprocess.run(["git", "init", "-q", d], check=True); '
-                   'assert subprocess.check_output(["git", "-C", d, "rev-parse", '
-                   '"--show-toplevel"], text=True).strip() == d; '
+                   # macOS temp dirs are symlinks (/var -> /private/var); Git
+                   # reports the resolved path.
+                   'assert os.path.realpath(subprocess.check_output(["git", "-C", d, "rev-parse", '
+                   '"--show-toplevel"], text=True).strip()) == os.path.realpath(d); '
                    'shutil.rmtree(d); assert os.environ["HOME"] != os.environ["BUTLER_DATA"]']
         env = dict(os.environ, GIT_DIR=gitdir, GIT_WORK_TREE=str(self.linked),
                    GIT_INDEX_FILE=gitdir + '/index', GIT_COMMON_DIR=str(self.root / '.git'),

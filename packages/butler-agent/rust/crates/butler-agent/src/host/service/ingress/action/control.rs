@@ -34,7 +34,7 @@ pub(super) fn ack(
     }))
 }
 
-fn outcome_name(outcome: &TurnOutcomeKind) -> &'static str {
+pub(super) fn outcome_name(outcome: &TurnOutcomeKind) -> &'static str {
     match outcome {
         TurnOutcomeKind::Delivered(_) => "delivered",
         TurnOutcomeKind::AlreadyDelivered(_) => "already_delivered",
