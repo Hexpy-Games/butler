@@ -18,6 +18,7 @@ import {
   selectReplacementInstance,
   writeAgentStopIntent,
 } from "./app-agent-stop-intent.mjs";
+import { killOwnedProcessGroup } from "./butler-platform/process-group.mjs";
 
 export const APP_LOCAL_AUTH_SCHEMA = "butler.app-local-agent-auth.v1";
 
@@ -125,6 +126,9 @@ export function createBundledAgentSupervisor({
   // SIGTERM → SIGKILL grace, the same as the CLI/MCP controllers: an Agent
   // still draining an announced stop exits 0 by itself at 6 s (#244).
   killTimeoutMs = AGENT_STOP_KILL_TIMEOUT_MS,
+  // Only the tree this supervisor spawned; never a name pattern.
+  terminateOwnedTree = killOwnedProcessGroup,
+  log = (line) => console.error(line),
   probeTimeoutMs = 2000,
   stdio = "inherit",
   onUnexpectedExit = () => {},
@@ -517,11 +521,13 @@ export function createBundledAgentSupervisor({
     const exited = wait ? new Promise((resolve) => stopping.once("exit", (code, signal) => resolve({ code, signal }))) : null;
     const intent = recordAppStopIntent(stopping, reason);
     if (preserveWork) {
-      if (!activeGateway?.foregroundHost || !stopping.stdin?.writable) {
-        throw new Error("foreground_graceful_stop_unavailable");
-      }
       // EOF is the portable App-owned graceful request. Windows kill() is not.
-      stopping.stdin.end();
+      const graceful = activeGateway?.foregroundHost === true && stopping.stdin?.writable === true;
+      if (graceful) stopping.stdin.end();
+      // Quit never outlives the Agent: a stop it ignores ends in termination.
+      if (child === stopping) {
+        shutdownKillTimer = setKillTimer(() => forceTerminate(stopping, graceful ? killTimeoutMs : 0), graceful ? killTimeoutMs : 0);
+      }
     } else {
       // Non-Quit controllers retain their existing signal/deadline policy.
       if (!deliverSignal(stopping, "SIGTERM") && intent) safeRetractStopIntent(intent);
@@ -835,6 +841,13 @@ export function createBundledAgentSupervisor({
     const changed = next.token !== localAuth?.token;
     localAuth = next;
     return changed;
+  }
+
+  function forceTerminate(target, waitedMs) {
+    if (child !== target || typeof target.pid !== "number") return;
+    log(`agent did not stop in ${waitedMs} ms; terminating pid ${target.pid}`);
+    try { terminateOwnedTree(target.pid); } catch { /* The direct kill below still applies. */ }
+    deliverSignal(target, "SIGKILL");
   }
 
   function clearShutdownTimer() {

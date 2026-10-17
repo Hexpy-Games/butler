@@ -22,6 +22,7 @@ import {
 } from "electron";
 import { openExternalSignIn, openLink, installAppLinks } from "./browser/links.mjs";
 import { installUserBrowser } from "./browser/ipc.mjs";
+import { saveBrowserForQuit } from "./browser/quit.mjs";
 import { prepareAppPackageUpdate } from "./app-package-update.mjs";
 import { appDataRoots } from "./app-legacy-data.mjs";
 import { getDesktopCopy } from "./i18n/desktop-copy.mjs";
@@ -277,6 +278,7 @@ const readyPowerStateWebContents = new WeakSet();
 let tray = null;
 let isQuitting = false;
 let finalQuitAllowed = false;
+let quitExitFallback = null;
 let foregroundInstance = null;
 let foregroundQuitSnapshot = null;
 let quitFeedback = null;
@@ -2506,6 +2508,7 @@ const appUpdateCoordinator = createAppUpdateCoordinator({
       await reportAppUpdateStage("applying");
       await reportAppUpdateStage("restarting");
     }
+    if (userBrowser) await saveBrowserForQuit(userBrowser);
     const result = await stopServerProcess({ reason: "app_update" });
     if (!result.stopped || (isMac && !result.checkpointed)) throw new Error("update_checkpoint_failed");
     isQuitting = true;
@@ -2853,6 +2856,8 @@ app.on("activate", activateButlerApp);
 app.on("before-quit", (event) => {
   storageCorrectionWatch?.close(); storageCorrectionWatch = null;
   if (finalQuitAllowed) {
+    // will-quit work is bounded; this backstop keeps a stuck close from hanging the App.
+    quitExitFallback ??= setTimeout(() => app.exit(0), 5_000).unref();
     mainWindow?.setProgressBar(-1);
     powerStateMonitor?.stop();
     quitFeedback?.destroy();
@@ -2875,19 +2880,19 @@ app.on("before-quit", (event) => {
     feedbackReady = quitFeedback.begin(mainWindow);
   }
   if (isMenuBarHelperProcess) removeMenuBarHelperPid();
-  void Promise.resolve(feedbackReady).then(() => {
+  void Promise.resolve(feedbackReady).then(async () => {
+    // Save while the Agent can still accept visits; browserHost.stop() closes that channel.
+    if (userBrowser) await saveBrowserForQuit(userBrowser);
     browserHost.stop();
     return stopServerProcess({ reason: "app_quit" });
-  }).then(() => {
+  }).catch((error) => {
+    // Quit always exits. The supervisor already terminated an Agent that ignored the stop.
+    console.error(error);
+  }).finally(() => {
     finalQuitAllowed = true;
     // Quit on a later tick: Electron drops an app.quit() made in the same
     // tick as the before-quit it cancelled (the stopped-Agent path is sync).
     setImmediate(() => app.quit());
-  }).catch((error) => {
-    // Keep the owner alive on failure. Exiting would close the foreground
-    // containment while durable cleanup might still be running.
-    quitFeedback?.failed();
-    console.error(error);
   });
 });
 
@@ -2902,13 +2907,10 @@ async function readForegroundActiveWorkSnapshot() {
   return classifyAppForegroundActiveWork({ readFailed: true });
 }
 
-process.once("SIGINT", () => {
-  app.quit();
-});
-
-process.once("SIGTERM", () => {
-  app.quit();
-});
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  // A repeated signal joins the running quit; after it, the App exits now.
+  process.on(signal, () => finalQuitAllowed ? app.exit(0) : app.quit());
+}
 
 async function stopServerProcess({ reason = "app_shutdown" } = {}) {
   appUpdateCoordinator.dispose();
