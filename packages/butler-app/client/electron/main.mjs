@@ -1,4 +1,5 @@
 import { shellRegistrationAllowed as profileAllowsShellRegistration } from "./shell-registration.mjs";
+import * as desktopShell from "./desktop-shell.mjs";
 import { watchStorageCorrection } from "./app-storage-correction.mjs";
 import { isLifecycleWindow } from "./lifecycle-window.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
@@ -351,7 +352,7 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   butlerData: butlerDataRoot,
   resolveGateway: managedGatewayCommand,
   spawnProcess: (command, args, options) => spawnTracedAgent(command, args, options,
-    (phase, edge) => quitFeedback?.phase(phase, edge)),
+    (phase, edge) => quitFeedback?.phase(phase, edge), appWritableDataRoot),
   healthCheck: healthOk,
   readinessCheck: gatewayReady,
   isPortAvailable,
@@ -1962,7 +1963,7 @@ async function openNativeNotificationSettings() {
     };
   }
   try {
-    await shell.openExternal(settingsUrl, { activate: true });
+    await desktopShell.openExternal(settingsUrl, { activate: true });
     return {
       opened: true,
       status: await nativeNotificationStatus(),
@@ -2411,7 +2412,7 @@ ipcMain.handle("butler:get-app-info", () => appInfoView());
 
 ipcMain.handle("butler:legacy-data-recovery", async (_event, action) => {
   if (!legacyDataBlocked) return { ok: false };
-  if (action === "open-folder") return { ok: !(await shell.openPath(dirname(butlerDataRoot))) };
+  if (action === "open-folder") return { ok: !(await desktopShell.openPath(dirname(butlerDataRoot))) };
   if (action === "restart") {
     // The preload endpoint is internal state, not an external-server override
     // for the next App. Keep only an override supplied at the original launch.
@@ -2853,7 +2854,7 @@ if (appSingleInstanceLock) {
   app
     .whenReady()
     .then(async () => {
-      configureStartupActions({ retry: () => prepareStartupRetry(bundledAgentSupervisor, explicitServerUrl), exit: () => { finalQuitAllowed = true; app.quit(); }, diagnostics: () => bundledAgentSupervisor.diagnostics() });
+      configureStartupActions({ retry: () => prepareStartupRetry(bundledAgentSupervisor, explicitServerUrl), exit: () => { isQuitting = true; finalQuitAllowed = true; app.quit(); }, diagnostics: () => bundledAgentSupervisor.diagnostics() });
       recordAppStartupProgress("electron_ready");
       configureAppIdentity();
       configureWindowsAppUpdater();
@@ -3177,7 +3178,7 @@ function openAppLink(value) {
     return false;
   }
   if (!["http:", "https:", "mailto:"].includes(url.protocol)) return false;
-  if (url.protocol === "mailto:") void shell.openExternal(url.toString());
+  if (url.protocol === "mailto:") void desktopShell.openExternal(url.toString());
   else void openLink(userBrowser, url.toString()).catch(() => {});
   return true;
 }
