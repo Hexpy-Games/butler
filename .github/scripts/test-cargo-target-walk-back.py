@@ -140,9 +140,9 @@ class WalkBack(unittest.TestCase):
             return real_popen([snapshots.sys.executable, '-c',
                                "import sys; sys.stdout.buffer.write(bytes(10240)); sys.exit(1)"], **kwargs)
 
-        def extract(directory):
+        def extract(directory, **kwargs):
             with patch.object(snapshots.cache.subprocess, 'Popen', side_effect=failed_decompress):
-                real_extract(directory)
+                real_extract(directory, **kwargs)
 
         with tempfile.TemporaryDirectory() as temporary, \
                 patch.dict(os.environ, CARGO_TARGET_DIR=str(Path(temporary) / 'target')), \

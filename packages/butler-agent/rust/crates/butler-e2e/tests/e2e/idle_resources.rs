@@ -18,6 +18,8 @@ use butler_platform::sqlite;
 use std::time::Duration;
 
 use super::app_storage_scale::seed as app_seed;
+#[path = "idle_resources/accounting.rs"]
+mod accounting;
 #[path = "idle_resources/seed.rs"]
 mod seed;
 #[path = "idle_resources/transcripts.rs"]
@@ -147,21 +149,34 @@ async fn measure(
     schedules: &serde_json::Value,
 ) -> Result<Samples, HarnessError> {
     let pid = s.agent.pid().unwrap();
-    let mut before = process_usage::sample(pid)?.unwrap();
     let started = std::time::Instant::now();
     let mut windows = Vec::new();
     eprintln!("PERF-IDLE start load={:?}", process_usage::load_average()?);
     // Collect the entire ten-minute interval before applying every unchanged
     // per-minute budget, so a failure also retains its complete attribution.
     for window in 0..10 {
+        // Start after the preceding HTTP/content probes have completed.
+        let before = process_usage::sample(pid)?.unwrap();
         tokio::time::sleep(WINDOW).await;
         let after = process_usage::sample(pid)?.unwrap();
         let chars = after.read_chars.zip(before.read_chars).map(|(a, b)| a - b);
         let reads = after.read_bytes - before.read_bytes;
         let writes = after.write_bytes - before.write_bytes;
+        let buffered = after
+            .write_chars
+            .zip(before.write_chars)
+            .map(|(a, b)| a - b);
+        let cpu_user = after
+            .cpu_user_time
+            .zip(before.cpu_user_time)
+            .map(|(a, b)| a - b);
+        let cpu_system = after
+            .cpu_system_time
+            .zip(before.cpu_system_time)
+            .map(|(a, b)| a - b);
         let opens = transcript_opens(s).await?;
         eprintln!(
-            "PERF-IDLE window={window} rss={} pss={:?} footprint={:?} rchar={chars:?} read_bytes={reads} write_bytes={writes} transcript_opens={opens} quota_served={} load={:?}",
+            "PERF-IDLE window={window} rss={} pss={:?} footprint={:?} rchar={chars:?} read_bytes={reads} write_bytes={writes} buffered_writes={buffered:?} cpu_user={cpu_user:?} cpu_system={cpu_system:?} transcript_opens={opens} quota_served={} load={:?}",
             after.resident_bytes,
             after.proportional_bytes,
             after.footprint_bytes,
@@ -175,7 +190,6 @@ async fn measure(
             "idle schedule content changed"
         );
         windows.push((before, after));
-        before = after;
     }
     Ok(Samples {
         elapsed: started.elapsed(),
@@ -196,16 +210,6 @@ fn assert_samples(samples: &Samples) {
             chars.is_none_or(|chars| chars < READ_BUDGET) && reads < READ_BUDGET,
             "idle reads: rchar={chars:?} read_bytes={reads}"
         );
-        assert_eq!(
-            after.write_bytes, before.write_bytes,
-            "physical writes during idle"
-        );
-        assert!(
-            after
-                .write_chars
-                .zip(before.write_chars)
-                .is_none_or(|(a, b)| a == b),
-            "buffered writes during idle"
-        );
+        accounting::assert_no_writes(before, after);
     }
 }

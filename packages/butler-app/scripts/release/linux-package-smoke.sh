@@ -1,7 +1,8 @@
 #!/bin/sh
 # Installs a Butler Linux App package in a clean container and runs its bundled
-# native agent headless: version, service start with a temporary BUTLER_DATA,
-# authenticated GET /health, CLI stop, and an unchanged installation.
+# native agent headless: PATH-resolved CLI version and status, service start
+# with temporary BUTLER_DATA, authenticated GET /health, CLI stop, and an
+# unchanged installation.
 #
 # Run as root inside a fresh distribution container, for example:
 #   docker run --rm -v "$PWD/dist:/pkg:ro" -v "$PWD/packages/butler-app/scripts/release:/smoke:ro" \
@@ -37,7 +38,7 @@ install_dir="$(find /opt/butler -mindepth 1 -maxdepth 1 -type d -name 'Butler-li
 [ -n "$install_dir" ] || fail "no /opt/butler/Butler-linux-* installation"
 agent="$install_dir/resources/bundled-agent/bin/butler-agent"
 resources="$install_dir/resources/bundled-agent/resources"
-for path in "$install_dir/Butler" "$agent" /usr/bin/butler-app; do
+for path in "$install_dir/Butler" "$agent" /usr/bin/butler-app /usr/bin/butler; do
   [ -x "$path" ] || fail "missing executable $path"
 done
 [ -f /usr/share/applications/butler.desktop ] || fail "missing desktop entry"
@@ -71,17 +72,49 @@ ELECTRON_RUN_AS_NODE=1 "$install_dir/Butler" resolve.mjs "$app_dir" "$install_di
 grep -q '"command":"'"$agent"'"' resolved.json || { cat resolved.json; exit 10; }
 grep -q '"'"$install_dir"'"' resolved.json || { cat resolved.json; exit 10; }
 agent() { "$agent" --installation-root "$install_dir" --resource-root "$resources" "\$@"; }
+cli() (
+  cd /
+  export PATH=/usr/bin:/bin
+  [ "\$(command -v butler)" = /usr/bin/butler ]
+  butler "\$@"
+)
 agent version --json > version.json
 grep -q '"ok": *true' version.json || { cat version.json; exit 11; }
-agent > agent.log 2>&1 < /dev/null &
+cli --version > cli-version.txt
+cli version --json > cli-version.json
+ELECTRON_RUN_AS_NODE=1 "$install_dir/Butler" --input-type=module - "$install_dir/resources/bundled-agent/native-agent-manifest.json" <<'JS'
+import { readFileSync } from "node:fs";
+import assert from "node:assert/strict";
+const manifest = JSON.parse(readFileSync(process.argv[2], "utf8"));
+const cli = JSON.parse(readFileSync("cli-version.json", "utf8"));
+const cliVersion = readFileSync("cli-version.txt", "utf8");
+const agent = JSON.parse(readFileSync("version.json", "utf8"));
+assert.equal(cli.ok, true);
+assert.equal(typeof manifest.version, "string");
+assert.ok(manifest.version.length > 0);
+assert.equal(cli.data.version, manifest.version);
+assert.equal(cli.data.version, agent.data.version);
+assert.equal(cliVersion, "Butler native " + manifest.version + "\n");
+JS
+# The launcher execs the agent, so this PID is the service, not a function shell.
+/usr/bin/butler > agent.log 2>&1 < /dev/null &
 pid=\$!
+cleanup() {
+  kill -TERM "\$pid" 2>/dev/null || true
+  wait "\$pid" 2>/dev/null || true
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 echo "\$pid" > agent.pid
 token=""
 i=0
 while [ \$i -lt 90 ]; do
   kill -0 "\$pid" 2>/dev/null || { tail -n 60 agent.log; exit 12; }
   token="\$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' data/app/runtime/auth/local-agent-auth.json 2>/dev/null || true)"
-  if [ -n "\$token" ] && curl -fsS -H "Authorization: Bearer \$token" "http://127.0.0.1:$port/health" > health.json 2>/dev/null; then
+  # The gateway can answer before the service publishes its ready identity.
+  if [ -n "\$token" ] && curl -fsS -H "Authorization: Bearer \$token" "http://127.0.0.1:$port/health" > health.json 2>/dev/null &&
+    grep -Eq '"state"[[:space:]]*:[[:space:]]*"ready"' data/state/butler-agent-native-service.json 2>/dev/null; then
     break
   fi
   i=\$((i + 1))
@@ -89,6 +122,21 @@ while [ \$i -lt 90 ]; do
 done
 grep -q '"ok": *true' health.json 2>/dev/null || { tail -n 60 agent.log; exit 13; }
 echo "health: \$(cat health.json)"
+cli status --json > cli-status.json
+ELECTRON_RUN_AS_NODE=1 "$install_dir/Butler" --input-type=module - <<'JS'
+import { readFileSync } from "node:fs";
+import assert from "node:assert/strict";
+const status = JSON.parse(readFileSync("cli-status.json", "utf8"));
+const version = JSON.parse(readFileSync("version.json", "utf8"));
+const pid = Number(readFileSync("agent.pid", "utf8").trim());
+assert.equal(status.ok, true);
+assert.equal(status.command, "butler status");
+assert.equal(status.data.version, version.data.version);
+assert.deepEqual(status.data.services.summary, { total: 1, online: 1, offline: 0, stale: 0 });
+assert.equal(status.data.services.items.length, 1);
+assert.equal(status.data.services.items[0].status, "online");
+assert.equal(status.data.services.items[0].pid, pid);
+JS
 agent stop --json > stop.json 2>&1 || { cat stop.json; tail -n 60 agent.log; exit 14; }
 # An exited child stays a zombie until waited for, so check its state.
 running() { [ -r "/proc/\$pid/status" ] && ! grep -q '^State:[[:space:]]*Z' "/proc/\$pid/status"; }
@@ -99,6 +147,7 @@ while running; do
   sleep 1
 done
 wait "\$pid" || { echo "agent exit status \$?"; tail -n 60 agent.log; exit 16; }
+trap - EXIT INT TERM
 EOF
 chown butler-smoke "$work/run.sh"
 runuser -u butler-smoke -- sh "$work/run.sh" || fail "headless agent run (exit $?)"
