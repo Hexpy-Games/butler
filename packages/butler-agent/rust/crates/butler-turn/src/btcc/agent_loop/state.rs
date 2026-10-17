@@ -215,7 +215,7 @@ pub(super) fn begin_final_report(state: &mut State, offers_blocks: bool) {
     };
     state.messages.push(ModelRoundMessage::user(
         format!(
-            "Execution is settled. Write the final report as your normal assistant response now; the runtime delivers it to the recipient automatically. {presentation} Lead with the result, stating only what the results already received support. Add one line on an assumption, gap or remaining work only when it would change the recipient's next decision: what you did or assumed and how to change it. Never ask the recipient to check what a tool could check."
+            "Execution is settled. Write the final report as your normal assistant response now; the runtime delivers it to the recipient automatically. {presentation} Lead with the result, stating only what the results already received support, each at the strength they give it. Plan checks and assumptions are working notes; do not restate them. Add one line on an assumption, gap or remaining work only when it changes the recipient's next decision, with how to change it. Leave out what you did not do or change, how a finding should not be read, and how or how far you worked, unless asked. Never ask the recipient to check what a tool could check."
         ),
         None,
     ));

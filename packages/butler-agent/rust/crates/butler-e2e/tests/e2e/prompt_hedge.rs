@@ -31,6 +31,10 @@ async fn model_facing_prompts_carry_no_handback_rules() -> Result<(), HarnessErr
         }
         if key.starts_with("legacy|") {
             assert!(text.contains("Look up what the user said earlier"));
+            assert!(
+                text.contains("answer from what you got"),
+                "{key} lacks the failed-route rule"
+            );
         }
         if key == "phase_minimal|butler|direct" {
             assert!(text.contains("including what the user said earlier"));
@@ -53,6 +57,8 @@ async fn model_facing_prompts_carry_no_handback_rules() -> Result<(), HarnessErr
     assert_no_handback("eol.template.md", &eol);
     assert!(eol.contains("give your best judgment, why, and what would change it"));
     assert!(eol.contains("before relying on something the principal told you, look it up"));
+    assert!(eol.contains("do not tell the reader how not to read it"));
+    assert!(eol.contains("what you did not do, and how or how far you worked"));
     assert_no_limits_persona(&root.join("../resources/personas/templates"))?;
     Ok(())
 }
@@ -94,6 +100,10 @@ fn assert_no_handback(source: &str, text: &str) {
         "never act or claim without evidence",
         "checks performed",
         "if you checked something",
+        "report what still fails",
+        "say what you did and what you assumed",
+        "disclose the limitation",
+        "with where you looked",
     ] {
         assert!(!text.contains(forbidden), "{source} contains {forbidden}");
     }

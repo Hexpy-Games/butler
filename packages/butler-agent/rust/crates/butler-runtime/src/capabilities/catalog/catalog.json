@@ -131,7 +131,7 @@
       "definition": {
         "type": "function",
         "name": "web_read",
-        "description": "Get a page's text as bounded evidence. Pass tab to read an open tab as it shows now, or url: a page already open in a tab is read from that tab, any other through Butler's page reader. Each page is read once per turn. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. If a page fails, is blocked, or returns little or no text (script-built or image-only), open it in a tab and read or observe it there when browser tools are available, or read another source for the same fact; after one corrected call and one other route, report what still fails and what you tried.",
+        "description": "Get a page's text as bounded evidence. Pass tab to read an open tab as it shows now, or url: a page already open in a tab is read from that tab, any other through Butler's page reader. Each page is read once per turn. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. If a page fails, is blocked, or returns little or no text (script-built or image-only), open it in a tab and read or observe it there when browser tools are available, or read another source for the same fact; after one corrected call and one other route, answer from what you got.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5068,7 +5068,7 @@
                 "minLength": 1
               },
               "default": [],
-              "description": "Outcomes the delivered result must show, each observable with a tool before reporting (a produced page or chart viewed as the user will see it, a change seen working). Make each explicit constraint in the request its own check: a requested count, in the unit the request names and each one distinct; dates or ranges; other stated limits. Write outcomes, not report contents: never a check to list caveats or unverified items. Result and completion reviews test the result against them."
+              "description": "Outcomes the delivered result must show, each observable with a tool before reporting (a produced page or chart viewed as the user will see it, a change seen working). Make each explicit constraint in the request its own check: a requested count, in the unit the request names and each one distinct; dates or ranges; other stated limits. Write outcomes, not report contents: never a check to list caveats or unverified items, or to leave alone something the request does not mention. Checks steer the work; the answer meets them without restating them. Result and completion reviews test the result against them."
             },
             "presentation": {
               "type": "array",
@@ -5106,7 +5106,7 @@
               "required": [
                 "goal"
               ],
-              "description": "Conception, decided before the actions, which serve it. goal: what the user is really after, and why. deliver: unasked deliverables the goal clearly implies. next: their likely next request, prepared when cheap. assume: assumptions made instead of asking; ask only for user-only facts that would change the result. Recorded in the Plan and given to delegated work with the unchanged request."
+              "description": "Conception, decided before the actions, which serve it. goal: what the user is really after, and why. deliver: unasked deliverables the goal clearly implies. next: their likely next request, prepared when cheap. assume: assumptions made instead of asking; ask only for user-only facts that would change the result. Recorded in the Plan and given to delegated work with the unchanged request; working notes, never restated in the answer."
             }
           },
           "required": [
@@ -5186,7 +5186,7 @@
       "definition": {
         "type": "function",
         "name": "record_work_review",
-        "description": "Optionally record a concise Plan Review, result Review, or whole-Work completion Validation with the current action progress. Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful. Result and completion test the result against each Plan check and each explicit constraint in the request: a requested count, in the unit the request names and each one distinct, and its dates or limits. One that fails is revise, or partial when it cannot be met; never accept. The runtime derives the fixed graph transition from subject and verdict; never choose a raw stage. For a revised or partial result/completion, use correction_scope only to say whether correction belongs in planning or execution. When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates. The runtime validates only the fixed semantic mapping, known action keys, and durable bindings; it does not judge the Review or Validation meaning. Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority. Accept a usable result once no remaining gap that matters can be closed with tools; partial means a material requested outcome remains unfinished. A review records judgment but never replaces real tool evidence.",
+        "description": "Optionally record a concise Plan Review, result Review, or whole-Work completion Validation with the current action progress. Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful. Result and completion test the result against each Plan check and each explicit constraint in the request: a requested count, in the unit the request names and each one distinct, and its dates or limits. One that fails is revise, or partial when it cannot be met; never accept. The runtime derives the fixed graph transition from subject and verdict; never choose a raw stage. For a revised or partial result/completion, use correction_scope only to say whether correction belongs in planning or execution. When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates. The runtime validates only the fixed semantic mapping, known action keys, and durable bindings; it does not judge the Review or Validation meaning. Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority. Accept a usable result once no remaining gap that matters can be closed with tools; partial means a material requested outcome remains unfinished. A review records judgment but never replaces real tool evidence. A Plan check that lists caveats or unverified items, or leaves alone something the request does not mention, is revise. Corrections serve the request and the user's explicit instructions in this conversation or memory; never correct toward withholding, softening or caveating content the user explicitly asked to see.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5257,7 +5257,8 @@
                 "type": "string",
                 "minLength": 1
               },
-              "default": []
+              "default": [],
+              "description": "What must change for the result to meet the request: content, not caveats. Never ask to withhold or soften content the user explicitly asked for."
             }
           },
           "required": [
@@ -7528,7 +7529,7 @@
               "minLength": 1
             },
             "default": [],
-            "description": "Outcomes the delivered result must show, each observable with a tool before reporting (a produced page or chart viewed as the user will see it, a change seen working). Make each explicit constraint in the request its own check: a requested count, in the unit the request names and each one distinct; dates or ranges; other stated limits. Write outcomes, not report contents: never a check to list caveats or unverified items. Result and completion reviews test the result against them."
+            "description": "Outcomes the delivered result must show, each observable with a tool before reporting (a produced page or chart viewed as the user will see it, a change seen working). Make each explicit constraint in the request its own check: a requested count, in the unit the request names and each one distinct; dates or ranges; other stated limits. Write outcomes, not report contents: never a check to list caveats or unverified items, or to leave alone something the request does not mention. Checks steer the work; the answer meets them without restating them. Result and completion reviews test the result against them."
           },
           "presentation": {
             "type": "array",
@@ -7566,7 +7567,7 @@
             "required": [
               "goal"
             ],
-            "description": "Conception, decided before the actions, which serve it. goal: what the user is really after, and why. deliver: unasked deliverables the goal clearly implies. next: their likely next request, prepared when cheap. assume: assumptions made instead of asking; ask only for user-only facts that would change the result. Recorded in the Plan and given to delegated work with the unchanged request."
+            "description": "Conception, decided before the actions, which serve it. goal: what the user is really after, and why. deliver: unasked deliverables the goal clearly implies. next: their likely next request, prepared when cheap. assume: assumptions made instead of asking; ask only for user-only facts that would change the result. Recorded in the Plan and given to delegated work with the unchanged request; working notes, never restated in the answer."
           }
         },
         "required": [
@@ -8306,7 +8307,7 @@
     "record_work_review": {
       "type": "function",
       "name": "record_work_review",
-      "description": "Optionally record a concise Plan Review, result Review, or whole-Work completion Validation with the current action progress. Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful. Result and completion test the result against each Plan check and each explicit constraint in the request: a requested count, in the unit the request names and each one distinct, and its dates or limits. One that fails is revise, or partial when it cannot be met; never accept. The runtime derives the fixed graph transition from subject and verdict; never choose a raw stage. For a revised or partial result/completion, use correction_scope only to say whether correction belongs in planning or execution. When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates. The runtime validates only the fixed semantic mapping, known action keys, and durable bindings; it does not judge the Review or Validation meaning. Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority. Accept a usable result once no remaining gap that matters can be closed with tools; partial means a material requested outcome remains unfinished. A review records judgment but never replaces real tool evidence.",
+      "description": "Optionally record a concise Plan Review, result Review, or whole-Work completion Validation with the current action progress. Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful. Result and completion test the result against each Plan check and each explicit constraint in the request: a requested count, in the unit the request names and each one distinct, and its dates or limits. One that fails is revise, or partial when it cannot be met; never accept. The runtime derives the fixed graph transition from subject and verdict; never choose a raw stage. For a revised or partial result/completion, use correction_scope only to say whether correction belongs in planning or execution. When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates. The runtime validates only the fixed semantic mapping, known action keys, and durable bindings; it does not judge the Review or Validation meaning. Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority. Accept a usable result once no remaining gap that matters can be closed with tools; partial means a material requested outcome remains unfinished. A review records judgment but never replaces real tool evidence. A Plan check that lists caveats or unverified items, or leaves alone something the request does not mention, is revise. Corrections serve the request and the user's explicit instructions in this conversation or memory; never correct toward withholding, softening or caveating content the user explicitly asked to see.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -8377,7 +8378,8 @@
               "type": "string",
               "minLength": 1
             },
-            "default": []
+            "default": [],
+            "description": "What must change for the result to meet the request: content, not caveats. Never ask to withhold or soften content the user explicitly asked for."
           }
         },
         "required": [
@@ -9782,7 +9784,7 @@
     "web_read": {
       "type": "function",
       "name": "web_read",
-      "description": "Get a page's text as bounded evidence. Pass tab to read an open tab as it shows now, or url: a page already open in a tab is read from that tab, any other through Butler's page reader. Each page is read once per turn. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. If a page fails, is blocked, or returns little or no text (script-built or image-only), open it in a tab and read or observe it there when browser tools are available, or read another source for the same fact; after one corrected call and one other route, report what still fails and what you tried.",
+      "description": "Get a page's text as bounded evidence. Pass tab to read an open tab as it shows now, or url: a page already open in a tab is read from that tab, any other through Butler's page reader. Each page is read once per turn. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. If a page fails, is blocked, or returns little or no text (script-built or image-only), open it in a tab and read or observe it there when browser tools are available, or read another source for the same fact; after one corrected call and one other route, answer from what you got.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

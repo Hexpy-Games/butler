@@ -44,6 +44,16 @@ pub struct ContinueWorkInput {
 /// asking. They travel with the Plan to delegated work.
 pub const PLAN_INTENT_LINES: [&str; 4] = ["Goal:", "Deliver:", "Next:", "Assumed:"];
 
+/// Check-line label recording how the Plan presents its result.
+pub const PLAN_PRESENTATION_LINE: &str = "Presentation:";
+
+/// Plan check lines that instruct the model (intent and presentation) and are
+/// not checks the result must meet.
+pub fn plan_model_only_line(check: &str) -> bool {
+    check.starts_with(PLAN_PRESENTATION_LINE)
+        || PLAN_INTENT_LINES.iter().any(|line| check.starts_with(line))
+}
+
 /// Replaces the Work's plan.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

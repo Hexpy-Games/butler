@@ -183,10 +183,11 @@ pub use work::policy::{
 pub use work::{
     ActionProgress, ActionStatus, Checkpoint, CheckpointInput, ClaimCloseoutCorrectionInput,
     ContinueWorkInput, CorrectionScope, DispositionActionUpdate, DispositionInput,
-    DispositionStatus, DurableWorkService, ExecutionMode, PLAN_INTENT_LINES, PlanAction,
-    ReplacePlanInput, ReviewInput, ReviewSubject, ReviewVerdict, RuntimeOwnedOpenGeneration,
-    StartWorkInput, WorkContext, WorkDisposition, WorkOrigin, WorkPlan, WorkReview, WorkScope,
-    WorkStage, WorkTurnScope, WorkView,
+    DispositionStatus, DurableWorkService, ExecutionMode, PLAN_INTENT_LINES,
+    PLAN_PRESENTATION_LINE, PlanAction, ReplacePlanInput, ReviewInput, ReviewSubject,
+    ReviewVerdict, RuntimeOwnedOpenGeneration, StartWorkInput, WorkContext, WorkDisposition,
+    WorkOrigin, WorkPlan, WorkReview, WorkScope, WorkStage, WorkTurnScope, WorkView,
+    plan_model_only_line,
 };
 pub use work::{
     CheckpointCommand, ContinueWorkCommand, DispositionCommand, DurableWorkRepository,

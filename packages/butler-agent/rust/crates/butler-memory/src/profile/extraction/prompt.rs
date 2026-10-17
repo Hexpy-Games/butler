@@ -143,7 +143,7 @@ pub(super) fn instructions(mode: ProfilingMode) -> String {
         "Do not mark ordinary language, public or broad career roles, collaboration preferences, communication style, technical interests, design taste, project context, or safety/privacy rules as sensitive merely because the category is identity, relationships, boundaries, or values.".into(),
         "Also classify each candidate by layer: stable_disposition, contextual_adaptation, current_attention, or narrative_meaning.".into(),
         "stable_disposition is for durable tendencies and values; contextual_adaptation is for situation-specific collaboration rules; current_attention is for active interests/projects; narrative_meaning is for meaningful events, identity stories, and unresolved threads.".into(),
-        "Include applies_when, butler_should, and butler_should_not when they help Butler act differently. Keep them short and behavior-level.".into(),
+        "Include applies_when, butler_should, and butler_should_not when they help Butler act differently. Keep them short and behavior-level, and set applies_when to the topic they came from. Write them as what to put in the answer, never as a duty to add disclaimers, certainty labels, or lines about what the answer does not claim.".into(),
         "Set temporal_scope to transient, active, or durable. Set decay_policy to days_7, days_30, reinforce_or_decay, or never_without_consent.".into(),
         "Set sensitivity to normal, sensitive, or restricted.".into(),
         "Return strict JSON only, with this shape:".into(),

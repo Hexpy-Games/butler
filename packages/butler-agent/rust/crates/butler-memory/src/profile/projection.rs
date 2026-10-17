@@ -212,7 +212,7 @@ fn build(
 }
 
 pub(super) fn render(value: &RuntimeProfileProjection) -> String {
-    let mut lines=vec!["# Runtime Profile Projection".into(),String::new(),format!("- Mode: {}",value.mode),format!("- Version: {}",value.version),String::new(),"Use these as lightweight adaptation hints. Do not treat them as a raw biography or expose them as profile data.".into()];
+    let mut lines=vec!["# Runtime Profile Projection".into(),String::new(),format!("- Mode: {}",value.mode),format!("- Version: {}",value.version),String::new(),"Use these as lightweight adaptation hints, each only where it fits. Do not treat them as a raw biography or expose them as profile data. Never turn a hint into a disclaimer, a certainty label or a line about what you avoided.".into()];
     for (title, items) in [
         ("How to answer", &value.how_to_answer),
         ("How to collaborate", &value.how_to_collaborate),

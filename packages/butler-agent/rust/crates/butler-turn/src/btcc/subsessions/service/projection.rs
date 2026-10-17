@@ -150,7 +150,7 @@ impl SubsessionService {
                 .packet
                 .acceptance_criteria
                 .iter()
-                .filter(|check| !model_only_line(check));
+                .filter(|check| !crate::btcc::plan_model_only_line(check));
             object.insert(
                 "delegated_request".into(),
                 json!({"turn_id":relation.child_turn_id,
@@ -332,12 +332,4 @@ fn projected_status(result: Option<&Value>, latest: Option<&(String, String)>) -
         _ if latest.is_some_and(|(_, state)| state == "admitted") => "active",
         _ => "waiting",
     }
-}
-
-/// Plan acceptance lines that instruct the model and are not checks for the user.
-fn model_only_line(check: &str) -> bool {
-    check.starts_with(super::helpers::PRESENTATION_LINE)
-        || crate::btcc::PLAN_INTENT_LINES
-            .iter()
-            .any(|line| check.starts_with(line))
 }

@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use butler_turn::btcc::{WorkContext, WorkView};
+use butler_turn::btcc::{WorkContext, WorkView, plan_model_only_line};
 
 fn word<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_value(value)
@@ -64,6 +64,24 @@ fn executable(work: &WorkView) -> Vec<String> {
 fn corrections(rows: &mut Vec<String>, label: &str, values: &[String]) {
     if !values.is_empty() {
         rows.push(format!("{label}: {}", list(values, 4, 100)));
+    }
+}
+
+/// Intent and presentation lines steer the work; only real checks are shown
+/// as checks, so the answer does not restate the working notes.
+fn plan_checks(rows: &mut Vec<String>, values: &[String]) {
+    let (notes, checks): (Vec<_>, Vec<_>) = values
+        .iter()
+        .cloned()
+        .partition(|check| plan_model_only_line(check));
+    if !checks.is_empty() {
+        rows.push(format!("Checks: {}", list(&checks, 20, 240)));
+    }
+    if !notes.is_empty() {
+        rows.push(format!(
+            "Intent (working notes; never restate): {}",
+            list(&notes, 20, 240)
+        ));
     }
 }
 
@@ -161,9 +179,7 @@ pub(in crate::host) fn render(context: Option<&WorkContext>) -> Option<String> {
                 list(&progress, 24, 72)
             }
         ));
-        if !plan.checks.is_empty() {
-            rows.push(format!("Checks: {}", list(&plan.checks, 20, 240)));
-        }
+        plan_checks(&mut rows, &plan.checks);
     }
     for blocker in work
         .effect_blockers
