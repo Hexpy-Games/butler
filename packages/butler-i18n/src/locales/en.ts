@@ -1093,9 +1093,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     allProviders: "All",
     noModels: "No models found",
     modelLoading: "Checking model",
-    modelUnavailable: "Selected model unavailable",
-    modelError: "Model state error",
-    modelErrorHint: "Butler couldn't load the model list. Check Models in Settings.",
+    modelNone: "No model",
+    modelNoneHint: "Add a model in Settings.",
     gitMissingTitle: "Git is not installed",
     gitMissingMessage:
       "Butler still works, but branch and commit features are unavailable.",
@@ -1765,6 +1764,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       composerDecoration: "Art behind your text.",
       composerCharacter: "A little friend sits above the message box.",
       themeFollowsWallpaper: "Set by the real-time wallpaper",
+      reasoningFixed: "Set by the model",
       contextLimit: (maxLabel) =>
         `The active Butler context budget. Model maximum: ${maxLabel}.`,
       contextLimitClamped: (value) =>
