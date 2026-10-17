@@ -24,6 +24,7 @@ pub(crate) struct Script {
     pub(crate) answer_blocks: AtomicBool,
     answer_step: Mutex<usize>,
     pub(crate) browser: AtomicBool,
+    pub(crate) fail_report: AtomicBool,
     pub open_disposition: AtomicBool,
     pub blocked_disposition: AtomicBool,
     steps: Mutex<(usize, usize)>,
@@ -60,6 +61,14 @@ async fn reply(
     let key = matching::key("/codex/responses", &body, &Placeholders::default());
     script.requests.lock().unwrap().push(body.clone());
     let child = child_lane(&body);
+    if !child && script.fail_report.load(Ordering::SeqCst) {
+        let path = std::path::PathBuf::from(script.workspace.lock().unwrap().clone())
+            .join("metrics/prompt-cache-usage.jsonl");
+        if path.is_dir() {
+            std::fs::remove_dir(&path).unwrap();
+            std::fs::rename(path.with_extension("before-report-failure"), &path).unwrap();
+        }
+    }
     if child
         && script.hold_direction.load(Ordering::SeqCst)
         && key.user_request.starts_with(DIRECTION)
@@ -97,6 +106,14 @@ async fn reply(
     if child && step == 4 && !script.browser.load(Ordering::SeqCst) {
         script.held.notify_one();
         script.release.notified().await;
+    }
+    if child && step == 6 && script.fail_report.load(Ordering::SeqCst) {
+        // Fail the real model-round metrics append before the report tool is accepted.
+        // This yields InvocationFailure -> provider_unknown_error / surface.
+        let path = std::path::PathBuf::from(script.workspace.lock().unwrap().clone())
+            .join("metrics/prompt-cache-usage.jsonl");
+        std::fs::rename(&path, path.with_extension("before-report-failure")).unwrap();
+        std::fs::create_dir(&path).unwrap();
     }
     let item = if child {
         child_item(step, &body, &script)
