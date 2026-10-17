@@ -21,6 +21,9 @@ mod current_reader;
 #[path = "wal_checkpoint/finish.rs"]
 mod finish;
 
+#[path = "wal_checkpoint/finish_races.rs"]
+mod finish_races;
+
 #[path = "wal_checkpoint/backstop.rs"]
 mod backstop;
 
@@ -96,7 +99,7 @@ fn observe(event: sqlite::CheckpointEvent) {
         sqlite::CheckpointEvent::Checkpointed { finish: true, .. } => {
             FINISHES.fetch_add(1, SeqCst);
         }
-        sqlite::CheckpointEvent::Checkpointed { .. } => {}
+        sqlite::CheckpointEvent::Checkpointed { .. } | sqlite::CheckpointEvent::Started => {}
         sqlite::CheckpointEvent::WalCommitted(pages) => {
             if pages < LAST.swap(pages, SeqCst) {
                 RESTARTS.fetch_add(1, SeqCst);

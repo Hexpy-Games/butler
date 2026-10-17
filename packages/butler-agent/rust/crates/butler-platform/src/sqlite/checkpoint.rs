@@ -6,7 +6,7 @@ use std::{
     marker::PhantomData,
     path::PathBuf,
     rc::Rc,
-    sync::{Arc, Mutex, PoisonError, mpsc},
+    sync::{Arc, Mutex, PoisonError, TryLockError, mpsc},
     thread,
     time::{Duration, Instant},
 };
@@ -37,6 +37,8 @@ pub enum CheckpointError {
 #[derive(Clone, Copy)]
 /// Content-free observations from the writer hook and maintenance thread.
 pub enum CheckpointEvent {
+    /// A due background pass captured its progress before checkpoint serialization.
+    Started,
     /// The writer committed this many frames into its current WAL.
     WalCommitted(i32),
     /// A measured SQLite checkpoint completed on either owner thread.
@@ -88,6 +90,7 @@ struct Progress {
     backfilled: i32,
     attempted: i32,
     finish_pending: bool,
+    writer_finishes: u64,
 }
 impl Progress {
     fn committed(&mut self, frames: i32) {
@@ -228,16 +231,32 @@ fn committed(wal: &rusqlite::hooks::Wal, pages: i32) -> rusqlite::Result<()> {
 }
 
 fn writer_pass(wal: &rusqlite::hooks::Wal, pages: i32, hook: &Maintenance, finish: bool) -> bool {
-    // Serialize with maintenance so PASSIVE cannot return BUSY at the ceiling.
-    // The writer owns this hook, so no later commit can race the finish pass.
+    // Only the ceiling may wait for maintenance. A skipped finish is re-armed
+    // when the running background pass publishes its completed snapshot.
     let started = Instant::now();
-    let guard = hook
-        .checkpoint
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let guard = if pages >= hook.pages.saturating_mul(HARD_LIMIT_MULTIPLIER) {
+        hook.checkpoint
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    } else {
+        match hook.checkpoint.try_lock() {
+            Ok(guard) => guard,
+            Err(TryLockError::Poisoned(error)) => error.into_inner(),
+            Err(TryLockError::WouldBlock) => {
+                return hook
+                    .progress
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .due(hook.pages);
+            }
+        }
+    };
     let result = wal.checkpoint_v2(rusqlite::hooks::CheckpointMode::PASSIVE);
     let due = {
         let mut progress = hook.progress.lock().unwrap_or_else(PoisonError::into_inner);
+        if finish {
+            progress.writer_finishes = progress.writer_finishes.wrapping_add(1);
+        }
         if let Ok((log, backfilled)) = result.as_ref() {
             let generation = progress.generation;
             progress.completed(generation, *log, *backfilled);
@@ -284,7 +303,6 @@ fn run(
     let _ = ready.send(Ok(()));
     while requests.recv().is_ok() {
         let started = Instant::now();
-        let guard = checkpoint.lock().unwrap_or_else(PoisonError::into_inner);
         let snapshot = {
             let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
             // A coalesced wake may be left behind a pass that already covered
@@ -293,13 +311,24 @@ fn run(
                 continue;
             }
             progress.attempted = progress.frames;
-            (progress.generation, progress.frames)
+            (
+                progress.generation,
+                progress.frames,
+                progress.writer_finishes,
+            )
         };
+        if let Some(observer) = maintenance.observer {
+            observer(CheckpointEvent::Started);
+        }
+        let guard = checkpoint.lock().unwrap_or_else(PoisonError::into_inner);
         let result = backfill(&connection, maintenance, started);
         if let Ok((0, log, backfilled)) = result.as_ref() {
             let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
             progress.completed(snapshot.0, *log, *backfilled);
-            if progress.generation == snapshot.0 && *backfilled >= snapshot.1 {
+            if progress.generation == snapshot.0
+                && *backfilled >= snapshot.1
+                && progress.writer_finishes == snapshot.2
+            {
                 progress.finish_pending = true;
             }
         }

@@ -17,7 +17,7 @@ impl CheckpointOwner {
 }
 fn observe(event: sqlite::CheckpointEvent) {
     match event {
-        sqlite::CheckpointEvent::Checkpointed { .. } => {}
+        sqlite::CheckpointEvent::Checkpointed { .. } | sqlite::CheckpointEvent::Started => {}
         sqlite::CheckpointEvent::WalCommitted(pages) => timing::wal_committed(pages),
         sqlite::CheckpointEvent::Finished { elapsed, succeeded } => CommandTiming::report_duration(
             "sqlite_checkpoint",
