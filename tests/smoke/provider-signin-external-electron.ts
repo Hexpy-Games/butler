@@ -47,8 +47,7 @@ try {
   await page.locator('[data-memory-choice="off"]').click();
   await page.getByRole("button", { name: copy.firstRun.memoryChoice.continue, exact: true }).click();
   await page.locator('[data-card-id="gemini"]').click();
-  const keyLink = page.getByRole("link", { name: copy.firstRun.getKey, exact: true })
-    .or(page.getByRole("button", { name: copy.firstRun.getKey, exact: true }));
+  const keyLink = page.getByRole("link", { name: copy.firstRun.getKey, exact: true });
   for (const theme of ["light", "dark"] as const) {
     await main(`${module}('electron').nativeTheme.themeSource=${JSON.stringify(theme)}`);
     await page.emulateMedia({ colorScheme: theme });

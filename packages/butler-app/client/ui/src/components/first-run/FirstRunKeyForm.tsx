@@ -1,3 +1,4 @@
+import type { MouseEvent } from "react";
 import { faviconSrc } from "@/app/favicons.ts";
 import { openExternalSignIn } from "@/app/openExternalSignIn";
 import {
@@ -25,6 +26,7 @@ import type { FirstRunFlow } from "./useFirstRunFlow";
 export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: FirstRunFlow }) {
   const { copy } = flow;
   const spec = PROVIDER_CARDS[cardId];
+  const keyUrl = spec.keyUrl;
   const name = copy.providerNames[cardId];
   const key = useKeyVerification({
     providerId: spec.providerId ?? cardId,
@@ -57,13 +59,11 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
         <KeyStatusLine copy={copy} status={connected ? "valid" : connecting ? "checking" : key.status} onRetry={key.retry} />
       </Field>
       <Inline gap="md">
-        {spec.keyUrl ? (
+        {keyUrl ? (
           <Typo.Body as="span">
-            <span
-              onClickCapture={(event) => { event.preventDefault(); openExternalSignIn(spec.keyUrl); }}
-              onAuxClickCapture={(event) => { if (event.button === 1) { event.preventDefault(); openExternalSignIn(spec.keyUrl); } }}
-            >
-              <InlineReference kind="external" href={spec.keyUrl} iconSrc={faviconSrc(spec.keyUrl)}>{copy.getKey}</InlineReference>
+            {/* Provider account pages need the user's own browser session, never an in-app tab. */}
+            <span onClickCapture={(event) => openKeyPage(event, keyUrl)} onAuxClickCapture={(event) => { if (event.button === 1) openKeyPage(event, keyUrl); }}>
+              <InlineReference kind="external" href={keyUrl} iconSrc={faviconSrc(keyUrl)}>{copy.getKey}</InlineReference>
             </span>
           </Typo.Body>
         ) : null}
@@ -71,6 +71,11 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
       </Inline>
     </FirstRunStepCard>
   );
+}
+
+function openKeyPage(event: MouseEvent, url: string) {
+  event.preventDefault();
+  openExternalSignIn(url);
 }
 
 function isKeyFailure(status: KeyStatus): status is KeyCheckFailure {
