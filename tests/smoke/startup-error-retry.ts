@@ -46,7 +46,10 @@ async function scenario(fixture: Fixture, death: Death, retries: number) {
   const foreground = join(fixture.data, "app/runtime/foreground");
   const debugPort = await freePort();
   const mainPort = await freePort();
-  const env: Record<string, string> = { ...fixture.env, BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort) };
+  // Open log is recorded, not shown: no Finder/Explorer window opens on the machine running this.
+  const opened = join(fixture.root, `shell-open-${death}.jsonl`);
+  const env: Record<string, string> = { ...fixture.env, BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort), BUTLER_TEST_SHELL_OPEN_LOG: opened };
+  const openRequests = () => { try { return readFileSync(opened, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line)); } catch { return []; } };
   const profile = env.BUTLER_APP_ELECTRON_USER_DATA_DIR!;
   let original: ChildProcess | undefined;
   let browser: Browser | undefined;
@@ -78,6 +81,7 @@ async function scenario(fixture: Fixture, death: Death, retries: number) {
   };
   const openLog = async (surface: Page, attempt: number) => {
     const before = new Set(readdirSync(foreground));
+    const requested = openRequests().length;
     await surface.getByRole("button", { name: /로그 열기|Open log/u }).click();
     const file = await waitFor(() => readdirSync(foreground).find((name) => name.startsWith("lifecycle-diagnostics-") && !before.has(name)), `${death}: Open log did not write diagnostics`);
     const report = await waitFor(() => readJson(join(foreground, file)), `${death}: diagnostics unreadable`);
@@ -89,7 +93,10 @@ async function scenario(fixture: Fixture, death: Death, retries: number) {
     if (death === "failed") {
       await waitFor(() => readFileSync(join(fixture.data, report.agentLog), "utf8").includes("[native-service] failed:"), "Agent log did not record the startup failure");
     }
-    console.log(JSON.stringify({ death, attempt, openLog: { failedStage: report.failedStage, supervisor: report.supervisor } }));
+    // Open log reveals the current Agent log, the file the report names.
+    const request = await waitFor(() => openRequests()[requested], `${death}: Open log did not reveal a file`);
+    assert.deepEqual(request, { action: "showItemInFolder", target: join(fixture.data, report.agentLog) });
+    console.log(JSON.stringify({ death, attempt, openLog: { revealed: request.target.slice(fixture.data.length + 1), failedStage: report.failedStage, supervisor: report.supervisor } }));
   };
   // Kill or stop the running Agent once it is ready, while the startup surface is still pending.
   const induce = async () => {

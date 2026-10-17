@@ -1,4 +1,5 @@
-import { app, shell } from "electron";
+import { app } from "electron";
+import { showItemInFolder } from "./desktop-shell.mjs";
 import { mkdir, readdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { appDataRoots } from "./app-legacy-data.mjs";
@@ -25,6 +26,6 @@ export async function openLifecycleLog(state, timings, supervisor = {}) {
   await writeFile(file, JSON.stringify(report, null, 2), { mode: 0o600 });
   const files = (await readdir(directory)).filter((name) => /^lifecycle-diagnostics-.*\.json$/.test(name)).sort();
   await Promise.all(files.slice(0, -5).map((name) => unlink(join(directory, name))));
-  shell.showItemInFolder(agentLog ? agentLogPath(root) : file);
+  showItemInFolder(agentLog ? agentLogPath(root) : file);
   return file;
 }
