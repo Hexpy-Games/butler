@@ -20,6 +20,7 @@ use butler_platform::sqlite;
 use serde_json::{Value, json};
 
 const HELD: &str = "client-00000000-0000-4000-8000-0000000000a1";
+const FOLLOW_UP: &str = "client-00000000-0000-4000-8000-0000000000a2";
 const STOPPED: &str = "Reply with exactly the word: stopped";
 const NUMBERS: &str = "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.";
 const APP_DB: &str = "app-server/butler-client.sqlite";
@@ -83,10 +84,16 @@ async fn stop_unadmitted_turn(s: &mut Scenario) -> Result<String, HarnessError> 
         )
         .await?;
     assert_eq!(queued.status, 202, "{}", queued.text);
-    let delivered = s
-        .gw
-        .wait_terminal("general", &first, Duration::from_secs(turn_timeout()))
+    let follow_up =
+        s.gw.post(
+            "/session-queue",
+            json!({"chat_id":"general","text":NUMBERS,"client_message_id":FOLLOW_UP}),
+        )
         .await?;
+    assert_eq!(follow_up.status, 202, "{}", follow_up.text);
+    let delivered =
+        s.gw.wait_terminal("general", &first, Duration::from_secs(turn_timeout()))
+            .await?;
     assert_eq!(turn_state(&delivered), "delivered", "{delivered}");
     wait_file(s, "e2e-queue-admission-held").await;
     let turns = s.gw.turns("general").await?;
@@ -157,6 +164,53 @@ fn assert_settled(s: &Scenario, turn: &str, paused: bool) {
             paused
         )
     );
+}
+
+/// A Stop must preserve the full queue, including across recovery.
+async fn assert_follow_up_paused(s: &Scenario) -> Result<(), HarnessError> {
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let view = s.gw.get("/session-queue?chat_id=general").await?;
+    assert_eq!(view.status, 200, "{}", view.text);
+    assert_eq!(view.data()["paused"], true, "{}", view.text);
+    let items = view.data()["queued_messages"].as_array().unwrap();
+    assert_eq!(items.len(), 1, "{}", view.text);
+    assert_eq!(items[0]["client_message_id"], FOLLOW_UP, "{}", view.text);
+    let row: (String, Option<String>, Option<String>) = app_db(s).query_row(
+        "SELECT state,safe_error_code,turn_id FROM session_queued_messages WHERE client_message_id=?1",
+        [FOLLOW_UP], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    ).unwrap();
+    assert_eq!(row, ("queued".into(), None, None));
+    assert_eq!(
+        s.provider()?.served(),
+        1,
+        "paused follow-up reached provider"
+    );
+    Ok(())
+}
+
+/// New user input is the public API that resumes a stopped queue.
+async fn resume_and_deliver_follow_up(s: &Scenario) -> Result<(), HarnessError> {
+    let (_, resumed) = s.turn("general", NUMBERS).await?;
+    assert_eq!(turn_state(&resumed), "delivered", "{resumed}");
+    let turns = s.gw.turns("general").await?;
+    let follow_up = turns
+        .iter()
+        .find(|turn| turn["user_message_id"] == FOLLOW_UP)
+        .unwrap_or_else(|| panic!("follow-up dropped: {turns:?}"));
+    assert_eq!(turn_state(follow_up), "delivered", "{follow_up}");
+    let row: (String, Option<String>) = app_db(s)
+        .query_row(
+            "SELECT state,safe_error_code FROM session_queued_messages WHERE client_message_id=?1",
+            [FOLLOW_UP],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(row, ("dispatched".into(), None));
+    let view = s.gw.get("/session-queue?chat_id=general").await?;
+    assert_eq!(view.data()["paused"], false, "{}", view.text);
+    assert_eq!(view.data()["queued_messages"], json!([]), "{}", view.text);
+    assert_eq!(s.provider()?.served(), 3, "stopped turn must never run");
+    Ok(())
 }
 
 async fn create_schedule(s: &Scenario) -> Result<String, HarnessError> {
@@ -235,14 +289,8 @@ async fn q_02_stop_of_an_unadmitted_turn_settles() -> Result<(), HarnessError> {
     assert_eq!(turn_state(&settled), "cancelled", "{settled}");
     assert_settled(&s, &turn, true);
     assert_never_admitted(&s, &turn);
-    let view = s.gw.get("/session-queue?chat_id=general").await?;
-    assert_eq!(view.data()["paused"], true, "{}", view.text);
-    assert_eq!(
-        view.data()["queued_messages"].as_array().map(Vec::len),
-        Some(0),
-        "{}",
-        view.text
-    );
+    assert_follow_up_paused(&s).await?;
+    resume_and_deliver_follow_up(&s).await?;
     s.finish().await
 }
 
@@ -262,6 +310,7 @@ async fn q_02_restart_settles_a_left_stop_and_runs_the_schedule() -> Result<(), 
     s.gw.wait_terminal("general", &turn, Duration::from_secs(20))
         .await
         .unwrap_or_else(|error| panic!("{error}\n{}", s.agent.logs()));
+    assert_follow_up_paused(&s).await?;
     let schedule = create_schedule(&s).await?;
     s.agent.terminate().await?;
     // The App state an earlier version left: BTCC answered, the App dropped it.
@@ -274,17 +323,23 @@ async fn q_02_restart_settles_a_left_stop_and_runs_the_schedule() -> Result<(), 
         .unwrap();
     let (_, _, outbox, paused) = stop_rows(&s, &turn);
     assert_eq!((outbox.as_str(), paused), ("pending", true));
-    make_due(&s, &schedule);
     s.agent.launch.remove_env("BUTLER_E2E_HOLD_DISPATCH_READY");
     s.gw = s.agent.start_again().await?;
     let settled =
         s.gw.wait_terminal("general", &turn, Duration::from_secs(20))
             .await?;
     assert_eq!(turn_state(&settled), "cancelled", "{settled}");
+    assert_settled(&s, &turn, true);
+    assert_never_admitted(&s, &turn);
+    assert_follow_up_paused(&s).await?;
+    resume_and_deliver_follow_up(&s).await?;
+    s.agent.terminate().await?;
+    make_due(&s, &schedule);
+    s.gw = s.agent.start_again().await?;
     assert_schedule_delivers(&s, &schedule).await?;
-    // The schedule's input resumed the queue the Stop paused.
+    // The user input resumed the queue the Stop paused.
     assert_settled(&s, &turn, false);
-    assert_eq!(s.provider()?.served(), 2);
+    assert_eq!(s.provider()?.served(), 4);
     s.finish().await
 }
 
