@@ -232,6 +232,31 @@ class Followup(unittest.TestCase):
         self.assertNotIn('>old<', github.issues[2]['body'])
 
     # test-category: security
+    def test_no_baseline_failures_get_one_issue_per_workflow(self):
+        other = '<!-- main-ci-range:unavailable:older -->\n' + section(3)
+        github = FakeGitHub([dict(number=2, body=other)])
+        with patch.object(failure, 'failure_range', side_effect=ValueError('No green baseline')), \
+             github.patches():
+            failure.report(REPO, RUN)
+            self.assertEqual([w[:2] for w in github.writes], [('repos/owner/repo/issues', 'POST')])
+            self.assertEqual(github.issues[2]['body'], other)
+            self.assertIn('<!-- workflow:4 -->', github.issues[3]['body'])
+            failure.report(REPO, dict(RUN, id=11, head_sha='worse'))
+        self.assertEqual(github.writes[1][:2], ('repos/owner/repo/issues/3', 'PATCH'))
+        self.assertEqual(len(github.issues), 2)
+
+    # test-category: security
+    def test_issue_closed_as_not_planned_is_never_reopened(self):
+        for base, failed in [('unavailable', ValueError('No green baseline')), ('green', None)]:
+            dismissed = f'<!-- main-ci-range:{base}:older -->\n' + section(4)
+            github = FakeGitHub([dict(number=2, body=dismissed, state='closed', state_reason='not_planned')])
+            ranges = dict(side_effect=failed) if failed else dict(return_value=(base, []))
+            with patch.object(failure, 'failure_range', **ranges), github.patches():
+                failure.report(REPO, RUN)
+            self.assertEqual([w[:2] for w in github.writes], [('repos/owner/repo/issues', 'POST')], base)
+            self.assertEqual((github.issues[2]['state'], github.issues[2]['body']), ('closed', dismissed))
+
+    # test-category: security
     def test_marker_in_issue_by_another_author_is_never_reused_or_closed(self):
         forged = '<!-- main-ci-range:unavailable:x -->\n' + section(4)
         github = FakeGitHub([dict(number=2, body=forged, user={'login': 'someone'})],

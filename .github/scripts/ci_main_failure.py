@@ -120,9 +120,10 @@ def report(repository, run):
     except ValueError:
         base, commits = 'unavailable', []
     merges, prs = range_prs(repository, commits)
-    # One issue per green baseline: later failing pushes and other workflows
-    # failing since that baseline update it, each with separate evidence. The
-    # draft revert stays keyed to the exact range.
+    # One issue per green baseline (per workflow when there is none): later
+    # failing pushes and other workflows failing since that baseline update
+    # it, each with separate evidence. The draft revert stays keyed to the
+    # exact range.
     marker = f'<!-- main-ci-range:{base}:{run["head_sha"]} -->'
     family = f'<!-- main-ci-range:{base}:'
     start, end = f'<!-- workflow:{run["workflow_id"]} -->', f'<!-- /workflow:{run["workflow_id"]} -->'
@@ -135,11 +136,19 @@ def report(repository, run):
             return re.sub(pattern, lambda match: section, body, flags=re.S)
         return body + '\n\n' + section
 
+    def same_failure(issue):
+        body = issue.get('body') or ''
+        # An issue closed as not planned stays closed; a new failure gets a new issue.
+        if family not in body or issue.get('state_reason') == 'not_planned':
+            return False
+        # Without a green baseline there is no shared range: one issue per workflow.
+        return base != 'unavailable' or start in body
+
     title = f'Main CI failure: {base[:8]}..{run["head_sha"][:8]}'
     # Query the baseline at the mutation boundary, after range discovery.
-    existing = next((i for i in bot_issues(repository, 'all') if family in (i.get('body') or '')), None)
+    existing = next((i for i in bot_issues(repository, 'all') if same_failure(i)), None)
     if existing is None:
-        existing = next((i for i in bot_issues(repository, 'all') if family in (i.get('body') or '')), None)
+        existing = next((i for i in bot_issues(repository, 'all') if same_failure(i)), None)
     if existing:
         body = apply(f'repos/{repository}/issues/{existing["number"]}', put_section,
                      lambda _: dict(title=title, state='open'))
