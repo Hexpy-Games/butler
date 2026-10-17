@@ -8,6 +8,7 @@
 mod events;
 mod fidelity;
 mod fixture;
+mod ownership;
 mod perf;
 mod progress;
 mod reads;

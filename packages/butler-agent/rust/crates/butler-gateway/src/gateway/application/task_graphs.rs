@@ -1,5 +1,6 @@
 //! User-facing projection of existing plan actions and delegation groups.
 mod events;
+mod grouping;
 mod nodes;
 mod response;
 use super::AppSettingsFacts;
@@ -18,11 +19,6 @@ pub fn task_graph_label(raw: &str) -> String {
 }
 pub fn task_graph_model_label(raw: &str) -> String {
     task_graph_label(raw)
-}
-
-/// One delegated objective is represented by its executing child's graph.
-fn represented_by_steward_child(work: &butler_turn::btcc::TaskGraphWorkRecord) -> bool {
-    work.execution_mode.as_deref() == Some("steward") && work.has_planned_steward
 }
 
 pub fn project_task_graphs(
@@ -45,16 +41,7 @@ pub fn project_task_graphs(
         .into_iter()
         .map(|r| (r.work_id.clone(), r))
         .collect();
-    let mut graphs = Vec::new();
-    for work in records.works {
-        if represented_by_steward_child(&work) {
-            continue;
-        }
-        let assigned = children.remove(&work.id).unwrap_or_default();
-        let review = reviews.get(&work.id);
-        let nodes = nodes::work_nodes(&work, &assigned, review, times, facts);
-        graphs.push(finish(&work, nodes, review));
-    }
+    let mut graphs = grouping::graphs(&records.works, &mut children, &reviews, times, facts);
     graphs.sort_by_key(|graph| state_order(&graph["state"]));
     graphs
 }
@@ -64,6 +51,7 @@ fn finish(
     mut nodes: Vec<Value>,
     review: Option<&butler_turn::btcc::TaskGraphReviewRecord>,
 ) -> Value {
+    grouping::settle_terminal_nodes(&work.status, &mut nodes);
     let keys: BTreeMap<&str, &str> = nodes
         .iter()
         .filter_map(|n| Some((n["_key"].as_str()?, n["task_id"].as_str()?)))

@@ -10,6 +10,7 @@ mod read;
 mod relation;
 mod review;
 mod scope_selection;
+pub(super) mod terminal;
 mod tool_result;
 
 #[cfg(test)]

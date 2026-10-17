@@ -423,7 +423,8 @@ pub(super) fn abandon(
             format!("Durable Work could not be abandoned: {work_id}"),
         ));
     }
-    super::super::authority::close_pending_source_work_requests(db, work_id, &clock())?;
+    super::terminal::close_children(db, work_id, &now)?;
+    super::super::authority::close_pending_source_work_requests(db, work_id, &now)?;
     Ok(())
 }
 

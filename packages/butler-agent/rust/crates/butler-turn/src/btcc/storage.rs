@@ -185,6 +185,11 @@ impl BtccStorage {
                 return Err(error);
             }
         };
+        if let Err(error) = work::terminal::startup(read_path.clone(), profile).await {
+            drop(sender);
+            join_failed_initialization(thread).await;
+            return Err(error);
+        }
         let readers = match read_pool::open(read_path, profile).await {
             Ok(readers) => readers,
             Err(error) => {

@@ -2,7 +2,7 @@
 
 mod activity;
 mod assets;
-mod completion;
+pub(super) mod completion;
 mod decode;
 mod directions;
 mod files;
@@ -248,14 +248,14 @@ impl SqliteSubsessionRepository {
         &self,
         relation: String,
     ) -> Result<Option<StoredSubsessionDirection>, StorageError> {
-        self.storage.execute(move |db| db.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending' ORDER BY revision LIMIT 1",[relation],direction_row).optional().map_err(StorageError::sqlite)).await
+        self.storage.execute(move |db| db.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending' AND NOT EXISTS(SELECT 1 FROM btcc_subsession_delegations d JOIN btcc_guided_works w ON w.work_id=d.root_work_id WHERE d.relation_id=btcc_subsession_directions.relation_id AND w.status IN ('completed','abandoned')) ORDER BY revision LIMIT 1",[relation],direction_row).optional().map_err(StorageError::sqlite)).await
     }
 
     pub(crate) async fn pending_directions(
         &self,
     ) -> Result<Vec<StoredSubsessionDirection>, StorageError> {
         self.storage.execute(move |db| {
-            let mut statement=db.prepare("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE status='pending' ORDER BY relation_id,revision").map_err(StorageError::sqlite)?;
+            let mut statement=db.prepare("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE status='pending' AND NOT EXISTS(SELECT 1 FROM btcc_subsession_delegations d JOIN btcc_guided_works w ON w.work_id=d.root_work_id WHERE d.relation_id=btcc_subsession_directions.relation_id AND w.status IN ('completed','abandoned')) ORDER BY relation_id,revision").map_err(StorageError::sqlite)?;
             let rows=statement.query_map([],direction_row).map_err(StorageError::sqlite)?;
             rows.collect::<Result<Vec<_>,_>>().map_err(StorageError::sqlite)
         }).await
@@ -271,7 +271,7 @@ impl SqliteSubsessionRepository {
             let tx=db.transaction().map_err(StorageError::sqlite)?;
             let relation:Option<String>=tx.query_row("SELECT relation_id FROM btcc_session_relations WHERE child_session_id=?1",[child],|r|r.get(0)).optional().map_err(StorageError::sqlite)?;
             let Some(relation)=relation else { return Ok(None) };
-            let direction=tx.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending' ORDER BY revision LIMIT 1",[&relation],direction_row).optional().map_err(StorageError::sqlite)?;
+            let direction=tx.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending' AND NOT EXISTS(SELECT 1 FROM btcc_subsession_delegations d JOIN btcc_guided_works w ON w.work_id=d.root_work_id WHERE d.relation_id=btcc_subsession_directions.relation_id AND w.status IN ('completed','abandoned')) ORDER BY revision LIMIT 1",[&relation],direction_row).optional().map_err(StorageError::sqlite)?;
             if let Some(value)=&direction {
                 tx.execute("UPDATE btcc_subsession_directions SET status='applied',applied_at=?2,applied_child_turn_id=?3 WHERE instruction_id=?1 AND status='pending'",params![value.instruction_id,now,child_turn]).map_err(StorageError::sqlite)?;
             }

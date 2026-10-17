@@ -41,7 +41,7 @@ async fn task_graphs_btcc_main_path() -> Result<(), Error> {
         ))
         .await?
         .status,
-        404
+        200
     );
     only_graph(&s, "general").await?;
     let initial = graph(&s, &work).await?;

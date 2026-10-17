@@ -84,6 +84,9 @@ pub(in crate::btcc::storage::work) fn record(
     }
     db.execute("UPDATE btcc_guided_works SET status = ?1, updated_at = ?2 WHERE work_id = ?3 AND (status IN ('open', 'blocked') OR (?4 = 1 AND status = 'completed'))", params![common::enum_text(input.disposition)?, now, work.id, i32::from(transition == RuntimeTransition::Reopen)]).map_err(StorageError::sqlite)?;
     db.execute("INSERT INTO btcc_guided_work_disposition_commands (mutation_call_id, request_sha256, work_id, disposition_revision_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5)", params![input.mutation_call_id, command.request_sha256, work.id, disposition_id, now]).map_err(StorageError::sqlite)?;
+    if input.disposition == DispositionStatus::Completed {
+        super::super::terminal::close_children(db, &work.id, &now)?;
+    }
     let persisted = read::view(db, &work.id)?;
     let fingerprint = material_fingerprint(&persisted)?;
     db.execute("UPDATE btcc_guided_work_disposition_revisions SET material_fingerprint = ?1 WHERE disposition_revision_id = ?2", params![fingerprint, disposition_id]).map_err(StorageError::sqlite)?;

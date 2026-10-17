@@ -27,7 +27,7 @@ async fn task_graphs_revision_event_and_reconnect() -> Result<(), HarnessError> 
     wake(&s, id).await?;
     let changed = stream
         .wait_for(Duration::from_secs(10), |e| {
-            e["type"] == "work_model.changed" && e["payload"]["plan_id"] == *id
+            e["type"] == "work_model.changed" && e["payload"]["plan_id"] == graph.data()["graph_id"]
         })
         .await?;
     let latest = s.gw.get(&format!("/plans/{id}/task-graph")).await?;
@@ -55,7 +55,7 @@ async fn task_graphs_revision_event_and_reconnect() -> Result<(), HarnessError> 
     let next = stream
         .wait_for(Duration::from_secs(10), |e| {
             e["type"] == "work_model.changed"
-                && e["payload"]["plan_id"] == *id
+                && e["payload"]["plan_id"] == graph.data()["graph_id"]
                 && e["payload"]["graph_revision"] != changed["payload"]["graph_revision"]
         })
         .await?;
