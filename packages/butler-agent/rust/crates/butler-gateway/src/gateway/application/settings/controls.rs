@@ -121,15 +121,23 @@ fn project_global(
     })
 }
 
+/// The session's stored controls over the global defaults. A stored model
+/// that is no longer available (deleted, disabled) resolves to the Settings
+/// default model, then to the first available model, so a conversation never
+/// stays bound to a model it cannot use.
 pub(super) fn inherited_controls(
     settings: &GlobalSettings,
     stored: &Map<String, Value>,
     facts: &AppSettingsFacts,
-    explicit: bool,
 ) -> Controls {
-    let stored_model = stored.get("model").and_then(Value::as_str);
+    let available = available_models(facts);
+    let model = stored
+        .get("model")
+        .and_then(Value::as_str)
+        .filter(|model| selectable(model, &available).is_some())
+        .unwrap_or(&settings.model);
     let candidate = Controls {
-        model: stored_model.unwrap_or(&settings.model).to_owned(),
+        model: model.to_owned(),
         reasoning: stored
             .get("reasoning_effort")
             .and_then(Value::as_str)
@@ -145,27 +153,7 @@ pub(super) fn inherited_controls(
             .and_then(Value::as_bool)
             .unwrap_or(settings.plan_mode),
     };
-    if let Some(stored_model) = stored_model
-        .filter(|_| explicit && selectable(&candidate.model, &available_models(facts)).is_none())
-    {
-        let normalized = normalize_controls(
-            Controls {
-                model: settings.model.clone(),
-                ..candidate
-            },
-            &available_models(facts),
-        );
-        return Controls {
-            model: stored_model.to_owned(),
-            reasoning: stored
-                .get("reasoning_effort")
-                .and_then(Value::as_str)
-                .and_then(parse_reasoning)
-                .unwrap_or(normalized.reasoning),
-            ..normalized
-        };
-    }
-    normalize_controls(candidate, &available_models(facts))
+    normalize_controls(candidate, &available)
 }
 
 pub(super) fn merge_message_controls(controls: &mut Controls, request: &MessageSendRequest) {
