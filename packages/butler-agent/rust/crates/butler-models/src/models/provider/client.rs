@@ -27,6 +27,7 @@ struct PreparedResponse {
     continuation: Option<super::continuation::LegacyProjection>,
     identity: Option<serde_json::Value>,
     prefix: serde_json::Value,
+    thinking_binding: Option<super::anthropic_thinking::Binding>,
 }
 
 pub struct ModelProvider {
@@ -174,6 +175,9 @@ impl ModelProvider {
             request,
             prepared.continuation,
         );
+        if let Some(binding) = &prepared.thinking_binding {
+            super::anthropic_thinking::bind(&mut result, binding);
+        }
         if result.usage.is_none() && matches!(prepared.carrier, serialize::Carrier::Chat { .. }) {
             result.usage = super::stream_usage::estimate(&result, &prepared.prefix, request.model);
         }
