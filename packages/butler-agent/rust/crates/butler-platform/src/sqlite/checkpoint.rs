@@ -285,15 +285,15 @@ fn run(
         }
     };
     let _ = ready.send(Ok(()));
-    let mut follow_up = false;
-    while follow_up || requests.recv().is_ok() {
+    let mut chain: Option<i32> = None;
+    while chain.is_some() || requests.recv().is_ok() {
         let started = Instant::now();
         let guard = checkpoint.lock().unwrap_or_else(PoisonError::into_inner);
         let snapshot = {
             let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
             // A coalesced wake may be left behind a pass that already covered
             // its frames. Do not run another SQL checkpoint for that request.
-            if !follow_up && !progress.due(pages) {
+            if chain.is_none() && !progress.due(pages) {
                 continue;
             }
             progress.inline_pending = false;
@@ -301,17 +301,21 @@ fn run(
             (progress.generation, progress.frames)
         };
         let result = backfill(&connection, maintenance, started);
-        follow_up = if let Ok((_, log, backfilled)) = result.as_ref() {
-            let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
-            progress.completed(snapshot, *log, *backfilled);
-            // Only a due pass may drain commits that raced its backfill. A
-            // follow-up's tail, and commits after this lock, wait for due().
-            !follow_up
-                && progress.generation == snapshot.0
-                && *backfilled >= snapshot.1
-                && progress.frames > *backfilled
-        } else {
-            false
+        chain = match result.as_ref() {
+            Ok((_, log, backfilled)) => {
+                let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
+                progress.completed(snapshot, *log, *backfilled);
+                // Always drain the due pass's raced tail; continue only while
+                // later tails halve. Decide before releasing the progress lock.
+                let raced = progress.frames - backfilled;
+                let converging = chain.is_none_or(|prev| raced.saturating_mul(2) <= prev);
+                (progress.generation == snapshot.0
+                    && *backfilled >= snapshot.1
+                    && raced > 0
+                    && converging)
+                    .then_some(raced)
+            }
+            Err(_) => None,
         };
         drop(guard);
         finish_pass(&connection, maintenance, started, result.is_ok());
