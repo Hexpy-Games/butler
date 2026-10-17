@@ -143,7 +143,8 @@ fn observe_lifetime(state: &Arc<HttpState>) -> Result<(), HttpError> {
             }
             state.previews.close(&id);
             runtime.spawn(async move {
-                state.previews.stop_closed(&id).await;
+                // The lifecycle HTTP path also awaits cleanup and reports failures.
+                state.previews.cleanup_closed(&id).await;
             });
         }
     }))?;

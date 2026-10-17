@@ -185,7 +185,11 @@ if (process.platform === "win32") {
   app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
 }
 if (windowsSquirrelLaunch.handled) {
-  if (!shellRegistrationAllowed()) process.exit(0);
+  if (!installShellRegistrationAllowed()) process.exit(0);
+  // Squirrel events act for this install: its shortcuts, its protocol handler
+  // and its login item all target this install's stub, whatever the profile.
+  // Only the data root's operational state belongs to the default profile.
+  const profileOwnsData = profileOwnsShellRegistration();
   let squirrelExitCode = 0;
   let squirrelErrorCode = null;
   let squirrelResult = null;
@@ -197,13 +201,14 @@ if (windowsSquirrelLaunch.handled) {
         writeShortcut: (path, options) => shell.writeShortcutLink(path, "create", options),
         runPowerShell: spawnSync,
       }),
-      setLoginItemSettings: (settings) => app.setLoginItemSettings(settings),
+      setLoginItemSettings: setInstallLoginItemSettings,
       registerProtocol: (scheme, executable, args) =>
         app.setAsDefaultProtocolClient(scheme, executable, args),
       unregisterProtocol: (scheme, executable, args) =>
         app.removeAsDefaultProtocolClient(scheme, executable, args),
-      cleanupOperationalState: () =>
-        removeWindowsOperationalState({ butlerData: appWritableDataRoot }),
+      cleanupOperationalState: () => profileOwnsData
+        ? removeWindowsOperationalState({ butlerData: appWritableDataRoot })
+        : [],
     });
   } catch (error) {
     squirrelExitCode = 1;
@@ -1248,9 +1253,25 @@ function configureAppIdentity() {
 }
 
 function shellRegistrationAllowed() {
-  if (!profileAllowsShellRegistration({
+  return profileOwnsShellRegistration() && squirrelInstallPresent();
+}
+
+function profileOwnsShellRegistration() {
+  return profileAllowsShellRegistration({
     isPackaged: app.isPackaged, env: process.env, home: userHome, dataRoot: butlerDataRoot,
-  })) return false;
+  });
+}
+
+// Registrations that point at this install's own stub: Squirrel events and
+// explicit user toggles. The explicit opt-out still applies.
+function installShellRegistrationAllowed() {
+  return process.env.BUTLER_APP_DISABLE_SHELL_REGISTRATION !== "1" && squirrelInstallPresent();
+}
+
+// A portable App has no Squirrel stub; registering that missing executable
+// would replace the user's associations with a temporary path.
+function squirrelInstallPresent() {
+  if (!app.isPackaged) return false;
   if (process.platform !== "win32") return true;
   const settings = windowsLoginItemSettings({
     openAtLogin: false, platform: process.platform,
@@ -1288,14 +1309,25 @@ function getButlerLoginItemSettings() {
   });
 }
 
+// An explicit Settings toggle writes this App's own login item, the same
+// entry getButlerLoginItemSettings reads, so it is not limited to the default
+// profile. Only automatic registration at launch is.
 function setButlerLoginItemSettings(openAtLogin) {
-  if (!shellRegistrationAllowed()) return;
-  app.setLoginItemSettings(windowsLoginItemSettings({
+  if (!installShellRegistrationAllowed()) return;
+  setInstallLoginItemSettings(windowsLoginItemSettings({
     openAtLogin,
     platform: process.platform,
     isPackaged: app.isPackaged,
     execPath: process.execPath,
   }));
+}
+
+// Windows removes a login item by its value name alone. Like protocol
+// removal, remove it only while it still targets this install's stub.
+function setInstallLoginItemSettings(settings) {
+  if (process.platform === "win32" && settings.openAtLogin !== true && settings.path &&
+      !app.getLoginItemSettings({ path: settings.path, args: settings.args }).openAtLogin) return;
+  app.setLoginItemSettings(settings);
 }
 
 function configureWindowsAppUpdater() {

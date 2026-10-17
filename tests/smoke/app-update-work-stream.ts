@@ -95,18 +95,24 @@ try {
   assert.equal(requests, 3);
   console.log("PASS background-only quit and real authenticated SSE: three turns delivered; deferred activation once after native shutdown");
 } catch (error) {
-  const view = await server.api("/user-work");
-  const { turns } = await server.api<{ turns: Array<{ state: string }> }>(`/turns?chat_id=${chatId}`);
-  console.error({ reads, wakes, streamStatuses, requests, status: coordinator.state().status,
-    view, turnStates: turns.map(turn => turn.state) });
-  const db = new Database(join(server.butlerData, "app-server/butler-client.sqlite"), { readonly: true });
-  console.error({ rows: db.query("SELECT t.chat_id=? AS fixture,t.state,c.kind,t.safe_error_code,json_extract(t.execution_controls_json,'$.model_ref') AS model FROM turns t JOIN chats c ON c.id=t.chat_id").all(chatId),
-    queue: db.query("SELECT chat_id=? AS fixture,state,turn_id IS NULL AS unclaimed FROM session_queued_messages").all(chatId) });
-  db.close();
-  const btcc = new Database(join(server.butlerData, "agent-runtime/btcc.sqlite"), { readonly: true });
-  console.error({ modelErrors: btcc.query("SELECT error_code,failure_disposition,COUNT(*) AS count FROM btcc_model_route_events GROUP BY error_code,failure_disposition").all(),
-    semanticStates: btcc.query("SELECT semantic_state,suspension_reason,COUNT(*) AS count FROM btcc_turns GROUP BY semantic_state,suspension_reason").all() });
-  btcc.close();
+  console.error("Work-stream smoke failed", error);
+  try {
+    console.error(server.diagnostics());
+    const view = await server.api("/user-work");
+    const { turns } = await server.api<{ turns: Array<{ state: string }> }>(`/turns?chat_id=${chatId}`);
+    console.error({ reads, wakes, streamStatuses, requests, status: coordinator.state().status,
+      view, turnStates: turns.map(turn => turn.state) });
+    const db = new Database(join(server.butlerData, "app-server/butler-client.sqlite"), { readonly: true });
+    console.error({ rows: db.query("SELECT t.chat_id=? AS fixture,t.state,c.kind,t.safe_error_code,json_extract(t.execution_controls_json,'$.model_ref') AS model FROM turns t JOIN chats c ON c.id=t.chat_id").all(chatId),
+      queue: db.query("SELECT chat_id=? AS fixture,state,turn_id IS NULL AS unclaimed FROM session_queued_messages").all(chatId) });
+    db.close();
+    const btcc = new Database(join(server.butlerData, "agent-runtime/btcc.sqlite"), { readonly: true });
+    console.error({ modelErrors: btcc.query("SELECT error_code,failure_disposition,COUNT(*) AS count FROM btcc_model_route_events GROUP BY error_code,failure_disposition").all(),
+      semanticStates: btcc.query("SELECT semantic_state,suspension_reason,COUNT(*) AS count FROM btcc_turns GROUP BY semantic_state,suspension_reason").all() });
+    btcc.close();
+  } catch (diagnosticError) {
+    console.error("Work-stream diagnostics unavailable", diagnosticError);
+  }
   throw error;
 } finally {
   clearTimeout(timer);
