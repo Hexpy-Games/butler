@@ -341,14 +341,13 @@ impl AppApplication {
             .ok_or(GatewayApplicationError::internal())?
             .initialize(self.clone_handle())
             .await?;
-        // Settled Stops free their sessions before schedules catch up.
-        self.recover_turn_cancellations().await?;
         let automation_scheduler = self
             .automation_scheduler
             .as_ref()
             .ok_or(GatewayApplicationError::internal())?;
         self.automation_runs.initialize(self.clone_handle()).await?;
         automation_scheduler.initialize(self.clone_handle())?;
+        self.recover_turn_cancellations().await?;
         self.watch_wallpaper_modules().await;
         authority_recovery::retry(self).await;
         self.setup_readiness.start(

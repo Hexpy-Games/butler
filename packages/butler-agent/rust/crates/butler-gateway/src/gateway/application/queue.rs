@@ -386,50 +386,6 @@ fn restore_claim(
     Ok(changed == 1)
 }
 
-/// Ends the queued input of a turn whose Stop BTCC confirmed when no claim of
-/// it settles that input: recovered (`queued`) or claimed again after the
-/// Stop. The turn never runs, so the input never dispatches again.
-pub(super) fn settle_stopped(
-    connection: &Connection,
-    subscribers: &EventSubscribers,
-    chat_id: &str,
-    turn_id: &str,
-    updated_at: &str,
-) -> Result<bool, AppStorageError> {
-    let queued = connection
-        .query_row_cached(
-            "SELECT id FROM session_queued_messages WHERE chat_id=?1 AND turn_id=?2 \
-             AND state IN ('queued','dispatching') ORDER BY rowid DESC LIMIT 1",
-            params![chat_id, turn_id],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(AppStorageError::sqlite)?;
-    let Some(queued) = queued else {
-        return Ok(false);
-    };
-    connection
-        .execute_cached(
-            "UPDATE session_queued_messages SET state='failed', safe_error_code='turn_cancelled', \
-               claim_id=NULL, claim_owner=NULL, claimed_at=NULL, lease_expires_at=NULL, \
-               updated_at=?1 WHERE id=?2",
-            params![updated_at, queued],
-        )
-        .map_err(AppStorageError::sqlite)?;
-    events::append(
-        connection,
-        subscribers,
-        "session_queue.changed",
-        Some(turn_id),
-        service::map(&serde_json::json!({
-            "session_id":chat_id,"turn_id":turn_id,"queued_message_id":queued,
-            "action":"failed","safe_error_code":"turn_cancelled"
-        }))?,
-        updated_at,
-    )?;
-    Ok(true)
-}
-
 pub(super) fn settle(
     connection: &Connection,
     chat_id: &str,

@@ -17,9 +17,6 @@ impl<'a> SqliteAuthorityReader<'a> {
     pub(crate) fn retains_approval_claim(&self, turn_id: &str) -> AuthorityResult<bool> {
         query::retains_approval_claim(self.db, turn_id)
     }
-    pub(crate) fn stop_confirmed(&self, turn_id: &str) -> AuthorityResult<bool> {
-        query::stop_confirmed(self.db, turn_id)
-    }
     pub(crate) fn list_pending(&self, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
         query::list_pending(self.db, owner)
     }

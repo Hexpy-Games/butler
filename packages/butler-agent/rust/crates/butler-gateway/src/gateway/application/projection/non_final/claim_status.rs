@@ -32,12 +32,6 @@ pub(super) fn current_claim_status(
         // authority projections after the suspended queue claim was settled.
         return Ok(QueuedTurnClaimStatus::Unlinked);
     }
-    if status == QueuedTurnClaimStatus::Stale && confirmed_owner_stop(db, turn_id, outbound)? {
-        // The stale link (input recovered or claimed again after the Stop) no
-        // longer fences BTCC's final word; projection ends the turn and that
-        // input together (`settle_if_claimed`).
-        return Ok(QueuedTurnClaimStatus::Unlinked);
-    }
     let metadata = object(outbound.payload.get("metadata"));
     let reply_to = token(object(outbound.payload.get("message")).get("replyToMessageId"));
     if status == QueuedTurnClaimStatus::Stale
@@ -78,29 +72,4 @@ fn cancellation_settlement(
          WHERE t.id=?1 AND t.chat_id=?2 AND c.state IN ('pending','accepted','completed') AND c.queue_id IS NOT NULL)",
         rusqlite::params![turn_id, chat_id], |row| row.get(0),
     ).map_err(AppStorageError::sqlite)
-}
-
-/// BTCC's cancellation of a turn the owner stopped and is still waiting on:
-/// BTCC cancelled it or stopped it before admission, so it never runs again.
-fn confirmed_owner_stop(
-    db: &Connection,
-    turn_id: &str,
-    outbound: &TranscriptEvent,
-) -> Result<bool, AppStorageError> {
-    let metadata = object(outbound.payload.get("metadata"));
-    if text(metadata.get("kind")).as_deref() != Some("turn_cancelled")
-        || !matches!(
-            text(metadata.get("outcome")).as_deref(),
-            Some("cancelled" | "already_cancelled")
-        )
-    {
-        return Ok(false);
-    }
-    db.query_row(
-        "SELECT EXISTS(SELECT 1 FROM app_turn_cancel_outbox \
-         WHERE state IN ('pending','accepted') AND turn_id=?1)",
-        [turn_id],
-        |row| row.get(0),
-    )
-    .map_err(AppStorageError::sqlite)
 }

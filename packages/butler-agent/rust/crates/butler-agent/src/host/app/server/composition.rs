@@ -31,10 +31,7 @@ pub(super) async fn dependencies(
         setup: Arc::new(setup),
         skills: runtime.skills.clone(),
         mcp_client: runtime.mcp_client.clone(),
-        native_ingress: Arc::new(AppIngress::new(
-            owners.queue.clone(),
-            runtime.authority.clone(),
-        )),
+        native_ingress: Arc::new(AppIngress::new(owners.queue.clone())),
         native_assets: native_assets(runtime, data_root),
         executor_readiness: Arc::new(readiness),
         admission: admission(runtime, artifacts.clone()),

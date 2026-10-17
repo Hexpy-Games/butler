@@ -16,12 +16,6 @@ impl PrincipalAuthority {
         self.in_read(move |repo| repo.retains_approval_claim(&turn_id))
             .await
     }
-    /// Whether BTCC settled a Stop of the turn for good (see
-    /// `btcc_stop_requests`): the turn was cancelled or never admitted.
-    pub async fn stop_confirmed(&self, turn_id: String) -> AuthorityResult<bool> {
-        self.in_read(move |repo| repo.stop_confirmed(&turn_id))
-            .await
-    }
     /// An authority over the store, collation, clock and id source.
     pub fn new(
         storage: BtccStorage,

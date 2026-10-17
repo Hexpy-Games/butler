@@ -30,19 +30,6 @@ pub(super) fn retains_approval_claim(db: &Connection, turn_id: &str) -> Authorit
     .map(|row| row.is_some())
     .map_err(sql)
 }
-/// Whether BTCC settled a Stop of the turn for good: it cancelled the turn,
-/// or stopped it before admission so the turn is never admitted to run.
-pub(super) fn stop_confirmed(db: &Connection, turn_id: &str) -> AuthorityResult<bool> {
-    db.query_row(
-        "SELECT 1 FROM btcc_stop_requests WHERE turn_id=?1 \
-         AND status IN ('cancelled','already_cancelled','cancelled_before_admission')",
-        [turn_id],
-        |_| Ok(()),
-    )
-    .optional()
-    .map(|row| row.is_some())
-    .map_err(sql)
-}
 fn hydrate(row: &Row<'_>) -> rusqlite::Result<AuthorityRecord> {
     Ok(AuthorityRecord {
         request_id: row.get(0)?,
