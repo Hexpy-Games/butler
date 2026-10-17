@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import subprocess
 
+BOT = 'github-actions[bot]'
 PASSED = '<!-- passed -->'
 SECTION = r'(<!-- workflow:(\d+) -->)(.*?)(<!-- /workflow:\2 -->)'
 
@@ -126,24 +127,56 @@ def report(repository, run):
     family = f'<!-- main-ci-range:{base}:'
     start, end = f'<!-- workflow:{run["workflow_id"]} -->', f'<!-- /workflow:{run["workflow_id"]} -->'
     section = issue_body(run, base, commits, merges, prs, jobs, start) + '\n' + end
-    # Query the baseline at the mutation boundary, after range discovery.
-    existing = next((i for i in pages(f'repos/{repository}/issues?state=all')
-                     if not i.get('pull_request') and family in (i.get('body') or '')), None)
-    if existing is None:
-        existing = next((i for i in pages(f'repos/{repository}/issues?state=all')
-                         if not i.get('pull_request') and family in (i.get('body') or '')), None)
-    body = (existing.get('body') or marker) if existing else marker
     pattern = re.escape(start) + '.*?' + re.escape(end)
-    body = re.sub(pattern, lambda match: section, body, flags=re.S) if start in body else body + '\n\n' + section
+
+    def put_section(body):
+        body = body or marker
+        if start in body:
+            return re.sub(pattern, lambda match: section, body, flags=re.S)
+        return body + '\n\n' + section
+
     title = f'Main CI failure: {base[:8]}..{run["head_sha"][:8]}'
+    # Query the baseline at the mutation boundary, after range discovery.
+    existing = next((i for i in bot_issues(repository, 'all') if family in (i.get('body') or '')), None)
+    if existing is None:
+        existing = next((i for i in bot_issues(repository, 'all') if family in (i.get('body') or '')), None)
     if existing:
-        path = f'repos/{repository}/issues/{existing["number"]}'
-        if existing.get('state') == 'closed':
-            api(path, 'PATCH', dict(state='open'))
-        api(path, 'PATCH', dict(body=body, title=title))
+        body = apply(f'repos/{repository}/issues/{existing["number"]}', put_section,
+                     lambda _: dict(title=title, state='open'))
     else:
+        body = put_section(marker)
         api(f'repos/{repository}/issues', 'POST', dict(title=title, body=body))
     draft_revert(repository, run, merges, prs, marker, body)
+
+
+def bot_issues(repository, state):
+    # Anyone can open an issue carrying a marker; only the follow-up's own count.
+    path = f'repos/{repository}/issues?state={state}&creator={BOT.replace("[", "%5B").replace("]", "%5D")}'
+    return (i for i in pages(path)
+            if not i.get('pull_request') and (i.get('user') or {}).get('login') == BOT)
+
+
+def apply(path, change, fields):
+    """Write change(body) over the latest body and re-read until it holds.
+
+    Report and resolve runs for different workflows may edit one issue at
+    once. A fixed concurrency group would cancel all but one pending run and
+    drop evidence, so each writer re-applies its idempotent change to the
+    current body until a read after its write still contains it.
+    """
+    for _ in range(5):
+        updated = change(api(path).get('body') or '')
+        api(path, 'PATCH', dict(fields(updated), body=updated))
+        latest = api(path)
+        if change(latest.get('body') or '') == (latest.get('body') or ''):
+            return latest.get('body') or ''
+    raise RuntimeError(f'{path} kept changing during the follow-up; rerun this job')
+
+
+def failing_jobs(section):
+    """Job names listed under the section's 'Failing jobs:' heading."""
+    listed = section.split('Failing jobs:', 1)[1].split('\n\n', 1)[0] if 'Failing jobs:' in section else ''
+    return re.findall(r'^- \[(.+)\]\([^)\n]*\)$', listed, re.M)
 
 
 def resolve(repository, run):
@@ -151,28 +184,40 @@ def resolve(repository, run):
     if not trusted(run, repository) or run.get('conclusion') != 'success':
         return
     note = f'{PASSED}\n[{run["name"]} passed]({run["html_url"]})\n'
+    start = f'<!-- workflow:{run["workflow_id"]} -->'
+    jobs = None
 
     def mark(match):
         failed = re.search(r'/actions/runs/(\d+)', match[3])
-        # A success older than the recorded failure does not resolve it.
-        if (match[2] != str(run['workflow_id']) or PASSED in match[3]
-                or (failed and int(failed[1]) > run['id'])):
+        names = failing_jobs(match[3])
+        # A success older than the recorded failure does not resolve it, and a
+        # run whose path selection skipped a failed job proves nothing about it.
+        if (match[2] != str(run['workflow_id']) or PASSED in match[3] or not names
+                or (failed and int(failed[1]) > run['id'])
+                or any(jobs.get(name) != 'success' for name in names)):
             return match[0]
         return match[1] + '\n' + note + match[3] + match[4]
 
-    for issue in pages(f'repos/{repository}/issues?state=open'):
+    def mark_all(body):
+        return re.sub(SECTION, mark, body, flags=re.S)
+
+    def close_when_clear(body):
+        if any(PASSED not in match[3] for match in re.finditer(SECTION, body, re.S)):
+            return {}
+        return dict(state='closed', state_reason='completed')
+
+    for issue in bot_issues(repository, 'open'):
         body = issue.get('body') or ''
-        if issue.get('pull_request') or '<!-- main-ci-range:' not in body:
+        if '<!-- main-ci-range:' not in body or start not in body:
             continue
-        updated = re.sub(SECTION, mark, body, flags=re.S)
-        if updated == body:
+        if jobs is None:
+            jobs = {job['name']: job['conclusion'] for job in
+                    pages(f'repos/{repository}/actions/runs/{run["id"]}/jobs?filter=latest')}
+        if mark_all(body) == body:
             continue
         path = f'repos/{repository}/issues/{issue["number"]}'
-        if any(PASSED not in match[3] for match in re.finditer(SECTION, updated, re.S)):
-            api(path, 'PATCH', dict(body=updated))
-            continue
-        api(f'{path}/comments', 'POST', dict(body=f'CI passed again: [{run["name"]}]({run["html_url"]}).'))
-        api(path, 'PATCH', dict(body=updated, state='closed', state_reason='completed'))
+        if close_when_clear(apply(path, mark_all, close_when_clear)):
+            api(f'{path}/comments', 'POST', dict(body=f'CI passed again: [{run["name"]}]({run["html_url"]}).'))
 
 
 if __name__ == '__main__':

@@ -4,8 +4,8 @@
 
 ## Issues
 
-<!-- One line per issue: "Fixes #N" when this PR resolves it, "Part of #N" when it stays open.
-     The issue-links check fails on any other issue mention. Merges into release/** also close fixed issues. -->
+<!-- One line per issue: "Fixes #N" when this PR resolves it, "Part of #N" or "Related #N" when it stays open.
+     The issue-links check fails on bare issue mentions. Merges into release/** also close fixed issues. -->
 
 ## Checks
 

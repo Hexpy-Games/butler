@@ -7,12 +7,19 @@ import subprocess
 import sys
 
 # GitHub's closing keywords; each one closes only the issue right after it.
-CLOSING = re.compile(r'\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)\b', re.I)
-# A PR that only advances an issue says so explicitly, so the issue stays open.
-PARTIAL = re.compile(r'\bpart of:?\s+#(\d+)\b', re.I)
-MENTION = re.compile(r'(?<![\w/#&])#(\d+)\b')
+CLOSING = r'\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)'
+# Explicitly non-closing: the PR advances or relates to an issue that stays open.
+NON_CLOSING = r'\b(?:part\s+of|related)'
 # Code and HTML comments are not references (hex colors, template guidance).
-UNREFERENCED = re.compile(r'```.*?```|`[^`\n]*`|<!--.*?-->', re.S)
+FENCES = re.compile(r'^(```|~~~).*?(?:^\1|\Z)|<!--.*?-->', re.S | re.M)
+INDENTED = re.compile(r'(?:\A|(?<=\n\n))(?:(?: {4}|\t)[^\n]*(?:\n|\Z))+')
+INLINE = re.compile(r'`[^`\n]*`')
+
+
+def ref(repository):
+    """`#N`, `owner/repo#N` or the issue URL, for this repository only."""
+    repo = re.escape(repository)
+    return rf'(?:(?<![\w/#&])#|\b{repo}#|https://github\.com/{repo}/issues/)(\d+)\b'
 
 
 def api(path, method='GET', data=None):
@@ -34,19 +41,26 @@ def issue(repository, number):
     return json.loads(result.stdout)
 
 
-def references(text):
-    """(closed, loose): numbers after a closing keyword, and other bare mentions."""
-    text = UNREFERENCED.sub('', text or '')
-    closed = {int(n) for n in CLOSING.findall(text)}
-    partial = {int(n) for n in PARTIAL.findall(text)}
-    mentioned = {int(n) for n in MENTION.findall(text)}
-    return closed, mentioned - closed - partial
+def references(repository, text):
+    """(closed, conflicts, loose) issue numbers named in markdown text.
+
+    closed: after a closing keyword only; conflicts: after both a closing and
+    a non-closing token; loose: mentioned without either.
+    """
+    text = re.sub(r'[ \t]+$', '', (text or '').replace('\r\n', '\n'), flags=re.M)
+    text = INLINE.sub('', INDENTED.sub('', FENCES.sub('', text)))
+    number = ref(repository)
+    closing = {int(n) for n in re.findall(rf'{CLOSING}:?\s+{number}', text, re.I)}
+    non_closing = {int(n) for n in re.findall(rf'{NON_CLOSING}:?\s+{number}', text, re.I)}
+    mentioned = {int(n) for n in re.findall(number, text, re.I)}
+    return closing - non_closing, closing & non_closing, mentioned - closing - non_closing
 
 
-def unlinked_issues(repository, body):
-    _, loose = references(body)
+def problems(repository, body):
+    _, conflicts, loose = references(repository, body)
     records = {number: issue(repository, number) for number in sorted(loose)}
-    return [n for n, record in records.items() if record and not record.get('pull_request')]
+    unlinked = [n for n, record in records.items() if record and not record.get('pull_request')]
+    return sorted(conflicts), unlinked
 
 
 def close_release_fixes(repository, pr):
@@ -54,7 +68,7 @@ def close_release_fixes(repository, pr):
     base = pr['base']['ref']
     if not pr.get('merged_at') or not base.startswith('release/'):
         return []
-    closed, _ = references(f'{pr.get("title") or ""}\n{pr.get("body") or ""}')
+    closed, _, _ = references(repository, f'{pr.get("title") or ""}\n{pr.get("body") or ""}')
     done = []
     for number in sorted(closed):
         record = issue(repository, number)
@@ -72,11 +86,17 @@ def main(argv):
     if argv[1:2] == ['check']:
         with open(os.environ['GITHUB_EVENT_PATH'], encoding='utf-8') as event:
             body = json.load(event)['pull_request'].get('body')
-        missing = unlinked_issues(repository, body)
-        if missing:
-            names = ', '.join(f'#{n}' for n in missing)
-            sys.exit(f'Issues mentioned without a closing keyword: {names}. Write "Fixes #N" '
-                     'when this PR resolves the issue, or "Part of #N" when the issue stays open.')
+        conflicts, unlinked = problems(repository, body)
+        errors = []
+        if conflicts:
+            errors.append('Issues named both as fixed and as staying open: '
+                          + ', '.join(f'#{n}' for n in conflicts) + '. Keep only one form.')
+        if unlinked:
+            errors.append('Issues mentioned without a closing keyword: ' + ', '.join(f'#{n}' for n in unlinked)
+                          + '. Write "Fixes #N" when this PR resolves the issue, or "Part of #N" or '
+                          '"Related #N" when it stays open.')
+        if errors:
+            sys.exit('\n'.join(errors))
     elif argv[1:2] == ['close'] and len(argv) == 3:
         done = close_release_fixes(repository, api(f'repos/{repository}/pulls/{int(argv[2])}'))
         print('Closed: ' + (', '.join(f'#{n}' for n in done) or 'none'))

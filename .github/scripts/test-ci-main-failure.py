@@ -16,6 +16,49 @@ RUN = dict(id=10, workflow_id=4, run_attempt=1, name='Rust quality', head_sha='b
            conclusion='failure', repository={'full_name': REPO}, head_repository={'full_name': REPO})
 PR = dict(number=7, html_url='https://example.invalid/pull/7', merged_at='today',
           merge_commit_sha='merge', base={'ref': 'main', 'repo': {'full_name': REPO}})
+BOT = {'login': 'github-actions[bot]'}
+FAILED_JOB = dict(name='linux-tests', html_url='job-url', conclusion='failure')
+
+
+def section(workflow, run=10, job='linux-tests'):
+    return (f'<!-- workflow:{workflow} -->\n[w failed](https://x/actions/runs/{run})\n\n'
+            f'Failing jobs:\n- [{job}](https://x/job)\n<!-- /workflow:{workflow} -->')
+
+
+class FakeGitHub:
+    """Issues and run jobs behind pages()/api(); `interleave` edits an issue after our next write."""
+
+    def __init__(self, issues=(), jobs=(FAILED_JOB,), conclusions=None, interleave=None):
+        self.issues = {i['number']: dict(dict(user=BOT, state='open'), **i) for i in issues}
+        self.jobs, self.conclusions = list(jobs), conclusions or {}
+        self.interleave, self.writes, self.paths = interleave, [], []
+
+    def pages(self, path):
+        self.paths.append(path)
+        if '/issues?' in path:
+            state = path.split('state=')[1].split('&')[0]
+            return [dict(i) for i in self.issues.values() if state in ('all', i['state'])]
+        if '/attempts/' in path:
+            return list(self.jobs)
+        return [dict(name=name, conclusion=value) for name, value in self.conclusions.items()]
+
+    def api(self, path, method='GET', data=None):
+        number = int(path.split('/issues/')[1].split('/')[0]) if '/issues/' in path else None
+        if method == 'GET':
+            return dict(self.issues[number])
+        self.writes.append((path, method, data))
+        if method == 'PATCH':
+            self.issues[number].update(data)
+            hook, self.interleave = self.interleave, None
+            if hook:
+                hook(self.issues[number])
+        elif path.endswith('/issues'):
+            number = max(self.issues, default=0) + 1
+            self.issues[number] = dict(data, number=number, user=BOT, state='open')
+        return {}
+
+    def patches(self):
+        return patch.multiple(failure, pages=self.pages, api=self.api)
 
 
 class Followup(unittest.TestCase):
@@ -86,15 +129,12 @@ class Followup(unittest.TestCase):
     # test-category: security
     def test_issue_range_and_revert_pr_deduplicate(self):
         marker = '<!-- main-ci-range:green:bad -->'
-        def pages(path):
-            return ([dict(number=2, body=marker)] if '/issues?' in path else
-                    [dict(name='test', html_url='job-url', conclusion='failure')])
+        github = FakeGitHub([dict(number=2, body=marker)])
         with patch.object(failure, 'failure_range', return_value=('green', ['merge'])), \
              patch.object(failure, 'range_prs', return_value=([('merge', 7)], {7: PR})), \
-             patch.object(failure, 'pages', side_effect=pages), \
-             patch.object(failure, 'api') as api, patch.object(failure, 'draft_revert'):
+             github.patches(), patch.object(failure, 'draft_revert'):
             failure.report(REPO, RUN)
-            self.assertEqual(api.call_args.args[:2], ('repos/owner/repo/issues/2', 'PATCH'))
+        self.assertEqual([w[:2] for w in github.writes], [('repos/owner/repo/issues/2', 'PATCH')])
         with patch.object(failure, 'pages', return_value=[dict(number=3)]), \
              patch.object(failure, 'git') as git, patch.object(failure, 'api') as api:
             failure.draft_revert(REPO, RUN, [('merge', 7)], {7: PR}, marker, 'body')
@@ -113,31 +153,25 @@ class Followup(unittest.TestCase):
     def test_same_range_across_workflows_updates_one_issue_preserving_evidence(self):
         marker = '<!-- main-ci-range:green:bad -->'
         previous = marker + '\n<!-- workflow:3 -->earlier failure<!-- /workflow:3 -->'
-        def pages(path):
-            if '/issues?' in path:
-                return [dict(number=2, body=previous)]
-            return [dict(name='test', html_url='job-url', conclusion='failure')]
+        github = FakeGitHub([dict(number=2, body=previous)])
         with patch.object(failure, 'failure_range', return_value=('green', ['merge'])), \
              patch.object(failure, 'range_prs', return_value=([('merge', 7)], {7: PR})), \
-             patch.object(failure, 'pages', side_effect=pages), \
-             patch.object(failure, 'api') as api, patch.object(failure, 'draft_revert') as revert:
+             github.patches(), patch.object(failure, 'draft_revert') as revert:
             failure.report(REPO, RUN)
-            self.assertEqual(api.call_args.args[:2], ('repos/owner/repo/issues/2', 'PATCH'))
-            self.assertIn('earlier failure', api.call_args.args[2]['body'])
-            self.assertIn('<!-- workflow:4 -->', api.call_args.args[2]['body'])
-            self.assertEqual(revert.call_args.args[4], marker)
+        self.assertEqual([w[:2] for w in github.writes], [('repos/owner/repo/issues/2', 'PATCH')])
+        self.assertIn('earlier failure', github.issues[2]['body'])
+        self.assertIn('<!-- workflow:4 -->', github.issues[2]['body'])
+        self.assertEqual(revert.call_args.args[4], marker)
 
     # test-category: pure-logic
     def test_cancelled_run_with_failed_job_and_missing_baseline_still_reports(self):
-        def pages(path):
-            return [] if '/issues?' in path else [dict(name='failed', html_url='job-url', conclusion='failure')]
+        github = FakeGitHub()
         with patch.object(failure, 'failure_range', side_effect=ValueError('No green baseline')), \
-             patch.object(failure, 'pages', side_effect=pages), patch.object(failure, 'api') as api, \
-             patch.object(failure, 'git') as git:
+             github.patches(), patch.object(failure, 'git') as git:
             failure.report(REPO, dict(RUN, conclusion='cancelled'))
-            self.assertEqual(api.call_args.args[1], 'POST')
-            self.assertIn('No proven green baseline', api.call_args.args[2]['body'])
             git.assert_not_called()
+        self.assertEqual([w[:2] for w in github.writes], [('repos/owner/repo/issues', 'POST')])
+        self.assertIn('No proven green baseline', github.issues[1]['body'])
 
     # test-category: pure-logic
     def test_pagination_stops_at_first_matching_item(self):
@@ -156,15 +190,11 @@ class Followup(unittest.TestCase):
     # test-category: security
     def test_closed_matching_issue_reopens_before_body_update(self):
         marker = '<!-- main-ci-range:green:bad -->'
-        def pages(path):
-            if '/issues?' in path:
-                return [dict(number=2, body=marker, state='closed')]
-            return [dict(name='failed', html_url='job-url', conclusion='failure')]
-        with patch.object(failure, 'failure_range', return_value=('green', [])), \
-             patch.object(failure, 'pages', side_effect=pages), patch.object(failure, 'api') as api:
+        github = FakeGitHub([dict(number=2, body=marker, state='closed')])
+        with patch.object(failure, 'failure_range', return_value=('green', [])), github.patches():
             failure.report(REPO, RUN)
-        self.assertEqual(api.call_args_list[0].args[2], dict(state='open'))
-        self.assertIn('body', api.call_args_list[1].args[2])
+        self.assertEqual(github.writes[0][2]['state'], 'open')
+        self.assertIn('job-url', github.issues[2]['body'])
 
     # test-category: security
     def test_success_skipped_and_self_runs_never_query_or_write(self):
@@ -178,63 +208,107 @@ class Followup(unittest.TestCase):
     # test-category: security
     def test_issue_marker_is_rechecked_before_creation(self):
         marker = '<!-- main-ci-range:green:bad -->'
-        issues = iter([[], [dict(number=2, body=marker)]])
+        github = FakeGitHub([dict(number=2, body=marker)])
+        first = iter([True])
+
         def pages(path):
-            if '/issues?' in path:
-                return next(issues)
-            return iter([dict(name='failed', html_url='job-url', conclusion='failure')])
+            return [] if '/issues?' in path and next(first, False) else github.pages(path)
         with patch.object(failure, 'failure_range', return_value=('green', [])), \
-             patch.object(failure, 'pages', side_effect=pages), patch.object(failure, 'api') as api:
+             patch.multiple(failure, pages=pages, api=github.api):
             failure.report(REPO, RUN)
-        self.assertEqual(api.call_args.args[:2], ('repos/owner/repo/issues/2', 'PATCH'))
-        self.assertIn('job-url', api.call_args.args[2]['body'])
+        self.assertEqual([w[:2] for w in github.writes], [('repos/owner/repo/issues/2', 'PATCH')])
+        self.assertIn('job-url', github.issues[2]['body'])
 
     # test-category: security
     def test_later_failing_push_on_same_baseline_reuses_issue(self):
         previous = '<!-- main-ci-range:unavailable:older -->\n<!-- workflow:4 -->old<!-- /workflow:4 -->'
-        def pages(path):
-            if '/issues?' in path:
-                return [dict(number=5, body='<!-- main-ci-range:green:older -->'), dict(number=2, body=previous)]
-            return [dict(name='failed', html_url='job-url', conclusion='failure')]
+        github = FakeGitHub([dict(number=5, body='<!-- main-ci-range:green:older -->'),
+                             dict(number=2, body=previous)])
         with patch.object(failure, 'failure_range', side_effect=ValueError('No green baseline')), \
-             patch.object(failure, 'pages', side_effect=pages), patch.object(failure, 'api') as api:
+             github.patches():
             failure.report(REPO, RUN)
-        self.assertEqual(api.call_args.args[:2], ('repos/owner/repo/issues/2', 'PATCH'))
-        self.assertEqual(api.call_args.args[2]['title'], 'Main CI failure: unavaila..bad')
-        self.assertNotIn('>old<', api.call_args.args[2]['body'])
+        self.assertEqual([w[:2] for w in github.writes], [('repos/owner/repo/issues/2', 'PATCH')])
+        self.assertEqual(github.issues[2]['title'], 'Main CI failure: unavaila..bad')
+        self.assertNotIn('>old<', github.issues[2]['body'])
+
+    # test-category: security
+    def test_marker_in_issue_by_another_author_is_never_reused_or_closed(self):
+        forged = '<!-- main-ci-range:unavailable:x -->\n' + section(4)
+        github = FakeGitHub([dict(number=2, body=forged, user={'login': 'someone'})],
+                            conclusions={'linux-tests': 'success'})
+        with patch.object(failure, 'failure_range', side_effect=ValueError('No green baseline')), \
+             github.patches(), patch.object(failure, 'draft_revert') as revert:
+            failure.report(REPO, RUN)
+            failure.resolve(REPO, dict(RUN, id=12, conclusion='success'))
+        # The report opens the bot's own issue (#3); the passing run then closes only that one.
+        self.assertEqual(github.writes[0][:2], ('repos/owner/repo/issues', 'POST'))
+        self.assertFalse(any('/issues/2' in w[0] for w in github.writes))
+        self.assertEqual((github.issues[2]['body'], github.issues[2]['state']), (forged, 'open'))
+        self.assertEqual(github.issues[3]['state'], 'closed')
+        self.assertNotIn(forged, revert.call_args.args[5])
+        self.assertTrue(all('creator=github-actions%5Bbot%5D' in p for p in github.paths if '/issues?' in p))
 
     # test-category: security
     def test_success_closes_issue_once_every_failed_workflow_passes(self):
-        def section(workflow, run):
-            return (f'<!-- workflow:{workflow} -->\n[w failed](https://x/actions/runs/{run})\n'
-                    f'<!-- /workflow:{workflow} -->')
-        both = '<!-- main-ci-range:green:bad -->\n' + section(4, 10) + '\n' + section(3, 10)
+        both = '<!-- main-ci-range:green:bad -->\n' + section(4) + '\n' + section(3, job='macos-tests')
+        github = FakeGitHub([dict(number=2, body=both)],
+                            conclusions={'linux-tests': 'success', 'macos-tests': 'success'})
         passed = dict(RUN, id=12, conclusion='success', html_url='https://x/actions/runs/12')
-        with patch.object(failure, 'pages', return_value=[dict(number=2, body=both)]), \
-             patch.object(failure, 'api') as api:
+        with github.patches():
             failure.resolve(REPO, passed)
-        self.assertEqual(len(api.call_args_list), 1)
-        body = api.call_args.args[2]['body']
-        self.assertNotIn('state', api.call_args.args[2])
-        self.assertIn('passed](https://x/actions/runs/12)', body)
-        with patch.object(failure, 'pages', return_value=[dict(number=2, body=body)]), \
-             patch.object(failure, 'api') as api:
+            self.assertEqual(len(github.writes), 1)
+            self.assertNotIn('state', github.writes[0][2])
+            self.assertIn('passed](https://x/actions/runs/12)', github.issues[2]['body'])
             failure.resolve(REPO, dict(passed, workflow_id=3))
-        comment, close = [call.args for call in api.call_args_list]
+        close, comment = [w for w in github.writes[1:]]
+        self.assertEqual((close[1], close[2]['state']), ('PATCH', 'closed'))
         self.assertEqual(comment[:2], ('repos/owner/repo/issues/2/comments', 'POST'))
         self.assertIn('https://x/actions/runs/12', comment[2]['body'])
-        self.assertEqual((close[1], close[2]['state']), ('PATCH', 'closed'))
+
+    # test-category: security
+    def test_success_that_skipped_or_failed_the_failing_job_keeps_issue_open(self):
+        body = '<!-- main-ci-range:green:bad -->\n' + section(4)
+        for conclusions in [{'linux-tests': 'skipped'}, {'other': 'success'}, {'linux-tests': 'failure'}]:
+            github = FakeGitHub([dict(number=2, body=body)], conclusions=conclusions)
+            with github.patches():
+                failure.resolve(REPO, dict(RUN, id=12, conclusion='success'))
+            self.assertEqual(github.writes, [], conclusions)
+            self.assertIn('/actions/runs/12/jobs?filter=latest', github.paths[-1])
+
+    # test-category: race
+    def test_concurrent_report_and_resolve_reapply_lost_updates(self):
+        marker = '<!-- main-ci-range:green:bad -->'
+        start = marker + '\n' + section(3, job='macos-tests')
+
+        def resolver_wins(issue):  # A resolve for workflow 3 overwrote our report and closed it.
+            issue.update(body=start.replace('<!-- workflow:3 -->', '<!-- workflow:3 -->\n<!-- passed -->'),
+                         state='closed')
+        github = FakeGitHub([dict(number=2, body=start)], interleave=resolver_wins)
+        with patch.object(failure, 'failure_range', return_value=('green', [])), github.patches():
+            failure.report(REPO, RUN)
+        self.assertIn('<!-- workflow:4 -->', github.issues[2]['body'])
+        self.assertEqual(github.issues[2]['state'], 'open')
+
+        def reporter_wins(issue):  # A report for workflow 5 rewrote the body after our close.
+            issue.update(body=issue['body'] + '\n' + section(5), state='open')
+        github = FakeGitHub([dict(number=2, body=start)], conclusions={'macos-tests': 'success'},
+                            interleave=reporter_wins)
+        with github.patches():
+            failure.resolve(REPO, dict(RUN, id=12, workflow_id=3, conclusion='success'))
+        self.assertEqual(github.issues[2]['state'], 'open')
+        self.assertFalse(any(w[0].endswith('/comments') for w in github.writes))
 
     # test-category: security
     def test_older_success_unrelated_issues_and_untrusted_runs_never_write(self):
-        body = '<!-- main-ci-range:green:bad -->\n<!-- workflow:4 -->runs/10<!-- /workflow:4 -->'
-        issues = [dict(number=2, body=body.replace('runs/10', '/actions/runs/20')),
-                  dict(number=3, body='<!-- workflow:4 -->manual<!-- /workflow:4 -->'),
-                  dict(number=4, body=body, pull_request={'url': 'pr'})]
+        body = '<!-- main-ci-range:green:bad -->\n' + section(4, run=20)
+        issues = [dict(number=2, body=body),
+                  dict(number=3, body=section(4)),
+                  dict(number=4, body=body.replace('runs/20', 'runs/10'), pull_request={'url': 'pr'})]
         for update in [{}, dict(head_branch='feature'), dict(event='pull_request'), dict(conclusion='failure')]:
-            with patch.object(failure, 'pages', return_value=issues), patch.object(failure, 'api') as api:
+            github = FakeGitHub(issues, conclusions={'linux-tests': 'success'})
+            with github.patches():
                 failure.resolve(REPO, dict(dict(RUN, id=12, conclusion='success'), **update))
-                api.assert_not_called()
+            self.assertEqual(github.writes, [], update)
 
 
 if __name__ == '__main__':

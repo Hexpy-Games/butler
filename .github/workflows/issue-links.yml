@@ -28,7 +28,7 @@ jobs:
           sparse-checkout: .github/scripts
       - name: Test issue link parsing
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-issue-links.py
-      - name: Require a closing keyword or "Part of" for each referenced issue
+      - name: Require a closing or non-closing token for each referenced issue
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/issue_links.py check
