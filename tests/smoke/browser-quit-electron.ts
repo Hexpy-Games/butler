@@ -6,7 +6,8 @@
  * - an App-owned Agent that ignores the graceful stop is terminated, then the App exits
  *   (app.quit() and SIGTERM), and an Agent that dies while stopping never keeps the App open;
  *   after either forced exit a restarted App recovers the full queue:
- *   the interrupted active turn stays retryable and the queued follow-up is delivered once.
+ *   the interrupted active turn stays retryable and the queued follow-up is delivered once;
+ * - a quit window whose renderer crashes before it paints never holds the shutdown.
  * Host: build the UI and the native Agent; set BUTLER_SMOKE_ELECTRON_EXECUTABLE,
  * BUTLER_BROWSER_EVIDENCE and BUTLER_NATIVE_AGENT_EXECUTABLE. The Agent scenarios
  * pause the Agent with SIGSTOP, so they run on POSIX hosts only.
@@ -138,6 +139,8 @@ async function failedAgentStopQuit(how: How, fate: "hangs" | "dies") {
     const exitMs = await waitGone(first.appPid, started);
     const agentGoneMs = await waitGone(first.agentPid, started);
     if (fate === "hangs") assert.match(terminated, new RegExp(`^agent did not stop in \\d+ ms; terminating pid ${first.agentPid}$`, "mu"), "termination logged");
+    // The forced exit is recorded as such, replacing any earlier graceful record.
+    assert.deepEqual([quit.lastExit().graceful, quit.lastExit().process_tree_dead], [false, true], "forced exit recorded");
 
     const restarted = await launchQuitApp(quit);
     children.push(restarted.child);
@@ -173,9 +176,30 @@ async function failedAgentStopQuit(how: How, fate: "hangs" | "dies") {
   }
 }
 
+/** The quit feedback window's renderer crashes before its first paint; the graceful stop still runs. */
+async function quitWindowCrashQuit() {
+  const quit = await quitFixture();
+  let app: Awaited<ReturnType<typeof launchQuitApp>> | undefined;
+  try {
+    app = await launchQuitApp(quit);
+    // Every window created from now on (the quit window) loses its renderer once its page commits.
+    await app.main(`${electron}.app.on("web-contents-created",(_e,wc)=>wc.once("did-navigate",()=>wc.forcefullyCrashRenderer())),true`);
+    const started = performance.now();
+    await requestQuit("app.quit", app.appPid, app.main);
+    const exitMs = await waitGone(app.appPid, started);
+    await waitGone(app.agentPid, started);
+    assert.equal(quit.lastExit().graceful, true, "Agent stopped gracefully");
+    return { scenario: "quit window renderer crashes before paint, app.quit x2", exit_ms: exitMs };
+  } finally {
+    killAdoptedProcessGroups();
+    if (app) await stopElectronChild(app.child);
+    quit.cleanup();
+  }
+}
+
 const finderBefore = finderWindows();
 try {
-  // An optional argument runs one scenario: app.quit, SIGTERM, agent, agent-SIGTERM or agent-dies.
+  // An optional argument runs one scenario: app.quit, SIGTERM, agent, agent-SIGTERM, agent-dies or quit-window.
   const only = process.argv[2], wanted = (name: string) => !only || only === name;
   const results = [];
   if (wanted("app.quit")) results.push(await blockedTabsQuit("app.quit"));
@@ -185,6 +209,7 @@ try {
     if (wanted("agent-SIGTERM")) results.push(await failedAgentStopQuit("SIGTERM", "hangs"));
     if (wanted("agent-dies")) results.push(await failedAgentStopQuit("app.quit", "dies"));
   }
+  if (wanted("quit-window")) results.push(await quitWindowCrashQuit());
   assert.ok(results.length, `unknown scenario ${only}`);
   const finderAfter = finderWindows();
   assert.equal(finderAfter, finderBefore, "no Finder window opened");

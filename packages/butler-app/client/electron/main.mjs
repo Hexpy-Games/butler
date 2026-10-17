@@ -2951,29 +2951,41 @@ async function stopServerProcess({ reason = "app_shutdown" } = {}) {
     foregroundInstance = transitionAppForeground(foregroundInstance, "stopping");
     writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
   }
-  const stopResult = await bundledAgentSupervisor.stop({ wait: true, preserveWork: true });
+  let stopResult;
+  try {
+    stopResult = await bundledAgentSupervisor.stop({ wait: true, preserveWork: true });
+  } catch (error) {
+    // A stop that failed or was ended by termination still records how this run ended.
+    const treeDead = bundledAgentSupervisor.diagnostics().pid === null;
+    await recordForegroundStopped(reason, { graceful: false, treeDead, groupDead: treeDead, errorCode: error?.message });
+    throw error;
+  }
   if (stopResult.stopped !== true) throw new Error("foreground_stop_incomplete");
   quitFeedback?.phase("port_release");
   const checkpointed = stopResult.stopped && stopResult.containment_released &&
     bundledAgentSupervisor.diagnostics().last_exit?.code === 0;
-  if (usesAppForegroundLifecycle && foregroundInstance?.state === "stopping") {
-    foregroundInstance = transitionAppForeground(foregroundInstance, "stopped", {
-      patch: { clean_exit: isMac ? checkpointed : true },
-    });
-    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
-    writeAppForegroundLastExit(butlerDataRoot, {
-      generation: foregroundInstance.generation,
-      exitReason: reason,
-      graceful: isMac ? checkpointed : true,
-      checkpointResult: isMac && !checkpointed ? "checkpoint_failed" : "native_shutdown",
-      processGroupDead: foregroundInstance.process_group_id !== null &&
-        stopResult.containment_released,
-      processTreeDead: stopResult.containment_released,
-      portReleased: await waitForAppForegroundPortRelease({ port, isPortAvailable }),
-    });
-  }
+  await recordForegroundStopped(reason, {
+    graceful: isMac ? checkpointed : true, treeDead: stopResult.containment_released,
+    groupDead: stopResult.containment_released,
+  });
   foregroundQuitSnapshot = null;
   return { ...stopResult, checkpointed };
+}
+
+async function recordForegroundStopped(reason, { graceful, treeDead, groupDead, errorCode = null }) {
+  if (!usesAppForegroundLifecycle || foregroundInstance?.state !== "stopping") return;
+  foregroundInstance = transitionAppForeground(foregroundInstance, "stopped", { patch: { clean_exit: graceful } });
+  writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+  writeAppForegroundLastExit(butlerDataRoot, {
+    generation: foregroundInstance.generation,
+    exitReason: reason,
+    graceful,
+    checkpointResult: graceful ? "native_shutdown" : "checkpoint_failed",
+    processGroupDead: foregroundInstance.process_group_id !== null && groupDead,
+    processTreeDead: treeDead,
+    portReleased: await waitForAppForegroundPortRelease({ port, isPortAvailable }),
+    errorCode,
+  });
 }
 
 async function appServerFetch(path, init = {}) {
