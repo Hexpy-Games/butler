@@ -1769,6 +1769,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       composerDecoration: "글자 뒤에 그림을 깝니다.",
       composerCharacter: "입력창 위에 작은 친구가 앉습니다.",
       themeFollowsWallpaper: "실시간 월페이퍼가 정해요",
+      reasoningFixed: "모델이 정해요",
       contextLimit: (maxLabel) =>
         `실제 버틀러 컨텍스트 예산입니다. 모델 최대값: ${maxLabel}.`,
       contextLimitClamped: (value) =>
