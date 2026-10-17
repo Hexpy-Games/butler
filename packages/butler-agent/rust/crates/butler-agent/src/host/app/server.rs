@@ -319,12 +319,26 @@ fn open_updates(
         .map_err(|code| BtccError::relayed(code.to_string(), "App update service is unavailable"))
 }
 
+/// Keeps the gateway's underlying error as the source, so the service log
+/// names the root cause (`[native-service] cause=...`).
 fn app_error(error: GatewayApplicationError) -> BtccError {
-    match error {
-        GatewayApplicationError::Public { code, message, .. } => BtccError::relayed(code, message),
-        GatewayApplicationError::Internal { .. } => {
-            BtccError::relayed("app_application_failed", "App application is unavailable")
-        }
+    let (code, message, source) = match error {
+        GatewayApplicationError::Public {
+            code,
+            message,
+            source,
+            ..
+        } => (code.into(), message, source),
+        GatewayApplicationError::Internal { source } => (
+            "app_application_failed".into(),
+            "App application is unavailable".to_owned(),
+            source,
+        ),
+    };
+    BtccError::Relayed {
+        code,
+        message,
+        source,
     }
 }
 
