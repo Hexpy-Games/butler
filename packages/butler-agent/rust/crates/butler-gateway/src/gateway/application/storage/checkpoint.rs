@@ -9,7 +9,7 @@ pub(super) fn start(db: &rusqlite::Connection) -> StorageResult<Option<sqlite::C
 }
 
 fn command_timings() -> bool {
-    std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref() == Some(std::ffi::OsStr::new("1"))
+    crate::gateway::command_timing::CommandTiming::enabled()
 }
 
 pub(super) fn close(owner: Option<sqlite::CheckpointOwner>) -> StorageResult<()> {

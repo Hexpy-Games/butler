@@ -6,9 +6,7 @@ use butler_platform::sqlite;
 pub(super) struct CheckpointOwner(pub(super) sqlite::CheckpointOwner);
 impl CheckpointOwner {
     pub(super) fn start(db: &rusqlite::Connection) -> StorageResult<Option<Self>> {
-        let observer = (std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
-            == Some(std::ffi::OsStr::new("1")))
-        .then_some(observe as sqlite::CheckpointObserver);
+        let observer = CommandTiming::enabled().then_some(observe as sqlite::CheckpointObserver);
         sqlite::CheckpointOwner::start(db, "BTCC", observer)
             .map(|owner| owner.map(Self))
             .map_err(error)

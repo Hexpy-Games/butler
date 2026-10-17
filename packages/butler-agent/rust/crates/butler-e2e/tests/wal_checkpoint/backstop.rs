@@ -94,38 +94,36 @@ fn stalled_worker_uses_inline_ceiling_and_recovers_after_reader_release()
 
 // test-category: race
 #[test]
-fn subthreshold_tail_does_not_repeat_a_fully_backfilled_pass()
+fn reader_pinned_partial_pass_waits_for_a_threshold_of_new_frames()
 -> Result<(), butler_e2e::e2e::HarnessError> {
     butler_e2e::gate!();
     let _serial = SERIAL.lock().unwrap();
     PASSES.store(0, SeqCst);
     let store = Store::new();
-    READER.with(|reader| *reader.borrow_mut() = Some(sqlite::open(&store.path).unwrap()));
+    let reader = sqlite::open(&store.path).unwrap();
+    reader.execute_batch("BEGIN; SELECT * FROM t").unwrap();
     let (arrived, backfilled) = mpsc::sync_channel(1);
     let (resume, paused) = mpsc::sync_channel(1);
     *PAUSE.lock().unwrap() = Some((arrived, paused));
-    let owner = sqlite::CheckpointOwner::start(&store.db, "test", Some(pause_after_backfill))
+    let owner = sqlite::CheckpointOwner::start(&store.db, "test", Some(pause_worker))
         .unwrap()
         .unwrap();
     let release = resume;
     store.insert_many(1100);
     backfilled.recv().unwrap();
     let (log, done) = frames(&store.path);
-    assert_eq!(done, log);
-    store.insert();
+    assert!(done < log);
+    for _ in 0..100 {
+        store.insert();
+    }
     let (tail, _) = frames(&store.path);
     assert!(tail > log && tail - log < 1000);
-    READER.with(|reader| assert!(reader.borrow_mut().take().unwrap().is_autocommit()));
     release.send(()).unwrap();
     owner.close().unwrap();
-    assert_eq!(PASSES.load(SeqCst), 1, "small tail repeated a pass");
+    assert_eq!(PASSES.load(SeqCst), 1, "partial pass retried small commits");
     assert_eq!(frames(&store.path), (tail, done));
-    // Further threshold growth still catches up and permits the next reset.
-    let owner = store.worker();
-    store.insert_many(1100);
-    owner.close().unwrap();
-    store.reset_after_quiet();
-    store.counts(2202);
-    eprintln!("subthreshold WAL: before={log} tail={tail} passes=1");
+    reader.execute_batch("ROLLBACK").unwrap();
+    store.counts(1200);
+    eprintln!("pinned subthreshold WAL: before={log} tail={tail} passes=1");
     Ok(())
 }

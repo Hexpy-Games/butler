@@ -33,6 +33,7 @@ struct Storage {
     passes: u128,
     busy: u128,
     inline: u128,
+    inline_passes: u128,
     commit_sum: u128,
     commit_max: u128,
     decision: u128,
@@ -66,6 +67,7 @@ impl Storage {
                 self.passes += 1;
                 self.busy += overlap;
             } else {
+                self.inline_passes += 1;
                 self.inline += overlap;
             }
             return;
@@ -120,7 +122,7 @@ pub(super) fn print(access: Access, samples: &[Sample], logs: &str) {
             }
         }
         eprintln!(
-            "REFUSAL-SAMPLE access={access:?} i={i} total_us={} card_us={} allow_us={} resume_us={} ckpt_passes={} ckpt_busy_us={} ckpt_inline_us={} app_commit_sum_us={} app_commit_max_us={} decision_us={} transcript_sync_us={} private_replace_us={} app_read_max_us={}",
+            "REFUSAL-SAMPLE access={access:?} i={i} total_us={} card_us={} allow_us={} resume_us={} ckpt_passes={} ckpt_busy_us={} ckpt_inline_us={} ckpt_inline_count={} app_commit_sum_us={} app_commit_max_us={} decision_us={} transcript_sync_us={} private_replace_us={} app_read_max_us={}",
             sample.total,
             sample.delta("sent", "approval_listed"),
             sample.delta("allow_submitted", "allow_returned"),
@@ -128,6 +130,7 @@ pub(super) fn print(access: Access, samples: &[Sample], logs: &str) {
             storage.passes,
             storage.busy,
             storage.inline,
+            storage.inline_passes,
             storage.commit_sum,
             storage.commit_max,
             storage.decision,

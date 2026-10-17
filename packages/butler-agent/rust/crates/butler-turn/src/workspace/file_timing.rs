@@ -13,9 +13,8 @@ impl Timing {
         let timing = Self {
             phase,
             id: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-            started: (std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
-                == Some(std::ffi::OsStr::new("1")))
-            .then(Instant::now),
+            started: crate::btcc::agent_loop::command_timing::CommandTiming::enabled()
+                .then(Instant::now),
         };
         timing.mark("entry");
         timing

@@ -40,9 +40,8 @@ pub(super) async fn dispatch(
     shutdown: CancellationToken,
     completion: oneshot::Sender<StructuredCommandOutput>,
 ) {
-    let timing = (std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
-        == Some(std::ffi::OsStr::new("1")))
-    .then(std::time::Instant::now);
+    let timing = crate::btcc::agent_loop::command_timing::CommandTiming::enabled()
+        .then(std::time::Instant::now);
     let start_utc_us = timing.map_or(0, |_| {
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
