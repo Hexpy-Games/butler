@@ -380,14 +380,14 @@ fn revise() -> Value {
 fn review() -> Value {
     json!({"subject":"plan","verdict":"accept","summary":"Ready","corrections":[],"action_updates":[]})
 }
-fn call(id: &str, name: &str, args: &Value) -> Value {
+pub(crate) fn call(id: &str, name: &str, args: &Value) -> Value {
     json!({"type":"function_call","id":id,"call_id":id,"name":name,"arguments":args.to_string(),"status":"completed"})
 }
-fn message(text: &str) -> Value {
+pub(crate) fn message(text: &str) -> Value {
     json!({"type":"message","id":"answer","role":"assistant","status":"completed","content":[{"type":"output_text","text":text,"annotations":[]}]})
 }
 
-fn wire(item: Value) -> String {
+pub(crate) fn wire(item: Value) -> String {
     let items = if item["call_id"] == "delegate" {
         vec![message("I'll compare both approaches."), item]
     } else {

@@ -4976,7 +4976,7 @@
       "definition": {
         "type": "function",
         "name": "replace_work_plan",
-        "description": "Open or revise the Plan for the Work explicitly selected by start_work or continue_work. Revision starts planning from any current stage without a prior result review; retain completed action keys and results. Use start_new only as a compatibility translation when older callers cannot use start_work. Ordinary tools never select Work; choose start_work or continue_work before this Plan operation. Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints. Choose execution_mode during planning: Butler uses steward for substantial execution or direct for a genuinely small direct action; Steward uses direct or workers; Worker uses direct. Planning, management, integration, review, validation, and reporting stay with the current role. Do not use this for simple conversation, stable knowledge, or a single-step read-only lookup. Use it for multi-source or multi-step research with a synthesized deliverable, even when source tools are read-only.",
+        "description": "Open or revise the Plan for the Work explicitly selected by start_work or continue_work. Revision starts planning from any current stage without a prior result review; retain completed action keys and results. Use start_new only as a compatibility translation when older callers cannot use start_work. Ordinary tools never select Work; choose start_work or continue_work before this Plan operation. Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints. Give each action the dependency_keys of the actions whose results it uses, so independent actions stay parallel and dependent ones wait for their inputs. Choose execution_mode during planning: Butler uses steward for substantial execution or direct for a genuinely small direct action; Steward uses direct or workers; Worker uses direct. Planning, management, integration, review, validation, and reporting stay with the current role. Do not use this for simple conversation, stable knowledge, or a single-step read-only lookup. Use it for multi-source or multi-step research with a synthesized deliverable, even when source tools are read-only.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5032,7 +5032,8 @@
                       "type": "string",
                       "minLength": 1
                     },
-                    "default": []
+                    "default": [],
+                    "description": "Exact action_key values of the other actions in this Plan whose results this action needs before it can start. List every such input: an action that combines, compares, checks, summarizes, or delivers earlier results depends on each action that produces them. Leave it empty only when the action needs no other action's result; do not chain independent actions just to set an order."
                   },
                   "effect": {
                     "type": "object",
@@ -7457,7 +7458,7 @@
     "replace_work_plan": {
       "type": "function",
       "name": "replace_work_plan",
-      "description": "Open or revise the Plan for the Work explicitly selected by start_work or continue_work. Revision starts planning from any current stage without a prior result review; retain completed action keys and results. Use start_new only as a compatibility translation when older callers cannot use start_work. Ordinary tools never select Work; choose start_work or continue_work before this Plan operation. Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints. Choose execution_mode during planning: Butler uses steward for substantial execution or direct for a genuinely small direct action; Steward uses direct or workers; Worker uses direct. Planning, management, integration, review, validation, and reporting stay with the current role. Do not use this for simple conversation, stable knowledge, or a single-step read-only lookup. Use it for multi-source or multi-step research with a synthesized deliverable, even when source tools are read-only.",
+      "description": "Open or revise the Plan for the Work explicitly selected by start_work or continue_work. Revision starts planning from any current stage without a prior result review; retain completed action keys and results. Use start_new only as a compatibility translation when older callers cannot use start_work. Ordinary tools never select Work; choose start_work or continue_work before this Plan operation. Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints. Give each action the dependency_keys of the actions whose results it uses, so independent actions stay parallel and dependent ones wait for their inputs. Choose execution_mode during planning: Butler uses steward for substantial execution or direct for a genuinely small direct action; Steward uses direct or workers; Worker uses direct. Planning, management, integration, review, validation, and reporting stay with the current role. Do not use this for simple conversation, stable knowledge, or a single-step read-only lookup. Use it for multi-source or multi-step research with a synthesized deliverable, even when source tools are read-only.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -7513,7 +7514,8 @@
                     "type": "string",
                     "minLength": 1
                   },
-                  "default": []
+                  "default": [],
+                  "description": "Exact action_key values of the other actions in this Plan whose results this action needs before it can start. List every such input: an action that combines, compares, checks, summarizes, or delivers earlier results depends on each action that produces them. Leave it empty only when the action needs no other action's result; do not chain independent actions just to set an order."
                 }
               },
               "required": [

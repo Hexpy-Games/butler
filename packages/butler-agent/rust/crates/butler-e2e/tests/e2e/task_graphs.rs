@@ -5,6 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod declared;
 mod events;
 mod fidelity;
 mod fixture;
