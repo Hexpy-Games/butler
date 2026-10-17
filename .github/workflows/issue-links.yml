@@ -1,0 +1,56 @@
+name: Issue links
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, closed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Merged release-branch PR whose fixed issues should be closed
+        required: true
+        type: number
+permissions:
+  contents: read
+concurrency:
+  group: issue-links-${{ github.event.pull_request.number || inputs.pr }}-${{ github.event.action == 'closed' || github.event_name == 'workflow_dispatch' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
+jobs:
+  issue-links:
+    name: issue-links
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - name: Test issue link parsing
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/test-issue-links.py
+      - name: Require a closing keyword or "Part of" for each referenced issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/issue_links.py check
+
+  # GitHub closes issues only for merges into the default branch.
+  release-close:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.action == 'closed' && github.event.pull_request.merged == true &&
+       startsWith(github.event.pull_request.base.ref, 'release/'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+          sparse-checkout: .github/scripts
+      - name: Close issues fixed on the release branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/issue_links.py close "$PR_NUMBER"

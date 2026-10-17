@@ -189,6 +189,53 @@ class Followup(unittest.TestCase):
         self.assertEqual(api.call_args.args[:2], ('repos/owner/repo/issues/2', 'PATCH'))
         self.assertIn('job-url', api.call_args.args[2]['body'])
 
+    # test-category: security
+    def test_later_failing_push_on_same_baseline_reuses_issue(self):
+        previous = '<!-- main-ci-range:unavailable:older -->\n<!-- workflow:4 -->old<!-- /workflow:4 -->'
+        def pages(path):
+            if '/issues?' in path:
+                return [dict(number=5, body='<!-- main-ci-range:green:older -->'), dict(number=2, body=previous)]
+            return [dict(name='failed', html_url='job-url', conclusion='failure')]
+        with patch.object(failure, 'failure_range', side_effect=ValueError('No green baseline')), \
+             patch.object(failure, 'pages', side_effect=pages), patch.object(failure, 'api') as api:
+            failure.report(REPO, RUN)
+        self.assertEqual(api.call_args.args[:2], ('repos/owner/repo/issues/2', 'PATCH'))
+        self.assertEqual(api.call_args.args[2]['title'], 'Main CI failure: unavaila..bad')
+        self.assertNotIn('>old<', api.call_args.args[2]['body'])
+
+    # test-category: security
+    def test_success_closes_issue_once_every_failed_workflow_passes(self):
+        def section(workflow, run):
+            return (f'<!-- workflow:{workflow} -->\n[w failed](https://x/actions/runs/{run})\n'
+                    f'<!-- /workflow:{workflow} -->')
+        both = '<!-- main-ci-range:green:bad -->\n' + section(4, 10) + '\n' + section(3, 10)
+        passed = dict(RUN, id=12, conclusion='success', html_url='https://x/actions/runs/12')
+        with patch.object(failure, 'pages', return_value=[dict(number=2, body=both)]), \
+             patch.object(failure, 'api') as api:
+            failure.resolve(REPO, passed)
+        self.assertEqual(len(api.call_args_list), 1)
+        body = api.call_args.args[2]['body']
+        self.assertNotIn('state', api.call_args.args[2])
+        self.assertIn('passed](https://x/actions/runs/12)', body)
+        with patch.object(failure, 'pages', return_value=[dict(number=2, body=body)]), \
+             patch.object(failure, 'api') as api:
+            failure.resolve(REPO, dict(passed, workflow_id=3))
+        comment, close = [call.args for call in api.call_args_list]
+        self.assertEqual(comment[:2], ('repos/owner/repo/issues/2/comments', 'POST'))
+        self.assertIn('https://x/actions/runs/12', comment[2]['body'])
+        self.assertEqual((close[1], close[2]['state']), ('PATCH', 'closed'))
+
+    # test-category: security
+    def test_older_success_unrelated_issues_and_untrusted_runs_never_write(self):
+        body = '<!-- main-ci-range:green:bad -->\n<!-- workflow:4 -->runs/10<!-- /workflow:4 -->'
+        issues = [dict(number=2, body=body.replace('runs/10', '/actions/runs/20')),
+                  dict(number=3, body='<!-- workflow:4 -->manual<!-- /workflow:4 -->'),
+                  dict(number=4, body=body, pull_request={'url': 'pr'})]
+        for update in [{}, dict(head_branch='feature'), dict(event='pull_request'), dict(conclusion='failure')]:
+            with patch.object(failure, 'pages', return_value=issues), patch.object(failure, 'api') as api:
+                failure.resolve(REPO, dict(dict(RUN, id=12, conclusion='success'), **update))
+                api.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

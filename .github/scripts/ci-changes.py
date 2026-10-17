@@ -72,6 +72,7 @@ CI_LINT_ONLY = (
     '.github/scripts/ci_main_failure.py', '.github/scripts/ci_main_baseline.py',
     '.github/scripts/ci-main-gate.py', '.github/scripts/ci_windows_cascade_tests.py',
     '.github/scripts/ci-check-selected.py', '.github/scripts/ds-approval.py',
+    '.github/workflows/issue-links.yml', '.github/scripts/issue_links.py',
 )
 # Integration packaging keys include Rust/UI and transitive producer inputs.
 NATIVE_CI = ('rust', 'ui', 'package', 'install', 'linux-package')
