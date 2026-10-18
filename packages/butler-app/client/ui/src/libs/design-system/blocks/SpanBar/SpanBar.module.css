@@ -1,0 +1,142 @@
+/* A SpanRow indents its row by depth; the bar reaches back to the trace's
+   shared axis (the indent less the axis shift), so every row's track starts
+   and ends at the same x. Outside a SpanRow the reach is 0. */
+.root {
+  --span-reach: calc(
+    var(--span-depth, 0) * var(--span-depth-step, 0px) - var(--span-shift, 0px)
+  );
+  --span-min-width: 3px;
+
+  display: block;
+  width: calc(100% + var(--span-reach));
+  margin-inline-start: calc(-1 * var(--span-reach));
+  padding-block-start: var(--space-xs);
+}
+
+.track {
+  position: relative;
+  display: block;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--selection);
+}
+
+/* Geometry is data (the span's place on the axis) and does not animate; the
+   bar grows in once from its start, a row at a time. */
+.bar {
+  position: absolute;
+  inset-block: 0;
+  left: min(var(--span-start), calc(100% - var(--span-min-width)));
+  width: max(var(--span-min-width), var(--span-width));
+  border-radius: inherit;
+  background: var(--accent);
+  transform-origin: left center;
+  transition: background-color var(--motion-base) var(--motion-ease-standard);
+  animation: span-bar-grow var(--motion-deliberate)
+    var(--motion-ease-decelerate) both;
+  animation-delay: calc(var(--span-stagger, 0) * var(--motion-stagger-row));
+}
+
+.root[data-tone="parent"] .bar {
+  background: var(--line-strong);
+}
+
+.root[data-tone="muted"] .bar {
+  background: color-mix(in srgb, var(--accent) 55%, var(--line-strong));
+}
+
+.root[data-tone="warning"] .bar {
+  background: var(--color-warning);
+}
+
+.root[data-tone="danger"] .bar {
+  background: var(--color-danger);
+}
+
+/* Reduced motion (the app setting, the viewer scope or the OS) fades the
+   bar in place instead of growing it. */
+.bar[data-reduced="true"] {
+  animation-name: span-bar-fade;
+}
+
+@keyframes span-bar-grow {
+  from {
+    opacity: 0.4;
+    transform: scaleX(0);
+  }
+}
+
+@keyframes span-bar-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar {
+    animation-name: span-bar-fade;
+  }
+}
+
+/* Shared by rows and the axis. A bar may reach back at most the row's
+   inner inset (the DisclosureRow inset kept inside the fill, plus its
+   chevron line); when the deepest indent passes that, the shared axis
+   shifts right by the difference, so even the deepest row's bar starts
+   --space-sm inside its own hover and open fill. */
+.row,
+.axis {
+  --span-depth-step: var(--space-lg);
+  --span-row-reach: calc(var(--space-sm) + var(--typo-body-line-height));
+  --span-shift: max(
+    0px,
+    calc(
+      var(--span-max-depth, 0) * var(--span-depth-step) - var(--span-row-reach)
+    )
+  );
+}
+
+/* SpanRow: one 16px step per nesting level, row spacing as DisclosureRow. */
+.row {
+  padding-inline-start: calc(var(--span-depth, 0) * var(--span-depth-step));
+}
+
+.row + .row {
+  margin-top: var(--space-xs);
+}
+
+/* SpanAxis: labels over the same track width as the bars. "disclosure"
+   matches a DisclosureRow description column: the row inset, the chevron
+   line and the column gap on the start, the row inset on the end. */
+.axis {
+  display: block;
+  padding-inline-start: var(--span-shift);
+}
+
+.axis[data-inset="disclosure"] {
+  padding-inline: calc(
+      2 * var(--space-sm) + var(--typo-body-line-height) + var(--span-shift)
+    )
+    var(--space-sm);
+}
+
+.axisTrack {
+  position: relative;
+  display: block;
+  height: var(--typo-caption-line-height);
+}
+
+.tick {
+  position: absolute;
+  top: 0;
+  left: var(--span-tick);
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.tick[data-edge="start"] {
+  transform: none;
+}
+
+.tick[data-edge="end"] {
+  transform: translateX(-100%);
+}
