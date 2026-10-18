@@ -8,6 +8,9 @@ on:
       platform:
         type: string
         default: linux-x64
+      perf-fixture:
+        type: boolean
+        default: false
       ort-mode:
         type: string
         default: prebuilt-ort
@@ -54,6 +57,7 @@ jobs:
             cp target/release/butler-sandbox "$RUNNER_TEMP/agent-payload/butler-sandbox"
           fi
       - name: Build the perf E2E agent from the same recipe
+        if: inputs.perf-fixture
         env:
           ORT_MODE: ${{ inputs.ort-mode }}
           BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
@@ -89,6 +93,7 @@ jobs:
           if [[ "$version" != v[0-9]* && "$version" != 0.1.0-preview.99 ]]; then version=0.1.0-dev; fi
           python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" record "$RUNNER_TEMP/agent-payload" "$PLATFORM" "$ORT_MODE" release "${version#v}"
       - uses: actions/upload-artifact@v4
+        if: inputs.perf-fixture
         with:
           name: agent-perf-fixture-${{ inputs.platform }}
           path: ${{ runner.temp }}/agent-perf-fixture/*
