@@ -16,6 +16,7 @@ mod maintenance;
 mod poll;
 mod startup;
 mod stop_signal;
+mod structured_logs;
 pub(crate) use startup::STARTUP_TIMEOUT;
 mod storage_health;
 mod support;
@@ -83,7 +84,7 @@ async fn run(
     let (ready, initialized) = tokio::sync::oneshot::channel();
     let (correction, timing) =
         tokio::sync::watch::channel(crate::host::runtime::startup_trace::Correction::Pending);
-    let service = Box::pin(run_until_stopped(
+    let service = Box::pin(structured_logs::run_until_stopped(
         installation,
         explicit_data,
         foreground_lease,
@@ -93,6 +94,9 @@ async fn run(
     ));
     let result = startup::until_ready(service, initialized, timing, &stop).await;
     let result = stop.settle(result, |line| logs.problem(line));
+    if let Err(error) = &result {
+        logs.causes(error);
+    }
     let code = result
         .as_ref()
         .err()
@@ -110,95 +114,22 @@ async fn run(
     result
 }
 
-async fn run_until_stopped(
-    installation: ResolvedInstallation,
-    explicit_data: Option<&str>,
-    foreground_lease: Option<bool>,
-    logs: ServiceLogMode,
-    stop: &StopSignal,
-    readiness: (
-        tokio::sync::oneshot::Sender<()>,
-        crate::host::runtime::startup_trace::CorrectionSender,
-    ),
-) -> Result<String, BtccError> {
-    let (ready, correction) = readiness;
-    let user_home = butler_platform::user_dirs::home_dir()
-        .filter(|home| !home.as_os_str().is_empty())
-        .ok_or_else(|| failure("native_home_unavailable", "User home is unavailable"))?;
-    let mut config =
-        support::capture_configuration(explicit_data, &user_home, &installation).await?;
-    let listener = if config.app.enabled {
-        Some(crate::host::AppServer::bind(&config.app.host, config.app.port).await?)
-    } else {
-        None
-    };
-    config = support::initialize_credentials(config).await?;
-    report_credential_errors(&config, logs);
-    let executable = butler_platform::process_names::current_exe().map_err(io)?;
-    let mut instance = support::acquire_instance(
-        &config,
-        executable,
-        holds_foreground_lease(foreground_lease),
-    )
-    .await?;
-    stop.attach(
-        config.data_root.clone(),
-        instance.nonce(),
-        config.installation.clone(),
-    );
-    stop.check_startup()?;
-    repair_cli_launcher(&config, logs);
-    let app_endpoint = Arc::new(ActiveAppEndpoint::new());
-    let runtime = support::open_runtime(
-        &config,
-        &user_home,
-        instance.unclean_previous_exit(),
-        stop,
-        correction,
-        &app_endpoint,
-    )
-    .await?;
-    if stop.requested() {
-        let _ = close_runtime(runtime).await;
-        return Err(StopSignal::cancelled_startup());
-    }
-    let (runtime, writer) = support::open_writer(runtime, config.data_root.clone()).await?;
-    stop.attach_writer(writer.clone());
-    let result = serve(
-        runtime.clone(),
-        (app_endpoint, listener, ready),
-        &config,
-        writer.clone(),
-        &mut instance,
-        logs,
-        stop,
-    )
-    .await;
-    close_after_serve(runtime, &writer, result, instance).await
-}
-
 /// Admission and dispatcher tasks have ended before BTCC closes its services.
 /// The transcript lane outlives all producers and is joined last.
 async fn close_after_serve(
     runtime: Arc<AgentRuntime>,
     writer: &TranscriptWriter,
     result: Result<String, BtccError>,
-    instance: crate::host::service::instance::InstanceGuard,
 ) -> Result<String, BtccError> {
     let runtime_close =
         super::shutdown_trace::measure("runtime_close", close_runtime(runtime)).await;
     let transcript_close = super::shutdown_trace::measure("transcript_close", writer.close())
         .await
         .map_err(|e| failure(e.code(), e.message()));
-    let result = match result {
+    match result {
         Err(error) => Err(error),
         Ok(session) => runtime_close.and(transcript_close).map(|()| session),
-    };
-    // Guard release waits for the record lock; keep that wait off Tokio workers.
-    tokio::task::spawn_blocking(move || drop(instance))
-        .await
-        .map_err(|error| failure("native_service_instance_release_failed", error.to_string()))?;
-    result
+    }
 }
 
 /// Without its token the App gateway refuses every client

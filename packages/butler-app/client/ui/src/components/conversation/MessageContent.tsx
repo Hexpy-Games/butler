@@ -69,7 +69,12 @@ function MessageContentComponent({
         />
       )}
       {message.role === "assistant" && (
-        <MessageChangedFiles files={message.changed_files ?? []} />
+        <MessageChangedFiles
+          files={message.changed_files ?? []}
+          attachments={message.attachments ?? []}
+          artifacts={artifacts}
+          text={message.text}
+        />
       )}
       {liveActivity}
       {message.role === "assistant" && running && <AnswerDraftFooter turnId={message.turn_id} />}

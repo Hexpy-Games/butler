@@ -11,6 +11,8 @@ publish.workspace = true
 # these companions through their process boundary.
 # butler-platform is not product code: it is the OS boundary every crate uses.
 [dependencies]
+butler-log = { path = "../butler-log", features = ["e2e-fixtures"] }
+butler-gateway = { path = "../butler-gateway", features = ["test-support"] }
 butler-runtime = { path = "../butler-runtime" }
 butler-core = { path = "../butler-core" }
 butler-models = { path = "../butler-models" }
@@ -35,9 +37,11 @@ serde_json.workspace = true
 sha2.workspace = true
 tar.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 tiktoken-rs.workspace = true
 uuid.workspace = true
 zip.workspace = true
+zstd = "0.13.3"
 
 [lints]
 workspace = true

@@ -12,6 +12,7 @@ import type {
   SettingsView as SettingsData,
 } from "@/app/types.ts";
 import { useSessionControlSnapshot } from "./useSessionControlSnapshot.ts";
+import { runtimeModels } from "@/app/utils.ts";
 import { resolveComposerModelTruth } from "../composerModelResolution.ts";
 import { activeProjectId } from "../composerProjectContext.ts";
 
@@ -29,6 +30,8 @@ export function useComposerControls(
   settings: SettingsData,
 ) {
   const [model, setModel] = useState("");
+  const modelRef = useRef(model);
+  modelRef.current = model;
   const [modelState, setModelState] =
     useState<ComposerModelState>("loading");
   const [reasoning, setReasoning] = useState<ReasoningEffort>("medium");
@@ -65,33 +68,27 @@ export function useComposerControls(
       planModeAvailable,
     });
     setModelState(truth.state);
-    if (truth.state !== "ready") setModel(truth.model);
     if (truth.generationMismatch && session.snapshot) {
-      const generationKey = `${session.snapshot.catalog_generation}:${modelCatalog.generation}`;
+      const snapshotGeneration = session.snapshot.catalog_generation;
+      const generationKey = `${snapshotGeneration}:${modelCatalog.generation}`;
       if (refreshedGenerationRef.current !== generationKey) {
         refreshedGenerationRef.current = generationKey;
-        void api<ModelCatalogView>("/model-catalog")
-          .then((catalog) => {
-            if (catalog.generation !== session.snapshot?.catalog_generation) {
-              setModelState("error");
-              return;
-            }
-            setGlobalModelCatalog(catalog);
-          })
-          .catch((error) => {
-            setModelState("error");
-            notifyError(error, appCopy.interfacePanels.modelRefreshFailed, {
-              id: `model-catalog-generation-${activeChatId}`,
-            });
-          });
+        refreshCatalogGeneration(snapshotGeneration, activeChatId, setGlobalModelCatalog, session.reload);
       }
+    }
+    if (truth.state !== "ready") {
+      setModel(truth.model);
       return;
     }
-    if (truth.state === "ready" && !composerSelectionTouchedRef.current) {
+    if (!composerSelectionTouchedRef.current) {
       setModel(truth.model);
       setReasoning(truth.reasoning);
       setAccessMode(truth.accessMode);
       setPlanMode(truth.planMode);
+    } else if (!runtimeModels(modelCatalog).some((item) => item.model_ref === modelRef.current)) {
+      // A model chosen here and then deleted gives way to the resolved one.
+      setModel(truth.model);
+      setReasoning(truth.reasoning);
     }
   }, [
     activeChatId,
@@ -99,6 +96,7 @@ export function useComposerControls(
     modelCatalogState,
     planModeAvailable,
     session.loadState,
+    session.reload,
     session.snapshot,
     setGlobalModelCatalog,
     settings,
@@ -117,4 +115,23 @@ export function useComposerControls(
     persistControls: session.persist,
     composerSelectionTouchedRef,
   };
+}
+
+/** Whichever side is older catches up; the picker stays usable meanwhile. */
+function refreshCatalogGeneration(
+  snapshotGeneration: string,
+  activeChatId: string,
+  setGlobalModelCatalog: (catalog: ModelCatalogView) => void,
+  reloadControls: () => void,
+) {
+  void api<ModelCatalogView>("/model-catalog")
+    .then((catalog) => {
+      if (catalog.generation === snapshotGeneration) setGlobalModelCatalog(catalog);
+      else reloadControls();
+    })
+    .catch((error) => {
+      notifyError(error, appCopy.interfacePanels.modelRefreshFailed, {
+        id: `model-catalog-generation-${activeChatId}`,
+      });
+    });
 }

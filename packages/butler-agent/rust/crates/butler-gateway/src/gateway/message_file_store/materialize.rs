@@ -20,6 +20,9 @@ const MAX_FILES: usize = 12;
 
 struct PendingFile {
     staged: Option<PathBuf>,
+    title: Option<String>,
+    source_label: Option<String>,
+    deliverable: bool,
     name: names::SafeName,
     mime: String,
     kind: &'static str,
@@ -75,7 +78,7 @@ pub(super) fn run(
         );
         let kind = names::kind(&mime, &name.stored);
         let (size, digest, bytes) = read_and_hash(&path, pending.len() < MAX_FILES)?;
-        if size == 0 {
+        if size == 0 && !candidate.deliverable {
             continue;
         }
         let key = content_key(&name.units, &mime, size, &digest);
@@ -90,6 +93,9 @@ pub(super) fn run(
             .transpose()?;
         pending.push(PendingFile {
             staged,
+            title: candidate.title.clone(),
+            source_label: candidate.source_label.clone(),
+            deliverable: candidate.deliverable,
             name,
             mime,
             kind,
@@ -156,6 +162,9 @@ fn publish_files(
             .map_err(internal)?;
         files.push(MaterializedResponderFile {
             id: id.clone(),
+            title: item.title,
+            source_label: item.source_label,
+            deliverable: item.deliverable,
             kind: item.kind.into(),
             mime_type: item.mime,
             safe_name: item.name.stored,

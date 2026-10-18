@@ -21,6 +21,12 @@ export interface ComposerModelResolution {
   generationMismatch: boolean;
 }
 
+/**
+ * The model the composer shows. A model that no longer exists falls back to
+ * the Settings default, then to the first available model; a failed controls
+ * read uses the Settings controls. Only a catalog with no model at all leaves
+ * the composer without one.
+ */
 export function resolveComposerModelTruth(input: {
   catalog: ModelCatalogView;
   catalogState: ModelCatalogState;
@@ -29,47 +35,34 @@ export function resolveComposerModelTruth(input: {
   settings: SettingsView;
   planModeAvailable: boolean;
 }): ComposerModelResolution {
-  const preferredModel =
-    input.controls?.controls.model ||
-    input.settings.model ||
-    input.catalog.default_model_ref;
+  const controls = input.controlsState === "ready" ? input.controls : null;
   const base = {
-    model: preferredModel,
     reasoning:
-      input.controls?.controls.reasoning_effort ||
+      controls?.controls.reasoning_effort ||
       input.settings.reasoning_effort,
     accessMode:
-      input.controls?.controls.access_mode || input.settings.access_mode,
+      controls?.controls.access_mode || input.settings.access_mode,
     planMode: input.planModeAvailable && Boolean(
-      input.controls?.controls.plan_mode ?? input.settings.plan_mode_default,
+      controls?.controls.plan_mode ?? input.settings.plan_mode_default,
     ),
-    generationMismatch: false,
+    generationMismatch: Boolean(
+      controls && controls.catalog_generation !== input.catalog.generation,
+    ),
   };
-  if (input.catalogState === "loading" || input.controlsState === "loading") {
+  const models = runtimeModels(input.catalog);
+  if (models.length === 0) {
+    const settled = input.catalogState === "ready" || input.catalogState === "unavailable";
+    return { ...base, state: settled ? "unavailable" : "loading", model: "" };
+  }
+  if (input.controlsState === "loading") {
     return { ...base, state: "loading", model: "" };
   }
-  if (input.catalogState === "error" || input.controlsState === "error") {
-    return { ...base, state: "error" };
-  }
-  const models = runtimeModels(input.catalog);
-  if (input.catalogState === "unavailable" || models.length === 0) {
-    return { ...base, state: "unavailable" };
-  }
-  if (
-    input.controls &&
-    input.controls.catalog_generation !== input.catalog.generation
-  ) {
-    return {
-      ...base,
-      state: "loading",
-      model: "",
-      generationMismatch: true,
-    };
-  }
-  const metadata = models.find((model) => model.model_ref === preferredModel);
-  if (!metadata) return { ...base, state: "unavailable" };
+  const metadata =
+    [controls?.controls.model, input.settings.model, input.catalog.default_model_ref]
+      .map((ref) => models.find((model) => model.model_ref === ref))
+      .find((model) => model !== undefined) ?? models[0]!;
   const reasoning = metadata.reasoning_efforts.includes(base.reasoning)
     ? base.reasoning
     : metadata.default_reasoning_effort;
-  return { ...base, state: "ready", metadata, reasoning };
+  return { ...base, state: "ready", model: metadata.model_ref, metadata, reasoning };
 }

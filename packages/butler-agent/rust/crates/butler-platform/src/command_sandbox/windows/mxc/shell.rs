@@ -32,7 +32,10 @@ pub(super) fn prepare(request: &mut Value, scratch: &Path, temporary: &str) -> R
                 .is_some_and(|s| s.starts_with("BUTLER_COMMAND_SCRIPT="))
         });
         env.push(format!("BUTLER_COMMAND_FILE={temporary}\\command.ps1").into());
-        "\"!BUTLER_COMMAND_SHELL!\" -NoLogo -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -Command \"Invoke-Expression ([IO.File]::ReadAllText($env:BUTLER_COMMAND_FILE))\"".to_owned()
+        format!(
+            "\"!BUTLER_COMMAND_SHELL!\" -NoLogo -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -Command \"{}Invoke-Expression ([IO.File]::ReadAllText($env:BUTLER_COMMAND_FILE))\"",
+            crate::command_sandbox::windows::bootstrap_modules()
+        )
     } else {
         // Expand once from the environment: batch-file percent rules must not
         // reinterpret the original cmd text before its own shell parses it.

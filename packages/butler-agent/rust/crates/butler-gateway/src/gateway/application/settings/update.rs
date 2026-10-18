@@ -97,6 +97,7 @@ pub(super) fn event_payload(projection: &Value) -> Map<String, Value> {
         })
         .unwrap_or(0);
     let fields = [
+        "diagnostics_enabled",
         "bridge_mode",
         "language",
         "model",

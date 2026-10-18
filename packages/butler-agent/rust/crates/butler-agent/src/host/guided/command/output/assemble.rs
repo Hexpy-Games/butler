@@ -84,7 +84,7 @@ pub(super) fn assemble(input: Assembly<'_>) -> Result<JsonDocument, BtccError> {
             append_value(
                 &mut encoded,
                 "verified_output_files",
-                &serde_json::json!(&artifacts),
+                &declared_files(artifacts, declared),
             )?;
             let labels: Vec<_> = artifacts
                 .iter()
@@ -251,4 +251,18 @@ fn append_value(out: &mut String, key: &str, value: &Value) -> Result<(), BtccEr
 
 fn error(code: &'static str) -> BtccError {
     BtccError::relayed(code, code)
+}
+
+fn declared_files(artifacts: &[Artifact], declared: usize) -> Value {
+    serde_json::json!(
+        artifacts
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(index, mut file)| {
+                file.deliverable = index < declared;
+                file
+            })
+            .collect::<Vec<_>>()
+    )
 }

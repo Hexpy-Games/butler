@@ -1,5 +1,7 @@
 /** The page-CDP protocol used by the existing native Electron smokes. */
 import { strict as assert } from "node:assert";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 export interface ElectronPage {
   evaluate<T>(fn: () => T): Promise<Awaited<T>>;
@@ -28,6 +30,28 @@ export async function electronPage(port: number, origin = "app://butler/"): Prom
     const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then(r => r.json()).catch(() => []) as Array<{ type: string; url?: string; webSocketDebuggerUrl?: string }>;
     const target = targets.find(t => t.type === "page" && t.url?.startsWith(origin) && t.webSocketDebuggerUrl);
     if (target) return connect(target.webSocketDebuggerUrl!);
+    await new Promise(done => setTimeout(done, 200));
+  }
+  throw new Error("Electron page did not start.");
+}
+
+/**
+ * Page of the App launched with `--remote-debugging-port=0`: each launch binds a fresh port and
+ * records it in `<profile>/DevToolsActivePort`. Use this when the App relaunches itself (update),
+ * because its descendants may keep a fixed port bound. `previous` is the endpoint already used.
+ */
+export async function electronProfilePage(profile: string, previous: string | null, origin = "app://butler/"): Promise<{ page: ElectronPage; endpoint: string }> {
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    const endpoint = await readFile(join(profile, "DevToolsActivePort"), "utf8").then(text => text.trim(), () => null);
+    if (endpoint && endpoint !== previous) {
+      const port = Number(endpoint.split("\n")[0]);
+      // A stale port can still be held, without accepting, by a handle another process inherited.
+      const targets = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(2_000) })
+        .then(r => r.json()).catch(() => []) as Array<{ type: string; url?: string; webSocketDebuggerUrl?: string }>;
+      const target = targets.find(t => t.type === "page" && t.url?.startsWith(origin) && t.webSocketDebuggerUrl);
+      if (target) return { page: await connect(target.webSocketDebuggerUrl!), endpoint };
+    }
     await new Promise(done => setTimeout(done, 200));
   }
   throw new Error("Electron page did not start.");

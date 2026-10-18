@@ -40,6 +40,7 @@ pub(super) fn app_error(error: AppStorageError) -> GatewayApplicationError {
         | "queued_message_not_found"
         | "turn_not_found"
         | "library_group_not_found"
+        | "library_file_not_found"
         | "library_item_not_found"
         | "library_tag_not_found"
         | "space_group_not_found" => public(404, error.code(), &error.detail()),

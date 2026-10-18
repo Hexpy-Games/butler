@@ -31,7 +31,7 @@ pub(in crate::gateway::http) async fn record(
         .clone();
     reply(state, C::Record(visits)).await
 }
-pub(super) async fn route(
+pub(in crate::gateway::http) async fn route(
     state: Arc<HttpState>,
     request: Request<Body>,
 ) -> Result<Response, HttpError> {

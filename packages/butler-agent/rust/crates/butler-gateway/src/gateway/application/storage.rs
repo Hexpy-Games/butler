@@ -11,6 +11,8 @@ mod read_pool;
 #[cfg(feature = "e2e-fixtures")]
 pub(super) mod retirement_fixture;
 mod schema;
+#[cfg(feature = "test-support")]
+pub mod testing;
 mod tuning;
 mod wal_index;
 mod writer;
@@ -231,12 +233,13 @@ impl AppStorage {
         if metrics::baseline() {
             return self.execute(move |db| operation(db)).await;
         }
+        let timing = crate::gateway::command_timing::CommandTiming::new("app_sqlite_read");
         let _measurement = self.measure_view("read_total");
         let metrics = self.inner.metrics.clone();
         let result = self
             .inner
             .readers
-            .read(move |db| {
+            .read(timing, move |db| {
                 let _measurement = metrics::view_measurement(metrics, "read_sql");
                 operation(db)
             })

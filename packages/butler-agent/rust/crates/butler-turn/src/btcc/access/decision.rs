@@ -25,6 +25,7 @@ pub enum CapabilityKind {
     ProjectRecord,
     CrossConversation,
     ButlerOutput,
+    DeliverFiles,
     FullOnly(FullOnlyAction),
     /// Moving the session's working folder; its scope says whether the
     /// target stays within the consented folder or its repository.
@@ -83,8 +84,8 @@ pub enum AccessDecision {
 pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     use AccessDecision::{Allow, Ask, Deny};
     use CapabilityKind::{
-        ButlerOutput, CommandMutation, CommandObservation, Connector, Exempt, FileEdit, FileRead,
-        FolderSwitch, FullOnly, InternalRead, Network, ProjectRecord,
+        ButlerOutput, CommandMutation, CommandObservation, Connector, DeliverFiles, Exempt,
+        FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, ProjectRecord,
     };
     if *mode == AccessMode::FullAccess {
         return Allow;
@@ -104,7 +105,7 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     if *mode == AccessMode::ReadOnly {
         return if matches!(
             request.kind,
-            InternalRead | FileRead | CommandObservation { .. }
+            InternalRead | FileRead | DeliverFiles | CommandObservation { .. }
         ) {
             Allow
         } else {
@@ -115,7 +116,7 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     let auto = *mode == AccessMode::Auto;
     let first = auto || *mode == AccessMode::AskExceptReads;
     match request.kind {
-        Exempt(_) | InternalRead | ButlerOutput => Allow,
+        Exempt(_) | InternalRead | ButlerOutput | DeliverFiles => Allow,
         CommandMutation {
             sandbox: CommandSandbox::Disabled,
         } if auto => Ask(GrantUse::Honor),
@@ -158,7 +159,9 @@ impl CapabilityKind {
     /// Effects cannot inherit exemptions intended for other dispatch routes.
     pub fn gated_effect(self) -> Self {
         match self {
-            Self::InternalRead | Self::Exempt(_) | Self::ButlerOutput => Self::OtherEffect,
+            Self::InternalRead | Self::Exempt(_) | Self::ButlerOutput | Self::DeliverFiles => {
+                Self::OtherEffect
+            }
             kind => kind,
         }
     }
@@ -215,6 +218,7 @@ impl CapabilityKind {
             SetWallpaper | SaveWallpaperModule => Self::SettingsWrite,
             StartTopicConversation => Self::CrossConversation,
             OutputPublish => Self::ButlerOutput,
+            ToolName::DeliverFiles => Self::DeliverFiles,
             SwitchFolder => Self::FolderSwitch,
             _ => Self::InternalRead,
         }

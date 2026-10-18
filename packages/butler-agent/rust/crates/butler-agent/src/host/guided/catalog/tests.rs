@@ -444,7 +444,7 @@ fn image_context() -> Value {
         "imageAdmission":{
             "tuple":{
                 "providerId":"zai",
-                "modelId":"glm-5.2",
+                "modelId":"glm-5.3",
                 "carrierProtocol":"zai_mcp_vision",
                 "endpointProfileId":"profile",
                 "catalogCapabilityRevision":"revision",
@@ -452,7 +452,7 @@ fn image_context() -> Value {
             },
             "capability":{
                 "providerId":"zai",
-                "modelId":"glm-5.2",
+                "modelId":"glm-5.3",
                 "carrierProtocol":"zai_mcp_vision",
                 "endpointProfileId":"profile",
                 "catalogCapabilityRevision":"revision",

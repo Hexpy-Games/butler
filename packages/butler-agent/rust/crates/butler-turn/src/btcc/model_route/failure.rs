@@ -10,6 +10,7 @@ const ADVANCE: &[&str] = &[
     "provider_model_retired",
     "provider_model_unavailable",
     "provider_unsupported_model",
+    "provider_tools_unsupported",
 ];
 const RETRY: &[&str] = &[
     "provider_empty_response",
@@ -76,22 +77,20 @@ pub(super) fn reduce_outer(error: ModelRoundError) -> ReducedModelError {
         ModelRoundError::Recovered {
             failure_code,
             disposition,
-        } => ReducedModelError::Operational(RuntimeFailure {
-            code: failure_code,
-            retryable: disposition == "retry",
-        }),
-        ModelRoundError::Cancelled => ReducedModelError::Operational(RuntimeFailure {
-            code: "turn_cancelled".into(),
-            retryable: false,
-        }),
+        } => ReducedModelError::Operational(RuntimeFailure::new(
+            failure_code,
+            disposition == "retry",
+        )),
+        ModelRoundError::Cancelled => {
+            ReducedModelError::Operational(RuntimeFailure::new("turn_cancelled", false))
+        }
         ModelRoundError::RequestAdmission(_)
         | ModelRoundError::InvocationFailure { .. }
         | ModelRoundError::StablePrefix(_)
         | ModelRoundError::ImageAdmission { .. }
-        | ModelRoundError::DispatchLimit => ReducedModelError::Operational(RuntimeFailure {
-            code: "gateway_failed".into(),
-            retryable: true,
-        }),
+        | ModelRoundError::DispatchLimit => {
+            ReducedModelError::Operational(RuntimeFailure::new("gateway_failed", true))
+        }
     }
 }
 
@@ -106,6 +105,8 @@ fn provider_runtime(error: &ProviderRequestError) -> RuntimeFailure {
     RuntimeFailure {
         code: error.code.clone(),
         retryable: error.retryable,
+        status_code: error.status_code,
+        cause: error.cause.clone(),
     }
 }
 

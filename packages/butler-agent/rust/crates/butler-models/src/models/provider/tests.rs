@@ -15,6 +15,7 @@ use super::*;
 
 mod anthropic_schema;
 mod continuation;
+mod gemini_schema;
 mod prompt;
 mod serialization;
 mod sizing;

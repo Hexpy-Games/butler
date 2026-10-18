@@ -1,5 +1,6 @@
 //! Two owned WAL readers; fresh transactions never run on Tokio workers.
 use super::{AppStorageError, StorageResult};
+use crate::gateway::command_timing::CommandTiming;
 use parking_lot::{Condvar, Mutex};
 use rusqlite::{Connection, OpenFlags};
 use std::{
@@ -16,6 +17,7 @@ const SPARE_RETENTION: Duration = Duration::from_secs(10);
 type ReadOperation = Box<dyn FnOnce(&Connection) -> StorageResult<()> + Send>;
 
 struct Job {
+    timing: CommandTiming,
     operation: ReadOperation,
     completed: tokio::sync::oneshot::Sender<StorageResult<()>>,
     permit: OwnedSemaphorePermit,
@@ -130,6 +132,7 @@ impl ReadPool {
     }
     pub(super) fn read<T, F>(
         self: &Arc<Self>,
+        timing: CommandTiming,
         operation: F,
     ) -> impl std::future::Future<Output = StorageResult<T>> + Send + '_
     where
@@ -142,14 +145,15 @@ impl ReadPool {
             let _sent = sender.send(value);
             Ok(())
         });
-        self.complete(operation, receiver)
+        self.complete(operation, receiver, timing)
     }
     async fn complete<T: Send + 'static>(
         self: &Arc<Self>,
         operation: ReadOperation,
         receiver: tokio::sync::oneshot::Receiver<T>,
+        timing: CommandTiming,
     ) -> StorageResult<T> {
-        self.dispatch(operation).await?;
+        self.dispatch(operation, timing).await?;
         receiver.await.map_err(|error| {
             AppStorageError::new(
                 super::AppStorageCode::AppSqliteJoinFailed,
@@ -157,7 +161,11 @@ impl ReadPool {
             )
         })
     }
-    async fn dispatch(self: &Arc<Self>, operation: ReadOperation) -> StorageResult<()> {
+    async fn dispatch(
+        self: &Arc<Self>,
+        operation: ReadOperation,
+        timing: CommandTiming,
+    ) -> StorageResult<()> {
         let guard = self.gate.clone().read_owned().await;
         let permit = self
             .permits
@@ -170,8 +178,10 @@ impl ReadPool {
                     error.to_string(),
                 )
             })?;
+        timing.mark("permit_acquired");
         let (completed, completion) = tokio::sync::oneshot::channel();
         self.work.state.lock().jobs.push_back(Job {
+            timing,
             operation,
             completed,
             permit,
@@ -247,12 +257,15 @@ impl ReadPool {
                     return;
                 }
                 Work::Read(Job {
+                    timing,
                     operation,
                     completed,
                     permit,
                     guard,
                 }) => {
+                    timing.mark("dequeued");
                     let result = Self::run_read(path, work, &mut connection, operation);
+                    timing.mark("sql_done");
                     last_used = Instant::now();
                     // Admission belongs to the queued job even if its caller
                     // disappears. Close waits for all transactions to finish.

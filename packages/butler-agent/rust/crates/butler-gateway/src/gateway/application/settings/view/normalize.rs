@@ -3,7 +3,7 @@ use serde_json::{Map, Value, json};
 use crate::gateway::ui_language::UiLanguage;
 
 pub(super) fn ui_defaults() -> Value {
-    json!({
+    let mut defaults = json!({
         "bridge_mode":"local", "gateway_profile":"electron", "server_url":"",
         "default_project_workspace_label":"Project", "language":"en", "timezone":"UTC",
         "model":butler_models::models::LEGACY_DEFAULT_MODEL, "reasoning_effort":"medium",
@@ -20,7 +20,11 @@ pub(super) fn ui_defaults() -> Value {
         "desktop_tray_enabled":true,
         "web_search":{"provider":"duckduckgo-html","reader_backend":"browser","api_key_configured":false,"api_key_env_var":null,"planning_enabled":true,"planning_default_depth":"balanced"},
         "model_fallback":{"enabled":false,"models":[]}, "profile_label":"Local Butler"
-    })
+    });
+    defaults["log_level"] = json!("standard");
+    defaults["log_category_levels"] = json!({});
+    defaults["log_full"] = Value::Null;
+    defaults
 }
 
 pub(super) fn native_value<'a>(native: &'a Map<String, Value>, key: &str) -> &'a Value {

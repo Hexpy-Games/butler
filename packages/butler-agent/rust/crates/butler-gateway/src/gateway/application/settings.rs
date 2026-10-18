@@ -8,7 +8,9 @@ use serde_json::{Value, json};
 
 mod access;
 mod command_sandbox;
+mod logging;
 pub use command_sandbox::command_sandbox_enabled;
+pub use logging::startup_config as startup_log_config;
 mod background_sources;
 mod composer_decoration;
 mod controls;
@@ -151,7 +153,7 @@ pub(super) fn resolve_for_message_send(
         .flatten()
         .and_then(|v| v.as_object().cloned())
         .unwrap_or_default();
-    let mut controls = inherited_controls(&settings, &stored, facts, explicit);
+    let mut controls = inherited_controls(&settings, &stored, facts);
     // A per-message override applies to this message only: the session keeps
     // its own controls (PATCH /sessions/{id}/controls changes those).
     let message_override = has_message_override(request);
@@ -309,9 +311,11 @@ impl super::AppApplication {
         &self,
         input: Value,
     ) -> Result<Value, crate::gateway::GatewayApplicationError> {
-        self.update_settings_from(input, WallpaperOrigin::User)
-            .await
-            .map(|(_, projection)| projection)
+        let (_, projection) = self
+            .update_settings_from(input, WallpaperOrigin::User)
+            .await?;
+        logging::apply(&projection).await?;
+        Ok(projection)
     }
 
     /// Applies a settings PATCH from `origin`. Returns the effective

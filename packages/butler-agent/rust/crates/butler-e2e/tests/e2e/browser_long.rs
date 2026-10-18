@@ -171,7 +171,7 @@ fn output(request: &Value) -> Value {
     serde_json::from_str(&text).unwrap()
 }
 
-async fn serve_host(
+pub(super) async fn serve_host(
     mut stream: reqwest::Response,
     admin: AdminClient,
 ) -> Result<usize, HarnessError> {

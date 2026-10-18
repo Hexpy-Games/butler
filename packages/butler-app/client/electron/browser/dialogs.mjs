@@ -15,6 +15,7 @@ export function beginDialog(browser, tab, value, callback) {
     defaultPrompt: String(value.defaultPrompt ?? ""), origin: value.url ?? value.origin ?? tab.url, deadline: Date.now() + DIALOG_TIMEOUT_MS,
     sessionId: value.sessionId, beforeUnloadClose: value.beforeUnloadClose, pageBeforeUnload: value.pageBeforeUnload, navigation: value.navigation, callback };
   tab.dialog = dialog; tab.waiting = true;
+  for (const finish of tab.dialogWaiters ?? []) finish();
   dialog.timer = setTimeout(() => { void resolveDialog(browser, tab, { accept: false }, "timeout"); }, DIALOG_TIMEOUT_MS);
   browserEvent(browser, tab, "dialog_opened", { dialog: publicDialog(tab) });
   // The last completed still is available while the page's synchronous dialog is waiting.
@@ -31,7 +32,7 @@ export async function resolveDialog(browser, tab, answer, reason = "answered") {
     await tab.view.webContents.debugger.sendCommand("Page.handleJavaScriptDialog", { accept: answer.accept === true, promptText: answer.value ?? "" }, dialog.sessionId).catch(() => {});
   }
   if (tab.dialog === dialog) tab.dialog = null;
-  tab.waiting = false;
+  tab.waiting = Boolean(tab.dialog);
   browserEvent(browser, tab, answer.accept ? "dialog_accepted" : "dialog_cancelled", { dialog: dialog.id, dialog_type: dialog.type, reason });
   browser.publish(); browser.sync(tab);
 }
@@ -68,6 +69,7 @@ export async function answerDialog(browser, tab, args) {
   const steps = (tab.pendingBatch ?? []).map(step => step.reason === "dialog_pending" ? { ...step, status: "completed", reason: undefined } : step);
   const completed = steps.findLast(step => step.status === "completed");
   if (completed && tab.view && !tab.view.webContents.isDestroyed()) completed.still = await stepStill(tab);
+  if (tab.dialog) { tab.pendingBatch = steps; return { ...pendingDialog(tab), steps }; }
   tab.pendingBatch = null;
   return { status: "ok", tab: tab.id, epoch: tab.epoch, url: tab.url, steps };
 }

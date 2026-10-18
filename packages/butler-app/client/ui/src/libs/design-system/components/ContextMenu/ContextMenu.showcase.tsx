@@ -36,9 +36,8 @@ export const stories: ShowcaseStory[] = [
       <Stack gap="sm">
         <ContextMenu>
           <ContextMenuTrigger asChild>
-            <MessageRow role="system" compactionEvent>
-              <Typo.Body>{text(context).message}</Typo.Body>
-            </MessageRow>
+            {/* MessageContent: system text renders as is, in the row's type. */}
+            <MessageRow role="system" compactionEvent>{text(context).message}</MessageRow>
           </ContextMenuTrigger>
           <ContextMenuContent>
             <ContextMenuItem><Copy size="sm" /><span>{text(context).copy}</span></ContextMenuItem>

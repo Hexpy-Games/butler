@@ -1,4 +1,6 @@
 mod browser;
+mod names;
+use names::*;
 use std::collections::HashSet;
 
 use crate::btcc::{AccessMode, ApprovalExemptAction};
@@ -8,90 +10,6 @@ use super::catalog::{GuidedCatalogSnapshot, GuidedCatalogTool};
 use super::policy::{GuidedExecutionPolicy, PolicyRole};
 use super::selection::GuidedPhase;
 
-const DISCOVERY: &[&str] = &[
-    "tool_search",
-    "tool_describe",
-    "tool_call",
-    "web_search",
-    "web_read",
-    "read_file",
-    "project_artifacts",
-    "grep_files",
-    "list_files",
-];
-const NON_FULL: &[&str] = &[
-    "answer_blocks",
-    "output_check",
-    "output_publish",
-    "run_command",
-    "write_file",
-    "edit_file",
-    "list_tool_capabilities",
-    "tool_search",
-    "tool_describe",
-    "tool_call",
-    "web_search",
-    "web_read",
-    "read_file",
-    "project_artifacts",
-    "read_project_source",
-    "grep_files",
-    "list_files",
-    "read_tool_evidence_artifact",
-    "read_tool_output_artifact",
-    "project_ledger_status",
-    "project_ledger_list",
-    "project_ledger_show",
-    "project_ledger_check",
-    "inspect_project_status",
-    "query_project_work",
-    "render_project_dashboard",
-    "get_work_dashboard",
-    "get_context_monitor",
-    "get_usage_monitor",
-    "get_memory_health",
-    "list_todo_list",
-    "read_conversation_context",
-    "list_conversation_sessions",
-    "read_conversation_session",
-    "recall_memory",
-    "query_memory",
-    "list_automations",
-    "create_automation",
-    "update_automation",
-    "delete_automation",
-    "list_wallpapers",
-    "set_wallpaper",
-    "save_wallpaper_module",
-    "browser_history_search",
-    "library_search",
-    "library_organize",
-    "read_mcp_resource",
-    "list_skills",
-    "load_skill",
-    "read_skill_file",
-    "transform_public_data_table",
-];
-/// Non-full tools that change something: offered when asking first, where
-/// each asks for approval before it runs (the wallpaper writes are reviewed
-/// persistent effects there), and never to a read-only turn.
-const SCHEDULE_WRITES: &[&str] = &[
-    "create_automation",
-    "update_automation",
-    "delete_automation",
-];
-const ASK_FIRST_WRITES: &[&str] = &[
-    "output_publish",
-    "library_organize",
-    "run_command",
-    "set_wallpaper",
-    "save_wallpaper_module",
-    "create_automation",
-    "update_automation",
-    "delete_automation",
-];
-const STEWARD_PARENT: &[&str] = &["delegate_to_steward", "steer_steward", "cancel_steward"];
-const WORKER_DELEGATION: &[&str] = &["delegate_to_worker", "steer_worker", "wait_for_worker"];
 /// The tools a guided turn is authorized to call on the legacy surface, from
 /// its role, access mode, tracking mode and project binding.
 /// What the turn context says about its project.
@@ -273,7 +191,14 @@ fn apply_access_mode(
             }
         }
         names.extend(
-            ["run_command", "write_file", "edit_file", "output_publish"].map(str::to_owned),
+            [
+                "run_command",
+                "write_file",
+                "edit_file",
+                "output_publish",
+                "deliver_files",
+            ]
+            .map(str::to_owned),
         );
         if scope.has_project {
             names.insert("bind_session_git_worktree".into());
@@ -320,30 +245,6 @@ fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
         }
     }
 }
-
-/// Tools every legacy surface shows.
-const LEGACY_BASE: [&str; 20] = [
-    "answer_blocks",
-    "tool_search",
-    "tool_describe",
-    "tool_call",
-    "web_search",
-    "web_read",
-    "read_file",
-    "project_artifacts",
-    "grep_files",
-    "list_files",
-    "recall_memory",
-    "query_memory",
-    "list_conversation_sessions",
-    "read_conversation_session",
-    "read_project_source",
-    "project_ledger_status",
-    "update_todo_list",
-    "list_todo_list",
-    "load_skill",
-    "read_skill_file",
-];
 
 pub(super) fn legacy_visible<'a>(
     authorized: &[&'a GuidedCatalogTool],

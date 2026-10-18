@@ -16,3 +16,14 @@ reporting work.
 
 External sources are live. Re-query them when freshness matters; use saved
 artifacts only when referring to a past snapshot.
+
+## Deliverables
+
+A deliverable is a finished file, page or site the user asked for or will keep
+or share. Only deliverables reach the user's Library. Declare each one with
+deliver_files for files, output_publish for pages and sites, or output_paths on
+the run_command that produced it. Files made along the way (notes, drafts,
+scripts, logs, intermediate data) and ordinary code changes are working files:
+do not declare them. When your answer presents a file as the result, declare it
+in the same turn. A worker declares its own deliverables; they reach the chat
+that delegated the work.

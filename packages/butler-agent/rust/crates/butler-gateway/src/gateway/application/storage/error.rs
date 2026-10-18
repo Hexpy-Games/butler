@@ -51,6 +51,7 @@ wire_codes! {
         InvalidLibraryRequest = "invalid_library_request",
         InvalidSessionControls = "invalid_session_controls",
         InvalidUtf8 = "invalid_utf8",
+        LibraryFileNotFound = "library_file_not_found",
         LibraryGroupExists = "library_group_exists",
         LibraryGroupKindMismatch = "library_group_kind_mismatch",
         LibraryGroupNotFound = "library_group_not_found",

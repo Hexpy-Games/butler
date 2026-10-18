@@ -16,13 +16,7 @@ pub(in crate::gateway) fn serve(
     local_addr: SocketAddr,
 ) -> JoinHandle<std::io::Result<()>> {
     tokio::spawn(async move {
-        let devices = security::DeviceRegistry::load(
-            application.clone(),
-            local_addr.port(),
-            shutdown.clone(),
-        )
-        .await
-        .map_err(|_| std::io::Error::other("device registry unavailable"))?;
+        let devices = prepare_devices(application.clone(), shutdown.clone(), local_addr).await?;
         let exposure = GatewayExposure {
             remote_access_enabled: config.remote_access_enabled,
             allowed_hosts: config.allowed_hosts.clone(),
@@ -120,4 +114,17 @@ fn app_host(
         },
         shutdown.clone(),
     ))
+}
+
+async fn prepare_devices(
+    application: Arc<dyn GatewayApplication>,
+    shutdown: CancellationToken,
+    local_addr: SocketAddr,
+) -> std::io::Result<security::DeviceRegistry> {
+    super::logs::initialize(application.clone(), shutdown.clone())
+        .await
+        .map_err(|_| std::io::Error::other("log configuration unavailable"))?;
+    security::DeviceRegistry::load(application, local_addr.port(), shutdown)
+        .await
+        .map_err(|_| std::io::Error::other("device registry unavailable"))
 }

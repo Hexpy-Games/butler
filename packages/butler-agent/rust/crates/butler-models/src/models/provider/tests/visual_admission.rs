@@ -165,7 +165,7 @@ pub(super) async fn large_photo_attachment_is_admitted_on_every_native_carrier()
     let bytes = photo();
     for model in [
         "anthropic/claude-opus-5-5",
-        "google/gemini-3.5-flash",
+        "google/gemini-3.8-flash",
         "openai/gpt-5.5",
     ] {
         large_photo_round(model, &bytes).await;

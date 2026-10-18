@@ -1,8 +1,9 @@
 # Release disclosures
 
-Butler is free, non-commercial software. The owner approved disclosure plus
-upstream license links, including the six existing MPL-2.0 components and the
-Electron/ONNX supplier collections. Our generated payload contains no full
+Butler is free, MIT-licensed open-source software; HexpyGames may offer
+optional paid services. The owner approved disclosure plus upstream license
+links, including the six existing MPL-2.0 components and the Electron/ONNX
+supplier collections. Our generated payload contains no full
 license bodies or shared text store. Electron retains the license files supplied
 in its original runtime; our packagers do not duplicate them.
 

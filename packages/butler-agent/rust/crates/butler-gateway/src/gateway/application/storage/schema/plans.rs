@@ -13,6 +13,7 @@ use crate::gateway::application::{
     queue_dispatcher::{LEASE_DEADLINE_SQL, QUEUED_CHATS_SQL},
     recovery::DISPATCHING_SQL,
     retry::RUNTIME_FAULT_SQL,
+    turn_cancellation::SENT_CANCELS_SQL,
 };
 
 const EVENTS_INDEX: &str = "events_turn_id_idx";
@@ -59,5 +60,10 @@ pub(super) fn hot_queries_use_their_indexes() {
         assert_uses(&connection, sql, QUEUE_INDEX);
     }
     assert_uses(&connection, &queued_sql(), "app_automation_runs_queued_idx");
+    assert_uses(
+        &connection,
+        SENT_CANCELS_SQL,
+        "app_turn_cancel_outbox_pending_idx",
+    );
     assert_uses(&connection, SETTLE_ENDED_SQL, "messages_streaming_turn_idx");
 }

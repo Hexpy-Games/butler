@@ -74,10 +74,10 @@ pub(super) fn local(
             .iter()
             .any(|value| catalog_effort_name(*value) == effort)
         {
-            return Err(ModelRoundError::Operational(RuntimeFailure {
-                code: "gateway_failed".into(),
-                retryable: true,
-            }));
+            return Err(ModelRoundError::Operational(RuntimeFailure::new(
+                "gateway_failed",
+                true,
+            )));
         }
         output.insert("reasoning_effort".into(), effort.into());
         return Ok(output);

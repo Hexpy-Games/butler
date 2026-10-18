@@ -4,7 +4,10 @@ import { connectElectronMain } from "./electron-main-cdp";
 import { freePort } from "./native-app-server";
 import { spawnElectron, stopElectronChild } from "./electron-child";
 
-export type FileElectronApp = Pick<ElectronApplication, "evaluate" | "process" | "close">;
+export type FileElectronApp = Pick<ElectronApplication, "evaluate" | "process" | "close"> & {
+  /** An attached main inspector holds a quitting App at exit; the next evaluate reconnects. */
+  detach(): void;
+};
 
 /** Main inspection without Playwright's piped Electron launcher. */
 export async function fileElectronApp(input: {
@@ -25,15 +28,16 @@ export async function fileElectronApp(input: {
       await new Promise(done => setTimeout(done, 100));
     }
     if (!main) throw new Error("Electron main inspector unavailable");
-    const client = main;
+    let client: typeof main | undefined = main;
     const module = `process.getBuiltinModule('module').createRequire(${JSON.stringify(join(resolve("packages/butler-app/client/electron"), "package.json"))})('electron')`;
-    const evaluate: ElectronApplication["evaluate"] = async (fn: string | ((...args: any[]) => any), arg?: unknown) => client.evaluate<any>(
+    const evaluate: ElectronApplication["evaluate"] = async (fn: string | ((...args: any[]) => any), arg?: unknown) => (client ??= await connectElectronMain(port)).evaluate<any>(
       typeof fn === "string" ? fn : `(${fn.toString()})(${module},${JSON.stringify(arg) ?? "undefined"})`,
     );
     return {
       evaluate, process: () => child,
+      detach() { client?.close(); client = undefined; },
       async close() {
-        client.close(); await stopElectronChild(child);
+        client?.close(); await stopElectronChild(child);
       },
     };
   } catch (error) { main?.close(); await stopElectronChild(child); throw error; }

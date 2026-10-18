@@ -159,8 +159,12 @@ pub(super) async fn finish(
     let route = route(&state.used_tools, &closeout);
     let content =
         super::answer_prose::without_block_tables(&closeout.content, &closeout.answer_blocks);
+    // A failed model round is a visible failure, never an empty answer.
+    let runtime_failure = closeout
+        .runtime_failure
+        .or_else(|| state.runtime_failure.clone());
     let terminal_outcome = (suspension.is_none()
-        && closeout.runtime_failure.is_none()
+        && runtime_failure.is_none()
         && content.trim().is_empty()
         && closeout.answer_blocks.is_empty()
         && input.semantic.context.empty_response_policy
@@ -174,9 +178,8 @@ pub(super) async fn finish(
         authority_continuation,
         work_status: closeout.work_status,
         accepted_work_result: closeout.accepted_work_result,
-        runtime_failure: closeout
-            .runtime_failure
-            .or_else(|| state.runtime_failure.clone()),
+        runtime_failure,
+        outputs: closeout.outputs,
         artifacts: closeout.artifacts,
         changed_files: closeout.changed_files,
         answer_blocks: closeout.answer_blocks,
