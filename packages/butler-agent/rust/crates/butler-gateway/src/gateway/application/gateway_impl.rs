@@ -41,9 +41,6 @@ impl GatewayApplication for AppApplication {
     fn list_system_events(&self, page: AppMonitorPage) -> ApplicationFuture<Value> {
         self.dependencies.monitoring.system_events(page)
     }
-    fn list_developer_logs(&self, query: AppDeveloperLogsQuery) -> ApplicationFuture<Value> {
-        self.dependencies.monitoring.developer_logs(query)
-    }
     fn runtime_session_hint(&self, chat: String) -> ApplicationFuture<String> {
         let this = self.clone_handle();
         Box::pin(async move { this.runtime_hint(&chat).await })

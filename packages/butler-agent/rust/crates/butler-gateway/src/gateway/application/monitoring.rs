@@ -43,16 +43,6 @@ pub struct AppUsageMonitorView {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct AppDeveloperLogsQuery {
-    pub limit: Option<usize>,
-    pub offset: Option<usize>,
-    pub session_id: Option<String>,
-    pub turn_id: Option<String>,
-    pub kind: Option<String>,
-    pub query: Option<String>,
-}
-
-#[derive(Clone, Debug, Default)]
 pub struct AppWorkerActivityQuery {
     pub session_id: Option<String>,
     pub include_history: bool,
@@ -97,7 +87,6 @@ pub trait AppMonitoringPort: Send + Sync + 'static {
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>>;
     fn usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<AppUsageMonitorView>;
     fn system_events(&self, page: AppMonitorPage) -> ApplicationFuture<Value>;
-    fn developer_logs(&self, query: AppDeveloperLogsQuery) -> ApplicationFuture<Value>;
     /// The provider's latest subscription quota, polled first when
     /// `refresh` is set; unavailable by default.
     fn provider_quota(

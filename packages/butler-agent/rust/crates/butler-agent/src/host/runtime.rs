@@ -368,10 +368,7 @@ impl AgentRuntime {
         let bindings = stores.bindings.clone();
         let conversations = Arc::new(stores.conversations.clone());
         let progress = StorageProgressPublication::new(stores.btcc.clone());
-        let (developer_log_capture, developer_settings) =
-            owners::developer_capture(&paths.data_root, app_database_path, installation)?;
         let owner = Arc::new(RuntimeOwners {
-            developer_settings,
             stores,
             project_work,
             project_tools,
@@ -404,7 +401,6 @@ impl AgentRuntime {
             messages: repositories.clone(),
             progress: repositories.clone(),
             readiness: repositories.clone(),
-            developer_log_capture,
             host: owner,
         });
         startup.phase("runtime_ports");

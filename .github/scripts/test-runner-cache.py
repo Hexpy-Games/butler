@@ -17,6 +17,9 @@ from unittest.mock import patch
 spec = importlib.util.spec_from_file_location('snapshots', Path(__file__).with_name('cargo-target-release.py'))
 snapshots = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(snapshots)
+# Cache namespaces reject every linked ancestor. Keep test roots under the
+# canonical temp dir: macOS's default TMPDIR sits under the /var link.
+tempfile.tempdir = os.path.realpath(tempfile.gettempdir())
 
 MAX_PATH = 260
 # POSIX keeps exactly two leading slashes through joins and directory listings,

@@ -3,6 +3,10 @@ name: macOS App package
 on:
   workflow_dispatch:
     inputs:
+      update-agent-run-id:
+        description: Run providing the macos-update-agent-builds artifact (required unless published-candidate)
+        required: false
+        type: string
       candidate-version:
         description: Exact preview candidate (empty keeps preview.99 packaging)
         required: false
@@ -73,6 +77,14 @@ jobs:
             exit 1
           fi
 
+      # Manual packaging runs the update work-stream smoke, which needs the
+      # update-fixture agents; fail before building instead of skipping it.
+      - name: Require update-fixture agents for manual packaging
+        if: ${{ github.event_name == 'workflow_dispatch' && github.workflow == 'macOS App package' && !inputs.published-candidate && inputs.update-agent-run-id == '' }}
+        run: |
+          echo '::error::Manual packaging requires update-agent-run-id: a run that uploaded macos-update-agent-builds.'
+          exit 1
+
       - name: Verify the native runner
         run: test "$(uname -m)" = arm64
 
@@ -135,8 +147,16 @@ jobs:
         with:
           name: ${{ inputs.update-agent-artifact }}
           path: ${{ runner.temp }}/update-agent-builds
+      - name: Download manually selected update-fixture agents
+        if: github.event_name == 'workflow_dispatch' && inputs.update-agent-run-id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-update-agent-builds
+          run-id: ${{ inputs.update-agent-run-id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/update-agent-builds
       - name: Use the real prebuilt update-fixture versions
-        if: inputs.update-agent-artifact != ''
+        if: inputs.update-agent-artifact != '' || (github.event_name == 'workflow_dispatch' && inputs.update-agent-run-id != '')
         run: |
           chmod +x "$RUNNER_TEMP"/update-agent-builds/*/butler-agent
           echo "BUTLER_UPDATE_SMOKE_AGENT_BUILDS=$RUNNER_TEMP/update-agent-builds" >> "$GITHUB_ENV"
@@ -181,6 +201,7 @@ jobs:
           export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/butler-smoke-browsers"
           isolate=packages/butler-agent/rust/crates/butler-e2e/scripts/isolated-run.sh
           "$isolate" bunx playwright install chromium
+          "$isolate" bunx playwright install firefox webkit
           "$isolate" bun tests/smoke/app-newchat-visual-smoke.ts
           BUTLER_SMOKE_SCREENSHOTS="$PWD/.tmp/newchat-regression/onboarding" "$isolate" bun tests/smoke/app-onboarding-visual-smoke.ts
           "$isolate" bun tests/smoke/app-update-choice-smoke.ts
@@ -235,6 +256,7 @@ jobs:
           export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/butler-smoke-browsers"
           packages/butler-agent/rust/crates/butler-e2e/scripts/isolated-run.sh bun tests/smoke/focus-ring-clipping-smoke.ts
           packages/butler-agent/rust/crates/butler-e2e/scripts/isolated-run.sh bun tests/smoke/app-layout-smoke.ts
+          packages/butler-agent/rust/crates/butler-e2e/scripts/isolated-run.sh bun tests/smoke/app-composer-ime-smoke.ts
       - name: Update the published baseline through Settings to the published candidate
         if: inputs.baseline-tag
         env:

@@ -38,13 +38,10 @@ pub use contracts::{
     ProgressWrite, RouteEventStatus, StateExecutionClaim, StopPersistenceOutcome, SuspensionReason,
     TerminalOutcome, TurnCheckpoint, TurnRecord, TurnSemanticState, TurnTransition, WakeIdentity,
 };
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) use ports::NoopTurnDeveloperLogCapturePort;
 pub use ports::{
     AgentLoop, AgentLoopError, AgentLoopProgress, CanonicalMessageStore, HostDependencies,
     PortFuture, PreparedConversation, ProgressEventRepository, StorageReadiness,
-    TransitionCommitError, TurnDeveloperLogCapturePort, TurnDeveloperLogExecution,
-    TurnDeveloperLogFuture, TurnStore,
+    TransitionCommitError, TurnStore,
 };
 pub(crate) use ports::{PreparedExecution, TurnPreparation};
 
@@ -63,7 +60,6 @@ pub struct TurnFacadeDependencies {
     pub messages: Arc<dyn CanonicalMessageStore>,
     pub progress: Arc<dyn ProgressEventRepository>,
     pub readiness: Arc<dyn StorageReadiness>,
-    pub developer_log_capture: Arc<dyn TurnDeveloperLogCapturePort>,
     pub host: Arc<dyn HostDependencies>,
 }
 
@@ -87,7 +83,6 @@ impl TurnFacade {
                 dependencies.messages.clone(),
                 dependencies.progress.clone(),
                 dependencies.readiness.clone(),
-                dependencies.developer_log_capture.clone(),
                 supervisor,
             ),
         }

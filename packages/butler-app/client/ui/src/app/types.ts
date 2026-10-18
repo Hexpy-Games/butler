@@ -497,69 +497,6 @@ export interface AppInfoView {
   developer_mode_enabled: boolean;
 }
 
-export interface DeveloperLogSectionView {
-  id: string;
-  title: string;
-  region: string;
-  char_count: number;
-  content: string;
-}
-
-export interface DeveloperLogEntryView {
-  schema: "butler.developer-log.v1";
-  id: string;
-  kind: "model_turn" | "model_turn_error";
-  created_at: string;
-  session_id: string;
-  turn_id: string | null;
-  role: string;
-  transport: string;
-  route: {
-    session_id: string | null;
-    role: string | null;
-    reason: string | null;
-    project_id: string | null;
-  };
-  model: {
-    requested_model_ref: string;
-    provider_id: string | null;
-    runtime_adapter_id: string | null;
-  };
-  context: {
-    live_config_hash: string | null;
-    region_order: readonly string[];
-    sections: DeveloperLogSectionView[];
-    references: Array<{
-      kind: string;
-      id: string;
-      label?: string;
-      metadata?: Record<string, unknown>;
-    }>;
-    prompt_context: string;
-  };
-  request: {
-    input_text: string;
-    metadata: Record<string, unknown>;
-  };
-  response: {
-    text: string;
-    raw: unknown;
-  };
-  privacy: {
-    raw_text_included: true;
-    secrets_redacted: true;
-    local_only: true;
-  };
-}
-
-export interface DeveloperLogListView {
-  developer_mode_enabled: true;
-  entries: DeveloperLogEntryView[];
-  pagination: PaginationView;
-  generated_at: string;
-  raw_text_included: true;
-}
-
 export interface SettingsView {
   /** Opaque id of the agent's data; it changes when Butler is reset. */
   data_generation?: string;
@@ -618,6 +555,11 @@ export interface SettingsView {
   translucent_sidebar: boolean;
   smart_grouping_enabled: boolean;
   diagnostics_enabled: boolean;
+  /** Structured log preset; developer mode only (agents before #1218 omit it). */
+  log_level?: "minimal" | "standard" | "detailed" | "full";
+  log_category_levels?: Record<string, string>;
+  /** The full-logging lease: when it ends and the preset it returns to. */
+  log_full?: { expires_at: string; previous: string } | null;
   desktop_notifications: DesktopNotificationSettingsView;
   desktop_tray_enabled: boolean;
   web_search: WebSearchSettingsView;

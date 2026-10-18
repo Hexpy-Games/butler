@@ -112,7 +112,6 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/context-details", Handler::Subsessions),
     ("/credentials", Handler::Setup),
     ("/credentials/{id}", Handler::Setup),
-    ("/developer-logs", Handler::Monitors),
     ("/events", Handler::Events),
     ("/events/live", Handler::Live),
     ("/favicons", Handler::Favicons),

@@ -26,7 +26,23 @@ def ci_commands(path):
         (ROOT / path).read_text(), re.M)]
 
 
+def isolate_git(test):
+    """Keep fixture Git calls in their temp repos, whatever Git state the caller exports."""
+    # Hooks and `rebase --exec` in a linked worktree export GIT_DIR; fixture `git init`
+    # and `git config` would then write the caller's .git/config, shared by all worktrees.
+    env = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+    identity = {'GIT_AUTHOR_NAME': 'Test', 'GIT_AUTHOR_EMAIL': 'test@example.invalid',
+                'GIT_COMMITTER_NAME': 'Test', 'GIT_COMMITTER_EMAIL': 'test@example.invalid'}
+    env.update(identity, GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull)
+    patcher = patch.dict(os.environ, env, clear=True)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+
+
 class PrepushChecks(unittest.TestCase):
+    def setUp(self):
+        isolate_git(self)
+
     # test-category: format-pin
     def test_clippy_targets_and_flags_are_derived_from_ci(self):
         quality = (ROOT / '.github/workflows/rust-quality.yml').read_text()
@@ -83,8 +99,6 @@ class PrepushChecks(unittest.TestCase):
             def git(*args):
                 return subprocess.check_output(['git', *args], cwd=root, text=True)
             git('init', '-q', '-b', 'ci/checks')
-            git('config', 'user.email', 'test@example.invalid')
-            git('config', 'user.name', 'Test')
             for name in ('deleted', 'unstaged', 'staged'):
                 (root / name).write_text('base\n')
             git('add', '.')
@@ -217,7 +231,7 @@ class PrepushChecks(unittest.TestCase):
         self.assertEqual(hook.read_text().splitlines()[-1], 'exec "$root/scripts/prepush" --hook "$@"')
         self.assertNotRegex(hook.read_text(), r'\|\| true|SKIP|NO_VERIFY')
         tests = prepush.python_tests(['scripts/prepush', '.github/scripts/prepush.py'])
-        self.assertIn('.github/scripts/test-integration-proof.py', tests)
+        self.assertTrue(any(c[1] == '.github/scripts/test-integration-proof.py' for c in tests))
 
     # test-category: pure-logic
     def test_missing_rust_and_node_tools_warn_once_without_running(self):
@@ -236,3 +250,58 @@ class PrepushChecks(unittest.TestCase):
                 call.assert_not_called()
                 self.assertEqual(errors.getvalue().splitlines(),
                                  [f'prepush: WARNING: tool missing: {tool} — skipped, CI checks it'])
+
+    # test-category: format-pin
+    def test_ci_script_commands_match_lint_job_with_identical_arguments(self):
+        source = (ROOT / '.github/workflows/rust-quality.yml').read_text()
+        job = source.split('\n  lint:\n', 1)[1].split('\n  gate:\n', 1)[0]
+        expected = [shlex.split(line.strip().removeprefix('run: ').split(
+            'python3 .github/scripts/isolated.py ', 1)[1])
+            for line in job.splitlines() if 'python3 .github/scripts/test-' in line]
+        self.assertTrue(expected)
+        self.assertEqual(prepush.python_tests(['.github/scripts/cargo-target-release.py']), expected)
+        with patch.object(prepush.shutil, 'which', return_value='/tools/oras'), \
+                contextlib.redirect_stderr(io.StringIO()) as errors:
+            local = [prepush.local_ci_command(command) for command in expected]
+        ci_input = [command for command in expected if '--active-workflows' in command]
+        self.assertEqual(len(ci_input), 1)
+        offline = ci_input[0][:2]
+        self.assertEqual({tuple(c) for c in local} - {tuple(offline)},
+                         {tuple(c) for c in expected} - {tuple(c) for c in ci_input})
+        self.assertIn(offline, local)  # The offline proof and hook tests remain covered.
+        self.assertEqual(len(errors.getvalue().splitlines()), 1)
+        self.assertIn('workflow-state file', errors.getvalue())
+        invariants = next(c for c in local if c[1].endswith('test-ci-invariants.py'))
+        self.assertEqual(invariants[2:], ['--windows-safety'])
+        self.assertEqual(prepush.python_tests(['unrelated.py']), [])
+
+    # test-category: pure-logic
+    def test_missing_oras_skips_only_its_cases_and_preserves_failures(self):
+        for passed in (True, False):
+            class Cases(unittest.TestCase):
+                # test-category: pure-logic
+                def test_oci(self):
+                    raise AssertionError('must skip missing input')
+
+                # test-category: pure-logic
+                def test_offline(self):
+                    self.assertTrue(passed)
+            with patch.object(prepush.runpy, 'run_path', return_value={'Cases': Cases}) as load, \
+                    contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(prepush.ci_unittest('test.py', ['Cases.test_oci']), int(not passed))
+                load.assert_called_once_with(str(Path('test.py').resolve()))
+        for script, cases in prepush.ORAS_TESTS.items():
+            command = ['python3', '.github/scripts/' + script]
+            with patch.object(prepush.shutil, 'which', return_value=None), \
+                    contextlib.redirect_stderr(io.StringIO()) as errors:
+                local = prepush.local_ci_command(command)
+            self.assertEqual(local[2:], ['--ci-unittest', command[1], *cases])
+            self.assertEqual(len(errors.getvalue().splitlines()), 1)
+            self.assertIn('missing oras', errors.getvalue())
+            # Pin actual existing test IDs so a renamed OCI test fails visibly.
+            namespace = prepush.runpy.run_path(str(ROOT / command[1]))
+            for name in cases:
+                case, method = name.split('.')
+                self.assertTrue(callable(getattr(namespace[case], method)))
+            with patch.object(prepush.shutil, 'which', return_value='/tools/oras'):
+                self.assertEqual(prepush.local_ci_command(command), command)

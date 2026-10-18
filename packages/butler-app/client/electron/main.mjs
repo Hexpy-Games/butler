@@ -125,6 +125,7 @@ import {
   readCacheBudgetArtifact,
 } from "./cache-budget-runtime.mjs";
 import { createSessionFolderLauncher } from "./session-folder-launch.mjs";
+import { registerLogsExport } from "./logs-export.mjs";
 import { createBrowserHost } from "./browser/host-channel.mjs";
 import { isSecuritySenderOrigin, readAppLocalAdmin, requestSecurityRoute } from "./app-security-admin.mjs";
 import { clearAppOwnedData, relaunchAfterFullReset, requestFullReset } from "./app-full-reset.mjs";
@@ -2831,6 +2832,15 @@ ipcMain.handle("butler:select-project-folder", async () => {
       projectFolderTokenSecret,
     ),
   };
+});
+
+registerLogsExport({
+  ipcMain,
+  dialog,
+  serverFetch: appServerFetch,
+  readUiCrashes: () => uiCrashStore.read(),
+  isTrustedSender: (event) => event.sender === mainWindow?.webContents,
+  saveLabel: async () => getDesktopCopy(await readDesktopLanguage()).save,
 });
 
 ipcMain.handle("butler:save-message-file", async (_event, input = {}) => {

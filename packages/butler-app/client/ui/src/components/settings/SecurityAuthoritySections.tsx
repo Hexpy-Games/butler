@@ -1,22 +1,15 @@
-import { readUiCrashLog } from "@/app/uiCrashReporting.ts";
-import { notifyStatus } from "@/app/notifications.ts";
-import { Button } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
-import type { SettingsView as SettingsData } from "@/app/types.ts";
-import { SettingsSection, SettingsSwitch } from "./SettingsFormComponents";
-import { useButlerModels } from "./hooks/useButlerModels";
+import { SettingsSection } from "./SettingsFormComponents";
 import { useSavedKeys } from "./hooks/useSavedKeys";
 import { SavedKeysRows } from "./SavedKeysRows";
 import { GrantsSection } from "./GrantsSection";
 import { useGrants } from "./useGrants";
 
 /** Direct section elements for SettingsPage; data and effects stay with the page. */
-export function securityAuthoritySections({ models, savedKeys, grants }: {
-  models: Pick<ReturnType<typeof useButlerModels>, "update" | "setSettings"> & { draft: Pick<SettingsData, "diagnostics_enabled"> | null }; savedKeys: ReturnType<typeof useSavedKeys>; grants: ReturnType<typeof useGrants>;
+export function securityAuthoritySections({ savedKeys, grants }: {
+  savedKeys: ReturnType<typeof useSavedKeys>; grants: ReturnType<typeof useGrants>;
 }) {
-  const { draft, update, setSettings } = models;
   const settingsCopy = appCopy.settings;
-  const fields = settingsCopy.fields;
   const sections = settingsCopy.pageSections;
   return <>
     <SettingsSection id="grants" kind="list" title={sections.grants}
@@ -32,27 +25,5 @@ export function securityAuthoritySections({ models, savedKeys, grants }: {
         <SavedKeysRows keys={savedKeys} />
       </SettingsSection>
     )}
-    {draft && <>
-      <SettingsSection id="diagnostics" kind="form" title={settingsCopy.pageSections.diagnostics}>
-        <Button size="sm" variant="outline" onClick={() => void copyDiagnostics()}>
-          {appCopy.interfacePanels.copyDiagnostics}
-        </Button>
-        <SettingsSwitch
-          settingId="diagnostics"
-          label={fields.diagnostics}
-          checked={draft.diagnostics_enabled}
-          onChange={(value) => update({ diagnostics_enabled: value }, setSettings)}
-        />
-      </SettingsSection>
-    </>}
   </>;
-}
-
-async function copyDiagnostics(): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(JSON.stringify({ ui_crashes: await readUiCrashLog() }, null, 2));
-    notifyStatus(appCopy.firstRun.reportCopied, { id: "ui-crash-export", tone: "ok" });
-  } catch {
-    notifyStatus(appCopy.firstRun.reportUnavailable, { id: "ui-crash-export", tone: "error" });
-  }
 }
