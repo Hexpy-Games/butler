@@ -107,10 +107,10 @@ rectangular shell.
 - Text on the shell (sidebar and the cards title row) follows the same rule:
   the root picks `--sidebar-text-secondary` / `--sidebar-text-tertiary` per
   platform (`--mac-sidebar-text-*`, `--windows-sidebar-text-*`), and those
-  scopes map `--text-secondary`, `--text-tertiary`, `--muted-foreground` and
-  `--menu-group-label-color` to them. They equal the global tones except
-  Windows dark, where acrylic over a light desktop lifts the shell (#1187); a
-  solid shell takes the global tones.
+  scopes map the secondary and tertiary text roles (`--color-text-*`,
+  `--text-*`, `--muted-foreground`, `--menu-group-label-color`) to them.
+  They equal the global tones except Windows dark, where acrylic over a light
+  desktop lifts the shell (#1187); a solid shell takes the global tones.
 - Content sits in rounded cards (`--shell-card-bg`, `--shell-card-radius`
   12, one quiet `--shell-card-edge`, `--shell-card-shadow` none), inset
   `--shell-card-inset` (8) from the window and `--shell-card-gap` (8) from

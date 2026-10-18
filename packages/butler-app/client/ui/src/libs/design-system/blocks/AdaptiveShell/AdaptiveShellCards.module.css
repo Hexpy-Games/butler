@@ -67,6 +67,8 @@
 /* Cards: the title row sits on the shell, so its text takes the shell text
    tones like the sidebar (AdaptiveShell.module.css). */
 .root[data-frame="cards"][data-panel-layout="docked"] .title {
+  --color-text-secondary: var(--sidebar-text-secondary);
+  --color-text-tertiary: var(--sidebar-text-tertiary);
   --text-secondary: var(--sidebar-text-secondary);
   --text-tertiary: var(--sidebar-text-tertiary);
   --muted-foreground: var(--text-secondary);

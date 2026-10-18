@@ -105,6 +105,8 @@
   /* Text on the translucent shell takes the platform's shell text tones,
      chosen on the root with the shell layer. The aliases compute where they
      are declared, so they are re-declared on the new tones here. */
+  --color-text-secondary: var(--sidebar-text-secondary);
+  --color-text-tertiary: var(--sidebar-text-tertiary);
   --text-secondary: var(--sidebar-text-secondary);
   --text-tertiary: var(--sidebar-text-tertiary);
   --muted-foreground: var(--text-secondary);
