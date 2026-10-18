@@ -43,7 +43,7 @@ pub use crate::gateway::inbound_queue::{
 };
 pub use crate::gateway::message_file_store::AppMessageFiles;
 pub use application::settings::{
-    command_sandbox_enabled, diagnostics_enabled_readonly, startup_log_config,
+    command_sandbox_enabled, diagnostics_enabled_readonly, producer_log_config, startup_log_config,
     stored_ui_language_readonly,
 };
 pub use application::{

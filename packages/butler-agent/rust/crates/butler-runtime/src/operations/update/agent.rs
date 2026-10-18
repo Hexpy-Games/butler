@@ -39,7 +39,7 @@ pub struct AgentArchiveUpdateService {
     current_version: Option<String>,
     home: Option<AgentHome>,
     manifest: String,
-    client: reqwest::Client,
+    client: butler_log::http::Client,
     writes: Arc<Mutex<()>>,
     shutdown: CancellationToken,
 }
@@ -53,12 +53,12 @@ impl AgentArchiveUpdateService {
         if data.starts_with(&installation) || installation.starts_with(&data) {
             return Err(UpdateCode::ButlerDataOverlapsInstallation.into());
         }
-        let client = reqwest::Client::builder()
+        let client = butler_log::http::external(butler_log::http::Purpose::new("update"))
             // A slow download is fine, a stalled one is not: no limit on the
             // whole request, a limit on connecting and on each read.
             .connect_timeout(Duration::from_secs(15))
             .read_timeout(Duration::from_secs(60))
-            .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            .redirect(butler_log::http::RedirectPolicy::custom(|attempt| {
                 if redirect_allowed(attempt.previous(), attempt.url()) {
                     attempt.follow()
                 } else {

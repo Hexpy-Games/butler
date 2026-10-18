@@ -40,6 +40,7 @@ pub(super) async fn validate_and_save(
 
 /// Applies the plan to the graph, then registers the episode's vector
 /// units (a registration failure is recorded, not returned).
+#[tracing::instrument(name = "memory.write", level = "debug", skip_all, fields(count = plan.refs.len()), err)]
 pub(super) async fn finish(
     operation: Operation,
     claim: Arc<ClaimedProjectionWindow>,

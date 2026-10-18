@@ -2,6 +2,7 @@
 //!
 //! [`eventually`] bounds waits on conditions that another task must reach.
 
+#![allow(clippy::disallowed_methods, reason = "test crate HTTP drivers")]
 use std::time::Duration;
 
 /// Upper bound for a condition that another task is expected to reach promptly.

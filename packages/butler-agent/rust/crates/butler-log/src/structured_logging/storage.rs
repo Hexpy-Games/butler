@@ -12,6 +12,8 @@ pub(crate) type Catalog = BTreeMap<PathBuf, Vec<Block>>;
 pub(crate) struct Storage {
     pub root: PathBuf,
     pub catalog: Catalog,
+    retention_owner: bool,
+    index_versions: BTreeMap<PathBuf, (u64, Option<std::time::SystemTime>)>,
     main: Option<Segment>,
     debug: Option<Segment>,
     last_ts: String,
@@ -22,10 +24,18 @@ pub(crate) struct Storage {
 }
 impl Storage {
     pub(super) fn open(root: PathBuf, config: &Config) -> io::Result<Self> {
+        Self::open_mode(root, config, true)
+    }
+    pub(super) fn producer(root: PathBuf, config: &Config) -> io::Result<Self> {
+        Self::open_mode(root, config, false)
+    }
+    fn open_mode(root: PathBuf, config: &Config, retention_owner: bool) -> io::Result<Self> {
         butler_platform::secure_fs::create_private_dir_all(&root.join("agent/main"))?;
         let mut this = Self {
             root,
             catalog: Catalog::new(),
+            retention_owner,
+            index_versions: BTreeMap::new(),
             main: None,
             debug: None,
             last_ts: String::new(),
@@ -34,6 +44,9 @@ impl Storage {
             write_errors: [None, None],
             written: [false, false],
         };
+        if !retention_owner {
+            return Ok(this);
+        }
         let _ = this.configure(config);
         // Pending verbose cleanup must not prevent startup or level reversion.
         if !this.cleanup_pending() {
@@ -53,21 +66,37 @@ impl Storage {
     }
     fn discover(&mut self, repair: bool) -> io::Result<()> {
         self.catalog.retain(|p, _| p.exists());
+        self.index_versions.retain(|p, _| p.exists());
         for source in ["agent", "app"] {
             for lane in ["main", "debug"] {
                 for path in retention::files(&self.root.join(source).join(lane))? {
                     if path.extension().is_none_or(|s| s != "jsonl")
-                        || self.catalog.contains_key(&path)
+                        || self
+                            .main
+                            .iter()
+                            .chain(self.debug.iter())
+                            .any(|s| s.path == path)
                     {
                         continue;
                     }
-                    let blocks = if path.with_extension("idx").exists() {
+                    let version = std::fs::metadata(path.with_extension("idx"))
+                        .ok()
+                        .map(|m| (m.len(), m.modified().ok()));
+                    if self.catalog.contains_key(&path)
+                        && version.as_ref() == self.index_versions.get(&path)
+                    {
+                        continue;
+                    }
+                    let blocks = if version.is_some() {
                         index::load(&path)?
                     } else if repair {
                         index::rebuild(&path, source)?
                     } else {
                         continue;
                     };
+                    if let Some(version) = version {
+                        self.index_versions.insert(path.clone(), version);
+                    }
                     self.catalog.insert(path, blocks);
                 }
             }
@@ -82,6 +111,10 @@ impl Storage {
         self.cleanup.is_some()
     }
     pub(super) fn cleanup(&mut self) -> io::Result<u64> {
+        if !self.retention_owner {
+            self.cleanup = None;
+            return Ok(0);
+        }
         let Some(config) = self.cleanup.clone() else {
             return Ok(0);
         };
@@ -190,6 +223,9 @@ impl Storage {
                     self.write_errors[lane] = Some(error.to_string());
                     return Err(error);
                 }
+                if !self.retention_owner {
+                    index::save(&s.path, &s.blocks)?;
+                }
                 self.catalog.insert(s.path.clone(), s.blocks.clone());
                 if self.written[lane] {
                     self.write_errors[lane] = None;
@@ -203,6 +239,9 @@ impl Storage {
         Ok(())
     }
     pub(super) fn prune(&mut self) -> io::Result<()> {
+        if !self.retention_owner {
+            return Ok(());
+        }
         if self.cleanup_pending() {
             let _ = self.cleanup();
         }

@@ -334,6 +334,10 @@ pub(crate) async fn memory_status(
 /// Sends `request` (without its token, which comes from `record`) to the
 /// loopback control endpoint `record` publishes; a refused command is its
 /// error code, or `failed`.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "authenticated loopback framed control protocol; not HTTP"
+)]
 async fn send(
     record: &crate::host::service::instance::InstanceRecord,
     mut request: Value,

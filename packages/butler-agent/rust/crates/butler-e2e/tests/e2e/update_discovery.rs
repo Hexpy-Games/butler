@@ -109,6 +109,7 @@ async fn installed_preview_refresh_discovers_new_published_releases() -> Result<
         .env("BUTLER_APP_VERSION", "0.1.0-preview.6")
         .env("BUTLER_UPDATE_RELEASES_API", &feed.api);
     let mut s = setup.start().await?;
+    super::outbound_http::logging(&s, "detailed").await?;
     assert_eq!(s.gw.settings().await?["update_previews"], true);
     let initial =
         s.gw.post("/updates/check", json!({"component":"app"}))
@@ -159,5 +160,7 @@ async fn installed_preview_refresh_discovers_new_published_releases() -> Result<
         s.gw.post("/updates/check", json!({"component":"app"}))
             .await?;
     assert_offer(next.data(), "0.1.0-preview.7", "0.1.0-preview.8", true);
+    let rows = super::outbound_http::http_calls(&s, &feed.api).await?;
+    assert_eq!(rows.len() as u64, feed.lists.load(Ordering::SeqCst));
     s.finish().await
 }

@@ -10,6 +10,15 @@ publish.workspace = true
 e2e-fixtures = []
 
 [dependencies]
+reqwest.workspace = true
+http.workspace = true
+http-body-util.workspace = true
+http-body.workspace = true
+percent-encoding.workspace = true
+h2.workspace = true
+futures-core.workspace = true
+futures-util.workspace = true
+bytes.workspace = true
 butler-platform = { path = "../butler-platform" }
 butler-core = { path = "../butler-core" }
 base64.workspace = true
