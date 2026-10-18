@@ -36,9 +36,9 @@ export function usageTimeline(view: UsageMonitorView | null, maxBars: number) {
     toMs: view ? view.filters.untilTs ?? now : undefined,
   });
   const buckets = grouped.buckets.map((bucket) => {
-    const [requests = 0, prompt = 0, cached = 0, output = 0] = bucket.values;
+    const [requests = 0, prompt = 0, cached = 0, output = 0, delegated = 0] = bucket.values;
     return {
-      ...bucket, requests, prompt, cached, output, total: prompt + output,
+      ...bucket, requests, prompt, cached, output, delegated, total: prompt + output,
       key: String(bucket.startMs),
       label: usageBucketLabel(bucket.startMs, bucket.endMs, now, grouped.stepHours),
       valueText: `${usageTokens(prompt + output)} ${appCopy.composer.usage.tokens}`,
@@ -65,4 +65,17 @@ export function usageReadout(view: UsageMonitorView | null, bucket?: ReturnType<
 export function usageShare(value: number): string {
   if (value > 0 && value < 0.01) return appCopy.composer.usage.tinyShare;
   return new Intl.NumberFormat(getAppLocale(), { style: "percent", maximumFractionDigits: 1 }).format(value);
+}
+
+/** The chat total split into its own calls and its delegated work; `null` when nothing was delegated. */
+export function usageParts(view: UsageMonitorView | null, bucket?: ReturnType<typeof usageTimeline>["buckets"][number]) {
+  const roles = view?.model.byRole;
+  const delegatedAll = (roles?.steward?.totalTokens ?? 0) + (roles?.worker?.totalTokens ?? 0);
+  if (!view || delegatedAll <= 0) return null;
+  const total = bucket ? bucket.total : view.model.totalTokens;
+  const delegated = Math.min(total, bucket ? bucket.delegated : delegatedAll);
+  const copy = appCopy.composer.usage;
+  const part = (id: string, label: string, value: number) =>
+    ({ id, label, value: total > 0 ? `${usageTokens(value)} · ${usageShare(value / total)}` : usageTokens(value) });
+  return [part("main", copy.conversationPart, total - delegated), part("delegated", copy.delegatedPart, delegated)];
 }

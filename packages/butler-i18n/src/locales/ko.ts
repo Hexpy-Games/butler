@@ -1125,6 +1125,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       bucketUnit: hours => hours < 24 ? `${hours}시간 단위` : `${hours / 24}일 단위`,
       codexProvider: "OpenAI Codex",
       thisChat: "이 대화",
+      conversationPart: "대화",
+      delegatedPart: "하위 작업",
       calls: count => `${count}회`,
       requests: count => `요청 ${count}회`,
       tokens: "토큰",
