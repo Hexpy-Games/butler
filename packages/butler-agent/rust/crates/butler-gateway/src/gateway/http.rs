@@ -7,6 +7,7 @@ mod content;
 mod library;
 mod start;
 pub(super) use start::serve;
+mod access_log;
 mod agent_import;
 mod automations;
 mod browser_import;
@@ -16,6 +17,7 @@ mod favicons;
 mod hooks;
 mod latency_trace;
 mod listeners;
+mod logs;
 mod mcp_servers;
 mod memory_management;
 mod message_files;
@@ -120,6 +122,15 @@ struct Client {
 /// Host and Origin admission, CORS preflight before auth, then the
 /// authorized route; every answer to an admitted origin carries CORS headers.
 async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -> Response {
+    let started = std::time::Instant::now();
+    let method = request.method().clone();
+    let route = request.uri().path().to_owned();
+    let response = dispatch_inner(state, request).await;
+    access_log::finish(&method, &route, response.status(), started);
+    response
+}
+
+async fn dispatch_inner(state: Arc<HttpState>, request: Request<Body>) -> Response {
     let timing = latency_trace::start(&request);
     let connect_form =
         request.method() == Method::POST && request.uri().path() == security::CONNECT_PATH;
@@ -218,6 +229,13 @@ async fn route_for_client(
     client: Client,
 ) -> Result<Response, HttpError> {
     let uri = request.uri().clone();
+    if uri.path() == "/logs" || uri.path().starts_with("/logs/") {
+        return logs::route(state, request, &uri).await;
+    }
+    #[cfg(feature = "e2e-fixtures")]
+    if uri.path() == "/internal/e2e/logs/expire" {
+        return logs::expire().await;
+    }
     if let Some(result) = library::dispatch(request.uri().path()) {
         return result.route(state, request).await;
     }

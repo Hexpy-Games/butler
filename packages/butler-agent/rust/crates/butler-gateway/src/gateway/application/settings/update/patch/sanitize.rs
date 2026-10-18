@@ -239,6 +239,12 @@ fn reasoning(value: &str) -> Option<butler_turn::btcc::ReasoningEffort> {
 }
 
 fn sanitize_preferences(input: &Map<String, Value>, output: &mut Map<String, Value>) {
+    for key in ["log_level", "log_category_levels"] {
+        if let Some(value) = input.get(key) {
+            output.insert(key.into(), value.clone());
+        }
+    }
+
     if let Some(value) = input.get("update_previews").and_then(Value::as_bool) {
         output.insert("update_previews".into(), json!(value));
     }
