@@ -8,7 +8,7 @@ status: published
 
 ## Supported platforms
 
-Butler is in preview. Always download the newest preview from [GitHub Releases](https://github.com/Hexpy-Games/butler/releases/latest). The stable 0.1.0 release is still to come.
+Butler is in preview. Always download the newest preview from [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) (the newest preview is at the top). The stable 0.1.0 release is still to come.
 
 - Apple silicon (M-series) Mac, macOS 12 or later
 - Linux x64 / arm64: DEB package
@@ -31,14 +31,14 @@ Butler is in preview. Always download the newest preview from [GitHub Releases](
 >
   <TabPanel value="macos">
     <Steps>
-      1. Open the newest preview on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and expand **Assets**.
+      1. Open the newest preview (at the top) on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and expand **Assets**.
       2. Download the macOS DMG (`butler-app-<version>-darwin-arm64.dmg`).
       3. Open the DMG and drag `Butler.app` into the Applications folder.
       4. Open Butler once. macOS blocks it, because the preview is not notarized.
       5. Open **System Settings → Privacy & Security**, scroll down, and choose **Open Anyway** next to Butler. Confirm with your password. You only need to do this once.
     </Steps>
     <Notice tone="info">
-      On macOS 14 or earlier, you can instead right-click Butler and choose **Open**.
+      **Open Anyway** works on every supported macOS version. On macOS 14 or earlier, right-click → **Open** works too.
     </Notice>
     <Notice tone="info" title="Verify the download (optional)">
       Download the DMG and its `.sha256` file into the same folder, then run `shasum -a 256 -c butler-app-*-darwin-arm64.dmg.sha256`. `OK` means the file matches the release.
@@ -46,7 +46,7 @@ Butler is in preview. Always download the newest preview from [GitHub Releases](
   </TabPanel>
   <TabPanel value="windows">
     <Steps>
-      1. Open the newest preview on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and expand **Assets**.
+      1. Open the newest preview (at the top) on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and expand **Assets**.
       2. Download the Windows installer (`ButlerSetup-<version>-x64.exe`).
       3. Run it. If Windows SmartScreen shows "Windows protected your PC", choose **More info**, then **Run anyway**. Preview installers are not signed yet.
       4. Open Butler from the Start menu.
@@ -100,7 +100,11 @@ After setup, press <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K"
     ```
   </TabPanel>
   <TabPanel value="windows">
-    Windows has no separate Agent installer. Use the app installer above.
+    The headless Agent supports Windows x64. In PowerShell, replace `<version>` with the newest preview, such as `0.1.0-preview.12`.
+
+    ```powershell
+    $env:BUTLER_VERSION='<version>'; irm https://github.com/Hexpy-Games/butler/releases/download/v<version>/install.ps1 | iex
+    ```
   </TabPanel>
   <TabPanel value="linux">
     The headless Agent supports glibc-based Linux x64 / arm64.
