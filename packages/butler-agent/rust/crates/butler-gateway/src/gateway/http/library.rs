@@ -20,6 +20,12 @@ pub(super) async fn route(
             None => C::Page(input::page(&args)?),
         },
         (&Method::POST, []) => C::Save(input::item(body(request, 10 * 1024 * 1024).await?)?),
+        (&Method::POST, ["documents"]) => {
+            let value = body(request, LIMIT).await?;
+            C::Promote {
+                file_id: value["file_id"].as_str().unwrap_or_default().to_owned(),
+            }
+        }
         (&Method::GET, ["search"]) => C::Search(input::search(&args)?),
         (&Method::POST, ["organize"]) => {
             C::Change(input::change(&body(request, LIMIT).await?, true)?)
@@ -37,16 +43,7 @@ pub(super) async fn route(
                 name: input::group_name(&value["name"])?,
             }
         }
-        (&Method::PATCH, ["groups", id]) => {
-            let value = body(request, LIMIT).await?;
-            C::UpdateGroup {
-                id: (*id).to_owned(),
-                name: (!value["name"].is_null())
-                    .then(|| input::group_name(&value["name"]))
-                    .transpose()?,
-                position: input::position(&value["position"])?,
-            }
-        }
+        (&Method::PATCH, ["groups", id]) => group_update(id, &body(request, LIMIT).await?)?,
         (&Method::DELETE, ["groups", id]) => C::DeleteGroup {
             id: (*id).to_owned(),
         },
@@ -128,4 +125,14 @@ impl BrowserDataRoute {
             Self::History => history::route(state, request).await,
         }
     }
+}
+
+fn group_update(id: &str, value: &Value) -> Result<C, HttpError> {
+    Ok(C::UpdateGroup {
+        id: id.to_owned(),
+        name: (!value["name"].is_null())
+            .then(|| input::group_name(&value["name"]))
+            .transpose()?,
+        position: input::position(&value["position"])?,
+    })
 }

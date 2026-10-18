@@ -104,7 +104,7 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     if *mode == AccessMode::ReadOnly {
         return if matches!(
             request.kind,
-            InternalRead | FileRead | CommandObservation { .. }
+            InternalRead | FileRead | ButlerOutput | CommandObservation { .. }
         ) {
             Allow
         } else {
@@ -214,7 +214,7 @@ impl CapabilityKind {
             }
             SetWallpaper | SaveWallpaperModule => Self::SettingsWrite,
             StartTopicConversation => Self::CrossConversation,
-            OutputPublish => Self::ButlerOutput,
+            OutputPublish | ToolName::DeliverFiles => Self::ButlerOutput,
             SwitchFolder => Self::FolderSwitch,
             _ => Self::InternalRead,
         }

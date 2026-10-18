@@ -1,27 +1,27 @@
-use std::collections::HashSet;
-
-use serde_json::Value;
-
-use butler_turn::btcc::{ArtifactKind, BtccError, FinalArtifact, ToolJournalCloseoutRow};
-
 use super::{invalid, safe_path, trimmed};
+use butler_turn::btcc::{ArtifactKind, BtccError, FinalArtifact, ToolJournalCloseoutRow};
+use serde_json::Value;
 
 #[derive(Default)]
 pub(super) struct ArtifactCollector {
-    items: Vec<FinalArtifact>,
-    seen: HashSet<String>,
+    deliverables: Vec<FinalArtifact>,
+    working: Vec<FinalArtifact>,
+    pub(super) outputs: Vec<String>,
 }
-
 impl ArtifactCollector {
     pub(super) fn add(&mut self, row: &ToolJournalCloseoutRow) -> Result<(), BtccError> {
-        if self.items.len() == 12 {
-            return Ok(());
-        }
         let Some(result) = &row.result else {
             return Ok(());
         };
         if result.field("ok").map_err(invalid)? == Some("false") {
             return Ok(());
+        }
+        if row.tool_name == "output_publish"
+            && let Some(raw) = result.field("output_id").map_err(invalid)?
+            && let Ok(id) = serde_json::from_str::<String>(raw)
+            && !self.outputs.contains(&id)
+        {
+            self.outputs.push(id);
         }
         let page = page_url(result)?;
         for key in ["artifacts", "verified_output_files"] {
@@ -32,15 +32,11 @@ impl ArtifactCollector {
                 continue;
             }
             butler_core::json::visit_raw_array(raw, |candidate| {
-                if self.items.len() == 12 {
-                    return Ok(());
-                }
                 if let Ok(value) = serde_json::from_str::<Value>(candidate)
                     && let Some(mut artifact) = final_artifact(&value)
-                    && self.seen.insert(artifact.safe_path_label.clone())
                 {
                     artifact.source_url.clone_from(&page);
-                    self.items.push(artifact);
+                    self.insert(artifact);
                 }
                 Ok(())
             })
@@ -48,9 +44,31 @@ impl ArtifactCollector {
         }
         Ok(())
     }
-
-    pub(super) fn finish(self) -> Vec<FinalArtifact> {
-        self.items
+    fn insert(&mut self, artifact: FinalArtifact) {
+        let items = if artifact.deliverable {
+            &mut self.deliverables
+        } else {
+            &mut self.working
+        };
+        if let Some(prior) = items
+            .iter_mut()
+            .find(|a| a.safe_path_label == artifact.safe_path_label)
+        {
+            *prior = artifact;
+        } else if items.len() < 12 {
+            items.push(artifact);
+        }
+    }
+    pub(super) fn finish(mut self) -> Vec<FinalArtifact> {
+        self.working.retain(|a| {
+            !self
+                .deliverables
+                .iter()
+                .any(|d| d.safe_path_label == a.safe_path_label)
+        });
+        self.deliverables
+            .extend(self.working.into_iter().take(12 - self.deliverables.len()));
+        self.deliverables
     }
 }
 
@@ -67,7 +85,8 @@ fn page_url(result: &butler_core::json::JsonDocument) -> Result<Option<String>, 
 
 fn final_artifact(value: &Value) -> Option<FinalArtifact> {
     let item = value.as_object()?;
-    let path = safe_path(item.get("path")?.as_str()?, true)?;
+    let deliverable = item.get("deliverable").and_then(Value::as_bool) == Some(true);
+    let path = safe_path(item.get("path")?.as_str()?, false)?;
     let size_value = item
         .get("size_bytes")
         .filter(|value| !value.is_null())
@@ -114,7 +133,15 @@ fn final_artifact(value: &Value) -> Option<FinalArtifact> {
     Some(FinalArtifact {
         id: format!("artifact-{}", butler_turn::btcc::digest_identity(&identity)),
         kind,
-        title: path.rsplit('/').next()?.to_owned(),
+        title: item
+            .get("title")
+            .and_then(safe_text)
+            .unwrap_or_else(|| path.rsplit('/').next().unwrap_or(&path).to_owned()),
+        source: item
+            .get("source")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        deliverable,
         safe_path_label: path,
         mime_type: Some(mime),
         size_bytes,
@@ -163,7 +190,7 @@ fn kind_name(kind: &ArtifactKind) -> &'static str {
     }
 }
 
-fn mime_for(path: &str) -> &'static str {
+pub(in crate::host::guided) fn mime_for(path: &str) -> &'static str {
     let name = path.rsplit('/').next().unwrap_or("");
     let extension = name
         .rsplit_once('.')
@@ -184,32 +211,75 @@ fn mime_for(path: &str) -> &'static str {
     }
 }
 
-/// File-tool outputs are artifacts too; the gateway materializer verifies their
-/// path against the conversation's workspace before exposing an open/download.
+/// One matching key for both declarations and changed-file attachments.
+pub(super) fn source_label(path: &str, workspace: &str) -> Option<String> {
+    let path = safe_path(path, false)?;
+    let path = std::path::Path::new(&path);
+    let relative = if path.is_absolute() {
+        path.strip_prefix(workspace).ok()?
+    } else {
+        path
+    };
+    let mut parts = Vec::new();
+    for part in relative.components() {
+        match part {
+            std::path::Component::Normal(p) => parts.push(p.to_str()?),
+            std::path::Component::CurDir => {}
+            _ => return None,
+        }
+    }
+    (!parts.is_empty()).then(|| parts.join("/"))
+}
+
+/// Working files stay attached; declarations take the available capacity first.
 pub(super) fn with_changed_files(
     mut artifacts: Vec<FinalArtifact>,
     files: &[butler_turn::btcc::ChangedFileSummary],
     workspace: &str,
 ) -> Vec<FinalArtifact> {
+    for artifact in &mut artifacts {
+        artifact.source = source_label(
+            artifact
+                .source
+                .as_deref()
+                .unwrap_or(&artifact.safe_path_label),
+            workspace,
+        );
+    }
+    artifacts.sort_by_key(|a| !a.deliverable);
+    let mut seen = std::collections::HashSet::new();
+    artifacts.retain(|a| {
+        seen.insert(
+            a.source
+                .clone()
+                .unwrap_or_else(|| a.safe_path_label.clone()),
+        )
+    });
+    artifacts.truncate(12);
     for file in files {
+        if artifacts.len() >= 12 {
+            break;
+        }
+        let Some(source) = source_label(&file.path, workspace) else {
+            continue;
+        };
         if artifacts
             .iter()
-            .any(|item| item.safe_path_label == file.path)
+            .any(|a| a.source.as_deref() == Some(&source))
         {
             continue;
         }
-        let Some(path) = safe_path(&file.path, false) else {
-            continue;
-        };
         artifacts.push(FinalArtifact {
-            id: format!("artifact-{}", butler_turn::btcc::digest_identity(&path)),
+            id: format!("artifact-{}", butler_turn::btcc::digest_identity(&source)),
             kind: ArtifactKind::File,
-            title: path.rsplit('/').next().unwrap_or(&path).to_owned(),
-            mime_type: Some(mime_for(&path).into()),
+            title: source.rsplit('/').next().unwrap_or(&source).to_owned(),
+            mime_type: Some(mime_for(&source).into()),
             safe_path_label: std::path::Path::new(workspace)
-                .join(path)
+                .join(&source)
                 .to_string_lossy()
                 .into_owned(),
+            source: Some(source),
+            deliverable: false,
             size_bytes: None,
             created_at: None,
             source_url: None,

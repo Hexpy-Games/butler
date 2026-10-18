@@ -155,6 +155,10 @@ pub struct ProjectSourceReference {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MessageFileRef {
+    #[serde(default)]
+    pub source_label: Option<String>,
+    #[serde(default)]
+    pub deliverable: bool,
     pub file_id: String,
     pub kind: MessageFileKind,
     pub mime_type: String,
@@ -167,6 +171,10 @@ pub struct MessageFileRef {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SessionArtifactSummary {
+    #[serde(default)]
+    pub source_label: Option<String>,
+    #[serde(default)]
+    pub deliverable: bool,
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
@@ -215,6 +223,8 @@ pub enum ArtifactOpenAction {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ChangedFileDetail {
+    #[serde(default)]
+    pub file_id: Option<String>,
     pub path: String,
     pub additions: u64,
     pub deletions: u64,

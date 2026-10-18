@@ -19,6 +19,7 @@ pub(super) struct Terminal<'a> {
     suspension: Option<&'a str>,
     model: Option<Value>,
     pub(super) artifacts: &'a [FinalArtifact],
+    pub(super) outputs: &'a [String],
     pub(super) changed_files: &'a [ChangedFileSummary],
     pub(super) plan: Option<&'a Value>,
 }
@@ -52,6 +53,7 @@ pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, Ing
                 .as_ref()
                 .and_then(|model| serde_json::to_value(model).ok()),
             artifacts: &value.artifacts,
+            outputs: &value.outputs,
             changed_files: &value.changed_files,
             plan: value.plan.as_ref(),
         },
@@ -72,6 +74,7 @@ pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, Ing
             suspension: None,
             model: None,
             artifacts: &value.artifacts,
+            outputs: &value.outputs,
             changed_files: &value.changed_files,
             plan: None,
         },
@@ -88,6 +91,7 @@ pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, Ing
             suspension: Some(reason),
             model: None,
             artifacts: &[],
+            outputs: &[],
             changed_files: &[],
             plan: None,
         },
@@ -113,6 +117,7 @@ pub(super) fn cancelled(turn_id: &str) -> Terminal<'_> {
         suspension: None,
         model: None,
         artifacts: &[],
+        outputs: &[],
         changed_files: &[],
         plan: None,
     }
@@ -130,6 +135,7 @@ pub(super) fn crash_interrupted(turn_id: &str) -> Terminal<'_> {
         suspension: None,
         model: None,
         artifacts: &[],
+        outputs: &[],
         changed_files: &[],
         plan: None,
     }
@@ -147,6 +153,7 @@ pub(super) fn rejected<'a>(turn_id: &'a str, code: &'a str) -> Terminal<'a> {
         suspension: None,
         model: None,
         artifacts: &[],
+        outputs: &[],
         changed_files: &[],
         plan: None,
     }
@@ -208,6 +215,9 @@ pub(super) fn action(
         "replyToMessageId".into(),
         envelope.message.id.clone().into(),
     );
+    if !terminal.outputs.is_empty() {
+        message.insert("outputs".into(), json!(terminal.outputs));
+    }
     if !artifacts.is_empty() {
         message.insert("artifacts".into(), Value::Array(artifacts));
     }

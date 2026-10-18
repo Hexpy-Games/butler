@@ -21,6 +21,7 @@ const ALLOW: &[(
 )] = &[
     (ReadOnly, InternalRead, None, None),
     (ReadOnly, FileRead, None, None),
+    (ReadOnly, ButlerOutput, None, None),
     (
         ReadOnly,
         CommandObservation { sandboxed: false },
@@ -256,6 +257,7 @@ fn access_boundary_matches_the_owner_table() {
     }
     for (name, kind) in [
         ("call_mcp_tool", Connector),
+        ("deliver_files", ButlerOutput),
         ("write_file", FileEdit),
         ("edit_file", FileEdit),
         ("read_file", FileRead),

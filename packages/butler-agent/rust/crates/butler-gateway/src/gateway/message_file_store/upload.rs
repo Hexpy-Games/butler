@@ -60,6 +60,8 @@ pub(super) fn write(
         return Err(GatewayApplicationError::internal());
     }
     let file = MaterializedResponderFile {
+        source_label: None,
+        deliverable: false,
         id: id.clone(),
         kind: kind.into(),
         mime_type,
@@ -168,6 +170,8 @@ pub(super) fn replace_still(
     let path = file_path(root, &file)?;
     replace_private(path, bytes, "browser_still").map_err(internal)?;
     Ok(MaterializedResponderFile {
+        source_label: None,
+        deliverable: false,
         id: file.id,
         kind: file.kind,
         mime_type: file.mime_type,

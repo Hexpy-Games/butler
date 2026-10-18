@@ -59,7 +59,40 @@ pub(super) fn recover(
             .map_err(AppStorageError::sqlite)?;
         tx.commit().map_err(AppStorageError::sqlite)?;
     }
+    if !migrated(db, 4)? {
+        recover_v4(db)?;
+    }
     Ok(())
+}
+fn recover_v4(db: &mut Connection) -> Result<(), AppStorageError> {
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+    let mut after = String::new();
+    loop {
+        let mut query = tx.prepare("SELECT id,group_id IS NULL AND NOT EXISTS(SELECT 1 FROM browser_library_item_tag t WHERE t.item_id=browser_library.id) AND json_type(payload,'$.autoTitle') IS NULL FROM browser_library WHERE kind='document' AND id>?1 ORDER BY id LIMIT 500").map_err(AppStorageError::sqlite)?;
+        let rows = query
+            .query_map([&after], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, bool>(1)?))
+            })
+            .map_err(AppStorageError::sqlite)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(AppStorageError::sqlite)?;
+        if rows.is_empty() {
+            break;
+        }
+        drop(query);
+        for (id, remove) in rows {
+            if remove {
+                library::delete(&tx, &id)?;
+            }
+            after = id;
+        }
+    }
+    tx.execute(
+        "INSERT INTO browser_library_migration(version) VALUES(4)",
+        [],
+    )
+    .map_err(AppStorageError::sqlite)?;
+    tx.commit().map_err(AppStorageError::sqlite)
 }
 fn migrated(db: &Connection, version: i64) -> Result<bool, AppStorageError> {
     db.query_row(

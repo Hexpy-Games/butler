@@ -28,6 +28,8 @@ async fn source_artifact_is_stored_once_with_original_metadata() {
     std::fs::write(&source, b"native artifact\n").unwrap();
     let owner = AppMessageFiles::new(&root.clone(), Arc::new(Clock));
     let candidate = ArtifactFileCandidate {
+        source_label: None,
+        deliverable: false,
         candidate_paths: vec![source],
         name: "reports\\Daily:Report.MD".into(),
         mime_type: Some("APPLICATION/OCTET-STREAM".into()),
@@ -130,6 +132,8 @@ async fn interrupted_write(point: &str) {
             std::fs::write(directory.join(id), b"invalid pdf").unwrap();
             owner
                 .prepare_uploaded(AppMessageFileSnapshot {
+                    source_label: None,
+                    deliverable: false,
                     id: id.into(),
                     owner_session_id: None,
                     message_id: None,
@@ -151,6 +155,8 @@ async fn interrupted_write(point: &str) {
                 .materialize(ArtifactMaterializationRequest {
                     allowed_roots: vec![root.clone()],
                     candidates: vec![ArtifactFileCandidate {
+                        source_label: None,
+                        deliverable: false,
                         candidate_paths: vec![source],
                         name: "report.txt".into(),
                         mime_type: Some("text/plain".into()),

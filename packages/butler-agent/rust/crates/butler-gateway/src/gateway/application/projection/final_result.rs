@@ -94,11 +94,7 @@ fn apply(
             "Assistant message changed during artifact materialization.",
         ));
     }
-    let visible = !input.text.is_empty()
-        || !apply.files.is_empty()
-        || !input.changed_files.is_empty()
-        || input.plan.is_some()
-        || input.answer_blocks.is_some();
+    let visible = visible_result(input, &apply.files);
     if input.no_visible_reply || !visible {
         super::final_turn_events::append_if_missing(
             &tx,
@@ -334,13 +330,18 @@ fn attach_files(
     files: Vec<MaterializedResponderFile>,
 ) -> Result<(), AppStorageError> {
     for (position, file) in files.into_iter().take(12).enumerate() {
-        db.execute("INSERT INTO message_files(id,owner_session_id,message_id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",params![file.id,chat,message,file.kind,file.mime_type,file.safe_name,file.size_bytes,file.sha256,file.storage_name,file.created_at]).map_err(AppStorageError::sqlite)?;
+        db.execute("INSERT INTO message_files(id,owner_session_id,message_id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at,source_label,deliverable) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",params![file.id,chat,message,file.kind,file.mime_type,file.safe_name,file.size_bytes,file.sha256,file.storage_name,file.created_at,file.source_label,file.deliverable]).map_err(AppStorageError::sqlite)?;
         db.execute(
             "INSERT INTO message_attachments(message_id,file_id,position) VALUES(?1,?2,?3)",
             params![message, file.id, position],
         )
         .map_err(AppStorageError::sqlite)?;
-        super::super::library::document(db, &file.id)?;
+        if file.deliverable {
+            let key = file
+                .source_label
+                .unwrap_or_else(|| format!("file:{}", file.id));
+            super::super::library::deliverable(db, chat, &key, &file.id)?;
+        }
     }
     Ok(())
 }
@@ -404,4 +405,13 @@ fn save_message(
                 params![message_id,input.chat_id,input.turn_id,input.text,now,input.plan.as_ref().map(Value::to_string),input.answer_blocks.as_ref().map(Value::to_string)]).map_err(AppStorageError::sqlite)?;
     }
     Ok(())
+}
+
+fn visible_result(input: &FinalCandidate, files: &[MaterializedResponderFile]) -> bool {
+    !input.text.is_empty()
+        || !files.is_empty()
+        || !input.outputs.is_empty()
+        || !input.changed_files.is_empty()
+        || input.plan.is_some()
+        || input.answer_blocks.is_some()
 }

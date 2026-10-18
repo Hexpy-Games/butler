@@ -137,6 +137,16 @@ impl OutputStore {
             }
             hashes.insert(name, sha);
         }
+        if output.revisions.last().is_some_and(|r| r.files == hashes) {
+            super::index::reference(
+                &self.root.join("index.sqlite"),
+                &output.output_id,
+                &request.session_id,
+                &request.turn_id,
+                &request.message_id,
+            )?;
+            return Ok((output, written));
+        }
         let revision = output.revisions.last().map_or(1, |r| r.revision + 1);
         output.title = request.title;
         output.message_id = request.message_id;
@@ -153,6 +163,28 @@ impl OutputStore {
         }
         self.persist(&path, &output)?;
         Ok((output, written))
+    }
+    /// Rebind a delegated publication and record the parent's final-message reference.
+    pub fn adopt(&self, id: &str, session: &str, turn: &str, message: &str) -> std::io::Result<()> {
+        let _lock = CHANGES
+            .lock()
+            .map_err(|_| error("output_store_unavailable"))?;
+        let mut output = self.read(id)?;
+        if output.session_id != session {
+            let old = self
+                .root
+                .join("sessions")
+                .join(hash(output.session_id.as_bytes()))
+                .join(id);
+            output.session_id = session.to_owned();
+            output.turn_id = turn.to_owned();
+            output.message_id = message.to_owned();
+            self.persist(&self.manifest(id)?, &output)?;
+            if old.exists() {
+                std::fs::remove_file(old)?;
+            }
+        }
+        super::index::reference(&self.root.join("index.sqlite"), id, session, turn, message)
     }
     fn publication_id(&self, session: &str, source: &str) -> std::io::Result<String> {
         let generation = self.root.join("generations").join(hash(session.as_bytes()));

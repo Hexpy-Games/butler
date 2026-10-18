@@ -38,7 +38,8 @@
     "project_artifacts",
     "output_publish",
     "preview_start",
-    "preview_stop"
+    "preview_stop",
+    "deliver_files"
   ],
   "tools": [
     {
@@ -251,7 +252,7 @@
       "definition": {
         "type": "function",
         "name": "run_command",
-        "description": "Run a non-interactive command in the active workspace using POSIX shell syntax on macOS/Linux (/bin/sh -lc for changes, /bin/bash -o pipefail -lc for observations) or Windows PowerShell 5.1 (powershell.exe, no profile) on Windows. Explicit cmd /c scripts use cmd.exe on Windows. summary is the compact model-authored action label shown to the user, such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'; it never authorizes execution. Set validation_suite for validation receipts. Put generated artifacts under $BUTLER_ARTIFACTS_DIR, and list intentional existing workspace deliverables in output_paths. Prefer cross-platform executables and JSON-safe command text.",
+        "description": "Run a non-interactive command in the active workspace using POSIX shell syntax on macOS/Linux (/bin/sh -lc for changes, /bin/bash -o pipefail -lc for observations) or Windows PowerShell 5.1 (powershell.exe, no profile) on Windows. Explicit cmd /c scripts use cmd.exe on Windows. summary is the compact model-authored action label shown to the user, such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'; it never authorizes execution. Set validation_suite for validation receipts. Put generated files under $BUTLER_ARTIFACTS_DIR, and list in output_paths only the finished files the user should receive. Prefer cross-platform executables and JSON-safe command text.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -281,7 +282,7 @@
             },
             "output_paths": {
               "type": "array",
-              "description": "Existing regular files to publish as deliverables after success, not directories or globs. Omit for ordinary source changes and build directories; file changes are tracked separately. Use artifacts/generated/... for $BUTLER_ARTIFACTS_DIR. Publication failure is separate from command exit status and success.",
+              "description": "Finished files to deliver to the user after success (see deliver_files): existing regular files, not directories or globs. Omit for ordinary source changes, build directories, scripts, logs and intermediate files; file changes are tracked separately. Use artifacts/generated/... for $BUTLER_ARTIFACTS_DIR. Publication failure is separate from command exit status and success.",
               "items": {
                 "type": "string"
               }
@@ -5788,7 +5789,7 @@
       "definition": {
         "type": "function",
         "name": "output_publish",
-        "description": "Publish a file or site so the user can open it. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done.",
+        "description": "Publish a finished page or site so the user can open it in the browser; it is delivered to the user's Library as one item that keeps its versions. Republish the same path to add a version. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done. Use deliver_files for other finished files.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -6837,6 +6838,58 @@
         "file",
         "정리",
         "이름"
+      ],
+      "durable": false
+    },
+    {
+      "name": "deliver_files",
+      "definition": {
+        "type": "function",
+        "name": "deliver_files",
+        "description": "Hand finished files to the user as this turn's deliverables: the report, deck, document, spreadsheet, image or other file the user asked for or that is meant to be kept or shared. Delivered files appear on your answer and in the user's Library; nothing else does. Do not deliver notes, drafts, helper scripts, logs, intermediate data or ordinary source-code changes; the user can still find those in the turn's details. The user receives each file as it is when the turn ends. To revise an earlier deliverable, change the same file and deliver it again: the Library keeps one item with its versions. Use output_publish instead for a page or site the user opens in the browser.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "files": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 12,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Workspace file path, or an artifacts/... label from a tool result."
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "Name the user sees; defaults to the file name."
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          },
+          "required": [
+            "files"
+          ]
+        },
+        "effectBoundary": "turn_local",
+        "concurrencySafe": false,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "turn_local",
+      "category": "message",
+      "tags": [
+        "output",
+        "deliver",
+        "file"
       ],
       "durable": false
     }
@@ -8422,7 +8475,7 @@
     "run_command": {
       "type": "function",
       "name": "run_command",
-      "description": "Run a non-interactive command in the active workspace using POSIX shell syntax on macOS/Linux (/bin/sh -lc for changes, /bin/bash -o pipefail -lc for observations) or Windows PowerShell 5.1 (powershell.exe, no profile) on Windows. Explicit cmd /c scripts use cmd.exe on Windows. summary is the compact model-authored action label shown to the user, such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'; it never authorizes execution. Set validation_suite for validation receipts. Put generated artifacts under $BUTLER_ARTIFACTS_DIR, and list intentional existing workspace deliverables in output_paths. Prefer cross-platform executables and JSON-safe command text.",
+      "description": "Run a non-interactive command in the active workspace using POSIX shell syntax on macOS/Linux (/bin/sh -lc for changes, /bin/bash -o pipefail -lc for observations) or Windows PowerShell 5.1 (powershell.exe, no profile) on Windows. Explicit cmd /c scripts use cmd.exe on Windows. summary is the compact model-authored action label shown to the user, such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'; it never authorizes execution. Set validation_suite for validation receipts. Put generated files under $BUTLER_ARTIFACTS_DIR, and list in output_paths only the finished files the user should receive. Prefer cross-platform executables and JSON-safe command text.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -8452,7 +8505,7 @@
           },
           "output_paths": {
             "type": "array",
-            "description": "Existing regular files to publish as deliverables after success, not directories or globs. Omit for ordinary source changes and build directories; file changes are tracked separately. Use artifacts/generated/... for $BUTLER_ARTIFACTS_DIR. Publication failure is separate from command exit status and success.",
+            "description": "Finished files to deliver to the user after success (see deliver_files): existing regular files, not directories or globs. Omit for ordinary source changes, build directories, scripts, logs and intermediate files; file changes are tracked separately. Use artifacts/generated/... for $BUTLER_ARTIFACTS_DIR. Publication failure is separate from command exit status and success.",
             "items": {
               "type": "string"
             }
@@ -11359,7 +11412,7 @@
     "output_publish": {
       "type": "function",
       "name": "output_publish",
-      "description": "Publish a file or site so the user can open it. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done.",
+      "description": "Publish a finished page or site so the user can open it in the browser; it is delivered to the user's Library as one item that keeps its versions. Republish the same path to add a version. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done. Use deliver_files for other finished files.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -12165,6 +12218,47 @@
       "concurrencySafe": true,
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"
+    },
+    "deliver_files": {
+      "type": "function",
+      "name": "deliver_files",
+      "description": "Hand finished files to the user as this turn's deliverables: the report, deck, document, spreadsheet, image or other file the user asked for or that is meant to be kept or shared. Delivered files appear on your answer and in the user's Library; nothing else does. Do not deliver notes, drafts, helper scripts, logs, intermediate data or ordinary source-code changes; the user can still find those in the turn's details. The user receives each file as it is when the turn ends. To revise an earlier deliverable, change the same file and deliver it again: the Library keeps one item with its versions. Use output_publish instead for a page or site the user opens in the browser.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 12,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Workspace file path, or an artifacts/... label from a tool result."
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "Name the user sees; defaults to the file name."
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          }
+        },
+        "required": [
+          "files"
+        ]
+      },
+      "effectBoundary": "turn_local",
+      "concurrencySafe": false,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "visible"
     }
   },
   "allLedgerEffects": [
@@ -12236,7 +12330,8 @@
       "request_service_restart",
       "load_skill",
       "read_skill_file",
-      "output_publish"
+      "output_publish",
+      "deliver_files"
     ],
     "public-web": [
       "web_search",

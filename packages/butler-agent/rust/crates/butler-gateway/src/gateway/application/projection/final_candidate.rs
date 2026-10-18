@@ -22,6 +22,7 @@ pub(super) struct FinalCandidate {
     pub text: String,
     pub no_visible_reply: bool,
     pub changed_files: Vec<Value>,
+    pub outputs: Vec<String>,
     pub plan: Option<Value>,
     pub answer_blocks: Option<Value>,
     pub activates_plan: bool,
@@ -79,10 +80,7 @@ pub(super) fn candidate(
         .get("plan")
         .or_else(|| metadata.get("plan"))
         .and_then(project_plan);
-    let activates_plan = plan
-        .as_ref()
-        .is_some_and(|value| value.get("status").and_then(Value::as_str) == Some("active"))
-        && turn_plan_mode(db, &turn_id)?;
+    let activates_plan = activates_plan(db, &turn_id, plan.as_ref())?;
     let delivery_metadata = delivery_metadata(&metadata);
     Ok(Some(FinalCandidate {
         action_id,
@@ -95,6 +93,7 @@ pub(super) fn candidate(
         text: sanitize(message.get("text")),
         no_visible_reply: metadata.get("noVisibleReply") == Some(&Value::Bool(true)),
         changed_files,
+        outputs: output_ids(&message),
         plan,
         answer_blocks: message
             .get("answerBlocks")
@@ -162,6 +161,22 @@ fn file_candidates(
             {
                 roots.extend(base_roots.iter().map(|root| root.join(&path)));
             }
+        }
+    }
+    for item in message
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let native_source = item["source"]
+            .as_str()
+            .is_some_and(|source| butler_turn::workspace::safe_workspace_path(source).is_some());
+        if (item["deliverable"] == true || native_source)
+            && let Some(label) = item["safePathLabel"].as_str()
+            && std::path::Path::new(label).is_absolute()
+        {
+            roots.push(PathBuf::from(label));
         }
     }
     artifacts(message.get("artifacts"), roots)
@@ -261,11 +276,18 @@ fn artifacts(value: Option<&Value>, roots: &[PathBuf]) -> Vec<ArtifactFileCandid
                 return None;
             }
             // The filesystem owner falls back to the selected path's basename.
-            let name = label
-                .or_else(|| text(object.get("title")))
-                .unwrap_or_default();
+            let deliverable = object.get("deliverable").and_then(Value::as_bool) == Some(true);
+            let title = text(object.get("title"));
+            let name = if deliverable {
+                title.or(label)
+            } else {
+                label.or(title)
+            }
+            .unwrap_or_default();
             Some(ArtifactFileCandidate {
                 candidate_paths: paths,
+                source_label: text(object.get("source")),
+                deliverable,
                 name,
                 mime_type: text(object.get("mimeType")),
             })
@@ -350,4 +372,25 @@ fn changed_files(message: &Map<String, Value>) -> Vec<Value> {
         .take(40)
         .cloned()
         .collect()
+}
+
+fn output_ids(message: &Map<String, Value>) -> Vec<String> {
+    message
+        .get("outputs")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect()
+}
+fn activates_plan(
+    db: &Connection,
+    turn: &str,
+    plan: Option<&Value>,
+) -> Result<bool, AppStorageError> {
+    Ok(
+        plan.is_some_and(|value| value.get("status").and_then(Value::as_str) == Some("active"))
+            && turn_plan_mode(db, turn)?,
+    )
 }
