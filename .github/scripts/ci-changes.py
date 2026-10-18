@@ -82,7 +82,8 @@ CI_CONSUMERS = (
     (('licenses',), (
         '.github/scripts/test-*.py', '.github/scripts/ds-approval.py',
         '.github/scripts/cargo-artifact-cache.py', '.github/scripts/agent-provenance.py',
-        '.github/scripts/integration-proof.py', '.github/scripts/check-gate.py',
+        '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py',
+        '.github/scripts/check-gate.py',
         '.github/scripts/ci-check-selected.py', '.github/scripts/cargo-target-release.py',
         '.github/scripts/runner_cache.py', '.github/scripts/ci-changes.py',
         '.github/scripts/ci_policy.py', '.github/scripts/ci_parts.py',
