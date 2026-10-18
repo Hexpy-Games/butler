@@ -130,6 +130,12 @@ pub fn sync_wal_index(connection: &rusqlite::Connection) -> std::io::Result<()> 
     }
 }
 
+/// Whether this platform performs the WAL-index sync exercised by E2E fixtures.
+#[cfg(feature = "test-support")]
+pub fn wal_index_sync_supported() -> bool {
+    cfg!(target_os = "macos")
+}
+
 /// Cross-process WAL deadman-lock evidence for E2E; never changes a lock.
 /// Unsupported platforms return `None`, an unlocked index returns PID zero.
 #[cfg(feature = "test-support")]

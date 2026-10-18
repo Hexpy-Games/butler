@@ -63,10 +63,10 @@ status: published
   ]}
 >
   <TabPanel value="macos">
-    Butler 앱은 Apple 공증을 거치지 않아 처음 열 때 macOS가 실행을 막을 수 있습니다. **시스템 설정 → 개인정보 보호 및 보안**에서 **그래도 열기**를 선택합니다.
+    버틀러 앱은 Apple 공증을 거치지 않아 처음 열 때 macOS가 실행을 막을 수 있습니다. **시스템 설정 → 개인정보 보호 및 보안**에서 **그래도 열기**를 선택합니다.
   </TabPanel>
   <TabPanel value="windows">
-    Windows 프리뷰 빌드는 서명되지 않았습니다. SmartScreen이 표시되면 빌드 출처를 신뢰할 수 있을 때만 계속합니다. 공개된 `0.1.0-preview.5` 릴리스에는 내려받을 Windows 설치 파일이 없습니다.
+    Windows 프리뷰 빌드는 서명되지 않았습니다. SmartScreen이 표시되면 빌드 출처를 신뢰할 수 있을 때만 **추가 정보**를 누른 뒤 **실행**을 선택합니다. 설치 파일은 [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)의 `ButlerSetup-<버전>-x64.exe`입니다.
   </TabPanel>
   <TabPanel value="linux">
     DEB 또는 Arch 패키지를 설치한 뒤 앱 목록에서 Butler를 엽니다. 시작하지 않으면 아래 서비스 로그를 확인합니다.
@@ -221,7 +221,7 @@ butler doctor --check installation
     </Steps>
   </TabPanel>
   <TabPanel value="windows">
-    공개된 `0.1.0-preview.5` 릴리스에는 내려받을 Windows 설치 파일이 없습니다. Windows 패키지는 [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 확인합니다.
+    버틀러를 종료하고 `~/.butler`를 복사해 둡니다. 그다음 [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)의 가장 최신 프리뷰에서 `ButlerSetup-<버전>-x64.exe`를 내려받아 실행합니다.
   </TabPanel>
   <TabPanel value="linux">
     최신 DEB 또는 Arch 패키지를 받아 [설치](/help/getting-started/install/#내려받기)의 명령으로 다시 설치합니다.
@@ -284,7 +284,7 @@ butler doctor --check installation
 
 ### Windows나 Linux에서 쓸 수 있나요?
 
-Linux 데스크톱 패키지는 제공됩니다. Windows 빌드는 소스 프리뷰이며 공개된 릴리스에는 내려받을 설치 파일이나 Agent 패키지가 없습니다. 릴리스 파일은 [설치](/help/getting-started/install/)에서 확인합니다.
+Linux 데스크톱 패키지는 제공됩니다. Windows에는 `ButlerSetup` 설치 파일과 Agent zip이 있습니다. 릴리스 파일은 [설치](/help/getting-started/install/)에서 확인합니다.
 
 ### 이전 버전을 설치했는데 준비가 계속 실패합니다.
 
