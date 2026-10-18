@@ -117,7 +117,7 @@ fn every_carrier_image_shape_is_projected_and_other_text_is_not() {
             {"inlineData":{"mimeType":"image/jpeg","data":data}}]}]});
     for (model, body) in [
         ("anthropic/claude-opus-5-5", &anthropic),
-        ("google/gemini-3.5-flash", &gemini),
+        ("google/gemini-3.8-flash", &gemini),
     ] {
         let (text, count) = image_token_projection(body).unwrap();
         assert_eq!(count, 2, "{model}");

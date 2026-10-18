@@ -208,6 +208,21 @@ fn confirmed_routine_presets_and_openai_sol_metadata_are_pinned() {
             ReasoningEffort::Max,
         ]
     );
+    let google = |id: &str| lookup::find_model_metadata(Some(id), &catalog.models).unwrap();
+    let latest = catalog
+        .models
+        .iter()
+        .find(|m| m.provider_id == "google" && m.status == "latest");
+    let argon = latest.unwrap();
+    assert_eq!(argon.model_ref, "google/gemini-4-argon");
+    assert_eq!(argon.context_window_tokens, Some(1_048_576.0));
+    assert_eq!(argon.max_output_tokens, Some(65_536.0));
+    assert_eq!(google("google/gemini-3.8-flash").status, "recommended");
+    for id in ["google/gemini-3.7-flash", "google/gemini-3.5-flash"] {
+        let model = google(id);
+        assert!(!model.runtime_supported, "{id}");
+        assert_eq!(model.status, "deprecated");
+    }
 }
 
 #[test]
@@ -366,6 +381,18 @@ fn pricing_picks_the_prompt_band_day_and_cache_rates() {
         flash.prices_at(1, "2027-01-01").unwrap().input_per_mtok_usd,
         1.5
     );
+    let argon = catalog.pricing("google/gemini-4-argon").unwrap();
+    let rates = |day: &str| {
+        let p = argon.prices_at(1_048_576, day).unwrap();
+        (
+            p.input_per_mtok_usd,
+            p.cached_input_per_mtok_usd,
+            p.cache_write_per_mtok_usd,
+            p.output_per_mtok_usd,
+        )
+    };
+    assert_eq!(rates("2026-11-30"), (2.0, Some(0.1), None, 10.0));
+    assert_eq!(rates("2026-12-01"), (4.0, Some(0.2), None, 20.0));
     let promo = catalog.pricing("openai/gpt-5.6-sol").unwrap();
     assert!(promo.prices_at(1, "2026-11-21").is_some());
     assert!(promo.prices_at(1, "2026-11-22").is_none());
