@@ -312,4 +312,3 @@ if (selected) {
   }
 }
 console.log(JSON.stringify({ ok: true, cases: selected ? [selected] : cases }));
-
