@@ -14,6 +14,9 @@ use std::{
 #[derive(Clone, Default)]
 pub(super) struct Admission(Arc<AtomicBool>);
 impl Admission {
+    pub(super) fn is_granted(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
     pub(super) fn grant(&self) {
         self.0.store(true, Ordering::Relaxed);
     }
@@ -35,19 +38,23 @@ pub(super) async fn finish(
     } else {
         "INFO"
     };
-    let Some(log) = butler_log::global().filter(|log| log.enabled("http.server", level)) else {
-        return;
-    };
     let route = if admitted {
         route.map(MatchedPath::as_str).unwrap_or("<unmatched>")
     } else {
         "<unmatched>"
     };
+    tracing::Span::current()
+        .record("log_level", level)
+        .record("method", method.as_str())
+        .record("route", route)
+        .record("status", status.as_u16());
+    let Some(log) = butler_log::global().filter(|log| log.enabled("http.server", level)) else {
+        return;
+    };
     let mut row = butler_log::Record::new(level, "http.server", "http.request", "Gateway request");
     let context = butler_log::TraceContext::current();
     row.trace_id = context.trace_id;
-    row.parent_span_id = context.span_id;
-    row.span_id = Some(uuid::Uuid::new_v4().simple().to_string()[..16].into());
+    row.span_id = context.span_id;
     let elapsed = start.elapsed();
     row.duration_ms = Some(elapsed.as_secs_f64() * 1000.0);
     let started_at = chrono::Utc::now() - chrono::Duration::from_std(elapsed).unwrap_or_default();

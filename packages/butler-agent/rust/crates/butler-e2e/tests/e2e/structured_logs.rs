@@ -40,7 +40,7 @@ async fn logs_records_gateway_requests_at_standard() -> Result<(), HarnessError>
     let rows = r.data()["rows"].as_array().unwrap();
     let row = rows
         .iter()
-        .find(|r| r["attrs"]["method"] == "PATCH")
+        .find(|r| r["event"] == "http.request" && r["attrs"]["method"] == "PATCH")
         .unwrap();
     for field in [
         "ts",

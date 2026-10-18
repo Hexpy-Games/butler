@@ -16,7 +16,7 @@ async fn trace_spans_preserve_tasks_errors_and_offsets() -> Result<(), Box<dyn s
     butler_log::install(log.clone())?;
     log.configure(Config::full())?;
     let trace_id = "0123456789abcdef0123456789abcdef";
-    let root_span = tracing::info_span!(target: "butler_e2e", "turn.admit", trace_id, chat_id = "chat", turn_id = "turn", message_id = "message");
+    let root_span = tracing::info_span!(target: "butler_e2e", "turn.admit", parent_span_id = "fedcba9876543210", trace_id, chat_id = "chat", turn_id = "turn", message_id = "message");
     async {
         let queue = butler_gateway::gateway::InboundQueue::new(&root);
         let envelope = butler_core::json::JsonDocument::from_value(&serde_json::json!({
@@ -56,7 +56,7 @@ async fn trace_spans_preserve_tasks_errors_and_offsets() -> Result<(), Box<dyn s
                         .await;
                 }
                 .instrument(
-                    tracing::info_span!(target: "butler_e2e", "turn.run", model = "provider/model"),
+                    tracing::info_span!(target: "butler_e2e", "turn.run", trace_root = true, model = "provider/model"),
                 )
                 .await;
             }
@@ -76,10 +76,14 @@ async fn trace_spans_preserve_tasks_errors_and_offsets() -> Result<(), Box<dyn s
     for (i, span) in spans.iter().enumerate() {
         assert!(span["duration_ms"].as_f64().unwrap() >= 0.0);
         assert!(span["start_offset_ms"].as_f64().unwrap() >= 0.0);
-        if let Some(parent) = span["parent_span_id"].as_str() {
+        if let Some(parent) = span["parent_span_id"].as_str()
+            && spans.iter().any(|s| s["span_id"] == parent)
+        {
             assert!(spans[..i].iter().any(|s| s["span_id"] == parent));
         }
     }
+    assert!(spans[1]["parent_span_id"].is_null());
+    assert_eq!(spans[1]["attrs"]["follows_from"], spans[0]["span_id"]);
     assert_eq!(spans[1]["status"], "error");
     assert_eq!(spans[2]["name"], "tool.call");
     assert_eq!(spans[2]["status"], "ok");
@@ -97,6 +101,12 @@ async fn trace_spans_preserve_tasks_errors_and_offsets() -> Result<(), Box<dyn s
         trace_id: Some(trace_id.into()),
         ..Default::default()
     })?;
+    let diagnostic = rows
+        .rows
+        .iter()
+        .find(|row| row.msg == "nonfatal diagnostic")
+        .unwrap();
+    assert!(diagnostic.parent_span_id.is_none());
     let payload = rows
         .rows
         .iter()

@@ -53,10 +53,12 @@ async fn turn_trace_complete_and_traceparent_joins_trace() -> Result<(), Harness
     assert!(trace["model"].as_str().is_some_and(|m| model.ends_with(m)));
     assert_eq!(trace["truncated"], false);
     let spans = trace["spans"].as_array().unwrap();
+    assert_message_shape(spans);
     for name in [
         "turn.admit",
         "turn.dispatch",
-        "turn.queue",
+        "turn.enqueue",
+        "turn.dequeue",
         "turn.run",
         "context.build",
         "route.select",
@@ -222,6 +224,7 @@ async fn mcp_tool_spans() -> Result<(), HarnessError> {
     let trace = s.gw.get(&format!("/logs/trace?turn_id={turn_id}")).await?;
     assert_eq!(trace.status, 200, "{}", trace.text);
     let spans = trace.data()["spans"].as_array().unwrap();
+    assert_turn_children(spans);
     let mcp = spans
         .iter()
         .find(|s| s["name"] == "mcp.call" && s["attrs"]["method"] == "tools/call")
@@ -266,51 +269,7 @@ async fn traceparent_joins_trace_at_standard() -> Result<(), HarnessError> {
     assert_eq!(trace.status, 200, "{}", trace.text);
     assert_eq!(trace.data()["trace_id"], id);
     let spans = trace.data()["spans"].as_array().unwrap();
-    for name in ["http.server", "turn.admit", "turn.queue", "turn.run"] {
-        assert!(
-            spans.iter().any(|span| span["name"] == name),
-            "missing {name}: {}",
-            trace.text
-        );
-    }
-    let server_span = spans
-        .iter()
-        .find(|span| span["name"] == "http.server")
-        .unwrap();
-    assert_eq!(server_span["tone"], "app");
-    let admit = spans
-        .iter()
-        .find(|span| span["name"] == "turn.admit")
-        .unwrap();
-    assert_eq!(admit["parent_span_id"], server_span["span_id"]);
-    assert!(
-        spans
-            .iter()
-            .any(|span| span["name"] == "turn.queue" && span["parent_span_id"] == admit["span_id"])
-    );
-    let mut ancestor = spans
-        .iter()
-        .find(|span| span["name"] == "turn.run")
-        .unwrap();
-    let mut chain = Vec::new();
-    for _ in 0..spans.len() {
-        chain.push(ancestor["name"].as_str().unwrap());
-        let Some(parent) = spans
-            .iter()
-            .find(|span| span["span_id"] == ancestor["parent_span_id"])
-        else {
-            break;
-        };
-        ancestor = parent;
-    }
-    for name in ["http.server", "turn.admit", "turn.queue"] {
-        assert!(chain.contains(&name), "missing ancestor {name}: {chain:?}");
-    }
-    let access = spans
-        .iter()
-        .find(|span| span["category"] == "http.server" && span["name"] == "http.request")
-        .unwrap();
-    assert_eq!(access["tone"], "app");
+    assert_message_shape(spans);
     assert!(
         server
             .seen()
@@ -318,4 +277,63 @@ async fn traceparent_joins_trace_at_standard() -> Result<(), HarnessError> {
             .all(|r| !r.headers.contains_key("traceparent"))
     );
     s.finish().await
+}
+
+fn assert_message_shape(spans: &[Value]) {
+    let inbound: Vec<_> = spans
+        .iter()
+        .filter(|s| s["category"] == "http.server")
+        .collect();
+    assert_eq!(inbound.len(), 1, "one App request: {spans:?}");
+    let http = inbound[0];
+    assert_eq!(http["name"], "http.server");
+    assert_eq!(http["tone"], "app");
+    assert_eq!(http["attrs"]["method"], "POST");
+    assert_eq!(http["attrs"]["route"], "/messages");
+    assert_eq!(http["attrs"]["status"], 202);
+    assert_eq!(http["attrs"]["action"], "message.send");
+    assert_eq!(http["has_details"], true);
+    let mut previous = 0.0;
+    for name in ["http.server", "turn.admit", "turn.dequeue", "turn.run"] {
+        let matching: Vec<_> = spans.iter().filter(|s| s["name"] == name).collect();
+        assert_eq!(matching.len(), 1, "{name}: {spans:?}");
+        let step = matching[0];
+        assert!(
+            !spans.iter().any(|s| s["span_id"] == step["parent_span_id"]),
+            "top level {name}: {step}"
+        );
+        let start = step["start_offset_ms"].as_f64().unwrap();
+        assert!(start >= previous, "time order {name}: {spans:?}");
+        previous = start;
+        assert!(step["duration_ms"].as_f64().unwrap() >= 0.0);
+    }
+    assert!(!spans.iter().any(|s| s["name"] == "turn.queue"));
+    let enqueue: Vec<_> = spans
+        .iter()
+        .filter(|s| s["name"] == "turn.enqueue")
+        .collect();
+    assert_eq!(enqueue.len(), 1);
+    assert!(enqueue[0]["parent_span_id"].is_null());
+    assert_turn_children(spans);
+    for step in spans {
+        eprintln!(
+            "TRACE-SHAPE {} parent={} id={}",
+            step["name"], step["parent_span_id"], step["span_id"]
+        );
+    }
+}
+
+fn assert_turn_children(spans: &[Value]) {
+    let run = spans.iter().find(|s| s["name"] == "turn.run").unwrap();
+    for step in spans.iter().filter(|s| {
+        matches!(
+            s["name"].as_str(),
+            Some("model.request" | "tool.call" | "memory.extract")
+        )
+    }) {
+        assert_eq!(
+            step["parent_span_id"], run["span_id"],
+            "direct turn child: {step}"
+        );
+    }
 }

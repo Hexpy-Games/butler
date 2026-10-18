@@ -14,7 +14,10 @@ pub(super) struct Lifetime {
 }
 impl Lifetime {
     pub(super) fn new(metadata: &tracing::Metadata<'_>, fields: &Map<String, Value>) -> Self {
-        let name = metadata.name();
+        let name = fields
+            .get("span_name")
+            .and_then(Value::as_str)
+            .unwrap_or(metadata.name());
         let category = if name == "http.server" {
             name
         } else {
@@ -36,9 +39,19 @@ impl Lifetime {
     pub(super) fn finish(&self, log: &Logger, fields: &Map<String, Value>) {
         let mut row = with_fields(self.row.clone(), fields);
         row.event = "span.end".into();
+        if let Some(start) = fields.get("started_at").and_then(Value::as_str) {
+            row.ts = start.into();
+        }
         row.attrs["started_at"] = row.ts.clone().into();
         row.ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
-        row.duration_ms = Some(self.started.elapsed().as_secs_f64() * 1000.0);
+        row.duration_ms = Some(
+            if fields.get("started_at").and_then(Value::as_str).is_some() {
+                (millis(&row.ts) - millis(row.attrs["started_at"].as_str().unwrap_or(&row.ts)))
+                    .max(0.0)
+            } else {
+                self.started.elapsed().as_secs_f64() * 1000.0
+            },
+        );
         if row.attrs["status"] == "error" {
             row.level = "ERROR".into();
         }
@@ -47,6 +60,9 @@ impl Lifetime {
 }
 fn with_fields(mut row: Record, fields: &Map<String, Value>) -> Record {
     let string = |key: &str| fields.get(key).and_then(Value::as_str).map(str::to_owned);
+    if let Some(level) = string("log_level") {
+        row.level = level;
+    }
     row.trace_id = string("trace_id");
     row.span_id = string("span_id");
     row.parent_span_id = string("parent_span_id");
@@ -218,13 +234,45 @@ fn project(id: &str, mut rows: Vec<Record>, scanned_bytes: u64, truncated: bool)
 }
 fn completed_spans(rows: &[Record]) -> Vec<Record> {
     let mut unique = HashMap::new();
+    let mut access = Vec::new();
     for row in rows {
+        if row.category == "http.server" && row.event == "http.request" {
+            access.push(row);
+            continue;
+        }
         if matches!(
             row.event.as_str(),
             "span.start" | "span.end" | "http.request"
         ) && let Some(id) = &row.span_id
         {
             unique.insert(id.clone(), row.clone());
+        }
+    }
+    for detail in access {
+        let Some(id) = detail.span_id.as_ref() else {
+            continue;
+        };
+        let id = if unique.contains_key(id) {
+            id
+        } else {
+            detail
+                .parent_span_id
+                .as_ref()
+                .filter(|parent| unique.contains_key(*parent))
+                .unwrap_or(id)
+        };
+        let row = unique.entry(id.clone()).or_insert_with(|| {
+            let mut row = detail.clone();
+            row.event = "span.end".into();
+            row.msg = "http.server".into();
+            row
+        });
+        if let (Some(attrs), Some(extra)) = (row.attrs.as_object_mut(), detail.attrs.as_object()) {
+            attrs.extend(extra.clone());
+        }
+        row.attrs["access_log"] = true.into();
+        if let Some(body_ref) = &detail.body_ref {
+            row.attrs["body_ref"] = body_ref.clone().into();
         }
     }
     let mut spans: Vec<Record> = unique
@@ -292,7 +340,10 @@ fn span(row: Record, start: f64) -> TraceSpan {
         tone: tone.into(),
         title: row.msg,
         child_count: 0,
-        has_details: row.content.is_some() || row.error.is_some() || row.body_ref.is_some(),
+        has_details: row.content.is_some()
+            || row.error.is_some()
+            || row.body_ref.is_some()
+            || row.attrs["access_log"] == true,
         attrs: row.attrs,
     }
 }

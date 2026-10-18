@@ -107,6 +107,11 @@ where
                         .unwrap_or(Value::Null),
                 );
             }
+            if fields.0.get("trace_root") == Some(&Value::Bool(true))
+                && let Some(parent) = fields.0.insert("parent_span_id".into(), Value::Null)
+            {
+                fields.0.insert("follows_from".into(), parent);
+            }
             fields
                 .0
                 .entry("trace_id")

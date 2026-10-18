@@ -33,7 +33,7 @@ impl AppApplication {
         Box::pin(self.send_with_attachment_source(command, Some(source_user_message_id))).await
     }
 
-    #[tracing::instrument(name = "turn.admit", skip_all, fields(chat_id = %command.chat_id), err)]
+    #[tracing::instrument(name = "turn.admit", skip_all, fields(trace_root = true, chat_id = %command.chat_id), err)]
     async fn send_with_attachment_source(
         &self,
         command: SendMessageCommand,
@@ -173,8 +173,11 @@ impl AppApplication {
         request: crate::gateway::MessageSendRequest,
         settings_facts: Arc<AppSettingsFacts>,
     ) -> Result<(bool, ControlResolution), GatewayApplicationError> {
-        let trace_context = serde_json::to_string(&butler_log::TraceContext::current())
-            .map_err(GatewayApplicationError::internal_from)?;
+        let mut context = butler_log::TraceContext::current();
+        context.enqueued_at =
+            Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true));
+        let trace_context =
+            serde_json::to_string(&context).map_err(GatewayApplicationError::internal_from)?;
         let expected = request.expected_project_id.clone();
         let request_for_resolution = request.clone();
         let subscribers = self.subscribers.clone();
@@ -263,7 +266,7 @@ impl AppApplication {
         Ok(())
     }
 
-    #[tracing::instrument(name = "turn.queue", skip_all, fields(chat_id, message_id = client_id), err)]
+    #[tracing::instrument(name = "turn.enqueue", skip_all, fields(trace_root = true, chat_id, message_id = client_id), err)]
     async fn dispatch(
         &self,
         chat_id: &str,
