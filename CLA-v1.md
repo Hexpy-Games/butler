@@ -1,10 +1,12 @@
 # Butler Individual Contributor License Agreement
 
-Version 1. Based on the Apache Software Foundation Individual Contributor License Agreement.
+Version 1.0. Based on the Apache Software Foundation Individual Contributor License Agreement.
+
+This version is frozen. Any change is published as a new version in a new file; it never alters what you accepted under this version.
 
 Thank you for contributing to Butler. This agreement lets the project owner accept your contributions while you keep ownership of them. Butler stays available to everyone under the MIT License. This agreement also lets the project owner offer your contributions under other licenses, including commercial ones.
 
-You accept this agreement by commenting the requested phrase on your pull request. It covers every contribution you submit to Butler, now and later.
+You accept this agreement by commenting the requested phrase on your pull request. It covers every contribution you submit to Butler, including contributions submitted before you accepted it.
 
 ## 1. Definitions
 
@@ -18,7 +20,7 @@ You keep all right, title and interest in your Contributions. You remain free to
 
 ## 3. Copyright license
 
-You grant the Project Owner and recipients of software distributed by the Project Owner a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable copyright license to reproduce, prepare derivative works of, publicly display, publicly perform, sublicense and distribute your Contributions and derivative works of them.
+You grant the Project Owner and recipients of software distributed by the Project Owner a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable copyright license to reproduce, prepare derivative works of, publicly display, publicly perform, sublicense and distribute your Contributions, including Contributions you submitted before accepting this agreement, and derivative works of them.
 
 This includes the right for the Project Owner to license your Contributions, alone or as part of Butler, under any license, including open source licenses other than MIT and proprietary or commercial licenses.
 
@@ -28,11 +30,15 @@ You grant the Project Owner and recipients of software distributed by the Projec
 
 If anyone starts patent litigation (including a cross-claim or counterclaim) alleging that your Contribution, or the work it was submitted to, infringes a patent, the patent licenses granted to them under this agreement for that Contribution end on the date the litigation is filed.
 
-## 5. Assignment
+## 5. Moral rights
+
+To the extent permitted by law, you agree not to assert moral rights in your Contributions (for example, 저작인격권 under Korean copyright law) against the Project Owner or its licensees in a way that prevents them from using, modifying or relicensing your Contributions.
+
+## 6. Assignment
 
 The Project Owner may assign or transfer this agreement and the licenses you grant in it, in whole or in part, without further notice or consent. For example, the Project Owner may transfer them to a company that later takes over the Butler project. The licenses continue for the benefit of anyone they are assigned or transferred to.
 
-## 6. Your promises
+## 7. Your promises
 
 - You have the legal right to grant these licenses.
 - Each Contribution is your original work, or you have the right to submit it under this agreement.
@@ -40,10 +46,14 @@ The Project Owner may assign or transfer this agreement and the licenses you gra
 - When a Contribution includes third-party material, you identify it in the pull request, with its source and license.
 - You will tell the Project Owner if any of these promises stops being true.
 
-## 7. No warranty
+## 8. No warranty
 
 Unless required by law or agreed in writing, you provide your Contributions "as is", without warranties or conditions of any kind, including warranties of title, non-infringement, merchantability or fitness for a particular purpose. You are not expected to provide support for your Contributions.
 
-## 8. Corporate contributors
+## 9. Corporate contributors
 
 If you contribute on behalf of a company or other organization, open an issue before your first pull request so the organization's acceptance of this agreement can be arranged.
+
+## 10. Governing law
+
+This agreement is governed by the laws of the Republic of Korea.

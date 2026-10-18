@@ -4,7 +4,7 @@ This guide covers the repository layout, running Butler from source, the checks 
 
 ## License and CLA
 
-Butler is licensed to everyone under the [MIT License](LICENSE), and so are your contributions. Contributions are also covered by the [Contributor License Agreement](CLA.md): you keep your copyright and grant the project owner, HexpyGames (헥스피게임즈), the right to offer them under other licenses too. On your first pull request the CLA check posts a comment; sign by replying with the exact phrase it asks for. If you contribute for a company or other organization, open an issue first. The Butler name and logo follow the [trademark policy](TRADEMARKS.md).
+Butler is licensed to everyone under the [MIT License](LICENSE), and so are your contributions. Contributions are also covered by the [Contributor License Agreement](CLA-v1.md): you keep your copyright and grant the project owner, HexpyGames (헥스피게임즈), the right to offer them under other licenses too. On your first pull request the CLA check posts a comment; sign by replying with the exact phrase it asks for. If you contribute for a company or other organization, open an issue first. The Butler name and logo follow the [trademark policy](TRADEMARKS.md).
 
 ## Repository layout
 

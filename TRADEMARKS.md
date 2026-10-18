@@ -2,7 +2,7 @@
 
 The names "Butler" and "버틀러" and the Butler logo are trademarks (™) of HexpyGames (헥스피게임즈). They are not registered.
 
-The MIT License covers Butler's code. It does not grant any rights to these names or the logo. This policy explains how you can use them.
+The MIT License covers Butler's code. It does not grant any trademark rights in these names or the logo. This policy explains how you can use them.
 
 ## You can
 
@@ -18,7 +18,7 @@ Get written permission from HexpyGames before you use the names or the logo in a
 - hosted services built on Butler;
 - products, packages, app store listings and domain names.
 
-Forks and modified builds must use a different name and logo. You may say that your project is "based on Butler".
+Forks and modified builds must use a different name and logo unless HexpyGames gives written permission. You may say that your project is "based on Butler".
 
 ## Contact
 
