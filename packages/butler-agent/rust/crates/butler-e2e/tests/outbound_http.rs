@@ -1,5 +1,9 @@
 //! Stub-tier coverage of the shared outbound HTTP boundary.
-#![allow(clippy::disallowed_methods, reason = "test crate HTTP drivers")]
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "test crate HTTP drivers"
+)]
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -268,7 +272,7 @@ async fn traceparent_never_sent_externally() -> Result<(), Box<dyn std::error::E
 }
 
 #[tokio::test]
-async fn full_body_larger_than_segment_is_retrievable() -> Result<(), Box<dyn std::error::Error>> {
+async fn full_body_over_cap_retains_metadata() -> Result<(), Box<dyn std::error::Error>> {
     butler_e2e::gate!();
     let _serial = SERIAL.lock().await;
     logger().configure(Config::full()).unwrap();
@@ -290,11 +294,13 @@ async fn full_body_larger_than_segment_is_retrievable() -> Result<(), Box<dyn st
     assert_eq!(response.as_ref(), text.as_bytes());
     let row = rows().remove(0);
     assert_eq!(row.attrs["response_bytes"], expected);
-    let body: serde_json::Value =
-        serde_json::from_slice(&logger().body(row.body_ref.as_deref().unwrap()).unwrap()).unwrap();
+    let body = row.content.as_ref().unwrap();
+    use sha2::{Digest, Sha256};
+    assert_eq!(body["response"]["length"], expected);
+    assert_eq!(body["response"]["truncated"], true);
     assert_eq!(
-        body["response"].as_str().unwrap().as_bytes(),
-        response.as_ref()
+        body["response"]["sha256"],
+        format!("{:x}", Sha256::digest(&response))
     );
     logger().configure(Config::detailed()).unwrap();
     task.abort();
@@ -391,3 +397,6 @@ async fn web_page_fetch_is_logged_once_with_complete_response()
     std::fs::remove_dir_all(root)?;
     Ok(())
 }
+
+#[path = "outbound_http/review.rs"]
+mod review;

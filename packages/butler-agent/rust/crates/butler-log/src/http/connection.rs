@@ -8,7 +8,7 @@ use std::{
     pin::Pin,
     sync::{
         Arc,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     task::{Context, Poll},
     time::{Duration, Instant},
@@ -30,11 +30,12 @@ pub struct Connection {
     row: Record,
     start: Instant,
     counts: Arc<Counts>,
+    connected: AtomicBool,
 }
 impl Connection {
     pub fn new(host: &str, port: u16, purpose: &Purpose) -> Self {
         let mut row = Record::new(
-            "WARN",
+            "DEBUG",
             &purpose.category,
             "http.connection",
             "HTTP connection",
@@ -47,6 +48,7 @@ impl Connection {
             row,
             start: Instant::now(),
             counts: Arc::default(),
+            connected: AtomicBool::new(false),
         }
     }
 
@@ -56,7 +58,7 @@ impl Connection {
         addresses: &[SocketAddr],
         timeout: Duration,
     ) -> io::Result<ConnectionStream> {
-        super::logging::ensure().await?;
+        super::logging::ensure().await;
         if self.row.attrs["host"].is_null() {
             return Err(io::ErrorKind::InvalidInput.into());
         }
@@ -64,6 +66,7 @@ impl Connection {
         for address in addresses {
             match tokio::time::timeout(timeout, TcpStream::connect(address)).await {
                 Ok(Ok(inner)) => {
+                    self.connected.store(true, Ordering::Relaxed);
                     return Ok(ConnectionStream {
                         inner,
                         counts: self.counts.clone(),
@@ -84,7 +87,14 @@ impl Connection {
                 self.row.attrs["outcome"] = json!("completed");
             }
             Err(error) => {
-                self.row.level = "ERROR".into();
+                self.row.level = if self.connected.load(Ordering::Relaxed) {
+                    "DEBUG"
+                } else if error.kind() == io::ErrorKind::PermissionDenied {
+                    "ERROR"
+                } else {
+                    "WARN"
+                }
+                .into();
                 self.row.attrs["outcome"] = json!("error");
                 self.row.error = Some(json!({"kind":format!("{:?}", error.kind())}));
             }

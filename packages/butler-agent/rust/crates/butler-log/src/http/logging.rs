@@ -14,16 +14,19 @@ where
     OPEN.set(Box::new(move || Box::pin(open())))
         .map_err(|_| io::Error::other("HTTP logger initializer already installed"))
 }
-pub(super) async fn ensure() -> io::Result<()> {
+pub(super) async fn ensure() {
     if crate::global().is_some() {
-        return Ok(());
+        return;
     }
     if let Some(open) = OPEN.get() {
         STARTED
-            .get_or_try_init(|| async { crate::install(open().await?) })
-            .await?;
+            .get_or_init(|| async {
+                if open().await.and_then(crate::install).is_err() {
+                    eprintln!("http_logging_unavailable: continuing without HTTP logs");
+                }
+            })
+            .await;
     }
-    Ok(())
 }
 /// Flush only the writer this boundary started; service-owned writers close themselves.
 pub async fn shutdown() -> io::Result<()> {

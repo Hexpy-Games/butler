@@ -47,10 +47,6 @@ struct Start<'a> {
     generation: u64,
 }
 impl Previews {
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "loopback TCP readiness/occupancy probes; no HTTP or payload"
-    )]
     pub async fn start(
         &self,
         session: &str,
@@ -84,10 +80,14 @@ impl Previews {
         if let Some(existing) = self.admit(&input)? {
             return Ok(existing);
         }
-        if tokio::net::TcpStream::connect(("127.0.0.1", input.port))
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "loopback TCP readiness/occupancy probes; no HTTP or payload"
+        )]
+        let occupied = tokio::net::TcpStream::connect(("127.0.0.1", input.port))
             .await
-            .is_ok()
-        {
+            .is_ok();
+        if occupied {
             return Err("port_in_use");
         }
         let process = PreviewProcess::start(input.command.into(), input.cwd.clone())

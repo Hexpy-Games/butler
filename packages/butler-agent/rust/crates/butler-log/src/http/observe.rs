@@ -1,14 +1,7 @@
 use super::{Phase, Purpose};
 use crate::{Preset, Record};
-use bytes::Bytes;
-use futures_core::Stream;
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
-use std::{
-    pin::Pin,
-    task::{Context, Poll},
-    time::Instant,
-};
+use std::time::Instant;
 
 pub(super) fn detailed() -> bool {
     crate::global().is_some_and(|log| log.config().effective.level.threshold() >= 4)
@@ -23,8 +16,9 @@ pub(super) struct Attempt {
     chunks: u64,
     upload: std::sync::Arc<super::upload::Capture>,
     request_headers: reqwest::header::HeaderMap,
-    response: Vec<u8>,
+    response: super::capture::Capture,
     error_body: Vec<u8>,
+    phase: Phase,
     capture: bool,
     failed: bool,
     sse: bool,
@@ -59,7 +53,6 @@ impl Attempt {
             "request_bytes":body.map(<[u8]>::len), "purpose":purpose.name,
             "phase":phase.name, "retry":phase.retry, "start":row.ts,
         });
-        let capture = full();
         let upload = super::upload::Capture::attach(request);
         Self {
             row,
@@ -68,9 +61,10 @@ impl Attempt {
             chunks: 0,
             upload,
             request_headers: request.headers().clone(),
-            response: Vec::new(),
+            response: super::capture::Capture::new(request.headers()),
             error_body: Vec::new(),
-            capture,
+            phase: phase.clone(),
+            capture: full(),
             failed: false,
             sse: false,
             line: Vec::new(),
@@ -81,9 +75,10 @@ impl Attempt {
         self.row.attrs["response_headers"] = headers(response.headers());
         self.row.attrs["first_byte_ms"] = json!(self.start.elapsed().as_secs_f64() * 1000.0);
         self.failed = response.status().is_client_error() || response.status().is_server_error();
-        if self.failed {
+        if self.failed && !self.phase.routine {
             self.row.level = "ERROR".into();
         }
+        self.response = super::capture::Capture::new(response.headers());
         self.sse = response
             .headers()
             .get("content-type")
@@ -91,26 +86,33 @@ impl Attempt {
     }
     pub(super) fn wrap(self, response: reqwest::Response) -> reqwest::Response {
         let (parts, body) = super::response::split(response);
-        let stream = Observed {
-            inner: Box::pin(body.into_data_stream()),
+        let stream = super::body::Observed {
+            inner: body,
             attempt: Some(self),
         };
-        ::http::Response::from_parts(parts, reqwest::Body::wrap_stream(stream)).into()
+        ::http::Response::from_parts(parts, reqwest::Body::wrap(stream)).into()
     }
-    fn chunk(&mut self, bytes: &[u8]) {
+    pub(super) fn chunk(&mut self, bytes: &[u8]) {
         self.bytes += bytes.len() as u64;
         self.chunks += 1;
-        if self.failed && detailed() {
+        if self.failed && detailed() && self.response.is_text() {
             let remaining = 4096 - self.error_body.len();
             self.error_body
                 .extend_from_slice(&bytes[..bytes.len().min(remaining)]);
         }
         if self.capture && full() {
-            self.response.extend_from_slice(bytes);
+            self.response.observe(bytes);
         }
         if self.sse && crate::global().is_some_and(|log| log.enabled(&self.row.category, "TRACE")) {
             self.events(bytes);
         }
+    }
+    pub(super) fn read_error(&mut self, error: &reqwest::Error) {
+        self.row.level = if self.phase.routine { "DEBUG" } else { "ERROR" }.into();
+        self.row.error = Some(json!({"message":error.to_string()}));
+    }
+    pub(super) fn complete(&mut self) {
+        self.row.attrs["response_complete"] = json!(true);
     }
     fn events(&mut self, bytes: &[u8]) {
         for &byte in bytes {
@@ -150,47 +152,32 @@ impl Drop for Attempt {
         if self.row.attrs.get("response_complete").is_none() {
             self.row.attrs["response_complete"] = json!(false);
         }
-        if self.failed && detailed() {
-            self.row.error = Some(json!({"body":error_text(&self.error_body)}));
-        }
-        if self.capture && full() {
-            self.row.content = Some(
-                json!({"request":self.upload.body(&self.request_headers),"response":decode(&self.response)}),
+        let mut row = self.row.clone();
+        let error_body = std::mem::take(&mut self.error_body);
+        let response = std::mem::take(&mut self.response);
+        let upload = self.upload.clone();
+        let headers = std::mem::take(&mut self.request_headers);
+        let failed = self.failed && detailed();
+        let capture = self.capture && full();
+        if let Some(log) = crate::global() {
+            let retained = response.retained_bytes() + upload.retained_bytes() + 16384;
+            log.record_deferred(
+                &row.category.clone(),
+                &row.level.clone(),
+                retained,
+                move || {
+                    if failed && row.error.is_none() {
+                        row.error = Some(json!({"body":error_text(&error_body)}));
+                    }
+                    if capture {
+                        row.content = Some(
+                            json!({"request":upload.body(&headers),"response":response.content()}),
+                        );
+                    }
+                    row
+                },
             );
         }
-        crate::emit(self.row.clone());
-    }
-}
-struct Observed {
-    inner: Pin<Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send>>,
-    attempt: Option<Attempt>,
-}
-impl Stream for Observed {
-    type Item = Result<Bytes, reqwest::Error>;
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let next = self.inner.as_mut().poll_next(cx);
-        match &next {
-            Poll::Ready(Some(Ok(bytes))) => {
-                if let Some(attempt) = &mut self.attempt {
-                    attempt.chunk(bytes);
-                }
-            }
-            Poll::Ready(Some(Err(error))) => {
-                if let Some(attempt) = &mut self.attempt {
-                    attempt.row.level = "ERROR".into();
-                    attempt.row.error = Some(json!({"message":error.to_string()}));
-                }
-                self.attempt.take();
-            }
-            Poll::Ready(None) => {
-                if let Some(attempt) = &mut self.attempt {
-                    attempt.row.attrs["response_complete"] = json!(true);
-                }
-                self.attempt.take();
-            }
-            Poll::Pending => {}
-        }
-        next
     }
 }
 fn headers(headers: &reqwest::header::HeaderMap) -> Value {

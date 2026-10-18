@@ -1,5 +1,9 @@
 //! Drives the production App writer and outbox using queued operations on WAL files.
-#![allow(clippy::disallowed_methods, reason = "test crate HTTP drivers")]
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "test crate HTTP drivers"
+)]
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,

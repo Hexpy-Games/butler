@@ -119,3 +119,79 @@ async fn log_http_setup_oauth_local_models_and_mcp_are_logged_once() -> Result<(
     }
     s.finish().await
 }
+
+#[tokio::test]
+async fn log_http_mcp_path_token_is_scrubbed() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    use std::io::Read;
+    let mcp = FakeServer::mcp_http().await?;
+    let s = Setup::new("LOG-HTTP-PATH")?.start().await?;
+    logging(&s, "full").await?;
+    let secret = "0123456789abcdef0123456789abcdef";
+    let endpoint = format!("{}/s/{secret}/mcp", mcp.base_url);
+    let added = s.gw.post("/mcp-servers", json!({"id":"e2e","display_name":"Path token","enabled":true,"transport":"http","url":endpoint})).await?;
+    assert!(added.status < 300);
+    let probe = s.gw.post("/mcp-servers/e2e/probe", json!({})).await?;
+    assert!(probe.status < 300, "MCP probe failed");
+    assert!(super::super::mcp::healthy(&probe.body));
+    let closed_port = free_port()?;
+    let refused_endpoint = format!("http://127.0.0.1:{closed_port}/s/{secret}/mcp");
+    assert_eq!(
+        s.gw.patch("/mcp-servers/e2e", json!({"url":refused_endpoint}))
+            .await?
+            .status,
+        200
+    );
+    let failed = s.gw.post("/mcp-servers/e2e/probe", json!({})).await?;
+    assert!(!super::super::mcp::healthy(&failed.body));
+    let logs = s.gw.get("/logs?category=http.client&limit=1000").await?;
+    assert!(!logs.text.contains(secret));
+    let rows = logs.data()["rows"].as_array().unwrap();
+    assert!(
+        rows.iter()
+            .any(|row| row["level"] == "ERROR" && row["attrs"]["purpose"] == "mcp")
+    );
+    assert!(rows.iter().any(|row| row["attrs"]["purpose"] == "mcp"));
+    for row in rows {
+        if let Some(reference) = row["body_ref"].as_str() {
+            let body = s.gw.get(&format!("/logs/bodies/{reference}")).await?;
+            assert!(!body.text.contains(secret));
+        }
+    }
+    let response =
+        s.gw.http()
+            .post(format!("{}/logs/export", s.gw.base))
+            .bearer_auth(&s.gw.token)
+            .json(&json!({"include_bodies":true}))
+            .send()
+            .await?;
+    assert_eq!(response.status(), 200);
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(response.bytes().await?)).unwrap();
+    for n in 0..archive.len() {
+        let mut file = archive.by_index(n).unwrap();
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)?;
+        let bytes = if file.name().ends_with(".zst") {
+            zstd::decode_all(bytes.as_slice())?
+        } else {
+            bytes
+        };
+        assert!(!String::from_utf8_lossy(&bytes).contains(secret));
+    }
+    for entry in walkdir(&s.sandbox.data.join("logs"))? {
+        assert!(!String::from_utf8_lossy(&entry).contains(secret));
+    }
+    s.finish().await
+}
+fn walkdir(root: &std::path::Path) -> Result<Vec<Vec<u8>>, HarnessError> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(root)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            files.extend(walkdir(&entry.path())?);
+        } else {
+            files.push(std::fs::read(entry.path())?);
+        }
+    }
+    Ok(files)
+}

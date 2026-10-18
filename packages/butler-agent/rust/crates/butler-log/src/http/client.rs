@@ -67,6 +67,10 @@ impl ClientBuilder {
         self.inner = self.inner.dns_resolver(value);
         self
     }
+    pub fn http2_prior_knowledge(mut self) -> Self {
+        self.inner = self.inner.http2_prior_knowledge();
+        self
+    }
     pub fn no_gzip(mut self) -> Self {
         self.inner = self.inner.no_gzip();
         self

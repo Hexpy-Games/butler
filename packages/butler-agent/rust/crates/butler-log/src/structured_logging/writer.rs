@@ -22,6 +22,7 @@ use tokio::sync::{broadcast, oneshot, watch};
 const DEBUG_CAPACITY: usize = 8192;
 type Reply<T> = mpsc::SyncSender<io::Result<T>>;
 enum Command {
+    Deferred(Box<dyn FnOnce() -> Record + Send + Sync>, usize),
     Record(
         Encoded,
         bool,
@@ -51,6 +52,7 @@ struct Inner {
     config: RwLock<Arc<ConfigView>>,
     queue: queue::Queue,
     pending: AtomicUsize,
+    deferred: AtomicUsize,
     dropped: AtomicUsize,
     write_timeouts: AtomicUsize,
     live: broadcast::Sender<Record>,
@@ -99,6 +101,7 @@ impl Logger {
             config: RwLock::new(Arc::new(view)),
             queue: queue::Queue::default(),
             pending: AtomicUsize::new(0),
+            deferred: AtomicUsize::new(0),
             dropped: AtomicUsize::new(0),
             write_timeouts: AtomicUsize::new(0),
             live,
@@ -118,6 +121,30 @@ impl Logger {
     }
     pub fn enabled(&self, category: &str, level: &str) -> bool {
         self.0.config.read().effective.enabled(category, level)
+    }
+    pub(crate) fn record_deferred(
+        &self,
+        category: &str,
+        level: &str,
+        bytes: usize,
+        make: impl FnOnce() -> Record + Send + Sync + 'static,
+    ) {
+        if !self.enabled(category, level) {
+            return;
+        }
+        if self.0.deferred.fetch_add(bytes, Ordering::Relaxed) >= 16 * 1024 * 1024 {
+            self.0.deferred.fetch_sub(bytes, Ordering::Relaxed);
+            self.0.dropped.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+        if self
+            .0
+            .tx
+            .send(Command::Deferred(Box::new(make), bytes))
+            .is_err()
+        {
+            self.0.deferred.fetch_sub(bytes, Ordering::Relaxed);
+        }
     }
     pub fn record(&self, row: Record) -> io::Result<()> {
         self.enqueue(row, None).map(|_| ())

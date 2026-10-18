@@ -9,7 +9,7 @@ pub(super) fn response(method: &Method, body: &str) -> Response<Body> {
     let id = request["id"].clone();
     if id.is_null() {
         let mut response = Response::new(Body::empty());
-        *response.status_mut() = StatusCode::ACCEPTED;
+        *response.status_mut() = StatusCode::OK;
         return response;
     }
     let result = match request["method"].as_str().unwrap_or_default() {

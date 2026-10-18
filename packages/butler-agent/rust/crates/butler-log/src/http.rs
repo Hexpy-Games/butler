@@ -1,6 +1,7 @@
 //! The outbound HTTP boundary. Clients never expose an unlogged send path.
 #![allow(
     clippy::disallowed_methods,
+    clippy::disallowed_types,
     reason = "the sole reqwest construction and execution boundary"
 )]
 mod client;
@@ -16,9 +17,12 @@ pub use redirect::{
 };
 mod upload;
 pub use error::Error;
+mod body;
+mod capture;
 mod observe;
 mod request;
 mod response;
+mod retry;
 pub use client::{Client, ClientBuilder};
 pub use request::RequestBuilder;
 
@@ -45,6 +49,7 @@ impl Purpose {
 pub struct Phase {
     name: String,
     retry: u32,
+    routine: bool,
     trace_id: Option<String>,
     turn_id: Option<String>,
     chat_id: Option<String>,
@@ -59,6 +64,11 @@ impl Phase {
             chat_id: row.chat_id,
             ..Self::default()
         }
+    }
+    /// Routine background attempts remain DEBUG, including fallback and HTTP rejection.
+    pub fn routine(mut self) -> Self {
+        self.routine = true;
+        self
     }
     pub fn trace_id(&self) -> Option<&str> {
         self.trace_id.as_deref()
@@ -125,7 +135,10 @@ fn register_credentials(request: &reqwest::Request) {
                 | "set-cookie"
         ) && let Ok(value) = value.to_str()
         {
-            crate::register_secret(value.strip_prefix("Bearer ").unwrap_or(value));
+            crate::register_secret_for(
+                &format!("{}:{name}", request.url().origin().ascii_serialization()),
+                value.strip_prefix("Bearer ").unwrap_or(value),
+            );
         }
     }
     if request.headers().get("content-type").is_some_and(|v| {
@@ -138,7 +151,10 @@ fn register_credentials(request: &reqwest::Request) {
                 key.as_ref(),
                 "code" | "code_verifier" | "access_token" | "refresh_token" | "client_secret"
             ) {
-                crate::register_secret(&value);
+                crate::register_secret_for(
+                    &format!("{}:{key}", request.url().origin().ascii_serialization()),
+                    &value,
+                );
             }
         }
     }

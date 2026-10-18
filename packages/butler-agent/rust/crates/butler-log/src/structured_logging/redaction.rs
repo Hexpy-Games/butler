@@ -18,21 +18,63 @@ fn secrets() -> &'static RwLock<Vec<String>> {
     static SECRETS: OnceLock<RwLock<Vec<String>>> = OnceLock::new();
     SECRETS.get_or_init(RwLock::default)
 }
-/// Register before exposing a credential to any producer. Old secrets remain scrubbed.
+/// Register before exposing a credential to any producer.
 pub fn register_secret(secret: &str) {
     if secret.is_empty() {
         return;
     }
     let mut secrets = secrets().write();
     if !secrets.iter().any(|s| s == secret) {
+        if secrets.len() == 256 {
+            secrets.remove(0);
+        }
         secrets.push(secret.into());
         secrets.sort_by_key(|s| std::cmp::Reverse(s.len()));
+    }
+}
+fn sourced_secrets() -> &'static RwLock<std::collections::BTreeMap<String, String>> {
+    static SOURCED: OnceLock<RwLock<std::collections::BTreeMap<String, String>>> = OnceLock::new();
+    SOURCED.get_or_init(RwLock::default)
+}
+/// Replace rotated credentials from the same origin/header; placeholders stay literal.
+pub fn register_secret_for(source: &str, secret: &str) {
+    let mut secrets = sourced_secrets().write();
+    if secret.len() < 16 {
+        secrets.remove(source);
+        return;
+    }
+    if secrets.len() >= 256 && !secrets.contains_key(source) {
+        secrets.pop_first();
+    }
+    secrets.insert(source.into(), secret.into());
+}
+/// Register opaque path segments before any configured endpoint can be logged.
+pub fn register_endpoint(input: &str) {
+    let Ok(url) = url::Url::parse(input) else {
+        return;
+    };
+    if let Some(segments) = url.path_segments() {
+        for segment in segments {
+            if segment.len() >= 16 {
+                register_secret(segment);
+                let decoded = percent_encoding::percent_decode_str(segment).decode_utf8_lossy();
+                if decoded.len() >= 16 {
+                    register_secret(&decoded);
+                }
+            }
+        }
     }
 }
 fn scrub_text(text: &str) -> String {
     let mut text = text.to_owned();
     for secret in secrets().read().iter() {
         text = text.replace(secret, "[REDACTED]");
+    }
+    let mut sourced: Vec<_> = sourced_secrets().read().values().cloned().collect();
+    sourced.sort_unstable_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+    sourced.dedup();
+    for secret in sourced {
+        text = text.replace(&secret, "[REDACTED]");
     }
     patterns::redact_log_line(&text)
 }

@@ -7,13 +7,14 @@ pub(super) async fn chain(
     mut request: Request,
     policy: redirect::Policy,
     purpose: Purpose,
-    phase: Phase,
+    mut phase: Phase,
     timeout: Option<std::time::Duration>,
 ) -> Result<Response, Error> {
-    super::logging::ensure().await.map_err(Error::Logging)?;
+    super::logging::ensure().await;
     let start = Instant::now();
     let timeout = request.timeout().copied().or(timeout);
     let mut previous = Vec::new();
+    let mut replays = 0;
     loop {
         if let Some(timeout) = timeout {
             *request.timeout_mut() =
@@ -21,7 +22,18 @@ pub(super) async fn chain(
         }
         previous.push(request.url().clone());
         let next = request.try_clone();
-        let response = attempt(&client, request, &purpose, &phase).await?;
+        let response = match attempt(&client, request, &purpose, &phase).await {
+            Err(Error::Transport(error))
+                if replays < 2 && super::retry::safe(&error) && next.is_some() =>
+            {
+                previous.pop();
+                request = next.ok_or(Error::Timeout)?;
+                replays += 1;
+                phase.retry += 1;
+                continue;
+            }
+            result => result?,
+        };
         let Some(next) = policy.next(&response, next, &previous)? else {
             return Ok(response);
         };
@@ -41,14 +53,14 @@ async fn attempt(
     let mut attempt = observe::Attempt::new(&mut request, purpose, phase);
     if phase.retry > 0 {
         let mut row = attempt.row.clone();
-        row.level = "WARN".into();
+        row.level = if phase.routine { "DEBUG" } else { "WARN" }.into();
         row.event = "http.retry".into();
         crate::emit(row);
     }
     let response = match client.execute(request).await {
         Ok(response) => response,
         Err(error) => {
-            attempt.row.level = "ERROR".into();
+            attempt.row.level = if phase.routine { "DEBUG" } else { "ERROR" }.into();
             attempt.row.error = Some(serde_json::json!({"message":error.to_string()}));
             return Err(error.into());
         }
@@ -64,19 +76,30 @@ async fn attempt(
 }
 /// Error callers often discard the body. Read a bounded prefix, then replay
 /// those exact chunks, preserving the original body stream and backpressure.
-async fn error_prefix(mut response: Response) -> Result<Response, Error> {
-    use futures_util::StreamExt;
+async fn error_prefix(response: Response) -> Result<Response, Error> {
     use http_body_util::BodyExt;
-    let mut prefix = Vec::new();
+    let (parts, mut body) = super::response::split(response);
+    let mut prefix = std::collections::VecDeque::new();
     let mut size = 0;
     while size < 4096 {
-        let Some(chunk) = response.chunk().await? else {
-            break;
-        };
-        size += chunk.len();
-        prefix.push(Ok::<_, reqwest::Error>(chunk));
+        match body.frame().await {
+            Some(Ok(frame)) => {
+                size += frame.data_ref().map_or(0, bytes::Bytes::len);
+                prefix.push_back(Ok(frame));
+            }
+            Some(Err(error)) => {
+                prefix.push_back(Err(error));
+                break;
+            }
+            None => break,
+        }
     }
-    let (parts, body) = super::response::split(response);
-    let stream = futures_util::stream::iter(prefix).chain(body.into_data_stream());
-    Ok(::http::Response::from_parts(parts, reqwest::Body::wrap_stream(stream)).into())
+    Ok(::http::Response::from_parts(
+        parts,
+        reqwest::Body::wrap(super::body::Replay {
+            inner: body,
+            prefix,
+        }),
+    )
+    .into())
 }

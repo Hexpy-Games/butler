@@ -186,8 +186,9 @@ impl ModelConfiguration {
             &collation,
         )?;
         if let Some(secret) = &environment.openai_api_key {
-            butler_log::register_secret(secret);
+            butler_log::register_secret_for("environment:openai", secret);
         }
+        logging::register_environment_endpoints(&environment);
         let secrets = ProviderSecrets::new(environment.secret_store);
         Ok(Self {
             data_root,

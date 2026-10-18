@@ -32,7 +32,13 @@ impl Logger {
                 Err(mpsc::RecvTimeoutError::Timeout) => continue,
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             };
-            if let Command::Dropped = command {
+            if let Command::Deferred(make, bytes) = command {
+                let result = Encoded::new(make(), &self.snapshot().effective)
+                    .and_then(|row| self.write(row));
+                self.0.deferred.fetch_sub(bytes, Ordering::Relaxed);
+                self.report(result);
+                self.report(self.0.storage.lock().flush(true));
+            } else if let Command::Dropped = command {
                 self.report(self.report_drops());
                 self.report(self.0.storage.lock().flush(false));
             } else if let Command::Record(..) = command {

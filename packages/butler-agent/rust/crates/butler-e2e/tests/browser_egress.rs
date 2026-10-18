@@ -1,5 +1,9 @@
 //! Opaque browser connections through the real guard and shared HTTP boundary.
-#![allow(clippy::disallowed_methods, reason = "test crate TCP drivers")]
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "test crate TCP drivers"
+)]
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 use butler_log::{Config, Logger, Query, Record};
 use butler_runtime::browser::{ContentOrigin, EgressProxy};
@@ -137,7 +141,7 @@ async fn forwarded_connection_logs_origin_only_and_exact_bytes() -> io::Result<(
 }
 
 #[tokio::test]
-async fn denied_and_refused_connections_are_errors() -> io::Result<()> {
+async fn denied_is_error_and_refused_connect_is_warn() -> io::Result<()> {
     butler_e2e::gate!();
     let _serial = SERIAL.lock().await;
     logger().clear()?;
@@ -161,7 +165,7 @@ async fn denied_and_refused_connections_are_errors() -> io::Result<()> {
     .await?;
     assert!(response.starts_with(b"HTTP/1.1 502"));
     let row = record().await;
-    assert_eq!(row.level, "ERROR");
+    assert_eq!(row.level, "WARN");
     assert_eq!(row.error.unwrap()["kind"], "ConnectionRefused");
     Ok(())
 }
@@ -185,7 +189,7 @@ async fn cancelled_tunnel_keeps_partial_counts() -> io::Result<()> {
     assert_eq!(&got, b"partial");
     drop(proxy);
     let row = record().await;
-    assert_eq!(row.level, "WARN");
+    assert_eq!(row.level, "DEBUG");
     assert_eq!(row.attrs["outcome"], "cancelled");
     assert_eq!(row.attrs["bytes_up"], 7);
     assert_eq!(row.attrs["bytes_down"], 0);

@@ -1,4 +1,8 @@
-#![allow(clippy::disallowed_methods, reason = "test crate HTTP drivers")]
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "test crate HTTP drivers"
+)]
 //! All current scenarios share one integration-test link.
 mod acceptance_payload;
 mod access;

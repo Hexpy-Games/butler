@@ -24,6 +24,7 @@ pub(super) async fn wait_until_ready(
 ) -> Result<InstanceRecord, crate::host::HostError> {
     let mut deadline = Instant::now() + START_TIMEOUT;
     let mut progress = StorageProgress::default();
+    crate::host::cli::http_logs::prepare(&config.data_root);
     let client = butler_log::http::loopback()
         .redirect(butler_log::http::RedirectPolicy::none())
         .timeout(Duration::from_secs(2))

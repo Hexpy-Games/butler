@@ -118,6 +118,7 @@ pub struct QuotaHttp {
     client: Client,
     ipv4: Client,
     user_agent: String,
+    failing: std::sync::Arc<parking_lot::Mutex<std::collections::BTreeSet<String>>>,
 }
 
 impl QuotaHttp {
@@ -135,6 +136,7 @@ impl QuotaHttp {
                 .local_address(IpAddr::V4(Ipv4Addr::UNSPECIFIED))
                 .build()?,
             user_agent: user_agent.into(),
+            failing: Default::default(),
         })
     }
 
@@ -153,8 +155,27 @@ impl QuotaHttp {
             Err(error) if error.is_connect() => send(&self.ipv4, url, headers, 1).await,
             result => result,
         }
-        .map_err(QuotaFetchError::Transport)?;
-        body(response).await
+        .map_err(QuotaFetchError::Transport);
+        let result = match response {
+            Ok(response) => body(response).await,
+            Err(error) => Err(error),
+        };
+        let mut failing = self.failing.lock();
+        if let Err(error) = &result {
+            if failing.len() < 256 && failing.insert(url.as_str().to_owned()) {
+                let mut row = butler_log::Record::new(
+                    "WARN",
+                    "http.client",
+                    "http.poll.state",
+                    "HTTP poll became unavailable",
+                );
+                row.attrs = serde_json::json!({"code":error.code()});
+                butler_log::emit(row);
+            }
+        } else {
+            failing.remove(url.as_str());
+        }
+        result
     }
 }
 
@@ -167,7 +188,7 @@ async fn send(
     client
         .get(url.clone())
         .headers(headers.clone())
-        .phase(butler_log::http::Phase::new("poll", retry))
+        .phase(butler_log::http::Phase::new("poll", retry).routine())
         .send()
         .await
 }
