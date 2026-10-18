@@ -78,7 +78,12 @@ pub(super) fn gemini_output(message: &ModelRoundMessage) -> Value {
         ),
         None => (message.content.to_string(), None),
     };
-    let response: Value = serde_json::from_str(&text).unwrap_or_else(|_| json!({"output":text}));
+    let response: Value = serde_json::from_str(&text).unwrap_or_else(|_| json!(text));
+    let response = if response.is_object() {
+        response
+    } else {
+        json!({"output":response})
+    };
     let mut parts = vec![
         json!({"functionResponse":{"name":message.name.as_deref().unwrap_or("unknown_tool"),"response":response}}),
     ];
