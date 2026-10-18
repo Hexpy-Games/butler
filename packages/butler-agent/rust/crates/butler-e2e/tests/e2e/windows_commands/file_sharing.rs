@@ -84,7 +84,17 @@ async fn run_sharing_case(external_save: bool) -> Result<(), HarnessError> {
     assert_eq!(turn_state(&turn?.1), "delivered");
     let (output, _) = script.result.lock().unwrap().clone().unwrap();
     if external_save {
-        assert_eq!(output["error"], "external_change_conflict", "{output}");
+        assert_eq!(output["ok"], false, "{output}");
+        assert_eq!(
+            output["error"]["code"], "effect_dispatch_failed",
+            "{output}"
+        );
+        assert!(
+            output["error"]["message"]
+                .as_str()
+                .is_some_and(|message| message.starts_with("external_change_conflict: ")),
+            "{output}"
+        );
         assert_eq!(fs::read_to_string(&path)?, "external save\n");
     } else {
         assert_eq!(output["ok"], true, "{output}");
