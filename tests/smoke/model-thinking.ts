@@ -117,12 +117,18 @@ try {
         await Promise.all(document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity)
           .map(animation => animation.finished.catch(() => {})));
       });
-      await page.keyboard.press("Tab");
-      await disclosure.evaluate(element => element.focus({ preventScroll: true }));
+      await disclosure.evaluate(element => {
+        element.focus({ preventScroll: true });
+        element.addEventListener("keydown", event => { if (event instanceof KeyboardEvent && event.key === "Tab") event.preventDefault(); }, { once: true });
+      });
+      await disclosure.press("Tab");
       await page.locator('[data-test-class="thinking-summary"]').evaluate(async element => {
         await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {})));
       });
-      await content.scrollIntoViewIfNeeded();
+      const latest = page.getByRole("button", { name: "최신 메시지와 입력창으로 이동" });
+      if (await latest.isVisible()) await latest.click();
+      await latest.waitFor({ state: "hidden" });
+      await disclosure.evaluate(element => element.focus({ preventScroll: true }));
       await page.screenshot({ path: join(evidence, `after-chat-${cell}.png`) });
       await receive(null);
       assert.equal(await page.evaluate(() => document.documentElement.dataset.thinkingExit), "closed");
@@ -149,8 +155,12 @@ try {
       await page.waitForFunction(id => document.getElementById(id!)?.getAttribute("aria-checked") === "false", await setting.getAttribute("id"), { timeout: 10_000 });
       await setting.click();
       await page.waitForFunction(id => document.getElementById(id!)?.getAttribute("aria-checked") === "true", await setting.getAttribute("id"), { timeout: 10_000 });
-      await page.keyboard.press("Tab");
-      await setting.focus();
+      await page.getByText("저장됨", { exact: true }).waitFor({ state: "hidden" });
+      await setting.evaluate(element => {
+        element.focus({ preventScroll: true });
+        element.addEventListener("keydown", event => { if (event instanceof KeyboardEvent && event.key === "Tab") event.preventDefault(); }, { once: true });
+      });
+      await setting.press("Tab");
     } else assert.equal(await setting.count(), 0);
     await conversation.locator('[data-slot="form-section-header"]').scrollIntoViewIfNeeded();
     await page.screenshot({ path: join(evidence, `${process.env.BUTLER_THINKING_PHASE ?? "after"}-settings-${cell}.png`) });
