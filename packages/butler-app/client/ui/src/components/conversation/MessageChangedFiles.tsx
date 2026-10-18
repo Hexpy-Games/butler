@@ -1,16 +1,28 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
-import type { ChangedFileDetail } from "@/app/types.ts";
+import type { ChangedFileDetail, MessageFileRef, SessionArtifactSummary } from "@/app/types.ts";
 import { Button, Space, Stack, Typo } from "@/butler-ds";
+import { inlineImageFiles } from "./inlineImageFiles";
 import { MessageChangedFileRow } from "./MessageChangedFileRow.tsx";
+import { MessageGeneratedFileRow } from "./MessageGeneratedFileRow";
+import { workingFileRows } from "./workingFiles";
 
 const INITIAL_VISIBLE_FILES = 5;
 
-export function MessageChangedFiles({ files }: { files: ChangedFileDetail[] }) {
+export function MessageChangedFiles({ files, attachments = [], artifacts = [], text = "" }: {
+  files: ChangedFileDetail[];
+  attachments?: MessageFileRef[];
+  artifacts?: SessionArtifactSummary[];
+  text?: string;
+}) {
   useAppLocale();
   const [expanded, setExpanded] = useState(false);
-  if (files.length === 0) return null;
+  const rows = useMemo(
+    () => workingFileRows(files, attachments, () => inlineImageFiles(text, attachments, artifacts)),
+    [files, attachments, artifacts, text],
+  );
+  if (rows.length === 0) return null;
   const additions = files.reduce((total, file) => total + file.additions, 0);
   const deletions = files.reduce((total, file) => total + file.deletions, 0);
   return (
@@ -24,15 +36,15 @@ export function MessageChangedFiles({ files }: { files: ChangedFileDetail[] }) {
       >
         <Typo.Label>
           {appCopy.conversation.fileChanges.titleSummary(
-            files.length,
+            rows.length,
             additions,
             deletions,
           )}
         </Typo.Label>
-        {(expanded ? files : files.slice(0, INITIAL_VISIBLE_FILES)).map((file) => (
-          <MessageChangedFileRow key={file.path} file={file} />
-        ))}
-        {files.length > INITIAL_VISIBLE_FILES ? (
+        {(expanded ? rows : rows.slice(0, INITIAL_VISIBLE_FILES)).map((row) => row.change
+          ? <MessageChangedFileRow key={row.key} file={row.change} stored={row.file} />
+          : row.file ? <MessageGeneratedFileRow key={row.key} file={row.file} /> : null)}
+        {rows.length > INITIAL_VISIBLE_FILES ? (
           <Button
             aria-expanded={expanded}
             data-test-class="toggle-changed-files"
@@ -42,7 +54,7 @@ export function MessageChangedFiles({ files }: { files: ChangedFileDetail[] }) {
           >
             {expanded
               ? appCopy.conversation.fileChanges.showLess
-              : appCopy.conversation.fileChanges.showMore(files.length - INITIAL_VISIBLE_FILES)}
+              : appCopy.conversation.fileChanges.showMore(rows.length - INITIAL_VISIBLE_FILES)}
           </Button>
         ) : null}
       </Stack>

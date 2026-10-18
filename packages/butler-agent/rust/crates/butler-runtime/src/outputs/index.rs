@@ -174,3 +174,20 @@ pub(super) fn library_page(path: &Path, after: &str) -> std::io::Result<Vec<Outp
         .collect::<Result<Vec<_>, _>>()
         .map_err(std::io::Error::other)
 }
+
+/// Add a message reference without changing the output's current revision.
+pub(super) fn reference(
+    path: &Path,
+    id: &str,
+    session: &str,
+    turn: &str,
+    message: &str,
+) -> std::io::Result<()> {
+    let db = butler_platform::sqlite::open(path).map_err(std::io::Error::other)?;
+    db.execute(
+        "INSERT OR REPLACE INTO output_refs(id,session,turn,message) VALUES(?1,?2,?3,?4)",
+        params![id, session, turn, message],
+    )
+    .map_err(std::io::Error::other)?;
+    Ok(())
+}

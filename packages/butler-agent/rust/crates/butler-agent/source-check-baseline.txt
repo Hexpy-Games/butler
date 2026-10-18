@@ -12,7 +12,6 @@ src/host/guided/activity.rs	new_group	99
 src/host/guided/activity/content.rs	content	160
 src/host/guided/activity/snapshot.rs	restore	97
 src/host/guided/command.rs	GuidedCommand::execute_observation	166
-src/host/guided/command/artifacts.rs	declared	84
 src/host/guided/command/evidence.rs	capability_receipts	85
 src/host/guided/command/output.rs	from_streams	175
 src/host/guided/command/output/assemble.rs	assemble	139

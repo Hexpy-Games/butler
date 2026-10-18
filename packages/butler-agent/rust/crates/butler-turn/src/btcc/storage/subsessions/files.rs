@@ -29,6 +29,7 @@ impl SqliteSubsessionRepository {
                     })
                     .map_err(StorageError::sqlite)?;
                 let mut files = JournalCloseout {
+                    outputs: Vec::new(),
                     artifacts: Vec::new(),
                     changed_files: Vec::new(),
                     answer_blocks: Vec::new(),
@@ -38,6 +39,12 @@ impl SqliteSubsessionRepository {
                         continue;
                     };
                     let payload: serde_json::Value = serde_json::from_str(&raw).map_err(invalid)?;
+                    if let Some(value) = payload.get("outputs") {
+                        files.outputs.extend(
+                            serde_json::from_value::<Vec<String>>(value.clone())
+                                .map_err(invalid)?,
+                        );
+                    }
                     if let Some(value) = payload.get("artifacts") {
                         files.artifacts.extend(
                             serde_json::from_value::<Vec<crate::btcc::FinalArtifact>>(

@@ -9,7 +9,9 @@ use super::{AppApplication, AppAssetCommand, AppStorageError, app_error};
 use crate::gateway::ApplicationFuture;
 pub use organize::AppLibraryChange;
 pub use query::AppLibraryQuery;
-pub(super) use records::{bookmark_in_folder, create_folder_groups, document, output, save};
+pub(super) use records::{
+    bookmark_in_folder, create_folder_groups, deliverable, document, output, save,
+};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 /// Explicit user (and agent tool) commands over App-owned Library records.
@@ -23,6 +25,9 @@ pub enum AppLibraryCommand {
         url: String,
     },
     Save(Value),
+    Promote {
+        file_id: String,
+    },
     Delete {
         id: String,
     },
@@ -67,6 +72,7 @@ impl AppApplication {
             C::Page(q) => self.library_read(move |db| query::page(db, &q)),
             C::Search(q) => self.library_read(move |db| query::search(db, &q)),
             C::Bookmark { url } => self.library_read(move |db| lookup(db, &url)),
+            C::Promote { file_id } => self.library_write(move |db| records::promote(db, &file_id)),
             C::Save(item) => self.library_write(move |db| save_item(db, item)),
             C::Delete { id } => self.library_write(move |db| delete(db, &id)),
             C::Snapshot { id } => self.library_read(move |db| snapshot(db, &id)),

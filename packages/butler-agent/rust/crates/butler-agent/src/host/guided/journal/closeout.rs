@@ -1,6 +1,6 @@
 //! Ordinary Turn closeout from the durable journal's ordered result pages.
 
-mod artifacts;
+pub(super) mod artifacts;
 mod changed;
 #[cfg(test)]
 mod tests;
@@ -60,8 +60,19 @@ pub(super) async fn collect(
             break;
         }
     }
-    let changed_files = changed.finish();
+    let changed_files = changed
+        .finish()
+        .into_iter()
+        .map(|mut file| {
+            if let Some(path) = artifacts::source_label(&file.path, workspace) {
+                file.path = path;
+            }
+            file
+        })
+        .collect::<Vec<_>>();
+    let outputs = std::mem::take(&mut artifacts.outputs);
     Ok(JournalCloseout {
+        outputs,
         artifacts: artifacts::with_changed_files(artifacts.finish(), &changed_files, workspace),
         changed_files,
         answer_blocks,
@@ -119,7 +130,13 @@ pub(super) fn merge_files(mut child: JournalCloseout, own: JournalCloseout) -> J
         artifacts: Vec::new(),
         changed_files: Vec::new(),
         answer_blocks: own.answer_blocks,
+        outputs: child.outputs,
     };
+    for output in own.outputs {
+        if !merged.outputs.contains(&output) {
+            merged.outputs.push(output);
+        }
+    }
     child.changed_files.extend(own.changed_files);
     child.artifacts.extend(own.artifacts);
     for file in child.changed_files {
@@ -133,16 +150,20 @@ pub(super) fn merge_files(mut child: JournalCloseout, own: JournalCloseout) -> J
             merged.changed_files.push(file);
         }
     }
-    for artifact in child.artifacts {
+    for mut artifact in child.artifacts {
         if let Some(previous) = merged
             .artifacts
             .iter_mut()
             .find(|item| item.safe_path_label == artifact.safe_path_label)
         {
+            artifact.deliverable |= previous.deliverable;
+            artifact.source = artifact.source.or_else(|| previous.source.clone());
             *previous = artifact;
         } else {
             merged.artifacts.push(artifact);
         }
     }
+    merged.artifacts.sort_by_key(|a| !a.deliverable);
+    merged.artifacts.truncate(12);
     merged
 }

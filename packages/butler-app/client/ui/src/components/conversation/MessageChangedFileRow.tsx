@@ -1,10 +1,11 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { memo, useId, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
-import type { ChangedFileDetail } from "@/app/types.ts";
-import { ChangedLineDiff, DisclosureRow, FileText, ListRow } from "@/butler-ds";
+import type { ChangedFileDetail, MessageFileRef } from "@/app/types.ts";
+import { ChangedLineDiff, DisclosureRow, FileText, Inline, ListRow, Stack } from "@/butler-ds";
+import { WorkingFileMenu } from "./WorkingFileMenu";
 
-function MessageChangedFileRowComponent({ file }: { file: ChangedFileDetail }) {
+function MessageChangedFileRowComponent({ file, stored }: { file: ChangedFileDetail; stored?: MessageFileRef }) {
   useAppLocale();
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
@@ -13,10 +14,7 @@ function MessageChangedFileRowComponent({ file }: { file: ChangedFileDetail }) {
     ? appCopy.conversation.fileChanges.fileCounts(file.additions, file.deletions)
     : appCopy.conversation.fileChanges.noLineDetails;
 
-  if (!hasLines) {
-    return <ListRow icon={<FileText size="lg" />} meta={meta} title={file.path} />;
-  }
-  return (
+  const row = !hasLines ? <ListRow icon={<FileText size="lg" />} meta={meta} title={file.path} /> : (
     <DisclosureRow
       controlsId={detailsId}
       icon={<FileText size="lg" />}
@@ -32,6 +30,14 @@ function MessageChangedFileRowComponent({ file }: { file: ChangedFileDetail }) {
         lines={file.lines}
       />
     </DisclosureRow>
+  );
+  if (!stored) return row;
+  // The ⋯ stays at the row header while the diff opens below it.
+  return (
+    <Inline gap="xs" wrap={false} cross={expanded ? "start" : "center"}>
+      <Stack.Item grow minWidth="0">{row}</Stack.Item>
+      <WorkingFileMenu file={stored} title={file.path} />
+    </Inline>
   );
 }
 

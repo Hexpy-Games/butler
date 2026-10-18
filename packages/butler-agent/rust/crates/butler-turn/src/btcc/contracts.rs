@@ -271,6 +271,10 @@ pub struct FinalArtifact {
     /// item in its answer blocks does not attach the same item again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub deliverable: bool,
 }
 
 /// The kind of produced artifact.
@@ -381,6 +385,8 @@ pub struct DeliveredOutcome {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub artifacts: Vec<FinalArtifact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changed_files: Vec<ChangedFileSummary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub answer_blocks: Vec<serde_json::Value>,
@@ -408,6 +414,8 @@ pub struct AlreadyDeliveredOutcome {
     pub execution_outcome: Option<ExecutionOutcome>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub artifacts: Vec<FinalArtifact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changed_files: Vec<ChangedFileSummary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
