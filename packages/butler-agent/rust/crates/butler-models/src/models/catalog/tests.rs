@@ -124,23 +124,34 @@ fn subscription_plans_bill_api_keys_against_quota() {
 #[test]
 fn confirmed_routine_presets_and_openai_sol_metadata_are_pinned() {
     let catalog = catalog();
-    for (provider, model) in [
-        ("openai", "openai/gpt-6.1-sol"),
-        ("anthropic", "anthropic/claude-sonnet-5"),
-        ("google", "google/gemini-3.8-flash"),
-        ("zai", "zai/glm-5"),
-        ("zai-api", "zai-api/glm-5"),
+    for (provider, model, effort) in [
+        ("openai", "openai/gpt-6.1-sol", ReasoningEffort::Medium),
+        (
+            "anthropic",
+            "anthropic/claude-sonnet-5",
+            ReasoningEffort::Medium,
+        ),
+        ("google", "google/gemini-3.8-flash", ReasoningEffort::Medium),
+        ("zai", "zai/glm-5.3", ReasoningEffort::High),
+        ("zai-api", "zai-api/glm-5", ReasoningEffort::High),
     ] {
         let preset = catalog.routine_preset(provider).unwrap();
-        assert_eq!(preset.model, model);
-        assert_eq!(preset.effort, ReasoningEffort::Medium);
+        assert_eq!((preset.model.as_str(), preset.effort), (model, effort));
     }
+    for (provider, model) in [
+        ("zai", "zai/glm-5.3-flash"),
+        ("zai-api", "zai-api/glm-5.3-flash"),
+    ] {
+        let planning = catalog.provider_presets(provider).unwrap().planning;
+        let planning = planning.unwrap();
+        assert_eq!(
+            (planning.model.as_str(), planning.effort),
+            (model, ReasoningEffort::Low)
+        );
+    }
+    let find = |id: &str| lookup::find_model_metadata(Some(id), &catalog.models).unwrap();
 
-    let sol = catalog
-        .models
-        .iter()
-        .find(|model| model.model_ref == "openai/gpt-6.1-sol")
-        .unwrap();
+    let sol = find("openai/gpt-6.1-sol");
     assert_eq!(sol.status, "latest");
     assert_eq!(sol.context_window_tokens, Some(1_050_000.0));
     assert_eq!(sol.max_output_tokens, Some(128_000.0));
@@ -160,55 +171,42 @@ fn confirmed_routine_presets_and_openai_sol_metadata_are_pinned() {
     assert_eq!(sol.image_max_height, None);
     assert_eq!(sol.image_max_pixels, None);
     assert_eq!(sol.image_max_patches, Some(30_000.0));
-    let previous_sol = catalog
-        .models
-        .iter()
-        .find(|model| model.model_ref == "openai/gpt-6-sol")
-        .unwrap();
-    assert_eq!(previous_sol.status, "previous");
+    assert_eq!(find("openai/gpt-6-sol").status, "previous");
 
-    let sonnet = catalog
-        .models
-        .iter()
-        .find(|model| model.model_ref == "anthropic/claude-sonnet-5-5")
-        .unwrap();
-    assert_eq!(sonnet.display_name, "Claude Sonnet 5.5");
-    assert_eq!(sonnet.status, "latest");
-    assert_eq!(sonnet.context_window_tokens, Some(1_000_000.0));
-    assert_eq!(sonnet.max_output_tokens, Some(128_000.0));
-    assert_eq!(sonnet.default_reasoning_effort, ReasoningEffort::High);
+    for (id, name, effort) in [
+        (
+            "anthropic/claude-sonnet-5-5",
+            "Claude Sonnet 5.5",
+            ReasoningEffort::High,
+        ),
+        (
+            "anthropic/claude-haiku-5-5",
+            "Claude Haiku 5.5",
+            ReasoningEffort::Medium,
+        ),
+    ] {
+        let claude = find(id);
+        assert_eq!(claude.display_name, name);
+        assert_eq!(claude.status, "latest");
+        assert_eq!(claude.context_window_tokens, Some(1_000_000.0));
+        assert_eq!(claude.max_output_tokens, Some(128_000.0));
+        assert_eq!(claude.default_reasoning_effort, effort);
+        assert_eq!(claude.reasoning_efforts, sol.reasoning_efforts, "{id}");
+    }
+    let grok = find("xai/grok-4.6");
+    assert!(grok.runtime_supported);
+    assert_eq!(grok.status, "available");
+    assert_eq!(grok.context_window_tokens, Some(500_000.0));
+    assert_eq!(grok.default_reasoning_effort, ReasoningEffort::High);
+    assert_eq!(grok.reasoning_efforts, sol.reasoning_efforts[..4]);
     assert_eq!(
-        sonnet.reasoning_efforts,
+        find("kimi/kimi-k3").reasoning_efforts,
         [
             ReasoningEffort::Low,
-            ReasoningEffort::Medium,
             ReasoningEffort::High,
-            ReasoningEffort::Xhigh,
-            ReasoningEffort::Max,
+            ReasoningEffort::Max
         ]
     );
-
-    let haiku = catalog
-        .models
-        .iter()
-        .find(|model| model.model_ref == "anthropic/claude-haiku-5-5")
-        .unwrap();
-    assert_eq!(haiku.display_name, "Claude Haiku 5.5");
-    assert_eq!(haiku.status, "latest");
-    assert_eq!(haiku.context_window_tokens, Some(1_000_000.0));
-    assert_eq!(haiku.max_output_tokens, Some(128_000.0));
-    assert_eq!(haiku.default_reasoning_effort, ReasoningEffort::Medium);
-    assert_eq!(
-        haiku.reasoning_efforts,
-        [
-            ReasoningEffort::Low,
-            ReasoningEffort::Medium,
-            ReasoningEffort::High,
-            ReasoningEffort::Xhigh,
-            ReasoningEffort::Max,
-        ]
-    );
-    let google = |id: &str| lookup::find_model_metadata(Some(id), &catalog.models).unwrap();
     let latest = catalog
         .models
         .iter()
@@ -217,9 +215,9 @@ fn confirmed_routine_presets_and_openai_sol_metadata_are_pinned() {
     assert_eq!(argon.model_ref, "google/gemini-4-argon");
     assert_eq!(argon.context_window_tokens, Some(1_048_576.0));
     assert_eq!(argon.max_output_tokens, Some(65_536.0));
-    assert_eq!(google("google/gemini-3.8-flash").status, "recommended");
+    assert_eq!(find("google/gemini-3.8-flash").status, "recommended");
     for id in ["google/gemini-3.7-flash", "google/gemini-3.5-flash"] {
-        let model = google(id);
+        let model = find(id);
         assert!(!model.runtime_supported, "{id}");
         assert_eq!(model.status, "deprecated");
     }

@@ -15,6 +15,7 @@ pub struct StoreUsage {
 #[derive(Serialize)]
 pub struct StorageView {
     pub stores: Vec<StoreUsage>,
+    pub write_timeouts: usize,
     pub last_write_error: Option<String>,
 }
 pub(crate) const STORES: [(&str, u64, i64); 3] = [
@@ -69,6 +70,7 @@ pub(crate) fn usage(root: &Path) -> io::Result<StorageView> {
     Ok(StorageView {
         stores,
         last_write_error: None,
+        write_timeouts: 0,
     })
 }
 pub(crate) fn prune(root: &Path, active: &[PathBuf]) -> io::Result<()> {

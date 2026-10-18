@@ -64,6 +64,8 @@ pub(super) enum Handler {
     Wallpapers,
     #[cfg(feature = "e2e-fixtures")]
     Expire,
+    #[cfg(feature = "e2e-fixtures")]
+    LogWriter,
 }
 pub(super) fn routes() -> Router<Arc<HttpState>> {
     let mut router = Router::new();
@@ -319,6 +321,7 @@ fn table() -> impl Iterator<Item = (&'static str, Handler)> {
 #[cfg(feature = "e2e-fixtures")]
 const FIXTURE_ROUTES: &[(&str, Handler)] = &[
     ("/internal/e2e/logs/expire", Handler::Expire),
+    ("/internal/e2e/logs/writer/{action}", Handler::LogWriter),
     (
         "/automations/_test/scheduler-next-due-reads",
         Handler::Automations,

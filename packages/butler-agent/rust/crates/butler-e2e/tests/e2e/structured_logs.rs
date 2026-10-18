@@ -411,3 +411,6 @@ async fn logs_use_router_templates_for_ids() -> Result<(), HarnessError> {
     assert_eq!(routes, templates.into_iter().map(str::to_owned).collect());
     s.finish().await
 }
+
+#[path = "structured_logs_completion.rs"]
+mod completion;
