@@ -9,6 +9,7 @@ import { $readComposerContent, $replaceComposerContent } from "./serialization";
 import { registerComposerClipboard } from "./clipboard";
 import { $selectDropPoint } from "./drop-selection";
 import { registerComposerFocus } from "./composerFocus";
+import { afterComposition, registerComposerComposition } from "./composition";
 import { focusComposer } from "./focusComposer";
 import { useHotkey } from "@/butler-ds";
 import { KEY_ENTER_COMMAND } from "lexical";
@@ -20,6 +21,7 @@ export function ComposerEditorPlugin() {
   const savedSelection = useRef<BaseSelection | null>(null);
   useHotkey("mod+shift+e", () => focusComposer(editor.getRootElement()), { enabled: true });
   useEffect(() => registerComposerFocus(editor, savedSelection), [editor]);
+  useEffect(() => registerComposerComposition(editor), [editor]);
   // Handle send before PlainTextPlugin inserts a line break. React's bubble
   // handler sees defaultPrevented and cannot submit the same key twice.
   useEffect(() => editor.registerCommand(KEY_ENTER_COMMAND, event => {
@@ -28,11 +30,14 @@ export function ComposerEditorPlugin() {
     useComposerStore.getState().handleKeyDown(event);
     return event.defaultPrevented;
   }, COMMAND_PRIORITY_HIGH), [editor]);
-  useEffect(() => {
-    const desired = parts ?? { version: 1 as const, parts: text ? [{ type: "text" as const, text }] : [] };
+  // Rewriting the document mid-composition would make the IME commit early, so a
+  // store change made meanwhile is applied, as the store then holds it, afterwards.
+  useEffect(() => afterComposition(editor, () => {
+    const { contentParts, text } = useComposerStore.getState();
+    const desired = contentParts ?? { version: 1 as const, parts: text ? [{ type: "text" as const, text }] : [] };
     const current = editor.getEditorState().read($readComposerContent);
     if (JSON.stringify(current) !== JSON.stringify(desired)) editor.update(() => $replaceComposerContent(desired), { tag: SKIP_DOM_SELECTION_TAG });
-  }, [editor, parts, text]);
+  }), [editor, parts, text]);
   useEffect(() => {
     const knownSession = (id: string) => id === "general" || useButlerStore.getState().navigation.space.nodes.some(node => node.kind === "session" && node.entityId === id);
     function insert(reference: { sessionId: string; titleSnapshot: string }, drop?: DragEvent) {
