@@ -142,4 +142,4 @@ To build Butler from source, run the checks or work on the Rust agent, see [CONT
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Contributions are covered by the [CLA](CLA-v1.md). The Butler name and logo follow the [trademark policy](TRADEMARKS.md).
