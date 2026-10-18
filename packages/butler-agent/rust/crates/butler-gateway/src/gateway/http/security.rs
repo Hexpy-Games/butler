@@ -162,12 +162,6 @@ impl GatewaySecurity {
             signed_url_ttl,
             shutdown,
         } = config;
-        if let Some(secret) = auth.token() {
-            butler_log::register_secret(&secret);
-        }
-        if let Some(secret) = &admin {
-            butler_log::register_secret(secret);
-        }
         let ttl_seconds = signed_url_ttl.as_secs().max(1);
         let keyed = Keyed::derive(auth.token(), local_addr.port(), ttl_seconds, &shutdown);
         let policy = RequestPolicy::new(local_addr, &allowed_hosts, dev_origins.as_deref(), &[]);
@@ -261,7 +255,6 @@ impl GatewaySecurity {
     /// those streams got the rotation event; `None` when there is no token
     /// to replace.
     pub(super) fn rotate(&self, token: &str) -> Option<CancellationToken> {
-        butler_log::register_secret(token);
         let mut keyed = self.keyed.write();
         if keyed.token.is_none() || !self.auth.replace_token(token) {
             return None;

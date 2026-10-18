@@ -14,7 +14,6 @@ name = "butler_agent"
 # E2E fixtures (source keychain service, fault, clock and barrier hooks); never
 # enabled in shipped binaries.
 e2e-fixtures = [
-    "butler-log/e2e-fixtures",
     "butler-platform/test-support",
     "butler-gateway/e2e-fixtures",
     "butler-memory/e2e-fixtures",
@@ -26,7 +25,6 @@ prebuilt-ort = ["butler-gateway/prebuilt-ort", "butler-memory/prebuilt-ort"]
 static-ort = ["butler-gateway/static-ort", "butler-memory/static-ort"]
 
 [dependencies]
-butler-log = { path = "../butler-log" }
 butler-test-support = { path = "../butler-test-support", optional = true }
 butler-gateway = { path = "../butler-gateway", default-features = false }
 butler-memory = { path = "../butler-memory", default-features = false }

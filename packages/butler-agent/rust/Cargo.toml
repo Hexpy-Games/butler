@@ -10,7 +10,6 @@ license = "MIT"
 publish = false
 
 [workspace.dependencies]
-tracing = "0.1.44"
 semver = "1.0.27"
 arrow-array = "=57.3.1"
 arrow-schema = "=57.3.1"

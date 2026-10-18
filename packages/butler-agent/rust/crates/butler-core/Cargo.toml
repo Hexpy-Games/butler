@@ -7,7 +7,6 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-tracing.workspace = true
 butler-platform = { path = "../butler-platform" }
 base64.workspace = true
 chrono.workspace = true

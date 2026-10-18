@@ -171,3 +171,10 @@ fn profile_import(value: &Value) -> bool {
         && input.get("source").is_none_or(Value::is_string)
         && input.get("model").is_none_or(Value::is_string)
 }
+
+pub(super) fn settings_path(uri: &Uri) -> bool {
+    matches!(
+        uri.path().split('/').nth(1),
+        Some("memory" | "personalization")
+    )
+}

@@ -148,17 +148,10 @@ impl LocalCredentials {
                 new_secret_file,
             ),
         };
-        let admin = super::local_admin::load(data_root, files);
-        for secret in [&token, &folder_secret, &admin]
-            .into_iter()
-            .filter_map(|r| r.as_ref().ok())
-        {
-            butler_log::register_secret(secret);
-        }
         Self {
             token,
             folder_secret,
-            admin,
+            admin: super::local_admin::load(data_root, files),
         }
     }
 }

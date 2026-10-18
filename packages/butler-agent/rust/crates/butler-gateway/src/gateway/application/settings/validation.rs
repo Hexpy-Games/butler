@@ -31,8 +31,6 @@ const UPDATE_KEYS: &[&str] = &[
     "conversation_background",
     "translucent_sidebar",
     "diagnostics_enabled",
-    "log_level",
-    "log_category_levels",
     "desktop_notifications",
     "desktop_tray_enabled",
     "web_search",
@@ -42,9 +40,6 @@ const UPDATE_KEYS: &[&str] = &[
 ];
 
 pub(super) fn is_request(value: &Value) -> bool {
-    if !super::logging::valid(value) {
-        return false;
-    }
     let Some(input) = value.as_object() else {
         return false;
     };

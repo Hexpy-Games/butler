@@ -3,6 +3,9 @@ use super::*;
 use crate::gateway::AppTaskGraphQuery;
 use butler_turn::btcc::TaskGraphScope as GraphScope;
 
+pub(super) fn matches(uri: &Uri) -> bool {
+    scope(uri).is_some()
+}
 fn scope(uri: &Uri) -> Option<GraphScope> {
     let parts: Vec<_> = uri.path().trim_start_matches('/').split('/').collect();
     match parts.as_slice() {

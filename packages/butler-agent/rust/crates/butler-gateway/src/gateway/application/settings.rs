@@ -8,9 +8,7 @@ use serde_json::{Value, json};
 
 mod access;
 mod command_sandbox;
-mod logging;
 pub use command_sandbox::command_sandbox_enabled;
-pub use logging::startup_config as startup_log_config;
 mod background_sources;
 mod composer_decoration;
 mod controls;
@@ -311,11 +309,9 @@ impl super::AppApplication {
         &self,
         input: Value,
     ) -> Result<Value, crate::gateway::GatewayApplicationError> {
-        let (_, projection) = self
-            .update_settings_from(input, WallpaperOrigin::User)
-            .await?;
-        logging::apply(&projection).await?;
-        Ok(projection)
+        self.update_settings_from(input, WallpaperOrigin::User)
+            .await
+            .map(|(_, projection)| projection)
     }
 
     /// Applies a settings PATCH from `origin`. Returns the effective

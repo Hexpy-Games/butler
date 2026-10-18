@@ -142,7 +142,6 @@ pub(super) fn record(
     }
     let id = text(value.get("id"))?.to_owned();
     let (home, masked) = if let Some(secret) = text(value.get("secret")) {
-        butler_log::register_secret(secret);
         let masked = mask(secret);
         (
             SecretHome::Plaintext(SecretText::new(secret.into())),

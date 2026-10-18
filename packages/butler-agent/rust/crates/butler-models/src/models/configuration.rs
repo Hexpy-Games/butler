@@ -15,7 +15,6 @@ mod discovery;
 mod environment;
 mod key_check;
 mod local_credentials;
-mod logging;
 mod mcp;
 mod mutations;
 mod probes;
@@ -125,7 +124,6 @@ pub struct ModelConfiguration {
     client: Client,
     configuration_writes: Arc<ConfigurationWrites>,
     secrets: ProviderSecrets,
-    log_secrets: tokio::sync::OnceCell<()>,
 }
 
 /// Raw config and credentials never implement Debug or Serialize. Request
@@ -185,9 +183,6 @@ impl ModelConfiguration {
             },
             &collation,
         )?;
-        if let Some(secret) = &environment.openai_api_key {
-            butler_log::register_secret(secret);
-        }
         let secrets = ProviderSecrets::new(environment.secret_store);
         Ok(Self {
             data_root,
@@ -200,14 +195,11 @@ impl ModelConfiguration {
             client,
             configuration_writes,
             secrets,
-            log_secrets: tokio::sync::OnceCell::new(),
         })
     }
 
     pub async fn read(&self) -> Result<ModelConfigurationRead, ModelCatalogError> {
-        let read = self.read_from(&self.data_root).await?;
-        self.register_log_secrets(&read).await;
-        Ok(read)
+        self.read_from(&self.data_root).await
     }
 
     async fn read_from(&self, root: &Path) -> Result<ModelConfigurationRead, ModelCatalogError> {

@@ -36,9 +36,6 @@ pub(super) fn write(
     path: &Path,
     credentials: &HashMap<String, String>,
 ) -> Result<(), ModelCatalogError> {
-    for secret in credentials.values() {
-        butler_log::register_secret(secret);
-    }
     let parent = path.parent().ok_or_else(write_error)?;
     if secure_fs::OWNER_ONLY {
         fs::create_dir_all(parent).map_err(write_failed)?;
@@ -80,10 +77,9 @@ fn decode(bytes: &[u8]) -> Result<HashMap<String, String>, ModelCatalogError> {
     Ok(object
         .iter()
         .filter_map(|(key, value)| {
-            value.as_str().map(|secret| {
-                butler_log::register_secret(secret);
-                (key.clone(), secret.to_owned())
-            })
+            value
+                .as_str()
+                .map(|secret| (key.clone(), secret.to_owned()))
         })
         .collect())
 }

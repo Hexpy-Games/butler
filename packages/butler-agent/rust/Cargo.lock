@@ -902,7 +902,6 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tokio-util",
- "tracing",
  "unicode-normalization",
  "unicode-segmentation",
  "uuid",
@@ -916,7 +915,6 @@ dependencies = [
  "base64 0.22.1",
  "butler-core",
  "butler-gateway",
- "butler-log",
  "butler-models",
  "butler-platform",
  "butler-runtime",
@@ -938,11 +936,9 @@ dependencies = [
  "tiktoken-rs",
  "tokio",
  "tokio-util",
- "tracing",
  "url",
  "uuid",
  "zip",
- "zstd",
 ]
 
 [[package]]
@@ -952,7 +948,6 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "butler-core",
- "butler-log",
  "butler-memory",
  "butler-models",
  "butler-platform",
@@ -997,7 +992,6 @@ dependencies = [
  "butler-core",
  "butler-gateway",
  "butler-ledger",
- "butler-log",
  "butler-memory",
  "butler-models",
  "butler-platform",
@@ -1052,29 +1046,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "butler-log"
-version = "0.0.0"
-dependencies = [
- "base64 0.22.1",
- "butler-core",
- "butler-platform",
- "chrono",
- "parking_lot",
- "regex",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "url",
- "uuid",
- "zip",
- "zstd",
-]
-
-[[package]]
 name = "butler-memory"
 version = "0.0.0"
 dependencies = [
@@ -1119,7 +1090,6 @@ version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "butler-core",
- "butler-log",
  "butler-platform",
  "butler-test-support",
  "butler-turn",
@@ -1205,7 +1175,6 @@ version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "butler-core",
- "butler-log",
  "butler-models",
  "butler-platform",
  "butler-runtime",
