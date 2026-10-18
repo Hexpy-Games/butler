@@ -301,7 +301,7 @@ fn session_activity_path(path: &str) -> Option<(String, bool)> {
     Some((decode_component(encoded).ok()?, suffix == "/history"))
 }
 
-fn decode_component(value: &str) -> Result<String, HttpError> {
+pub(super) fn decode_component(value: &str) -> Result<String, HttpError> {
     let mut bytes = Vec::with_capacity(value.len());
     let mut input = value.as_bytes().iter().copied();
     while let Some(byte) = input.next() {

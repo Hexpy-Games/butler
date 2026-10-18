@@ -10,6 +10,7 @@ pub(super) fn project(
     workspace_root: &std::path::Path,
 ) -> serde_json::Value {
     let mut output = project::project(current, patch, facts, workspace_root);
+    super::super::logging::project(current, patch, &mut output);
     wallpaper::project(current, patch, &mut output);
     composer_decoration::project(current, patch, &mut output);
     conversation_background::project(current, patch, &mut output);

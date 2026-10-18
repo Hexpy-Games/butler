@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { Notice } from "../../blocks/Notice";
+import { SpanBar, type SpanBarTone } from "../../blocks/SpanBar";
 import { Stack } from "../../components/Stack";
 import { TintedGlass } from "../../components/TintedGlass";
 import { Typo } from "../../components/Typo";
@@ -75,6 +76,31 @@ function ChartAndSyntax() {
   );
 }
 
+const TRACE_FILLS: Array<[SpanBarTone, string]> = [
+  ["model", "Model and HTTP requests, streams"], ["tool", "Tool and MCP calls"], ["app", "App side (send, deliver)"],
+  ["agent", "Agent work (turn, pick, context, memory)"], ["error", "Error"], ["wait", "Wait, retry, warning"],
+];
+
+/** Each trace fill as a solid span and as a span split solid / hatch with its -alt partner. */
+function TraceFills() {
+  return (
+    <ThemePanes label="Trace fills">
+      {() => (
+        <Stack gap="md">
+          {TRACE_FILLS.map(([tone, role]) => (
+            <Stack gap="none" key={tone}>
+              <Typo.Caption tone="secondary">{`--trace-${tone} · -alt — ${role}`}</Typo.Caption>
+              <SpanBar offset={0} duration={2} total={2} tone={tone} />
+              <SpanBar offset={0} duration={2} total={2} tone={tone}
+                segments={[{ offset: 0, duration: 1, tone }, { offset: 1, duration: 1, tone }]} />
+            </Stack>
+          ))}
+        </Stack>
+      )}
+    </ThemePanes>
+  );
+}
+
 function GlassOverPalette() {
   return (
     <ThemePanes label="Glass">
@@ -96,7 +122,7 @@ function GlassOverPalette() {
 export function ColorChapter({ chapter, anchor, locale, onOpen }: ChapterProps) {
   const s = chapterSections(chapter, [
     ["palette", "Palette"], ["roles", "Roles on surfaces"], ["surfaces", "Surfaces"], ["status", "Status"],
-    ["semantic-map", "Semantic map"], ["data-and-code", "Charts and code"], ["glass", "Glass"],
+    ["semantic-map", "Semantic map"], ["data-and-code", "Charts and code"], ["trace", "Trace fills"], ["glass", "Glass"],
   ]);
   return (
     <ChapterLayout anchor={anchor} chapter={chapter} locale={locale} onOpen={onOpen} sections={s.list}
@@ -118,6 +144,9 @@ export function ColorChapter({ chapter, anchor, locale, onOpen }: ChapterProps) 
       </GuideSection>
       <GuideSection spec={s.at("data-and-code")} lead="Chart series reuse the role colors; syntax colors are tuned per theme.">
         <ChartAndSyntax />
+      </GuideSection>
+      <GuideSection spec={s.at("trace")} lead="Span bar fills for traces: what a step is (model, tool, app, agent) or its status (error, wait). Each has an -alt partner for the hatch between adjacent segments; fills, never text colors.">
+        <TraceFills />
       </GuideSection>
       <GuideSection spec={s.at("glass")} lead="Glass is tint, border and highlight tokens; it stays readable over moving content.">
         <GlassOverPalette />
