@@ -19,10 +19,13 @@ mod upload;
 pub use error::Error;
 mod body;
 mod capture;
+#[cfg(feature = "e2e-fixtures")]
+pub mod fixtures;
 mod observe;
 mod request;
 mod response;
 mod retry;
+mod sse;
 pub use client::{Client, ClientBuilder};
 pub use request::RequestBuilder;
 

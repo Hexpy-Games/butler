@@ -400,3 +400,6 @@ async fn web_page_fetch_is_logged_once_with_complete_response()
 
 #[path = "outbound_http/review.rs"]
 mod review;
+
+#[path = "outbound_http/sse.rs"]
+mod sse;

@@ -54,17 +54,10 @@ impl InboundQueue {
     }
 
     pub async fn enqueue_async(&self, envelope: JsonDocument) -> QueueResult<QueuedInboundEvent> {
-        let context =
-            serde_json::to_value(butler_log::TraceContext::current()).map_err(|error| {
-                InboundQueueError::new(InboundQueueCode::InboundQueueIoFailed, error.to_string())
-            })?;
-        self.blocking(move |queue| {
-            queue.enqueue_idempotent_with_metadata(
-                envelope,
-                Map::from_iter([("traceContext".into(), context)]),
-            )
-        })
-        .await
+        let mut metadata = Map::new();
+        capture_trace_context(&mut metadata)?;
+        self.blocking(move |queue| queue.enqueue_idempotent_with_metadata(envelope, metadata))
+            .await
     }
 
     /// Publish work already committed by a durable owner which reconstructs
@@ -74,7 +67,9 @@ impl InboundQueue {
         &self,
         envelope: JsonDocument,
     ) -> QueueResult<QueuedInboundEvent> {
-        self.blocking(move |queue| queue.publish(envelope, Map::new(), false))
+        let mut metadata = Map::new();
+        capture_trace_context(&mut metadata)?;
+        self.blocking(move |queue| queue.publish(envelope, metadata, false))
             .await
     }
 
@@ -170,11 +165,7 @@ impl InboundQueue {
         mut metadata: Map<String, Value>,
         durable: bool,
     ) -> QueueResult<QueuedInboundEvent> {
-        metadata.entry("traceContext").or_insert(
-            serde_json::to_value(butler_log::TraceContext::current()).map_err(|error| {
-                InboundQueueError::new(InboundQueueCode::InboundQueueIoFailed, error.to_string())
-            })?,
-        );
+        capture_trace_context(&mut metadata)?;
         let timing = super::command_timing::CommandTiming::new("inbound_enqueue");
         let _guard = self.lane.lock();
         timing.mark("lock_acquired");
@@ -249,4 +240,17 @@ impl InboundQueue {
         let _guard = self.lane.lock();
         storage::recover_stale(&self.root, &self.owner_id, active)
     }
+}
+
+fn capture_trace_context(metadata: &mut Map<String, Value>) -> QueueResult<()> {
+    if !metadata.contains_key("traceContext") {
+        let context = butler_log::TraceContext::current();
+        if context.trace_id.is_some() {
+            let value = serde_json::to_value(context).map_err(|error| {
+                InboundQueueError::new(InboundQueueCode::InboundQueueIoFailed, error.to_string())
+            })?;
+            metadata.insert("traceContext".into(), value);
+        }
+    }
+    Ok(())
 }

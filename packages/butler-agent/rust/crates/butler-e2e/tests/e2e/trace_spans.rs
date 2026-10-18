@@ -265,13 +265,52 @@ async fn traceparent_joins_trace_at_standard() -> Result<(), HarnessError> {
     let trace = s.gw.get(&format!("/logs/trace?turn_id={turn_id}")).await?;
     assert_eq!(trace.status, 200, "{}", trace.text);
     assert_eq!(trace.data()["trace_id"], id);
+    let spans = trace.data()["spans"].as_array().unwrap();
+    for name in ["http.server", "turn.admit", "turn.queue", "turn.run"] {
+        assert!(
+            spans.iter().any(|span| span["name"] == name),
+            "missing {name}: {}",
+            trace.text
+        );
+    }
+    let server_span = spans
+        .iter()
+        .find(|span| span["name"] == "http.server")
+        .unwrap();
+    assert_eq!(server_span["tone"], "app");
+    let admit = spans
+        .iter()
+        .find(|span| span["name"] == "turn.admit")
+        .unwrap();
+    assert_eq!(admit["parent_span_id"], server_span["span_id"]);
     assert!(
-        trace.data()["spans"]
-            .as_array()
-            .unwrap()
+        spans
             .iter()
-            .any(|s| s["name"] == "turn.run")
+            .any(|span| span["name"] == "turn.queue" && span["parent_span_id"] == admit["span_id"])
     );
+    let mut ancestor = spans
+        .iter()
+        .find(|span| span["name"] == "turn.run")
+        .unwrap();
+    let mut chain = Vec::new();
+    for _ in 0..spans.len() {
+        chain.push(ancestor["name"].as_str().unwrap());
+        let Some(parent) = spans
+            .iter()
+            .find(|span| span["span_id"] == ancestor["parent_span_id"])
+        else {
+            break;
+        };
+        ancestor = parent;
+    }
+    for name in ["http.server", "turn.admit", "turn.queue"] {
+        assert!(chain.contains(&name), "missing ancestor {name}: {chain:?}");
+    }
+    let access = spans
+        .iter()
+        .find(|span| span["category"] == "http.server" && span["name"] == "http.request")
+        .unwrap();
+    assert_eq!(access["tone"], "app");
     assert!(
         server
             .seen()
