@@ -255,6 +255,12 @@ impl Logger {
         storage.refresh()?;
         query::query(&storage.root, &storage.catalog, q)
     }
+    pub(super) fn query_trace(&self, q: &Query) -> io::Result<Page> {
+        self.flush()?;
+        let mut storage = self.0.storage.lock();
+        storage.refresh()?;
+        query::query_bounded(&storage.root, &storage.catalog, q, 10000)
+    }
     pub fn storage(&self) -> io::Result<StorageView> {
         self.flush()?;
         let mut view = retention::usage(&self.0.storage.lock().root)?;

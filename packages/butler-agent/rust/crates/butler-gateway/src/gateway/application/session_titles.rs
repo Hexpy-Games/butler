@@ -2,6 +2,7 @@
 use super::*;
 use rusqlite::{Connection, OptionalExtension};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tracing::Instrument;
 
 #[derive(Clone, Default)]
 pub(super) struct SessionTitleOwner {
@@ -47,7 +48,7 @@ impl AppApplication {
             if let Some(reason) = reason {
                 eprintln!("WARN [session-title] chat={chat} model={model} reason={reason}");
             }
-        });
+        }.instrument(tracing::Span::current()));
     }
 
     async fn generate_title(

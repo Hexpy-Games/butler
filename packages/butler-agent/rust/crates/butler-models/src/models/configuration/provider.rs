@@ -71,6 +71,7 @@ impl ProviderRequestConfigPort for ModelConfiguration {
 }
 
 impl ModelConfiguration {
+    #[tracing::instrument(name = "route.select", level = "debug", skip_all, fields(model = %request.model_ref, chosen = tracing::field::Empty, key_source = tracing::field::Empty), err)]
     async fn resolve_request(
         &self,
         request: ProviderConfigRequest<'_>,
@@ -167,7 +168,7 @@ impl ModelConfiguration {
         } else {
             metadata.model_id.clone()
         };
-        Ok(ProviderRequestConfig {
+        Ok(record_route(ProviderRequestConfig {
             wire_model,
             api_shape: metadata.hosted_api_shape,
             metadata,
@@ -179,7 +180,7 @@ impl ModelConfiguration {
             ),
             prompt_cache,
             prompt_reasoning_effort,
-        })
+        }))
     }
 
     fn selected_root(&self, butler_data: Option<&str>) -> PathBuf {
@@ -431,4 +432,18 @@ impl ModelConfiguration {
         let config = super::read_object_sync(&self.data_root.join("butler.config.json"));
         self.prompt_cache_from_config(&config, &self.data_root)
     }
+}
+
+fn record_route(config: ProviderRequestConfig) -> ProviderRequestConfig {
+    tracing::Span::current()
+        .record("chosen", &config.metadata.model_ref)
+        .record(
+            "key_source",
+            match &config.auth {
+                ProviderAuth::ApiKey(_) => "credential_store",
+                ProviderAuth::Codex { .. } => "oauth_profile",
+                ProviderAuth::None => "none",
+            },
+        );
+    config
 }

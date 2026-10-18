@@ -241,3 +241,5 @@ mod logs_request_completion;
 mod structured_logs;
 
 mod outbound_http;
+
+mod trace_spans;

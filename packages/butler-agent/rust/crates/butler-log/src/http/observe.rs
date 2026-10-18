@@ -37,6 +37,8 @@ impl Attempt {
         if let Some(id) = &phase.chat_id {
             row.chat_id = Some(id.clone());
         }
+        row.parent_span_id = row.span_id.take();
+        row.span_id = Some(uuid::Uuid::new_v4().simple().to_string()[..16].into());
         let url = crate::redact_url(request.url().as_str());
         let path = url::Url::parse(&url).ok().map(|url| {
             let mut path = url.path().to_owned();
@@ -103,7 +105,7 @@ impl Attempt {
         if self.capture && full() {
             self.response.observe(bytes);
         }
-        if self.sse && crate::global().is_some_and(|log| log.enabled(&self.row.category, "TRACE")) {
+        if self.sse {
             self.events(bytes);
         }
     }
@@ -128,7 +130,23 @@ impl Attempt {
                             .and_then(|v| v["type"].as_str().map(str::to_owned))
                     })
                     .or_else(|| line.starts_with("data:").then(|| "message".to_owned()));
-                if let Some(event) = event {
+                if let Some(value) = line
+                    .strip_prefix("data:")
+                    .and_then(|s| serde_json::from_str::<Value>(s).ok())
+                {
+                    if let Some(reason) = value["choices"][0]["finish_reason"]
+                        .as_str()
+                        .or_else(|| value["candidates"][0]["finishReason"].as_str())
+                        .or_else(|| value["delta"]["stop_reason"].as_str())
+                    {
+                        self.row.attrs["finish_reason"] = reason.into();
+                    } else if value["type"] == "response.completed" {
+                        self.row.attrs["finish_reason"] = "completed".into();
+                    }
+                }
+                if let Some(event) = event.filter(|_| {
+                    crate::global().is_some_and(|log| log.enabled(&self.row.category, "TRACE"))
+                }) {
                     let mut row = self.row.clone();
                     row.level = "TRACE".into();
                     row.event = "http.stream.event".into();
@@ -151,6 +169,16 @@ impl Drop for Attempt {
         self.row.attrs["chunks"] = json!(self.chunks);
         if self.row.attrs.get("response_complete").is_none() {
             self.row.attrs["response_complete"] = json!(false);
+        }
+        if self.sse {
+            let mut stream = self.row.clone();
+            stream.parent_span_id = stream.span_id.take();
+            stream.span_id = Some(uuid::Uuid::new_v4().simple().to_string()[..16].into());
+            stream.event = "span.end".into();
+            stream.msg = "stream.receive".into();
+            stream.category = "stream".into();
+            stream.attrs["started_at"] = stream.ts.clone().into();
+            crate::emit(stream);
         }
         let mut row = self.row.clone();
         let error_body = std::mem::take(&mut self.error_body);

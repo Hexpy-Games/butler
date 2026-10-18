@@ -54,8 +54,17 @@ impl InboundQueue {
     }
 
     pub async fn enqueue_async(&self, envelope: JsonDocument) -> QueueResult<QueuedInboundEvent> {
-        self.blocking(move |queue| queue.enqueue_idempotent(envelope))
-            .await
+        let context =
+            serde_json::to_value(butler_log::TraceContext::current()).map_err(|error| {
+                InboundQueueError::new(InboundQueueCode::InboundQueueIoFailed, error.to_string())
+            })?;
+        self.blocking(move |queue| {
+            queue.enqueue_idempotent_with_metadata(
+                envelope,
+                Map::from_iter([("traceContext".into(), context)]),
+            )
+        })
+        .await
     }
 
     /// Publish work already committed by a durable owner which reconstructs
@@ -158,9 +167,14 @@ impl InboundQueue {
     fn publish(
         &self,
         envelope: JsonDocument,
-        metadata: Map<String, Value>,
+        mut metadata: Map<String, Value>,
         durable: bool,
     ) -> QueueResult<QueuedInboundEvent> {
+        metadata.entry("traceContext").or_insert(
+            serde_json::to_value(butler_log::TraceContext::current()).map_err(|error| {
+                InboundQueueError::new(InboundQueueCode::InboundQueueIoFailed, error.to_string())
+            })?,
+        );
         let timing = super::command_timing::CommandTiming::new("inbound_enqueue");
         let _guard = self.lane.lock();
         timing.mark("lock_acquired");

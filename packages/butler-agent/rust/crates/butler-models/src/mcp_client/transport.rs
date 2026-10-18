@@ -33,6 +33,7 @@ impl McpClient {
             .await
     }
 
+    #[tracing::instrument(name = "mcp.call", skip_all, fields(method = operation.method()), err)]
     pub(super) async fn with_server_timeout(
         &self,
         server: &McpServerConfig,
