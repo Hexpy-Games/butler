@@ -70,11 +70,6 @@ fn script(def: &Definition, root: &std::path::Path) -> String {
         script.push(' ');
         script.push_str(&quote(arg));
     }
-    script.push_str(&format!(
-        " 1>> {} 2>> {}",
-        quote(&def.working_dir.join(super::STDOUT_LOG).to_string_lossy()),
-        quote(&def.working_dir.join(super::STDERR_LOG).to_string_lossy())
-    ));
     script.push_str(";exit $LASTEXITCODE");
     script
 }

@@ -225,11 +225,12 @@ pub fn definition_path() -> Result<PathBuf, Error> {
     sys::definition_path()
 }
 
-/// DATA-relative stdout file held open by service launchers.
+/// DATA-relative stdout file held open by Unix service launchers.
 pub const STDOUT_LOG: &str = "logs/butler-agent-service.stdout.log";
-/// DATA-relative stderr file held open by service launchers.
+/// DATA-relative stderr file held open by Unix service launchers.
 pub const STDERR_LOG: &str = "logs/butler-agent-service.stderr.log";
-/// Files whose parent must survive a reset while launchers hold them open.
+/// Unix launcher files retained during reset; absent files are skipped.
+/// Windows Task Scheduler inherits native streams without redirecting them.
 pub const LAUNCHER_LOGS: &[&str] = &[STDOUT_LOG, STDERR_LOG];
 
 /// Writes the definition and, with [`Activation::Load`], loads it and starts

@@ -35,8 +35,8 @@ const KEPT: &[&str] = &[
 pub(crate) fn movable(path: &Path) -> bool {
     inventory::directory(path).is_some()
 }
-pub(crate) fn collect(root: &Path) -> io::Result<Vec<PathBuf>> {
-    validate_parents(root)?;
+pub(crate) fn collect(root: &Path, kept_logs: &[PathBuf]) -> io::Result<Vec<PathBuf>> {
+    validate_parents(root, kept_logs)?;
     let mut moves = Vec::new();
     for (path, directory) in inventory::entries() {
         let full = root.join(&path);
@@ -57,9 +57,16 @@ pub(crate) fn collect(root: &Path) -> io::Result<Vec<PathBuf>> {
     if real_parents(root, &logs.join("entry"))? {
         for entry in fs::read_dir(root.join(logs))? {
             let entry = entry?;
-            let path = logs.join(entry.file_name());
+            let name = entry.file_name();
+            if butler_platform::data_paths::OWNED_LOG_STORES
+                .iter()
+                .any(|source| name == *source)
+            {
+                continue;
+            }
+            let path = logs.join(name);
             if super::logs::valid(&path)
-                && !super::logs::kept(&path)
+                && !kept_logs.contains(&path)
                 && inventory::matches(&path, false, entry.file_type()?)
             {
                 check_device(root, &entry.path())?;
@@ -70,9 +77,9 @@ pub(crate) fn collect(root: &Path) -> io::Result<Vec<PathBuf>> {
     moves.sort();
     Ok(moves)
 }
-fn validate_parents(root: &Path) -> io::Result<()> {
-    for path in super::logs::paths() {
-        if !real_parents(root, &path)? {
+fn validate_parents(root: &Path, kept_logs: &[PathBuf]) -> io::Result<()> {
+    for path in kept_logs {
+        if !real_parents(root, path)? {
             continue;
         }
         match fs::symlink_metadata(root.join(path)) {
@@ -121,6 +128,7 @@ pub(crate) fn preflight(
     requested: &Path,
     db: &Path,
     installation: &ResolvedInstallation,
+    kept_logs: &[PathBuf],
 ) -> Result<Vec<PathBuf>, &'static str> {
     if !super::super::data_ownership::safe_location(root)
         || !super::super::data_ownership::owned(root)
@@ -166,7 +174,7 @@ pub(crate) fn preflight(
             return Err(invalid);
         }
     }
-    collect(root).map_err(|e| {
+    collect(root, kept_logs).map_err(|e| {
         if e.kind() == io::ErrorKind::CrossesDevices {
             "full_reset_cross_device"
         } else {

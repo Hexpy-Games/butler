@@ -16,9 +16,15 @@ impl Scratch {
     /// unsandboxed command later picks up from a shared cache.
     pub(super) fn new(butler_data: &Path, project_write: bool) -> Self {
         let (temporary, cache) = if project_write {
-            ("tmp/project-write", "cache/project-write")
+            (
+                "tmp/project-write",
+                butler_platform::data_paths::PROJECT_WRITE_CACHE,
+            )
         } else {
-            ("tmp", "cache/tools")
+            (
+                butler_platform::data_paths::TEMPORARY,
+                butler_platform::data_paths::TOOL_CACHE,
+            )
         };
         Self {
             temporary: butler_data.join(temporary),

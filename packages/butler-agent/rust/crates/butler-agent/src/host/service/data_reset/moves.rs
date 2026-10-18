@@ -75,7 +75,7 @@ pub(super) fn move_all(root: &Path, journal: &mut Journal) -> io::Result<()> {
     journal::sync(root)?;
     for relative in journal.moves.clone() {
         let from = root.join(&relative);
-        if super::logs::kept(&relative) || !present(&from)? {
+        if journal.kept_logs.contains(&relative) || !present(&from)? {
             continue;
         }
         let directory = super::inventory::directory(&relative)
@@ -107,7 +107,7 @@ pub(super) fn rollback(root: &Path, journal: &mut Journal) -> io::Result<()> {
     let trash = journal.trash(root);
     for relative in journal.moves.clone().into_iter().rev() {
         let from = trash.join(&relative);
-        if super::logs::kept(&relative) || !present(&from)? {
+        if journal.kept_logs.contains(&relative) || !present(&from)? {
             continue;
         }
         let to = root.join(&relative);

@@ -39,8 +39,14 @@ pub const MESSAGE_FILES: &str = "app-server/message-files";
 pub const ASSETS: &str = "app-server/assets";
 /// Generated artifact files.
 pub const ARTIFACTS: &str = "artifacts/generated";
-/// Agent log directory; reset inspects direct files only.
+/// Agent log directory; reset retains launcher files and removes owned stores.
 pub const LOGS: &str = "logs";
+/// Native structured-log store name beneath LOGS.
+pub const NATIVE_LOG_STORE: &str = "agent";
+/// App structured-log store name beneath LOGS.
+pub const APP_LOG_STORE: &str = "app";
+/// Owned structured-log subdirectories; other log directories are preserved.
+pub const OWNED_LOG_STORES: &[&str] = &[NATIVE_LOG_STORE, APP_LOG_STORE];
 /// Installed skill packages.
 pub const SKILLS: &str = "skills";
 /// User hook settings.
@@ -79,8 +85,32 @@ pub const FOLDER_SECRET: &str = "state/app-gateway/project-folder-token-secret";
 pub const APP_LOGS: &str = "app/logs";
 /// Electron composer draft files.
 pub const COMPOSER_DRAFTS: &str = "app/composer-drafts";
+/// Legacy schedules reimported into App storage.
+pub const LEGACY_SCHEDULES: &str = "automations";
+/// Legacy memory namespace migration source.
+pub const LEGACY_MEMORY: &str = "memory";
+/// Private context compaction evidence.
+pub const COMPACTIONS: &str = "context/compactions";
+/// Legacy task records and their memory source.
+pub const TASKS: &str = "tasks";
+/// Incremental transcript projection spool.
+pub const TRANSCRIPT_PROJECTION_SPOOL: &str = "transcript-projection-spool";
+/// Exported private diagnostic bundles.
+pub const LOG_EXPORTS: &str = "log-exports";
+/// Guided command cache state.
+pub const TOOL_CACHE: &str = "cache/tools";
+/// Project-write command cache state.
+pub const PROJECT_WRITE_CACHE: &str = "cache/project-write";
 /// Paths whose first component Butler creates itself.
 pub const OWNED_PATHS: &[&str] = &[
+    LEGACY_SCHEDULES,
+    LEGACY_MEMORY,
+    COMPACTIONS,
+    TASKS,
+    TRANSCRIPT_PROJECTION_SPOOL,
+    LOG_EXPORTS,
+    TOOL_CACHE,
+    PROJECT_WRITE_CACHE,
     CONFIG,
     APP_DB,
     BTCC_DB,
@@ -125,6 +155,14 @@ pub const OWNED_PATHS: &[&str] = &[
 pub const LOCKED_FILES: &[&str] = &[CONFIG, EOL];
 /// Directory-valued store paths; other complete paths name regular files.
 pub const OWNED_DIRECTORIES: &[&str] = &[
+    LEGACY_SCHEDULES,
+    LEGACY_MEMORY,
+    COMPACTIONS,
+    TASKS,
+    TRANSCRIPT_PROJECTION_SPOOL,
+    LOG_EXPORTS,
+    TOOL_CACHE,
+    PROJECT_WRITE_CACHE,
     COGNITION,
     TRANSCRIPTS,
     WALLPAPERS,

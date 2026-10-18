@@ -20,7 +20,6 @@ const UNKNOWN: &[&str] = &[
     "work/source",
     "plans/source",
     "projects/source",
-    "tasks/source",
 ];
 fn seed_unknown(root: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>, HarnessError> {
     for name in UNKNOWN {
@@ -42,7 +41,7 @@ fn hashes(root: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>, HarnessError> {
         })
         .collect()
 }
-async fn reset_and_restart(s: &mut Scenario) -> Result<(), HarnessError> {
+pub(super) async fn reset_and_restart(s: &mut Scenario) -> Result<(), HarnessError> {
     let before = generation(s).await?;
     let reply = request(s, &nonce(s).await?).await?;
     assert_eq!(reply.status, 202, "{}", reply.text);
@@ -62,6 +61,8 @@ async fn unknown_entries_and_links_survive_while_owned_stores_are_reset() -> Res
     let before = seed_unknown(&root)?;
     fs::create_dir_all(root.join("outputs"))?;
     fs::write(root.join("outputs/owned-proof"), b"owned")?;
+    fs::create_dir_all(root.join("tasks"))?;
+    fs::write(root.join("tasks/source"), b"owned task")?;
     // Wrong types are preserved and diagnosed; a named store link is moved as a link.
     fs::write(root.join("worktrees"), b"wrong type, keep")?;
     let outside = s.sandbox.workspace.join("outside");
@@ -75,6 +76,7 @@ async fn unknown_entries_and_links_survive_while_owned_stores_are_reset() -> Res
     reset_and_restart(&mut s).await?;
     assert_eq!(hashes(&root)?, before);
     assert!(!root.join("outputs/owned-proof").exists());
+    assert!(!root.join("tasks/source").exists());
     assert_eq!(fs::read(root.join("worktrees"))?, b"wrong type, keep");
     assert!(s.agent.logs().contains("retained wrong type: worktrees"));
     assert_eq!(

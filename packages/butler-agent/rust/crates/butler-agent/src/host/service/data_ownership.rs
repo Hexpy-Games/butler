@@ -60,6 +60,18 @@ pub(crate) fn migrate(root: &Path, requested: &Path, default: &Path) -> io::Resu
     if is_default {
         return write(root);
     }
+    // Generic directory names alone cannot establish a custom root's identity.
+    if ![
+        butler_platform::data_paths::APP_DB,
+        butler_platform::data_paths::BTCC_DB,
+    ]
+    .iter()
+    .any(|path| {
+        fs::symlink_metadata(root.join(path))
+            .is_ok_and(|m| m.is_file() && !m.file_type().is_symlink())
+    }) {
+        return Ok(());
+    }
     for entry in fs::read_dir(root)? {
         let entry = entry?;
         let kind = entry.file_type()?;

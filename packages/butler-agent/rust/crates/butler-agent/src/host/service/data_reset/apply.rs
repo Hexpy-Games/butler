@@ -7,11 +7,6 @@ use butler_platform::secure_fs;
 use std::{io, path::Path, time::Instant};
 
 pub(crate) fn apply(root: &Path, journal: &mut Journal) -> io::Result<bool> {
-    for log in super::logs::paths() {
-        if !journal.kept_logs.contains(&log) {
-            journal.kept_logs.push(log);
-        }
-    }
     if matches!(journal.phase, Phase::RollingBack) {
         rollback(root, journal).map_err(rollback_error)?;
         return Ok(false);
@@ -26,7 +21,7 @@ pub(crate) fn apply(root: &Path, journal: &mut Journal) -> io::Result<bool> {
             journal.save(root)?;
         }
         secure_fs::fault_checkpoint("data_reset.plan")?;
-        for path in plan::collect(root)? {
+        for path in plan::collect(root, &journal.kept_logs)? {
             if !journal.moves.contains(&path) {
                 journal.moves.push(path);
             }

@@ -148,14 +148,22 @@ impl Control {
         {
             return Err(public(409, "full_reset_in_progress"));
         }
-        let moves = plan::preflight(&self.root, &self.requested, &self.db, &self.installation)
-            .map_err(|code| public(409, code))?;
+        let mut kept_logs = logs::paths();
+        if let Some(pending) = &pending {
+            merge(&mut kept_logs, pending.kept_logs.clone());
+        }
+        let moves = plan::preflight(
+            &self.root,
+            &self.requested,
+            &self.db,
+            &self.installation,
+            &kept_logs,
+        )
+        .map_err(|code| public(409, code))?;
         let (mut secret_keys, mut project_hot_caches) = secrets::snapshot(&self.root, &self.db)
             .map_err(GatewayApplicationError::internal_from)?;
-        let mut kept_logs = logs::paths();
         let mut pending_trash = vec![PathBuf::from(format!("{}{id}", journal::TRASH_PREFIX))];
         if let Some(pending) = pending {
-            merge(&mut kept_logs, pending.kept_logs);
             merge(&mut pending_trash, pending.pending_trash);
             merge(&mut secret_keys, pending.secret_keys);
             merge(&mut project_hot_caches, pending.project_hot_caches);

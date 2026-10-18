@@ -16,9 +16,26 @@ mod allowlist;
 mod interruption;
 mod review;
 mod round2;
+mod round5;
 mod seed;
 
 fn setup(id: &str) -> Result<Setup, HarnessError> {
+    let setup = unowned_setup(id)?;
+    // Reset scenarios model an installed Butler root, including its real store.
+    // Settings-only fixtures intentionally no longer establish custom ownership.
+    butler_turn::btcc::bootstrap_fresh_storage(
+        &setup
+            .sandbox
+            .data
+            .join(butler_platform::data_paths::BTCC_DB),
+        "full-reset-fixture",
+        env!("CARGO_PKG_VERSION"),
+        "2026-10-18T00:00:00Z",
+    )
+    .map_err(|e| HarnessError(e.to_string()))?;
+    Ok(setup)
+}
+fn unowned_setup(id: &str) -> Result<Setup, HarnessError> {
     Ok(Setup::new(id)?
         .data_folder_token()
         .env("BUTLER_APP_VERSION", "1.0.0"))

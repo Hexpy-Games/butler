@@ -24,6 +24,3 @@ pub(crate) fn paths() -> Vec<PathBuf> {
     }
     paths
 }
-pub(crate) fn kept(path: &Path) -> bool {
-    paths().iter().any(|p| p == path)
-}

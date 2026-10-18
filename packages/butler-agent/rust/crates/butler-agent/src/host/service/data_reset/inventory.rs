@@ -25,6 +25,9 @@ pub(super) fn entries() -> Vec<(PathBuf, bool)> {
             entries.push((boundary, directory));
         }
     }
+    for source in data_paths::OWNED_LOG_STORES {
+        entries.push((Path::new(data_paths::LOGS).join(source), true));
+    }
     for path in data_paths::LOCKED_FILES {
         entries.push((PathBuf::from(format!("{path}.lock")), false));
     }

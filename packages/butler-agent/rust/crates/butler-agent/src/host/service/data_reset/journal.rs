@@ -53,7 +53,7 @@ pub(crate) struct Journal {
     pub relocations: Vec<Relocation>,
     #[serde(default)]
     pub pending_trash: Vec<PathBuf>,
-    #[serde(default = "super::logs::paths")]
+    #[serde(default)]
     pub kept_logs: Vec<PathBuf>,
 }
 impl Journal {
