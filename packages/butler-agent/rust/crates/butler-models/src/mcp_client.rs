@@ -21,3 +21,5 @@ pub use catalog::{
 };
 pub use client::{McpClient, RegistryPathGuard};
 pub use registry::{McpRegistryError, normalize_server_id};
+
+mod logged_http;

@@ -102,7 +102,9 @@ async fn check(owner: &GuidedTools, invocation: &GuidedInvocation<'_>, args: &Va
     let Ok(Ok(admin)) = admin else {
         return json!({"status":"unavailable","reason":"no_browser"});
     };
-    let client = reqwest::Client::new();
+    let Ok(client) = butler_log::http::loopback().build() else {
+        return json!({"status":"unavailable","reason":"no_browser"});
+    };
     let bearer = endpoint.local_auth.token().unwrap_or_default();
     if image
         && !vision(
@@ -142,7 +144,7 @@ async fn check(owner: &GuidedTools, invocation: &GuidedInvocation<'_>, args: &Va
     result
 }
 pub(super) async fn vision(
-    client: &reqwest::Client,
+    client: &butler_log::http::Client,
     base: &str,
     bearer: &str,
     model: &str,

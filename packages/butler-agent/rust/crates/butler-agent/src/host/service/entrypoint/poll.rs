@@ -28,7 +28,7 @@ pub(super) struct PollOwners<'a> {
     pub(super) progress: Arc<ProgressPublisher>,
     pub(super) config: &'a ServiceConfiguration,
     pub(super) subsessions: &'a butler_turn::btcc::SqliteSubsessionRepository,
-    pub(super) parent_client: &'a reqwest::Client,
+    pub(super) parent_client: &'a butler_log::http::Client,
     pub(super) app_endpoint: &'a ActiveAppEndpoint,
     pub(super) readiness: &'a ServiceReadiness,
     pub(super) logs: ServiceLogMode,

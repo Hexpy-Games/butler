@@ -1,7 +1,7 @@
 //! Where an Agent archive may be fetched from.
 
-pub(super) fn redirect_policy() -> reqwest::redirect::Policy {
-    reqwest::redirect::Policy::custom(|attempt| {
+pub(super) fn redirect_policy() -> butler_log::http::RedirectPolicy {
+    butler_log::http::RedirectPolicy::custom(|attempt| {
         if redirect_allowed(attempt.previous(), attempt.url()) {
             attempt.follow()
         } else {

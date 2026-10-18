@@ -53,6 +53,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "coordination" | "lenient" | "js_json" => &[],
         // butler-gateway and the host binary are single-domain crates.
         "gateway" | "host" | "structured_logging" => &[],
+        // Outbound transport produces records through the structured logging facade.
+        "http" => &["structured_logging"],
         // butler-e2e: dev-only harness around the built binary; one domain.
         "e2e" => &[],
         _ => return None,

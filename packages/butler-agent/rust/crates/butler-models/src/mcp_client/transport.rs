@@ -3,8 +3,7 @@ use std::{collections::HashMap, process::Stdio, time::Duration};
 use rmcp::{
     RoleClient,
     transport::{
-        StreamableHttpClientTransport, async_rw::AsyncRwTransport,
-        streamable_http_client::StreamableHttpClientTransportConfig,
+        async_rw::AsyncRwTransport, streamable_http_client::StreamableHttpClientTransportConfig,
     },
 };
 use serde_json::{Value, json};
@@ -74,7 +73,7 @@ impl McpClient {
                 let mut config = StreamableHttpClientTransportConfig::with_uri(url.as_str());
                 config.reinit_on_expired_session = false;
                 config.custom_headers = custom_headers;
-                let transport = StreamableHttpClientTransport::from_config(config);
+                let transport = super::logged_http::transport(config).map_err(http_client_error)?;
                 Box::pin(run_session(transport, operation, timeout, signal)).await
             }
             McpTransportKind::Sse => {
@@ -88,7 +87,7 @@ impl McpClient {
                     .with_source(source)
                 })?;
                 let transport = LegacySseTransport::connect(
-                    reqwest::Client::new(),
+                    super::logged_http::client().map_err(http_client_error)?,
                     url,
                     custom_headers,
                     CancellationToken::new(),
@@ -283,4 +282,13 @@ pub(super) fn with_probe_error(mut base: Value, message: &str) -> Value {
 
 fn failure(code: &'static str, message: &'static str, attempted: bool) -> McpClientError {
     McpClientError::new(code, message, attempted)
+}
+
+fn http_client_error(source: reqwest::Error) -> McpClientError {
+    failure(
+        "mcp_server_unavailable",
+        "MCP HTTP client unavailable.",
+        false,
+    )
+    .with_source(source)
 }

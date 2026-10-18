@@ -127,7 +127,9 @@ async fn call(
         )
     };
     let current = owner.app_endpoint.snapshot().ok_or_else(unavailable)?;
-    let mut request = reqwest::Client::new()
+    let mut request = butler_log::http::loopback()
+        .build()
+        .map_err(|_| unavailable())?
         .request(method, format!("{}{route}", current.base_url))
         .query(query)
         .timeout(Duration::from_secs(30));

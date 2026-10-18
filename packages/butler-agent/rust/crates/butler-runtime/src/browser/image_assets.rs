@@ -103,9 +103,9 @@ async fn fetch_inner(raw: &str, referer: &str, user_agent: &str) -> Result<Vec<u
             .await
             .map_err(|_| "private_image_url")?;
         let client = tokio::task::spawn_blocking(move || {
-            reqwest::Client::builder()
+            butler_log::http::external(butler_log::http::Purpose::new("browser_image"))
                 .no_proxy()
-                .redirect(reqwest::redirect::Policy::none())
+                .redirect(butler_log::http::RedirectPolicy::none())
                 .resolve_to_addrs(&host, &addresses)
                 .timeout(Duration::from_secs(10))
                 .build()
