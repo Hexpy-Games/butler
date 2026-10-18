@@ -40,6 +40,17 @@ describe("token catalog generated from tokens.css", () => {
     expect(byName.get("--syntax-keyword")?.group).toBe("Syntax");
     expect(byName.get("--context-chart-3")?.group).toBe("Chart");
     expect(byName.get("--tinted-glass-tint")?.group).toBe("Glass");
+    expect(byName.get("--trace-wait-alt")).toMatchObject({ category: "color", group: "Trace" });
+    expect(byName.get("--trace-light-model")).toMatchObject({ category: "color", group: "Trace" });
+  });
+
+  test("resolves every trace fill per theme from the trace palette", () => {
+    for (const kind of ["model", "tool", "app", "agent", "error", "wait"]) {
+      for (const name of [`--trace-${kind}`, `--trace-${kind}-alt`]) {
+        const suffix = name.slice("--trace-".length);
+        expect(byName.get(name)).toMatchObject({ light: `var(--trace-light-${suffix})`, dark: `var(--trace-dark-${suffix})` });
+      }
+    }
   });
 
   test("sorts the other foundations by role", () => {
