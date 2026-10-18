@@ -178,7 +178,11 @@ pub(super) fn rename(from: &Path, to: &Path) -> io::Result<()> {
     fs::rename(from, to)
 }
 
-pub(super) fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
+pub(super) fn replace_file(
+    from: &Path,
+    to: &Path,
+    _before_retry: &mut dyn FnMut() -> io::Result<()>,
+) -> io::Result<()> {
     fs::rename(from, to)
 }
 

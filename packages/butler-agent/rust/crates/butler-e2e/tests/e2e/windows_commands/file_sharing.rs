@@ -12,15 +12,19 @@ use std::{fs, path::Path, time::Duration};
 async fn release_after_publication_starts(
     directory: &Path,
     lock: fs::File,
+    external_save: Option<&Path>,
 ) -> Result<(), HarnessError> {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             if fs::read_dir(directory)?.any(|entry| {
                 entry.is_ok_and(|entry| entry.path().extension().is_some_and(|ext| ext == "tmp"))
             }) {
-                // Keep a real incompatible handle alive beyond the old 180 ms
-                // retry budget, without changing either file's contents.
-                tokio::time::sleep(Duration::from_millis(800)).await;
+                // Outlast the old 180 ms budget while leaving ample room for
+                // the bounded 950 ms replacement retry window.
+                tokio::time::sleep(Duration::from_millis(350)).await;
+                if let Some(path) = external_save {
+                    fs::write(path, "external save\n")?;
+                }
                 break;
             }
             tokio::time::sleep(Duration::from_millis(5)).await;
@@ -40,6 +44,20 @@ async fn edit_file_survives_a_transient_delete_sharing_lock() -> Result<(), Harn
         !butler_platform::command_sandbox::POSIX_SHELL,
         "Native delete sharing required"
     );
+    run_sharing_case(false).await
+}
+
+#[tokio::test]
+async fn edit_file_preserves_an_external_save_during_sharing_retry() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        !butler_platform::command_sandbox::POSIX_SHELL,
+        "Native delete sharing required"
+    );
+    run_sharing_case(true).await
+}
+
+async fn run_sharing_case(external_save: bool) -> Result<(), HarnessError> {
     let setup = Setup::new("FILE-MUTATION-SHARING")?;
     let directory = setup.sandbox.home.join("Desktop");
     fs::create_dir(&directory)?;
@@ -60,13 +78,18 @@ async fn edit_file_survives_a_transient_delete_sharing_lock() -> Result<(), Harn
         .await?;
     let (turn, release) = tokio::join!(
         s.turn("general", provider::PROMPT),
-        release_after_publication_starts(&directory, lock),
+        release_after_publication_starts(&directory, lock, external_save.then_some(path.as_path())),
     );
     release?;
     assert_eq!(turn_state(&turn?.1), "delivered");
     let (output, _) = script.result.lock().unwrap().clone().unwrap();
-    assert_eq!(output["ok"], true, "{output}");
-    assert_eq!(fs::read_to_string(&path)?, "after\n");
+    if external_save {
+        assert_eq!(output["error"], "external_change_conflict", "{output}");
+        assert_eq!(fs::read_to_string(&path)?, "external save\n");
+    } else {
+        assert_eq!(output["ok"], true, "{output}");
+        assert_eq!(fs::read_to_string(&path)?, "after\n");
+    }
     assert_eq!(fs::read_dir(&directory)?.count(), 1, "staging was cleaned");
     s.finish().await?;
     server.abort();

@@ -229,7 +229,11 @@ pub(super) fn rename(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 
-pub(super) fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
+pub(super) fn replace_file(
+    from: &Path,
+    to: &Path,
+    before_retry: &mut dyn FnMut() -> io::Result<()>,
+) -> io::Result<()> {
     let from = move_path(from)?;
     let to = move_path(to)?;
     let mut attempt = 1;
@@ -244,6 +248,7 @@ pub(super) fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
             {
                 attempt += 1;
                 std::thread::sleep(REPLACEMENT_BACKOFF);
+                before_retry()?;
             }
             result => return result,
         }
