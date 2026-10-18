@@ -35,6 +35,7 @@ pub(crate) struct AgentRuntime {
     pub context_compactions: ContextCompactionRepository,
     pub collation: Arc<LocaleCollation>,
     pub progress: StorageProgressPublication,
+    pub thinking: butler_turn::btcc::AnswerDraftPublisher,
     pub answer_drafts: butler_turn::btcc::AnswerDraftPublisher,
     pub conversations: Arc<AgentConversationStore>,
     pub image_files: Arc<butler_gateway::gateway::AppImageFiles>,

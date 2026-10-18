@@ -159,6 +159,11 @@ pub trait AgentLoopProgress: Send + Sync {
     /// Publishes one progress event.
     fn emit(&self, event: crate::btcc::RuntimeTurnEventInput) -> PortFuture<'_, ()>;
 
+    /// Ephemeral user-facing summary line. Never append durable events or log its text.
+    fn model_thinking(&self, _stream_id: String, _line: Option<String>) -> PortFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
+
     /// Ephemeral validated draft ops. Implementations must never append durable events.
     /// Gateway delivery is composed separately from the durable progress path.
     /// `call_id` is the provider's tool call id when known; an `end` op names
@@ -193,6 +198,8 @@ pub trait CanonicalMessageStore: Send + Sync {
 
 /// Durable progress events of turns.
 pub trait ProgressEventRepository: Send + Sync {
+    /// Publishes a live summary line without persistence.
+    fn model_thinking(&self, _payload: serde_json::Value) {}
     /// Publishes a validated ephemeral draft, bypassing durable progress.
     fn answer_blocks_draft(&self, _payload: serde_json::Value) {}
     /// Appends one progress event.

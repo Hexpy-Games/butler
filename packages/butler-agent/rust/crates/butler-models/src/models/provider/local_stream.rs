@@ -81,6 +81,7 @@ pub(super) struct StreamWatch<'a> {
     inner: Option<&'a dyn ProviderStreamObserver>,
     streamed: AtomicBool,
     tools_observed: AtomicBool,
+    summary: bool,
 }
 
 impl<'a> StreamWatch<'a> {
@@ -89,7 +90,13 @@ impl<'a> StreamWatch<'a> {
             inner,
             streamed: AtomicBool::new(false),
             tools_observed: AtomicBool::new(false),
+            summary: false,
         }
+    }
+
+    pub(super) fn with_summary(mut self, summary: bool) -> Self {
+        self.summary = summary;
+        self
     }
 
     /// JSON-only carriers still declare identity before their one complete argument fragment.
@@ -157,7 +164,13 @@ impl ProviderStreamObserver for StreamWatch<'_> {
             self.streamed.store(true, Ordering::Release);
         }
         if let Some(inner) = self.inner {
-            inner.event(event);
+            if event["type"] == "reasoning_delta" && !self.summary {
+                let mut event = event.clone();
+                event["display"] = "internal".into();
+                inner.event(&event);
+            } else {
+                inner.event(event);
+            }
         }
     }
 

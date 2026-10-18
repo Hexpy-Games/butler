@@ -8,6 +8,8 @@ use serde_json::json;
 // test-category: pure-logic
 #[tokio::test]
 async fn no_visible_empty_recovery_and_first_effective_outcome_are_preserved() {
+    super::thinking_line::tests::derives_latest_heading_complete_line_and_utf16_cap();
+    super::thinking_line::tests::changed_line_waits_for_one_second_and_latest_wins().await;
     let empty = Fixture::new([
         result("", vec![], 0),
         result("", vec![], 1),

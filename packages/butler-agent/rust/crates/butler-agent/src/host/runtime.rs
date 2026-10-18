@@ -400,16 +400,13 @@ impl AgentRuntime {
             skills: skills.clone(),
             context_maintenance: context_maintenance.clone(),
         });
-        let assembly = btcc::assemble(&TurnFacadeDependencies {
+        let assembly = assemble_runtime_turn(
+            &repositories,
             preparation,
-            store: repositories.clone(),
             agent,
-            messages: repositories.clone(),
-            progress: repositories.clone(),
-            readiness: repositories.clone(),
             developer_log_capture,
-            host: owner,
-        });
+            owner,
+        );
         startup.phase("runtime_ports");
         Self::finish_startup(Self {
             hooks,
@@ -425,6 +422,7 @@ impl AgentRuntime {
             context_compactions: repositories.context_compactions(),
             collation,
             progress,
+            thinking: repositories.thinking.clone(),
             answer_drafts: repositories.answer_drafts.clone(),
             conversations,
             image_files,
@@ -464,4 +462,24 @@ impl AgentRuntime {
         );
         Ok(runtime)
     }
+}
+
+/// Bind durable storage and its process-local progress publishers to one turn runtime.
+fn assemble_runtime_turn(
+    repositories: &Arc<BtccRepositories>,
+    preparation: Arc<DefaultTurnPreparation>,
+    agent: Arc<dyn btcc::AgentLoop>,
+    developer_log_capture: Arc<dyn btcc::TurnDeveloperLogCapturePort>,
+    host: Arc<dyn HostDependencies>,
+) -> btcc::BtccAssembly {
+    btcc::assemble(&TurnFacadeDependencies {
+        preparation,
+        store: repositories.clone(),
+        agent,
+        messages: repositories.clone(),
+        progress: repositories.clone(),
+        readiness: repositories.clone(),
+        developer_log_capture,
+        host,
+    })
 }

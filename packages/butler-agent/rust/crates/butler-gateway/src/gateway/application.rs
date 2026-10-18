@@ -14,6 +14,7 @@ mod contracts;
 mod errors;
 mod event_outbox;
 mod events;
+mod thinking;
 use crate::gateway::shutdown_trace::measure as measure_shutdown;
 
 use errors::app_error;

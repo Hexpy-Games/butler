@@ -1,3 +1,4 @@
+import { useModelThinking } from "@/app/modelThinking";
 import { useId } from "react";
 import { useAppLocale } from "@/app/copy.ts";
 import { projectTurnActivity } from "@/app/conversation-progress";
@@ -25,6 +26,7 @@ export function TurnActivityPanel({
   // Pending and current status are different trees, so the status mark remounts when work
   // arrives; one key per panel lets it continue the morph instead of restarting from the logo.
   const markKey = useId();
+  const thinkingLine = useModelThinking(store => turnId ? store.lines[turnId] : undefined);
   const {
     decisions,
     modelRoundWait,
@@ -70,6 +72,7 @@ export function TurnActivityPanel({
         <TurnDecisionRow decision={decisions.at(-1)!} />
       ) : null}
       <CurrentTurnStatus
+        thinkingLine={thinkingLine}
         markKey={markKey}
         state={state}
         waitingForAnswer={rows.some((row) => row.safe_tool_name === "ask_user")}

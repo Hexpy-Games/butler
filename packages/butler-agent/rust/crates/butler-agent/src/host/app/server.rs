@@ -152,6 +152,12 @@ impl AppServer {
                 application.publish_answer_draft(payload);
             }
         }));
+        let thinking_application = Arc::downgrade(&application);
+        runtime.thinking.set_sink(Arc::new(move |payload| {
+            if let Some(application) = thinking_application.upgrade() {
+                application.publish_thinking(payload);
+            }
+        }));
         let gateway_config = gateway_config(app_config, data_root, installation, owners.local_auth);
         Self::activate_listener(
             listener,
