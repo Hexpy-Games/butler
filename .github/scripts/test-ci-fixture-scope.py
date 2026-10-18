@@ -31,7 +31,8 @@ def expression(source, key):
 def evaluate(condition, values):
     for key, value in values.items():
         condition = condition.replace(key, repr(value))
-    return eval(condition.replace('&&', ' and ').replace('||', ' or '), {'__builtins__': {}})
+    condition = re.sub(r'!(?!=)', ' not ', condition.replace('&&', ' and ').replace('||', ' or '))
+    return eval(condition, {'__builtins__': {}})
 
 
 class FixtureScope(unittest.TestCase):
@@ -143,49 +144,51 @@ class FixtureScope(unittest.TestCase):
         self.assertIn("if: inputs.update-agent-artifact != ''\n        with:\n          name: ${{ inputs.update-agent-artifact }}", source)
         use = source.split('      - name: Use the real prebuilt update-fixture versions')[1].split('      - name:')[0]
         self.assertIn('BUTLER_UPDATE_SMOKE_AGENT_BUILDS=$RUNNER_TEMP/update-agent-builds', use)
-        condition = expression(source, 'MANUAL_WITHOUT_UPDATE_FIXTURES')
-        for event, caller, run, skip in [
-            ('workflow_dispatch', 'macOS App package', '', True),
-            ('workflow_dispatch', 'macOS App package', '123', False),
-            ('push', 'Rust quality', '', False),
-            ('workflow_dispatch', 'Rust quality', '', False),
+        require = source.split('      - name: Require update-fixture agents for manual packaging')[1].split('      - name:')[0]
+        condition = re.search(r"^        if: \$\{\{ (.*) \}\}$", require, re.M)[1]
+        for event, caller, run, published, fail in [
+            ('workflow_dispatch', 'macOS App package', '', False, True),
+            ('workflow_dispatch', 'macOS App package', '123', False, False),
+            ('workflow_dispatch', 'macOS App package', '', True, False),
+            ('push', 'Rust quality', '', False, False),
+            ('workflow_dispatch', 'Rust quality', '', False, False),
+            ('workflow_dispatch', 'Post-release verify', '', True, False),
         ]:
-            self.assertEqual(evaluate(condition, {'github.event_name': event,
-                             'github.workflow': caller, 'inputs.update-agent-run-id': run}), skip)
-        # Other visual smokes and the packaged update proof remain unconditional
-        # within their existing !published-candidate steps.
-        visual = source.split('      - name: Compare new-chat surfaces')[1].split('      - name:')[0]
-        guard = visual.split('          if [ "$MANUAL_WITHOUT_UPDATE_FIXTURES"')[1].split('          fi', 1)[0]
-        self.assertEqual(re.findall(r'tests/smoke/[\w.-]+', guard), ['tests/smoke/app-update-work-stream.ts'])
+            self.assertEqual(evaluate(condition, {'github.event_name': event, 'github.workflow': caller,
+                             'inputs.update-agent-run-id': run, 'inputs.published-candidate': published}), fail)
+        self.assertIn('::error::', require)
+        self.assertIn('exit 1', require)
+        # The fail-fast check runs before any build step.
+        self.assertLess(source.index('Require update-fixture agents for manual packaging'),
+                        source.index('Set up Rust and static ONNX Runtime'))
+        # The update work-stream smoke stays unconditional within the visual step.
+        self.assertNotIn('MANUAL_WITHOUT_UPDATE_FIXTURES', source)
+        self.assertNotIn('::warning::Skipped', source)
         packaged = source.split('      - name: Packaged preview App update through Settings')[1].split('      - name:')[0]
         self.assertIn('if: ${{ !inputs.published-candidate }}', packaged)
         self.assertIn('for scenario in idle now defer background-quit', packaged)
-        self.assertNotIn('MANUAL_WITHOUT_UPDATE_FIXTURES', packaged)
 
     # test-category: pure-logic
-    def test_update_guard_warns_only_for_manual_missing_source_and_fails_closed(self):
-        source = workflow('macos-app-package')
-        block = source.split('          if [ "$MANUAL_WITHOUT_UPDATE_FIXTURES"')[1].split('          fi', 1)[0]
-        script = 'if [ "$MANUAL_WITHOUT_UPDATE_FIXTURES"' + block + 'fi\n'
+    def test_update_work_stream_smoke_fails_closed_without_fixture_agents(self):
+        visual = workflow('macos-app-package').split('      - name: Compare new-chat surfaces')[1].split('      - name:')[0]
+        lines = visual.splitlines()
+        index = next(i for i, line in enumerate(lines) if 'BUTLER_UPDATE_SMOKE_AGENT_BUILDS' in line)
+        script = '\n'.join(line.strip() for line in lines[index:index + 2]) + '\n'
+        self.assertIn('tests/smoke/app-update-work-stream.ts', script)
         with tempfile.TemporaryDirectory() as directory:
             runner = Path(directory) / 'isolate'
             runner.write_text('#!/bin/sh\nprintf "UPDATE_PROOF:%s\\n" "$BUTLER_NATIVE_AGENT_EXECUTABLE"\n')
             runner.chmod(0o700)
-            for skip, builds, code in [('true', '', 0), ('false', '', 1),
-                                        ('false', directory, 0)]:
-                env = dict(os.environ, MANUAL_WITHOUT_UPDATE_FIXTURES=skip,
-                           BUTLER_UPDATE_SMOKE_AGENT_BUILDS=builds, isolate=str(runner))
+            for builds, code in [('', 1), (directory, 0)]:
+                env = dict(os.environ, BUTLER_UPDATE_SMOKE_AGENT_BUILDS=builds, isolate=str(runner))
                 result = subprocess.run(['bash', '-eu', '-c', script], env=env,
                                         capture_output=True, text=True)
                 self.assertEqual(result.returncode, code, result.stderr)
-                self.assertEqual('::warning::Skipped app-update-work-stream smoke:' in result.stdout,
-                                 skip == 'true')
                 self.assertEqual('UPDATE_PROOF:' in result.stdout, bool(builds))
                 if builds:
                     self.assertIn(builds + '/0.1.0-preview.91/butler-agent', result.stdout)
-                elif skip == 'false':
+                else:
                     self.assertIn('update-fixture agents required', result.stderr)
-
 
 if __name__ == '__main__':
     unittest.main()

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       update-agent-run-id:
-        description: Run providing the macos-update-agent-builds artifact (empty skips update work-stream smoke)
+        description: Run providing the macos-update-agent-builds artifact (required unless published-candidate)
         required: false
         type: string
       candidate-version:
@@ -76,6 +76,14 @@ jobs:
             echo 'A published update requires baseline-tag.' >&2
             exit 1
           fi
+
+      # Manual packaging runs the update work-stream smoke, which needs the
+      # update-fixture agents; fail before building instead of skipping it.
+      - name: Require update-fixture agents for manual packaging
+        if: ${{ github.event_name == 'workflow_dispatch' && github.workflow == 'macOS App package' && !inputs.published-candidate && inputs.update-agent-run-id == '' }}
+        run: |
+          echo '::error::Manual packaging requires update-agent-run-id: a run that uploaded macos-update-agent-builds.'
+          exit 1
 
       - name: Verify the native runner
         run: test "$(uname -m)" = arm64
@@ -159,8 +167,6 @@ jobs:
       - name: Package the native App release
         id: package
         if: ${{ !inputs.published-candidate }}
-        env:
-          MANUAL_WITHOUT_UPDATE_FIXTURES: ${{ github.event_name == 'workflow_dispatch' && github.workflow == 'macOS App package' && inputs.update-agent-run-id == '' }}
         run: |
           set -euo pipefail
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
@@ -200,12 +206,8 @@ jobs:
           BUTLER_SMOKE_SCREENSHOTS="$PWD/.tmp/newchat-regression/onboarding" "$isolate" bun tests/smoke/app-onboarding-visual-smoke.ts
           "$isolate" bun tests/smoke/app-update-choice-smoke.ts
           # Holding the background bootstrap needs an E2E fixture agent; the update fixtures are one.
-          if [ "$MANUAL_WITHOUT_UPDATE_FIXTURES" = true ]; then
-            echo '::warning::Skipped app-update-work-stream smoke: manual dispatch has no update-agent-run-id providing update-fixture agents.'
-          else
-            BUTLER_NATIVE_AGENT_EXECUTABLE="${BUTLER_UPDATE_SMOKE_AGENT_BUILDS:?update-fixture agents required}/0.1.0-preview.91/butler-agent" \
-              "$isolate" bun tests/smoke/app-update-work-stream.ts
-          fi
+          BUTLER_NATIVE_AGENT_EXECUTABLE="${BUTLER_UPDATE_SMOKE_AGENT_BUILDS:?update-fixture agents required}/0.1.0-preview.91/butler-agent" \
+            "$isolate" bun tests/smoke/app-update-work-stream.ts
           "$isolate" bun tests/smoke/quick-fixes-smoke.ts
           "$isolate" bun tests/smoke/quick-fixes-compare.ts
           "$isolate" bun tests/smoke/app-memory-smoke.ts
