@@ -1024,6 +1024,11 @@
   height: var(--control-height-xs);
 }
 
+/* A still specimen drawn with live component classes: no hover and no pointer cursor. */
+.staticSpecimen {
+  pointer-events: none;
+}
+
 /* The product DropdownMenu surface sized for the page; its padding, radius and rows stay the component's. */
 .nestMenu {
   width: min(100%, 14rem);

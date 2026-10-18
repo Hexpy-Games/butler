@@ -48,7 +48,7 @@ function RadiusShapes() {
 function SessionMenu({ locale, pinched }: { locale: ChapterProps["locale"]; pinched?: boolean }) {
   const copy = getAppCopy(locale === "ko" ? "ko-KR" : "en-US").sessionActions;
   return (
-    <div className={cn(tintedGlassSurfaceClassName, menu.content, f.nestMenu)} data-glass="popover" data-radius="popover" data-slot="dropdown-menu-content">
+    <div className={cn(tintedGlassSurfaceClassName, menu.content, f.nestMenu, f.staticSpecimen)} data-glass="popover" data-radius="popover" data-slot="dropdown-menu-content">
       {([[<PencilLine size="sm" key="icon" />, copy.rename], [<Archive size="sm" key="icon" />, copy.archive]] as const).map(([icon, label], index) => (
         <div className={cn(menu.item, f.nestRow)} data-hovered={index === 0 ? "" : undefined} data-pinched={pinched ? "" : undefined}
           data-slot="dropdown-menu-item" data-variant="default" key={label}>{icon} {label}</div>
@@ -116,7 +116,7 @@ export function ShapeChapter({ chapter, anchor, locale, onOpen }: ChapterProps) 
       <GuideSection spec={s.at("radius")} lead="Each radius on the surface it belongs to.">
         <RadiusShapes />
       </GuideSection>
-      <GuideSection spec={s.at("nesting")} lead="A menu keeps --radius-popover (12px) on its surface and --radius-control (8px) on its rows, so a row matches every other control. The inset only sets the gap: 6px in DropdownMenu and ContextMenu.">
+      <GuideSection spec={s.at("nesting")} lead="A menu keeps --radius-popover (12px) on its surface and --radius-control (8px) on its rows, so a row matches every other control. The inset only sets the gap: 6px in DropdownMenu and ContextMenu, --space-1 (4px) for OptionMenu in a Popover.">
         <NestedRadius locale={locale} />
       </GuideSection>
       <GuideSection spec={s.at("layers")} lead="Page, card, control, overlay, drag: each step up casts a longer, softer shadow.">
