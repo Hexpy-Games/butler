@@ -26,8 +26,8 @@ export const RECIPES: ScreenRecipe[] = [
   },
   {
     id: "sidebar", title: "Sidebar", Screen: SidebarRecipe,
-    description: "Sections of rows; project folders collapse; row actions appear on hover through an overflow menu.",
-    uses: ["NavSection", "NavRow", "CollapsibleNavGroup", "OverflowActionMenu", "IconButton"],
+    description: "Sections of rows inside the sidebar shell; project folders collapse; row actions appear on hover through an overflow menu.",
+    uses: ["SidebarShell", "NavSection", "NavRow", "CollapsibleNavGroup", "NavRowSwap", "OverflowActionMenu", "ButtonContainer", "IconButton"],
   },
   {
     id: "dashboard", title: "Project dashboard", Screen: DashboardRecipe,

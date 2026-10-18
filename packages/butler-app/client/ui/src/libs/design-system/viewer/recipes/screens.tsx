@@ -14,13 +14,14 @@ import { MarkdownContent } from "../../blocks/MarkdownContent";
 import { MessageFooter, MessageRow } from "../../blocks/MessageRow";
 import { MetricCard } from "../../blocks/MetricCard";
 import { MetricGrid } from "../../blocks/MetricGrid";
-import { NavRow } from "../../blocks/NavRow";
+import { NavRow, NavRowSwap } from "../../blocks/NavRow";
 import { NavSection } from "../../blocks/NavSection";
 import { Notice } from "../../blocks/Notice";
 import { OverflowActionMenu } from "../../blocks/OverflowActionMenu";
 import { SettingsField } from "../../blocks/SettingsField";
 import { SettingsHeader } from "../../blocks/SettingsHeader";
 import { SettingsPage, SettingsSection } from "../../blocks/SettingsSection";
+import { SidebarShell } from "../../blocks/SidebarShell";
 import { WorkActivityBlock } from "../../blocks/WorkActivityBlock";
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
@@ -100,17 +101,21 @@ export function ConversationTurnRecipe() {
 // #region recipe: Sidebar
 export function SidebarRecipe() {
   return (
-    <Stack gap="lg">
+    <SidebarShell ariaLabel="Sidebar">
       <NavSection title="Chats">
         <NavRow icon={<GeneralChat size="md" />} label="General" active onClick={() => undefined} />
       </NavSection>
-      <NavSection title="Projects" actions={<IconButton label="New project"><Plus size="md" /></IconButton>}>
+      <NavSection title="Projects" actions={(
+        <ButtonContainer size="icon-sm"><IconButton label="New project"><Plus size="md" /></IconButton></ButtonContainer>
+      )}>
         <CollapsibleNavGroup expanded icon={<FolderOpen size="md" />} label="butler" onToggle={() => undefined}>
-          <NavRow label="Token page review" onClick={() => undefined} actionsVisibility="hover" actions={(
-            <OverflowActionMenu label="Session actions" items={[
-              { icon: <PencilLine size="sm" />, label: "Rename", onSelect: () => undefined },
-              { icon: <Archive size="sm" />, label: "Archive", onSelect: () => undefined },
-            ]} />
+          <NavRow label="Token page review" onClick={() => undefined} actions={(
+            <NavRowSwap>
+              <OverflowActionMenu label="Session actions" items={[
+                { icon: <PencilLine size="sm" />, label: "Rename", onSelect: () => undefined },
+                { icon: <Archive size="sm" />, label: "Archive", onSelect: () => undefined },
+              ]} />
+            </NavRowSwap>
           )} />
           <NavRow label="Settings S7" onClick={() => undefined} />
         </CollapsibleNavGroup>
@@ -118,7 +123,7 @@ export function SidebarRecipe() {
           <NavRow label="Landing copy" />
         </CollapsibleNavGroup>
       </NavSection>
-    </Stack>
+    </SidebarShell>
   );
 }
 // #endregion

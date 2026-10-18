@@ -2832,22 +2832,26 @@ export function ConversationTurnRecipe() {
 
 ### Sidebar
 
-Sections of rows; project folders collapse; row actions appear on hover through an overflow menu. Uses: `NavSection`, `NavRow`, `CollapsibleNavGroup`, `OverflowActionMenu`, `IconButton`.
+Sections of rows inside the sidebar shell; project folders collapse; row actions appear on hover through an overflow menu. Uses: `SidebarShell`, `NavSection`, `NavRow`, `CollapsibleNavGroup`, `NavRowSwap`, `OverflowActionMenu`, `ButtonContainer`, `IconButton`.
 
 ```tsx
 export function SidebarRecipe() {
   return (
-    <Stack gap="lg">
+    <SidebarShell ariaLabel="Sidebar">
       <NavSection title="Chats">
         <NavRow icon={<GeneralChat size="md" />} label="General" active onClick={() => undefined} />
       </NavSection>
-      <NavSection title="Projects" actions={<IconButton label="New project"><Plus size="md" /></IconButton>}>
+      <NavSection title="Projects" actions={(
+        <ButtonContainer size="icon-sm"><IconButton label="New project"><Plus size="md" /></IconButton></ButtonContainer>
+      )}>
         <CollapsibleNavGroup expanded icon={<FolderOpen size="md" />} label="butler" onToggle={() => undefined}>
-          <NavRow label="Token page review" onClick={() => undefined} actionsVisibility="hover" actions={(
-            <OverflowActionMenu label="Session actions" items={[
-              { icon: <PencilLine size="sm" />, label: "Rename", onSelect: () => undefined },
-              { icon: <Archive size="sm" />, label: "Archive", onSelect: () => undefined },
-            ]} />
+          <NavRow label="Token page review" onClick={() => undefined} actions={(
+            <NavRowSwap>
+              <OverflowActionMenu label="Session actions" items={[
+                { icon: <PencilLine size="sm" />, label: "Rename", onSelect: () => undefined },
+                { icon: <Archive size="sm" />, label: "Archive", onSelect: () => undefined },
+              ]} />
+            </NavRowSwap>
           )} />
           <NavRow label="Settings S7" onClick={() => undefined} />
         </CollapsibleNavGroup>
@@ -2855,7 +2859,7 @@ export function SidebarRecipe() {
           <NavRow label="Landing copy" />
         </CollapsibleNavGroup>
       </NavSection>
-    </Stack>
+    </SidebarShell>
   );
 }
 ```
