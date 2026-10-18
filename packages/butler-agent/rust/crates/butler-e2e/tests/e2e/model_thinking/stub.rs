@@ -19,7 +19,9 @@ fn frames(stub: &Stub, first_index: u64, second_index: u64) -> (String, String, 
             gemini(&json!({"text":b,"thought":true}), false),
             gemini(
                 &json!({"functionCall":{"name":"tool_describe","args":{"ids":["native:list_tool_capabilities"]}},"thoughtSignature":SIGNATURE}),
-                true,
+                false,
+            ) + &frame(
+                &json!({"candidates":[{"index":0,"finishReason":"STOP"}],"modelVersion":"gemini-3.8-flash"}),
             ),
         ),
         "anthropic" => (
@@ -128,22 +130,32 @@ async fn reply(State(stub): State<Stub>, Json(body): Json<Value>) -> Response {
     } else {
         vec![(0, first), (300, second)]
     };
+    let (start, terminal) = last.rsplit_once("data:").unwrap();
+    let (start, terminal) = (start.to_owned(), format!("data:{terminal}"));
+    let chunks = chunks
+        .into_iter()
+        .map(|(delay, text)| (Some(delay), text))
+        .chain([(None, start), (None, terminal)]);
     let stream = futures_util::stream::unfold(
-        (chunks.into_iter(), stub, last),
-        |(mut chunks, stub, last)| async move {
-            let text = if let Some((delay, text)) = chunks.next() {
+        (chunks, stub, false),
+        |(mut chunks, stub, finishing)| async move {
+            let (delay, text) = chunks.next()?;
+            let finishing = if let Some(delay) = delay {
                 tokio::time::sleep(Duration::from_millis(delay)).await;
-                text
-            } else if !last.is_empty() {
-                stub.gate.notified().await;
-                last.clone()
+                finishing
+            } else if finishing {
+                if text.is_empty() {
+                    return None;
+                }
+                stub.finish_gate.notified().await;
+                true
             } else {
-                return None;
+                stub.gate.notified().await;
+                true
             };
-            let done = chunks.len() == 0 && text == last;
             Some((
                 Ok::<_, std::convert::Infallible>(text),
-                (chunks, stub, if done { String::new() } else { last }),
+                (chunks, stub, finishing),
             ))
         },
     );
@@ -170,6 +182,7 @@ pub(super) async fn setup_refusal(
         raw,
         reject_summary,
         gate: Arc::new(Notify::new()),
+        finish_gate: Arc::new(Notify::new()),
         requests: Default::default(),
     };
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;

@@ -30,6 +30,7 @@ struct Stub {
     raw: bool,
     reject_summary: bool,
     gate: Arc<Notify>,
+    finish_gate: Arc<Notify>,
     requests: Arc<Mutex<Vec<Value>>>,
 }
 struct Server(tokio::task::JoinHandle<()>);
@@ -168,6 +169,18 @@ async fn summary_case(provider: &'static str, show: bool) -> Result<(), HarnessE
     );
     stub.gate.notify_one();
     let turn = second["payload"]["turn_id"].as_str().unwrap();
+    live.wait_for(WAIT, |e| {
+        e["type"] == "turn.thinking"
+            && e["payload"]["turn_id"] == turn
+            && e["payload"]["line"].is_null()
+    })
+    .await?;
+    let current = s.gw.turn("general", turn).await?.unwrap();
+    assert_eq!(
+        current["state"], "thinking",
+        "text/tool start clears before delivery"
+    );
+    stub.finish_gate.notify_one();
     live.wait_turn(&s.gw, "general", turn, &["delivered"], WAIT)
         .await?;
     let events = live.snapshot();
@@ -200,8 +213,8 @@ async fn summary_case(provider: &'static str, show: bool) -> Result<(), HarnessE
     assert_no_durable_summary(&s)?;
     assert_wire(&stub);
     eprintln!(
-        "{provider}: show={show}; summary_bytes={}; durable rows {before:?} unchanged; reconnect snapshots=1; gated delivery verified",
-        expected.len()
+        "{provider}: show={show}; opt_in_summary_bytes={:?}; durable rows {before:?} unchanged; reconnect snapshots=1; gated delivery verified",
+        show.then_some(expected.len())
     );
     drop((live, reconnect, ended));
     s.finish().await
@@ -289,6 +302,7 @@ async fn responses_internal_reasoning_never_reaches_app() -> Result<(), HarnessE
     );
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     stub.gate.notify_one();
+    stub.finish_gate.notify_one();
     let (_, turn) = s.turn("general", "Reply briefly.").await?;
     assert_eq!(turn["state"], "delivered");
     assert!(
@@ -307,6 +321,7 @@ async fn openai_summary_rejection_resends_once_and_is_remembered() -> Result<(),
     let (s, stub, _server) = setup_refusal("openai", false, true).await?;
     for _ in 0..2 {
         stub.gate.notify_one();
+        stub.finish_gate.notify_one();
         let (_, turn) = s.turn("general", "Reply briefly.").await?;
         assert_eq!(turn["state"], "delivered", "{turn}");
     }
