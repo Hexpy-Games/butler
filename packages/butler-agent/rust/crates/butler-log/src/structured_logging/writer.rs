@@ -1,3 +1,4 @@
+mod completion;
 mod queue;
 mod worker;
 use super::encoded::Encoded;
@@ -16,12 +17,17 @@ use std::{
     },
     thread,
 };
-use tokio::sync::{broadcast, watch};
+use tokio::sync::{broadcast, oneshot, watch};
 
 const DEBUG_CAPACITY: usize = 8192;
 type Reply<T> = mpsc::SyncSender<io::Result<T>>;
 enum Command {
-    Record(Encoded, bool, usize),
+    Record(
+        Encoded,
+        bool,
+        usize,
+        Option<oneshot::Sender<io::Result<()>>>,
+    ),
     Control(Control),
     Dropped,
 }
@@ -46,6 +52,7 @@ struct Inner {
     queue: queue::Queue,
     pending: AtomicUsize,
     dropped: AtomicUsize,
+    write_timeouts: AtomicUsize,
     live: broadcast::Sender<Record>,
     changes: watch::Sender<ConfigView>,
     join: Mutex<Option<thread::JoinHandle<io::Result<()>>>>,
@@ -93,6 +100,7 @@ impl Logger {
             queue: queue::Queue::default(),
             pending: AtomicUsize::new(0),
             dropped: AtomicUsize::new(0),
+            write_timeouts: AtomicUsize::new(0),
             live,
             changes,
             join: Mutex::new(None),
@@ -112,7 +120,7 @@ impl Logger {
         self.0.config.read().effective.enabled(category, level)
     }
     pub fn record(&self, row: Record) -> io::Result<()> {
-        self.enqueue(row)
+        self.enqueue(row, None).map(|_| ())
     }
     /// Fixture seeding waits for the writer rather than exercising the lossy lane.
     #[cfg(feature = "e2e-fixtures")]
@@ -120,28 +128,38 @@ impl Logger {
         if !self.enabled(&row.category, &row.level) {
             return Ok(());
         }
-        self.send_record(row, false)?;
+        self.send_record(row, false, None)?;
         if self.0.queue.bytes.load(Ordering::Relaxed) > 16 * 1024 * 1024 {
             self.flush()?;
         }
         Ok(())
     }
-    fn enqueue(&self, row: Record) -> io::Result<()> {
+    fn enqueue(
+        &self,
+        row: Record,
+        ack: Option<oneshot::Sender<io::Result<()>>>,
+    ) -> io::Result<bool> {
         if !self.enabled(&row.category, &row.level) {
-            return Ok(());
+            return Ok(false);
         }
         let lossy = super::record::severity(&row.level) >= 4;
         if lossy && self.0.pending.fetch_add(1, Ordering::Relaxed) >= DEBUG_CAPACITY {
             self.0.pending.fetch_sub(1, Ordering::Relaxed);
             self.0.dropped.fetch_add(1, Ordering::Relaxed);
-            return Ok(());
+            return Ok(false);
         }
-        self.send_record(row, lossy)
+        self.send_record(row, lossy, ack)
     }
-    fn send_record(&self, row: Record, lossy: bool) -> io::Result<()> {
+    fn send_record(
+        &self,
+        row: Record,
+        lossy: bool,
+        ack: Option<oneshot::Sender<io::Result<()>>>,
+    ) -> io::Result<bool> {
         // A full lane cannot accept any payload; avoid encoding records it will discard.
         if !lossy && self.0.queue.reject_full(&row.level) {
-            return self.notify_queue_full();
+            self.notify_queue_full()?;
+            return Ok(false);
         }
         let encoded = match Encoded::new(row, &self.snapshot().effective) {
             Ok(encoded) => encoded,
@@ -157,9 +175,9 @@ impl Logger {
             if !self.0.queue.notice.swap(true, Ordering::Relaxed) {
                 self.0.tx.send(Command::Dropped).map_err(io::Error::other)?;
             }
-            return Ok(());
+            return Ok(false);
         }
-        if let Err(error) = self.0.tx.send(Command::Record(encoded, lossy, bytes)) {
+        if let Err(error) = self.0.tx.send(Command::Record(encoded, lossy, bytes, ack)) {
             if !lossy {
                 self.0.queue.bytes.fetch_sub(bytes, Ordering::Relaxed);
             }
@@ -168,7 +186,7 @@ impl Logger {
             }
             return Err(io::Error::other(error));
         }
-        Ok(())
+        Ok(true)
     }
 
     fn request<T>(&self, make: impl FnOnce(Reply<T>) -> Control) -> io::Result<T> {
@@ -212,6 +230,7 @@ impl Logger {
     pub fn storage(&self) -> io::Result<StorageView> {
         self.flush()?;
         let mut view = retention::usage(&self.0.storage.lock().root)?;
+        view.write_timeouts = self.write_timeouts();
         view.last_write_error = self.0.storage.lock().last_write_error();
         Ok(view)
     }

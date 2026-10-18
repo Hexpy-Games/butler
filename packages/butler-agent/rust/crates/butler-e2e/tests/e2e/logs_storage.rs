@@ -335,3 +335,63 @@ fn logs_export_skips_corruption_and_reports_count() -> Result<(), Box<dyn std::e
     fs::remove_dir_all(root)?;
     Ok(())
 }
+
+#[test]
+fn logs_drained_batch_is_visible_without_flush_or_fsync() -> Result<(), Box<dyn std::error::Error>>
+{
+    butler_e2e::gate!();
+    let root = root();
+    let log = Logger::open(&root, Config::detailed())?;
+    let paused = log.pause_writer()?;
+    for n in 0..100 {
+        log.record(record(n, if n % 2 == 0 { "INFO" } else { "DEBUG" }))?;
+    }
+    drop(paused);
+    // This command waits for preceding records, without requesting a flush.
+    assert_eq!(log.sync_count()?, 0, "ordinary batches must not fsync");
+    for (lane, parity) in [("main", 0), ("debug", 1)] {
+        let mut rows = Vec::new();
+        for entry in fs::read_dir(root.join("logs/agent").join(lane))? {
+            let path = entry?.path();
+            if path.extension().is_some_and(|ext| ext == "jsonl") {
+                for line in fs::read_to_string(path)?.lines() {
+                    rows.push(serde_json::from_str::<Record>(line)?);
+                }
+            }
+        }
+        assert_eq!(rows.len(), 50, "{lane} records remain buffered");
+        for (n, row) in rows.iter().enumerate() {
+            assert_eq!(row.msg, format!("row {}", n * 2 + parity));
+        }
+    }
+    log.shutdown()?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
+fn logs_dropped_notice_is_visible_without_flush() -> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    let root = root();
+    let log = Logger::open(&root, Config::full())?;
+    let mut row = record(0, "INFO");
+    // A body larger than the normal lane is rejected without queuing a record.
+    row.content = Some(serde_json::json!("x".repeat(33 * 1024 * 1024)));
+    log.record(row)?;
+    assert_eq!(log.sync_count()?, 0);
+    let mut rows = Vec::new();
+    for entry in fs::read_dir(root.join("logs/agent/main"))? {
+        let path = entry?.path();
+        if path.extension().is_some_and(|ext| ext == "jsonl") {
+            for line in fs::read_to_string(path)?.lines() {
+                rows.push(serde_json::from_str::<Record>(line)?);
+            }
+        }
+    }
+    assert_eq!(rows.len(), 1, "drop notice remains buffered");
+    assert_eq!(rows[0].event, "logs.dropped");
+    assert_eq!(rows[0].attrs["dropped"]["INFO"], 1);
+    log.shutdown()?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
