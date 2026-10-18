@@ -9,7 +9,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from prepush_tests import ROOT, PrepushChecks, isolate_git, prepush
+import prepush_tests
+from prepush_tests import ROOT, isolate_git, prepush
 
 
 class PrepushGitChecks(unittest.TestCase):
@@ -129,8 +130,8 @@ class PrepushGitChecks(unittest.TestCase):
                         str(Path(self.temp.name) / 'caller-linked')], check=True)
         config = caller / '.git/config'
         before = (config.read_text(), self.git(caller, 'for-each-ref'))
-        fixtures = (PrepushChecks('test_changed_paths_include_commits_staged_unstaged_'
-                                  'untracked_and_deletions'),
+        fixtures = (prepush_tests.PrepushChecks('test_changed_paths_include_commits_staged_'
+                                                'unstaged_untracked_and_deletions'),
                     PrepushGitChecks('test_detached_head_push_uses_destination_branch'))
         with patch.dict(os.environ, GIT_DIR=str(caller / '.git/worktrees/caller-linked')):
             for fixture in fixtures:
