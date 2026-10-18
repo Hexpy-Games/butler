@@ -4,8 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use base64::Engine as _;
-use butler_log::http::Client;
-use reqwest::Url;
+use reqwest::{Client, Url};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
@@ -202,7 +201,6 @@ impl AuthOwner<'_> {
                 ("client_id", client_id),
                 ("refresh_token", refresh_token),
             ])
-            .purpose(butler_log::http::Purpose::new("oauth"))
             .send()
             .await
             .map_err(|source| {
@@ -249,7 +247,6 @@ impl AuthOwner<'_> {
                 ("redirect_uri", redirect_uri),
                 ("code_verifier", verifier),
             ])
-            .purpose(butler_log::http::Purpose::new("oauth"))
             .send()
             .await
             .map_err(|source| {

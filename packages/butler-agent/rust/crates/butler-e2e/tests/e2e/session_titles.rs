@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 const TITLE: &str = "Planning a Simple Reply";
 
-pub(super) async fn start(name: &str) -> Result<(Scenario, String), HarnessError> {
+async fn start(name: &str) -> Result<(Scenario, String), HarnessError> {
     start_with_title(name, TITLE, None).await
 }
 
@@ -54,7 +54,7 @@ fn non_title_turn_reply(request: &Value) -> Option<ResponseRecord> {
     (!is_title_request(request)).then(|| title_response("Attachment received."))
 }
 
-pub(super) async fn chat(s: &Scenario, title: &str, prompt: &str) -> Result<String, HarnessError> {
+async fn chat(s: &Scenario, title: &str, prompt: &str) -> Result<String, HarnessError> {
     let reply =
         s.gw.post(
             "/sessions",
@@ -211,7 +211,7 @@ async fn title_04_general_and_custom_titles_untouched() -> Result<(), HarnessErr
     s.finish().await
 }
 
-pub(super) fn provisional(prompt: &str) -> String {
+fn provisional(prompt: &str) -> String {
     let line = prompt
         .trim()
         .split_once('\n')

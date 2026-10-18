@@ -73,7 +73,7 @@ pub(super) fn newest<'a>(items: impl Iterator<Item = &'a Value>) -> Option<&'a V
 /// Stable uses GitHub's latest release. Preview lists published releases and
 /// selects by SemVer, independently of publication date and prerelease numbering.
 pub(super) async fn source(
-    client: &butler_log::http::Client,
+    client: &reqwest::Client,
     shutdown: &CancellationToken,
     source: &str,
     previews: bool,

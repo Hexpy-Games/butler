@@ -64,14 +64,13 @@ impl From<&DiscoveredLocalModel> for ModelProviderMetadata {
 }
 
 pub(super) async fn discover(
-    client: &butler_log::http::Client,
+    client: &reqwest::Client,
     server_url: &str,
     platform: LocalModelPlatform,
     api_key: Option<&str>,
 ) -> Result<LocalModelDiscoveryResult, ModelCatalogError> {
     validate_key(api_key)?;
     let (server_url, api_base_url) = normalize_server(server_url)?;
-    butler_log::register_endpoint(&api_base_url);
     let server_root = api_base_url.strip_suffix("/v1").unwrap_or(&api_base_url);
     let models = fetch_object(client, &format!("{api_base_url}/models"), api_key)
         .await
@@ -141,7 +140,7 @@ pub(super) async fn discover(
 }
 
 async fn model_props(
-    client: &butler_log::http::Client,
+    client: &reqwest::Client,
     server_root: &str,
     raw_id: &str,
     platform: LocalModelPlatform,
@@ -161,11 +160,7 @@ async fn model_props(
     }
 }
 
-async fn fetch_object(
-    client: &butler_log::http::Client,
-    url: &str,
-    api_key: Option<&str>,
-) -> Option<Value> {
+async fn fetch_object(client: &reqwest::Client, url: &str, api_key: Option<&str>) -> Option<Value> {
     let mut request = client.get(url);
     if let Some(api_key) = api_key.filter(|value| !value.is_empty()) {
         request = request.bearer_auth(api_key);

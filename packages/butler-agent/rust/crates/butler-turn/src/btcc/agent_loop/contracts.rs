@@ -297,20 +297,6 @@ pub struct UsageAttribution {
     pub round_index: Option<u32>,
 }
 
-impl UsageAttribution {
-    /// A model operation outside a turn, classified independently of its destination.
-    pub fn background(phase: &str) -> Self {
-        Self {
-            session_kind: Some("background".into()),
-            turn_id: String::new(),
-            prompt_diagnostics: None,
-            phase: phase.into(),
-            reasoning_effort: None,
-            round_index: None,
-        }
-    }
-}
-
 /// Whether the model may answer without a tool call.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

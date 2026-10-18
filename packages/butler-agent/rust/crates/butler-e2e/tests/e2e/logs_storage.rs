@@ -8,38 +8,6 @@ use std::{
 };
 
 #[test]
-fn logs_secondary_producer_preserves_service_segments_and_refreshes_latest()
--> Result<(), Box<dyn std::error::Error>> {
-    butler_e2e::gate!();
-    let root = root();
-    let service = Logger::open(&root, Config::full())?;
-    let payload = "complete content ".repeat(2000);
-    let mut row = Record::new("DEBUG", "http.client", "service", "service body");
-    row.content = Some(serde_json::json!({"response":payload}));
-    service.record(row)?;
-    let before = service.query(&Query::default())?;
-    let reference = before.rows[0].body_ref.as_deref().unwrap();
-    let body = service.body(reference)?;
-    let producer = Logger::producer(&root, Config::default())?;
-    producer.record(Record::new("ERROR", "http.client", "cli.first", "first"))?;
-    producer.flush()?;
-    assert_eq!(service.query(&Query::default())?.rows.len(), 2);
-    producer.record(Record::new("ERROR", "http.client", "cli.latest", "latest"))?;
-    producer.shutdown()?;
-    let after = service.query(&Query::default())?;
-    assert_eq!(after.rows.len(), 3);
-    assert_eq!(after.rows[0].event, "cli.latest");
-    assert_eq!(service.body(reference)?, body);
-    assert_eq!(
-        serde_json::from_slice::<serde_json::Value>(&body)?["response"],
-        payload
-    );
-    service.shutdown()?;
-    fs::remove_dir_all(root)?;
-    Ok(())
-}
-
-#[test]
 fn logs_old_name_recent_record_survives_restart() -> Result<(), Box<dyn std::error::Error>> {
     butler_e2e::gate!();
     let root = root();
@@ -206,11 +174,6 @@ fn logs_body_references_require_bounded_frame() -> Result<(), Box<dyn std::error
             .unwrap_err()
             .kind(),
         std::io::ErrorKind::InvalidData
-    );
-    let multipart = log.body(&format!("{name}:0:{}:2", compressed.len()));
-    assert_eq!(
-        multipart.err().map(|error| error.kind()),
-        Some(std::io::ErrorKind::InvalidData)
     );
     log.shutdown()?;
     fs::remove_dir_all(root)?;

@@ -14,103 +14,24 @@ impl<T> fmt::Display for Secret<T> {
         f.write_str("[REDACTED]")
     }
 }
-#[derive(Default)]
-struct Secrets {
-    process: std::collections::BTreeSet<String>,
-    ephemeral: std::collections::VecDeque<String>,
-    sourced: std::collections::BTreeMap<String, String>,
-    scrub_order: Vec<String>,
-}
-impl Secrets {
-    fn refresh(&mut self) {
-        self.scrub_order = self
-            .process
-            .iter()
-            .chain(self.ephemeral.iter())
-            .chain(self.sourced.values())
-            .cloned()
-            .collect();
-        self.scrub_order
-            .sort_unstable_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
-        self.scrub_order.dedup();
-    }
-}
-fn secrets() -> &'static RwLock<Secrets> {
-    static SECRETS: OnceLock<RwLock<Secrets>> = OnceLock::new();
+fn secrets() -> &'static RwLock<Vec<String>> {
+    static SECRETS: OnceLock<RwLock<Vec<String>>> = OnceLock::new();
     SECRETS.get_or_init(RwLock::default)
 }
-/// Register a long-lived process credential before exposing it to any producer.
+/// Register before exposing a credential to any producer. Old secrets remain scrubbed.
 pub fn register_secret(secret: &str) {
-    if !secret.is_empty() {
-        let mut secrets = secrets().write();
-        if secrets.process.insert(secret.into()) {
-            secrets.refresh();
-        }
-    }
-}
-/// Bound rotating codes in insertion order, independently of process credentials.
-pub fn register_ephemeral_secret(secret: &str) {
     if secret.is_empty() {
         return;
     }
     let mut secrets = secrets().write();
-    if !secrets.ephemeral.iter().any(|s| s == secret) {
-        if secrets.ephemeral.len() == 256 {
-            secrets.ephemeral.pop_front();
-        }
-        secrets.ephemeral.push_back(secret.into());
-        secrets.refresh();
+    if !secrets.iter().any(|s| s == secret) {
+        secrets.push(secret.into());
+        secrets.sort_by_key(|s| std::cmp::Reverse(s.len()));
     }
-}
-/// Replace rotated credentials from the same origin/header; placeholders stay literal.
-pub fn register_secret_for(source: &str, secret: &str) {
-    let mut secrets = secrets().write();
-    if secret.len() < 16 {
-        secrets.sourced.remove(source);
-    } else {
-        secrets.sourced.insert(source.into(), secret.into());
-    }
-    secrets.refresh();
-}
-/// Register credential-like path segments before a configured endpoint is logged.
-pub fn register_endpoint(input: &str) {
-    let Ok(url) = url::Url::parse(input) else {
-        return;
-    };
-    if let Some(segments) = url.path_segments() {
-        for segment in segments {
-            let decoded = percent_encoding::percent_decode_str(segment).decode_utf8_lossy();
-            if credential_segment(&decoded) {
-                register_secret(segment);
-                register_secret(&decoded);
-            }
-        }
-    }
-}
-fn credential_segment(segment: &str) -> bool {
-    if segment.len() < 16
-        || !segment.bytes().any(|b| b.is_ascii_alphabetic())
-        || !segment.bytes().any(|b| b.is_ascii_digit())
-    {
-        return false;
-    }
-    let mut counts = [0usize; 256];
-    for byte in segment.bytes() {
-        counts[byte as usize] += 1;
-    }
-    let entropy: f64 = counts
-        .into_iter()
-        .filter(|&n| n > 0)
-        .map(|n| {
-            let probability = n as f64 / segment.len() as f64;
-            -probability * probability.log2()
-        })
-        .sum();
-    entropy >= 3.5
 }
 fn scrub_text(text: &str) -> String {
     let mut text = text.to_owned();
-    for secret in &secrets().read().scrub_order {
+    for secret in secrets().read().iter() {
         text = text.replace(secret, "[REDACTED]");
     }
     patterns::redact_log_line(&text)
@@ -180,14 +101,7 @@ pub fn redact_url(input: &str) -> String {
                     | "code"
                     | "client_secret"
                     | "refresh_token"
-                    | "signature"
-                    | "sig"
-                    | "x-amz-signature"
-                    | "x-amz-credential"
-                    | "x-amz-security-token"
-                    | "x-goog-signature"
-                    | "x-goog-credential"
-            ) || patterns::secret_key().is_match(&key);
+            );
             (
                 key.into_owned(),
                 if secret {
@@ -239,10 +153,7 @@ pub fn redact_headers<'a>(headers: impl IntoIterator<Item = (&'a str, &'a str)>)
                         | "request-id"
                         | "retry-after"
                 ) || key.starts_with("x-ratelimit-")
-                    || key.starts_with("ratelimit-")
-                    || key.starts_with("x-rate-limit-")
-                    || key.starts_with("rate-limit-")
-                    || key.starts_with("anthropic-ratelimit-");
+                    || key.starts_with("ratelimit-");
                 (
                     redact_log_line(&key),
                     if secret {

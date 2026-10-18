@@ -338,9 +338,6 @@ fn normalize_server(
     };
     let command = clean_string(value.get("command"));
     let url = clean_string(value.get("url"));
-    if let Some(url) = &url {
-        butler_log::register_endpoint(url);
-    }
     match transport {
         McpTransportKind::Stdio if command.is_none() => {
             return Err(McpRegistryError::CommandRequired);

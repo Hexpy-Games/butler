@@ -27,9 +27,6 @@ pub(crate) struct RequestTrace {
     round: Option<f64>,
     kind: String,
     latest: Mutex<Option<Value>>,
-    turn_id: Option<String>,
-    chat_id: Option<String>,
-    trace_id: String,
 }
 
 impl RequestTrace {
@@ -38,7 +35,7 @@ impl RequestTrace {
         prepared: Prepared,
         request: &butler_turn::btcc::ModelRoundRequest<'_>,
     ) -> Result<Self, ModelRoundError> {
-        let mut trace = Self::new(
+        Self::new(
             provider,
             prepared,
             request.cache_scope,
@@ -53,31 +50,7 @@ impl RequestTrace {
                 .unwrap_or("parent"),
             request.butler_data,
         )
-        .await?;
-        trace.turn_id = request
-            .usage_attribution
-            .filter(|a| !a.turn_id.is_empty())
-            .map(|a| a.turn_id.clone())
-            .or(trace.turn_id);
-        Ok(trace)
-    }
-
-    pub(super) async fn prompt(
-        provider: &ModelProvider,
-        prepared: Prepared,
-        request: &crate::models::ProviderPromptRequest<'_>,
-    ) -> Result<Self, ModelRoundError> {
-        Self::new(
-            provider,
-            prepared,
-            request.cache_scope,
-            request.usage_attribution.and_then(|a| a.phase),
-            request.usage_attribution.and_then(|a| a.round_index),
-            "background",
-            request.butler_data,
-        )
         .await
-        .map(|trace| trace.with_turn(request.usage_attribution.and_then(|a| a.turn_id)))
     }
 
     pub(super) async fn new(
@@ -89,14 +62,7 @@ impl RequestTrace {
         kind: &str,
         data: Option<&str>,
     ) -> Result<Self, ModelRoundError> {
-        let context = butler_log::http::Phase::current();
         Ok(Self {
-            turn_id: context.turn_id().map(str::to_owned),
-            chat_id: context.chat_id().map(str::to_owned),
-            trace_id: context
-                .trace_id()
-                .map(str::to_owned)
-                .unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string()),
             prepared: prepared.tokenize(provider.catalog.clone()).await?,
             history: provider.prefix_history.clone(),
             sink: provider.prompt_metrics.clone(),
@@ -117,16 +83,12 @@ impl RequestTrace {
         let data = self.data.clone();
         let phase = self.phase.clone();
         let kind = self.kind.clone();
-        let turn_id = self.turn_id.clone();
-        let chat_id = self.chat_id.clone();
         let sequence = REQUEST_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let request_id = uuid::Uuid::new_v4().simple().to_string();
         let round = self.round.unwrap_or(sequence as f64);
         let metadata = tokio::task::spawn_blocking(move || {
             let mut metadata = history.observe(scope.as_deref(), prepared);
             metadata["requestId"] = request_id.clone().into();
-            metadata["turn_id"] = turn_id.into();
-            metadata["chat_id"] = chat_id.into();
             metadata["sessionSha256"] = format!(
                 "{:x}",
                 Sha256::digest(scope.as_deref().unwrap_or(&request_id))
@@ -190,28 +152,6 @@ impl RequestTrace {
         })??;
         *self.latest.lock() = Some(metadata);
         Ok(())
-    }
-
-    pub(super) fn with_turn(mut self, turn_id: Option<&str>) -> Self {
-        if let Some(turn_id) = turn_id {
-            self.turn_id = Some(turn_id.into());
-        }
-        self
-    }
-
-    pub(crate) fn http_request(
-        &self,
-        request: butler_log::http::RequestBuilder,
-        provider: &str,
-        retry: u32,
-    ) -> butler_log::http::RequestBuilder {
-        request
-            .purpose(butler_log::http::Purpose::provider(provider, &self.phase))
-            .phase(butler_log::http::Phase::new(&self.kind, retry).ids(
-                Some(&self.trace_id),
-                self.turn_id.as_deref(),
-                self.chat_id.as_deref(),
-            ))
     }
 
     pub(super) fn latest(&self) -> Option<Value> {

@@ -20,7 +20,7 @@ pub(super) fn provider(endpoint: Url) -> Result<ModelProvider, Error> {
         &butler_core::locale::LocaleCollation::new("en-US")?,
     )?);
     Ok(ModelProvider::new(
-        butler_log::http::external(butler_log::http::Purpose::new("model")).build()?,
+        reqwest::Client::new(),
         Arc::new(support::Config { endpoint, snapshot }),
         Arc::new(support::Observer),
         catalog,

@@ -35,7 +35,7 @@ impl Logger {
             if let Command::Dropped = command {
                 self.report(self.report_drops());
                 self.report(self.0.storage.lock().flush(false));
-            } else if matches!(command, Command::Record(..) | Command::Deferred(..)) {
+            } else if let Command::Record(..) = command {
                 pending = self.batch(command, rx);
             } else if let Command::Control(command) = command
                 && self.control(command, &mut state)
@@ -90,24 +90,9 @@ impl Logger {
             let Some(command) = pending.take() else {
                 break;
             };
-            let (row, lossy, bytes, ack) = match command {
-                Command::Record(row, lossy, bytes, ack) => (row, lossy, bytes, ack),
-                Command::Deferred(make, bytes) => {
-                    let row = Encoded::new(make(), &self.snapshot().effective);
-                    self.0.deferred.fetch_sub(bytes, Ordering::Relaxed);
-                    match row {
-                        Ok(row) => (row, false, 0, None),
-                        Err(error) => {
-                            self.report_error(&error);
-                            pending = rx.try_recv().ok();
-                            continue;
-                        }
-                    }
-                }
-                command => {
-                    pending = Some(command);
-                    break;
-                }
+            let Command::Record(row, lossy, bytes, ack) = command else {
+                pending = Some(command);
+                break;
             };
             if !lossy {
                 self.0.queue.bytes.fetch_sub(bytes, Ordering::Relaxed);
@@ -170,12 +155,8 @@ impl Logger {
                 let _ = reply.send(self.0.storage.lock().clear());
             }
             Control::Shutdown(reply) => {
-                let result = self.close();
+                let result = self.0.storage.lock().close();
                 let _ = reply.send(result);
-                return true;
-            }
-            Control::ShutdownBounded(reply) => {
-                let _ = reply.send(self.close());
                 return true;
             }
             #[cfg(feature = "e2e-fixtures")]
@@ -193,21 +174,5 @@ impl Logger {
             }
         }
         false
-    }
-    fn close(&self) -> io::Result<()> {
-        #[cfg(feature = "e2e-fixtures")]
-        close_delay();
-        self.0.storage.lock().close()
-    }
-}
-
-/// Model a stuck close without blocking a Tokio worker or changing shipped builds.
-#[cfg(feature = "e2e-fixtures")]
-fn close_delay() {
-    if let Some(delay) = std::env::var("BUTLER_E2E_LOG_CLOSE_DELAY_MS")
-        .ok()
-        .and_then(|value| value.parse::<u64>().ok())
-    {
-        std::thread::sleep(Duration::from_millis(delay));
     }
 }

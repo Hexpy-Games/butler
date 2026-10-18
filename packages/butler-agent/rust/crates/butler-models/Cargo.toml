@@ -7,8 +7,6 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-sse-stream = "0.2.4"
-pin-project-lite = "0.2"
 butler-log = { path = "../butler-log" }
 butler-core = { path = "../butler-core" }
 butler-platform = { path = "../butler-platform" }

@@ -35,13 +35,7 @@ pub(super) fn prepare(
         target.clone(),
         Value::Object(normalized),
         Arc::new(TopicConversationEffect {
-            client: butler_log::http::loopback().build().map_err(|source| {
-                butler_turn::btcc::BtccError::relayed(
-                    "app_gateway_unavailable",
-                    "App client unavailable.",
-                )
-                .with_source(source)
-            })?,
+            client: reqwest::Client::new(),
             endpoint: owner.app_endpoint.clone(),
             current_session_id: owner.binding.app_session_id.clone(),
             target,
@@ -50,7 +44,7 @@ pub(super) fn prepare(
 }
 
 struct TopicConversationEffect {
-    client: butler_log::http::Client,
+    client: reqwest::Client,
     endpoint: Arc<ActiveAppEndpoint>,
     current_session_id: Option<String>,
     target: String,

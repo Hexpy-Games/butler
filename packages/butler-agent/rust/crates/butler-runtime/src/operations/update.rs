@@ -48,10 +48,10 @@ pub struct AppUpdateService {
     version: Option<String>,
     manifest: String,
     /// Downloads packages.
-    client: butler_log::http::Client,
+    client: reqwest::Client,
     /// Fetches the manifest: a short connect timeout and a small total, so a
     /// dead network fails the check quickly.
-    manifest_client: butler_log::http::Client,
+    manifest_client: reqwest::Client,
     writes: Arc<Mutex<()>>,
     checks: Arc<Mutex<()>>,
     shutdown: CancellationToken,
@@ -74,12 +74,12 @@ impl AppUpdateService {
         if data.starts_with(&installation) || installation.starts_with(&data) {
             return Err(UpdateCode::ButlerDataOverlapsInstallation.into());
         }
-        let client = butler_log::http::external(butler_log::http::Purpose::new("update"))
+        let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
             .redirect(source::redirect_policy())
             .build()
             .map_err(|source| UpdateError::caused(UpdateCode::UpdateHttpUnavailable, source))?;
-        let manifest_client = butler_log::http::external(butler_log::http::Purpose::new("update"))
+        let manifest_client = reqwest::Client::builder()
             .user_agent("Butler updater")
             .connect_timeout(MANIFEST_CONNECT_TIMEOUT)
             .timeout(MANIFEST_TIMEOUT)

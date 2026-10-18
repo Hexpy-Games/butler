@@ -29,9 +29,7 @@ pub(super) fn resolve_data_root(
     let resolved = realpath_or_nearest(&absolute_normalized(&requested)?).map_err(|source| {
         crate::host::HostError::new("butler_data_unavailable").with_source(source)
     })?;
-    let data = installation.validate_data_root(&absolute_normalized(&resolved)?)?;
-    crate::host::cli::http_logs::prepare(&data);
-    Ok(data)
+    installation.validate_data_root(&absolute_normalized(&resolved)?)
 }
 
 fn expand_tilde(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, crate::host::HostError> {

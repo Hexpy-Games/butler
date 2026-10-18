@@ -25,7 +25,7 @@ impl ScheduleError {
 pub(crate) struct ScheduleClient {
     base_url: String,
     token: std::sync::Arc<str>,
-    http: butler_log::http::Client,
+    http: reqwest::Client,
 }
 
 impl ScheduleClient {
@@ -54,9 +54,9 @@ impl ScheduleClient {
         Ok(Self {
             base_url,
             token,
-            http: butler_log::http::loopback()
+            http: reqwest::Client::builder()
                 .timeout(Duration::from_secs(30))
-                .redirect(butler_log::http::RedirectPolicy::none())
+                .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .map_err(|_| unavailable())?,
         })

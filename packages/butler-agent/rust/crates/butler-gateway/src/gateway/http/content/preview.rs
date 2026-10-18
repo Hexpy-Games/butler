@@ -66,9 +66,9 @@ pub(super) async fn serve(
                 .map_err(|_| refused())?,
         );
     }
-    let client = butler_log::http::external(butler_log::http::Purpose::new("content_preview"))
+    let client = reqwest::Client::builder()
         .no_proxy()
-        .redirect(butler_log::http::RedirectPolicy::none())
+        .redirect(reqwest::redirect::Policy::none())
         .no_gzip()
         .no_brotli()
         .no_deflate()

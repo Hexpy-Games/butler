@@ -22,7 +22,6 @@ use tokio::sync::{broadcast, oneshot, watch};
 const DEBUG_CAPACITY: usize = 8192;
 type Reply<T> = mpsc::SyncSender<io::Result<T>>;
 enum Command {
-    Deferred(Box<dyn FnOnce() -> Record + Send + Sync>, usize),
     Record(
         Encoded,
         bool,
@@ -39,7 +38,6 @@ enum Control {
     Configure(Config, Reply<ConfigView>),
     Clear(Reply<u64>),
     Shutdown(Reply<()>),
-    ShutdownBounded(oneshot::Sender<io::Result<()>>),
     #[cfg(feature = "e2e-fixtures")]
     Expire(Reply<()>),
     #[cfg(feature = "e2e-fixtures")]
@@ -53,7 +51,6 @@ struct Inner {
     config: RwLock<Arc<ConfigView>>,
     queue: queue::Queue,
     pending: AtomicUsize,
-    deferred: AtomicUsize,
     dropped: AtomicUsize,
     write_timeouts: AtomicUsize,
     live: broadcast::Sender<Record>,
@@ -64,24 +61,13 @@ struct Inner {
 pub struct Logger(Arc<Inner>);
 impl Logger {
     pub fn open(data: &Path, config: Config) -> io::Result<Self> {
-        Self::open_mode(data, config, true)
-    }
-    /// A secondary process appends private segments; only the service prunes shared logs.
-    pub fn producer(data: &Path, config: Config) -> io::Result<Self> {
-        Self::open_mode(data, config, false)
-    }
-    fn open_mode(data: &Path, config: Config, owner: bool) -> io::Result<Self> {
         if !config.valid() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "invalid log configuration",
             ));
         }
-        let storage = if owner {
-            Storage::open(data.join("logs"), &config)?
-        } else {
-            Storage::producer(data.join("logs"), &config)?
-        };
+        let storage = Storage::open(data.join("logs"), &config)?;
         let initial_full = config.level == Preset::Full;
         let config = if initial_full {
             Config::default()
@@ -102,7 +88,6 @@ impl Logger {
             config: RwLock::new(Arc::new(view)),
             queue: queue::Queue::default(),
             pending: AtomicUsize::new(0),
-            deferred: AtomicUsize::new(0),
             dropped: AtomicUsize::new(0),
             write_timeouts: AtomicUsize::new(0),
             live,
@@ -122,30 +107,6 @@ impl Logger {
     }
     pub fn enabled(&self, category: &str, level: &str) -> bool {
         self.0.config.read().effective.enabled(category, level)
-    }
-    pub(crate) fn record_deferred(
-        &self,
-        category: &str,
-        level: &str,
-        bytes: usize,
-        make: impl FnOnce() -> Record + Send + Sync + 'static,
-    ) {
-        if !self.enabled(category, level) {
-            return;
-        }
-        if self.0.deferred.fetch_add(bytes, Ordering::Relaxed) >= 16 * 1024 * 1024 {
-            self.0.deferred.fetch_sub(bytes, Ordering::Relaxed);
-            self.0.dropped.fetch_add(1, Ordering::Relaxed);
-            return;
-        }
-        if self
-            .0
-            .tx
-            .send(Command::Deferred(Box::new(make), bytes))
-            .is_err()
-        {
-            self.0.deferred.fetch_sub(bytes, Ordering::Relaxed);
-        }
     }
     pub fn record(&self, row: Record) -> io::Result<()> {
         self.enqueue(row, None).map(|_| ())
@@ -317,24 +278,6 @@ impl Logger {
                 .map_err(|_| io::Error::other("log writer panicked"))??;
         }
         result
-    }
-    /// Drain and close within a short-lived producer's exit budget.
-    /// The writer owns its files and may finish in the background after timeout.
-    /// Service owners use `shutdown` to retain the durable close and thread join.
-    pub async fn shutdown_bounded(&self, timeout: std::time::Duration) -> io::Result<()> {
-        let (tx, rx) = oneshot::channel();
-        self.0
-            .tx
-            .send(Command::Control(Control::ShutdownBounded(tx)))
-            .map_err(io::Error::other)?;
-        // A writer stalled in filesystem I/O must not hold the caller or its
-        // Tokio blocking pool alive. The explicit command stops the worker
-        // even though the global tracing subscriber still owns a sender.
-        self.0.join.lock().take();
-        tokio::time::timeout(timeout, rx)
-            .await
-            .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "log writer shutdown timed out"))?
-            .map_err(io::Error::other)?
     }
     #[cfg(feature = "e2e-fixtures")]
     pub fn expire_full(&self) -> io::Result<()> {

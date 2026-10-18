@@ -61,7 +61,7 @@ impl WebAccess {
 
     pub(in crate::web_access) async fn fetch_request_to_spool(
         &self,
-        request: butler_log::http::RequestBuilder,
+        request: reqwest::RequestBuilder,
         cancellation: &CancellationToken,
     ) -> Result<FetchedBody, WebAccessError> {
         if cancellation.is_cancelled() {

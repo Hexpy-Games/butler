@@ -2,7 +2,7 @@
 use super::segment::SEGMENT_BYTES;
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader, Read, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -12,13 +12,7 @@ pub(super) struct Bodies {
 }
 impl Bodies {
     pub(super) fn write(&mut self, root: &Path, bytes: &[u8]) -> io::Result<(String, bool)> {
-        let mut compressed = Vec::new();
-        let frame_bytes = usize::try_from(SEGMENT_BYTES / 2).map_err(io::Error::other)?;
-        let mut frames = 0_u64;
-        for chunk in bytes.chunks(frame_bytes) {
-            zstd::stream::copy_encode(chunk, &mut compressed, 1)?;
-            frames += 1;
-        }
+        let compressed = zstd::encode_all(bytes, 1)?;
         let len = u64::try_from(compressed.len()).map_err(io::Error::other)?;
         let rotated = self
             .active
@@ -46,11 +40,7 @@ impl Bodies {
             .file_name()
             .and_then(|s| s.to_str())
             .ok_or_else(|| io::Error::other("invalid body segment"))?;
-        let reference = if frames > 1 {
-            format!("{name}:{offset}:{len}:{frames}")
-        } else {
-            format!("{name}:{offset}:{len}")
-        };
+        let reference = format!("{name}:{offset}:{len}");
         *offset += len;
         Ok((reference, rotated))
     }
@@ -77,7 +67,7 @@ pub(super) fn read(root: &Path, reference: &str) -> io::Result<Vec<u8>> {
     if name.contains(['/', '\\'])
         || !name.ends_with(".zst")
         || name.contains("..")
-        || !matches!(parts.len(), 3 | 4)
+        || parts.len() != 3
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -90,11 +80,7 @@ pub(super) fn read(root: &Path, reference: &str) -> io::Result<Vec<u8>> {
     let len = parts[2]
         .parse::<u64>()
         .map_err(|_| invalid("invalid body length"))?;
-    let frames = parts
-        .get(3)
-        .map_or(Ok(1), |value| value.parse::<u64>())
-        .map_err(|_| invalid("invalid body frame count"))?;
-    if len == 0 || frames == 0 || frames > len || frames == 1 && len > SEGMENT_BYTES {
+    if len == 0 || len > SEGMENT_BYTES {
         return Err(invalid("invalid body length"));
     }
     for source in ["agent", "app"] {
@@ -110,36 +96,20 @@ pub(super) fn read(root: &Path, reference: &str) -> io::Result<Vec<u8>> {
             return Err(invalid("invalid body range"));
         }
         file.seek(SeekFrom::Start(offset))?;
-        return read_frames(file.take(len), frames);
+        let decoder = zstd::stream::read::Decoder::new(file.take(len))?;
+        let mut bytes = Vec::new();
+        decoder.take(SEGMENT_BYTES + 1).read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > SEGMENT_BYTES {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "decoded body exceeds limit",
+            ));
+        }
+        return Ok(bytes);
     }
     Err(io::Error::new(io::ErrorKind::NotFound, "body expired"))
 }
 
 fn invalid(message: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
-}
-
-/// Each compressed frame is independently bounded, including multipart bodies.
-/// The reference's encoded range must end exactly at its final frame.
-fn read_frames(input: impl Read, frames: u64) -> io::Result<Vec<u8>> {
-    let mut input = BufReader::new(input);
-    let mut bytes = Vec::new();
-    for _ in 0..frames {
-        let start = bytes.len();
-        let decoder = zstd::stream::read::Decoder::with_buffer(&mut input)?.single_frame();
-        decoder.take(SEGMENT_BYTES + 1).read_to_end(&mut bytes)?;
-        if bytes.len() == start || (bytes.len() - start) as u64 > SEGMENT_BYTES {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "decoded body frame exceeds limit",
-            ));
-        }
-    }
-    if !input.fill_buf()?.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "trailing body frames",
-        ));
-    }
-    Ok(bytes)
 }

@@ -131,9 +131,9 @@ async fn online_request(
         .local_auth
         .token()
         .ok_or_else(unavailable)?;
-    let client = butler_log::http::loopback()
+    let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
-        .redirect(butler_log::http::RedirectPolicy::none())
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|_| unavailable())?;
     let mut request = client

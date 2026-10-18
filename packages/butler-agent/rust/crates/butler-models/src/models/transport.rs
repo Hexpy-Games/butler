@@ -1,9 +1,7 @@
 mod sse;
 mod timing;
 
-use butler_log::http::Client;
-use butler_log::http::RequestBuilder;
-use reqwest::Response;
+use reqwest::{Client, RequestBuilder, Response};
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
@@ -131,7 +129,7 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                 })?;
                 trace.start().await.map_err(TransportError::Admission)?;
                 let result = send_attempt(
-                    trace.http_request(current, provider, attempt),
+                    current,
                     provider,
                     api,
                     (quota, clock),
@@ -421,8 +419,8 @@ async fn checked(
 }
 
 pub fn provider_http_client() -> Result<Client, reqwest::Error> {
-    butler_log::http::external(butler_log::http::Purpose::new("model"))
-        .redirect(butler_log::http::RedirectPolicy::limited(20))
+    Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(20))
         .build()
 }
 

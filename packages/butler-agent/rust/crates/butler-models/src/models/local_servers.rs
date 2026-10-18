@@ -5,9 +5,8 @@
 
 use std::time::Duration;
 
-use butler_log::http::Client;
-use butler_log::http::RedirectPolicy as Policy;
 use futures_util::future::join_all;
+use reqwest::{Client, redirect::Policy};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -87,7 +86,7 @@ pub async fn detect_local_servers(
     timeout: Duration,
 ) -> Vec<DetectedLocalServer> {
     // Loopback probes never go through a system proxy or follow redirects.
-    let client = butler_log::http::external(butler_log::http::Purpose::new("local_models"))
+    let client = Client::builder()
         .no_proxy()
         .redirect(Policy::none())
         .timeout(timeout)

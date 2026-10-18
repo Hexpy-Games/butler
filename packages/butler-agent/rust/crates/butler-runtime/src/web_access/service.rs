@@ -1,10 +1,8 @@
 pub(crate) use super::error::WebAccessError;
-use butler_log::http::RedirectPolicy as Policy;
 use parking_lot::Mutex;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
-use butler_log::http::Client;
-use reqwest::Url;
+use reqwest::{Client, Url, redirect::Policy};
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
@@ -138,7 +136,7 @@ impl WebAccess {
             )
             .with_source(source)
         })?;
-        let client = butler_log::http::external(butler_log::http::Purpose::new("web_search"))
+        let client = Client::builder()
             .redirect(Policy::custom(|attempt| {
                 if attempt.previous().len() >= 10 {
                     return attempt.error("too many redirects");
@@ -159,7 +157,7 @@ impl WebAccess {
                 .with_source(source)
             })?;
         let page_client = crate::browser::guarded_client(
-            butler_log::http::external(butler_log::http::Purpose::new("web_fetch"))
+            Client::builder()
                 .timeout(REQUEST_TIMEOUT)
                 .user_agent("butler-native-web-access/0.1"),
             fixtures.clone(),

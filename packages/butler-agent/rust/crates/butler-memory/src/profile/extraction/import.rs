@@ -137,7 +137,6 @@ async fn request_candidates(
     )?;
     let attachments = [];
     let root_text = dependencies.root.to_string_lossy().into_owned();
-    let attribution = butler_models::models::PromptUsageAttribution::for_phase("profile_import");
     let request = ProviderPromptRequest {
         prompt: &prompt,
         model: Some(&model_config.effective_model),
@@ -149,7 +148,7 @@ async fn request_candidates(
         cancellation,
         attachments: &attachments,
         butler_data: Some(&root_text),
-        usage_attribution: Some(&attribution),
+        usage_attribution: None,
         stream_observer: None,
         provider_retry_attempts: None,
     };

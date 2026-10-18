@@ -28,10 +28,7 @@ impl ModelConfiguration {
         secret: &str,
         previous: Option<&SecretHome>,
     ) -> Result<CredentialView, CredentialError> {
-        butler_log::register_secret_for(
-            &format!("credential:{}:{}", draft.provider_id, draft.id),
-            secret,
-        );
+        butler_log::register_secret(secret);
         let target = self.secrets.target(root).await?;
         let backend = target.store.backend();
         let key = secret_store::key(root, backend, &draft.provider_id, &draft.id)
@@ -76,10 +73,7 @@ impl ModelConfiguration {
     ) -> Result<SecretText, CredentialError> {
         let backend = match &record.home {
             SecretHome::Plaintext(secret) => {
-                butler_log::register_secret_for(
-                    &format!("credential:{}:{}", record.provider_id, record.id),
-                    secret.expose(),
-                );
+                butler_log::register_secret(secret.expose());
                 return Ok(SecretText::new(secret.expose().into()));
             }
             SecretHome::Store(backend) => *backend,
@@ -92,10 +86,7 @@ impl ModelConfiguration {
             .get(&store, &key)
             .await?
             .ok_or(CredentialError::SecretMissing)?;
-        butler_log::register_secret_for(
-            &format!("credential:{}:{}", record.provider_id, record.id),
-            secret.expose(),
-        );
+        butler_log::register_secret(secret.expose());
         Ok(secret)
     }
 

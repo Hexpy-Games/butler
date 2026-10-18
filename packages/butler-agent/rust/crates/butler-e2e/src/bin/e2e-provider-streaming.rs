@@ -89,7 +89,7 @@ fn provider(
         &butler_core::locale::LocaleCollation::new("en-US")?,
     )?);
     Ok(ModelProvider::new(
-        butler_log::http::external(butler_log::http::Purpose::new("model")).build()?,
+        reqwest::Client::new(),
         Arc::new(config::Config {
             endpoint,
             snapshot,

@@ -167,8 +167,8 @@ async fn request_link(
         )
         .with_source(source)
     };
-    let client = butler_log::http::loopback()
-        .redirect(butler_log::http::RedirectPolicy::none())
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
         .timeout(REQUEST_TIMEOUT)
         .build()
         .map_err(unavailable)?;
@@ -177,13 +177,7 @@ async fn request_link(
         .bearer_auth(token)
         .send()
         .await
-        .map_err(|source| {
-            CliError::failed(
-                "connection_code_unavailable",
-                "Butler did not issue a connection code.",
-            )
-            .with_source(source)
-        })?
+        .map_err(unavailable)?
         .error_for_status()
         .map_err(unavailable)?;
     let mut link = response.json::<Envelope>().await.map_err(unavailable)?.data;

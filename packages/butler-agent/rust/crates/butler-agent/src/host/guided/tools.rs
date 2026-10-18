@@ -162,7 +162,7 @@ pub(crate) struct GuidedTools {
     session_worktrees: butler_turn::workspace::SessionWorktrees,
     web_session: butler_runtime::web_access::WebSession,
     app_endpoint: Arc<crate::host::ActiveAppEndpoint>,
-    browser_http: OnceCell<butler_log::http::Client>,
+    browser_http: OnceCell<reqwest::Client>,
     binding: GuidedToolBinding,
     state: Mutex<State>,
     resume: OnceCell<Mutex<ResumePool>>,

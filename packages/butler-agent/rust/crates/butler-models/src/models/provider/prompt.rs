@@ -79,7 +79,16 @@ async fn run(
         carrier,
     );
     let http = super::route::cache_affinity(http, &config.auth, body);
-    let trace = super::request_trace::RequestTrace::prompt(provider, prefix, &request).await?;
+    let trace = super::request_trace::RequestTrace::new(
+        provider,
+        prefix,
+        request.cache_scope,
+        request.usage_attribution.and_then(|a| a.phase),
+        request.usage_attribution.and_then(|a| a.round_index),
+        "background",
+        request.butler_data,
+    )
+    .await?;
     let request_bytes = serialized.len();
     let observe = || {
         provider

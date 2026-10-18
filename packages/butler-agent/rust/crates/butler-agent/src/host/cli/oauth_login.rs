@@ -24,7 +24,6 @@ pub(crate) async fn run_native_oauth_login(
         .map(PathBuf::from)
         .unwrap_or_else(|| user_home.join(".butler"));
     let data_root = installation.validate_data_root(&requested_data)?;
-    super::http_logs::prepare(&data_root);
     run_native_oauth_login_with_data(user_home, data_root).await
 }
 
@@ -35,7 +34,6 @@ pub(crate) async fn run_native_oauth_login_for_data(
     let user_home =
         butler_platform::user_dirs::non_empty_home_dir().ok_or("native_home_unavailable")?;
     let data_root = installation.validate_data_root(&requested_data)?;
-    super::http_logs::prepare(&data_root);
     run_native_oauth_login_with_data(user_home, data_root).await
 }
 

@@ -129,22 +129,6 @@ pub struct PromptUsageAttribution<'a> {
     pub prompt_sections: Option<&'a [PromptUsageSectionAttribution]>,
 }
 
-impl<'a> PromptUsageAttribution<'a> {
-    /// Classify a background operation that has no parent turn or budget.
-    pub fn for_phase(phase: &'a str) -> Self {
-        Self {
-            turn_id: None,
-            phase: Some(phase),
-            round_index: None,
-            reasoning_effort: None,
-            requested_output_tokens: None,
-            budget_state: None,
-            budget_state_source: None,
-            prompt_sections: None,
-        }
-    }
-}
-
 pub struct PromptUsageMetricInput<'a> {
     pub model: &'a str,
     pub scope: &'a str,

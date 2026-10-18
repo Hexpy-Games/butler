@@ -55,13 +55,11 @@ pub(crate) fn resolve_data(
                 .map(PathBuf::from)
         })
         .unwrap_or_else(|| home.join(".butler"));
-    let data = installation
+    installation
         .validate_data_root(&requested)
         .map_err(|source| {
             crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
-        })?;
-    super::http_logs::prepare(&data);
-    Ok(data)
+        })
 }
 
 fn expand_home_path(value: &str) -> PathBuf {

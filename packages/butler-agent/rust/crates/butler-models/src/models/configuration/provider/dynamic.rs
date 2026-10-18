@@ -110,11 +110,7 @@ pub(super) async fn resolve(
         ProviderAuth::Codex { authorization, .. } => request.header("authorization", authorization),
         ProviderAuth::None => request,
     };
-    let response = request
-        .purpose(butler_log::http::Purpose::new("provider_models"))
-        .send()
-        .await
-        .map_err(failure)?;
+    let response = request.send().await.map_err(failure)?;
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();

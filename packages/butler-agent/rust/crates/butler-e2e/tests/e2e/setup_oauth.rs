@@ -38,14 +38,14 @@ async fn with_callback_port(id: &str, token: &FakeServer) -> Result<(Scenario, u
     Ok((s, port))
 }
 
-pub(super) async fn start(gw: &Gateway, body: Value) -> Result<Value, HarnessError> {
+async fn start(gw: &Gateway, body: Value) -> Result<Value, HarnessError> {
     let reply = gw.post("/setup/oauth/start", body).await?;
     assert_eq!(reply.status, 200, "{}", reply.text);
     Ok(reply.data().clone())
 }
 
 /// The `name` query parameter of the flow's authorization URL.
-pub(super) fn auth_param(flow: &Value, name: &str) -> String {
+fn auth_param(flow: &Value, name: &str) -> String {
     let url = flow["auth_url"].as_str().unwrap();
     let query = url.split_once('?').unwrap().1;
     form_value(query, name).unwrap().to_owned()
@@ -56,16 +56,12 @@ fn listening(port: u16) -> bool {
 }
 
 /// The browser's redirect to the callback listener.
-pub(super) async fn callback(port: u16, query: &str) -> Result<(u16, String), HarnessError> {
+async fn callback(port: u16, query: &str) -> Result<(u16, String), HarnessError> {
     let response = reqwest::get(format!("http://127.0.0.1:{port}/auth/callback?{query}")).await?;
     Ok((response.status().as_u16(), response.text().await?))
 }
 
-pub(super) async fn flow_until(
-    gw: &Gateway,
-    flow_id: &str,
-    status: &str,
-) -> Result<Value, HarnessError> {
+async fn flow_until(gw: &Gateway, flow_id: &str, status: &str) -> Result<Value, HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
         let reply = gw.get(&format!("/setup/oauth/{flow_id}")).await?;

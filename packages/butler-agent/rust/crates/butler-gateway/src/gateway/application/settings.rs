@@ -10,7 +10,7 @@ mod access;
 mod command_sandbox;
 mod logging;
 pub use command_sandbox::command_sandbox_enabled;
-pub use logging::{producer_config as producer_log_config, startup_config as startup_log_config};
+pub use logging::startup_config as startup_log_config;
 mod background_sources;
 mod composer_decoration;
 mod controls;

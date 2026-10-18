@@ -101,16 +101,11 @@ enum StreamEnd {
     Cut,
 }
 
-mod favicons;
-mod mcp;
-
 #[derive(Clone, Copy)]
 enum Kind {
     LocalModels,
     ProviderModels,
     OauthToken,
-    McpHttp,
-    Favicons,
 }
 
 /// One request as the stand-in saw it.
@@ -142,14 +137,6 @@ impl FakeServer {
 
     pub async fn provider_models() -> Result<Self, HarnessError> {
         Self::start(Kind::ProviderModels, ChatBehavior::default()).await
-    }
-
-    pub async fn favicons() -> Result<Self, HarnessError> {
-        Self::start(Kind::Favicons, ChatBehavior::default()).await
-    }
-
-    pub async fn mcp_http() -> Result<Self, HarnessError> {
-        Self::start(Kind::McpHttp, ChatBehavior::default()).await
     }
 
     pub async fn oauth_token() -> Result<Self, HarnessError> {
@@ -224,12 +211,6 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
         all.push(seen.clone());
         count
     };
-    if matches!(state.kind, Kind::McpHttp) {
-        return mcp::response(&parts.method, &seen.body);
-    }
-    if matches!(state.kind, Kind::Favicons) {
-        return favicons::response(seen.path.as_str());
-    }
     match (state.kind, &parts.method, seen.path.as_str()) {
         (Kind::LocalModels, &Method::GET, "/api/tags") => json_response(200, &ollama_tags()),
         (Kind::LocalModels, &Method::GET, "/v1/models") => json_response(200, &lm_studio_models()),

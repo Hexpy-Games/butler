@@ -195,7 +195,6 @@ pub(in crate::host) fn open_app_update(
     installation: &ResolvedInstallation,
 ) -> Result<AppUpdateService, crate::host::HostError> {
     let data = installation.validate_data_root(data)?;
-    super::http_logs::prepare(&data);
     let version = installation.app_version();
     AppUpdateService::new(data, installation.root().to_path_buf(), version)
         .map_err(|error| error.code().to_owned())

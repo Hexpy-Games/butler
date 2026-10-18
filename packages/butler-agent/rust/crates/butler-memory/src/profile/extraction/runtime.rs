@@ -45,8 +45,6 @@ pub(super) async fn run_batch(
     let instructions = prompt::instructions(mode);
     let attachments = [];
     let root = dependencies.root.to_string_lossy().into_owned();
-    let attribution =
-        butler_models::models::PromptUsageAttribution::for_phase("profile_extraction");
     let request = ProviderPromptRequest {
         prompt,
         model: Some(model),
@@ -58,7 +56,7 @@ pub(super) async fn run_batch(
         cancellation: cancellation.clone(),
         attachments: &attachments,
         butler_data: Some(&root),
-        usage_attribution: Some(&attribution),
+        usage_attribution: None,
         stream_observer: None,
         provider_retry_attempts: None,
     };

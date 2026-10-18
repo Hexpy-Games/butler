@@ -10,7 +10,7 @@ use crate::host::service::shutdown_trace::measure;
 use crate::host::{AgentRuntime, ServiceConfiguration, SystemIdentity};
 
 pub(super) async fn deliver_parent_results(
-    client: &butler_log::http::Client,
+    client: &reqwest::Client,
     repository: &butler_turn::btcc::SqliteSubsessionRepository,
     base: &str,
     auth: &butler_gateway::gateway::LocalAuthConfig,

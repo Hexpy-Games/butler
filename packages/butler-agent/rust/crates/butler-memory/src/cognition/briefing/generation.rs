@@ -265,9 +265,7 @@ impl BriefingGenerationService {
                     cancellation: cancellation.clone(),
                     attachments: &[],
                     butler_data: Some(&root),
-                    usage_attribution: Some(
-                        &butler_models::models::PromptUsageAttribution::for_phase("briefing"),
-                    ),
+                    usage_attribution: None,
                     stream_observer: None,
                     provider_retry_attempts: None,
                 },

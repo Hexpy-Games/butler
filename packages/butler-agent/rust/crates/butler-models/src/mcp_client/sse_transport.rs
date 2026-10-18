@@ -30,7 +30,7 @@ impl std::fmt::Display for LegacySseError {
 impl std::error::Error for LegacySseError {}
 
 pub(super) struct LegacySseTransport {
-    client: butler_log::http::Client,
+    client: reqwest::Client,
     headers: HeaderMap,
     cancel: CancellationToken,
     endpoint: watch::Receiver<Option<Result<Url, ()>>>,
@@ -40,7 +40,7 @@ pub(super) struct LegacySseTransport {
 
 impl LegacySseTransport {
     pub(super) fn connect(
-        client: butler_log::http::Client,
+        client: reqwest::Client,
         source_url: Url,
         headers: HeaderMap,
         cancel: CancellationToken,
@@ -141,7 +141,7 @@ impl Drop for LegacySseTransport {
 }
 
 async fn run_sse_source(
-    client: butler_log::http::Client,
+    client: reqwest::Client,
     source_url: Url,
     headers: HeaderMap,
     cancel: CancellationToken,

@@ -3,33 +3,3 @@ allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
 allow-indexing-slicing-in-tests = true
-
-disallowed-methods = [
-    { path = "tower_service::Service::call", reason = "Raw service execution bypasses butler_log::http; transport infrastructure needs a local exemption" },
-    { path = "reqwest::blocking::get", allow-invalid = true, reason = "Use butler_log::http" },
-    { path = "reqwest::blocking::Client::new", allow-invalid = true, reason = "Use butler_log::http" },
-    { path = "reqwest::blocking::Client::builder", allow-invalid = true, reason = "Use butler_log::http" },
-    { path = "reqwest::blocking::ClientBuilder::new", allow-invalid = true, reason = "Use butler_log::http" },
-    { path = "reqwest::blocking::RequestBuilder::send", allow-invalid = true, reason = "Use butler_log::http" },
-    { path = "reqwest::blocking::Client::execute", allow-invalid = true, reason = "Use butler_log::http" },
-    { path = "tokio::net::TcpStream::connect", reason = "Use butler_log::http::Connection for raw egress; non-HTTP loopback probes/control need an explicit exemption" },
-    { path = "tokio::net::TcpSocket::connect", reason = "Use butler_log::http::Connection for raw egress" },
-    { path = "std::net::TcpStream::connect", reason = "Use butler_log::http::Connection for raw egress" },
-    { path = "std::net::TcpStream::connect_timeout", reason = "Use butler_log::http::Connection for raw egress" },
-    { path = "socket2::Socket::connect", reason = "Use butler_log::http::Connection for raw egress" },
-    { path = "reqwest::Client::new", reason = "Use butler_log::http; all outbound HTTP must be logged" },
-    { path = "reqwest::Client::builder", reason = "Use butler_log::http; all outbound HTTP must be logged" },
-    { path = "reqwest::ClientBuilder::new", reason = "Use butler_log::http; all outbound HTTP must be logged" },
-    { path = "reqwest::RequestBuilder::send", reason = "Use butler_log::http; all outbound HTTP must be logged" },
-    { path = "reqwest::Client::execute", reason = "Use butler_log::http; all outbound HTTP must be logged" },
-    { path = "reqwest::get", reason = "Use butler_log::http; all outbound HTTP must be logged" },
-    { path = "rmcp::transport::worker::WorkerTransport::from_uri", reason = "Use butler_log::http; all outbound HTTP must be logged" },
-    { path = "rmcp::transport::worker::WorkerTransport::from_config", reason = "Use butler_log::http; all outbound HTTP must be logged" },
-]
-
-disallowed-types = [
-    { path = "reqwest::Client", reason = "Raw clients permit Default and Service bypasses; use butler_log::http" },
-    { path = "reqwest::ClientBuilder", reason = "Raw builders permit Default bypasses; use butler_log::http" },
-    { path = "reqwest::blocking::Client", allow-invalid = true, reason = "Use butler_log::http; blocking HTTP bypasses the logging boundary" },
-    { path = "reqwest::blocking::ClientBuilder", allow-invalid = true, reason = "Use butler_log::http" },
-]

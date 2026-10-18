@@ -4,8 +4,7 @@
 
 use std::time::Duration;
 
-use butler_log::http::RedirectPolicy as Policy;
-use butler_log::http::RequestBuilder;
+use reqwest::{Client, RequestBuilder, redirect::Policy};
 use serde_json::Value;
 
 use super::super::catalog::hosted_provider;
@@ -37,7 +36,7 @@ pub enum ProviderKeyCheckError {
     #[error("The provider could not be reached.")]
     Network {
         #[source]
-        source: Option<butler_log::http::Error>,
+        source: Option<reqwest::Error>,
     },
     #[error("The provider answered with HTTP {status}.")]
     ProviderUnavailable { status: u16 },
@@ -72,12 +71,12 @@ impl ModelConfiguration {
     ) -> Result<ProviderKeyCheck, ProviderKeyCheckError> {
         let (provider, key) = provider_key(provider_id, api_key)?;
         let url = format!("{}/models", self.provider_api_base(&provider));
-        let client = butler_log::http::external(butler_log::http::Purpose::new("key_check"))
+        let client = Client::builder()
             .redirect(Policy::none())
             .timeout(CHECK_TIMEOUT)
             .build()
             .map_err(|source| ProviderKeyCheckError::Network {
-                source: Some(source.into()),
+                source: Some(source),
             })?;
         let response = authorize(client.get(url), &provider, key)
             .send()

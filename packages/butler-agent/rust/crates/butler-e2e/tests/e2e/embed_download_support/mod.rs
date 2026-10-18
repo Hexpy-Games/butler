@@ -28,7 +28,7 @@ pub(crate) struct Server {
     pub(crate) corrupt: Arc<AtomicBool>,
     pub(crate) pause: Arc<AtomicBool>,
     pub(crate) offsets: Arc<Mutex<Vec<usize>>>,
-    pub(crate) address: String,
+    address: String,
 }
 const BYTES: usize = 256 * 1024;
 const FILES: [&str; 4] = [

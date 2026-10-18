@@ -5,7 +5,7 @@ use crate::web_access::service::{WebAccess, WebAccessError};
 
 pub(super) async fn response_bytes(
     access: &WebAccess,
-    request: butler_log::http::RequestBuilder,
+    request: reqwest::RequestBuilder,
     cancellation: &CancellationToken,
 ) -> Result<(u16, Vec<u8>), WebAccessError> {
     let fetched = access.fetch_request_to_spool(request, cancellation).await?;

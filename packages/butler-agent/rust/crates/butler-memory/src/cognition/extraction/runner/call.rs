@@ -245,9 +245,7 @@ async fn invoke<P>(
                 cancellation: cancellation.clone(),
                 attachments: &[],
                 butler_data: Some(request.butler_data),
-                usage_attribution: Some(&butler_models::models::PromptUsageAttribution::for_phase(
-                    "memory_extraction",
-                )),
+                usage_attribution: None,
                 stream_observer: None,
                 provider_retry_attempts: Some(0.0),
             },

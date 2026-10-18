@@ -56,7 +56,7 @@ use std::{
     sync::Arc,
 };
 
-use butler_log::http::Client;
+use reqwest::Client;
 use serde_json::Value;
 
 use super::{
@@ -186,9 +186,8 @@ impl ModelConfiguration {
             &collation,
         )?;
         if let Some(secret) = &environment.openai_api_key {
-            butler_log::register_secret_for("environment:openai", secret);
+            butler_log::register_secret(secret);
         }
-        logging::register_environment_endpoints(&environment);
         let secrets = ProviderSecrets::new(environment.secret_store);
         Ok(Self {
             data_root,
@@ -427,8 +426,8 @@ impl ModelConfiguration {
         } else {
             None
         };
-        let client = butler_log::http::external(butler_log::http::Purpose::new("model_discovery"))
-            .redirect(butler_log::http::RedirectPolicy::none())
+        let client = Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|source| ModelCatalogError::Storage {
                 message: "Local model discovery could not start.",

@@ -50,9 +50,7 @@ async fn legacy_sse_endpoint_posts_and_receives_through_scoped_rmcp_session() {
     });
 
     let transport = LegacySseTransport::connect(
-        butler_log::http::external(butler_log::http::Purpose::new("mcp"))
-            .build()
-            .unwrap(),
+        reqwest::Client::new(),
         source,
         headers(&[("x-fixture-auth".into(), "local-secret".into())]).unwrap(),
         CancellationToken::new(),

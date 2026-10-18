@@ -22,7 +22,7 @@ pub(crate) struct AgentArtifact {
 }
 
 pub(crate) async fn load_agent_artifact(
-    client: &butler_log::http::Client,
+    client: &reqwest::Client,
     shutdown: &CancellationToken,
     source: &str,
     channel: Option<&str>,
