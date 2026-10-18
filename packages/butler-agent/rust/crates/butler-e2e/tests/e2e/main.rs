@@ -65,6 +65,7 @@ mod gateway_remote;
 mod gateway_rotation;
 mod gateway_security;
 mod gateway_tunnel;
+mod gemini_requests;
 mod general_clear;
 mod harness_hygiene;
 mod hedge_v2_stub;
