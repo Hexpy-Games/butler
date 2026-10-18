@@ -21,7 +21,7 @@ pub use query::{Page, Query};
 pub use record::Record;
 pub use redaction::{
     Secret, redact_headers, redact_json, redact_log_line, redact_url, register_endpoint,
-    register_secret, register_secret_for,
+    register_ephemeral_secret, register_secret, register_secret_for,
 };
 pub use retention::{StorageView, StoreUsage};
 use std::{io, sync::OnceLock};

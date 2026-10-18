@@ -32,16 +32,10 @@ impl Logger {
                 Err(mpsc::RecvTimeoutError::Timeout) => continue,
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             };
-            if let Command::Deferred(make, bytes) = command {
-                let result = Encoded::new(make(), &self.snapshot().effective)
-                    .and_then(|row| self.write(row));
-                self.0.deferred.fetch_sub(bytes, Ordering::Relaxed);
-                self.report(result);
-                self.report(self.0.storage.lock().flush(true));
-            } else if let Command::Dropped = command {
+            if let Command::Dropped = command {
                 self.report(self.report_drops());
                 self.report(self.0.storage.lock().flush(false));
-            } else if let Command::Record(..) = command {
+            } else if matches!(command, Command::Record(..) | Command::Deferred(..)) {
                 pending = self.batch(command, rx);
             } else if let Command::Control(command) = command
                 && self.control(command, &mut state)
@@ -96,9 +90,24 @@ impl Logger {
             let Some(command) = pending.take() else {
                 break;
             };
-            let Command::Record(row, lossy, bytes, ack) = command else {
-                pending = Some(command);
-                break;
+            let (row, lossy, bytes, ack) = match command {
+                Command::Record(row, lossy, bytes, ack) => (row, lossy, bytes, ack),
+                Command::Deferred(make, bytes) => {
+                    let row = Encoded::new(make(), &self.snapshot().effective);
+                    self.0.deferred.fetch_sub(bytes, Ordering::Relaxed);
+                    match row {
+                        Ok(row) => (row, false, 0, None),
+                        Err(error) => {
+                            self.report_error(&error);
+                            pending = rx.try_recv().ok();
+                            continue;
+                        }
+                    }
+                }
+                command => {
+                    pending = Some(command);
+                    break;
+                }
             };
             if !lossy {
                 self.0.queue.bytes.fetch_sub(bytes, Ordering::Relaxed);

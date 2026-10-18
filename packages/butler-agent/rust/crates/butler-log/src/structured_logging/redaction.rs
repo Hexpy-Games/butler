@@ -14,67 +14,104 @@ impl<T> fmt::Display for Secret<T> {
         f.write_str("[REDACTED]")
     }
 }
-fn secrets() -> &'static RwLock<Vec<String>> {
-    static SECRETS: OnceLock<RwLock<Vec<String>>> = OnceLock::new();
+#[derive(Default)]
+struct Secrets {
+    process: std::collections::BTreeSet<String>,
+    ephemeral: std::collections::VecDeque<String>,
+    sourced: std::collections::BTreeMap<String, String>,
+    scrub_order: Vec<String>,
+}
+impl Secrets {
+    fn refresh(&mut self) {
+        self.scrub_order = self
+            .process
+            .iter()
+            .chain(self.ephemeral.iter())
+            .chain(self.sourced.values())
+            .cloned()
+            .collect();
+        self.scrub_order
+            .sort_unstable_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+        self.scrub_order.dedup();
+    }
+}
+fn secrets() -> &'static RwLock<Secrets> {
+    static SECRETS: OnceLock<RwLock<Secrets>> = OnceLock::new();
     SECRETS.get_or_init(RwLock::default)
 }
-/// Register before exposing a credential to any producer.
+/// Register a long-lived process credential before exposing it to any producer.
 pub fn register_secret(secret: &str) {
+    if !secret.is_empty() {
+        let mut secrets = secrets().write();
+        if secrets.process.insert(secret.into()) {
+            secrets.refresh();
+        }
+    }
+}
+/// Bound rotating codes in insertion order, independently of process credentials.
+pub fn register_ephemeral_secret(secret: &str) {
     if secret.is_empty() {
         return;
     }
     let mut secrets = secrets().write();
-    if !secrets.iter().any(|s| s == secret) {
-        if secrets.len() == 256 {
-            secrets.remove(0);
+    if !secrets.ephemeral.iter().any(|s| s == secret) {
+        if secrets.ephemeral.len() == 256 {
+            secrets.ephemeral.pop_front();
         }
-        secrets.push(secret.into());
-        secrets.sort_by_key(|s| std::cmp::Reverse(s.len()));
+        secrets.ephemeral.push_back(secret.into());
+        secrets.refresh();
     }
-}
-fn sourced_secrets() -> &'static RwLock<std::collections::BTreeMap<String, String>> {
-    static SOURCED: OnceLock<RwLock<std::collections::BTreeMap<String, String>>> = OnceLock::new();
-    SOURCED.get_or_init(RwLock::default)
 }
 /// Replace rotated credentials from the same origin/header; placeholders stay literal.
 pub fn register_secret_for(source: &str, secret: &str) {
-    let mut secrets = sourced_secrets().write();
+    let mut secrets = secrets().write();
     if secret.len() < 16 {
-        secrets.remove(source);
-        return;
+        secrets.sourced.remove(source);
+    } else {
+        secrets.sourced.insert(source.into(), secret.into());
     }
-    if secrets.len() >= 256 && !secrets.contains_key(source) {
-        secrets.pop_first();
-    }
-    secrets.insert(source.into(), secret.into());
+    secrets.refresh();
 }
-/// Register opaque path segments before any configured endpoint can be logged.
+/// Register credential-like path segments before a configured endpoint is logged.
 pub fn register_endpoint(input: &str) {
     let Ok(url) = url::Url::parse(input) else {
         return;
     };
     if let Some(segments) = url.path_segments() {
         for segment in segments {
-            if segment.len() >= 16 {
+            let decoded = percent_encoding::percent_decode_str(segment).decode_utf8_lossy();
+            if credential_segment(&decoded) {
                 register_secret(segment);
-                let decoded = percent_encoding::percent_decode_str(segment).decode_utf8_lossy();
-                if decoded.len() >= 16 {
-                    register_secret(&decoded);
-                }
+                register_secret(&decoded);
             }
         }
     }
 }
+fn credential_segment(segment: &str) -> bool {
+    if segment.len() < 16
+        || !segment.bytes().any(|b| b.is_ascii_alphabetic())
+        || !segment.bytes().any(|b| b.is_ascii_digit())
+    {
+        return false;
+    }
+    let mut counts = [0usize; 256];
+    for byte in segment.bytes() {
+        counts[byte as usize] += 1;
+    }
+    let entropy: f64 = counts
+        .into_iter()
+        .filter(|&n| n > 0)
+        .map(|n| {
+            let probability = n as f64 / segment.len() as f64;
+            -probability * probability.log2()
+        })
+        .sum();
+    entropy >= 3.5
+}
 fn scrub_text(text: &str) -> String {
     let mut text = text.to_owned();
-    for secret in secrets().read().iter() {
+    for secret in &secrets().read().scrub_order {
         text = text.replace(secret, "[REDACTED]");
-    }
-    let mut sourced: Vec<_> = sourced_secrets().read().values().cloned().collect();
-    sourced.sort_unstable_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
-    sourced.dedup();
-    for secret in sourced {
-        text = text.replace(&secret, "[REDACTED]");
     }
     patterns::redact_log_line(&text)
 }

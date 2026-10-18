@@ -71,6 +71,7 @@ pub(super) async fn discover(
 ) -> Result<LocalModelDiscoveryResult, ModelCatalogError> {
     validate_key(api_key)?;
     let (server_url, api_base_url) = normalize_server(server_url)?;
+    butler_log::register_endpoint(&api_base_url);
     let server_root = api_base_url.strip_suffix("/v1").unwrap_or(&api_base_url);
     let models = fetch_object(client, &format!("{api_base_url}/models"), api_key)
         .await

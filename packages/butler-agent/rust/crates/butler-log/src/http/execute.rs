@@ -15,6 +15,7 @@ pub(super) async fn chain(
     let timeout = request.timeout().copied().or(timeout);
     let mut previous = Vec::new();
     let mut replays = 0;
+    let initial_retry = phase.retry;
     loop {
         if let Some(timeout) = timeout {
             *request.timeout_mut() =
@@ -22,10 +23,9 @@ pub(super) async fn chain(
         }
         previous.push(request.url().clone());
         let next = request.try_clone();
-        let response = match attempt(&client, request, &purpose, &phase).await {
-            Err(Error::Transport(error))
-                if replays < 2 && super::retry::safe(&error) && next.is_some() =>
-            {
+        let replay_allowed = replays < 2 && next.is_some();
+        let response = match attempt(&client, request, &purpose, &phase, replay_allowed).await {
+            Err(Error::Transport(error)) if replay_allowed && super::retry::safe(&error) => {
                 previous.pop();
                 request = next.ok_or(Error::Timeout)?;
                 replays += 1;
@@ -39,6 +39,7 @@ pub(super) async fn chain(
         };
         drop(response);
         request = next;
+        phase.retry = initial_retry;
     }
 }
 async fn attempt(
@@ -46,21 +47,29 @@ async fn attempt(
     mut request: Request,
     purpose: &Purpose,
     phase: &Phase,
+    replay_allowed: bool,
 ) -> Result<Response, Error> {
     request.headers_mut().remove("traceparent");
     request.headers_mut().remove("tracestate");
     super::register_credentials(&request);
     let mut attempt = observe::Attempt::new(&mut request, purpose, phase);
-    if phase.retry > 0 {
-        let mut row = attempt.row.clone();
-        row.level = if phase.routine { "DEBUG" } else { "WARN" }.into();
-        row.event = "http.retry".into();
-        crate::emit(row);
-    }
     let response = match client.execute(request).await {
         Ok(response) => response,
         Err(error) => {
-            attempt.row.level = if phase.routine { "DEBUG" } else { "ERROR" }.into();
+            let retry = replay_allowed && super::retry::safe(&error);
+            attempt.row.level = if phase.routine {
+                "DEBUG"
+            } else if retry {
+                "WARN"
+            } else {
+                "ERROR"
+            }
+            .into();
+            if retry {
+                let mut row = attempt.row.clone();
+                row.event = "http.retry".into();
+                crate::emit(row);
+            }
             attempt.row.error = Some(serde_json::json!({"message":error.to_string()}));
             return Err(error.into());
         }
