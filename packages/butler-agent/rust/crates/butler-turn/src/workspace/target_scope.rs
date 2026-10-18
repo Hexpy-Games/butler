@@ -86,20 +86,17 @@ fn classify(
     if ambiguous_path(&absolute) {
         return TargetScope::Outside;
     }
-    let real = realpath_or_nearest(&absolute);
-    if roots
-        .attachments
-        .iter()
-        .filter(|path| {
-            std::fs::symlink_metadata(path).is_ok_and(|metadata| {
+    // Only the stored spelling shown in the prompt grants attachment access.
+    // Resolving links here would let a mutable alias inherit uncontained reads.
+    if roots.attachments.iter().any(|path| {
+        *path == absolute
+            && std::fs::symlink_metadata(path).is_ok_and(|metadata| {
                 metadata.is_file() && !butler_platform::secure_fs::has_other_links(path, &metadata)
             })
-        })
-        .filter_map(|path| canonicalize(path).ok())
-        .any(|path| path == real)
-    {
+    }) {
         return TargetScope::Attachment;
     }
+    let real = realpath_or_nearest(&absolute);
     let Some(project) = project else {
         return TargetScope::Outside;
     };

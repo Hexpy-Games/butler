@@ -231,22 +231,48 @@ async fn attachment_reads_in_project_respect_access_modes() -> Result<(), Harnes
         let file = project_attachment(&s, &chat).await?;
         let path = file_path(&s, &file);
         let prompt = format!("Read the project attachment in {} mode.", mode.as_str());
-        script.rounds.lock().unwrap().insert(
-            prompt.clone(),
-            vec![json!([call(
-                "read",
+        let mut calls = vec![call(
+            "read",
+            "read_file",
+            &json!({"requests":[{"path":path}]}),
+        )];
+        let linked =
+            matches!(mode, Access::AskExceptReads) && butler_platform::command_sandbox::POSIX_SHELL;
+        if linked {
+            let link = folder.join("작업 Project/attachment-link");
+            butler_platform::secure_fs::symlink(&path, &link)?;
+            calls.push(call(
+                "link",
                 "read_file",
-                &json!({"requests":[{"path":path}]})
-            ),])],
-        );
+                &json!({"requests":[{"path":link}]}),
+            ));
+        }
+        script
+            .rounds
+            .lock()
+            .unwrap()
+            .insert(prompt.clone(), vec![json!(calls)]);
         let id = send_to(&s, &chat, &prompt, std::slice::from_ref(&file), mode).await?;
-        if matches!(mode, Access::AskAlways) {
+        let asks = linked || matches!(mode, Access::AskAlways);
+        if asks {
             pending(&s, &chat, &id).await?;
-            approve(&s, &chat, "allow").await?;
+            approve(&s, &chat, if linked { "deny" } else { "allow" }).await?;
         }
         delivered(&s, &chat, &id).await?;
-        assert_counts(&s, &id, u64::from(matches!(mode, Access::AskAlways)), 0)?;
-        let output = outputs(&s, &chat, &id, &script, &prompt).await?.join("\n");
+        assert_counts(&s, &id, u64::from(asks), 0)?;
+        let results = outputs(&s, &chat, &id, &script, &prompt).await?;
+        assert_eq!(results.len(), 1 + usize::from(linked));
+        if linked {
+            assert_eq!(
+                results
+                    .iter()
+                    .filter(|raw| raw.contains("PROJECT-ATTACHMENT-MARKER"))
+                    .count(),
+                1,
+                "only the direct stored path may read without approval: {results:?}"
+            );
+        }
+        let output = results.join("\n");
         assert!(output.contains("PROJECT-ATTACHMENT-MARKER"), "{output}");
     }
     // A project file mixed with an attachment must not inherit the latter's
