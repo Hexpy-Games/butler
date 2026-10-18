@@ -260,6 +260,7 @@ fn files_for_ids(
         let file = connection.query_row(
             "SELECT id,kind,mime_type,safe_name,size_bytes,sha256,created_at FROM message_files WHERE id=?1",
             [id], |row| Ok(MessageFileRef {
+                title: None,
                 source_label: None,
                 deliverable: false,
                 file_id: row.get(0)?, kind: parse_sql_enum(row.get::<_, String>(1)?)?,

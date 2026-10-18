@@ -250,13 +250,13 @@ pub(super) fn file(
     id: &str,
 ) -> Result<Option<AppMessageFileSnapshot>, AppStorageError> {
     db.query_row(
-        "SELECT id,owner_session_id,message_id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at,source_label,deliverable \
+        "SELECT id,owner_session_id,message_id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at,source_label,deliverable,title \
          FROM message_files WHERE id=?1",
         [id],
         |row| Ok(AppMessageFileSnapshot {
             id:row.get(0)?,owner_session_id:row.get(1)?,message_id:row.get(2)?,kind:row.get(3)?,
             mime_type:row.get(4)?,safe_name:row.get(5)?,size_bytes:row.get(6)?,sha256:row.get(7)?,
-            storage_name:row.get(8)?,created_at:row.get(9)?,source_label:row.get(10)?,deliverable:row.get(11)?,
+            storage_name:row.get(8)?,created_at:row.get(9)?,source_label:row.get(10)?,deliverable:row.get(11)?,title:row.get(12)?,
         }),
     ).optional().map_err(AppStorageError::sqlite)
 }

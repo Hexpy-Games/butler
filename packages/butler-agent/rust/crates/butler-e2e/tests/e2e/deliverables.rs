@@ -7,6 +7,7 @@
 )]
 pub(super) mod delegation;
 mod migration;
+mod paths;
 mod stub;
 use butler_e2e::e2e::{
     HarnessError,
@@ -62,20 +63,26 @@ async fn research_to_deck_preserves_working_files_and_pairs_changes() -> Result<
         write("notes/research.md", "Research"),
         write("tools/build.sh", "printf '<h1>Deck</h1>' > deck.html\nprintf '{}' > \"$BUTLER_ARTIFACTS_DIR/data.json\"\n"),
         call("run_command", json!({"command":"sh tools/build.sh","state_effect":"mutation","summary":"Create requested files"})),
-        deliver("deck.html", "Deck"), done(),
+        deliver("deck.html", "Q3/Q4 Deck"), done(),
     ].into();
     let s = setup.start().await?;
     let (_, turn) = run_turn(&s, &script, "Make a deck.").await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     let docs = documents(&s).await?;
     assert_eq!(docs.len(), 1, "{docs:?}");
-    assert_eq!(docs[0]["title"], "Deck");
+    assert_eq!(docs[0]["title"], "Q3/Q4 Deck");
+    assert_eq!(docs[0]["file"]["safe_name"], "deck.html");
     assert_eq!(docs[0]["session"], "general");
     let message = last(&s).await?;
     let files = message["attachments"].as_array().unwrap();
     assert_eq!(files.len(), 4, "{message}");
     assert!(files.iter().all(|f| f["source_label"].is_string()));
     assert_eq!(files.iter().filter(|f| f["deliverable"] == true).count(), 1);
+    let delivered = files.iter().find(|f| f["deliverable"] == true).unwrap();
+    assert_eq!(delivered["safe_name"], "deck.html");
+    assert_eq!(delivered["title"], "Q3/Q4 Deck");
+    let bytes = s.gw.get(delivered["url"].as_str().unwrap()).await?;
+    assert_eq!(bytes.text, "<h1>Deck</h1>");
     let changed = message["changed_files"].as_array().unwrap();
     assert_eq!(changed.len(), 2, "{message}");
     assert!(changed.iter().all(|f| f["file_id"].is_string()));
@@ -85,6 +92,15 @@ async fn research_to_deck_preserves_working_files_and_pairs_changes() -> Result<
         4,
         "{artifacts:?}"
     );
+    let projected = artifacts.data();
+    let artifact = projected["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["deliverable"] == true)
+        .unwrap();
+    assert_eq!(artifact["title"], "Q3/Q4 Deck");
+    assert_eq!(artifact["safe_path_label"], "deck.html");
     s.finish().await?;
     server.abort();
     Ok(())
@@ -252,6 +268,7 @@ async fn command_declaration_and_missing_file_use_explicit_intent_only() -> Resu
     run_turn(&s, &script, "Create table.").await?;
     let docs = documents(&s).await?;
     assert_eq!(docs.len(), 1, "{docs:?}");
+    assert_eq!(docs[0]["source"], "artifacts/generated/table.csv");
     s.finish().await?;
     server.abort();
     Ok(())

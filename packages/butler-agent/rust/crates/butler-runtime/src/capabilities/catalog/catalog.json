@@ -5789,7 +5789,7 @@
       "definition": {
         "type": "function",
         "name": "output_publish",
-        "description": "Publish a finished page or site so the user can open it in the browser; it is delivered to the user's Library as one item that keeps its versions. Republish the same path to add a version. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done. Use deliver_files for other finished files.",
+        "description": "Publish a finished page or site to the user's Library, opened in the browser; republishing the same path adds a version. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done. For other files, use deliver_files.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -6846,7 +6846,7 @@
       "definition": {
         "type": "function",
         "name": "deliver_files",
-        "description": "Hand finished files to the user as this turn's deliverables: the report, deck, document, spreadsheet, image or other file the user asked for or that is meant to be kept or shared. Delivered files appear on your answer and in the user's Library; nothing else does. Do not deliver notes, drafts, helper scripts, logs, intermediate data or ordinary source-code changes; the user can still find those in the turn's details. The user receives each file as it is when the turn ends. To revise an earlier deliverable, change the same file and deliver it again: the Library keeps one item with its versions. Use output_publish instead for a page or site the user opens in the browser.",
+        "description": "Hand finished files to the user as this turn's deliverables: what the user asked for or will keep or share. Only delivered files appear on your answer and in the user's Library. Do not deliver notes, drafts, helper scripts, logs, intermediate data or ordinary code changes; those stay in the turn's details. Each file is sent as it is when the turn ends. To revise one, change the same file and deliver it again; the Library keeps its versions. For a page or site, use output_publish.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -6861,7 +6861,7 @@
                 "properties": {
                   "path": {
                     "type": "string",
-                    "description": "Workspace file path, or an artifacts/... label from a tool result."
+                    "description": "Workspace path, or an artifacts/... label from a tool result."
                   },
                   "title": {
                     "type": "string",
@@ -11412,7 +11412,7 @@
     "output_publish": {
       "type": "function",
       "name": "output_publish",
-      "description": "Publish a finished page or site so the user can open it in the browser; it is delivered to the user's Library as one item that keeps its versions. Republish the same path to add a version. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done. Use deliver_files for other finished files.",
+      "description": "Publish a finished page or site to the user's Library, opened in the browser; republishing the same path adds a version. The result includes a first check; read it, and use output_check with include_image when looks matter, before reporting the output done. For other files, use deliver_files.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -12222,7 +12222,7 @@
     "deliver_files": {
       "type": "function",
       "name": "deliver_files",
-      "description": "Hand finished files to the user as this turn's deliverables: the report, deck, document, spreadsheet, image or other file the user asked for or that is meant to be kept or shared. Delivered files appear on your answer and in the user's Library; nothing else does. Do not deliver notes, drafts, helper scripts, logs, intermediate data or ordinary source-code changes; the user can still find those in the turn's details. The user receives each file as it is when the turn ends. To revise an earlier deliverable, change the same file and deliver it again: the Library keeps one item with its versions. Use output_publish instead for a page or site the user opens in the browser.",
+      "description": "Hand finished files to the user as this turn's deliverables: what the user asked for or will keep or share. Only delivered files appear on your answer and in the user's Library. Do not deliver notes, drafts, helper scripts, logs, intermediate data or ordinary code changes; those stay in the turn's details. Each file is sent as it is when the turn ends. To revise one, change the same file and deliver it again; the Library keeps its versions. For a page or site, use output_publish.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -12237,7 +12237,7 @@
               "properties": {
                 "path": {
                   "type": "string",
-                  "description": "Workspace file path, or an artifacts/... label from a tool result."
+                  "description": "Workspace path, or an artifacts/... label from a tool result."
                 },
                 "title": {
                   "type": "string",
