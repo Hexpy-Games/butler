@@ -81,7 +81,7 @@ pub(in crate::gateway) fn serve(
             headless.shutdown().await;
         }
         if let Some(host) = &state.app_host {
-            host.stop().await;
+            host.shutdown().await;
         }
         result
     })
