@@ -27,10 +27,6 @@ use crate::gateway::{
 
 const MAX_SETUP_BODY: usize = 64 * 1024;
 
-pub(super) fn handles(path: &str) -> bool {
-    path.starts_with("/setup/") || path == "/credentials" || path.starts_with("/credentials/")
-}
-
 pub(super) async fn route(
     state: Arc<HttpState>,
     request: Request<Body>,

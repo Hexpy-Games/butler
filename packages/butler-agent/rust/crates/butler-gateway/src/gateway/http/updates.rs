@@ -36,13 +36,6 @@ struct ApplyBody {
     dry_run: Option<bool>,
 }
 
-pub(super) fn handles(path: &str) -> bool {
-    matches!(
-        path,
-        "/updates" | "/updates/check" | "/updates/apply" | "/updates/cancel" | "/updates/progress"
-    )
-}
-
 pub(super) async fn route(
     state: Arc<HttpState>,
     request: Request<Body>,

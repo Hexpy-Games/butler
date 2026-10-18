@@ -28,12 +28,11 @@ src/gateway/application/session_relocation.rs	AppApplication::perform_relocation
 src/gateway/application/session_relocation/records.rs	reserve	81
 src/gateway/application/settings/update/patch/project.rs	project	199
 src/gateway/application/settings/update/patch/sanitize.rs	sanitize	180
-src/gateway/application/settings/view.rs	read	218
+src/gateway/application/settings/view.rs	read	210
 src/gateway/application/shell.rs	command_palette	148
 src/gateway/application/space/commands.rs	execute	125
 src/gateway/application/space/owner.rs	commit_relocation	102
 src/gateway/application/storage/schema/project_ledger_bindings.rs	initialize	109
-src/gateway/http.rs	route	158
 src/gateway/http/dashboard.rs	route	214
 src/gateway/http/message_files/mime.rs	inferred_content_type	84
 src/gateway/http/model_catalog.rs	route	96
