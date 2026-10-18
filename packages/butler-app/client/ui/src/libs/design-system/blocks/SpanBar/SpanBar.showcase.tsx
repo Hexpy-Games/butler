@@ -4,7 +4,7 @@ import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { SpanAxis } from "./SpanAxis";
 import { SpanBar, type SpanBarTone } from "./SpanBar";
-import { GeminiTrace, RowIndentTrace } from "./SpanBar.showcaseParts";
+import { GeminiTrace, PlainIndentTrace, RowIndentTrace } from "./SpanBar.showcaseParts";
 import { formatTraceMs, GEMINI_STEPS, GEMINI_TOTAL, stepChildren, stepTone } from "./SpanBar.showcaseData";
 
 export const meta: ShowcaseMeta = {
@@ -114,6 +114,11 @@ export const stories: ShowcaseStory[] = [
         <SpanBar offset={120} duration={1480} total={1840} label={formatTraceMs(context.locale, 1480)} />
       </Stack>
     ),
+  },
+  {
+    name: "Text indent on plain rows",
+    states: ["static", "interactive", "text indent", "depth cue"],
+    render: (context) => <PlainIndentTrace locale={context.locale} />,
   },
   {
     name: "Row indent (leading chevrons)",

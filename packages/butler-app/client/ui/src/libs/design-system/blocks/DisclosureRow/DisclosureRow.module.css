@@ -2,6 +2,8 @@
   /* One title line: chevron and icon boxes, and the panel's text inset. */
   --disclosure-line: var(--typo-body-line-height);
   --disclosure-inset: var(--space-sm);
+  /* The trigger's own start/end padding; the text indent adds to it. */
+  --disclosure-pad-inline: var(--disclosure-inset);
   /* Text-only indent (SpanRow indent="text"); each row resolves its own. */
   --disclosure-indent: 0px;
 
@@ -11,6 +13,7 @@
 /* Plain rows sit flush with the surrounding text (dialogs, readers). */
 .plain {
   --disclosure-inset: 0px;
+  --disclosure-pad-inline: var(--space-sm);
 
   background: transparent;
 }
@@ -31,7 +34,7 @@
      stretched row track keeps the title at the top of the fill. */
   align-content: center;
   width: 100%;
-  padding: var(--disclosure-inset);
+  padding: var(--disclosure-inset) var(--disclosure-pad-inline);
   border-radius: inherit;
 }
 
@@ -42,7 +45,6 @@
   width: auto;
   max-width: none;
   margin-inline: calc(-1 * var(--space-sm));
-  padding-inline: var(--space-sm);
 }
 
 /* The bleed can reach a scroll container's clipping edge (dialog readers):
@@ -190,7 +192,7 @@
   box-sizing: border-box;
   width: 100%;
   min-height: var(--control-height-md);
-  padding: var(--disclosure-inset);
+  padding: var(--disclosure-inset) var(--disclosure-pad-inline);
   border-radius: inherit;
 }
 
@@ -201,7 +203,6 @@
 .plain .trigger[data-static="true"] {
   width: auto;
   margin-inline: calc(-1 * var(--space-sm));
-  padding-inline: var(--space-sm);
 }
 
 /* Trailing chevron: hugs the meta and turns down when the row opens. */
@@ -287,7 +288,8 @@
 }
 
 /* Text indent: 16px per level moves the first line, the description and
-   the panel; the fill and the bar stay put. */
+   the panel; the fill and the bar stay put. It adds to the trigger's own
+   start padding, so plain and static rows keep their inset at every depth. */
 .root[data-indent="true"] {
   --disclosure-indent: calc(
     var(--disclosure-indent-level, 0) * var(--space-lg)
@@ -296,7 +298,7 @@
 
 .root[data-indent="true"] > .trigger {
   padding-inline-start: calc(
-    var(--disclosure-inset) + var(--disclosure-indent)
+    var(--disclosure-pad-inline) + var(--disclosure-indent)
   );
 }
 

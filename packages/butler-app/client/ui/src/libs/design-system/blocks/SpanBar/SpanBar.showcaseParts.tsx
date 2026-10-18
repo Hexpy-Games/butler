@@ -118,3 +118,27 @@ export function RowIndentTrace({ locale }: { locale: Locale }) {
     </Stack>
   );
 }
+
+/** Plain rows in text-indent SpanRows: static and interactive rows keep the 8px start inset at every depth. */
+export function PlainIndentTrace({ locale }: { locale: Locale }) {
+  const steps = [0, 1, 2, 3, 4].map((depth) => GEMINI_STEPS.find((step) => stepDepth(step) === depth)).filter((step) => step !== undefined);
+  const [open, setOpen] = useState<string | null>(null);
+  return (
+    <Stack gap="sm">
+      <SpanAxis total={GEMINI_TOTAL} inset="row" format={(ms) => formatTraceMs(locale, ms)} />
+      <div>
+        {steps.flatMap((step, index) => [true, false].map((interactive) => (
+          <SpanRow key={`${step.id}-${interactive}`} depth={stepDepth(step)} indent="text"
+            depthLabel={(depth) => (locale === "ko-KR" ? `깊이 ${depth}` : `Depth ${depth}`)}>
+            <DisclosureRow surface="plain" affordance="none" title={copy(locale, step.title)}
+              count={interactive ? stepChildren(step.id).length || 1 : undefined}
+              meta={formatTraceMs(locale, step.duration)} description={startText(locale, step.offset)}
+              open={open === step.id && interactive} onToggle={() => setOpen((current) => (current === step.id ? null : step.id))}
+              bar={<SpanBar offset={step.offset} duration={step.duration} total={GEMINI_TOTAL} tone={stepTone(step)}
+                index={index} label={spoken(locale, step)} />} />
+          </SpanRow>
+        )))}
+      </div>
+    </Stack>
+  );
+}
