@@ -44,6 +44,16 @@ fn hot_documents(data: &Path) -> Vec<String> {
         .map(Result::unwrap).collect()
 }
 
+/// The daily cycle also composes the New Chat Briefing with the memory model;
+/// only the cache refresh itself must stay free of model calls.
+fn non_briefing_calls(server: &FakeServer) -> usize {
+    server
+        .chat_requests()
+        .iter()
+        .filter(|request| !request.to_string().contains("_new_chat_briefing"))
+        .count()
+}
+
 #[tokio::test]
 async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -168,7 +178,7 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     )?;
     std::fs::write(box_root.join("index.sqlite"), b"dormant index\0\xff")?;
     let box_before = box_snapshot(&box_root)?;
-    let calls_before_refresh = server.chat_requests().len();
+    let calls_before_refresh = non_briefing_calls(&server);
     s.gw = s.agent.start_again().await?;
     until(|| {
         ["session-sync", "consolidation-cycle"].iter().all(|job| {
@@ -181,7 +191,7 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     .await;
     until(|| cache_complete(&graph, &turn_id)).await;
     assert_eq!(
-        server.chat_requests().len(),
+        non_briefing_calls(&server),
         calls_before_refresh,
         "cache-only refresh made a model call"
     );
