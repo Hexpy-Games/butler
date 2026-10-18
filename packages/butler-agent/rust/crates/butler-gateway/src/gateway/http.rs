@@ -141,7 +141,8 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
         &admitted,
         response.status(),
         started,
-    );
+    )
+    .await;
     response
 }
 

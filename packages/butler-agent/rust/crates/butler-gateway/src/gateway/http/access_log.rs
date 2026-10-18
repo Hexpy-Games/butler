@@ -18,7 +18,7 @@ impl Admission {
         self.0.store(true, Ordering::Relaxed);
     }
 }
-pub(super) fn finish(
+pub(super) async fn finish(
     method: &Method,
     route: Option<&MatchedPath>,
     admitted: &Admission,
@@ -47,5 +47,5 @@ pub(super) fn finish(
     row.duration_ms = Some(start.elapsed().as_secs_f64() * 1000.0);
     row.attrs =
         serde_json::json!({"method":method.as_str(),"route":route,"status":status.as_u16()});
-    let _ = log.record(row);
+    let _ = log.record_written(row).await;
 }
