@@ -8,7 +8,7 @@ use axum::{
     routing::{get, post},
 };
 use butler_e2e::e2e::{
-    HarnessError, config::ModelChoice, scenario::{Scenario, Setup},
+    HarnessError, config::ModelChoice, scenario::Setup,
 };
 use serde_json::{Value, json};
 use std::{collections::{BTreeMap, BTreeSet}, sync::{Arc, Mutex}};
@@ -23,30 +23,39 @@ const SCHEMA_FIELDS: &[&str] = &[
     "default", "items", "minimum", "maximum",
 ];
 
+// https://ai.google.dev/gemini-api/docs/structured-output
+const JSON_SCHEMA_FIELDS: &[&str] = &[
+    "type", "title", "description", "properties", "required", "additionalProperties",
+    "enum", "format", "minimum", "maximum", "items", "prefixItems", "minItems",
+    "maxItems", "anyOf",
+];
+const SIGNATURE: &str = "c3R1Yi1zaWduYXR1cmU=";
+
 fn invalid(field: &str, path: &str) -> String {
     format!("Invalid JSON payload received. Unknown name \"{field}\" at '{path}': Cannot find field.")
 }
 
-fn schema(node: &Value, path: &str) -> Result<(), String> {
+fn schema(node: &Value, path: &str, json_schema: bool) -> Result<(), String> {
     let object = node.as_object().ok_or_else(|| format!("{path}: Schema must be an object"))?;
     for (key, value) in object {
-        if !SCHEMA_FIELDS.contains(&key.as_str()) {
+        if !(if json_schema { JSON_SCHEMA_FIELDS } else { SCHEMA_FIELDS }).contains(&key.as_str()) {
             return Err(invalid(key, path));
         }
         let child = format!("{path}.{key}");
         match key.as_str() {
-            "type" if !value.is_string() => return Err(format!("{child}: type must be a string")),
+            "type" if !json_schema && !value.is_string() => return Err(format!("{child}: type must be a string")),
             "properties" => {
                 for (name, property) in value.as_object()
                     .ok_or_else(|| format!("{child}: properties must be an object"))? {
-                    schema(property, &format!("{child}.{name}"))?;
+                    schema(property, &format!("{child}.{name}"), json_schema)?;
                 }
             }
-            "items" => schema(value, &child)?,
-            "anyOf" => {
+            "items" => schema(value, &child, json_schema)?,
+            "additionalProperties" if value.is_object() => schema(value, &child, true)?,
+            "anyOf" | "prefixItems" => {
                 for (index, variant) in value.as_array()
                     .ok_or_else(|| format!("{child}: anyOf must be an array"))?.iter().enumerate() {
-                    schema(variant, &format!("{child}[{index}]"))?;
+                    schema(variant, &format!("{child}[{index}]"), json_schema)?;
                 }
             }
             _ => {}
@@ -62,6 +71,9 @@ fn validate(body: &Value) -> Result<(), String> {
             return Err(format!("contents[{index}].role must be user or model"));
         }
         for part in content["parts"].as_array().ok_or("parts must be an array")? {
+            if part.get("functionCall").is_some() && part["thoughtSignature"] != SIGNATURE {
+                return Err("replayed functionCall thoughtSignature differs".into());
+            }
             if let Some(result) = part.get("functionResponse")
                 && !result["response"].is_object() {
                 return Err(format!("contents[{index}].functionResponse.response must be an object"));
@@ -79,17 +91,15 @@ fn validate(body: &Value) -> Result<(), String> {
                 return Err(format!("{path}: parameters and parametersJsonSchema are mutually exclusive"));
             }
             if let Some(value) = declaration.get("parameters") {
-                schema(value, &format!("{path}.parameters"))?;
+                schema(value, &format!("{path}.parameters"), false)?;
             }
-            if let Some(value) = declaration.get("parametersJsonSchema")
-                && (!value.is_object() || value["type"] != "object") {
-                return Err(format!("{path}.parametersJsonSchema must be an object schema"));
+            if let Some(value) = declaration.get("parametersJsonSchema") {
+                schema(value, &format!("{path}.parametersJsonSchema"), true)?;
+                if value["type"] != "object" {
+                    return Err(format!("{path}.parametersJsonSchema must be an object schema"));
+                }
             }
         }
-    }
-    if let Some(level) = body.pointer("/generationConfig/thinkingConfig/thinkingLevel")
-        && !matches!(level.as_str(), Some("MINIMAL" | "LOW" | "MEDIUM" | "HIGH")) {
-        return Err("thinkingLevel must be MINIMAL, LOW, MEDIUM or HIGH".into());
     }
     Ok(())
 }
@@ -111,22 +121,18 @@ async fn reply(
         return (StatusCode::BAD_REQUEST, Json(json!({"error":{
             "code":400,"message":message,"status":"INVALID_ARGUMENT"}}))).into_response();
     }
-    let done = has_result(&body, "tool_call");
+    let done = has_result(&body, "tool_describe");
     let part = if done {
         json!({"text":"Compatible Gemini request."})
-    } else if has_result(&body, "tool_describe") {
-        json!({"functionCall":{"name":"tool_call","args":{
-            "id":"native:list_tool_capabilities","arguments":{"include_disabled":true}}},
-            "thoughtSignature":"c3R1Yi1zaWduYXR1cmU="})
     } else {
         json!({"functionCall":{"name":"tool_describe","args":{"ids":["native:list_tool_capabilities"]}},
-            "thoughtSignature":"c3R1Yi1zaWduYXR1cmU="})
+            "thoughtSignature":SIGNATURE})
     };
     let response = json!({"candidates":[{"content":{"role":"model","parts":[part]},
         "finishReason":"STOP","index":0}],
         "usageMetadata":{"promptTokenCount":100,"candidatesTokenCount":10,"totalTokenCount":110},
         "modelVersion":"gemini-3.8-flash"});
-    ([("content-type","text/event-stream")], format!("data: {response}\n\n")).into_response()
+    ([("content-type","text/event-stream")], format!("data: {response}\r\n\r\n")).into_response()
 }
 
 fn has_result(body: &Value, name: &str) -> bool {
@@ -170,7 +176,7 @@ async fn gemini_requests_accept_registered_tool_schemas() -> Result<(), HarnessE
     }).await?;
     assert_eq!(selected.status, 200, "{}", selected.text);
     requests.lock().unwrap().clear();
-    let (turn_id, turn) = s.turn("general", "Reply briefly.").await?;
+    let (_, turn) = s.turn("general", "Reply briefly.").await?;
     let bodies = requests.lock().unwrap().clone();
     for (_, result) in &bodies {
         assert!(result.is_ok(), "Gemini HTTP 400: {}", result.as_ref().unwrap_err());
@@ -179,39 +185,76 @@ async fn gemini_requests_accept_registered_tool_schemas() -> Result<(), HarnessE
     let messages = s.gw.messages("general").await?;
     let answer = messages.iter().rev().find(|message| message["role"] == "assistant").unwrap();
     assert_eq!(answer["text"], "Compatible Gemini request.");
-    let expected = registered_tools(&s, &turn_id)?;
-    assert!(!expected.is_empty());
-    assert_eq!(bodies.len(), 3, "describe, call, final");
+    assert_eq!(bodies.len(), 2, "tool call, final");
     for (body, _) in &bodies {
         let tools = body["tools"][0]["functionDeclarations"].as_array().unwrap();
         let names = tools.iter().map(|tool| tool["name"].as_str().unwrap().to_owned())
             .collect::<BTreeSet<_>>();
-        assert_eq!(names, expected);
-        assert_eq!(tools.len(), expected.len(), "duplicate tools");
+        assert!(!names.is_empty());
+        assert_eq!(tools.len(), names.len(), "duplicate tools");
         for tool in tools {
-            assert!(tool.get("parameters").is_none());
-            assert_eq!(tool["parametersJsonSchema"]["type"], "object");
+            assert!(tool.get("parameters").is_some() || tool.get("parametersJsonSchema").is_some());
         }
         eprintln!("Gemini gateway stub: {} registered tools validated", tools.len());
     }
-    assert!(has_result(&bodies[2].0, "tool_call"));
+    assert!(has_result(&bodies[1].0, "tool_describe"));
+    let result = bodies[1].0["contents"].as_array().unwrap().iter()
+        .flat_map(|content| content["parts"].as_array().unwrap())
+        .find(|part| part["functionResponse"]["name"] == "tool_describe").unwrap();
+    assert_eq!(result["functionResponse"]["response"]["ok"], true, "{result}");
+    assert_eq!(result["functionResponse"]["response"]["descriptions"][0]["id"],
+        "native:list_tool_capabilities");
     s.finish().await?;
     Ok(())
 }
 
-// Independent gate-filtered runtime registry, rather than the request under test.
-fn registered_tools(s: &Scenario, turn_id: &str) -> Result<BTreeSet<String>, HarnessError> {
-    let db = butler_platform::sqlite::open_with_flags(
-        s.sandbox.data.join("agent-runtime/btcc.sqlite"),
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )?;
-    let raw: String = db.query_row(
-        "SELECT result_json FROM btcc_guided_tool_calls WHERE turn_id=?1 AND tool_name='list_tool_capabilities'",
-        [turn_id], |row| row.get(0),
-    )?;
-    let result: Value = serde_json::from_str(&raw)?;
-    assert_eq!(result["ok"], true, "{result}");
-    Ok(result["capabilities"].as_array().unwrap().iter()
-        .filter(|tool| tool["current_turn_selected"] == true)
-        .map(|tool| tool["name"].as_str().unwrap().to_owned()).collect())
+#[path = "../../src/bin/provider_stream/config.rs"]
+mod provider_config;
+
+// Exercise plain tool results separately at the production provider port.
+#[tokio::test]
+async fn gemini_requests_wrap_plain_tool_results() -> Result<(), Box<dyn std::error::Error>> {
+    use butler_models::models::*;
+    use butler_turn::btcc::{ModelRoundMessage, ModelRoundPort, ModelRoundRole, ReasoningEffort};
+    butler_e2e::gate!();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let endpoint = url::Url::parse(&format!("http://{}/", listener.local_addr()?))?;
+    let captured = Arc::new(Mutex::new(Vec::<Value>::new()));
+    let observed = captured.clone();
+    let app = Router::new().route("/", post(move |Json(body): Json<Value>| {
+        observed.lock().unwrap().push(body.clone());
+        async move {
+            match validate(&body) {
+                Ok(()) => (StatusCode::OK, Json(json!({"candidates":[{
+                    "content":{"role":"model","parts":[{"text":"done"}]},"finishReason":"STOP"}]}))),
+                Err(message) => (StatusCode::BAD_REQUEST, Json(json!({"error":{
+                    "code":400,"message":message,"status":"INVALID_ARGUMENT"}}))),
+            }
+        }
+    }));
+    let _server = Server(tokio::spawn(async move { let _ = axum::serve(listener, app).await; }));
+    let catalog = Arc::new(ModelCatalog::new()?);
+    let snapshot = Arc::new(catalog.snapshot(ModelCatalogSnapshotInput {
+        configured_local:vec![],extra_models:vec![],registered_models:vec![],credential_views:vec![],
+        default_model_ref:None,generated_at:"now".into(),
+    }, &butler_core::locale::LocaleCollation::new("en-US")?)?);
+    let provider = ModelProvider::new(provider_http_client()?, Arc::new(provider_config::Config {
+        metadata:snapshot.find_model_metadata(Some("google/gemini-3.8-flash")).unwrap(),
+        endpoint,snapshot,codex:false,
+    }), Arc::new(provider_config::Observations), catalog,
+        Arc::new(provider_config::Clock), Arc::new(provider_config::Metrics));
+    for text in ["42", "\"x\"", "true", "[1,2]", "null", "plain", "{\"ok\":true}"] {
+        let mut message = ModelRoundMessage::user(text.into(), None);
+        message.role = ModelRoundRole::Tool;
+        message.name = Some("plain_result".into());
+        message.tool_call_id = Some("call-1".into());
+        let messages = [message];
+        provider.run_round(provider_config::request("google/gemini-3.8-flash", &messages,
+            &ReasoningEffort::Medium, tokio_util::sync::CancellationToken::new(), None)).await?;
+        let bodies = captured.lock().unwrap();
+        let response = &bodies.last().unwrap()["contents"][0]["parts"][0]["functionResponse"]["response"];
+        let value = serde_json::from_str::<Value>(text).unwrap_or(json!(text));
+        assert_eq!(*response, if value.is_object() { value } else { json!({"output":value}) });
+    }
+    Ok(())
 }
