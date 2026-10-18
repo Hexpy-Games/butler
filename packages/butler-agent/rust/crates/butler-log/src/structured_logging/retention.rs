@@ -55,7 +55,7 @@ pub(crate) fn usage(root: &Path) -> io::Result<StorageView> {
             let entries = files(&root.join(source).join(store))?;
             let bytes = entries
                 .iter()
-                .try_fold(0, |sum, p| Ok::<_, io::Error>(sum + fs::metadata(p)?.len()))?;
+                .try_fold(0, |sum, p| Ok::<_, io::Error>(sum + size(p)?))?;
             stores.push(StoreUsage {
                 id: format!("{source}/{store}"),
                 bytes,
@@ -67,13 +67,13 @@ pub(crate) fn usage(root: &Path) -> io::Result<StorageView> {
     }
     Ok(StorageView { stores })
 }
-pub(crate) fn prune(root: &Path) -> io::Result<()> {
+pub(crate) fn prune(root: &Path, active: &[PathBuf]) -> io::Result<()> {
     let now = chrono::Utc::now();
     for (store, limit, hours) in STORES {
         let entries = files(&root.join(store))?;
         let mut bytes = entries
             .iter()
-            .try_fold(0, |sum, p| Ok::<_, io::Error>(sum + fs::metadata(p)?.len()))?;
+            .try_fold(0, |sum, p| Ok::<_, io::Error>(sum + size(p)?))?;
         for path in entries {
             if !matches!(
                 path.extension().and_then(|s| s.to_str()),
@@ -81,16 +81,18 @@ pub(crate) fn prune(root: &Path) -> io::Result<()> {
             ) {
                 continue;
             }
-            let old = timestamp(&path)
-                .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+            if active.contains(&path) {
+                continue;
+            }
+            let old = newest(&path)?
                 .is_some_and(|date| now.signed_duration_since(date).num_hours() >= hours);
             if old || bytes > limit {
-                bytes = bytes.saturating_sub(fs::metadata(&path)?.len());
-                fs::remove_file(&path)?;
+                bytes = bytes.saturating_sub(size(&path)?);
+                remove_file(&path)?;
                 let index = path.with_extension("idx");
                 if index.exists() {
-                    bytes = bytes.saturating_sub(fs::metadata(&index)?.len());
-                    fs::remove_file(index)?;
+                    bytes = bytes.saturating_sub(size(&index)?);
+                    remove_file(&index)?;
                 }
             }
         }
@@ -100,9 +102,42 @@ pub(crate) fn prune(root: &Path) -> io::Result<()> {
 pub(crate) fn remove(dir: &Path) -> io::Result<u64> {
     let bytes = files(dir)?
         .iter()
-        .try_fold(0, |sum, p| Ok::<_, io::Error>(sum + fs::metadata(p)?.len()))?;
+        .try_fold(0, |sum, p| Ok::<_, io::Error>(sum + size(p)?))?;
     if dir.exists() {
-        fs::remove_dir_all(dir)?;
+        ignore_removed(fs::remove_dir_all(dir))?;
     }
     Ok(bytes)
+}
+
+fn newest(path: &Path) -> io::Result<Option<chrono::DateTime<chrono::Utc>>> {
+    match super::index::load(path) {
+        Ok(blocks) => Ok(blocks
+            .iter()
+            .map(|b| &b.max_ts)
+            .max()
+            .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
+            .map(|ts| ts.with_timezone(&chrono::Utc))),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => match fs::metadata(path) {
+            Ok(metadata) => Ok(Some(metadata.modified()?.into())),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e),
+        },
+        Err(e) => Err(e),
+    }
+}
+fn size(path: &Path) -> io::Result<u64> {
+    match fs::metadata(path) {
+        Ok(metadata) => Ok(metadata.len()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(0),
+        Err(e) => Err(e),
+    }
+}
+fn ignore_removed(result: io::Result<()>) -> io::Result<()> {
+    match result {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+        other => other,
+    }
+}
+fn remove_file(path: &Path) -> io::Result<()> {
+    ignore_removed(fs::remove_file(path))
 }

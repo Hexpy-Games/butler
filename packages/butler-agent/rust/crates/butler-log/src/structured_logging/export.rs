@@ -37,6 +37,7 @@ pub(crate) fn export<W: Write + Seek>(
             path,
             blocks,
             if bodies { Some(&mut references) } else { None },
+            (since.as_deref(), until.as_deref()),
         )?;
     }
     if bodies {
@@ -63,32 +64,40 @@ fn append_segment<W: Write + Seek>(
     root: &Path,
     path: &Path,
     blocks: &[Block],
-    references: Option<&mut BTreeSet<PathBuf>>,
+    mut references: Option<&mut BTreeSet<PathBuf>>,
+    (since, until): (Option<&str>, Option<&str>),
 ) -> io::Result<()> {
     let name = path.strip_prefix(root).map_err(io::Error::other)?;
+    let source = name
+        .components()
+        .next()
+        .ok_or_else(|| io::Error::other("missing log source"))?
+        .as_os_str();
+    let source = source.to_string_lossy();
     let len = blocks.last().map_or(0, |b| b.offset + b.len);
     zip.start_file_from_path(name, options())?;
-    io::copy(&mut File::open(path)?.take(len), zip)?;
-    zip.start_file_from_path(name.with_extension("idx"), options())?;
-    zip.write_all(&serde_json::to_vec(blocks)?)?;
-    if let Some(references) = references {
-        let source = path
-            .strip_prefix(root)
-            .map_err(io::Error::other)?
-            .components()
-            .next()
-            .ok_or_else(|| io::Error::other("missing log source"))?
-            .as_os_str()
-            .to_owned();
-        for line in BufReader::new(File::open(path)?.take(len)).lines() {
-            let line = line?;
-            if let Ok(row) = serde_json::from_str::<Record>(&line)
-                && let Some(reference) = row.body_ref
-            {
-                let file = reference.split(':').next().unwrap_or_default();
-                references.insert(Path::new(&source).join("bodies").join(file));
-            }
+    let mut filtered = Vec::new();
+    let mut offset = 0;
+    for line in BufReader::new(File::open(path)?.take(len)).lines() {
+        let row: Record = serde_json::from_str(&line?)?;
+        if since.is_some_and(|s| row.ts.as_str() < s) || until.is_some_and(|u| row.ts.as_str() > u)
+        {
+            continue;
+        }
+        let mut bytes = serde_json::to_vec(&row)?;
+        bytes.push(b'\n');
+        zip.write_all(&bytes)?;
+        let len = bytes.len() as u64;
+        super::index::add(&mut filtered, &row, offset, len, &source);
+        offset += len;
+        if let Some(references) = &mut references
+            && let Some(reference) = row.body_ref
+        {
+            let file = reference.split(':').next().unwrap_or_default();
+            references.insert(Path::new(source.as_ref()).join("bodies").join(file));
         }
     }
+    zip.start_file_from_path(name.with_extension("idx"), options())?;
+    zip.write_all(&serde_json::to_vec(&filtered)?)?;
     Ok(())
 }

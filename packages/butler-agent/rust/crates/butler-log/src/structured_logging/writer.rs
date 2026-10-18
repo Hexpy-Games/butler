@@ -1,3 +1,4 @@
+mod worker;
 use super::{
     Config, ConfigView, Page, Preset, Query, Record, StorageView, export, query, retention,
     storage::Storage,
@@ -12,25 +13,32 @@ use std::{
         mpsc,
     },
     thread,
-    time::{Duration, Instant},
 };
 use tokio::sync::{broadcast, watch};
 
 const DEBUG_CAPACITY: usize = 8192;
 type Reply<T> = mpsc::SyncSender<io::Result<T>>;
 enum Command {
-    Record(Box<Record>, bool),
+    Record(Box<Record>, bool, usize),
+    Control(Control),
+}
+enum Control {
     Flush(Reply<()>),
     Configure(Config, Reply<ConfigView>),
     Clear(Reply<u64>),
     Shutdown(Reply<()>),
     #[cfg(feature = "e2e-fixtures")]
     Expire(Reply<()>),
+    #[cfg(feature = "e2e-fixtures")]
+    SyncCount(Reply<usize>),
+    #[cfg(feature = "e2e-fixtures")]
+    Prune(Reply<()>),
 }
 struct Inner {
-    tx: mpsc::SyncSender<Command>,
+    tx: mpsc::Sender<Command>,
     storage: Mutex<Storage>,
-    config: RwLock<ConfigView>,
+    config: RwLock<Arc<ConfigView>>,
+    queued_bytes: AtomicUsize,
     pending: AtomicUsize,
     dropped: AtomicUsize,
     live: broadcast::Sender<Record>,
@@ -61,11 +69,12 @@ impl Logger {
         };
         let (changes, _) = watch::channel(view.clone());
         let (live, _) = broadcast::channel(1024);
-        let (tx, rx) = mpsc::sync_channel(16384);
+        let (tx, rx) = mpsc::channel();
         let this = Self(Arc::new(Inner {
             tx,
             storage: Mutex::new(storage),
-            config: RwLock::new(view),
+            config: RwLock::new(Arc::new(view)),
+            queued_bytes: AtomicUsize::new(0),
             pending: AtomicUsize::new(0),
             dropped: AtomicUsize::new(0),
             live,
@@ -95,10 +104,11 @@ impl Logger {
         if !self.enabled(&row.category, &row.level) {
             return Ok(());
         }
-        self.0
-            .tx
-            .send(Command::Record(Box::new(row), false))
-            .map_err(io::Error::other)
+        self.send_record(row, false)?;
+        if self.0.queued_bytes.load(Ordering::Relaxed) > 16 * 1024 * 1024 {
+            self.flush()?;
+        }
+        Ok(())
     }
     fn enqueue(&self, row: Record) -> io::Result<()> {
         if !self.enabled(&row.category, &row.level) {
@@ -110,28 +120,32 @@ impl Logger {
             self.0.dropped.fetch_add(1, Ordering::Relaxed);
             return Ok(());
         }
-        let command = Command::Record(Box::new(row), lossy);
-        if lossy {
-            match self.0.tx.try_send(command) {
-                Ok(()) => Ok(()),
-                Err(mpsc::TrySendError::Full(_)) => {
-                    self.0.pending.fetch_sub(1, Ordering::Relaxed);
-                    self.0.dropped.fetch_add(1, Ordering::Relaxed);
-                    Ok(())
-                }
-                Err(e) => Err(io::Error::other(e)),
-            }
-        } else {
-            self.0.tx.send(command).map_err(io::Error::other)
-        }
+        self.send_record(row, lossy)
     }
-    fn request<T>(&self, make: impl FnOnce(Reply<T>) -> Command) -> io::Result<T> {
+    fn send_record(&self, row: Record, lossy: bool) -> io::Result<()> {
+        // Account serialized payload bytes while the lossless lane is queued.
+        let bytes = serde_json::to_vec(&row)?.len();
+        self.0.queued_bytes.fetch_add(bytes, Ordering::Relaxed);
+        if let Err(error) = self.0.tx.send(Command::Record(Box::new(row), lossy, bytes)) {
+            self.0.queued_bytes.fetch_sub(bytes, Ordering::Relaxed);
+            if lossy {
+                self.0.pending.fetch_sub(1, Ordering::Relaxed);
+            }
+            return Err(io::Error::other(error));
+        }
+        Ok(())
+    }
+
+    fn request<T>(&self, make: impl FnOnce(Reply<T>) -> Control) -> io::Result<T> {
         let (tx, rx) = mpsc::sync_channel(1);
-        self.0.tx.send(make(tx)).map_err(io::Error::other)?;
+        self.0
+            .tx
+            .send(Command::Control(make(tx)))
+            .map_err(io::Error::other)?;
         rx.recv().map_err(io::Error::other)?
     }
     pub fn flush(&self) -> io::Result<()> {
-        self.request(Command::Flush)
+        self.request(Control::Flush)
     }
     pub fn configure(&self, config: Config) -> io::Result<ConfigView> {
         if !config.valid() {
@@ -140,9 +154,12 @@ impl Logger {
                 "invalid log configuration",
             ));
         }
-        self.request(|reply| Command::Configure(config, reply))
+        self.request(|reply| Control::Configure(config, reply))
     }
     pub fn config(&self) -> ConfigView {
+        self.snapshot().as_ref().clone()
+    }
+    pub(super) fn snapshot(&self) -> Arc<ConfigView> {
         self.0.config.read().clone()
     }
     pub fn subscribe(&self) -> broadcast::Receiver<Record> {
@@ -165,7 +182,7 @@ impl Logger {
         super::bodies::read(&self.0.storage.lock().root, reference)
     }
     pub fn clear(&self) -> io::Result<u64> {
-        self.request(Command::Clear)
+        self.request(Control::Clear)
     }
     pub fn export(
         &self,
@@ -210,7 +227,7 @@ impl Logger {
         Ok(file)
     }
     pub fn shutdown(&self) -> io::Result<()> {
-        let result = self.request(Command::Shutdown);
+        let result = self.request(Control::Shutdown);
         if let Some(join) = self.0.join.lock().take() {
             join.join()
                 .map_err(|_| io::Error::other("log writer panicked"))??;
@@ -219,7 +236,15 @@ impl Logger {
     }
     #[cfg(feature = "e2e-fixtures")]
     pub fn expire_full(&self) -> io::Result<()> {
-        self.request(Command::Expire)
+        self.request(Control::Expire)
+    }
+    #[cfg(feature = "e2e-fixtures")]
+    pub fn sync_count(&self) -> io::Result<usize> {
+        self.request(Control::SyncCount)
+    }
+    #[cfg(feature = "e2e-fixtures")]
+    pub fn prune(&self) -> io::Result<()> {
+        self.request(Control::Prune)
     }
     fn apply(&self, config: Config) -> io::Result<ConfigView> {
         let freed_bytes = self.0.storage.lock().configure(&config)?;
@@ -238,16 +263,18 @@ impl Logger {
             full_expires_at: expires,
             freed_bytes,
         };
-        *self.0.config.write() = view.clone();
+        *self.0.config.write() = Arc::new(view.clone());
+        tracing::callsite::rebuild_interest_cache();
         self.0.changes.send_replace(view.clone());
         Ok(view)
     }
     fn write(&self, row: Record) -> io::Result<()> {
-        let config = self.config().effective;
+        let snapshot = self.snapshot();
+        let config = &snapshot.effective;
         if !config.enabled(&row.category, &row.level) {
             return Ok(());
         }
-        let row = self.0.storage.lock().write(row, &config)?;
+        let row = self.0.storage.lock().write(row, config)?;
         if self.0.live.receiver_count() > 0 {
             let _ = self.0.live.send(row);
         }
@@ -272,72 +299,6 @@ impl Logger {
             ))?;
         }
         Ok(())
-    }
-    fn run(&self, rx: &mpsc::Receiver<Command>) -> io::Result<()> {
-        let mut flush_at: Option<Instant> = None;
-        let mut full_until: Option<Instant> = None;
-        let mut previous = Preset::Standard;
-        loop {
-            let deadline = [flush_at, full_until].into_iter().flatten().min();
-            let command = if let Some(deadline) = deadline {
-                match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
-                    Ok(command) => Some(command),
-                    Err(mpsc::RecvTimeoutError::Timeout) => None,
-                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
-                }
-            } else {
-                match rx.recv() {
-                    Ok(c) => Some(c),
-                    Err(_) => break,
-                }
-            };
-            if full_until.is_some_and(|d| Instant::now() >= d) {
-                let mut config = self.config().effective;
-                config.level = previous.clone();
-                self.apply(config)?;
-                full_until = None;
-            }
-            if flush_at.is_some_and(|d| Instant::now() >= d) {
-                self.0.storage.lock().flush(false)?;
-                flush_at = None;
-            }
-            let Some(command) = command else {
-                continue;
-            };
-            match command {
-                Command::Record(row, lossy) => {
-                    self.write_queued(*row, lossy)?;
-                    flush_at.get_or_insert_with(|| Instant::now() + Duration::from_secs(1));
-                }
-                Command::Configure(config, reply) => {
-                    if config.level == Preset::Full && full_until.is_none() {
-                        previous = self.config().effective.level;
-                        full_until = Some(Instant::now() + Duration::from_secs(3600));
-                    } else if config.level != Preset::Full {
-                        full_until = None;
-                    }
-                    let _ = reply.send(self.apply(config));
-                }
-                Command::Flush(reply) => {
-                    let _ = reply.send(self.0.storage.lock().flush(false));
-                    flush_at = None;
-                }
-                Command::Clear(reply) => {
-                    let _ = reply.send(self.0.storage.lock().clear());
-                    flush_at = None;
-                }
-                Command::Shutdown(reply) => {
-                    let _ = reply.send(self.0.storage.lock().close());
-                    return Ok(());
-                }
-                #[cfg(feature = "e2e-fixtures")]
-                Command::Expire(reply) => {
-                    full_until = Some(Instant::now());
-                    let _ = reply.send(Ok(()));
-                }
-            }
-        }
-        self.0.storage.lock().close()
     }
     pub fn root(&self) -> PathBuf {
         self.0.storage.lock().root.clone()

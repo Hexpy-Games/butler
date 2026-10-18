@@ -78,7 +78,7 @@ pub(crate) fn save(path: &Path, blocks: &[Block]) -> io::Result<()> {
     let mut file = super::files::create(&tmp, false)?;
     serde_json::to_writer(&mut file, blocks)?;
     file.flush()?;
-    file.sync_all()?;
+    super::files::sync(&file)?;
     butler_platform::secure_fs::rename(&tmp, &path.with_extension("idx"))?;
     super::files::sync_parent(path)
 }

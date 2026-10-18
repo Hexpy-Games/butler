@@ -136,6 +136,9 @@ fn logs_rotation_index_retention() -> Result<(), Box<dyn std::error::Error>> {
     }
     let old = main.join("20000101T000000Z-0000.jsonl");
     fs::write(&old, b"{}\n").unwrap();
+    fs::OpenOptions::new().write(true).open(&old)?.set_times(
+        fs::FileTimes::new().set_modified(std::time::SystemTime::now() - Duration::from_hours(480)),
+    )?;
     let log = Logger::open(&root, Config::default()).unwrap();
     assert!(!old.exists());
     let storage = log.storage().unwrap();
@@ -355,6 +358,9 @@ fn logs_tracing_updates_filters_and_inherits_span_ids() -> Result<(), Box<dyn st
     fn probe(value: &Probe) {
         tracing::info!(target:"butler.provider",category="provider",event="provider.probe",?value);
     }
+    fn dependency_enabled() -> bool {
+        tracing::enabled!(target: "dependency_probe", tracing::Level::TRACE)
+    }
     fn marker(content: &str) {
         tracing::trace!(target:"butler.provider",category="provider",event="provider.marker",content);
     }
@@ -362,6 +368,7 @@ fn logs_tracing_updates_filters_and_inherits_span_ids() -> Result<(), Box<dyn st
     let log = Logger::open(&root, Config::default()).unwrap();
     butler_log::install(log.clone()).unwrap();
     marker("disabled");
+    assert!(!dependency_enabled());
     let mut config = Config::default();
     config
         .category_levels
@@ -371,6 +378,7 @@ fn logs_tracing_updates_filters_and_inherits_span_ids() -> Result<(), Box<dyn st
     probe(&Probe(formatted.clone()));
     assert!(!formatted.load(Ordering::Relaxed));
     log.configure(Config::full()).unwrap();
+    assert!(dependency_enabled());
     let span = tracing::info_span!(target:"butler.turn","turn",trace_id="trace-context",span_id="span-context",parent_span_id="parent-context",chat_id="chat-context",turn_id="turn-context");
     {
         let _entered = span.enter();
@@ -396,6 +404,23 @@ fn logs_tracing_updates_filters_and_inherits_span_ids() -> Result<(), Box<dyn st
     assert_eq!(marker.level, "TRACE");
     assert!(marker.content.is_none());
     assert!(log.body(marker.body_ref.as_ref().unwrap()).unwrap().len() > 8192);
+    log.configure(Config::default())?;
+    assert!(!dependency_enabled());
+    {
+        let span =
+            tracing::trace_span!(target:"butler.turn", "context", trace_id="low-level-context");
+        let _entered = span.enter();
+        tracing::info!(target:"butler.turn", category="turn", event="context.probe", "context");
+    }
+    assert_eq!(
+        log.query(&Query {
+            trace_id: Some("low-level-context".into()),
+            ..Query::default()
+        })?
+        .rows
+        .len(),
+        1
+    );
     log.shutdown().unwrap();
     fs::remove_dir_all(root).unwrap();
     Ok(())
@@ -440,3 +465,6 @@ fn logs_inline_strings_include_marker_within_limit() -> Result<(), Box<dyn std::
     fs::remove_dir_all(root)?;
     Ok(())
 }
+
+#[path = "e2e/logs_storage.rs"]
+mod regressions;

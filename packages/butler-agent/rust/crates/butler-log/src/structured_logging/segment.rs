@@ -46,9 +46,6 @@ impl Segment {
         index::add(&mut self.blocks, row, self.bytes, len, "agent");
         self.bytes += len;
         self.dirty = true;
-        if row.level == "ERROR" {
-            self.flush(true)?;
-        }
         Ok(())
     }
     pub(super) fn flush(&mut self, sync: bool) -> io::Result<()> {
@@ -57,7 +54,7 @@ impl Segment {
             self.dirty = false;
         }
         if sync {
-            self.file.get_ref().sync_all()?;
+            super::files::sync(self.file.get_ref())?;
             super::files::sync_parent(&self.path)?;
         }
         Ok(())

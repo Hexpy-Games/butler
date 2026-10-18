@@ -26,6 +26,23 @@ pub(super) fn sync_parent(path: &Path) -> io::Result<()> {
         && let Some(result) = secure_fs::sync_directory(parent)
     {
         result?;
+        count_sync();
     }
     Ok(())
+}
+
+#[cfg(feature = "e2e-fixtures")]
+thread_local! { static SYNCS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+fn count_sync() {
+    #[cfg(feature = "e2e-fixtures")]
+    SYNCS.set(SYNCS.get() + 1);
+}
+pub(super) fn sync(file: &File) -> io::Result<()> {
+    file.sync_all()?;
+    count_sync();
+    Ok(())
+}
+#[cfg(feature = "e2e-fixtures")]
+pub(super) fn sync_count() -> usize {
+    SYNCS.get()
 }

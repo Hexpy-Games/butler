@@ -21,7 +21,7 @@ impl Storage {
     pub(super) fn open(root: PathBuf, config: &Config) -> io::Result<Self> {
         butler_platform::secure_fs::create_private_dir_all(&root.join("agent/main"))?;
         for source in ["agent", "app"] {
-            retention::prune(&root.join(source))?;
+            retention::prune(&root.join(source), &[])?;
         }
         let mut this = Self {
             root,
@@ -33,7 +33,7 @@ impl Storage {
         };
         this.configure(config)?;
         this.discover(true)?;
-        retention::prune(&this.root.join("agent"))?;
+        this.prune()?;
         this.catalog.retain(|p, _| p.exists());
         Ok(this)
     }
@@ -108,7 +108,7 @@ impl Storage {
                     .insert(segment.path.clone(), segment.blocks.clone());
                 segment.close()?;
             }
-            retention::prune(&self.root.join("agent"))?;
+            self.prune()?;
             self.catalog.retain(|p, _| p.exists());
         }
         let slot = if debug {
@@ -123,11 +123,12 @@ impl Storage {
                 "main"
             }))?);
         }
-        if let Some(segment) = slot {
-            segment.write(&row)?;
-        }
-        if row.level == "ERROR" {
-            self.bodies.sync()?;
+        if let Some(segment) = slot
+            && let Err(error) = segment.write(&row)
+        {
+            // A partial write must never leave a poisoned buffered segment active.
+            *slot = None;
+            return Err(error);
         }
         Ok(row)
     }
@@ -140,7 +141,18 @@ impl Storage {
                 let content = redaction::redact_json(&content);
                 let bytes = serde_json::to_vec(&content)?;
                 if bytes.len() > 8192 {
-                    row.body_ref = Some(self.bodies.write(&self.root, &bytes)?);
+                    let result = self.bodies.write(&self.root, &bytes);
+                    let (reference, rotated) = match result {
+                        Ok(result) => result,
+                        Err(error) => {
+                            self.bodies = Bodies::default();
+                            return Err(error);
+                        }
+                    };
+                    row.body_ref = Some(reference);
+                    if rotated {
+                        self.prune()?;
+                    }
                 } else {
                     row.content = Some(content);
                 }
@@ -157,12 +169,31 @@ impl Storage {
         Ok(())
     }
     pub(super) fn flush(&mut self, sync: bool) -> io::Result<()> {
-        for s in [&mut self.main, &mut self.debug].into_iter().flatten() {
-            s.flush(sync)?;
-            self.catalog.insert(s.path.clone(), s.blocks.clone());
+        for slot in [&mut self.main, &mut self.debug] {
+            if let Some(s) = slot {
+                if let Err(error) = s.flush(sync) {
+                    *slot = None;
+                    return Err(error);
+                }
+                self.catalog.insert(s.path.clone(), s.blocks.clone());
+            }
+        }
+        if sync {
+            self.bodies.sync()?;
         }
         Ok(())
     }
+    pub(super) fn prune(&self) -> io::Result<()> {
+        let active = self
+            .main
+            .iter()
+            .chain(self.debug.iter())
+            .map(|s| s.path.clone())
+            .chain(self.bodies.path().cloned())
+            .collect::<Vec<_>>();
+        retention::prune(&self.root.join("agent"), &active)
+    }
+
     pub(super) fn close(&mut self) -> io::Result<()> {
         self.bodies.close()?;
         if let Some(s) = self.main.take() {
@@ -171,7 +202,7 @@ impl Storage {
         if let Some(s) = self.debug.take() {
             s.close()?;
         }
-        retention::prune(&self.root.join("agent"))
+        self.prune()
     }
     pub(super) fn clear(&mut self) -> io::Result<u64> {
         self.close()?;

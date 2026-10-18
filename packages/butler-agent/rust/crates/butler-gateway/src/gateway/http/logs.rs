@@ -82,7 +82,7 @@ pub(super) async fn route(
         (&Method::DELETE, "/logs") => {
             envelope(value!({"freed_bytes":blocking(move || log.clear()).await?}))
         }
-        (&Method::GET, "/logs/live") => live(&log, &state, &request),
+        (&Method::GET, "/logs/live") => live(&log, &state, request).await,
         (&Method::POST, "/logs/export") => export(request, log, developer).await,
         (&Method::GET, path) if path.starts_with("/logs/bodies/") => {
             let reference =
@@ -102,7 +102,7 @@ async fn configure(
     log: butler_log::Logger,
 ) -> Result<Response, HttpError> {
     let bytes = read_body_with_limit(request.into_body(), 64 * 1024).await?;
-    let config: butler_log::Config =
+    let mut config: butler_log::Config =
         serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
     if !config.valid() {
         return Err(HttpError::public(
@@ -110,6 +110,9 @@ async fn configure(
             "invalid_log_config",
             "Invalid log configuration.",
         ));
+    }
+    for level in config.category_levels.values_mut() {
+        level.make_ascii_lowercase();
     }
     let previous = log.config().effective;
     state
@@ -124,13 +127,43 @@ async fn configure(
     }
     envelope(serde_json::to_value(view).map_err(|_| HttpError::Internal)?)
 }
-fn live(
+async fn developer_subscription(
+    state: &HttpState,
+) -> Result<
+    (
+        tokio_util::sync::CancellationToken,
+        Box<dyn crate::gateway::EventSubscription>,
+    ),
+    HttpError,
+> {
+    let disabled = tokio_util::sync::CancellationToken::new();
+    let cancel = disabled.clone();
+    // Subscribe before the snapshot so a concurrent disable cannot be missed.
+    let subscription = state.application.subscribe_events(Arc::new(move |event| {
+        let event = event.envelope();
+        if event.event_type == "settings.updated"
+            && event
+                .payload
+                .get("settings")
+                .and_then(|s| s.get("diagnostics_enabled"))
+                == Some(&Value::Bool(false))
+        {
+            cancel.cancel();
+        }
+    }))?;
+    if state.application.read_settings().await?["diagnostics_enabled"] != true {
+        disabled.cancel();
+    }
+    Ok((disabled, subscription))
+}
+async fn live(
     log: &butler_log::Logger,
     state: &HttpState,
-    request: &Request<Body>,
+    request: Request<Body>,
 ) -> Result<Response, HttpError> {
+    let (disabled, subscription) = developer_subscription(state).await?;
     use futures_util::StreamExt;
-    let mut closers = vec![state.shutdown.clone()];
+    let mut closers = vec![state.shutdown.clone(), disabled];
     closers.extend(
         request
             .extensions()
@@ -162,6 +195,7 @@ fn live(
         }
     });
     let stream = stream.take_until(async move {
+        let _subscription = subscription;
         futures_util::future::select_all(
             closers
                 .into_iter()

@@ -31,6 +31,7 @@ mod project_session_mutations;
 mod projects;
 mod read_routes;
 mod retry;
+mod router;
 mod security;
 mod security_settings;
 mod session_branches;
@@ -124,9 +125,21 @@ struct Client {
 async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -> Response {
     let started = std::time::Instant::now();
     let method = request.method().clone();
-    let route = request.uri().path().to_owned();
+    let route = request
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .cloned();
+    let admitted = access_log::Admission::default();
+    let mut request = request;
+    request.extensions_mut().insert(admitted.clone());
     let response = dispatch_inner(state, request).await;
-    access_log::finish(&method, &route, response.status(), started);
+    access_log::finish(
+        &method,
+        route.as_ref(),
+        &admitted,
+        response.status(),
+        started,
+    );
     response
 }
 
@@ -195,6 +208,9 @@ async fn authorized_route(
         security::Admission::Granted(grant) => grant,
     };
     security::require_json_body(request.method(), request.uri().path(), request.headers())?;
+    if let Some(admitted) = request.extensions().get::<access_log::Admission>() {
+        admitted.grant();
+    }
     if request.method() == Method::POST && request.uri().path() == security::CONNECTION_CODES_PATH {
         return state
             .security

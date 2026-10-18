@@ -191,7 +191,7 @@ async fn logs_gateway_and_pairing_credentials_are_scrubbed() -> Result<(), Harne
     assert!(logs.data()["rows"].as_array().unwrap().iter().any(|r| {
         r["attrs"]["route"]
             .as_str()
-            .is_some_and(|r| r.starts_with("/log-probe/"))
+            .is_some_and(|r| r == "<unmatched>")
     }));
     let secrets = [s.gw.token.as_str(), pin, provider_key];
     for secret in secrets {
@@ -268,5 +268,100 @@ async fn logs_live_closes_with_gateway() -> Result<(), HarnessError> {
     })
     .await
     .unwrap()?;
+    s.finish().await
+}
+
+#[tokio::test]
+async fn logs_rejected_requests_never_store_raw_paths() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("LOG-ADMISSION")?.start().await?;
+    s.gw.patch("/settings", json!({"diagnostics_enabled":true}))
+        .await?;
+    configure(&s, "detailed").await?;
+    let path = format!("/{}", uuid::Uuid::new_v4().to_string().repeat(150));
+    let response =
+        s.gw.http()
+            .post(format!("{}{path}", s.gw.base))
+            .header("origin", "https://untrusted.example")
+            .body("probe")
+            .send()
+            .await?;
+    assert!(!response.status().is_success());
+    let rows = s.gw.get("/logs?category=http.server").await?;
+    assert!(!rows.text.contains(&path));
+    let rejected = rows.data()["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["attrs"]["method"] == "POST" && r["attrs"]["route"] == "<unmatched>")
+        .unwrap();
+    assert_eq!(rejected["level"], "DEBUG");
+    s.finish().await
+}
+
+#[tokio::test]
+async fn logs_uppercase_override_is_normalized() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("LOG-LEVEL-CASE")?.start().await?;
+    s.gw.patch("/settings", json!({"diagnostics_enabled":true}))
+        .await?;
+    let r =
+        s.gw.send(
+            reqwest::Method::PUT,
+            "/logs/config",
+            Some(json!({"level":"standard","category_levels":{"turn":"DEBUG"}}).to_string()),
+        )
+        .await?;
+    assert_eq!(r.status, 200, "{}", r.text);
+    assert_eq!(r.data()["effective"]["category_levels"]["turn"], "debug");
+    s.finish().await
+}
+
+#[tokio::test]
+async fn logs_live_ends_when_developer_mode_disabled() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("LOG-LIVE-DISABLE")?.start().await?;
+    s.gw.patch("/settings", json!({"diagnostics_enabled":true}))
+        .await?;
+    let mut response =
+        s.gw.http()
+            .get(format!("{}/logs/live", s.gw.base))
+            .bearer_auth(&s.gw.token)
+            .send()
+            .await?;
+    assert_eq!(response.status(), 200);
+    s.gw.patch("/settings", json!({"diagnostics_enabled":false}))
+        .await?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while response.chunk().await?.is_some() {}
+        Ok::<_, reqwest::Error>(())
+    })
+    .await
+    .unwrap()?;
+    s.finish().await
+}
+
+#[tokio::test]
+async fn logs_use_router_templates_for_ids() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("LOG-ROUTES")?.start().await?;
+    s.gw.patch("/settings", json!({"diagnostics_enabled":true}))
+        .await?;
+    configure(&s, "detailed").await?;
+    let id = uuid::Uuid::new_v4().to_string();
+    s.gw.get(&format!("/automations/{id}")).await?;
+    s.gw.send(reqwest::Method::DELETE, &format!("/mcp-servers/{id}"), None)
+        .await?;
+    let rows = s.gw.get("/logs?category=http.server").await?;
+    assert!(!rows.text.contains(&id));
+    for template in ["/automations/{id}", "/mcp-servers/{id}"] {
+        assert!(
+            rows.data()["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|r| r["attrs"]["route"] == template)
+        );
+    }
     s.finish().await
 }

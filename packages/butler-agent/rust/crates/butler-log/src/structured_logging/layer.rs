@@ -40,11 +40,18 @@ where
         &self,
         metadata: &'static tracing::Metadata<'static>,
     ) -> tracing::subscriber::Interest {
-        if metadata.target().starts_with("butler") || *metadata.level() == tracing::Level::TRACE {
+        if metadata.target().starts_with("butler") {
             tracing::subscriber::Interest::sometimes()
+        } else if *metadata.level() == tracing::Level::TRACE && self.0.enabled("deps", "TRACE") {
+            tracing::subscriber::Interest::always()
         } else {
             tracing::subscriber::Interest::never()
         }
+    }
+    fn max_level_hint(&self) -> Option<tracing::metadata::LevelFilter> {
+        // Spans at every level carry context for enabled events. Dependency
+        // events are disabled through cached callsite Interest instead.
+        Some(tracing::metadata::LevelFilter::TRACE)
     }
     fn enabled(&self, metadata: &tracing::Metadata<'_>, _ctx: Context<'_, S>) -> bool {
         // Event categories are fields, unavailable here; use the most permissive
@@ -55,7 +62,8 @@ where
         if metadata.is_span() {
             return true;
         }
-        let config = self.0.config().effective;
+        let snapshot = self.0.snapshot();
+        let config = &snapshot.effective;
         config.enabled(metadata.target(), metadata.level().as_str())
             || config.category_levels.values().any(|l| {
                 super::record::severity(metadata.level().as_str()) <= super::record::severity(l)
