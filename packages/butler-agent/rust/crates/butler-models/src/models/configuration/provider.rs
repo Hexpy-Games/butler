@@ -71,7 +71,7 @@ impl ProviderRequestConfigPort for ModelConfiguration {
 }
 
 impl ModelConfiguration {
-    #[tracing::instrument(name = "route.select", level = "debug", skip_all, fields(model = %request.model_ref, chosen = tracing::field::Empty, key_source = tracing::field::Empty), err)]
+    #[tracing::instrument(name = "route.resolve", level = "debug", skip_all, fields(model = %request.model_ref, chosen = tracing::field::Empty, key_source = tracing::field::Empty), err)]
     async fn resolve_request(
         &self,
         request: ProviderConfigRequest<'_>,

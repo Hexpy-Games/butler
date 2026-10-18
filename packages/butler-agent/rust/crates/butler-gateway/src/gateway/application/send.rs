@@ -166,6 +166,7 @@ impl AppApplication {
         result
     }
 
+    #[tracing::instrument(name = "turn.enqueue", skip_all, fields(trace_root = true, chat_id = %reservation_base.chat_id, message_id = %reservation_base.client_message_id), err)]
     async fn reserve_send(
         &self,
         reservation_base: QueueReservation,
@@ -266,7 +267,7 @@ impl AppApplication {
         Ok(())
     }
 
-    #[tracing::instrument(name = "turn.enqueue", skip_all, fields(trace_root = true, chat_id, message_id = client_id), err)]
+    #[tracing::instrument(name = "turn.claim", skip_all, fields(trace_root = true, chat_id, message_id = client_id), err)]
     async fn dispatch(
         &self,
         chat_id: &str,

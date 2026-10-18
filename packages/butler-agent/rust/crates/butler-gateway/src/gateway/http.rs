@@ -145,7 +145,12 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
         .and_then(|h| h.to_str().ok())
         .and_then(butler_log::TraceContext::from_traceparent)
         .unwrap_or_default();
-    let span = context.http_span("DEBUG");
+    let level = if matches!(method, Method::GET | Method::HEAD | Method::OPTIONS) {
+        "DEBUG"
+    } else {
+        "INFO"
+    };
+    let span = context.http_span(level);
     async {
         let response = dispatch_inner(state, request).await;
         if admitted.is_granted() {

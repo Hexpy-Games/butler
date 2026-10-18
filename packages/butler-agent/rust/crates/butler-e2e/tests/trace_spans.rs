@@ -76,12 +76,15 @@ async fn trace_spans_preserve_tasks_errors_and_offsets() -> Result<(), Box<dyn s
     for (i, span) in spans.iter().enumerate() {
         assert!(span["duration_ms"].as_f64().unwrap() >= 0.0);
         assert!(span["start_offset_ms"].as_f64().unwrap() >= 0.0);
-        if let Some(parent) = span["parent_span_id"].as_str()
-            && spans.iter().any(|s| s["span_id"] == parent)
-        {
-            assert!(spans[..i].iter().any(|s| s["span_id"] == parent));
+        if let Some(parent) = span["parent_span_id"].as_str() {
+            if i == 0 {
+                assert_eq!(parent, "fedcba9876543210");
+            } else {
+                assert!(spans[..i].iter().any(|s| s["span_id"] == parent));
+            }
         }
     }
+    assert_eq!(spans[0]["parent_span_id"], "fedcba9876543210");
     assert!(spans[1]["parent_span_id"].is_null());
     assert_eq!(spans[1]["attrs"]["follows_from"], spans[0]["span_id"]);
     assert_eq!(spans[1]["status"], "error");

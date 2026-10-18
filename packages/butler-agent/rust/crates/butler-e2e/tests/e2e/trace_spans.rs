@@ -62,6 +62,8 @@ async fn turn_trace_complete_and_traceparent_joins_trace() -> Result<(), Harness
         "turn.run",
         "context.build",
         "route.select",
+        "route.resolve",
+        "context.tokenize",
         "model.request",
         "http.request",
     ] {
@@ -72,10 +74,12 @@ async fn turn_trace_complete_and_traceparent_joins_trace() -> Result<(), Harness
     }
     for (i, span) in spans.iter().enumerate() {
         assert!(span["start_offset_ms"].as_f64().unwrap() >= 0.0);
-        if let Some(parent) = span["parent_span_id"].as_str()
-            && spans.iter().any(|s| s["span_id"] == parent)
-        {
-            assert!(spans[..i].iter().any(|s| s["span_id"] == parent));
+        if let Some(parent) = span["parent_span_id"].as_str() {
+            if span["name"] == "http.server" {
+                assert_eq!(parent, "0123456789abcdef");
+            } else {
+                assert!(spans[..i].iter().any(|s| s["span_id"] == parent));
+            }
         }
     }
     assert!(spans.iter().find(|s| s["name"] == "turn.run").unwrap()["attrs"]["model"].is_string());
@@ -279,6 +283,48 @@ async fn traceparent_joins_trace_at_standard() -> Result<(), HarnessError> {
     s.finish().await
 }
 
+#[tokio::test]
+async fn state_changing_request_is_visible_before_completion() -> Result<(), HarnessError> {
+    use butler_e2e::e2e::scenario::Setup;
+    butler_e2e::gate!();
+    let message = format!("client-{}", uuid::Uuid::new_v4());
+    let mut s = Setup::new("TRACE-OPEN-REQUEST")?
+        .cassette("TURN-01")
+        .env("BUTLER_E2E_HOLD_QUEUE_MESSAGE", &message)
+        .start()
+        .await?;
+    s.gw.patch("/settings", json!({"diagnostics_enabled":true}))
+        .await?;
+    let trace_id = "123456789abcdef0123456789abcdef0";
+    let request =
+        s.gw.http()
+            .post(format!("{}/messages", s.gw.base))
+            .bearer_auth(&s.gw.token)
+            .header("traceparent", format!("00-{trace_id}-0123456789abcdef-01"))
+            .json(&json!({"chat_id":"general", "text":"Hello", "client_message_id":message}))
+            .send();
+    let request = tokio::spawn(request);
+    let held = s.sandbox.data.join("e2e-queue-admission-held");
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while !held.exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "admission barrier not reached"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(!request.is_finished());
+    let trace = s.gw.get(&format!("/logs/trace/{trace_id}")).await?;
+    assert_eq!(trace.status, 200, "{}", trace.text);
+    let spans = trace.data()["spans"].as_array().unwrap();
+    let http = spans.iter().find(|s| s["name"] == "http.server").unwrap();
+    assert!(http["duration_ms"].is_null(), "request still open: {http}");
+    assert_eq!(http["tone"], "app");
+    s.agent.terminate().await?;
+    assert_eq!(request.await.unwrap()?.status(), 503);
+    s.finish().await
+}
+
 fn assert_message_shape(spans: &[Value]) {
     let inbound: Vec<_> = spans
         .iter()
@@ -294,7 +340,15 @@ fn assert_message_shape(spans: &[Value]) {
     assert_eq!(http["attrs"]["action"], "message.send");
     assert_eq!(http["has_details"], true);
     let mut previous = 0.0;
-    for name in ["http.server", "turn.admit", "turn.dequeue", "turn.run"] {
+    for name in [
+        "http.server",
+        "turn.admit",
+        "turn.enqueue",
+        "turn.dequeue",
+        "turn.claim",
+        "turn.dispatch",
+        "turn.run",
+    ] {
         let matching: Vec<_> = spans.iter().filter(|s| s["name"] == name).collect();
         assert_eq!(matching.len(), 1, "{name}: {spans:?}");
         let step = matching[0];
@@ -314,11 +368,19 @@ fn assert_message_shape(spans: &[Value]) {
         .collect();
     assert_eq!(enqueue.len(), 1);
     assert!(enqueue[0]["parent_span_id"].is_null());
+    let dequeue = spans.iter().find(|s| s["name"] == "turn.dequeue").unwrap();
+    assert_eq!(dequeue["attrs"]["follows_from"], enqueue[0]["span_id"]);
+    let dispatch = spans.iter().find(|s| s["name"] == "turn.dispatch").unwrap();
+    assert_eq!(dispatch["attrs"]["follows_from"], enqueue[0]["span_id"]);
     assert_turn_children(spans);
     for step in spans {
         eprintln!(
-            "TRACE-SHAPE {} parent={} id={}",
-            step["name"], step["parent_span_id"], step["span_id"]
+            "TRACE-SHAPE {} parent={} id={} start_ms={} follows_from={}",
+            step["name"],
+            step["parent_span_id"],
+            step["span_id"],
+            step["start_offset_ms"],
+            step["attrs"]["follows_from"]
         );
     }
 }
