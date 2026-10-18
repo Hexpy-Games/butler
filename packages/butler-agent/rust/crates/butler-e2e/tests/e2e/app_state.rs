@@ -7,7 +7,11 @@
     reason = "test assertions"
 )]
 
-use std::time::{Duration, Instant};
+use std::{
+    collections::BTreeSet,
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::gateway::turn_state;
@@ -169,7 +173,7 @@ async fn att_01_upload_and_attach() -> Result<(), HarnessError> {
             "download differs"
         );
     }
-    let files_before = count_files(&s.sandbox.data);
+    let files_before = message_file_paths(&s.sandbox.data)?;
     let oversize = vec![b'a'; 10 * 1024 * 1024 + 16];
     let reply =
         s.gw.upload("big.txt", "text/plain", &oversize, Some("general"))
@@ -186,10 +190,12 @@ async fn att_01_upload_and_attach() -> Result<(), HarnessError> {
             .await?;
     assert_eq!(empty.status, 400);
     assert_eq!(empty.error_code(), Some("message_file_empty"));
-    assert_eq!(
-        count_files(&s.sandbox.data),
-        files_before,
-        "rejected uploads left files"
+    let files_after = message_file_paths(&s.sandbox.data)?;
+    let added = files_after.difference(&files_before).collect::<Vec<_>>();
+    let removed = files_before.difference(&files_after).collect::<Vec<_>>();
+    assert!(
+        added.is_empty() && removed.is_empty(),
+        "rejected uploads changed message-file store; added: {added:?}; removed: {removed:?}"
     );
     let exe = b"MZ\x90\x00";
     let reply =
@@ -224,28 +230,23 @@ async fn att_01_upload_and_attach() -> Result<(), HarnessError> {
     s.finish().await
 }
 
-fn count_files(dir: &std::path::Path) -> usize {
-    let mut count = 0;
-    let mut stack = vec![dir.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+fn message_file_paths(data_dir: &std::path::Path) -> std::io::Result<BTreeSet<PathBuf>> {
+    let root = data_dir.join("app-server/message-files");
+    let mut paths = BTreeSet::new();
+    let mut stack = vec![(root, PathBuf::new())];
+    while let Some((dir, relative_dir)) = stack.pop() {
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
             let path = entry.path();
-            let name = path.to_string_lossy();
-            if name.contains("/logs")
-                || name.ends_with(".log")
-                || name.contains("sqlite")
-                || name.contains("/metrics")
-            {
-                continue;
-            }
-            if path.is_dir() {
-                stack.push(path);
+            let relative_path = relative_dir.join(entry.file_name());
+            if entry.file_type()?.is_dir() {
+                stack.push((path, relative_path));
             } else {
-                count += 1;
+                paths.insert(relative_path);
             }
         }
     }
-    count
+    Ok(paths)
 }
 
 async fn enqueue(s: &Scenario, text: &str) -> Result<String, HarnessError> {
