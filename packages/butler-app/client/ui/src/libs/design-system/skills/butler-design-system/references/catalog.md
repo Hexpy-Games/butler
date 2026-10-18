@@ -360,7 +360,6 @@
 | Commit or cancel a form or dialog | `Button` |  |
 | Compact row or toolbar actions | `IconButton` |  |
 | Compact widths; TaskGraphCanvas renders it for you with orientation="auto" | `TaskGraphLanes` |  |
-| Comparing step durations inside one run (retries, waits, streaming) | `SpanBar` |  |
 | Composer-side status | `ComposerAdjunctPanel` | `QueuedMessage` |
 | Confirm an action that has no visible result on screen | `Toast` |  |
 | Confirm that an action just finished, in the icon slot where it ran | `SuccessCheck` |  |
@@ -438,6 +437,7 @@
 | Loading failed | `Notice` | `Skeleton` |
 | Loading has no known shape or is inside a control | `Spinner` | `Skeleton` |
 | Loading that ends in a success check in the same slot | `LoadingIndicator` | `ProgressRing` |
+| Log lists: affordance="trailing" puts the chevron after the meta and starts the title at the row inset | `DisclosureRow` |  |
 | Main and aside columns on a page | `Grid` |  |
 | Make a whole list row clickable | `Clickable` |  |
 | Many attributes compared side by side | `MarkdownContent` | `ItemCard` |
@@ -579,6 +579,7 @@
 | Showing and hiding content | `Presence` | `RollingSwap` |
 | Showing that Butler waits (parked) while you hold the tab or an approval waits | `AgentPointer` |  |
 | Showing that something is loading or working | `Spinner` | `FoundationHeroMotion` |
+| Showing what a parent step spent its time on (segments: one per direct child) | `SpanBar` |  |
 | Showing who holds a tab: nobody, Butler (riso edge), you, or an approval | `PageCard` |  |
 | Sidebar navigation between conversations | `NavRow` | `TabStrip` |
 | Something failed | `Notice` | `EmptyLine` |
@@ -656,6 +657,7 @@
 | Top of an inspector or artifact viewer panel | `PanelHeader` |  |
 | Top of the project dashboard or the automations page | `DashboardHeader` |  |
 | Totals as rows without a time axis | `UsageSummaryRows` | `UsageBars` |
+| Trace steps: affordance="none" with a count of child steps, an attention dot on problem rows and a SpanBar in `bar` | `DisclosureRow` |  |
 | Turn a setting on or off without a save step | `Switch` |  |
 | Turn a title into a quiet text link that opens details | `Clickable` |  |
 | Two to five facts on one line | `MetaList` | `KeyValueRow` |
@@ -2092,12 +2094,14 @@ The conversation column: scroll container, readable message width, composer rese
 
 `import { DisclosureRow } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/DisclosureRow`
 
-A row with title, description and meta that expands details below it with the reveal motion.
+A row with title, description and meta that expands details below it with the reveal motion; the open cue is a leading chevron, a trailing chevron, or the row itself.
 
 - Use for: Tool calls, changed files, source details and log entries that expand
+- Use for: Log lists: affordance="trailing" puts the chevron after the meta and starts the title at the row inset
+- Use for: Trace steps: affordance="none" with a count of child steps, an attention dot on problem rows and a SpanBar in `bar`
 - Not for: A sidebar folder → `CollapsibleNavGroup`
 - Not for: Expanding arbitrary content without a row → `Collapsible`
-- Tokens: `--selection`, `--motion-base`, `--icon-size-md`
+- Tokens: `--selection`, `--motion-base`, `--motion-fast`, `--motion-ease-standard`, `--icon-size-md`, `--trace-error`, `--trace-wait`, `--focus-ring-width`, `--focus-ring-color`, `--space-lg`
 
 ### EmptyLine
 
@@ -2280,14 +2284,14 @@ A determinate progress bar (0–100) with a label row, tones and a bare track va
 
 `import { SpanBar } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/SpanBar`
 
-One span of a trace on the trace's shared time axis: a bar placed by its start offset and sized by its duration, with a status tone; SpanAxis labels the axis and SpanRow indents a row by nesting depth.
+One span of a trace on the trace's shared time axis: a bar placed by its start offset and sized by its duration, in a trace tone, optionally split over its direct children; SpanAxis labels the axis and SpanRow places a row at its nesting depth.
 
 - Use for: A request trace or log waterfall: when each step started and how long it took
-- Use for: Comparing step durations inside one run (retries, waits, streaming)
+- Use for: Showing what a parent step spent its time on (segments: one per direct child)
 - Not for: A fraction of a budget or a task's progress → `ProgressMeter`
 - Not for: Usage totals per day or hour → `UsageBars`
 - Not for: Which days something changed → `ActivityStrip`
-- Tokens: `--accent`, `--line-strong`, `--color-danger`, `--color-warning`, `--selection`, `--radius-pill`, `--motion-deliberate`, `--motion-ease-decelerate`, `--motion-stagger-row`, `--space-lg`, `--typo-caption-line-height`
+- Tokens: `--trace-model`, `--trace-tool`, `--trace-app`, `--trace-agent`, `--trace-error`, `--trace-wait`, `--trace-model-alt`, `--trace-wait-alt`, `--selection`, `--radius-pill`, `--motion-deliberate`, `--motion-ease-decelerate`, `--motion-stagger-row`, `--space-lg`, `--typo-caption-line-height`
 
 ### TaskGraphCanvas
 

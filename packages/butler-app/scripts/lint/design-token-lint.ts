@@ -50,7 +50,7 @@ function cssVariableName(line: string): string | null {
 }
 
 function isSourceColorTokenName(name: string): boolean {
-  return /^(?:--neutral-|--grayscale-|--blue-|--green-|--red-|--amber-|--orange-)/u.test(
+  return /^(?:--neutral-|--grayscale-|--blue-|--green-|--red-|--amber-|--orange-|--trace-(?:light|dark)-)/u.test(
     name,
   );
 }

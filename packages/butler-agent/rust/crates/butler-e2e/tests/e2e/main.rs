@@ -230,3 +230,5 @@ mod session_titles;
 mod storage_correction_seed;
 
 mod web_speed;
+
+mod structured_logs;

@@ -16,6 +16,55 @@ export function spanFraction(offset: number, duration: number, total: number): S
   return { start: start / total, width: (end - start) / total };
 }
 
+/** A direct child of a span, in the same unit as the span (ms from the trace start). */
+export interface SpanSegmentInput<T> {
+  offset: number;
+  duration: number;
+  tone: T;
+}
+
+/** One painted piece of a span, as fractions (0–1) of the span itself. */
+export interface SpanPiece<T> {
+  start: number;
+  width: number;
+  tone: T;
+  /** Every other drawn child is hatched, so adjacent children stay apart without gaps. */
+  hatch: boolean;
+}
+
+/**
+ * Splits a span into one piece per direct child (time order, clipped to the
+ * span, overlaps cut at the earlier child's end) and fills the span's
+ * uncovered time with pieces in its own tone. Returns no pieces when the
+ * span is empty or no child lands inside it: the caller draws a plain bar.
+ */
+export function spanPieces<T>(offset: number, duration: number, tone: T, segments: readonly SpanSegmentInput<T>[]): SpanPiece<T>[] {
+  const from = finiteOr0(offset);
+  const end = from + (Number.isFinite(duration) ? Math.max(0, duration) : 0);
+  if (end <= from) return [];
+  const length = end - from;
+  const piece = (start: number, stop: number, pieceTone: T, hatch: boolean): SpanPiece<T> =>
+    ({ start: (start - from) / length, width: (stop - start) / length, tone: pieceTone, hatch });
+  const children = segments
+    .filter((segment) => Number.isFinite(segment.offset) && Number.isFinite(segment.duration) && segment.duration > 0)
+    .sort((left, right) => left.offset - right.offset);
+  const pieces: SpanPiece<T>[] = [];
+  let cursor = from;
+  let drawn = 0;
+  for (const child of children) {
+    const start = Math.max(child.offset, cursor);
+    const stop = Math.min(child.offset + child.duration, end);
+    if (stop <= start) continue;
+    if (start > cursor) pieces.push(piece(cursor, start, tone, false));
+    pieces.push(piece(start, stop, child.tone, drawn % 2 === 1));
+    drawn += 1;
+    cursor = stop;
+  }
+  if (drawn === 0) return [];
+  if (end > cursor) pieces.push(piece(cursor, end, tone, false));
+  return pieces;
+}
+
 /** The smallest 1·2·5 × 10ⁿ step that splits `total` into at most `intervals` parts. */
 export function spanTickStep(total: number, intervals = 4): number {
   if (!validTotal(total)) return 0;
