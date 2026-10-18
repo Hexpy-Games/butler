@@ -38,6 +38,10 @@ interface AutomationStore {
   startAt?: string;
   /** The access the schedule's runs get, independent of the target conversation. */
   accessMode: AccessMode;
+  /** The schedule's own model; empty follows the target chat's model. */
+  model: string;
+  /** The model as loaded, so a save sends `model` only when it changed. */
+  initialModel: string;
   state: string;
   runs: AutomationRunSummary[];
   saving: boolean;
@@ -51,6 +55,7 @@ interface AutomationStore {
   setTargetSessionId: (id: string) => Promise<void>;
   setIntervalSeconds: (seconds: number) => void;
   setAccessMode: (mode: AccessMode) => void;
+  setModel: (model: string) => void;
 
   // Actions
   initialize: (
@@ -86,6 +91,8 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
   schedule: null,
   scheduleType: "interval",
   accessMode: DEFAULT_SCHEDULE_ACCESS_MODE,
+  model: "",
+  initialModel: "",
   state: "enabled",
   runs: [],
   saving: false,
@@ -112,6 +119,8 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
       accessMode,
       saveError: withoutFieldError(current.saveError, "accessMode"),
     })),
+  setModel: (model) =>
+    set((current) => ({ model, saveError: withoutFieldError(current.saveError, "model") })),
 
   // Initialize - loads automation data
   initialize: async (automationId, sessionOptions, onStatus) => {
@@ -131,6 +140,8 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
         startAt: undefined,
         // Unattended runs start from the schedule default (D7), not the chat's mode.
         accessMode: scheduleDefaultAccessMode(useButlerStore.getState().settings),
+        model: "",
+        initialModel: "",
         state: "enabled",
         runs: [],
       });
@@ -161,6 +172,8 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
         accessMode: isAccessMode(detail.automation.access_mode)
           ? detail.automation.access_mode
           : DEFAULT_SCHEDULE_ACCESS_MODE,
+        model: detail.automation.model ?? "",
+        initialModel: detail.automation.model ?? "",
         state: detail.automation.state,
         runs: runList.runs ?? [],
       });
@@ -175,7 +188,7 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
   // Save automation
   save: async (event, onSaved, onStatus) => {
     event.preventDefault();
-    const { automationId, isNew, title, promptBody, targetSessionId, intervalSeconds, accessMode, schedule, scheduleType, runAt, startAt } = get();
+    const { automationId, isNew, title, promptBody, targetSessionId, intervalSeconds, accessMode, model, initialModel, schedule, scheduleType, runAt, startAt } = get();
     set({ saving: true, saveError: null });
 
     try {
@@ -189,6 +202,8 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
         schedule_type: scheduleType,
         run_at: runAt,
         start_at: startAt,
+        // An untouched model stays as it was; a new schedule then follows its chat.
+        ...(model !== initialModel ? { model } : {}),
       });
 
       if (isNew) {
@@ -203,7 +218,7 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
       if (isNew) void hintScheduleLogin();
       onStatus({ label: appCopy.automations.saved, tone: "ok" });
     } catch (error) {
-      // A 400 is shown on its field; anything else stays a toast.
+      // A refused field is shown on that field; anything else stays a toast.
       const saveError = automationSaveError(error);
       if (saveError) set({ saveError });
       else {

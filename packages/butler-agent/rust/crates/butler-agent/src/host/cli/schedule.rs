@@ -36,6 +36,7 @@ struct Options {
     start_at: Option<String>,
     state: Option<String>,
     access_mode: Option<String>,
+    model: Option<String>,
     positionals: Vec<String>,
 }
 
@@ -44,7 +45,8 @@ pub(crate) fn recognizes(args: &[OsString]) -> bool {
     while let Some(arg) = args.get(index) {
         match arg.to_string_lossy().as_ref() {
             "--data" | "--title" | "--prompt" | "--session" | "--interval-seconds" | "--run-at"
-            | "--start-at" | "--state" | "--access-mode" | "--status" | "--schedule-type" => {
+            | "--start-at" | "--state" | "--access-mode" | "--model" | "--status"
+            | "--schedule-type" => {
                 index += 2;
             }
             value if value.starts_with('-') => index += 1,
@@ -119,14 +121,14 @@ async fn execute(client: &ScheduleClient, options: &Options) -> Result<(Value, S
                 "target_session_id": session, "schedule_type": kind,
                 "interval_seconds": options.interval_seconds.unwrap_or(0),
                 "run_at": options.run_at, "start_at": options.start_at,
-                "access_mode": options.access_mode,
+                "access_mode": options.access_mode, "model": options.model,
             }))).await.map_err(|error| cli_error(&error))?
         }
         "update" if options.positionals.len() == 3 => client.request(Method::PATCH, &format!("/automations/{id}"), Some(json!({
             "title": options.title, "prompt_body": options.prompt,
             "target_session_id": options.session, "interval_seconds": options.interval_seconds,
             "run_at": options.run_at, "start_at": options.start_at, "schedule_type": options.schedule_type,
-            "state": options.state, "access_mode": options.access_mode,
+            "state": options.state, "access_mode": options.access_mode, "model": options.model,
         }))).await.map_err(|error| cli_error(&error))?,
         "run" if options.positionals.len() == 3 => client.request(Method::POST, &format!("/automations/{id}/run"), Some(json!({}))).await.map_err(|error| cli_error(&error))?,
         "delete" if options.positionals.len() == 3 => client.request(Method::DELETE, &format!("/automations/{id}"), None).await.map_err(|error| cli_error(&error))?,
@@ -170,7 +172,8 @@ fn parse(args: &[OsString]) -> Result<Options, CliError> {
         let item = args[index].to_string_lossy();
         match item.as_ref() {
             "--data" | "--title" | "--prompt" | "--session" | "--interval-seconds" | "--run-at"
-            | "--start-at" | "--state" | "--access-mode" | "--status" | "--schedule-type" => {
+            | "--start-at" | "--state" | "--access-mode" | "--model" | "--status"
+            | "--schedule-type" => {
                 let value = args
                     .get(index + 1)
                     .and_then(|v| v.to_str())
@@ -236,6 +239,7 @@ fn set_option(options: &mut Options, name: &str, value: &str) -> Result<(), CliE
         "--schedule-type" => options.schedule_type = Some(value.into()),
         "--state" => options.state = Some(value.into()),
         "--access-mode" => options.access_mode = Some(value.into()),
+        "--model" => options.model = Some(value.into()),
         "--status" => options.status = Some(value.into()),
         _ => return Err(CliError::invalid("unknown schedule option")),
     }

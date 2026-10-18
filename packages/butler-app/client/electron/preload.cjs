@@ -1377,7 +1377,7 @@ const butlerApp = Object.freeze({
   // Schedule saves return the bridge envelope so a refused save keeps its
   // code and status (the form shows 400s inline). An omitted accessMode lets
   // the gateway use the target conversation's current mode.
-  createAutomation: ({ title, promptBody, targetSessionId, intervalSeconds, accessMode, schedule, scheduleType, runAt, startAt }) => requestBridgeResult("/automations", {
+  createAutomation: ({ title, promptBody, targetSessionId, intervalSeconds, accessMode, model, schedule, scheduleType, runAt, startAt }) => requestBridgeResult("/automations", {
     method: "POST",
     body: JSON.stringify({
       title,
@@ -1385,13 +1385,14 @@ const butlerApp = Object.freeze({
       target_session_id: targetSessionId,
       interval_seconds: intervalSeconds,
       access_mode: accessMode,
+      model,
       schedule,
       schedule_type: scheduleType,
       run_at: runAt,
       start_at: startAt,
     }),
   }),
-  updateAutomation: ({ automationId, title, promptBody, targetSessionId, intervalSeconds, state, accessMode, schedule, scheduleType, runAt, startAt }) =>
+  updateAutomation: ({ automationId, title, promptBody, targetSessionId, intervalSeconds, state, accessMode, model, schedule, scheduleType, runAt, startAt }) =>
     requestBridgeResult(`/automations/${encodeURIComponent(automationId)}`, {
       method: "PATCH",
       body: JSON.stringify({
@@ -1401,6 +1402,7 @@ const butlerApp = Object.freeze({
         interval_seconds: intervalSeconds,
         state,
         access_mode: accessMode,
+        model,
         schedule,
         schedule_type: scheduleType,
         run_at: runAt,

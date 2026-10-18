@@ -1110,6 +1110,7 @@ export interface AppCopy {
       prompt: string;
       interval: string;
       accessMode: string;
+      model: string;
       invalid: string;
     };
     runs: {

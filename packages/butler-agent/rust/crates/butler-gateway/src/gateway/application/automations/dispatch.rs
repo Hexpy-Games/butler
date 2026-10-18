@@ -1,5 +1,5 @@
 use rusqlite::{OptionalExtension, params};
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::{
     AutomationRunListView, AutomationRunResult, AutomationRunSummary,
@@ -201,6 +201,13 @@ impl AppApplication {
         run_id: &str,
         trigger: &str,
     ) -> DispatchResult {
+        let Ok(model) = self.automation_model_override(row.model.as_deref()).await else {
+            return DispatchResult {
+                state: "failed",
+                safe_error: Some("automation_dispatch_failed".into()),
+                turn_id: None,
+            };
+        };
         let request = MessageSendRequest {
             expected_project_id: None,
             content_parts: None,
@@ -208,7 +215,7 @@ impl AppApplication {
             text: Some(json!(row.prompt)),
             client_message_id: Some(json!(format!("automation-{}-{run_id}", row.id))),
             attachments: None,
-            model: None,
+            model,
             reasoning_effort: None,
             // The schedule's own access, whatever the conversation's mode (#237).
             access_mode: Some(json!(settings::access_mode_name(&row.access))),
@@ -252,6 +259,16 @@ impl AppApplication {
                 turn_id: None,
             },
         }
+    }
+
+    async fn automation_model_override(
+        &self,
+        model: Option<&str>,
+    ) -> Result<Option<Value>, GatewayApplicationError> {
+        let Some(model) = model else { return Ok(None) };
+        self.dependencies.settings_facts.refresh().await?;
+        let facts = self.dependencies.settings_facts.snapshot()?;
+        Ok(settings::selectable_model_ref(&facts, model).map(Value::String))
     }
 
     async fn complete_fresh_run(

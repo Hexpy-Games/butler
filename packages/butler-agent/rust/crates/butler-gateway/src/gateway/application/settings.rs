@@ -37,6 +37,7 @@ use controls::{
     Controls, append_controls_event, controls_json, global_settings, has_message_override,
     inherited_controls, merge_message_controls,
 };
+pub(super) use model::selectable_model_ref;
 use model::{
     assert_selectable, available as available_models, normalize as normalize_controls,
     normalized_fallback, parse_reasoning,

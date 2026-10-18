@@ -36,6 +36,7 @@ const COLUMNS: &[(&str, &str, &str)] = &[
         "INTEGER NOT NULL DEFAULT 0",
     ),
     ("app_automations", "access_mode", "TEXT"),
+    ("app_automations", "model", "TEXT"),
     (
         "app_automations",
         "schedule_type",
