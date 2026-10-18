@@ -1,6 +1,6 @@
 ---
 title: "설치"
-description: "GitHub Releases에서 Butler 앱을 내려받아 설치하고 처음 실행합니다."
+description: "GitHub Releases에서 버틀러 앱을 내려받아 설치하고 처음 실행합니다."
 section: getting-started
 order: 1
 status: published
@@ -8,15 +8,15 @@ status: published
 
 ## 지원 환경
 
-현재 버전은 `0.1.0-preview.5` 프리뷰이며, 정식 0.1.0은 출시 예정입니다.
+버틀러는 프리뷰 단계입니다. [GitHub Releases](https://github.com/Hexpy-Games/butler/releases/latest)에서 가장 최신 프리뷰를 내려받습니다. 정식 0.1.0은 출시 예정입니다.
 
 - Apple Silicon(M 시리즈 칩) Mac, macOS 12 이상
 - Linux x64 / arm64: DEB 패키지
 - Arch Linux x64: Arch 패키지
-- Windows x64 소스 프리뷰: 이 릴리스에는 내려받을 설치 파일이 없음
+- Windows x64: 설치 파일(`ButlerSetup`)
 
 <Notice tone="info">
-  macOS와 Linux 앱에는 Butler Agent가 포함되어 있으며, 앱이 열려 있는 동안 실행됩니다. Windows는 소스 프리뷰만 있고 이 릴리스에는 내려받을 설치 파일이 없습니다.
+  앱에는 Butler Agent가 포함되어 있으며, 앱이 열려 있는 동안 실행됩니다.
 </Notice>
 
 ## 내려받기
@@ -31,32 +31,39 @@ status: published
 >
   <TabPanel value="macos">
     <Steps>
-      1. [0.1.0 preview.5 릴리스](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.5)를 엽니다.
-      2. [macOS DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-darwin-arm64.dmg)를 내려받습니다.
+      1. [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 가장 최신 프리뷰를 열고 **Assets**를 펼칩니다.
+      2. macOS DMG(`butler-app-<버전>-darwin-arm64.dmg`)를 내려받습니다.
       3. DMG를 열고 `Butler.app`을 응용 프로그램 폴더로 끌어다 놓습니다.
-      4. 처음 열 때 Gatekeeper가 Butler 실행을 막으면 Butler를 마우스 오른쪽 버튼으로 클릭하고 **열기**를 고릅니다. 그래도 열리지 않으면 **시스템 설정 → 개인정보 보호 및 보안**에서 **그래도 열기**를 선택합니다.
+      4. 버틀러를 한 번 엽니다. 프리뷰는 공증되지 않아서 macOS가 실행을 막습니다.
+      5. **시스템 설정 → 개인정보 보호 및 보안**을 열고 아래로 내려가 버틀러 옆의 **그래도 열기**를 선택합니다. 암호를 입력해 확인합니다. 한 번만 하면 됩니다.
     </Steps>
+    <Notice tone="info">
+      macOS 14 이하에서는 버틀러를 마우스 오른쪽 버튼으로 클릭하고 **열기**를 골라도 됩니다.
+    </Notice>
     <Notice tone="info" title="파일 확인 (선택)">
       DMG와 `.sha256` 파일을 같은 폴더에 받은 뒤 `shasum -a 256 -c butler-app-*-darwin-arm64.dmg.sha256`를 실행합니다. `OK`가 나오면 파일이 릴리스에 올라온 것과 같습니다.
     </Notice>
   </TabPanel>
   <TabPanel value="windows">
-    <Notice tone="info" title="소스 프리뷰">
-      공개된 `0.1.0-preview.5` 릴리스에는 내려받을 Windows 설치 파일이 없습니다. 이후 Windows 패키지는 [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 확인합니다.
-    </Notice>
+    <Steps>
+      1. [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 가장 최신 프리뷰를 열고 **Assets**를 펼칩니다.
+      2. Windows 설치 파일(`ButlerSetup-<버전>-x64.exe`)을 내려받습니다.
+      3. 실행합니다. Windows SmartScreen이 "Windows의 PC 보호"를 표시하면 **추가 정보**를 누른 뒤 **실행**을 선택합니다. 프리뷰 설치 파일은 아직 서명되지 않았습니다.
+      4. 시작 메뉴에서 버틀러를 엽니다.
+    </Steps>
   </TabPanel>
   <TabPanel value="linux">
     <Steps>
-      1. [DEB x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-linux-x64.deb), [DEB arm64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-linux-arm64.deb) 또는 [Arch x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-archlinux-x64.pkg.tar.zst)를 내려받습니다.
+      1. [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)의 최신 프리뷰 **Assets**에서 DEB(x64 또는 arm64) 또는 Arch(x64) 패키지를 내려받습니다.
       2. 내려받은 폴더에서 배포판에 맞는 명령으로 설치합니다.
-      3. 앱 목록에서 Butler를 엽니다.
+      3. 앱 목록에서 버틀러를 엽니다.
     </Steps>
 
     ```bash
     # Debian / Ubuntu (x64; arm64는 파일명을 바꿉니다)
-    sudo apt install ./butler-app-0.1.0-preview.5-linux-x64.deb
+    sudo apt install ./butler-app-<버전>-linux-x64.deb
     # Arch Linux (x64)
-    sudo pacman -U ./butler-app-0.1.0-preview.5-archlinux-x64.pkg.tar.zst
+    sudo pacman -U ./butler-app-<버전>-archlinux-x64.pkg.tar.zst
     ```
   </TabPanel>
 </Tabs>
@@ -65,7 +72,7 @@ status: published
   이전 릴리스에는 지금은 쓰지 않는 TypeScript/Bun Agent가 들어 있을 수 있습니다. 네이티브 Agent가 포함된 릴리스를 받습니다.
 </Notice>
 
-`0.1.0-preview.5` 앱을 설치한 뒤 **미리보기 버전 받기**를 켜면 다음 프리뷰를 **설정 → 업데이트**에서 받을 수 있습니다. `butler --version`으로 정확한 버전을 확인합니다.
+프리뷰 빌드는 **미리보기 버전 받기**가 기본으로 켜져 있어서, 다음 프리뷰가 **설정 → 업데이트**에 나타납니다. 업데이트하기 전에 버틀러를 종료하고 `~/.butler`를 복사해 둡니다. 새 버전을 처음 실행하면 데이터베이스를 한 번 다시 쓸 수 있습니다. `butler --version`으로 정확한 버전을 확인합니다.
 
 ## 첫 실행 설정
 
@@ -84,22 +91,22 @@ status: published
   ]}
 >
   <TabPanel value="macos">
-    헤드리스 Agent는 Apple Silicon macOS를 지원합니다.
+    헤드리스 Agent는 Apple Silicon macOS를 지원합니다. `<버전>`은 가장 최신 프리뷰 버전(예: `0.1.0-preview.12`)으로 바꿉니다.
 
     ```bash
-    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
+    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<버전>/install.sh | sh -s -- --version <버전>
     # Node.js 사용 시
     npx @hexpygames/butler install
     ```
   </TabPanel>
   <TabPanel value="windows">
-    공개된 릴리스에는 내려받을 Windows Agent 설치 파일이 없습니다. Windows 빌드는 소스 프리뷰입니다.
+    Windows에는 별도의 Agent 설치 파일이 없습니다. 위의 앱 설치 파일을 사용합니다.
   </TabPanel>
   <TabPanel value="linux">
     헤드리스 Agent는 glibc 기반 Linux x64 / arm64를 지원합니다.
 
     ```bash
-    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
+    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<버전>/install.sh | sh -s -- --version <버전>
     # Node.js 사용 시
     npx @hexpygames/butler install
     ```
