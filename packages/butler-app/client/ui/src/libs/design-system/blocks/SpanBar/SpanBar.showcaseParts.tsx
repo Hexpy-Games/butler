@@ -38,9 +38,14 @@ export const GEMINI_SPANS: TraceSpan[] = [
     tone: "default", detail: { "en-US": ["Status", "200"], "ko-KR": ["상태", "200"] } },
   { id: "stream", name: { "en-US": "Receive stream", "ko-KR": "스트림 수신" }, offset: 3660, duration: 3290, depth: 2,
     tone: "default", detail: { "en-US": ["Chunks", "214"], "ko-KR": ["청크", "214개"] } },
+  { id: "parse", name: { "en-US": "Parse chunks", "ko-KR": "청크 파싱" }, offset: 3672, duration: 3270, depth: 3,
+    tone: "muted", detail: { "en-US": ["Parsed", "214"], "ko-KR": ["파싱", "214개"] } },
   { id: "memory", name: { "en-US": "Save memory", "ko-KR": "기억 저장" }, offset: 6990, duration: 96, depth: 1,
     tone: "default", detail: { "en-US": ["Items", "2"], "ko-KR": ["항목", "2개"] } },
 ];
+
+/** The deepest level of the trace, passed to every SpanRow and the SpanAxis. */
+const GEMINI_MAX_DEPTH = Math.max(...GEMINI_SPANS.map((span) => span.depth));
 
 /** "0.58초" / "0.58s"; whole seconds drop the decimals ("0초", "2초"); under a second stays in ms. */
 export function formatTraceMs(locale: Locale, ms: number, decimals = 2): string {
@@ -66,10 +71,10 @@ export function GeminiTrace({ locale }: { locale: Locale }) {
   const [round, setRound] = useState(0);
   return (
     <Stack gap="sm">
-      <SpanAxis total={GEMINI_TOTAL} inset="disclosure" format={(ms) => formatTraceMs(locale, ms)} />
+      <SpanAxis total={GEMINI_TOTAL} inset="disclosure" maxDepth={GEMINI_MAX_DEPTH} format={(ms) => formatTraceMs(locale, ms)} />
       <div key={round}>
         {GEMINI_SPANS.map((span, index) => (
-          <SpanRow key={span.id} depth={span.depth}>
+          <SpanRow key={span.id} depth={span.depth} maxDepth={GEMINI_MAX_DEPTH}>
             <DisclosureRow title={span.name[locale]} meta={formatTraceMs(locale, span.duration)}
               open={open === span.id} controlsId={`span-${span.id}`}
               onToggle={() => setOpen((current) => (current === span.id ? null : span.id))}

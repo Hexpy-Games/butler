@@ -15,10 +15,10 @@ const TRACE = [
 function TraceRows() {
   return (
     <Stack gap="sm">
-      <SpanAxis total={7112} inset="disclosure" />
+      <SpanAxis total={7112} inset="disclosure" maxDepth={1} />
       <div>
         {TRACE.map((span, index) => (
-          <SpanRow key={span.id} depth={span.depth}>
+          <SpanRow key={span.id} depth={span.depth} maxDepth={1}>
             <DisclosureRow title={span.title} meta={span.length}
               description={<>{span.start}<SpanBar offset={span.offset} duration={span.duration} total={7112}
                 tone={span.tone} index={index} label={`Starts ${span.start}, ${span.length}`} /></>} />
@@ -48,7 +48,7 @@ export const guidance: ShowcaseGuidance = {
     { when: "Which days something changed", use: "ActivityStrip" },
   ],
   recipes: [
-    { name: "Trace rows on one axis", description: "SpanAxis inset=disclosure over SpanRows; each DisclosureRow description holds the start text and the SpanBar.", render: () => <TraceRows /> },
+    { name: "Trace rows on one axis", description: "SpanAxis inset=disclosure over SpanRows, all given the trace's maxDepth; each DisclosureRow description holds the start text and the SpanBar.", render: () => <TraceRows /> },
     { name: "A single span under a caption", description: "Pass the same total to every bar of a trace.", render: () => <SingleSpan /> },
   ],
   doDont: [
@@ -67,6 +67,7 @@ export const guidance: ShowcaseGuidance = {
     "The track is aria-hidden; label renders as visually hidden text, so inside a DisclosureRow it joins the row's accessible name.",
     "Tone never carries meaning alone: the row title or meta names the failure or the wait.",
     "SpanAxis is aria-hidden; each bar speaks its own start and length.",
+    "Bars stay inside their row's hover and open fill at any depth (pass maxDepth), so focus rings and fills are never crossed.",
     "Reduced motion (app setting or OS) fades the bars in instead of growing them.",
   ],
   tokens: [

@@ -3,7 +3,7 @@ import type { DsBaseProps } from "../../lib/dsProps";
 import { Typo } from "../../components/Typo";
 import { dsClass, dsStyle } from "../../lib/internal";
 import { cn } from "../../lib/utils";
-import { formatSpanMs, spanTicks } from "./spanGeometry";
+import { formatSpanMs, spanLevel, spanTicks } from "./spanGeometry";
 import styles from "./SpanBar.module.css";
 
 /** Room one tick label needs, start to start ("7.11초" at caption size plus a gap). */
@@ -18,6 +18,8 @@ export interface SpanAxisProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
   format?: (value: number) => string;
   /** disclosure: starts where a DisclosureRow's description column starts, so it lines up with SpanBars in rows. */
   inset?: "none" | "disclosure";
+  /** The trace's deepest level, as passed to every SpanRow, so the axis moves with the bars. */
+  maxDepth?: number;
 }
 
 /**
@@ -25,14 +27,17 @@ export interface SpanAxisProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
  * end, round steps between. Visual only (aria-hidden); every SpanBar carries
  * its own spoken label.
  */
-export function SpanAxis({ total, ticks, format = formatSpanMs, inset = "none", className, ...props }: SpanAxisProps) {
+export function SpanAxis({
+  total, ticks, format = formatSpanMs, inset = "none", maxDepth = 0, className, style, ...props
+}: SpanAxisProps) {
   const ref = useRef<HTMLSpanElement>(null);
   const width = useTrackWidth(ref);
   // Before the first measure (or without layout) assume room for four steps.
   const values = spanTicks(total, ticks, width > 0 ? Math.min(1, LABEL_SPACING_PX / width) : undefined);
   const last = values.length - 1;
   return (
-    <div {...props} className={cn(styles.axis, className)} data-slot="span-axis" data-inset={inset} aria-hidden="true">
+    <div {...props} className={cn(styles.axis, className)} data-slot="span-axis" data-inset={inset} aria-hidden="true"
+      style={dsStyle({ ...style, "--span-max-depth": spanLevel(maxDepth) })}>
       <span ref={ref} className={styles.axisTrack}>
         {values.map((value, position) => (
           <Typo.Caption key={value} tone="tertiary" numeric="tabular" className={dsClass(styles.tick)}

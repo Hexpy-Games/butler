@@ -20,9 +20,9 @@ up across rows, including nested rows.
 ## How to use this component
 
 ```tsx
-<SpanAxis total={7112} inset="disclosure" format={formatSeconds} />
+<SpanAxis total={7112} inset="disclosure" maxDepth={maxDepth} format={formatSeconds} />
 {spans.map((span, index) => (
-  <SpanRow key={span.id} depth={span.depth}>
+  <SpanRow key={span.id} depth={span.depth} maxDepth={maxDepth}>
     <DisclosureRow title={span.title} meta={span.lengthText} open={…} onToggle={…}
       description={<>{span.startText}
         <SpanBar offset={span.offset} duration={span.duration} total={7112}
@@ -44,11 +44,12 @@ up across rows, including nested rows.
 | `label` | string | Visually hidden text, e.g. "시작 +0.58초, 2.00초". |
 
 The bar is at least 3px wide, so a 4ms step in a 7s trace stays visible. A
-`total` of 0 or less draws the empty track.
+`total` of 0 or less, or a non-finite value, draws the empty track; a
+non-finite `offset` or `duration` counts as 0.
 
 ### SpanAxis
 `total`, optional interior `ticks` (default 1·2·5 steps), `format` for each
-label (default "0s" / "412ms" / "2s") and `inset`. 0 and the total are
+label (default "0s" / "412ms" / "2s"), `inset` and `maxDepth`. 0 and the total are
 always shown. Tick density follows the axis width (about one label per
 64px): an interior tick too close to its neighbour or to the total is
 dropped, so labels never collide at compact widths. `inset="disclosure"` starts the axis where a DisclosureRow's
@@ -56,8 +57,15 @@ description column starts (selection surface).
 
 ### SpanRow
 `depth` (0 for a root span) indents the row by 16px (`--space-lg`) per level.
-A SpanBar inside reaches back by the same indent, so nested bars stay on the
-shared axis; rows are spaced like adjacent DisclosureRows.
+A SpanBar inside reaches back to the shared axis, so nested bars line up;
+rows are spaced like adjacent DisclosureRows.
+
+Pass the trace's deepest level as `maxDepth` to every SpanRow and to the
+SpanAxis. A bar reaches back at most the row's inner inset (`--space-sm`
+plus the chevron line); when the deepest indent passes that, the whole axis
+shifts right by the difference, so every bar keeps `--space-sm` inside its
+own row's hover and open fill. Shallow traces (16px steps up to the inset)
+do not shift.
 
 ## Who can use this component
 Any container that has already mapped trace records to offsets, durations,

@@ -1,8 +1,9 @@
-import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import type { DsBaseProps } from "../../lib/dsProps";
+import { dsStyle } from "../../lib/internal";
 import { useReducedMotion } from "../../lib/useReducedMotion";
 import { cn } from "../../lib/utils";
-import { spanFraction } from "./spanGeometry";
+import { spanFraction, spanLevel } from "./spanGeometry";
 import styles from "./SpanBar.module.css";
 
 export type SpanBarTone = "default" | "parent" | "danger" | "warning" | "muted";
@@ -32,11 +33,11 @@ export interface SpanBarProps extends Omit<DsBaseProps<HTMLAttributes<HTMLSpanEl
 export function SpanBar({ offset, duration, total, tone = "default", index = 0, label, className, ...props }: SpanBarProps) {
   const reduced = useReducedMotion();
   const { start, width } = spanFraction(offset, duration, total);
-  const geometry = {
+  const geometry = dsStyle({
     "--span-start": `${start * 100}%`,
     "--span-width": `${width * 100}%`,
-    "--span-stagger": Math.min(Math.max(0, index), STAGGER_ROWS),
-  } as CSSProperties;
+    "--span-stagger": Math.min(spanLevel(index), STAGGER_ROWS),
+  });
   return (
     <span {...props} className={cn(styles.root, className)} data-slot="span-bar" data-tone={tone}>
       <span className={styles.track} aria-hidden="true">
@@ -50,19 +51,25 @@ export function SpanBar({ offset, duration, total, tone = "default", index = 0, 
 export interface SpanRowProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   /** Nesting level of the span (0 for a root span); indents the row 16px per level. */
   depth?: number;
+  /**
+   * The trace's deepest level, the same on every row and on the SpanAxis.
+   * When the deepest indent would pass the row's inner inset, the shared
+   * axis moves right by the difference, so no bar leaves its row.
+   */
+  maxDepth?: number;
   children: ReactNode;
 }
 
 /**
  * One trace row (usually a DisclosureRow) indented by its depth. A SpanBar
- * inside reaches back by the same indent, so every row's bar stays on the
- * shared axis while titles show the nesting.
+ * inside reaches back to the shared axis, so every row's bar lines up while
+ * titles show the nesting; the bar never leaves the row's inner inset.
  */
-export function SpanRow({ depth = 0, children, className, style, ...props }: SpanRowProps) {
-  const level = Math.max(0, Math.floor(depth));
+export function SpanRow({ depth = 0, maxDepth = 0, children, className, style, ...props }: SpanRowProps) {
+  const level = spanLevel(depth);
   return (
     <div {...props} className={cn(styles.row, className)} data-slot="span-row" data-depth={level}
-      style={{ ...style, "--span-depth": level } as CSSProperties}>
+      style={dsStyle({ ...style, "--span-depth": level, "--span-max-depth": spanLevel(maxDepth) })}>
       {children}
     </div>
   );
