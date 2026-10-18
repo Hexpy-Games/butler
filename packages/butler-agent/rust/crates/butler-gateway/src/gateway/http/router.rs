@@ -1,5 +1,6 @@
 //! This table selects both transport templates and authenticated dispatch.
 mod dispatch;
+mod select;
 use super::{HttpState, dispatch as dispatch_request};
 use axum::{Extension, Router, routing::any};
 pub(super) use dispatch::route;
@@ -7,6 +8,7 @@ use std::sync::Arc;
 
 #[derive(Clone, Copy)]
 pub(super) enum Handler {
+    NotFound,
     Authority,
     Automations,
     Browser,

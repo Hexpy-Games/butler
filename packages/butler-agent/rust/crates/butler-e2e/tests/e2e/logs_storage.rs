@@ -107,8 +107,19 @@ fn logs_writer_recovers_after_transient_io_error() -> Result<(), Box<dyn std::er
     let rows = log.query(&Query::default())?.rows;
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].msg, "row 2");
-    assert!(log.storage()?.last_write_error.is_some());
+    assert!(log.storage()?.last_write_error.is_none());
     log.configure(Config::detailed())?;
+    let debug = root.join("logs/agent/debug");
+    fs::write(&debug, b"temporarily unavailable")?;
+    log.record(record(3, "DEBUG"))?;
+    log.flush()?;
+    fs::remove_file(&debug)?;
+    log.record(record(4, "INFO"))?;
+    log.flush()?;
+    assert!(log.storage()?.last_write_error.is_some());
+    log.record(record(5, "DEBUG"))?;
+    log.flush()?;
+    assert!(log.storage()?.last_write_error.is_none());
     log.shutdown()?;
     fs::remove_dir_all(root)?;
     Ok(())
@@ -231,9 +242,13 @@ fn logs_expiry_reverts_before_cleanup_and_retries() -> Result<(), Box<dyn std::e
     let rows = log.query(&Query::default())?.rows;
     assert_eq!(rows.len(), 1);
     assert!(rows[0].body_ref.is_none() && rows[0].content.is_none());
+    // Failed attempts at 1 s and 3 s schedule the next attempt at 7 s.
+    std::thread::sleep(Duration::from_millis(3300));
     fs::remove_file(&blocked)?;
     fs::create_dir(&blocked)?;
     fs::write(blocked.join("pending.zst"), b"pending cleanup")?;
+    std::thread::sleep(Duration::from_millis(1200));
+    assert!(blocked.exists(), "cleanup must back off while idle");
     let start = Instant::now();
     while blocked.exists() && start.elapsed() < Duration::from_secs(5) {
         std::thread::sleep(Duration::from_millis(20));

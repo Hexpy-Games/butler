@@ -7,7 +7,7 @@ pub(in crate::gateway::http) async fn route(
     client: Client,
 ) -> Result<Response, HttpError> {
     let uri = request.uri().clone();
-    let Some(handler) = request.extensions().get::<Handler>().copied() else {
+    let Some(handler) = super::select::handler(&request) else {
         return if request.method() == Method::GET {
             static_ui::serve(
                 state.static_ui_root.as_deref(),
@@ -20,6 +20,7 @@ pub(in crate::gateway::http) async fn route(
         };
     };
     match handler {
+        Handler::NotFound => Err(HttpError::public(404, "not_found", "Route not found.")),
         Handler::Logs => logs::route(state, request, &uri).await,
         Handler::Library => library::route(state, request).await,
         Handler::History => library::history::route(state, request).await,
@@ -77,7 +78,9 @@ async fn commands(
         Handler::Mcp => mcp_servers::route(state, request, uri).await,
         Handler::Operation => required(operation_output::route(state, request, uri).await?),
         Handler::Retry => required(retry::route(state, request.method(), uri).await?),
-        Handler::Cancel => required(retry::cancel(&state, request.method(), uri).await?),
+        Handler::Cancel if request.method() == Method::POST => {
+            required(retry::cancel(&state, request.method(), uri).await?)
+        }
         Handler::Setup => setup::route(state, request, uri).await,
         #[cfg(feature = "e2e-fixtures")]
         Handler::Expire => logs::expire().await,

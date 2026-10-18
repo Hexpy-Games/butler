@@ -44,7 +44,6 @@ struct Inner {
     storage: Mutex<Storage>,
     config: RwLock<Arc<ConfigView>>,
     queue: queue::Queue,
-    write_error: RwLock<Option<String>>,
     pending: AtomicUsize,
     dropped: AtomicUsize,
     live: broadcast::Sender<Record>,
@@ -81,7 +80,6 @@ impl Logger {
             storage: Mutex::new(storage),
             config: RwLock::new(Arc::new(view)),
             queue: queue::Queue::default(),
-            write_error: RwLock::new(None),
             pending: AtomicUsize::new(0),
             dropped: AtomicUsize::new(0),
             live,
@@ -203,7 +201,7 @@ impl Logger {
     pub fn storage(&self) -> io::Result<StorageView> {
         self.flush()?;
         let mut view = retention::usage(&self.0.storage.lock().root)?;
-        view.last_write_error = self.0.write_error.read().clone();
+        view.last_write_error = self.0.storage.lock().last_write_error();
         Ok(view)
     }
     pub fn body(&self, reference: &str) -> io::Result<Vec<u8>> {
@@ -343,7 +341,6 @@ impl Logger {
     }
     fn report_error(&self, error: &io::Error) {
         eprintln!("structured log writer I/O failure: {error}");
-        *self.0.write_error.write() = Some(error.to_string());
     }
     pub fn root(&self) -> PathBuf {
         self.0.storage.lock().root.clone()

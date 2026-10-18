@@ -8,6 +8,7 @@ struct State {
     full_until: Option<Instant>,
     previous: Preset,
     cleanup_at: Option<Instant>,
+    cleanup_backoff: Duration,
 }
 impl Logger {
     pub(super) fn run(&self, rx: &mpsc::Receiver<Command>) -> io::Result<()> {
@@ -51,11 +52,13 @@ impl Logger {
     }
     fn schedule_cleanup(&self, state: &mut State) {
         if self.0.storage.lock().cleanup_pending() {
+            state.cleanup_backoff = state.cleanup_backoff.max(Duration::from_secs(1));
             state
                 .cleanup_at
-                .get_or_insert_with(|| Instant::now() + Duration::from_secs(1));
+                .get_or_insert_with(|| Instant::now() + state.cleanup_backoff);
         } else {
             state.cleanup_at = None;
+            state.cleanup_backoff = Duration::ZERO;
         }
     }
     fn timers(&self, state: &mut State) {
@@ -66,7 +69,15 @@ impl Logger {
             state.full_until = None;
         }
         if state.cleanup_at.is_some_and(|d| Instant::now() >= d) {
-            self.report(self.0.storage.lock().cleanup().map(|_| ()));
+            let result = self.0.storage.lock().cleanup();
+            if let Err(error) = result {
+                let next = (state.cleanup_backoff * 2)
+                    .clamp(Duration::from_secs(1), Duration::from_secs(600));
+                if next != state.cleanup_backoff {
+                    self.report_error(&error);
+                }
+                state.cleanup_backoff = next;
+            }
             state.cleanup_at = None;
         }
         self.schedule_cleanup(state);

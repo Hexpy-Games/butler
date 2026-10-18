@@ -17,6 +17,8 @@ pub(crate) struct Storage {
     last_ts: String,
     bodies: Bodies,
     cleanup: Option<Config>,
+    write_errors: [Option<String>; 2],
+    written: [bool; 2],
 }
 impl Storage {
     pub(super) fn open(root: PathBuf, config: &Config) -> io::Result<Self> {
@@ -29,6 +31,8 @@ impl Storage {
             last_ts: String::new(),
             bodies: Bodies::default(),
             cleanup: None,
+            write_errors: [None, None],
+            written: [false, false],
         };
         let _ = this.configure(config);
         // Pending verbose cleanup must not prevent startup or level reversion.
@@ -102,7 +106,22 @@ impl Storage {
         self.cleanup = None;
         Ok(freed)
     }
-    pub(super) fn write(&mut self, mut encoded: Encoded, config: &Config) -> io::Result<Record> {
+    pub(super) fn last_write_error(&self) -> Option<String> {
+        self.write_errors.iter().flatten().next().cloned()
+    }
+    pub(super) fn write(&mut self, encoded: Encoded, config: &Config) -> io::Result<Record> {
+        let lane = usize::from(super::record::severity(&encoded.level) >= 4);
+        let result = self.write_record(encoded, config);
+        match &result {
+            Ok(_) => self.written[lane] = true,
+            Err(error) => {
+                self.written[lane] = false;
+                self.write_errors[lane] = Some(error.to_string());
+            }
+        }
+        result
+    }
+    fn write_record(&mut self, mut encoded: Encoded, config: &Config) -> io::Result<Record> {
         let full = config.level == Preset::Full;
         let reference = if full && let Some(body) = &encoded.body {
             match self.bodies.write(&self.root, body) {
@@ -163,13 +182,19 @@ impl Storage {
         Ok(row)
     }
     pub(super) fn flush(&mut self, sync: bool) -> io::Result<()> {
-        for slot in [&mut self.main, &mut self.debug] {
+        for (lane, slot) in [&mut self.main, &mut self.debug].into_iter().enumerate() {
             if let Some(s) = slot {
                 if let Err(error) = s.flush(sync) {
                     *slot = None;
+                    self.written[lane] = false;
+                    self.write_errors[lane] = Some(error.to_string());
                     return Err(error);
                 }
                 self.catalog.insert(s.path.clone(), s.blocks.clone());
+                if self.written[lane] {
+                    self.write_errors[lane] = None;
+                    self.written[lane] = false;
+                }
             }
         }
         if sync {
@@ -177,7 +202,10 @@ impl Storage {
         }
         Ok(())
     }
-    pub(super) fn prune(&self) -> io::Result<()> {
+    pub(super) fn prune(&mut self) -> io::Result<()> {
+        if self.cleanup_pending() {
+            let _ = self.cleanup();
+        }
         let active = self
             .main
             .iter()
