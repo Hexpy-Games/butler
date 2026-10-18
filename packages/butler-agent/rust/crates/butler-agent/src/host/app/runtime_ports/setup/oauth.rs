@@ -1,4 +1,4 @@
-//! The ChatGPT (Codex subscription) sign-in flow the App starts during
+//! The ChatGPT sign-in flow table the App starts during
 //! first-run setup (#230).
 //!
 //! Each flow owns a localhost callback listener and its PKCE verifier and
@@ -6,35 +6,27 @@
 //! ends the task: the listener closes, the PKCE state is dropped and the
 //! flow reports `cancelled`. From then on the sign-in is saved whatever
 //! happens, so a cancel waits for it and reports its real outcome. A flow
-//! with no callback within [`FLOW_TIMEOUT`] (the App's own sign-in timeout)
+//! with no callback within five minutes
 //! fails with `oauth_timeout`.
 
 use std::sync::Arc;
 use std::time::Duration;
 
-use parking_lot::Mutex;
-use tokio::{
-    net::{TcpListener, TcpStream},
-    task::{JoinHandle, JoinSet},
-};
-use tokio_util::sync::CancellationToken;
-
+use crate::host::chatgpt_sign_in::Attempt;
 use butler_gateway::gateway::{GatewayApplicationError, OauthFlowStatus, OauthFlowView};
 use butler_models::models::{
-    ModelConfiguration, OpenAiAuthProfile, generate_pkce_verifier, pkce_challenge,
+    ModelConfiguration,
+    chatgpt::{SignInKind, SignInOutcome},
 };
+use parking_lot::Mutex;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
-use crate::host::oauth_callback::{Callback, CallbackEndpoint, read_callback, respond};
-
-const FLOW_TIMEOUT: Duration = Duration::from_mins(5);
 /// Finished flows kept readable by `GET /setup/oauth/{flow_id}`.
 const KEPT_FLOWS: usize = 8;
 /// How long cancel waits for the flow task to release its listener, or
 /// for a sign-in past the point of no return to be saved.
 const CANCEL_WAIT: Duration = Duration::from_secs(10);
-/// Callback connections read at once; more are closed unread.
-const MAX_OPEN_CALLBACKS: usize = 16;
-
 struct Flow {
     view: OauthFlowView,
     stop: CancellationToken,
@@ -54,16 +46,7 @@ pub(super) struct OauthFlows {
     starting: tokio::sync::Mutex<()>,
 }
 
-/// A started flow's secrets; they live only inside the flow task.
-struct Pkce {
-    verifier: String,
-    state: String,
-}
-
-/// What a flow task needs besides its listener and secrets.
 struct FlowContext {
-    redirect_uri: String,
-    configuration: Arc<ModelConfiguration>,
     flows: FlowTable,
     flow_id: String,
 }
@@ -79,7 +62,7 @@ impl OauthFlows {
 
     /// Starts a sign-in. Without `force`, a saved sign-in answers
     /// `profile_exists` and a pending flow is returned as it is.
-    pub(super) async fn start(&self, force: bool) -> OauthFlowView {
+    pub(super) async fn start(&self, force: bool, kind: SignInKind) -> OauthFlowView {
         let _serial = self.starting.lock().await;
         if force {
             self.cancel_open().await;
@@ -87,12 +70,22 @@ impl OauthFlows {
             if let Some(view) = self.open_view() {
                 return view;
             }
-            if let Some(label) = self.configuration.openai_auth_profile_label().await {
-                return self.record(finished(OauthFlowStatus::ProfileExists, Some(label), None));
+            if let Ok(account) = self.configuration.chatgpt_account().await
+                && matches!(
+                    account.status,
+                    butler_models::models::chatgpt::ChatGptAccountStatus::SignedIn
+                        | butler_models::models::chatgpt::ChatGptAccountStatus::PlanOff
+                )
+            {
+                return self.record(finished(
+                    OauthFlowStatus::ProfileExists,
+                    account.label,
+                    None,
+                ));
             }
         }
-        match self.listen().await {
-            Ok((listener, endpoint, pkce, view)) => self.spawn(listener, endpoint, pkce, view),
+        match Attempt::start(&self.configuration, kind).await {
+            Ok(attempt) => self.spawn(attempt),
             Err(code) => self.record(finished(OauthFlowStatus::Failed, None, Some(code))),
         }
     }
@@ -154,54 +147,24 @@ impl OauthFlows {
             .map(|flow| flow.view.clone())
     }
 
-    /// Binds the callback listener and builds the authorization URL.
-    async fn listen(&self) -> Result<(TcpListener, CallbackEndpoint, Pkce, OauthFlowView), String> {
-        let endpoint = CallbackEndpoint::from_environment()
-            .map_err(|_| "oauth_callback_port_invalid".to_owned())?;
-        let listener = TcpListener::bind((endpoint.bind_host.as_str(), endpoint.port))
-            .await
-            .map_err(|_| "oauth_callback_port_unavailable".to_owned())?;
-        let pkce = Pkce {
-            verifier: generate_pkce_verifier(),
-            state: uuid::Uuid::new_v4().simple().to_string(),
-        };
-        let auth_url = self
-            .configuration
-            .openai_authorize_url(
-                &endpoint.redirect_uri,
-                &pkce_challenge(&pkce.verifier),
-                &pkce.state,
-                None,
-            )
-            .map_err(|_| "oauth_authorize_url_invalid".to_owned())?;
-        let view = OauthFlowView {
-            flow_id: new_flow_id(),
-            status: OauthFlowStatus::Pending,
-            auth_url: Some(auth_url.to_string()),
-            redirect_uri: Some(endpoint.redirect_uri.clone()),
-            label: None,
-            error: None,
-        };
-        Ok((listener, endpoint, pkce, view))
-    }
-
-    fn spawn(
-        &self,
-        listener: TcpListener,
-        endpoint: CallbackEndpoint,
-        pkce: Pkce,
-        view: OauthFlowView,
-    ) -> OauthFlowView {
+    fn spawn(&self, attempt: Attempt) -> OauthFlowView {
+        let mut view = finished(OauthFlowStatus::Pending, None, None);
+        view.auth_url = Some(attempt.auth_url.clone());
+        view.redirect_uri = Some(attempt.redirect_uri.clone());
         let stop = CancellationToken::new();
         let context = FlowContext {
-            redirect_uri: endpoint.redirect_uri,
-            configuration: self.configuration.clone(),
             flows: self.flows.clone(),
             flow_id: view.flow_id.clone(),
         };
-        // Registered before the task runs, so the task always finds it.
+        let configuration = self.configuration.clone();
+        let stopped = stop.clone();
         let mut flows = self.flows.lock();
-        let task = tokio::spawn(run_flow(listener, pkce, context, stop.clone()));
+        let task = tokio::spawn(async move {
+            let outcome = attempt
+                .run(configuration, stopped, || mark_completing(&context))
+                .await;
+            settle(&context, outcome);
+        });
         insert(
             &mut flows,
             Flow {
@@ -248,34 +211,6 @@ impl Drop for OauthFlows {
     }
 }
 
-/// Waits for this sign-in's callback and exchanges its code (cancellable),
-/// then saves the sign-in (not cancellable) and records the outcome.
-async fn run_flow(
-    listener: TcpListener,
-    pkce: Pkce,
-    context: FlowContext,
-    stop: CancellationToken,
-) {
-    let exchanged = tokio::select! {
-        exchanged = exchange(&listener, &pkce, &context) => exchanged,
-        () = tokio::time::sleep(FLOW_TIMEOUT) => Err("oauth_timeout".to_owned()),
-        () = stop.cancelled() => return,
-    };
-    drop(listener);
-    drop(pkce);
-    let outcome = match exchanged {
-        Ok((profile, mut stream)) => {
-            if !mark_completing(&context) {
-                respond(&mut stream, 409, "This sign-in was cancelled in Butler.").await;
-                return;
-            }
-            save(&context, &profile, stream).await
-        }
-        Err(code) => Err(code),
-    };
-    settle(&context, outcome);
-}
-
 /// Moves the flow past the point of no return, unless it was cancelled.
 fn mark_completing(context: &FlowContext) -> bool {
     let mut flows = context.flows.lock();
@@ -292,31 +227,8 @@ fn mark_completing(context: &FlowContext) -> bool {
     }
 }
 
-/// Saves the exchanged sign-in and answers the browser.
-async fn save(
-    context: &FlowContext,
-    profile: &OpenAiAuthProfile,
-    mut stream: TcpStream,
-) -> Result<String, String> {
-    match context
-        .configuration
-        .write_openai_auth_profile(profile)
-        .await
-    {
-        Ok(()) => {
-            let done = "Codex subscription login complete. You can close this tab.";
-            respond(&mut stream, 200, done).await;
-            Ok(account_label(&profile.as_json()))
-        }
-        Err(_) => {
-            respond(&mut stream, 500, "Codex subscription login failed.").await;
-            Err("oauth_profile_write_failed".to_owned())
-        }
-    }
-}
-
 /// Records a finished flow's outcome (a cancelled flow keeps `cancelled`).
-fn settle(context: &FlowContext, outcome: Result<String, String>) {
+fn settle(context: &FlowContext, outcome: Result<SignInOutcome, String>) {
     let mut flows = context.flows.lock();
     let Some(flow) = flows
         .iter_mut()
@@ -327,78 +239,16 @@ fn settle(context: &FlowContext, outcome: Result<String, String>) {
     };
     flow.completing = false;
     match outcome {
-        Ok(label) => {
+        Ok(outcome) => {
             flow.view.status = OauthFlowStatus::Completed;
-            flow.view.label = Some(label);
+            flow.view.label = Some(outcome.label);
+            flow.view.plan_enabled = Some(outcome.plan_enabled);
         }
         Err(code) => {
             flow.view.status = OauthFlowStatus::Failed;
             flow.view.error = Some(code);
         }
     }
-}
-
-/// Waits for this sign-in's code and exchanges it with the provider.
-async fn exchange(
-    listener: &TcpListener,
-    pkce: &Pkce,
-    context: &FlowContext,
-) -> Result<(OpenAiAuthProfile, TcpStream), String> {
-    let (code, mut stream) = wait_for_code(listener, &context.redirect_uri, &pkce.state).await?;
-    match context
-        .configuration
-        .exchange_openai_oauth_code(&code, &context.redirect_uri, &pkce.verifier)
-        .await
-    {
-        Ok(profile) => Ok((profile, stream)),
-        Err(_) => {
-            respond(&mut stream, 500, "Codex subscription login failed.").await;
-            Err("oauth_exchange_failed".to_owned())
-        }
-    }
-}
-
-/// Reads callback connections side by side, so an idle or stray one never
-/// holds up the browser's; each read is bounded by the callback reader.
-async fn wait_for_code(
-    listener: &TcpListener,
-    redirect_uri: &str,
-    state: &str,
-) -> Result<(String, TcpStream), String> {
-    let mut reads = JoinSet::new();
-    loop {
-        tokio::select! {
-            accepted = listener.accept() => {
-                let (stream, _) = accepted.map_err(|_| "oauth_callback_unavailable".to_owned())?;
-                if reads.len() < MAX_OPEN_CALLBACKS {
-                    reads.spawn(read_one(stream, redirect_uri.to_owned(), state.to_owned()));
-                }
-            }
-            Some(read) = reads.join_next() => match read {
-                Ok((Callback::Code(code), stream)) => return Ok((code, stream)),
-                Ok((Callback::Denied, _)) => return Err("oauth_denied".to_owned()),
-                Ok((Callback::Ignored, _)) | Err(_) => {}
-            },
-        }
-    }
-}
-
-async fn read_one(
-    mut stream: TcpStream,
-    redirect_uri: String,
-    state: String,
-) -> (Callback, TcpStream) {
-    let callback = read_callback(&mut stream, &redirect_uri, &state).await;
-    (callback, stream)
-}
-
-fn account_label(profile: &serde_json::Value) -> String {
-    ["email", "accountId"]
-        .iter()
-        .find_map(|key| profile.get(*key).and_then(serde_json::Value::as_str))
-        .filter(|value| !value.is_empty())
-        .unwrap_or("OpenAI account")
-        .to_owned()
 }
 
 fn finished(
@@ -413,6 +263,7 @@ fn finished(
         redirect_uri: None,
         label,
         error,
+        plan_enabled: None,
     }
 }
 

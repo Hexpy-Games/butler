@@ -2,27 +2,17 @@
 
 use serde_json::{Map, Value};
 
-pub struct OpenAiAuthProfile {
+pub(in crate::models::configuration) struct OpenAiAuthProfile {
     pub(super) raw: Map<String, Value>,
     pub(super) access_token: String,
     pub(super) refresh_token: Option<String>,
     pub(super) expires_at: Option<f64>,
 }
 
-impl OpenAiAuthProfile {
-    pub fn as_json(&self) -> Value {
-        Value::Object(self.raw.clone())
-    }
-}
-
 pub(super) fn update_string(raw: &mut Map<String, Value>, key: &str, value: Option<&Value>) {
     if let Some(value) = value.and_then(Value::as_str) {
         raw.insert(key.into(), value.into());
     }
-}
-
-pub(super) fn copy_string(raw: &mut Map<String, Value>, key: &str, value: Option<&Value>) {
-    update_string(raw, key, value);
 }
 
 pub(super) fn update_number(

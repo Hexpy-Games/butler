@@ -26,6 +26,7 @@ struct Options {
     quiet: bool,
     yes: bool,
     non_interactive: bool,
+    new_account: bool,
     positionals: Vec<String>,
 }
 
@@ -131,9 +132,11 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
         Command::ConfigSet => {
             config_commands::config_set(&options, command, &data_root, &installation).await
         }
-        Command::AuthStatus => {
+        Command::AuthStatus => tokio::task::spawn_blocking(move || {
             auth_model::auth_status(&options, command, &data_root, &installation)
-        }
+        })
+        .await
+        .unwrap_or(ExitCode::FAILURE),
         Command::AuthLogin => {
             auth_model::auth_login(options, command, data_root, installation).await
         }
@@ -176,6 +179,7 @@ fn parse(args: &[OsString]) -> Result<(Options, Command), (&'static str, CliErro
             "--quiet" | "--silent" => options.quiet = true,
             "--yes" => options.yes = true,
             "--non-interactive" => options.non_interactive = true,
+            "--new-account" => options.new_account = true,
             "--verbose" => {}
             _ => options.positionals.push(value.into_owned()),
         }
@@ -204,7 +208,8 @@ fn positionals_without_common_options(args: &[OsString]) -> Vec<String> {
                     index += 1;
                 }
             }
-            "--json" | "--quiet" | "--silent" | "--yes" | "--non-interactive" | "--verbose" => {
+            "--json" | "--quiet" | "--silent" | "--yes" | "--non-interactive" | "--new-account"
+            | "--verbose" => {
                 index += 1;
             }
             _ => {

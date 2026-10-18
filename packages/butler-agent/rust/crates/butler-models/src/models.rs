@@ -86,6 +86,7 @@ use tokenizer::TokenizerOwner;
 
 /// Secret input for key commands: echo off at a terminal (#217).
 pub use butler_platform::secrets::read_secret_input;
+pub use configuration::chatgpt;
 pub use configuration::{
     CredentialError, CredentialFileSummary, CredentialList, CredentialListItem,
     CredentialMigrationFailure, CredentialMigrationReport, CredentialStoreError,
@@ -96,9 +97,9 @@ pub use configuration::{
 pub use configuration::{
     DiscoveredLocalModel, HostedModelMutation, LocalModelMutation, McpModelTarget,
     ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
-    ModelConfigurationRead, ModelContextMetadataRead, OpenAiAuthProfile,
-    ProviderCredentialMutation, ProviderKeyCheck, ProviderKeyCheckError, ProviderKeySaveError,
-    SavedProviderKey, SettingsError, generate_pkce_verifier, pkce_challenge,
+    ModelConfigurationRead, ModelContextMetadataRead, ProviderCredentialMutation, ProviderKeyCheck,
+    ProviderKeyCheckError, ProviderKeySaveError, SavedProviderKey, SettingsError,
+    generate_pkce_verifier, pkce_challenge,
 };
 pub use status::{StatusModels, auth_status_with_environment, open_status_models};
 

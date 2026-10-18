@@ -187,20 +187,8 @@ pub(super) fn auth_profile_path(
     data_root: &Path,
     environment: &HashMap<String, String>,
 ) -> PathBuf {
-    ["BUTLER_CODEX_AUTH_PROFILE", "BUTLER_OPENAI_AUTH_PROFILE"]
-        .iter()
-        .find_map(|name| auth_env_path(name, environment))
-        .map_or_else(
-            || data_root.join("auth/openai-codex.json"),
-            |profile| {
-                let profile = PathBuf::from(profile);
-                if profile.is_absolute() {
-                    profile
-                } else {
-                    data_root.join(profile)
-                }
-            },
-        )
+    let dir = auth_env_path("BUTLER_CHATGPT_AUTH_DIR", environment).map(PathBuf::from);
+    butler_models::models::chatgpt::store::paths(data_root, dir.as_deref()).registration
 }
 
 fn auth_env_path(name: &str, environment: &HashMap<String, String>) -> Option<String> {

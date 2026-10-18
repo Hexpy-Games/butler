@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use base64::Engine as _;
-use reqwest::{Client, Url};
+use reqwest::Client;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
@@ -14,9 +14,8 @@ mod profile;
 mod refresh;
 mod url;
 use io::{read_json_object, response_json, write_mode_600};
-use jwt::{account_id_from_access_token, codex_account_id, email_from_access_token};
-pub use profile::OpenAiAuthProfile;
-use profile::{copy_string, update_claim, update_number};
+use jwt::{account_id_from_access_token, codex_account_id};
+pub(super) use profile::OpenAiAuthProfile;
 
 use super::{ModelConfigurationClock, ModelConfigurationEnvironment};
 use crate::models::{ProviderAuth, ProviderAuthMode};
@@ -230,86 +229,6 @@ impl AuthOwner<'_> {
         Ok(profile)
     }
 
-    pub(crate) async fn exchange_code(
-        &self,
-        code: &str,
-        redirect_uri: &str,
-        verifier: &str,
-    ) -> Result<OpenAiAuthProfile, AuthError> {
-        let client_id = trimmed(self.environment.oauth_client_id.as_deref()).unwrap_or(CLIENT_ID);
-        let response = self
-            .client
-            .post(url::token_url(self.environment)?)
-            .form(&[
-                ("grant_type", "authorization_code"),
-                ("client_id", client_id),
-                ("code", code),
-                ("redirect_uri", redirect_uri),
-                ("code_verifier", verifier),
-            ])
-            .send()
-            .await
-            .map_err(|source| {
-                error(
-                    "provider_auth_exchange_transport",
-                    "OpenAI OAuth token exchange failed.",
-                )
-                .with_source(source)
-            })?;
-        if !response.status().is_success() {
-            return Err(error(
-                "provider_auth_exchange_http",
-                "OpenAI OAuth token exchange failed.",
-            ));
-        }
-        let token = response_json(response).await.map_err(|source| {
-            error(
-                "provider_auth_exchange_invalid",
-                "OpenAI OAuth token exchange response was invalid.",
-            )
-            .with_source(source)
-        })?;
-        let access = token
-            .get("access_token")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_owned();
-        if access.is_empty() {
-            return Err(error(
-                "provider_auth_exchange_missing_token",
-                "OpenAI OAuth token exchange did not return an access token.",
-            ));
-        }
-        let now = self.clock.now_epoch_millis();
-        let mut raw = Map::new();
-        raw.insert("provider".into(), "openai-codex".into());
-        raw.insert("type".into(), "oauth".into());
-        raw.insert("accessToken".into(), access.clone().into());
-        copy_string(&mut raw, "refreshToken", token.get("refresh_token"));
-        update_number(&mut raw, "expiresAt", token.get("expires_in"), now);
-        update_claim(&mut raw, "accountId", account_id_from_access_token(&access));
-        update_claim(&mut raw, "email", email_from_access_token(&access));
-        copy_string(&mut raw, "scope", token.get("scope"));
-        raw.insert("provenance".into(), "codex-subscription-oauth".into());
-        raw.insert("updatedAt".into(), self.clock.now_iso().into());
-        Ok(OpenAiAuthProfile {
-            refresh_token: raw
-                .get("refreshToken")
-                .and_then(Value::as_str)
-                .map(str::to_owned),
-            expires_at: raw.get("expiresAt").and_then(Value::as_f64),
-            access_token: access,
-            raw,
-        })
-    }
-
-    pub(crate) async fn write_profile_value(
-        &self,
-        profile: &OpenAiAuthProfile,
-    ) -> Result<(), AuthError> {
-        self.write_profile(&profile.raw).await
-    }
-
     async fn write_profile(&self, profile: &Map<String, Value>) -> Result<(), AuthError> {
         let path = self.butler_profile_path();
         let parent = path.parent().ok_or_else(|| {
@@ -335,16 +254,6 @@ impl AuthOwner<'_> {
             })?;
         bytes.push(b'\n');
         write_mode_600(&path, &bytes).await
-    }
-
-    pub(crate) fn authorize_url(
-        &self,
-        redirect_uri: &str,
-        challenge: &str,
-        state: &str,
-        scope: Option<&str>,
-    ) -> Result<Url, AuthError> {
-        url::authorize(self.environment, redirect_uri, challenge, state, scope)
     }
 
     fn butler_profile_path(&self) -> PathBuf {

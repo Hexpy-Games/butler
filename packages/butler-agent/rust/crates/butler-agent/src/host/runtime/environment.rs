@@ -43,10 +43,11 @@ impl ProcessEnvironment {
             codex_home: Some(
                 nonempty_path("CODEX_HOME").unwrap_or_else(|| user_home.join(".codex")),
             ),
-            oauth_authorize_url: first_nonempty_raw(&[
-                "BUTLER_CODEX_OAUTH_AUTHORIZE_URL",
-                "BUTLER_OPENAI_OAUTH_AUTHORIZE_URL",
-            ]),
+            chatgpt_auth_issuer: optional("BUTLER_CHATGPT_AUTH_ISSUER"),
+            chatgpt_auth_dir: nonempty_path("BUTLER_CHATGPT_AUTH_DIR"),
+            chatgpt_oauth_port: optional("BUTLER_CHATGPT_OAUTH_PORT"),
+            oauth_callback_bind_host: optional("BUTLER_OAUTH_CALLBACK_BIND_HOST"),
+            oauth_no_browser: optional("BUTLER_OAUTH_NO_BROWSER"),
             oauth_token_url: first_nonempty_raw(&[
                 "BUTLER_CODEX_OAUTH_TOKEN_URL",
                 "BUTLER_OPENAI_OAUTH_TOKEN_URL",
@@ -55,7 +56,6 @@ impl ProcessEnvironment {
                 "BUTLER_CODEX_OAUTH_CLIENT_ID",
                 "BUTLER_OPENAI_OAUTH_CLIENT_ID",
             ]),
-            oauth_scope: first_trimmed(&["BUTLER_CODEX_OAUTH_SCOPE", "BUTLER_OPENAI_OAUTH_SCOPE"]),
             oauth_originator: first_trimmed(&[
                 "BUTLER_CODEX_OAUTH_ORIGINATOR",
                 "BUTLER_OPENAI_OAUTH_ORIGINATOR",

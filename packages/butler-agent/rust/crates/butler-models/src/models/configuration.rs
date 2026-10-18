@@ -6,6 +6,7 @@ pub use metadata::ModelContextMetadataRead;
 mod admission;
 mod auth;
 mod catalog_cache;
+pub mod chatgpt;
 mod credential_admin;
 mod credential_migration;
 mod credential_vault;
@@ -28,7 +29,6 @@ mod setup;
 mod store_policy;
 
 pub(crate) use auth::AuthError as ModelAuthError;
-pub use auth::OpenAiAuthProfile;
 pub use auth::{generate_pkce_verifier, pkce_challenge};
 pub use butler_platform::secrets::{SecretBackend, SecretStoreMode};
 pub use credential_admin::{
@@ -96,10 +96,13 @@ pub struct ModelConfigurationEnvironment {
     pub butler_openai_auth_profile: Option<PathBuf>,
     pub codex_auth_json: Option<PathBuf>,
     pub codex_home: Option<PathBuf>,
-    pub oauth_authorize_url: Option<String>,
+    pub chatgpt_auth_issuer: Option<String>,
+    pub chatgpt_auth_dir: Option<PathBuf>,
+    pub chatgpt_oauth_port: Option<String>,
+    pub oauth_callback_bind_host: Option<String>,
+    pub oauth_no_browser: Option<String>,
     pub oauth_token_url: Option<String>,
     pub oauth_client_id: Option<String>,
-    pub oauth_scope: Option<String>,
     pub oauth_originator: Option<String>,
     pub codex_user_agent: Option<String>,
     pub os_platform: Option<String>,
@@ -126,6 +129,8 @@ pub struct ModelConfiguration {
     configuration_writes: Arc<ConfigurationWrites>,
     secrets: ProviderSecrets,
     log_secrets: tokio::sync::OnceCell<()>,
+    chatgpt_authority: Arc<chatgpt::authority::ChatGptAuthority>,
+    account_revision: tokio::sync::watch::Sender<u64>,
 }
 
 /// Raw config and credentials never implement Debug or Serialize. Request
@@ -189,7 +194,12 @@ impl ModelConfiguration {
             butler_log::register_secret(secret);
         }
         let secrets = ProviderSecrets::new(environment.secret_store);
+        let chatgpt_authority = Arc::new(chatgpt::authority::ChatGptAuthority::new(
+            environment.chatgpt_auth_issuer.as_deref(),
+        ));
         Ok(Self {
+            chatgpt_authority,
+            account_revision: tokio::sync::watch::channel(0).0,
             data_root,
             environment,
             clock,
@@ -350,35 +360,6 @@ impl ModelConfiguration {
         )
     }
 
-    pub fn openai_authorize_url(
-        &self,
-        redirect_uri: &str,
-        challenge: &str,
-        state: &str,
-        scope: Option<&str>,
-    ) -> Result<url::Url, ModelAuthError> {
-        self.auth_owner()
-            .authorize_url(redirect_uri, challenge, state, scope)
-    }
-
-    pub async fn exchange_openai_oauth_code(
-        &self,
-        code: &str,
-        redirect_uri: &str,
-        verifier: &str,
-    ) -> Result<OpenAiAuthProfile, ModelAuthError> {
-        self.auth_owner()
-            .exchange_code(code, redirect_uri, verifier)
-            .await
-    }
-
-    pub async fn write_openai_auth_profile(
-        &self,
-        profile: &OpenAiAuthProfile,
-    ) -> Result<(), ModelAuthError> {
-        self.auth_owner().write_profile_value(profile).await
-    }
-
     /// Resolve the same private OpenAI/Codex auth used by model requests for
     /// provider-owned public web search. Secrets stay inside the Models port.
     pub async fn resolve_openai_auth_for_web_search(
@@ -436,6 +417,7 @@ impl ModelConfiguration {
         discovery::discover(&client, server_url, platform, api_key.as_deref()).await
     }
 
+    #[cfg(test)]
     fn auth_owner(&self) -> auth::AuthOwner<'_> {
         auth::AuthOwner {
             data_root: &self.data_root,

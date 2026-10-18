@@ -103,6 +103,7 @@ fn cli_surface_exposes_only_user_commands() -> Result<(), HarnessError> {
     assert!(usage.contains("Background browser / 백그라운드 브라우저"));
     assert!(usage.contains("BUTLER_BROWSER_HEADLESS=on|off"));
     for args in [
+        vec!["oauth-login"],
         vec!["context", "status"],
         vec!["maintenance", "context"],
         vec!["conversation", "historical-recovery", "--write"],

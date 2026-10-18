@@ -42,20 +42,6 @@ pub(super) fn merge_private_auth_environment(
             "BUTLER_OPENAI_OAUTH_ORIGINATOR",
         );
     }
-    if target.oauth_authorize_url.is_none() {
-        string(
-            &mut target.oauth_authorize_url,
-            private,
-            "BUTLER_CODEX_OAUTH_AUTHORIZE_URL",
-        );
-        if target.oauth_authorize_url.is_none() {
-            string(
-                &mut target.oauth_authorize_url,
-                private,
-                "BUTLER_OPENAI_OAUTH_AUTHORIZE_URL",
-            );
-        }
-    }
     if target.oauth_token_url.is_none() {
         string(
             &mut target.oauth_token_url,
@@ -84,16 +70,6 @@ pub(super) fn merge_private_auth_environment(
             );
         }
     }
-    if target.oauth_scope.is_none() {
-        string(&mut target.oauth_scope, private, "BUTLER_CODEX_OAUTH_SCOPE");
-        if target.oauth_scope.is_none() {
-            string(
-                &mut target.oauth_scope,
-                private,
-                "BUTLER_OPENAI_OAUTH_SCOPE",
-            );
-        }
-    }
     path(
         &mut target.butler_codex_auth_profile,
         private,
@@ -106,4 +82,9 @@ pub(super) fn merge_private_auth_environment(
     );
     path(&mut target.codex_auth_json, private, "CODEX_AUTH_JSON");
     path(&mut target.codex_home, private, "CODEX_HOME");
+    path(
+        &mut target.chatgpt_auth_dir,
+        private,
+        "BUTLER_CHATGPT_AUTH_DIR",
+    );
 }

@@ -73,8 +73,8 @@ impl ModelConfigurationClock for Clock {
 
 pub(super) async fn profile_write_failure() {
     let fixture = Fixture::new();
-    let path = fixture.0.join("auth/openai-codex.json");
-    let original = br#"{"type":"oauth","accessToken":"old","refreshToken":"fixture"}"#;
+    let path = fixture.0.join("auth/chatgpt.json");
+    let original = br#"{"schema_version":1,"access_token":"old","refresh_token":"fixture"}"#;
     fs::write(&path, original).unwrap();
     interrupted().lock().unwrap().insert(path.clone());
     assert!(

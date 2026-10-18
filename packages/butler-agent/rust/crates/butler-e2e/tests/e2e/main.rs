@@ -41,6 +41,8 @@ mod browser_signin;
 mod browser_speed;
 mod browser_usage;
 mod cassette_lint;
+mod chatgpt_plan_usage;
+mod chatgpt_sign_in;
 mod cli_launcher;
 mod cli_remote;
 mod cli_reply_language;

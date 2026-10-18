@@ -28,7 +28,6 @@ pub enum Command {
     Status,
     Open,
     Skills,
-    OauthLogin,
     RunService,
     Unexpected,
 }
@@ -58,9 +57,6 @@ impl Command {
         }
         if is_skills_command(args) {
             return Self::Skills;
-        }
-        if args.len() == 1 && args[0] == "oauth-login" {
-            return Self::OauthLogin;
         }
         if args.is_empty() {
             Self::RunService
@@ -104,15 +100,6 @@ impl Command {
                 printed(&result.stdout, &result.stderr, result.exit_code)
             }
 
-            Self::OauthLogin => {
-                match cli::oauth_login::run_native_oauth_login(installation).await {
-                    Ok(()) => ExitCode::SUCCESS,
-                    Err(error) => {
-                        eprintln!("{error}");
-                        ExitCode::FAILURE
-                    }
-                }
-            }
             Self::RunService => {
                 match crate::host::service::entrypoint::run_native_service(installation).await {
                     Ok(session) => {

@@ -230,7 +230,7 @@ async fn registered_openai_key_overrides_environment_and_sizing_rereads_files() 
 }
 
 #[tokio::test]
-async fn codex_profile_precedes_codex_file_and_authorize_url_matches_source() {
+async fn codex_profile_precedes_codex_file() {
     let fixture = Fixture::new("codex-profile");
     let profile = fixture.0.join("profile.json");
     let codex = fixture.0.join("codex-auth.json");
@@ -282,23 +282,6 @@ async fn codex_profile_precedes_codex_file_and_authorize_url_matches_source() {
     assert_eq!(
         auth::pkce_challenge(verifier),
         "8Dw_rXYDuMBDOofOjlxvMNEALsULmI6c47hS_o9Dkqg"
-    );
-    let url = owner
-        .openai_authorize_url("http://127.0.0.1:1455/callback", "challenge", "state", None)
-        .unwrap();
-    assert_eq!(
-        url.query_pairs()
-            .find(|(key, _)| key == "client_id")
-            .unwrap()
-            .1,
-        "app_EMoamEEZ73f0CkXaXp7hrann"
-    );
-    assert_eq!(
-        url.query_pairs()
-            .find(|(key, _)| key == "code_challenge_method")
-            .unwrap()
-            .1,
-        "S256"
     );
 }
 

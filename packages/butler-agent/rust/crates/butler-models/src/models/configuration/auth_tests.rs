@@ -153,90 +153,49 @@ async fn refresh_http_failure_keeps_original_and_invalid_json_is_reported() {
     }
 }
 
-async fn code_exchange_returns_profile_without_writing_it() {
-    let fixture = Fixture::new("exchange");
-    let access = jwt(&json!({"sub":"account","email":"person@example.com"}));
-    let body = json!({
-        "access_token":access, "refresh_token":"refresh", "expires_in":3600, "scope":"openid"
-    })
-    .to_string();
-    let (url, server) = token_server("200 OK", &body).await;
-    let owner = fixture.owner(url);
-    let profile = owner
-        .exchange_openai_oauth_code(
-            "authorization-code",
-            "http://127.0.0.1/callback",
-            "verifier",
-        )
-        .await
-        .unwrap();
-    let request = server.await.unwrap();
-    assert!(request.contains("grant_type=authorization_code"));
-    assert_eq!(
-        profile.as_json().get("accountId").and_then(Value::as_str),
-        Some("account")
-    );
-    assert!(!fixture.0.join("auth/openai-codex.json").exists());
-}
-
+// test-category: security
 #[tokio::test]
 async fn relative_profile_override_is_shared_by_oauth_write_and_model_auth_reader() {
-    code_exchange_returns_profile_without_writing_it().await;
     let fixture = Fixture::new("relative-profile");
     assert_ne!(std::env::current_dir().unwrap(), fixture.0);
     let access = jwt(&json!({"sub":"account","email":"person@example.com"}));
-    let (token_url, server) = token_server(
-        "200 OK",
-        &json!({"access_token":access,"refresh_token":"refresh","expires_in":3600}).to_string(),
-    )
-    .await;
-    let owner = ModelConfiguration::new(
-        fixture.0.clone(),
-        ModelConfigurationEnvironment {
-            butler_codex_auth_profile: Some(PathBuf::from("auth/custom.json")),
-            oauth_token_url: Some(token_url),
-            os_platform: Some("darwin".into()),
-            os_release: Some("25.0".into()),
-            os_arch: Some("arm64".into()),
-            ..Default::default()
-        },
-        Arc::new(Clock),
-        Arc::new(ModelCatalog::new().unwrap()),
-        Arc::new(LocaleCollation::new("en-US").unwrap()),
-        crate::models::provider_http_client().unwrap(),
-        Arc::new(butler_core::configuration::ConfigurationWrites::new()),
-    )
-    .unwrap();
-    let profile = owner
-        .exchange_openai_oauth_code("code", "http://127.0.0.1/callback", "verifier")
-        .await
-        .unwrap();
-    server.await.unwrap();
-    owner.write_openai_auth_profile(&profile).await.unwrap();
-    assert!(fixture.0.join("auth/custom.json").exists());
-    assert!(!fixture.0.join("auth/openai-codex.json").exists());
+    let body =
+        json!({"access_token":access,"refresh_token":"rotated","expires_in":3600}).to_string();
+    let (url, server) = token_server("200 OK", &body).await;
+    let mut owner = fixture.owner(url);
+    owner.environment.butler_codex_auth_profile = Some(PathBuf::from("auth/custom.json"));
+    let path = fixture.0.join("auth/custom.json");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(&path, json!({"type":"oauth","accessToken":"old","refreshToken":"refresh","expiresAt":1,"unknown":"keep"}).to_string()).unwrap();
     let auth = owner.auth_owner().resolve_codex().await.unwrap();
     assert!(
         matches!(auth, ProviderAuth::Codex { authorization, .. } if authorization == format!("Bearer {access}"))
     );
+    assert!(server.await.unwrap().contains("grant_type=refresh_token"));
+    assert!(path.exists());
+    let saved: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert!(
+        saved["accessToken"] == access,
+        "rotated token was not saved"
+    );
+    assert_eq!(saved["unknown"], "keep");
+    assert!(!fixture.0.join("auth/openai-codex.json").exists());
 }
 
+// test-category: security
 #[tokio::test]
-async fn token_exchange_accepts_response_larger_than_one_megabyte() {
+async fn token_refresh_accepts_response_larger_than_one_megabyte() {
     let fixture = Fixture::new("large-token-response");
-    let body = json!({
-        "access_token":"token",
-        "provider_extension":"x".repeat(1024 * 1024 + 1)
-    })
-    .to_string();
+    let body = json!({"access_token":"token","provider_extension":"x".repeat(1024 * 1024 + 1)})
+        .to_string();
     let (url, server) = token_server("200 OK", &body).await;
-    let profile = fixture
-        .owner(url)
-        .exchange_openai_oauth_code("code", "http://127.0.0.1/callback", "verifier")
-        .await
-        .unwrap();
+    let owner = fixture.owner(url);
+    write_profile(&fixture, "old", 1);
+    let auth = owner.auth_owner().resolve_codex().await.unwrap();
     server.await.unwrap();
-    assert_eq!(profile.as_json()["accessToken"], "token");
+    assert!(
+        matches!(auth, ProviderAuth::Codex { authorization, .. } if authorization == "Bearer token")
+    );
 }
 
 fn write_profile(fixture: &Fixture, access: &str, expires_at: i64) -> PathBuf {

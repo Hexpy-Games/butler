@@ -2,8 +2,7 @@
 //! `POST /setup/oauth/start` returns a `flow_id` and opens a localhost
 //! callback listener; `POST /setup/oauth/{flow_id}/cancel` closes it and
 //! drops the PKCE state, and the flow reports `cancelled`. The browser is
-//! played by the test; the token endpoint is a loopback stand-in
-//! (`BUTLER_CODEX_OAUTH_TOKEN_URL`).
+//! played by the test through the local fake ChatGPT authority.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -14,28 +13,30 @@
 use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::HarnessError;
-use butler_e2e::e2e::agent::free_port;
+use butler_e2e::e2e::fake_chatgpt::FakeChatGptAuthority;
 use butler_e2e::e2e::fake_servers::{
     FakeServer, OAUTH_ACCOUNT_ID, OAUTH_EMAIL, base64url, form_value,
 };
 use butler_e2e::e2e::gateway::Gateway;
 use butler_e2e::e2e::scenario::{Fixture, Scenario, Setup};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
-async fn with_callback_port(id: &str, token: &FakeServer) -> Result<(Scenario, u16), HarnessError> {
-    let port = free_port()?;
-    let s = Setup::new(id)?
+async fn with_callback_port(
+    id: &str,
+    authority: &butler_e2e::e2e::fake_chatgpt::FakeChatGptAuthority,
+) -> Result<Scenario, HarnessError> {
+    Setup::new(id)?
         .fixture(Fixture::Empty)
         .without_credential()
-        .env("BUTLER_CODEX_OAUTH_PORT", port.to_string())
-        .env(
-            "BUTLER_CODEX_OAUTH_TOKEN_URL",
-            format!("{}/oauth/token", token.base_url),
-        )
+        .env("BUTLER_CHATGPT_AUTH_ISSUER", &authority.issuer)
         .start()
-        .await?;
-    Ok((s, port))
+        .await
+}
+fn port(flow: &Value) -> u16 {
+    url::Url::parse(flow["redirect_uri"].as_str().unwrap())
+        .unwrap()
+        .port()
+        .unwrap()
 }
 
 async fn start(gw: &Gateway, body: Value) -> Result<Value, HarnessError> {
@@ -79,14 +80,15 @@ async fn flow_until(gw: &Gateway, flow_id: &str, status: &str) -> Result<Value, 
 #[tokio::test]
 async fn setup_08_cancel_closes_the_listener_and_drops_the_state() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let token = FakeServer::oauth_token().await?;
-    let (s, port) = with_callback_port("SETUP-08", &token).await?;
+    let token = FakeChatGptAuthority::start().await?;
+    let s = with_callback_port("SETUP-08", &token).await?;
     let flow = start(&s.gw, json!({})).await?;
+    let port = port(&flow);
     assert_eq!(flow["status"], "pending", "{flow}");
     let flow_id = flow["flow_id"].as_str().unwrap().to_owned();
     assert_eq!(
         flow["redirect_uri"],
-        format!("http://localhost:{port}/auth/callback"),
+        format!("http://127.0.0.1:{port}/auth/callback"),
         "{flow}"
     );
     assert_eq!(auth_param(&flow, "code_challenge_method"), "S256");
@@ -114,7 +116,10 @@ async fn setup_08_cancel_closes_the_listener_and_drops_the_state() -> Result<(),
         late.is_err(),
         "a callback reached a cancelled flow: {late:?}"
     );
-    assert!(token.seen().is_empty(), "a cancelled flow exchanged a code");
+    assert!(
+        !token.seen().iter().any(|r| r.path == "token"),
+        "a cancelled flow exchanged a code"
+    );
     let again =
         s.gw.post(&format!("/setup/oauth/{flow_id}/cancel"), json!({}))
             .await?;
@@ -125,19 +130,14 @@ async fn setup_08_cancel_closes_the_listener_and_drops_the_state() -> Result<(),
     assert_eq!(unknown.status, 404, "{}", unknown.text);
     assert_eq!(unknown.error_code(), Some("oauth_flow_not_found"));
 
-    // The port is free again: a new sign-in listens on it.
+    // A new sign-in owns another available callback port.
     let next = start(&s.gw, json!({})).await?;
     assert_ne!(next["flow_id"], flow_id.as_str());
-    assert!(listening(port));
+    assert!(listening(self::port(&next)));
     let next_id = next["flow_id"].as_str().unwrap();
     s.gw.post(&format!("/setup/oauth/{next_id}/cancel"), json!({}))
         .await?;
     s.finish().await
-}
-
-/// RFC 7636 S256: base64url (no padding) of SHA-256 of the verifier.
-fn s256(verifier: &str) -> String {
-    base64url(&Sha256::digest(verifier.as_bytes()))
 }
 
 /// SETUP-09 — A sign-in completes when the browser returns with this
@@ -147,14 +147,13 @@ fn s256(verifier: &str) -> String {
 #[tokio::test]
 async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let token = FakeServer::oauth_token().await?;
-    let (s, port) = with_callback_port("SETUP-09", &token).await?;
+    let token = FakeChatGptAuthority::start().await?;
+    let s = with_callback_port("SETUP-09", &token).await?;
 
     let flow = start(&s.gw, json!({})).await?;
+    let port = port(&flow);
     let flow_id = flow["flow_id"].as_str().unwrap().to_owned();
-    let challenge = auth_param(&flow, "code_challenge");
-    let state = auth_param(&flow, "state");
-    let (status, page) = callback(port, &format!("code=e2e-code&state={state}")).await?;
+    let (status, page) = token.browser(&flow).await?;
     assert_eq!(status, 200, "{page}");
     let done = flow_until(&s.gw, &flow_id, "completed").await?;
     assert_eq!(done["status"], "completed", "{done}");
@@ -167,17 +166,23 @@ async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessE
     assert_eq!(late.data()["status"], "completed", "{}", late.text);
 
     let exchange = token.seen();
-    assert_eq!(exchange.len(), 1, "{exchange:?}");
-    let form = &exchange[0].body;
-    assert_eq!(form_value(form, "grant_type"), Some("authorization_code"));
-    assert_eq!(form_value(form, "code"), Some("e2e-code"));
-    let verifier = form_value(form, "code_verifier").unwrap();
-    assert_eq!(s256(verifier), challenge, "the verifier is not the flow's");
-    let profile: Value = serde_json::from_slice(&std::fs::read(
-        s.sandbox.data.join("auth/openai-codex.json"),
-    )?)?;
-    assert_eq!(profile["email"], OAUTH_EMAIL, "{profile}");
-    assert_eq!(profile["accountId"], OAUTH_ACCOUNT_ID, "{profile}");
+    assert_eq!(exchange.iter().filter(|r| r.path == "token").count(), 1);
+    let authorize = &exchange
+        .iter()
+        .find(|r| r.path == "authorize")
+        .unwrap()
+        .params;
+    let form = &exchange.iter().find(|r| r.path == "token").unwrap().params;
+    assert_eq!(form["grant_type"], "authorization_code");
+    assert_eq!(
+        butler_models::models::pkce_challenge(&form["code_verifier"]),
+        authorize["code_challenge"]
+    );
+    assert_eq!(form["redirect_uri"], flow["redirect_uri"]);
+    let profile: Value =
+        serde_json::from_slice(&std::fs::read(s.sandbox.data.join("auth/chatgpt.json"))?)?;
+    assert_eq!(profile["email"], OAUTH_EMAIL);
+    assert_eq!(profile["subject"], "e2e-subject");
 
     let existing = start(&s.gw, json!({})).await?;
     assert_eq!(existing["status"], "profile_exists", "{existing}");
@@ -198,9 +203,10 @@ async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessE
 #[tokio::test]
 async fn setup_10_stray_callbacks_are_ignored() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let token = FakeServer::oauth_token().await?;
-    let (s, port) = with_callback_port("SETUP-10", &token).await?;
+    let token = FakeChatGptAuthority::start().await?;
+    let s = with_callback_port("SETUP-10", &token).await?;
     let flow = start(&s.gw, json!({})).await?;
+    let port = port(&flow);
     let flow_id = flow["flow_id"].as_str().unwrap().to_owned();
     let state = auth_param(&flow, "state");
 
@@ -219,11 +225,14 @@ async fn setup_10_stray_callbacks_are_ignored() -> Result<(), HarnessError> {
         s.gw.get(&format!("/setup/oauth/{flow_id}")).await?.data()["status"],
         "pending"
     );
-    assert!(token.seen().is_empty(), "a stray request exchanged a code");
+    assert!(
+        !token.seen().iter().any(|r| r.path == "token"),
+        "a stray request exchanged a code"
+    );
 
     // The browser's callback completes while the idle connection is open.
     let started = Instant::now();
-    let (status, page) = callback(port, &format!("code=e2e-code&state={state}")).await?;
+    let (status, page) = token.browser(&flow).await?;
     assert_eq!(status, 200, "{page}");
     butler_e2e::assert_wall_clock_budget!(
         started.elapsed(),
@@ -239,14 +248,18 @@ async fn setup_10_stray_callbacks_are_ignored() -> Result<(), HarnessError> {
     // Declining ends a (forced) new sign-in.
     let declined = start(&s.gw, json!({"force": true})).await?;
     let declined_id = declined["flow_id"].as_str().unwrap().to_owned();
+    let declined_port = self::port(&declined);
     let declined_state = auth_param(&declined, "state");
-    let (status, _) =
-        callback(port, &format!("error=access_denied&state={declined_state}")).await?;
+    let (status, _) = callback(
+        declined_port,
+        &format!("error=access_denied&state={declined_state}"),
+    )
+    .await?;
     assert_eq!(status, 400);
     let failed = flow_until(&s.gw, &declined_id, "failed").await?;
     assert_eq!(failed["error"], "oauth_denied", "{failed}");
     assert!(
-        !listening(port),
+        !listening(declined_port),
         "the listener outlived the declined sign-in"
     );
     s.finish().await

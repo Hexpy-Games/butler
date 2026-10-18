@@ -5,7 +5,7 @@ use std::{path::Path, process::ExitCode};
 use serde_json::{Value, json};
 
 use super::{CliError, Command, Options, ResolvedInstallation, path, report_error, report_success};
-use crate::host::cli::oauth_login;
+use crate::host::cli::chatgpt_login;
 use butler_models::models;
 
 pub(super) fn auth_status(
@@ -20,6 +20,11 @@ pub(super) fn auth_status(
         Err(error) => return report_error(command.name(), options.json, &error),
     };
     let mut data = models::auth_status_with_environment(data_root, &environment);
+    data["profilePath"] = Value::String(
+        path::auth_profile_path(data_root, &environment)
+            .display()
+            .to_string(),
+    );
     data["envPath"] = Value::String(env_path.display().to_string());
     data["redacted"] = Value::Bool(true);
     let human = format!(
@@ -44,7 +49,7 @@ pub(super) async fn auth_login(
             &CliError::invalid("auth login requires an interactive browser flow"),
         );
     }
-    match oauth_login::run_native_oauth_login_for_data(installation, data_root).await {
+    match chatgpt_login::run(installation, data_root, options.new_account).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(message) => report_error(
             command.name(),
@@ -67,53 +72,30 @@ pub(super) async fn auth_logout(
             &CliError::invalid("auth logout requires --yes"),
         );
     }
-    let environment =
-        match path::read_private_environment(installation, data_root, &data_root.join(".env")) {
-            Ok(environment) => environment,
-            Err(error) => return report_error(command.name(), options.json, &error),
-        };
-    let profile = path::auth_profile_path(data_root, &environment);
-    let Ok(profile) = path::safe_data_file(installation, data_root, &profile) else {
+    let Ok(owner) = models::open_status_models(data_root.to_path_buf()).await else {
         return report_error(
             command.name(),
             options.json,
-            &CliError::invalid("auth profile removal must remain inside DATA"),
+            &CliError::failed("auth_logout_failed", "ChatGPT sign-out could not start"),
         );
     };
-    let owner = match models::open_status_models(data_root.to_path_buf()).await {
-        Ok(owner) => owner,
-        Err(error) => {
+    let revoked = match owner.configuration.chatgpt_sign_out().await {
+        Ok(revoked) => revoked,
+        Err(code) => {
             return report_error(
                 command.name(),
                 options.json,
-                &CliError::failed("auth_logout_failed", error.to_string()),
+                &CliError::failed("auth_logout_failed", code),
             );
         }
     };
-    let removed = match owner.configuration.remove_auth_profile(&profile).await {
-        Ok(removed) => removed,
-        Err(error) => {
-            return report_error(
-                command.name(),
-                options.json,
-                &CliError::failed("auth_logout_failed", error.to_string()),
-            );
-        }
-    };
-    drop(owner);
-    let data = json!({
-        "removed": removed,
-        "profilePath": profile.display().to_string(),
-        "envPath": data_root.join(".env").display().to_string(),
-        "apiKeyEnvUntouched": true,
-        "redacted": true,
-    });
-    let human = if removed {
-        "Local auth profile removed."
-    } else {
-        "No local auth profile was present."
-    };
-    report_success(options, command.name(), &data, human)
+    let _ = installation;
+    report_success(
+        options,
+        command.name(),
+        &json!({"revoked":revoked,"redacted":true}),
+        &format!("revoked: {revoked}"),
+    )
 }
 
 pub(super) fn model_list(options: &Options, command: Command) -> ExitCode {

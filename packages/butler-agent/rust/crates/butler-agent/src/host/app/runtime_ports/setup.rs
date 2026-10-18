@@ -2,6 +2,7 @@
 //! local model servers, API keys and the ChatGPT sign-in flow, behind the
 //! gateway's [`AppSetupPort`].
 
+mod chatgpt_account;
 mod credentials;
 mod oauth;
 mod readiness;
@@ -193,9 +194,27 @@ impl AppSetupPort for AppSetup {
         })
     }
 
+    fn chatgpt_revision(&self) -> watch::Receiver<u64> {
+        self.0.configuration.chatgpt_revision()
+    }
+    fn chatgpt_account(
+        &self,
+    ) -> ApplicationFuture<butler_models::models::chatgpt::ChatGptAccountState> {
+        chatgpt_account::view(self.0.configuration.clone())
+    }
+    fn chatgpt_notice(
+        &self,
+        input: butler_gateway::gateway::ChatGptNoticeInput,
+    ) -> ApplicationFuture<butler_models::models::chatgpt::ChatGptAccountState> {
+        chatgpt_account::notice(self.0.configuration.clone(), input)
+    }
+    fn chatgpt_sign_out(&self) -> ApplicationFuture<butler_gateway::gateway::ChatGptSignOutView> {
+        chatgpt_account::sign_out(self.0.configuration.clone())
+    }
+
     fn start_oauth(&self, input: AppOauthStartInput) -> ApplicationFuture<OauthFlowView> {
         let this = self.0.clone();
-        Box::pin(async move { Ok(this.oauth.start(input.force).await) })
+        Box::pin(async move { Ok(this.oauth.start(input.force, input.kind).await) })
     }
 
     fn oauth_flow(&self, flow_id: String) -> ApplicationFuture<OauthFlowView> {
