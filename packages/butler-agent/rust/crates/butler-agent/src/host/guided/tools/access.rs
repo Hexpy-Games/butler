@@ -102,11 +102,13 @@ async fn target_scope(
     let project = consented.then(|| root.clone());
     let data = owner.binding.butler_data.clone();
     let protected = owner.binding.protected_ledger_roots.clone();
+    let attachments = owner.binding.attachment_files.clone();
     let installation = owner.binding.installation_root.clone();
     let args = args.clone();
     let name = call.name.clone();
     tokio::task::spawn_blocking(move || {
         let roots = ScopeRoots {
+            attachments: &attachments,
             project: project.as_deref(),
             butler_data: &data,
             protected_ledger_roots: &protected,
