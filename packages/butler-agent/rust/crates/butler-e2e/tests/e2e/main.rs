@@ -118,6 +118,8 @@ mod prompt_history;
 mod prompt_history_cache;
 mod prompt_layout;
 mod queue_admission_shutdown;
+#[cfg(debug_assertions)]
+mod queue_claim_crash;
 mod queue_notifications;
 mod queue_pause;
 mod queue_shutdown;

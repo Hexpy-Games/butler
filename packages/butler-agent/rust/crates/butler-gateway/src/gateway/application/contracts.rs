@@ -44,6 +44,16 @@ pub struct EnqueueReceipt {
 pub trait AppNativeIngress: Send + Sync + 'static {
     fn enqueue(&self, turn: AppTurn) -> ApplicationFuture<EnqueueReceipt>;
     fn find(&self, turn: AppTurn) -> ApplicationFuture<Option<EnqueueReceipt>>;
+    /// The claim an unfailed durable native record of this message attempt
+    /// delivers under: the one carrying `claim`, else a live one.
+    fn delivering_claim(
+        &self,
+        _message_id: String,
+        _turn_attempt: u64,
+        _claim: Option<String>,
+    ) -> ApplicationFuture<Option<String>> {
+        Box::pin(async { Ok(None) })
+    }
     fn enqueue_cancel(&self, _cancel: AppCancellation) -> ApplicationFuture<EnqueueReceipt> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
