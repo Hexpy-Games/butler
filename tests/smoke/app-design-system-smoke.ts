@@ -396,7 +396,7 @@ async function assertWorkbench(page: Page, baseUrl: string, label: string): Prom
   assert(blockPolishState.workerIconTitleAligned, `${label}: WorkerActivityRow icon/title alignment is off`);
   assert(blockPolishState.automationIconTitleAligned, `${label}: AutomationRunList icon/title alignment is off`);
 
-  const groupHeader = page.locator('[data-ds-component="CollapsibleNavGroup"]').getByRole("button", { name: "Design system" });
+  const groupHeader = page.locator('[data-ds-component="CollapsibleNavGroup"]').getByRole("button", { name: "Design system", exact: true });
   await groupHeader.click();
   await page.waitForFunction(() =>
     document.querySelector('[data-ds-component="CollapsibleNavGroup"] [aria-expanded="false"]'),

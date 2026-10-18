@@ -1,5 +1,6 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Typo } from "../../components/Typo";
+import { MarkdownContent } from "../MarkdownContent";
 import { MessageRow } from "../MessageRow";
 import {
   ConversationScroll,
@@ -52,7 +53,8 @@ function Conversation({ locale, jump }: ShowcaseRenderContext & { jump: boolean 
           <MessageListSurface>
             {text.turns.map(([role, body], index) => (
               <MessageRow key={index} role={role as "user" | "assistant"} index={index}>
-                <Typo.Body as="p">{body}</Typo.Body>
+                {/* As the App renders them: user text as typed, assistant text as Markdown. */}
+                {role === "user" ? <Typo.Text as="div" wrap="pre">{body}</Typo.Text> : <MarkdownContent><p>{body}</p></MarkdownContent>}
               </MessageRow>
             ))}
           </MessageListSurface>

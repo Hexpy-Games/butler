@@ -302,13 +302,6 @@
 
 /* ---- Components and tiles ---- */
 
-.menuRow {
-  display: flex;
-  align-items: center;
-  min-block-size: var(--control-height-md);
-  padding-inline: var(--space-sm);
-}
-
 .composer {
   display: grid;
   inline-size: calc(var(--space-4xl) * 8);

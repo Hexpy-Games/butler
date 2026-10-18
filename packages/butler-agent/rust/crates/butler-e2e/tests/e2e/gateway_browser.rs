@@ -412,3 +412,5 @@ async fn assert_sandboxed(
     assert_eq!(response.bytes().await?.to_vec(), bytes);
     Ok(())
 }
+
+mod routing;
