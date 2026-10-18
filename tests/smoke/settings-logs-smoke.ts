@@ -76,6 +76,9 @@ async function openSettings(page: Page, label: string) {
 
 async function capture(page: Page, name: string) {
   await page.evaluate(() => document.fonts.ready);
+  // The settings page fades in when it opens; capture the settled page, not its first frame.
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-slot="settings-page"]')]
+    .every((node) => getComputedStyle(node).opacity === "1"));
   await page.waitForFunction(() => document.getAnimations().every((animation) =>
     animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name}: no page overflow`);
