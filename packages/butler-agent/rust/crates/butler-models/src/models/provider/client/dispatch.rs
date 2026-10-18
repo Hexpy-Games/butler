@@ -2,7 +2,7 @@
 use super::*;
 
 pub(super) struct PreparedHttp<'a> {
-    pub http: reqwest::RequestBuilder,
+    pub http: butler_log::http::RequestBuilder,
     pub serialized_bytes: usize,
     pub admission: request_admission::PreparedRequestAdmission<'a>,
     pub trace: super::super::request_trace::RequestTrace,

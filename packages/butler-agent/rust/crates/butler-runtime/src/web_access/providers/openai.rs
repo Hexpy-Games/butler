@@ -63,7 +63,7 @@ impl SearchProvider for OpenAIWebSearchProvider {
                 "include":["web_search_call.action.sources"],
                 "input":input.query,
             }));
-            let (status, bytes) = response_bytes(access, request, cancellation).await?;
+            let (status, bytes) = response_bytes(access, request.purpose(butler_log::http::Purpose::provider("openai", "web_search")), cancellation).await?;
             if !(200..300).contains(&status) {
                 return Err(http_error(status));
             }

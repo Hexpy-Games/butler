@@ -15,7 +15,7 @@ const SERVICE_MAINTENANCE_INTERVAL: Duration = Duration::from_millis(500);
 
 pub(super) async fn run_service_maintenance(
     progress: Arc<ProgressPublisher>,
-    parent_client: reqwest::Client,
+    parent_client: butler_log::http::Client,
     subsessions: butler_turn::btcc::SqliteSubsessionRepository,
     app_endpoint: ActiveAppEndpoint,
     mut stop: oneshot::Receiver<()>,

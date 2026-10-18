@@ -35,7 +35,7 @@ impl Drop for TempFile {
 }
 
 pub(super) async fn download(
-    client: &reqwest::Client,
+    client: &butler_log::http::Client,
     shutdown: &CancellationToken,
     data: &Path,
     installation: &Path,
@@ -74,7 +74,7 @@ pub(super) struct DownloadSource<'a> {
 }
 
 pub(super) async fn download_to_label(
-    client: &reqwest::Client,
+    client: &butler_log::http::Client,
     shutdown: &CancellationToken,
     data: &Path,
     installation: &Path,
@@ -172,7 +172,7 @@ impl Sink<'_> {
 }
 
 async fn fetch_http(
-    client: &reqwest::Client,
+    client: &butler_log::http::Client,
     shutdown: &CancellationToken,
     url: &str,
     sink: &mut Sink<'_>,

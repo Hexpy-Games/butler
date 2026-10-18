@@ -3,3 +3,14 @@ allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
 allow-indexing-slicing-in-tests = true
+
+disallowed-methods = [
+    { path = "reqwest::Client::new", reason = "Use butler_log::http; all outbound HTTP must be logged" },
+    { path = "reqwest::Client::builder", reason = "Use butler_log::http; all outbound HTTP must be logged" },
+    { path = "reqwest::ClientBuilder::new", reason = "Use butler_log::http; all outbound HTTP must be logged" },
+    { path = "reqwest::RequestBuilder::send", reason = "Use butler_log::http; all outbound HTTP must be logged" },
+    { path = "reqwest::Client::execute", reason = "Use butler_log::http; all outbound HTTP must be logged" },
+    { path = "reqwest::get", reason = "Use butler_log::http; all outbound HTTP must be logged" },
+    { path = "rmcp::transport::worker::WorkerTransport::from_uri", reason = "Use butler_log::http; all outbound HTTP must be logged" },
+    { path = "rmcp::transport::worker::WorkerTransport::from_config", reason = "Use butler_log::http; all outbound HTTP must be logged" },
+]

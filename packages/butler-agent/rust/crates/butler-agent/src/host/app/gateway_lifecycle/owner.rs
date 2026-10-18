@@ -382,8 +382,8 @@ fn view_status(enabled: bool, running: bool, refusing: bool) -> (&'static str, V
 }
 
 /// A bounded status probe; its result never controls startup admission.
-fn probe_client() -> Option<reqwest::Client> {
-    reqwest::Client::builder()
+fn probe_client() -> Option<butler_log::http::Client> {
+    butler_log::http::loopback()
         .timeout(std::time::Duration::from_millis(500))
         .build()
         .ok()

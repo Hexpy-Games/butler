@@ -1,7 +1,8 @@
 //! Bounded source failover and verified Range continuation.
 use super::{Asset, matches_asset};
+use butler_log::http::Client;
 use futures_util::StreamExt;
-use reqwest::{Client, StatusCode, header};
+use reqwest::{StatusCode, header};
 use std::{
     fs::{self, File},
     io::Write,
@@ -40,7 +41,11 @@ pub(super) async fn with_retries(
                 asset.relative.rsplit('/').next().unwrap_or(&asset.relative)
             };
             let url = format!("{source}/{relative}");
-            match download(client, &url, asset, part, baseline, progress).await {
+            let retry = u32::try_from(attempt * sources.len() + index).unwrap_or(u32::MAX);
+            let request = client
+                .get(&url)
+                .phase(butler_log::http::Phase::new("download", retry));
+            match download(request, asset, part, baseline, progress).await {
                 Ok(()) => return Ok(()),
                 Err(error) => failure = error,
             }
@@ -53,8 +58,7 @@ pub(super) async fn with_retries(
 }
 
 async fn download(
-    client: &Client,
-    url: &str,
+    request: butler_log::http::RequestBuilder,
     asset: &Asset,
     part: &Path,
     baseline: u64,
@@ -70,7 +74,7 @@ async fn download(
         start = 0;
     }
     progress("downloading", baseline + start);
-    let mut request = client.get(url).header(header::ACCEPT_ENCODING, "identity");
+    let mut request = request.header(header::ACCEPT_ENCODING, "identity");
     if start > 0 {
         request = request.header(header::RANGE, format!("bytes={start}-"));
     }

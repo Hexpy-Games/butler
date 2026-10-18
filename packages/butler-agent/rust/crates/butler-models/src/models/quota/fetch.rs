@@ -2,11 +2,13 @@
 //! redirects (a credential never follows one), and one IPv4-only retry when
 //! the first connection attempt fails (hosts with a broken IPv6 route).
 
+use butler_log::http::RedirectPolicy as Policy;
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
 
+use butler_log::http::Client;
 use reqwest::header::{HeaderMap, RETRY_AFTER};
-use reqwest::{Client, Response, Url, redirect::Policy};
+use reqwest::{Response, Url};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -66,7 +68,7 @@ pub enum QuotaFetchError {
     Refused,
     /// The request did not complete.
     #[error("the quota request failed")]
-    Transport(#[source] reqwest::Error),
+    Transport(#[source] butler_log::http::Error),
     /// The body was not the expected JSON (or exceeded the size limit).
     #[error("the quota response did not match the expected schema")]
     Schema,
@@ -122,7 +124,7 @@ impl QuotaHttp {
     /// Builds the default and the IPv4-only client.
     pub fn new(user_agent: impl Into<String>) -> Result<Self, reqwest::Error> {
         let builder = || {
-            Client::builder()
+            butler_log::http::external(butler_log::http::Purpose::new("quota"))
                 .redirect(Policy::none())
                 .timeout(TIMEOUT)
                 .connect_timeout(CONNECT_TIMEOUT)
@@ -147,8 +149,8 @@ impl QuotaHttp {
         url: &Url,
         headers: &HeaderMap,
     ) -> Result<Vec<u8>, QuotaFetchError> {
-        let response = match send(&self.client, url, headers).await {
-            Err(error) if error.is_connect() => send(&self.ipv4, url, headers).await,
+        let response = match send(&self.client, url, headers, 0).await {
+            Err(error) if error.is_connect() => send(&self.ipv4, url, headers, 1).await,
             result => result,
         }
         .map_err(QuotaFetchError::Transport)?;
@@ -156,10 +158,16 @@ impl QuotaHttp {
     }
 }
 
-async fn send(client: &Client, url: &Url, headers: &HeaderMap) -> Result<Response, reqwest::Error> {
+async fn send(
+    client: &Client,
+    url: &Url,
+    headers: &HeaderMap,
+    retry: u32,
+) -> Result<Response, butler_log::http::Error> {
     client
         .get(url.clone())
         .headers(headers.clone())
+        .phase(butler_log::http::Phase::new("poll", retry))
         .send()
         .await
 }
@@ -178,7 +186,11 @@ async fn body(mut response: Response) -> Result<Vec<u8>, QuotaFetchError> {
         _ => return Err(QuotaFetchError::Http { status }),
     }
     let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(QuotaFetchError::Transport)? {
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| QuotaFetchError::Transport(error.into()))?
+    {
         if bytes.len() + chunk.len() > MAX_BODY_BYTES {
             return Err(QuotaFetchError::Schema);
         }

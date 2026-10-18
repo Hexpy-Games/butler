@@ -22,7 +22,7 @@ pub(super) struct AppArtifact {
 }
 
 pub(super) async fn load_artifact(
-    client: &reqwest::Client,
+    client: &butler_log::http::Client,
     shutdown: &CancellationToken,
     source: &str,
     channel: Option<&str>,
@@ -111,7 +111,7 @@ fn required_version(value: &Value) -> Result<&str, UpdateError> {
 }
 
 pub(super) async fn read_manifest(
-    client: &reqwest::Client,
+    client: &butler_log::http::Client,
     shutdown: &CancellationToken,
     source: &str,
 ) -> Result<Vec<u8>, UpdateError> {

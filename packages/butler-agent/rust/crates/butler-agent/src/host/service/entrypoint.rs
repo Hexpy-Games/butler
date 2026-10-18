@@ -208,8 +208,8 @@ async fn serve(
     } = admission::prepare(&runtime, config, writer.clone(), instance, stop).await?;
     startup.phase("admission");
 
-    let parent_client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
+    let parent_client = butler_log::http::loopback()
+        .redirect(butler_log::http::RedirectPolicy::none())
         .build()
         .map_err(io)?;
     let foreground_lease = capture_foreground_lease(instance)?;

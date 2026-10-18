@@ -56,7 +56,7 @@ use std::{
     sync::Arc,
 };
 
-use reqwest::Client;
+use butler_log::http::Client;
 use serde_json::Value;
 
 use super::{
@@ -426,8 +426,8 @@ impl ModelConfiguration {
         } else {
             None
         };
-        let client = Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
+        let client = butler_log::http::external(butler_log::http::Purpose::new("model_discovery"))
+            .redirect(butler_log::http::RedirectPolicy::none())
             .build()
             .map_err(|source| ModelCatalogError::Storage {
                 message: "Local model discovery could not start.",

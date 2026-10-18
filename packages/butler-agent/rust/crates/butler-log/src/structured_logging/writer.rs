@@ -54,13 +54,24 @@ struct Inner {
 pub struct Logger(Arc<Inner>);
 impl Logger {
     pub fn open(data: &Path, config: Config) -> io::Result<Self> {
+        Self::open_mode(data, config, true)
+    }
+    /// A secondary process appends private segments; only the service prunes shared logs.
+    pub fn producer(data: &Path, config: Config) -> io::Result<Self> {
+        Self::open_mode(data, config, false)
+    }
+    fn open_mode(data: &Path, config: Config, owner: bool) -> io::Result<Self> {
         if !config.valid() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "invalid log configuration",
             ));
         }
-        let storage = Storage::open(data.join("logs"), &config)?;
+        let storage = if owner {
+            Storage::open(data.join("logs"), &config)?
+        } else {
+            Storage::producer(data.join("logs"), &config)?
+        };
         let initial_full = config.level == Preset::Full;
         let config = if initial_full {
             Config::default()

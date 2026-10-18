@@ -6,6 +6,7 @@ mod export;
 mod files;
 mod index;
 mod layer;
+pub(crate) use layer::current_ids;
 mod patterns;
 mod query;
 mod record;

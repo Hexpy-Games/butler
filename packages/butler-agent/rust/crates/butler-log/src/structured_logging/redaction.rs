@@ -101,7 +101,14 @@ pub fn redact_url(input: &str) -> String {
                     | "code"
                     | "client_secret"
                     | "refresh_token"
-            );
+                    | "signature"
+                    | "sig"
+                    | "x-amz-signature"
+                    | "x-amz-credential"
+                    | "x-amz-security-token"
+                    | "x-goog-signature"
+                    | "x-goog-credential"
+            ) || patterns::secret_key().is_match(&key);
             (
                 key.into_owned(),
                 if secret {
@@ -153,7 +160,10 @@ pub fn redact_headers<'a>(headers: impl IntoIterator<Item = (&'a str, &'a str)>)
                         | "request-id"
                         | "retry-after"
                 ) || key.starts_with("x-ratelimit-")
-                    || key.starts_with("ratelimit-");
+                    || key.starts_with("ratelimit-")
+                    || key.starts_with("x-rate-limit-")
+                    || key.starts_with("rate-limit-")
+                    || key.starts_with("anthropic-ratelimit-");
                 (
                     redact_log_line(&key),
                     if secret {

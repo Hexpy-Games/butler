@@ -1,4 +1,5 @@
 //! Storage regressions for coalesced maintenance, using real SQLite connections.
+#![allow(clippy::disallowed_methods, reason = "test crate HTTP drivers")]
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 use butler_platform::{process_control::sample_usage, sqlite};
 use std::{

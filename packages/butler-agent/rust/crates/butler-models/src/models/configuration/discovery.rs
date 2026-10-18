@@ -64,7 +64,7 @@ impl From<&DiscoveredLocalModel> for ModelProviderMetadata {
 }
 
 pub(super) async fn discover(
-    client: &reqwest::Client,
+    client: &butler_log::http::Client,
     server_url: &str,
     platform: LocalModelPlatform,
     api_key: Option<&str>,
@@ -140,7 +140,7 @@ pub(super) async fn discover(
 }
 
 async fn model_props(
-    client: &reqwest::Client,
+    client: &butler_log::http::Client,
     server_root: &str,
     raw_id: &str,
     platform: LocalModelPlatform,
@@ -160,7 +160,11 @@ async fn model_props(
     }
 }
 
-async fn fetch_object(client: &reqwest::Client, url: &str, api_key: Option<&str>) -> Option<Value> {
+async fn fetch_object(
+    client: &butler_log::http::Client,
+    url: &str,
+    api_key: Option<&str>,
+) -> Option<Value> {
     let mut request = client.get(url);
     if let Some(api_key) = api_key.filter(|value| !value.is_empty()) {
         request = request.bearer_auth(api_key);

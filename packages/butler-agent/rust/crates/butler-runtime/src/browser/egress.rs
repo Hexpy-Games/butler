@@ -174,12 +174,12 @@ impl reqwest::dns::Resolve for PublicResolver {
 /// A fetch client behind the egress guard: public resolution, and every
 /// redirect hop re-checked. Hops carrying credentials stop, as before.
 pub fn guarded_client(
-    builder: reqwest::ClientBuilder,
+    builder: butler_log::http::ClientBuilder,
     fixtures: LoopbackFixtures,
-) -> reqwest::ClientBuilder {
+) -> butler_log::http::ClientBuilder {
     builder
         .dns_resolver(std::sync::Arc::new(PublicResolver))
-        .redirect(reqwest::redirect::Policy::custom(move |attempt| {
+        .redirect(butler_log::http::RedirectPolicy::custom(move |attempt| {
             if attempt.previous().len() >= 10 {
                 return attempt.error("too many redirects");
             }

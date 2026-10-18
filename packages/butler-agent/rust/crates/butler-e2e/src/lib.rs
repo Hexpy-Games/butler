@@ -8,6 +8,7 @@
 //!
 //! Scenarios live in `tests/`; the catalog and rules are in `README.md`.
 
+#![allow(clippy::disallowed_methods, reason = "test crate HTTP drivers")]
 pub mod e2e;
 
 /// Opt-in gate: E2E scenarios run only when `BUTLER_E2E_TIER` is set
