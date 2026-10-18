@@ -1,5 +1,7 @@
 //! Read only the browser vaults' primary-key indexes, sharing their service rule.
-use super::signin_secrets::{self, AUTOFILL_SERVICE, PAYMENT_SERVICE, SERVICE};
+use super::signin_secrets::{
+    self, AUTOFILL_SERVICE, LEGACY_TRAVELER_SERVICE, PAYMENT_SERVICE, SERVICE,
+};
 use std::{io, path::Path};
 pub fn reset_browser_secret_keys(
     root: &Path,
@@ -10,7 +12,7 @@ pub fn reset_browser_secret_keys(
         ("browser_signin_entries", SERVICE),
         ("browser_payment_cards", PAYMENT_SERVICE),
         ("browser_autofill_profiles", AUTOFILL_SERVICE),
-        ("browser_autofill_profiles", "com.hexpy.butler.traveler"),
+        ("browser_autofill_profiles", LEGACY_TRAVELER_SERVICE),
     ] {
         let mut statement = db
             .prepare(&format!("SELECT id FROM {table}"))

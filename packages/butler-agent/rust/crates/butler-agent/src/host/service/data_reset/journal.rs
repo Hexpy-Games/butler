@@ -7,10 +7,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
+// Cleanup is detached from readiness; serialize it with explicit requests so
+// an older cleanup cannot delete or publish over a newer reset's work.
+pub(crate) static CHANGES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 pub(crate) const JOURNAL: &str = "state/full-reset.json";
 pub(crate) const GENERATION: &str = "state/data-generation";
 pub(crate) const TRASH_PREFIX: &str = ".reset-trash-";
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SecretId {
     pub service: String,

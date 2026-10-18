@@ -53,7 +53,6 @@ pub(crate) async fn recover(
                 Phase::Failed if !journal.retried => {
                     journal.retried = true;
                     journal.phase = Phase::Requested;
-                    journal.save(&root)?;
                     if !apply::apply(&root, &mut journal)? {
                         journal::remove(&root)?;
                     }
@@ -126,6 +125,16 @@ pub(crate) async fn protected_roots(
     .map_err(error)?
     .map_err(error)
 }
-fn error(e: impl std::fmt::Display) -> butler_turn::btcc::BtccError {
-    butler_turn::btcc::BtccError::relayed("full_reset_recovery_failed", e.to_string())
+fn error(e: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> butler_turn::btcc::BtccError {
+    let error = e.into();
+    let rollback_failed = error
+        .downcast_ref::<io::Error>()
+        .and_then(io::Error::get_ref)
+        .is_some_and(<dyn std::error::Error + Send + Sync>::is::<apply::RollbackError>);
+    let code = if rollback_failed {
+        "full_reset_rollback_failed"
+    } else {
+        "full_reset_recovery_failed"
+    };
+    butler_turn::btcc::BtccError::relayed(code, error.to_string())
 }

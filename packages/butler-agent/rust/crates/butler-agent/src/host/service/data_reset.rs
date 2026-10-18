@@ -135,16 +135,32 @@ impl Control {
         })
     }
     fn prepare(&self, id: String) -> Result<(), GatewayApplicationError> {
-        if journal::load(&self.root)
-            .map_err(GatewayApplicationError::internal_from)?
-            .is_some()
+        let _journal_change = journal::CHANGES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let pending = journal::load(&self.root).map_err(GatewayApplicationError::internal_from)?;
+        if pending
+            .as_ref()
+            .is_some_and(|j| matches!(j.phase, Phase::Requested | Phase::RollingBack))
         {
             return Err(public(409, "full_reset_in_progress"));
         }
         let moves = plan::preflight(&self.root, &self.requested, &self.db, &self.installation)
             .map_err(|code| public(409, code))?;
-        let (secret_keys, project_hot_caches) = secrets::snapshot(&self.root, &self.db)
+        let (mut secret_keys, mut project_hot_caches) = secrets::snapshot(&self.root, &self.db)
             .map_err(GatewayApplicationError::internal_from)?;
+        if let Some(pending) = pending {
+            for key in pending.secret_keys {
+                if !secret_keys.contains(&key) {
+                    secret_keys.push(key);
+                }
+            }
+            for path in pending.project_hot_caches {
+                if !project_hot_caches.contains(&path) {
+                    project_hot_caches.push(path);
+                }
+            }
+        }
         let journal = Journal {
             schema: 1,
             id,

@@ -42,6 +42,8 @@ fn unavailable() -> HttpError {
 pub(super) const PAYMENT_SERVICE: &str = "com.hexpy.butler.payment";
 /// Autofill profiles' service (birth date, passport and resident numbers).
 pub(super) const AUTOFILL_SERVICE: &str = "com.hexpy.butler.autofill";
+/// The autofill vault's service before the traveler migration.
+pub(super) const LEGACY_TRAVELER_SERVICE: &str = "com.hexpy.butler.traveler";
 
 fn service(root: &Path) -> String {
     service_in(root, SERVICE)
@@ -130,7 +132,7 @@ pub(super) async fn get_in(
     let store = store(state).await?;
     let key = key_in(state, base, entry)?;
     if base == AUTOFILL_SERVICE {
-        let legacy = key_in(state, "com.hexpy.butler.traveler", entry)?;
+        let legacy = key_in(state, LEGACY_TRAVELER_SERVICE, entry)?;
         let migrated = state.signin_secrets.migrated.clone();
         let entry = entry.to_owned();
         return blocking(state, move || {

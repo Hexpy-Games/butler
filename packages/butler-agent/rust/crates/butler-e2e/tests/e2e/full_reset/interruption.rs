@@ -18,10 +18,16 @@ async fn reset_02_requested_survives_kill9() -> Result<(), HarnessError> {
 #[tokio::test]
 async fn reset_05_move_failure_rolls_back_and_retries_once() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    for point in ["data_reset.plan", "data_reset.move"] {
+        rollback_failure(point).await?;
+    }
+    Ok(())
+}
+async fn rollback_failure(point: &str) -> Result<(), HarnessError> {
     let setup = setup("RESET-05")?;
     let marker = setup.sandbox.root.join("move-fault");
     let mut s = setup
-        .env("BUTLER_E2E_FILE_FAULT", "data_reset.move")
+        .env("BUTLER_E2E_FILE_FAULT", point)
         .env("BUTLER_E2E_FILE_FAULT_MARKER", marker.display().to_string())
         .start()
         .await?;
@@ -61,7 +67,7 @@ async fn reset_self_stop_is_a_requested_clean_exit() -> Result<(), HarnessError>
     let deadline = Instant::now() + Duration::from_secs(10);
     while s.agent.is_running() {
         assert!(Instant::now() < deadline, "self stop did not exit");
-        tokio::task::yield_now().await;
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
     // Reap and assert the child's requested-stop exit status through the harness.
     s.agent.terminate().await?;
@@ -88,7 +94,7 @@ async fn reset_02_mid_move_kill9_resumes() -> Result<(), HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(10);
     while !release.with_extension("held").exists() {
         assert!(Instant::now() < deadline, "apply boundary not reached");
-        tokio::task::yield_now().await;
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
     s.agent.kill9()?;
     std::fs::write(&release, b"release")?;

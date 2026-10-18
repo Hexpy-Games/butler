@@ -8,27 +8,38 @@ use std::{fs, io, path::Path, time::Instant};
 
 pub(crate) fn apply(root: &Path, journal: &mut Journal) -> io::Result<bool> {
     if matches!(journal.phase, Phase::RollingBack) {
-        rollback(root, journal)?;
+        rollback(root, journal).map_err(rollback_error)?;
         return Ok(false);
     }
     let started = Instant::now();
     // Writers may have committed new top-level files since preflight. Merge
     // this bounded listing with the durable plan so moved sources remain known.
-    for path in plan::collect(root)? {
-        if !journal.moves.contains(&path) {
-            journal.moves.push(path);
+    let result = (|| {
+        // Record the one automatic retry before even a plan read can fail or
+        // be interrupted. Publication failures still take the rollback path.
+        if journal.retried {
+            journal.save(root)?;
         }
-    }
-    journal.save(root)?;
-    let result = move_all(root, journal).and_then(|()| {
+        secure_fs::fault_checkpoint("data_reset.plan")?;
+        for path in plan::collect(root)? {
+            if !journal.moves.contains(&path) {
+                journal.moves.push(path);
+            }
+        }
+        journal.save(root)?;
+        move_all(root, journal)?;
         journal::write_generation(root, &journal.new_generation)?;
         journal.phase = Phase::Applied;
         journal.save(root)
-    });
+    })();
     if result.is_err() {
         journal.phase = Phase::RollingBack;
-        journal.save(root)?;
-        rollback(root, journal)?;
+        // Even a failed phase save must not prevent restoration. The original
+        // requested journal still records the complete durable move plan.
+        if journal.save(root).is_err() {
+            butler_core::diagnostic!("[full-reset] rollback phase publication failed");
+        }
+        rollback(root, journal).map_err(rollback_error)?;
         return Ok(false);
     }
     butler_core::diagnostic!(
@@ -37,6 +48,12 @@ pub(crate) fn apply(root: &Path, journal: &mut Journal) -> io::Result<bool> {
         started.elapsed().as_millis()
     );
     Ok(true)
+}
+#[derive(Debug, thiserror::Error)]
+#[error("Reset rollback failed: {0}")]
+pub(super) struct RollbackError(io::Error);
+fn rollback_error(error: io::Error) -> io::Error {
+    io::Error::other(RollbackError(error))
 }
 fn move_all(root: &Path, journal: &Journal) -> io::Result<()> {
     let trash = journal.trash(root);

@@ -1,5 +1,5 @@
 //! Best-effort deletion runs off Tokio; the applied journal retains pending work.
-use super::journal::{self, Journal, Phase};
+use super::journal::{self, Journal, Phase, TRASH_PREFIX};
 use butler_platform::{
     secrets::{SecretKey, SecretStore},
     secure_fs,
@@ -7,7 +7,27 @@ use butler_platform::{
 use std::{fs, io, path::Path};
 
 pub(crate) fn clean(root: &Path, mut journal: Journal) -> io::Result<()> {
-    secure_fs::remove_tree(&journal.trash(root))?;
+    let _change = journal::CHANGES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if !journal::load(root)?.is_some_and(|current| {
+        current.id == journal.id
+            && current.new_generation == journal.new_generation
+            && matches!(current.phase, Phase::Applied)
+    }) {
+        return Ok(());
+    }
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        if entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with(TRASH_PREFIX)
+            && entry.file_type()?.is_dir()
+        {
+            secure_fs::remove_tree(&entry.path())?;
+        }
+    }
     journal::sync(root)?;
     for path in &journal.project_hot_caches {
         remove_hot_cache(path)?;

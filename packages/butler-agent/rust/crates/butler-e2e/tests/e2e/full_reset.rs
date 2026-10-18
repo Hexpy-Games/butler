@@ -13,6 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 mod interruption;
+mod review;
 mod seed;
 
 fn setup(id: &str) -> Result<Setup, HarnessError> {
@@ -58,7 +59,7 @@ async fn cleaned(root: &Path) {
     let deadline = Instant::now() + Duration::from_secs(10);
     while root.join("state/full-reset.json").exists() {
         assert!(Instant::now() < deadline, "cleanup did not finish");
-        tokio::task::yield_now().await;
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
     assert!(!std::fs::read_dir(root).unwrap().any(|e| {
         e.unwrap()
@@ -182,6 +183,7 @@ async fn reset_04_invalid_requests_consume_nonce_without_disk_changes() -> Resul
         assert_eq!(reply.status, 400, "{}", reply.text);
         assert_eq!(reply.error_code(), Some("full_reset_confirmation_invalid"));
     }
+    review::generic_admission(&s).await?;
     for method in [Method::GET, Method::POST] {
         let reply =
             s.gw.send_with(
