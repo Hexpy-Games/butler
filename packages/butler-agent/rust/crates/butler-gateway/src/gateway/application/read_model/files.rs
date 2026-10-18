@@ -6,7 +6,7 @@ pub(super) fn attachments(
     ids: &[String],
 ) -> Result<HashMap<String, Vec<MessageFileRef>>, AppStorageError> {
     let mut result = HashMap::new();
-    let mut statement = connection.prepare_cached("SELECT f.id,f.kind,f.mime_type,f.safe_name,f.size_bytes,f.sha256,f.created_at,f.source_label,f.deliverable \
+    let mut statement = connection.prepare_cached("SELECT f.id,f.kind,f.mime_type,f.safe_name,f.size_bytes,f.sha256,f.created_at,f.source_label,f.deliverable,f.title \
         FROM message_attachments a JOIN message_files f ON f.id=a.file_id WHERE a.message_id=?1 ORDER BY a.position")
         .map_err(AppStorageError::sqlite)?;
     for id in ids {
@@ -19,7 +19,7 @@ pub(super) fn attachments(
                     row.get(3)?,
                     row.get(4)?,
                     row.get(5)?,
-                    (row.get(6)?, row.get(7)?, row.get(8)?),
+                    (row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?),
                 )
             })
             .map_err(AppStorageError::sqlite)?
@@ -44,6 +44,7 @@ pub(in crate::gateway::application) fn message_file_ref(
             row.created_at.clone(),
             row.source_label.clone(),
             row.deliverable,
+            row.title.clone(),
         ),
     )
     .map_err(AppStorageError::sqlite)
@@ -56,10 +57,11 @@ pub(super) fn file_ref_from_values(
     safe_name: String,
     size_bytes: u64,
     sha256: String,
-    metadata: (String, Option<String>, bool),
+    metadata: (String, Option<String>, bool, Option<String>),
 ) -> rusqlite::Result<MessageFileRef> {
-    let (created_at, source_label, deliverable) = metadata;
+    let (created_at, source_label, deliverable, title) = metadata;
     Ok(MessageFileRef {
+        title,
         url: format!("/message-files/{}", encode_component(&id)),
         file_id: id,
         kind: parse_sql_enum(kind)?,

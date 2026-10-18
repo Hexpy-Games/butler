@@ -86,7 +86,7 @@ fn page_url(result: &butler_core::json::JsonDocument) -> Result<Option<String>, 
 fn final_artifact(value: &Value) -> Option<FinalArtifact> {
     let item = value.as_object()?;
     let deliverable = item.get("deliverable").and_then(Value::as_bool) == Some(true);
-    let path = safe_path(item.get("path")?.as_str()?, false)?;
+    let path = safe_path(item.get("path")?.as_str()?, !deliverable)?;
     let size_value = item
         .get("size_bytes")
         .filter(|value| !value.is_null())
@@ -260,25 +260,24 @@ pub(super) fn with_changed_files(
         if artifacts.len() >= 12 {
             break;
         }
-        let Some(source) = source_label(&file.path, workspace) else {
-            continue;
-        };
+        let source = source_label(&file.path, workspace);
+        let label = source.as_deref().unwrap_or(&file.path);
         if artifacts
             .iter()
-            .any(|a| a.source.as_deref() == Some(&source))
+            .any(|a| a.source.as_deref() == Some(label) || a.safe_path_label == file.path)
         {
             continue;
         }
         artifacts.push(FinalArtifact {
-            id: format!("artifact-{}", butler_turn::btcc::digest_identity(&source)),
+            id: format!("artifact-{}", butler_turn::btcc::digest_identity(label)),
             kind: ArtifactKind::File,
-            title: source.rsplit('/').next().unwrap_or(&source).to_owned(),
-            mime_type: Some(mime_for(&source).into()),
+            title: label.rsplit('/').next().unwrap_or(label).to_owned(),
+            mime_type: Some(mime_for(label).into()),
             safe_path_label: std::path::Path::new(workspace)
-                .join(&source)
+                .join(label)
                 .to_string_lossy()
                 .into_owned(),
-            source: Some(source),
+            source,
             deliverable: false,
             size_bytes: None,
             created_at: None,

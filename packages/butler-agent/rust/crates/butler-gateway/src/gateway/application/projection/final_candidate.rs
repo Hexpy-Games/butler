@@ -278,13 +278,9 @@ fn artifacts(value: Option<&Value>, roots: &[PathBuf]) -> Vec<ArtifactFileCandid
             // The filesystem owner falls back to the selected path's basename.
             let deliverable = object.get("deliverable").and_then(Value::as_bool) == Some(true);
             let title = text(object.get("title"));
-            let name = if deliverable {
-                title.or(label)
-            } else {
-                label.or(title)
-            }
-            .unwrap_or_default();
+            let name = label.unwrap_or_default();
             Some(ArtifactFileCandidate {
+                title,
                 candidate_paths: paths,
                 source_label: text(object.get("source")),
                 deliverable,

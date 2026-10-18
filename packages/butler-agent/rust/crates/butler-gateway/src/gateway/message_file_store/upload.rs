@@ -60,6 +60,7 @@ pub(super) fn write(
         return Err(GatewayApplicationError::internal());
     }
     let file = MaterializedResponderFile {
+        title: None,
         source_label: None,
         deliverable: false,
         id: id.clone(),
@@ -170,6 +171,7 @@ pub(super) fn replace_still(
     let path = file_path(root, &file)?;
     replace_private(path, bytes, "browser_still").map_err(internal)?;
     Ok(MaterializedResponderFile {
+        title: None,
         source_label: None,
         deliverable: false,
         id: file.id,

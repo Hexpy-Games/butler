@@ -253,6 +253,7 @@ pub(crate) struct AppChatSnapshot {
 
 #[derive(Clone, Debug)]
 pub struct AppMessageFileSnapshot {
+    pub title: Option<String>,
     pub source_label: Option<String>,
     pub deliverable: bool,
     pub id: String,

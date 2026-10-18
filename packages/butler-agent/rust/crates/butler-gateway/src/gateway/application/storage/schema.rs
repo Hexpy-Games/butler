@@ -32,6 +32,7 @@ pub(super) fn migrate(
 ) -> Result<(), AppStorageError> {
     let turns_new = !migration::table_exists(connection, "turns")?;
     core::create(connection)?;
+    migration::ensure_column(connection, "message_files", "title", "TEXT")?;
     migration::ensure_column(connection, "message_files", "source_label", "TEXT")?;
     migration::ensure_column(
         connection,

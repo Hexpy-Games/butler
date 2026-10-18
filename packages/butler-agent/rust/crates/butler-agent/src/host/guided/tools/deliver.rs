@@ -46,15 +46,19 @@ fn collect(workspace: &Path, data: &Path, files: &Value) -> Value {
     json!({"ok":true,"delivered":delivered,"artifacts":artifacts})
 }
 fn checked(workspace: &Path, data: &Path, label: &str) -> Option<Value> {
+    let label = label.replace('\\', "/");
     let artifact = label.starts_with("artifacts/");
-    let root = std::fs::canonicalize(if artifact { data } else { workspace }).ok()?;
-    let path = Path::new(label);
+    let raw_root = if artifact { data } else { workspace };
+    let root = std::fs::canonicalize(raw_root).ok()?;
+    let path = Path::new(&label);
     let relative = if path.is_absolute() {
-        path.strip_prefix(&root).ok()?
+        path.strip_prefix(raw_root)
+            .or_else(|_| path.strip_prefix(&root))
+            .ok()?
     } else {
         path
     };
-    if relative.as_os_str().is_empty() || label.contains(['\\', '\0']) {
+    if relative.as_os_str().is_empty() || label.contains('\0') {
         return None;
     }
     let mut target = root.clone();
@@ -82,6 +86,6 @@ fn checked(workspace: &Path, data: &Path, label: &str) -> Option<Value> {
     let source = relative.to_str()?.replace('\\', "/");
     Some(
         json!({"path":if artifact { source.clone() } else { target.to_str()?.to_owned() },
-        "source":source,"deliverable":true,"size_bytes":metadata.len(),"mime_type":super::super::journal::mime_for(label)}),
+        "source":source,"deliverable":true,"size_bytes":metadata.len(),"mime_type":super::super::journal::mime_for(&label)}),
     )
 }

@@ -20,6 +20,7 @@ const MAX_FILES: usize = 12;
 
 struct PendingFile {
     staged: Option<PathBuf>,
+    title: Option<String>,
     source_label: Option<String>,
     deliverable: bool,
     name: names::SafeName,
@@ -92,6 +93,7 @@ pub(super) fn run(
             .transpose()?;
         pending.push(PendingFile {
             staged,
+            title: candidate.title.clone(),
             source_label: candidate.source_label.clone(),
             deliverable: candidate.deliverable,
             name,
@@ -160,6 +162,7 @@ fn publish_files(
             .map_err(internal)?;
         files.push(MaterializedResponderFile {
             id: id.clone(),
+            title: item.title,
             source_label: item.source_label,
             deliverable: item.deliverable,
             kind: item.kind.into(),
