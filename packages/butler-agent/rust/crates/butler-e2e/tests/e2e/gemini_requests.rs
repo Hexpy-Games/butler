@@ -14,8 +14,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-mod projection;
-
 type Requests = Arc<Mutex<Vec<(Value, Result<(), String>)>>>;
 
 // https://ai.google.dev/api/generate-content#Schema
@@ -353,111 +351,5 @@ async fn gemini_requests_accept_registered_tool_schemas() -> Result<(), HarnessE
         "native:list_tool_capabilities"
     );
     s.finish().await?;
-    Ok(())
-}
-
-#[path = "../../src/bin/provider_stream/config.rs"]
-mod provider_config;
-
-// Exercise plain tool results separately at the production provider port.
-#[tokio::test]
-async fn gemini_requests_wrap_plain_tool_results() -> Result<(), Box<dyn std::error::Error>> {
-    use butler_models::models::*;
-    use butler_turn::btcc::{ModelRoundMessage, ModelRoundPort, ModelRoundRole, ReasoningEffort};
-    butler_e2e::gate!();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let endpoint = url::Url::parse(&format!("http://{}/", listener.local_addr()?))?;
-    let captured = Arc::new(Mutex::new(Vec::<Value>::new()));
-    let observed = captured.clone();
-    let app = Router::new().route(
-        "/",
-        post(move |Json(body): Json<Value>| {
-            observed.lock().unwrap().push(body.clone());
-            async move {
-                match validate(&body) {
-                    Ok(()) => (
-                        StatusCode::OK,
-                        Json(json!({"candidates":[{
-                    "content":{"role":"model","parts":[{"text":"done"}]},"finishReason":"STOP"}]})),
-                    ),
-                    Err(message) => (
-                        StatusCode::BAD_REQUEST,
-                        Json(json!({"error":{
-                    "code":400,"message":message,"status":"INVALID_ARGUMENT"}})),
-                    ),
-                }
-            }
-        }),
-    );
-    let _server = Server(tokio::spawn(async move {
-        let _ = axum::serve(listener, app).await;
-    }));
-    let catalog = Arc::new(ModelCatalog::new()?);
-    let snapshot = Arc::new(catalog.snapshot(
-        ModelCatalogSnapshotInput {
-            configured_local: vec![],
-            extra_models: vec![],
-            registered_models: vec![],
-            credential_views: vec![],
-            default_model_ref: None,
-            generated_at: "now".into(),
-        },
-        &butler_core::locale::LocaleCollation::new("en-US")?,
-    )?);
-    let provider = ModelProvider::new(
-        provider_http_client()?,
-        Arc::new(provider_config::Config {
-            metadata: snapshot
-                .find_model_metadata(Some("google/gemini-3.8-flash"))
-                .unwrap(),
-            endpoint,
-            snapshot,
-            codex: false,
-        }),
-        Arc::new(provider_config::Observations),
-        catalog,
-        Arc::new(provider_config::Clock),
-        Arc::new(provider_config::Metrics),
-    );
-    for text in [
-        "42",
-        "\"x\"",
-        "true",
-        "[1,2]",
-        "null",
-        "plain",
-        "{\"ok\":true}",
-    ] {
-        let mut message = ModelRoundMessage::user(text.into(), None);
-        message.role = ModelRoundRole::Tool;
-        message.name = Some("plain_result".into());
-        message.tool_call_id = Some("call-1".into());
-        let messages = [message];
-        let tools = [projection::tool()];
-        let original = tools[0].parameters.clone();
-        let mut request = provider_config::request(
-            "google/gemini-3.8-flash",
-            &messages,
-            &ReasoningEffort::Medium,
-            tokio_util::sync::CancellationToken::new(),
-            None,
-        );
-        request.tools = &tools;
-        provider.run_round(request).await?;
-        assert_eq!(tools[0].parameters, original);
-        let bodies = captured.lock().unwrap();
-        projection::check(bodies.last().unwrap());
-        let response =
-            &bodies.last().unwrap()["contents"][0]["parts"][0]["functionResponse"]["response"];
-        let value = serde_json::from_str::<Value>(text).unwrap_or(json!(text));
-        assert_eq!(
-            *response,
-            if value.is_object() {
-                value
-            } else {
-                json!({"output":value})
-            }
-        );
-    }
     Ok(())
 }

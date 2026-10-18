@@ -38,9 +38,16 @@ fn project(node: &Value, root: &Value, active: &mut BTreeSet<String>) -> Value {
         }
     }
     if let Some(branches) = source.get("oneOf").and_then(Value::as_array) {
-        let any = output.entry("anyOf").or_insert_with(|| json!([]));
-        if let Some(any) = any.as_array_mut() {
-            any.extend(branches.iter().map(|branch| project(branch, root, active)));
+        if source.contains_key("anyOf") {
+            constraints.insert("oneOf".into(), Value::Array(branches.clone()));
+        } else {
+            output.insert(
+                "anyOf".into(),
+                branches
+                    .iter()
+                    .map(|branch| project(branch, root, active))
+                    .collect(),
+            );
         }
     }
     if let Some(value) = source.get("const") {
