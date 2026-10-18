@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, type ReactNode } from "react";
 import { useAppLocale } from "@/app/copy.ts";
 import { projectTurnActivity, type TurnActivityProjection } from "@/app/conversation-progress";
 import type { ProgressRow } from "@/app/types.ts";
@@ -33,24 +33,17 @@ export function TurnActivityPanel({ rows, state, turnId, startedAt }: LiveTurnAc
       data-test-class="turn-activity-panel turn-work-panel turn-decision-work-panel"
       aria-label={appCopy.conversation.work.historyRegionLabel}
     >
-      <TurnActivityWork projection={projection} live currentState={projection.semanticState} turnId={turnId} />
+      {projection.phaseActivities.length > 0
+        ? <TurnActivityTimeline activities={projection.phaseActivities} currentState={projection.semanticState} live turnId={turnId} />
+        : liveTurnWork(projection, turnId)}
       <TurnActivityStatus markKey={markKey} rows={rows} state={state} turnId={turnId} startedAt={startedAt} />
     </Stack>
   );
 }
 
-/** The turn's work above the answer. Live and settled share one tree so completion folds in place. */
-export function TurnActivityWork({ projection, live, currentState, turnId }: {
-  projection: TurnActivityProjection;
-  live: boolean;
-  currentState?: string;
-  turnId?: string;
-}) {
-  const { decisions, modelRoundWait, operation, phaseActivities, publicActivity, workBlocks } = projection;
-  if (phaseActivities.length > 0) {
-    return <TurnActivityTimeline activities={phaseActivities} currentState={currentState} live={live} turnId={turnId} />;
-  }
-  if (!live) return null;
+/** Live work that has no phase timeline: work blocks, or the latest decision. */
+export function liveTurnWork(projection: TurnActivityProjection, turnId?: string): ReactNode {
+  const { decisions, modelRoundWait, operation, publicActivity, workBlocks } = projection;
   if (workBlocks.length > 0) return <CollapsedTurnActivity blocks={workBlocks} live turnId={turnId} />;
   const showDecision = decisions.length > 0 && !publicActivity && !modelRoundWait && !operation;
   return showDecision ? <TurnDecisionRow decision={decisions.at(-1)!} /> : null;

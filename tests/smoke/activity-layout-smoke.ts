@@ -4,7 +4,7 @@ import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 import { checkCapturedActivity } from "./activity-capture-support";
-import { assertOrder, checkActivityOrderScenarios, gapBetween, offsetIn, waitPinned } from "./activity-order-support";
+import { assertOrder, checkActivityOrderScenarios, checkFoldSettles, gapBetween, offsetIn, waitPinned } from "./activity-order-support";
 import { smokeBrowserArgs } from "../support/smoke-browser";
 
 const uiRoot = resolve("packages/butler-app/client/ui/dist");
@@ -22,6 +22,7 @@ const scenarios: Array<{ width: number; theme: string; firstDeltaShift: number }
 const ACTIVITY = '[data-test-class="turn-current-phase-activity"]';
 const TEXT = '[data-test-class="turn-result-section"]';
 const STATUS = '[data-test-class="turn-live-status"]';
+const STATUS_LINE = '[data-test-class="turn-live-status-line"]';
 const HEADER = '[data-test-class="toggle-turn-activity-disclosure"]';
 try {
   const page = await browser.newPage({ viewport: { width: 375, height: 900 }, reducedMotion: "reduce" });
@@ -48,7 +49,7 @@ try {
     assert(distance <= 2, `streaming remains pinned: ${distance}px`);
     const liveGap = await gapBetween(message, ACTIVITY, TEXT);
     assert.equal(liveGap, 16, "live activity/answer uses the DS lg gap");
-    const statusGap = await gapBetween(message, TEXT, STATUS);
+    const statusGap = await gapBetween(message, TEXT, STATUS_LINE);
     assert.equal(statusGap, 16, "live answer/status uses the DS lg gap");
     const liveHeader = await offsetIn(message, HEADER);
     await page.screenshot({ path: join(output, `running-${width}-${theme}.png`) });
@@ -128,12 +129,16 @@ try {
   await page.goto(`http://127.0.0.1:${server.port}/?visual=components&surface=activity-layout&theme=dark`);
   await page.locator('[data-stub-stream-complete="true"]').waitFor();
   const fold = await foldFrames(page);
+  const foldEnd = await checkFoldSettles(page, `http://127.0.0.1:${server.port}/?visual=components&surface=activity-layout&theme=dark`);
+  assert(foldEnd.folds > 0, "completion runs the fold");
+  assert(Math.abs(foldEnd.end.text - foldEnd.settled.text) <= 0.5 && Math.abs(foldEnd.end.height - foldEnd.settled.height) <= 0.5,
+    `fold ends where it settles, without a spacing snap: ${JSON.stringify(foldEnd)}`);
   const normalTurn = page.locator('[data-test-class="message assistant"]').last();
   await normalTurn.getByRole("button", { name: /활동 · 완료/ }).waitFor();
   assert.equal(await normalTurn.locator('[data-test-class="assistant-footer"]').count(), 1);
   assert.equal(await normalTurn.locator('[data-test-class~="turn-activity-panel"]').count(), 0);
   await checkCapturedActivity(page, `http://127.0.0.1:${server.port}`, output);
-  console.log(JSON.stringify({ ok: true, screenshots: 48, measurements, spacing, scenarios, fold, checks: ["stream-order", "first-delta", "multi-round", "no-text", "no-tools", "completion-fold", "single-footer", "completed-history", "observer-history", "autoscroll", "completed-list", "ko-light-dark-mobile-desktop", "normal-and-reduced-motion"] }));
+  console.log(JSON.stringify({ ok: true, screenshots: 48, measurements, spacing, scenarios, fold, foldEnd, checks: ["stream-order", "first-delta", "multi-round", "no-text", "no-tools", "two-segments", "settle-order", "decision-row", "completion-fold", "fold-no-snap", "single-footer", "completed-history", "observer-history", "autoscroll", "completed-list", "ko-light-dark-mobile-desktop", "normal-and-reduced-motion"] }));
 } finally { await browser.close(); server.stop(true); }
 
 /** Clicks completion and samples the text's offset inside its message every frame until the fold settles. */

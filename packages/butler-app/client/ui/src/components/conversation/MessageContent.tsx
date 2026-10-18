@@ -20,7 +20,6 @@ import { MessageChangedFiles } from "./MessageChangedFiles";
 import { MessageAttachments } from "./MessageAttachments";
 import { UserMessageText } from "./UserMessageText";
 import { MessageImageContext, openMessageImage } from "./messageImages";
-import { MessageLiveStatus } from "./MessageTurnActivity";
 import type { LiveTurnActivity } from "./TurnActivityPanel";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection";
@@ -78,7 +77,6 @@ function MessageContentComponent({
           text={message.text}
         />
       )}
-      {message.role === "assistant" && <MessageLiveStatus live={liveActivity} />}
       {message.role === "assistant" && running && <AnswerDraftFooter turnId={message.turn_id} />}
       {message.role === "assistant" && !running && onCopyAssistantMessage && (
         <AssistantResponseFooter

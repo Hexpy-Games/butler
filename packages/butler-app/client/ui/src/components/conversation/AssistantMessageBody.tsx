@@ -5,7 +5,7 @@ import type { RefreshFileUrls } from "@/hooks/useMessageFileSource";
 import { Stack, Tag, Typo } from "@/butler-ds";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { AssistantFailureNotice } from "./FailureNoticeContainer";
-import { MessageTurnActivity } from "./MessageTurnActivity";
+import { MessageLiveGroup, MessageTurnActivity, useKeptLiveActivity } from "./MessageTurnActivity";
 import type { LiveTurnActivity } from "./TurnActivityPanel";
 import { CompletedWorkBlocks } from "./CompletedWorkBlocks";
 import { AssistantReply } from "./AssistantReply";
@@ -23,15 +23,16 @@ export function AssistantMessageBody({ message, running, liveActivity, failureNo
   refreshFileUrls: RefreshFileUrls;
 }) {
   useAppLocale();
+  const kept = useKeptLiveActivity(liveActivity);
   const hasPhaseActivity = projectTurnActivity(message.turn_activity_rows ?? [], message.turn_id).phaseActivities.length > 0;
   return (
     <>
-      <MessageTurnActivity message={message} live={liveActivity} />
+      <MessageTurnActivity message={message} live={liveActivity} kept={kept} />
       {!running && !hasPhaseActivity && <CompletedWorkBlocks
         blocks={message.work_blocks}
         turnId={message.turn_id}
       />}
-      {stewardProgress ? (
+      <MessageLiveGroup live={liveActivity} kept={kept}>{stewardProgress ? (
         <Stack data-test-class="steward-message-content" gap="md">
           {failureNotice ? (
             <AssistantFailureNotice message={message} />
@@ -46,7 +47,7 @@ export function AssistantMessageBody({ message, running, liveActivity, failureNo
         <AssistantFailureNotice message={message} />
       ) : (
         <AssistantReply message={message} refreshFileUrls={refreshFileUrls} />
-      )}
+      )}</MessageLiveGroup>
       {message.question_summary?.map(question => (
         <Stack key={question.id} gap="none" data-test-class="assistant-question-summary">
           <Typo.Caption tone="tertiary">{question.eyebrow}</Typo.Caption>

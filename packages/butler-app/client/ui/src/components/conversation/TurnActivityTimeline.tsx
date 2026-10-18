@@ -7,13 +7,15 @@ import {
   Collapsible,
   ListChecks,
   RollingSwap,
+  Space,
   Stack,
 } from "@/butler-ds";
 import type { PhaseActivity } from "@/app/conversation-progress";
 import { phaseLabel } from "./phaseLabel";
 import { appCopy } from "@/app/copy.ts";
 import { ActivityBlock } from "./TurnActivityBlock";
-import { BrowserTimelineStill } from "../browser/BrowserTimelineStill";
+import { browserTimelineStill } from "../browser/BrowserTimelineStill";
+import { BrowserStepStill } from "../browser/BrowserStepStill";
 
 export function TurnActivityTimeline({
   activities,
@@ -45,6 +47,7 @@ export function TurnActivityTimeline({
   if (!latest) return null;
   const currentPhase = phaseLabel(currentState ?? latest.phase);
   const headerLabel = appCopy.interfaceTemplates.activityHistory(live, currentPhase, activities.length);
+  const still = expanded ? null : browserTimelineStill(activities, turnId, live);
 
   return (
     <section
@@ -66,7 +69,6 @@ export function TurnActivityTimeline({
           />
         </Stack>}
         <Stack gap="sm">
-          {!expanded && <BrowserTimelineStill activities={activities} turnId={turnId} live={live} />}
           {expanded ? (
             <Stack as="ol" gap="sm">
               {activities.map((activity, index) => (
@@ -82,12 +84,18 @@ export function TurnActivityTimeline({
               ))}
             </Stack>
           ) : (
-            // The current step folds away when the turn settles; the header stays in place.
-            <Collapsible open={live} data-test-class="turn-current-step">
-              <RollingSwap itemKey={latest.id} motion={live}>
-                <ActivityBlock activity={latest} delegatedGoal={activities.length === 1 ? delegatedGoal : undefined} live={pulseLatest} turnId={latest.turnId ?? turnId} />
-              </RollingSwap>
-            </Collapsible>
+            <Stack gap="none">
+              {still ? <BrowserStepStill {...still} /> : null}
+              {/* The current step folds away with its spacing when the turn settles; the header stays. */}
+              <Collapsible open={live} data-test-class="turn-current-step">
+                <Stack gap="none">
+                  {still ? <Space size="sm" /> : null}
+                  <RollingSwap itemKey={latest.id} motion={live}>
+                    <ActivityBlock activity={latest} delegatedGoal={activities.length === 1 ? delegatedGoal : undefined} live={pulseLatest} turnId={latest.turnId ?? turnId} />
+                  </RollingSwap>
+                </Stack>
+              </Collapsible>
+            </Stack>
           )}
           {expanded && !expandAll ? (
             <Stack as="footer" cross="start">

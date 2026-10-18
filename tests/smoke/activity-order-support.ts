@@ -9,6 +9,7 @@ const TEXT = '[data-test-class="turn-result-section"]';
 const STATUS = '[data-test-class="turn-live-status"]';
 const HEADER = '[data-test-class="toggle-turn-activity-disclosure"]';
 const ROW = '[data-test-class~="turn-activity-message"]';
+const LIVE_HEADER = '[data-test-class="turn-current-phase-activity"][aria-label="현재 작업"]';
 
 /** Each selector's first match inside `root` must follow the previous one in document order. */
 export async function assertOrder(root: Locator, selectors: string[], message: string) {
@@ -130,11 +131,105 @@ async function noTools(page: Page, url: string, shot: string) {
   await page.screenshot({ path: `${shot}-no-tools.png` });
 }
 
+/** A delivered first segment keeps its summary; the live activity follows it, then moves to the next segment. */
+async function twoSegments(page: Page, url: string, shot: string) {
+  await page.goto(`${url}&segments=2`);
+  const first = page.locator(MESSAGE).filter({ hasText: "질문 전에 확인한 내용입니다." });
+  const row = page.locator(ROW);
+  await row.locator(ACTIVITY).waitFor();
+  await first.getByRole("button", { name: /^활동 · / }).waitFor();
+  assert.equal(await first.locator(`${STATUS}, ${LIVE_HEADER}`).count(), 0, "delivered segment keeps its settled summary");
+  await assertOrder(first, [ACTIVITY, TEXT], "delivered segment: summary, then text");
+  assert(await first.evaluate((node, selector) => Boolean(node.compareDocumentPosition(document.querySelector(selector)!) &
+    Node.DOCUMENT_POSITION_FOLLOWING), ROW), "live activity row follows the delivered segment");
+  const firstHeader = await offsetIn(first, HEADER);
+  await page.screenshot({ path: `${shot}-segment-wait.png` });
+  await page.getByRole("button", { name: "답변 시작", exact: true }).click();
+  const second = page.locator(MESSAGE).last();
+  await second.locator(TEXT).waitFor();
+  assert.equal(await row.count(), 0, "the next segment takes the live activity");
+  await assertOrder(second, [LIVE_HEADER, TEXT, STATUS], "streaming segment: activity, text, status");
+  assert.equal(await first.locator(`${STATUS}, ${LIVE_HEADER}`).count(), 0, "earlier segment stays settled");
+  assert.equal(await offsetIn(first, HEADER), firstHeader, "earlier segment keeps its header in place");
+  await page.locator('[data-stub-stream-complete="true"]').waitFor();
+  await page.screenshot({ path: `${shot}-segment-streaming.png` });
+  await page.getByRole("button", { name: "완료", exact: true }).click();
+  await second.locator(STATUS).waitFor({ state: "detached" });
+  await assertOrder(second, [ACTIVITY, TEXT, '[data-test-class="assistant-footer"]'], "completed segment order");
+  await page.screenshot({ path: `${shot}-segment-completed.png` });
+}
+
+/** Progress and message settle in either order; the header never leaves its slot. */
+async function settleOrder(page: Page, url: string, order: string) {
+  await page.goto(`${url}&settle=${order}`);
+  const message = page.locator(MESSAGE).last();
+  await page.locator('[data-stub-stream-complete="true"]').waitFor();
+  const live = await offsetIn(message, HEADER);
+  const samples = await page.evaluate(async () => {
+    const values: Array<number | null> = [];
+    [...document.querySelectorAll("button")].find(node => node.textContent?.trim() === "완료")!.click();
+    const start = performance.now();
+    await new Promise<void>(resolve => {
+      const tick = () => {
+        const node = [...document.querySelectorAll('[data-test-class="message assistant"]')].at(-1)!;
+        const header = node.querySelector('[data-test-class="toggle-turn-activity-disclosure"]');
+        values.push(header ? header.getBoundingClientRect().top - node.getBoundingClientRect().top : null);
+        if (performance.now() - start < 900) requestAnimationFrame(tick); else resolve();
+      };
+      requestAnimationFrame(tick);
+    });
+    return values;
+  });
+  assert(samples.every(value => value === live), `${order}: header stays at ${live}: ${samples.join(",")}`);
+  await message.getByRole("button", { name: /활동 · 완료/ }).waitFor();
+  await message.locator('[data-test-class="assistant-footer"]').waitFor();
+  assert.equal(await message.locator(STATUS).count(), 0, `${order}: live status gone`);
+}
+
+/** A live decision row sits above the text and folds away with its spacing on completion. */
+async function decisionRow(page: Page, url: string) {
+  await page.goto(`${url}&rows=decision`);
+  const message = page.locator(MESSAGE).last();
+  await message.locator('[data-test-class="turn-decision-row"]').waitFor();
+  await assertOrder(message, ['[data-test-class="turn-decision-row"]', TEXT, STATUS], "decision: row, text, status");
+  assert.equal(await gapBetween(message, '[data-test-class="turn-decision-row"]', TEXT), 16, "decision row keeps the DS lg gap");
+  await page.locator('[data-stub-stream-complete="true"]').waitFor();
+  await page.getByRole("button", { name: "완료", exact: true }).click();
+  await message.locator('[data-test-class="turn-live-work"]').waitFor({ state: "detached" });
+  await message.locator('[data-test-class="assistant-footer"]').waitFor();
+  assert.equal(await offsetIn(message, TEXT), await message.locator('[data-test-class="message-body"]').evaluate(node =>
+    parseFloat(getComputedStyle(node).paddingTop)), "completed decision turn starts with its text");
+}
+
+/** The fold ends where it settles: no spacing snaps after the closing content unmounts. */
+export async function checkFoldSettles(page: Page, url: string) {
+  await page.goto(url);
+  await page.locator('[data-stub-stream-complete="true"]').waitFor();
+  return page.evaluate(async () => {
+    const read = () => {
+      const node = [...document.querySelectorAll('[data-test-class="message assistant"]')].at(-1)!;
+      const text = node.querySelector('[data-test-class="turn-result-section"]')!;
+      return { text: text.getBoundingClientRect().top - node.getBoundingClientRect().top, height: node.getBoundingClientRect().height };
+    };
+    [...document.querySelectorAll("button")].find(node => node.textContent?.trim() === "완료")!.click();
+    await new Promise(requestAnimationFrame);
+    const folds = document.getAnimations().filter(animation => animation.playState === "running" && animation.effect?.getTiming().iterations !== Infinity);
+    folds.forEach(animation => { animation.pause(); animation.currentTime = Number(animation.effect!.getComputedTiming().endTime); });
+    const end = read();
+    folds.forEach(animation => animation.play());
+    await new Promise(resolve => setTimeout(resolve, 400));
+    return { folds: folds.length, end, settled: read() };
+  });
+}
+
 export async function checkActivityOrderScenarios(page: Page, url: string, output: string, cell: string) {
   const shot = join(output, `order-${cell}`);
   const firstDeltaShift = await firstDelta(page, url, shot);
   await multiRound(page, url, shot);
   await noText(page, url, shot);
   await noTools(page, url, shot);
+  await twoSegments(page, url, shot);
+  for (const order of ["progress-first", "message-first"]) await settleOrder(page, url, order);
+  await decisionRow(page, url);
   return { firstDeltaShift };
 }
