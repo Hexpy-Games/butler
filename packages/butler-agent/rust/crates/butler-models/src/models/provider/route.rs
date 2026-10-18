@@ -1,7 +1,7 @@
 //! How a provider's round travels: its carrier (request body shape),
 //! response mode and API name, and the auth headers of its request.
 
-use reqwest::RequestBuilder;
+use butler_log::http::RequestBuilder;
 use serde_json::Value;
 
 use super::super::{HostedApiShape, transport};

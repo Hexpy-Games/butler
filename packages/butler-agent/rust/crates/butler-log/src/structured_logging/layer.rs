@@ -154,3 +154,26 @@ impl Visit for Category {
         }
     }
 }
+
+/// Copy the current span hierarchy while it is still on the sending task.
+pub(crate) fn current_ids(row: &mut Record) {
+    use tracing_subscriber::registry::Registry;
+    tracing::Span::current().with_subscriber(|(id, dispatch)| {
+        let Some(registry) = dispatch.downcast_ref::<Registry>() else {
+            return;
+        };
+        let Some(span) = registry.span(id) else {
+            return;
+        };
+        let mut fields = serde_json::Map::new();
+        for span in span.scope().from_root() {
+            if let Some(parent) = span.extensions().get::<Fields>() {
+                fields.extend(parent.0.clone());
+            }
+        }
+        row.trace_id = take(&mut fields, "trace_id");
+        row.turn_id = take(&mut fields, "turn_id");
+        row.chat_id = take(&mut fields, "chat_id");
+        row.span_id = take(&mut fields, "span_id");
+    });
+}

@@ -1,7 +1,11 @@
 //! Site-only HTTPS fetches with pinned DNS and bounded reads.
 use super::{Icon, policy};
-use reqwest::{Client, Response, Url, redirect::Policy};
+use butler_log::http::RedirectPolicy as Policy;
+use reqwest::{Response, Url};
 use std::time::Duration;
+
+#[cfg(feature = "e2e-fixtures")]
+mod fixtures;
 
 pub(super) const ICON_LIMIT: usize = 100 * 1024;
 const HEAD_LIMIT: usize = 512 * 1024;
@@ -15,6 +19,8 @@ pub(super) async fn fetch(host: &str) -> Option<Icon> {
 
 async fn fetch_site(host: &str) -> Option<Icon> {
     let root = Url::parse(&format!("https://{host}/")).ok()?;
+    #[cfg(feature = "e2e-fixtures")]
+    let root = fixtures::root().unwrap_or(root);
     if let Some((head, final_url)) = request(root.clone(), host, HEAD_LIMIT, true).await {
         for url in declared_icons(&head, &final_url) {
             if let Some(icon) = fetch_icon(url, host).await {
@@ -32,25 +38,11 @@ async fn fetch_icon(url: Url, host: &str) -> Option<Icon> {
 
 async fn request(mut url: Url, site: &str, cap: usize, head: bool) -> Option<(Vec<u8>, Url)> {
     for hop in 0..=3 {
-        let host = url.host_str()?;
-        // Icons, pages and redirects cannot send browsing history to another site.
-        if url.scheme() != "https"
-            || host != site
-            || !policy::valid_host(host)
-            || !url.username().is_empty()
-            || url.password().is_some()
-            || url.port_or_known_default() != Some(443)
-        {
-            return None;
-        }
-        let addresses: Vec<_> = tokio::net::lookup_host((host, 443)).await.ok()?.collect();
-        if addresses.is_empty() || addresses.iter().any(|addr| !policy::public_ip(addr.ip())) {
-            return None;
-        }
-        let host = host.to_owned();
+        let addresses = addresses(&url, site).await?;
+        let host = url.host_str()?.to_owned();
         // Native trust-store loading may read files; keep it off Tokio workers.
         let client = tokio::task::spawn_blocking(move || {
-            Client::builder()
+            butler_log::http::external(butler_log::http::Purpose::new("favicon"))
                 .no_proxy()
                 .redirect(Policy::none())
                 .connect_timeout(Duration::from_secs(2))
@@ -82,6 +74,29 @@ async fn request(mut url: Url, site: &str, cap: usize, head: bool) -> Option<(Ve
         return Some((read(response, cap, head).await?, url));
     }
     None
+}
+
+async fn addresses(url: &Url, site: &str) -> Option<Vec<std::net::SocketAddr>> {
+    #[cfg(feature = "e2e-fixtures")]
+    if let Some(addresses) = fixtures::addresses(url) {
+        return Some(addresses);
+    }
+    let host = url.host_str()?;
+    // Icons, pages and redirects cannot send browsing history to another site.
+    if url.scheme() != "https"
+        || host != site
+        || !policy::valid_host(host)
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.port_or_known_default() != Some(443)
+    {
+        return None;
+    }
+    let addresses: Vec<_> = tokio::net::lookup_host((host, 443)).await.ok()?.collect();
+    if addresses.is_empty() || addresses.iter().any(|addr| !policy::public_ip(addr.ip())) {
+        return None;
+    }
+    Some(addresses)
 }
 
 async fn read(mut response: Response, cap: usize, head: bool) -> Option<Vec<u8>> {

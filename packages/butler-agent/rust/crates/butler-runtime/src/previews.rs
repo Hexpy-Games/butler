@@ -80,10 +80,14 @@ impl Previews {
         if let Some(existing) = self.admit(&input)? {
             return Ok(existing);
         }
-        if tokio::net::TcpStream::connect(("127.0.0.1", input.port))
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "loopback TCP readiness/occupancy probes; no HTTP or payload"
+        )]
+        let occupied = tokio::net::TcpStream::connect(("127.0.0.1", input.port))
             .await
-            .is_ok()
-        {
+            .is_ok();
+        if occupied {
             return Err("port_in_use");
         }
         let process = PreviewProcess::start(input.command.into(), input.cwd.clone())
@@ -329,6 +333,10 @@ impl Previews {
 fn summary(id: &str, entry: &Preview) -> Value {
     json!({"status":"ok","preview_id":id,"port":entry.port,"pid":entry.process.pid(),"untrusted_log":entry.process.log()})
 }
+#[allow(
+    clippy::disallowed_methods,
+    reason = "loopback TCP readiness/occupancy probes; no HTTP or payload"
+)]
 async fn ready(target: &Target) -> bool {
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {

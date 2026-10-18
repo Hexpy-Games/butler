@@ -24,8 +24,9 @@ pub(super) async fn wait_until_ready(
 ) -> Result<InstanceRecord, crate::host::HostError> {
     let mut deadline = Instant::now() + START_TIMEOUT;
     let mut progress = StorageProgress::default();
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
+    crate::host::cli::http_logs::prepare(&config.data_root);
+    let client = butler_log::http::loopback()
+        .redirect(butler_log::http::RedirectPolicy::none())
         .timeout(Duration::from_secs(2))
         .build()
         .map_err(|source| {
@@ -147,7 +148,7 @@ pub(super) async fn wait_for_app_respawn(
 /// only after its App gateway is listening, and the caller has already checked
 /// the DATA lock and the process identity.
 async fn app_health_ready(
-    client: &reqwest::Client,
+    client: &butler_log::http::Client,
     config: &ServiceConfiguration,
     record: &InstanceRecord,
 ) -> bool {
@@ -191,7 +192,11 @@ struct ReadinessView {
     raw_text_included: bool,
 }
 
-async fn readiness_probe(client: &reqwest::Client, url: &str, token: Option<&str>) -> bool {
+async fn readiness_probe(
+    client: &butler_log::http::Client,
+    url: &str,
+    token: Option<&str>,
+) -> bool {
     let mut request = client.get(url);
     if let Some(token) = token {
         request = request.bearer_auth(token);

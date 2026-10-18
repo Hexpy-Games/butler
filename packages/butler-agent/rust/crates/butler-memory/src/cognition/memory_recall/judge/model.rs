@@ -61,7 +61,9 @@ impl ConfiguredRecallJudge {
                     cancellation,
                     attachments: &[],
                     butler_data: None,
-                    usage_attribution: None,
+                    usage_attribution: Some(
+                        &butler_models::models::PromptUsageAttribution::for_phase("recall_judge"),
+                    ),
                     stream_observer: None,
                     provider_retry_attempts: Some(0.0),
                 },
