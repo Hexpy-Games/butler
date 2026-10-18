@@ -12,6 +12,7 @@ import {
 import { AnswerDraftFooter } from "./AnswerDraftFooter";
 import { AssistantResponseFooter } from "./AssistantResponseFooter";
 import { AssistantBranchActions } from "./AssistantBranchActions";
+import { MessageTraceMenu } from "./MessageTraceMenu";
 import {
   MessageRetryActionsContainer,
 } from "./FailureNoticeContainer";
@@ -85,7 +86,7 @@ function MessageContentComponent({
           status={message.status}
           suppressTerminalStatus={Boolean(stewardProgress)}
           onCopy={() => onCopyAssistantMessage(message)}
-          actions={<AssistantBranchActions message={message} />}
+          actions={<><AssistantBranchActions message={message} /><MessageTraceMenu message={message} /></>}
         />
       )}
       {message.role !== "assistant" &&

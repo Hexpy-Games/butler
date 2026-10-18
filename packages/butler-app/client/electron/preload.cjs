@@ -111,6 +111,13 @@ async function requestBridgeResult(path, options = {}) {
   }
 }
 
+const TRACEPARENT = /^00-(?!0{32})[0-9a-f]{32}-(?!0{16})[0-9a-f]{16}-[0-9a-f]{2}$/u;
+
+/** A user action's W3C trace context, forwarded to the local agent only when well formed. */
+function traceHeaders(traceparent) {
+  return typeof traceparent === "string" && TRACEPARENT.test(traceparent) ? { traceparent } : {};
+}
+
 function wallpaperPath(id, suffix = "") {
   return `/wallpapers/${encodeURIComponent(String(id ?? ""))}${suffix}`;
 }
@@ -934,8 +941,9 @@ const butlerApp = Object.freeze({
     method: "DELETE",
   }),
   getSessionControls: ({ sessionId }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/controls`),
-  updateSessionControls: ({ sessionId, controls }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/controls`, {
+  updateSessionControls: ({ sessionId, controls, traceparent }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/controls`, {
     method: "PATCH",
+    headers: traceHeaders(traceparent),
     body: JSON.stringify(controls ?? {}),
   }),
   decideSessionPlan: ({ sessionId, planId, action, instruction } = {}) => requestJson(
@@ -989,8 +997,9 @@ const butlerApp = Object.freeze({
       body: form,
     });
   },
-  sendMessage: ({ chatId, text, contentParts, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments }) => requestBridgeResult("/messages", {
+  sendMessage: ({ chatId, text, contentParts, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments, traceparent }) => requestBridgeResult("/messages", {
     method: "POST",
+    headers: traceHeaders(traceparent),
     body: JSON.stringify({
       chat_id: chatId,
       text,
@@ -1050,8 +1059,9 @@ const butlerApp = Object.freeze({
       },
     );
   },
-  queueMessage: ({ chatId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments }) => requestBridgeResult("/session-queue", {
+  queueMessage: ({ chatId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments, traceparent }) => requestBridgeResult("/session-queue", {
     method: "POST",
+    headers: traceHeaders(traceparent),
     body: JSON.stringify({
       chat_id: chatId,
       text,
@@ -1079,16 +1089,19 @@ const butlerApp = Object.freeze({
   deleteQueuedMessage: ({ queuedMessageId } = {}) => requestJson(`/session-queue/${encodeURIComponent(queuedMessageId ?? "")}`, {
     method: "DELETE",
   }),
-  retryTurn: ({ turnId }) => requestJson(`/turns/${encodeURIComponent(turnId)}/retry`, {
+  retryTurn: ({ turnId, traceparent }) => requestJson(`/turns/${encodeURIComponent(turnId)}/retry`, {
     method: "POST",
+    headers: traceHeaders(traceparent),
     body: JSON.stringify({}),
   }),
-  retryTurnWithCurrentControls: ({ turnId }) => requestJson(`/turns/${encodeURIComponent(turnId)}/retry-current`, {
+  retryTurnWithCurrentControls: ({ turnId, traceparent }) => requestJson(`/turns/${encodeURIComponent(turnId)}/retry-current`, {
     method: "POST",
+    headers: traceHeaders(traceparent),
     body: JSON.stringify({}),
   }),
-  cancelTurn: ({ turnId }) => requestJson(`/turns/${encodeURIComponent(turnId)}/cancel`, {
+  cancelTurn: ({ turnId, traceparent }) => requestJson(`/turns/${encodeURIComponent(turnId)}/cancel`, {
     method: "POST",
+    headers: traceHeaders(traceparent),
     body: JSON.stringify({}),
   }),
   cancelSteward: ({ relationId, parentSessionId }) => requestJson(
@@ -1342,10 +1355,11 @@ const butlerApp = Object.freeze({
     const query = params.toString();
     return requestJson(query ? `/system-events?${query}` : "/system-events");
   },
-  // Settings > Logs JSON routes (GET /logs, /logs/config, /logs/storage; PUT config; DELETE).
+  // Settings > Logs JSON routes (GET /logs, /logs/config, /logs/storage, /logs/trace; PUT config; DELETE).
   logs: ({ path, method = "GET", body } = {}) => {
     const url = new URL(String(path ?? ""), "http://local");
-    if (!["/logs", "/logs/config", "/logs/storage"].includes(url.pathname)) {
+    const trace = url.pathname === "/logs/trace" || /^\/logs\/trace\/[0-9a-f]{32}$/u.test(url.pathname);
+    if (!trace && !["/logs", "/logs/config", "/logs/storage"].includes(url.pathname)) {
       throw new Error("Unsupported log route.");
     }
     return requestJson(url.pathname + url.search, {
