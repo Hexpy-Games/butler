@@ -1,5 +1,6 @@
 // Korean 2-beolsik IME models for composer smokes.
 // `hangulAutomaton` is self-contained so it also runs inside Firefox's chrome context.
+import type { Page } from "playwright";
 import type { Marionette } from "./firefox-marionette.ts";
 
 export type ImeKeyResult = { commit: string; compose: string; literal: string };
@@ -97,6 +98,11 @@ globalThis.__butlerIme = {
     tip.keydown(backspace); tip.keyup(backspace);
     return true;
   },
+  undo() {
+    const z = key("z", "KeyZ", 90);
+    tip.keydown(modifier); tip.keydown(z); tip.keyup(z); tip.keyup(modifier);
+    return true;
+  },
   enter(withModifier) {
     const enter = key("Enter", "Enter", 13);
     if (withModifier) tip.keydown(modifier);
@@ -109,7 +115,7 @@ globalThis.__butlerIme = {
 return true;
 `;
 
-export type FirefoxIme = { press(key: string): Promise<void>; commit(): Promise<void>; type(text: string): Promise<void>; clear(): Promise<void>; enter(withModifier: boolean): Promise<void>; external(): Promise<string[]> };
+export type FirefoxIme = { press(key: string): Promise<void>; commit(): Promise<void>; type(text: string): Promise<void>; clear(): Promise<void>; enter(withModifier: boolean): Promise<void>; undo(): Promise<void>; external(): Promise<string[]> };
 
 export async function installFirefoxIme(marionette: Marionette): Promise<FirefoxIme> {
   await marionette.run("chrome", FIREFOX_IME(hangulAutomaton.toString()));
@@ -118,7 +124,56 @@ export async function installFirefoxIme(marionette: Marionette): Promise<Firefox
     commit: async () => { await marionette.run("chrome", "return globalThis.__butlerIme.commit()"); },
     type: async (text) => { await marionette.run("chrome", "return globalThis.__butlerIme.type(arguments[0])", [text]); },
     clear: async () => { await marionette.run("chrome", "return globalThis.__butlerIme.clear()"); },
+    undo: async () => { await marionette.run("chrome", "return globalThis.__butlerIme.undo()"); },
     enter: async (withModifier) => { await marionette.run("chrome", "return globalThis.__butlerIme.enter(arguments[0])", [withModifier]); },
     external: () => marionette.run<string[]>("chrome", "return globalThis.__butlerIme.external(true)"),
   };
+}
+
+/**
+ * Plays one composition into the focused editor as WebKit orders its events:
+ * updates, then deleteCompositionText, a cancelable insertFromComposition, and
+ * compositionend last. There is no WebKit IME automation, so the browser's own DOM
+ * edits are made here too. Returns whether insertFromComposition was prevented.
+ */
+export async function composeLikeWebKit(page: Page, steps: string[]): Promise<boolean> {
+  return await page.evaluate(async (steps) => {
+    const root = document.querySelector<HTMLElement>("[contenteditable=true]")!;
+    const fire = <T extends Event>(event: T) => { root.dispatchEvent(event); return event; };
+    const input = (type: string, inputType: string, data: string | null, cancelable = false) =>
+      fire(new InputEvent(type, { inputType, data, isComposing: inputType !== "insertFromComposition", bubbles: true, cancelable, composed: true }));
+    const tick = () => new Promise(resolve => setTimeout(resolve, 30));
+    const selection = getSelection()!;
+    fire(new CompositionEvent("compositionstart", { data: "", bubbles: true }));
+    await tick();
+    const range = selection.getRangeAt(0);
+    let node = range.startContainer instanceof Text ? range.startContainer : null;
+    const start = node ? range.startOffset : 0;
+    if (!node) {
+      node = document.createTextNode("");
+      range.insertNode(node);
+      node.parentElement?.querySelector("br")?.remove();
+    }
+    let shown = "";
+    const show = (text: string) => {
+      node!.replaceData(start, shown.length, text);
+      shown = text;
+      selection.setBaseAndExtent(node!, start + text.length, node!, start + text.length);
+    };
+    for (const step of steps) {
+      fire(new CompositionEvent("compositionupdate", { data: step, bubbles: true }));
+      input("beforeinput", "insertCompositionText", step);
+      show(step);
+      input("input", "insertCompositionText", step);
+      await tick();
+    }
+    const committed = steps.at(-1)!;
+    input("beforeinput", "deleteCompositionText", null);
+    show("");
+    input("input", "deleteCompositionText", null);
+    const insert = input("beforeinput", "insertFromComposition", committed, true);
+    if (!insert.defaultPrevented) { show(committed); input("input", "insertFromComposition", committed); }
+    fire(new CompositionEvent("compositionend", { data: committed, bubbles: true }));
+    return insert.defaultPrevented;
+  }, steps);
 }

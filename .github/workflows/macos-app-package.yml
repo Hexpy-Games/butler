@@ -181,6 +181,7 @@ jobs:
           export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/butler-smoke-browsers"
           isolate=packages/butler-agent/rust/crates/butler-e2e/scripts/isolated-run.sh
           "$isolate" bunx playwright install chromium
+          "$isolate" bunx playwright install firefox webkit
           "$isolate" bun tests/smoke/app-newchat-visual-smoke.ts
           BUTLER_SMOKE_SCREENSHOTS="$PWD/.tmp/newchat-regression/onboarding" "$isolate" bun tests/smoke/app-onboarding-visual-smoke.ts
           "$isolate" bun tests/smoke/app-update-choice-smoke.ts
@@ -235,6 +236,7 @@ jobs:
           export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/butler-smoke-browsers"
           packages/butler-agent/rust/crates/butler-e2e/scripts/isolated-run.sh bun tests/smoke/focus-ring-clipping-smoke.ts
           packages/butler-agent/rust/crates/butler-e2e/scripts/isolated-run.sh bun tests/smoke/app-layout-smoke.ts
+          packages/butler-agent/rust/crates/butler-e2e/scripts/isolated-run.sh bun tests/smoke/app-composer-ime-smoke.ts
       - name: Update the published baseline through Settings to the published candidate
         if: inputs.baseline-tag
         env:

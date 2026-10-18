@@ -11,6 +11,7 @@ import { $ownElement, releaseElement, type BrowserOwnedElement } from "./browser
 // from compositionstart until the IME is idle; Lexical reads the result from the DOM.
 
 const IME_IDLE_MS = 100;
+const COMPOSITION_INPUT = new Set(["insertCompositionText", "deleteCompositionText", "insertFromComposition"]);
 
 type CompositionState = { active: boolean; owned: BrowserOwnedElement | null; idle: number | null; waiting: Array<() => void> };
 const states = new WeakMap<LexicalEditor, CompositionState>();
@@ -26,6 +27,11 @@ export function afterComposition(editor: LexicalEditor, write: () => void): void
   if (state && isComposerComposing(editor)) state.waiting.push(write); else write();
 }
 
+/** A write from outside the editor waits for the IME; until it runs, it is the newer content. */
+export function hasHeldWrites(editor: LexicalEditor): boolean {
+  return (states.get(editor)?.waiting.length ?? 0) > 0;
+}
+
 function settle(editor: LexicalEditor, state: CompositionState): void {
   if (state.active) return;
   if (state.idle !== null) window.clearTimeout(state.idle);
@@ -34,6 +40,15 @@ function settle(editor: LexicalEditor, state: CompositionState): void {
   state.owned = null;
   if (owned) releaseElement(editor, owned);
   state.waiting.splice(0).forEach(write => write());
+}
+
+/** The editor is going away: keep committed text, unless a held write replaces it anyway. */
+function settleOnUnmount(editor: LexicalEditor, state: CompositionState): void {
+  if (state.idle !== null) window.clearTimeout(state.idle);
+  const owned = state.owned;
+  const replaced = state.waiting.length > 0;
+  Object.assign(state, { active: false, owned: null, idle: null, waiting: [] });
+  if (owned && !replaced) releaseElement(editor, owned);
 }
 
 function trackComposition(editor: LexicalEditor, state: CompositionState): () => void {
@@ -56,7 +71,7 @@ function trackComposition(editor: LexicalEditor, state: CompositionState): () =>
     },
     beforeinput: event => {
       const input = event as InputEvent;
-      if (inEditor(event) && !input.isComposing && input.inputType !== "insertCompositionText") settle(editor, state);
+      if (inEditor(event) && !input.isComposing && !COMPOSITION_INPUT.has(input.inputType)) settle(editor, state);
     },
     pointerdown: () => settle(editor, state),
     focusout: event => { if (inEditor(event)) settle(editor, state); },
@@ -67,22 +82,29 @@ function trackComposition(editor: LexicalEditor, state: CompositionState): () =>
   return () => {
     removeRoot();
     for (const [type, handler] of Object.entries(handlers)) window.removeEventListener(type, handler, true);
-    if (state.idle !== null) window.clearTimeout(state.idle);
   };
 }
 
 function $startComposition(editor: LexicalEditor, state: CompositionState): boolean {
   const selection = $getSelection();
-  const collapsed = $isRangeSelection(selection) && selection.isCollapsed() ? selection : null;
-  const anchor = collapsed?.anchor.getNode();
-  if (!state.owned && (!collapsed || ($isTextNode(anchor) && $isTokenOrSegmented(anchor)))) return false;
+  if (!$isRangeSelection(selection)) return false;
   // Lexical's own handler commits in a separate update that writes the selection.
   $addUpdateTag(SKIP_DOM_SELECTION_TAG);
   $addUpdateTag(COMPOSITION_START_TAG);
-  // In text the browser composes in place and Lexical reads it back from the DOM;
-  // marking that node as composing would add Lexical's placeholder and suffix.
-  if (!state.owned && $isTextNode(anchor)) return true;
-  state.owned ??= $ownElement(editor, collapsed as RangeSelection);
+  if (state.owned) { $setCompositionKey(state.owned.key); return true; }
+  // The browser replaces a selection inside one text node in place; anything wider
+  // is removed now, as Lexical's own handler would.
+  if (!selection.isCollapsed() && (selection.anchor.key !== selection.focus.key || selection.anchor.type !== "text")) {
+    selection.removeText();
+  }
+  const anchor = selection.anchor.getNode();
+  if ($isTextNode(anchor) && $isTokenOrSegmented(anchor)) return false;
+  // In text the browser composes in place and Lexical reads it back from the DOM.
+  // The composition key goes on the text's parent: on the text node itself Lexical
+  // would add its placeholder and suffix characters. Keyed, Lexical treats the
+  // updates as one composition (history, shortcuts, placeholder).
+  if ($isTextNode(anchor)) { $setCompositionKey(anchor.getParentOrThrow().getKey()); return true; }
+  state.owned = $ownElement(editor, selection as RangeSelection);
   if (!state.owned) return false;
   $setCompositionKey(state.owned.key);
   return true;
@@ -92,16 +114,27 @@ export function registerComposerComposition(editor: LexicalEditor): () => void {
   const state: CompositionState = { active: false, owned: null, idle: null, waiting: [] };
   states.set(editor, state);
   const keepDOMSelection = () => { if (isComposerComposing(editor)) $addUpdateTag(SKIP_DOM_SELECTION_TAG); return false; };
-  return mergeRegister(
+  const cleanup = mergeRegister(
     trackComposition(editor, state),
     editor.registerCommand(COMPOSITION_START_COMMAND, () => $startComposition(editor, state), COMMAND_PRIORITY_CRITICAL),
-    // Lexical's copies of browser-composed text in an owned element.
-    editor.registerCommand(CONTROLLED_TEXT_INSERTION_COMMAND, () => state.owned !== null, COMMAND_PRIORITY_CRITICAL),
+    // Lexical's copies of browser-composed text in an owned element; a commit the
+    // browser was told not to insert is kept for the release.
+    editor.registerCommand(CONTROLLED_TEXT_INSERTION_COMMAND, payload => {
+      if (!state.owned) return false;
+      if (payload instanceof InputEvent && payload.inputType === "insertFromComposition" && payload.defaultPrevented) {
+        state.owned.committed += payload.data ?? "";
+      }
+      return true;
+    }, COMMAND_PRIORITY_CRITICAL),
     editor.registerCommand(COMPOSITION_END_COMMAND, keepDOMSelection, COMMAND_PRIORITY_CRITICAL),
     editor.registerCommand(INPUT_COMMAND, keepDOMSelection, COMMAND_PRIORITY_CRITICAL),
     editor.registerCommand(SELECTION_CHANGE_COMMAND, keepDOMSelection, COMMAND_PRIORITY_CRITICAL),
     // Keys the IME consumes are not editor shortcuts.
     editor.registerCommand(KEY_DOWN_COMMAND, event => event.isComposing, COMMAND_PRIORITY_CRITICAL),
-    () => { states.delete(editor); },
   );
+  return () => {
+    settleOnUnmount(editor, state);
+    cleanup();
+    states.delete(editor);
+  };
 }

@@ -1,13 +1,13 @@
-// Korean IME composition and caret restore in the real composer, Chromium and Firefox.
+// Korean IME composition and caret restore in the real composer: Chromium, Firefox, WebKit.
 // Firefox runs Gecko's TextInputProcessor under the Android/Windows-TSF commit policy
 // (an outside text change commits the composition), so any composer write during
 // composition splits syllables exactly as users see it. Chromium uses CDP IME input.
 import { strict as assert } from "node:assert";
-import type { CDPSession, Page } from "playwright";
+import { webkit, type CDPSession, type Page } from "playwright";
 import { createNativeAppServer, type NativeAppServerHandle } from "../support/native-app-server.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { launchMarionetteFirefox, type Marionette } from "../support/firefox-marionette.ts";
-import { hangulAutomaton, hangulKeys, installFirefoxIme } from "../support/hangul-ime.ts";
+import { composeLikeWebKit, hangulAutomaton, hangulKeys, installFirefoxIme } from "../support/hangul-ime.ts";
 
 type Driver = {
   name: string;
@@ -20,6 +20,7 @@ type Driver = {
   clear(): Promise<void>;
   /** Enter adds a line; with the shortcut modifier it sends. */
   enter(withModifier: boolean): Promise<void>;
+  undo(): Promise<void>;
   /** Text/selection changes the IME saw during composition that it did not cause (Firefox only). */
   external(): Promise<string[]>;
 };
@@ -100,11 +101,54 @@ async function clearDraft(driver: Driver): Promise<void> {
   await driver.run<State>(STATE);
 }
 
-async function typeKorean(driver: Driver, delayMs: number, text = TARGET): Promise<State> {
+async function typeKorean(driver: Driver, delayMs: number, text = TARGET, settleMs = 300): Promise<State> {
   for (const key of hangulKeys(text)) { await driver.press(key); await sleep(delayMs); }
   await driver.commit();
-  await sleep(300);
+  await sleep(settleMs);
   return await driver.run<State>(STATE);
+}
+
+const JAMO = /[\u3131-\u318e]/u;
+
+// One undo after composing removes whole syllables, never part of one.
+async function undo(driver: Driver): Promise<void> {
+  await clearDraft(driver);
+  await driver.type("ab ");
+  await sleep(200);
+  await typeKorean(driver, 80, "한글");
+  await driver.undo();
+  await sleep(200);
+  const text = (await driver.run<State>(STATE)).text ?? "";
+  assert(!JAMO.test(text) && "ab 한글".startsWith(text) && text !== "ab 한글", `${driver.name} undo: ${JSON.stringify(text)}`);
+}
+
+// Composing over a selected word replaces it, in place.
+async function overSelection(driver: Driver): Promise<void> {
+  await clearDraft(driver);
+  await driver.type("ab cd");
+  await driver.run("const t = document.createTreeWalker(document.querySelector('[contenteditable=true]'), NodeFilter.SHOW_TEXT).nextNode(); getSelection().setBaseAndExtent(t, 3, t, 5); return true;");
+  await sleep(300);
+  await driver.external();
+  await driver.run(STATE);
+  const state = await typeKorean(driver, 40, "한글");
+  const external = await driver.external();
+  const seen = JSON.stringify({ ...state, external });
+  assert.deepEqual(external, [], `${driver.name} over a selection: the IME saw outside changes ${seen}`);
+  assert.deepEqual(state.violations, [], `${driver.name} over a selection: text changed while composing ${seen}`);
+  assert.equal(state.text, "ab 한글", `${driver.name} over a selection: replaced by composed syllables ${seen}`);
+}
+
+// Send keys the IME consumes while composing do not send.
+async function keysWhileComposing(driver: Driver, server: NativeAppServerHandle): Promise<void> {
+  await clearDraft(driver);
+  const calls = server.stubModelCalls.length;
+  for (const key of hangulKeys("한")) { await driver.press(key); await sleep(40); }
+  await driver.enter(true);
+  await driver.enter(false);
+  await sleep(500);
+  assert.equal(server.stubModelCalls.length, calls, `${driver.name}: Enter while composing sent a message`);
+  await driver.commit();
+  await sleep(300);
 }
 
 // A new line starts with no text node to compose in.
@@ -122,10 +166,11 @@ async function afterLineBreak(driver: Driver): Promise<void> {
   assert.deepEqual(state.violations, [], `${driver.name} after a line break: text changed while composing ${seen}`);
 }
 
-// The send shortcut right after composing sends the composed text.
+// The send shortcut right after a commit, before the IME counts as idle, sends the
+// composed text of an empty line and clears the composer.
 async function send(driver: Driver, server: NativeAppServerHandle): Promise<void> {
   await clearDraft(driver);
-  await typeKorean(driver, 40);
+  await typeKorean(driver, 40, "한글", 0);
   const calls = server.stubModelCalls.length;
   await driver.enter(true);
   const deadline = Date.now() + 15_000;
@@ -134,7 +179,8 @@ async function send(driver: Driver, server: NativeAppServerHandle): Promise<void
     await sleep(100);
   }
   const request = JSON.stringify(server.stubModelCalls.at(-1)!.messages);
-  assert(request.includes(TARGET), `${driver.name}: sent the composed text ${request.slice(-300)}`);
+  assert(request.includes("한글") && !JAMO.test(request), `${driver.name}: sent the composed text ${request.slice(-300)}`);
+  await waitFor(driver, "return document.querySelector('[contenteditable=true]')?.textContent === '';", "composer cleared after send");
 }
 
 async function composition(driver: Driver, label: string, delayMs: number): Promise<void> {
@@ -184,8 +230,11 @@ async function scenarios(driver: Driver, server: NativeAppServerHandle): Promise
   await afterLineBreak(driver);
   await refocus(driver, "preview refocus", () => center(driver, '[data-slot="composer-compact-preview"]'));
   await refocus(driver, "card padding refocus", cardPadding(driver));
+  await undo(driver);
+  await overSelection(driver);
+  await keysWhileComposing(driver, server);
   await send(driver, server);
-  console.log(JSON.stringify({ browser: driver.name, ok: true, cases: 6 }));
+  console.log(JSON.stringify({ browser: driver.name, ok: true, cases: 9 }));
 }
 
 async function chromiumDriver(page: Page, cdp: CDPSession): Promise<Driver> {
@@ -212,6 +261,7 @@ async function chromiumDriver(page: Page, cdp: CDPSession): Promise<Driver> {
     type: (text) => page.keyboard.type(text),
     async clear() { await page.keyboard.press("ControlOrMeta+a"); await page.keyboard.press("Backspace"); },
     enter: (withModifier) => page.keyboard.press(withModifier ? "ControlOrMeta+Enter" : "Enter"),
+    undo: () => page.keyboard.press("ControlOrMeta+z"),
     external: async () => [],
   };
 }
@@ -237,17 +287,39 @@ async function runFirefox(server: NativeAppServerHandle): Promise<void> {
       name: `firefox ${firefox.version}`,
       run: (body, args) => marionette.run("content", body, args),
       click: (x, y) => marionette.click(x, y),
-      press: ime.press, commit: ime.commit, type: ime.type, clear: ime.clear, enter: ime.enter, external: ime.external,
+      press: ime.press, commit: ime.commit, type: ime.type, clear: ime.clear, enter: ime.enter, undo: ime.undo, external: ime.external,
     }, server);
   } finally { await firefox.close(); }
+}
+
+// WebKit has no IME automation: replay its event order for a commit on an empty line and in text.
+async function runWebKit(server: NativeAppServerHandle): Promise<void> {
+  const browser = await webkit.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await server.signIn(page);
+    await page.goto(server.url);
+    await page.locator('[data-slot="composer-compact-preview"]').click();
+    await page.waitForFunction(() => document.activeElement?.getAttribute("contenteditable") === "true");
+    const text = () => page.evaluate(() => document.querySelector("[contenteditable=true]")!.textContent);
+    await composeLikeWebKit(page, ["ㅎ", "하", "한"]);
+    await sleep(300);
+    assert.equal(await text(), "한", "webkit: commit on an empty line keeps the text");
+    await page.keyboard.type("ab");
+    await composeLikeWebKit(page, ["ㄱ", "그", "글"]);
+    await sleep(300);
+    assert.equal(await text(), "한ab글", "webkit: commit in text keeps the text");
+    console.log(JSON.stringify({ browser: `webkit ${browser.version()} (replayed events)`, ok: true, cases: 2 }));
+  } finally { await browser.close(); }
 }
 
 const server = await createNativeAppServer({ config: { user: { name: "Smoke", language: "en" } } });
 try {
   const only = process.env.BUTLER_SMOKE_BROWSER;
-  assert(!only || only === "chromium" || only === "firefox", `Unknown smoke browser: ${only}`);
-  if (only !== "firefox") await runChromium(server);
-  if (only !== "chromium") await runFirefox(server);
+  assert(!only || ["chromium", "firefox", "webkit"].includes(only), `Unknown smoke browser: ${only}`);
+  if (!only || only === "chromium") await runChromium(server);
+  if (!only || only === "firefox") await runFirefox(server);
+  if (!only || only === "webkit") await runWebKit(server);
 } finally {
   await server.stop();
 }
