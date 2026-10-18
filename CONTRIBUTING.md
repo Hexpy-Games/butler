@@ -2,6 +2,10 @@
 
 This guide covers the repository layout, running Butler from source, the checks a change has to pass, and how releases are cut. To learn how to use Butler, read the [manual](https://butler.hexpy.games/help/).
 
+## License and CLA
+
+Butler is licensed to everyone under the [MIT License](LICENSE), and so are your contributions. Contributions are also covered by the [Contributor License Agreement](CLA.md): you keep your copyright and grant the project owner, Yeonwoo Jo (HexpyGames), the right to offer them under other licenses too. On your first pull request the CLA check posts a comment; sign by replying with the exact phrase it asks for. If you contribute for a company or other organization, open an issue first. The Butler name and logo follow the [trademark policy](TRADEMARKS.md).
+
 ## Repository layout
 
 | Path | Contents |

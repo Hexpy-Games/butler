@@ -7,7 +7,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 ALLOW = (
-    'README.md', 'AGENTS.md', 'CONTRIBUTING.md', 'LICENSE*',
+    'README.md', 'AGENTS.md', 'CONTRIBUTING.md', 'CLA.md', 'TRADEMARKS.md', 'LICENSE*',
     '**/README.md', '**/SKILL.md',
     '**/skills/**/resources/**', '**/skills/**/references/**',
     '.github/releases/**', '.github/ISSUE_TEMPLATE/**', '.github/pull_request_template.md',
