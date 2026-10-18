@@ -423,6 +423,9 @@ jobs:
           python3 .github/scripts/isolated.py python3 .github/scripts/test-cargo-units.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-runner-cache.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-native-deps.py
+      - name: Validate release publication recovery
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/test-recover-release.py
       - name: Validate integration proof and branch policy
         working-directory: ${{ github.workspace }}
         env:

@@ -4,11 +4,14 @@ import argparse
 import os
 from pathlib import Path
 import re
+import runpy
 import shlex
 import shutil
 import subprocess
 import sys
 import time
+import types
+import unittest
 
 from prepush_cross import enable_hint, prerequisites
 
@@ -123,24 +126,69 @@ def selection(paths):
     }
 
 
+# Only these individual tests use the CI-installed OCI client. All their other
+# tests still run locally; CI executes the original commands without filtering.
+ORAS_TESTS = {
+    'test-cargo-target.py': (
+        'TargetSnapshot.test_local_oras_push_pull_verify_tamper_missing_and_write_once',),
+    'test-native-deps.py': ('NativeDeps.test_native_sdk_local_oci_roundtrip_and_missing_tag',),
+}
+
+
+def ci_script_commands():
+    source = (ROOT / '.github/workflows/rust-quality.yml').read_text()
+    job = re.search(r'^  lint:.*?(?=^  [\w-]+:|\Z)', source, re.M | re.S)
+    if not job or 'name: Repository and CI lint' not in job[0]:
+        raise ValueError('Repository and CI lint job changed; update prepush extraction')
+    commands = []
+    for line in job[0].splitlines():
+        match = re.fullmatch(
+            r'\s*(?:run: )?python3 \.github/scripts/isolated\.py '
+            r'(python3 \.github/scripts/test-[^\n]+)', line)
+        if match:
+            commands.append(shlex.split(match[1]))
+        elif re.search(r'python3 .*test-[\w.-]+\.py', line):
+            raise ValueError('CI-script invocation changed; update prepush extraction')
+    if not commands:
+        raise ValueError('No CI-script tests in Repository and CI lint')
+    return commands
+
+
 def python_tests(paths):
-    tests = set()
-    for path in paths:
-        if path.startswith('.github/scripts/') and path.endswith('.py'):
-            candidate = ROOT / path
-            if candidate.name.startswith('test-'):
-                tests.add(path)
-            sibling = candidate.with_name('test-' + candidate.name)
-            if sibling.is_file():
-                tests.add(sibling.relative_to(ROOT).as_posix())
-    # The derived prepush tests are also loaded by the existing CI entry point.
-    inputs = {'scripts/prepush', '.githooks/pre-push', '.github/scripts/prepush.py',
-              '.github/scripts/prepush_tests.py', '.github/scripts/prepush_git_tests.py',
-              '.github/scripts/prepush_cross.py',
-              '.github/scripts/isolated.py', 'deploy/windows-preview-quality.ps1'}
-    if inputs.intersection(paths) or any(p.startswith('.github/workflows/') for p in paths):
-        tests.add('.github/scripts/test-integration-proof.py')
-    return sorted(tests)
+    inputs = {'scripts/prepush', '.githooks/pre-push', 'deploy/windows-preview-quality.ps1'}
+    if inputs.intersection(paths) or any(p.startswith(('.github/scripts/', '.github/workflows/'))
+                                         for p in paths):
+        return ci_script_commands()
+    return []
+
+
+def local_ci_command(command):
+    command = list(command)
+    # The lint job obtains this file with authenticated gh api. Keep the offline
+    # unittest suite, but never replace live workflow state with a fixture.
+    if '--active-workflows' in command:
+        index = command.index('--active-workflows')
+        print('prepush: WARNING: SKIP live workflow-state check: missing '
+              'GitHub API workflow-state file (network/auth); CI still checks it', file=sys.stderr)
+        del command[index:index + 2]
+    missing = ORAS_TESTS.get(Path(command[1]).name, ())
+    oras = os.environ.get('BUTLER_ORAS_EXECUTABLE', 'oras')
+    if missing and not shutil.which(oras):
+        print(f'prepush: WARNING: SKIP {", ".join(missing)}: missing oras; '
+              'CI still checks them', file=sys.stderr)
+        return [command[0], str(Path(__file__).resolve()), '--ci-unittest',
+                command[1], *missing]
+    return command
+
+
+def ci_unittest(script, skipped):
+    namespace = runpy.run_path(str(Path(script).resolve()))
+    for name in skipped:
+        case, method = name.split('.')
+        cls = namespace[case]
+        setattr(cls, method, unittest.skip('missing oras; CI still checks it')(getattr(cls, method)))
+    result = unittest.main(module=types.SimpleNamespace(**namespace), argv=[script], exit=False)
+    return 0 if result.result.wasSuccessful() else 1
 
 
 def tool_available(tool):
@@ -247,8 +295,8 @@ def check_range(base=None, tip=None, branch=None):
         if tool_available('actionlint'):
             success = run('actionlint', ['actionlint', *selected['workflows']]) and success
     success = powershell_check(selected['powershell']) and success
-    for test in python_tests(paths):
-        success = run('CI-script tests', ['python3', test]) and success
+    for command in python_tests(paths):
+        success = run('CI-script ' + Path(command[1]).name, local_ci_command(command)) and success
     if base and selected['licenses']:
         success = run('notices', ['node', 'deploy/licenses/generate.mjs', '--check']) and success
         success = run('licenses', ['node', 'deploy/licenses/check.mjs']) and success
@@ -259,6 +307,10 @@ def check_range(base=None, tip=None, branch=None):
 
 
 def main(argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv and argv[0] == '--ci-unittest':
+        return ci_unittest(argv[1], argv[2:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--hook', action='store_true', help='read pre-push ref updates from stdin')
     parser.add_argument('--base', help='override the comparison base for local checks')
