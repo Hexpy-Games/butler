@@ -305,7 +305,8 @@ fn gemini(value: &Value, model: &str, round: u32) -> Fields {
             model,
             number(value.pointer("/usageMetadata/promptTokenCount")),
             number(value.pointer("/usageMetadata/cachedContentTokenCount")).unwrap_or(0.0),
-            number(value.pointer("/usageMetadata/candidatesTokenCount")).unwrap_or(0.0),
+            number(value.pointer("/usageMetadata/candidatesTokenCount")).unwrap_or(0.0)
+                + number(value.pointer("/usageMetadata/thoughtsTokenCount")).unwrap_or(0.0),
             number(value.pointer("/usageMetadata/totalTokenCount")),
         ),
         reported,
