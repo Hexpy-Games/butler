@@ -37,6 +37,7 @@ mod stop;
 mod subsession_result;
 mod subsessions;
 pub(crate) use subsessions::ChildCompletion;
+pub(crate) use subsessions::direction_turn_id;
 mod task_graphs;
 mod timing;
 pub use task_graphs::{

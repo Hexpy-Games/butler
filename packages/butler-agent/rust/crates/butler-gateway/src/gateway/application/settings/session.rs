@@ -33,7 +33,7 @@ pub(in crate::gateway::application) fn session_context_settings(
         .flatten()
         .and_then(|value| value.as_object().cloned())
         .unwrap_or_default();
-    let controls = inherited_controls(&settings, &stored, facts, explicit);
+    let controls = inherited_controls(&settings, &stored, facts);
     let model_max = facts
         .known_models
         .iter()

@@ -15,6 +15,13 @@ pub(super) fn runtime_failure_message_for_work(
     let work_completed =
         accepted_work.is_some_and(|value| value.status == crate::btcc::AcceptedWorkStatus::Success);
     let korean = original.chars().any(|value| ('가'..='힣').contains(&value));
+    if failure.code == "provider_tools_unsupported" && !work_completed {
+        return if korean {
+            "이 모델 서버는 도구 호출을 지원하지 않습니다.".into()
+        } else {
+            "This model server doesn't support tool calls.".into()
+        };
+    }
     let cause = match (failure.code.as_str(), korean) {
         ("provider_rate_limited", true) => "모델 제공자의 요청 한도에 걸려",
         ("provider_quota_exhausted", true) => "모델 제공자의 사용량 한도가 소진되어",

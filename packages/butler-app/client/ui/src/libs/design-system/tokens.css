@@ -378,12 +378,15 @@
   /* Source color literals. Semantic tokens below must reference these. */
   --neutral-white: #ffffff;
   --neutral-light-text-primary: #222326;
-  --neutral-light-text-secondary: #696d73;
-  --neutral-light-text-tertiary: #6d7279;
+  --neutral-light-text-secondary: #52565a;
+  --neutral-light-text-tertiary: #5a5e64;
   --neutral-light-text-disabled: #a7abb0;
   --neutral-light-placeholder: #6a6e74;
   --neutral-dark-text-secondary: #b5b8bd;
-  --neutral-dark-text-tertiary: #8b8f97;
+  --neutral-dark-text-tertiary: #a4a8ae;
+  /* Windows dark shell text: acrylic lets a light desktop lift the shell. */
+  --neutral-dark-acrylic-text-secondary: #d2d4d7;
+  --neutral-dark-acrylic-text-tertiary: #d2d3d7;
   --neutral-dark-text-disabled: #5a5d64;
   --neutral-dark-icon-muted: #c5c7cb;
   --neutral-dark-placeholder: #969a9f;
@@ -453,6 +456,34 @@
   --amber-08: #b38300;
   --amber-09: #996c00;
   --amber-10: #805600;
+
+  /* Trace palette: span bar fills tuned per theme. Each hue has an -alt
+     partner (a clearly lighter or deeper shade of the same hue) for the
+     hatch between adjacent segments. Role tokens: --trace-*. */
+  --trace-light-model: #007aff;
+  --trace-light-model-alt: #0058c2;
+  --trace-light-tool: #b48cf8;
+  --trace-light-tool-alt: #8456e8;
+  --trace-light-app: #0fa898;
+  --trace-light-app-alt: #0a7d71;
+  --trace-light-agent: #4b5694;
+  --trace-light-agent-alt: #7f8bcc;
+  --trace-light-error: #e5484d;
+  --trace-light-error-alt: #b52f33;
+  --trace-light-wait: #f2b200;
+  --trace-light-wait-alt: #b88200;
+  --trace-dark-model: #3d9bff;
+  --trace-dark-model-alt: #8cc3ff;
+  --trace-dark-tool: #c9a8ff;
+  --trace-dark-tool-alt: #9a72f0;
+  --trace-dark-app: #1fb5a3;
+  --trace-dark-app-alt: #7fe0d2;
+  --trace-dark-agent: #5b67c2;
+  --trace-dark-agent-alt: #8e98e6;
+  --trace-dark-error: #ff6b66;
+  --trace-dark-error-alt: #ffa8a5;
+  --trace-dark-wait: #ffc21a;
+  --trace-dark-wait-alt: #c99400;
 
   /* Semantic Color Tokens */
   --color-text-primary: var(--neutral-light-text-primary);
@@ -701,12 +732,24 @@
   --sidebar-bg: rgba(255, 255, 255, 0.52);
   /* macOS Electron: thinner over the native "sidebar" vibrancy (AdaptiveShell, darwin). */
   --mac-sidebar-bg: rgba(255, 255, 255, 0.3);
-  --windows-sidebar-bg: rgba(255, 255, 255, 0.36);
+  --windows-sidebar-bg: rgba(255, 255, 255, 0.85);
+  /* Shell text: secondary and tertiary text on the translucent shell, chosen
+     per platform like the shell layer (AdaptiveShell maps them in the sidebar
+     and the cards title row). */
+  --sidebar-text-secondary: var(--color-text-secondary);
+  --sidebar-text-tertiary: var(--color-text-tertiary);
+  --mac-sidebar-text-secondary: var(--color-text-secondary);
+  --mac-sidebar-text-tertiary: var(--color-text-tertiary);
+  --windows-sidebar-text-secondary: var(--color-text-secondary);
+  --windows-sidebar-text-tertiary: var(--color-text-tertiary);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
   /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
      the workspace surface with one quiet edge. */
   --shell-bg: var(--sidebar-bg);
   --shell-card-bg: var(--workspace-bg);
+  /* The Settings detail card keeps the settings surface, so its FormSection
+     cards (--settings-panel-bg) lift off it. Dark keeps the card surface. */
+  --shell-settings-card-bg: var(--settings-bg);
   --shell-card-edge: color-mix(in srgb, var(--text-primary) 8%, transparent);
   /* The browser sheet in frame="cards": its ink tint over the card surface and
      the page card's shadow on it. Light keeps both faint, so the sheet's strip
@@ -817,6 +860,21 @@
   --syntax-meta: var(--grayscale-08);
   --syntax-addition: var(--green-08);
   --syntax-deletion: var(--red-07);
+
+  /* Trace span fills: what a step is (model, tool, app, agent) or its
+     status (error, wait); -alt is the hatch partner. */
+  --trace-model: var(--trace-light-model);
+  --trace-model-alt: var(--trace-light-model-alt);
+  --trace-tool: var(--trace-light-tool);
+  --trace-tool-alt: var(--trace-light-tool-alt);
+  --trace-app: var(--trace-light-app);
+  --trace-app-alt: var(--trace-light-app-alt);
+  --trace-agent: var(--trace-light-agent);
+  --trace-agent-alt: var(--trace-light-agent-alt);
+  --trace-error: var(--trace-light-error);
+  --trace-error-alt: var(--trace-light-error-alt);
+  --trace-wait: var(--trace-light-wait);
+  --trace-wait-alt: var(--trace-light-wait-alt);
 }
 
 @supports (height: 100dvh) {
@@ -1112,11 +1170,21 @@
   --sidebar-bg: rgba(36, 37, 40, 0.72);
   --mac-sidebar-bg: rgba(36, 37, 40, 0.5);
   --windows-sidebar-bg: rgba(24, 25, 28, 0.46);
+  /* Shell text: secondary and tertiary text on the translucent shell, chosen
+     per platform like the shell layer (AdaptiveShell maps them in the sidebar
+     and the cards title row). */
+  --sidebar-text-secondary: var(--color-text-secondary);
+  --sidebar-text-tertiary: var(--color-text-tertiary);
+  --mac-sidebar-text-secondary: var(--color-text-secondary);
+  --mac-sidebar-text-tertiary: var(--color-text-tertiary);
+  --windows-sidebar-text-secondary: var(--neutral-dark-acrylic-text-secondary);
+  --windows-sidebar-text-tertiary: var(--neutral-dark-acrylic-text-tertiary);
   --sidebar-collapsed-bg: rgba(20, 21, 23, 0.18);
   /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
      the workspace surface with one quiet edge. */
   --shell-bg: var(--sidebar-bg);
   --shell-card-bg: var(--workspace-bg);
+  --shell-settings-card-bg: var(--shell-card-bg);
   --shell-card-edge: color-mix(in srgb, var(--text-primary) 6%, transparent);
   --shell-sheet-tint: 2.5%;
   --shell-page-shadow:
@@ -1188,6 +1256,21 @@
   --syntax-meta: var(--grayscale-05);
   --syntax-addition: var(--green-04);
   --syntax-deletion: var(--red-05);
+
+  /* Trace span fills: what a step is (model, tool, app, agent) or its
+     status (error, wait); -alt is the hatch partner. */
+  --trace-model: var(--trace-dark-model);
+  --trace-model-alt: var(--trace-dark-model-alt);
+  --trace-tool: var(--trace-dark-tool);
+  --trace-tool-alt: var(--trace-dark-tool-alt);
+  --trace-app: var(--trace-dark-app);
+  --trace-app-alt: var(--trace-dark-app-alt);
+  --trace-agent: var(--trace-dark-agent);
+  --trace-agent-alt: var(--trace-dark-agent-alt);
+  --trace-error: var(--trace-dark-error);
+  --trace-error-alt: var(--trace-dark-error-alt);
+  --trace-wait: var(--trace-dark-wait);
+  --trace-wait-alt: var(--trace-dark-wait-alt);
 }
 
 .theme-light {
@@ -1277,12 +1360,24 @@
   --worker-panel-bg: rgba(241, 242, 244, 0.96);
   --sidebar-bg: rgba(255, 255, 255, 0.52);
   --mac-sidebar-bg: rgba(255, 255, 255, 0.3);
-  --windows-sidebar-bg: rgba(255, 255, 255, 0.36);
+  --windows-sidebar-bg: rgba(255, 255, 255, 0.85);
+  /* Shell text: secondary and tertiary text on the translucent shell, chosen
+     per platform like the shell layer (AdaptiveShell maps them in the sidebar
+     and the cards title row). */
+  --sidebar-text-secondary: var(--color-text-secondary);
+  --sidebar-text-tertiary: var(--color-text-tertiary);
+  --mac-sidebar-text-secondary: var(--color-text-secondary);
+  --mac-sidebar-text-tertiary: var(--color-text-tertiary);
+  --windows-sidebar-text-secondary: var(--color-text-secondary);
+  --windows-sidebar-text-tertiary: var(--color-text-tertiary);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
   /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
      the workspace surface with one quiet edge. */
   --shell-bg: var(--sidebar-bg);
   --shell-card-bg: var(--workspace-bg);
+  /* The Settings detail card keeps the settings surface, so its FormSection
+     cards (--settings-panel-bg) lift off it. Dark keeps the card surface. */
+  --shell-settings-card-bg: var(--settings-bg);
   --shell-card-edge: color-mix(in srgb, var(--text-primary) 8%, transparent);
   /* The browser sheet in frame="cards": its ink tint over the card surface and
      the page card's shadow on it. Light keeps both faint, so the sheet's strip
@@ -1360,6 +1455,21 @@
   --syntax-meta: var(--grayscale-08);
   --syntax-addition: var(--green-08);
   --syntax-deletion: var(--red-07);
+
+  /* Trace span fills: what a step is (model, tool, app, agent) or its
+     status (error, wait); -alt is the hatch partner. */
+  --trace-model: var(--trace-light-model);
+  --trace-model-alt: var(--trace-light-model-alt);
+  --trace-tool: var(--trace-light-tool);
+  --trace-tool-alt: var(--trace-light-tool-alt);
+  --trace-app: var(--trace-light-app);
+  --trace-app-alt: var(--trace-light-app-alt);
+  --trace-agent: var(--trace-light-agent);
+  --trace-agent-alt: var(--trace-light-agent-alt);
+  --trace-error: var(--trace-light-error);
+  --trace-error-alt: var(--trace-light-error-alt);
+  --trace-wait: var(--trace-light-wait);
+  --trace-wait-alt: var(--trace-light-wait-alt);
 }
 
 /* Aliases of theme tokens. A custom property that references another is
@@ -1406,6 +1516,9 @@
   --sidebar-bg: rgba(36, 37, 40, 0.98);
   --mac-sidebar-bg: rgba(36, 37, 40, 0.98);
   --windows-sidebar-bg: rgba(36, 37, 40, 0.98);
+  /* An opaque shell takes the global text tones. */
+  --windows-sidebar-text-secondary: var(--color-text-secondary);
+  --windows-sidebar-text-tertiary: var(--color-text-tertiary);
 }
 
 * {

@@ -388,6 +388,10 @@ async fn sec_09_fixed_port_lan_access_survives_restart() -> Result<(), HarnessEr
 }
 
 /// An occupied LAN address is reported without claiming it is reachable.
+/// The port comes from the harness's port-pair probe: the gateway also
+/// needs the next port on loopback for its content origin, which an
+/// OS-assigned ephemeral port does not guarantee (Windows refuses ports
+/// in its excluded ranges with WSAEACCES).
 #[tokio::test]
 async fn sec_09_lan_bind_failure_reports_the_address() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -395,9 +399,10 @@ async fn sec_09_lan_bind_failure_reports_the_address() -> Result<(), HarnessErro
         eprintln!("SEC-09 bind failure: this machine has no LAN address");
         return Ok(());
     };
-    let occupied = tokio::net::TcpListener::bind((ip, 0)).await?;
+    let port = butler_e2e::e2e::agent::free_port()?;
+    assert_ne!(port, 18765);
+    let occupied = tokio::net::TcpListener::bind((ip, port)).await?;
     let address = occupied.local_addr()?;
-    assert_ne!(address.port(), 18765);
     let s = Setup::new("SEC-09-BIND-FAILURE")?
         .data_folder_token()
         .env("BUTLER_APP_SERVER_PORT", address.port().to_string())

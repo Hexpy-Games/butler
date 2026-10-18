@@ -1,5 +1,6 @@
 import { installFrameLinks } from "./app-frame-links.mjs";
-import { clipboard, ipcMain, shell } from "electron";
+import { clipboard, ipcMain } from "electron";
+import { openExternal } from "../desktop-shell.mjs";
 import { defaultBrowserName } from "../butler-platform/default-browser.mjs";
 import { menuPoint, popupMenu } from "../butler-platform/menu-placement.mjs";
 import { webUrl } from "./policy.mjs";
@@ -19,7 +20,7 @@ export async function openLink(browser, value, source) {
 export function openExternalLink(value) {
   const url = webUrl(value);
   if (!url) return;
-  return shell.openExternal(url);
+  return openExternal(url);
 }
 
 /** Explicit provider/account authentication ingress, separate from content links. */
@@ -50,6 +51,7 @@ export function installAppLinks(win, browser) {
   const receive = (event, op, url, point) => {
     if (event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame || !webUrl(url)) return;
     if (op === "open") void openLink(browser, url).catch(() => {});
+    if (op === "external") void openExternalLink(url)?.catch(() => {});
     if (op === "menu") void menu(url, point, true);
   };
   ipcMain.on("butler-app:link", receive);

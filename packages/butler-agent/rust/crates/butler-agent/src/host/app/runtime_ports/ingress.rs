@@ -9,14 +9,16 @@ use butler_gateway::gateway::{
     AppCancellation, AppNativeIngress, AppTurn, ApplicationFuture, EnqueueReceipt,
     GatewayApplicationError, InboundQueue,
 };
+use butler_turn::btcc::PrincipalAuthority;
 
 pub(crate) struct AppIngress {
     queue: Arc<InboundQueue>,
+    authority: Arc<PrincipalAuthority>,
 }
 
 impl AppIngress {
-    pub(crate) fn new(queue: Arc<InboundQueue>) -> Self {
-        Self { queue }
+    pub(crate) fn new(queue: Arc<InboundQueue>, authority: Arc<PrincipalAuthority>) -> Self {
+        Self { queue, authority }
     }
 }
 
@@ -90,6 +92,16 @@ impl AppNativeIngress for AppIngress {
             Ok(EnqueueReceipt {
                 queue_id: record.queue_id,
             })
+        })
+    }
+
+    fn stop_confirmed(&self, turn_id: String) -> ApplicationFuture<bool> {
+        let authority = self.authority.clone();
+        Box::pin(async move {
+            authority
+                .stop_confirmed(turn_id)
+                .await
+                .map_err(GatewayApplicationError::internal_from)
         })
     }
 }

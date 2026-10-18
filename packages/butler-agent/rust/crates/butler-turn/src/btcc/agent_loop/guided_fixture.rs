@@ -254,6 +254,7 @@ impl JournalPort for Fixture {
     fn closeout<'a>(&'a self, _: GuidedInvocation<'a>) -> PortFuture<'a, JournalCloseout> {
         Box::pin(async {
             Ok(JournalCloseout {
+                outputs: Vec::new(),
                 artifacts: vec![],
                 changed_files: vec![],
                 answer_blocks: Vec::new(),

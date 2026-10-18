@@ -46,7 +46,9 @@ Keep sidebar items presentational and drive selection from the container.
 Inside `AdaptiveShell frame="cards"` (docked) the active settings screen puts
 its navigation on the shell surface and its detail pane in a card under the
 48px title row, inset `--shell-card-inset` from the window; the title-row drag
-lane above the card is unchanged.
+lane above the card is unchanged. The card fills with
+`--shell-settings-card-bg`: the settings surface (`--settings-bg`) in light, so
+FormSection cards keep their contrast, and the card surface in dark.
 
 ## Wrong use cases
 Do not use it for inspector panels or project dashboards. Use InspectorPanel or dashboard blocks instead.

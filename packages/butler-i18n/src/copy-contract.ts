@@ -295,6 +295,7 @@ interface ConversationCopy {
     titleSummary: (files: number, additions: number, deletions: number) => string;
     fileCounts: (additions: number, deletions: number) => string;
     noLineDetails: string;
+    newFile: (size: string) => string;
     diffRegionLabel: (path: string) => string;
     showMore: (remaining: number) => string;
     showLess: string;
@@ -946,9 +947,8 @@ export interface AppCopy {
     allProviders: string;
     noModels: string;
     modelLoading: string;
-    modelUnavailable: string;
-    modelError: string;
-    modelErrorHint: string;
+    modelNone: string;
+    modelNoneHint: string;
     gitMissingTitle: string;
     gitMissingMessage: string;
     gitInstallAction: string;
@@ -1542,6 +1542,8 @@ export interface AppCopy {
       reduceMotionSystem: string;
       wallpaperStill: string;
       themeFollowsWallpaper: string;
+      /** Tooltip on a reasoning control the model leaves no choice in. */
+      reasoningFixed: string;
       contextLimit: (maxLabel: string) => string;
       contextLimitClamped: (value: string) => string;
       responseLanguage: string;

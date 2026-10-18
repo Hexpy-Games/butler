@@ -57,6 +57,10 @@ pub trait AppNativeIngress: Send + Sync + 'static {
     fn enqueue_cancel(&self, _cancel: AppCancellation) -> ApplicationFuture<EnqueueReceipt> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
+    /// Whether the native runtime settled a Stop of the turn for good.
+    fn stop_confirmed(&self, _turn_id: String) -> ApplicationFuture<bool> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -259,6 +263,9 @@ pub(crate) struct AppChatSnapshot {
 
 #[derive(Clone, Debug)]
 pub struct AppMessageFileSnapshot {
+    pub title: Option<String>,
+    pub source_label: Option<String>,
+    pub deliverable: bool,
     pub id: String,
     pub owner_session_id: Option<String>,
     pub message_id: Option<String>,

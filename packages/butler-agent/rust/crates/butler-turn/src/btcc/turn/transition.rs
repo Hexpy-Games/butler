@@ -55,6 +55,7 @@ pub(super) fn guided_final(
         work_status: result.work_status,
         accepted_work_result: result.accepted_work_result,
         runtime_failure: result.runtime_failure,
+        outputs: result.outputs,
         artifacts: result.artifacts,
         changed_files: result.changed_files,
         answer_blocks: result.answer_blocks,
@@ -90,10 +91,7 @@ fn final_content(turn: &TurnRecord, result: &super::contracts::AgentLoopResult) 
     }
     runtime_failure_message(
         &turn.original_message,
-        &crate::btcc::RuntimeFailure {
-            code: "runtime_error".into(),
-            retryable: false,
-        },
+        &crate::btcc::RuntimeFailure::new("runtime_error", false),
     )
 }
 
@@ -128,6 +126,9 @@ fn payload_body(
     }
     if !result.answer_blocks.is_empty() {
         body.insert("answerBlocks".into(), json_value(&result.answer_blocks)?);
+    }
+    if !result.outputs.is_empty() {
+        body.insert("outputs".into(), json_value(&result.outputs)?);
     }
     if !result.artifacts.is_empty() {
         body.insert("artifacts".into(), json_value(&result.artifacts)?);

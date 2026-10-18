@@ -1,4 +1,5 @@
 mod anthropic_schema;
+mod gemini_schema;
 mod input;
 mod messages;
 mod reasoning;
@@ -70,12 +71,18 @@ pub(super) fn body_with_continuation(
     Ok((body, continuation.map(|value| value.successful)))
 }
 
-/// Finish every content projection before placing Anthropic cache breakpoints.
+pub(super) struct PreparedBody {
+    pub body: Value,
+    pub continuation: Option<LegacyProjection>,
+    pub thinking_binding: Option<super::anthropic_thinking::Binding>,
+}
+
+/// Finish content projections and cache breakpoints before validating reasoning.
 pub(super) async fn body_with_visual(
     request: &ModelRoundRequest<'_>,
     config: &ProviderRequestConfig,
     carrier: Carrier,
-) -> Result<(Value, Option<LegacyProjection>), butler_turn::btcc::ModelRoundError> {
+) -> Result<PreparedBody, butler_turn::btcc::ModelRoundError> {
     let (mut body, continuation) = body_with_continuation(request, config, carrier)?;
     super::visual::apply(&mut body, request, carrier).await?;
     if matches!(carrier, Carrier::Anthropic) {
@@ -87,7 +94,13 @@ pub(super) async fn body_with_visual(
                 .and_then(|value| value.prompt_diagnostics.as_ref()),
         );
     }
-    Ok((body, continuation))
+    let thinking_binding = matches!(carrier, Carrier::Anthropic)
+        .then(|| super::anthropic_thinking::enforce(&mut body));
+    Ok(PreparedBody {
+        body,
+        continuation,
+        thinking_binding,
+    })
 }
 
 fn responses(
@@ -327,13 +340,14 @@ fn chat(
     {
         body.insert("max_tokens".into(), max.into());
     }
+    // OpenAI-compatible servers reject `tool_choice` without `tools`.
     if !request.tools.is_empty() {
         body.insert(
             "tools".into(),
             Value::Array(request.tools.iter().map(chat_tool).collect()),
         );
+        body.insert("tool_choice".into(), choice(request.tool_choice).into());
     }
-    body.insert("tool_choice".into(), choice(request.tool_choice).into());
     body.insert("stream".into(), stream.into());
     if stream {
         body.insert(
@@ -399,5 +413,5 @@ fn anthropic_tool(tool: &ModelRoundTool) -> Value {
     anthropic_schema::tool(tool)
 }
 fn gemini_tool(tool: &ModelRoundTool) -> Value {
-    serde_json::json!({"name":tool.name,"description":tool.description,"parameters":tool.parameters})
+    gemini_schema::tool(tool)
 }

@@ -2,6 +2,7 @@ import { $getNodeByKey, $getRoot, $isNodeSelection, $isRangeSelection, $setSelec
   FOCUS_COMMAND, COMMAND_PRIORITY_HIGH, type BaseSelection, type LexicalEditor } from "lexical";
 
 import { COMPOSER_FOCUS_EVENT, type ComposerFocusPlacement } from "./focusComposer";
+import { isComposerComposing } from "./composition";
 
 export function registerComposerFocus(editor: LexicalEditor, saved: { current: BaseSelection | null }) {
   let pointer = false;
@@ -16,7 +17,7 @@ export function registerComposerFocus(editor: LexicalEditor, saved: { current: B
     else $getRoot().selectEnd();
   };
   const focus = (event: Event) => {
-    if (editor.isComposing()) return;
+    if (isComposerComposing(editor)) return;
     const placement = (event as CustomEvent<ComposerFocusPlacement>).detail;
     requested = placement;
     editor.update(() => select(placement), { discrete: true });
@@ -25,7 +26,7 @@ export function registerComposerFocus(editor: LexicalEditor, saved: { current: B
   const pointerDown = () => { pointer = true; };
   const pointerUp = () => { pointer = false; };
   const activate = () => {
-    if (root === document.activeElement && !editor.isComposing()) {
+    if (root === document.activeElement && !isComposerComposing(editor)) {
       editor.update(() => select("end"));
     }
   };
@@ -38,7 +39,7 @@ export function registerComposerFocus(editor: LexicalEditor, saved: { current: B
   });
   const removeFocus = editor.registerCommand(FOCUS_COMMAND, () => {
     // Native text clicks own their hit-tested caret. Tab/DOM re-focus restores the draft selection.
-    if (!pointer && !editor.isComposing()) select(requested ?? "restore");
+    if (!pointer && !isComposerComposing(editor)) select(requested ?? "restore");
     return false;
   }, COMMAND_PRIORITY_HIGH);
   document.addEventListener("pointerup", pointerUp);

@@ -2,6 +2,9 @@
 use crate::gateway::application::storage::CachedSql;
 
 mod artifacts;
+mod files;
+pub(super) use files::message_file_ref;
+use files::{attachments, changed_files, file_ref_from_values};
 mod message_rows;
 mod plan;
 pub(super) use message_rows::{exact_message, streaming_message};
@@ -277,6 +280,7 @@ fn message(
     changed: &HashMap<String, Vec<ChangedFileDetail>>,
 ) -> Result<MessageRecord, AppStorageError> {
     let files = attachments.get(&row.id).cloned().unwrap_or_default();
+    let changed = files::pair_changes(changed.get(&row.id).cloned().unwrap_or_default(), &files);
     let artifacts =
         (row.role == "assistant").then(|| files.iter().map(|file| artifact(&row, file)).collect());
     Ok(MessageRecord {
@@ -300,10 +304,7 @@ fn message(
         cursor: row.cursor,
         attachments: (!files.is_empty()).then_some(files),
         artifacts: artifacts.filter(|items: &Vec<_>| !items.is_empty()),
-        changed_files: changed
-            .get(&row.id)
-            .cloned()
-            .filter(|items| !items.is_empty()),
+        changed_files: (!changed.is_empty()).then_some(changed),
         plan_document: parse_optional(row.plan_json.as_deref())?,
         answer_blocks: super::message_projection::answer_blocks(row.blocks_json.as_deref())?,
         work_blocks: None,
@@ -328,111 +329,6 @@ fn turn(row: TurnRow) -> Result<TurnRecord, AppStorageError> {
         execution_controls: parse_optional(row.execution_controls_json.as_deref())?,
         execution_model: parse_optional(row.execution_model_json.as_deref())?,
     })
-}
-
-fn attachments(
-    connection: &Connection,
-    ids: &[String],
-) -> Result<HashMap<String, Vec<MessageFileRef>>, AppStorageError> {
-    let mut result = HashMap::new();
-    let mut statement = connection.prepare_cached("SELECT f.id,f.kind,f.mime_type,f.safe_name,f.size_bytes,f.sha256,f.created_at \
-        FROM message_attachments a JOIN message_files f ON f.id=a.file_id WHERE a.message_id=?1 ORDER BY a.position")
-        .map_err(AppStorageError::sqlite)?;
-    for id in ids {
-        let rows = statement
-            .query_map([id], |row| {
-                file_ref_from_values(
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                    row.get(4)?,
-                    row.get(5)?,
-                    row.get(6)?,
-                )
-            })
-            .map_err(AppStorageError::sqlite)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(AppStorageError::sqlite)?;
-        result.insert(id.clone(), rows);
-    }
-    Ok(result)
-}
-
-pub(super) fn message_file_ref(
-    row: &super::AppMessageFileSnapshot,
-) -> Result<MessageFileRef, AppStorageError> {
-    file_ref_from_values(
-        row.id.clone(),
-        row.kind.clone(),
-        row.mime_type.clone(),
-        row.safe_name.clone(),
-        row.size_bytes,
-        row.sha256.clone(),
-        row.created_at.clone(),
-    )
-    .map_err(AppStorageError::sqlite)
-}
-
-fn file_ref_from_values(
-    id: String,
-    kind: String,
-    mime_type: String,
-    safe_name: String,
-    size_bytes: u64,
-    sha256: String,
-    created_at: String,
-) -> rusqlite::Result<MessageFileRef> {
-    Ok(MessageFileRef {
-        url: format!("/message-files/{}", encode_component(&id)),
-        file_id: id,
-        kind: parse_sql_enum(kind)?,
-        mime_type,
-        safe_name,
-        size_bytes,
-        sha256,
-        created_at,
-    })
-}
-
-fn changed_files(
-    connection: &Connection,
-    ids: &[String],
-) -> Result<HashMap<String, Vec<ChangedFileDetail>>, AppStorageError> {
-    let mut result = HashMap::new();
-    let mut statement = connection
-        .prepare_cached(
-            "SELECT safe_path_label,detail_json FROM message_changed_files \
-        WHERE message_id=?1 ORDER BY position",
-        )
-        .map_err(AppStorageError::sqlite)?;
-    for id in ids {
-        let rows = statement
-            .query_map([id], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
-            })
-            .map_err(AppStorageError::sqlite)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(AppStorageError::sqlite)?;
-        let values = rows
-            .into_iter()
-            .filter_map(|(path, json)| json.map(|json| (path, json)))
-            .map(|(path, json)| {
-                let mut detail =
-                    serde_json::from_str::<ChangedFileDetail>(&json).map_err(|error| {
-                        AppStorageError::new(
-                            AppStorageCode::AppProjectionJsonInvalid,
-                            error.to_string(),
-                        )
-                        .with_source(error)
-                    })?;
-                detail.path = path;
-                Ok(detail)
-            })
-            .collect::<Result<Vec<_>, AppStorageError>>()?;
-        result.insert(id.clone(), values);
-    }
-    Ok(result)
 }
 
 fn require_chat(connection: &Connection, chat_id: &str) -> Result<(), AppStorageError> {

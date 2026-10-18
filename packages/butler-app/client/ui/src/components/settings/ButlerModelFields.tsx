@@ -2,16 +2,15 @@ import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { reasoningOptionLabel, tokenWindowLabel } from "@/app/utils.ts";
+import { tokenWindowLabel } from "@/app/utils.ts";
 import { notifyStatus } from "@/app/notifications.ts";
 import { useId } from "react";
 import { PercentInputControl, SettingsField, TokenInputControl } from "@/butler-ds";
-import { SettingsSelect } from "./SettingsFormComponents";
+import { ReasoningSelect } from "./ReasoningSelect";
 import { ratioToPercent } from "./settingsUtils";
 import { useLocalReasoningBudget } from "./hooks/useLocalReasoningBudget";
 import { useButlerModels } from "./hooks/useButlerModels";
 import { ButlerPrimaryModelSelect } from "./ButlerPrimaryModelSelect";
-import type { ReasoningEffort } from "@/app/types.ts";
 
 /** Butler model section: primary model (with Manage models), reasoning, context limit, local budget. */
 export function ButlerModelFields() {
@@ -49,16 +48,13 @@ export function ButlerModelFields() {
         onManage={openModelManagement}
         onUpdate={updateSettings}
       />
-      <SettingsSelect
+      <ReasoningSelect
         settingId="reasoning"
         label={fields.butlerReasoning}
         triggerTestClass="settings-primary-reasoning-select"
+        model={activeModel}
         value={draft.reasoning_effort}
-        onChange={(value) => update({ reasoning_effort: value as ReasoningEffort }, setSettings)}
-        options={(activeModel?.reasoning_efforts ?? ["none"]).map((value) => ({
-          value,
-          label: reasoningOptionLabel(activeModel, value),
-        }))}
+        onChange={(value) => update({ reasoning_effort: value }, setSettings)}
       />
       <SettingsField
         settingId="context-limit"

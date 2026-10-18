@@ -124,6 +124,7 @@ pub(crate) async fn with_moved_credentials(models: ProcessModels) -> ProcessMode
 }
 
 /// Passive diagnostics retain counters only, never prompt text, auth or result bytes.
+/// A failed request logs the provider's own (redacted, bounded) error text.
 #[derive(Default)]
 struct ProviderCounts {
     requests: AtomicU64,
@@ -141,7 +142,17 @@ impl ProviderObservationSink for ProviderCounts {
     fn response(&self, _: &str, _: &str) {
         self.responses.fetch_add(1, Ordering::Relaxed);
     }
-    fn failure(&self, _: &butler_turn::btcc::ProviderRequestError) {
+    fn failure(&self, error: &butler_turn::btcc::ProviderRequestError) {
         self.failures.fetch_add(1, Ordering::Relaxed);
+        butler_core::diagnostic!(
+            "[provider] {} {} request failed: code={} status={} cause={}",
+            error.provider,
+            error.model.as_deref().unwrap_or("-"),
+            error.code,
+            error
+                .status_code
+                .map_or("-".into(), |status| status.to_string()),
+            error.cause.as_deref().unwrap_or("-")
+        );
     }
 }

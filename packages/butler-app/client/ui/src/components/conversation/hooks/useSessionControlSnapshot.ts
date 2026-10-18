@@ -1,5 +1,5 @@
 import { appCopy } from "@/app/copy.ts";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/app/api.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
@@ -11,6 +11,8 @@ export function useSessionControlSnapshot(activeChatId: string) {
   const [snapshot, setSnapshot] = useState<SessionControlsView | null>(null);
   const [loadState, setLoadState] =
     useState<ControlsLoadState>("loading");
+  const activeChatRef = useRef(activeChatId);
+  activeChatRef.current = activeChatId;
 
   useEffect(() => {
     let cancelled = false;
@@ -68,5 +70,23 @@ export function useSessionControlSnapshot(activeChatId: string) {
     [activeChatId],
   );
 
-  return { loadState, persist, snapshot };
+  /** Rereads the controls in place, without returning to the loading state. */
+  const reload = useCallback(() => {
+    if (!isServerBackedSessionId(activeChatId)) return;
+    void api<SessionControlsView>(
+      `/sessions/${encodeURIComponent(activeChatId)}/controls`,
+    )
+      .then((data) => {
+        if (activeChatRef.current !== activeChatId) return;
+        setSnapshot(data);
+        setLoadState("ready");
+      })
+      .catch((error) => {
+        notifyError(error, appCopy.interfacePanels.controlsFailed, {
+          id: `session-controls-${activeChatId}`,
+        });
+      });
+  }, [activeChatId]);
+
+  return { loadState, persist, reload, snapshot };
 }

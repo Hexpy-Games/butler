@@ -6,9 +6,9 @@
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
+use axum::Extension;
 use axum::extract::DefaultBodyLimit;
 use axum::serve::ListenerExt;
-use axum::{Extension, Router, routing::any};
 use parking_lot::Mutex;
 use serde::Serialize;
 use tokio::net::TcpListener;
@@ -16,7 +16,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use super::security::lan;
-use super::{HttpState, MAX_REQUEST_BODY_SIZE, dispatch};
+use super::{HttpState, MAX_REQUEST_BODY_SIZE};
 use crate::gateway::GatewayExposure;
 
 /// Request extension: the listener a request came through. Live streams
@@ -32,8 +32,7 @@ pub(super) fn spawn(
     state: Arc<HttpState>,
     closed: CancellationToken,
 ) -> JoinHandle<std::io::Result<()>> {
-    let service = Router::new()
-        .fallback(any(dispatch))
+    let service = super::router::routes()
         .with_state(state)
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_SIZE))
         .layer(Extension(ListenerScope {

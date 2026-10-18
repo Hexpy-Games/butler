@@ -134,6 +134,8 @@ impl AppApplication {
                     .into_iter()
                     .map(|o| SessionArtifactSummary {
                         id: o.output_id.clone(),
+                        source_label: None,
+                        deliverable: true,
                         session_id: Some(o.session_id),
                         project_id: None,
                         message_id: Some(o.message_id),

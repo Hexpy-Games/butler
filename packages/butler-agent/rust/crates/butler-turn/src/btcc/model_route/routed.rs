@@ -360,8 +360,5 @@ fn is_last_candidate(route: &RouteState) -> bool {
 }
 
 fn gateway_failed() -> ModelRoundError {
-    ModelRoundError::Operational(crate::btcc::RuntimeFailure {
-        code: "gateway_failed".into(),
-        retryable: true,
-    })
+    ModelRoundError::Operational(crate::btcc::RuntimeFailure::new("gateway_failed", true))
 }

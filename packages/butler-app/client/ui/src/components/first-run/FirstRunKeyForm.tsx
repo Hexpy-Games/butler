@@ -56,7 +56,8 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
         <KeyStatusLine copy={copy} status={connected ? "valid" : connecting ? "checking" : key.status} onRetry={key.retry} />
       </Field>
       <Inline gap="md">
-        {spec.keyUrl ? <Typo.Body as="span"><InlineReference kind="external" href={spec.keyUrl} iconSrc={faviconSrc(spec.keyUrl)}>{copy.getKey}</InlineReference></Typo.Body> : null}
+        {/* Provider account pages need the user's own browser sessions, never an in-app tab. */}
+        {spec.keyUrl ? <Typo.Body as="span"><span data-butler-link-target="external"><InlineReference kind="external" href={spec.keyUrl} iconSrc={faviconSrc(spec.keyUrl)}>{copy.getKey}</InlineReference></span></Typo.Body> : null}
         <Typo.Caption tone="tertiary">{copy.keyStored}</Typo.Caption>
       </Inline>
     </FirstRunStepCard>

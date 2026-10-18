@@ -6322,6 +6322,12 @@ Copyright (c) 2009-2013 Mozilla Foundation
 Copyright (c) 2006-2009 Graydon Hoare
 
 =====
+sharded-slab 0.1.7
+MIT
+License: https://github.com/hawkw/sharded-slab/blob/40579b92debe2ef283a455eb379945e023080ff3/LICENSE
+Copyright (c) 2019 Eliza Weisman
+
+=====
 signal-hook-registry 1.4.8
 MIT OR Apache-2.0
 License: https://github.com/vorner/signal-hook/blob/4d5fd6a6663be38e70774e4ac733d65916c70951/signal-hook-registry/LICENSE-APACHE
@@ -6694,6 +6700,13 @@ License: https://github.com/bluss/thread-tree/blob/aa1adb9fd181413fa7687eb82a558
 Copyright (c) 2010 The Rust Project Developers
 
 =====
+thread_local 1.1.10
+MIT OR Apache-2.0
+License: https://github.com/Amanieu/thread_local-rs/blob/4724199250d3307824cefe8a0fa5b232d95edae3/LICENSE-APACHE
+License: https://github.com/Amanieu/thread_local-rs/blob/4724199250d3307824cefe8a0fa5b232d95edae3/LICENSE-MIT
+Copyright (c) 2016 The Rust Project Developers
+
+=====
 tiktoken-rs 0.12.0
 MIT
 License: https://github.com/zurawiki/tiktoken-rs/blob/32de8dc0526d67f2c266c4e5e7c6a8ec5a0ce3d7/LICENSE
@@ -6857,6 +6870,12 @@ License: https://github.com/tokio-rs/tracing/blob/10a9e838a35e6ded79d66af246be2e
 License: https://github.com/tokio-rs/tracing/blob/10a9e838a35e6ded79d66af246be2ee05417136d/tracing-core/src/spin/LICENSE
 Copyright (c) 2019 Tokio Contributors
 Copyright (c) 2014 Mathijs van de Nes
+
+=====
+tracing-subscriber 0.3.23
+MIT
+License: https://github.com/tokio-rs/tracing/blob/54ede4d5d85a536aed5485c5213011d9ec961935/tracing-subscriber/LICENSE
+Copyright (c) 2019 Tokio Contributors
 
 =====
 tracing 0.1.44

@@ -49,17 +49,22 @@ export function wireHistory(browser, tab) {
     intent = null;
     if (inPage) queueMicrotask(() => void drain());
   };
-  async function drain() {
+  /** Metadata for committed visits. On quit the page is never asked: it may be hung or in a dialog. */
+  async function drain({ quitting = false } = {}) {
     if (privateMode()) { pending = []; return; }
     if (!pending.length) return;
+    let favicon = tab.favicon || "";
+    if (!quitting) {
+      try {
+        const found = await contents.executeJavaScript("document.querySelector('link[rel~=icon]')?.href||''");
+        if (typeof found === "string" && /^https?:/u.test(found)) favicon = found;
+      } catch { /* A closed or superseded page still has its committed visit. */ }
+    }
+    // Visits stay pending through the lookup, so a quit meanwhile still writes them.
     const visits = pending; pending = [];
-    let favicon = tab.favicon || "", currentUrl = "", title = "";
-    try {
-      currentUrl = contents.getURL(); title = contents.getTitle();
-      const found = await contents.executeJavaScript("document.querySelector('link[rel~=icon]')?.href||''");
-      if (typeof found === "string" && /^https?:/u.test(found)) favicon = found;
-    } catch { /* A closed or superseded page still has its committed visit. */ }
-    if (privateMode()) return;
+    if (privateMode() || !visits.length) return;
+    let currentUrl = "", title = "";
+    try { currentUrl = contents.getURL(); title = contents.getTitle(); } catch { /* Destroyed: committed visits keep their URL title. */ }
     for (const visit of visits) {
       if (visit.url === currentUrl) { visit.title = title || visit.url; visit.favicon = favicon; }
       browser.history?.add({ ...visit, metadataOnly: true });

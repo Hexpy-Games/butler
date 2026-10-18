@@ -24,6 +24,17 @@ use std::{
     time::Duration,
 };
 
+/// `BUTLER_TEST_LANDLOCK_ABI` exists only in a `test-support` Agent. The perf
+/// tier runs the production Agent on a real kernel, so a test that caps the
+/// ABI uses the test-support Agent CI supplies there (as the steward
+/// presentation fixtures do for the debug hooks); the stub tier already runs it.
+fn test_support_agent(setup: Setup) -> Result<Setup, HarnessError> {
+    if let Some(binary) = std::env::var_os("BUTLER_E2E_FAULT_BIN") {
+        butler_e2e::e2e::executable::copy(Path::new(&binary), &setup.sandbox.binary)?;
+    }
+    Ok(setup)
+}
+
 struct SocketPath(PathBuf);
 impl Drop for SocketPath {
     fn drop(&mut self) {
@@ -166,7 +177,11 @@ async fn kernel_boundaries_secrets_network_and_unicode() -> Result<(), HarnessEr
 async fn admission(abi_cap: Option<u32>) -> Result<(), HarnessError> {
     let capped = abi_cap.is_some();
     let (url, script, server) = stub::start().await?;
-    let mut setup = Setup::new("LINUX-ADMISSION")?
+    let mut setup = Setup::new("LINUX-ADMISSION")?;
+    if capped {
+        setup = test_support_agent(setup)?;
+    }
+    let mut setup = setup
         .access(Access::AskExceptReads)
         .data_folder_token()
         .stub_cassette(Cassette::load("TOOL-01")?)

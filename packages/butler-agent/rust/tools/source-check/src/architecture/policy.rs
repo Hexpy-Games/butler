@@ -52,7 +52,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "work_records" => &["lenient", "js_json"],
         "coordination" | "lenient" | "js_json" => &[],
         // butler-gateway and the host binary are single-domain crates.
-        "gateway" | "host" => &[],
+        "gateway" | "host" | "structured_logging" => &[],
         // butler-e2e: dev-only harness around the built binary; one domain.
         "e2e" => &[],
         _ => return None,
@@ -71,7 +71,8 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         | "account_dirs" | "process_priority" => &[],
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.
-        "sqlite" | "fs_space" | "secrets" | "install_link" | "command_sandbox" => &["secure_fs"],
+        "sqlite" | "fs_space" | "secrets" | "install_link" => &["secure_fs"],
+        "command_sandbox" => &["secure_fs", "account_dirs"],
         "process_control" => &["process_table"],
         // The headless browser's DevTools pipe runs in a contained process tree.
         "browser_process" => &["process_control"],

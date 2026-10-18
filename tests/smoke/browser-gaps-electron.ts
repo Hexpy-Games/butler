@@ -27,6 +27,7 @@ const ref = (r: StubModelRequest, label: string) => {
   assert.ok(found, `${label} in ${text(r)}`); return found;
 };
 const canvasCenter = (r: StubModelRequest) => {
+  assert.ok(observation(r).image_geometry, "canvas points require screenshot geometry");
   const found = /\[[^\]]+\] center=\[(\d+),(\d+)\] expect="canvas"/u.exec(text(r));
   assert.ok(found, text(r)); return [Number(found[1]), Number(found[2])];
 };
@@ -58,6 +59,12 @@ try {
     () => ({ name: "tool_describe", arguments: { ids: ["browser_open", "browser_observe", "browser_act"].map(n => `native:${n}`) } }),
     () => bridgeBrowser("browser_open", { url: page.url }),
     r => bridgeBrowser("browser_observe", { tab: latestBrowser(r, "tab").tab }),
+    r => {
+      // Since 3f6bfbd3a, auto keeps this mixed DOM/canvas page text-only.
+      assert.match(text(r), /canvas "icon 600×400 at /u);
+      assert.ok(!text(r).includes("Graphical targets in screenshot coordinates"));
+      return bridgeBrowser("browser_observe", { tab: observation(r).tab, look: "always" });
+    },
     // Tool, stroke, then another tool: the stroke opens an inline aria-modal widget.
     keep(act(r => { [cx, cy] = canvasCenter(r); return [{ action: "click", ref: ref(r, "Rectangle") },
       { action: "drag", point: [cx - 60, cy - 40], target_point: [cx + 60, cy + 40], expect: "canvas" }, { action: "click", ref: ref(r, "Line") }]; })),
@@ -76,6 +83,8 @@ try {
     keep(act(r => [{ action: "click", ref: ref(r, "Directions") }, { action: "click", ref: ref(r, "Directions") }])),
     keep(act(() => [{ action: "press", value: "Control+Z" }])),
     keep(act(() => [{ action: "press", value: "Control+Z" }])),
+    // Ref/key batches return text here; reacquire pixels before using points.
+    r => bridgeBrowser("browser_observe", { tab: observation(r).tab, look: "always" }),
     // The drawn line stays selected; a drag from its end handle edits it.
     keep(act(() => [{ action: "drag", point: [cx + 60, cy + 40], target_point: [cx + 180, cy - 20], expect: "canvas" }])),
     keep(act(() => [{ action: "press", value: "Escape" }, { action: "drag", point: [cx + 180, cy - 20], target_point: [cx + 220, cy + 60], expect: "canvas" }])),
@@ -97,8 +106,9 @@ try {
   assert.ok(line(drawn, "Bold") && !line(drawn, "Line").includes("covered_by"), "an inline aria-modal widget blocks nothing");
   const page2 = await app.call<{ tabs: Array<{ id: string; agent: boolean }> }>("state");
   const tab = page2.tabs.find(t => t.agent); assert.ok(tab);
-  const strokes = await app.main<{ strokes: number; edits: number }>(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab.id)}).view.webContents.executeJavaScript("log")`);
+  const strokes = await app.main<{ strokes: number; edits: number; count: number }>(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab.id)}).view.webContents.executeJavaScript("({...log,count:Number(document.querySelector('#count').textContent)})")`);
   assert.deepEqual([strokes.strokes, strokes.edits], [2, 1], "two lines drawn, one edited from its end handle");
+  assert.equal(strokes.count, 2, "both counter clicks complete even when auto omits model pixels");
   assert.match(line(blocked, "Rectangle"), /covered_by/u, "a visible backdrop covers the toolbar");
   assert.ok(!line(unblocked, "Rectangle").includes("covered_by"), "closing the backdrop uncovers it");
   assert.match(line(modal, "Rectangle"), /covered_by/u, "a native modal dialog blocks the page");

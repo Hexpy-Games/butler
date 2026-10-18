@@ -129,8 +129,9 @@ pub(super) async fn settle(
     }
 }
 
-/// Ends the child turn of a worker or steward session as failed, so its
-/// parent relation does not stay open.
+/// Ends the child turn of a worker or steward session as failed with `code`
+/// (or cancelled for `CHILD_CANCELLED`), so its parent relation does not stay
+/// open.
 pub(super) async fn close_child(
     item: &ClaimedInboundEvent,
     bindings: &SessionBindingStore,
@@ -147,10 +148,17 @@ pub(super) async fn close_child(
         return ChildClose::NotChild;
     }
     let turn_id = bind::routed_turn_id(&envelope);
-    let Err(error) = subsessions
-        .complete_failed_child(&binding.session_id, turn_id, code)
-        .await
-    else {
+    let closed = if code == interrupted::CHILD_CANCELLED {
+        let summary = super::CANCELLED_SUMMARY.into();
+        subsessions
+            .complete_child(&binding.session_id, turn_id, "cancelled", summary)
+            .await
+    } else {
+        subsessions
+            .complete_failed_child(&binding.session_id, turn_id, code)
+            .await
+    };
+    let Err(error) = closed else {
         return ChildClose::Closed;
     };
     butler_core::diagnostic!(

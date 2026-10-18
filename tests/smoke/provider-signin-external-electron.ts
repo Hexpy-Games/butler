@@ -1,5 +1,5 @@
 // test-category: race
-/** Provider authentication through the real App; external opens and OAuth helper are offline stubs. */
+/** Provider account pages and authentication through the real App; external opens and OAuth helper are offline stubs. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
@@ -9,6 +9,7 @@ import { createNativeAppServer } from "../support/native-app-server";
 import { firstRunElectron } from "../support/first-run-electron";
 import { firstRunStub } from "../support/first-run-stub";
 import { nativeSmokeRuntime } from "../support/native-smoke-runtime";
+import { settleFirstRun } from "../support/first-run-visual";
 import { waitBrowser } from "../support/browser-agent-app";
 
 const runtime = await nativeSmokeRuntime(import.meta.url);
@@ -20,6 +21,7 @@ const stub = await firstRunStub(server);
 let app: Awaited<ReturnType<typeof firstRunElectron>> | undefined;
 const facts: unknown[] = [];
 const firstRunUrl = "https://signin.invalid/first-run";
+const keyUrl = "https://aistudio.google.com/apikey";
 const helperUrl = "https://signin.invalid/device-auth";
 
 async function assertExternal(label: string, expected: string[]) {
@@ -37,17 +39,32 @@ try {
   app = await firstRunElectron(server, stub.url);
   const { page, main } = app;
   const module = `process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve("packages/butler-app/client/electron/package.json"))})`;
-  await main(`(()=>{globalThis.externalLinks=[];${module}('electron').shell.openExternal=async url=>{globalThis.externalLinks.push(url)}})()`);
+  const recorder = `(()=>{"use strict";const shell=${module}('electron').shell;globalThis.externalLinks=[];const record=async url=>{globalThis.externalLinks.push(url)};shell.openExternal=record;return shell.openExternal===record})()`;
+  assert.equal(await main<boolean>(recorder), true, "external opens are recorded, never sent to the real browser");
   const copy = getAppCopy("ko-KR");
   await page.locator("#first-run-language").selectOption("ko");
   await page.getByRole("button", { name: copy.firstRun.start, exact: true }).click();
   await page.getByRole("button", { name: copy.firstRun.agree, exact: true }).click();
+  await page.locator('[data-memory-choice="off"]').click();
+  await page.getByRole("button", { name: copy.firstRun.memoryChoice.continue, exact: true }).click();
+  await page.locator('[data-card-id="gemini"]').click();
+  const keyLink = page.getByRole("link", { name: copy.firstRun.getKey, exact: true });
+  for (const theme of ["light", "dark"] as const) {
+    await main(`${module}('electron').nativeTheme.themeSource=${JSON.stringify(theme)}`);
+    await page.emulateMedia({ colorScheme: theme });
+    await settleFirstRun(page);
+    await page.screenshot({ path: join(evidence, `first-run-gemini-key-${theme}.png`) });
+  }
+  await keyLink.focus();
+  await page.keyboard.press("Enter");
+  await assertExternal("first-run provider key page", [keyUrl]);
+  await page.getByRole("button", { name: copy.firstRun.back, exact: true }).click();
   await page.locator('[data-card-id="chatgpt"]').click();
   await page.getByRole("button", { name: copy.firstRun.signInReopen, exact: true }).waitFor();
-  await assertExternal("first-run automatic sign-in", [firstRunUrl]);
+  await assertExternal("first-run automatic sign-in", [keyUrl, firstRunUrl]);
   await page.screenshot({ path: join(evidence, "first-run-external.png") });
   await page.getByRole("button", { name: copy.firstRun.signInReopen, exact: true }).click();
-  await assertExternal("first-run reopen", [firstRunUrl, firstRunUrl]);
+  await assertExternal("first-run reopen", [keyUrl, firstRunUrl, firstRunUrl]);
   await page.getByRole("button", { name: copy.firstRun.cancel, exact: true }).click();
   await server.api("/settings", { method: "PATCH", body: JSON.stringify(onboardingCompletedPatch(null, new Date().toISOString(), new Date().toISOString())) });
   await page.reload();
@@ -68,12 +85,12 @@ try {
   await page.locator('[data-test-class="hosted-auth-method-select"]').click();
   await page.getByRole("option", { name: copy.settings.modelManagement.codexOauth, exact: true }).click();
   await page.locator("#model-oauth-link").waitFor();
-  await assertExternal("Settings helper automatic sign-in", [firstRunUrl, firstRunUrl, helperUrl]);
+  await assertExternal("Settings helper automatic sign-in", [keyUrl, firstRunUrl, firstRunUrl, helperUrl]);
   await page.screenshot({ path: join(evidence, "settings-external.png") });
   await page.getByRole("button", { name: copy.settings.modelManagement.oauthOpen, exact: true }).click();
-  await assertExternal("Settings reopen", [firstRunUrl, firstRunUrl, helperUrl, helperUrl]);
+  await assertExternal("Settings reopen", [keyUrl, firstRunUrl, firstRunUrl, helperUrl, helperUrl]);
   await page.getByRole("button", { name: copy.settings.modelManagement.oauthRetry, exact: true }).click();
-  await assertExternal("Settings re-authenticate", [firstRunUrl, firstRunUrl, helperUrl, helperUrl, helperUrl]);
+  await assertExternal("Settings re-authenticate", [keyUrl, firstRunUrl, firstRunUrl, helperUrl, helperUrl, helperUrl]);
   await page.evaluate(async () => {
     const bridge = (window as unknown as { butlerApp: { cancelOpenAIOAuthLogin(): Promise<unknown> } }).butlerApp;
     await bridge.cancelOpenAIOAuthLogin();

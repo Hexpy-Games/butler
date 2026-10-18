@@ -4,9 +4,11 @@ mod activity;
 mod assets;
 mod completion;
 mod decode;
+mod directions;
 mod files;
 mod records;
 
+pub(crate) use directions::direction_turn_id;
 pub use records::*;
 
 use rusqlite::{OptionalExtension, params};

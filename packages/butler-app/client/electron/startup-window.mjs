@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain } from "electron";
-import { startupTiming } from "./startup-timing.mjs";
+import { startupTiming, startupTimings } from "./startup-timing.mjs";
 export { startupTiming, startupTimings } from "./startup-timing.mjs";
 import { createLifecycleWindow, parkLifecycleWindow } from "./lifecycle-window.mjs";
 import { openLifecycleLog } from "./lifecycle-diagnostics.mjs";
@@ -13,6 +13,7 @@ let dwell;
 let displayedAt = 0;
 let state = { kind: "startup", stage: "prepare", failed: false };
 let actions = {};
+let retrying = false;
 let readyResolve;
 const rendererReady = new Promise((resolve) => { readyResolve = resolve; });
 let rendererId;
@@ -95,12 +96,15 @@ export function createStartupWindow() {
     async onAction(action) {
       if (!state.failed) return;
       if (action === "retry") {
+        // Each app.relaunch() starts one more App, so a second click must not register another.
+        if (retrying) return;
+        retrying = true;
         startupTiming("retry_requested");
-        await actions.retry?.();
+        try { await actions.retry?.(); } catch (error) { retrying = false; throw error; }
         startupTiming("retry_stopped");
         app.relaunch(); startupTiming("retry_relaunch_registered");
         if (actions.exit) actions.exit(); else app.exit(0);
-      } else if (action === "log") await openLifecycleLog(state, events, actions.diagnostics?.());
+      } else if (action === "log") await openLifecycleLog(state, startupTimings(), actions.diagnostics?.());
       else if (action === "quit") app.quit();
     },
   });
