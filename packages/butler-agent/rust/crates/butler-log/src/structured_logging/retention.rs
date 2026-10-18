@@ -15,6 +15,7 @@ pub struct StoreUsage {
 #[derive(Serialize)]
 pub struct StorageView {
     pub stores: Vec<StoreUsage>,
+    pub last_write_error: Option<String>,
 }
 pub(crate) const STORES: [(&str, u64, i64); 3] = [
     ("main", 64 * 1024 * 1024, 14 * 24),
@@ -65,7 +66,10 @@ pub(crate) fn usage(root: &Path) -> io::Result<StorageView> {
             });
         }
     }
-    Ok(StorageView { stores })
+    Ok(StorageView {
+        stores,
+        last_write_error: None,
+    })
 }
 pub(crate) fn prune(root: &Path, active: &[PathBuf]) -> io::Result<()> {
     let now = chrono::Utc::now();

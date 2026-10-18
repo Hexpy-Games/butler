@@ -20,7 +20,10 @@ fn logs_old_name_recent_record_survives_restart() -> Result<(), Box<dyn std::err
         .map(|e| e.unwrap().path())
         .find(|p| p.extension().is_some_and(|e| e == "jsonl"))
         .unwrap();
-    let old = main.join("20000101T000000Z-0001.jsonl");
+    let old = main.join(format!(
+        "{}-0001.jsonl",
+        (chrono::Utc::now() - chrono::Duration::days(20)).format("%Y%m%dT%H%M%SZ")
+    ));
     fs::rename(&path, &old)?;
     fs::rename(path.with_extension("idx"), old.with_extension("idx"))?;
     let log = Logger::open(&root, Config::default())?;
@@ -57,7 +60,10 @@ fn logs_active_lanes_survive_retention() -> Result<(), Box<dyn std::error::Error
             active.push(path);
         }
         let extension = if lane == "bodies" { "zst" } else { "jsonl" };
-        let stale = dir.join(format!("20000101T000000Z-0000.{extension}"));
+        let stale = dir.join(format!(
+            "{}-0000.{extension}",
+            (chrono::Utc::now() - chrono::Duration::days(20)).format("%Y%m%dT%H%M%SZ")
+        ));
         fs::write(&stale, b"\n")?;
         fs::OpenOptions::new()
             .write(true)
@@ -68,10 +74,11 @@ fn logs_active_lanes_survive_retention() -> Result<(), Box<dyn std::error::Error
     assert!(active.iter().all(|p| p.exists()));
     for lane in ["main", "debug", "bodies"] {
         assert!(fs::read_dir(root.join("logs/agent").join(lane))?.all(|e| {
-            !e.unwrap()
-                .file_name()
-                .to_string_lossy()
-                .starts_with("20000101")
+            !e.unwrap().file_name().to_string_lossy().starts_with(
+                &(chrono::Utc::now() - chrono::Duration::days(20))
+                    .format("%Y%m%d")
+                    .to_string(),
+            )
         }));
     }
     log.record(record(2, "INFO"))?;
@@ -93,12 +100,14 @@ fn logs_writer_recovers_after_transient_io_error() -> Result<(), Box<dyn std::er
     fs::remove_dir(&main)?;
     fs::write(&main, b"temporarily unavailable")?;
     log.record(record(1, "INFO"))?;
-    assert!(log.flush().is_err());
+    log.flush()?;
     fs::remove_file(&main)?;
+    assert!(log.storage()?.last_write_error.is_some());
     log.record(record(2, "INFO"))?;
     let rows = log.query(&Query::default())?.rows;
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].msg, "row 2");
+    assert!(log.storage()?.last_write_error.is_some());
     log.configure(Config::detailed())?;
     log.shutdown()?;
     fs::remove_dir_all(root)?;
@@ -138,7 +147,10 @@ fn logs_body_references_require_bounded_frame() -> Result<(), Box<dyn std::error
     let log = Logger::open(&root, Config::full())?;
     let dir = root.join("logs/agent/bodies");
     fs::create_dir_all(&dir)?;
-    let path = dir.join("20261018T000000Z-0000.zst");
+    let path = dir.join(format!(
+        "{}-0000.zst",
+        chrono::Utc::now().format("%Y%m%dT%H%M%SZ")
+    ));
     let compressed = zstd::encode_all(std::io::repeat(b'x').take(16 * 1024 * 1024 + 1), 1)?;
     fs::write(&path, &compressed)?;
     let name = path.file_name().unwrap().to_str().unwrap();
@@ -189,6 +201,84 @@ async fn logs_error_burst_keeps_runtime_responsive() -> Result<(), Box<dyn std::
         "LOG-ERROR-BURST rows=1000 wall_ms={:.3} fsync_count={syncs}",
         elapsed.as_secs_f64() * 1000.0
     );
+    log.shutdown()?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
+fn logs_expiry_reverts_before_cleanup_and_retries() -> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    let root = root();
+    let log = Logger::open(&root, Config::full())?;
+    let mut row = record(1, "TRACE");
+    row.content = Some(serde_json::json!("body ".repeat(3000)));
+    log.record(row)?;
+    log.flush()?;
+    let blocked = root.join("logs/app/bodies");
+    fs::create_dir_all(blocked.parent().unwrap())?;
+    // A regular file in place of the directory causes a portable deletion error.
+    fs::write(&blocked, b"blocked")?;
+    log.expire_full()?;
+    log.flush()?;
+    assert_eq!(log.config().effective, Config::default());
+    assert!(!log.enabled("turn", "TRACE"));
+    assert!(log.config().full_expires_at.is_none());
+    assert!(blocked.is_file());
+    let mut row = record(2, "INFO");
+    row.content = Some(serde_json::json!("body ".repeat(3000)));
+    log.record(row)?;
+    let rows = log.query(&Query::default())?.rows;
+    assert_eq!(rows.len(), 1);
+    assert!(rows[0].body_ref.is_none() && rows[0].content.is_none());
+    fs::remove_file(&blocked)?;
+    fs::create_dir(&blocked)?;
+    fs::write(blocked.join("pending.zst"), b"pending cleanup")?;
+    let start = Instant::now();
+    while blocked.exists() && start.elapsed() < Duration::from_secs(5) {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(!blocked.exists());
+    log.shutdown()?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
+fn logs_export_skips_corruption_and_reports_count() -> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    use std::io::{Seek, SeekFrom, Write};
+    let root = root();
+    let log = Logger::open(&root, Config::default())?;
+    for n in 1..=4 {
+        log.record(record(n, "INFO"))?;
+    }
+    log.flush()?;
+    let path = fs::read_dir(root.join("logs/agent/main"))?
+        .map(|e| e.unwrap().path())
+        .find(|p| p.extension().is_some_and(|e| e == "jsonl"))
+        .unwrap();
+    let bytes = fs::read(&path)?;
+    let offset = bytes.iter().position(|b| *b == b'\n').unwrap() + 1;
+    let mut file = fs::OpenOptions::new().write(true).open(&path)?;
+    file.seek(SeekFrom::Start(offset as u64))?;
+    file.write_all(b"!")?;
+    let next = offset + bytes[offset..].iter().position(|b| *b == b'\n').unwrap() + 1;
+    file.seek(SeekFrom::Start(next as u64))?;
+    file.write_all(b"\xff")?;
+    drop(file);
+    let expected = log.query(&Query::default())?.rows;
+    assert_eq!(expected.len(), 2);
+    let bytes = log.export(None, None, false)?;
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
+    let manifest: serde_json::Value = serde_json::from_reader(archive.by_name("manifest.json")?)?;
+    assert_eq!(manifest["skipped_lines"], 2);
+    let restored = root.join("restored");
+    archive.extract(restored.join("logs"))?;
+    let restored_log = Logger::open(&restored, Config::default())?;
+    let rows = restored_log.query(&Query::default())?.rows;
+    assert_eq!(serde_json::to_value(rows)?, serde_json::to_value(expected)?);
+    restored_log.shutdown()?;
     log.shutdown()?;
     fs::remove_dir_all(root)?;
     Ok(())

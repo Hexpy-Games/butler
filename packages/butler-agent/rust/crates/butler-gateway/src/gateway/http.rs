@@ -32,6 +32,8 @@ mod projects;
 mod read_routes;
 mod retry;
 mod router;
+#[cfg(feature = "test-support")]
+pub(crate) use router::templates as route_templates;
 mod security;
 mod security_settings;
 mod session_branches;
@@ -244,167 +246,23 @@ async fn route_for_client(
     request: Request<Body>,
     client: Client,
 ) -> Result<Response, HttpError> {
-    let uri = request.uri().clone();
-    if uri.path() == "/logs" || uri.path().starts_with("/logs/") {
-        return logs::route(state, request, &uri).await;
-    }
-    #[cfg(feature = "e2e-fixtures")]
-    if uri.path() == "/internal/e2e/logs/expire" {
-        return logs::expire().await;
-    }
-    if let Some(result) = library::dispatch(request.uri().path()) {
-        return result.route(state, request).await;
-    }
-    if uri.path().starts_with("/internal/browser") {
-        return browser_host::route(state, request, &client).await;
-    }
-    if uri.path().starts_with("/__o/") {
-        return Err(HttpError::public(404, "not_found", "Route not found."));
-    }
-    if uri.path().starts_with("/previews/") {
-        return content::preview::view(&state, &request);
-    }
-    if uri.path().starts_with("/outputs/") {
-        return content::view(state, request).await;
-    }
-    if uri.path() == "/security" || uri.path().starts_with("/security/") {
-        return security_settings::route(state, request).await;
-    }
-    if uri.path() == "/hooks" || uri.path().starts_with("/hooks/") {
-        return hooks::route(state, request).await;
-    }
-    match (request.method(), uri.path()) {
-        (&Method::GET, "/settings") => settings::get(state, Some(client)).await,
-        (&Method::GET, "/favicons") => favicons::get(state, &uri).await,
-        (&Method::GET, "/events/live") => {
-            let scope = request
-                .extensions()
-                .get::<listeners::ListenerScope>()
-                .cloned();
-            get_live_events(state, &uri, scope, &client.keys).await
-        }
-        _ => route(state, request).await,
-    }
+    router::route(state, request, client).await
 }
 
-async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response, HttpError> {
+async fn route(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+    handler: router::Handler,
+) -> Result<Response, HttpError> {
     let method = request.method().clone();
     let uri = request.uri().clone();
     let accepts_html = static_ui::accepts_html(request.headers());
-    if task_graphs::matches(&uri) {
-        return task_graphs::route(state, request, &uri).await;
-    }
-    if subsessions::matches(&uri) {
-        if let Some(response) = subsessions::route(state, request, &uri).await? {
-            return Ok(response);
+    match (method.clone(), handler) {
+        (Method::GET, router::Handler::Health) => health(),
+        (Method::GET, router::Handler::ProviderQuota) => {
+            monitors::provider_quota(state, &uri).await
         }
-        return Err(HttpError::public(404, "not_found", "Route not found."));
-    }
-    if uri.path().starts_with("/authority-requests")
-        || uri.path().starts_with("/authority-permissions")
-    {
-        return authority::route(state, request, &uri).await;
-    }
-    if uri.path() == "/model-catalog" || uri.path().starts_with("/model-catalog/") {
-        return model_catalog::route(state, request, &uri).await;
-    }
-    if personalization::settings_path(&uri) {
-        return personalization::route(state, request, &uri).await;
-    }
-    if matches!(
-        uri.path(),
-        "/usage-monitor"
-            | "/work-status"
-            | "/worker-activity"
-            | "/system-events"
-            | "/developer-logs"
-    ) || uri.path().starts_with("/worker-activity/")
-        || (uri.path().starts_with("/sessions/") && uri.path().contains("/worker-activity"))
-    {
-        return monitors::route(state, request, &uri).await;
-    }
-    if uri.path().starts_with("/space/") {
-        if let Some(response) = space_mutations::route(state, request, &uri).await? {
-            return Ok(response);
-        }
-        return Err(HttpError::public(404, "not_found", "Route not found."));
-    }
-    if uri.path().starts_with("/projects/") && uri.path().contains("/dashboard") {
-        if let Some(response) = dashboard::route(state, request, &uri).await? {
-            return Ok(response);
-        }
-        return Err(HttpError::public(404, "not_found", "Route not found."));
-    }
-    if uri.path().starts_with("/sessions/")
-        && (uri.path().ends_with("/controls") || uri.path().contains("/plan-decisions/"))
-    {
-        if let Some(response) = session_controls::route(state, request, &uri).await? {
-            return Ok(response);
-        }
-        return Err(HttpError::public(404, "not_found", "Route not found."));
-    }
-    if uri.path().starts_with("/projects/") || uri.path().starts_with("/sessions/") {
-        if let Some(response) = project_session_mutations::route(state, request, &uri).await? {
-            return Ok(response);
-        }
-        return Err(HttpError::public(404, "not_found", "Route not found."));
-    }
-    if method == Method::GET
-        && matches!(
-            uri.path(),
-            "/app-info" | "/navigation" | "/command-palette" | "/archives" | "/user-work"
-        )
-    {
-        return shell::route(state, &uri).await;
-    }
-    if uri.path() == "/automations" || uri.path().starts_with("/automations/") {
-        return automations::route(state, request, &uri).await;
-    }
-    if updates::handles(uri.path()) {
-        return updates::route(state, request).await;
-    }
-    if message_files::handles(&method, uri.path()) {
-        return message_files::route(state, request).await;
-    }
-    if wallpapers::handles(uri.path()) {
-        return wallpapers::route(state, request).await;
-    }
-    if (method == Method::PATCH || method == Method::DELETE)
-        && uri
-            .path()
-            .strip_prefix("/session-queue/")
-            .is_some_and(|id| !id.is_empty() && !id.contains('/'))
-    {
-        return session_queue::route(state, request, &uri).await;
-    }
-    if uri.path() == "/mcp-servers"
-        || uri.path() == "/mcp-capabilities"
-        || uri.path().starts_with("/mcp-servers/")
-    {
-        return mcp_servers::route(state, request, &uri).await;
-    }
-    if uri.path().starts_with("/turns/") && uri.path().contains("/operations/") {
-        if let Some(response) = operation_output::route(state, request, &uri).await? {
-            return Ok(response);
-        }
-        return Err(HttpError::public(404, "not_found", "Route not found."));
-    }
-    if uri.path().starts_with("/turns/") && uri.path().contains("/retry") {
-        if let Some(response) = retry::route(state, &method, &uri).await? {
-            return Ok(response);
-        }
-        return Err(HttpError::public(404, "not_found", "Route not found."));
-    }
-    if let Some(response) = retry::cancel(&state, &method, &uri).await? {
-        return Ok(response);
-    }
-    if setup::handles(uri.path()) {
-        return setup::route(state, request, &uri).await;
-    }
-    match (method.clone(), uri.path()) {
-        (Method::GET, "/health") => health(),
-        (Method::GET, "/provider-quota") => monitors::provider_quota(state, &uri).await,
-        (Method::GET, "/runtime-readiness") => {
+        (Method::GET, router::Handler::RuntimeReadiness) => {
             let mut readiness = state.application.runtime_readiness()?;
             readiness.raw_text_included = false;
             json(
@@ -415,30 +273,38 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
                 },
             )
         }
-        (Method::PATCH, "/settings") => settings::patch(state, request).await,
-        (Method::GET, "/skills") => skills::get(state).await,
-        (Method::POST, "/skills/import") => skills::import(state, request).await,
-        (Method::POST, "/messages") => post_message(state, request).await,
-        (Method::POST, "/internal/subsession-result") => {
+        (Method::PATCH, router::Handler::Settings) => settings::patch(state, request).await,
+        (Method::GET, router::Handler::Skills) => skills::get(state).await,
+        (Method::POST, router::Handler::SkillsImport) => skills::import(state, request).await,
+        (Method::POST, router::Handler::Messages) => post_message(state, request).await,
+        (Method::POST, router::Handler::InternalSubsessionResult) => {
             subsession_result::post(state, request).await
         }
-        (Method::POST, "/internal/session-branches") => {
+        (Method::POST, router::Handler::InternalSessionBranches) => {
             session_branches::post(state, request).await
         }
-        (Method::GET, "/projects") => projects::list(state, &uri).await,
-        (Method::GET, "/new-chat-briefing") => new_chat_briefing::get(state, &uri).await,
-        (Method::POST, "/projects") => projects::create(state, request).await,
-        (Method::GET, "/chats") => sessions::chats(state).await,
-        (Method::GET, "/sessions") => sessions::list(state, &uri).await,
-        (Method::GET, "/project-sessions") => sessions::project_list(state, &uri).await,
-        (Method::POST, "/sessions") => sessions::create(state, request).await,
-        (Method::GET, "/messages") => get_messages(state, &uri).await,
-        (Method::GET, "/artifacts") => get_artifacts(state, &uri).await,
-        (Method::GET, "/transcript-export") => transcript_export::get(state, &uri).await,
-        (Method::GET, "/session-queue") => get_session_queue(state, &uri).await,
-        (Method::POST, "/session-queue") => session_queue::create(state, request).await,
-        (Method::GET, "/turns") => get_turns(state, &uri).await,
-        (Method::GET, "/events") => get_events(state, &uri).await,
+        (Method::GET, router::Handler::Projects) => projects::list(state, &uri).await,
+        (Method::GET, router::Handler::NewChatBriefing) => {
+            new_chat_briefing::get(state, &uri).await
+        }
+        (Method::POST, router::Handler::Projects) => projects::create(state, request).await,
+        (Method::GET, router::Handler::Chats) => sessions::chats(state).await,
+        (Method::GET, router::Handler::Sessions) => sessions::list(state, &uri).await,
+        (Method::GET, router::Handler::ProjectSessions) => {
+            sessions::project_list(state, &uri).await
+        }
+        (Method::POST, router::Handler::Sessions) => sessions::create(state, request).await,
+        (Method::GET, router::Handler::Messages) => get_messages(state, &uri).await,
+        (Method::GET, router::Handler::Artifacts) => get_artifacts(state, &uri).await,
+        (Method::GET, router::Handler::TranscriptExport) => {
+            transcript_export::get(state, &uri).await
+        }
+        (Method::GET, router::Handler::SessionQueue) => get_session_queue(state, &uri).await,
+        (Method::POST, router::Handler::SessionQueue) => {
+            session_queue::create(state, request).await
+        }
+        (Method::GET, router::Handler::Turns) => get_turns(state, &uri).await,
+        (Method::GET, router::Handler::Events) => get_events(state, &uri).await,
         _ if method == Method::GET => {
             static_ui::serve(state.static_ui_root.as_deref(), uri.path(), accepts_html).await
         }

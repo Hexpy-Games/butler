@@ -47,14 +47,6 @@ const AGENT_PATH: &str = "/internal/wallpaper";
 const UPLOAD_RETAIN_BYTES: usize = 25 * 1024 * 1024 + 1;
 const IMMUTABLE: &str = "private, max-age=31536000, immutable";
 
-/// Asset and agent routes, and the module routes of [`super::wallpaper_modules`].
-pub(super) fn handles(path: &str) -> bool {
-    path == "/wallpapers"
-        || path.starts_with("/wallpapers/")
-        || [PROMOTE_PATH, AGENT_PATH].contains(&path)
-        || super::wallpaper_modules::handles(path)
-}
-
 #[derive(Deserialize)]
 struct PromoteRequest {
     file_id: String,

@@ -102,30 +102,3 @@ fn components(path: &str) -> Result<Vec<String>, HttpError> {
         })
         .collect()
 }
-
-/// The App-owned saved-browser-data routes, before unrelated App routes.
-pub(super) enum BrowserDataRoute {
-    Library,
-    History,
-}
-pub(super) fn dispatch(path: &str) -> Option<BrowserDataRoute> {
-    if path == "/library" || path.starts_with("/library/") {
-        Some(BrowserDataRoute::Library)
-    } else if path == "/browser-history" || path.starts_with("/browser-history/") {
-        Some(BrowserDataRoute::History)
-    } else {
-        None
-    }
-}
-impl BrowserDataRoute {
-    pub(super) async fn route(
-        self,
-        state: Arc<HttpState>,
-        request: Request<Body>,
-    ) -> Result<Response, HttpError> {
-        match self {
-            Self::Library => route(state, request).await,
-            Self::History => history::route(state, request).await,
-        }
-    }
-}

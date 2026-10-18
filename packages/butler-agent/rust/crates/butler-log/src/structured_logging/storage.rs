@@ -1,11 +1,11 @@
 use super::{
     Config, Preset, Record,
     bodies::Bodies,
+    encoded::Encoded,
     index::{self, Block},
-    redaction, retention,
+    retention,
     segment::{SEGMENT_BYTES, Segment},
 };
-use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, io, path::PathBuf};
 
 pub(crate) type Catalog = BTreeMap<PathBuf, Vec<Block>>;
@@ -16,13 +16,11 @@ pub(crate) struct Storage {
     debug: Option<Segment>,
     last_ts: String,
     bodies: Bodies,
+    cleanup: Option<Config>,
 }
 impl Storage {
     pub(super) fn open(root: PathBuf, config: &Config) -> io::Result<Self> {
         butler_platform::secure_fs::create_private_dir_all(&root.join("agent/main"))?;
-        for source in ["agent", "app"] {
-            retention::prune(&root.join(source), &[])?;
-        }
         let mut this = Self {
             root,
             catalog: Catalog::new(),
@@ -30,10 +28,19 @@ impl Storage {
             debug: None,
             last_ts: String::new(),
             bodies: Bodies::default(),
+            cleanup: None,
         };
-        this.configure(config)?;
+        let _ = this.configure(config);
+        // Pending verbose cleanup must not prevent startup or level reversion.
+        if !this.cleanup_pending() {
+            for source in ["agent", "app"] {
+                retention::prune(&this.root.join(source), &[])?;
+            }
+        }
         this.discover(true)?;
-        this.prune()?;
+        if !this.cleanup_pending() {
+            this.prune()?;
+        }
         this.catalog.retain(|p, _| p.exists());
         Ok(this)
     }
@@ -64,36 +71,59 @@ impl Storage {
         Ok(())
     }
     pub(super) fn configure(&mut self, config: &Config) -> io::Result<u64> {
-        let mut freed = 0;
-        if !config.verbose() {
-            if let Some(segment) = self.debug.take() {
-                segment.close()?;
-            }
-            for source in ["agent", "app"] {
-                freed += retention::remove(&self.root.join(source).join("debug"))?;
-            }
+        self.cleanup = Some(config.clone());
+        self.cleanup()
+    }
+    pub(super) fn cleanup_pending(&self) -> bool {
+        self.cleanup.is_some()
+    }
+    pub(super) fn cleanup(&mut self) -> io::Result<u64> {
+        let Some(config) = self.cleanup.clone() else {
+            return Ok(0);
+        };
+        if !config.verbose()
+            && let Some(segment) = self.debug.take()
+        {
+            segment.close()?;
         }
         if config.level != Preset::Full {
             self.bodies.close()?;
-            for source in ["agent", "app"] {
+        }
+        let mut freed = 0;
+        for source in ["agent", "app"] {
+            if !config.verbose() {
+                freed += retention::remove(&self.root.join(source).join("debug"))?;
+            }
+            if config.level != Preset::Full {
                 freed += retention::remove(&self.root.join(source).join("bodies"))?;
             }
         }
         self.catalog.retain(|p, _| p.exists());
+        self.cleanup = None;
         Ok(freed)
     }
-    pub(super) fn write(&mut self, mut row: Record, config: &Config) -> io::Result<Record> {
-        row.level = row.level.to_ascii_uppercase();
-        // Multiple producers may enqueue in a different order than their clocks.
-        // A nondecreasing writer clock makes each segment a mergeable stream.
-        if row.ts < self.last_ts {
-            row.ts = self.last_ts.clone();
-        }
+    pub(super) fn write(&mut self, mut encoded: Encoded, config: &Config) -> io::Result<Record> {
+        let full = config.level == Preset::Full;
+        let reference = if full && let Some(body) = &encoded.body {
+            match self.bodies.write(&self.root, body) {
+                Ok((reference, rotated)) => {
+                    if rotated {
+                        self.prune()?;
+                    }
+                    Some(reference)
+                }
+                Err(error) => {
+                    self.bodies = Bodies::default();
+                    return Err(error);
+                }
+            }
+        } else {
+            None
+        };
+        let row = encoded.finish(&self.last_ts, full, reference.as_deref())?;
         self.last_ts = row.ts.clone();
-        self.prepare(&mut row, config)?;
         let debug = super::record::severity(&row.level) >= 4;
-        let row_bytes =
-            u64::try_from(serde_json::to_vec(&row)?.len() + 1).map_err(io::Error::other)?;
+        let row_bytes = encoded.line.len() as u64;
         let rotate = if debug { &self.debug } else { &self.main }
             .as_ref()
             .is_some_and(|s| s.bytes > 0 && s.bytes + row_bytes > SEGMENT_BYTES);
@@ -124,49 +154,13 @@ impl Storage {
             }))?);
         }
         if let Some(segment) = slot
-            && let Err(error) = segment.write(&row)
+            && let Err(error) = segment.write(&row, &encoded.line)
         {
             // A partial write must never leave a poisoned buffered segment active.
             *slot = None;
             return Err(error);
         }
         Ok(row)
-    }
-    fn prepare(&mut self, row: &mut Record, config: &Config) -> io::Result<()> {
-        if let Some(content) = row.content.take() {
-            let bytes = serde_json::to_vec(&content)?;
-            row.content_len = Some(bytes.len());
-            row.content_hash = Some(format!("{:x}", Sha256::digest(&bytes))[..8].into());
-            if config.level == Preset::Full {
-                let content = redaction::redact_json(&content);
-                let bytes = serde_json::to_vec(&content)?;
-                if bytes.len() > 8192 {
-                    let result = self.bodies.write(&self.root, &bytes);
-                    let (reference, rotated) = match result {
-                        Ok(result) => result,
-                        Err(error) => {
-                            self.bodies = Bodies::default();
-                            return Err(error);
-                        }
-                    };
-                    row.body_ref = Some(reference);
-                    if rotated {
-                        self.prune()?;
-                    }
-                } else {
-                    row.content = Some(content);
-                }
-            }
-        }
-        let mut value = serde_json::to_value(&row)?;
-        // Schema keys are fixed identifiers; nested producer keys are untrusted.
-        if let Some(fields) = value.as_object_mut() {
-            for field in fields.values_mut() {
-                *field = redaction::scrub_value(field, true);
-            }
-        }
-        *row = serde_json::from_value::<Record>(value)?;
-        Ok(())
     }
     pub(super) fn flush(&mut self, sync: bool) -> io::Result<()> {
         for slot in [&mut self.main, &mut self.debug] {

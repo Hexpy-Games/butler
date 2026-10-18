@@ -1,6 +1,7 @@
 //! Structured agent logging: one writer, bounded indexed readers and shared redaction.
 mod bodies;
 mod config;
+mod encoded;
 mod export;
 mod files;
 mod index;

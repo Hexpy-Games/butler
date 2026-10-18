@@ -1,4 +1,6 @@
+mod queue;
 mod worker;
+use super::encoded::Encoded;
 use super::{
     Config, ConfigView, Page, Preset, Query, Record, StorageView, export, query, retention,
     storage::Storage,
@@ -9,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         Arc,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc,
     },
     thread,
@@ -19,11 +21,14 @@ use tokio::sync::{broadcast, watch};
 const DEBUG_CAPACITY: usize = 8192;
 type Reply<T> = mpsc::SyncSender<io::Result<T>>;
 enum Command {
-    Record(Box<Record>, bool, usize),
+    Record(Encoded, bool, usize),
     Control(Control),
+    Dropped,
 }
 enum Control {
     Flush(Reply<()>),
+    #[cfg(feature = "e2e-fixtures")]
+    Pause(Mutex<mpsc::Receiver<()>>, Reply<()>),
     Configure(Config, Reply<ConfigView>),
     Clear(Reply<u64>),
     Shutdown(Reply<()>),
@@ -38,7 +43,8 @@ struct Inner {
     tx: mpsc::Sender<Command>,
     storage: Mutex<Storage>,
     config: RwLock<Arc<ConfigView>>,
-    queued_bytes: AtomicUsize,
+    queue: queue::Queue,
+    write_error: RwLock<Option<String>>,
     pending: AtomicUsize,
     dropped: AtomicUsize,
     live: broadcast::Sender<Record>,
@@ -74,7 +80,8 @@ impl Logger {
             tx,
             storage: Mutex::new(storage),
             config: RwLock::new(Arc::new(view)),
-            queued_bytes: AtomicUsize::new(0),
+            queue: queue::Queue::default(),
+            write_error: RwLock::new(None),
             pending: AtomicUsize::new(0),
             dropped: AtomicUsize::new(0),
             live,
@@ -105,7 +112,7 @@ impl Logger {
             return Ok(());
         }
         self.send_record(row, false)?;
-        if self.0.queued_bytes.load(Ordering::Relaxed) > 16 * 1024 * 1024 {
+        if self.0.queue.bytes.load(Ordering::Relaxed) > 16 * 1024 * 1024 {
             self.flush()?;
         }
         Ok(())
@@ -123,11 +130,30 @@ impl Logger {
         self.send_record(row, lossy)
     }
     fn send_record(&self, row: Record, lossy: bool) -> io::Result<()> {
-        // Account serialized payload bytes while the lossless lane is queued.
-        let bytes = serde_json::to_vec(&row)?.len();
-        self.0.queued_bytes.fetch_add(bytes, Ordering::Relaxed);
-        if let Err(error) = self.0.tx.send(Command::Record(Box::new(row), lossy, bytes)) {
-            self.0.queued_bytes.fetch_sub(bytes, Ordering::Relaxed);
+        // A full lane cannot accept any payload; avoid encoding records it will discard.
+        if !lossy && self.0.queue.reject_full(&row.level) {
+            return self.notify_queue_full();
+        }
+        let encoded = match Encoded::new(row, &self.snapshot().effective) {
+            Ok(encoded) => encoded,
+            Err(error) => {
+                if lossy {
+                    self.0.pending.fetch_sub(1, Ordering::Relaxed);
+                }
+                return Err(error);
+            }
+        };
+        let bytes = encoded.bytes();
+        if !lossy && !self.0.queue.reserve(bytes, &encoded.level) {
+            if !self.0.queue.notice.swap(true, Ordering::Relaxed) {
+                self.0.tx.send(Command::Dropped).map_err(io::Error::other)?;
+            }
+            return Ok(());
+        }
+        if let Err(error) = self.0.tx.send(Command::Record(encoded, lossy, bytes)) {
+            if !lossy {
+                self.0.queue.bytes.fetch_sub(bytes, Ordering::Relaxed);
+            }
             if lossy {
                 self.0.pending.fetch_sub(1, Ordering::Relaxed);
             }
@@ -176,7 +202,9 @@ impl Logger {
     }
     pub fn storage(&self) -> io::Result<StorageView> {
         self.flush()?;
-        retention::usage(&self.0.storage.lock().root)
+        let mut view = retention::usage(&self.0.storage.lock().root)?;
+        view.last_write_error = self.0.write_error.read().clone();
+        Ok(view)
     }
     pub fn body(&self, reference: &str) -> io::Result<Vec<u8>> {
         super::bodies::read(&self.0.storage.lock().root, reference)
@@ -247,7 +275,6 @@ impl Logger {
         self.request(Control::Prune)
     }
     fn apply(&self, config: Config) -> io::Result<ConfigView> {
-        let freed_bytes = self.0.storage.lock().configure(&config)?;
         let expires = if config.level == Preset::Full {
             self.config().full_expires_at.or_else(|| {
                 Some(
@@ -261,26 +288,36 @@ impl Logger {
         let view = ConfigView {
             effective: config,
             full_expires_at: expires,
-            freed_bytes,
+            freed_bytes: 0,
         };
         *self.0.config.write() = Arc::new(view.clone());
         tracing::callsite::rebuild_interest_cache();
         self.0.changes.send_replace(view.clone());
+        let freed = self.0.storage.lock().configure(&view.effective);
+        let mut view = view;
+        match freed {
+            Ok(bytes) => view.freed_bytes = bytes,
+            Err(error) => self.report_error(&error),
+        }
+        *self.0.config.write() = Arc::new(view.clone());
         Ok(view)
     }
-    fn write(&self, row: Record) -> io::Result<()> {
+    fn write(&self, row: Encoded) -> io::Result<()> {
         let snapshot = self.snapshot();
         let config = &snapshot.effective;
         if !config.enabled(&row.category, &row.level) {
             return Ok(());
         }
+        self.persist(row, config)
+    }
+    fn persist(&self, row: Encoded, config: &Config) -> io::Result<()> {
         let row = self.0.storage.lock().write(row, config)?;
         if self.0.live.receiver_count() > 0 {
             let _ = self.0.live.send(row);
         }
         Ok(())
     }
-    fn write_queued(&self, row: Record, lossy: bool) -> io::Result<()> {
+    fn write_queued(&self, row: Encoded, lossy: bool) -> io::Result<()> {
         if lossy {
             self.0.pending.fetch_sub(1, Ordering::Relaxed);
         }
@@ -291,14 +328,22 @@ impl Logger {
             0
         };
         if dropped > 0 {
-            self.write(Record::new(
-                "WARN",
-                "lifecycle",
-                "logs.dropped",
-                &format!("dropped {dropped}"),
-            ))?;
+            self.write(Encoded::new(
+                Record::new(
+                    "WARN",
+                    "lifecycle",
+                    "logs.dropped",
+                    &format!("dropped {dropped}"),
+                ),
+                &self.config().effective,
+            )?)?;
         }
+        self.report_drops()?;
         Ok(())
+    }
+    fn report_error(&self, error: &io::Error) {
+        eprintln!("structured log writer I/O failure: {error}");
+        *self.0.write_error.write() = Some(error.to_string());
     }
     pub fn root(&self) -> PathBuf {
         self.0.storage.lock().root.clone()

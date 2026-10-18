@@ -471,3 +471,8 @@ mod wallpaper_store;
 mod wallpapers;
 
 pub use application::project_folder;
+
+#[cfg(feature = "test-support")]
+pub fn http_route_templates() -> Vec<&'static str> {
+    http::route_templates()
+}

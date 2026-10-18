@@ -24,6 +24,7 @@ pub(crate) fn export<W: Write + Seek>(
     let until = query::timestamp(until)?;
     let mut zip = ZipWriter::new(output);
     let mut references = BTreeSet::new();
+    let mut skipped_lines = 0;
     for (path, blocks) in catalog {
         if !blocks.iter().any(|b| {
             since.as_ref().is_none_or(|s| b.max_ts >= *s)
@@ -31,7 +32,7 @@ pub(crate) fn export<W: Write + Seek>(
         }) {
             continue;
         }
-        append_segment(
+        skipped_lines += append_segment(
             &mut zip,
             root,
             path,
@@ -54,7 +55,7 @@ pub(crate) fn export<W: Write + Seek>(
     }
     zip.start_file("manifest.json", options())?;
     let manifest = super::redaction::redact_json(
-        &json!({"version":1,"os":butler_platform::launcher::node_platform(),"level":config.level,"since":since,"until":until,"include_bodies":bodies}),
+        &json!({"version":1,"os":butler_platform::launcher::node_platform(),"level":config.level,"since":since,"until":until,"include_bodies":bodies,"skipped_lines":skipped_lines}),
     );
     zip.write_all(&serde_json::to_vec(&manifest)?)?;
     Ok(zip.finish()?)
@@ -66,7 +67,7 @@ fn append_segment<W: Write + Seek>(
     blocks: &[Block],
     mut references: Option<&mut BTreeSet<PathBuf>>,
     (since, until): (Option<&str>, Option<&str>),
-) -> io::Result<()> {
+) -> io::Result<u64> {
     let name = path.strip_prefix(root).map_err(io::Error::other)?;
     let source = name
         .components()
@@ -78,8 +79,13 @@ fn append_segment<W: Write + Seek>(
     zip.start_file_from_path(name, options())?;
     let mut filtered = Vec::new();
     let mut offset = 0;
-    for line in BufReader::new(File::open(path)?.take(len)).lines() {
-        let row: Record = serde_json::from_str(&line?)?;
+    let mut skipped = 0;
+    for line in BufReader::new(File::open(path)?.take(len)).split(b'\n') {
+        let line = line?;
+        let Ok(row) = serde_json::from_slice::<Record>(&line) else {
+            skipped += 1;
+            continue;
+        };
         if since.is_some_and(|s| row.ts.as_str() < s) || until.is_some_and(|u| row.ts.as_str() > u)
         {
             continue;
@@ -99,5 +105,5 @@ fn append_segment<W: Write + Seek>(
     }
     zip.start_file_from_path(name.with_extension("idx"), options())?;
     zip.write_all(&serde_json::to_vec(&filtered)?)?;
-    Ok(())
+    Ok(skipped)
 }

@@ -91,12 +91,32 @@ async fn logs_full_reverts_on_restart_and_expiry() -> Result<(), HarnessError> {
         "detailed"
     );
     configure(&s, "full").await?;
+    let blocked = s.sandbox.data.join("logs/app/bodies");
+    std::fs::create_dir_all(blocked.parent().unwrap())?;
+    std::fs::write(&blocked, b"blocked")?;
     let r = s.gw.post("/internal/e2e/logs/expire", json!({})).await?;
     assert_eq!(r.status, 200, "{}", r.text);
     assert_eq!(
         s.gw.get("/logs/config").await?.data()["effective"]["level"],
         "detailed"
     );
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while s.gw.get("/settings").await?.data()["log_level"] != "detailed" {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        Ok::<(), HarnessError>(())
+    })
+    .await
+    .unwrap()?;
+    assert!(blocked.is_file());
+    std::fs::remove_file(&blocked)?;
+    std::fs::create_dir(&blocked)?;
+    std::fs::write(blocked.join("pending.zst"), b"pending cleanup")?;
+    let start = std::time::Instant::now();
+    while blocked.exists() && start.elapsed() < Duration::from_secs(5) {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(!blocked.exists());
     s.finish().await
 }
 
@@ -348,20 +368,46 @@ async fn logs_use_router_templates_for_ids() -> Result<(), HarnessError> {
     s.gw.patch("/settings", json!({"diagnostics_enabled":true}))
         .await?;
     configure(&s, "detailed").await?;
-    let id = uuid::Uuid::new_v4().to_string();
-    s.gw.get(&format!("/automations/{id}")).await?;
-    s.gw.send(reqwest::Method::DELETE, &format!("/mcp-servers/{id}"), None)
-        .await?;
-    let rows = s.gw.get("/logs?category=http.server").await?;
-    assert!(!rows.text.contains(&id));
-    for template in ["/automations/{id}", "/mcp-servers/{id}"] {
-        assert!(
-            rows.data()["rows"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|r| r["attrs"]["route"] == template)
-        );
+    let templates = butler_gateway::gateway::http_route_templates();
+    for template in &templates {
+        let path = template
+            .split('/')
+            .map(|part| {
+                if part.starts_with('{') {
+                    "00000000-0000-4000-8000-000000000000"
+                } else {
+                    part
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("/");
+        s.gw.send(reqwest::Method::HEAD, &path, None).await?;
     }
+    s.gw.post("/authority-permissions/revoke", json!({}))
+        .await?;
+    let mut routes = std::collections::BTreeSet::new();
+    let mut cursor = None;
+    loop {
+        let mut path = "/logs?category=http.server&limit=1000".to_owned();
+        if let Some(cursor) = cursor {
+            path.push_str(&format!("&cursor={cursor}"));
+        }
+        let page = s.gw.get(&path).await?;
+        for row in page.data()["rows"].as_array().unwrap() {
+            if row["attrs"]["method"] == "HEAD" {
+                let route = row["attrs"]["route"].as_str().unwrap();
+                assert_ne!(route, "<unmatched>", "{row}");
+                routes.insert(route.to_owned());
+            }
+            if row["attrs"]["method"] == "POST" {
+                assert_eq!(row["attrs"]["route"], "/authority-permissions/revoke");
+            }
+        }
+        cursor = page.data()["cursor"].as_str().map(str::to_owned);
+        if cursor.is_none() {
+            break;
+        }
+    }
+    assert_eq!(routes, templates.into_iter().map(str::to_owned).collect());
     s.finish().await
 }

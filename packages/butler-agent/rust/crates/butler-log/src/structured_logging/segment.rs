@@ -38,11 +38,9 @@ impl Segment {
         }
         Err(io::Error::other("log segment sequence exhausted"))
     }
-    pub(super) fn write(&mut self, row: &Record) -> io::Result<()> {
-        let mut line = serde_json::to_vec(row)?;
-        line.push(b'\n');
+    pub(super) fn write(&mut self, row: &Record, line: &[u8]) -> io::Result<()> {
         let len = u64::try_from(line.len()).map_err(io::Error::other)?;
-        self.file.write_all(&line)?;
+        self.file.write_all(line)?;
         index::add(&mut self.blocks, row, self.bytes, len, "agent");
         self.bytes += len;
         self.dirty = true;

@@ -20,12 +20,10 @@ fn root() -> PathBuf {
 }
 fn record(n: usize, level: &str) -> Record {
     let mut r = Record::new(level, "turn", "turn.finished", &format!("row {n}"));
-    r.ts = format!(
-        "2026-10-18T10:{:02}:{:02}.{:06}Z",
-        n / 60_000_000,
-        n / 1_000_000 % 60,
-        n % 1_000_000
-    );
+    static START: std::sync::OnceLock<chrono::DateTime<chrono::Utc>> = std::sync::OnceLock::new();
+    let start = START.get_or_init(|| chrono::Utc::now() - chrono::Duration::hours(1));
+    r.ts = (*start + chrono::Duration::microseconds(i64::try_from(n).unwrap()))
+        .to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
     r.turn_id = Some(format!("turn-{}", n % 5000));
     r.chat_id = Some(format!("chat-{}", n % 600));
     r
@@ -134,7 +132,10 @@ fn logs_rotation_index_retention() -> Result<(), Box<dyn std::error::Error>> {
         let file = fs::File::create(path).unwrap();
         file.set_len(16 * 1024 * 1024).unwrap();
     }
-    let old = main.join("20000101T000000Z-0000.jsonl");
+    let old = main.join(format!(
+        "{}-0000.jsonl",
+        (chrono::Utc::now() - chrono::Duration::days(20)).format("%Y%m%dT%H%M%SZ")
+    ));
     fs::write(&old, b"{}\n").unwrap();
     fs::OpenOptions::new().write(true).open(&old)?.set_times(
         fs::FileTimes::new().set_modified(std::time::SystemTime::now() - Duration::from_hours(480)),
@@ -367,6 +368,10 @@ fn logs_tracing_updates_filters_and_inherits_span_ids() -> Result<(), Box<dyn st
     let root = root();
     let log = Logger::open(&root, Config::default()).unwrap();
     butler_log::install(log.clone()).unwrap();
+    assert_eq!(
+        tracing::level_filters::LevelFilter::current(),
+        tracing::level_filters::LevelFilter::INFO
+    );
     marker("disabled");
     assert!(!dependency_enabled());
     let mut config = Config::default();
@@ -379,6 +384,10 @@ fn logs_tracing_updates_filters_and_inherits_span_ids() -> Result<(), Box<dyn st
     assert!(!formatted.load(Ordering::Relaxed));
     log.configure(Config::full()).unwrap();
     assert!(dependency_enabled());
+    assert_eq!(
+        tracing::level_filters::LevelFilter::current(),
+        tracing::level_filters::LevelFilter::TRACE
+    );
     let span = tracing::info_span!(target:"butler.turn","turn",trace_id="trace-context",span_id="span-context",parent_span_id="parent-context",chat_id="chat-context",turn_id="turn-context");
     {
         let _entered = span.enter();
@@ -406,9 +415,26 @@ fn logs_tracing_updates_filters_and_inherits_span_ids() -> Result<(), Box<dyn st
     assert!(log.body(marker.body_ref.as_ref().unwrap()).unwrap().len() > 8192);
     log.configure(Config::default())?;
     assert!(!dependency_enabled());
+    assert_eq!(
+        tracing::level_filters::LevelFilter::current(),
+        tracing::level_filters::LevelFilter::INFO
+    );
+    let visited = Arc::new(AtomicBool::new(false));
+    tracing::debug!(target:"butler.turn", category="turn", value=?Probe(visited.clone()));
+    assert!(!visited.load(Ordering::Relaxed));
+    let mut config = Config::default();
+    config.category_levels.insert("turn".into(), "DEBUG".into());
+    log.configure(config)?;
+    assert_eq!(
+        tracing::level_filters::LevelFilter::current(),
+        tracing::level_filters::LevelFilter::DEBUG
+    );
+    tracing::debug!(target:"butler.turn", category="turn", value=?Probe(visited.clone()));
+    assert!(visited.load(Ordering::Relaxed));
+    log.configure(Config::default())?;
     {
         let span =
-            tracing::trace_span!(target:"butler.turn", "context", trace_id="low-level-context");
+            tracing::info_span!(target:"butler.turn", "context", trace_id="low-level-context");
         let _entered = span.enter();
         tracing::info!(target:"butler.turn", category="turn", event="context.probe", "context");
     }
@@ -468,3 +494,6 @@ fn logs_inline_strings_include_marker_within_limit() -> Result<(), Box<dyn std::
 
 #[path = "e2e/logs_storage.rs"]
 mod regressions;
+
+#[path = "e2e/logs_queue.rs"]
+mod queue;

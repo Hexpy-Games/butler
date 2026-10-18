@@ -7,22 +7,15 @@ struct State {
     flush_at: Option<Instant>,
     full_until: Option<Instant>,
     previous: Preset,
-    error: Option<io::Error>,
-}
-impl State {
-    fn report(&mut self, result: io::Result<()>) {
-        if let Err(error) = result {
-            eprintln!("structured log writer I/O failure: {error}");
-            self.error.get_or_insert(error);
-        }
-    }
+    cleanup_at: Option<Instant>,
 }
 impl Logger {
     pub(super) fn run(&self, rx: &mpsc::Receiver<Command>) -> io::Result<()> {
         let mut state = State::default();
+        self.schedule_cleanup(&mut state);
         let mut pending = None;
         loop {
-            let deadline = [state.flush_at, state.full_until]
+            let deadline = [state.flush_at, state.full_until, state.cleanup_at]
                 .into_iter()
                 .flatten()
                 .min();
@@ -39,7 +32,9 @@ impl Logger {
                 Err(mpsc::RecvTimeoutError::Timeout) => continue,
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             };
-            if let Command::Record(..) = command {
+            if let Command::Dropped = command {
+                self.report(self.report_drops());
+            } else if let Command::Record(..) = command {
                 pending = self.batch(command, rx, &mut state);
             } else if let Command::Control(command) = command
                 && self.control(command, &mut state)
@@ -49,15 +44,34 @@ impl Logger {
         }
         self.0.storage.lock().close()
     }
+    fn report(&self, result: io::Result<()>) {
+        if let Err(error) = result {
+            self.report_error(&error);
+        }
+    }
+    fn schedule_cleanup(&self, state: &mut State) {
+        if self.0.storage.lock().cleanup_pending() {
+            state
+                .cleanup_at
+                .get_or_insert_with(|| Instant::now() + Duration::from_secs(1));
+        } else {
+            state.cleanup_at = None;
+        }
+    }
     fn timers(&self, state: &mut State) {
         if state.full_until.is_some_and(|d| Instant::now() >= d) {
             let mut config = self.config().effective;
             config.level = state.previous.clone();
-            state.report(self.apply(config).map(|_| ()));
+            self.report(self.apply(config).map(|_| ()));
             state.full_until = None;
         }
+        if state.cleanup_at.is_some_and(|d| Instant::now() >= d) {
+            self.report(self.0.storage.lock().cleanup().map(|_| ()));
+            state.cleanup_at = None;
+        }
+        self.schedule_cleanup(state);
         if state.flush_at.is_some_and(|d| Instant::now() >= d) {
-            state.report(self.0.storage.lock().flush(false));
+            self.report(self.0.storage.lock().flush(false));
             state.flush_at = None;
         }
     }
@@ -77,13 +91,15 @@ impl Logger {
                 pending = Some(command);
                 break;
             };
-            self.0.queued_bytes.fetch_sub(bytes, Ordering::Relaxed);
+            if !lossy {
+                self.0.queue.bytes.fetch_sub(bytes, Ordering::Relaxed);
+            }
             sync |= row.level.eq_ignore_ascii_case("ERROR");
-            state.report(self.write_queued(*row, lossy));
+            self.report(self.write_queued(row, lossy));
             pending = rx.try_recv().ok();
         }
         if sync {
-            state.report(self.0.storage.lock().flush(true));
+            self.report(self.0.storage.lock().flush(true));
         }
         state
             .flush_at
@@ -96,6 +112,7 @@ impl Logger {
                 let full = config.level == Preset::Full;
                 let previous = self.config().effective.level;
                 let result = self.apply(config);
+                self.schedule_cleanup(state);
                 if result.is_ok() {
                     if full && state.full_until.is_none() {
                         state.previous = previous;
@@ -106,9 +123,14 @@ impl Logger {
                 }
                 let _ = reply.send(result);
             }
+            #[cfg(feature = "e2e-fixtures")]
+            Control::Pause(resume, reply) => {
+                let _ = reply.send(Ok(()));
+                let _ = resume.lock().recv();
+            }
             Control::Flush(reply) => {
                 let result = self.0.storage.lock().flush(false);
-                let _ = reply.send(state.error.take().map_or(result, Err));
+                let _ = reply.send(result);
                 state.flush_at = None;
             }
             Control::Clear(reply) => {
@@ -117,7 +139,7 @@ impl Logger {
             }
             Control::Shutdown(reply) => {
                 let result = self.0.storage.lock().close();
-                let _ = reply.send(state.error.take().map_or(result, Err));
+                let _ = reply.send(result);
                 return true;
             }
             #[cfg(feature = "e2e-fixtures")]

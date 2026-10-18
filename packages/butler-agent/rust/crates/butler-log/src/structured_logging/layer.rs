@@ -49,9 +49,24 @@ where
         }
     }
     fn max_level_hint(&self) -> Option<tracing::metadata::LevelFilter> {
-        // Spans at every level carry context for enabled events. Dependency
-        // events are disabled through cached callsite Interest instead.
-        Some(tracing::metadata::LevelFilter::TRACE)
+        use tracing::metadata::LevelFilter;
+        let snapshot = self.0.snapshot();
+        let config = &snapshot.effective;
+        let maximum = config
+            .category_levels
+            .values()
+            .map(|level| super::record::severity(level))
+            .chain(std::iter::once(config.level.threshold()))
+            .max()
+            .unwrap_or(0);
+        Some(match maximum {
+            5 => LevelFilter::TRACE,
+            4 => LevelFilter::DEBUG,
+            3 => LevelFilter::INFO,
+            2 => LevelFilter::WARN,
+            1 => LevelFilter::ERROR,
+            _ => LevelFilter::OFF,
+        })
     }
     fn enabled(&self, metadata: &tracing::Metadata<'_>, _ctx: Context<'_, S>) -> bool {
         // Event categories are fields, unavailable here; use the most permissive
