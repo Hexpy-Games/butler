@@ -22,6 +22,7 @@ export function ComposerEditorPlugin() {
   const savedSelection = useRef<BaseSelection | null>(null);
   useHotkey("mod+shift+e", () => focusComposer(editor.getRootElement()), { enabled: true });
   useEffect(() => registerComposerFocus(editor, savedSelection), [editor]);
+  // Declared before the update listener below: its unmount flush saves committed text through that listener.
   useEffect(() => registerComposerComposition(editor), [editor]);
   // Handle send before PlainTextPlugin inserts a line break. React's bubble
   // handler sees defaultPrevented and cannot submit the same key twice.

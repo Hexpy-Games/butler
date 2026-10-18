@@ -1,4 +1,4 @@
-import { $addUpdateTag, $getSelection, $isRangeSelection, $isTextNode, $isTokenOrSegmented, $setCompositionKey,
+import { $addUpdateTag, $getSelection, $isElementNode, $isRangeSelection, $isTextNode, $isTokenOrSegmented, $setCompositionKey,
   COMMAND_PRIORITY_CRITICAL, COMPOSITION_END_COMMAND, COMPOSITION_START_COMMAND, COMPOSITION_START_TAG,
   CONTROLLED_TEXT_INSERTION_COMMAND, INPUT_COMMAND, KEY_DOWN_COMMAND, SELECTION_CHANGE_COMMAND, SKIP_DOM_SELECTION_TAG,
   mergeRegister, type LexicalEditor, type RangeSelection } from "lexical";
@@ -92,19 +92,19 @@ function $startComposition(editor: LexicalEditor, state: CompositionState): bool
   $addUpdateTag(SKIP_DOM_SELECTION_TAG);
   $addUpdateTag(COMPOSITION_START_TAG);
   if (state.owned) { $setCompositionKey(state.owned.key); return true; }
-  // The browser replaces a selection inside one text node in place; anything wider
-  // is removed now, as Lexical's own handler would.
-  if (!selection.isCollapsed() && (selection.anchor.key !== selection.focus.key || selection.anchor.type !== "text")) {
-    selection.removeText();
-  }
   const anchor = selection.anchor.getNode();
+  const oneText = selection.isCollapsed() || (selection.anchor.key === selection.focus.key && selection.anchor.type === "text");
   if ($isTextNode(anchor) && $isTokenOrSegmented(anchor)) return false;
-  // In text the browser composes in place and Lexical reads it back from the DOM.
-  // The composition key goes on the text's parent: on the text node itself Lexical
-  // would add its placeholder and suffix characters. Keyed, Lexical treats the
-  // updates as one composition (history, shortcuts, placeholder).
-  if ($isTextNode(anchor)) { $setCompositionKey(anchor.getParentOrThrow().getKey()); return true; }
-  state.owned = $ownElement(editor, selection as RangeSelection);
+  // In text the browser composes in place, replacing a selection inside the node,
+  // and Lexical reads it back from the DOM. The composition key goes on the text's
+  // parent: on the text node itself Lexical would add its placeholder and suffix
+  // characters. Keyed, Lexical treats the updates as one composition (history,
+  // shortcuts, placeholder).
+  if (oneText && $isTextNode(anchor)) { $setCompositionKey(anchor.getParentOrThrow().getKey()); return true; }
+  // On an element, or over a selection across nodes, the browser owns their block.
+  const block = oneText ? (selection.anchor.type === "element" ? anchor : null) : anchor.getTopLevelElement();
+  if (!block || (!oneText && !block.is(selection.focus.getNode().getTopLevelElement()))) return false;
+  state.owned = $isElementNode(block) ? $ownElement(editor, block, selection as RangeSelection) : null;
   if (!state.owned) return false;
   $setCompositionKey(state.owned.key);
   return true;

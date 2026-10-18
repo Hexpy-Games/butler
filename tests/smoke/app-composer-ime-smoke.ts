@@ -138,6 +138,43 @@ async function overSelection(driver: Driver): Promise<void> {
   assert.equal(state.text, "ab 한글", `${driver.name} over a selection: replaced by composed syllables ${seen}`);
 }
 
+// Composing over a selection across lines replaces all of it with the composed text.
+async function overLines(driver: Driver): Promise<void> {
+  await clearDraft(driver);
+  await driver.type("ab");
+  await driver.enter(false);
+  await driver.type("cd");
+  await driver.run(`const walker = document.createTreeWalker(document.querySelector("[contenteditable=true]"), NodeFilter.SHOW_TEXT);
+    const first = walker.nextNode(); let last = first;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) last = node;
+    getSelection().setBaseAndExtent(first, 0, last, last.length); return true;`);
+  await sleep(300);
+  await driver.external();
+  await driver.run(STATE);
+  const state = await typeKorean(driver, 40, "한글");
+  const external = await driver.external();
+  const seen = JSON.stringify({ ...state, external });
+  assert.equal(state.text, "한글", `${driver.name} over lines: replaced by composed syllables ${seen}`);
+  assert.deepEqual(external, [], `${driver.name} over lines: the IME saw outside changes ${seen}`);
+  assert.deepEqual(state.violations, [], `${driver.name} over lines: text changed while composing ${seen}`);
+}
+
+// Clause conversion: the IME selects part of its composition, and the editor still leaves it alone.
+async function clauseSelection(driver: Driver, cdp: CDPSession): Promise<void> {
+  await clearDraft(driver);
+  await driver.type("ab ");
+  await sleep(200);
+  for (const key of hangulKeys("한")) { await driver.press(key); await sleep(40); }
+  await cdp.send("Input.imeSetComposition", { text: "한", selectionStart: 0, selectionEnd: 1 });
+  await sleep(100);
+  await driver.commit();
+  await sleep(300);
+  const state = await driver.run<State>(STATE);
+  const seen = JSON.stringify(state);
+  assert.deepEqual(state.violations, [], `${driver.name} clause selection: text changed while composing ${seen}`);
+  assert.equal(state.text, "ab 한", `${driver.name} clause selection: composed once ${seen}`);
+}
+
 // Send keys the IME consumes while composing do not send.
 async function keysWhileComposing(driver: Driver, server: NativeAppServerHandle): Promise<void> {
   await clearDraft(driver);
@@ -232,9 +269,10 @@ async function scenarios(driver: Driver, server: NativeAppServerHandle): Promise
   await refocus(driver, "card padding refocus", cardPadding(driver));
   await undo(driver);
   await overSelection(driver);
+  await overLines(driver);
   await keysWhileComposing(driver, server);
   await send(driver, server);
-  console.log(JSON.stringify({ browser: driver.name, ok: true, cases: 9 }));
+  console.log(JSON.stringify({ browser: driver.name, ok: true, cases: 10 }));
 }
 
 async function chromiumDriver(page: Page, cdp: CDPSession): Promise<Driver> {
@@ -272,7 +310,11 @@ async function runChromium(server: NativeAppServerHandle): Promise<void> {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     await server.signIn(page);
     await page.goto(server.url);
-    await scenarios(await chromiumDriver(page, await page.context().newCDPSession(page)), server);
+    const cdp = await page.context().newCDPSession(page);
+    const driver = await chromiumDriver(page, cdp);
+    await scenarios(driver, server);
+    await clauseSelection(driver, cdp);
+    console.log(JSON.stringify({ browser: "chromium", ok: true, case: "clause selection" }));
   } finally { await browser.close(); }
 }
 
