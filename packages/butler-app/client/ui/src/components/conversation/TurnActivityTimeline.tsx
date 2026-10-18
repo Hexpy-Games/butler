@@ -4,6 +4,7 @@ import {
   Button,
   ChevronDown,
   ChevronRight,
+  Collapsible,
   ListChecks,
   RollingSwap,
   Stack,
@@ -80,11 +81,14 @@ export function TurnActivityTimeline({
                 </li>
               ))}
             </Stack>
-          ) : live ? (
-            <RollingSwap itemKey={latest.id} motion={live}>
-              <ActivityBlock activity={latest} delegatedGoal={activities.length === 1 ? delegatedGoal : undefined} live={pulseLatest} turnId={latest.turnId ?? turnId} />
-            </RollingSwap>
-          ) : null}
+          ) : (
+            // The current step folds away when the turn settles; the header stays in place.
+            <Collapsible open={live} data-test-class="turn-current-step">
+              <RollingSwap itemKey={latest.id} motion={live}>
+                <ActivityBlock activity={latest} delegatedGoal={activities.length === 1 ? delegatedGoal : undefined} live={pulseLatest} turnId={latest.turnId ?? turnId} />
+              </RollingSwap>
+            </Collapsible>
+          )}
           {expanded && !expandAll ? (
             <Stack as="footer" cross="start">
               <Button

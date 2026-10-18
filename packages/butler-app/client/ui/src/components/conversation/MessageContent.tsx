@@ -1,5 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { memo, useCallback, type ReactNode } from "react";
+import { memo, useCallback } from "react";
 import type { MessageRecord } from "@/app/types.ts";
 import { visibleSystemMessageText } from "@/app/system-event-message.ts";
 import { refreshSessionFileUrls } from "@/app/messageFileRefresh.ts";
@@ -20,12 +20,14 @@ import { MessageChangedFiles } from "./MessageChangedFiles";
 import { MessageAttachments } from "./MessageAttachments";
 import { UserMessageText } from "./UserMessageText";
 import { MessageImageContext, openMessageImage } from "./messageImages";
+import { MessageLiveStatus } from "./MessageTurnActivity";
+import type { LiveTurnActivity } from "./TurnActivityPanel";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection";
 
 interface MessageContentProps {
   message: MessageRecord;
-  liveActivity?: ReactNode;
+  liveActivity?: LiveTurnActivity;
   copied: boolean;
   footerMeta: AssistantFooterMeta | null;
   onCopyAssistantMessage?: (message: MessageRecord) => void;
@@ -50,7 +52,7 @@ function MessageContentComponent({
   return (
     <MessageImageContext.Provider value={openImage}>
       {message.role === "assistant" ? (
-        <AssistantMessageBody message={message} running={running} failureNotice={failureNotice}
+        <AssistantMessageBody message={message} running={running} liveActivity={liveActivity} failureNotice={failureNotice}
           stewardProgress={stewardProgress} refreshFileUrls={refreshFileUrls} />
       ) : message.role === "user" ? (
         <UserMessageText key={message.id} text={message.text} contentParts={message.content_parts} />
@@ -76,7 +78,7 @@ function MessageContentComponent({
           text={message.text}
         />
       )}
-      {liveActivity}
+      {message.role === "assistant" && <MessageLiveStatus live={liveActivity} />}
       {message.role === "assistant" && running && <AnswerDraftFooter turnId={message.turn_id} />}
       {message.role === "assistant" && !running && onCopyAssistantMessage && (
         <AssistantResponseFooter

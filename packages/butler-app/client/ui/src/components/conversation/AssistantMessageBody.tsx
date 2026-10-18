@@ -5,16 +5,19 @@ import type { RefreshFileUrls } from "@/hooks/useMessageFileSource";
 import { Stack, Tag, Typo } from "@/butler-ds";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { AssistantFailureNotice } from "./FailureNoticeContainer";
-import { CompletedTurnActivity } from "./CompletedTurnActivity";
+import { MessageTurnActivity } from "./MessageTurnActivity";
+import type { LiveTurnActivity } from "./TurnActivityPanel";
 import { CompletedWorkBlocks } from "./CompletedWorkBlocks";
 import { AssistantReply } from "./AssistantReply";
 import { PlanDocumentMessage } from "./PlanDocumentMessage";
 import { StewardParentProgress } from "./StewardParentProgress";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection";
 
-export function AssistantMessageBody({ message, running, failureNotice, stewardProgress, refreshFileUrls }: {
+export function AssistantMessageBody({ message, running, liveActivity, failureNotice, stewardProgress, refreshFileUrls }: {
   message: MessageRecord;
   running: boolean;
+  /** Live progress of the running turn; it fills the slot the completed summary takes. */
+  liveActivity?: LiveTurnActivity;
   failureNotice: boolean;
   stewardProgress?: AnchoredStewardProgress;
   refreshFileUrls: RefreshFileUrls;
@@ -23,11 +26,7 @@ export function AssistantMessageBody({ message, running, failureNotice, stewardP
   const hasPhaseActivity = projectTurnActivity(message.turn_activity_rows ?? [], message.turn_id).phaseActivities.length > 0;
   return (
     <>
-      {!running && <CompletedTurnActivity
-        rows={message.turn_activity_rows}
-        turnId={message.turn_id}
-        turnState={message.status}
-      />}
+      <MessageTurnActivity message={message} live={liveActivity} />
       {!running && !hasPhaseActivity && <CompletedWorkBlocks
         blocks={message.work_blocks}
         turnId={message.turn_id}
