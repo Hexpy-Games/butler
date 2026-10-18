@@ -5,6 +5,11 @@ allow-panic-in-tests = true
 allow-indexing-slicing-in-tests = true
 
 disallowed-methods = [
+    { path = "tokio::net::TcpStream::connect", reason = "Use butler_log::http::Connection for raw egress; non-HTTP loopback probes/control need an explicit exemption" },
+    { path = "tokio::net::TcpSocket::connect", reason = "Use butler_log::http::Connection for raw egress" },
+    { path = "std::net::TcpStream::connect", reason = "Use butler_log::http::Connection for raw egress" },
+    { path = "std::net::TcpStream::connect_timeout", reason = "Use butler_log::http::Connection for raw egress" },
+    { path = "socket2::Socket::connect", reason = "Use butler_log::http::Connection for raw egress" },
     { path = "reqwest::Client::new", reason = "Use butler_log::http; all outbound HTTP must be logged" },
     { path = "reqwest::Client::builder", reason = "Use butler_log::http; all outbound HTTP must be logged" },
     { path = "reqwest::ClientBuilder::new", reason = "Use butler_log::http; all outbound HTTP must be logged" },

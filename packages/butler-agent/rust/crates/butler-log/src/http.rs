@@ -4,6 +4,8 @@
     reason = "the sole reqwest construction and execution boundary"
 )]
 mod client;
+mod connection;
+pub use connection::{Connection, ConnectionStream};
 mod error;
 mod execute;
 mod logging;

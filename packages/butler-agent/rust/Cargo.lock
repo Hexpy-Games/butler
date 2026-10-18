@@ -1248,6 +1248,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "toml_edit",
+ "tracing",
  "tz-rs",
  "unicode-normalization",
  "unicode-segmentation",

@@ -47,6 +47,10 @@ struct Start<'a> {
     generation: u64,
 }
 impl Previews {
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "loopback TCP readiness/occupancy probes; no HTTP or payload"
+    )]
     pub async fn start(
         &self,
         session: &str,
@@ -329,6 +333,10 @@ impl Previews {
 fn summary(id: &str, entry: &Preview) -> Value {
     json!({"status":"ok","preview_id":id,"port":entry.port,"pid":entry.process.pid(),"untrusted_log":entry.process.log()})
 }
+#[allow(
+    clippy::disallowed_methods,
+    reason = "loopback TCP readiness/occupancy probes; no HTTP or payload"
+)]
 async fn ready(target: &Target) -> bool {
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
