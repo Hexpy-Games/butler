@@ -39,182 +39,9 @@ impl Drop for Server {
     }
 }
 
-fn frame(value: &Value) -> String {
-    format!("data: {value}\n\n")
-}
-fn gemini(part: &Value, end: bool) -> String {
-    let mut candidate = json!({"index":0,"content":{"role":"model","parts":[part]}});
-    if end {
-        candidate["finishReason"] = json!("STOP");
-    }
-    frame(&json!({"candidates":[candidate],"modelVersion":"gemini-3.8-flash"}))
-}
-fn frames(stub: &Stub) -> (String, String, String) {
-    let a = format!("**{FIRST}**\nDetails.\n");
-    let b = format!("**{SECOND}**\nMore details.\n");
-    match stub.provider {
-        "google" => (
-            gemini(&json!({"text":a,"thought":true}), false),
-            gemini(&json!({"text":b,"thought":true}), false),
-            gemini(
-                &json!({"functionCall":{"name":"tool_describe","args":{"ids":["native:list_tool_capabilities"]}},"thoughtSignature":SIGNATURE}),
-                true,
-            ),
-        ),
-        "anthropic" => (
-            frame(
-                &json!({"type":"message_start","message":{"id":"msg_thinking","model":"claude-haiku-4-5","type":"message","role":"assistant","content":[],"usage":{"input_tokens":10,"output_tokens":0}}}),
-            ) + &frame(
-                &json!({"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}),
-            ) + &frame(
-                &json!({"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":a}}),
-            ),
-            frame(
-                &json!({"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":b}}),
-            ),
-            frame(
-                &json!({"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":SIGNATURE}}),
-            ) + &frame(&json!({"type":"content_block_stop","index":0}))
-                + &frame(
-                    &json!({"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}),
-                )
-                + &frame(
-                    &json!({"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Done."}}),
-                )
-                + &frame(&json!({"type":"content_block_stop","index":1}))
-                + &frame(
-                    &json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":10}}),
-                )
-                + &frame(&json!({"type":"message_stop"})),
-        ),
-        _ => {
-            let kind = if stub.raw {
-                "response.reasoning_text.delta"
-            } else {
-                "response.reasoning_summary_text.delta"
-            };
-            (
-                frame(&json!({"type":kind,"item_id":"rs_1","output_index":0,"delta":a})),
-                frame(&json!({"type":kind,"item_id":"rs_1","output_index":0,"delta":b})),
-                frame(&json!({"type":"response.output_text.delta","delta":"Done."}))
-                    + &frame(
-                        &json!({"type":"response.completed","response":{"id":"resp_done","model":"gpt-5.5","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done."}]}],"usage":{"input_tokens":10,"output_tokens":10,"total_tokens":20}}}),
-                    ),
-            )
-        }
-    }
-}
-async fn reply(State(stub): State<Stub>, Json(body): Json<Value>) -> Response {
-    if stub.reject_summary && body["reasoning"]["summary"] == "auto" {
-        stub.requests.lock().unwrap().push(body);
-        return (axum::http::StatusCode::BAD_REQUEST, Json(json!({"error":{"type":"invalid_request_error","param":"reasoning.summary","message":"Summary unavailable"}}))).into_response();
-    }
-    let round = {
-        let mut requests = stub.requests.lock().unwrap();
-        requests.push(body);
-        requests.len()
-    };
-    if stub.provider == "google" && round > 1 {
-        return (
-            [("content-type", "text/event-stream")],
-            gemini(&json!({"text":"Done."}), true),
-        )
-            .into_response();
-    }
-    let (first, second, last) = frames(&stub);
-    let stream = futures_util::stream::unfold(
-        (0, stub, first, second, last),
-        |(step, stub, first, second, last)| async move {
-            let text = match step {
-                0 => first.clone(),
-                1 => {
-                    tokio::time::sleep(Duration::from_millis(300)).await;
-                    second.clone()
-                }
-                2 => {
-                    stub.gate.notified().await;
-                    last.clone()
-                }
-                _ => return None,
-            };
-            Some((
-                Ok::<_, std::convert::Infallible>(text),
-                (step + 1, stub, first, second, last),
-            ))
-        },
-    );
-    (
-        [("content-type", "text/event-stream")],
-        Body::from_stream(stream),
-    )
-        .into_response()
-}
+mod stub;
+use stub::{setup, setup_refusal};
 
-async fn setup(
-    provider: &'static str,
-    raw: bool,
-) -> Result<(Scenario, Stub, Server), HarnessError> {
-    setup_refusal(provider, raw, false).await
-}
-async fn setup_refusal(
-    provider: &'static str,
-    raw: bool,
-    reject_summary: bool,
-) -> Result<(Scenario, Stub, Server), HarnessError> {
-    let stub = Stub {
-        provider,
-        raw,
-        reject_summary,
-        gate: Arc::new(Notify::new()),
-        requests: Default::default(),
-    };
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let base = format!("http://{}/v1", listener.local_addr()?);
-    let model = match provider {
-        "google" => "gemini-3.8-flash",
-        "anthropic" => "claude-haiku-4-5",
-        _ => "gpt-5.5",
-    };
-    let app = Router::new().route("/v1/models", get(|| async { Json(json!({"data":[],"models":[{"name":"models/gemini-3.8-flash","displayName":"Gemini 3.8 Flash","supportedGenerationMethods":["generateContent"],"inputTokenLimit":1_048_576,"outputTokenLimit":65_536}]})) }))
-        .route("/v1/models/gemini-3.8-flash:streamGenerateContent", post(reply))
-        .route("/v1/messages", post(reply)).route("/v1/responses", post(reply)).with_state(stub.clone());
-    let server = Server(tokio::spawn(async move {
-        let _ = axum::serve(listener, app).await;
-    }));
-    let env = match provider {
-        "google" => "BUTLER_GOOGLE_BASE_URL",
-        "anthropic" => "BUTLER_ANTHROPIC_BASE_URL",
-        _ => "OPENAI_BASE_URL",
-    };
-    let s = Setup::new("MODEL-THINKING")?
-        .env(env, &base)
-        .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
-        .start()
-        .await?;
-    let key = match provider {
-        "google" => "AIza-e2e-placeholder",
-        "anthropic" => "sk-ant-e2e-placeholder",
-        _ => "sk-e2e-placeholder",
-    };
-    let saved =
-        s.gw.post(
-            "/credentials",
-            json!({"provider_id":provider,"api_key":key}),
-        )
-        .await?;
-    assert_eq!(saved.status, 201, "{}", saved.text);
-    let registered = s.gw.post("/model-catalog/registered-models", json!({"provider_id":provider,"model_id":model,"auth_type":"api_key","credential_id":saved.data()["credential"]["id"]})).await?;
-    assert_eq!(registered.status, 201, "{}", registered.text);
-    let selected = s
-        .select_model(&ModelChoice {
-            model: format!("{provider}/{model}"),
-            effort: Some("medium".into()),
-        })
-        .await?;
-    assert_eq!(selected.status, 200, "{}", selected.text);
-    stub.requests.lock().unwrap().clear();
-    Ok((s, stub, server))
-}
 fn row_counts(s: &Scenario) -> Result<(i64, i64), HarnessError> {
     let app = rusqlite::Connection::open_with_flags(
         s.sandbox.data.join("app-server/butler-client.sqlite"),
@@ -243,18 +70,65 @@ async fn summary_case(provider: &'static str, show: bool) -> Result<(), HarnessE
     assert_eq!(saved.data()["show_thinking"], show);
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     s.gw.say("general", "Reply briefly.").await?;
+    if provider == "openai" {
+        live.wait_for(WAIT, |e| {
+            e["type"] == "turn.thinking" && e["payload"]["line"] == "A link"
+        })
+        .await?;
+        let capped = live
+            .wait_for(WAIT, |e| {
+                e["type"] == "turn.thinking" && e["payload"]["line"] == "😀".repeat(60)
+            })
+            .await?;
+        assert_eq!(
+            capped["payload"]["line"]
+                .as_str()
+                .unwrap()
+                .encode_utf16()
+                .count(),
+            120
+        );
+        assert!(
+            !live
+                .snapshot()
+                .iter()
+                .any(|e| e["payload"]["line"] == "unfinished")
+        );
+    }
     let first = live
         .wait_for(WAIT, |e| {
             e["type"] == "turn.thinking" && e["payload"]["line"] == FIRST
         })
         .await?;
     assert!(first.get("id").is_none());
+    let first_seen = std::time::Instant::now();
     let before = row_counts(&s)?;
     let second = live
         .wait_for(WAIT, |e| {
             e["type"] == "turn.thinking" && e["payload"]["line"] == SECOND
         })
         .await?;
+    if provider == "openai" {
+        assert!(
+            first_seen.elapsed() >= Duration::from_millis(950),
+            "line updates must wait one second"
+        );
+        let lines: Vec<_> = live
+            .snapshot()
+            .into_iter()
+            .filter(|e| e["type"] == "turn.thinking")
+            .map(|e| e["payload"]["line"].clone())
+            .collect();
+        assert_eq!(
+            lines.iter().filter(|line| **line == FIRST).count(),
+            1,
+            "unchanged heading must not publish"
+        );
+        assert!(
+            !lines.contains(&json!("Superseded")),
+            "latest pending heading wins"
+        );
+    }
     assert_eq!(before, row_counts(&s)?, "thinking must not write rows");
     let expected = format!("**{FIRST}**\nDetails.\n**{SECOND}**\nMore details.\n");
     if show {
@@ -296,6 +170,18 @@ async fn summary_case(provider: &'static str, show: bool) -> Result<(), HarnessE
     let turn = second["payload"]["turn_id"].as_str().unwrap();
     live.wait_turn(&s.gw, "general", turn, &["delivered"], WAIT)
         .await?;
+    let events = live.snapshot();
+    let second_at = events
+        .iter()
+        .position(|e| e["type"] == "turn.thinking" && e["payload"]["line"] == SECOND)
+        .unwrap();
+    assert!(
+        events
+            .iter()
+            .skip(second_at + 1)
+            .any(|e| e["type"] == "turn.thinking" && e["payload"]["line"].is_null()),
+        "text/tool start must clear the line"
+    );
     let ended = LiveEvents::subscribe(&s.gw, 0).await?;
     ended
         .wait_for(WAIT, |e| e["type"] == "answer_blocks.snapshot")

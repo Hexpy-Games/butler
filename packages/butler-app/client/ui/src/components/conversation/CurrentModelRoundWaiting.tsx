@@ -17,5 +17,5 @@ export function CurrentModelRoundWaiting({ row, line }: { row: ProgressRow; line
       ariaLabel={appCopy.interfaceStatus.modelWaiting}
     />
   );
-  return <RollingSwap itemKey={line ?? "generating"}>{text}</RollingSwap>;
+  return <RollingSwap itemKey={line ?? "generating"} motion={Boolean(line)}>{text}</RollingSwap>;
 }

@@ -76,11 +76,17 @@ impl CodexState {
             }
         } else if matches!(
             kind,
-            "response.reasoning_summary_text.delta"
+            "response.reasoning_summary_part.added"
+                | "response.reasoning_summary_text.delta"
                 | "response.reasoning_summary.delta"
                 | "response.reasoning_text.delta"
         ) {
-            if let Some(delta) = event.get("delta").and_then(Value::as_str) {
+            let delta = if kind == "response.reasoning_summary_part.added" {
+                Some("\n\n")
+            } else {
+                event.get("delta").and_then(Value::as_str)
+            };
+            if let Some(delta) = delta {
                 let sequence = self.next();
                 self.emit(observer, &serde_json::json!({"type":"reasoning_delta","display":if kind == "response.reasoning_text.delta" { "internal" } else { "summary" },"streamId":self.stream_id(event),"sequence":sequence,"textDelta":delta,"charCount":delta.encode_utf16().count(),"raw":event}));
             }
