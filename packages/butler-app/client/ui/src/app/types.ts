@@ -1794,7 +1794,7 @@ export interface AutomationSummary {
   next_run_at?: string | null;
   /** The access the schedule's runs get; it never changes the target conversation's mode. */
   access_mode: AccessMode;
-  /** The schedule's own model; absent or null follows the target chat's model. */
+  /** The schedule's own model; absent or null means none is set and runs follow the target chat's model. An update that omits it or sends null leaves it unchanged. */
   model?: string | null;
 }
 

@@ -201,13 +201,7 @@ impl AppApplication {
         run_id: &str,
         trigger: &str,
     ) -> DispatchResult {
-        let Ok(model) = self.automation_model_override(row.model.as_deref()).await else {
-            return DispatchResult {
-                state: "failed",
-                safe_error: Some("automation_dispatch_failed".into()),
-                turn_id: None,
-            };
-        };
+        let model = self.automation_model_override(row.model.as_deref());
         let request = MessageSendRequest {
             expected_project_id: None,
             content_parts: None,
@@ -261,14 +255,11 @@ impl AppApplication {
         }
     }
 
-    async fn automation_model_override(
-        &self,
-        model: Option<&str>,
-    ) -> Result<Option<Value>, GatewayApplicationError> {
-        let Some(model) = model else { return Ok(None) };
-        self.dependencies.settings_facts.refresh().await?;
-        let facts = self.dependencies.settings_facts.snapshot()?;
-        Ok(settings::selectable_model_ref(&facts, model).map(Value::String))
+    /// The schedule's stored model, read from the current settings snapshot only.
+    /// Without a snapshot or a selectable model the run follows the chat's model.
+    fn automation_model_override(&self, model: Option<&str>) -> Option<Value> {
+        let facts = self.dependencies.settings_facts.snapshot().ok()?;
+        settings::selectable_model_ref(&facts, model?).map(Value::String)
     }
 
     async fn complete_fresh_run(
