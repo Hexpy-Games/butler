@@ -1,6 +1,6 @@
 //! Only fresh roots or a conservative, bounded startup migration acquire ownership.
 use super::data_reset::plan;
-use butler_platform::secure_fs;
+use butler_platform::secure_fs::{self, Canonical as _};
 use serde::{Deserialize, Serialize};
 use std::{fs, io, path::Path};
 
@@ -48,14 +48,23 @@ fn initialize_empty(root: &Path) -> io::Result<()> {
     Ok(())
 }
 
-pub(crate) fn migrate(root: &Path) -> io::Result<()> {
+pub(crate) fn migrate(root: &Path, requested: &Path, default: &Path) -> io::Result<()> {
     if fs::symlink_metadata(root.join(MARKER)).is_ok() || !safe_location(root) {
         return Ok(());
     }
+    // Compare resolved default locations, retaining the configured path to
+    // refuse a symlink alias. Unknown entries are preserved by reset.
+    let is_default = fs::symlink_metadata(requested)
+        .is_ok_and(|m| m.is_dir() && !m.file_type().is_symlink())
+        && default.canonical().is_ok_and(|path| path == root);
+    if is_default {
+        return write(root);
+    }
     for entry in fs::read_dir(root)? {
         let entry = entry?;
-        if entry.file_type()?.is_symlink()
-            || !plan::recognized_root(&entry.file_name(), entry.file_type()?)
+        let kind = entry.file_type()?;
+        if kind.is_symlink()
+            || !plan::recognized_root(&entry.file_name(), kind).unwrap_or(false)
         {
             return Ok(());
         }

@@ -15,8 +15,9 @@ pub(crate) async fn recover(
     installation: &ResolvedInstallation,
 ) -> Result<(), butler_turn::btcc::BtccError> {
     let root = super::super::configuration::requested_data(explicit, home);
+    let default = super::super::configuration::default_data(home);
     let installation = installation.clone();
-    let legacy = tokio::task::spawn_blocking(move || recover_owned(&root, &installation))
+    let legacy = tokio::task::spawn_blocking(move || recover_owned(&root, &default, &installation))
         .await
         .map_err(error)?
         .map_err(error)?;
@@ -30,9 +31,13 @@ pub(crate) async fn recover(
     Ok(())
 }
 
-fn recover_owned(root: &Path, installation: &ResolvedInstallation) -> io::Result<Option<PathBuf>> {
+fn recover_owned(
+    requested: &Path,
+    default: &Path,
+    installation: &ResolvedInstallation,
+) -> io::Result<Option<PathBuf>> {
     let root = installation
-        .validate_data_root(root)
+        .validate_data_root(requested)
         .map_err(io::Error::other)?;
     if !root.join(journal::JOURNAL).exists()
         && crate::host::runtime::storage_bootstrap::is_unsupported_legacy_data(&root)
@@ -57,7 +62,7 @@ fn recover_owned(root: &Path, installation: &ResolvedInstallation) -> io::Result
         Err(e) => return Err(io::Error::other(e)),
     };
     let _data = instance::lock_stopped_data(&root).map_err(io::Error::other)?;
-    super::super::data_ownership::migrate(&root)?;
+    super::super::data_ownership::migrate(&root, requested, default)?;
     if let Some(mut journal) = journal::load(&root)? {
         match journal.phase {
             Phase::RollingBack | Phase::Requested => {

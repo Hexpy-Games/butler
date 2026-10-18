@@ -161,5 +161,10 @@ fn read_butler_config(data_root: &Path) -> Value {
 }
 
 pub(crate) fn requested_data(explicit: Option<&str>, home: &Path) -> PathBuf {
-    source_path(explicit, "BUTLER_DATA").unwrap_or_else(|| home.join(".butler"))
+    source_path(explicit, "BUTLER_DATA").unwrap_or_else(|| default_data(home))
+}
+
+/// The data root with every data-root override unset.
+pub(crate) fn default_data(home: &Path) -> PathBuf {
+    home.join(".butler")
 }

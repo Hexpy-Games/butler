@@ -151,9 +151,9 @@ pub(crate) fn preflight(
     })
 }
 
-// Deliberately conservative: only roots of paths the retention/configuration
-// code itself names qualify. Workspace effect receipts are not an ownership inventory.
-pub(crate) fn recognized_root(name: &std::ffi::OsStr, kind: fs::FileType) -> bool {
+// Some(valid type) for names the retention/configuration code itself owns;
+// None for unknown entries. Only the default-root migration may accept None.
+pub(crate) fn recognized_root(name: &std::ffi::OsStr, kind: fs::FileType) -> Option<bool> {
     let retained = KEPT.iter().chain(PARENTS).copied().any(|path| {
         Path::new(path)
             .components()
@@ -161,23 +161,23 @@ pub(crate) fn recognized_root(name: &std::ffi::OsStr, kind: fs::FileType) -> boo
             .is_some_and(|c| c.as_os_str() == name)
     });
     if retained {
-        return kind.is_dir();
+        return Some(kind.is_dir());
     }
-    let known = butler_platform::data_paths::OWNED_PATHS.iter().any(|path| {
+    for path in butler_platform::data_paths::OWNED_PATHS {
         let mut parts = Path::new(path).components();
-        let matches = parts.next().is_some_and(|c| c.as_os_str() == name);
+        if parts.next().is_none_or(|c| c.as_os_str() != name) {
+            continue;
+        }
         let directory =
             parts.next().is_some() || butler_platform::data_paths::OWNED_DIRECTORIES.contains(path);
-        matches
-            && if directory {
-                kind.is_dir()
-            } else {
-                kind.is_file()
-            }
-    });
-    known
-        || kind.is_file()
-            && butler_platform::data_paths::LOCKED_FILES
-                .iter()
-                .any(|path| name == std::ffi::OsStr::new(&format!("{path}.lock")))
+        return Some(if directory {
+            kind.is_dir()
+        } else {
+            kind.is_file()
+        });
+    }
+    butler_platform::data_paths::LOCKED_FILES
+        .iter()
+        .any(|path| name == std::ffi::OsStr::new(&format!("{path}.lock")))
+        .then_some(kind.is_file())
 }
