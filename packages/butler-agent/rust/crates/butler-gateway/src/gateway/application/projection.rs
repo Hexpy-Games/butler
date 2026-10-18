@@ -193,9 +193,18 @@ async fn project_final(
         .artifact_materializer
         .materialize(candidate.materialization.clone())
         .await?;
+    let reply_id = format!("message-{}", context.dependencies.identity_clock.new_uuid());
+    adopt_outputs(
+        context,
+        &candidate,
+        candidate
+            .existing_message_id
+            .as_deref()
+            .unwrap_or(&reply_id),
+    )
+    .await?;
     let library_outputs = library_outputs(context, &candidate.chat_id, &candidate.turn_id).await?;
     let continuation = plan_continuation(context, &candidate)?;
-    let reply_id = format!("message-{}", context.dependencies.identity_clock.new_uuid());
     let turn_event_ids = final_event_ids(context);
     let now = context.dependencies.identity_clock.now_iso();
     let subscribers = context.subscribers.clone();
@@ -402,4 +411,28 @@ fn plan_continuation(
         None
     };
     Ok(continuation)
+}
+
+async fn adopt_outputs(
+    context: &ProjectionContext,
+    candidate: &final_candidate::FinalCandidate,
+    message: &str,
+) -> Result<(), GatewayApplicationError> {
+    if candidate.outputs.is_empty() {
+        return Ok(());
+    }
+    let store = butler_runtime::outputs::OutputStore::new(&context.butler_data);
+    let ids = candidate.outputs.clone();
+    let session = candidate.chat_id.clone();
+    let turn = candidate.turn_id.clone();
+    let message = message.to_owned();
+    tokio::task::spawn_blocking(move || {
+        for id in ids {
+            store.adopt(&id, &session, &turn, &message)?;
+        }
+        Ok::<_, std::io::Error>(())
+    })
+    .await
+    .map_err(GatewayApplicationError::internal_from)?
+    .map_err(GatewayApplicationError::internal_from)
 }

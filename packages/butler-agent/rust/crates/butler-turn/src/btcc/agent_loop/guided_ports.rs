@@ -243,6 +243,7 @@ pub trait JournalPort: Send + Sync {
 /// What the journal contributes to the final payload.
 pub struct JournalCloseout {
     pub artifacts: Vec<FinalArtifact>,
+    pub outputs: Vec<String>,
     pub changed_files: Vec<crate::btcc::ChangedFileSummary>,
     pub answer_blocks: Vec<serde_json::Value>,
 }

@@ -195,6 +195,7 @@ mod cli_project_folder;
 mod data_perf;
 mod delegate_followup;
 mod delegate_host_lost;
+mod deliverables;
 mod mac_app_update;
 mod memory_instructions;
 mod memory_management;
@@ -229,3 +230,5 @@ mod session_titles;
 mod storage_correction_seed;
 
 mod web_speed;
+
+mod structured_logs;

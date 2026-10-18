@@ -9,6 +9,9 @@ pub struct ArtifactMaterializationRequest {
 
 #[derive(Clone, Debug)]
 pub struct ArtifactFileCandidate {
+    pub title: Option<String>,
+    pub source_label: Option<String>,
+    pub deliverable: bool,
     pub candidate_paths: Vec<PathBuf>,
     pub name: String,
     pub mime_type: Option<String>,
@@ -16,6 +19,9 @@ pub struct ArtifactFileCandidate {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MaterializedResponderFile {
+    pub title: Option<String>,
+    pub source_label: Option<String>,
+    pub deliverable: bool,
     pub id: String,
     pub kind: String,
     pub mime_type: String,

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ShowcaseRenderContext } from "../../showcase";
 import { Typo } from "../../components/Typo";
+import { MarkdownContent } from "../MarkdownContent";
 import { MessageRow } from "../MessageRow";
 import { PromptSuggestionList } from "../PromptSuggestionList";
 import { Wallpaper, type WallpaperContentRect, type WallpaperSource } from "../Wallpaper";
@@ -52,8 +53,8 @@ export function SharedBackground({ locale, startWithMessages = false }: Showcase
         ) : (
           <ConversationScroll>
             <MessageListSurface onColumnRect={setColumn}>
-              <MessageRow index={0} role="user"><Typo.Body as="p">{sent}</Typo.Body></MessageRow>
-              <MessageRow index={1} role="assistant"><Typo.Body as="p">{text.reply}</Typo.Body></MessageRow>
+              <MessageRow index={0} role="user"><Typo.Text as="div" wrap="pre">{sent}</Typo.Text></MessageRow>
+              <MessageRow index={1} role="assistant"><MarkdownContent><p>{text.reply}</p></MarkdownContent></MessageRow>
             </MessageListSurface>
           </ConversationScroll>
         )}

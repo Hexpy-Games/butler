@@ -130,6 +130,7 @@ fn delivered(
             accepted_work_result: payload.accepted_work_result,
             runtime_failure: payload.runtime_failure,
             execution_outcome: payload.execution_outcome,
+            outputs: payload.outputs,
             artifacts: payload.artifacts,
             changed_files: payload.changed_files,
             answer_blocks: payload.answer_blocks,

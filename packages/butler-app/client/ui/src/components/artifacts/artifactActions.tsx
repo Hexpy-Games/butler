@@ -21,6 +21,8 @@ export function artifactCardActions(
   if (artifact.kind === "web") return [];
   const url = artifactUrl(artifact);
   const title = artifact.title || artifact.safe_path_label || "artifact";
+  // Saved files keep their own name and extension; the title is display text only.
+  const fileName = artifact.safe_path_label || title;
   const canUseDesktopSave =
     Boolean(artifact.file_id) &&
     typeof window !== "undefined" &&
@@ -33,7 +35,7 @@ export function artifactCardActions(
         ariaLabel: `${appCopy.artifacts.save}: ${title}`,
         icon: <Save size="sm" />,
         onClick: () => {
-          void saveDesktopArtifact(artifact.file_id!, title);
+          void saveDesktopArtifact(artifact.file_id!, fileName);
         },
       },
     ];
@@ -47,7 +49,7 @@ export function artifactCardActions(
             label: appCopy.artifacts.save,
             ariaLabel: `${appCopy.artifacts.save}: ${title}`,
             href: url,
-            download: title,
+            download: fileName,
             icon: <Save size="sm" />,
           },
         ]

@@ -61,6 +61,7 @@ pub(super) fn actions(
     let plan = rich::plan(terminal.plan);
     let no_visible = butler_core::public_text::trim_js_whitespace(terminal.text).is_empty()
         && artifacts.is_empty()
+        && terminal.outputs.is_empty()
         && changed_files.is_empty()
         && plan.is_none()
         && terminal.answer_blocks.is_empty();

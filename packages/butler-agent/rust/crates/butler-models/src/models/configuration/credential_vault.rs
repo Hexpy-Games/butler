@@ -28,6 +28,7 @@ impl ModelConfiguration {
         secret: &str,
         previous: Option<&SecretHome>,
     ) -> Result<CredentialView, CredentialError> {
+        butler_log::register_secret(secret);
         let target = self.secrets.target(root).await?;
         let backend = target.store.backend();
         let key = secret_store::key(root, backend, &draft.provider_id, &draft.id)
@@ -71,16 +72,22 @@ impl ModelConfiguration {
         record: &CredentialRecord,
     ) -> Result<SecretText, CredentialError> {
         let backend = match &record.home {
-            SecretHome::Plaintext(secret) => return Ok(SecretText::new(secret.expose().into())),
+            SecretHome::Plaintext(secret) => {
+                butler_log::register_secret(secret.expose());
+                return Ok(SecretText::new(secret.expose().into()));
+            }
             SecretHome::Store(backend) => *backend,
         };
         let store = self.secrets.holding(root, backend).await?;
         let key = secret_store::key(root, backend, &record.provider_id, &record.id)
             .map_err(|error| CredentialError::Store(error.into()))?;
-        self.secrets
+        let secret = self
+            .secrets
             .get(&store, &key)
             .await?
-            .ok_or(CredentialError::SecretMissing)
+            .ok_or(CredentialError::SecretMissing)?;
+        butler_log::register_secret(secret.expose());
+        Ok(secret)
     }
 
     /// Carries out the journaled removals of `file` (under `root`) and saves

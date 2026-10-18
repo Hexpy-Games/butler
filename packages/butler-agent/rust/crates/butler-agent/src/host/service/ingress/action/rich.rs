@@ -39,6 +39,12 @@ pub(super) fn artifacts(source: &[FinalArtifact]) -> Vec<Value> {
             if let Some(value) = artifact.created_at.as_deref().and_then(text) {
                 projected.insert("createdAt".into(), value.into());
             }
+            if let Some(source) = &artifact.source {
+                projected.insert("source".into(), source.clone().into());
+            }
+            if artifact.deliverable {
+                projected.insert("deliverable".into(), true.into());
+            }
             Value::Object(projected)
         })
         .collect()

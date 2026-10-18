@@ -947,6 +947,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
         `파일 변경 ${files}개 · +${additions} −${deletions}`,
       fileCounts: (additions, deletions) => `+${additions} −${deletions}`,
       noLineDetails: "라인 상세 없음",
+      newFile: (size) => `새 파일 · ${size}`,
       diffRegionLabel: (path) => `${path} 변경 라인`,
       showMore: (remaining) => `더보기 (${remaining}개)`,
       showLess: "접기",

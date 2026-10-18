@@ -38,10 +38,12 @@ export async function tagItems(items: LibraryItem[], addTags: string[], removeTa
   try { syncDetail((await patchItems({ ids: items.map((item) => item.id), addTags, removeTags })).items); } catch (error) { failed(error); }
 }
 
-/** One line of meta: source and saved date. */
+/** One line of meta: source, version (when kept in several), saved date. The version precedes the date so a narrow card truncates the date. */
 export function itemMeta(item: LibraryItem) {
   const host = item.site ?? (item.kind === "bookmark" ? safeHost(item.url) : undefined);
-  return [host, new Date(item.capturedAt).toLocaleDateString(document.documentElement.lang)].filter(Boolean).join(" · ");
+  const versions = item.revisions?.length ?? 0;
+  const version = versions > 1 ? `${appCopy.artifacts.revision} ${versions}` : undefined;
+  return [host, version, new Date(item.capturedAt).toLocaleDateString(document.documentElement.lang)].filter(Boolean).join(" · ");
 }
 export function safeHost(url: string) { try { return new URL(url).host; } catch { return url; } }
 

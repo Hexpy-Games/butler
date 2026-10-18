@@ -879,6 +879,10 @@ export interface ActiveChatView {
 }
 
 export interface MessageFileRef {
+  /** Workspace label the file was produced under; null on legacy rows. */
+  source_label?: string | null;
+  /** Handed to the user as a finished file (it is in the Library). */
+  deliverable?: boolean;
   file_id: string;
   kind: MessageFileKind;
   mime_type: string;
@@ -899,6 +903,8 @@ export interface ChangedFileLine {
 }
 
 export interface ChangedFileDetail {
+  /** The stored copy of this file on the same message, when it has one. */
+  file_id?: string | null;
   path: string;
   additions: number;
   deletions: number;
@@ -1573,6 +1579,16 @@ export interface SessionArtifactSummary {
   size_bytes?: number;
   created_at: string;
   open_action?: "route" | "unsupported" | string;
+  source_label?: string | null;
+  deliverable?: boolean;
+  /** Library versions of a deliverable, newest first. */
+  revisions?: ArtifactRevision[];
+}
+
+export interface ArtifactRevision {
+  file: MessageFileRef;
+  message?: string | null;
+  capturedAt: string;
 }
 
 export interface AutomationTargetSummary {
