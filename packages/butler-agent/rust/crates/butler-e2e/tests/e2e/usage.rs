@@ -185,7 +185,7 @@ async fn use_01_subscription_turn_reports_quota_usage_and_cost() -> Result<(), H
     assert_eq!(monitor.status, 200, "{}", monitor.text);
     let cost = &monitor.data()["cost"];
     assert_eq!(cost["available"], true, "{cost}");
-    assert_eq!(cost["asOf"], "2026-09-28", "{cost}");
+    assert_eq!(cost["asOf"], "2026-10-18", "{cost}");
     let providers = monitor.data()["providerUsage"]["providers"]
         .as_array()
         .unwrap();

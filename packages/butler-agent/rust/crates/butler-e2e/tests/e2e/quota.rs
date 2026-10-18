@@ -195,7 +195,7 @@ async fn use_04_zai_coding_plan_quota_is_polled() -> Result<(), HarnessError> {
         .gw
         .post(
             "/model-catalog/registered-models",
-            json!({"provider_id": "zai", "model_id": "glm-5.1", "auth_type": "api_key", "api_key": key}),
+            json!({"provider_id": "zai", "model_id": "glm-5.3", "auth_type": "api_key", "api_key": key}),
         )
         .await?;
     assert!(registered.status < 300, "{}", registered.status);
