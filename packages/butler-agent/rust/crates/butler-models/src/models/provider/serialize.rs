@@ -1,4 +1,5 @@
 mod anthropic_schema;
+mod gemini_schema;
 mod input;
 mod messages;
 mod reasoning;
@@ -412,5 +413,5 @@ fn anthropic_tool(tool: &ModelRoundTool) -> Value {
     anthropic_schema::tool(tool)
 }
 fn gemini_tool(tool: &ModelRoundTool) -> Value {
-    serde_json::json!({"name":tool.name,"description":tool.description,"parameters":tool.parameters})
+    gemini_schema::tool(tool)
 }
