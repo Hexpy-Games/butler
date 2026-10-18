@@ -18,7 +18,8 @@ use std::{collections::HashMap, sync::Arc};
 type Error = StreamableHttpError<butler_log::http::Error>;
 const DEFAULT_LIMIT: usize = 16 * 1024 * 1024;
 #[derive(Clone)]
-pub(super) struct LoggedHttp(pub Client);
+pub(super) struct LoggedHttp(pub Client, tracing::Span);
+use tracing::Instrument;
 pub(super) fn client() -> Result<Client, reqwest::Error> {
     butler_log::http::external(butler_log::http::Purpose::new("mcp"))
         .pool_max_idle_per_host(0)
@@ -29,7 +30,7 @@ pub(super) fn transport(
     config: rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig,
 ) -> Result<rmcp::transport::StreamableHttpClientTransport<LoggedHttp>, reqwest::Error> {
     Ok(rmcp::transport::StreamableHttpClientTransport::with_client(
-        LoggedHttp(client()?),
+        LoggedHttp(client()?, tracing::Span::current()),
         config,
     ))
 }
@@ -59,7 +60,11 @@ impl StreamableHttpClient for LoggedHttp {
         if let Some(last) = last {
             request = request.header("last-event-id", last);
         }
-        let response = request.send().await.map_err(StreamableHttpError::Client)?;
+        let response = request
+            .send()
+            .instrument(self.1.clone())
+            .await
+            .map_err(StreamableHttpError::Client)?;
         if response.status() == StatusCode::METHOD_NOT_ALLOWED {
             return Err(StreamableHttpError::ServerDoesNotSupportSse);
         }
@@ -84,6 +89,7 @@ impl StreamableHttpClient for LoggedHttp {
     ) -> Result<(), Error> {
         let response = headers(self.0.delete(uri.as_ref()), Some(session), auth, custom)?
             .send()
+            .instrument(self.1.clone())
             .await
             .map_err(StreamableHttpError::Client)?;
         if response.status() != StatusCode::METHOD_NOT_ALLOWED {
@@ -124,6 +130,7 @@ impl StreamableHttpClient for LoggedHttp {
         let response = headers(self.0.post(uri.as_ref()), session, auth, custom)?
             .json(&message)
             .send()
+            .instrument(self.1.clone())
             .await
             .map_err(StreamableHttpError::Client)?;
         authenticate(&response)?;

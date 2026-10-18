@@ -9,7 +9,7 @@ use tracing_subscriber::{Layer, layer::Context, registry::LookupSpan};
 
 pub(crate) struct LogLayer(pub Logger);
 #[derive(Clone, Default)]
-struct Fields(Map<String, Value>);
+pub(super) struct Fields(pub(super) Map<String, Value>);
 impl Visit for Fields {
     fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
         self.0
@@ -88,7 +88,35 @@ where
         if let Some(span) = ctx.span(id) {
             let mut fields = Fields::default();
             attrs.record(&mut fields);
-            span.extensions_mut().insert(fields);
+            let span_id = fields.0.get("span_id").cloned().unwrap_or_else(|| {
+                Value::String(uuid::Uuid::new_v4().simple().to_string()[..16].into())
+            });
+            let parent_id = fields.0.get("parent_span_id").cloned();
+            if let Some(parent) = span.parent()
+                && let Some(inherited) = parent.extensions().get::<Fields>()
+            {
+                for key in ["trace_id", "turn_id", "chat_id", "message_id"] {
+                    if let Some(value) = inherited.0.get(key) {
+                        fields.0.entry(key).or_insert_with(|| value.clone());
+                    }
+                }
+                fields.0.insert(
+                    "parent_span_id".into(),
+                    parent_id
+                        .or_else(|| inherited.0.get("span_id").cloned())
+                        .unwrap_or(Value::Null),
+                );
+            }
+            fields
+                .0
+                .entry("trace_id")
+                .or_insert_with(|| Value::String(uuid::Uuid::new_v4().simple().to_string()));
+            fields.0.insert("span_id".into(), span_id);
+            let lifetime = super::trace::Lifetime::new(span.metadata(), &fields.0);
+            lifetime.start(&self.0);
+            let mut ext = span.extensions_mut();
+            ext.insert(lifetime);
+            ext.insert(fields);
         }
     }
     fn on_record(&self, id: &Id, values: &SpanRecord<'_>, ctx: Context<'_, S>) {
@@ -99,7 +127,31 @@ where
             }
         }
     }
+    fn on_close(&self, id: Id, ctx: Context<'_, S>) {
+        if let Some(span) = ctx.span(&id) {
+            let ext = span.extensions();
+            if let (Some(lifetime), Some(fields)) =
+                (ext.get::<super::trace::Lifetime>(), ext.get::<Fields>())
+            {
+                lifetime.finish(&self.0, &fields.0);
+            }
+        }
+    }
     fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
+        if *event.metadata().level() == tracing::Level::ERROR
+            && let Some(span) = ctx.event_span(event)
+            && let Some(fields) = span.extensions_mut().get_mut::<Fields>()
+        {
+            let mut failure = Fields::default();
+            event.record(&mut failure);
+            failure
+                .0
+                .retain(|name, _| matches!(name.as_str(), "error" | "message" | "code" | "reason"));
+            fields.0.insert("failure".into(), Value::Object(failure.0));
+            fields
+                .0
+                .insert("status".into(), Value::String("error".into()));
+        }
         let mut category = Category::default();
         event.record(&mut category);
         let category = if event.metadata().target().starts_with("butler") {
@@ -132,7 +184,15 @@ where
         row.chat_id = take(&mut fields.0, "chat_id");
         row.turn_id = take(&mut fields.0, "turn_id");
         row.duration_ms = fields.0.remove("duration_ms").and_then(|v| v.as_f64());
-        row.content = fields.0.remove("content");
+        // JSON payloads retain structural redaction without changing plain content strings.
+        row.content = fields
+            .0
+            .remove("content_json")
+            .map(|value| match value {
+                Value::String(raw) => serde_json::from_str(&raw).unwrap_or(Value::String(raw)),
+                value => value,
+            })
+            .or_else(|| fields.0.remove("content"));
         row.error = fields.0.remove("error");
         row.attrs = Value::Object(fields.0);
         let _ = self.0.record(row);
@@ -175,5 +235,9 @@ pub(crate) fn current_ids(row: &mut Record) {
         row.turn_id = take(&mut fields, "turn_id");
         row.chat_id = take(&mut fields, "chat_id");
         row.span_id = take(&mut fields, "span_id");
+        row.parent_span_id = take(&mut fields, "parent_span_id");
+        if let Some(message) = fields.remove("message_id") {
+            row.attrs["message_id"] = message;
+        }
     });
 }

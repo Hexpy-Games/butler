@@ -54,7 +54,9 @@ impl InboundQueue {
     }
 
     pub async fn enqueue_async(&self, envelope: JsonDocument) -> QueueResult<QueuedInboundEvent> {
-        self.blocking(move |queue| queue.enqueue_idempotent(envelope))
+        let mut metadata = Map::new();
+        capture_trace_context(&mut metadata)?;
+        self.blocking(move |queue| queue.enqueue_idempotent_with_metadata(envelope, metadata))
             .await
     }
 
@@ -65,7 +67,9 @@ impl InboundQueue {
         &self,
         envelope: JsonDocument,
     ) -> QueueResult<QueuedInboundEvent> {
-        self.blocking(move |queue| queue.publish(envelope, Map::new(), false))
+        let mut metadata = Map::new();
+        capture_trace_context(&mut metadata)?;
+        self.blocking(move |queue| queue.publish(envelope, metadata, false))
             .await
     }
 
@@ -166,9 +170,10 @@ impl InboundQueue {
     fn publish(
         &self,
         envelope: JsonDocument,
-        metadata: Map<String, Value>,
+        mut metadata: Map<String, Value>,
         durable: bool,
     ) -> QueueResult<QueuedInboundEvent> {
+        capture_trace_context(&mut metadata)?;
         let timing = super::command_timing::CommandTiming::new("inbound_enqueue");
         let _guard = self.lane.lock();
         timing.mark("lock_acquired");
@@ -243,4 +248,17 @@ impl InboundQueue {
         let _guard = self.lane.lock();
         storage::recover_stale(&self.root, &self.owner_id, active)
     }
+}
+
+fn capture_trace_context(metadata: &mut Map<String, Value>) -> QueueResult<()> {
+    if !metadata.contains_key("traceContext") {
+        let context = butler_log::TraceContext::current();
+        if context.trace_id.is_some() {
+            let value = serde_json::to_value(context).map_err(|error| {
+                InboundQueueError::new(InboundQueueCode::InboundQueueIoFailed, error.to_string())
+            })?;
+            metadata.insert("traceContext".into(), value);
+        }
+    }
+    Ok(())
 }

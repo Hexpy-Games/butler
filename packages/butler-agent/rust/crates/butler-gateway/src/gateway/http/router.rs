@@ -157,6 +157,8 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/logs/export", Handler::Logs),
     ("/logs/live", Handler::Logs),
     ("/logs/storage", Handler::Logs),
+    ("/logs/trace", Handler::Logs),
+    ("/logs/trace/{trace_id}", Handler::Logs),
     ("/mcp-capabilities", Handler::Mcp),
     ("/mcp-servers", Handler::Mcp),
     ("/mcp-servers/{id}", Handler::Mcp),

@@ -137,6 +137,7 @@ fn browser_tab(call: &ModelRoundToolCall) -> Option<Option<String>> {
     }
 }
 
+#[tracing::instrument(name = "tool.call", skip_all, fields(name = %policy.hook_tool_name(&prepared.call), status = tracing::field::Empty), err)]
 pub(super) async fn execute<'a>(
     policy: &'a dyn GuidedPolicyPort,
     invocation: GuidedInvocation<'a>,
@@ -151,7 +152,9 @@ pub(super) async fn execute<'a>(
         None,
     )
     .await?;
+    tracing::trace!(category = "tool", event = "tool.input", content_json = %serde_json::Value::Object(prepared.call.arguments.clone()), "Tool input");
     if let Some(error) = &prepared.validation {
+        tracing::error!(category = "tool", event = "tool.failed", code = %error.code, "Tool validation failed");
         let result = ToolResult {
             tool_call_id: prepared.call.id.clone(),
             name: prepared.call.name.clone(),
@@ -198,6 +201,20 @@ pub(super) async fn execute<'a>(
     let executed = ExecutedCall::restored(result);
     if executed.pending_authority.is_none() {
         publish_result(policy, invocation, prepared, &executed.result).await?;
+    }
+    tracing::trace!(
+        category = "tool",
+        event = "tool.output",
+        content_json = executed
+            .result
+            .output
+            .as_ref()
+            .map(JsonDocument::as_str)
+            .unwrap_or("null"),
+        "Tool output"
+    );
+    if !executed.result.ok {
+        tracing::error!(category = "tool", event = "tool.failed", "Tool failed");
     }
     Ok(executed)
 }
