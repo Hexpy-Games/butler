@@ -12,8 +12,8 @@ pub(super) fn full() -> bool {
 pub(super) struct Attempt {
     pub row: Record,
     start: Instant,
-    bytes: u64,
-    chunks: u64,
+    pub(super) bytes: u64,
+    pub(super) chunks: u64,
     upload: std::sync::Arc<super::upload::Capture>,
     request_headers: reqwest::header::HeaderMap,
     response: super::capture::Capture,
@@ -21,8 +21,9 @@ pub(super) struct Attempt {
     phase: Phase,
     capture: bool,
     failed: bool,
-    sse: bool,
-    line: Vec<u8>,
+    pub(super) sse: bool,
+    line: super::sse::Line,
+    receive: Option<(Instant, String)>,
 }
 impl Attempt {
     pub(super) fn new(request: &mut reqwest::Request, purpose: &Purpose, phase: &Phase) -> Self {
@@ -37,6 +38,8 @@ impl Attempt {
         if let Some(id) = &phase.chat_id {
             row.chat_id = Some(id.clone());
         }
+        row.parent_span_id = row.span_id.take();
+        row.span_id = Some(uuid::Uuid::new_v4().simple().to_string()[..16].into());
         let url = crate::redact_url(request.url().as_str());
         let path = url::Url::parse(&url).ok().map(|url| {
             let mut path = url.path().to_owned();
@@ -67,7 +70,8 @@ impl Attempt {
             capture: full(),
             failed: false,
             sse: false,
-            line: Vec::new(),
+            line: super::sse::Line::default(),
+            receive: None,
         }
     }
     pub(super) fn headers(&mut self, response: &reqwest::Response) {
@@ -93,6 +97,12 @@ impl Attempt {
         ::http::Response::from_parts(parts, reqwest::Body::wrap(stream)).into()
     }
     pub(super) fn chunk(&mut self, bytes: &[u8]) {
+        if self.receive.is_none() {
+            self.receive = Some((
+                Instant::now(),
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true),
+            ));
+        }
         self.bytes += bytes.len() as u64;
         self.chunks += 1;
         if self.failed && detailed() && self.response.is_text() {
@@ -103,7 +113,7 @@ impl Attempt {
         if self.capture && full() {
             self.response.observe(bytes);
         }
-        if self.sse && crate::global().is_some_and(|log| log.enabled(&self.row.category, "TRACE")) {
+        if self.sse && crate::global().is_some_and(|log| log.enabled(&self.row.category, "DEBUG")) {
             self.events(bytes);
         }
     }
@@ -117,26 +127,20 @@ impl Attempt {
     fn events(&mut self, bytes: &[u8]) {
         for &byte in bytes {
             if byte == b'\n' {
-                let line = String::from_utf8_lossy(&self.line);
-                let event = line
-                    .strip_prefix("event:")
-                    .map(str::trim)
-                    .map(str::to_owned)
-                    .or_else(|| {
-                        line.strip_prefix("data:")
-                            .and_then(|s| serde_json::from_str::<Value>(s).ok())
-                            .and_then(|v| v["type"].as_str().map(str::to_owned))
-                    })
-                    .or_else(|| line.starts_with("data:").then(|| "message".to_owned()));
-                if let Some(event) = event {
+                let (event, reason) = self.line.finish();
+                if let Some(reason) = reason {
+                    self.row.attrs["finish_reason"] = reason.into();
+                }
+                if let Some(event) = event.filter(|_| {
+                    crate::global().is_some_and(|log| log.enabled(&self.row.category, "TRACE"))
+                }) {
                     let mut row = self.row.clone();
                     row.level = "TRACE".into();
                     row.event = "http.stream.event".into();
                     row.attrs = json!({"type":event});
                     crate::emit(row);
                 }
-                self.line.clear();
-            } else if self.line.len() < 8192 {
+            } else {
                 self.line.push(byte);
             }
         }
@@ -151,6 +155,20 @@ impl Drop for Attempt {
         self.row.attrs["chunks"] = json!(self.chunks);
         if self.row.attrs.get("response_complete").is_none() {
             self.row.attrs["response_complete"] = json!(false);
+        }
+        if self.sse
+            && let Some((started, ts)) = &self.receive
+        {
+            let mut stream = self.row.clone();
+            stream.parent_span_id = stream.span_id.take();
+            stream.span_id = Some(uuid::Uuid::new_v4().simple().to_string()[..16].into());
+            stream.event = "span.end".into();
+            stream.msg = "stream.receive".into();
+            stream.category = "stream".into();
+            stream.attrs["started_at"] = ts.clone().into();
+            stream.duration_ms = Some(started.elapsed().as_secs_f64() * 1000.0);
+            stream.ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
+            crate::emit(stream);
         }
         let mut row = self.row.clone();
         let error_body = std::mem::take(&mut self.error_body);
