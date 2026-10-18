@@ -103,12 +103,9 @@
   box-shadow: var(--shadow-window);
 }
 
+/* The sidebar column's surface; the SidebarShell inside lays out its rows. */
 .stageSidebar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
   min-width: 0;
-  padding: var(--space-md) var(--space-sm);
   border-right: var(--border-hairline) solid var(--line);
   background: var(--sidebar-bg);
 }
@@ -189,6 +186,16 @@
 .stageFrame[data-stage="tokens"] .part:not([data-layer="token"]),
 .stageFrame[data-stage="components"] .part[data-layer="block"] > * {
   opacity: 0.35;
+}
+
+/* A part inside a dimmed part (the activity in the assistant row) keeps the
+   dim it inherits instead of compounding it. */
+.stageFrame[data-stage="tokens"] .part .part:not([data-layer="token"]),
+.stageFrame[data-stage="components"]
+  .part[data-layer="block"]
+  .part[data-layer="block"]
+  > * {
+  opacity: 1;
 }
 
 .swatchStrip {

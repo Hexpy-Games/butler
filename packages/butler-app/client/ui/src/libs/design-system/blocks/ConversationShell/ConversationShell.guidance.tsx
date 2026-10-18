@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { ShowcaseGuidance } from "../../showcase";
 import { ScrollArea } from "../ScrollArea";
 import { Typo } from "../../components/Typo";
+import { MarkdownContent } from "../MarkdownContent";
 import { MessageRow } from "../MessageRow";
 import { Wallpaper, type WallpaperSource } from "../Wallpaper";
 import { ConversationScroll, ConversationScrollToBottomButton, ConversationShell, MessageListSurface } from "./index";
@@ -12,8 +13,10 @@ function Thread() {
     <ConversationShell composerReserve={24}>
       <ConversationScroll>
         <MessageListSurface>
-          <MessageRow role="user"><Typo.Body as="p">Why do the settings pages feel flat?</Typo.Body></MessageRow>
-          <MessageRow role="assistant"><Typo.Body as="p">Section descriptions match the field labels, so the page reads as one long list.</Typo.Body></MessageRow>
+          <MessageRow role="user"><Typo.Text as="div" wrap="pre">Why do the settings pages feel flat?</Typo.Text></MessageRow>
+          <MessageRow role="assistant">
+            <MarkdownContent><p>Section descriptions match the field labels, so the page reads as one long list.</p></MarkdownContent>
+          </MessageRow>
         </MessageListSurface>
       </ConversationScroll>
       <ConversationScrollToBottomButton ariaLabel="Jump to latest" hasUnreadMessages onScrollToBottom={() => undefined}>New messages</ConversationScrollToBottomButton>
@@ -31,7 +34,7 @@ function ThreadOverBackground() {
     <ConversationShell background={<Wallpaper scope="container" source={CONVERSATION_BACKGROUND} />} composerReserve={24}>
       <ConversationScroll>
         <MessageListSurface onColumnRect={(column) => void column}>
-          <MessageRow role="user"><Typo.Body as="p">Plan today.</Typo.Body></MessageRow>
+          <MessageRow role="user"><Typo.Text as="div" wrap="pre">Plan today.</Typo.Text></MessageRow>
         </MessageListSurface>
       </ConversationScroll>
     </ConversationShell>

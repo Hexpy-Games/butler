@@ -1,8 +1,8 @@
 import type { CSSProperties } from "react";
-import { NavRow } from "../../blocks/NavRow";
+import { OptionMenu, OptionMenuItem } from "../../blocks/OptionMenu";
 import { Button } from "../../components/Button";
 import { IconButton } from "../../components/IconButton";
-import { MoreHorizontal, Plus } from "../../components/Icons";
+import { Folder, MoreHorizontal, PencilLine, Plus } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { Tag } from "../../components/Tag";
 import { Typo } from "../../components/Typo";
@@ -55,8 +55,10 @@ function HitTargets() {
       </Specimen>
       <Specimen caption="--menu-item-height · menu and list rows">
         <div className={f.menuSample}>
-          <NavRow density="compact" label="Rename" />
-          <NavRow density="compact" label="Move to project" />
+          <OptionMenu title="Session actions" size="fit">
+            <OptionMenuItem icon={<PencilLine />} label="Rename" />
+            <OptionMenuItem icon={<Folder />} label="Move to project" />
+          </OptionMenu>
         </div>
       </Specimen>
     </div>
