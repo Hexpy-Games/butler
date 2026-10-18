@@ -4,21 +4,24 @@ use std::time::Duration;
 use tokio::time::Instant;
 
 const INTERVAL: Duration = Duration::from_secs(1);
-const TAIL_BYTES: usize = 4096;
+const TAIL_BYTES: usize = 16 * 1024;
 #[derive(Default)]
 pub(super) struct ThinkingLine {
     stream: Option<String>,
     tail: String,
     shown: Option<String>,
+    summary_shown: String,
+    summary_pending: bool,
     pending: Option<String>,
     last: Option<Instant>,
+    summary_last: Option<Instant>,
     closed: bool,
 }
 impl ThinkingLine {
     pub(super) fn deadline(&self) -> Option<Instant> {
-        self.pending
-            .as_ref()
-            .map(|_| self.last.map_or_else(Instant::now, |last| last + INTERVAL))
+        let line = self.pending.as_ref().map(|_| due(self.last));
+        let summary = self.summary_pending.then(|| due(self.summary_last));
+        line.into_iter().chain(summary).min()
     }
     pub(super) async fn push(
         &mut self,
@@ -44,7 +47,9 @@ impl ThinkingLine {
             }
             self.tail.drain(..start);
         }
-        self.pending = derive(&self.tail).filter(|line| Some(line) != self.shown.as_ref());
+        self.summary_pending = self.tail != self.summary_shown;
+        self.pending =
+            derive(tail(&self.tail, 4096)).filter(|line| Some(line) != self.shown.as_ref());
         if self
             .deadline()
             .is_some_and(|deadline| deadline <= Instant::now())
@@ -53,24 +58,45 @@ impl ThinkingLine {
         }
     }
     pub(super) async fn flush(&mut self, progress: &dyn AgentLoopProgress) {
-        if let (Some(stream), Some(line)) = (&self.stream, self.pending.take()) {
+        if let Some(stream) = &self.stream {
+            let line_due = self.pending.is_some() && due(self.last) <= Instant::now();
+            if !(line_due || self.summary_pending && due(self.summary_last) <= Instant::now()) {
+                return;
+            }
+            if line_due {
+                self.shown = self.pending.take();
+                self.last = Some(Instant::now());
+            }
             let _ = progress
-                .model_thinking(stream.clone(), Some(line.clone()))
+                .model_thinking(stream.clone(), self.shown.clone(), Some(self.tail.clone()))
                 .await;
-            self.shown = Some(line);
-            self.last = Some(Instant::now());
+            self.summary_shown.clone_from(&self.tail);
+            self.summary_pending = false;
+            self.summary_last = Some(Instant::now());
         }
     }
     pub(super) async fn clear(&mut self, progress: &dyn AgentLoopProgress) {
         self.pending = None;
         self.tail.clear();
+        self.summary_pending = false;
         self.closed = true;
-        if self.shown.take().is_some()
+        if (self.shown.take().is_some() || !self.summary_shown.is_empty())
             && let Some(stream) = &self.stream
         {
-            let _ = progress.model_thinking(stream.clone(), None).await;
+            let _ = progress.model_thinking(stream.clone(), None, None).await;
         }
+        self.summary_shown.clear();
     }
+}
+fn due(last: Option<Instant>) -> Instant {
+    last.map_or_else(Instant::now, |last| last + INTERVAL)
+}
+fn tail(text: &str, bytes: usize) -> &str {
+    let mut start = text.len().saturating_sub(bytes);
+    while !text.is_char_boundary(start) {
+        start += 1;
+    }
+    &text[start..]
 }
 fn heading(line: &str) -> Option<&str> {
     let line = line.trim();
@@ -165,6 +191,7 @@ pub(super) mod tests {
             &self,
             _: String,
             line: Option<String>,
+            _: Option<String>,
         ) -> crate::btcc::PortFuture<'_, ()> {
             self.0.lock().unwrap().push(line);
             Box::pin(async { Ok(()) })
@@ -186,7 +213,7 @@ pub(super) mod tests {
             vec![Some("First".into()), Some("Latest".into())]
         );
         line.push("s".into(), "body\n", &progress).await;
-        assert_eq!(line.deadline(), None);
+        assert!(line.deadline().is_some());
         line.clear(&progress).await;
         line.push("s".into(), "**Late**\n", &progress).await;
         assert_eq!(progress.0.lock().unwrap().last(), Some(&None));
@@ -195,6 +222,11 @@ pub(super) mod tests {
             progress.0.lock().unwrap().last(),
             Some(&Some("Fresh".into()))
         );
+        line.push("new".into(), &"가".repeat(TAIL_BYTES), &progress)
+            .await;
         assert!(line.tail.len() <= TAIL_BYTES);
+        assert!(line.tail.chars().all(|c| c == '가'));
+        line.clear(&progress).await;
+        assert!(line.tail.is_empty() && line.summary_shown.is_empty());
     }
 }

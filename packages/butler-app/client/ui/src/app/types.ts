@@ -615,6 +615,7 @@ export interface SettingsView {
   composer_decoration: { theme: "none" | "shoreline" | "cherry"; character: boolean };
   translucent_sidebar: boolean;
   smart_grouping_enabled: boolean;
+  show_thinking: boolean;
   diagnostics_enabled: boolean;
   desktop_notifications: DesktopNotificationSettingsView;
   desktop_tray_enabled: boolean;

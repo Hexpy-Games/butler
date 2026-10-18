@@ -160,7 +160,12 @@ pub trait AgentLoopProgress: Send + Sync {
     fn emit(&self, event: crate::btcc::RuntimeTurnEventInput) -> PortFuture<'_, ()>;
 
     /// Ephemeral user-facing summary line. Never append durable events or log its text.
-    fn model_thinking(&self, _stream_id: String, _line: Option<String>) -> PortFuture<'_, ()> {
+    fn model_thinking(
+        &self,
+        _stream_id: String,
+        _line: Option<String>,
+        _summary: Option<String>,
+    ) -> PortFuture<'_, ()> {
         Box::pin(async { Ok(()) })
     }
 

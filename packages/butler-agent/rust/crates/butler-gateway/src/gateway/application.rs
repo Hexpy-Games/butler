@@ -319,6 +319,7 @@ impl AppApplication {
             setup_readiness: setup::ReadinessRelay::default(),
             quota_events: Arc::default(),
         };
+        application.initialize_thinking_preference().await?;
         application.recover_for_open().await?;
         Ok(application)
     }

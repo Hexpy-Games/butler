@@ -231,8 +231,16 @@ fn row_counts(s: &Scenario) -> Result<(i64, i64), HarnessError> {
         })?,
     ))
 }
-async fn summary_case(provider: &'static str) -> Result<(), HarnessError> {
+async fn summary_case(provider: &'static str, show: bool) -> Result<(), HarnessError> {
     let (s, stub, _server) = setup(provider, false).await?;
+    let saved = if show {
+        s.gw.patch("/settings", json!({"show_thinking":true}))
+            .await?
+    } else {
+        s.gw.get("/settings").await?
+    };
+    assert_eq!(saved.status, 200, "{}", saved.text);
+    assert_eq!(saved.data()["show_thinking"], show);
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     s.gw.say("general", "Reply briefly.").await?;
     let first = live
@@ -248,17 +256,34 @@ async fn summary_case(provider: &'static str) -> Result<(), HarnessError> {
         })
         .await?;
     assert_eq!(before, row_counts(&s)?, "thinking must not write rows");
+    let expected = format!("**{FIRST}**\nDetails.\n**{SECOND}**\nMore details.\n");
+    if show {
+        assert_eq!(second["payload"]["summary"], expected);
+        assert!(expected.len() <= 16 * 1024);
+    } else {
+        for event in live
+            .snapshot()
+            .iter()
+            .filter(|e| e["type"] == "turn.thinking")
+        {
+            assert!(event["payload"].get("summary").is_none());
+        }
+    }
     assert_eq!(
         stub.requests.lock().unwrap().len(),
         1,
         "tool frame is still gated"
     );
     let reconnect = LiveEvents::subscribe(&s.gw, 0).await?;
-    reconnect
+    let snapshot = reconnect
         .wait_for(WAIT, |e| {
             e["type"] == "turn.thinking" && e["payload"]["line"] == SECOND
         })
         .await?;
+    assert_eq!(
+        snapshot["payload"].get("summary"),
+        show.then(|| json!(expected)).as_ref()
+    );
     assert_eq!(
         reconnect
             .snapshot()
@@ -289,7 +314,8 @@ async fn summary_case(provider: &'static str) -> Result<(), HarnessError> {
     assert_no_durable_summary(&s)?;
     assert_wire(&stub);
     eprintln!(
-        "{provider}: durable rows {before:?} unchanged; reconnect snapshots=1; gated delivery verified"
+        "{provider}: show={show}; summary_bytes={}; durable rows {before:?} unchanged; reconnect snapshots=1; gated delivery verified",
+        expected.len()
     );
     drop((live, reconnect, ended));
     s.finish().await
@@ -348,22 +374,33 @@ fn assert_wire(stub: &Stub) {
 #[tokio::test]
 async fn gemini_summary_is_live_only_and_replayed() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    summary_case("google").await
+    summary_case("google", false).await
 }
 #[tokio::test]
 async fn anthropic_summary_is_live_only() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    summary_case("anthropic").await
+    summary_case("anthropic", false).await
 }
 #[tokio::test]
 async fn responses_summary_is_live_only() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    summary_case("openai").await
+    summary_case("openai", false).await
+}
+#[tokio::test]
+async fn full_summary_is_opt_in_live_only() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    summary_case("google", true).await
 }
 #[tokio::test]
 async fn responses_internal_reasoning_never_reaches_app() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, stub, _server) = setup("openai", true).await?;
+    assert_eq!(
+        s.gw.patch("/settings", json!({"show_thinking":true}))
+            .await?
+            .status,
+        200
+    );
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     stub.gate.notify_one();
     let (_, turn) = s.turn("general", "Reply briefly.").await?;

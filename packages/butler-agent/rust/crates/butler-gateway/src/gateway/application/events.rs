@@ -33,6 +33,10 @@ struct SubscriberState {
 }
 
 impl EventSubscribers {
+    pub(super) fn set_thinking_enabled(&self, enabled: bool) {
+        self.inner.lock().thinking.enabled = enabled;
+    }
+
     pub(super) fn observe_cursor(&self, observer: Arc<dyn Fn(u64) + Send + Sync>) {
         self.inner.lock().cursor_observer = Some(observer);
     }
@@ -56,7 +60,9 @@ impl EventSubscribers {
 
     pub(super) fn publish_thinking(&self, payload: Value) {
         let mut state = self.inner.lock();
-        state.thinking.apply(&payload);
+        let Some(payload) = state.thinking.update(payload) else {
+            return;
+        };
         let event = Arc::new(PublishedEvent::new(super::answer_drafts::envelope(
             "turn.thinking",
             payload,
@@ -84,6 +90,14 @@ impl EventSubscribers {
         let (listeners, cursor_observer) = {
             let mut state = self.inner.lock();
             state.thinking.finish(event.envelope());
+            if state.thinking.preference(event.envelope()) {
+                for snapshot in state.thinking.snapshot() {
+                    let snapshot = Arc::new(PublishedEvent::new(snapshot));
+                    for listener in state.listeners.values() {
+                        listener(snapshot.clone());
+                    }
+                }
+            }
             if let Some(end) = state.drafts.finish(event.envelope()) {
                 let end = Arc::new(PublishedEvent::new(end));
                 for listener in state.listeners.values() {

@@ -281,6 +281,21 @@ pub(super) fn resolution_from_persisted(value: &str) -> Result<ControlResolution
 }
 
 impl super::AppApplication {
+    pub(super) async fn initialize_thinking_preference(
+        &self,
+    ) -> Result<(), crate::gateway::GatewayApplicationError> {
+        let enabled = self
+            .storage
+            .read(|db| {
+                Ok(read_json(db, SETTINGS_KEY)?
+                    .is_some_and(|settings| settings["show_thinking"] == true))
+            })
+            .await
+            .map_err(super::app_error)?;
+        self.subscribers.set_thinking_enabled(enabled);
+        Ok(())
+    }
+
     pub(super) async fn briefing_language(
         &self,
     ) -> Result<String, crate::gateway::GatewayApplicationError> {

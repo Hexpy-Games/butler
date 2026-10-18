@@ -1,3 +1,4 @@
+import { ThinkingSummary } from "./ThinkingSummary";
 import { useModelThinking } from "@/app/modelThinking";
 import { useId } from "react";
 import { useAppLocale } from "@/app/copy.ts";
@@ -82,6 +83,7 @@ export function TurnActivityPanel({
         phaseLabel={phaseActivities.at(-1)?.summary}
         startedAt={startedAt ?? earliestProgressTimestamp(rows)}
       />
+      <ThinkingSummary turnId={turnId} active={Boolean(modelRoundWait) && !operation && state !== "waiting_for_form" && publicActivity?.bridge_phase !== "operational_recovery"} />
     </Stack>
   );
 }
