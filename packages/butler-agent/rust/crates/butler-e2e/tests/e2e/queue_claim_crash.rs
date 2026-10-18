@@ -174,6 +174,7 @@ async fn settled_once(s: &mut Scenario, prompts: &[String]) -> Result<(), Harnes
             other => panic!("{prompt}: unexpected terminal state {other}: {turn}"),
         }
     }
+    wait_queue_drained(&s.sandbox.data).await;
     assert_queue_records(&s.sandbox.data, prompts)?;
     assert_app_rows(&s.sandbox.data, prompts.len())?;
     Ok(())
@@ -249,6 +250,19 @@ fn queue_listing(data: &Path) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// A turn is terminal before the native queue moves its record to `processed/`;
+/// wait for that move so the record check does not race it.
+async fn wait_queue_drained(data: &Path) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline
+        && ["pending", "processing"]
+            .iter()
+            .any(|state| !queue_records(data, state).is_empty())
+    {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 }
 
 fn assert_queue_records(data: &Path, prompts: &[String]) -> Result<(), HarnessError> {
