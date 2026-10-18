@@ -60,9 +60,9 @@ fn local_metadata_and_provider_family_preserve_source_rules() {
 
     let catalog = ModelCatalog::new().unwrap();
     let snapshot = baseline(&catalog);
-    let zai = snapshot.find_model_metadata(Some("zai/glm-5.2")).unwrap();
+    let zai = snapshot.find_model_metadata(Some("zai/glm-5.3")).unwrap();
     let api = snapshot
-        .find_model_metadata(Some("zai-api/glm-5.2"))
+        .find_model_metadata(Some("zai-api/glm-5.3"))
         .unwrap();
     assert_eq!(model_identity_key(&zai), model_identity_key(&api));
 }

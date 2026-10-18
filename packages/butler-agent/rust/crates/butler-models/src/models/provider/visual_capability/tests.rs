@@ -23,7 +23,7 @@ impl ProviderVisualCapabilityPort for LiveDigest {
         Box::pin(async move {
             if cancellation.is_cancelled()
                 || metadata.provider_id != "zai"
-                || metadata.model_id != "glm-5.2"
+                || metadata.model_id != "glm-5.3"
             {
                 return Err(());
             }
@@ -47,7 +47,7 @@ fn zai_metadata() -> ModelProviderMetadata {
             &LocaleCollation::new("en-US").unwrap(),
         )
         .unwrap();
-    snapshot.find_model_metadata(Some("zai/glm-5.2")).unwrap()
+    snapshot.find_model_metadata(Some("zai/glm-5.3")).unwrap()
 }
 
 fn manifest() -> VisualAttachmentManifest {
@@ -89,7 +89,7 @@ fn request<'a>(
     ModelRoundRequest {
         max_output_tokens: None,
         round_id: None,
-        model: "zai/glm-5.2",
+        model: "zai/glm-5.3",
         messages: &[],
         instructions: None,
         tools: &[],
