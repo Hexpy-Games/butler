@@ -4,13 +4,20 @@ import { Folder, Notebook } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { OverflowActionMenu } from "../OverflowActionMenu";
+import { SidebarShell } from "../SidebarShell";
 import { NavRow } from "./NavRow";
+import { NavRowSwap } from "./NavRowSwap";
 
 // #region recipe: Sidebar row with hover actions
 function SessionNavRow() {
   return (
-    <NavRow icon={<Notebook size="md" />} label="Token page review" onClick={() => undefined} actionsVisibility="hover"
-      actions={<OverflowActionMenu label="Session actions" items={[{ label: "Rename", onSelect: () => undefined }]} />} />
+    <SidebarShell ariaLabel="Sidebar">
+      <NavRow icon={<Notebook size="md" />} label="Token page review" onClick={() => undefined} actions={(
+        <NavRowSwap>
+          <OverflowActionMenu label="Session actions" items={[{ label: "Rename", onSelect: () => undefined }]} />
+        </NavRowSwap>
+      )} />
+    </SidebarShell>
   );
 }
 // #endregion
@@ -23,7 +30,7 @@ export const guidance: ShowcaseGuidance = {
     { when: "A folder that expands", use: "CollapsibleNavGroup" },
     { when: "A generic clickable surface", use: "Clickable" },
   ],
-  recipes: [{ name: "Sidebar row with hover actions", description: "actionsVisibility=\"hover\" reveals the menu on hover and focus without reserving width.", render: () => <SessionNavRow /> }],
+  recipes: [{ name: "Sidebar row with hover actions", description: "In the SidebarShell, NavRowSwap reveals the row menu on hover and focus in place of the row's rest status.", render: () => <SessionNavRow /> }],
   doDont: [
     {
       do: { caption: "The active row is a flat selection fill.", render: () => <NavRow icon={<Folder size="md" />} label="butler" active onClick={() => undefined} /> },
