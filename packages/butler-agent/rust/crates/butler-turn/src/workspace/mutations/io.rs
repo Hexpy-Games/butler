@@ -348,7 +348,7 @@ fn publish_temporary(
     observer: &dyn CommitObserver,
 ) -> std::io::Result<bool> {
     if prepared.before.exists {
-        fs::rename(temporary, &prepared.before.path.absolute)
+        secure_fs::replace_file(temporary, &prepared.before.path.absolute)
             .map_err(|error| failure::inspect_io("rename", error))?;
         Ok(false)
     } else {
