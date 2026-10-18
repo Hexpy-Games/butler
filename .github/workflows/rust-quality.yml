@@ -86,6 +86,7 @@ jobs:
       runner: ubuntu-24.04
       platform: linux-x64
       # Match the trusted main snapshot; a different ORT mode forces cold PR builds.
+      perf-fixture: ${{ needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['linux-perf'] }}
       ort-mode: static-ort
 
   linux-archive:
@@ -146,6 +147,7 @@ jobs:
     with:
       runner: ubuntu-24.04-arm
       platform: linux-arm64
+      perf-fixture: ${{ needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['linux-arm64-perf'] }}
       ort-mode: static-ort
 
   linux-arm64-archive:
@@ -238,6 +240,7 @@ jobs:
     with:
       runner: macos-15
       platform: darwin-arm64
+      perf-fixture: ${{ needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['macos-perf'] }}
       ort-mode: static-ort
 
   macos-updates:
@@ -407,6 +410,7 @@ jobs:
         run: |
           python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-smoke-reuse.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-pr-workspace.py
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-fixture-scope.py
       - name: Guard shared Windows runner resources
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-invariants.py --windows-safety
