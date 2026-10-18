@@ -143,14 +143,20 @@ async fn remote_cli_data_equals_and_unavailable_logger() -> Result<(), HarnessEr
             .iter()
             .any(|r| r["event"] == "http.request" && r["attrs"]["path"] == "/security")
     );
-    let root = s.sandbox.data.join("logs");
-    let saved = s.sandbox.data.join("saved-logs");
-    std::fs::rename(&root, &saved)?;
-    std::fs::write(&root, b"unavailable log directory")?;
-    let result = s.agent.cli(&["remote", "status", "--json"]);
-    std::fs::remove_file(&root)?;
-    std::fs::rename(&saved, &root)?;
-    let output = result?;
+    // The CLI shares the service's log directory, whose open files prevent
+    // renaming it on Windows. Give only the CLI an unusable logs path while
+    // retaining the same loopback port (Launch) and data-folder credentials.
+    let cli_data = s.sandbox.home.join("cli-data");
+    std::fs::create_dir_all(cli_data.join("app/runtime/auth"))?;
+    for credential in [
+        butler_e2e::e2e::agent::DATA_FOLDER_TOKEN_FILE,
+        butler_e2e::e2e::agent::DATA_FOLDER_ADMIN_FILE,
+    ] {
+        std::fs::copy(s.sandbox.data.join(credential), cli_data.join(credential))?;
+    }
+    std::fs::write(cli_data.join("logs"), b"unavailable log directory")?;
+    let cli_data = format!("--data={}", cli_data.display());
+    let output = s.agent.cli(&[&cli_data, "remote", "status", "--json"])?;
     assert_eq!(output.code, Some(0));
     assert_eq!(output.stderr.matches("http_logging_unavailable").count(), 1);
     assert!(output.json()?["data"]["remote_access_enabled"].is_boolean());
