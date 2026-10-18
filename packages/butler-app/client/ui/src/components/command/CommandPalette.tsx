@@ -19,7 +19,7 @@ import type { CommandPaletteResult } from "@/app/types.ts";
 import { useOrganization } from "@/app/space/organization";
 import { commandResultSubtitle, commandResultTitle } from "./commandPaletteLabels";
 import { createSettingsSections, matchesSettingsSection } from "../settings/settingsSections";
-import { useDeveloperLogsAvailability } from "../settings/useDeveloperLogsAvailability";
+import { useDeveloperMode } from "@/hooks/useDeveloperMode.ts";
 import { useCommandPaletteFocus } from "./useCommandPaletteFocus";
 
 export function CommandPalette({
@@ -33,8 +33,7 @@ export function CommandPalette({
   onSelect?: (result: CommandPaletteResult) => void;
 } = {}) {
   const locale = useAppLocale();
-  const diagnosticsEnabled = useButlerStore((state) => state.settings.diagnostics_enabled === true);
-  const developerMode = useDeveloperLogsAvailability(diagnosticsEnabled);
+  const developerMode = useDeveloperMode();
   const setCommandOpen = useButlerStore((state) => state.setCommandOpen);
   const navigateCommandResult = useButlerStore(
     (state) => state.navigateCommandResult,

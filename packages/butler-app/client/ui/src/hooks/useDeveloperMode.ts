@@ -1,13 +1,9 @@
 import { useButlerStore } from "@/app/store.ts";
-import { useDeveloperLogsAvailability } from "@/components/settings/useDeveloperLogsAvailability.ts";
 
 /**
- * Developer mode (Settings > About), the same gate the Logs page uses. Agent
+ * Developer mode (Settings > About): the Logs page, DevTools and agent
  * internals such as context, workers and Git details show only while it is on.
  */
 export function useDeveloperMode(): boolean {
-  const diagnosticsEnabled = useButlerStore(
-    (state) => state.settings.diagnostics_enabled === true,
-  );
-  return useDeveloperLogsAvailability(diagnosticsEnabled);
+  return useButlerStore((state) => state.settings.diagnostics_enabled === true);
 }
