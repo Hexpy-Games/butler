@@ -12,6 +12,7 @@ use std::{
     path::Path,
     time::{Duration, Instant},
 };
+mod allowlist;
 mod interruption;
 mod review;
 mod round2;
@@ -95,6 +96,8 @@ async fn reset_01_replacement_clears_data_preserves_keeps_and_rotates_auth()
     std::fs::write(&outside, b"outside")?;
     butler_platform::secure_fs::symlink(&outside, &root.join("outside-link"))?;
     std::fs::write(root.join("discard-me"), b"private")?;
+    std::fs::create_dir_all(root.join("outputs"))?;
+    std::fs::write(root.join("outputs/reset-proof"), b"private")?;
     let accepted = request(&s, &nonce(&s).await?).await?;
     assert_eq!(accepted.status, 202, "{}", accepted.text);
     assert_eq!(
@@ -123,8 +126,13 @@ async fn reset_01_replacement_clears_data_preserves_keeps_and_rotates_auth()
         "{}",
         settings.text
     );
-    assert!(!root.join("discard-me").exists());
-    assert!(!root.join("outside-link").exists());
+    assert_eq!(std::fs::read(root.join("discard-me"))?, b"private");
+    assert!(!root.join("outputs/reset-proof").exists());
+    assert!(
+        std::fs::symlink_metadata(root.join("outside-link"))?
+            .file_type()
+            .is_symlink()
+    );
     assert_eq!(std::fs::read(&outside)?, b"outside");
     for name in [
         "project-ledger/sentinel",

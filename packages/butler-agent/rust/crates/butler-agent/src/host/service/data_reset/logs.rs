@@ -2,20 +2,14 @@
 use std::path::{Component, Path, PathBuf};
 
 pub(crate) fn valid(path: &Path) -> bool {
-    let Some(text) = path.to_str() else {
-        return false;
-    };
-    let mut parts = text.split('/');
-    parts.next() == Some("logs")
-        && parts.next().is_some_and(|name| {
-            !name.is_empty()
-                && !name.contains(['\\', ':'])
-                && Path::new(name)
-                    .components()
-                    .all(|p| matches!(p, Component::Normal(_)))
-        })
+    let mut parts = path.components();
+    matches!(parts.next(), Some(Component::Normal(name))
+        if name == butler_platform::data_paths::LOGS)
+        && matches!(parts.next(), Some(Component::Normal(name))
+            if name.to_str().is_some_and(|name| !name.contains(['\\', ':'])))
         && parts.next().is_none()
 }
+
 pub(crate) fn paths() -> Vec<PathBuf> {
     let mut paths = butler_platform::service_registration::LAUNCHER_LOGS
         .iter()

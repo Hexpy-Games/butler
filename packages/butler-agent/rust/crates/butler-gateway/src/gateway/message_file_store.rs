@@ -36,7 +36,7 @@ pub struct AppMessageFiles {
 impl AppMessageFiles {
     pub fn new(data_root: &Path, clock: Arc<dyn AppIdentityClock>) -> Self {
         Self {
-            root: data_root.join("app-server/message-files"),
+            root: data_root.join(butler_platform::data_paths::MESSAGE_FILES),
             clock,
             permits: Arc::new(Semaphore::new(2)),
             jobs: TaskTracker::new(),

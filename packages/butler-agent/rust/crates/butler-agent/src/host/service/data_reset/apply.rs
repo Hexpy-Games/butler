@@ -12,7 +12,6 @@ pub(crate) fn apply(root: &Path, journal: &mut Journal) -> io::Result<bool> {
             journal.kept_logs.push(log);
         }
     }
-    super::moves::expand_legacy_logs(root, journal)?;
     if matches!(journal.phase, Phase::RollingBack) {
         rollback(root, journal).map_err(rollback_error)?;
         return Ok(false);

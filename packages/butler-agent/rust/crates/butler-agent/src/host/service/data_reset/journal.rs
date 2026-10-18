@@ -83,10 +83,7 @@ pub(crate) fn load(root: &Path) -> io::Result<Option<Journal>> {
     let journal: Journal = serde_json::from_reader(file).map_err(|e| invalid(e.to_string()))?;
     if journal.schema != 1
         || !super::valid_id(&journal.id)
-        || journal
-            .moves
-            .iter()
-            .any(|p| !super::plan::movable(p) && !super::logs::valid(p) && p != Path::new("logs"))
+        || journal.moves.iter().any(|p| !super::plan::movable(p))
         || journal.relocations.iter().any(|m| !super::moves::valid(m))
         || journal.pending_trash.iter().any(|p| !trash_name(p))
         || journal.kept_logs.iter().any(|p| !super::logs::valid(p))

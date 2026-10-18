@@ -1,6 +1,7 @@
 //! Reset ownership survives a disconnected requester and fences native admission.
 mod apply;
 mod cleanup;
+mod inventory;
 pub(crate) mod journal;
 mod logs;
 mod moves;

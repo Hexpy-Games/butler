@@ -24,8 +24,8 @@ use serde::{Deserialize, Serialize};
 use butler_core::public_text::trim_js_whitespace;
 
 /// Where the gateway token lives, relative to the data folder.
-const LOCAL_AUTH_FILE: &str = "app/runtime/auth/local-agent-auth.json";
-const FOLDER_SECRET_FILE: &str = "state/app-gateway/project-folder-token-secret";
+const LOCAL_AUTH_FILE: &str = butler_platform::data_paths::LOCAL_AUTH;
+const FOLDER_SECRET_FILE: &str = butler_platform::data_paths::FOLDER_SECRET;
 const TOKEN_SCHEMA: &str = "butler.app-local-agent-auth.v1";
 /// The App regenerates shorter tokens; the agent treats them the same way.
 const MIN_TOKEN_LENGTH: usize = 32;

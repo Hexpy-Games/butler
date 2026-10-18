@@ -23,7 +23,7 @@ impl Scratch {
         Self {
             temporary: butler_data.join(temporary),
             cache: butler_data.join(cache),
-            artifacts: butler_data.join("artifacts/generated"),
+            artifacts: butler_data.join(butler_platform::data_paths::ARTIFACTS),
         }
     }
 }

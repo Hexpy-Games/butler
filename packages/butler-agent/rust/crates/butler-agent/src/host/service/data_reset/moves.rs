@@ -7,8 +7,14 @@ use std::{
 };
 
 pub(super) fn valid(m: &Relocation) -> bool {
-    (super::plan::movable(&m.source) || super::logs::valid(&m.source))
-        && super::plan::movable(&m.restored)
+    super::plan::movable(&m.source)
+        && m.restored
+            .file_name()
+            .and_then(|p| p.to_str())
+            .is_some_and(|p| {
+                p.strip_prefix("reset-recovered-")
+                    .is_some_and(super::valid_id)
+            })
         && m.source.parent() == m.restored.parent()
         && m.destination.components().count() == 1
         && m.destination
@@ -72,6 +78,17 @@ pub(super) fn move_all(root: &Path, journal: &mut Journal) -> io::Result<()> {
         if super::logs::kept(&relative) || !present(&from)? {
             continue;
         }
+        let directory = super::inventory::directory(&relative)
+            .ok_or_else(|| io::Error::other("Reset path is not allowlisted"))?;
+        if !super::plan::real_parents(root, &relative)?
+            || !super::inventory::matches(
+                &relative,
+                directory,
+                fs::symlink_metadata(&from)?.file_type(),
+            )
+        {
+            continue;
+        }
         let original = trash.join(&relative);
         let to = if present(&original)? {
             collision(root, journal, &relative)?
@@ -109,27 +126,4 @@ pub(super) fn rollback(root: &Path, journal: &mut Journal) -> io::Result<()> {
         }
     }
     Ok(())
-}
-
-// Older journals planned logs as a whole directory. Resume those as child
-// moves too, so a launcher-recreated logs parent can never be renamed.
-pub(super) fn expand_legacy_logs(root: &Path, journal: &mut Journal) -> io::Result<()> {
-    if !journal.moves.contains(&PathBuf::from("logs")) {
-        return Ok(());
-    }
-    let old = journal.trash(root).join("logs");
-    if present(&old)? {
-        let metadata = fs::symlink_metadata(&old)?;
-        if !metadata.is_dir() || metadata.file_type().is_symlink() {
-            return Err(io::Error::other("Invalid reset log parent"));
-        }
-        for entry in fs::read_dir(old)? {
-            let relative = PathBuf::from("logs").join(entry?.file_name());
-            if super::plan::movable(&relative) && !journal.moves.contains(&relative) {
-                journal.moves.push(relative);
-            }
-        }
-    }
-    journal.moves.retain(|p| p != Path::new("logs"));
-    journal.save(root)
 }

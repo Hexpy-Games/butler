@@ -63,9 +63,7 @@ pub(crate) fn migrate(root: &Path, requested: &Path, default: &Path) -> io::Resu
     for entry in fs::read_dir(root)? {
         let entry = entry?;
         let kind = entry.file_type()?;
-        if kind.is_symlink()
-            || !plan::recognized_root(&entry.file_name(), kind).unwrap_or(false)
-        {
+        if kind.is_symlink() || !plan::recognized_root(&entry.file_name(), kind).unwrap_or(false) {
             return Ok(());
         }
     }

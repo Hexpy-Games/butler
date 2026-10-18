@@ -30,9 +30,9 @@ pub(super) fn headless_browser(
     };
     Some(HeadlessBrowserConfig {
         enabled,
-        root: data_root.join("state/browser/headless"),
+        root: data_root.join(butler_platform::data_paths::HEADLESS_BROWSER),
         app_host: app_host_source(),
-        app_host_root: data_root.join("state/browser/app-host"),
+        app_host_root: data_root.join(butler_platform::data_paths::APP_HOST_BROWSER),
         install: InstallSource {
             cache_root: env_value("BUTLER_BROWSER_CACHE_DIR")
                 .map_or_else(|| data_root.join("cache/browser"), Into::into),

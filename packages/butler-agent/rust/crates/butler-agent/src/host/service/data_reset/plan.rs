@@ -1,10 +1,14 @@
 //! Bounded directory-entry inspection. Large stores are never walked or read.
-use super::journal::{GENERATION, JOURNAL, TRASH_PREFIX};
+use super::{
+    inventory,
+    journal::{GENERATION, JOURNAL},
+};
 use crate::host::{ResolvedInstallation, service::paths};
 use butler_platform::secure_fs::{self, Canonical as _};
+use inventory::PARENTS;
 use std::{
     fs, io,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
 };
 
 const KEPT: &[&str] = &[
@@ -28,67 +32,87 @@ const KEPT: &[&str] = &[
     GENERATION,
     super::super::data_ownership::MARKER,
 ];
-const PARENTS: &[&str] = &["state", "cache", "app", "app/runtime", "logs"];
 pub(crate) fn movable(path: &Path) -> bool {
-    path.components().all(|c| matches!(c, Component::Normal(_)))
-        && !path.as_os_str().is_empty()
-        && !kept(path)
-        && path
-            .parent()
-            .is_some_and(|p| p.as_os_str().is_empty() || PARENTS.iter().any(|v| p == Path::new(v)))
-        && !PARENTS.iter().any(|p| path == Path::new(p))
-}
-fn kept(path: &Path) -> bool {
-    super::logs::kept(path)
-        || KEPT.iter().any(|p| path == Path::new(p))
-        || path.components().count() == 1 && path.to_string_lossy().starts_with(TRASH_PREFIX)
+    inventory::directory(path).is_some()
 }
 pub(crate) fn collect(root: &Path) -> io::Result<Vec<PathBuf>> {
-    let logs = super::logs::paths();
-    let paths = PARENTS
-        .iter()
-        .chain(KEPT.iter())
-        .map(Path::new)
-        .chain(logs.iter().map(PathBuf::as_path));
-    for name in paths {
-        let path = root.join(name);
-        match fs::symlink_metadata(&path) {
-            Ok(m) if m.file_type().is_symlink() => {
-                return Err(io::Error::other("Retention path is a link"));
+    validate_parents(root)?;
+    let mut moves = Vec::new();
+    for (path, directory) in inventory::entries() {
+        let full = root.join(&path);
+        // Never traverse a retained parent that is absent or has the wrong type.
+        if !real_parents(root, &path)? {
+            continue;
+        }
+        match fs::symlink_metadata(&full) {
+            Ok(m) if inventory::matches(&path, directory, m.file_type()) => {
+                check_device(root, &full)?;
+                moves.push(path);
             }
-            Ok(m) if PARENTS.iter().any(|p| name == Path::new(p)) && !m.is_dir() => {
-                return Err(io::Error::other("Retention parent is not a directory"));
+            Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
+            _ => {}
+        }
+    }
+    let logs = Path::new(butler_platform::data_paths::LOGS);
+    if real_parents(root, &logs.join("entry"))? {
+        for entry in fs::read_dir(root.join(logs))? {
+            let entry = entry?;
+            let path = logs.join(entry.file_name());
+            if super::logs::valid(&path)
+                && !super::logs::kept(&path)
+                && inventory::matches(&path, false, entry.file_type()?)
+            {
+                check_device(root, &entry.path())?;
+                moves.push(path);
             }
-            Ok(m) if logs.iter().any(|p| p.as_path() == name) && !m.is_file() => {
+        }
+    }
+    moves.sort();
+    Ok(moves)
+}
+fn validate_parents(root: &Path) -> io::Result<()> {
+    for path in super::logs::paths() {
+        if !real_parents(root, &path)? {
+            continue;
+        }
+        match fs::symlink_metadata(root.join(path)) {
+            Ok(m) if !m.is_file() || m.file_type().is_symlink() => {
                 return Err(io::Error::other("Retention log is not a regular file"));
             }
             Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
             _ => {}
         }
     }
-    let mut moves = Vec::new();
-    children(root, Path::new(""), &mut moves)?;
-    moves.sort();
-    Ok(moves)
+    Ok(())
 }
-fn children(root: &Path, relative: &Path, moves: &mut Vec<PathBuf>) -> io::Result<()> {
-    for entry in fs::read_dir(root.join(relative))? {
-        let entry = entry?;
-        let child = relative.join(entry.file_name());
-        if kept(&child) {
-            continue;
+pub(super) fn real_parents(root: &Path, path: &Path) -> io::Result<bool> {
+    let mut parent = PathBuf::new();
+    let Some(parts) = path.parent() else {
+        return Ok(false);
+    };
+    for part in parts.components() {
+        parent.push(part);
+        match fs::symlink_metadata(root.join(&parent)) {
+            Ok(m) if m.is_dir() && !m.file_type().is_symlink() => {}
+            Ok(_) => {
+                butler_core::diagnostic!(
+                    "[full-reset] retained non-directory parent: {}",
+                    parent.display()
+                );
+                return Ok(false);
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(false),
+            Err(e) => return Err(e),
         }
-        if !secure_fs::same_device(root, &entry.path())? {
-            return Err(io::Error::new(
-                io::ErrorKind::CrossesDevices,
-                "Reset crosses devices",
-            ));
-        }
-        if PARENTS.iter().any(|p| child == Path::new(p)) {
-            children(root, &child, moves)?;
-        } else {
-            moves.push(child);
-        }
+    }
+    Ok(true)
+}
+fn check_device(root: &Path, path: &Path) -> io::Result<()> {
+    if !secure_fs::same_device(root, path)? {
+        return Err(io::Error::new(
+            io::ErrorKind::CrossesDevices,
+            "Reset crosses devices",
+        ));
     }
     Ok(())
 }
@@ -151,33 +175,25 @@ pub(crate) fn preflight(
     })
 }
 
-// Some(valid type) for names the retention/configuration code itself owns;
-// None for unknown entries. Only the default-root migration may accept None.
+// Existing custom installations migrate only when every top-level entry is known.
 pub(crate) fn recognized_root(name: &std::ffi::OsStr, kind: fs::FileType) -> Option<bool> {
-    let retained = KEPT.iter().chain(PARENTS).copied().any(|path| {
-        Path::new(path)
+    if KEPT.iter().chain(PARENTS).any(|p| {
+        Path::new(p)
             .components()
             .next()
             .is_some_and(|c| c.as_os_str() == name)
-    });
-    if retained {
+    }) {
         return Some(kind.is_dir());
     }
-    for path in butler_platform::data_paths::OWNED_PATHS {
-        let mut parts = Path::new(path).components();
-        if parts.next().is_none_or(|c| c.as_os_str() != name) {
-            continue;
+    for (path, directory) in inventory::entries() {
+        let mut parts = path.components();
+        if parts.next().is_some_and(|c| c.as_os_str() == name) {
+            return Some(if parts.next().is_some() || directory {
+                kind.is_dir()
+            } else {
+                kind.is_file()
+            });
         }
-        let directory =
-            parts.next().is_some() || butler_platform::data_paths::OWNED_DIRECTORIES.contains(path);
-        return Some(if directory {
-            kind.is_dir()
-        } else {
-            kind.is_file()
-        });
     }
-    butler_platform::data_paths::LOCKED_FILES
-        .iter()
-        .any(|path| name == std::ffi::OsStr::new(&format!("{path}.lock")))
-        .then_some(kind.is_file())
+    None
 }

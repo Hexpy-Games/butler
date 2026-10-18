@@ -47,6 +47,7 @@ pub(super) async fn seed(s: &Scenario) -> Result<(), HarnessError> {
         ("transcripts/large-fixture", 1_500_000_000),
         ("metrics/large-fixture", 300_000_000),
         ("reset-scale/large-fixture", 7_000_000_000),
+        ("agent-runtime/large-fixture", 7_000_000_000),
     ] {
         let path = s.sandbox.data.join(name);
         std::fs::create_dir_all(path.parent().unwrap())?;
@@ -56,10 +57,13 @@ pub(super) async fn seed(s: &Scenario) -> Result<(), HarnessError> {
     }
     for name in [
         "attachments/reset-attachment",
-        "outputs/reset-output",
-        "logs/reset-log",
         "app/browser/reset-profile",
         "favicons/reset-icon",
+        "app-server/message-files/reset-attachment",
+        "outputs/reset-output",
+        "logs/reset-log",
+        "state/browser/reset-profile",
+        "cache/favicons/reset-icon",
         "downloads/reset-download",
     ] {
         let path = s.sandbox.data.join(name);
@@ -96,18 +100,29 @@ pub(super) async fn assert_empty(s: &Scenario) -> Result<(), HarnessError> {
         assert_eq!(kind["item_count"], 0, "{kind}");
     }
     for name in [
-        "attachments/reset-attachment",
+        "app-server/message-files/reset-attachment",
         "outputs/reset-output",
         "logs/reset-log",
-        "app/browser/reset-profile",
-        "favicons/reset-icon",
+        "state/browser/reset-profile",
+        "cache/favicons/reset-icon",
         "downloads/reset-download",
         "transcripts/large-fixture",
         "metrics/large-fixture",
-        "reset-scale",
+        "agent-runtime/large-fixture",
     ] {
         assert!(!s.sandbox.data.join(name).exists(), "retained {name}");
     }
+    for name in [
+        "attachments/reset-attachment",
+        "app/browser/reset-profile",
+        "favicons/reset-icon",
+    ] {
+        assert_eq!(std::fs::read(s.sandbox.data.join(name))?, b"discard");
+    }
+    assert_eq!(
+        std::fs::metadata(s.sandbox.data.join("reset-scale/large-fixture"))?.len(),
+        7_000_000_000
+    );
     let project = s.sandbox.workspace.join("registered-project");
     assert!(!project.join(".butler/hot-cache.md").exists());
     assert_eq!(

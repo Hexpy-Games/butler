@@ -6,11 +6,17 @@ async fn reset_02_requested_survives_kill9() -> Result<(), HarnessError> {
     let mut s = setup("RESET-02")?.start().await?;
     let before = generation(&s).await?;
     std::fs::write(s.sandbox.data.join("discard-me"), b"private")?;
+    std::fs::create_dir_all(s.sandbox.data.join("outputs"))?;
+    std::fs::write(s.sandbox.data.join("outputs/reset-proof"), b"private")?;
     assert_eq!(request(&s, &nonce(&s).await?).await?.status, 202);
     s.agent.kill9()?;
     s.gw = s.agent.start_again().await?;
     assert_ne!(generation(&s).await?, before);
-    assert!(!s.sandbox.data.join("discard-me").exists());
+    assert_eq!(
+        std::fs::read(s.sandbox.data.join("discard-me"))?,
+        b"private"
+    );
+    assert!(!s.sandbox.data.join("outputs/reset-proof").exists());
     cleaned(&s.sandbox.data).await;
     s.finish().await
 }
@@ -33,13 +39,14 @@ async fn rollback_failure(point: &str) -> Result<(), HarnessError> {
         .await?;
     let before = generation(&s).await?;
     std::fs::write(s.sandbox.data.join("discard-me"), b"private")?;
+    std::fs::create_dir_all(s.sandbox.data.join("outputs"))?;
+    std::fs::write(s.sandbox.data.join("outputs/reset-proof"), b"private")?;
     assert_eq!(request(&s, &nonce(&s).await?).await?.status, 202);
     s.agent.terminate().await?;
     assert!(marker.exists());
-    assert_eq!(
-        std::fs::read(s.sandbox.data.join("discard-me"))?,
-        b"private"
-    );
+    for name in ["discard-me", "outputs/reset-proof"] {
+        assert_eq!(std::fs::read(s.sandbox.data.join(name))?, b"private");
+    }
     assert_eq!(
         std::fs::read_to_string(s.sandbox.data.join("state/data-generation"))?,
         before.as_str().unwrap()
@@ -48,10 +55,9 @@ async fn rollback_failure(point: &str) -> Result<(), HarnessError> {
     std::fs::remove_file(marker)?;
     s.gw = s.agent.start_again().await?;
     assert_eq!(generation(&s).await?, before);
-    assert_eq!(
-        std::fs::read(s.sandbox.data.join("discard-me"))?,
-        b"private"
-    );
+    for name in ["discard-me", "outputs/reset-proof"] {
+        assert_eq!(std::fs::read(s.sandbox.data.join(name))?, b"private");
+    }
     assert!(!s.sandbox.data.join("state/full-reset.json").exists());
     s.finish().await
 }
@@ -113,16 +119,17 @@ async fn reset_02_abort_before_journal_keeps_old_data() -> Result<(), HarnessErr
         .await?;
     let before = generation(&s).await?;
     std::fs::write(s.sandbox.data.join("discard-me"), b"private")?;
+    std::fs::create_dir_all(s.sandbox.data.join("outputs"))?;
+    std::fs::write(s.sandbox.data.join("outputs/reset-proof"), b"private")?;
     let n = nonce(&s).await?;
     assert!(request(&s, &n).await.is_err());
     s.agent.kill9()?;
     s.agent.launch.set_env("BUTLER_E2E_ABORT_POINT", "");
     s.gw = s.agent.start_again().await?;
     assert_eq!(generation(&s).await?, before);
-    assert_eq!(
-        std::fs::read(s.sandbox.data.join("discard-me"))?,
-        b"private"
-    );
+    for name in ["discard-me", "outputs/reset-proof"] {
+        assert_eq!(std::fs::read(s.sandbox.data.join(name))?, b"private");
+    }
     assert!(!s.sandbox.data.join("state/full-reset.json").exists());
     s.finish().await
 }
