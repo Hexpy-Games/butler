@@ -2,6 +2,10 @@
   /* One title line: chevron and icon boxes, and the panel's text inset. */
   --disclosure-line: var(--typo-body-line-height);
   --disclosure-inset: var(--space-sm);
+  /* The trigger's own start/end padding; the text indent adds to it. */
+  --disclosure-pad-inline: var(--disclosure-inset);
+  /* Text-only indent (SpanRow indent="text"); each row resolves its own. */
+  --disclosure-indent: 0px;
 
   border-radius: var(--radius-control);
 }
@@ -9,6 +13,7 @@
 /* Plain rows sit flush with the surrounding text (dialogs, readers). */
 .plain {
   --disclosure-inset: 0px;
+  --disclosure-pad-inline: var(--space-sm);
 
   background: transparent;
 }
@@ -29,7 +34,7 @@
      stretched row track keeps the title at the top of the fill. */
   align-content: center;
   width: 100%;
-  padding: var(--disclosure-inset);
+  padding: var(--disclosure-inset) var(--disclosure-pad-inline);
   border-radius: inherit;
 }
 
@@ -40,7 +45,6 @@
   width: auto;
   max-width: none;
   margin-inline: calc(-1 * var(--space-sm));
-  padding-inline: var(--space-sm);
 }
 
 /* The bleed can reach a scroll container's clipping edge (dialog readers):
@@ -118,5 +122,199 @@
 .withIcon .panel {
   padding-left: calc(
     var(--disclosure-inset) + 2 * (var(--disclosure-line) + var(--space-sm))
+  );
+}
+
+/* Trailing and no-chevron rows (log lists, trace steps): the title starts at
+   the row inset, meta ends the first line, and a trailing chevron follows
+   it. Every first-line item is placed explicitly, so a row without meta or
+   a static row keeps the same columns. */
+.root[data-affordance="trailing"] > .trigger {
+  grid-template-columns: minmax(0, 1fr) fit-content(50%) var(--disclosure-line);
+}
+
+.root[data-affordance="trailing"] > .trigger:not(.noIcon) {
+  grid-template-columns:
+    var(--disclosure-line) minmax(0, 1fr) fit-content(50%)
+    var(--disclosure-line);
+}
+
+.root[data-affordance="none"] > .trigger {
+  grid-template-columns: minmax(0, 1fr) fit-content(50%);
+}
+
+.root[data-affordance="none"] > .trigger:not(.noIcon) {
+  grid-template-columns: var(--disclosure-line) minmax(0, 1fr) fit-content(50%);
+}
+
+.root[data-affordance] > .trigger > .title,
+.root[data-affordance] > .trigger > .titleLine {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.root[data-affordance] > .trigger:not(.noIcon) > .title,
+.root[data-affordance] > .trigger:not(.noIcon) > .titleLine {
+  grid-column: 2;
+}
+
+.root[data-affordance="trailing"] > .trigger > .meta {
+  grid-row: 1;
+  grid-column: -3 / -2;
+}
+
+.root[data-affordance="none"] > .trigger > .meta {
+  grid-row: 1;
+  grid-column: -2 / -1;
+}
+
+.root[data-affordance] > .trigger > .description {
+  grid-column: 1 / -1;
+}
+
+.root[data-affordance] > .trigger:not(.noIcon) > .description {
+  grid-column: 2 / -1;
+}
+
+/* The ring sits inside the fill: these rows span their list edge to edge,
+   so an outer ring would be cut by a clipping card or scroll frame. */
+.root[data-affordance] > .trigger[data-slot="clickable"]:focus-visible {
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+}
+
+/* Static rows (nothing to reveal): the trigger's grid and Clickable's
+   height, without the button, hover fill or focus stop. */
+.trigger[data-static="true"] {
+  display: grid;
+  gap: var(--space-xs) var(--space-sm);
+  align-items: baseline;
+  align-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--control-height-md);
+  padding: var(--disclosure-inset) var(--disclosure-pad-inline);
+  border-radius: inherit;
+}
+
+.trigger[data-static="true"] > * {
+  min-width: 0;
+}
+
+.plain .trigger[data-static="true"] {
+  width: auto;
+  margin-inline: calc(-1 * var(--space-sm));
+}
+
+/* Trailing chevron: hugs the meta and turns down when the row opens. */
+.turn {
+  display: inline-grid;
+  align-self: start;
+  width: var(--disclosure-line);
+  height: var(--disclosure-line);
+  place-items: center;
+  margin-inline-start: calc(-1 * var(--space-xs));
+  color: var(--text-tertiary);
+  grid-row: 1;
+  grid-column: -2 / -1;
+  transition: transform var(--motion-fast) var(--motion-ease-standard);
+}
+
+.turn svg {
+  display: block;
+}
+
+.turn[data-open="true"] {
+  transform: rotate(90deg);
+}
+
+/* Reduced motion (the app setting, the viewer scope or the OS): the
+   chevron turns without travel. */
+.turn[data-reduced="true"] {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turn {
+    transition: none;
+  }
+}
+
+/* Title extras: a problem dot before the title, a muted count after it.
+   Only the title text truncates. */
+.titleLine {
+  display: flex;
+  gap: var(--space-xs);
+  align-items: baseline;
+  min-width: 0;
+}
+
+.titleLine > .title {
+  flex: 0 1 auto;
+}
+
+.count {
+  flex: none;
+}
+
+.dot {
+  flex: none;
+  align-self: center;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--trace-error);
+}
+
+.dot[data-tone="warning"] {
+  background: var(--trace-wait);
+}
+
+/* The bar line spans the whole row (inside its inset) on trailing and
+   no-chevron rows, and the description column on leading rows. It reaches
+   back over a text indent, so the fill and the bar keep the full width. */
+.barLine {
+  display: block;
+  min-width: 0;
+  grid-column: 3 / -1;
+  margin-inline-start: calc(-1 * var(--disclosure-indent));
+}
+
+.noIcon > .barLine {
+  grid-column: 2 / -1;
+}
+
+.root[data-affordance] > .trigger > .barLine {
+  grid-column: 1 / -1;
+}
+
+/* Text indent: 16px per level moves the first line, the description and
+   the panel; the fill and the bar stay put. It adds to the trigger's own
+   start padding, so plain and static rows keep their inset at every depth. */
+.root[data-indent="true"] {
+  --disclosure-indent: calc(
+    var(--disclosure-indent-level, 0) * var(--space-lg)
+  );
+}
+
+.root[data-indent="true"] > .trigger {
+  padding-inline-start: calc(
+    var(--disclosure-pad-inline) + var(--disclosure-indent)
+  );
+}
+
+/* Panels read their own row's indent (0 unless indented), so rows nested
+   in a panel never inherit it. */
+.panel:not([data-affordance]) {
+  margin-inline-start: var(--disclosure-indent);
+}
+
+.panel[data-affordance] {
+  padding-left: calc(var(--disclosure-inset) + var(--disclosure-indent));
+}
+
+.panel[data-affordance][data-icon="true"] {
+  padding-left: calc(
+    var(--disclosure-inset) + var(--disclosure-indent) +
+      var(--disclosure-line) + var(--space-sm)
   );
 }

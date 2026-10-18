@@ -22,14 +22,16 @@
 }
 
 /* Geometry is data (the span's place on the axis) and does not animate; the
-   bar grows in once from its start, a row at a time. */
+   bar grows in once from its start, a row at a time. The bar is one pill
+   that clips its pieces, so only its outer ends are round. */
 .bar {
   position: absolute;
   inset-block: 0;
   left: min(var(--span-start), calc(100% - var(--span-min-width)));
   width: max(var(--span-min-width), var(--span-width));
+  overflow: hidden;
   border-radius: inherit;
-  background: var(--accent);
+  background: var(--span-fill);
   transform-origin: left center;
   transition: background-color var(--motion-base) var(--motion-ease-standard);
   animation: span-bar-grow var(--motion-deliberate)
@@ -37,20 +39,61 @@
   animation-delay: calc(var(--span-stagger, 0) * var(--motion-stagger-row));
 }
 
-.root[data-tone="parent"] .bar {
-  background: var(--line-strong);
+/* Tones: the --trace-* fill and its -alt hatch partner. */
+.bar,
+.piece {
+  --span-fill: var(--trace-model);
+  --span-fill-alt: var(--trace-model-alt);
 }
 
-.root[data-tone="muted"] .bar {
-  background: color-mix(in srgb, var(--accent) 55%, var(--line-strong));
+.bar[data-tone="tool"],
+.piece[data-tone="tool"] {
+  --span-fill: var(--trace-tool);
+  --span-fill-alt: var(--trace-tool-alt);
 }
 
-.root[data-tone="warning"] .bar {
-  background: var(--color-warning);
+.bar[data-tone="app"],
+.piece[data-tone="app"] {
+  --span-fill: var(--trace-app);
+  --span-fill-alt: var(--trace-app-alt);
 }
 
-.root[data-tone="danger"] .bar {
-  background: var(--color-danger);
+.bar[data-tone="agent"],
+.piece[data-tone="agent"] {
+  --span-fill: var(--trace-agent);
+  --span-fill-alt: var(--trace-agent-alt);
+}
+
+.bar[data-tone="error"],
+.piece[data-tone="error"] {
+  --span-fill: var(--trace-error);
+  --span-fill-alt: var(--trace-error-alt);
+}
+
+.bar[data-tone="wait"],
+.piece[data-tone="wait"] {
+  --span-fill: var(--trace-wait);
+  --span-fill-alt: var(--trace-wait-alt);
+}
+
+/* One direct child (or the parent's own uncovered time) inside the pill:
+   square joints, at least 1px so a short child stays visible. */
+.piece {
+  position: absolute;
+  inset-block: 0;
+  left: var(--piece-start);
+  width: max(1px, var(--piece-width));
+  background: var(--span-fill);
+}
+
+/* Every other child: a 2px diagonal hatch of the fill and its -alt partner,
+   so adjacent children read apart without a gap. */
+.piece[data-hatch="true"] {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--span-fill) 0 2px,
+    var(--span-fill-alt) 2px 4px
+  );
 }
 
 /* Reduced motion (the app setting, the viewer scope or the OS) fades the
@@ -104,6 +147,12 @@
   margin-top: var(--space-xs);
 }
 
+/* Text indent: the row and its bar keep the full width; the DisclosureRow
+   inside indents only its text (DisclosureRowIndent), so no bar reaches. */
+.row[data-indent="text"] {
+  --span-depth-step: 0px;
+}
+
 /* SpanAxis: labels over the same track width as the bars. "disclosure"
    matches a DisclosureRow description column: the row inset, the chevron
    line and the column gap on the start, the row inset on the end. */
@@ -117,6 +166,12 @@
       2 * var(--space-sm) + var(--typo-body-line-height) + var(--span-shift)
     )
     var(--space-sm);
+}
+
+/* "row" matches a row whose bar spans the whole row inside its inset: a
+   DisclosureRow with a trailing or no chevron, as text-indent SpanRows use. */
+.axis[data-inset="row"] {
+  padding-inline: var(--space-sm);
 }
 
 .axisTrack {
