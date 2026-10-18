@@ -26,7 +26,23 @@ def ci_commands(path):
         (ROOT / path).read_text(), re.M)]
 
 
+def isolate_git(test):
+    """Keep fixture Git calls in their temp repos, whatever Git state the caller exports."""
+    # Hooks and `rebase --exec` in a linked worktree export GIT_DIR; fixture `git init`
+    # and `git config` would then write the caller's .git/config, shared by all worktrees.
+    env = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+    identity = {'GIT_AUTHOR_NAME': 'Test', 'GIT_AUTHOR_EMAIL': 'test@example.invalid',
+                'GIT_COMMITTER_NAME': 'Test', 'GIT_COMMITTER_EMAIL': 'test@example.invalid'}
+    env.update(identity, GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull)
+    patcher = patch.dict(os.environ, env, clear=True)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+
+
 class PrepushChecks(unittest.TestCase):
+    def setUp(self):
+        isolate_git(self)
+
     # test-category: format-pin
     def test_clippy_targets_and_flags_are_derived_from_ci(self):
         quality = (ROOT / '.github/workflows/rust-quality.yml').read_text()
@@ -83,8 +99,6 @@ class PrepushChecks(unittest.TestCase):
             def git(*args):
                 return subprocess.check_output(['git', *args], cwd=root, text=True)
             git('init', '-q', '-b', 'ci/checks')
-            git('config', 'user.email', 'test@example.invalid')
-            git('config', 'user.name', 'Test')
             for name in ('deleted', 'unstaged', 'staged'):
                 (root / name).write_text('base\n')
             git('add', '.')
