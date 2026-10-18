@@ -102,7 +102,7 @@ fn hosted_prompt_wire_bodies_follow_each_carrier_contract() {
 
         let gemini = request(&ReasoningEffort::Low, &usage);
         assert_eq!(
-            wire(&gemini, &config("google/gemini-3.5-flash"), Carrier::Gemini,),
+            wire(&gemini, &config("google/gemini-3.8-flash"), Carrier::Gemini,),
             r#"{"systemInstruction":{"parts":[{"text":"System"}]},"generationConfig":{"thinkingConfig":{"thinkingLevel":"LOW"},"maxOutputTokens":321},"contents":[{"role":"user","parts":[{"text":"Hello"}]}]}"#
         );
 
