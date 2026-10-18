@@ -1,7 +1,4 @@
 import { securityAuthoritySections } from "./SecurityAuthoritySections";
-import { useShallow } from "zustand/react/shallow";
-import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { useButlerStore } from "@/app/store.ts";
 import { useSavedKeys } from "./hooks/useSavedKeys";
 import { useGrants } from "./useGrants";
 import { memo, useId, useState } from "react";
@@ -21,12 +18,6 @@ import { useSecuritySettings } from "./useSecuritySettings";
 export const SecuritySettings = memo(function SecuritySettings() {
   useAppLocale();
   const security = useSecuritySettings();
-  const draft = useSettingsUIStore(useShallow(state => state.draft && ({
-    diagnostics_enabled: state.draft.diagnostics_enabled,
-  })));
-  const update = useSettingsUIStore(state => state.update);
-  const setSettings = useButlerStore(state => state.setSettings);
-  const models = { draft, update, setSettings };
   const savedKeys = useSavedKeys();
   const grants = useGrants();
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -46,7 +37,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
           errorMessage={load === "admin-required" ? settingsCopy.security.adminRequired : undefined}
           onRetry={security.retry}
         />
-        {securityAuthoritySections({ models, savedKeys, grants })}
+        {securityAuthoritySections({ savedKeys, grants })}
       </SettingsPage>
     );
   }
@@ -69,7 +60,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
           <SecurityDevicesSection disabled={busy !== null} />
         </>
       )}
-      {securityAuthoritySections({ models, savedKeys, grants })}
+      {securityAuthoritySections({ savedKeys, grants })}
       {view && <SecurityAdvancedSection security={security} open={advancedOpen} onToggle={() => setAdvancedOpen(!advancedOpen)} />}
     </SettingsPage>
   );
