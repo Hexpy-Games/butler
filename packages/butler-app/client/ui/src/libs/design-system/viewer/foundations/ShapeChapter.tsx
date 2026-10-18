@@ -1,6 +1,11 @@
 import type { CSSProperties } from "react";
+import { getAppCopy } from "../../../../../../../../butler-i18n/src/locale.ts";
+import menu from "../../components/DropdownMenu/DropdownMenu.module.css";
+import { Archive, PencilLine } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
+import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { Typo } from "../../components/Typo";
+import { cn } from "../../lib/utils";
 import { tokenCatalog } from "./catalog";
 import { ChapterLayout, chapterSections, DoDont, GuideSection, ThemePanes } from "./Chapter";
 import type { ChapterProps } from "./chapterProps";
@@ -39,23 +44,26 @@ function RadiusShapes() {
   );
 }
 
-function NestedRadius() {
+/** The sidebar session menu as DropdownMenu draws it (its surface and item classes), the first row hovered. */
+function SessionMenu({ locale, pinched }: { locale: ChapterProps["locale"]; pinched?: boolean }) {
+  const copy = getAppCopy(locale === "ko" ? "ko-KR" : "en-US").sessionActions;
+  return (
+    <div className={cn(tintedGlassSurfaceClassName, menu.content, f.nestMenu)} data-glass="popover" data-radius="popover" data-slot="dropdown-menu-content">
+      {([[<PencilLine size="sm" key="icon" />, copy.rename], [<Archive size="sm" key="icon" />, copy.archive]] as const).map(([icon, label], index) => (
+        <div className={cn(menu.item, f.nestRow)} data-hovered={index === 0 ? "" : undefined} data-pinched={pinched ? "" : undefined}
+          data-slot="dropdown-menu-item" data-variant="default" key={label}>{icon} {label}</div>
+      ))}
+    </div>
+  );
+}
+
+function NestedRadius({ locale }: { locale: ChapterProps["locale"] }) {
   return (
     <DoDont
-      doCaption="Inner radius = outer − padding: 12px popover, 4px inset, 8px rows"
+      doCaption="12px surface, 6px inset, 8px rows: DropdownMenu as the product draws it"
       dontCaption="Same radius inside and out pinches the corners"
-      doRender={(
-        <div className={f.nestOuter}>
-          <span className={f.nestInner} data-active>Rename</span>
-          <span className={f.nestInner}>Move to project</span>
-        </div>
-      )}
-      dontRender={(
-        <div className={f.nestOuter}>
-          <span className={f.nestInner} data-active data-pinched>Rename</span>
-          <span className={f.nestInner} data-pinched>Move to project</span>
-        </div>
-      )} />
+      doRender={<SessionMenu locale={locale} />}
+      dontRender={<SessionMenu locale={locale} pinched />} />
   );
 }
 
@@ -108,8 +116,8 @@ export function ShapeChapter({ chapter, anchor, locale, onOpen }: ChapterProps) 
       <GuideSection spec={s.at("radius")} lead="Each radius on the surface it belongs to.">
         <RadiusShapes />
       </GuideSection>
-      <GuideSection spec={s.at("nesting")} lead="Rows inside a rounded container follow its curve.">
-        <NestedRadius />
+      <GuideSection spec={s.at("nesting")} lead="A menu keeps --radius-popover (12px) on its surface and --radius-control (8px) on its rows, so a row matches every other control. The inset only sets the gap: 6px in DropdownMenu and ContextMenu.">
+        <NestedRadius locale={locale} />
       </GuideSection>
       <GuideSection spec={s.at("layers")} lead="Page, card, control, overlay, drag: each step up casts a longer, softer shadow.">
         <LayeredElevation />

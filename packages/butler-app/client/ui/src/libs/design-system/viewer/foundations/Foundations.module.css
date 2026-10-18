@@ -1024,28 +1024,17 @@
   height: var(--control-height-xs);
 }
 
-.nestOuter {
-  display: grid;
-  gap: calc(var(--space-xs) / 2);
+/* The product DropdownMenu surface sized for the page; its padding, radius and rows stay the component's. */
+.nestMenu {
   width: min(100%, 14rem);
-  padding: var(--space-xs);
-  border: var(--border-hairline) solid var(--line);
-  border-radius: var(--radius-popover);
-  background: var(--color-surface-overlay);
 }
 
-.nestInner {
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-control);
-  font-size: var(--typo-label-size);
-  line-height: var(--typo-label-line-height);
+/* The hover fill DropdownMenu items take (:hover, :focus), held still. */
+.nestRow[data-hovered] {
+  background: var(--selection);
 }
 
-.nestInner[data-active] {
-  background: var(--selection-strong);
-}
-
-.nestInner[data-pinched] {
+.nestRow[data-pinched] {
   border-radius: var(--radius-popover);
 }
 
