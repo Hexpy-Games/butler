@@ -27,6 +27,9 @@ fn run(scenario: &str) -> Result<(), Box<dyn std::error::Error>> {
     if scenario == "barrier" {
         assert_barrier_sync(&stderr)?;
     }
+    if scenario == "sync" {
+        assert_sync_retry(&stderr)?;
+    }
     Ok(())
 }
 
@@ -50,6 +53,23 @@ fn assert_barrier_sync(stderr: &str) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn assert_sync_retry(stderr: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let (before_failure, after_failure) = stderr
+        .split_once("WAL sync failure completion observed\n")
+        .ok_or("missing WAL sync failure completion marker")?;
+    assert!(
+        before_failure.contains("committed; WAL index sync failed"),
+        "missing committed WAL-index sync failure diagnostic"
+    );
+    assert!(
+        after_failure.lines().any(|line| {
+            line.contains("phase=app_sqlite_wal_sync ") && line.contains("event=synced ")
+        }),
+        "missing successful WAL-index sync after the failed completion: {after_failure}"
+    );
+    Ok(())
+}
+
 #[test]
 fn earlier_completions_survive_failed_begin() -> Result<(), Box<dyn std::error::Error>> {
     butler_e2e::gate!();
@@ -67,4 +87,14 @@ fn failed_commit_rolls_back_and_writer_commits_next_batch() -> Result<(), Box<dy
 {
     butler_e2e::gate!();
     run("commit")
+}
+
+#[test]
+fn failed_wal_sync_after_commit_keeps_writer() -> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    if !butler_platform::sqlite::wal_index_sync_supported() {
+        eprintln!("SKIPPED: this platform has no WAL-index sync implementation");
+        return Ok(());
+    }
+    run("sync")
 }
