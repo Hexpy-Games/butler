@@ -141,7 +141,13 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
         .and_then(|h| h.to_str().ok())
         .and_then(butler_log::TraceContext::from_traceparent)
         .unwrap_or_default();
-    let span = context.span("http.server");
+    let span = context.http_span(
+        if matches!(method, Method::GET | Method::HEAD | Method::OPTIONS) {
+            "DEBUG"
+        } else {
+            "INFO"
+        },
+    );
     async {
         let response = dispatch_inner(state, request).await;
         access_log::finish(

@@ -15,7 +15,11 @@ pub(super) struct Lifetime {
 impl Lifetime {
     pub(super) fn new(metadata: &tracing::Metadata<'_>, fields: &Map<String, Value>) -> Self {
         let name = metadata.name();
-        let category = name.split('.').next().unwrap_or("agent");
+        let category = if name == "http.server" {
+            name
+        } else {
+            name.split('.').next().unwrap_or("agent")
+        };
         let level = fields
             .get("log_level")
             .and_then(Value::as_str)
@@ -109,13 +113,15 @@ impl Logger {
                 "turn_id or chat_id and message_id required",
             ));
         }
-        let (rows, scanned, truncated) = self.trace_rows(Query {
+        let page = self.query_trace(&Query {
             turn_id,
             chat_id,
             message_id: message_id.map(str::to_owned),
+            limit: 1,
             ..Query::default()
         })?;
-        let id = rows
+        let id = page
+            .rows
             .iter()
             .find(|r| {
                 message_id.is_none_or(|id| r.attrs["message_id"].as_str() == Some(id))
@@ -124,8 +130,7 @@ impl Logger {
             .and_then(|r| r.trace_id.as_deref())
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "trace not found"))?;
         let mut trace = self.trace(id)?;
-        trace.scanned_bytes += scanned;
-        trace.truncated |= truncated;
+        trace.scanned_bytes += page.scanned_bytes;
         Ok(trace)
     }
     fn trace_rows(&self, mut query: Query) -> io::Result<(Vec<Record>, u64, bool)> {
@@ -258,6 +263,8 @@ fn span(row: Record, start: f64) -> TraceSpan {
         "error"
     } else if matches!(status, "wait" | "warn") {
         "wait"
+    } else if row.category == "http.server" {
+        "app"
     } else if row.event == "http.request"
         || matches!(row.category.as_str(), "model" | "http" | "stream")
     {

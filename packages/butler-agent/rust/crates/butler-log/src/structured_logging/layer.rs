@@ -95,13 +95,15 @@ where
             if let Some(parent) = span.parent()
                 && let Some(inherited) = parent.extensions().get::<Fields>()
             {
-                let own = std::mem::take(&mut fields.0);
-                fields.0 = inherited.0.clone();
-                fields.0.extend(own);
+                for key in ["trace_id", "turn_id", "chat_id", "message_id"] {
+                    if let Some(value) = inherited.0.get(key) {
+                        fields.0.entry(key).or_insert_with(|| value.clone());
+                    }
+                }
                 fields.0.insert(
                     "parent_span_id".into(),
                     parent_id
-                        .or_else(|| fields.0.get("span_id").cloned())
+                        .or_else(|| inherited.0.get("span_id").cloned())
                         .unwrap_or(Value::Null),
                 );
             }
@@ -234,5 +236,8 @@ pub(crate) fn current_ids(row: &mut Record) {
         row.chat_id = take(&mut fields, "chat_id");
         row.span_id = take(&mut fields, "span_id");
         row.parent_span_id = take(&mut fields, "parent_span_id");
+        if let Some(message) = fields.remove("message_id") {
+            row.attrs["message_id"] = message;
+        }
     });
 }

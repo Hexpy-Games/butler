@@ -14,7 +14,7 @@ impl AppApplication {
         let queued = claim.queued_message_id.clone();
         let context = self
             .storage
-            .inspect(move |db| {
+            .read(move |db| {
                 db.query_row(
                     "SELECT trace_context_json FROM session_queued_messages WHERE id=?1",
                     [&queued],

@@ -6,6 +6,7 @@ pub struct TraceContext {
     pub span_id: Option<String>,
     pub turn_id: Option<String>,
     pub chat_id: Option<String>,
+    pub message_id: Option<String>,
 }
 impl TraceContext {
     pub fn current() -> Self {
@@ -16,6 +17,7 @@ impl TraceContext {
             span_id: row.span_id,
             turn_id: row.turn_id,
             chat_id: row.chat_id,
+            message_id: row.attrs["message_id"].as_str().map(str::to_owned),
         }
     }
     pub fn from_traceparent(value: &str) -> Option<Self> {
@@ -37,6 +39,15 @@ impl TraceContext {
             ..Self::default()
         })
     }
+    pub fn http_span(&self, level: &str) -> tracing::Span {
+        let trace_id = self
+            .trace_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string());
+        tracing::error_span!(parent: None, "http.server", log_level = level, trace_id,
+            parent_span_id = self.span_id.as_deref(), turn_id = self.turn_id.as_deref(),
+            chat_id = self.chat_id.as_deref(), message_id = self.message_id.as_deref())
+    }
     pub fn span(&self, name: &'static str) -> tracing::Span {
         let trace_id = self
             .trace_id
@@ -46,11 +57,9 @@ impl TraceContext {
         let turn_id = self.turn_id.as_deref();
         let chat_id = self.chat_id.as_deref();
         match name {
-            "http.server" => {
-                tracing::error_span!(parent: None, "http.server", log_level = "DEBUG", trace_id, parent_span_id = parent, turn_id, chat_id)
-            }
+            "http.server" => self.http_span("DEBUG"),
             _ => {
-                tracing::info_span!(parent: None, "turn.queue", trace_id, parent_span_id = parent, turn_id, chat_id)
+                tracing::info_span!(parent: None, "turn.queue", trace_id, parent_span_id = parent, turn_id, chat_id, message_id = self.message_id.as_deref())
             }
         }
     }
