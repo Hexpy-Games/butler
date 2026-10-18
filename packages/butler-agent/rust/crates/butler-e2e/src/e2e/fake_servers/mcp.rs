@@ -1,7 +1,7 @@
 //! Stateless legacy MCP handshake and tools over real HTTP.
 use super::*;
 
-pub(super) fn response(method: &Method, body: &str, tool: &str) -> Response<Body> {
+pub(super) fn response(method: &Method, body: &str) -> Response<Body> {
     if method != Method::POST {
         return json_response(405, &json!({}));
     }
@@ -23,7 +23,7 @@ pub(super) fn response(method: &Method, body: &str, tool: &str) -> Response<Body
             json!({"protocolVersion":request["params"]["protocolVersion"],"capabilities":{"tools":{}},"serverInfo":{"name":"http-fixture","version":"1"}})
         }
         "tools/list" => {
-            json!({"tools":[{"name":tool,"description":"Echo text","inputSchema":{"type":"object","properties":{}}}]})
+            json!({"tools":[{"name":"echo","description":"Echo text","inputSchema":{"type":"object","properties":{}}}]})
         }
         "tools/call" => {
             json!({"content":[{"type":"text","text":"HTTP fixture reply"}],"isError":false})

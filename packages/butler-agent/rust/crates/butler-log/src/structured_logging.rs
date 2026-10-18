@@ -14,11 +14,6 @@ mod redaction;
 mod retention;
 mod segment;
 mod storage;
-mod trace;
-mod trace_context;
-pub(crate) use trace::valid_id as valid_trace_id;
-pub use trace::{Trace, TraceSpan};
-pub use trace_context::TraceContext;
 mod writer;
 
 pub use config::{Config, ConfigView, Preset};

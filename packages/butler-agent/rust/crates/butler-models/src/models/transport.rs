@@ -45,7 +45,6 @@ pub(super) enum GuardStart {
     AfterAdmission,
 }
 
-#[derive(Debug)]
 enum TransportError {
     Admission(ModelRoundError),
     Provider(Box<ProviderRequestError>),
@@ -338,13 +337,6 @@ fn with_receipt(
 }
 
 /// Waits `delay_ms` before a retry, unless the request is cancelled.
-#[tracing::instrument(
-    name = "retry.wait",
-    level = "warn",
-    skip_all,
-    fields(delay_ms, provider, api),
-    err(Debug)
-)]
 async fn before_retry(
     progress: &super::request_guard::RequestProgress,
     delay_ms: f64,

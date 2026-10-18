@@ -30,7 +30,6 @@ sha2.workspace = true
 # Key fingerprints and wiped key buffers (#217).
 hmac.workspace = true
 zeroize.workspace = true
-tracing.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 thiserror.workspace = true

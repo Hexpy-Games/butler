@@ -216,14 +216,11 @@ impl Prepared {
         self
     }
 
-    #[tracing::instrument(name = "context.build", level = "debug", skip_all, fields(sections = self.metadata["components"].as_array().map_or(0, Vec::len), tokens = tracing::field::Empty), err)]
     pub(super) async fn tokenize(
         mut self,
         catalog: Arc<crate::models::ModelCatalog>,
     ) -> Result<Self, ModelRoundError> {
-        let span = tracing::Span::current();
         tokio::task::spawn_blocking(move || {
-            let _entered = span.enter();
             let text =
                 std::str::from_utf8(&self.prefix).map_err(|error| failure(error.to_string()))?;
             self.tokens = catalog
@@ -231,7 +228,6 @@ impl Prepared {
                 .encode_json_components(text)
                 .map_err(|error| failure(error.to_string()))?
                 .into();
-            tracing::Span::current().record("tokens", self.tokens.len());
             self.metadata["prefixTokens"] = self.tokens.len().into();
             self.metadata["tokenRepresentation"] =
                 "serialized components using the catalog tokenizer".into();

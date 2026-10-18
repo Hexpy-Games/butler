@@ -96,10 +96,7 @@ pub(super) fn eligible_for_claim(
     batch_sessions.insert(session)
 }
 
-mod trace;
-pub(super) use trace::one;
-
-async fn one_traced(item: ClaimedInboundEvent, deps: DispatchDependencies) -> IngressPoll {
+pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -> IngressPoll {
     let DispatchDependencies {
         shutdown,
         queue,
@@ -139,7 +136,6 @@ async fn one_traced(item: ClaimedInboundEvent, deps: DispatchDependencies) -> In
     match result {
         Ok(executed) => handled(&item, executed, &queue, &restart_handoff).await,
         Err(error) => {
-            tracing::error!(category = "turn", event = "turn.failed", error = %error, "Turn dispatch failed");
             let subsessions = subsessions.as_ref();
             let poll = failed(
                 &item,
@@ -377,7 +373,7 @@ async fn execute(
             .pointer("/metadata/kind")
             .and_then(serde_json::Value::as_str)
             == Some("final_result");
-        if !trace::deliver(delivery, &binding.session_id, action).await? {
+        if !delivery.deliver(binding.session_id.clone(), action).await? {
             return Err(super::IngressError::new(
                 "inbound_delivery_interrupted",
                 "App result delivery unavailable",

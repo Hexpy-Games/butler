@@ -195,7 +195,6 @@ impl AppApplication {
         }).await.map_err(app_error)
     }
 
-    #[tracing::instrument(name = "schedule.run", parent = None, skip_all, fields(run_id, chat_id = %row.target_id, status = tracing::field::Empty))]
     async fn send_automation(
         &self,
         row: &AutomationRow,
@@ -223,7 +222,7 @@ impl AppApplication {
                 unattended: trigger == "scheduled",
             }),
         };
-        let result = match self
+        match self
             .send(SendMessageCommand {
                 request,
                 chat_id: row.target_id.clone(),
@@ -252,11 +251,7 @@ impl AppApplication {
                 safe_error: Some("automation_dispatch_failed".into()),
                 turn_id: None,
             },
-        };
-        if result.state == "failed" {
-            tracing::error!(category = "schedule", event = "schedule.failed", reason = ?result.safe_error, "Schedule run failed");
         }
-        result
     }
 
     async fn complete_fresh_run(

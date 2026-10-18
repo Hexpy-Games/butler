@@ -18,7 +18,6 @@ use butler_core::public_text::trim_js_whitespace;
 ///
 /// The object is persisted as `btcc_turns.context_json`; its key order and
 /// omission rules are part of that format.
-#[tracing::instrument(name = "context.build", level = "debug", skip_all, fields(sections = sections(assembly).count()), err)]
 pub(super) async fn snapshot(
     repositories: &BtccRepositories,
     binding: &StoredSessionBinding,

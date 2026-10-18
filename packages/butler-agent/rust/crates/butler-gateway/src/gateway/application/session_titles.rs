@@ -2,7 +2,6 @@
 use super::*;
 use rusqlite::{Connection, OptionalExtension};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use tracing::Instrument;
 
 #[derive(Clone, Default)]
 pub(super) struct SessionTitleOwner {
@@ -25,11 +24,6 @@ impl AppApplication {
         }
         let app = self.clone_handle();
         let cancellation = self.session_titles.cancellation.child_token();
-        let context = butler_log::TraceContext::current();
-        let span = tracing::info_span!(parent: None, "session.title",
-            trace_id = context.trace_id.as_deref(), turn_id = context.turn_id.as_deref(),
-            chat_id = context.chat_id.as_deref(), message_id = context.message_id.as_deref());
-        span.follows_from(tracing::Span::current());
         self.session_titles.tasks.spawn(async move {
             let result = tokio::select! {
                 biased;
@@ -53,7 +47,7 @@ impl AppApplication {
             if let Some(reason) = reason {
                 eprintln!("WARN [session-title] chat={chat} model={model} reason={reason}");
             }
-        }.instrument(span));
+        });
     }
 
     async fn generate_title(
