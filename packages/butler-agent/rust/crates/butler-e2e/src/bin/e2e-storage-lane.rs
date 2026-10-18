@@ -22,6 +22,7 @@ fn main() {
         "begin" => failed_begin(&path),
         "barrier" => failed_commit(&path, true),
         "commit" => failed_commit(&path, false),
+        "sync" => failed_wal_sync(&path),
         other => panic!("unknown scenario: {other}"),
     }
 }
@@ -102,6 +103,70 @@ fn verify_recovery(sender: &Sender, events: &Events, published: &Published, prio
     });
     sender.send(inspect).unwrap();
     inspected.wait().unwrap();
+}
+
+struct DirectoryRestore {
+    original: PathBuf,
+    displaced: PathBuf,
+}
+
+impl DirectoryRestore {
+    fn new(original: &Path) -> Self {
+        let name = original.file_name().unwrap().to_string_lossy();
+        let displaced = original.with_file_name(format!("{name}-moved-{}", std::process::id()));
+        Self {
+            original: original.to_owned(),
+            displaced,
+        }
+    }
+
+    fn restore(&self) -> std::io::Result<()> {
+        std::fs::rename(&self.displaced, &self.original)
+    }
+}
+
+impl Drop for DirectoryRestore {
+    fn drop(&mut self) {
+        if self.displaced.exists() && !self.original.exists() {
+            let _ = std::fs::rename(&self.displaced, &self.original);
+        }
+    }
+}
+
+fn failed_wal_sync(path: &Path) {
+    let (events, published, _subscription) = event_stream();
+    let restore = DirectoryRestore::new(path.parent().unwrap());
+    assert!(!restore.displaced.exists());
+    let original = restore.original.clone();
+    let displaced = restore.displaced.clone();
+    let (write, completion) = Operation::new(false, false, move |db| {
+        db.execute_batch(
+            "CREATE TABLE wal_sync_first(value); INSERT INTO wal_sync_first VALUES(11)",
+        )?;
+        std::fs::rename(&original, &displaced)
+            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+        Ok(())
+    });
+    let (sender, thread) = storage_testing::start(path.to_owned(), vec![write]).unwrap();
+    let error = completion.wait().unwrap_err();
+    assert!(error.contains("app_sqlite_wal_sync_failed"), "{error}");
+    eprintln!("WAL sync failure completion observed");
+    restore.restore().unwrap();
+
+    verify_recovery(&sender, &events, &published, &[]);
+    let reader = butler_platform::sqlite::open(path).unwrap();
+    assert_eq!(
+        reader
+            .query_row("SELECT value FROM wal_sync_first", [], |row| row
+                .get::<_, i64>(0))
+            .unwrap(),
+        11,
+        "the first operation committed before WAL-index sync failed"
+    );
+    drop(reader);
+    drop(sender);
+    thread.join().unwrap().unwrap();
+    eprintln!("failed WAL-index sync after COMMIT: committed row and writer recovery verified");
 }
 
 fn failed_begin(path: &Path) {
