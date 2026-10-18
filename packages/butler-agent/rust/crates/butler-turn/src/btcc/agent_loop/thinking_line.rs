@@ -39,14 +39,13 @@ impl ThinkingLine {
         if self.closed {
             return;
         }
-        self.tail.push_str(text);
-        if self.tail.len() > TAIL_BYTES {
-            let mut start = self.tail.len() - TAIL_BYTES;
-            while !self.tail.is_char_boundary(start) {
-                start += 1;
-            }
-            self.tail.drain(..start);
+        if text.len() >= TAIL_BYTES {
+            self.tail.clear();
         }
+        let text = tail(text, TAIL_BYTES);
+        let retained = tail(&self.tail, TAIL_BYTES - text.len()).len();
+        self.tail.drain(..self.tail.len() - retained);
+        self.tail.push_str(text);
         self.summary_pending = self.tail != self.summary_shown;
         self.pending =
             derive(tail(&self.tail, 4096)).filter(|line| Some(line) != self.shown.as_ref());
@@ -225,6 +224,7 @@ pub(super) mod tests {
         line.push("new".into(), &"가".repeat(TAIL_BYTES), &progress)
             .await;
         assert!(line.tail.len() <= TAIL_BYTES);
+        assert!(line.tail.capacity() <= TAIL_BYTES * 2);
         assert!(line.tail.chars().all(|c| c == '가'));
         line.clear(&progress).await;
         assert!(line.tail.is_empty() && line.summary_shown.is_empty());
