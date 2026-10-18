@@ -1469,7 +1469,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       searchBehavior: "How Butler reads pages and plans searches before running them.",
       sidebar: "How the sidebar organizes conversations.",
       homeScreen: "The background of the new chat screen.",
-      conversation: "Background for conversations.",
+      conversation: "Background and display for conversations.",
       messageBox: "Applies to the input on new chats and conversation screens.",
       learning: "How much Butler picks up about you from your chats.",
     },

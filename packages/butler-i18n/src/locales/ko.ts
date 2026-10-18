@@ -1474,7 +1474,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       searchBehavior: "버틀러가 검색 전에 페이지를 읽고 계획하는 방식입니다.",
       sidebar: "사이드바가 대화를 정리하는 방식입니다.",
       homeScreen: "새 채팅 첫 화면의 배경입니다.",
-      conversation: "대화 화면의 배경입니다.",
+      conversation: "대화 화면의 배경과 표시입니다.",
       messageBox: "새 채팅과 대화 화면의 입력창에 함께 적용됩니다.",
       learning: "버틀러가 대화하면서 사용자를 알아가는 범위입니다.",
     },

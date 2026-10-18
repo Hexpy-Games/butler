@@ -1,7 +1,7 @@
 // Offline chat harness: one live line, DS motion, unchanged fallback and cleanup.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createServer } from "../../packages/butler-app/client/ui/node_modules/vite/dist/node/index.js";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser";
@@ -16,10 +16,21 @@ const evidence = process.env.BUTLER_THINKING_EVIDENCE;
 assert(evidence, "BUTLER_THINKING_EVIDENCE required");
 mkdirSync(evidence, { recursive: true });
 process.chdir(join(root, "packages/butler-app/client/ui"));
-const originals = before ? Object.fromEntries(["AppearanceSettings", "TurnActivityPanel"].map(name => {
-  const path = `packages/butler-app/client/ui/src/components/${name === "AppearanceSettings" ? "settings" : "conversation"}/${name}.tsx`;
-  return [join(root, path), execFileSync("git", ["show", `${baseline}:${path}`], { cwd: root, encoding: "utf8" })];
-})) : {};
+const originals: Record<string, string> = {};
+if (before) {
+  const paths = execFileSync("git", ["diff", "--name-only", baseline!, "--", "packages/butler-app/client/ui/src", "packages/butler-i18n/src"], { cwd: root, encoding: "utf8" }).trim().split("\n");
+  for (const path of paths.filter(path => /\.tsx?$/u.test(path))) {
+    const exists = execFileSync("git", ["ls-tree", baseline!, "--", path], { cwd: root, encoding: "utf8" });
+    if (exists) originals[join(root, path)] = execFileSync("git", ["show", `${baseline}:${path}`], { cwd: root, encoding: "utf8" });
+  }
+}
+const blur = async (page: import("playwright").Page) => page.evaluate(() => {
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  // Restore the capture frame after Playwright scrolls a control into view.
+  for (const element of document.querySelectorAll("*")) {
+    if (element.scrollLeft) element.scrollTo({ left: 0, behavior: "instant" });
+  }
+});
 const vite = await createServer({ plugins: [{ name: "thinking-before", enforce: "pre", load(id) { return originals[id]; } }], server: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
 await vite.listen();
 const base = vite.resolvedUrls!.local[0];
@@ -68,7 +79,8 @@ try {
     await status.waitFor();
     const aria = await status.getAttribute("aria-label");
     assert((await status.innerText()).startsWith("응답 생성 중"));
-    await page.screenshot({ path: join(evidence, `${process.env.BUTLER_THINKING_PHASE ?? "after"}-chat-before-${cell}.png`) });
+    await blur(page);
+    if (before) await page.screenshot({ path: join(evidence, `before-chat-${cell}.png`) });
     const receive = async (line: string | null) => page.evaluate(async line => {
       const path = "/src/app/modelThinking.ts";
       const { receiveModelThinking } = await import(/* @vite-ignore */ path);
@@ -86,18 +98,20 @@ try {
       }
       return receiveModelThinking({ type: "turn.thinking", payload: { session_id: "butler-client", turn_id: "thinking-turn", stream_id: "stream", line } });
     }, line);
-    assert(await receive("Planning the search"));
-    await page.locator('[data-slot="rolling-swap"] [data-motion="incoming"]').waitFor();
-    await page.waitForFunction(() => !document.querySelector('[data-slot="rolling-swap"] [data-motion="incoming"]'));
-    await page.waitForFunction(() => document.querySelector('[data-test-class="turn-model-round-waiting"]')?.textContent?.startsWith("Planning the search"));
-    assert.equal(await status.getAttribute("aria-label"), aria);
-    assert.equal(await page.locator('[data-test-class="turn-current-status-slot"]').getAttribute("title"), "Planning the search");
-    assert.equal(await page.locator('[data-test-class="assistant-status-label"] [data-shimmer="true"]').count(), 0);
-    await receive("Checking the results");
-    await page.locator('[data-slot="rolling-swap"] [data-motion="incoming"]').waitFor();
-    await page.waitForFunction(() => !document.querySelector('[data-slot="rolling-swap"] [data-motion="incoming"]'));
-    assert.equal(await page.getByRole("button", { name: "생각 요약" }).count(), 0);
     if (!before) {
+      assert(await receive("Planning the search"));
+      await page.locator('[data-slot="rolling-swap"] [data-motion="incoming"]').waitFor();
+      await page.waitForFunction(() => !document.querySelector('[data-slot="rolling-swap"] [data-motion="incoming"]'));
+      await page.waitForFunction(() => document.querySelector('[data-test-class="turn-model-round-waiting"]')?.textContent?.startsWith("Planning the search"));
+      assert.equal(await status.getAttribute("aria-label"), aria);
+      assert.equal(await page.locator('[data-test-class="turn-current-status-slot"]').getAttribute("title"), "Planning the search");
+      assert.equal(await page.locator('[data-test-class="assistant-status-label"] [data-shimmer="true"]').count(), 0);
+      await receive("Checking the results");
+      await page.locator('[data-slot="rolling-swap"] [data-motion="incoming"]').waitFor();
+      await page.waitForFunction(() => !document.querySelector('[data-slot="rolling-swap"] [data-motion="incoming"]'));
+      assert.equal(await page.getByRole("button", { name: "생각 요약" }).count(), 0);
+      await blur(page);
+      await page.screenshot({ path: join(evidence, `after-a-chat-${cell}.png`) });
       await page.evaluate(async () => {
         const storePath = "/src/app/store.ts", thinkingPath = "/src/app/modelThinking.ts";
         const { useButlerStore } = await import(/* @vite-ignore */ storePath);
@@ -117,25 +131,21 @@ try {
         await Promise.all(document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity)
           .map(animation => animation.finished.catch(() => {})));
       });
-      await disclosure.evaluate(element => {
-        element.focus({ preventScroll: true });
-        element.addEventListener("keydown", event => { if (event instanceof KeyboardEvent && event.key === "Tab") event.preventDefault(); }, { once: true });
-      });
-      await disclosure.press("Tab");
       await page.locator('[data-test-class="thinking-summary"]').evaluate(async element => {
         await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {})));
       });
       const latest = page.getByRole("button", { name: "최신 메시지와 입력창으로 이동" });
       if (await latest.isVisible()) await latest.click();
       await latest.waitFor({ state: "hidden" });
-      await disclosure.evaluate(element => element.focus({ preventScroll: true }));
-      await page.screenshot({ path: join(evidence, `after-chat-${cell}.png`) });
+      await blur(page);
+      await page.screenshot({ path: join(evidence, `after-b-chat-${cell}.png`) });
       await receive(null);
+      await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
+      assert((await status.innerText()).startsWith("응답 생성 중"));
+      assert.equal(await page.locator('[data-slot="rolling-swap"] [data-motion="incoming"]').count(), 0);
+      await page.screenshot({ path: join(evidence, `after-clear-chat-${cell}.png`) });
       assert.equal(await page.evaluate(() => document.documentElement.dataset.thinkingExit), "closed");
       await disclosure.waitFor({ state: "detached" });
-    } else {
-      await page.screenshot({ path: join(evidence, `before-chat-${cell}.png`) });
-      await receive(null);
     }
     await page.waitForFunction(() => document.querySelector('[data-test-class="turn-model-round-waiting"]')?.textContent?.startsWith("응답 생성 중"));
     assert.equal(await page.locator('[data-test-class="assistant-status-label"] [data-shimmer="true"]').count(), 1);
@@ -156,15 +166,12 @@ try {
       await setting.click();
       await page.waitForFunction(id => document.getElementById(id!)?.getAttribute("aria-checked") === "true", await setting.getAttribute("id"), { timeout: 10_000 });
       await page.getByText("저장됨", { exact: true }).waitFor({ state: "hidden" });
-      await setting.evaluate(element => {
-        element.focus({ preventScroll: true });
-        element.addEventListener("keydown", event => { if (event instanceof KeyboardEvent && event.key === "Tab") event.preventDefault(); }, { once: true });
-      });
-      await setting.press("Tab");
     } else assert.equal(await setting.count(), 0);
-    await conversation.locator('[data-slot="form-section-header"]').scrollIntoViewIfNeeded();
+    await conversation.locator('[data-slot="form-section-header"]').evaluate(element => element.scrollIntoView({ block: "start", behavior: "instant" }));
+    await blur(page);
     await page.screenshot({ path: join(evidence, `${process.env.BUTLER_THINKING_PHASE ?? "after"}-settings-${cell}.png`) });
   }
+  writeFileSync(join(evidence, "model-thinking-paths.txt"), ["before-chat", "after-a-chat", "after-b-chat", "after-clear-chat", "before-settings", "after-settings"].flatMap(prefix => cases.map(cell => join(evidence, `${prefix}-${cell}.png`))).join("\n") + "\n");
   assert.deepEqual(errors, []);
   console.log("live thinking chat: fallback, line swap, tooltip, aria, shimmer and clear passed");
 } finally { await browser.close(); await vite.close(); }
