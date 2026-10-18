@@ -2,7 +2,6 @@ pub(super) mod cli_launcher;
 pub(super) mod configuration;
 pub(super) mod conversation_observer;
 pub(super) mod delivery;
-pub(super) mod developer_log;
 pub(crate) mod diagnostics;
 pub(super) mod entrypoint;
 pub(super) mod foreground_lease;

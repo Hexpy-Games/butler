@@ -43,8 +43,8 @@ pub use crate::gateway::inbound_queue::{
 };
 pub use crate::gateway::message_file_store::AppMessageFiles;
 pub use application::settings::{
-    DiagnosticsSettingsReader, command_sandbox_enabled, diagnostics_enabled_readonly,
-    producer_log_config, startup_log_config, stored_ui_language_readonly,
+    command_sandbox_enabled, diagnostics_enabled_readonly, producer_log_config, startup_log_config,
+    stored_ui_language_readonly,
 };
 pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
@@ -54,8 +54,8 @@ pub use application::{
     AppBranchSummaryInput, AppCancellation, AppChatKind, AppChatSummary, AppContextBudgetFacts,
     AppContextConfigurationFacts, AppContextReadFacts, AppContextReadPort, AppContextReadQuery,
     AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult, AppCreateSessionInput,
-    AppCreateSessionRequest, AppCreateSessionResult, AppDeveloperLogsQuery, AppExecutorReadiness,
-    AppFileDownload, AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView, AppIdentityClock,
+    AppCreateSessionRequest, AppCreateSessionResult, AppExecutorReadiness, AppFileDownload,
+    AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView, AppIdentityClock,
     AppLedgerSourceRequest, AppLibraryChange, AppLibraryCommand, AppLibraryQuery, AppMemoryCommand,
     AppMemoryPort, AppMessageFileSnapshot, AppMessageFileStorage, AppModelCatalogCommand,
     AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata, AppMonitorPage,
@@ -257,10 +257,6 @@ pub trait GatewayApplication:
         chat_id: String,
     ) -> ApplicationFuture<AppWorkStatusConversationFact>;
     fn list_system_events(&self, page: AppMonitorPage) -> ApplicationFuture<serde_json::Value>;
-    fn list_developer_logs(
-        &self,
-        query: AppDeveloperLogsQuery,
-    ) -> ApplicationFuture<serde_json::Value>;
     fn read_app_info(&self) -> ApplicationFuture<serde_json::Value>;
     fn model_catalog(
         &self,

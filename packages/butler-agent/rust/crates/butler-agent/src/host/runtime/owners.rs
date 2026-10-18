@@ -5,7 +5,6 @@ use crate::host::service::shutdown_trace::measure;
 use butler_runtime::skills::Skills;
 
 pub(super) struct RuntimeOwners {
-    pub(super) developer_settings: butler_gateway::gateway::DiagnosticsSettingsReader,
     pub(super) stores: RuntimeStores,
     pub(super) project_work: Arc<ProjectWork>,
     pub(super) project_tools: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
@@ -142,32 +141,10 @@ pub(super) fn workspace_services(
 
 impl RuntimeOwners {
     async fn close_observers(&self) -> Result<(), BtccError> {
-        let observer = measure("runtime_observer", self.observer.close())
+        measure("runtime_observer", self.observer.close())
             .await
-            .map_err(BtccError::from);
-        let settings = measure(
-            "runtime_developer_settings",
-            self.developer_settings.close(),
-        )
-        .await
-        .map_err(setup);
-        observer.and(settings)
+            .map_err(BtccError::from)
     }
-}
-
-pub(super) fn developer_capture(
-    data_root: &std::path::Path,
-    database_path: PathBuf,
-    installation: ResolvedInstallation,
-) -> Result<
-    (
-        Arc<butler_runtime::operations::OperationsDeveloperLogCapture>,
-        butler_gateway::gateway::DiagnosticsSettingsReader,
-    ),
-    BtccError,
-> {
-    crate::host::service::developer_log::capture(data_root.to_owned(), database_path, installation)
-        .map_err(setup)
 }
 
 /// Compose the process loop and its durable model-route retry owner together.

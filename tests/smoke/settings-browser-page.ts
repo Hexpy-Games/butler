@@ -44,7 +44,7 @@ async function matrix(locale: "ko" | "en", theme: "light" | "dark") {
     assert.equal(await section(page, "sign-ins").count(), 0);
     assert.equal(await section(page, "browser-import").count(), 0);
     assert.equal(await section(page, "headless-browser").count(), 0);
-    for (const id of ["grants", "saved-keys", "diagnostics"]) await section(page, id).waitFor();
+    for (const id of ["grants", "saved-keys"]) await section(page, id).waitFor();
   } else {
     await section(page, "sign-ins").locator('[data-test-class="sign-in-row"]').waitFor();
     await section(page, "browser-import").getByText(copy.settings.browserImport.passwords, { exact: true }).waitFor();
