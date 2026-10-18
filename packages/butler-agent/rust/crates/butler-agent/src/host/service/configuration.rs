@@ -151,8 +151,10 @@ fn source_path(explicit: Option<&str>, name: &str) -> Option<PathBuf> {
         })
 }
 
+pub(crate) const DATA_CONFIG: &str = butler_platform::data_paths::CONFIG;
+
 fn read_butler_config(data_root: &Path) -> Value {
-    std::fs::read(data_root.join("butler.config.json"))
+    std::fs::read(data_root.join(DATA_CONFIG))
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or_else(|| Value::Object(Default::default()))

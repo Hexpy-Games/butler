@@ -31,6 +31,13 @@ pub(crate) enum Phase {
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct Relocation {
+    pub source: PathBuf,
+    pub destination: PathBuf,
+    pub restored: PathBuf,
+}
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Journal {
     pub schema: u32,
     pub id: String,
@@ -42,6 +49,12 @@ pub(crate) struct Journal {
     pub old_generation: String,
     pub new_generation: String,
     pub retried: bool,
+    #[serde(default)]
+    pub relocations: Vec<Relocation>,
+    #[serde(default)]
+    pub pending_trash: Vec<PathBuf>,
+    #[serde(default = "super::logs::paths")]
+    pub kept_logs: Vec<PathBuf>,
 }
 impl Journal {
     pub(crate) fn trash(&self, root: &Path) -> PathBuf {
@@ -61,12 +74,24 @@ pub(crate) fn load(root: &Path) -> io::Result<Option<Journal>> {
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e),
     };
-    let journal: Journal = serde_json::from_reader(file).map_err(io::Error::other)?;
+    let invalid = |reason: String| {
+        io::Error::other(format!(
+            "Invalid reset journal {}: {reason}",
+            root.join(JOURNAL).display()
+        ))
+    };
+    let journal: Journal = serde_json::from_reader(file).map_err(|e| invalid(e.to_string()))?;
     if journal.schema != 1
         || !super::valid_id(&journal.id)
-        || journal.moves.iter().any(|p| !super::plan::movable(p))
+        || journal
+            .moves
+            .iter()
+            .any(|p| !super::plan::movable(p) && !super::logs::valid(p) && p != Path::new("logs"))
+        || journal.relocations.iter().any(|m| !super::moves::valid(m))
+        || journal.pending_trash.iter().any(|p| !trash_name(p))
+        || journal.kept_logs.iter().any(|p| !super::logs::valid(p))
     {
-        return Err(io::Error::other("Invalid reset journal"));
+        return Err(invalid("invalid schema or paths".into()));
     }
     Ok(Some(journal))
 }
@@ -124,4 +149,11 @@ fn create_generation(root: &Path) -> io::Result<String> {
     })();
     fs::remove_file(temporary)?;
     result
+}
+
+pub(crate) fn trash_name(path: &Path) -> bool {
+    path.components().count() == 1
+        && path
+            .to_str()
+            .is_some_and(|name| name.strip_prefix(TRASH_PREFIX).is_some_and(super::valid_id))
 }

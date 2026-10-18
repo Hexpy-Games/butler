@@ -195,6 +195,22 @@ pub fn remove_tree(path: &Path) -> io::Result<()> {
     }
 }
 
+/// Removes a symbolic link itself, including a Windows directory link.
+pub fn unlink(path: &Path) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.file_type().is_symlink() {
+        return Err(io::Error::other("Expected a symbolic link"));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::FileTypeExt;
+        if metadata.file_type().is_symlink_dir() {
+            return fs::remove_dir(path);
+        }
+    }
+    fs::remove_file(path)
+}
+
 /// Restricts an existing file to its owner; `None` without [`OWNER_ONLY`].
 pub fn restrict_file(path: &Path) -> Option<io::Result<()>> {
     sys::restrict_file(path)
@@ -248,7 +264,15 @@ pub fn no_follow(options: &mut OpenOptions) -> Option<&mut OpenOptions> {
 
 /// Reads a regular file below an anchored root, refusing symlink components.
 pub fn open_read_beneath(root: &Path, relative: &Path) -> io::Result<File> {
-    contained_read::open(root, relative)
+    contained_read::open(root, relative, false)
+}
+
+/// Truncates a regular file through an anchored handle, refusing every symlink
+/// component. Opens without truncation until the file type has been verified.
+pub fn truncate_file_beneath(root: &Path, relative: &Path) -> io::Result<()> {
+    let file = contained_read::open(root, relative, true)?;
+    file.set_len(0)?;
+    file.sync_all()
 }
 
 /// Opens the file at `path` for reading, refusing a symbolic link as the

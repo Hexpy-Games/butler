@@ -110,7 +110,7 @@ impl AppServiceConfiguration {
 
     /// The same, creating missing credential files when `files` allows.
     pub(crate) fn capture_with(data_root: &Path, files: CredentialFiles) -> Self {
-        let settings = fs::read(data_root.join("gateways/app.json"))
+        let settings = fs::read(data_root.join(butler_platform::data_paths::GATEWAY_CONFIG))
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
             .unwrap_or(Value::Null);
@@ -146,7 +146,7 @@ impl AppServiceConfiguration {
         let db_configured = configured_db.is_some();
         let db_path = configured_db
             .map(PathBuf::from)
-            .unwrap_or_else(|| data_root.join("app-server/butler-client.sqlite"));
+            .unwrap_or_else(|| data_root.join(butler_platform::data_paths::APP_DB));
         // Local auth is enforced whoever started the agent: the token (and
         // the folder secret) belong to the data folder.
         let LocalCredentials {

@@ -2,7 +2,9 @@
 mod apply;
 mod cleanup;
 pub(crate) mod journal;
-mod plan;
+mod logs;
+mod moves;
+pub(super) mod plan;
 mod recovery;
 mod secrets;
 use crate::host::ResolvedInstallation;
@@ -149,17 +151,13 @@ impl Control {
             .map_err(|code| public(409, code))?;
         let (mut secret_keys, mut project_hot_caches) = secrets::snapshot(&self.root, &self.db)
             .map_err(GatewayApplicationError::internal_from)?;
+        let mut kept_logs = logs::paths();
+        let mut pending_trash = vec![PathBuf::from(format!("{}{id}", journal::TRASH_PREFIX))];
         if let Some(pending) = pending {
-            for key in pending.secret_keys {
-                if !secret_keys.contains(&key) {
-                    secret_keys.push(key);
-                }
-            }
-            for path in pending.project_hot_caches {
-                if !project_hot_caches.contains(&path) {
-                    project_hot_caches.push(path);
-                }
-            }
+            merge(&mut kept_logs, pending.kept_logs);
+            merge(&mut pending_trash, pending.pending_trash);
+            merge(&mut secret_keys, pending.secret_keys);
+            merge(&mut project_hot_caches, pending.project_hot_caches);
         }
         let journal = Journal {
             schema: 1,
@@ -172,6 +170,9 @@ impl Control {
             old_generation: self.generation.clone(),
             new_generation: uuid::Uuid::new_v4().to_string(),
             retried: false,
+            relocations: Vec::new(),
+            pending_trash,
+            kept_logs,
         };
         butler_platform::secure_fs::abort_point("data_reset.before_journal");
         // A publication failure can occur after rename (directory fsync).
@@ -215,5 +216,13 @@ fn public(status: u16, code: &str) -> GatewayApplicationError {
         code: code.into(),
         message: "Full reset is unavailable.".into(),
         source: None,
+    }
+}
+
+fn merge<T: PartialEq>(into: &mut Vec<T>, pending: Vec<T>) {
+    for value in pending {
+        if !into.contains(&value) {
+            into.push(value);
+        }
     }
 }

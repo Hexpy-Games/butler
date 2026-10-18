@@ -4,9 +4,15 @@ use super::{
     plan,
 };
 use butler_platform::secure_fs;
-use std::{fs, io, path::Path, time::Instant};
+use std::{io, path::Path, time::Instant};
 
 pub(crate) fn apply(root: &Path, journal: &mut Journal) -> io::Result<bool> {
+    for log in super::logs::paths() {
+        if !journal.kept_logs.contains(&log) {
+            journal.kept_logs.push(log);
+        }
+    }
+    super::moves::expand_legacy_logs(root, journal)?;
     if matches!(journal.phase, Phase::RollingBack) {
         rollback(root, journal).map_err(rollback_error)?;
         return Ok(false);
@@ -27,7 +33,7 @@ pub(crate) fn apply(root: &Path, journal: &mut Journal) -> io::Result<bool> {
             }
         }
         journal.save(root)?;
-        move_all(root, journal)?;
+        super::moves::move_all(root, journal)?;
         journal::write_generation(root, &journal.new_generation)?;
         journal.phase = Phase::Applied;
         journal.save(root)
@@ -55,72 +61,10 @@ pub(super) struct RollbackError(io::Error);
 fn rollback_error(error: io::Error) -> io::Error {
     io::Error::other(RollbackError(error))
 }
-fn move_all(root: &Path, journal: &Journal) -> io::Result<()> {
-    let trash = journal.trash(root);
-    match fs::symlink_metadata(&trash) {
-        Ok(m) if !m.is_dir() || m.file_type().is_symlink() => {
-            return Err(io::Error::other("Invalid reset trash"));
-        }
-        Ok(_) => {}
-        Err(e) if e.kind() == io::ErrorKind::NotFound => secure_fs::create_private_dir(&trash)?,
-        Err(e) => return Err(e),
-    }
-    journal::sync(root)?;
-    for relative in &journal.moves {
-        let from = root.join(relative);
-        let to = trash.join(relative);
-        match fs::symlink_metadata(&from) {
-            Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
-            Err(e) => return Err(e),
-            Ok(_) => {}
-        }
-        match fs::symlink_metadata(&to) {
-            Ok(_) => return Err(io::Error::other("Reset destination already exists")),
-            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e),
-        }
-        let parent = to
-            .parent()
-            .ok_or_else(|| io::Error::other("Invalid reset path"))?;
-        secure_fs::create_private_dir_all(parent)?;
-        secure_fs::rename(&from, &to)?;
-        journal::sync(
-            from.parent()
-                .ok_or_else(|| io::Error::other("Invalid reset path"))?,
-        )?;
-        journal::sync(parent)?;
-        secure_fs::fault_checkpoint("data_reset.move")?;
-        secure_fs::abort_point("data_reset.move");
-        secure_fs::hold_point("data_reset.move", || false)?;
-    }
-    Ok(())
-}
 fn rollback(root: &Path, journal: &mut Journal) -> io::Result<()> {
-    let trash = journal.trash(root);
-    for relative in journal.moves.iter().rev() {
-        let from = trash.join(relative);
-        match fs::symlink_metadata(&from) {
-            Ok(_) => {
-                let to = root.join(relative);
-                if fs::symlink_metadata(&to).is_ok() {
-                    return Err(io::Error::other("Rollback source occupied"));
-                }
-                secure_fs::rename(&from, &to)?;
-                journal::sync(
-                    from.parent()
-                        .ok_or_else(|| io::Error::other("Invalid reset path"))?,
-                )?;
-                journal::sync(
-                    to.parent()
-                        .ok_or_else(|| io::Error::other("Invalid reset path"))?,
-                )?;
-            }
-            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e),
-        }
-    }
+    super::moves::rollback(root, journal)?;
     journal::write_generation(root, &journal.old_generation)?;
-    secure_fs::remove_tree(&trash)?;
+    secure_fs::remove_tree(&journal.trash(root))?;
     journal::sync(root)?;
     journal.phase = Phase::Failed;
     journal.save(root)

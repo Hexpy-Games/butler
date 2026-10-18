@@ -14,6 +14,7 @@ use std::{
 };
 mod interruption;
 mod review;
+mod round2;
 mod seed;
 
 fn setup(id: &str) -> Result<Setup, HarnessError> {

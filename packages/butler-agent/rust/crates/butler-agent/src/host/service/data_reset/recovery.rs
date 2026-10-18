@@ -16,63 +16,10 @@ pub(crate) async fn recover(
 ) -> Result<(), butler_turn::btcc::BtccError> {
     let root = super::super::configuration::requested_data(explicit, home);
     let installation = installation.clone();
-    let legacy = tokio::task::spawn_blocking(move || {
-        let root = installation
-            .validate_data_root(&root)
-            .map_err(io::Error::other)?;
-        if !root.join(journal::JOURNAL).exists()
-            && crate::host::runtime::storage_bootstrap::is_unsupported_legacy_data(&root)
-        {
-            return Ok(Some(root));
-        }
-        match fs::symlink_metadata(root.join("state")) {
-            Ok(m) if !m.is_dir() || m.file_type().is_symlink() => {
-                return Err(io::Error::other(
-                    "Reset state parent is not a real directory",
-                ));
-            }
-            Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
-            _ => {}
-        }
-        // A CLI start controller holds admission until this child publishes its
-        // instance record. Otherwise acquire admission here. DATA ownership
-        // always excludes every writer, including stopped-service settings.
-        let _admission = match instance::AdmissionLock::acquire(&root, &installation) {
-            Ok(lock) => Some(lock),
-            Err(e) if e == "service_start_admission_busy" => None,
-            Err(e) => return Err(io::Error::other(e)),
-        };
-        let _data = instance::lock_stopped_data(&root).map_err(io::Error::other)?;
-        if let Some(mut journal) = journal::load(&root)? {
-            match journal.phase {
-                Phase::RollingBack | Phase::Requested => {
-                    if !apply::apply(&root, &mut journal)? && journal.retried {
-                        journal::remove(&root)?;
-                    }
-                }
-                Phase::Failed if !journal.retried => {
-                    journal.retried = true;
-                    journal.phase = Phase::Requested;
-                    if !apply::apply(&root, &mut journal)? {
-                        journal::remove(&root)?;
-                    }
-                }
-                Phase::Failed | Phase::Cleaned => {
-                    journal::remove(&root)?;
-                }
-                Phase::Applied => {}
-            }
-        }
-        if journal::load(&root)?.is_some_and(|j| matches!(j.phase, Phase::Applied)) {
-            super::super::configuration::local_credentials::initialize_after_reset(&root)
-                .map_err(io::Error::other)?;
-        }
-        journal::generation(&root)?;
-        Ok::<_, io::Error>(None)
-    })
-    .await
-    .map_err(error)?
-    .map_err(error)?;
+    let legacy = tokio::task::spawn_blocking(move || recover_owned(&root, &installation))
+        .await
+        .map_err(error)?
+        .map_err(error)?;
     if let Some(root) = legacy {
         return Err(butler_turn::btcc::BtccError::relayed(
             "storage_bootstrap_failed",
@@ -81,6 +28,63 @@ pub(crate) async fn recover(
         ));
     }
     Ok(())
+}
+
+fn recover_owned(root: &Path, installation: &ResolvedInstallation) -> io::Result<Option<PathBuf>> {
+    let root = installation
+        .validate_data_root(root)
+        .map_err(io::Error::other)?;
+    if !root.join(journal::JOURNAL).exists()
+        && crate::host::runtime::storage_bootstrap::is_unsupported_legacy_data(&root)
+    {
+        return Ok(Some(root));
+    }
+    match fs::symlink_metadata(root.join("state")) {
+        Ok(m) if !m.is_dir() || m.file_type().is_symlink() => {
+            return Err(io::Error::other(
+                "Reset state parent is not a real directory",
+            ));
+        }
+        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
+        _ => {}
+    }
+    // A CLI start controller holds admission until this child publishes its
+    // instance record. Otherwise acquire admission here. DATA ownership
+    // always excludes every writer, including stopped-service settings.
+    let _admission = match instance::AdmissionLock::acquire(&root, installation) {
+        Ok(lock) => Some(lock),
+        Err(e) if e == "service_start_admission_busy" => None,
+        Err(e) => return Err(io::Error::other(e)),
+    };
+    let _data = instance::lock_stopped_data(&root).map_err(io::Error::other)?;
+    super::super::data_ownership::migrate(&root)?;
+    if let Some(mut journal) = journal::load(&root)? {
+        match journal.phase {
+            Phase::RollingBack | Phase::Requested => {
+                journal.retried = true;
+                if !apply::apply(&root, &mut journal)? {
+                    journal::remove(&root)?;
+                }
+            }
+            Phase::Failed if !journal.retried => {
+                journal.retried = true;
+                journal.phase = Phase::Requested;
+                if !apply::apply(&root, &mut journal)? {
+                    journal::remove(&root)?;
+                }
+            }
+            Phase::Failed | Phase::Cleaned => {
+                journal::remove(&root)?;
+            }
+            Phase::Applied => {}
+        }
+    }
+    if journal::load(&root)?.is_some_and(|j| matches!(j.phase, Phase::Applied)) {
+        super::super::configuration::local_credentials::initialize_after_reset(&root)
+            .map_err(io::Error::other)?;
+    }
+    journal::generation(&root)?;
+    Ok::<_, io::Error>(None)
 }
 pub(crate) async fn finish(root: PathBuf) -> Result<(), butler_turn::btcc::BtccError> {
     tokio::task::spawn_blocking(move || {
@@ -108,9 +112,14 @@ pub(crate) async fn protected_roots(
                     .is_some_and(|v| v.to_string_lossy().starts_with(TRASH_PREFIX))
             })
             .collect();
-        if let Some(journal) = journal::load(&root)?
-            && matches!(journal.phase, Phase::Applied)
-        {
+        let journal = journal::load(&root)?;
+        let cleanup_root = root.clone();
+        tokio::task::spawn_blocking(move || {
+            if cleanup::orphans(&cleanup_root).is_err() {
+                butler_core::diagnostic!("[full-reset] orphan cleanup pending");
+            }
+        });
+        if let Some(journal) = journal.filter(|j| matches!(j.phase, Phase::Applied)) {
             // The caller is already on the blocking pool; cleanup is detached
             // from readiness and retains its journal on a keychain/I/O failure.
             tokio::task::spawn_blocking(move || {

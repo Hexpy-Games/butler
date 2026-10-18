@@ -443,6 +443,7 @@ fn open_lock(path: &Path, create: bool) -> Result<File, crate::host::HostError> 
         .parent()
         .ok_or_else(|| "service_lock_path_invalid".to_owned())?;
     if create {
+        super::data_ownership::initialize_for_lock(parent)?;
         secure_fs::create_private_dir_all(parent).map_err(|source| {
             crate::host::HostError::new("service_lock_directory_unavailable").with_source(source)
         })?;

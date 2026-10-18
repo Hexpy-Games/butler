@@ -44,6 +44,15 @@ async fn pending_cleanup_and_failed_intents_can_be_superseded() -> Result<(), Ha
         let mut s = setup("RESET-SUPERSEDE")?.start().await?;
         let before = generation(&s).await?;
         s.agent.terminate().await?;
+        // Keep secret deletion pending explicitly; cache failure no longer blocks it.
+        s.agent.launch.set_env(
+            "BUTLER_TEST_SECRET_STORE",
+            s.sandbox
+                .root
+                .join("unavailable-secrets/store.json")
+                .display()
+                .to_string(),
+        );
         let root = &s.sandbox.data;
         let hot_cache = s.sandbox.workspace.join(".butler/hot-cache.md");
         // A nonempty directory makes cleanup fail without relying on OS keychain availability.
@@ -95,7 +104,7 @@ async fn pending_cleanup_and_failed_intents_can_be_superseded() -> Result<(), Ha
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
         assert_eq!(std::fs::read(outside.join("keep"))?, b"keep");
-        assert!(std::fs::symlink_metadata(link)?.file_type().is_symlink());
+        assert!(std::fs::symlink_metadata(link).is_err());
         assert_ne!(generation(&s).await?, before);
         s.finish().await?;
     }

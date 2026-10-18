@@ -26,8 +26,9 @@ const KEPT: &[&str] = &[
     paths::CLI_SUPERVISOR_LOCK,
     JOURNAL,
     GENERATION,
+    super::super::data_ownership::MARKER,
 ];
-const PARENTS: &[&str] = &["state", "cache", "app", "app/runtime"];
+const PARENTS: &[&str] = &["state", "cache", "app", "app/runtime", "logs"];
 pub(crate) fn movable(path: &Path) -> bool {
     path.components().all(|c| matches!(c, Component::Normal(_)))
         && !path.as_os_str().is_empty()
@@ -38,18 +39,28 @@ pub(crate) fn movable(path: &Path) -> bool {
         && !PARENTS.iter().any(|p| path == Path::new(p))
 }
 fn kept(path: &Path) -> bool {
-    KEPT.iter().any(|p| path == Path::new(p))
+    super::logs::kept(path)
+        || KEPT.iter().any(|p| path == Path::new(p))
         || path.components().count() == 1 && path.to_string_lossy().starts_with(TRASH_PREFIX)
 }
 pub(crate) fn collect(root: &Path) -> io::Result<Vec<PathBuf>> {
-    for name in PARENTS.iter().chain(KEPT.iter()) {
+    let logs = super::logs::paths();
+    let paths = PARENTS
+        .iter()
+        .chain(KEPT.iter())
+        .map(Path::new)
+        .chain(logs.iter().map(PathBuf::as_path));
+    for name in paths {
         let path = root.join(name);
         match fs::symlink_metadata(&path) {
             Ok(m) if m.file_type().is_symlink() => {
                 return Err(io::Error::other("Retention path is a link"));
             }
-            Ok(m) if PARENTS.contains(name) && !m.is_dir() => {
+            Ok(m) if PARENTS.iter().any(|p| name == Path::new(p)) && !m.is_dir() => {
                 return Err(io::Error::other("Retention parent is not a directory"));
+            }
+            Ok(m) if logs.iter().any(|p| p.as_path() == name) && !m.is_file() => {
+                return Err(io::Error::other("Retention log is not a regular file"));
             }
             Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
             _ => {}
@@ -87,6 +98,11 @@ pub(crate) fn preflight(
     db: &Path,
     installation: &ResolvedInstallation,
 ) -> Result<Vec<PathBuf>, &'static str> {
+    if !super::super::data_ownership::safe_location(root)
+        || !super::super::data_ownership::owned(root)
+    {
+        return Err("full_reset_unsafe_root");
+    }
     let invalid = "full_reset_external_store";
     installation.validate_data_root(root).map_err(|_| invalid)?;
     let home = butler_runtime::operations::AgentHome::resolve().map_err(|_| invalid)?;
@@ -133,4 +149,35 @@ pub(crate) fn preflight(
             invalid
         }
     })
+}
+
+// Deliberately conservative: only roots of paths the retention/configuration
+// code itself names qualify. Workspace effect receipts are not an ownership inventory.
+pub(crate) fn recognized_root(name: &std::ffi::OsStr, kind: fs::FileType) -> bool {
+    let retained = KEPT.iter().chain(PARENTS).copied().any(|path| {
+        Path::new(path)
+            .components()
+            .next()
+            .is_some_and(|c| c.as_os_str() == name)
+    });
+    if retained {
+        return kind.is_dir();
+    }
+    let known = butler_platform::data_paths::OWNED_PATHS.iter().any(|path| {
+        let mut parts = Path::new(path).components();
+        let matches = parts.next().is_some_and(|c| c.as_os_str() == name);
+        let directory =
+            parts.next().is_some() || butler_platform::data_paths::OWNED_DIRECTORIES.contains(path);
+        matches
+            && if directory {
+                kind.is_dir()
+            } else {
+                kind.is_file()
+            }
+    });
+    known
+        || kind.is_file()
+            && butler_platform::data_paths::LOCKED_FILES
+                .iter()
+                .any(|path| name == std::ffi::OsStr::new(&format!("{path}.lock")))
 }

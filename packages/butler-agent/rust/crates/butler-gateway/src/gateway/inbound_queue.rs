@@ -109,7 +109,7 @@ impl InboundQueue {
 
     pub fn new(butler_data: &Path) -> Self {
         Self {
-            root: butler_data.join("runtime/inbound-events"),
+            root: butler_data.join(butler_platform::data_paths::INBOUND),
             owner_id: format!("{}:{}", std::process::id(), uuid::Uuid::new_v4()),
             lane: Arc::new(Mutex::new(())),
             enqueue_wake: Arc::new(Notify::new()),
