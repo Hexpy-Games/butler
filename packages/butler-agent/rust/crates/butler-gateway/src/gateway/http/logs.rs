@@ -288,3 +288,6 @@ pub(super) async fn expire() -> Result<Response, HttpError> {
     .await?;
     envelope(value!({}))
 }
+
+#[cfg(feature = "e2e-fixtures")]
+pub(super) mod writer_fixture;

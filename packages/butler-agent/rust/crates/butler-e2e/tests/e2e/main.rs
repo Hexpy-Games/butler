@@ -231,4 +231,5 @@ mod storage_correction_seed;
 
 mod web_speed;
 
+mod logs_request_completion;
 mod structured_logs;

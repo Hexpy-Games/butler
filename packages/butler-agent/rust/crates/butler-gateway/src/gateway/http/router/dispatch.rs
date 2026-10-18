@@ -84,6 +84,8 @@ async fn commands(
         Handler::Setup => setup::route(state, request, uri).await,
         #[cfg(feature = "e2e-fixtures")]
         Handler::Expire => logs::expire().await,
+        #[cfg(feature = "e2e-fixtures")]
+        Handler::LogWriter => logs::writer_fixture::route(uri).await,
         _ => super::super::route(state, request, handler).await,
     }
 }
