@@ -49,6 +49,7 @@ tool_names! {
     DelegateToSteward = "delegate_to_steward",
     DelegateToWorker = "delegate_to_worker",
     DeleteAutomation = "delete_automation",
+    DeliverFiles = "deliver_files",
     EditFile = "edit_file",
     ForgetExplicitMemory = "forget_explicit_memory",
     GetContextMonitor = "get_context_monitor",

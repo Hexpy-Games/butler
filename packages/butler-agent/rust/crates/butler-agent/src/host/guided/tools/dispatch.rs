@@ -293,6 +293,7 @@ async fn domain_tool(
             Some(super::answer_blocks::execute(owner, call, call_id, invocation.progress).await)
         }
         "output_check" => Some(super::outputs::inspect(owner, invocation, call).await),
+        "deliver_files" => Some(super::deliver::execute(owner, call).await),
         "output_publish" => Some(super::outputs::publish(owner, invocation, call).await),
         "read_file" | "list_files" | "grep_files" => {
             Some(file_observation::execute(owner, call, call_id).await)

@@ -113,7 +113,7 @@ fn label(path: &Path, cwd: &Path, data: &Path) -> String {
 
 pub(super) fn verified(
     path: &Path,
-    cwd: &Path,
+    _cwd: &Path,
     workspace: &Path,
     data: &Path,
     allow_workspace: bool,
@@ -139,7 +139,12 @@ pub(super) fn verified(
         _ => "file",
     };
     Some(Artifact {
-        path: label(path, cwd, data),
+        deliverable: false,
+        path: if artifact_allowed {
+            label(path, data, data)
+        } else {
+            path.to_string_lossy().into_owned()
+        },
         artifact_kind: kind,
         size_bytes: stat.len(),
         modified_at: DateTime::<Utc>::from(stat.modified().ok()?)

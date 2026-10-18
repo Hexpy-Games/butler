@@ -36,6 +36,9 @@ pub(super) fn write(
         return Err(GatewayApplicationError::internal());
     }
     let file = MaterializedResponderFile {
+        title: None,
+        source_label: None,
+        deliverable: false,
         id: id.clone(),
         kind: "text".into(),
         mime_type: "text/markdown".into(),

@@ -179,6 +179,7 @@ pub(super) async fn finish(
         work_status: closeout.work_status,
         accepted_work_result: closeout.accepted_work_result,
         runtime_failure,
+        outputs: closeout.outputs,
         artifacts: closeout.artifacts,
         changed_files: closeout.changed_files,
         answer_blocks: closeout.answer_blocks,

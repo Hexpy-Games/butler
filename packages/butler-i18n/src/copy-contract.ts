@@ -295,6 +295,7 @@ interface ConversationCopy {
     titleSummary: (files: number, additions: number, deletions: number) => string;
     fileCounts: (additions: number, deletions: number) => string;
     noLineDetails: string;
+    newFile: (size: string) => string;
     diffRegionLabel: (path: string) => string;
     showMore: (remaining: number) => string;
     showLess: string;

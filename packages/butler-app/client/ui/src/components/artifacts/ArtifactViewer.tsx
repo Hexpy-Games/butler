@@ -11,6 +11,8 @@ import {
   ArtifactPreviewPre,
   Button,
   MarkdownContent, MarkdownLink,
+  NativeSelect,
+  NativeSelectOption,
   PanelHeader,
   Stack,
   Typo,
@@ -31,11 +33,12 @@ import {
 import { HtmlFileFrame } from "./HtmlFileFrame";
 import { OutputFrame } from "./OutputFrame";
 import { useArtifactText, type ArtifactTextState } from "./useArtifactText";
+import { useMemo, useState } from "react";
 
 const MARKDOWN_COMPONENTS: Components = { a: MarkdownLink };
 
 export function ArtifactViewer({
-  artifact,
+  artifact: latest,
   onBack,
   embedded = false,
   refreshFileUrls,
@@ -47,6 +50,10 @@ export function ArtifactViewer({
   refreshFileUrls?: RefreshFileUrls;
 }) {
   useAppLocale();
+  const [choice, setChoice] = useState<{ id: string; index: number }>();
+  const revisions = latest.revisions ?? [];
+  const index = choice?.id === latest.id ? choice.index : 0;
+  const artifact = useMemo(() => revisionArtifact(latest, index), [latest, index]);
   const mode = artifactPreviewMode(artifact);
   const file = useMessageFileSource(artifact, refreshFileUrls);
   const { state, text } = useArtifactText({
@@ -76,11 +83,27 @@ export function ArtifactViewer({
         description={meta}
         title={artifact.title}
       />}
+      {revisions.length > 1 && <Stack align="row" gap="sm" cross="center" wrap>
+        <NativeSelect aria-label={appCopy.artifacts.revision} value={String(index)} onChange={(event) => setChoice({ id: latest.id, index: Number(event.target.value) })}>
+          {revisions.map((revision, position) => <NativeSelectOption key={revision.file.file_id} value={String(position)}>
+            {`${appCopy.artifacts.revision} ${revisions.length - position}`}
+          </NativeSelectOption>)}
+        </NativeSelect>
+      </Stack>}
       <ArtifactPreview data-test-class="artifact-viewer">
         {mode === "web" ? <OutputFrame key={artifact.id} outputId={artifact.id} title={artifact.title} preview={artifact.url?.startsWith("/previews/")} /> : mode === "html" ? <HtmlFileFrame key={file.path} path={file.path} title={artifact.title} /> : renderPreview({ mode, state, text, title: artifact.title, file })}
       </ArtifactPreview>
     </Stack>
   );
+}
+
+/** The artifact as one of its Library versions (newest first); index 0 is the artifact itself. */
+function revisionArtifact(artifact: SessionArtifactSummary, index: number): SessionArtifactSummary {
+  const revision = index > 0 ? artifact.revisions?.[index] : undefined;
+  if (!revision) return artifact;
+  const { file } = revision;
+  return { ...artifact, file_id: file.file_id, url: file.url, signed_url: file.signed_url, size_bytes: file.size_bytes,
+    safe_path_label: file.safe_name, source_label: file.source_label ?? artifact.source_label, created_at: revision.capturedAt };
 }
 
 function renderPreview(input: {

@@ -22,6 +22,7 @@ pub(crate) const QUEUED_REPLY: &str = "Status noted.";
 #[derive(Default)]
 pub(crate) struct Script {
     pub(crate) answer_blocks: AtomicBool,
+    pub(crate) deliverables: AtomicBool,
     answer_step: Mutex<usize>,
     pub(crate) browser: AtomicBool,
     pub open_disposition: AtomicBool,
@@ -282,6 +283,9 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
             ),
             _ => message("Browser verified."),
         };
+    }
+    if script.deliverables.load(Ordering::SeqCst) && step >= 6 {
+        return super::super::deliverables::delegation::child(step, &work_id(body));
     }
     let path = |name: &str| format!("{}/{}", script.workspace.lock().unwrap(), name);
     match step {

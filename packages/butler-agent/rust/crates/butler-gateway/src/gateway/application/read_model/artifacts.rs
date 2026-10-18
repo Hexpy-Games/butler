@@ -20,7 +20,7 @@ pub(super) fn list(
                ORDER BY rowid DESC LIMIT 200 \
              ) \
              SELECT m.message_rowid,m.id,m.chat_id,m.turn_id, \
-                    f.id,f.kind,f.mime_type,f.safe_name,f.size_bytes,f.sha256,f.created_at \
+                    f.id,f.kind,f.mime_type,f.safe_name,f.size_bytes,f.sha256,f.created_at,f.source_label,f.deliverable,f.title \
              FROM latest_messages AS m \
              JOIN message_attachments AS a ON a.message_id=m.id \
              JOIN message_files AS f ON f.id=a.file_id \
@@ -42,7 +42,7 @@ pub(super) fn list(
                 row.get(7)?,
                 row.get(8)?,
                 row.get(9)?,
-                row.get(10)?,
+                (row.get(10)?, row.get(11)?, row.get(12)?, row.get(13)?),
             )?;
             Ok((message_rowid, message_id, chat_id, turn_id, file))
         })
@@ -70,13 +70,15 @@ fn artifact_summary(
 ) -> SessionArtifactSummary {
     SessionArtifactSummary {
         id: format!("artifact-{}", file.file_id),
+        source_label: file.source_label.clone(),
+        deliverable: file.deliverable,
         session_id: Some(chat_id.to_owned()),
         project_id: None,
         message_id: Some(message_id.to_owned()),
         turn_id: turn_id.map(str::to_owned),
         file_id: Some(file.file_id.clone()),
         kind: artifact_kind(file),
-        title: file.safe_name.clone(),
+        title: file.title.clone().unwrap_or_else(|| file.safe_name.clone()),
         safe_path_label: Some(file.safe_name.clone()),
         url: Some(file.url.clone()),
         size_bytes: Some(file.size_bytes),

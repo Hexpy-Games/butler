@@ -31,7 +31,11 @@ pub(super) fn provider_candidates(
         names.insert("analyze_attached_image".to_owned());
     }
     for tool in authorized {
-        if tool.name == ToolName::UpdateTodoList || BROWSER_CORE.contains(&tool.name.as_str()) {
+        if tool.name == ToolName::UpdateTodoList
+            || BROWSER_CORE.contains(&tool.name.as_str())
+            || tool.effect_boundary.as_deref() == Some("turn_local")
+                && tool.category.as_deref() == Some("message")
+        {
             names.insert(tool.name.clone());
         }
         if tool.category.as_deref() == Some("control")
