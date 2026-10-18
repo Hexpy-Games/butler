@@ -33,7 +33,13 @@ pub fn classify_targets(roots: &ScopeRoots<'_>, base: &Path, targets: &[&str]) -
     targets
         .iter()
         .map(|target| classify(roots, base, target, project.as_deref(), &data))
-        .max()
+        .reduce(|scope, next| match (scope, next) {
+            // Attachment execution is uncontained only when every target
+            // is an exact attachment, including in mixed project reads.
+            (TargetScope::Attachment, TargetScope::ProjectFolder)
+            | (TargetScope::ProjectFolder, TargetScope::Attachment) => TargetScope::Outside,
+            _ => scope.max(next),
+        })
         .unwrap_or(TargetScope::NoTarget)
 }
 /// How a file tool should spell `requested` so the access check, the
@@ -84,10 +90,13 @@ fn classify(
     if roots
         .attachments
         .iter()
-        .filter_map(|p| canonicalize(p).ok())
-        .any(|p| p == real)
-        && std::fs::symlink_metadata(&real)
-            .is_ok_and(|m| m.is_file() && !butler_platform::secure_fs::has_other_links(&real, &m))
+        .filter(|path| {
+            std::fs::symlink_metadata(path).is_ok_and(|metadata| {
+                metadata.is_file() && !butler_platform::secure_fs::has_other_links(path, &metadata)
+            })
+        })
+        .filter_map(|path| canonicalize(path).ok())
+        .any(|path| path == real)
     {
         return TargetScope::Attachment;
     }
