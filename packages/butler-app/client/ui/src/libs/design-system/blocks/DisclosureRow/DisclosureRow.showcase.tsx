@@ -5,11 +5,12 @@ import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { KeyValueRow } from "../KeyValueRow";
 import { DisclosureRow } from "./DisclosureRow";
+import { LogList, TraceSteps } from "./DisclosureRow.showcaseParts";
 
 export const meta: ShowcaseMeta = {
   title: "DisclosureRow",
   category: "Conversation & Activity",
-  tags: ["disclosure", "expand", "tool", "details", "motion"],
+  tags: ["disclosure", "expand", "tool", "details", "motion", "log", "trace", "chevron"],
   status: "stable",
 };
 
@@ -83,6 +84,18 @@ export const stories: ShowcaseStory[] = [
       </Stack>
     ),
   },
+  {
+    name: "Log list (trailing chevron)",
+    states: ["expanded", "chevron turn"],
+    widths: ["375", "app"],
+    render: (context) => <LogList locale={context.locale} />,
+  },
+  {
+    name: "Trace steps (no chevron, static and interactive)",
+    states: ["static", "count", "attention", "expanded"],
+    widths: ["375", "app"],
+    render: (context) => <TraceSteps locale={context.locale} />,
+  },
 ];
 
 /**
@@ -96,6 +109,9 @@ const MATRIX_VARIANTS = [
   "plain",
   "plain + icon + meta",
   "plain + long meta",
+  "trailing",
+  "none + count + dot",
+  "none, static",
 ] as const;
 
 export const stateMatrix: ShowcaseStateMatrix = {
@@ -119,6 +135,15 @@ export const stateMatrix: ShowcaseStateMatrix = {
         </DisclosureRow>;
       case "plain + long meta":
         return <DisclosureRow {...shared} title={copy.log} meta={copy.logMeta}><Typo.Caption>{copy.evidence}</Typo.Caption></DisclosureRow>;
+      case "trailing":
+        return <DisclosureRow {...shared} affordance="trailing" title={copy.log} meta={copy.counts} description={copy.files}>
+          <Typo.Caption>{copy.result}</Typo.Caption>
+        </DisclosureRow>;
+      case "none + count + dot":
+        return <DisclosureRow {...shared} affordance="none" attention="error" count={2} title={copy.search} meta={copy.counts}
+          description={copy.files}><Typo.Caption>{copy.result}</Typo.Caption></DisclosureRow>;
+      case "none, static":
+        return <DisclosureRow {...shared} affordance="none" title={copy.search} meta={copy.counts} description={copy.files} />;
       default:
         return <DisclosureRow {...shared} icon={<Wrench size="md" />} title={copy.search}><Typo.Caption>{copy.result}</Typo.Caption></DisclosureRow>;
     }

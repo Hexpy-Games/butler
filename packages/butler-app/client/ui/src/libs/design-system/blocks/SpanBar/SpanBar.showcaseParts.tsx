@@ -3,88 +3,85 @@ import type { ShowcaseRenderContext } from "../../showcase";
 import { Button } from "../../components/Button";
 import { Inline } from "../../components/Inline";
 import { Stack } from "../../components/Stack";
+import { Tag } from "../../components/Tag";
+import { Typo } from "../../components/Typo";
 import { DisclosureRow } from "../DisclosureRow";
 import { KeyValueRow } from "../KeyValueRow";
 import { SpanAxis } from "./SpanAxis";
-import { SpanBar, SpanRow, type SpanBarTone } from "./SpanBar";
+import { SpanBar, SpanRow } from "./SpanBar";
+import {
+  copy, formatTraceMs, GEMINI_OPEN, GEMINI_STEPS, GEMINI_TOTAL, startText, stepChildren, stepDepth, stepTone,
+  type TraceStep,
+} from "./SpanBar.showcaseData";
 
 type Locale = ShowcaseRenderContext["locale"];
 
-interface TraceSpan {
-  id: string;
-  name: Record<Locale, string>;
-  offset: number;
-  duration: number;
-  depth: number;
-  tone: SpanBarTone;
-  detail: Record<Locale, [string, string]>;
+/** Trailing meta: an optional status Tag beside the length; never truncated. */
+export function StepMeta({ locale, step }: { locale: Locale; step: TraceStep }) {
+  return (
+    <Inline as="span" gap="xs" wrap={false}>
+      {step.tag ? <Tag size="sm" tone={step.tag.tone}>{copy(locale, step.tag.text)}</Tag> : null}
+      <Typo.Caption tone="tertiary" numeric="tabular">{formatTraceMs(locale, step.duration)}</Typo.Caption>
+    </Inline>
+  );
 }
 
-/** A Gemini send: one retry after a 503, then a streamed answer. */
-export const GEMINI_TOTAL = 7112;
-
-export const GEMINI_SPANS: TraceSpan[] = [
-  { id: "send", name: { "en-US": "Send", "ko-KR": "전송" }, offset: 0, duration: 4, depth: 0, tone: "muted",
-    detail: { "en-US": ["Origin", "App"], "ko-KR": ["출처", "앱"] } },
-  { id: "deliver", name: { "en-US": "Deliver", "ko-KR": "전달" }, offset: 4, duration: 18, depth: 0, tone: "muted",
-    detail: { "en-US": ["Queue", "Empty"], "ko-KR": ["대기열", "비어 있음"] } },
-  { id: "turn", name: { "en-US": "Run turn", "ko-KR": "턴 실행" }, offset: 22, duration: 7090, depth: 0, tone: "parent",
-    detail: { "en-US": ["Model", "Gemini 3 Pro"], "ko-KR": ["모델", "Gemini 3 Pro"] } },
-  { id: "request-1", name: { "en-US": "Model request 1/3", "ko-KR": "모델 요청 1/3" }, offset: 168, duration: 412, depth: 1,
-    tone: "danger", detail: { "en-US": ["Error", "503 Service unavailable"], "ko-KR": ["오류", "503 서비스 사용 불가"] } },
-  { id: "retry-wait", name: { "en-US": "Retry wait", "ko-KR": "재시도 대기" }, offset: 580, duration: 2000, depth: 1,
-    tone: "warning", detail: { "en-US": ["Reason", "Server busy"], "ko-KR": ["이유", "서버 혼잡"] } },
-  { id: "request-2", name: { "en-US": "Model request 2/3", "ko-KR": "모델 요청 2/3" }, offset: 2580, duration: 4370, depth: 1,
-    tone: "default", detail: { "en-US": ["Status", "200"], "ko-KR": ["상태", "200"] } },
-  { id: "stream", name: { "en-US": "Receive stream", "ko-KR": "스트림 수신" }, offset: 3660, duration: 3290, depth: 2,
-    tone: "default", detail: { "en-US": ["Chunks", "214"], "ko-KR": ["청크", "214개"] } },
-  { id: "parse", name: { "en-US": "Parse chunks", "ko-KR": "청크 파싱" }, offset: 3672, duration: 3270, depth: 3,
-    tone: "muted", detail: { "en-US": ["Parsed", "214"], "ko-KR": ["파싱", "214개"] } },
-  { id: "memory", name: { "en-US": "Save memory", "ko-KR": "기억 저장" }, offset: 6990, duration: 96, depth: 1,
-    tone: "default", detail: { "en-US": ["Items", "2"], "ko-KR": ["항목", "2개"] } },
-];
-
-/** The deepest level of the trace, passed to every SpanRow and the SpanAxis. */
-const GEMINI_MAX_DEPTH = Math.max(...GEMINI_SPANS.map((span) => span.depth));
-
-/** "0.58초" / "0.58s"; whole seconds drop the decimals ("0초", "2초"); under a second stays in ms. */
-export function formatTraceMs(locale: Locale, ms: number, decimals = 2): string {
-  if (ms > 0 && ms < 1000) return `${Math.round(ms)}ms`;
-  const seconds = ms % 1000 === 0 ? String(ms / 1000) : (ms / 1000).toFixed(decimals);
-  return locale === "ko-KR" ? `${seconds}초` : `${seconds}s`;
-}
-
-function startText(locale: Locale, offset: number): string {
-  const seconds = (offset / 1000).toFixed(2);
-  return locale === "ko-KR" ? `+${seconds}초` : `+${seconds}s`;
-}
-
-function spokenText(locale: Locale, span: TraceSpan): string {
-  const start = startText(locale, span.offset);
-  const length = formatTraceMs(locale, span.duration);
+function spoken(locale: Locale, step: TraceStep): string {
+  const start = startText(locale, step.offset);
+  const length = formatTraceMs(locale, step.duration);
   return locale === "ko-KR" ? `시작 ${start}, ${length}` : `Starts ${start}, ${length}`;
 }
 
-/** The trace page: the axis over DisclosureRows whose description carries the bar. */
+/** One trace step: no chevron, count and problem dot by the title, a segmented bar over its children. */
+export function TraceStepRow({ locale, step, index, open, onToggle }: {
+  locale: Locale; step: TraceStep; index: number; open: boolean; onToggle: () => void;
+}) {
+  const children = stepChildren(step.id);
+  const attention = step.problem === "error" ? "error" : step.problem === "wait" ? "warning" : undefined;
+  return (
+    <SpanRow depth={stepDepth(step)} indent="text"
+      depthLabel={(depth) => (locale === "ko-KR" ? `깊이 ${depth}` : `Depth ${depth}`)}>
+      <DisclosureRow affordance="none" title={copy(locale, step.title)} count={children.length || undefined}
+        attention={attention} meta={<StepMeta locale={locale} step={step} />} description={startText(locale, step.offset)}
+        open={open} onToggle={onToggle} controlsId={step.facts ? `trace-${step.id}` : undefined}
+        bar={<SpanBar offset={step.offset} duration={step.duration} total={GEMINI_TOTAL} tone={stepTone(step)} index={index}
+          segments={children.map((child) => ({ offset: child.offset, duration: child.duration, tone: stepTone(child) }))}
+          label={spoken(locale, step)} />}>
+        {step.facts ? (
+          <Stack gap="xs" id={`trace-${step.id}`}>
+            {step.facts.map(([label, value]) => (
+              <KeyValueRow key={label[0]} label={copy(locale, label)} value={copy(locale, value)} valueTextSize="caption" />
+            ))}
+          </Stack>
+        ) : null}
+      </DisclosureRow>
+    </SpanRow>
+  );
+}
+
+/** The trace page: the axis over trace steps; a parent shows its child steps while open. */
 export function GeminiTrace({ locale }: { locale: Locale }) {
-  const [open, setOpen] = useState<string | null>("request-1");
+  const [open, setOpen] = useState(() => new Set(GEMINI_OPEN));
   const [round, setRound] = useState(0);
+  const toggle = (id: string) => setOpen((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+  const visible = GEMINI_STEPS.filter((step) => {
+    for (let parent = step.parent; parent; parent = GEMINI_STEPS.find((candidate) => candidate.id === parent)?.parent) {
+      if (!open.has(parent)) return false;
+    }
+    return true;
+  });
   return (
     <Stack gap="sm">
-      <SpanAxis total={GEMINI_TOTAL} inset="disclosure" maxDepth={GEMINI_MAX_DEPTH} format={(ms) => formatTraceMs(locale, ms)} />
+      <SpanAxis total={GEMINI_TOTAL} inset="row" format={(ms) => formatTraceMs(locale, ms)} />
       <div key={round}>
-        {GEMINI_SPANS.map((span, index) => (
-          <SpanRow key={span.id} depth={span.depth} maxDepth={GEMINI_MAX_DEPTH}>
-            <DisclosureRow title={span.name[locale]} meta={formatTraceMs(locale, span.duration)}
-              open={open === span.id} controlsId={`span-${span.id}`}
-              onToggle={() => setOpen((current) => (current === span.id ? null : span.id))}
-              description={<>{startText(locale, span.offset)}
-                <SpanBar offset={span.offset} duration={span.duration} total={GEMINI_TOTAL} tone={span.tone}
-                  index={index} label={spokenText(locale, span)} /></>}>
-              <KeyValueRow id={`span-${span.id}`} label={span.detail[locale][0]} value={span.detail[locale][1]}
-                valueTextSize="caption" />
-            </DisclosureRow>
-          </SpanRow>
+        {visible.map((step, index) => (
+          <TraceStepRow key={step.id} locale={locale} step={step} index={index} open={open.has(step.id)}
+            onToggle={() => toggle(step.id)} />
         ))}
       </div>
       <Inline>
@@ -92,6 +89,32 @@ export function GeminiTrace({ locale }: { locale: Locale }) {
           {locale === "ko-KR" ? "다시 재생" : "Replay"}
         </Button>
       </Inline>
+    </Stack>
+  );
+}
+
+/** Row indent (leading chevrons): the whole row indents and its bar reaches back to the shared axis. */
+export function RowIndentTrace({ locale }: { locale: Locale }) {
+  const steps = GEMINI_STEPS.filter((step) => ["turn", "req-2", "http-2", "stream"].includes(step.id));
+  const maxDepth = Math.max(...steps.map(stepDepth));
+  const [open, setOpen] = useState<string | null>(null);
+  return (
+    <Stack gap="sm">
+      <SpanAxis total={GEMINI_TOTAL} inset="disclosure" maxDepth={maxDepth} format={(ms) => formatTraceMs(locale, ms)} />
+      <div>
+        {steps.map((step, index) => (
+          <SpanRow key={step.id} depth={stepDepth(step)} maxDepth={maxDepth}>
+            <DisclosureRow title={copy(locale, step.title)} meta={formatTraceMs(locale, step.duration)}
+              open={open === step.id} onToggle={() => setOpen((current) => (current === step.id ? null : step.id))}
+              description={<>{startText(locale, step.offset)}
+                <SpanBar offset={step.offset} duration={step.duration} total={GEMINI_TOTAL} tone={stepTone(step)}
+                  index={index} label={spoken(locale, step)} /></>}>
+              <KeyValueRow label={copy(locale, step.facts![0]![0])} value={copy(locale, step.facts![0]![1])}
+                valueTextSize="caption" />
+            </DisclosureRow>
+          </SpanRow>
+        ))}
+      </div>
     </Stack>
   );
 }
