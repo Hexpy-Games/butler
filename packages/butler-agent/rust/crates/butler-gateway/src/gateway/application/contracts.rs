@@ -168,20 +168,6 @@ pub trait AppBranchSummarizer: Send + Sync + 'static {
 }
 
 #[derive(Clone, Debug)]
-pub struct AppSessionTitleInput {
-    pub text: String,
-    pub model_ref: String,
-}
-
-pub trait AppSessionTitleGenerator: Send + Sync + 'static {
-    fn generate(
-        &self,
-        input: AppSessionTitleInput,
-        cancellation: tokio_util::sync::CancellationToken,
-    ) -> ApplicationFuture<String>;
-}
-
-#[derive(Clone, Debug)]
 pub struct AppAuthorityPage {
     pub requests: Vec<Value>,
     pub permissions: Vec<Value>,
@@ -409,6 +395,8 @@ pub trait AppContextReadPort: Send + Sync {
     fn read(&self, query: AppContextReadQuery) -> ApplicationFuture<AppContextReadFacts>;
 }
 
+mod session_titles;
+pub use session_titles::{AppSessionTitleGenerator, AppSessionTitleInput};
 mod subsessions;
 pub use subsessions::{
     AppSessionViewPage, AppSubsessionPort, AppTaskGraphQuery, AppWorkerActivitySourcePage,
