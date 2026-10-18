@@ -191,10 +191,7 @@ impl IngressDispatcher {
                 }
             }
         }
-        if summary.interrupted > 0 {
-            return Ok(summary);
-        }
-        if self.shutdown.is_cancelled() {
+        if summary.interrupted > 0 || self.shutdown.is_cancelled() {
             return Ok(summary);
         }
         recover_stale(self.queue.clone(), state.active_queue_ids.clone()).await?;
