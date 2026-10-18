@@ -9,6 +9,8 @@
 //! returns `None`. Renames that replace a file retry on Windows while
 //! another process briefly holds it ([`rename`]).
 
+mod device;
+pub use device::same_device;
 mod contained_read;
 mod exact_name;
 pub use exact_name::exact_entry_exists;

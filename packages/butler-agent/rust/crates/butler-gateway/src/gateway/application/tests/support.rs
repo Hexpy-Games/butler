@@ -396,6 +396,7 @@ impl AppQueueOwnerLiveness for Liveness {
 
 pub(super) fn dependencies(native: Arc<Native>, clock: u64) -> AppApplicationDependencies {
     AppApplicationDependencies {
+        data_reset: None,
         hooks: None,
         service_shutdown: tokio_util::sync::CancellationToken::new(),
         updates: test_updates(),

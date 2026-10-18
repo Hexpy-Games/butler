@@ -9,7 +9,7 @@ use std::time::Duration;
 
 /// The product service; another data folder gets its own suffixed service so
 /// test and secondary folders never read or delete the owner's items.
-const SERVICE: &str = "com.hexpy.butler.signin";
+pub(super) const SERVICE: &str = "com.hexpy.butler.signin";
 const STORE_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub(super) struct SignInSecrets {
@@ -47,7 +47,7 @@ fn service(root: &Path) -> String {
     service_in(root, SERVICE)
 }
 
-fn service_in(root: &Path, base: &str) -> String {
+pub(super) fn service_in(root: &Path, base: &str) -> String {
     use sha2::{Digest, Sha256};
     let default = butler_platform::user_dirs::home_dir().map(|home| home.join(".butler"));
     let resolve = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());

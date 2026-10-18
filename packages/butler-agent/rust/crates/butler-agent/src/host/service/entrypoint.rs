@@ -262,7 +262,7 @@ async fn serve(
     )
     .await;
     let close = close_serving(control, &gateway, &dispatcher, &progress).await;
-    drop(readiness);
+    admission::cancel_reset_queue(&runtime, &queue).await?;
     result.and(close).map(|()| session_id)
 }
 

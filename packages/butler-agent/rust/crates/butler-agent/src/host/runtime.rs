@@ -28,9 +28,7 @@ use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
 use crate::host::runtime::environment::ProcessEnvironment;
 use crate::host::runtime::stores::RuntimeStores;
-use boundary::{setup, validate_data_installation_boundary};
-use butler_core::configuration::ConfigurationWrites;
-use butler_core::locale::LocaleCollation;
+use boundary::setup;
 use butler_ledger::project_ledger::{ProjectLedger, ProjectWork};
 use butler_memory::cognition::{CognitionPromptReader, ExactMemoryQuery};
 use butler_memory::cognition::{MemoryRecall, ProjectCapsuleService};
@@ -69,12 +67,11 @@ impl AgentRuntime {
         app: startup_trace::AppStartup<'_>,
     ) -> Result<Self, BtccError> {
         let (app_endpoint, stop, timing) = app;
+        let process =
+            boundary::open_process_state(&paths, &app_database_path, &installation, locale, stop)
+                .await?;
+        let (collation, writes) = (process.collation, process.writes);
         let mut startup = startup_trace::Trace::new();
-        stores::check_startup(stop)?;
-        validate_data_installation_boundary(&paths.data_root, &paths.installation_root)?;
-        // All fallible in-memory setup precedes the first store owner.
-        let collation = Arc::new(LocaleCollation::new(locale).map_err(setup)?);
-        let writes = Arc::new(ConfigurationWrites::new());
         let host_environment = environment::initialize_host();
         let continuation_limits =
             btcc::select_turn_continuation_budget(|key| host_environment.get(key).cloned())?;
@@ -342,7 +339,7 @@ impl AgentRuntime {
             compactions: ContextCompactionRepository::new(stores.btcc.clone()),
             attachment_context: attachment_context.clone(),
             verified_image_payload: image_files.clone(),
-            protected_ledger_roots: vec![],
+            protected_ledger_roots: process.protected_roots,
             butler_data: paths.data_root.clone(),
             installation_root: paths.installation_root,
             subsessions: subsessions.clone(),
@@ -412,6 +409,7 @@ impl AgentRuntime {
         });
         startup.phase("runtime_ports");
         Self::finish_startup(Self {
+            data_reset: process.data_reset,
             hooks,
             memory_writes: Arc::new(memory_writes.rules.clone()),
             memory_management,

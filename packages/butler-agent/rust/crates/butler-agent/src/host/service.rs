@@ -12,3 +12,7 @@ pub(super) mod instance_identity;
 pub(super) mod progress_publisher;
 pub(super) mod restart_handoff;
 pub(crate) mod shutdown_trace;
+
+pub(crate) mod data_reset;
+pub(crate) mod paths;
+pub(crate) mod purge_policy;

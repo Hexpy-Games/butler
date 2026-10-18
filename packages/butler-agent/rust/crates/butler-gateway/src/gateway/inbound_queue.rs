@@ -118,6 +118,14 @@ impl InboundQueue {
     }
 
     /// Wait exactly for the next durable deferral deadline, if one exists.
+    pub async fn cancel_pending_async(&self) -> QueueResult<()> {
+        self.blocking(move |queue| {
+            let _lane = queue.lane.lock();
+            storage::cancel_pending(&queue.root)
+        })
+        .await
+    }
+
     pub async fn next_deferred_delay(&self) -> QueueResult<Option<std::time::Duration>> {
         self.blocking(move |queue| storage::next_delay(&queue.root))
             .await

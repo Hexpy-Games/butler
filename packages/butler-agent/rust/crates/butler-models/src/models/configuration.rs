@@ -1,5 +1,7 @@
 //! Fresh filesystem facts and request-owned snapshots of shared catalog construction.
 
+mod reset_secrets;
+pub use reset_secrets::reset_secret_keys;
 mod metadata;
 pub use metadata::ModelContextMetadataRead;
 

@@ -155,6 +155,9 @@ impl IngressDispatcher {
         }
     }
 
+    pub(crate) fn shutdown_token(&self) -> tokio_util::sync::CancellationToken {
+        self.shutdown.clone()
+    }
     pub(crate) async fn poll(&self) -> Result<IngressPoll, IngressError> {
         let mut state = self.lifecycle.lock().await;
         if state.closing {
@@ -189,6 +192,9 @@ impl IngressDispatcher {
             }
         }
         if summary.interrupted > 0 {
+            return Ok(summary);
+        }
+        if self.shutdown.is_cancelled() {
             return Ok(summary);
         }
         recover_stale(self.queue.clone(), state.active_queue_ids.clone()).await?;

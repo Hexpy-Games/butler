@@ -9,6 +9,7 @@ use std::sync::Arc;
 #[derive(Clone, Copy)]
 pub(super) enum Handler {
     NotFound,
+    DataReset,
     Authority,
     Automations,
     Browser,
@@ -81,6 +82,7 @@ pub(crate) fn templates() -> Vec<&'static str> {
 const ROUTES: &[(&str, Handler)] = &[
     ("/authority-requests", Handler::Authority),
     ("/app-info", Handler::Shell),
+    ("/data/reset", Handler::DataReset),
     ("/archives", Handler::Shell),
     ("/artifacts", Handler::Artifacts),
     ("/authority-permissions", Handler::Authority),

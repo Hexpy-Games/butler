@@ -154,6 +154,9 @@ pub use session_controls_contract::GatewaySessionControls;
 ///
 /// Every method is required. Composition cannot replace absent persistence or
 /// BTCC readiness with process-liveness guesses or an optional callback.
+mod data_reset;
+pub use data_reset::{AppDataResetPort, FullResetRequest, ResetNonce};
+
 pub trait GatewayApplication:
     GatewayMutationCommands
     + GatewayProjectDashboard
@@ -165,6 +168,12 @@ pub trait GatewayApplication:
     + Sync
     + 'static
 {
+    fn data_reset(&self) -> Option<Arc<dyn AppDataResetPort>> {
+        None
+    }
+    fn accept_full_reset(&self, _input: serde_json::Value) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     /// Read a bounded page of saved browser items.
     fn library(&self, command: AppLibraryCommand) -> ApplicationFuture<serde_json::Value> {
         let _ = command;
@@ -476,3 +485,5 @@ pub use application::project_folder;
 pub fn http_route_templates() -> Vec<&'static str> {
     http::route_templates()
 }
+
+pub use http::reset_browser_secret_keys;

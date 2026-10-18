@@ -58,6 +58,7 @@ pub struct AppHost {
     config: AppHostConfig,
     current: Mutex<Option<Running>>,
     starting: tokio::sync::Mutex<()>,
+    closing: tokio::sync::Mutex<()>,
     attached: watch::Sender<Option<String>>,
     failed_at: Mutex<Option<Instant>>,
 }
@@ -68,6 +69,7 @@ impl AppHost {
             config,
             current: Mutex::new(None),
             starting: tokio::sync::Mutex::new(()),
+            closing: tokio::sync::Mutex::new(()),
             attached: watch::Sender::new(None),
             failed_at: Mutex::new(None),
         });
@@ -75,7 +77,7 @@ impl AppHost {
         tokio::spawn(async move {
             shutdown.cancelled().await;
             if let Some(host) = weak.upgrade() {
-                host.end_now();
+                host.stop().await;
             }
         });
         host
@@ -232,6 +234,7 @@ impl AppHost {
     /// Ends the current host: its channel is already closed, so it quits on
     /// its own; after the grace period its tree is killed. Waits until gone.
     pub async fn stop(&self) {
+        let _closing = self.closing.lock().await;
         let running = self
             .current
             .lock()
@@ -241,18 +244,6 @@ impl AppHost {
         if let Some(mut running) = running {
             running.stop.cancel();
             let _ = running.ended.wait_for(|ended| *ended).await;
-        }
-    }
-
-    /// Service shutdown: the tree is killed without waiting for it to quit.
-    fn end_now(&self) {
-        if let Some(running) = self
-            .current
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take()
-        {
-            running.stop.cancel();
         }
     }
 }

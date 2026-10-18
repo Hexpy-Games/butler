@@ -30,6 +30,7 @@ pub(crate) struct ServiceConfiguration {
     pub(crate) app: AppServiceConfiguration,
     pub(crate) installation: ResolvedInstallation,
     pub(crate) data_root: PathBuf,
+    pub(crate) requested_data_root: PathBuf,
     pub(crate) provider_id: String,
     default_binding_model_ref: String,
     user_home: PathBuf,
@@ -42,8 +43,7 @@ impl ServiceConfiguration {
         user_home: &Path,
         installation: &ResolvedInstallation,
     ) -> Result<Self, BtccError> {
-        let requested_data =
-            source_path(explicit_data, "BUTLER_DATA").unwrap_or_else(|| user_home.join(".butler"));
+        let requested_data = requested_data(explicit_data, user_home);
         let data_root = installation
             .validate_data_root(&requested_data)
             .map_err(|message| {
@@ -89,6 +89,7 @@ impl ServiceConfiguration {
             app,
             installation: installation.clone(),
             data_root,
+            requested_data_root: requested_data,
             provider_id,
             default_binding_model_ref,
             user_home: user_home.to_path_buf(),
@@ -155,4 +156,8 @@ fn read_butler_config(data_root: &Path) -> Value {
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or_else(|| Value::Object(Default::default()))
+}
+
+pub(crate) fn requested_data(explicit: Option<&str>, home: &Path) -> PathBuf {
+    source_path(explicit, "BUTLER_DATA").unwrap_or_else(|| home.join(".butler"))
 }

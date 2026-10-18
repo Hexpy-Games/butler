@@ -1,3 +1,6 @@
+mod data_reset;
+mod reset_secrets;
+pub use reset_secrets::reset_browser_secret_keys;
 mod assets;
 mod authority;
 mod authority_permissions;
@@ -168,7 +171,8 @@ async fn dispatch_inner(state: Arc<HttpState>, request: Request<Body>) -> Respon
     if request.method() == Method::OPTIONS && origin.allowed().is_some() {
         return security::preflight(&origin);
     }
-    let mut response = if declared_body_too_large(&request) {
+    let mut response = if declared_body_too_large(&request) && request.uri().path() != "/data/reset"
+    {
         if html_connect_form {
             security::GatewaySecurity::connect_error_response(&HttpError::PayloadTooLarge)
         } else {
@@ -210,7 +214,9 @@ async fn authorized_route(
         security::Admission::Respond(response) => return Ok(response),
         security::Admission::Granted(grant) => grant,
     };
-    security::require_json_body(request.method(), request.uri().path(), request.headers())?;
+    if request.uri().path() != "/data/reset" {
+        security::require_json_body(request.method(), request.uri().path(), request.headers())?;
+    }
     if let Some(admitted) = request.extensions().get::<access_log::Admission>() {
         admitted.grant();
     }

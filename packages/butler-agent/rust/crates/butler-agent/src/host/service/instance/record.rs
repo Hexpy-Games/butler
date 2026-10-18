@@ -124,11 +124,11 @@ pub(super) fn acquire_record_update_lock(
 }
 
 pub(super) fn record_update_lock_path(data_root: &Path) -> PathBuf {
-    data_root.join("state/butler-agent-native-service-record.lock")
+    data_root.join(crate::host::service::paths::RECORD_LOCK)
 }
 
 pub(super) fn instance_record_path(data_root: &Path) -> PathBuf {
-    data_root.join("state/butler-agent-native-service.json")
+    data_root.join(crate::host::service::paths::INSTANCE_RECORD)
 }
 
 /// The grace thread must leave room for the controller's eight-second kill.

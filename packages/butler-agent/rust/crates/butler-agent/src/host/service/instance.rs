@@ -473,11 +473,11 @@ fn open_lock(path: &Path, create: bool) -> Result<File, crate::host::HostError> 
 }
 
 fn instance_lock_path(data_root: &Path) -> PathBuf {
-    data_root.join("state/butler-agent-native-service.lock")
+    data_root.join(crate::host::service::paths::INSTANCE_LOCK)
 }
 
 fn admission_lock_path(data_root: &Path) -> PathBuf {
-    data_root.join("state/butler-agent-native-service-start.lock")
+    data_root.join(crate::host::service::paths::ADMISSION_LOCK)
 }
 
 #[cfg(test)]
