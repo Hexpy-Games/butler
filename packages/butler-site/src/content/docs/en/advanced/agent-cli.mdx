@@ -14,13 +14,13 @@ Butler Agent CLI is a command-line tool that installs and runs the Butler runtim
 
 ## Supported platforms
 
-- Apple silicon Mac (`darwin-arm64`) and Linux x64 and arm64 (glibc) are supported.
-- Intel Macs and musl-based Linux such as Alpine do not run it. Windows builds are in source preview; the published release has no downloadable Windows installer.
-- You need a release that publishes the native Agent archive (`butler-agent-<version>-<platform>.tar.gz`).
+- Apple silicon Mac (`darwin-arm64`), Windows x64 and Linux x64 and arm64 (glibc) are supported.
+- Intel Macs and musl-based Linux such as Alpine do not run it. Windows x64 is supported too.
+- You need a release that publishes the native Agent archive (`butler-agent-<version>-<platform>.tar.gz`, or `.zip` on Windows).
 
 ## Install
 
-To use Butler without the app, for example on a server or a remote computer, run the one-line install script. The current version is the `0.1.0-preview.5` preview, so download the script from the preview release and pass the same version with `--version`.
+To use Butler without the app, for example on a server or a remote computer, run the one-line install script. Butler is in preview, so download the script from a preview release and pass the same version with `--version`. Replace `<version>` with the newest preview on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases), such as `0.1.0-preview.12`.
 
 <Tabs
   label="Operating system"
@@ -32,17 +32,21 @@ To use Butler without the app, for example on a server or a remote computer, run
 >
   <TabPanel value="macos">
     ```bash
-    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
+    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<version>/install.sh | sh -s -- --version <version>
     # With Node.js
     npx @hexpygames/butler install
     ```
   </TabPanel>
   <TabPanel value="windows">
-    The published release has no downloadable Windows Agent installer. Windows builds are in source preview. See [Install](/en/help/getting-started/install/) for the current release status.
+    In PowerShell on Windows x64. Replace `<version>` with the newest preview, such as `0.1.0-preview.12`.
+
+    ```powershell
+    $env:BUTLER_VERSION='<version>'; irm https://github.com/Hexpy-Games/butler/releases/download/v<version>/install.ps1 | iex
+    ```
   </TabPanel>
   <TabPanel value="linux">
     ```bash
-    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
+    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<version>/install.sh | sh -s -- --version <version>
     # With Node.js
     npx @hexpygames/butler install
     ```
@@ -63,7 +67,7 @@ It is safe to run the same command again. A version that is already installed is
 Add options after `sh -s --` (with npx, after `install`).
 
 ```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5 --no-start
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<version>/install.sh | sh -s -- --version <version> --no-start
 ```
 
 | Option | Description |
@@ -78,8 +82,8 @@ Change the install folder with `BUTLER_AGENT_HOME` and the location of the `butl
 
 | Item | macOS | Windows | Linux |
 | --- | --- | --- | --- |
-| Install folder | `~/Applications/ButlerAgent` | Not distributed in this release | `~/.local/share/butler/agent` |
-| `butler` command | `~/.local/bin/butler` | Not distributed in this release | `~/.local/bin/butler` |
+| Install folder | `~/Applications/ButlerAgent` | `%LOCALAPPDATA%\Butler\agent` | `~/.local/share/butler/agent` |
+| `butler` command | `~/.local/bin/butler` | `%LOCALAPPDATA%\Butler\bin\butler.exe` | `~/.local/bin/butler` |
 
 Inside the install folder, each version gets a `<version>-<8-character hash>` folder. `current` points to the version in use and `previous` to the one before it. Only the 3 most recent old versions are kept (the version in use, the previous version and the running version are always kept), and `butler update` or `butler install` removes the rest. Data is stored in the data folder (default `~/.butler`), outside the install folder. The desktop app and the CLI use the same install layout.
 
@@ -99,7 +103,7 @@ If you cannot use the install script, extract the archive yourself. The archive 
     Use a `darwin-arm64` archive and the Bash steps below.
   </TabPanel>
   <TabPanel value="windows">
-    The published release has no downloadable Windows Agent archive or installer.
+    On Windows, use the install script above. It downloads `butler-agent-<version>-windows-x64.zip`.
   </TabPanel>
   <TabPanel value="linux">
     Use a `linux-x64` or `linux-arm64` archive and the Bash steps below.
@@ -115,7 +119,7 @@ If you cannot use the install script, extract the archive yourself. The archive 
 
 ```bash
 set -euo pipefail
-VERSION=0.1.0-preview.5 # The exact release version, including the preview suffix.
+VERSION=<version> # The exact release version, including the preview suffix, such as 0.1.0-preview.12.
 RELEASE="$VERSION" # The release tag without v.
 PLATFORM=darwin-arm64 # One of darwin-arm64, linux-x64 or linux-arm64.
 ARCHIVE="butler-agent-${VERSION}-${PLATFORM}.tar.gz"
