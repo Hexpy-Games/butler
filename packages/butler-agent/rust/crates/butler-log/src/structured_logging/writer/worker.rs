@@ -4,7 +4,6 @@ use std::time::{Duration, Instant};
 
 #[derive(Default)]
 struct State {
-    flush_at: Option<Instant>,
     full_until: Option<Instant>,
     previous: Preset,
     cleanup_at: Option<Instant>,
@@ -16,7 +15,7 @@ impl Logger {
         self.schedule_cleanup(&mut state);
         let mut pending = None;
         loop {
-            let deadline = [state.flush_at, state.full_until, state.cleanup_at]
+            let deadline = [state.full_until, state.cleanup_at]
                 .into_iter()
                 .flatten()
                 .min();
@@ -35,8 +34,9 @@ impl Logger {
             };
             if let Command::Dropped = command {
                 self.report(self.report_drops());
+                self.report(self.0.storage.lock().flush(false));
             } else if let Command::Record(..) = command {
-                pending = self.batch(command, rx, &mut state);
+                pending = self.batch(command, rx);
             } else if let Command::Control(command) = command
                 && self.control(command, &mut state)
             {
@@ -81,24 +81,16 @@ impl Logger {
             state.cleanup_at = None;
         }
         self.schedule_cleanup(state);
-        if state.flush_at.is_some_and(|d| Instant::now() >= d) {
-            self.report(self.0.storage.lock().flush(false));
-            state.flush_at = None;
-        }
     }
-    fn batch(
-        &self,
-        first: Command,
-        rx: &mpsc::Receiver<Command>,
-        state: &mut State,
-    ) -> Option<Command> {
+    fn batch(&self, first: Command, rx: &mpsc::Receiver<Command>) -> Option<Command> {
         let mut sync = false;
+        let mut acknowledgements = Vec::new();
         let mut pending = Some(first);
         for _ in 0..1024 {
             let Some(command) = pending.take() else {
                 break;
             };
-            let Command::Record(row, lossy, bytes) = command else {
+            let Command::Record(row, lossy, bytes, ack) = command else {
                 pending = Some(command);
                 break;
             };
@@ -106,15 +98,31 @@ impl Logger {
                 self.0.queue.bytes.fetch_sub(bytes, Ordering::Relaxed);
             }
             sync |= row.level.eq_ignore_ascii_case("ERROR");
-            self.report(self.write_queued(row, lossy));
+            match self.write_queued(row, lossy) {
+                Ok(()) => acknowledgements.extend(ack),
+                Err(error) => {
+                    self.report_error(&error);
+                    if let Some(ack) = ack {
+                        let _ = ack.send(Err(error));
+                    }
+                }
+            }
             pending = rx.try_recv().ok();
         }
+        // Coalesce only records already queued. Never leave a partial buffer
+        // waiting for a timer after the producer has become idle.
+        let result = self.0.storage.lock().flush(false);
+        for ack in acknowledgements {
+            let reply = result
+                .as_ref()
+                .copied()
+                .map_err(|e| io::Error::new(e.kind(), e.to_string()));
+            let _ = ack.send(reply);
+        }
+        self.report(result);
         if sync {
             self.report(self.0.storage.lock().flush(true));
         }
-        state
-            .flush_at
-            .get_or_insert_with(|| Instant::now() + Duration::from_secs(1));
         pending
     }
     fn control(&self, command: Control, state: &mut State) -> bool {
@@ -142,11 +150,9 @@ impl Logger {
             Control::Flush(reply) => {
                 let result = self.0.storage.lock().flush(false);
                 let _ = reply.send(result);
-                state.flush_at = None;
             }
             Control::Clear(reply) => {
                 let _ = reply.send(self.0.storage.lock().clear());
-                state.flush_at = None;
             }
             Control::Shutdown(reply) => {
                 let result = self.0.storage.lock().close();
