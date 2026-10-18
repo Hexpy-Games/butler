@@ -214,6 +214,38 @@ async function storageChecks(page: Page) {
   await page.locator("[data-sonner-toast]").filter({ hasText: /비웠습니다/u }).first().waitFor();
 }
 
+/** 더 보기 continues the 24시간 query with the agent's cursor (its `since` is fixed per query). */
+async function pagingCheck(page: Page) {
+  const viewer = section(page, "logs-viewer");
+  const more = viewer.getByRole("button", { name: copy.common.more, exact: true });
+  await more.waitFor();
+  const before = await rows(page).count();
+  const nextPage = page.waitForResponse((response) => new URL(response.url()).pathname === "/logs"
+    && new URL(response.url()).searchParams.has("cursor"));
+  await more.click();
+  const response = await nextPage;
+  assert.equal(response.status(), 200, `더 보기 query: ${await response.text()}`);
+  await page.waitForFunction(([selector, count]) => document.querySelectorAll(selector as string).length > (count as number),
+    ['[data-settings-section-id="logs-viewer"] [data-test-class="log-row"]', before] as const);
+}
+
+/** Every 출처 option queries without an error. */
+async function sourceCheck(page: Page) {
+  const viewer = section(page, "logs-viewer");
+  const select = viewer.getByRole("combobox", { name: logs.filters.source, exact: true });
+  const values = await select.locator("option").evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+  assert.deepEqual(values, ["all", "app", "agent"]);
+  for (const value of [...values.slice(1), "all"]) {
+    const response = page.waitForResponse((answer) => new URL(answer.url()).pathname === "/logs"
+      && new URL(answer.url()).searchParams.get("source") === value);
+    await select.selectOption(value);
+    assert.equal((await response).status(), 200, `출처 ${value}`);
+    await page.waitForFunction((id) => !document.querySelector(`[data-settings-section-id="${id}"] [aria-busy="true"]`), "logs-viewer");
+    assert.equal(await viewer.getByText(logs.loadFailed, { exact: true }).count(), 0, `출처 ${value} shows no error`);
+  }
+  await rows(page).first().waitFor();
+}
+
 async function emptyCheck(page: Page) {
   const viewer = section(page, "logs-viewer");
   await viewer.getByRole("searchbox", { name: logs.search }).fill("zz-no-such-log-line");
@@ -243,17 +275,26 @@ async function runCase(cell: string) {
     assert.deepEqual(off.errors, [], "no renderer errors (developer mode off)");
     await off.close();
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ diagnostics_enabled: true }) });
+    // Each admitted settings write is an INFO access record: more than one page of them.
+    for (let index = 0; index < 60; index += 1) {
+      await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko" }) });
+    }
     const { page, errors, close } = await newPage(browser, server, width, theme);
     await openSettings(page, copy.settings.sections.logs);
     await rows(page).first().waitFor();
     const ids = await page.locator("[data-settings-section-id]").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-settings-section-id")));
     assert.deepEqual(ids, ["logs-level", "logs-viewer", "logs-storage", "developer-context-estimates"]);
+    for (const [id, title] of [["logs-level", logs.sections.level], ["logs-viewer", logs.sections.viewer], ["logs-storage", logs.sections.storage]]) {
+      await section(page, id!).getByRole("heading", { name: title, exact: true }).waitFor();
+    }
     await capture(page, `${cell}-logs`);
     await section(page, "logs-storage").getByRole("progressbar").first().waitFor();
     await section(page, "logs-storage").scrollIntoViewIfNeeded();
     await capture(page, `${cell}-storage`);
     await rowChecks(page, cell);
     if (functional) {
+      await pagingCheck(page);
+      await sourceCheck(page);
       await levelChecks(page, cell);
       await liveChecks(page, server);
       await emptyCheck(page);

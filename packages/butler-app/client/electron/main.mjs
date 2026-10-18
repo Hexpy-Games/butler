@@ -2759,6 +2759,7 @@ registerLogsExport({
   serverFetch: appServerFetch,
   readUiCrashes: () => uiCrashStore.read(),
   isTrustedSender: (event) => event.sender === mainWindow?.webContents,
+  saveLabel: async () => getDesktopCopy(await readDesktopLanguage()).save,
 });
 
 ipcMain.handle("butler:save-message-file", async (_event, input = {}) => {

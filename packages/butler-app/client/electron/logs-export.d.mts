@@ -5,4 +5,5 @@ export function registerLogsExport(dependencies: {
   serverFetch(path: string, init: RequestInit): Promise<Response>;
   readUiCrashes(): Promise<unknown[]>;
   isTrustedSender(event: unknown): boolean;
+  saveLabel(): Promise<string>;
 }): void;

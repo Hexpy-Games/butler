@@ -480,6 +480,7 @@ function subscribeLogs(handlers = {}) {
       });
       if (!response.ok || !response.body) throw new Error(`Log stream failed with status ${response.status}.`);
       const reader = response.body.getReader();
+      handlers.onOpen?.();
       const decoder = new TextDecoder();
       let buffer = "";
       while (!closed) {

@@ -1,7 +1,9 @@
 // Settings > Logs export: the agent's zip, saved where the user picks, with the
 // app's UI crash records added as one more entry.
+import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { open } from "node:fs/promises";
+import { open, rename, rm } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { crc32 } from "node:zlib";
@@ -74,13 +76,13 @@ function header(signature, fileName, length, checksum, offset) {
 }
 
 /** Registers `butler:export-logs`; every dependency is injected by main. */
-export function registerLogsExport({ ipcMain, dialog, serverFetch, readUiCrashes, isTrustedSender }) {
+export function registerLogsExport({ ipcMain, dialog, serverFetch, readUiCrashes, isTrustedSender, saveLabel }) {
   ipcMain.handle("butler:export-logs", async (event, input = {}) => {
     if (!isTrustedSender(event)) throw new Error("invalid_logs_export_sender");
     const since = typeof input?.since === "string" && input.since.length <= 64 ? input.since : undefined;
     const includeBodies = input?.includeBodies === true;
     const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/gu, "-");
-    const result = await dialog.showSaveDialog({ defaultPath: `butler-logs-${stamp}.zip`, buttonLabel: "Save" });
+    const result = await dialog.showSaveDialog({ defaultPath: `butler-logs-${stamp}.zip`, buttonLabel: await saveLabel() });
     if (result.canceled || !result.filePath) return { saved: false };
     const response = await serverFetch("/logs/export", {
       method: "POST",
@@ -88,11 +90,22 @@ export function registerLogsExport({ ipcMain, dialog, serverFetch, readUiCrashes
       body: JSON.stringify({ ...(since ? { since } : {}), include_bodies: includeBodies }),
     });
     if (!response.ok || !response.body) throw new Error(`Log export failed with status ${response.status}.`);
-    await pipeline(Readable.fromWeb(response.body), createWriteStream(result.filePath, { mode: 0o600 }));
-    const crashes = await readUiCrashes();
-    if (Array.isArray(crashes) && crashes.length > 0) {
-      await appendZipEntry(result.filePath, "app/ui-crashes.json", Buffer.from(JSON.stringify(crashes, null, 2)));
-    }
+    await writeExport(result.filePath, response.body, await readUiCrashes());
     return { saved: true };
   });
+}
+
+/** Writes beside the destination and renames on success, so a failed export leaves no partial zip. */
+async function writeExport(destination, body, crashes) {
+  const partial = join(dirname(destination), `.${basename(destination)}.${randomUUID()}.partial`);
+  try {
+    await pipeline(Readable.fromWeb(body), createWriteStream(partial, { mode: 0o600 }));
+    if (Array.isArray(crashes) && crashes.length > 0) {
+      await appendZipEntry(partial, "app/ui-crashes.json", Buffer.from(JSON.stringify(crashes, null, 2)));
+    }
+    await rename(partial, destination);
+  } catch (error) {
+    await rm(partial, { force: true });
+    throw error;
+  }
 }

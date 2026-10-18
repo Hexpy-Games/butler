@@ -3,7 +3,8 @@ import { appCopy } from "@/app/copy.ts";
 import { Inline, Input, Label, NativeSelect, Stack, Switch } from "@/butler-ds";
 import { LOG_PERIODS, LOG_SEVERITIES, type LogFilter, type LogPeriod } from "./logsApi";
 
-const SOURCES = ["app", "agent", "mcp"] as const;
+// The agent filters by process (agent, app); MCP servers are a category.
+const SOURCES = ["app", "agent"] as const;
 
 /** Search, level, source, category, period and the live switch above the log list. */
 export function LogFilters({ filter, categories, live, onChange, onLiveChange }: {

@@ -31,9 +31,15 @@ export function useLogStorage(revision: number): LogStorageState {
 type StoreKind = keyof typeof appCopy.settings.logs.stores;
 const STORE_ORDER: readonly StoreKind[] = ["app", "main", "debug", "bodies"];
 
+/** How full a store is, 0–1. */
+function fill(store: LogStoreUsage): number {
+  return store.limit_bytes > 0 ? store.bytes / store.limit_bytes : 0;
+}
+
 /**
- * 앱 and 에이전트 are each source's main store (`app/main`, `agent/main`);
- * 자세히 and 본문 add up both sources' `debug` and `bodies` stores.
+ * 앱 and 에이전트 are each source's main store (`app/main`, `agent/main`).
+ * 자세히 and 본문 have a limit per source (`debug`, `bodies`); each meter
+ * shows whichever source's store is fuller, with that store's own limit.
  */
 function storeGroups(stores: readonly LogStoreUsage[]): Array<LogStoreUsage & { id: StoreKind }> {
   const groups = new Map<StoreKind, LogStoreUsage & { id: StoreKind }>();
@@ -43,9 +49,7 @@ function storeGroups(stores: readonly LogStoreUsage[]): Array<LogStoreUsage & { 
       : name === "debug" || name === "bodies" ? name : null;
     if (!kind) continue;
     const current = groups.get(kind);
-    groups.set(kind, current
-      ? { ...current, bytes: current.bytes + store.bytes, limit_bytes: current.limit_bytes + store.limit_bytes }
-      : { ...store, id: kind });
+    if (!current || fill(store) > fill(current)) groups.set(kind, { ...store, id: kind });
   }
   return STORE_ORDER.flatMap((kind) => groups.get(kind) ?? []);
 }
@@ -58,8 +62,10 @@ export function LogStoreMeters({ view }: { view: LogStorageView | null }) {
 function StoreMeter({ store }: { store: LogStoreUsage & { id: StoreKind } }) {
   const copy = appCopy.settings.logs;
   const label = copy.stores[store.id];
-  const retention = store.retention_h % 24 === 0 ? copy.retentionDays(store.retention_h / 24) : copy.retentionHours(store.retention_h);
-  const value = store.limit_bytes > 0 ? Math.min(100, (store.bytes / store.limit_bytes) * 100) : 0;
+  // A week or more reads in days (14일); shorter windows in hours (72시간).
+  const retention = store.retention_h >= 168 && store.retention_h % 24 === 0
+    ? copy.retentionDays(store.retention_h / 24) : copy.retentionHours(store.retention_h);
+  const value = Math.min(100, fill(store) * 100);
   return (
     <ProgressMeter label={label} value={value} tone={value >= 90 ? "warning" : "default"}
       meta={copy.storeMeta(formatBytes(store.bytes), formatBytes(store.limit_bytes), retention)} />

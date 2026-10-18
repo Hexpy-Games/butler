@@ -1829,7 +1829,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       developerMode: "DevTools와 로그 화면을 켭니다.",
     },
     logs: {
-      sections: { level: "기록", viewer: "로그", storage: "저장 공간" },
+      sections: { level: "기록", viewer: "목록", storage: "저장 공간" },
       levelLabel: "기록 수준",
       levels: { minimal: "최소", standard: "기본", detailed: "자세히", full: "전체" },
       levelMeta: {
@@ -1853,9 +1853,10 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       allLevels: "모든 수준",
       allSources: "모든 출처",
       allCategories: "모든 분류",
-      sources: { app: "앱", agent: "에이전트", mcp: "MCP" },
+      sources: { app: "앱", agent: "에이전트" },
       periods: { hour: "1시간", day: "24시간", week: "7일", all: "전체 기간" },
       live: "실시간",
+      liveLost: "실시간 연결 끊김",
       newLines: (count) => `새 줄 ${count}개`,
       empty: "기록이 없습니다",
       loadFailed: "로그를 불러오지 못했습니다",

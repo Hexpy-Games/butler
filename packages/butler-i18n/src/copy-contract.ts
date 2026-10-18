@@ -1595,9 +1595,10 @@ export interface AppCopy {
       allLevels: string;
       allSources: string;
       allCategories: string;
-      sources: Record<"app" | "agent" | "mcp", string>;
+      sources: Record<"app" | "agent", string>;
       periods: Record<"hour" | "day" | "week" | "all", string>;
       live: string;
+      liveLost: string;
       newLines: (count: number) => string;
       empty: string;
       loadFailed: string;

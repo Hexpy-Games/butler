@@ -70,14 +70,24 @@ export function periodSince(period: LogPeriod, now = Date.now()): string | undef
   return hours === null ? undefined : new Date(now - hours * 3_600_000).toISOString();
 }
 
-export function queryLogs(filter: LogFilter, cursor?: string | null): Promise<LogPage> {
+/**
+ * One page of a query. The agent's cursor binds every filter value, so a
+ * query's `since` and `until` are fixed once and reused for each later page.
+ */
+export interface LogWindow {
+  since?: string;
+  until?: string;
+  cursor?: string | null;
+}
+
+export function queryLogs(filter: LogFilter, window: LogWindow): Promise<LogPage> {
   const params = new URLSearchParams({ limit: String(LOG_PAGE_SIZE), source: filter.source || "all" });
   if (filter.q.trim()) params.set("q", filter.q.trim());
   if (filter.level) params.set("level", filter.level);
   if (filter.category) params.set("category", filter.category);
-  const since = periodSince(filter.period);
-  if (since) params.set("since", since);
-  if (cursor) params.set("cursor", cursor);
+  if (window.since) params.set("since", window.since);
+  if (window.until) params.set("until", window.until);
+  if (window.cursor) params.set("cursor", window.cursor);
   return api<LogPage>(`/logs?${params.toString()}`);
 }
 

@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
-import { notifyError } from "@/app/notifications.ts";
-import { queryLogs, type LogFilter, type LogRecord } from "./logsApi";
-import { subscribeLogs } from "./logsTransport";
+import { notifyError, notifyStatus } from "@/app/notifications.ts";
+import { EMPTY_LOG_LIST, logListReducer, matchesFilter } from "./logRecords";
+import { periodSince, queryLogs, type LogFilter, type LogRecord } from "./logsApi";
+import { useLiveLogs } from "./useLiveLogs";
 
 export const EMPTY_LOG_FILTER: LogFilter = { q: "", level: "", source: "all", category: "", period: "day" };
-const LIVE_LIMIT = 500;
 
 export interface LogViewerState {
   filter: LogFilter;
@@ -24,84 +24,59 @@ export interface LogViewerState {
   setAtTop: (atTop: boolean) => void;
 }
 
-/** Client-side filter for live rows, matching the agent's query semantics. */
-export function matchesFilter(row: LogRecord, filter: LogFilter): boolean {
-  if (filter.level && row.level.toLowerCase() !== filter.level.toLowerCase()) return false;
-  if (filter.source !== "all" && row.process !== filter.source) return false;
-  if (filter.category && row.category !== filter.category && !row.category.startsWith(`${filter.category}.`)) return false;
-  return !filter.q.trim() || JSON.stringify(row).includes(filter.q.trim());
-}
-
 export function useLogViewer(): LogViewerState {
   const [filter, setFilterState] = useState<LogFilter>(EMPTY_LOG_FILTER);
-  const [rows, setRows] = useState<LogRecord[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [state, setState] = useState<"loading" | "ready" | "failed">("loading");
+  const [list, dispatch] = useReducer(logListReducer, EMPTY_LOG_LIST);
   const [paging, setPaging] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [live, setLive] = useState(false);
-  const [buffer, setBuffer] = useState<LogRecord[]>([]);
   const atTop = useRef(true);
-  const buffered = useRef(0);
-  buffered.current = buffer.length;
+  const current = useRef(filter);
+  current.current = filter;
 
   useEffect(() => {
     let cancelled = false;
-    setState("loading");
-    setBuffer([]);
-    queryLogs(filter).then((page) => {
-      if (cancelled) return;
-      setRows(page.rows);
-      setCursor(page.exhausted ? null : page.cursor);
-      setState("ready");
-    }).catch(() => { if (!cancelled) setState("failed"); });
+    // The period starts now, once; every later page of this query reuses it.
+    const bounds = { since: periodSince(filter.period) };
+    dispatch({ type: "reset", since: bounds.since });
+    queryLogs(filter, bounds).then((page) => {
+      if (!cancelled) dispatch({ type: "page", page, window: bounds, first: true });
+    }).catch(() => { if (!cancelled) dispatch({ type: "failed" }); });
     return () => { cancelled = true; };
   }, [filter, attempt]);
 
-  useEffect(() => {
-    if (!live) return;
-    return subscribeLogs({
-      onRecord: (row) => {
-        if (!matchesFilter(row, filter)) return;
-        // Live rows join the list only while its top is in view and nothing waits.
-        if (atTop.current && buffered.current === 0) setRows((current) => [row, ...current]);
-        else setBuffer((current) => [row, ...current].slice(0, LIVE_LIMIT));
-      },
-      onError: () => setLive(false),
-    });
-  }, [live, filter]);
+  useLiveLogs(live, (record) => {
+    if (matchesFilter(record, current.current)) dispatch({ type: "live", record, atTop: atTop.current });
+  }, () => {
+    setLive(false);
+    notifyStatus(appCopy.settings.logs.liveLost, { id: "logs-live" });
+  });
 
+  const { next } = list;
   const loadMore = useCallback(() => {
-    if (!cursor || paging) return;
+    if (!next || paging) return;
     setPaging(true);
-    queryLogs(filter, cursor).then((page) => {
-      setRows((current) => [...current, ...page.rows]);
-      setCursor(page.exhausted ? null : page.cursor);
-    }).catch((error) => notifyError(error, appCopy.settings.logs.loadFailed, { id: "logs-more" }))
+    queryLogs(filter, next).then((page) => dispatch({ type: "page", page, window: next, first: false }))
+      .catch((error) => notifyError(error, appCopy.settings.logs.loadFailed, { id: "logs-more" }))
       .finally(() => setPaging(false));
-  }, [cursor, filter, paging]);
+  }, [filter, next, paging]);
 
-  const showPending = useCallback(() => {
-    setRows((current) => [...buffer, ...current]);
-    setBuffer([]);
-  }, [buffer]);
-
-  const setFilter = useCallback((next: Partial<LogFilter>) => setFilterState((current) => ({ ...current, ...next })), []);
+  const setFilter = useCallback((change: Partial<LogFilter>) => setFilterState((value) => ({ ...value, ...change })), []);
   const setAtTop = useCallback((value: boolean) => { atTop.current = value; }, []);
 
   return {
     filter,
     setFilter,
-    rows,
-    failed: state === "failed",
-    loading: state === "loading" || paging,
-    hasMore: cursor !== null,
+    rows: list.rows,
+    failed: list.status === "failed",
+    loading: list.status === "loading" || paging,
+    hasMore: next !== null,
     loadMore,
     reload: () => setAttempt((value) => value + 1),
     live,
     setLive,
-    pending: buffer.length,
-    showPending,
+    pending: list.pending.length,
+    showPending: () => dispatch({ type: "showPending" }),
     setAtTop,
   };
 }

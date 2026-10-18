@@ -45,7 +45,9 @@ export async function exportLogs(input: LogExportInput): Promise<boolean> {
 }
 
 export interface LogStreamHandlers {
+  onOpen: () => void;
   onRecord: (record: LogRecord) => void;
+  /** The stream failed or ended; the caller decides whether to reconnect. */
   onError: () => void;
 }
 
@@ -57,11 +59,13 @@ export function subscribeLogs(handlers: LogStreamHandlers): () => void {
     return typeof close === "function" ? close : () => undefined;
   }
   const source = new EventSource("/logs/live");
+  source.onopen = () => handlers.onOpen();
   source.addEventListener("log", (event) => {
     try {
       handlers.onRecord(JSON.parse((event as MessageEvent<string>).data) as LogRecord);
     } catch { /* A malformed line is skipped; the next one still arrives. */ }
   });
+  // EventSource would retry on its own; one owner (the caller) decides instead.
   source.onerror = () => {
     source.close();
     handlers.onError();
