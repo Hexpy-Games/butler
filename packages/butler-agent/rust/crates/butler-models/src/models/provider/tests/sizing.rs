@@ -86,7 +86,7 @@ pub(super) fn native_carrier_sizing_counts_tool_images_by_allowance() {
     let mut projected = serde_json::to_value(std::slice::from_ref(&message)).unwrap();
     projected[0]["content"] = text.into();
     let projected = butler_core::json::stringify(&projected).unwrap();
-    for model in ["anthropic/claude-opus-5-5", "google/gemini-3.8-flash"] {
+    for model in ["anthropic/claude-opus-5-5", "google/gemini-3.5-flash"] {
         let expected = catalog
             .estimate_tokens(
                 &snapshot,
