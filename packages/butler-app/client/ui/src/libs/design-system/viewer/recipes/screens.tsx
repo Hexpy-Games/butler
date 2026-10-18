@@ -1,6 +1,7 @@
 // "Build a screen" recipes: real Butler screens assembled only from DS pieces.
 // The viewer shows each recipe's JSX verbatim from its #region block, so the
 // code on the page is exactly what renders above it.
+import type { ReactNode } from "react";
 import { ActivityHeatmap } from "../../blocks/ActivityHeatmap";
 import { CollapsibleNavGroup } from "../../blocks/CollapsibleNavGroup";
 import {
@@ -28,10 +29,11 @@ import { ButtonContainer } from "../../components/ButtonContainer";
 import { CopyButton } from "../../components/CopyButton";
 import { IconButton } from "../../components/IconButton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../components/DropdownMenu";
+import { GlyphToggle } from "../../components/GlyphToggle";
 import { IconSlot } from "../../components/IconSlot";
 import {
-  Activity, Archive, Briefcase, ChevronDown, Clock3, FileText, Folder, FolderPlus, GeneralChat, LayoutDashboard, ListFilter,
-  MessageSquare, MessageSquarePlus, Notebook, PencilLine, Plus, Search, Settings, Terminal,
+  Activity, Archive, Briefcase, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderPlus, GeneralChat, LayoutDashboard, ListFilter,
+  MessageSquare, MessageSquarePlus, Notebook, PencilLine, Plus, Search, Settings, Sparkles, Terminal,
 } from "../../components/Icons";
 import { Input } from "../../components/Input";
 import { PageContainer } from "../../components/PageContainer";
@@ -115,22 +117,56 @@ function RowMenu({ title }: { title: string }) {
   );
 }
 
+/** SpaceRow for a chat: its glyph doubles as the pin toggle (SpaceIdentity), and the row menu trails. */
+function ChatRow({ title, glyph, pinned = false }: { title: string; glyph: ReactNode; pinned?: boolean }) {
+  return (
+    <NavRow iconInteractive ariaLabel={title} label={title} onClick={() => undefined} actions={<RowMenu title={title} />}
+      icon={(
+        <GlyphToggle glyph={<IconSlot size="sidebar">{glyph}</IconSlot>} pressed={pinned} label={`${title} ${pinned ? "Unpin" : "Pin"}`}
+          toggleGlyph={<Sparkles fill={pinned ? "currentColor" : "none"} />} onClick={(event) => event.stopPropagation()} />
+      )} />
+  );
+}
+
 /** SpaceRowActions: a project's dashboard, then the folder chevron that gives way to the row menu. */
-function FolderActions({ title, project = false }: { title: string; project?: boolean }) {
+function FolderActions({ title, expanded, project = false }: { title: string; expanded: boolean; project?: boolean }) {
   return (
     <ButtonContainer size="icon-sm" wrap={false}>
       {project ? <IconButton label={`${title} dashboard`}><LayoutDashboard /></IconButton> : null}
-      <NavRowSwap rest={<IconButton tabIndex={-1} label={`${title} collapse`}><ChevronDown /></IconButton>}>
+      <NavRowSwap rest={(
+        <IconButton tabIndex={-1} label={`${title} ${expanded ? "collapse" : "expand"}`}>
+          {expanded ? <ChevronDown /> : <ChevronRight />}
+        </IconButton>
+      )}>
         <RowMenu title={title} />
       </NavRowSwap>
     </ButtonContainer>
   );
 }
 
+/** SpaceHeader: the entry actions, then Favorites; both scroll away before the browse header sticks. */
+function SpaceHeader() {
+  return (
+    <Stack gap="2xl">
+      <SidebarNav ariaLabel="Primary actions">
+        <NavRow icon={<PencilLine />} label="New chat" onClick={() => undefined} />
+        <NavRow icon={<Search />} label="Search" onClick={() => undefined} />
+        <NavRow icon={<IconSlot size="sidebar" minHeight="line"><Clock3 /></IconSlot>} label="Schedules" onClick={() => undefined} />
+      </SidebarNav>
+      <Stack gap="sm">
+        <NavSectionHeading title="Favorites" />
+        <Stack gap="xs">
+          <ChatRow title="Release checklist" glyph={<MessageSquare />} pinned />
+        </Stack>
+      </Stack>
+    </Stack>
+  );
+}
+
 /** SpaceBrowseHeader: the view tabs, the General chat, then the Space heading and its actions; it sticks. */
 function SpaceBrowseHeader() {
   return (
-    <Stack gap="sm">
+    <Stack gap="sm" compactGap="lg">
       <Stack gap="md">
         <Tabs defaultValue="all">
           <TabsList stretch aria-label="Views">
@@ -139,8 +175,8 @@ function SpaceBrowseHeader() {
             <TabsTrigger value="running"><Activity />Running</TabsTrigger>
           </TabsList>
         </Tabs>
-        <NavRow icon={<IconSlot size="sidebar"><GeneralChat /></IconSlot>} label="General" active onClick={() => undefined}
-          actions={<RowMenu title="General" />} />
+        <NavRow iconInteractive ariaLabel="General" icon={<IconSlot size="sidebar"><GeneralChat /></IconSlot>} label="General" active
+          onClick={() => undefined} actions={<RowMenu title="General" />} />
       </Stack>
       <NavSectionHeading title="Space" actions={(
         <ButtonContainer size="icon-sm">
@@ -152,6 +188,7 @@ function SpaceBrowseHeader() {
             <DropdownMenuContent align="end" sideOffset={8}>
               <DropdownMenuItem>New group</DropdownMenuItem>
               <DropdownMenuItem>New project</DropdownMenuItem>
+              <DropdownMenuItem>Archive</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </ButtonContainer>
@@ -162,29 +199,18 @@ function SpaceBrowseHeader() {
 
 export function SidebarRecipe() {
   return (
-    <SidebarShell ariaLabel="Sidebar" titlebar={<SidebarTrafficSpace />} stickyHeader={<SpaceBrowseHeader />}
-      scrollHeader={(
-        <SidebarNav ariaLabel="Primary actions">
-          <NavRow icon={<PencilLine />} label="New chat" onClick={() => undefined} />
-          <NavRow icon={<Search />} label="Search" onClick={() => undefined} />
-          <NavRow icon={<IconSlot size="sidebar" minHeight="line"><Clock3 /></IconSlot>} label="Schedules" onClick={() => undefined} />
-        </SidebarNav>
-      )}
+    <SidebarShell ariaLabel="Sidebar" titlebar={<SidebarTrafficSpace />} scrollHeader={<SpaceHeader />} stickyHeader={<SpaceBrowseHeader />}
       footer={<SidebarNav ariaLabel="Footer"><NavRow icon={<Settings />} label="Settings" onClick={() => undefined} /></SidebarNav>}>
       <CollapsibleNavGroup indented stickyDepth={0} expanded icon={<IconSlot size="sidebar"><Briefcase /></IconSlot>} label="butler"
-        onToggle={() => undefined} actions={<FolderActions title="butler" project />}>
-        <NavRow icon={<IconSlot size="sidebar"><Notebook /></IconSlot>} label="Token page review" onClick={() => undefined}
-          actions={<RowMenu title="Token page review" />} />
-        <NavRow icon={<IconSlot size="sidebar"><Notebook /></IconSlot>} label="Settings S7" onClick={() => undefined}
-          actions={<RowMenu title="Settings S7" />} />
+        onToggle={() => undefined} actions={<FolderActions title="butler" expanded project />}>
+        <ChatRow title="Token page review" glyph={<Notebook />} />
+        <ChatRow title="Settings S7" glyph={<Notebook />} />
       </CollapsibleNavGroup>
       <CollapsibleNavGroup indented stickyDepth={0} expanded={false} icon={<IconSlot size="sidebar"><Folder /></IconSlot>} label="Reading"
-        onToggle={() => undefined} actions={<FolderActions title="Reading" />}>
-        <NavRow icon={<IconSlot size="sidebar"><MessageSquare /></IconSlot>} label="Weekly review" onClick={() => undefined}
-          actions={<RowMenu title="Weekly review" />} />
+        onToggle={() => undefined} actions={<FolderActions title="Reading" expanded={false} />}>
+        <ChatRow title="Weekly review" glyph={<MessageSquare />} />
       </CollapsibleNavGroup>
-      <NavRow icon={<IconSlot size="sidebar"><MessageSquare /></IconSlot>} label="Travel plan" onClick={() => undefined}
-        actions={<RowMenu title="Travel plan" />} />
+      <ChatRow title="Travel plan" glyph={<MessageSquare />} />
     </SidebarShell>
   );
 }

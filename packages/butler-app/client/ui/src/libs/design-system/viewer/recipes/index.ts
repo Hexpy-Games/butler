@@ -26,10 +26,10 @@ export const RECIPES: ScreenRecipe[] = [
   },
   {
     id: "sidebar", title: "Sidebar", Screen: SidebarRecipe,
-    description: "The App's space sidebar: actions that scroll away, sticky view tabs and Space heading, project and group folders with their actions, rows whose menu replaces the rest status on hover.",
+    description: "The App's space sidebar: actions and Favorites that scroll away, sticky view tabs and Space heading, project and group folders with their actions, chat rows whose glyph pins and whose menu replaces the rest status on hover.",
     uses: [
-      "SidebarShell", "SidebarNav", "NavRow", "Tabs", "NavSectionHeading", "CollapsibleNavGroup", "NavRowSwap", "OverflowActionMenu",
-      "ButtonContainer", "IconButton", "DropdownMenu", "IconSlot",
+      "SidebarShell", "SidebarNav", "NavRow", "GlyphToggle", "Tabs", "NavSectionHeading", "CollapsibleNavGroup", "NavRowSwap",
+      "OverflowActionMenu", "ButtonContainer", "IconButton", "DropdownMenu", "IconSlot",
     ],
   },
   {
