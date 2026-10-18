@@ -1858,7 +1858,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       loadFailed: "Couldn't load logs",
       tabs: { request: "Request", response: "Response", json: "JSON" },
       fields: {
-        time: "Time", level: "Level", category: "Category", process: "Process", event: "Event",
+        time: "Time", message: "Message", level: "Level", category: "Category", process: "Process", event: "Event",
         duration: "Duration", trace: "Trace ID", span: "Span ID", chat: "Chat ID", turn: "Turn ID",
         error: "Error", method: "Method", url: "URL", status: "Status", headers: "Headers", body: "Body",
       },

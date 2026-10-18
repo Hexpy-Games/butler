@@ -161,9 +161,13 @@ async function rowChecks(page: Page, prefix: string) {
   await staticRow.waitFor();
   assert.equal(await staticRow.locator('[data-static="true"]').count(), 1, "nothing to reveal: static row");
   assert.equal(await staticRow.getByRole("button").count(), 0, "static row has no button");
+  // HTTP records are titled by method, target and status, not by their message.
+  const titles = await rows(page).locator('[data-slot="disclosure-row-title"]').allTextContents();
+  assert(titles.some((title) => /^(GET|POST|PUT|PATCH|DELETE) \/\S* · \d{3}$/u.test(title)), `a gateway row shows method and status: ${titles.slice(0, 8).join(" | ")}`);
+  assert.equal(titles.includes("Gateway request"), false, "no bare gateway messages as titles");
   await row(page, "Smoke failure").getByRole("button").click();
   await row(page, "Smoke failure").getByText("stub failure", { exact: true }).waitFor();
-  const http = row(page, "Smoke model request");
+  const http = row(page, "POST api.example.test/v1/chat · 200");
   await http.getByRole("button", { expanded: false }).click();
   for (const tab of [logs.tabs.request, logs.tabs.response, logs.tabs.json]) await http.getByRole("tab", { name: tab, exact: true }).waitFor();
   await http.getByText(/authorization: \[redacted\]/u).waitFor();
@@ -172,7 +176,10 @@ async function rowChecks(page: Page, prefix: string) {
   await capture(page, `${prefix}-row-open`);
   await http.getByRole("tab", { name: logs.tabs.json, exact: true }).click();
   await http.getByText(/"trace_id": "tr_smoke_1"/u).waitFor();
-  const upload = row(page, "Smoke upload");
+  await http.getByRole("tab", { name: logs.tabs.request, exact: true }).click();
+  await http.getByText("https://api.example.test/v1/chat", { exact: true }).waitFor();
+  await http.getByText("Smoke model request", { exact: true }).waitFor();
+  const upload = row(page, "PUT uploads.example.test/file");
   await upload.getByRole("button", { expanded: false }).click();
   await upload.getByText(logs.bodyUnavailable, { exact: true }).waitFor();
 }

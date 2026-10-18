@@ -22,7 +22,7 @@ export function LogHttpTabs({ record, attrs }: { record: LogRecord; attrs: Recor
       <TabsContent value="request">
         <Stack gap="xs">
           {attrs.method !== undefined ? <KeyValueRow label={copy.fields.method} value={String(attrs.method)} /> : null}
-          {attrs.url ?? attrs.route ? <KeyValueRow label={copy.fields.url} value={String(attrs.url ?? attrs.route)} /> : null}
+          {attrs.url ?? attrs.route ?? attrs.path ? <KeyValueRow label={copy.fields.url} value={String(attrs.url ?? attrs.route ?? attrs.path)} /> : null}
           <Headers value={attrs.request_headers ?? attrs.headers} />
           {bodyOnResponse ? null : <LogBody record={record} />}
         </Stack>

@@ -1603,7 +1603,7 @@ export interface AppCopy {
       empty: string;
       loadFailed: string;
       tabs: { request: string; response: string; json: string };
-      fields: Record<"time" | "level" | "category" | "process" | "event" | "duration" | "trace" | "span" | "chat" | "turn" | "error" | "method" | "url" | "status" | "headers" | "body", string>;
+      fields: Record<"time" | "message" | "level" | "category" | "process" | "event" | "duration" | "trace" | "span" | "chat" | "turn" | "error" | "method" | "url" | "status" | "headers" | "body", string>;
       bodyUnavailable: string;
       bodyFailed: string;
       copy: string;

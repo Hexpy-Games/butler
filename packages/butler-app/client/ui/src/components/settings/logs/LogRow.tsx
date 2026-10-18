@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { CopyButton, DisclosureRow, Inline, KeyValueRow, Stack, Tag, Typo } from "@/butler-ds";
-import { formatDuration, formatLogTime, hasDetail, httpAttrs, prettyJson, severityLabel, severityOf, severityTone } from "./logFormat";
+import { formatDuration, formatLogTime, hasDetail, httpAttrs, logTitle, prettyJson, severityLabel, severityOf, severityTone } from "./logFormat";
 import { LogHttpTabs } from "./LogHttpTabs";
 import { LogJson } from "./LogJson";
 import type { LogRecord } from "./logsApi";
@@ -16,7 +16,7 @@ export function LogRow({ record, open, onToggle }: { record: LogRecord; open: bo
     <DisclosureRow
       affordance="trailing"
       surface="plain"
-      title={record.msg || record.event}
+      title={logTitle(record)}
       description={description}
       attention={severity === "error" ? "error" : severity === "warn" ? "warning" : undefined}
       meta={
@@ -53,6 +53,8 @@ function LogFields({ record }: { record: LogRecord }) {
   return (
     <Stack gap="none">
       <KeyValueRow label={fields.time} value={record.ts} valueTextSize="caption" />
+      {record.msg && logTitle(record) !== record.msg
+        ? <KeyValueRow label={fields.message} value={record.msg} valueTextSize="caption" /> : null}
       <KeyValueRow label={fields.event} value={record.event} valueTextSize="caption" />
       {ids.map(([label, value]) => value ? <KeyValueRow key={label} label={label} value={<IdValue value={value} />} /> : null)}
       {record.error !== undefined ? (

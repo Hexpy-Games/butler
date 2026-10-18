@@ -51,7 +51,38 @@ export function severityTone(level: string): TagTone {
 /** Request/response attributes, when the record describes an HTTP exchange. */
 export function httpAttrs(record: LogRecord): Record<string, unknown> | null {
   const attrs = record.attrs ?? {};
-  return ["method", "url", "route", "status"].some((key) => key in attrs) ? attrs : null;
+  return ["method", "url", "route", "path", "status"].some((key) => key in attrs) ? attrs : null;
+}
+
+const TARGET_LIMIT = 64;
+
+/** Where a request went: the route template or path, or a URL's host and path (no scheme or query). */
+export function httpTarget(attrs: Record<string, unknown>): string | null {
+  const route = attrs.route ?? attrs.path;
+  if (typeof route === "string" && route) return route;
+  if (typeof attrs.url !== "string" || !attrs.url) return null;
+  try {
+    const url = new URL(attrs.url);
+    return `${url.host}${url.pathname === "/" ? "" : url.pathname}`;
+  } catch {
+    return attrs.url.split(/[?#]/u)[0] || null;
+  }
+}
+
+/**
+ * A row title from the record's HTTP attributes: "POST /sessions/{id}/messages · 500".
+ * Long targets end in an ellipsis; the full value stays in the opened row.
+ */
+export function logTitle(record: LogRecord): string {
+  const attrs = httpAttrs(record);
+  const fallback = record.msg || record.event;
+  if (!attrs) return fallback;
+  const method = typeof attrs.method === "string" ? attrs.method.toUpperCase() : null;
+  const target = httpTarget(attrs);
+  if (!method && !target) return fallback;
+  const shown = target && target.length > TARGET_LIMIT ? `${target.slice(0, TARGET_LIMIT - 1)}…` : target;
+  const request = [method, shown].filter(Boolean).join(" ");
+  return attrs.status === undefined || attrs.status === null ? request : `${request} · ${String(attrs.status)}`;
 }
 
 const SUMMARY_KEYS = new Set(["ts", "level", "category", "process", "msg", "duration_ms"]);

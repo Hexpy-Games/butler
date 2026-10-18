@@ -1862,7 +1862,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       loadFailed: "로그를 불러오지 못했습니다",
       tabs: { request: "요청", response: "응답", json: "JSON" },
       fields: {
-        time: "시간", level: "수준", category: "분류", process: "프로세스", event: "이벤트",
+        time: "시간", message: "메시지", level: "수준", category: "분류", process: "프로세스", event: "이벤트",
         duration: "소요 시간", trace: "추적 ID", span: "스팬 ID", chat: "대화 ID", turn: "턴 ID",
         error: "오류", method: "메서드", url: "주소", status: "상태", headers: "헤더", body: "본문",
       },
