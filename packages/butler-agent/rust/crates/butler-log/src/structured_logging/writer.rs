@@ -39,6 +39,7 @@ enum Control {
     Configure(Config, Reply<ConfigView>),
     Clear(Reply<u64>),
     Shutdown(Reply<()>),
+    ShutdownBounded(oneshot::Sender<io::Result<()>>),
     #[cfg(feature = "e2e-fixtures")]
     Expire(Reply<()>),
     #[cfg(feature = "e2e-fixtures")]
@@ -316,6 +317,24 @@ impl Logger {
                 .map_err(|_| io::Error::other("log writer panicked"))??;
         }
         result
+    }
+    /// Drain and close within a short-lived producer's exit budget.
+    /// The writer owns its files and may finish in the background after timeout.
+    /// Service owners use `shutdown` to retain the durable close and thread join.
+    pub async fn shutdown_bounded(&self, timeout: std::time::Duration) -> io::Result<()> {
+        let (tx, rx) = oneshot::channel();
+        self.0
+            .tx
+            .send(Command::Control(Control::ShutdownBounded(tx)))
+            .map_err(io::Error::other)?;
+        // A writer stalled in filesystem I/O must not hold the caller or its
+        // Tokio blocking pool alive. The explicit command stops the worker
+        // even though the global tracing subscriber still owns a sender.
+        self.0.join.lock().take();
+        tokio::time::timeout(timeout, rx)
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "log writer shutdown timed out"))?
+            .map_err(io::Error::other)?
     }
     #[cfg(feature = "e2e-fixtures")]
     pub fn expire_full(&self) -> io::Result<()> {

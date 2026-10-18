@@ -170,8 +170,12 @@ impl Logger {
                 let _ = reply.send(self.0.storage.lock().clear());
             }
             Control::Shutdown(reply) => {
-                let result = self.0.storage.lock().close();
+                let result = self.close();
                 let _ = reply.send(result);
+                return true;
+            }
+            Control::ShutdownBounded(reply) => {
+                let _ = reply.send(self.close());
                 return true;
             }
             #[cfg(feature = "e2e-fixtures")]
@@ -189,5 +193,21 @@ impl Logger {
             }
         }
         false
+    }
+    fn close(&self) -> io::Result<()> {
+        #[cfg(feature = "e2e-fixtures")]
+        close_delay();
+        self.0.storage.lock().close()
+    }
+}
+
+/// Model a stuck close without blocking a Tokio worker or changing shipped builds.
+#[cfg(feature = "e2e-fixtures")]
+fn close_delay() {
+    if let Some(delay) = std::env::var("BUTLER_E2E_LOG_CLOSE_DELAY_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+    {
+        std::thread::sleep(Duration::from_millis(delay));
     }
 }

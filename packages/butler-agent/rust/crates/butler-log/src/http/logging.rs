@@ -28,14 +28,14 @@ pub(super) async fn ensure() {
             .await;
     }
 }
-/// Flush only the writer this boundary started; service-owned writers close themselves.
+/// Bound the exit wait for the writer this boundary started. Service-owned
+/// writers retain their durable shutdown; no blocking task can outlive this wait.
 pub async fn shutdown() -> io::Result<()> {
     if STARTED.get().is_some()
         && let Some(log) = crate::global().cloned()
     {
-        tokio::task::spawn_blocking(move || log.shutdown())
-            .await
-            .map_err(io::Error::other)??;
+        log.shutdown_bounded(std::time::Duration::from_millis(250))
+            .await?;
     }
     Ok(())
 }
