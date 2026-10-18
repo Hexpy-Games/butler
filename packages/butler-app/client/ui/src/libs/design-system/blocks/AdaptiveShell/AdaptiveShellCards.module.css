@@ -64,6 +64,15 @@
   grid-row: auto;
 }
 
+/* Cards: the title row sits on the shell, so its text takes the shell text
+   tones like the sidebar (AdaptiveShell.module.css). */
+.root[data-frame="cards"][data-panel-layout="docked"] .title {
+  --text-secondary: var(--sidebar-text-secondary);
+  --text-tertiary: var(--sidebar-text-tertiary);
+  --muted-foreground: var(--text-secondary);
+  --menu-group-label-color: var(--text-tertiary);
+}
+
 /* Cards: the title row spans the inspector's column too, so its trailing
    icons stay at the window edge whether the inspector is open or not. */
 .root[data-frame="cards"][data-panel-layout="docked"][data-right-track="true"]

@@ -50,6 +50,8 @@
   /* The native vibrancy blurs the desktop under the shell, so a thinner tint
      lets it show through (Windows uses its acrylic token below). */
   --sidebar-bg: var(--mac-sidebar-bg);
+  --sidebar-text-secondary: var(--mac-sidebar-text-secondary);
+  --sidebar-text-tertiary: var(--mac-sidebar-text-tertiary);
 }
 
 .root[data-chrome-environment="electron"][data-platform="linux"],
@@ -60,6 +62,8 @@
 
 .root[data-chrome-environment="electron"][data-platform="win32"] {
   --sidebar-bg: var(--windows-sidebar-bg);
+  --sidebar-text-secondary: var(--windows-sidebar-text-secondary);
+  --sidebar-text-tertiary: var(--windows-sidebar-text-tertiary);
 }
 
 .root[data-chrome-environment="electron"][data-platform="linux"] {
@@ -98,6 +102,14 @@
 }
 
 .sidebar {
+  /* Text on the translucent shell takes the platform's shell text tones,
+     chosen on the root with the shell layer. The aliases compute where they
+     are declared, so they are re-declared on the new tones here. */
+  --text-secondary: var(--sidebar-text-secondary);
+  --text-tertiary: var(--sidebar-text-tertiary);
+  --muted-foreground: var(--text-secondary);
+  --menu-group-label-color: var(--text-tertiary);
+
   z-index: 30;
 }
 
