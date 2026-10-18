@@ -28,7 +28,7 @@ export function TraceStepRow({ trace, step, total, index, open, onToggle }: Trac
   return (
     <SpanRow depth={step.depth} indent="text" depthLabel={copy.depth} data-test-class="trace-step"
       data-step-name={step.span.name} data-span-id={step.id}>
-      <DisclosureRow affordance="none" title={stepTitle(step.span)} count={step.children.length || undefined}
+      <DisclosureRow affordance="none" title={stepTitle(step)} count={step.children.length || undefined}
         attention={stepAttention(step)} meta={<StepMeta step={step} length={length} />} description={start}
         open={open} onToggle={onToggle} controlsId={detail ? panelId : undefined}
         bar={<SpanBar offset={step.offset} duration={step.duration} total={total} tone={stepTone(step)} index={index}

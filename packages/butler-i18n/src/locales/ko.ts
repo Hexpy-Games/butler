@@ -1893,6 +1893,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       trace: {
         title: "메시지 추적",
         viewLogs: "로그 보기",
+        latestRunLogs: "최근 실행 로그",
         openCommand: "로그 열기",
         openCommandHint: "최근 메시지 추적",
         viewWhole: "메시지 전체 보기",

@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { KeyValueRow, Stack } from "@/butler-ds";
 import { LogHttpTabs } from "./LogHttpTabs";
 import type { LogRecord } from "./logsApi";
-import { readSpanRecord, type TraceView } from "./traceApi";
-import { isHttpStep, type TraceStep } from "./traceModel";
+import { readSpanRecord, type TraceSpan, type TraceView } from "./traceApi";
+import { httpSpan, isHttpStep, type TraceStep } from "./traceModel";
 import { stepFields } from "./traceText";
 
 export function hasStepDetail(step: TraceStep, trace: TraceView): boolean {
@@ -30,23 +30,23 @@ export function TraceStepDetail({ id, trace, step, open }: { id: string; trace: 
 /** The span's stored record once the row opens (its body and error live there); the span itself until then. */
 function HttpTabs({ trace, step, open }: { trace: TraceView; step: TraceStep; open: boolean }) {
   const [record, setRecord] = useState<LogRecord | null>(null);
-  const wanted = open && step.span.has_details;
+  const span = httpSpan(step);
+  const wanted = open && span.has_details;
   useEffect(() => {
     if (!wanted || record) return;
     let cancelled = false;
-    readSpanRecord(trace.trace_id, step.id, "http.request")
+    readSpanRecord(trace.trace_id, span.span_id, "http.request")
       .then((found) => { if (!cancelled && found) setRecord(found); })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [wanted, record, trace.trace_id, step.id]);
-  const shown = record ?? spanRecord(trace, step);
+  }, [wanted, record, trace.trace_id, span.span_id]);
+  const shown = record ?? spanRecord(trace, span);
   return <LogHttpTabs record={shown} attrs={shown.attrs ?? {}} />;
 }
 
 /** The span as a log record, for the tabs to show before (or without) the stored one. */
-function spanRecord(trace: TraceView, step: TraceStep): LogRecord {
-  const { span } = step;
-  const started = trace.started_at ? new Date(new Date(trace.started_at).getTime() + step.offset) : null;
+function spanRecord(trace: TraceView, span: TraceSpan): LogRecord {
+  const started = trace.started_at ? new Date(new Date(trace.started_at).getTime() + Math.max(0, span.start_offset_ms)) : null;
   return {
     ts: started && !Number.isNaN(started.getTime()) ? started.toISOString() : "",
     level: span.status === "error" ? "ERROR" : "DEBUG",

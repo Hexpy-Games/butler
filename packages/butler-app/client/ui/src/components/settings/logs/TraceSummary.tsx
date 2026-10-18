@@ -26,10 +26,10 @@ export function TraceSummary({ trace, steps }: { trace: TraceView; steps: readon
       {trace.model ? <KeyValueRow label={copy.fields.model} value={trace.model} /> : null}
       {trace.started_at ? <KeyValueRow label={copy.fields.started} value={formatStarted(trace.started_at)} /> : null}
       {trace.chat_id ? <KeyValueRow label={copy.fields.chat} value={chat ? sessionDisplayTitle(chat) : trace.chat_id} /> : null}
-      {/* A 32-character ID wraps (and its copy button with it) rather than pushing past a phone's edge. */}
+      {/* The 32-character ID shows its ends (full on hover); the copy button copies all of it. */}
       <KeyValueRow label={copy.fields.traceId} value={(
-        <Inline as="span" gap="xs" cross="center" justify="end">
-          <Typo.Code>{trace.trace_id}</Typo.Code>
+        <Inline as="span" gap="xs" cross="center" wrap={false}>
+          <Typo.Code title={trace.trace_id} data-test-class="trace-id">{`${trace.trace_id.slice(0, 8)}…${trace.trace_id.slice(-6)}`}</Typo.Code>
           <CopyButton label={copy.copyId} copiedLabel={appCopy.settings.logs.copied} text={trace.trace_id} />
         </Inline>
       )} />

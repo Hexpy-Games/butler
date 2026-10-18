@@ -31,6 +31,7 @@ export function LogRow({ record, open, onToggle }: { record: LogRecord; open: bo
       open={open}
       onToggle={onToggle}
       data-test-class="log-row"
+      data-log-open={open ? "true" : undefined}
     >
       {hasDetail(record) ? <LogDetail record={record} /> : null}
     </DisclosureRow>

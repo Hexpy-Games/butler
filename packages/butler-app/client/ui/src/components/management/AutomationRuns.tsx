@@ -1,10 +1,8 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { AutomationRunList, Button } from "@/butler-ds";
+import { AutomationRunList } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { relativeAge } from "@/app/utils.ts";
 import type { AutomationRunSummary } from "@/app/types.ts";
-import { useDeveloperMode } from "@/hooks/useDeveloperMode.ts";
-import { openLogTrace } from "@/stores/logTraceStore.ts";
 
 interface AutomationRunsProps {
   runs: AutomationRunSummary[];
@@ -12,7 +10,6 @@ interface AutomationRunsProps {
 
 export function AutomationRuns({ runs }: AutomationRunsProps) {
   useAppLocale();
-  const developerMode = useDeveloperMode();
   return (
     <AutomationRunList
       title={appCopy.automations.fields.runs}
@@ -21,19 +18,8 @@ export function AutomationRuns({ runs }: AutomationRunsProps) {
         id: run.id,
         title: automationRunLabel(run),
         meta: relativeAge(run.started_at),
-        // Developer mode: the run's trace, once it started a turn.
-        description: developerMode && run.turn_id ? <RunLogsButton turnId={run.turn_id} /> : undefined,
       }))}
     />
-  );
-}
-
-function RunLogsButton({ turnId }: { turnId: string }) {
-  return (
-    <Button type="button" size="sm" variant="ghost" data-test-class="automation-run-logs"
-      onClick={() => openLogTrace({ turnId })}>
-      {appCopy.settings.logs.trace.viewLogs}
-    </Button>
   );
 }
 

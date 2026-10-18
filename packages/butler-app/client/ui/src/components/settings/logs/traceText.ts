@@ -2,15 +2,17 @@ import { appCopy } from "@/app/copy.ts";
 import type { TagTone } from "@/butler-ds";
 import { formatBytes, formatDuration } from "./logFormat";
 import type { TraceSpan, TraceView } from "./traceApi";
-import { isHttpStep, type TraceStep } from "./traceModel";
+import { httpSpan, isHttpStep, type TraceStep } from "./traceModel";
 
-export function stepTitle(span: TraceSpan): string {
+export function stepTitle(step: TraceStep): string {
   const copy = appCopy.settings.logs.trace;
   const steps = copy.steps as Record<string, string>;
+  const { span } = step;
   const attrs = span.attrs ?? {};
   // A request the agent received names its route ("앱 요청 · POST /messages"); one it sent stays "HTTP 요청".
-  if (span.name === "http.request" && typeof attrs.route === "string" && attrs.route) {
-    return [copy.steps["http.server"], [attrs.method, attrs.route].filter((part) => typeof part === "string").join(" ")].join(" · ");
+  const received = httpSpan(step).attrs ?? {};
+  if (isHttpStep(step) && typeof received.route === "string" && received.route) {
+    return [copy.steps["http.server"], [received.method, received.route].filter((part) => typeof part === "string").join(" ")].join(" · ");
   }
   const base = steps[span.name] ?? (span.title || span.name);
   const attempt = attrs.attempt;
@@ -30,7 +32,7 @@ function httpStatus(span: TraceSpan): number | null {
 /** Status beside the title: the HTTP status (its own, else its latest HTTP child's), wait, failure or running. */
 export function stepTag(step: TraceStep): { text: string; tone: TagTone } | null {
   const copy = appCopy.settings.logs.trace;
-  const http = [step, ...step.children.filter(isHttpStep).reverse()].map((candidate) => httpStatus(candidate.span))
+  const http = [step, ...step.children.filter(isHttpStep).reverse()].map((candidate) => httpStatus(httpSpan(candidate)))
     .find((status) => status !== null);
   if (http !== undefined && http !== null) return { text: String(http), tone: http >= 400 ? "danger" : "neutral" };
   if (step.span.status === "wait") return { text: copy.wait, tone: "warning" };

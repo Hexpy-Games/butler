@@ -12,6 +12,13 @@ export interface TraceStep {
   /** A running span reaches to the end of the trace. */
   duration: number;
   running: boolean;
+  /** The request record a received request (http.server) logged: shown in this step's details, not as a row. */
+  exchange: TraceSpan | null;
+}
+
+/** The access record of a request the App sent the agent: part of its http.server span, not a step of its own. */
+export function isReceivedExchange(span: TraceSpan): boolean {
+  return span.name === "http.request" && span.category === "http.server";
 }
 
 const TONES: readonly SpanBarTone[] = ["model", "tool", "app", "agent", "error", "wait"];
@@ -31,11 +38,14 @@ export function traceSteps(trace: TraceView): TraceStep[] {
     const running = span.duration_ms === null;
     const step: TraceStep = {
       id: span.span_id, span, depth: parent ? parent.depth + 1 : 0, parent, children: [], offset, running,
-      duration: running ? Math.max(0, total - offset) : Math.max(0, span.duration_ms ?? 0),
+      duration: running ? Math.max(0, total - offset) : Math.max(0, span.duration_ms ?? 0), exchange: null,
     };
     parent?.children.push(step);
     ordered.push(step);
-    for (const child of byStart(children.get(span.span_id) ?? [])) place(child, step);
+    for (const child of byStart(children.get(span.span_id) ?? [])) {
+      if (isReceivedExchange(child) && !step.exchange && (children.get(child.span_id) ?? []).length === 0) step.exchange = child;
+      else place(child, step);
+    }
   };
   for (const root of byStart(children.get(null) ?? [])) place(root, null);
   return ordered;
@@ -95,6 +105,12 @@ export function stepAttention(step: TraceStep): "error" | "warning" | undefined 
   return step.span.status === "wait" || step.span.status === "warn" ? "warning" : undefined;
 }
 
+/** A step with an HTTP exchange: its own request, or the received request it folded in. */
 export function isHttpStep(step: TraceStep): boolean {
-  return step.span.name === "http.request";
+  return step.span.name === "http.request" || step.exchange !== null;
+}
+
+/** The span that carries the step's HTTP attributes. */
+export function httpSpan(step: TraceStep): TraceSpan {
+  return step.exchange ?? step.span;
 }

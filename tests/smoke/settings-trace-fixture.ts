@@ -13,10 +13,10 @@ type Span = {
 
 let next = 0;
 function span(parent: string | null, name: string, offset: number, duration: number, tone: Span["tone"],
-  attrs: Record<string, unknown> = {}, status: Span["status"] = "ok"): Span {
+  attrs: Record<string, unknown> = {}, status: Span["status"] = "ok", category = name === "http.server" ? name : name.split(".")[0]!): Span {
   next += 1;
   return {
-    span_id: `d5${String(next).padStart(14, "0")}`, parent_span_id: parent, name, category: name.split(".")[0]!,
+    span_id: `d5${String(next).padStart(14, "0")}`, parent_span_id: parent, name, category,
     process: tone === "app" ? "app" : "agent", start_offset_ms: offset, duration_ms: duration, status, tone,
     title: name, child_count: 0, has_details: false, attrs,
   };
@@ -25,7 +25,9 @@ function span(parent: string | null, name: string, offset: number, duration: num
 function build(): Span[] {
   const spans: Span[] = [];
   const add = (...args: Parameters<typeof span>) => { const value = span(...args); spans.push(value); return value.span_id; };
-  add(null, "http.request", 0, 4, "app", { method: "POST", route: "/messages", status: 202 });
+  // The received request: its access record belongs to the http.server row's details.
+  const received = add(null, "http.server", 0, 4, "app");
+  add(received, "http.request", 0, 4, "app", { method: "POST", route: "/messages", status: 202 }, "ok", "http.server");
   add(null, "turn.deliver", 4, 18, "app", { final_action: true });
   const turn = add(null, "turn.run", 22, 9818, "agent", { model: "gemini-3-pro", turn_id: "turn_01JB7Q4M2X" });
   add(turn, "route.select", 30, 6, "agent");
@@ -64,10 +66,13 @@ export function fixtureTrace(): Record<string, unknown> {
   };
 }
 
+/** One record, like a stored one: every page that lists it returns the same timestamp. */
+const ROW_TS = new Date(Date.now() - 500).toISOString();
+
 /** A log row that leads to the fixture trace (메시지 전체 보기). */
 export function fixtureTraceRow(): Record<string, unknown> {
   return {
-    ts: new Date(Date.now() - 500).toISOString(), level: "INFO", process: "agent", category: "smoke.trace",
+    ts: ROW_TS, level: "INFO", process: "agent", category: "smoke.trace",
     event: "smoke.trace", msg: "Smoke traced row", trace_id: FIXTURE_TRACE_ID, attrs: {},
   };
 }

@@ -389,6 +389,8 @@ export type TraceStepName =
 export interface LogTraceCopy {
   title: string;
   viewLogs: string;
+  /** A schedule's overflow menu: its latest run that started a turn. */
+  latestRunLogs: string;
   openCommand: string;
   openCommandHint: string;
   viewWhole: string;

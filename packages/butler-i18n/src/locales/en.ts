@@ -1889,6 +1889,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       trace: {
         title: "Message trace",
         viewLogs: "View logs",
+        latestRunLogs: "Latest run logs",
         openCommand: "Open logs",
         openCommandHint: "Latest message trace",
         viewWhole: "View whole message",
