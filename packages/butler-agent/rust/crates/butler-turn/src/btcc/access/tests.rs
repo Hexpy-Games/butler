@@ -5,9 +5,9 @@ use crate::btcc::ApprovalRisk;
 use AccessDecision::{Allow, Ask, Deny};
 use AccessMode::{AskAlways, AskExceptReads, Auto, FullAccess, ReadOnly};
 use CapabilityKind::{
-    ButlerOutput, CommandMutation, CommandObservation, Connector, CrossConversation, Exempt,
-    FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, OtherEffect, ProjectRecord,
-    Schedule, SettingsWrite, WebRequest,
+    ButlerOutput, CommandMutation, CommandObservation, Connector, CrossConversation, DeliverFiles,
+    Exempt, FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, OtherEffect,
+    ProjectRecord, Schedule, SettingsWrite, WebRequest,
 };
 use TargetScope::{NoTarget, Outside, ProjectFolder, Protected};
 use butler_core::tool_protocol::ToolName;
@@ -21,7 +21,7 @@ const ALLOW: &[(
 )] = &[
     (ReadOnly, InternalRead, None, None),
     (ReadOnly, FileRead, None, None),
-    (ReadOnly, ButlerOutput, None, None),
+    (ReadOnly, DeliverFiles, None, None),
     (
         ReadOnly,
         CommandObservation { sandboxed: false },
@@ -31,8 +31,10 @@ const ALLOW: &[(
     (ReadOnly, CommandObservation { sandboxed: true }, None, None),
     (AskAlways, InternalRead, None, None),
     (AskAlways, ButlerOutput, None, None),
+    (AskAlways, DeliverFiles, None, None),
     (AskExceptReads, InternalRead, None, None),
     (AskExceptReads, ButlerOutput, None, None),
+    (AskExceptReads, DeliverFiles, None, None),
     (AskExceptReads, FileRead, Some(ProjectFolder), None),
     (
         AskAlways,
@@ -76,6 +78,7 @@ const ALLOW: &[(
     // commands and Butler's own ledger records.
     (Auto, InternalRead, None, None),
     (Auto, ButlerOutput, None, None),
+    (Auto, DeliverFiles, None, None),
     (Auto, FileRead, Some(ProjectFolder), None),
     (
         Auto,
@@ -135,6 +138,7 @@ const KINDS: &[CapabilityKind] = &[
     ProjectRecord,
     CrossConversation,
     ButlerOutput,
+    DeliverFiles,
     FullOnly(FullOnlyAction::ServiceRestart),
     FullOnly(FullOnlyAction::GitWorktree),
     FullOnly(FullOnlyAction::MemoryForget),
@@ -257,7 +261,8 @@ fn access_boundary_matches_the_owner_table() {
     }
     for (name, kind) in [
         ("call_mcp_tool", Connector),
-        ("deliver_files", ButlerOutput),
+        ("deliver_files", DeliverFiles),
+        ("output_publish", ButlerOutput),
         ("write_file", FileEdit),
         ("edit_file", FileEdit),
         ("read_file", FileRead),
@@ -381,6 +386,7 @@ fn access_boundary_matches_the_owner_table() {
     for kind in [
         InternalRead,
         ButlerOutput,
+        DeliverFiles,
         Exempt(ApprovalExemptAction::MemorySave),
     ] {
         assert_eq!(kind.gated_effect(), OtherEffect);
