@@ -74,10 +74,16 @@ pub(crate) fn bounded(s: &str) -> String {
         return s.into();
     }
     let mut end = 8192;
-    while !s.is_char_boundary(end) {
-        end -= 1;
+    loop {
+        while !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        let marker = format!("…truncated {} B", s.len() - end);
+        if end + marker.len() <= 8192 {
+            return format!("{}{marker}", &s[..end]);
+        }
+        end = 8192 - marker.len();
     }
-    format!("{}…truncated {} B", &s[..end], s.len() - end)
 }
 pub fn redact_url(input: &str) -> String {
     let Ok(mut url) = url::Url::parse(input) else {

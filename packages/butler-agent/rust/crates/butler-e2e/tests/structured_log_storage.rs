@@ -71,6 +71,26 @@ fn logs_cursor_walk_complete() -> Result<(), Box<dyn std::error::Error>> {
     app.shutdown().unwrap();
     fs::rename(app_root.join("logs/agent"), root.join("logs/app")).unwrap();
     log.flush().unwrap();
+    let mut data_bytes = 0;
+    for source in ["agent", "app"] {
+        for entry in fs::read_dir(root.join("logs").join(source).join("main"))? {
+            let entry = entry?;
+            if entry.path().extension().is_some_and(|ext| ext == "jsonl") {
+                data_bytes += entry.metadata()?.len();
+            }
+        }
+    }
+    let newest = log.query(&Query {
+        q: Some("row 1299".into()),
+        limit: 1,
+        ..Query::default()
+    })?;
+    assert_eq!(newest.rows.len(), 1);
+    assert_eq!(newest.rows[0].msg, "row 1299");
+    assert!(
+        newest.scanned_bytes < data_bytes,
+        "older segments must not delay the newest result"
+    );
     let rows = walk(
         &log,
         Query {
@@ -202,6 +222,7 @@ fn perf_logs_owner_scale_query() -> Result<(), Box<dyn std::error::Error>> {
     let mut errors = Vec::new();
     let mut oldest_turn = Vec::new();
     let mut ground = Vec::new();
+    let mut newest_ground = Vec::new();
     for n in 0..1_250_000 {
         let level = if n % 100_003 == 0 {
             "ERROR"
@@ -226,6 +247,9 @@ fn perf_logs_owner_scale_query() -> Result<(), Box<dyn std::error::Error>> {
         }
         if r.turn_id.as_deref() == Some("turn-1") {
             oldest_turn.push(r.msg.clone());
+        }
+        if n >= 1_249_800 {
+            newest_ground.push(r.clone());
         }
         ground.push(r.msg.clone());
         log.record_reliable(r).unwrap();
@@ -253,6 +277,35 @@ fn perf_logs_owner_scale_query() -> Result<(), Box<dyn std::error::Error>> {
         ground.iter().rev().take(200).cloned().collect::<Vec<_>>()
     );
     assert!(page.scanned_bytes <= 32 * 1024 * 1024);
+    for (row, expected) in page.rows.iter().zip(newest_ground.iter().rev()) {
+        let mut actual = serde_json::to_value(row)?;
+        let mut original = serde_json::to_value(expected)?;
+        for key in ["content", "content_len", "content_hash", "body_ref"] {
+            actual.as_object_mut().unwrap().remove(key);
+            original.as_object_mut().unwrap().remove(key);
+        }
+        assert_eq!(actual, original, "complete metadata survives query");
+        assert!(row.content.is_none());
+        if let Some(content) = &expected.content {
+            use sha2::{Digest, Sha256};
+            let bytes = serde_json::to_vec(content)?;
+            assert_eq!(row.content_len, Some(bytes.len()));
+            assert_eq!(
+                row.content_hash.as_deref(),
+                Some(&format!("{:x}", Sha256::digest(&bytes))[..8])
+            );
+            let body = log.body(row.body_ref.as_deref().unwrap())?;
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(&body)?,
+                *content
+            );
+        } else {
+            assert!(
+                row.body_ref.is_none() && row.content_len.is_none() && row.content_hash.is_none()
+            );
+        }
+    }
+
     let turn = walk(
         &log,
         Query {
@@ -362,6 +415,27 @@ fn logs_registered_secrets_preserve_record_schema() -> Result<(), Box<dyn std::e
     assert_eq!(page.rows.len(), 1);
     assert_eq!(page.rows[0].event, "turn.finished");
     assert_eq!(page.rows[0].attrs["value"], "[REDACTED]");
+    log.shutdown()?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
+fn logs_inline_strings_include_marker_within_limit() -> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    let root = root();
+    let log = Logger::open(&root, Config::default())?;
+    let original = "가".repeat(4000);
+    let mut row = record(1, "INFO");
+    row.msg = original.clone();
+    log.record(row)?;
+    let page = log.query(&Query::default())?;
+    let text = &page.rows[0].msg;
+    assert!(text.len() <= 8192);
+    let (prefix, marker) = text.rsplit_once("…truncated ").unwrap();
+    let omitted = marker.strip_suffix(" B").unwrap().parse::<usize>()?;
+    assert_eq!(prefix.len() + omitted, original.len());
+    assert!(original.starts_with(prefix));
     log.shutdown()?;
     fs::remove_dir_all(root)?;
     Ok(())

@@ -109,8 +109,19 @@ impl Query {
     }
 }
 impl Reader {
+    fn upper_bound(&self) -> Option<(&str, &str, u64)> {
+        if let Some((offset, row)) = &self.front {
+            return Some((&row.ts, &self.name, *offset));
+        }
+        self.blocks
+            .iter()
+            .rev()
+            .find(|block| block.offset < self.pos)
+            .map(|block| (block.max_ts.as_str(), self.name.as_str(), self.pos))
+    }
     /// False means the scan budget was reached before this source's next row.
     fn advance(&mut self, q: &Query, scanned: &mut u64) -> io::Result<bool> {
+        let mut loaded = false;
         loop {
             if self.front.is_some() || self.pos == 0 {
                 return Ok(true);
@@ -125,14 +136,13 @@ impl Reader {
                 }
                 self.pos = offset;
             }
+            if loaded {
+                return Ok(true);
+            }
             let Some(b) = self.blocks.iter().rev().find(|b| b.offset < self.pos) else {
                 self.pos = 0;
                 return Ok(true);
             };
-            if !q.block_matches(b) {
-                self.pos = b.offset;
-                continue;
-            }
             if *scanned + b.len > SCAN_LIMIT {
                 return Ok(false);
             }
@@ -141,6 +151,7 @@ impl Reader {
             let mut bytes = vec![0; usize::try_from(b.len).map_err(io::Error::other)?];
             file.read_exact(&mut bytes)?;
             *scanned += b.len;
+            loaded = true;
             let mut offset = b.offset;
             for line in bytes.split_inclusive(|b| *b == b'\n') {
                 if offset < self.pos
@@ -203,7 +214,11 @@ pub(crate) fn query(root: &Path, catalog: &Catalog, q: &Query) -> io::Result<Pag
         readers.push(Reader {
             path: path.clone(),
             name,
-            blocks: blocks.clone(),
+            blocks: blocks
+                .iter()
+                .filter(|block| block.offset < pos && q.block_matches(block))
+                .cloned()
+                .collect(),
             pos,
             buffered: Vec::new(),
             front: None,
@@ -214,25 +229,22 @@ pub(crate) fn query(root: &Path, catalog: &Catalog, q: &Query) -> io::Result<Pag
 fn merge(mut readers: Vec<Reader>, q: &Query, filter: String) -> io::Result<Page> {
     let mut rows = Vec::new();
     let mut scanned = 0;
-    'page: loop {
-        for reader in &mut readers {
-            if !reader.advance(q, &mut scanned)? {
-                break 'page;
-            }
-        }
+    loop {
         let next = readers
             .iter()
             .enumerate()
-            .filter_map(|(i, r)| {
-                r.front
-                    .as_ref()
-                    .map(|(off, row)| (i, (&row.ts, &r.name, *off)))
-            })
+            .filter_map(|(i, reader)| reader.upper_bound().map(|key| (i, key)))
             .max_by(|(_, a), (_, b)| a.cmp(b))
             .map(|(i, _)| i);
         let Some(next) = next else {
             break;
         };
+        if readers[next].front.is_none() {
+            if !readers[next].advance(q, &mut scanned)? {
+                break;
+            }
+            continue;
+        }
         if let Some((offset, row)) = readers[next].front.take() {
             readers[next].pos = offset;
             rows.push(row);
@@ -241,7 +253,7 @@ fn merge(mut readers: Vec<Reader>, q: &Query, filter: String) -> io::Result<Page
             break;
         }
     }
-    let exhausted = readers.iter().all(|r| r.pos == 0);
+    let exhausted = readers.iter().all(|r| r.upper_bound().is_none());
     let cursor = if exhausted {
         None
     } else {
