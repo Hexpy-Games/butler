@@ -108,52 +108,6 @@ pub trait AgentLoop: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<AgentLoopResult, AgentLoopError>> + Send + 'a>>;
 }
 
-/// A boxed developer-log capture.
-pub type TurnDeveloperLogFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
-
-/// Developer-log capture of one turn execution (diagnostic only).
-pub trait TurnDeveloperLogExecution: crate::btcc::ModelRoundObserver + Send + Sync {
-    /// Captures the execution's result or error.
-    fn capture<'a>(
-        &'a self,
-        turn: &'a TurnRecord,
-        result: Result<&'a AgentLoopResult, &'a AgentLoopError>,
-    ) -> TurnDeveloperLogFuture<'a>;
-}
-
-/// Starts developer-log captures.
-pub trait TurnDeveloperLogCapturePort: Send + Sync {
-    /// A capture for one turn execution.
-    fn start_execution(&self) -> Box<dyn TurnDeveloperLogExecution>;
-}
-
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) struct NoopTurnDeveloperLogCapturePort;
-
-#[cfg(any(test, feature = "test-support"))]
-struct NoopTurnDeveloperLogExecution;
-
-#[cfg(any(test, feature = "test-support"))]
-impl TurnDeveloperLogCapturePort for NoopTurnDeveloperLogCapturePort {
-    fn start_execution(&self) -> Box<dyn TurnDeveloperLogExecution> {
-        Box::new(NoopTurnDeveloperLogExecution)
-    }
-}
-
-#[cfg(any(test, feature = "test-support"))]
-impl crate::btcc::ModelRoundObserver for NoopTurnDeveloperLogExecution {}
-
-#[cfg(any(test, feature = "test-support"))]
-impl TurnDeveloperLogExecution for NoopTurnDeveloperLogExecution {
-    fn capture<'a>(
-        &'a self,
-        _: &'a TurnRecord,
-        _: Result<&'a AgentLoopResult, &'a AgentLoopError>,
-    ) -> TurnDeveloperLogFuture<'a> {
-        Box::pin(async {})
-    }
-}
-
 /// Publishes runtime progress events of a running turn.
 pub trait AgentLoopProgress: Send + Sync {
     /// Publishes one progress event.

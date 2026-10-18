@@ -141,10 +141,9 @@ pub trait ModelRoundObserver: Send + Sync {
     }
 }
 
-#[cfg(any(test, feature = "test-support"))]
+/// Observes nothing.
 pub struct NoopModelRoundObserver;
 
-#[cfg(any(test, feature = "test-support"))]
 impl ModelRoundObserver for NoopModelRoundObserver {}
 
 /// Reads admitted image bytes for a provider request.

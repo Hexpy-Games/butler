@@ -35,6 +35,17 @@ pub(super) enum Operation {
     },
 }
 
+impl Operation {
+    pub(super) fn method(&self) -> &'static str {
+        match self {
+            Self::Probe => "initialize",
+            Self::CallTool { .. } => "tools/call",
+            Self::DescribeTool { .. } => "tools/list",
+            Self::ReadResource { .. } => "resources/read",
+        }
+    }
+}
+
 pub(super) async fn run_session<T, E, A>(
     transport: T,
     operation: Operation,

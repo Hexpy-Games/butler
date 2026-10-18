@@ -219,14 +219,18 @@ impl IngressDispatcher {
                 subsessions: self.subsessions.clone(),
                 restart_handoff: self.restart_handoff.clone(),
             };
-            let handle = state.tasks.spawn(async move {
-                let result = dispatch::one(item, deps).await;
-                DispatchDone {
-                    session,
-                    queue_id,
-                    result,
+            use tracing::Instrument;
+            let handle = state.tasks.spawn(
+                async move {
+                    let result = dispatch::one(item, deps).await;
+                    DispatchDone {
+                        session,
+                        queue_id,
+                        result,
+                    }
                 }
-            });
+                .instrument(tracing::Span::current()),
+            );
             state.task_keys.insert(handle.id(), key);
         }
         Ok(summary)

@@ -62,9 +62,6 @@ impl crate::gateway::AppMonitoringPort for TestMonitoring {
     fn system_events(&self, _: crate::gateway::AppMonitorPage) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    fn developer_logs(&self, _: crate::gateway::AppDeveloperLogsQuery) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
 }
 
 pub(super) fn test_dependencies() -> AppApplicationDependencies {

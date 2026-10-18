@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use futures_util::FutureExt;
 use tokio::sync::{Mutex as AsyncMutex, Notify};
+use tracing::Instrument;
 
 use super::TurnFacade;
 use super::ports::HostDependencies;
@@ -67,17 +68,21 @@ impl Coordinator {
         if leader {
             let coordinator = self.clone();
             let spawned = flight.clone();
-            let task = tokio::spawn(async move {
-                let turn_id = request.turn_id.clone();
-                let session_id = request.session_id.clone();
-                let result =
-                    AssertUnwindSafe(Box::pin(coordinator.run_after(predecessor, request)))
-                        .catch_unwind()
-                        .await
-                        .unwrap_or_else(|_| Err(panicked_task_error()));
-                spawned.complete(result).await;
-                coordinator.remove_flight(&turn_id, &session_id, &spawned);
-            });
+            let parent = tracing::Span::current();
+            let task = tokio::spawn(
+                async move {
+                    let turn_id = request.turn_id.clone();
+                    let session_id = request.session_id.clone();
+                    let result =
+                        AssertUnwindSafe(Box::pin(coordinator.run_after(predecessor, request)))
+                            .catch_unwind()
+                            .await
+                            .unwrap_or_else(|_| Err(panicked_task_error()));
+                    spawned.complete(result).await;
+                    coordinator.remove_flight(&turn_id, &session_id, &spawned);
+                }
+                .instrument(parent),
+            );
             flight.attach(task).await;
         }
         let result = flight.wait().await;
@@ -123,14 +128,17 @@ impl Coordinator {
         let coordinator = self.clone();
         let spawned = flight.clone();
         let turn_id = turn_id.to_owned();
-        let task = tokio::spawn(async move {
-            let result = AssertUnwindSafe(coordinator.facade.stop(&turn_id))
-                .catch_unwind()
-                .await
-                .unwrap_or_else(|_| Err(panicked_task_error()));
-            spawned.complete(result).await;
-            coordinator.remove_stop(generation, &spawned);
-        });
+        let task = tokio::spawn(
+            async move {
+                let result = AssertUnwindSafe(coordinator.facade.stop(&turn_id))
+                    .catch_unwind()
+                    .await
+                    .unwrap_or_else(|_| Err(panicked_task_error()));
+                spawned.complete(result).await;
+                coordinator.remove_stop(generation, &spawned);
+            }
+            .instrument(tracing::Span::current()),
+        );
         flight.attach(task).await;
         let result = flight.wait().await;
         self.remove_stop(generation, &flight);
@@ -184,13 +192,16 @@ impl Coordinator {
         if leader {
             let coordinator = self.clone();
             let completion = close.clone();
-            let task = tokio::spawn(async move {
-                let result = AssertUnwindSafe(coordinator.close_after(active))
-                    .catch_unwind()
-                    .await
-                    .unwrap_or_else(|_| Err(panicked_task_error()));
-                completion.complete(result).await;
-            });
+            let task = tokio::spawn(
+                async move {
+                    let result = AssertUnwindSafe(coordinator.close_after(active))
+                        .catch_unwind()
+                        .await
+                        .unwrap_or_else(|_| Err(panicked_task_error()));
+                    completion.complete(result).await;
+                }
+                .instrument(tracing::Span::current()),
+            );
             close.attach(task).await;
         }
         close.wait().await

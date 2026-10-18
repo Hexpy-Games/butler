@@ -38,13 +38,10 @@ pub use contracts::{
     ProgressWrite, RouteEventStatus, StateExecutionClaim, StopPersistenceOutcome, SuspensionReason,
     TerminalOutcome, TurnCheckpoint, TurnRecord, TurnSemanticState, TurnTransition, WakeIdentity,
 };
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) use ports::NoopTurnDeveloperLogCapturePort;
 pub use ports::{
     AgentLoop, AgentLoopError, AgentLoopProgress, CanonicalMessageStore, HostDependencies,
     PortFuture, PreparedConversation, ProgressEventRepository, StorageReadiness,
-    TransitionCommitError, TurnDeveloperLogCapturePort, TurnDeveloperLogExecution,
-    TurnDeveloperLogFuture, TurnStore,
+    TransitionCommitError, TurnStore,
 };
 pub(crate) use ports::{PreparedExecution, TurnPreparation};
 
@@ -63,7 +60,6 @@ pub struct TurnFacadeDependencies {
     pub messages: Arc<dyn CanonicalMessageStore>,
     pub progress: Arc<dyn ProgressEventRepository>,
     pub readiness: Arc<dyn StorageReadiness>,
-    pub developer_log_capture: Arc<dyn TurnDeveloperLogCapturePort>,
     pub host: Arc<dyn HostDependencies>,
 }
 
@@ -87,16 +83,24 @@ impl TurnFacade {
                 dependencies.messages.clone(),
                 dependencies.progress.clone(),
                 dependencies.readiness.clone(),
-                dependencies.developer_log_capture.clone(),
                 supervisor,
             ),
         }
     }
 
+    #[tracing::instrument(name = "turn.run", skip_all, fields(chat_id = %request.peer.id, turn_id = %request.turn_id, model = tracing::field::Empty, status = tracing::field::Empty), err)]
     pub(super) async fn run(&self, request: TurnRequest) -> Result<TurnOutcome, BtccError> {
         let execution = self.preparation.prepare(request).await?;
         let prepared = &execution.turn;
         let admitted = self.store.find_turn(&prepared.request.turn_id).await?;
+        let model = match &prepared.command {
+            TurnCommand::Run(command) => Some(&command.model_selection.selection.model),
+            TurnCommand::Wake(command) => Some(&command.model_selection.selection.model),
+            TurnCommand::Resume(_) => admitted.as_ref().map(|turn| &turn.model_selection.model),
+        };
+        if let Some(model) = model {
+            tracing::Span::current().record("model", model);
+        }
         let destination = progress_destination(admitted.as_ref(), &prepared.request);
         let (mut outcome, _runtime_fresh) = self
             .runtime
@@ -109,6 +113,16 @@ impl TurnFacade {
         });
         match &outcome.result {
             TurnOutcomeKind::Delivered(_) | TurnOutcomeKind::AlreadyDelivered(_) => {
+                if let TurnOutcomeKind::Delivered(value) = &outcome.result
+                    && (value.runtime_failure.is_some()
+                        || value.execution_outcome == Some(crate::btcc::ExecutionOutcome::Failed))
+                {
+                    tracing::error!(
+                        category = "turn",
+                        event = "turn.failed",
+                        "Turn execution failed"
+                    );
+                }
                 execution.conversation.complete(outcome.clone()).await?;
             }
             TurnOutcomeKind::Cancelled { .. } | TurnOutcomeKind::AlreadyCancelled { .. } => {

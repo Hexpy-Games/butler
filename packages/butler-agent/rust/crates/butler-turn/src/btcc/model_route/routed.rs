@@ -132,11 +132,21 @@ impl RoutedRound<'_> {
             recovery: Recovery::Idle,
         };
         loop {
-            let candidate = route
-                .candidates
-                .get(route.active_cursor as usize)
-                .cloned()
-                .ok_or_else(gateway_failed)?;
+            let candidate = tracing::debug_span!(
+                "route.select",
+                candidates = route.candidates.len(),
+                route = route.active_cursor,
+                reason = "active_candidate",
+                chosen = tracing::field::Empty
+            )
+            .in_scope(|| {
+                let candidate = route
+                    .candidates
+                    .get(route.active_cursor as usize)
+                    .ok_or_else(gateway_failed)?;
+                tracing::Span::current().record("chosen", &candidate.model_ref);
+                Ok::<_, ModelRoundError>(candidate.clone())
+            })?;
             visual_freeze(request.image_carrier, &candidate.model_ref)?;
             let key = format!(
                 "{}:{}:{}:{}",
@@ -302,6 +312,7 @@ impl RoutedRound<'_> {
 
     /// Sends the physical request for the current candidate, within the
     /// round's dispatch budget.
+    #[tracing::instrument(name = "model.request", level = "debug", skip_all, fields(model = %candidate.model_ref, attempt = cursor.attempt, attempts = route.retry_ceiling), err)]
     async fn dispatch(
         &self,
         route: &RouteState,

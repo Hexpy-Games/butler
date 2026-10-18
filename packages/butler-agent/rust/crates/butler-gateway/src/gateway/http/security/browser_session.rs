@@ -75,7 +75,7 @@ impl BrowserSessions {
         {
             code = new_digits();
         }
-        butler_log::register_secret(&code);
+        butler_log::register_ephemeral_secret(&code);
         let expires = self.now() + Duration::from_secs(60);
         let id = uuid::Uuid::new_v4().to_string();
         *slot = Some(Pairing {
@@ -183,7 +183,7 @@ impl BrowserSessions {
         now: SystemTime,
     ) -> ConnectionLink {
         let code = new_code();
-        butler_log::register_secret(&code);
+        butler_log::register_ephemeral_secret(&code);
         let expires = now + CODE_TTL;
         {
             let mut pending = self.pending.lock();

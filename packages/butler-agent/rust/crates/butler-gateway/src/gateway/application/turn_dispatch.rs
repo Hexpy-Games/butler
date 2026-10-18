@@ -10,12 +10,43 @@ impl AppApplication {
         claim: QueueClaim,
         prepared: ResolvedAppAdmission,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
+        use tracing::Instrument;
+        let queued = claim.queued_message_id.clone();
+        let context = self
+            .storage
+            .read(move |db| {
+                db.query_row(
+                    "SELECT trace_context_json FROM session_queued_messages WHERE id=?1",
+                    [&queued],
+                    |row| row.get::<_, Option<String>>(0),
+                )
+                .map_err(AppStorageError::sqlite)
+            })
+            .await
+            .map_err(app_error)?;
+        let context: butler_log::TraceContext = context
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_else(butler_log::TraceContext::current);
+        self.start_turn_traced(claim, prepared)
+            .instrument(context.span("turn.queue"))
+            .await
+    }
+
+    #[tracing::instrument(name = "turn.dispatch", skip_all, fields(chat_id = %claim.chat_id, turn_id = tracing::field::Empty, message_id = tracing::field::Empty), err)]
+    async fn start_turn_traced(
+        &self,
+        claim: QueueClaim,
+        prepared: ResolvedAppAdmission,
+    ) -> Result<MessageSendResult, GatewayApplicationError> {
         self.ensure_dispatch_open(&claim).await?;
         let queue_replay = self.claimed_dispatch(&claim).await?.is_some();
         let (message_id, turn_id) = match self.admit_claimed_turn(&claim, prepared).await {
             Ok(linked) => linked,
             Err(error) => return Err(self.dispatch_error(&claim, error).await?),
         };
+        tracing::Span::current()
+            .record("turn_id", &turn_id)
+            .record("message_id", &message_id);
         #[cfg(feature = "e2e-fixtures")]
         self.hold_queue_admission(&message_id).await?;
         self.ensure_dispatch_open(&claim).await?;

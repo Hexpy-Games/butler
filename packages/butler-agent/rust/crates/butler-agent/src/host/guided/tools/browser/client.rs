@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 #[derive(Clone)]
 pub(super) struct Client {
-    client: reqwest::Client,
+    client: butler_log::http::Client,
     base: String,
     bearer: String,
     admin: String,
@@ -31,7 +31,13 @@ impl Client {
         // freshly resolved above/on every call. Trust-store loading is blocking.
         let client = owner
             .browser_http
-            .get_or_try_init(|| tokio::task::spawn_blocking(reqwest::Client::new))
+            .get_or_try_init(|| async {
+                tokio::task::spawn_blocking(|| butler_log::http::loopback().build())
+                    .await
+                    .ok()
+                    .and_then(Result::ok)
+                    .ok_or(())
+            })
             .await
             .ok()?
             .clone();

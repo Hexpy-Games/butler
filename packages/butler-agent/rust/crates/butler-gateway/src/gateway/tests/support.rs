@@ -155,9 +155,6 @@ impl GatewayApplication for TestApplication {
     fn list_system_events(&self, _: AppMonitorPage) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    fn list_developer_logs(&self, _: AppDeveloperLogsQuery) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
     fn check_app_update(
         &self,
         _request: butler_runtime::operations::UpdateRequest,

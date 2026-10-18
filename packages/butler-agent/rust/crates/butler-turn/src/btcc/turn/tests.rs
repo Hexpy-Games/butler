@@ -66,7 +66,6 @@ impl Harness {
             messages: self.clone(),
             progress: self.clone(),
             readiness: self.clone(),
-            developer_log_capture: Arc::new(NoopTurnDeveloperLogCapturePort),
             host: self.clone(),
         }
     }

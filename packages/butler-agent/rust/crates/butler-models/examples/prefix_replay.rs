@@ -48,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?);
     let (endpoint, server) = support::server().await?;
     let provider = ModelProvider::new(
-        reqwest::Client::new(),
+        butler_log::http::external(butler_log::http::Purpose::new("http")).build()?,
         Arc::new(support::Config { endpoint, snapshot }),
         Arc::new(support::Observer),
         catalog,

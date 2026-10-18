@@ -150,18 +150,11 @@ Ask Butler to separate conversation cost from background memory processing cost.
 
 ## Logs
 
-Inspect model request and response logs in developer mode. The section appears in the section list only when both **Developer mode** in **About** and **Diagnostics** in **Privacy** are on.
+Appears only in developer mode (**About → Developer mode**).
 
-- Use the fields at the top to search models, sessions, sections and responses, and to filter by session ID.
-- In the kind selector, choose **All**, **Model turn** or **Failed model turn**. Click **Refresh** to reload.
-- Expand a log to read it in the **Context**, **Request**, **Response** and **Metadata** tabs.
-- Click **More** to load 30 more logs.
-
-## Privacy
-
-Set whether diagnostic information is collected.
-
-- **Diagnostics** — When on, model requests and responses are recorded as developer logs. The logs are saved to `~/.butler/app/developer-logs/model-turns.jsonl`. When off, the **Logs** section disappears. To read the logs, see [Troubleshooting](/en/help/troubleshooting/#check-the-logs).
+- **Recording** — Choose **Minimal**, **Standard**, **Detailed** or **Full**. **Full** saves prompts, replies and request bodies on this device and turns off after 60 minutes; **Turn off** ends it sooner. **Category levels** sets a level per category.
+- **Entries** — Newest first. Filter by text, level, source, category and period. **Live** adds entries as they arrive; **More** loads older ones. Open an entry for its fields, and for HTTP entries the **Request**, **Response** and **JSON** tabs.
+- **Storage** — Use, limit and retention per store. **Export…** saves a zip, with bodies if you choose; **Delete all…** removes stored logs.
 
 ## Security
 
@@ -196,8 +189,9 @@ Restore or delete archived projects and conversations.
 View the Butler version and app information.
 
 - **App info** — Shows **App name**, **Version**, **GitHub repository** and **Protocol**.
+- **Diagnostics** — **Export diagnostics** saves the logs as a zip, without chat content.
 - **Developer**
-  - **Developer mode** — When on, a DevTools window opens and you can use Chrome DevTools in this app window. When off, the default Electron menus and the DevTools shortcuts are blocked. Turning it on or off also changes **Diagnostics** in **Privacy**. When both developer mode and **Diagnostics** are on, the **Context** and **Workers** tabs appear in the [right panel](/en/help/basics/right-panel/).
+  - **Developer mode** — Turns on Chrome DevTools in this app window, the [**Logs**](#logs) section, and the **Context** and **Workers** tabs in the [right panel](/en/help/basics/right-panel/).
 
 ## MCP
 
@@ -220,8 +214,8 @@ Set the Butler server connection and the folder for new projects.
 
 <Notice tone="warning">
   - Projects and conversations deleted from **Archives** cannot be restored.
-  - While **Diagnostics** is on, model requests and responses keep being written to a local log file. Turn it on only when you need it.
-  - If you turn off developer mode or diagnostics while viewing the **Logs** section, Settings moves to the **About** section.
+  - At **Full**, logs include chat content; it turns off after 60 minutes.
+  - If you turn off developer mode while viewing **Logs**, Settings moves to **About**.
   - Changes in **Personalization** are not saved until you click **Apply**.
   - Turn on **Allow access from other computers** only on a network you trust.
 </Notice>
