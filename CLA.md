@@ -9,7 +9,7 @@ You accept this agreement by commenting the requested phrase on your pull reques
 ## 1. Definitions
 
 - **"You"** means the individual who accepts this agreement.
-- **"Project Owner"** means Yeonwoo Jo, doing business as HexpyGames (헥스피게임즈), and their successors and assigns.
+- **"Project Owner"** means HexpyGames (헥스피게임즈), a Korean sole proprietorship, together with its proprietor and their successors and assigns.
 - **"Contribution"** means any work of authorship, including code, documentation, designs, translations and other material, that you intentionally submit to the Project Owner for inclusion in Butler. Submitting means sending it in any form to a Butler repository, issue tracker or other channel that the Project Owner manages. Anything you clearly mark as "Not a Contribution" is excluded.
 
 ## 2. You keep your copyright

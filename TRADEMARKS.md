@@ -1,6 +1,6 @@
 # Butler trademarks
 
-The names "Butler" and "버틀러" and the Butler logo are trademarks (™) of Yeonwoo Jo (HexpyGames). They are not registered.
+The names "Butler" and "버틀러" and the Butler logo are trademarks (™) of HexpyGames (헥스피게임즈). They are not registered.
 
 The MIT License covers Butler's code. It does not grant any rights to these names or the logo. This policy explains how you can use them.
 
