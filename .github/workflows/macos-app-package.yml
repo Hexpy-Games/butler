@@ -3,6 +3,10 @@ name: macOS App package
 on:
   workflow_dispatch:
     inputs:
+      update-agent-run-id:
+        description: Run providing the macos-update-agent-builds artifact (required unless published-candidate)
+        required: false
+        type: string
       candidate-version:
         description: Exact preview candidate (empty keeps preview.99 packaging)
         required: false
@@ -73,6 +77,14 @@ jobs:
             exit 1
           fi
 
+      # Manual packaging runs the update work-stream smoke, which needs the
+      # update-fixture agents; fail before building instead of skipping it.
+      - name: Require update-fixture agents for manual packaging
+        if: ${{ github.event_name == 'workflow_dispatch' && github.workflow == 'macOS App package' && !inputs.published-candidate && inputs.update-agent-run-id == '' }}
+        run: |
+          echo '::error::Manual packaging requires update-agent-run-id: a run that uploaded macos-update-agent-builds.'
+          exit 1
+
       - name: Verify the native runner
         run: test "$(uname -m)" = arm64
 
@@ -135,8 +147,16 @@ jobs:
         with:
           name: ${{ inputs.update-agent-artifact }}
           path: ${{ runner.temp }}/update-agent-builds
+      - name: Download manually selected update-fixture agents
+        if: github.event_name == 'workflow_dispatch' && inputs.update-agent-run-id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-update-agent-builds
+          run-id: ${{ inputs.update-agent-run-id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/update-agent-builds
       - name: Use the real prebuilt update-fixture versions
-        if: inputs.update-agent-artifact != ''
+        if: inputs.update-agent-artifact != '' || (github.event_name == 'workflow_dispatch' && inputs.update-agent-run-id != '')
         run: |
           chmod +x "$RUNNER_TEMP"/update-agent-builds/*/butler-agent
           echo "BUTLER_UPDATE_SMOKE_AGENT_BUILDS=$RUNNER_TEMP/update-agent-builds" >> "$GITHUB_ENV"
