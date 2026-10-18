@@ -16,6 +16,7 @@ import { RecallSettings } from "./RecallSettings";
 import { ChatMemoryBody } from "./ChatMemoryBody";
 import { ProjectMemoryBody } from "./ProjectMemoryBody";
 import { MemoryModelPreparation } from "./MemoryModelPreparation";
+import { FullResetSection } from "./FullResetSection";
 
 export function MemorySettings() {
   useAppLocale();
@@ -74,5 +75,6 @@ export function MemorySettings() {
           summary.projects.find((p) => p.id === project.selected)?.display_name, project.selected); }} />} >
       <ProjectMemoryBody projects={summary.projects} selected={project.selected} select={project.select} memory={project.memory} locked={Boolean(reset.kind === "project_memory")} />
     </SettingsSection>
+    <FullResetSection locked={sharedBusy} />
   </SettingsPage>;
 }

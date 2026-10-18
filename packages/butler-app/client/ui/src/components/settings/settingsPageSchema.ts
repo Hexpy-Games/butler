@@ -27,6 +27,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "memory-model", kind: "form", fields: ["memory-model"] },
     { id: "profile-memory", kind: "status", fields: [] },
     { id: "project-memory", kind: "status", fields: ["memory-project"] },
+    { id: "full-reset", kind: "status", fields: [] },
   ],
   general: [
     { id: "language-region", kind: "form", fields: ["language", "timezone"] },

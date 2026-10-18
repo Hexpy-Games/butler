@@ -10,8 +10,8 @@ export type AgentRuntimeState =
   | "failed"
   | "unknown";
 
-/** States the workspace shows a notice for. */
-export type AgentNotice = "stopped" | "restarting" | "restart_failed";
+/** States the workspace shows a notice for; `reset` is a browser client after the desktop app reset Butler. */
+export type AgentNotice = "stopped" | "restarting" | "restart_failed" | "reset";
 
 interface AgentRuntimeBridge {
   getAgentState?: () => Promise<unknown>;
@@ -46,6 +46,7 @@ export function agentNotice(state: AgentRuntimeState): AgentNotice | null {
 export function agentNoticeLabel(notice: AgentNotice): string {
   if (notice === "stopped") return appCopy.feedback.agentStopped;
   if (notice === "restarting") return appCopy.feedback.agentRestarting;
+  if (notice === "reset") return appCopy.feedback.agentReset;
   return appCopy.feedback.agentRestartFailed;
 }
 

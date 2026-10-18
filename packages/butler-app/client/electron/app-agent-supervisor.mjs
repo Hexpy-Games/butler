@@ -42,6 +42,14 @@ export function readAppLocalAuth({ butlerData }) {
   };
 }
 
+/**
+ * The Agent's full reset journal. While it exists the Agent may still move
+ * the data folder away and then writes a new token itself.
+ */
+export function fullResetPending({ butlerData }) {
+  return existsSync(join(butlerData, "state", "full-reset.json"));
+}
+
 export function prepareAppLocalAuth({
   butlerData,
   now = () => new Date(),
@@ -50,6 +58,8 @@ export function prepareAppLocalAuth({
   const path = appLocalAuthPath(butlerData);
   const existing = readAppLocalAuth({ butlerData });
   if (existing) return existing;
+  // Nothing is created in a data folder being reset; the token is read once the Agent writes it.
+  if (fullResetPending({ butlerData })) return { filePath: path, created: false, token: null };
   const token = generateToken();
   if (typeof token !== "string" || token.length < 32) {
     throw new Error("App local auth token generation failed");
@@ -897,9 +907,13 @@ export function createBundledAgentSupervisor({
     if (!healthy) {
       return { healthy: false, ready: false, timedOut: health.timedOut };
     }
-    const readiness = await runBoundedProbe(() =>
+    let readiness = await runBoundedProbe(() =>
       readinessCheck(localAuth, activeGateway, portOverride),
     );
+    // The Agent may have written a new token (a reset) after health passed.
+    if (!readiness.value && reloadLocalAuth()) {
+      readiness = await runBoundedProbe(() => readinessCheck(localAuth, activeGateway, portOverride));
+    }
     return {
       healthy: true,
       ready: readiness.value,

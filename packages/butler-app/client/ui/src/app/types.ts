@@ -561,6 +561,8 @@ export interface DeveloperLogListView {
 }
 
 export interface SettingsView {
+  /** Opaque id of the agent's data; it changes when Butler is reset. */
+  data_generation?: string;
   update_previews?: boolean;
   bridge_mode: "local" | "external";
   gateway_profile: "electron";
