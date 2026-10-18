@@ -22,7 +22,7 @@ impl AppApplication {
         &self,
         command: SendMessageCommand,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
-        self.send_with_attachment_source(command, None).await
+        Box::pin(self.send_with_attachment_source(command, None)).await
     }
 
     pub(super) async fn send_with_reused_attachments(
@@ -30,10 +30,10 @@ impl AppApplication {
         command: SendMessageCommand,
         source_user_message_id: String,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
-        self.send_with_attachment_source(command, Some(source_user_message_id))
-            .await
+        Box::pin(self.send_with_attachment_source(command, Some(source_user_message_id))).await
     }
 
+    #[tracing::instrument(name = "turn.admit", skip_all, fields(chat_id = %command.chat_id), err)]
     async fn send_with_attachment_source(
         &self,
         command: SendMessageCommand,
@@ -173,6 +173,8 @@ impl AppApplication {
         request: crate::gateway::MessageSendRequest,
         settings_facts: Arc<AppSettingsFacts>,
     ) -> Result<(bool, ControlResolution), GatewayApplicationError> {
+        let trace_context = serde_json::to_string(&butler_log::TraceContext::current())
+            .map_err(GatewayApplicationError::internal_from)?;
         let expected = request.expected_project_id.clone();
         let request_for_resolution = request.clone();
         let subscribers = self.subscribers.clone();
@@ -221,6 +223,14 @@ impl AppApplication {
                         .with_source(source)
                     })?;
                 let inserted = queue::reserve(&transaction, &reservation)?;
+                if inserted {
+                    transaction
+                        .execute(
+                            "UPDATE session_queued_messages SET trace_context_json=?1 WHERE id=?2",
+                            params![trace_context, reservation.id],
+                        )
+                        .map_err(AppStorageError::sqlite)?;
+                }
                 transaction.commit().map_err(AppStorageError::sqlite)?;
                 Ok((inserted, resolved.resolution))
             })
@@ -253,6 +263,7 @@ impl AppApplication {
         Ok(())
     }
 
+    #[tracing::instrument(name = "turn.queue", skip_all, fields(chat_id, message_id = client_id), err)]
     async fn dispatch(
         &self,
         chat_id: &str,

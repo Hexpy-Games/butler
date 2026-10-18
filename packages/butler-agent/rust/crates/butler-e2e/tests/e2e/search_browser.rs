@@ -32,6 +32,7 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
         .env("BUTLER_BRAVE_SEARCH_API_KEY", "offline-fixture-key");
     fixtures::stub_codex_auth(&setup.sandbox.codex_home())?;
     let s = setup.start().await?;
+    super::outbound_http::logging(&s, "detailed").await?;
     let path = s.sandbox.data.join("butler.config.json");
     let mut config: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
     config["webSearch"] = json!({"provider":"brave","planning":{"enabled":false},
@@ -168,5 +169,12 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
             serde_json::to_vec_pretty(&tools)?,
         )?;
     }
+    let requests =
+        super::outbound_http::http_calls(&s, &format!("{}/search", fixture.base)).await?;
+    assert_eq!(
+        requests.len(),
+        1,
+        "one record for the single search request"
+    );
     s.finish().await
 }

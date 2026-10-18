@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, reason = "test module TCP drivers")]
 use std::{sync::Arc, time::Duration};
 
 use serde_json::Value;

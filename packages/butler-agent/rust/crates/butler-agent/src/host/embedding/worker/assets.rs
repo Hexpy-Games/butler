@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use reqwest::Client;
+use butler_log::http::Client;
 
 mod background;
 mod choice;

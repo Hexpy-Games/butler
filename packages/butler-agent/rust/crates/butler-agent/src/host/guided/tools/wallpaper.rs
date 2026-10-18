@@ -412,7 +412,9 @@ async fn app_json_at(
     if auth.required && auth.token().is_none() {
         return Err(unsent("app_local_auth_unconfigured"));
     }
-    let mut request = reqwest::Client::new()
+    let mut request = butler_log::http::loopback()
+        .build()
+        .map_err(|_| unsent("app_gateway_unavailable"))?
         .request(method, format!("{}{route}", current.base_url))
         .query(query)
         .timeout(Duration::from_secs(60));
