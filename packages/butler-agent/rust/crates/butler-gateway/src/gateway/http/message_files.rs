@@ -22,16 +22,6 @@ use butler_core::public_text::trim_js_whitespace;
 // The rest of the multipart body is still parsed, but never retained as a file.
 const UPLOAD_RETAIN_BYTES: usize = 10 * 1024 * 1024 + 1;
 
-pub(super) fn handles(method: &Method, path: &str) -> bool {
-    (method == Method::GET && path.starts_with("/message-assets/"))
-        || (method == Method::POST && path == "/message-files")
-        || (method == Method::GET
-            && path.strip_prefix("/message-files/").is_some_and(|id| {
-                let id = id.strip_suffix("/view").unwrap_or(id);
-                !id.is_empty() && !id.contains('/')
-            }))
-}
-
 pub(super) async fn route(
     state: Arc<HttpState>,
     request: Request<Body>,

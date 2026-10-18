@@ -5,22 +5,23 @@
     "deploy/licenses/generate.mjs": "eb413c424649cc6ef3bc734cb1a9479cf8ddffb3af398601a974268c229d7c34",
     "deploy/licenses/inputs.mjs": "f9a38331fa5a8f26f9d745f0cf3bfaea028f2d5dc7c8e8aa4d7af1b923cb5124",
     "deploy/licenses/refresh.py": "bddecf7f564eb6da112439c87fca94158f22497a5094dd53d9389ff918ced71b",
-    "packages/butler-agent/rust/Cargo.lock": "2645e94541e4aeca2253198074c9faa09a9d127bddcb136ad6db7e311ffe6082",
-    "packages/butler-agent/rust/Cargo.toml": "d74d0251e354c1ec916d057d396badfcd600ad811b0e7a06fa8a90407c34a7f5",
+    "packages/butler-agent/rust/Cargo.lock": "9b8843390e264a32a817486c91ea82e15fbcbd07b283ce808a340c5a58bf4e80",
+    "packages/butler-agent/rust/Cargo.toml": "71d674df5ccfb929e00f11587f8019c5e58fe76b68b6af1dd00874f1b95e8ed8",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
-    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "5f6af87c40278561369e206b94e41a8db2e9ec2752b5a59b3cb7a77d2ad08d80",
+    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "d823d8342b4d4cef3f6f768ecef9fd01f0373453b8b5538f948189932df029b3",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs": "f11dc3b1952a178092fbf7da589b8c39e28021c4975f884e236cd71c78c8d7a9",
-    "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "b8a781872e8e48a1b1e02c6ab77f37ee31bf1237b6f68b03faa68b10b1e4270e",
+    "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "5af0d77e72e26b381caea14946683d7b94d79a2f7304d524842fa26ea213d1dc",
     "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt": "a0af5aa0d38e4c35e56c8e42a43a4b1e462619a26332e43249bb0772ad06a3e2",
-    "packages/butler-agent/rust/crates/butler-e2e/Cargo.toml": "a9f5c13cbcd86f2e48085fcd38938eb6dd3b9af07fe9f4fe8227d7f1ed04dccd",
-    "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "0f08a0abee30acbbb7ab91a9938f88a93837bcbd9f6a3f11ad9caf43c0227066",
+    "packages/butler-agent/rust/crates/butler-e2e/Cargo.toml": "d8cc0ca83fc4bf10932f936f903d1d9524d59d568eb86e4c02103eed40812fce",
+    "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "44e8f6f63726a12d4b064c1ee895c47f56d03b1966170dfb043ebd8c17fbda66",
     "packages/butler-agent/rust/crates/butler-ledger/Cargo.toml": "ccc46a2a8bb225eebcdf7858d73f5bddd3742ea57477e0208ca3c16464815b54",
+    "packages/butler-agent/rust/crates/butler-log/Cargo.toml": "9cd9d73f19792aee6e83e44e6118dc74ffe4bced0066be30c402c1308fe0ce64",
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "1ed619a531163d7d3975002c6e25b933e8c89a701b97979e6bcba78dcdcfd82a",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
-    "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
+    "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "ac9ab7e0570f758577704faa182f37b1bbaa65e3fcf57bce5e8729018f1b14c2",
     "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "6ac2ceefd558c7be96a1b15da080aa3c45f7b6c5183be7df932ac3e0c504912e",
-    "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "0b1332f0f43eb9296972675176176393546de2e442ce2b72c8dbf141135ec7f8",
+    "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "b487a681d2ed8b5499f7146ab27797b89ddc396b7fad25f5b8c3377a7b29f15f",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "15317b3544cdbcfacc5d46ab5b1cbddb1faa34c50ceca49221fdea0fa35a4592",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "1121b5e874a32434af0cc3662e26b47883d66446c7ec302b1a52ead90dc56070",
     "packages/butler-agent/rust/rust-toolchain.toml": "2ad6f15416572b4836585087f1d4abc53b8fa2dbd616f8dacfaa587ed6714228",
@@ -25925,6 +25926,31 @@
       ]
     },
     {
+      "id": "rust:sharded-slab@0.1.7",
+      "name": "sharded-slab",
+      "version": "0.1.7",
+      "license": "MIT",
+      "source": "https://github.com/hawkw/sharded-slab/tree/40579b92debe2ef283a455eb379945e023080ff3",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "eafbfa606bc005ed7fd2f623d65af17ffe4ef7c017221ac14405bf4140771ea9"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/hawkw/sharded-slab/blob/40579b92debe2ef283a455eb379945e023080ff3/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2019 Eliza Weisman"
+      ]
+    },
+    {
       "id": "rust:signal-hook-registry@1.4.8",
       "name": "signal-hook-registry",
       "version": "1.4.8",
@@ -27421,6 +27447,34 @@
       ]
     },
     {
+      "id": "rust:thread_local@1.1.10",
+      "name": "thread_local",
+      "version": "1.1.10",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/Amanieu/thread_local-rs/tree/4724199250d3307824cefe8a0fa5b232d95edae3",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "c9a75f18b9ab2927829a208fc6aa2cf4e63b8420887ba29cdb265d6619ae82d5"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/Amanieu/thread_local-rs/blob/4724199250d3307824cefe8a0fa5b232d95edae3/LICENSE-APACHE",
+        "https://github.com/Amanieu/thread_local-rs/blob/4724199250d3307824cefe8a0fa5b232d95edae3/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2016 The Rust Project Developers"
+      ]
+    },
+    {
       "id": "rust:tiktoken-rs@0.12.0",
       "name": "tiktoken-rs",
       "version": "0.12.0",
@@ -28069,6 +28123,31 @@
       "copyright": [
         "Copyright (c) 2019 Tokio Contributors",
         "Copyright (c) 2014 Mathijs van de Nes"
+      ]
+    },
+    {
+      "id": "rust:tracing-subscriber@0.3.23",
+      "name": "tracing-subscriber",
+      "version": "0.3.23",
+      "license": "MIT",
+      "source": "https://github.com/tokio-rs/tracing/tree/54ede4d5d85a536aed5485c5213011d9ec961935",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "898b1ae9821e98daf8964c8d6c7f61641f5f5aa78ad500020771c0939ee0dea1"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/tokio-rs/tracing/blob/54ede4d5d85a536aed5485c5213011d9ec961935/tracing-subscriber/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2019 Tokio Contributors"
       ]
     },
     {

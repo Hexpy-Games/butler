@@ -226,15 +226,7 @@ pub(super) fn read(
         json!(multiline(stored.get("multiline_send_behavior"))),
     );
     appearance(&stored, &mut output);
-    output.insert(
-        "diagnostics_enabled".into(),
-        json!(
-            stored
-                .get("diagnostics_enabled")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-        ),
-    );
+    super::logging::view(&stored, &mut output);
     output.insert(
         "desktop_notifications".into(),
         notifications(stored.get("desktop_notifications")),
