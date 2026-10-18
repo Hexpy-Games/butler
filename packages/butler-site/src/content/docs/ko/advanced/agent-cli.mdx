@@ -14,13 +14,13 @@ Butler Agent CLI는 데스크톱 앱 없이 Butler 런타임을 설치하고 실
 
 ## 지원 환경
 
-- Apple Silicon Mac(`darwin-arm64`)과 Linux x64·arm64(glibc)를 지원합니다.
-- Intel Mac과 Alpine 같은 musl 기반 Linux에서는 실행되지 않습니다. Windows 빌드는 소스 프리뷰이며 공개된 릴리스에는 내려받을 설치 파일이 없습니다.
-- 네이티브 Agent 아카이브(`butler-agent-<버전>-<플랫폼>.tar.gz`)를 게시한 릴리스가 필요합니다.
+- Apple Silicon Mac(`darwin-arm64`), Windows x64, Linux x64·arm64(glibc)를 지원합니다.
+- Intel Mac과 Alpine 같은 musl 기반 Linux에서는 실행되지 않습니다. Windows x64는 지원합니다.
+- 네이티브 Agent 아카이브(`butler-agent-<버전>-<플랫폼>.tar.gz`, Windows는 `.zip`)를 게시한 릴리스가 필요합니다.
 
 ## 설치
 
-서버나 원격 컴퓨터에서 앱 없이 쓸 때는 설치 스크립트 한 줄이면 됩니다. 현재 버전은 `0.1.0-preview.5` 프리뷰이므로 프리뷰 릴리스의 스크립트를 받고 `--version`으로 같은 버전을 지정합니다.
+서버나 원격 컴퓨터에서 앱 없이 쓸 때는 설치 스크립트 한 줄이면 됩니다. 버틀러는 프리뷰 단계이므로 프리뷰 릴리스의 스크립트를 받고 `--version`으로 같은 버전을 지정합니다. `<버전>`은 [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)의 가장 최신 프리뷰 버전(예: `0.1.0-preview.12`)으로 바꿉니다.
 
 <Tabs
   label="운영체제"
@@ -32,17 +32,21 @@ Butler Agent CLI는 데스크톱 앱 없이 Butler 런타임을 설치하고 실
 >
   <TabPanel value="macos">
     ```bash
-    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
+    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<버전>/install.sh | sh -s -- --version <버전>
     # Node.js 사용 시
     npx @hexpygames/butler install
     ```
   </TabPanel>
   <TabPanel value="windows">
-    공개된 릴리스에는 내려받을 Windows Agent 설치 파일이 없습니다. Windows 빌드는 소스 프리뷰입니다. 현재 릴리스 상태는 [설치](/help/getting-started/install/)에서 확인합니다.
+    Windows x64 PowerShell에서 실행합니다. `<버전>`은 가장 최신 프리뷰 버전(예: `0.1.0-preview.12`)으로 바꿉니다.
+
+    ```powershell
+    $env:BUTLER_VERSION='<버전>'; irm https://github.com/Hexpy-Games/butler/releases/download/v<버전>/install.ps1 | iex
+    ```
   </TabPanel>
   <TabPanel value="linux">
     ```bash
-    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
+    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<버전>/install.sh | sh -s -- --version <버전>
     # Node.js 사용 시
     npx @hexpygames/butler install
     ```
@@ -63,7 +67,7 @@ Butler Agent CLI는 데스크톱 앱 없이 Butler 런타임을 설치하고 실
 옵션은 `sh -s --` 뒤에 붙입니다(npx는 `install` 뒤에 붙입니다).
 
 ```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5 --no-start
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<버전>/install.sh | sh -s -- --version <버전> --no-start
 ```
 
 | 옵션 | 설명 |
@@ -78,8 +82,8 @@ curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-previe
 
 | 항목 | macOS | Windows | Linux |
 | --- | --- | --- | --- |
-| 설치 폴더 | `~/Applications/ButlerAgent` | 이 릴리스에는 배포하지 않음 | `~/.local/share/butler/agent` |
-| `butler` 명령 | `~/.local/bin/butler` | 이 릴리스에는 배포하지 않음 | `~/.local/bin/butler` |
+| 설치 폴더 | `~/Applications/ButlerAgent` | `%LOCALAPPDATA%\Butler\agent` | `~/.local/share/butler/agent` |
+| `butler` 명령 | `~/.local/bin/butler` | `%LOCALAPPDATA%\Butler\bin\butler.exe` | `~/.local/bin/butler` |
 
 설치 폴더 안에는 버전마다 `<버전>-<해시 8자리>` 폴더가 생기고, `current`가 사용 중인 버전을, `previous`가 직전 버전을 가리킵니다. 오래된 버전은 최근 3개까지만 남기며(사용 중인 버전, 직전 버전, 실행 중인 버전은 항상 남깁니다) 나머지는 `butler update`나 `butler install`이 정리합니다. 데이터는 설치 폴더가 아니라 데이터 폴더(기본값 `~/.butler`)에 저장합니다. 데스크톱 앱과 CLI는 같은 설치 구조를 씁니다.
 
@@ -99,7 +103,7 @@ curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-previe
     `darwin-arm64` 아카이브를 사용하고 아래 Bash 단계를 따릅니다.
   </TabPanel>
   <TabPanel value="windows">
-    공개된 릴리스에는 내려받을 Windows Agent 아카이브나 설치 파일이 없습니다.
+    Windows에서는 위의 설치 스크립트를 사용합니다. 스크립트가 `butler-agent-<버전>-windows-x64.zip`을 내려받습니다.
   </TabPanel>
   <TabPanel value="linux">
     `linux-x64` 또는 `linux-arm64` 아카이브를 사용하고 아래 Bash 단계를 따릅니다.
@@ -115,7 +119,7 @@ curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-previe
 
 ```bash
 set -euo pipefail
-VERSION=0.1.0-preview.5 # 릴리스의 정확한 버전입니다. 프리뷰 접미사도 포함합니다.
+VERSION=<버전> # 릴리스의 정확한 버전입니다. 프리뷰 접미사도 포함합니다(예: 0.1.0-preview.12).
 RELEASE="$VERSION" # 릴리스 태그에서 v를 뺀 값입니다.
 PLATFORM=darwin-arm64 # darwin-arm64, linux-x64, linux-arm64 중 하나입니다.
 ARCHIVE="butler-agent-${VERSION}-${PLATFORM}.tar.gz"
