@@ -157,14 +157,20 @@ async function rowChecks(page: Page, loaded: ApiTrace) {
     const expected = expectedPieces(loaded, span);
     assert.deepEqual(drawn.map((piece) => piece.tone), expected.map((piece) => piece.tone), `${span.name}: one segment per direct child`);
     drawn.forEach((piece, index) => assert(Math.abs(piece.start - expected[index]!.start * 100) < 0.01, `${span.name}: segment ${index} placed`));
-    // Each direct child starts its own segment (턴 실행 (N): N segments).
+    // Each direct child starts its own segment (턴 실행 (N): N segments). Overlapping
+    // siblings share time, which the bar cuts at the earlier child's end, so only
+    // children clear of their siblings are counted one by one.
     const own = loaded.spans.find((item) => item.span_id === span.span_id)!;
     const length = own.duration_ms ?? 0;
-    const starts = loaded.spans.filter((item) => item.parent_span_id === span.span_id && (item.duration_ms ?? 0) > 0 && length > 0
-      && item.start_offset_ms >= own.start_offset_ms && item.start_offset_ms < own.start_offset_ms + length);
+    const end = (item: ApiSpan) => item.start_offset_ms + (item.duration_ms ?? 0);
+    const siblings = loaded.spans.filter((item) => item.parent_span_id === span.span_id);
+    const starts = siblings.filter((item) => (item.duration_ms ?? 0) > 0 && length > 0
+      && item.start_offset_ms >= own.start_offset_ms && end(item) <= own.start_offset_ms + length
+      && !siblings.some((other) => other !== item && other.start_offset_ms < end(item) && item.start_offset_ms < end(other)));
     const childSegments = starts.filter((child) => drawn.some((piece) =>
       Math.abs(piece.start - ((child.start_offset_ms - own.start_offset_ms) / length) * 100) < 0.01)).length;
-    assert.equal(childSegments, starts.length, `${span.name}: one segment per direct child (${starts.length})`);
+    assert.equal(childSegments, starts.length, `${span.name}: one segment per direct child (${starts.length}): ${JSON.stringify({
+      drawn, own: [own.start_offset_ms, own.duration_ms], children: starts.map((child) => [child.start_offset_ms, child.duration_ms]) })}`);
     const dot = await row.locator('span[aria-hidden="true"]:has(+ [data-slot="disclosure-row-title"])').count();
     assert.equal(dot, ["error", "wait", "warn"].includes(span.status) ? 1 : 0, `${span.name} (${span.status}): dot only on problem rows`);
     if (await row.locator('[data-static="true"]').count()) {
