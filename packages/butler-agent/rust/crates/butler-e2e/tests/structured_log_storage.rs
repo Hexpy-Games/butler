@@ -347,3 +347,22 @@ fn logs_tracing_updates_filters_and_inherits_span_ids() -> Result<(), Box<dyn st
     fs::remove_dir_all(root).unwrap();
     Ok(())
 }
+
+#[test]
+fn logs_registered_secrets_preserve_record_schema() -> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    let root = root();
+    let log = Logger::open(&root, Config::default())?;
+    butler_log::register_secret("event");
+    let mut row = record(1, "INFO");
+    row.attrs = json!({"value":"event"});
+    log.record(row)?;
+    log.flush()?;
+    let page = log.query(&Query::default())?;
+    assert_eq!(page.rows.len(), 1);
+    assert_eq!(page.rows[0].event, "turn.finished");
+    assert_eq!(page.rows[0].attrs["value"], "[REDACTED]");
+    log.shutdown()?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}

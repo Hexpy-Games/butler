@@ -223,3 +223,50 @@ async fn logs_gateway_and_pairing_credentials_are_scrubbed() -> Result<(), Harne
     }
     s.finish().await
 }
+
+#[tokio::test]
+async fn logs_live_closes_with_gateway() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("LOG-LIVE")?.start().await?;
+    s.gw.patch("/settings", json!({"diagnostics_enabled":true}))
+        .await?;
+    let mut response =
+        s.gw.http()
+            .get(format!("{}/logs/live", s.gw.base))
+            .bearer_auth(&s.gw.token)
+            .send()
+            .await?;
+    assert_eq!(response.status(), 200);
+    s.gw.patch("/settings", json!({"reduce_motion":true}))
+        .await?;
+    let frame = tokio::time::timeout(Duration::from_secs(5), async {
+        let mut frame = String::new();
+        while !frame.contains("\n\n") {
+            let chunk = response
+                .chunk()
+                .await?
+                .expect("live stream ended before a record");
+            frame.push_str(&String::from_utf8_lossy(&chunk));
+        }
+        Ok::<_, reqwest::Error>(frame)
+    })
+    .await
+    .unwrap()?;
+    let row: Value = serde_json::from_str(
+        frame
+            .lines()
+            .find_map(|line| line.strip_prefix("data:"))
+            .unwrap()
+            .trim(),
+    )
+    .unwrap();
+    assert_eq!(row["process"], "agent");
+    s.agent.terminate().await?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while response.chunk().await?.is_some() {}
+        Ok::<_, reqwest::Error>(())
+    })
+    .await
+    .unwrap()?;
+    s.finish().await
+}

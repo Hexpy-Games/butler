@@ -146,7 +146,13 @@ impl Storage {
                 }
             }
         }
-        let value = redaction::scrub_value(&serde_json::to_value(&row)?, true);
+        let mut value = serde_json::to_value(&row)?;
+        // Schema keys are fixed identifiers; nested producer keys are untrusted.
+        if let Some(fields) = value.as_object_mut() {
+            for field in fields.values_mut() {
+                *field = redaction::scrub_value(field, true);
+            }
+        }
         *row = serde_json::from_value::<Record>(value)?;
         Ok(())
     }

@@ -82,7 +82,7 @@ pub(super) async fn route(
         (&Method::DELETE, "/logs") => {
             envelope(value!({"freed_bytes":blocking(move || log.clear()).await?}))
         }
-        (&Method::GET, "/logs/live") => live(&log),
+        (&Method::GET, "/logs/live") => live(&log, &state, &request),
         (&Method::POST, "/logs/export") => export(request, log, developer).await,
         (&Method::GET, path) if path.starts_with("/logs/bodies/") => {
             let reference =
@@ -124,7 +124,25 @@ async fn configure(
     }
     envelope(serde_json::to_value(view).map_err(|_| HttpError::Internal)?)
 }
-fn live(log: &butler_log::Logger) -> Result<Response, HttpError> {
+fn live(
+    log: &butler_log::Logger,
+    state: &HttpState,
+    request: &Request<Body>,
+) -> Result<Response, HttpError> {
+    use futures_util::StreamExt;
+    let mut closers = vec![state.shutdown.clone()];
+    closers.extend(
+        request
+            .extensions()
+            .get::<super::Client>()
+            .map(|client| client.keys.live_streams()),
+    );
+    closers.extend(
+        request
+            .extensions()
+            .get::<super::listeners::ListenerScope>()
+            .map(|scope| scope.closed.clone()),
+    );
     use axum::response::IntoResponse;
     let stream = futures_util::stream::unfold(log.subscribe(), |mut receiver| async move {
         match receiver.recv().await {
@@ -142,6 +160,14 @@ fn live(log: &butler_log::Logger) -> Result<Response, HttpError> {
             )),
             Err(tokio::sync::broadcast::error::RecvError::Closed) => None,
         }
+    });
+    let stream = stream.take_until(async move {
+        futures_util::future::select_all(
+            closers
+                .into_iter()
+                .map(|closer| Box::pin(closer.cancelled_owned())),
+        )
+        .await;
     });
     Ok(Sse::new(stream).into_response())
 }

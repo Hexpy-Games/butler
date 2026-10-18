@@ -4,7 +4,7 @@ use std::{
     collections::BTreeSet,
     fs::File,
     io::{self, BufRead, BufReader, Read, Seek, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 use zip::{ZipWriter, write::SimpleFileOptions};
 
@@ -42,14 +42,11 @@ pub(crate) fn export<W: Write + Seek>(
     if bodies {
         for source in ["agent", "app"] {
             for path in retention::files(&root.join(source).join("bodies"))? {
-                let name = path
-                    .strip_prefix(root)
-                    .map_err(io::Error::other)?
-                    .to_string_lossy();
-                if !references.contains(name.as_ref()) {
+                let name = path.strip_prefix(root).map_err(io::Error::other)?;
+                if !references.contains(name) {
                     continue;
                 }
-                zip.start_file(name, options())?;
+                zip.start_file_from_path(name, options())?;
                 io::copy(&mut File::open(path)?, &mut zip)?;
             }
         }
@@ -66,16 +63,13 @@ fn append_segment<W: Write + Seek>(
     root: &Path,
     path: &Path,
     blocks: &[Block],
-    references: Option<&mut BTreeSet<String>>,
+    references: Option<&mut BTreeSet<PathBuf>>,
 ) -> io::Result<()> {
-    let name = path
-        .strip_prefix(root)
-        .map_err(io::Error::other)?
-        .to_string_lossy();
+    let name = path.strip_prefix(root).map_err(io::Error::other)?;
     let len = blocks.last().map_or(0, |b| b.offset + b.len);
-    zip.start_file(name.as_ref(), options())?;
+    zip.start_file_from_path(name, options())?;
     io::copy(&mut File::open(path)?.take(len), zip)?;
-    zip.start_file(name.replace(".jsonl", ".idx"), options())?;
+    zip.start_file_from_path(name.with_extension("idx"), options())?;
     zip.write_all(&serde_json::to_vec(blocks)?)?;
     if let Some(references) = references {
         let source = path
@@ -85,14 +79,14 @@ fn append_segment<W: Write + Seek>(
             .next()
             .ok_or_else(|| io::Error::other("missing log source"))?
             .as_os_str()
-            .to_string_lossy();
+            .to_owned();
         for line in BufReader::new(File::open(path)?.take(len)).lines() {
             let line = line?;
             if let Ok(row) = serde_json::from_str::<Record>(&line)
                 && let Some(reference) = row.body_ref
             {
                 let file = reference.split(':').next().unwrap_or_default();
-                references.insert(format!("{source}/bodies/{file}"));
+                references.insert(Path::new(&source).join("bodies").join(file));
             }
         }
     }
