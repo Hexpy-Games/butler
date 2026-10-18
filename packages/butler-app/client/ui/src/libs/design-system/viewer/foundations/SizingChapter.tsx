@@ -1,8 +1,9 @@
 import type { CSSProperties } from "react";
-import { OptionMenu, OptionMenuItem } from "../../blocks/OptionMenu";
+import { getAppCopy } from "../../../../../../../../butler-i18n/src/locale.ts";
+import { OptionMenu, OptionMenuItem, OptionMenuSection } from "../../blocks/OptionMenu";
 import { Button } from "../../components/Button";
 import { IconButton } from "../../components/IconButton";
-import { Folder, MoreHorizontal, PencilLine, Plus } from "../../components/Icons";
+import { ImageIcon, MoreHorizontal, Paperclip, Plus } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { Tag } from "../../components/Tag";
 import { Typo } from "../../components/Typo";
@@ -38,7 +39,9 @@ function ControlRung({ name }: { name: string }) {
   );
 }
 
-function HitTargets() {
+function HitTargets({ locale }: { locale: ChapterProps["locale"] }) {
+  // The composer's attachment menu, with the App's copy.
+  const copy = getAppCopy(locale === "ko" ? "ko-KR" : "en-US").composer;
   return (
     <div className={f.hitGrid}>
       <Specimen caption="--control-hit-target · 30px pointer, 44px touch or ≤640px">
@@ -55,9 +58,11 @@ function HitTargets() {
       </Specimen>
       <Specimen caption="--menu-item-height · menu and list rows">
         <div className={f.menuSample}>
-          <OptionMenu title="Session actions" size="fit">
-            <OptionMenuItem icon={<PencilLine />} label="Rename" />
-            <OptionMenuItem icon={<Folder />} label="Move to project" />
+          <OptionMenu title={copy.featureDrawer} size="fit">
+            <OptionMenuSection title={copy.attachments}>
+              <OptionMenuItem icon={<Paperclip size="md" />} label={copy.attachFile} />
+              <OptionMenuItem icon={<ImageIcon size="md" />} label={copy.attachImage} />
+            </OptionMenuSection>
           </OptionMenu>
         </div>
       </Specimen>
@@ -74,7 +79,7 @@ export function SizingChapter({ chapter, anchor, locale, onOpen }: ChapterProps)
         <Stack gap="md">{tokens(/^--control-height-/u).map((token) => <ControlRung key={token.name} name={token.name} />)}</Stack>
       </GuideSection>
       <GuideSection spec={s.at("hit-targets")} lead="The dashed square is the target, not the drawing. IconButton pads itself up to it.">
-        <HitTargets />
+        <HitTargets locale={locale} />
       </GuideSection>
       <GuideSection spec={s.at("chrome")} lead="Sidebar, panels and title bar, resolved at this viewport and scaled against the widest.">
         <WidthBars tokens={tokens(/^--(sidebar-width|right-panel-width|composer-reserve|traffic-controls-width|titlebar-height|adaptive-(drawer|inspector)-width)$/u)} />

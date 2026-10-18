@@ -10,6 +10,7 @@ import { FileText, GeneralChat, MoreHorizontal, Notebook, PanelRight, Plus, Sear
 import { Stack } from "../../components/Stack";
 import { Tag } from "../../components/Tag";
 import { Typo } from "../../components/Typo";
+import { cn } from "../../lib/utils";
 import type { ShowcaseRenderContext } from "../../showcase";
 import { SidebarShell, SidebarTrafficSpace, type SidebarDensity } from "../../blocks/SidebarShell";
 import styles from "../DesignSystemViewer.module.css";
@@ -29,9 +30,13 @@ const COPY = {
   },
 } as const;
 
-function Part({ layer, label, children, index }: { layer: "token" | "component" | "block"; label: string; children: ReactNode; index: number }) {
+/** One x-rayed piece. `inside` puts its label inside the box, for a part whose top edge the stage clips. */
+function Part({ layer, label, children, index, inside, fill }: {
+  layer: "token" | "component" | "block"; label: string; children: ReactNode; index: number; inside?: boolean; fill?: boolean;
+}) {
   return (
-    <div className={styles.part} data-label={label} data-layer={layer} style={{ "--part-index": index } as CSSProperties}>
+    <div className={cn(styles.part, fill && styles.partFill)} data-label={label} data-layer={layer} data-label-inside={inside || undefined}
+      style={{ "--part-index": index } as CSSProperties}>
       {children}
     </div>
   );
@@ -46,28 +51,26 @@ export function AssembledScreen({ context, stage, density, run }: {
     <div className={styles.stageFrame} data-stage={stage} key={run} data-ds-assemble={stage}>
       <div className={styles.stage}>
         <div className={styles.stageSidebar}>
-          <SidebarShell ariaLabel={copy.sidebar} density={density} scrollFade={false} titlebar={<SidebarTrafficSpace />}>
-            <Part index={0} label="NavSection" layer="block">
+          <Part index={0} label="SidebarShell" layer="block" inside fill>
+            <SidebarShell ariaLabel={copy.sidebar} density={density} scrollFade={false} titlebar={<SidebarTrafficSpace />}>
               <NavSection title={copy.chats}><NavRow icon={<GeneralChat size="md" />} label={copy.general} active /></NavSection>
-            </Part>
-            <Part index={1} label="NavRow" layer="block">
               <NavSection title={copy.projects}>
                 {copy.sessions.map((session) => <NavRow icon={<Notebook size="md" />} key={session} label={session} />)}
               </NavSection>
-            </Part>
-          </SidebarShell>
+            </SidebarShell>
+          </Part>
         </div>
         <div className={styles.stageMain}>
           <Stack align="row" cross="center" justify="between" gap="sm">
-            <Part index={2} label="Typo.PanelTitle" layer="component"><Typo.PanelTitle>{copy.title}</Typo.PanelTitle></Part>
-            <Part index={3} label="--accent · --space-xs" layer="token">
+            <Part index={1} label="Typo.PanelTitle" layer="component"><Typo.PanelTitle>{copy.title}</Typo.PanelTitle></Part>
+            <Part index={2} label="--accent · --space-xs" layer="token">
               <div className={styles.swatchStrip}>
                 {["--accent", "--color-success", "--color-warning", "--text-secondary"].map((name) => (
                   <span className={styles.swatchDot} key={name} style={{ "--swatch": `var(${name})` } as CSSProperties} />
                 ))}
               </div>
             </Part>
-            <Part index={4} label="IconButton" layer="component">
+            <Part index={3} label="IconButton" layer="component">
               <Stack align="row" gap="xs">
                 <IconButton label={copy.search}><Search size="md" /></IconButton>
                 <IconButton label="Inspector"><PanelRight size="md" /></IconButton>
@@ -76,21 +79,21 @@ export function AssembledScreen({ context, stage, density, run }: {
             </Part>
           </Stack>
           <div className={styles.stageThread}>
-            <Part index={5} label="MessageRow" layer="block">
+            <Part index={4} label="MessageRow" layer="block">
               <MessageRow role="user"><Typo.Text as="div" wrap="pre">{copy.ask}</Typo.Text></MessageRow>
             </Part>
-            <Part index={6} label="Tag" layer="component"><Stack align="row"><Tag tone="accent">{copy.plan}</Tag></Stack></Part>
-            <Part index={7} label="MessageRow" layer="block">
+            <Part index={5} label="Tag" layer="component"><Stack align="row"><Tag tone="accent">{copy.plan}</Tag></Stack></Part>
+            <Part index={6} label="MessageRow" layer="block">
               <MessageRow role="assistant">
-                <Part index={8} label="WorkActivityBlock" layer="block">
-                  <WorkActivityBlock connected density="compact" title={copy.work}
+                <Part index={7} label="WorkActivityBlock" layer="block">
+                  <WorkActivityBlock density="compact" title={copy.work}
                     tools={[{ id: "read", icon: <FileText size="md" />, title: "tokens.css", summaryLabel: copy.search }]} />
                 </Part>
                 <MarkdownContent><p>{copy.answer}</p></MarkdownContent>
               </MessageRow>
             </Part>
           </div>
-          <Part index={9} label="ComposerCard" layer="block">
+          <Part index={8} label="ComposerCard" layer="block">
             <ComposerCard onSubmit={(event) => event.preventDefault()}>
               <ComposerCardTextarea aria-label={copy.placeholder} placeholder={copy.placeholder} rows={1} />
               <ComposerCardToolbar>

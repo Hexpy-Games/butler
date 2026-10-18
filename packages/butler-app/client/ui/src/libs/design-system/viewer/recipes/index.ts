@@ -26,8 +26,11 @@ export const RECIPES: ScreenRecipe[] = [
   },
   {
     id: "sidebar", title: "Sidebar", Screen: SidebarRecipe,
-    description: "Sections of rows inside the sidebar shell; project folders collapse; row actions appear on hover through an overflow menu.",
-    uses: ["SidebarShell", "NavSection", "NavRow", "CollapsibleNavGroup", "NavRowSwap", "OverflowActionMenu", "ButtonContainer", "IconButton"],
+    description: "The App's space sidebar: actions that scroll away, sticky view tabs and Space heading, project and group folders with their actions, rows whose menu replaces the rest status on hover.",
+    uses: [
+      "SidebarShell", "SidebarNav", "NavRow", "Tabs", "NavSectionHeading", "CollapsibleNavGroup", "NavRowSwap", "OverflowActionMenu",
+      "ButtonContainer", "IconButton", "DropdownMenu", "IconSlot",
+    ],
   },
   {
     id: "dashboard", title: "Project dashboard", Screen: DashboardRecipe,
