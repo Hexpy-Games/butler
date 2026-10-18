@@ -701,7 +701,7 @@
   --sidebar-bg: rgba(255, 255, 255, 0.52);
   /* macOS Electron: thinner over the native "sidebar" vibrancy (AdaptiveShell, darwin). */
   --mac-sidebar-bg: rgba(255, 255, 255, 0.3);
-  --windows-sidebar-bg: rgba(255, 255, 255, 0.36);
+  --windows-sidebar-bg: rgba(255, 255, 255, 0.85);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
   /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
      the workspace surface with one quiet edge. */
@@ -1281,7 +1281,7 @@
   --worker-panel-bg: rgba(241, 242, 244, 0.96);
   --sidebar-bg: rgba(255, 255, 255, 0.52);
   --mac-sidebar-bg: rgba(255, 255, 255, 0.3);
-  --windows-sidebar-bg: rgba(255, 255, 255, 0.36);
+  --windows-sidebar-bg: rgba(255, 255, 255, 0.85);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
   /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
      the workspace surface with one quiet edge. */
