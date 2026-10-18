@@ -152,8 +152,9 @@ impl Storage {
             } else {
                 self.main.take()
             };
-            if let Some(mut segment) = previous {
-                segment.publish(&mut self.catalog);
+            if let Some(segment) = previous {
+                self.catalog
+                    .insert(segment.path.clone(), segment.blocks.clone());
                 segment.close()?;
             }
             self.prune()?;
@@ -189,7 +190,7 @@ impl Storage {
                     self.write_errors[lane] = Some(error.to_string());
                     return Err(error);
                 }
-                s.publish(&mut self.catalog);
+                self.catalog.insert(s.path.clone(), s.blocks.clone());
                 if self.written[lane] {
                     self.write_errors[lane] = None;
                     self.written[lane] = false;
