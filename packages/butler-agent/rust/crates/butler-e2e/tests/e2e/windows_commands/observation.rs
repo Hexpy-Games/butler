@@ -53,7 +53,7 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
         .env("APPDATA", roaming.display().to_string())
         .stub_cassette(provider::cassette()?)
         .access(access)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("USERPROFILE", setup_home(&downloads))
         .env("BUTLER_SECRET_STORE", "file")
         .env("BUTLER_PLATFORM_SYSTEM_SECRETS", "0")

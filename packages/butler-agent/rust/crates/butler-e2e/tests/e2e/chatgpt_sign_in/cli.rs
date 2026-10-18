@@ -41,6 +41,10 @@ async fn siwc_07_cli_login_logout_and_status() -> Result<(), HarnessError> {
     let setup = Setup::new("SIWC-07")?;
     let mut launch = Launch::new(&setup.sandbox)?;
     launch.set_env("BUTLER_CHATGPT_AUTH_ISSUER", &authority.issuer);
+    launch.set_env(
+        "BUTLER_CHATGPT_API_BASE_URL",
+        format!("{}/v1", authority.issuer),
+    );
     launch.set_env("BUTLER_OAUTH_NO_BROWSER", "1");
     launch.set_env("BUTLER_CHATGPT_AUTH_DIR", "private-auth");
     let args = ["auth", "status", "--json"];
@@ -56,7 +60,7 @@ async fn siwc_07_cli_login_logout_and_status() -> Result<(), HarnessError> {
         command(&launch, &["auth", "logout", "--yes", "--json"]).await?["revoked"],
         true
     );
-    assert!(!legacy.exists());
+    assert!(legacy.exists());
     assert!(authority.seen().is_empty());
     launch.set_env("OPENAI_API_KEY", "test-api-key");
     assert_eq!(command(&launch, &args).await?["mode"], "api_key");

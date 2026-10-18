@@ -1,5 +1,6 @@
 //! Stub-only authority using the documented SIWC protocol, never a live service.
 mod authority;
+mod models;
 mod tokens;
 use super::{HarnessError, harness_error};
 use serde_json::Value;
@@ -23,6 +24,10 @@ pub struct Faults {
     pub no_plan: bool,
     pub invalid_grant: bool,
     pub revoke_503: bool,
+    pub refresh_503: bool,
+    pub invalid_client: bool,
+    pub refresh_reused: bool,
+    pub models_401: usize,
     pub subject: Option<String>,
 }
 #[derive(Clone)]
@@ -32,6 +37,8 @@ pub struct Seen {
 }
 pub(super) struct State {
     pub issuer: String,
+    pub refresh: Mutex<BTreeMap<String, String>>,
+    pub models: Mutex<Vec<Value>>,
     pub faults: Mutex<Faults>,
     pub seen: Mutex<Vec<Seen>>,
     pub grants: Mutex<BTreeMap<String, BTreeMap<String, String>>>,
@@ -49,6 +56,8 @@ impl FakeChatGptAuthority {
         let issuer = format!("http://{}", listener.local_addr()?);
         let state = Arc::new(State {
             issuer: issuer.clone(),
+            refresh: Mutex::new(BTreeMap::new()),
+            models: Mutex::new(models::defaults()),
             faults: Mutex::new(Faults::default()),
             seen: Mutex::new(Vec::new()),
             grants: Mutex::new(BTreeMap::new()),
@@ -64,6 +73,31 @@ impl FakeChatGptAuthority {
             state,
             task,
         })
+    }
+    pub fn stop(&self) {
+        self.task.abort();
+    }
+    pub fn models(&self, models: Vec<Value>) {
+        *self
+            .state
+            .models
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = models;
+    }
+    pub fn registration(&self) -> Value {
+        let client = "oaiapp_e2e_0001";
+        self.state
+            .clients
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(client.into());
+        let token = tokens::issue(&self.state, client);
+        serde_json::json!({"schema_version":1, "issuer":self.issuer, "client_id":client,
+            "subject":"e2e-subject", "email":"e2e-user@example.com", "token_type":"Bearer",
+            "access_token":token["access_token"], "refresh_token":token["refresh_token"],
+            "expires_at":chrono::Utc::now().timestamp_millis()+3_600_000,
+            "scopes":butler_models::models::chatgpt::SCOPES.split_whitespace().collect::<Vec<_>>(),
+            "plan_notice_acknowledged_at":chrono::Utc::now().to_rfc3339()})
     }
     pub fn faults(&self, faults: Faults) {
         *self

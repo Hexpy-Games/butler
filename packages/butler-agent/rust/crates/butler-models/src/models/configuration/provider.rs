@@ -1,5 +1,6 @@
 //! Physical provider request snapshots resolved from current filesystem state.
 
+mod auth;
 mod dynamic;
 mod endpoint;
 mod policy;
@@ -87,14 +88,17 @@ impl ModelConfiguration {
             butler_core::public_text::trim_js_whitespace(request.model_ref).is_empty();
         let requested = effective_model(request.model_ref, &read, &self.environment);
         let requested_model = parse_model_ref(&requested);
-        let requested = if (configured_openai_request && requested == dynamic::AUTO_CODEX_LATEST)
+        let (requested, dynamic_auth) = if (configured_openai_request
+            && requested == dynamic::AUTO_CODEX_LATEST)
             || (!configured_openai_request
                 && requested_model.provider_id == "openai"
                 && requested_model.model_id == dynamic::AUTO_CODEX_LATEST)
         {
-            dynamic::resolve(self, &root, &read).await?
+            let (model, auth) =
+                dynamic::resolve(self, &root, &read, request.rejected_authorization).await?;
+            (model, Some(auth))
         } else {
-            requested
+            (requested, None)
         };
         let parsed = parse_model_ref(&requested);
         let metadata = read
@@ -132,12 +136,13 @@ impl ModelConfiguration {
             ));
         }
         let auth = self
-            .resolve_auth(
+            .resolve_selected_auth(
                 &root,
                 &read,
-                &metadata.provider_id,
-                &metadata.model_ref,
+                &metadata,
                 registered.as_ref(),
+                dynamic_auth,
+                request.rejected_authorization,
             )
             .await?;
         let local_base = read
@@ -162,11 +167,7 @@ impl ModelConfiguration {
         };
         let prompt_reasoning_effort = (metadata.provider_id == "openai")
             .then(|| dynamic::configured_reasoning(&self.environment, &read.config));
-        let wire_model = if metadata.provider_id == "openai" {
-            parsed.model_id.clone()
-        } else {
-            metadata.model_id.clone()
-        };
+        let wire_model = endpoint::wire_model(&metadata, &parsed, auth.mode());
         Ok(ProviderRequestConfig {
             wire_model,
             api_shape: metadata.hosted_api_shape,
@@ -188,83 +189,6 @@ impl ModelConfiguration {
             .filter(|value| !value.is_empty())
             .map(PathBuf::from)
             .unwrap_or_else(|| self.data_root.clone())
-    }
-
-    async fn resolve_auth(
-        &self,
-        root: &Path,
-        read: &ModelConfigurationRead,
-        provider: &str,
-        model_ref: &str,
-        registered: Option<&RegisteredHostedModelConfig>,
-    ) -> Result<ProviderAuth, Box<ProviderRequestError>> {
-        if let Some(config) = registered {
-            if config.auth_type == ProviderAuthMethod::ApiKey {
-                let record = config
-                    .credential_id
-                    .as_deref()
-                    .and_then(|id| read.credential(id, &config.provider_id))
-                    .ok_or_else(|| {
-                        provider_error_for(
-                            &config.provider_id,
-                            "provider_auth_missing",
-                            "configuration",
-                            "Provider API key credential is not registered.",
-                        )
-                    })?;
-                // Read from its store for this request only; never cached.
-                let secret = self
-                    .credential_secret(root, record)
-                    .await
-                    .map_err(|error| {
-                        provider_error_for(
-                            &config.provider_id,
-                            error.code(),
-                            "configuration",
-                            "The saved API key could not be read from the credential store.",
-                        )
-                    })?;
-                return Ok(ProviderAuth::ApiKey(secret.into_zeroizing()));
-            }
-            if config.provider_id != "openai" {
-                return Err(provider_error_for(
-                    &config.provider_id,
-                    "provider_auth_unsupported",
-                    "configuration",
-                    "Configured provider authentication is unsupported.",
-                ));
-            }
-        }
-        if provider == "local" {
-            return Ok(read
-                .local_credential_secret(model_ref)
-                .map(|secret| ProviderAuth::ApiKey(zeroize::Zeroizing::new(secret.to_owned())))
-                .unwrap_or(ProviderAuth::None));
-        }
-        if provider != "openai" {
-            return Err(provider_error_for(
-                provider,
-                "provider_auth_missing",
-                "configuration",
-                "Provider API key credential is not registered.",
-            ));
-        }
-        let private_environment =
-            butler_core::configuration::read_private_environment(&root.join(".env"))
-                .unwrap_or_default();
-        let mut environment = self.environment.clone();
-        super::merge_private_auth_environment(&mut environment, &private_environment);
-        let owner = AuthOwner {
-            data_root: root,
-            environment: &environment,
-            clock: &self.clock,
-            client: &self.client,
-        };
-        if registered.is_some_and(|value| value.auth_type == ProviderAuthMethod::CodexOauth) {
-            owner.resolve_codex().await.map_err(auth_error)
-        } else {
-            owner.resolve_openai().await.map_err(auth_error)
-        }
     }
 
     fn round_policy(&self, provider: &str) -> ProviderRoundPolicy {
@@ -390,7 +314,10 @@ fn registered_config(
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn auth_error(error: AuthError) -> Box<ProviderRequestError> {
-    provider_error(error.code, "authentication", error.message)
+    let mut result = provider_error(error.code, "authentication", error.message);
+    result.cause = error.reason.map(str::to_owned);
+    result.retryable = error.code == "provider_auth_refresh_unavailable";
+    result
 }
 fn provider_error(code: &str, api: &str, message: &str) -> Box<ProviderRequestError> {
     provider_error_for("openai", code, api, message)

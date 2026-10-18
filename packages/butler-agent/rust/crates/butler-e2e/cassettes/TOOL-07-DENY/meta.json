@@ -15,32 +15,33 @@
     "chunks re-cut at SSE event boundaries (event bytes unchanged)",
     "JSON account identifiers (account_id, user_id, email, ...) -> {{ACCOUNT}}/{{EMAIL}}",
     "JSON tokens (access_token, refresh_token, id_token, authorization) -> {{TOKEN}}",
-    "absolute reset times -> {{EPOCH_MS|S+delta}} relative to recording, rounded to the hour"
+    "absolute reset times -> {{EPOCH_MS|S+delta}} relative to recording, rounded to the hour",
+    "siwc-path-migration"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "284990862a338746fd2debee927097d6e9299ce4efcbdbaf9758f641c85ce76d"
+      "sha256": "fa9f2e201041219e6b12d5d06ff4ca7170b7c21aa979bd7ebf85e5181381bd97"
     },
     {
       "file": "001.json",
-      "sha256": "17aa5e2c4512889327786b16f5b9888a8ed124bedfcb8d8e8d6cac8daa523840"
+      "sha256": "5c4614aa6af2101f4cf4dd1eabd0b0af65273d3cfd5ba41e898c1b51c70c4333"
     },
     {
       "file": "002.json",
-      "sha256": "6a113c760123e0ef659eb568873dd666924f05085f860a455d43810a692c53e5"
+      "sha256": "0e24dd71d169a913e2bff06d1da0e51e9f68a1fc29ddfa99d7fc2ad872b351a3"
     },
     {
       "file": "003.json",
-      "sha256": "7f121fcadf2f03f701e260adf38234e46e67ca302ec35393e4ff5b00e0f0816e"
+      "sha256": "a2fdbdfa516876139ef0858fcbd766bc6f87ebff4f5263922849af4a3b032a69"
     },
     {
       "file": "004.json",
-      "sha256": "af672a2c7e1a03d94ed3312a8e7ae4ebc30c1e2a0342c46d6d52b45ff3e105e8"
+      "sha256": "cee73c0f5ced2a6fcb79e0dca1b6fa7fe35fd238b37565d3dd6321ab325666e5"
     },
     {
       "file": "005.json",
-      "sha256": "2829b1130574035b00a30e10af729272b9bef367f7275dbc48545e9481d7212e"
+      "sha256": "0bc98523d5fe04fdf80ef106c4a94b26e452a41521c63c6a51b967b5c80b312c"
     }
   ],
   "fingerprint": [

@@ -88,6 +88,7 @@ impl ModelConfiguration {
         })
         .await?;
         store::delete_legacy(&paths).await;
+        self.chatgpt_invalidate_models().await;
         self.chatgpt_changed();
         Ok(SignInOutcome {
             label,

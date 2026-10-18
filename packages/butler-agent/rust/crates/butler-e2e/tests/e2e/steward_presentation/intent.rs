@@ -6,7 +6,7 @@ pub(super) fn assert_intent_carried(requests: &[Value]) {
     let request = requests
         .iter()
         .find(|request| {
-            matching::key("/codex/responses", request, &Placeholders::default())
+            matching::key("/v1/responses", request, &Placeholders::default())
                 .user_request
                 .starts_with("role: steward")
         })
@@ -26,7 +26,7 @@ pub(super) fn assert_intent_carried(requests: &[Value]) {
     // The request block is the delivered packet. Other prompt sections may
     // quote the same stored message, so the carried Conception is counted
     // where the packet carries it.
-    let packet = matching::key("/codex/responses", request, &Placeholders::default()).user_request;
+    let packet = matching::key("/v1/responses", request, &Placeholders::default()).user_request;
     assert!(packet.starts_with("role: steward"), "{packet}");
     assert!(packet.contains(super::stub::REVISED_CHECK), "{packet}");
     assert_eq!(

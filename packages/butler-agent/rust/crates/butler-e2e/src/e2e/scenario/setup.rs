@@ -35,7 +35,6 @@ impl Setup {
             launch_mode: LaunchMode::Harness,
             replay_only: false,
             extends: None,
-            login_refresh: false,
         }
     }
 }

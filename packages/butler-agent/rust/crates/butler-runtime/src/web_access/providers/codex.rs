@@ -6,7 +6,7 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use crate::web_access::service::{WebAccess, WebAccessError};
-use butler_models::models::{ProviderAuth, ProviderAuthMode};
+use butler_models::models::ProviderAuth;
 
 use super::{
     contracts::{SearchInput, SearchOutput, SearchProvider, SearchResult, filter_results},
@@ -18,9 +18,6 @@ use crate::web_access::WebAccessCode;
 
 pub(super) struct CodexSubscriptionWebSearchProvider {
     authorization: String,
-    account_id: String,
-    originator: String,
-    user_agent: String,
     model: Option<String>,
     api_base: Option<String>,
 }
@@ -31,33 +28,11 @@ impl CodexSubscriptionWebSearchProvider {
         model: Option<String>,
         api_base: Option<String>,
     ) -> Result<Self, WebAccessError> {
-        let ProviderAuth::Codex {
-            mode,
-            authorization,
-            account_id,
-            user_agent,
-            originator,
-        } = auth
-        else {
+        let ProviderAuth::ChatGptPlan { authorization, .. } = auth else {
             return Err(auth_missing());
         };
-        if !matches!(
-            mode,
-            ProviderAuthMode::CodexOauth | ProviderAuthMode::CodexSubscription
-        ) {
-            return Err(auth_missing());
-        }
-        if account_id.trim().is_empty() {
-            return Err(WebAccessError::new(
-                WebAccessCode::WebSearchProviderAuthMissing,
-                "Codex web search requires a ChatGPT account id.",
-            ));
-        }
         Ok(Self {
-            authorization,
-            account_id,
-            originator,
-            user_agent,
+            authorization: authorization.to_string(),
             model,
             api_base,
         })
@@ -104,10 +79,7 @@ impl SearchProvider for CodexSubscriptionWebSearchProvider {
                 .post(endpoint)
                 .header(reqwest::header::CONTENT_TYPE, "application/json")
                 .header(reqwest::header::AUTHORIZATION, &self.authorization)
-                .header("chatgpt-account-id", &self.account_id)
                 .header("openai-beta", "responses=experimental")
-                .header("originator", &self.originator)
-                .header(reqwest::header::USER_AGENT, &self.user_agent)
                 .json(&body);
             let (status, bytes) = response_bytes(access, request, cancellation).await?;
             if !(200..300).contains(&status) {

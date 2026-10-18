@@ -7,7 +7,6 @@
 //! the parsed numbers leave this module; raw header values and bodies are
 //! never stored.
 
-mod codex_usage;
 mod fetch;
 mod lenient;
 mod zai_usage;
@@ -16,7 +15,6 @@ use butler_core::json::{saturating_i64, saturating_u64};
 use reqwest::header::HeaderMap;
 use serde::{Deserialize, Serialize};
 
-pub(crate) use codex_usage::parse_codex_usage;
 pub use fetch::{QuotaBilling, QuotaFetch, QuotaFetchError, QuotaHttp};
 pub(crate) use zai_usage::parse_zai_quota;
 
@@ -73,7 +71,7 @@ pub enum QuotaSupport {
 }
 
 /// The providers whose usage endpoint Butler polls.
-pub const QUOTA_POLLED_PROVIDERS: [&str; 2] = ["openai", "zai"];
+pub const QUOTA_POLLED_PROVIDERS: [&str; 1] = ["zai"];
 
 /// The static quota support of a provider id. OpenCode Go bills a plan but
 /// documents no quota surface, so it is not offered for now.
@@ -81,7 +79,7 @@ pub fn provider_quota_support(provider_id: &str) -> QuotaSupport {
     match provider_id {
         _ if QUOTA_POLLED_PROVIDERS.contains(&provider_id) => QuotaSupport::Polled,
         "opencode-go" => QuotaSupport::NotOffered(QuotaBilling::Subscription),
-        "anthropic" | "google" | "xai" | "qwen" | "kimi" | "zai-api" => {
+        "openai" | "anthropic" | "google" | "xai" | "qwen" | "kimi" | "zai-api" => {
             QuotaSupport::NotOffered(QuotaBilling::Api)
         }
         _ => QuotaSupport::NotOffered(QuotaBilling::Unknown),

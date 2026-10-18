@@ -80,6 +80,10 @@ impl Attempt {
         let outcome = configuration.chatgpt_save(registration).await;
         match outcome {
             Ok(outcome) => {
+                let configuration = configuration.clone();
+                tokio::spawn(async move {
+                    let _ = configuration.chatgpt_models().await;
+                });
                 respond(&mut stream, 200, SPEC.pages.success).await;
                 Ok(outcome)
             }

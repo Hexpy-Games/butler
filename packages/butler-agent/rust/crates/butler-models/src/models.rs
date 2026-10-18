@@ -137,9 +137,7 @@ impl ModelCatalog {
             return UsageAuthMode::Local;
         }
         match auth {
-            ProviderAuthMode::CodexSubscription | ProviderAuthMode::CodexOauth => {
-                UsageAuthMode::Subscription
-            }
+            ProviderAuthMode::ChatGptPlan => UsageAuthMode::Subscription,
             ProviderAuthMode::ApiKey => match self.static_catalog.api_key_billing(provider_id) {
                 ApiKeyBilling::PerToken => UsageAuthMode::ApiKey,
                 ApiKeyBilling::Subscription => UsageAuthMode::Subscription,

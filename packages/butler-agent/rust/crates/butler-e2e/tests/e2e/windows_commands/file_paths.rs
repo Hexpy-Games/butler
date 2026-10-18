@@ -305,7 +305,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
     let s = setup
         .stub_cassette(super::observation_stub::cassette()?)
         .access(access)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         // Use the installed App's module environment, not the CI console's.
         .env("PSModulePath", "")
         .env("BUTLER_DEBUG_COMMAND_TIMINGS", "1")

@@ -65,7 +65,7 @@ async fn output_publish_stays_one_output_without_documents() -> Result<(), Harne
     .into();
     let s = Setup::new("DELIVERABLE-OUTPUT")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     run_turn(&s, &script, "Publish page.").await?;

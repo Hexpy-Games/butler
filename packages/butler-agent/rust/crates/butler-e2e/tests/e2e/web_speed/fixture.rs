@@ -44,7 +44,10 @@ impl Fixture {
         let base = format!("http://{}", socket.local_addr()?);
         let state = Arc::new(StateData::default());
         let app = Router::new()
-            .route("/codex/responses", post(model))
+            .route("/v1/responses", post(model))
+            .route_layer(axum::middleware::from_fn(
+                butler_e2e::e2e::chatgpt_wire::validate,
+            ))
             .route("/search", get(search))
             .with_state(state.clone());
         let server = tokio::spawn(async move {

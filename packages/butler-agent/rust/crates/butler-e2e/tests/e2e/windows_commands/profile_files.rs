@@ -75,7 +75,7 @@ async fn replay(downloads: &Path, access: Access) -> Result<(), HarnessError> {
     let s = setup
         .stub_cassette(super::observation_stub::cassette()?)
         .access(access)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("LOCALAPPDATA", local.display().to_string())
         .env("APPDATA", roaming.display().to_string())
         .env("BUTLER_SECRET_STORE", "file")

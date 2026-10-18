@@ -12,40 +12,41 @@
     "JWT/sk-key/bearer/email/home path/host name -> fixed placeholders",
     "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
     "response headers reduced to content-type, retry-after",
-    "chunks re-cut at SSE event boundaries (event bytes unchanged)"
+    "chunks re-cut at SSE event boundaries (event bytes unchanged)",
+    "siwc-path-migration"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "a9d2cc77c8ab042a40034ae8613c3fccb758c2bc5dc167bca37e618fcbdcc54f"
+      "sha256": "1adf9198d7534e1d78f7d40f2ae77d83ba80765fa49bb723ad0c039103d7205c"
     },
     {
       "file": "001.json",
-      "sha256": "45b9ede42ff8194e846d99d0f16f3ab3556c3537164b11e23a98f10578ec0bef"
+      "sha256": "7f298fde7040f4671c6727d09863ab3ef0a2796b0b65c965bd07fc58bc7df362"
     },
     {
       "file": "002.json",
-      "sha256": "53d781835bb39e100201dccfa76af7fb4a191e89eadbd47805de7e92e47d6ab7"
+      "sha256": "1d37e45c2e03e531e99e9452369c23610c7d924f82e3cef2be0b3dcecd262d5d"
     },
     {
       "file": "003.json",
-      "sha256": "52ee0f26d6990e7cc9d4ba2459f1c39fd275ff5cc62b2accf0cb70deb89b6bed"
+      "sha256": "78d90b91aa7a12af5f4c7e846b202a0106d0d5d9f5572f213a4c2d65f352d4b6"
     },
     {
       "file": "004.json",
-      "sha256": "b34bca909c4e78ba821d1078d8a960145ef1c7d88a05e75f36534cdbf6e9557c"
+      "sha256": "00c931ac0f2916b32550a261636e274cba1fcbd1b242f3a4c4448471ad2b2a60"
     },
     {
       "file": "005.json",
-      "sha256": "c75694f70cb492e327385b3cf5c678a9ebe90a611c77c613864e21f1f353d0d1"
+      "sha256": "5780c8ab6ab0d6fd5b77af85bb505625155aa9bedc245fb8f116058c584a95f2"
     },
     {
       "file": "006.json",
-      "sha256": "714e12467b63b73c98a5fe0d6dcdadd17d81cdedb4834d3778c51d7e392220bb"
+      "sha256": "ed367127841519f87003ede49fd16efcb48d504b15b46264e6c852f5ec46862e"
     },
     {
       "file": "007.json",
-      "sha256": "af2eeec3243b9ee26f53aa57d48e999299afcd37d1bd5951f60f07ca72b3e8a3"
+      "sha256": "804323c39ece86631856ac20e21c8776cd9d0c22d507a02c131cb0737509a1bb"
     }
   ],
   "fingerprint": [

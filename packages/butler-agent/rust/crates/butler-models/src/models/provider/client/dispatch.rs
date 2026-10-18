@@ -2,6 +2,7 @@
 use super::*;
 
 pub(super) struct PreparedHttp<'a> {
+    pub body: serde_json::Value,
     pub http: reqwest::RequestBuilder,
     pub serialized_bytes: usize,
     pub admission: request_admission::PreparedRequestAdmission<'a>,
@@ -49,9 +50,9 @@ impl ModelProvider {
             self.admission(request, config, &body, serialized.clone(), carrier)?;
         let serialized_bytes = serialized.len();
         let http = self.round_request(config, mode, carrier, serialized);
-        let http = super::super::route::cache_affinity(http, &config.auth, body);
         let trace = super::super::request_trace::RequestTrace::round(self, prefix, request).await?;
         Ok(PreparedHttp {
+            body,
             http,
             serialized_bytes,
             admission: physical_admission,
@@ -112,6 +113,7 @@ impl ModelProvider {
         DispatchedResponse {
             response,
             prepared: PreparedResponse {
+                body: prepared.body,
                 carrier,
                 continuation: prepared.continuation,
                 thinking_binding: prepared.thinking_binding,

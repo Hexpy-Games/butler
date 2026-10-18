@@ -1,3 +1,10 @@
+const REQUEST_ID_HEADERS: &[&str] = &[
+    "openai-request-id",
+    "x-request-id",
+    "request-id",
+    "x-zai-request-id",
+];
+pub(super) mod plan;
 use butler_core::public_text::fixed_regex;
 use std::sync::LazyLock;
 
@@ -81,7 +88,10 @@ pub(super) fn http(
     );
     let tools_refused = matches!(status, 400 | 422)
         && refuses_tools(string(identity, &["param"]).as_deref(), detail.as_deref());
-    let normalized = if tools_refused {
+    let plan = plan::classify(api, status, body);
+    let normalized = if let Some((code, _)) = plan {
+        Some(code)
+    } else if tools_refused {
         Some("provider_tools_unsupported")
     } else {
         normalized_code(
@@ -102,7 +112,10 @@ pub(super) fn http(
             "provider_api_error"
         }
     });
-    let retryable = normalized.is_none() && !context && (status == 429 || status >= 500);
+    let retryable = plan.map_or(
+        normalized.is_none() && !context && (status == 429 || status >= 500),
+        |(_, retryable)| retryable,
+    );
     let message = http_message(code);
     let mut failure = error(code, message, provider, api, retryable);
     failure.status_code = Some(status);
@@ -114,8 +127,7 @@ pub(super) fn http(
         .map(Value::Object)
         .and_then(|value| sanitize(&value, 0))
         .map(Box::new);
-    failure.provider_request_id =
-        header(headers, &["x-request-id", "request-id", "x-zai-request-id"]);
+    failure.provider_request_id = header(headers, REQUEST_ID_HEADERS);
     failure.retry_at = headers.and_then(retry::at);
     let retry_after = header(headers, &["retry-after"]);
     let reset = header(headers, &["ratelimit-reset", "x-ratelimit-reset"]);

@@ -170,11 +170,13 @@ async fn title_03_failure_logged_keeps_provisional() -> Result<(), HarnessError>
     butler_e2e::gate!();
     let (s, prompt) = start("TITLE-03").await?;
     let chat = chat(&s, &provisional(&prompt), &prompt).await?;
-    s.provider()?.inject(Fault::on_request(
+    let mut fault = Fault::on_request(
         &format!("User message: {prompt}"),
         0,
-        Transform::ErrorFromLibrary("codex-401".into()),
-    ))?;
+        Transform::ErrorFromLibrary("chatgpt-401".into()),
+    );
+    fault.remaining = Some(2);
+    s.provider()?.inject(fault)?;
     let (_, turn) = s.turn(&chat, &prompt).await?;
     assert_eq!(turn["state"], "delivered");
     tokio::time::timeout(Duration::from_secs(6), async {
@@ -185,6 +187,24 @@ async fn title_03_failure_logged_keeps_provisional() -> Result<(), HarnessError>
     .await
     .expect("title failure was not logged");
     assert_eq!(title(&s, &chat).await?, provisional(&prompt));
+    assert_eq!(
+        s.provider()?
+            .requests()
+            .iter()
+            .filter(|request| is_title_request(request))
+            .count(),
+        2
+    );
+    assert_eq!(
+        s.authority
+            .as_ref()
+            .unwrap()
+            .seen()
+            .iter()
+            .filter(|request| request.path == "token")
+            .count(),
+        1
+    );
     assert!(!s.agent.logs().contains(&prompt));
     assert_eq!(
         s.agent

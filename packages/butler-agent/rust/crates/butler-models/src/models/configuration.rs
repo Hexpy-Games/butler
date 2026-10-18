@@ -83,7 +83,6 @@ pub trait ModelConfigurationClock: Send + Sync {
 pub struct ModelConfigurationEnvironment {
     pub openai_model: Option<String>,
     pub openai_reasoning_effort: Option<String>,
-    pub codex_base_url: Option<String>,
     pub retry_attempts: Option<String>,
     pub provider_retry_base_delay_ms: Option<String>,
     pub openai_api_key: Option<String>,
@@ -92,19 +91,12 @@ pub struct ModelConfigurationEnvironment {
     pub provider_round_idle_timeout_ms: Option<String>,
     pub openai_prompt_cache_key_prefix: Option<String>,
     pub openai_prompt_cache_retention: Option<String>,
-    pub butler_codex_auth_profile: Option<PathBuf>,
-    pub butler_openai_auth_profile: Option<PathBuf>,
-    pub codex_auth_json: Option<PathBuf>,
-    pub codex_home: Option<PathBuf>,
+    pub chatgpt_api_base_url: Option<String>,
     pub chatgpt_auth_issuer: Option<String>,
     pub chatgpt_auth_dir: Option<PathBuf>,
     pub chatgpt_oauth_port: Option<String>,
     pub oauth_callback_bind_host: Option<String>,
     pub oauth_no_browser: Option<String>,
-    pub oauth_token_url: Option<String>,
-    pub oauth_client_id: Option<String>,
-    pub oauth_originator: Option<String>,
-    pub codex_user_agent: Option<String>,
     pub os_platform: Option<String>,
     pub os_release: Option<String>,
     pub os_arch: Option<String>,
@@ -130,6 +122,7 @@ pub struct ModelConfiguration {
     secrets: ProviderSecrets,
     log_secrets: tokio::sync::OnceCell<()>,
     chatgpt_authority: Arc<chatgpt::authority::ChatGptAuthority>,
+    chatgpt_models: chatgpt::models::Cache,
     account_revision: tokio::sync::watch::Sender<u64>,
 }
 
@@ -198,6 +191,7 @@ impl ModelConfiguration {
             environment.chatgpt_auth_issuer.as_deref(),
         ));
         Ok(Self {
+            chatgpt_models: chatgpt::models::Cache::default(),
             chatgpt_authority,
             account_revision: tokio::sync::watch::channel(0).0,
             data_root,
@@ -265,10 +259,11 @@ impl ModelConfiguration {
             .map(CredentialRecord::view)
             .collect::<Vec<_>>();
         let probes = probes::read(&config);
-        let codex_url =
-            self.environment.codex_base_url.as_ref().and_then(|value| {
-                normalize_hosted_api_base_url(Some(&Value::String(value.clone())))
-            });
+        let codex_url = self
+            .environment
+            .chatgpt_api_base_url
+            .as_ref()
+            .and_then(|value| normalize_hosted_api_base_url(Some(&Value::String(value.clone()))));
         let mut registered_metadata = registered_hosted_model_metadata(
             &registered,
             &self.registration_catalog,
@@ -317,10 +312,11 @@ impl ModelConfiguration {
             |value| value.model_ref.clone(),
         );
         let probes = probes::read(&config);
-        let codex_url =
-            self.environment.codex_base_url.as_ref().and_then(|value| {
-                normalize_hosted_api_base_url(Some(&Value::String(value.clone())))
-            });
+        let codex_url = self
+            .environment
+            .chatgpt_api_base_url
+            .as_ref()
+            .and_then(|value| normalize_hosted_api_base_url(Some(&Value::String(value.clone()))));
         let mut registered_metadata = registered_hosted_model_metadata(
             &registered,
             &self.registration_catalog,
@@ -373,6 +369,7 @@ impl ModelConfiguration {
             environment: &environment,
             clock: &self.clock,
             client: &self.client,
+            revision: &self.account_revision,
         }
         .resolve_openai()
         .await
@@ -416,20 +413,8 @@ impl ModelConfiguration {
             })?;
         discovery::discover(&client, server_url, platform, api_key.as_deref()).await
     }
-
-    #[cfg(test)]
-    fn auth_owner(&self) -> auth::AuthOwner<'_> {
-        auth::AuthOwner {
-            data_root: &self.data_root,
-            environment: &self.environment,
-            clock: &self.clock,
-            client: &self.client,
-        }
-    }
 }
 
-#[cfg(test)]
-mod auth_tests;
 #[cfg(test)]
 mod mutations_tests;
 #[cfg(test)]

@@ -75,14 +75,11 @@ pub(super) fn roots(environment: &HashMap<String, String>) -> Vec<PathBuf> {
         roots.push(data.join("sandbox-quarantine"));
         // These general product settings also cover externally stored logins.
         // Relative Butler profile paths resolve under the configured data root.
-        for key in [
-            "BUTLER_CODEX_AUTH_PROFILE",
-            "BUTLER_OPENAI_AUTH_PROFILE",
-            "BUTLER_CHATGPT_AUTH_DIR",
-        ] {
-            if let Some(path) = environment.get(key).filter(|path| !path.is_empty()) {
-                roots.push(data.join(path));
-            }
+        if let Some(path) = environment
+            .get("BUTLER_CHATGPT_AUTH_DIR")
+            .filter(|path| !path.is_empty())
+        {
+            roots.push(data.join(path));
         }
     }
     if let Some(path) = environment

@@ -2,7 +2,6 @@
 //! response mode and API name, and the auth headers of its request.
 
 use reqwest::RequestBuilder;
-use serde_json::Value;
 
 use super::super::{HostedApiShape, transport};
 use super::contracts::{ProviderAuth, ProviderAuthMode};
@@ -12,14 +11,11 @@ pub(in crate::models::provider) fn carrier(
     config: &super::contracts::ProviderRequestConfig,
 ) -> (Carrier, transport::ResponseMode, &'static str) {
     if config.metadata.provider_id == "openai" {
-        return if matches!(
-            config.auth.mode(),
-            ProviderAuthMode::CodexOauth | ProviderAuthMode::CodexSubscription
-        ) {
+        return if matches!(config.auth.mode(), ProviderAuthMode::ChatGptPlan) {
             (
                 Carrier::Responses,
-                transport::ResponseMode::CodexSse,
-                "codex_responses",
+                transport::ResponseMode::ChatGptPlanSse,
+                "chatgpt_plan_responses",
             )
         } else {
             (
@@ -75,40 +71,10 @@ pub(in crate::models::provider) fn authorize(
             request.header("x-goog-api-key", value.as_str())
         }
         ProviderAuth::ApiKey(value) => request.bearer_auth(value.as_str()),
-        ProviderAuth::Codex {
-            authorization,
-            account_id,
-            user_agent,
-            originator,
-            ..
-        } => request
-            .header("authorization", authorization)
-            .header("accept", "text/event-stream")
-            .header("openai-beta", "responses=experimental")
-            .header("user-agent", user_agent)
-            .header("chatgpt-account-id", account_id)
-            .header("originator", originator),
+        ProviderAuth::ChatGptPlan { authorization, .. } => request
+            .header("authorization", authorization.as_str())
+            .header("accept", "text/event-stream"),
     }
-}
-
-/// ChatGPT routes cache affinity by session-id, rather than the body key alone.
-/// Match Codex's Responses session identity to our existing cache scope.
-/// Consume the body projection to free it before sending the serialized bytes.
-pub(in crate::models::provider) fn cache_affinity(
-    request: RequestBuilder,
-    auth: &ProviderAuth,
-    body: Value,
-) -> RequestBuilder {
-    let request = if matches!(auth, ProviderAuth::Codex { .. })
-        && let Some(key) = body.get("prompt_cache_key").and_then(Value::as_str)
-        && let Ok(value) = reqwest::header::HeaderValue::from_str(key)
-    {
-        request.header("session-id", value)
-    } else {
-        request
-    };
-    drop(body);
-    request
 }
 
 /// Keep configured endpoints usable for probes while selecting Gemini SSE for rounds.

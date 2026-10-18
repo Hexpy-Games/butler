@@ -24,7 +24,10 @@ impl Model {
             requests: requests.clone(),
         });
         let app = Router::new()
-            .route("/codex/responses", post(reply))
+            .route("/v1/responses", post(reply))
+            .route_layer(axum::middleware::from_fn(
+                butler_e2e::e2e::chatgpt_wire::validate,
+            ))
             .with_state(script);
         let server = tokio::spawn(async move {
             axum::serve(socket, app).await.unwrap();
@@ -46,7 +49,7 @@ async fn reply(
     Json(body): Json<Value>,
 ) -> axum::response::Response {
     script.requests.lock().unwrap().push(body.clone());
-    let key = matching::key("/codex/responses", &body, &Placeholders::default());
+    let key = matching::key("/v1/responses", &body, &Placeholders::default());
     let outputs = outputs(&body);
     let item = if body["tools"].as_array().is_none_or(Vec::is_empty) {
         message("{}")

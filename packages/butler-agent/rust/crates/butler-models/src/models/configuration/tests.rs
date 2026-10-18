@@ -115,7 +115,7 @@ async fn actual_config_reads_preserve_first_records_defaults_and_secret_boundari
 async fn codex_probe_override_does_not_change_public_registered_endpoint() {
     let fixture = Fixture::new();
     let owner = fixture.owner(ModelConfigurationEnvironment {
-        codex_base_url: Some("https://codex.example.test:443/backend-api/".into()),
+        chatgpt_api_base_url: Some("https://plan.example.test:443/v1/".into()),
         retry_attempts: Some("0x4".into()),
         ..Default::default()
     });
@@ -125,8 +125,8 @@ async fn codex_probe_override_does_not_change_public_registered_endpoint() {
         .unwrap();
     let probe = json!({
         "provider_id":"openai", "model_id":"gpt-5.5", "model_ref":"openai/gpt-5.5", "auth_type":"codex_oauth",
-        "credential_id":"ignored-for-oauth", "auth_profile":"codex_oauth",
-        "api_base_url":"https://codex.example.test/backend-api", "carrier_protocol":base.image_carrier_protocol,
+        "credential_id":"ignored-for-oauth", "auth_profile":"chatgpt",
+        "api_base_url":"https://plan.example.test/v1", "carrier_protocol":base.image_carrier_protocol,
         "endpoint_profile_id":base.image_endpoint_profile_id, "capability_revision":base.image_capability_revision,
         "capability_digest":base.image_capability_digest, "verified_at":"2026-09-14T00:00:00.000Z"
     });

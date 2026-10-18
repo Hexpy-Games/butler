@@ -131,11 +131,12 @@ fn responses(
         "input".into(),
         input::response_input(request, config, continuation)?,
     );
+    super::chatgpt_plan::prepare(&mut body, config);
     if let Some(stable) = request.stable_provider_cache_prefix {
         body = stable::order(body, stable, request.instructions)?;
     }
-    apply_codex_controls(&mut body, request, config);
     body.insert("stream".into(), true.into());
+    super::chatgpt_plan::finalize(&mut body, &super::chatgpt_plan::memo(config));
     Ok(Value::Object(body))
 }
 
@@ -185,42 +186,6 @@ fn response_controls(
         body.insert("instructions".into(), value.into());
     }
     body
-}
-
-fn apply_codex_controls(
-    body: &mut Map<String, Value>,
-    request: &ModelRoundRequest<'_>,
-    config: &ProviderRequestConfig,
-) {
-    if matches!(
-        config.auth.mode(),
-        ProviderAuthMode::CodexOauth | ProviderAuthMode::CodexSubscription
-    ) {
-        body.insert(
-            "model".into(),
-            config
-                .wire_model
-                .strip_suffix("-codex")
-                .unwrap_or(&config.wire_model)
-                .into(),
-        );
-        if request
-            .instructions
-            .is_none_or(|value| butler_core::public_text::trim_js_whitespace(value).is_empty())
-        {
-            body.insert(
-                "instructions".into(),
-                "You are Butler, a helpful personal AI assistant.".into(),
-            );
-        }
-        body.insert("store".into(), false.into());
-        body.insert("stream".into(), true.into());
-        body.shift_remove("prompt_cache_retention");
-        body.shift_remove("max_output_tokens");
-        body.shift_remove("previous_response_id");
-        body.entry("text")
-            .or_insert_with(|| serde_json::json!({"verbosity":"medium"}));
-    }
 }
 
 pub(super) use stable::identity as provider_cache_identity;

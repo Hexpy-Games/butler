@@ -18,7 +18,7 @@ pub(super) enum ResponseMode {
         tolerate_invalid: bool,
     },
     HostedChatSse,
-    CodexSse,
+    ChatGptPlanSse,
     ResponsesSse,
     AnthropicSse,
     /// `call_round` names streamed calls as the decoded result does.
@@ -306,8 +306,8 @@ impl Reading<'_> {
                 }
                 sse::native::read(response, mode, provider, api, progress, stream_observer).await
             }
-            ResponseMode::CodexSse => {
-                sse::codex(response, provider, api, progress, stream_observer, clock).await
+            ResponseMode::ChatGptPlanSse => {
+                sse::chatgpt_plan(response, provider, api, progress, stream_observer, clock).await
             }
         }
     }

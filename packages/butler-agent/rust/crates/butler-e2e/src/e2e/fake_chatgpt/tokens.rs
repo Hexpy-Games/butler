@@ -37,6 +37,12 @@ pub(super) async fn exchange(
     Form(params): Form<BTreeMap<String, String>>,
 ) -> Response {
     state.record("token", &params);
+    if params
+        .get("grant_type")
+        .is_some_and(|g| g == "refresh_token")
+    {
+        return refresh(&state, &params);
+    }
     let faults = state.faults();
     let get = |key: &str| params.get(key).map(String::as_str).unwrap_or("");
     let grant = state
@@ -67,9 +73,9 @@ pub(super) async fn exchange(
             .into_response();
     }
     let token = id_token(&state, &grant);
-    Json(json!({"access_token":format!("access-{}", uuid::Uuid::new_v4()),"refresh_token":format!("refresh-{}",uuid::Uuid::new_v4()),
-        "id_token":token,"token_type":"Bearer","expires_in":3600,"earliest_refresh_at":null,
-        "scope":if faults.no_plan { "openid profile email offline_access resource.invoke" } else { butler_models::models::chatgpt::SCOPES }})).into_response()
+    let mut response = issue(&state, get("client_id"));
+    response["id_token"] = token.into();
+    Json(response).into_response()
 }
 fn id_token(state: &Authority, grant: &BTreeMap<String, String>) -> String {
     let faults = state.faults();
@@ -103,4 +109,52 @@ fn id_token(state: &Authority, grant: &BTreeMap<String, String>) -> String {
         signature[0] ^= 1;
     }
     format!("{message}.{}", B64.encode(signature))
+}
+
+pub(super) fn issue(state: &Authority, client: &str) -> Value {
+    let refresh = format!("refresh-{}", uuid::Uuid::new_v4());
+    state
+        .refresh
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(refresh.clone(), client.into());
+    json!({"access_token":format!("access-{}",uuid::Uuid::new_v4()), "refresh_token":refresh,
+        "token_type":"Bearer", "expires_in":3600, "earliest_refresh_at":null,
+        "scope":if state.faults().no_plan { "openid profile email offline_access resource.invoke" }
+            else { butler_models::models::chatgpt::SCOPES }})
+}
+fn refresh(state: &Authority, params: &BTreeMap<String, String>) -> Response {
+    let faults = state.faults();
+    if faults.refresh_503 {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
+    if faults.invalid_client {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error":"invalid_client"})),
+        )
+            .into_response();
+    }
+    let get = |k: &str| params.get(k).map(String::as_str).unwrap_or("");
+    if get("resource") != butler_models::models::chatgpt::RESOURCE || params.contains_key("scope") {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    let mut refresh = state
+        .refresh
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if faults.refresh_reused
+        || refresh
+            .get(get("refresh_token"))
+            .is_none_or(|client| client != get("client_id"))
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error":"refresh_token_reused"})),
+        )
+            .into_response();
+    }
+    refresh.remove(get("refresh_token"));
+    drop(refresh);
+    Json(issue(state, get("client_id"))).into_response()
 }

@@ -94,12 +94,9 @@ fn legacy_projection_acknowledges_then_strips_only_images_after_success() {
     let golden: Value =
         serde_json::from_str(include_str!("fixtures/legacy-continuation.json")).unwrap();
     assert_eq!(official["input"], golden["wireInput"]);
-    config.auth = ProviderAuth::Codex {
-        mode: ProviderAuthMode::CodexSubscription,
-        authorization: "Bearer fixture".into(),
-        account_id: "account".into(),
-        user_agent: "Butler fixture".into(),
-        originator: "butler".into(),
+    config.auth = ProviderAuth::ChatGptPlan {
+        authorization: "Bearer fixture".to_owned().into(),
+        registration: "fixture-registration".into(),
     };
     let (codex, _) =
         serialize::body_with_continuation(&input, &config, serialize::Carrier::Responses).unwrap();

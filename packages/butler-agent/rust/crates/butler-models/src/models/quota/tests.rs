@@ -139,12 +139,7 @@ fn response_headers_parse() {
 // test-category: format-pin
 #[test]
 fn usage_endpoint_bodies_parse() {
-    use super::{codex_usage::tests as codex, zai_usage::tests as zai};
-    codex::primary_and_secondary_windows_and_the_plan_parse();
-    codex::camel_case_minutes_strings_and_resets_at_are_accepted();
-    codex::additional_limits_merge_and_a_disallowed_limit_is_fully_used();
-    codex::a_zero_length_window_is_absent_and_values_are_clamped();
-    codex::a_body_without_windows_or_plan_is_a_schema_mismatch();
+    use super::zai_usage::tests as zai;
     zai::token_and_tool_windows_parse_with_resets_and_the_level();
     zai::credit_limits_count_as_model_quota_and_counts_give_the_percentage();
     zai::undocumented_windows_are_skipped_not_guessed();

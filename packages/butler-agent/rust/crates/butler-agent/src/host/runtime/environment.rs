@@ -28,7 +28,7 @@ impl ProcessEnvironment {
         let model = ModelConfigurationEnvironment {
             openai_model: optional("BUTLER_OPENAI_MODEL"),
             openai_reasoning_effort: optional("BUTLER_OPENAI_REASONING_EFFORT"),
-            codex_base_url: optional("BUTLER_CODEX_BASE_URL"),
+            chatgpt_api_base_url: optional("BUTLER_CHATGPT_API_BASE_URL"),
             retry_attempts: optional("BUTLER_MODEL_API_RETRY_ATTEMPTS"),
             provider_retry_base_delay_ms: optional("BUTLER_MODEL_API_RETRY_DELAY_MS"),
             openai_api_key: optional("OPENAI_API_KEY"),
@@ -37,30 +37,11 @@ impl ProcessEnvironment {
             provider_round_idle_timeout_ms: optional("BUTLER_PROVIDER_ROUND_IDLE_TIMEOUT_MS"),
             openai_prompt_cache_key_prefix: optional("BUTLER_OPENAI_PROMPT_CACHE_KEY_PREFIX"),
             openai_prompt_cache_retention: optional("BUTLER_OPENAI_PROMPT_CACHE_RETENTION"),
-            butler_codex_auth_profile: nonempty_path("BUTLER_CODEX_AUTH_PROFILE"),
-            butler_openai_auth_profile: nonempty_path("BUTLER_OPENAI_AUTH_PROFILE"),
-            codex_auth_json: nonempty_path("CODEX_AUTH_JSON"),
-            codex_home: Some(
-                nonempty_path("CODEX_HOME").unwrap_or_else(|| user_home.join(".codex")),
-            ),
             chatgpt_auth_issuer: optional("BUTLER_CHATGPT_AUTH_ISSUER"),
             chatgpt_auth_dir: nonempty_path("BUTLER_CHATGPT_AUTH_DIR"),
             chatgpt_oauth_port: optional("BUTLER_CHATGPT_OAUTH_PORT"),
             oauth_callback_bind_host: optional("BUTLER_OAUTH_CALLBACK_BIND_HOST"),
             oauth_no_browser: optional("BUTLER_OAUTH_NO_BROWSER"),
-            oauth_token_url: first_nonempty_raw(&[
-                "BUTLER_CODEX_OAUTH_TOKEN_URL",
-                "BUTLER_OPENAI_OAUTH_TOKEN_URL",
-            ]),
-            oauth_client_id: first_trimmed(&[
-                "BUTLER_CODEX_OAUTH_CLIENT_ID",
-                "BUTLER_OPENAI_OAUTH_CLIENT_ID",
-            ]),
-            oauth_originator: first_trimmed(&[
-                "BUTLER_CODEX_OAUTH_ORIGINATOR",
-                "BUTLER_OPENAI_OAUTH_ORIGINATOR",
-            ]),
-            codex_user_agent: trimmed("BUTLER_CODEX_USER_AGENT"),
             os_platform: Some(butler_platform::launcher::node_platform().to_owned()),
             os_release: Some(os_release.to_owned()),
             os_arch: Some(match env::consts::ARCH {
@@ -139,16 +120,6 @@ fn nonempty_path(name: &str) -> Option<PathBuf> {
     optional(name)
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
-}
-
-fn first_nonempty_raw(names: &[&str]) -> Option<String> {
-    names
-        .iter()
-        .find_map(|name| optional(name).filter(|value| !value.is_empty()))
-}
-
-fn first_trimmed(names: &[&str]) -> Option<String> {
-    names.iter().find_map(|name| trimmed(name))
 }
 
 fn retry_delay(value: f64) -> f64 {

@@ -30,11 +30,8 @@ impl ModelConfiguration {
             })
             .await?;
         }
+        self.chatgpt_invalidate_models().await;
         self.chatgpt_changed();
-        // Explicit sign-out must also disable the still-active P1 legacy model path.
-        self.remove_auth_profile(&paths.legacy)
-            .await
-            .map_err(|_| "legacy_auth_delete_failed")?;
         Ok(revoked)
     }
 }

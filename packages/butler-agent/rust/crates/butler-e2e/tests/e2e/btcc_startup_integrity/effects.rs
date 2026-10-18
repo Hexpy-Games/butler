@@ -3,7 +3,7 @@ mod project;
 mod rollback;
 mod stub;
 use butler_e2e::e2e::{
-    HarnessError, fixtures,
+    HarnessError,
     gateway::turn_state,
     scenario::{Access, Scenario, Setup},
 };
@@ -17,9 +17,8 @@ async fn effects() -> Result<Scenario, HarnessError> {
     let setup = Setup::new("BTCC-PLANLESS-EFFECTS")?.access(Access::FullAccess);
     let file = setup.sandbox.workspace.join("integrity.txt");
     let (url, server) = stub::start(file.display().to_string(), false, true).await?;
-    fixtures::stub_codex_auth(&setup.sandbox.codex_home())?;
     let s = setup
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_STARTUP_TRACE", "1")
         .start()
         .await?;

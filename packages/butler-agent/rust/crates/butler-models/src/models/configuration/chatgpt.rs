@@ -3,6 +3,8 @@ pub mod authority;
 pub mod authorize;
 pub mod exchange;
 pub mod id_token;
+pub mod models;
+pub mod refresh;
 pub mod revoke;
 pub mod store;
 
@@ -171,4 +173,12 @@ impl ModelConfiguration {
         self.chatgpt_changed();
         self.chatgpt_account().await
     }
+}
+
+/// Opaque registration identity; never a wire field.
+pub fn registration(raw: &Value) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let client = raw["client_id"].as_str().filter(|s| !s.is_empty())?;
+    let subject = raw["subject"].as_str().filter(|s| !s.is_empty())?;
+    Some(format!("{:x}", Sha256::digest(format!("{client}\n{subject}")))[..16].into())
 }

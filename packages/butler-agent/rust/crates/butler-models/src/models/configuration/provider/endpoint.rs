@@ -16,40 +16,18 @@ pub(super) fn resolve(
     auth: crate::models::ProviderAuthMode,
 ) -> Result<Url, Box<ProviderRequestError>> {
     if provider == "openai" {
-        let base = if matches!(
-            auth,
-            crate::models::ProviderAuthMode::CodexOauth
-                | crate::models::ProviderAuthMode::CodexSubscription
-        ) {
-            trim_slashes(
-                configuration
-                    .environment
-                    .codex_base_url
-                    .as_deref()
-                    .unwrap_or("https://chatgpt.com/backend-api"),
-            )
+        let base = if auth == crate::models::ProviderAuthMode::ChatGptPlan {
+            configuration.chatgpt_api_base().to_owned()
         } else {
-            trim_slashes(
-                configuration
-                    .environment
-                    .openai_base_url
-                    .as_deref()
-                    .unwrap_or("https://api.openai.com/v1"),
-            )
+            configuration
+                .environment
+                .openai_base_url
+                .as_deref()
+                .unwrap_or("https://api.openai.com/v1")
+                .to_owned()
         };
-        let value = if matches!(
-            auth,
-            crate::models::ProviderAuthMode::CodexOauth
-                | crate::models::ProviderAuthMode::CodexSubscription
-        ) {
-            if base.ends_with("/codex/responses") {
-                base
-            } else if base.ends_with("/codex") {
-                format!("{base}/responses")
-            } else {
-                format!("{base}/codex/responses")
-            }
-        } else if base.ends_with("/responses") {
+        let base = trim_slashes(&base);
+        let value = if base.ends_with("/responses") {
             base
         } else {
             format!("{base}/responses")
@@ -124,4 +102,16 @@ fn parse_endpoint(provider: &str, value: &str) -> Result<Url, Box<ProviderReques
             "Provider endpoint is invalid.",
         )
     })
+}
+
+pub(super) fn wire_model(
+    metadata: &crate::models::ModelProviderMetadata,
+    parsed: &crate::models::ParsedModelRef,
+    auth: crate::models::ProviderAuthMode,
+) -> String {
+    if metadata.provider_id == "openai" && auth != crate::models::ProviderAuthMode::ChatGptPlan {
+        parsed.model_id.clone()
+    } else {
+        metadata.model_id.clone()
+    }
 }

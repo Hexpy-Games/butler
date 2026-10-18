@@ -122,7 +122,9 @@ fn assert_session_usage(usage: &Value, recorded: &Recorded) {
 #[tokio::test]
 async fn use_01_subscription_turn_reports_quota_usage_and_cost() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let mut s = Setup::new("USE-01")?.cassette("USE-01").start().await?;
+    let setup = Setup::new("USE-01")?.cassette("USE-01");
+    super::memory_fixture::initialize_empty(&setup.sandbox.data)?;
+    let mut s = setup.start().await?;
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let (_, turn) = s.turn("general", PROMPT).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
@@ -163,9 +165,11 @@ async fn use_01_subscription_turn_reports_quota_usage_and_cost() -> Result<(), H
     // A delivered chat precedes background extraction. Wait for its completed
     // usage row, rather than racing it or guessing a delay. The empty meaning
     // stub performs exactly one request and requires no further binding stages.
+    let mut observed_scopes = Value::Null;
     let monitor = tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             let monitor = s.gw.get("/usage-monitor?since_hours=1").await?;
+            observed_scopes = monitor.data()["model"]["byScopeUsage"].clone();
             if monitor.data()["model"]["byScopeUsage"]
                 .as_object()
                 .is_some_and(|scopes| {
@@ -180,7 +184,11 @@ async fn use_01_subscription_turn_reports_quota_usage_and_cost() -> Result<(), H
     })
     .await
     .map_err(|_| {
-        butler_e2e::e2e::harness_error("background extraction usage did not complete")
+        butler_e2e::e2e::harness_error(format!(
+            "background extraction usage did not complete: memory_requests={} replay_misses={} scopes={observed_scopes}",
+            s.provider().map(|p| p.memory_requests().len()).unwrap_or(0),
+            s.provider().map(|p| p.misses().len()).unwrap_or(0),
+        ))
     })??;
     assert_eq!(monitor.status, 200, "{}", monitor.text);
     let cost = &monitor.data()["cost"];

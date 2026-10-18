@@ -212,6 +212,7 @@ impl super::ModelConfigurationClock for StatusClock {
 fn status_environment(data_root: &Path) -> ModelConfigurationEnvironment {
     ModelConfigurationEnvironment {
         chatgpt_auth_issuer: env_value("BUTLER_CHATGPT_AUTH_ISSUER"),
+        chatgpt_api_base_url: env_value("BUTLER_CHATGPT_API_BASE_URL"),
         chatgpt_auth_dir: env_value("BUTLER_CHATGPT_AUTH_DIR").map(PathBuf::from),
         chatgpt_oauth_port: env_value("BUTLER_CHATGPT_OAUTH_PORT"),
         oauth_callback_bind_host: env_value("BUTLER_OAUTH_CALLBACK_BIND_HOST"),
@@ -222,10 +223,6 @@ fn status_environment(data_root: &Path) -> ModelConfigurationEnvironment {
         openai_base_url: env_value("OPENAI_BASE_URL"),
         openai_prompt_cache_key_prefix: env_value("BUTLER_OPENAI_PROMPT_CACHE_KEY_PREFIX"),
         openai_prompt_cache_retention: env_value("BUTLER_OPENAI_PROMPT_CACHE_RETENTION"),
-        butler_codex_auth_profile: std::env::var_os("BUTLER_CODEX_AUTH_PROFILE").map(PathBuf::from),
-        butler_openai_auth_profile: std::env::var_os("BUTLER_OPENAI_AUTH_PROFILE")
-            .map(PathBuf::from),
-        codex_auth_json: std::env::var_os("CODEX_AUTH_JSON").map(PathBuf::from),
         secret_store: super::SecretStoreFacts::for_data_root(data_root),
         ..ModelConfigurationEnvironment::default()
     }

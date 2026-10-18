@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         learn(&mut placeholders, &body)?;
         let value: Value = serde_json::from_str(&body)?;
         assert_eq!(value["model"], "gpt-6-luna");
-        let key = matching::key("/codex/responses", &value, &placeholders);
+        let key = matching::key("/v1/responses", &value, &placeholders);
         let raw = fs::read_to_string(source.join(format!("response-{n}.sse")))?;
         let sanitized = sanitize_body(&placeholders.hide(&coalesce_deltas(&raw)?), &placeholders);
         let chunks = sanitized
@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         exchanges.push(Exchange {
             request: RequestRecord {
                 method: "POST".into(),
-                path: "/codex/responses".into(),
+                path: "/v1/responses".into(),
                 key,
             },
             response: ResponseRecord {

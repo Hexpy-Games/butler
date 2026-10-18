@@ -1,34 +1,17 @@
-//! Request-local OpenAI API-key and Codex OAuth resolution.
-
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-
+//! Request-local API-key and official ChatGPT registration resolution.
+use super::{ModelConfigurationClock, ModelConfigurationEnvironment, chatgpt};
+use crate::models::ProviderAuth;
 use base64::Engine as _;
-use reqwest::Client;
-use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
-
+use std::{path::Path, sync::Arc};
 pub(super) mod io;
-mod jwt;
-mod profile;
-mod refresh;
-mod url;
-use io::{read_json_object, response_json, write_mode_600};
-use jwt::{account_id_from_access_token, codex_account_id};
-pub(super) use profile::OpenAiAuthProfile;
-
-use super::{ModelConfigurationClock, ModelConfigurationEnvironment};
-use crate::models::{ProviderAuth, ProviderAuthMode};
-
-const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
-
 pub(super) struct AuthOwner<'a> {
     pub(super) data_root: &'a Path,
     pub(super) environment: &'a ModelConfigurationEnvironment,
     pub(super) clock: &'a Arc<dyn ModelConfigurationClock>,
-    pub(super) client: &'a Client,
+    pub(super) client: &'a reqwest::Client,
+    pub(super) revision: &'a tokio::sync::watch::Sender<u64>,
 }
-
 /// A provider authentication failure: a static wire code and user-facing
 /// message, plus the transport, filesystem or JSON error that caused it.
 #[derive(Clone, thiserror::Error)]
@@ -36,6 +19,7 @@ pub(super) struct AuthOwner<'a> {
 pub struct AuthError {
     pub(super) code: &'static str,
     pub(super) message: &'static str,
+    pub(super) reason: Option<&'static str>,
     #[source]
     source: Option<Arc<dyn std::error::Error + Send + Sync>>,
 }
@@ -66,10 +50,6 @@ impl AuthOwner<'_> {
     pub(super) async fn resolve_openai(&self) -> Result<ProviderAuth, AuthError> {
         self.resolve_openai_after(None).await
     }
-
-    /// Like [`Self::resolve_openai`]. `rejected` is a bearer authorization
-    /// the provider just rejected (HTTP 401): the Butler login is refreshed
-    /// unless its stored token has changed since.
     pub(super) async fn resolve_openai_after(
         &self,
         rejected: Option<&str>,
@@ -79,213 +59,73 @@ impl AuthOwner<'_> {
                 key.to_owned(),
             )));
         }
-        self.resolve_codex_after(rejected).await
+        self.resolve_chatgpt(rejected).await
     }
-
-    pub(super) async fn resolve_codex(&self) -> Result<ProviderAuth, AuthError> {
-        self.resolve_codex_after(None).await
-    }
-
-    /// Like [`Self::resolve_codex`], with `rejected` as for
-    /// [`Self::resolve_openai_after`].
-    pub(super) async fn resolve_codex_after(
+    pub(super) async fn resolve_chatgpt(
         &self,
         rejected: Option<&str>,
     ) -> Result<ProviderAuth, AuthError> {
-        if let Some(mut profile) = self.read_butler_profile().await
-            && !profile.access_token.is_empty()
-        {
-            let rejected_now =
-                rejected.is_some_and(|value| value == format!("Bearer {}", profile.access_token));
-            if rejected_now || self.is_expiring(&profile) {
-                profile = self.refresh_once(profile).await?;
-            }
-            let account_id = codex_account_id(&profile.raw, &profile.access_token)
-                .or_else(|| account_id_from_access_token(&profile.access_token))
-                .unwrap_or_default();
-            return self.codex_auth(
-                ProviderAuthMode::CodexSubscription,
-                &profile.access_token,
-                account_id,
-            );
-        }
-        let codex_auth_path = self.codex_auth_path()?;
-        if let Some(auth) = read_json_object(&codex_auth_path).await
-            && let Some(token) = auth
-                .get("tokens")
-                .and_then(Value::as_object)
-                .and_then(|tokens| tokens.get("access_token"))
-                .and_then(Value::as_str)
-                .and_then(|value| trimmed(Some(value)))
-        {
-            let account_id = codex_account_id(&auth, token).unwrap_or_default();
-            return self.codex_auth(ProviderAuthMode::CodexOauth, token, account_id);
-        }
-        Err(error(
-            "provider_auth_missing",
-            "Codex subscription login is required for OpenAI Codex OAuth auth.",
-        ))
-    }
-
-    fn codex_auth(
-        &self,
-        mode: ProviderAuthMode,
-        token: &str,
-        account_id: String,
-    ) -> Result<ProviderAuth, AuthError> {
-        let originator = trimmed(self.environment.oauth_originator.as_deref())
-            .unwrap_or("butler")
-            .to_owned();
-        let user_agent = if let Some(value) = trimmed(self.environment.codex_user_agent.as_deref())
-        {
-            value.to_owned()
-        } else {
-            let platform = required(
-                self.environment.os_platform.as_ref(),
-                "provider_os_facts_missing",
-            )?;
-            let release = required(
-                self.environment.os_release.as_ref(),
-                "provider_os_facts_missing",
-            )?;
-            let arch = required(
-                self.environment.os_arch.as_ref(),
-                "provider_os_facts_missing",
-            )?;
-            format!("butler ({platform} {release}; {arch})")
-        };
-        Ok(ProviderAuth::Codex {
-            mode,
-            authorization: format!("Bearer {token}"),
-            account_id,
-            user_agent,
-            originator,
-        })
-    }
-
-    pub(super) async fn read_butler_profile(&self) -> Option<OpenAiAuthProfile> {
-        profile::from_raw(read_json_object(&self.butler_profile_path()).await?)
-    }
-
-    /// Refreshes `profile` under the process-shared profile lock, unless the
-    /// stored login changed while this call waited for it (another refresh,
-    /// from a model request or a quota poll, already renewed it). Refresh
-    /// tokens rotate, so two refreshes of one login must never overlap.
-    async fn refresh_once(
-        &self,
-        profile: OpenAiAuthProfile,
-    ) -> Result<OpenAiAuthProfile, AuthError> {
-        refresh::once(self, profile).await
-    }
-
-    fn is_expiring(&self, profile: &OpenAiAuthProfile) -> bool {
-        profile.expires_at.is_some_and(|expires| {
-            expires != 0.0 && (self.clock.now_epoch_millis() as f64) > expires - 60_000.0
-        })
-    }
-
-    async fn refresh(&self, profile: OpenAiAuthProfile) -> Result<OpenAiAuthProfile, AuthError> {
-        let client_id = trimmed(self.environment.oauth_client_id.as_deref()).unwrap_or(CLIENT_ID);
-        let Some(refresh_token) = profile.refresh_token.as_deref() else {
-            return Ok(profile);
-        };
-        if client_id.is_empty() {
-            return Ok(profile);
-        }
-        let response = self
-            .client
-            .post(url::token_url(self.environment)?)
-            .form(&[
-                ("grant_type", "refresh_token"),
-                ("client_id", client_id),
-                ("refresh_token", refresh_token),
-            ])
-            .send()
+        let paths =
+            chatgpt::store::paths(self.data_root, self.environment.chatgpt_auth_dir.as_deref());
+        let raw = chatgpt::store::read(&paths.registration)
             .await
-            .map_err(|source| {
-                error(
-                    "provider_auth_refresh_transport",
-                    "OpenAI OAuth refresh failed.",
-                )
-                .with_source(source)
-            })?;
-        if !response.status().is_success() {
-            return Ok(profile);
-        }
-        let token = response_json(response).await.map_err(|source| {
-            error(
-                "provider_auth_refresh_invalid",
-                "OpenAI OAuth refresh response was invalid.",
-            )
-            .with_source(source)
-        })?;
-        let profile = profile::rotated(
-            profile,
-            &token,
-            self.clock.now_epoch_millis(),
-            &self.clock.now_iso(),
+            .map_err(chatgpt_error)?;
+        crate::models::provider::chatgpt_plan::observe_registration(
+            &paths.registration,
+            chatgpt::registration(&raw),
         );
-        self.write_profile(&profile.raw).await?;
-        Ok(profile)
-    }
-
-    async fn write_profile(&self, profile: &Map<String, Value>) -> Result<(), AuthError> {
-        let path = self.butler_profile_path();
-        let parent = path.parent().ok_or_else(|| {
-            error(
-                "provider_auth_path_invalid",
-                "OpenAI auth profile path is invalid.",
-            )
-        })?;
-        tokio::fs::create_dir_all(parent).await.map_err(|source| {
-            error(
-                "provider_auth_write_failed",
-                "OpenAI auth profile could not be written.",
-            )
-            .with_source(source)
-        })?;
-        let mut bytes =
-            serde_json::to_vec_pretty(&Value::Object(profile.clone())).map_err(|source| {
-                error(
-                    "provider_auth_write_failed",
-                    "OpenAI auth profile could not be written.",
-                )
-                .with_source(source)
-            })?;
-        bytes.push(b'\n');
-        write_mode_600(&path, &bytes).await
-    }
-
-    fn butler_profile_path(&self) -> PathBuf {
-        let configured = self
-            .environment
-            .butler_codex_auth_profile
-            .clone()
-            .or_else(|| self.environment.butler_openai_auth_profile.clone());
-        match configured {
-            Some(path) if path.is_absolute() => path,
-            Some(path) => self.data_root.join(path),
-            None => self.data_root.join("auth/openai-codex.json"),
-        }
-    }
-
-    fn codex_auth_path(&self) -> Result<PathBuf, AuthError> {
-        if let Some(path) = &self.environment.codex_auth_json {
-            return Ok(path.clone());
-        }
-        self.environment
-            .codex_home
-            .as_ref()
-            .map(|home| home.join("auth.json"))
-            .ok_or_else(|| {
-                error(
-                    "provider_home_facts_missing",
-                    "Required provider home facts are unavailable.",
-                )
+        if raw["client_id"].as_str().is_none_or(str::is_empty) && raw["sign_in_required"].is_null()
+        {
+            let legacy = paths.legacy.clone();
+            let legacy = tokio::task::spawn_blocking(move || {
+                std::fs::metadata(legacy).is_ok_and(|m| m.len() > 0)
             })
+            .await
+            .map_err(|_| chatgpt_error("chatgpt_store_unreadable"))?;
+            let mut failure = error(
+                if legacy {
+                    "chatgpt_sign_in_required"
+                } else {
+                    "provider_auth_missing"
+                },
+                if legacy {
+                    "ChatGPT sign-in is required (legacy)."
+                } else {
+                    "ChatGPT sign-in is required."
+                },
+            );
+            failure.reason = legacy.then_some("legacy");
+            return Err(failure);
+        }
+        validate(&raw)?;
+        let raw = chatgpt::refresh::resolve(self, paths, raw, rejected).await?;
+        validate(&raw)?;
+        let token = raw["access_token"]
+            .as_str()
+            .ok_or_else(|| chatgpt_error("chatgpt_sign_in_required"))?;
+        butler_log::register_secret(token);
+        Ok(ProviderAuth::ChatGptPlan {
+            authorization: zeroize::Zeroizing::new(format!("Bearer {token}")),
+            registration: chatgpt::registration(&raw)
+                .ok_or_else(|| chatgpt_error("chatgpt_sign_in_required"))?,
+        })
     }
 }
-
+fn validate(raw: &serde_json::Value) -> Result<(), AuthError> {
+    if !raw["sign_in_required"].is_null()
+        || !chatgpt::signed_in(raw)
+        || chatgpt::registration(raw).is_none()
+    {
+        return Err(chatgpt_error("chatgpt_sign_in_required"));
+    }
+    if !chatgpt::plan_enabled(raw) {
+        return Err(chatgpt_error("chatgpt_plan_not_enabled"));
+    }
+    Ok(())
+}
+pub(super) fn chatgpt_error(code: &'static str) -> AuthError {
+    error(code, "ChatGPT plan authentication could not be resolved.")
+}
 pub fn generate_pkce_verifier() -> String {
     let mut bytes = [0_u8; 32];
     bytes[..16].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
@@ -297,12 +137,6 @@ pub fn pkce_challenge(verifier: &str) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
 }
 
-fn required<'a>(value: Option<&'a String>, code: &'static str) -> Result<&'a str, AuthError> {
-    value
-        .map(String::as_str)
-        .and_then(|value| trimmed(Some(value)))
-        .ok_or_else(|| error(code, "Required host identity facts are unavailable."))
-}
 fn trimmed(value: Option<&str>) -> Option<&str> {
     value
         .map(butler_core::public_text::trim_js_whitespace)
@@ -313,5 +147,6 @@ fn error(code: &'static str, message: &'static str) -> AuthError {
         code,
         message,
         source: None,
+        reason: None,
     }
 }

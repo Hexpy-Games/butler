@@ -15,7 +15,7 @@ async fn external_content_web_requests_ask_with_exact_targets() -> Result<(), Ha
     let setup = Setup::new("PERM-WEB")?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let outside = setup.sandbox.home.join("outside.txt");
     std::fs::write(&outside, "External note")?;
     let s = setup.start().await?;
@@ -201,7 +201,7 @@ async fn external_content_scores_individual_path_segments() -> Result<(), Harnes
     let setup = Setup::new("PERM-WEB-PATH")?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let outside = setup.sandbox.home.join("outside.txt");
     std::fs::write(&outside, "External note")?;
     let s = setup.start().await?;

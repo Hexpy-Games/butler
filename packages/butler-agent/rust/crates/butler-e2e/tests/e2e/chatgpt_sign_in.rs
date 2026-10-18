@@ -20,6 +20,10 @@ pub(super) async fn scenario(
         .fixture(Fixture::Empty)
         .without_credential()
         .env("BUTLER_CHATGPT_AUTH_ISSUER", &authority.issuer)
+        .env(
+            "BUTLER_CHATGPT_API_BASE_URL",
+            format!("{}/v1", authority.issuer),
+        )
         .start()
         .await
 }

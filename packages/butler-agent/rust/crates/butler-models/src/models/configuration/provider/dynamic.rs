@@ -86,11 +86,30 @@ pub(super) async fn resolve(
     owner: &ModelConfiguration,
     root: &std::path::Path,
     read: &ModelConfigurationRead,
-) -> Result<String, Box<ProviderRequestError>> {
-    let auth = owner
-        .resolve_auth(root, read, "openai", "", None)
-        .await
-        .map_err(|error| failure(error.message))?;
+    rejected: Option<&str>,
+) -> Result<(String, ProviderAuth), Box<ProviderRequestError>> {
+    let alias = read
+        .catalog
+        .resolve_model_metadata(Some("openai/auto:codex-latest"));
+    let registered = super::registered_config(read, "openai", &alias.model_ref);
+    let mut auth = owner
+        .resolve_auth(
+            root,
+            read,
+            "openai",
+            &alias.model_ref,
+            registered.as_ref(),
+            rejected,
+        )
+        .await?;
+    if let ProviderAuth::ChatGptPlan {
+        authorization,
+        registration,
+    } = &mut auth
+    {
+        let model = plan_model(owner, read, registration, authorization).await?;
+        return Ok((model, auth));
+    }
     let base = owner
         .environment
         .openai_base_url
@@ -107,7 +126,9 @@ pub(super) async fn resolve(
     let mut request = owner.client.get(endpoint);
     request = match &auth {
         ProviderAuth::ApiKey(key) => request.bearer_auth(key.as_str()),
-        ProviderAuth::Codex { authorization, .. } => request.header("authorization", authorization),
+        ProviderAuth::ChatGptPlan { authorization, .. } => {
+            request.header("authorization", authorization.as_str())
+        }
         ProviderAuth::None => request,
     };
     let response = request.send().await.map_err(failure)?;
@@ -131,10 +152,47 @@ pub(super) async fn resolve(
     models.sort_by(|left, right| compare(owner, left, right));
     models
         .first()
-        .map(|value| (*value).to_owned())
+        .map(|value| ((*value).to_owned(), auth))
         .ok_or_else(|| {
             failure("No Codex-capable OpenAI model was returned by the configured model list.")
         })
+}
+
+async fn plan_model(
+    owner: &ModelConfiguration,
+    read: &ModelConfigurationRead,
+    registration: &str,
+    authorization: &mut zeroize::Zeroizing<String>,
+) -> Result<String, Box<ProviderRequestError>> {
+    let list = owner
+        .chatgpt_models_for(registration, Some(authorization))
+        .await
+        .map_err(|code| {
+            let mut error = super::provider_error(
+                code,
+                "models",
+                "ChatGPT model discovery could not complete.",
+            );
+            error.retryable = code == "provider_auth_refresh_unavailable";
+            error
+        })?
+        .ok_or_else(|| failure("ChatGPT model list is unavailable."))?;
+    let mut models = list
+        .iter()
+        .map(|m| m.slug.as_str())
+        .filter(|id| {
+            selectable(id)
+                && read
+                    .catalog
+                    .find_static_model_metadata(Some(&format!("openai/{id}")))
+                    .is_some()
+        })
+        .collect::<Vec<_>>();
+    models.sort_by(|left, right| compare(owner, left, right));
+    models
+        .first()
+        .map(|m| (*m).to_owned())
+        .ok_or_else(|| failure("ChatGPT model list is empty."))
 }
 
 fn compare(owner: &ModelConfiguration, left: &str, right: &str) -> Ordering {
@@ -234,7 +292,7 @@ fn utf16_len(value: &str) -> usize {
 fn failure(reason: impl std::fmt::Display) -> Box<ProviderRequestError> {
     let reason = reason.to_string();
     let mut error = provider_error(
-        "provider_unknown_error",
+        "provider_model_unavailable",
         "models",
         "Configured OpenAI dynamic model could not be resolved.",
     );

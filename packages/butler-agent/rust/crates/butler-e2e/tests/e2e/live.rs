@@ -333,13 +333,13 @@ async fn live_10_subscription_token_refresh() -> Result<(), HarnessError> {
     let Some(provider) = live::gate("LIVE-10")? else {
         return Ok(());
     };
-    let Some(Credential::CodexProfile(path)) = provider.credential.clone() else {
+    let Some(Credential::ChatGptAuthDir(dir)) = provider.credential.clone() else {
         live::report("LIVE-10", "SKIPPED (needs a dedicated OAuth test profile)");
         return Ok(());
     };
     // Check the sibling lock before mutating the in-place login. The guard
     // restores only expiry on failure, preserving any rotated credentials.
-    let probe = profile::ExpiryProbe::begin(path)?;
+    let probe = profile::ExpiryProbe::begin(dir.join("chatgpt.json"))?;
     let mut s = Setup::new("LIVE-10")?.live(provider).start().await?;
     let result = async {
         let (_, turn) = live_turn(&s, "general", "Reply with exactly: refreshed").await?;

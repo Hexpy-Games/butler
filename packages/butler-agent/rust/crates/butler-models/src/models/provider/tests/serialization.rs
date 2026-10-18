@@ -73,12 +73,9 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     );
     let previous_auth = std::mem::replace(
         &mut config.auth,
-        ProviderAuth::Codex {
-            mode: ProviderAuthMode::CodexSubscription,
-            authorization: "Bearer offline".into(),
-            account_id: "offline".into(),
-            user_agent: "offline".into(),
-            originator: "butler".into(),
+        ProviderAuth::ChatGptPlan {
+            authorization: "Bearer offline".to_owned().into(),
+            registration: "fixture-registration".into(),
         },
     );
     let codex = serialize::body(&request, &config, serialize::Carrier::Responses).unwrap();

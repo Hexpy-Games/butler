@@ -78,6 +78,7 @@ type ChatResponder = fn(&Value) -> Option<ResponseRecord>;
 type MemoryResponder = fn(&Value) -> ResponseRecord;
 
 struct State {
+    authority: Mutex<Option<String>>,
     mode: Mode,
     placeholders: Mutex<Placeholders>,
     hits: Mutex<Vec<u32>>,
@@ -172,6 +173,7 @@ impl Provider {
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let address = listener.local_addr()?;
         let state = Arc::new(State {
+            authority: Mutex::new(None),
             mode,
             placeholders: Mutex::new(placeholders),
             hits: Mutex::new(vec![0; count]),
@@ -287,6 +289,18 @@ impl Provider {
     }
 
     /// Number of interactive provider requests answered so far.
+    pub fn is_chatgpt_plan(&self) -> bool {
+        match &self.state.mode {
+            Mode::Replay(cassette) => cassette.meta.provider == "openai-subscription",
+            Mode::Synthetic(_) => true,
+            Mode::Record { meta, .. } => meta.provider == "openai-subscription",
+        }
+    }
+
+    pub fn chatgpt_authority(&self, issuer: &str) {
+        *lock(&self.state.authority) = Some(issuer.into());
+    }
+
     pub fn served(&self) -> u32 {
         *lock(&self.state.served)
     }

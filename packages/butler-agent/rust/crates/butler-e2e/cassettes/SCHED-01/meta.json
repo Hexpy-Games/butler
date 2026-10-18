@@ -12,52 +12,53 @@
     "JWT/sk-key/bearer/email/home path/host name -> fixed placeholders",
     "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
     "response headers reduced to content-type, retry-after",
-    "chunks re-cut at SSE event boundaries (event bytes unchanged)"
+    "chunks re-cut at SSE event boundaries (event bytes unchanged)",
+    "siwc-path-migration"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "a2e90567c476d00129f92c8d3b817d5a2665a42ca74633615c8ee45b5aec582b"
+      "sha256": "ea27c214b6bdc2da13667d4eb210bc1bd6a43898dcd12a9b9173c9c8fe2a3712"
     },
     {
       "file": "001.json",
-      "sha256": "32d1d2f79f0e3db2b26a412776d8df315480cbb31d1c3d896f8354f777c0dbb5"
+      "sha256": "d4fef33915543371af8037bafb0f94a75797125111a77d4306c9477cc3a6a24c"
     },
     {
       "file": "002.json",
-      "sha256": "07d4001fd604f83e6133095912d099eab4f367ecb1dbc1c4b2f4ca12f7ee8ce2"
+      "sha256": "655fd964708abd4a015a2f02a7297a996eea8fb36dd252ec16d4b93642aa0450"
     },
     {
       "file": "003.json",
-      "sha256": "cfbc66600a8cb5b34a2187baff085d332db15aa7037611ed8867418f8173447e"
+      "sha256": "3567247f396b582e035d46e02f4b0bc9f80ebf407663ff88b4fde4d81669c236"
     },
     {
       "file": "004.json",
-      "sha256": "125f120cf6b5b62c6f7de8014a0af26153ac5d52aab0f216c92a3afdebb70a4d"
+      "sha256": "33bc2d3c310b736001f19b5149ed6f29f539f6808fdf0343077190eaa6df9423"
     },
     {
       "file": "005.json",
-      "sha256": "d5664f3603f96ec52c2b9cb63b5492b6f85da0155412f1816e707f870592f872"
+      "sha256": "9a1d941aaf43b62dd4ba8c357b6558adfcd826b0de7f201afc502cc3795542e5"
     },
     {
       "file": "006.json",
-      "sha256": "9332be5ce555f800932cb113ed73131136c30238efffc03218f6f60f862fa9c8"
+      "sha256": "0e145831a9f69235aee5435b823844e6412ec625ba2b72b316020459a2c34fe9"
     },
     {
       "file": "007.json",
-      "sha256": "63d860d2c297c3f7cbdd547236726b25dc356354b5f561b822a4275e0715ed74"
+      "sha256": "66274830d558c2aa5a4b7171a29d4ec6e1ef2572c7069f8366629012552bdcac"
     },
     {
       "file": "008.json",
-      "sha256": "8c0fd608c3fdce9900fbf14de0e9a7ad3d6e2bd28b129cc197089691bd7e41e0"
+      "sha256": "d4776ec05e6f650fd792645b8154b1138ea3b44ebbae033b3a20c682346f2436"
     },
     {
       "file": "009.json",
-      "sha256": "c9a484c995335b8aea9cbf11658ec57e85d3c843fa692e8eda30d2ecdf01c34f"
+      "sha256": "7fb0600d7e95ca8463f703e239a44ce764aedd661aad723d18bff54ed1e1c8fb"
     },
     {
       "file": "010.json",
-      "sha256": "e3bd33edc433806309a95951c299ddb7a19b2bbc2c9c5e14197ca869be695bd9"
+      "sha256": "738462f59f99a249913e5b3498ad77d98d62b20333626f7533086c9c417f9cdd"
     }
   ],
   "fingerprint": [

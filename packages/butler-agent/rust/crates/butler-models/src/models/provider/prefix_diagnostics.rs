@@ -411,8 +411,7 @@ fn auth_route(mode: super::ProviderAuthMode) -> &'static str {
     use super::ProviderAuthMode;
     match mode {
         ProviderAuthMode::ApiKey => "api_key",
-        ProviderAuthMode::CodexSubscription => "codex_subscription",
-        ProviderAuthMode::CodexOauth => "oauth",
+        ProviderAuthMode::ChatGptPlan => "chatgpt_plan",
         ProviderAuthMode::None => "other",
     }
 }

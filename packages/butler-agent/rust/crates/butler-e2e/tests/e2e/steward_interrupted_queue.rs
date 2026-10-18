@@ -51,7 +51,7 @@ async fn started(id: &str, url: &str, script: &stub::Script) -> Result<Scenario,
                     .unwrap()
                     .iter()
                     .map(|r| butler_e2e::e2e::matching::key(
-                        "/codex/responses",
+                        "/v1/responses",
                         r,
                         &Default::default()
                     )
@@ -245,7 +245,7 @@ async fn assert_drained(
 }
 
 pub(super) fn request_text(body: &Value) -> String {
-    butler_e2e::e2e::matching::key("/codex/responses", body, &Default::default()).user_request
+    butler_e2e::e2e::matching::key("/v1/responses", body, &Default::default()).user_request
 }
 
 fn assert_requests(script: &stub::Script) {

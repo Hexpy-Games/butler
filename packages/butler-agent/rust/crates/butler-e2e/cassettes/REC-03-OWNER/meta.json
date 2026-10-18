@@ -12,32 +12,33 @@
     "JWT/sk-key/bearer/email/home path/host name -> fixed placeholders",
     "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
     "response headers reduced to content-type, retry-after",
-    "chunks re-cut at SSE event boundaries (event bytes unchanged)"
+    "chunks re-cut at SSE event boundaries (event bytes unchanged)",
+    "siwc-path-migration"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "b4cf7fa6e9baa50f447f317b0b61a9bee42479309471e46b85146f6bf5402f15"
+      "sha256": "a4919858262b7811a8b1686ee5c0865d87835fcb10bc10330670ed96b9e5ad6c"
     },
     {
       "file": "001.json",
-      "sha256": "cdc4ef69f8db23e445421501c6c0149f64486e4bd7103eefde9d2f26a7322f2d"
+      "sha256": "49efb75dc65fac66187840153fbf096add5404f62dac3ad54e1d2fcfd42e3ab7"
     },
     {
       "file": "002.json",
-      "sha256": "ce6bde308ce6bad5b4ee71862c42194c8b2045000a9ebfcfb9201b4676e2ec35"
+      "sha256": "3831b6e5091373e21b94143bc976d4eafda264733fed09402bdcf04432091cce"
     },
     {
       "file": "003.json",
-      "sha256": "f43dc9a09838c9ad39c863051617c2de7ac86fcf1614ceaccc69e987ad354806"
+      "sha256": "aa4990d1ae3125ee3bb234e4e980771d96d3af699d7a1a3c913085d71007aa80"
     },
     {
       "file": "004.json",
-      "sha256": "b4e2f2a5a6cfc0b4e65acdd0160d04743e72260814cc25dbc6a78a2cbe0cb55d"
+      "sha256": "d0d4144b2915ebd14c2d6e1a53ce6e41a517254003c19015a1b8711545d34ca3"
     },
     {
       "file": "005.json",
-      "sha256": "dbdf61edd336ed136956bca2ac5f6b264ccb991e46f6a4e573a2fe5496a1447c"
+      "sha256": "a56052957ea617f3677e7009c42e87fe8f09afcfcb821f2d7b7ddcee4bbf83cd"
     }
   ],
   "fingerprint": [

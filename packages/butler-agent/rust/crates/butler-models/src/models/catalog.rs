@@ -67,7 +67,8 @@ impl ReasoningEffort {
 #[serde(rename_all = "snake_case")]
 pub enum ProviderAuthMethod {
     ApiKey,
-    CodexOauth,
+    #[serde(rename = "chatgpt_oauth", alias = "codex_oauth")]
+    ChatGptOauth,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

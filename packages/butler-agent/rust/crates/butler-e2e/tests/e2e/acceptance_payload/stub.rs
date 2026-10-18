@@ -30,7 +30,7 @@ pub(in super::super) async fn start(
     rounds: usize,
 ) -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let url = format!("http://{}/codex", listener.local_addr()?);
+    let url = format!("http://{}", listener.local_addr()?);
     let script = Arc::new(Script {
         requests: Mutex::new(vec![]),
         input: Mutex::new(String::new()),
@@ -42,7 +42,10 @@ pub(in super::super) async fn start(
     });
     let app = Router::new()
         // The owner-scale synthetic input is about 2.4 MB; retain the complete body.
-        .route("/codex/responses", post(reply))
+        .route("/v1/responses", post(reply))
+        .route_layer(axum::middleware::from_fn(
+            butler_e2e::e2e::chatgpt_wire::validate,
+        ))
         .layer(DefaultBodyLimit::max(8 * 1024 * 1024))
         .with_state(script.clone());
     let server = tokio::spawn(async move {
@@ -52,7 +55,7 @@ pub(in super::super) async fn start(
 }
 async fn reply(State(script): State<Arc<Script>>, raw: Bytes) -> axum::response::Response {
     let body: Value = serde_json::from_slice(&raw).unwrap();
-    let key = matching::key("/codex/responses", &body, &Placeholders::default());
+    let key = matching::key("/v1/responses", &body, &Placeholders::default());
     let item = if key.user_request == REQUEST {
         let step = body["input"]
             .as_array()

@@ -11,7 +11,7 @@ async fn perf_owner_scale_history_assembly_and_idle_writes() -> Result<(), Harne
     let (url, stub, server) = provider::start(false).await?;
     let setup = Setup::new("PROMPT-OWNER-SCALE")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
         .env("BUTLER_STARTUP_TRACE", "1");
     super::super::perf_turn::require_release_agent(&setup)?;

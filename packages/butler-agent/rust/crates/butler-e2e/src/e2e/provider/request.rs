@@ -3,11 +3,42 @@ use super::*;
 pub(super) async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
     let (parts, body) = request.into_parts();
     let path = parts.uri.path().to_owned();
+    if parts.method == axum::http::Method::GET && path == "/v1/models" {
+        let authority = lock(&state.authority).clone();
+        if let Some(authority) = authority {
+            let mut http = reqwest::Client::new().get(format!("{authority}/v1/models"));
+            if let Some(auth) = parts.headers.get("authorization") {
+                http = http.header("authorization", auth);
+            }
+            if let Ok(response) = http.send().await {
+                let status = response.status().as_u16();
+                let bytes = response.bytes().await.unwrap_or_default();
+                return Response::builder()
+                    .status(status)
+                    .header("content-type", "application/json")
+                    .body(Body::from(bytes))
+                    .unwrap_or_default();
+            }
+        }
+        return plain(503, "HARNESS_ERROR: model authority unavailable");
+    }
     let bytes = axum::body::to_bytes(body, 64 * 1024 * 1024)
         .await
         .unwrap_or_default();
     let arrived = Instant::now();
     let json: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    let chatgpt = match &state.mode {
+        Mode::Replay(c) => c.meta.provider == "openai-subscription",
+        Mode::Synthetic(_) => true,
+        Mode::Record { meta, .. } => meta.provider == "openai-subscription",
+    };
+    if chatgpt
+        && let Err(violation) =
+            super::super::chatgpt_wire::assert_http(&parts.method, &path, &parts.headers, &json)
+    {
+        lock(&state.misses).push(format!("wire:{violation}"));
+        return plain(501, &format!("HARNESS_ERROR: wire:{violation}"));
+    }
     let memory = memory::matches(&json);
     if let Mode::Synthetic(synthetic) = &state.mode
         && !is_title_request(&json)

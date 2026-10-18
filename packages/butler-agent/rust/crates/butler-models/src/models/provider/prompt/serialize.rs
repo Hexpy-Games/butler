@@ -96,10 +96,7 @@ fn responses(
     prompt: &str,
     reasoning: ReasoningEffort,
 ) -> Result<(Value, Option<String>, Option<PromptCacheRetention>), ModelRoundError> {
-    let codex = matches!(
-        config.auth.mode(),
-        ProviderAuthMode::CodexOauth | ProviderAuthMode::CodexSubscription
-    );
+    let codex = matches!(config.auth.mode(), ProviderAuthMode::ChatGptPlan);
     let scope = request.cache_scope.unwrap_or("text-prompt");
     let key = config.prompt_cache.key_prefix.as_deref().map(|prefix| {
         if scope.is_empty() {
@@ -173,25 +170,8 @@ fn responses(
         body.insert("reasoning".into(), json!({"effort":effort(reasoning)}));
     }
     body.insert("input".into(), input);
-    if codex {
-        let model = config
-            .wire_model
-            .strip_suffix("-codex")
-            .unwrap_or(&config.wire_model)
-            .to_owned();
-        body.insert("model".into(), model.into());
-        let instructions = request
-            .instructions
-            .map(butler_core::public_text::trim_js_whitespace)
-            .filter(|value| !value.is_empty())
-            .unwrap_or("You are Butler, a helpful personal AI assistant.");
-        body.insert("instructions".into(), instructions.into());
-        body.insert("store".into(), false.into());
-        body.insert("stream".into(), true.into());
-        body.entry("text")
-            .or_insert_with(|| json!({"verbosity":"medium"}));
-        body.shift_remove("prompt_cache_retention");
-    }
+    super::super::chatgpt_plan::prepare(&mut body, config);
+    super::super::chatgpt_plan::finalize(&mut body, &super::super::chatgpt_plan::memo(config));
     Ok((
         Value::Object(body),
         key,

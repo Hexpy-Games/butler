@@ -12,7 +12,7 @@ pub(super) mod frame_size;
 pub(super) mod native;
 pub(super) use chat::hosted_chat;
 
-pub(super) async fn codex(
+pub(super) async fn chatgpt_plan(
     response: Response,
     provider: &str,
     api: &str,
@@ -20,7 +20,7 @@ pub(super) async fn codex(
     observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
     clock: &dyn ProviderClock,
 ) -> Result<Value, Box<ProviderRequestError>> {
-    let mut state = CodexState::new(clock.now_epoch_millis());
+    let mut state = ChatGptPlanState::new(clock.now_epoch_millis());
     let completed = consume(response, provider, api, None, |frame| {
         let Ok(event) = serde_json::from_str::<Value>(frame) else {
             return Ok(None);
@@ -39,7 +39,7 @@ pub(super) async fn codex(
     Ok(state.response(&completed, clock))
 }
 
-struct CodexState {
+struct ChatGptPlanState {
     output: Vec<Value>,
     fallback_text: String,
     sequence: u64,
@@ -47,7 +47,7 @@ struct CodexState {
     tool_stream_id: String,
 }
 
-impl CodexState {
+impl ChatGptPlanState {
     fn new(now: i64) -> Self {
         Self {
             output: Vec::new(),
@@ -65,6 +65,9 @@ impl CodexState {
         api: &str,
     ) -> Result<Option<Value>, Box<ProviderRequestError>> {
         let kind = event.get("type").and_then(Value::as_str).unwrap_or("");
+        if kind == "response.incomplete" {
+            return Err(diagnostics::plan::incomplete(event, provider, api));
+        }
         if kind == "error" || kind == "response.failed" {
             return Err(stream_error(event, provider, api));
         }
@@ -82,7 +85,7 @@ impl CodexState {
         } else if kind == "response.output_item.added" {
             if let Some(item) = event.get("item")
                 && item["type"] == "function_call"
-                && let Some(name) = item["name"].as_str()
+                && item["name"].is_string()
                 && let Some(observer) = observer
             {
                 let sequence = self.next();
@@ -91,7 +94,7 @@ impl CodexState {
                         stream_id: self.tool_stream_id.clone(),
                         call_index: event["output_index"].as_u64().unwrap_or(0),
                         sequence,
-                        tool_name: name.to_owned(),
+                        tool_name: super::super::provider::chatgpt_plan::call_name(item).to_owned(),
                         call_id: item["call_id"].as_str().map(str::to_owned),
                     },
                 );
@@ -305,7 +308,9 @@ fn stream_error(event: &Value, provider: &str, api: &str) -> Box<ProviderRequest
     let code = error.get("code").and_then(Value::as_str).unwrap_or("");
     let kind = error.get("type").and_then(Value::as_str).unwrap_or("");
     let identity = format!("{kind}:{code}").to_ascii_lowercase();
-    let status = if identity.contains("rate") || identity.contains("too_many_requests") {
+    let status = if let Some(status) = diagnostics::plan::stream_status(error) {
+        status
+    } else if identity.contains("rate") || identity.contains("too_many_requests") {
         429
     } else if identity.contains("unauthorized") || identity.contains("auth") {
         401

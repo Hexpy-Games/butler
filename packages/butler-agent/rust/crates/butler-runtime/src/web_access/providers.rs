@@ -100,7 +100,7 @@ pub(super) async fn configured(
                         Box::new(OpenAIWebSearchProvider::new(&key, model, api_base)),
                         ddg(),
                     ),
-                    Ok(auth @ ProviderAuth::Codex { .. }) => {
+                    Ok(auth @ ProviderAuth::ChatGptPlan { .. }) => {
                         match CodexSubscriptionWebSearchProvider::from_auth(auth, model, api_base) {
                             Ok(primary) => fallback(Box::new(primary), ddg()),
                             Err(_) => ddg(),

@@ -15,7 +15,7 @@ async fn row11_new_secrets_are_swept() -> Result<(), HarnessError> {
     let setup = Setup::new("WIN-11")?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let folder = setup.sandbox.home.join("project");
     std::fs::create_dir(&folder)?;
     let mut s = setup.start().await?;
@@ -81,7 +81,7 @@ async fn interrupted(kill: bool) -> Result<(), HarnessError> {
         .env("BUTLER_DEBUG_SANDBOX_TIMINGS", "1")
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let folder = setup.sandbox.home.join("project");
     std::fs::create_dir(&folder)?;
     let mut s = setup.start().await?;

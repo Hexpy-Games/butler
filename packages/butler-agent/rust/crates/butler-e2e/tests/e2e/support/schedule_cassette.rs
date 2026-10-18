@@ -356,7 +356,7 @@ pub(super) async fn bridge_result(
             .requests()
             .iter()
             .map(|request| butler_e2e::e2e::matching::key(
-                "/codex/responses",
+                "/v1/responses",
                 request,
                 &Default::default()
             ))

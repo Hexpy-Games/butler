@@ -16,6 +16,7 @@ pub(super) fn router(state: Arc<Authority>) -> Router {
         .route("/api/accounts/authorize", get(authorize))
         .route("/api/accounts/oauth/token", post(tokens::exchange))
         .route("/api/accounts/oauth/revoke", post(revoke))
+        .route("/v1/models", get(super::models::list))
         .with_state(state)
 }
 async fn discovery(State(state): State<Arc<Authority>>) -> Json<serde_json::Value> {

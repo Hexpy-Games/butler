@@ -3,9 +3,7 @@ use std::{fs, path::PathBuf, sync::Arc};
 use serde_json::{Value, json};
 
 use super::*;
-use crate::models::{
-    ModelCatalog, ProviderAuth, ProviderAuthMode, ProviderConfigRequest, ProviderRequestConfigPort,
-};
+use crate::models::{ModelCatalog, ProviderAuth, ProviderConfigRequest, ProviderRequestConfigPort};
 use butler_core::locale::LocaleCollation;
 use butler_turn::btcc::ModelRoundError;
 
@@ -124,6 +122,7 @@ async fn physical_config_resolves_all_provider_ids_and_registered_credentials() 
     for (provider, model_ref) in refs {
         let config = owner
             .resolve(ProviderConfigRequest {
+                rejected_authorization: None,
                 model_ref: &model_ref,
                 butler_data: None,
             })
@@ -136,6 +135,7 @@ async fn physical_config_resolves_all_provider_ids_and_registered_credentials() 
     }
     let local = owner
         .resolve(ProviderConfigRequest {
+            rejected_authorization: None,
             model_ref: "local/local-fixture",
             butler_data: None,
         })
@@ -180,6 +180,7 @@ async fn registered_openai_key_overrides_environment_and_sizing_rereads_files() 
     for model in ["openai/gpt-5.5", "openai/gpt-6-luna"] {
         let config = owner
             .resolve(ProviderConfigRequest {
+                rejected_authorization: None,
                 model_ref: model,
                 butler_data: None,
             })
@@ -229,59 +230,39 @@ async fn registered_openai_key_overrides_environment_and_sizing_rereads_files() 
     );
 }
 
+// test-category: security
 #[tokio::test]
-async fn codex_profile_precedes_codex_file() {
-    let fixture = Fixture::new("codex-profile");
-    let profile = fixture.0.join("profile.json");
-    let codex = fixture.0.join("codex-auth.json");
+async fn registered_chatgpt_ignores_api_key_and_legacy_file() {
+    let fixture = Fixture::new("chatgpt-registration");
     fixture.write(
-        "profile.json",
-        &json!({
-            "type":"oauth", "accessToken":"profile-token", "unknown":"kept",
-            "expiresAt":0
-        }),
+        "auth/chatgpt.json",
+        &json!({"schema_version":1,"client_id":"issued-client",
+        "subject":"subject","access_token":"registration-token","refresh_token":"refresh",
+        "expires_at":i64::MAX,"scopes":["chatgpt.tokens.use.direct"]}),
     );
     fixture.write(
-        "codex-auth.json",
-        &json!({"tokens":{"access_token":"codex-token"}}),
+        "auth/openai-codex.json",
+        &json!({"accessToken":"legacy-token"}),
     );
     fixture.write(
         "butler.config.json",
         &json!({"models":{"registered":[{
-            "provider_id":"openai", "model_id":"gpt-5.5", "auth_type":"codex_oauth"
-        }]}}),
+        "provider_id":"openai","model_id":"gpt-5.5","auth_type":"codex_oauth"}]}}),
     );
     let owner = fixture.owner(ModelConfigurationEnvironment {
-        openai_api_key: Some("must-not-override-codex-route".into()),
-        butler_codex_auth_profile: Some(profile),
-        codex_auth_json: Some(codex),
-        os_platform: Some("darwin".into()),
-        os_release: Some("25.0".into()),
-        os_arch: Some("arm64".into()),
+        openai_api_key: Some("api-key".into()),
         ..Default::default()
     });
     let config = owner
         .resolve(ProviderConfigRequest {
             model_ref: "openai/gpt-5.5",
             butler_data: None,
+            rejected_authorization: None,
         })
         .await
         .unwrap();
-    match config.auth {
-        ProviderAuth::Codex {
-            mode,
-            authorization,
-            ..
-        } => {
-            assert_eq!(mode, ProviderAuthMode::CodexSubscription);
-            assert_eq!(authorization, "Bearer profile-token");
-        }
-        _ => panic!("expected codex auth"),
-    }
-    let verifier = "fixture-verifier";
-    assert_eq!(
-        auth::pkce_challenge(verifier),
-        "8Dw_rXYDuMBDOofOjlxvMNEALsULmI6c47hS_o9Dkqg"
+    assert!(
+        matches!(config.auth, ProviderAuth::ChatGptPlan { authorization, .. } if authorization.as_str() == "Bearer registration-token")
     );
 }
 
@@ -293,6 +274,7 @@ async fn missing_registration_credential_and_provider_mismatch_are_rejected() {
     });
     let error = owner
         .resolve(ProviderConfigRequest {
+            rejected_authorization: None,
             model_ref: "anthropic/claude-sonnet-5",
             butler_data: None,
         })
@@ -316,6 +298,7 @@ async fn missing_registration_credential_and_provider_mismatch_are_rejected() {
     );
     let error = owner
         .resolve(ProviderConfigRequest {
+            rejected_authorization: None,
             model_ref: "anthropic/claude-sonnet-5",
             butler_data: None,
         })
@@ -386,6 +369,7 @@ async fn prompt_resolution_preserves_explicit_precedence_and_dynamic_discovery()
     );
     let config = owner
         .resolve(ProviderConfigRequest {
+            rejected_authorization: None,
             model_ref: "openai/auto:codex-latest",
             butler_data: None,
         })
@@ -393,6 +377,7 @@ async fn prompt_resolution_preserves_explicit_precedence_and_dynamic_discovery()
         .unwrap();
     let configured_dynamic = owner
         .resolve(ProviderConfigRequest {
+            rejected_authorization: None,
             model_ref: "",
             butler_data: None,
         })
@@ -400,6 +385,7 @@ async fn prompt_resolution_preserves_explicit_precedence_and_dynamic_discovery()
         .unwrap();
     let malformed_versions = owner
         .resolve(ProviderConfigRequest {
+            rejected_authorization: None,
             model_ref: "openai/auto:codex-latest",
             butler_data: None,
         })
@@ -407,6 +393,7 @@ async fn prompt_resolution_preserves_explicit_precedence_and_dynamic_discovery()
         .unwrap();
     let unicode_tie = owner
         .resolve(ProviderConfigRequest {
+            rejected_authorization: None,
             model_ref: "openai/auto:codex-latest",
             butler_data: None,
         })
@@ -414,6 +401,7 @@ async fn prompt_resolution_preserves_explicit_precedence_and_dynamic_discovery()
         .unwrap();
     let first_version_pattern = owner
         .resolve(ProviderConfigRequest {
+            rejected_authorization: None,
             model_ref: "openai/auto:codex-latest",
             butler_data: None,
         })
@@ -454,6 +442,7 @@ async fn prompt_resolution_preserves_explicit_precedence_and_dynamic_discovery()
     ));
     let config = owner
         .resolve(ProviderConfigRequest {
+            rejected_authorization: None,
             model_ref: "openai/gpt-5.5",
             butler_data: None,
         })
@@ -465,6 +454,7 @@ async fn prompt_resolution_preserves_explicit_precedence_and_dynamic_discovery()
     );
     let lower_default = owner
         .resolve(ProviderConfigRequest {
+            rejected_authorization: None,
             model_ref: "",
             butler_data: None,
         })

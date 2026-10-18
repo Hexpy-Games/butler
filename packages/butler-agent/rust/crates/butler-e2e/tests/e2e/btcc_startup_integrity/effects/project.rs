@@ -6,11 +6,10 @@ use serde_json::json;
 async fn project_plan_effects_pass_scan_and_startup() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("BTCC-PROJECT-PLAN-EFFECTS")?.access(Access::FullAccess);
-    fixtures::stub_codex_auth(&setup.sandbox.codex_home())?;
     let file = setup.sandbox.workspace.join("integrity.txt");
     let (url, server) = stub::start(file.display().to_string(), true, true).await?;
     let s = setup
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_STARTUP_TRACE", "1")
         .start()
         .await?;
@@ -60,11 +59,10 @@ async fn project_plan_effects_pass_scan_and_startup() -> Result<(), HarnessError
 async fn operation_turn_effects_use_general_empty_plan_rule() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("BTCC-OPERATION-EFFECTS")?.access(Access::FullAccess);
-    fixtures::stub_codex_auth(&setup.sandbox.codex_home())?;
     let file = setup.sandbox.workspace.join("integrity.txt");
     let (url, server) = stub::start(file.display().to_string(), false, false).await?;
     let s = setup
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_STARTUP_TRACE", "1")
         .start()
         .await?;

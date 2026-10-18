@@ -6,7 +6,6 @@
 //!   `POST /v1/chat/completions` (streamed or not).
 //! - [`FakeServer::provider_models`]: a provider's `GET /v1/models` that
 //!   checks the API key (OpenAI bearer or Anthropic `x-api-key`).
-//! - [`FakeServer::oauth_token`]: an OAuth token endpoint.
 //!
 //! Provenance. Every body is a vendor's documented example or follows the
 //! documented shape; values marked `synthetic` are made up for a case no
@@ -105,7 +104,6 @@ enum StreamEnd {
 enum Kind {
     LocalModels,
     ProviderModels,
-    OauthToken,
 }
 
 /// One request as the stand-in saw it.
@@ -137,10 +135,6 @@ impl FakeServer {
 
     pub async fn provider_models() -> Result<Self, HarnessError> {
         Self::start(Kind::ProviderModels, ChatBehavior::default()).await
-    }
-
-    pub async fn oauth_token() -> Result<Self, HarnessError> {
-        Self::start(Kind::OauthToken, ChatBehavior::default()).await
     }
 
     async fn start(kind: Kind, chat: ChatBehavior) -> Result<Self, HarnessError> {
@@ -221,7 +215,6 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
             chat_completion(&state.chat, &seen.body, streams_before == 0)
         }
         (Kind::ProviderModels, &Method::GET, "/v1/models") => provider_models(&seen.headers),
-        (Kind::OauthToken, &Method::POST, "/oauth/token") => json_response(200, &oauth_tokens()),
         _ => json_response(404, &json!({"error": {"message": "not found"}})),
     }
 }
@@ -393,25 +386,6 @@ fn anthropic_models(key: &str) -> Response<Body> {
         &json!({"type": "error", "error": {
         "type": "authentication_error", "message": "invalid x-api-key"}}),
     )
-}
-
-/// A token response with an `id_token` and a JWT access token carrying the
-/// ChatGPT claims (unsigned: the agent reads claims, it does not verify
-/// the provider's signature on a token it just received over TLS).
-fn oauth_tokens() -> Value {
-    let claims = json!({
-        "email": OAUTH_EMAIL,
-        "https://api.openai.com/auth": {"chatgpt_account_id": OAUTH_ACCOUNT_ID},
-        "exp": 1_999_999_999_u64
-    });
-    let jwt = format!(
-        "{}.{}.{}",
-        base64url(br#"{"alg":"none","typ":"JWT"}"#),
-        base64url(claims.to_string().as_bytes()),
-        base64url(b"synthetic-signature")
-    );
-    json!({"id_token": jwt, "access_token": jwt, "refresh_token": "e2e-refresh-token",
-           "expires_in": 3600, "token_type": "Bearer"})
 }
 
 /// Base64url without padding (RFC 4648 section 5), as JWTs and PKCE use.

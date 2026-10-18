@@ -70,8 +70,8 @@ pub(crate) fn without_a_reading_polled_providers_are_pending_and_api_ones_not_of
     let (store, _) = store(&dir);
     let openai = store.view("openai");
     assert!(!openai.available);
-    assert_eq!(code(&openai), Some("provider_quota_pending"));
-    assert_eq!(openai.plan_kind, QuotaPlanKind::Unknown);
+    assert_eq!(code(&openai), Some("provider_quota_not_offered"));
+    assert_eq!(openai.plan_kind, QuotaPlanKind::Api);
     let zai_api = store.view("zai-api");
     assert_eq!(code(&zai_api), Some("provider_quota_not_offered"));
     assert_eq!(zai_api.plan_kind, QuotaPlanKind::Api);
