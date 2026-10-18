@@ -87,20 +87,20 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     assert_eq!(
         butler_core::json::stringify(&codex).unwrap(),
         r#"{"model":"gpt-5.5","tool_choice":"auto","reasoning":{"effort":"medium","summary":"auto"},"instructions":"PREFIX dynamic","store":false,"input":[{"role":"user","content":[{"type":"input_text","text":"hello"}]}],"stream":true,"text":{"verbosity":"medium"}}"#,
-        "Codex keeps its existing request bytes and field order"
+        "Codex keeps its control fields and field order"
     );
     let identity = serialize::provider_cache_identity(&body, &encoded, &request, &config)
         .unwrap()
         .unwrap();
     assert_eq!(identity["providerId"], "openai");
-    assert_eq!(identity["serializedStablePrefixBytes"], 94);
+    assert_eq!(identity["serializedStablePrefixBytes"], 111);
     assert_eq!(
         identity["capabilityDigest"],
         "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     );
     assert_eq!(
         identity["serializedStablePrefixSha256"],
-        "41af67d477a09e70211ebec9e99780ce52a8ae4cfb00e387f0d33a8b138cc6d8"
+        "2ff58e195251b3132738dd1c56552d4027d222c66cef16c69dcab8cea40f1e2e"
     );
 
     let prior = serde_json::json!({"provider":"openai","toolSurfaceDigest":"a".repeat(64),

@@ -47,7 +47,7 @@ fn gemini(part: &Value, end: bool) -> String {
     if end {
         candidate["finishReason"] = json!("STOP");
     }
-    frame(&json!({"candidates":[candidate]}))
+    frame(&json!({"candidates":[candidate],"modelVersion":"gemini-3.8-flash"}))
 }
 fn frames(stub: &Stub) -> (String, String, String) {
     let a = format!("**{FIRST}**\nDetails.\n");
@@ -63,7 +63,7 @@ fn frames(stub: &Stub) -> (String, String, String) {
         ),
         "anthropic" => (
             frame(
-                &json!({"type":"message_start","message":{"id":"msg_thinking","type":"message","role":"assistant","content":[],"usage":{"input_tokens":10,"output_tokens":0}}}),
+                &json!({"type":"message_start","message":{"id":"msg_thinking","model":"claude-haiku-4-5","type":"message","role":"assistant","content":[],"usage":{"input_tokens":10,"output_tokens":0}}}),
             ) + &frame(
                 &json!({"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}),
             ) + &frame(
@@ -98,7 +98,7 @@ fn frames(stub: &Stub) -> (String, String, String) {
                 frame(&json!({"type":kind,"item_id":"rs_1","output_index":0,"delta":b})),
                 frame(&json!({"type":"response.output_text.delta","delta":"Done."}))
                     + &frame(
-                        &json!({"type":"response.completed","response":{"id":"resp_done","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done."}]}],"usage":{"input_tokens":10,"output_tokens":10,"total_tokens":20}}}),
+                        &json!({"type":"response.completed","response":{"id":"resp_done","model":"gpt-5.5","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done."}]}],"usage":{"input_tokens":10,"output_tokens":10,"total_tokens":20}}}),
                     ),
             )
         }
