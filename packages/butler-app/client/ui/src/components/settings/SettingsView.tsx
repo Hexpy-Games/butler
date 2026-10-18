@@ -10,7 +10,7 @@ import { SettingsDetailHeader } from "./SettingsDetailHeader";
 import { ModelSettingsTitle } from "./ModelSettingsTitle";
 import { SettingsSidebar } from "./SettingsSidebar";
 import { createSettingsSectionGroups } from "./settingsSections";
-import { useDeveloperLogsAvailability } from "./useDeveloperLogsAvailability";
+import { useDeveloperMode } from "@/hooks/useDeveloperMode.ts";
 import { useCompactSettingsPaneEntry } from "./useCompactSettingsPaneEntry";
 import { ArrowLeft, IconButton, SettingsShell } from "@/butler-ds";
 
@@ -66,7 +66,7 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
   }, [closeView]);
 
   const settingsCopy = appCopy.settings;
-  const developerModeEnabled = useDeveloperLogsAvailability(settings.diagnostics_enabled === true);
+  const developerModeEnabled = useDeveloperMode();
   const sectionGroups = createSettingsSectionGroups(
     settingsCopy,
     developerModeEnabled,

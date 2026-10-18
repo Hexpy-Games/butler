@@ -383,9 +383,6 @@ impl AppMonitoringPort for UnprovidedMonitoring {
     fn system_events(&self, _: AppMonitorPage) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    fn developer_logs(&self, _: AppDeveloperLogsQuery) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
 }
 
 impl AppQueueOwnerLiveness for Liveness {

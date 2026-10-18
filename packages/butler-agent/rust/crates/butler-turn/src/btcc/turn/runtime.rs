@@ -23,7 +23,6 @@ pub(super) struct TurnRuntime {
     messages: Arc<dyn CanonicalMessageStore>,
     progress: Arc<dyn ProgressEventRepository>,
     readiness: Arc<dyn StorageReadiness>,
-    developer_log_capture: Arc<dyn super::ports::TurnDeveloperLogCapturePort>,
     supervisor: TurnExecutionSupervisor,
 }
 
@@ -34,7 +33,6 @@ impl TurnRuntime {
         messages: Arc<dyn CanonicalMessageStore>,
         progress: Arc<dyn ProgressEventRepository>,
         readiness: Arc<dyn StorageReadiness>,
-        developer_log_capture: Arc<dyn super::ports::TurnDeveloperLogCapturePort>,
         supervisor: TurnExecutionSupervisor,
     ) -> Self {
         Self {
@@ -43,7 +41,6 @@ impl TurnRuntime {
             messages,
             progress,
             readiness,
-            developer_log_capture,
             supervisor,
         }
     }
@@ -145,7 +142,6 @@ impl TurnRuntime {
         let permit = self.supervisor.enter(&turn.turn_id, turn.semantic_state)?;
         let claim = self.store.acquire_state_claim(&turn).await?;
         let progress = self.progress_scope(conversation, &turn, destination);
-        let developer_log = self.developer_log_capture.start_execution();
         let agent_result = self
             .agent
             .run(
@@ -153,13 +149,11 @@ impl TurnRuntime {
                 &claim,
                 recovery_attempt,
                 &progress,
-                developer_log.as_ref(),
+                &super::super::agent_loop::NOOP_MODEL_ROUND_OBSERVER,
                 permit.cancellation(),
             )
             .await;
         timing.mark("agent_returned");
-        developer_log.capture(&turn, agent_result.as_ref()).await;
-        timing.mark("developer_log_captured");
         let mut result = match agent_result {
             Ok(result) => result,
             Err(AgentLoopError::Propagate(error)) => return Err(error),

@@ -371,10 +371,7 @@ impl AgentRuntime {
         let bindings = stores.bindings.clone();
         let conversations = Arc::new(stores.conversations.clone());
         let progress = StorageProgressPublication::new(stores.btcc.clone());
-        let (developer_log_capture, developer_settings) =
-            owners::developer_capture(&paths.data_root, app_database_path, installation)?;
         let owner = Arc::new(RuntimeOwners {
-            developer_settings,
             stores,
             project_work,
             project_tools,
@@ -400,13 +397,7 @@ impl AgentRuntime {
             skills: skills.clone(),
             context_maintenance: context_maintenance.clone(),
         });
-        let assembly = assemble_runtime_turn(
-            &repositories,
-            preparation,
-            agent,
-            developer_log_capture,
-            owner,
-        );
+        let assembly = assemble_runtime_turn(&repositories, preparation, agent, owner);
         startup.phase("runtime_ports");
         Self::finish_startup(Self {
             hooks,
@@ -469,7 +460,6 @@ fn assemble_runtime_turn(
     repositories: &Arc<BtccRepositories>,
     preparation: Arc<DefaultTurnPreparation>,
     agent: Arc<dyn btcc::AgentLoop>,
-    developer_log_capture: Arc<dyn btcc::TurnDeveloperLogCapturePort>,
     host: Arc<dyn HostDependencies>,
 ) -> btcc::BtccAssembly {
     btcc::assemble(&TurnFacadeDependencies {
@@ -479,7 +469,6 @@ fn assemble_runtime_turn(
         messages: repositories.clone(),
         progress: repositories.clone(),
         readiness: repositories.clone(),
-        developer_log_capture,
         host,
     })
 }
