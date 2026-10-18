@@ -66,9 +66,11 @@ export function artifactPreviewMode(
   artifact: SessionArtifactSummary,
 ): ArtifactPreviewMode {
   if (artifact.kind === "web") return "web";
-  const extension = artifactExtension(
-    artifact.title || artifact.safe_path_label,
-  );
+  // The file's own path decides the renderer: a deliverable's title (and stored name) may carry no extension.
+  const extension =
+    artifactExtension(artifact.source_label ?? undefined) ||
+    artifactExtension(artifact.safe_path_label) ||
+    artifactExtension(artifact.title);
   if (artifact.kind === "image" || IMAGE_EXTENSIONS.includes(extension)) {
     return "image";
   }
@@ -89,7 +91,7 @@ export function artifactPreviewMode(
 }
 
 function artifactExtension(value: string | undefined): string {
-  const name = value?.trim().toLocaleLowerCase("en-US") ?? "";
+  const name = value?.trim().toLocaleLowerCase("en-US").split(/[/\\]/u).pop() ?? "";
   const index = name.lastIndexOf(".");
   return index >= 0 ? name.slice(index) : "";
 }

@@ -950,6 +950,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
         `File changes ${files} · +${additions} −${deletions}`,
       fileCounts: (additions, deletions) => `+${additions} −${deletions}`,
       noLineDetails: "No line details",
+      newFile: (size) => `New file · ${size}`,
       diffRegionLabel: (path) => `Changed lines for ${path}`,
       showMore: (remaining) => `Show more (${remaining})`,
       showLess: "Show less",
