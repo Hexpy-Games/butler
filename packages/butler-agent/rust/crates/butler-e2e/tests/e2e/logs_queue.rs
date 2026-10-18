@@ -101,3 +101,42 @@ fn logs_error_reserve_exhaustion_is_counted() -> Result<(), Box<dyn std::error::
     fs::remove_dir_all(root)?;
     Ok(())
 }
+
+#[tokio::test]
+async fn logs_completion_ignores_disabled_dropped_and_closed_writer()
+-> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    let root = root();
+    let log = Logger::open(&root, Config::default())?;
+    let paused = log.pause_writer()?;
+    tokio::time::timeout(
+        Duration::from_millis(100),
+        log.record_written(record(0, "DEBUG")),
+    )
+    .await??;
+    drop(paused);
+    log.configure(Config::detailed())?;
+    let paused = log.pause_writer()?;
+    for n in 0..8192 {
+        log.record(record(n, "DEBUG"))?;
+    }
+    tokio::time::timeout(
+        Duration::from_millis(100),
+        log.record_written(record(8192, "DEBUG")),
+    )
+    .await??;
+    assert_eq!(log.write_timeouts(), 0);
+    drop(paused);
+    log.shutdown()?;
+    assert!(
+        tokio::time::timeout(
+            Duration::from_millis(100),
+            log.record_written(record(0, "INFO")),
+        )
+        .await?
+        .is_err()
+    );
+    assert_eq!(log.write_timeouts(), 0);
+    fs::remove_dir_all(root)?;
+    Ok(())
+}

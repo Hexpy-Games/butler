@@ -15,6 +15,7 @@ pub(crate) struct Segment {
     pub blocks: Vec<Block>,
     file: BufWriter<File>,
     dirty: bool,
+    index_dirty_from: Option<usize>,
 }
 impl Segment {
     pub(super) fn open(dir: &Path) -> io::Result<Self> {
@@ -30,6 +31,7 @@ impl Segment {
                         bytes: 0,
                         blocks: Vec::new(),
                         dirty: false,
+                        index_dirty_from: None,
                     });
                 }
                 Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
@@ -41,6 +43,8 @@ impl Segment {
     pub(super) fn write(&mut self, row: &Record, line: &[u8]) -> io::Result<()> {
         let len = u64::try_from(line.len()).map_err(io::Error::other)?;
         self.file.write_all(line)?;
+        self.index_dirty_from
+            .get_or_insert(self.blocks.len().saturating_sub(1));
         index::add(&mut self.blocks, row, self.bytes, len, "agent");
         self.bytes += len;
         self.dirty = true;
@@ -56,6 +60,15 @@ impl Segment {
             super::files::sync_parent(&self.path)?;
         }
         Ok(())
+    }
+    pub(super) fn publish(&mut self, catalog: &mut super::storage::Catalog) {
+        let Some(from) = self.index_dirty_from.take() else {
+            return;
+        };
+        let blocks = catalog.entry(self.path.clone()).or_default();
+        // Only the last existing block can change; earlier blocks are immutable.
+        blocks.truncate(from);
+        blocks.extend_from_slice(&self.blocks[from..]);
     }
     pub(super) fn close(mut self) -> io::Result<()> {
         self.flush(true)?;

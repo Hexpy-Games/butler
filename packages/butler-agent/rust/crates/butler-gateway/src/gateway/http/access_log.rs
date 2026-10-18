@@ -47,12 +47,5 @@ pub(super) async fn finish(
     row.duration_ms = Some(start.elapsed().as_secs_f64() * 1000.0);
     row.attrs =
         serde_json::json!({"method":method.as_str(),"route":route,"status":status.as_u16()});
-    // A queued record alone does not establish completion: the writer can run
-    // after the response reaches the client. Wait off the runtime workers so
-    // request-caused log bytes are flushed before completing the response.
-    let _ = tokio::task::spawn_blocking(move || {
-        log.record(row)?;
-        log.flush()
-    })
-    .await;
+    let _ = log.record_written(row).await;
 }
