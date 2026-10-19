@@ -21,6 +21,7 @@ export function siteOf(url: string | undefined): string | undefined {
 }
 
 async function imageBlob(src: string): Promise<Blob> {
+  if (/^https?:/iu.test(src)) window.butlerApp?.log?.({ level: "DEBUG", category: "http.client", event: "image.fetch", attrs: { url: new URL(src).origin } });
   const response = await fetch(src);
   if (!response.ok || !response.headers.get("content-type")?.startsWith("image/")) throw new Error("image_unavailable");
   return await response.blob();

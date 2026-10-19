@@ -24,6 +24,7 @@ pub(super) struct CompactionState {
 }
 
 pub(super) struct CompactionProjection {
+    pub compacted_through: Option<usize>,
     pub messages: Option<Vec<ModelRoundMessage>>,
     pub identity: Option<ContextProjectionRebaseIdentity>,
     pub save_record: Option<Arc<ContextCompactionRecord>>,
@@ -74,6 +75,7 @@ impl CompactionState {
             && units.iter().all(|unit| unit.mandatory)
         {
             return Ok(CompactionProjection {
+                compacted_through: self.compacted_through(&units, messages.len()),
                 messages: projected,
                 identity: None,
                 save_record: None,
@@ -102,9 +104,18 @@ impl CompactionState {
             .transpose()
             .map_err(ContextProjectionError::Contract)?;
         Ok(CompactionProjection {
+            compacted_through: self.compacted_through(&units, messages.len()),
             messages: projected,
             identity,
             save_record,
+        })
+    }
+
+    fn compacted_through(&self, units: &[AtomicUnit], length: usize) -> Option<usize> {
+        self.current.as_ref().map(|record| {
+            units
+                .get(record.covered_units)
+                .map_or(length, |unit| unit.range.start)
         })
     }
 

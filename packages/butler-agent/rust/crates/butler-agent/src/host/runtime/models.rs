@@ -120,6 +120,12 @@ pub(crate) async fn with_moved_credentials(models: ProcessModels) -> ProcessMode
         }
         Err(error) => butler_core::diagnostic!("[native-credentials] migration failed: {error}"),
     }
+    let configuration = models.configuration.clone();
+    tokio::spawn(async move {
+        if let Err(error) = configuration.discover_missing_local_images().await {
+            tracing::debug!(%error, "Local image startup discovery failed");
+        }
+    });
     models
 }
 

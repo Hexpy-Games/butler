@@ -42,6 +42,7 @@
     "app:update-sidebar:smoke": "bun run tests/smoke/update-sidebar-smoke.ts",
     "app:update-progress:smoke": "bun run tests/smoke/update-progress-smoke.ts",
     "app:update:smoke": "bun run tests/smoke/packaged-app-update.ts",
+    "app:debug-env:smoke": "bun run tests/smoke/packaged-app-debug-env.ts",
     "app:first-run:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-first-run-setup-smoke.ts",
     "app:full-reset:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-full-reset-smoke.ts",
     "app:consent:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-consent-smoke.ts",

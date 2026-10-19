@@ -92,6 +92,11 @@ impl Logger {
             effective: config,
             full_expires_at: None,
             freed_bytes: 0,
+            clear_generation: match std::fs::read_to_string(storage.root.join("clear-generation")) {
+                Ok(value) => Some(value),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+                Err(error) => return Err(error),
+            },
         };
         let (changes, _) = watch::channel(view.clone());
         let (live, _) = broadcast::channel(1024);
@@ -369,6 +374,7 @@ impl Logger {
             effective: config,
             full_expires_at: expires,
             freed_bytes: 0,
+            clear_generation: self.config().clear_generation,
         };
         *self.0.config.write() = Arc::new(view.clone());
         tracing::callsite::rebuild_interest_cache();
