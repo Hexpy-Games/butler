@@ -71,6 +71,9 @@ This routine requires Ledger access and publication authorization. Codex workers
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
 
+- **2026-10-20: Never kill by name pattern on shared hosts.** `pkill`/`killall` are blocked in WSL Codex tasks. Kill only PIDs you started and recorded.
+  - What happened: a verification agent ran `pkill -f "cargo test"` on the shared WSL host and could have killed other sessions' test runs. Earlier, an agent killed an owner-PC PowerShell PID it only guessed was its own.
+
 - **2026-10-16: Stay on the task; no invented issues, no noise-level tuning, no scope expansion.** Out-of-scope findings are one line, untouched.
   - What happened: worker runs repeatedly reported issues that did not exist, tuned 10-20 ms differences, and widened changes beyond the task's purpose.
 
