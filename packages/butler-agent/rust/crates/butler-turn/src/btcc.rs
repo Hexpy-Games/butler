@@ -277,5 +277,7 @@ pub fn assemble(dependencies: &TurnFacadeDependencies) -> BtccAssembly {
 }
 
 #[cfg(feature = "test-support")]
+mod test_pause;
+#[cfg(feature = "test-support")]
 #[doc(hidden)]
-pub mod test_pause;
+pub use test_pause::reach as pause_for_test;
