@@ -233,7 +233,7 @@ impl Btcc {
     /// Stops a turn and reports how it ended.
     pub async fn stop_turn(&self, request: StopRequest) -> Result<TurnOutcome, BtccError> {
         #[cfg(feature = "test-support")]
-        crate::test_pause::reach("stop_persist", &request.turn_id).await;
+        test_pause::reach("stop_persist", &request.turn_id).await;
         self.inner.stop_turn(&request.turn_id).await
     }
 
@@ -275,3 +275,7 @@ pub fn assemble(dependencies: &TurnFacadeDependencies) -> BtccAssembly {
         host: BtccHost { inner },
     }
 }
+
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub mod test_pause;

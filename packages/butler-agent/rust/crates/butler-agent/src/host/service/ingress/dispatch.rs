@@ -14,6 +14,8 @@ use super::{
 };
 use crate::host::service::restart_handoff::RestartHandoff;
 use butler_gateway::gateway::{ClaimedInboundEvent, InboundQueue, QueuedInboundEvent};
+#[cfg(feature = "e2e-fixtures")]
+use butler_turn::btcc::test_pause;
 use butler_turn::btcc::{Btcc, StopRequest, TurnOutcomeKind};
 use butler_turn::workspace::SessionBindingStore;
 
@@ -173,7 +175,7 @@ async fn failed(
 ) -> IngressPoll {
     #[cfg(feature = "e2e-fixtures")]
     if let Ok(envelope) = Envelope::from_record(&item.record) {
-        butler_turn::test_pause::reach("dispatch_failed", bind::routed_turn_id(&envelope)).await;
+        test_pause::reach("dispatch_failed", bind::routed_turn_id(&envelope)).await;
     }
     // BTCC supplies a stable code here, never the provider body or prompt.
     // Keep that cause observable when the outer queue error is generic.
