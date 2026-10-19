@@ -19,6 +19,13 @@ pub trait CognitionCoordinationHost: Send + Sync {
     fn new_uuid(&self) -> String;
     /// Now, in milliseconds since the Unix epoch.
     fn now_epoch_millis(&self) -> i64;
+    /// Maximum lock wait, optionally shortened by an injected host policy.
+    fn write_wait_millis(&self, class: CognitionWaitClass, _purpose: Option<&str>) -> i64 {
+        match class {
+            CognitionWaitClass::Interactive => 5_000,
+            CognitionWaitClass::Background => 30_000,
+        }
+    }
     /// Now, as an ISO 8601 time with milliseconds.
     fn now_iso(&self) -> String;
 }

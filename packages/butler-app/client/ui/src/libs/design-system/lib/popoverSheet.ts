@@ -38,7 +38,7 @@ function measureInsets(): boolean {
   probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;"
     + "padding:0 env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)";
   document.body.append(probe);
-  const style = getComputedStyle(probe);
+  const style = window.getComputedStyle(probe);
   const next = { left: parseFloat(style.paddingLeft) || 0, right: parseFloat(style.paddingRight) || 0, bottom: parseFloat(style.paddingBottom) || 0 };
   probe.remove();
   if (next.left === insets.left && next.right === insets.right && next.bottom === insets.bottom) return false;
@@ -47,18 +47,24 @@ function measureInsets(): boolean {
 }
 
 const insetListeners = new Set<() => void>();
+let listening = false;
 
-// Measured once at load and again only when a media query that can move the
-// safe areas changes; the module-lifetime listeners are shared by every popover.
-measureInsets();
-if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+/**
+ * Re-measures only when a media query that can move the safe areas changes;
+ * the listeners are shared by every popover. Registered on first use, never at
+ * module load: importing the design system must not touch the DOM.
+ */
+function listenForInsetChanges() {
+  if (listening || typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+  listening = true;
   const refresh = () => { if (measureInsets()) for (const listener of insetListeners) listener(); };
   for (const query of INSET_QUERIES) window.matchMedia(query).addEventListener("change", refresh);
 }
 
 function subscribeInsets(onChange: () => void) {
   insetListeners.add(onChange);
-  // The module loaded before <body> existed: measure once, after commit.
+  listenForInsetChanges();
+  // First popover after load: measure once, after commit.
   if (!measured && measureInsets()) onChange();
   return () => { insetListeners.delete(onChange); };
 }
