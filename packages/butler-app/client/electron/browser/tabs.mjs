@@ -1,3 +1,4 @@
+import { disposeMarkingHost, startMarkingHost } from "./marking-host.mjs";
 import { BrowserLiveFrames } from "./live.mjs";
 import { linkMenuItems } from "./links.mjs";
 import { configureWebIdentity } from "./identity.mjs";
@@ -41,6 +42,7 @@ class UserBrowser {
   metadataTimer = null;
 
   constructor(app, getWindow, getLanguage) {
+    startMarkingHost();
     this.getWindow = getWindow;
     this.live = new BrowserLiveFrames(this);
     this.getLanguage = getLanguage;
@@ -377,6 +379,7 @@ class UserBrowser {
   syncAll() { for (const tab of this.tabs.values()) this.sync(tab); }
   flush() { return this.restore.flush(); }
   async dispose() {
+    await disposeMarkingHost();
     this.live.dispose();
     this.downloads.stop();
     this.resetUse();

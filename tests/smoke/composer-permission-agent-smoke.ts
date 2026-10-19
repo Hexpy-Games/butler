@@ -76,7 +76,7 @@ try {
     await editor.fill("권한 검증");
     await page.locator('[data-test-class="access-button"]').click();
     const menu = page.locator('[data-test-class="composer-menu"]');
-    assert.equal(await menu.locator('[data-slot="option-menu-item"]').count(), 4);
+    assert.equal(await menu.locator('[data-slot="option-menu-item"]').count(), 5);
     await page.screenshot({ path: join(output, `${mode}-menu.png`), fullPage: true });
     await menu.getByRole("button").filter({ has: page.getByText(label, { exact: true }) }).click();
     await page.waitForFunction(label => document.querySelector('[data-test-class="access-button"]')?.getAttribute("aria-label")?.includes(label), label);
@@ -110,7 +110,7 @@ try {
       await waitFor(async () => (await api(`/authority-requests?session_id=${session.id}`)).permissions.length === grantsStoredAndHidden, "grant");
       await page.locator('[data-test-class="access-button"]').click();
       const menu = page.locator('[data-test-class="composer-menu"]');
-      assert.equal(await menu.locator('[data-slot="option-menu-item"]').count(), 4, "grant does not add menu items");
+      assert.equal(await menu.locator('[data-slot="option-menu-item"]').count(), 5, "grant does not add menu items");
       assert.equal(await page.locator('[data-test-class="access-button"]').getAttribute("aria-label"), `권한: ${label}`, "grant does not add pill count");
       assert(!(await menu.innerText()).includes("허용한"), "no grant section");
       await page.screenshot({ path: join(output, `${mode}-grant-hidden.png`), fullPage: true });

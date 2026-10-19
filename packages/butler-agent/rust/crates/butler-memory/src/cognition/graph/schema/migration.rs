@@ -57,6 +57,40 @@ pub(super) fn legacy_failures(connection: &mut Connection, now: &str) -> Cogniti
     tx.commit().map_err(db_error)
 }
 
+/// Repair windows stranded by the old contention/unknown-outcome policy once,
+/// under the same schema writer authority. Idle probes never scan failed rows.
+pub(super) fn interrupted_failures(connection: &mut Connection, now: &str) -> CognitionResult<()> {
+    let migrated: bool = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM memory_state WHERE key='projection_contention_recovery')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(db_error)?;
+    if migrated {
+        return Ok(());
+    }
+    let tx = connection.transaction().map_err(db_error)?;
+    let jobs = tx.prepare("SELECT DISTINCT job_id FROM memory_projection_windows WHERE state='failed' AND error_code IN ('memory_projection_outcome_unknown','memory_write_busy')")
+        .map_err(db_error)?.query_map([], |row| row.get::<_, String>(0))
+        .map_err(db_error)?.collect::<Result<Vec<_>, _>>().map_err(db_error)?;
+    if !jobs.is_empty() {
+        let retry = super::super::failure::retry_at(now, 1)?;
+        tx.execute("UPDATE memory_projection_windows SET state=CASE WHEN normalized_plan_json IS NOT NULL THEN 'planned' ELSE 'pending' END,
+            error_code='memory_projection_interrupted',next_attempt_at=?1,owner_pid=NULL,owner_nonce=NULL,started_at=NULL
+            WHERE state='failed' AND error_code IN ('memory_projection_outcome_unknown','memory_write_busy')", [&retry]).map_err(db_error)?;
+        for job in jobs {
+            super::super::jobs::refresh_semantic_state(&tx, &job, now)?;
+        }
+    }
+    tx.execute(
+        "INSERT INTO memory_state(key,value) VALUES('projection_contention_recovery',?1)",
+        [now],
+    )
+    .map_err(db_error)?;
+    tx.commit().map_err(db_error)
+}
+
 fn needs_migration(connection: &Connection, table: &str) -> CognitionResult<bool> {
     let mut statement = connection
         .prepare(&format!("PRAGMA table_info({table})"))

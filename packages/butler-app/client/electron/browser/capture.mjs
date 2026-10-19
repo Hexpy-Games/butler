@@ -1,38 +1,8 @@
-import { BrowserWindow, nativeImage } from "electron";
+import { markedImage } from "./marking-host.mjs";
 import { evaluateWorld, framePoint } from "./frame-worlds.mjs";
 import { resolveSource } from "./page/snapshot.mjs";
 import { imageSourceScript } from "./page/collect-image.mjs";
 import { secureBoxes, captureViewport } from "./capture-security.mjs";
-
-/** Compose on a Butler-owned bitmap, never modify the page or capture the pointer. */
-async function markedImage(image, marks) {
-  const size = image.getSize();
-  const labelScale = Math.max(1, Math.max(size.width, size.height) / 1024);
-  const host = new BrowserWindow({ show: false, webPreferences: {
-    sandbox: true, contextIsolation: true, nodeIntegration: false, offscreen: true,
-  } });
-  try {
-    await host.loadURL("data:text/html,<meta charset=utf-8><canvas></canvas>");
-    const url = image.toDataURL();
-    const data = await host.webContents.executeJavaScript(`(async()=>{
-      const source=new Image();source.src=${JSON.stringify(url)};await source.decode();
-      const canvas=document.querySelector('canvas');canvas.width=${size.width};canvas.height=${size.height};
-      const context=canvas.getContext('2d');context.drawImage(source,0,0);
-      const labelScale=${labelScale};context.font=(12*labelScale)+'px monospace';
-      for(const mark of ${JSON.stringify(marks)}) {
-        const {x,y,width,height}=mark.rect;
-        if(mark.secure){context.fillStyle='#000';context.fillRect(x,y,width,height);continue;}
-        context.strokeStyle='#222';context.lineWidth=2*labelScale;context.strokeRect(x,y,width,height);
-        const w=context.measureText(mark.ref).width+6*labelScale,h=16*labelScale,top=Math.max(0,y-h);
-        // Tiny packed controls remain visible; their named refs are in the observation.
-        if(width<w || height<h)continue;
-        context.fillStyle='#fff';context.fillRect(x,top,w,h);context.fillStyle='#000';context.fillText(mark.ref,x+3*labelScale,top+12*labelScale);
-      }
-      return canvas.toDataURL('image/png');
-    })()`);
-    return nativeImage.createFromDataURL(data);
-  } finally { if (!host.isDestroyed()) host.destroy(); }
-}
 
 async function boxes(tab) {
   const marks = [];
@@ -68,18 +38,42 @@ export function fitJpeg(image, max = 1024) {
     const scale = Math.min(1, side / Math.max(size.width, size.height));
     const resized = scale === 1 ? image : image.resize({ width: Math.max(1, Math.round(size.width * scale)),
       height: Math.max(1, Math.round(size.height * scale)) });
-    for (const quality of [75, 60, 45, 30]) {
-      const jpeg = resized.toJPEG(quality);
-      if (jpeg.length <= 150 * 1024) return { jpeg, width: resized.getSize().width, height: resized.getSize().height };
-    }
+    const fitted = jpegAtQualities(resized);
+    if (fitted) return fitted;
   }
   return null;
 }
+function jpegAtQualities(image) {
+  for (const quality of [75, 60, 45, 30]) {
+    const jpeg = image.toJPEG(quality);
+    if (jpeg.length <= 150 * 1024) return { jpeg, ...image.getSize() };
+  }
+  return null;
+}
+
+/** Resize pixels before marking; try each final size with original mark geometry. */
+export async function encodeMarked(image, marks) {
+  if (image.isEmpty()) return { image_status: "image_unavailable" };
+  const size = image.getSize();
+  for (const side of [1024, 768]) {
+    const scale = Math.min(1, side / Math.max(size.width, size.height));
+    const resized = scale === 1 ? image : image.resize({ width: Math.max(1, Math.round(size.width * scale)),
+      height: Math.max(1, Math.round(size.height * scale)) });
+    const marked = await markedImage(resized, marks, size);
+    const fitted = jpegAtQualities(marked);
+    if (fitted) return encodedJpeg(fitted);
+  }
+  return { image_status: "image_too_large" };
+}
+function encodedJpeg(fitted) {
+  return { image: { mime_type: "image/jpeg", data: fitted.jpeg.toString("base64"), width: fitted.width, height: fitted.height } };
+}
+
 function encode(image, max = 1024) {
   if (image.isEmpty()) return { image_status: "image_unavailable" };
   const fitted = fitJpeg(image, max);
   if (!fitted) return { image_status: "image_too_large" };
-  return { image: { mime_type: "image/jpeg", data: fitted.jpeg.toString("base64"), width: fitted.width, height: fitted.height } };
+  return encodedJpeg(fitted);
 }
 
 /** Paints every secure field (saved-item fills included) black on a page capture. */
@@ -103,7 +97,7 @@ export async function observationBitmap(tab) {
 export async function observationImage(tab) {
   const epoch = tab.epoch;
   const image = await observationBitmap(tab);
-  const captured = encode(await markedImage(image, await bitmapMarks(tab, image, await boxes(tab))));
+  const captured = await encodeMarked(image, await bitmapMarks(tab, image, await boxes(tab)));
   if (epoch !== tab.epoch || tab.holder !== "agent") return { image_status: "control_changed" };
   if (captured.image) {
     const viewport = await evaluateWorld(tab.observation.main, "({width:innerWidth,height:innerHeight})");
