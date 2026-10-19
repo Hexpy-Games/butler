@@ -126,3 +126,30 @@ async fn read_usage_tool_matches_lineage_view() -> Result<(), HarnessError> {
     storage.close().await.unwrap();
     s.finish().await
 }
+
+#[tokio::test]
+async fn appended_relation_reroots_cached_descendants() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("usage-late-ancestor")?.start().await?;
+    fixtures::relations(&s.sandbox.data, &[("leaf", "middle", Some("worker"))])?;
+    fixtures::append(
+        &s.sandbox.data,
+        &[
+            fixtures::row("middle", None, None, 100, 20),
+            fixtures::row("leaf", None, None, 200, 30),
+            fixtures::row("unrelated", None, None, 400, 40),
+        ],
+    )?;
+    let first = s.gw.get("/usage-monitor?session_id=middle").await?;
+    fixtures::model(&first.data()["model"], 2, 300, 50);
+    fixtures::relations(&s.sandbox.data, &[("middle", ROOT, Some("steward"))])?;
+    let rooted = s.gw.get("/usage-monitor?session_id=general").await?;
+    fixtures::model(&rooted.data()["model"], 2, 300, 50);
+    fixtures::model(&rooted.data()["model"]["byRole"]["worker"], 1, 200, 30);
+    fixtures::model(&rooted.data()["model"]["byRole"]["steward"], 1, 100, 20);
+    let session = s.gw.get("/session-view?session_id=general").await?;
+    fixtures::session(&session.data()["usage"], 2, 300, 50);
+    let unrelated = s.gw.get("/usage-monitor?session_id=unrelated").await?;
+    fixtures::model(&unrelated.data()["model"], 1, 400, 40);
+    s.finish().await
+}

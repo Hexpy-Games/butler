@@ -20,6 +20,31 @@ impl SqliteSubsessionRepository {
             .await
     }
 
+    /// Only relations appended since the last successfully resolved watermark.
+    pub async fn parent_links_since(
+        &self,
+        previous: i64,
+        watermark: i64,
+    ) -> Result<Vec<ParentLink>, StorageError> {
+        self.storage
+            .read(move |db| {
+                let mut statement = db
+                    .prepare(
+                        "SELECT child_session_id,parent_session_id,activity_role \
+                 FROM btcc_session_relations WHERE rowid > ?1 AND rowid <= ?2 ORDER BY rowid",
+                    )
+                    .map_err(StorageError::sqlite)?;
+                statement
+                    .query_map([previous, watermark], |row| {
+                        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                    })
+                    .map_err(StorageError::sqlite)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(StorageError::sqlite)
+            })
+            .await
+    }
+
     /// Resolve children in bounded indexed batches, including legacy relations.
     pub async fn parent_links(
         &self,

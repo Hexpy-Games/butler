@@ -118,6 +118,29 @@ impl UsageMonitor {
         now: f64,
         sources: Option<&UsageMonitorSources<'_>>,
     ) -> Value {
+        self.read_prepared_at_releasing(
+            data_root,
+            session_id,
+            usage_scope,
+            since_ts,
+            now,
+            sources,
+            (),
+        )
+    }
+
+    /// Release lineage serialization after the owner-dependent usage projection.
+    #[allow(clippy::too_many_arguments)]
+    pub fn read_prepared_at_releasing(
+        &self,
+        data_root: &Path,
+        session_id: Option<&str>,
+        usage_scope: Option<&str>,
+        since_ts: Option<f64>,
+        now: f64,
+        sources: Option<&UsageMonitorSources<'_>>,
+        projection_guard: impl Sized,
+    ) -> Value {
         let session_id = session_id.filter(|id| !id.trim().is_empty());
         let pricing = sources.map(|sources| sources.pricing);
         let (buckets, timeline, top_sessions, previous, scope, by_role) = {
@@ -149,6 +172,7 @@ impl UsageMonitor {
                 scope.as_ref().map(|_| log.by_role(window)),
             )
         };
+        drop(projection_guard);
         let cost = buckets.cost_value();
         let (mut model_value, provider_buckets) = buckets.views();
         if let Some(by_role) = by_role {
