@@ -14,8 +14,12 @@ export interface LayoutItemProps {
   basis?: LayoutBasis;
   /** `"0"` lets a flex item shrink below its content (needed for truncation). */
   minWidth?: "0" | "auto";
-  /** Cap the item's width to a share of its container (`full`, `3/5`, `1/2`). */
-  maxWidth?: "full" | "3/5" | "1/2";
+  /**
+   * Cap the item's width to a share of its container (`full`, `3/5`, `1/2`).
+   * `field`: at most `--layout-max-width-field` (320px) while the parent row is at least
+   * `--layout-wrap-width-field` (560px) wide; in a narrower (wrapped) row it spans the row.
+   */
+  maxWidth?: "full" | "3/5" | "1/2" | "field";
   alignSelf?: LayoutAlignSelf;
   /** Grid children only: columns to span; `full` spans the whole row. */
   span?: LayoutSpan;
@@ -51,7 +55,7 @@ export function layoutItemAttributes(item: LayoutItemProps): {
   "data-shrink"?: "true" | "false";
   "data-basis"?: LayoutBasis;
   "data-min-width"?: "0" | "auto";
-  "data-max-width"?: "full" | "3/5" | "1/2";
+  "data-max-width"?: "full" | "3/5" | "1/2" | "field";
   "data-align-self"?: LayoutAlignSelf;
   "data-span"?: LayoutSpan;
   "data-invisible"?: "true";
