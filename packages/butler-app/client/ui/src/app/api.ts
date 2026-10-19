@@ -57,6 +57,7 @@ export interface PowerState {
 }
 
 interface ButlerAppBridge {
+  log?: (row: { level: "DEBUG"; category: "http.client"; event: "image.fetch"; attrs: { url: string } }) => void;
   writeCachedComposerDraft?: (input: { snapshot: import("./composerDraftCache").ComposerDraftSnapshot }) => Promise<unknown>;
   history?: (input: { path: string; method: string; body?: unknown }) => Promise<unknown>;
   organizeLibrary?: (input: { path: string; method: string; body?: unknown }) => Promise<unknown>;

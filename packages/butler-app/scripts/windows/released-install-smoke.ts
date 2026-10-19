@@ -1,3 +1,4 @@
+import { relaunchInstalledAppForDebugging } from "./installed-app-debug.ts";
 /** Install the actual published preview, launch, use a stub chat, and uninstall. */
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
@@ -39,7 +40,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request 
 } });
 const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERPROFILE: join(root, "home"), BUTLER_DATA: data,
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_SECRET_STORE: "file",
-  BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
+  BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"),
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
   // Released agents keep the real clock; a zone where it is afternoon makes the daily briefing due.
   TZ: afternoonZone(new Date()),
@@ -63,6 +64,7 @@ try {
     status: "complete", gateway: "any", fields: {}, skipped_fields: [], created_at: now, updated_at: now, completed_at: now }));
   run(installer, []);
   await waitFor(() => existsSync(updater), "released one-click install");
+  await relaunchInstalledAppForDebugging(join(installed, "Butler.exe"), debugPort, env, owned);
   page = await electronPage(debugPort);
   assert.equal((await bridge(page, "getAppInfo")).version, version);
   assert.equal((await bridge(page, "health")).ok, true);

@@ -255,6 +255,20 @@ function normalizeLocalServerUrl(value) {
   return url.toString();
 }
 
+function recordWorkAction(path, options) {
+  const traceparent = options.headers?.traceparent;
+  const action = path === "/messages" || path === "/session-queue" ? "send"
+    : /\/turns\/[^/]+\/cancel$/u.test(path) ? "stop"
+    : /\/turns\/[^/]+\/retry(?:-current)?$/u.test(path) ? "retry"
+    : /\/sessions\/[^/]+\/controls$/u.test(path) && options.method === "PATCH" ? "model_pick" : null;
+  if (!action) return;
+  const body = typeof options.body === "string" ? JSON.parse(options.body) : {};
+  const turn_id = path.match(/^\/turns\/([^/]+)/u)?.[1];
+  ipcRenderer.send("butler:app-log", { level: "INFO", category: "app.ui", event: `ui.${action}`,
+    ...(traceparent ? { traceparent } : {}), ...(body.chat_id ? { chat_id: body.chat_id } : {}),
+    ...(turn_id ? { turn_id: decodeURIComponent(turn_id) } : {}), attrs: {} });
+}
+
 async function requestJson(path, options = {}) {
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   await ensureLocalServer();
@@ -281,6 +295,7 @@ async function requestJson(path, options = {}) {
     error.status = response.status;
     throw error;
   }
+  recordWorkAction(path, options);
   return body.data;
 }
 
@@ -672,6 +687,7 @@ function writeAppUiStateCache(snapshot) {
 }
 
 const butlerApp = Object.freeze({
+  log: row => ipcRenderer.send("butler:app-log", row),
   organizeLibrary: ({ path, method, body }) => {
     const route = new URL(path, "http://butler.invalid");
     const allowed = /^\/library\/(groups|tags|facets|items)(\/|$)/.test(route.pathname);
@@ -1290,12 +1306,16 @@ const butlerApp = Object.freeze({
   // Envelope, not a throw: the renderer needs the public error code
   // (e.g. settings_model_unavailable) to show localized, actionable copy.
   // A `security` change carries the admin credential, which only main holds.
-  updateSettings: (settings) => settings?.security !== undefined
+  updateSettings: async (settings) => {
+    const result = await (settings?.security !== undefined
     ? requestSecurity("updateSecuritySettings", settings)
     : requestBridgeResult("/settings", {
       method: "PATCH",
       body: JSON.stringify(settings ?? {}),
-    }),
+    }));
+    if (result.ok !== false && (settings?.diagnostics_enabled !== undefined || settings?.developer_mode_enabled !== undefined)) await ipcRenderer.invoke("butler:app-log-change");
+    return result;
+  },
   // Envelopes keep the code and status of the gateway's local-only rule.
   getSecurity: () => requestSecurity("getSecurity"),
   issuePairingCode: () => requestSecurity("issuePairingCode"),
@@ -1370,6 +1390,10 @@ const butlerApp = Object.freeze({
     return requestJson(url.pathname + url.search, {
       method: String(method).toUpperCase(),
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }).then(async result => {
+      if (String(method).toUpperCase() === "PUT") await ipcRenderer.invoke("butler:app-log-change");
+      if (String(method).toUpperCase() === "DELETE") await ipcRenderer.invoke("butler:app-log-change", "clear");
+      return result;
     });
   },
   readLogBody: ({ reference } = {}) => readLogBody(reference),
