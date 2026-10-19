@@ -56,6 +56,7 @@ pub enum RollingContextV1 {
 
 /// What the context port needs to project one round's messages.
 pub struct ContextProjectionInput<'a> {
+    pub usage_attribution: Option<&'a super::UsageAttribution>,
     pub round_id: &'a str,
     pub response_item_id: &'a str,
     pub semantic_messages: &'a [ModelRoundMessage],

@@ -1,8 +1,8 @@
 //! Registered graph/vector state and canonical inventory coverage.
 
-use rusqlite::{Connection, OptionalExtension, params, params_from_iter, types::Value};
+use rusqlite::{Connection, params_from_iter, types::Value};
 
-use crate::cognition::{CognitionResult, recall::RecallRequest, sources::CanonicalInventory};
+use crate::cognition::{CognitionResult, recall::RecallRequest, sources::InventoryCoverage};
 
 use super::{db_error, scope};
 
@@ -15,7 +15,7 @@ pub(in crate::cognition) struct ProjectionCoverage {
 pub(super) fn graph(
     db: &Connection,
     input: &RecallRequest,
-    inventory: &CanonicalInventory,
+    inventory: &InventoryCoverage,
 ) -> CognitionResult<ProjectionCoverage> {
     let source = scope::source(input, "s", "c");
     let sql=format!(
@@ -31,28 +31,7 @@ pub(super) fn graph(
         })
         .map_err(db_error)?
         > 0;
-    let mut missing = false;
-    let mut statement = db
-        .prepare(
-            "SELECT 1 FROM memory_chunks c JOIN memory_projection_jobs j
-         ON j.episode_id=c.memory_chunk_id AND j.revision=c.current_revision
-         WHERE c.memory_chunk_id=?1 AND c.current_revision=?2
-           AND json_extract(j.semantic_graph_state,'$.state')='complete' LIMIT 1",
-        )
-        .map_err(db_error)?;
-    for entry in &inventory.entries {
-        if statement
-            .query_row(params![entry.episode_id, entry.revision], |row| {
-                row.get::<_, i64>(0)
-            })
-            .optional()
-            .map_err(db_error)?
-            .is_none()
-        {
-            missing = true;
-            break;
-        }
-    }
+    let missing = inventory.missing;
     let mut codes = Vec::new();
     if registered_incomplete || missing {
         codes.push("ingestion_pending".into());

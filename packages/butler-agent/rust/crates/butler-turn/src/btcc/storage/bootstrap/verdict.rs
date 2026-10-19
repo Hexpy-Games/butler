@@ -1,6 +1,7 @@
-//! Small durable sidecars; never updated on cancellation, shutdown or idle polls.
-use super::{StorageError, StorageResult, io_error};
+//! Durable scan verdicts, with corruption identity sealed after writer shutdown.
+use super::{StorageError, StorageResult, error, io_error};
 use crate::btcc::StorageCode;
+use std::io::Read;
 use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
@@ -26,11 +27,63 @@ pub(super) fn corruption(error: &StorageError) -> bool {
     }
 }
 
+/// Physical legacy verdicts fail closed; legacy logical findings need a recheck.
+/// A recorded identity permits recovery only after a proven replacement.
 pub(super) fn needs_recheck(path: &Path) -> StorageResult<bool> {
-    match std::fs::metadata(sidecar(path, "corrupt")) {
-        Ok(_) => Ok(true),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(error) => Err(io_error(error)),
+    let file = match std::fs::File::open(sidecar(path, "corrupt")) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(io_error(error)),
+    };
+    let mut raw = String::new();
+    file.take(4096).read_to_string(&mut raw).map_err(io_error)?;
+    let (code, identity) = raw.split_once('\n').unwrap_or((&raw, ""));
+    match serde_json::from_str::<DatabaseIdentity>(identity) {
+        Ok(recorded) if recorded != DatabaseIdentity::read(path)? => return Ok(true),
+        Err(_) if physical_code(code).is_none() => return Ok(true),
+        _ => {}
+    }
+    Err(error(
+        physical_code(code).unwrap_or(StorageCode::AgentBtccStorageQuickCheckFailed),
+    ))
+}
+
+fn physical_code(code: &str) -> Option<StorageCode> {
+    [
+        StorageCode::AgentBtccStorageQuickCheckFailed,
+        StorageCode::AgentBtccStorageForeignKeyCheckFailed,
+    ]
+    .into_iter()
+    .find(|candidate| candidate.as_str() == code)
+}
+
+/// Called after the writer and checkpoint worker have attempted to close.
+pub(in crate::btcc::storage) fn refresh_after_close(path: &Path) {
+    if let Ok(raw) = std::fs::read_to_string(sidecar(path, "corrupt"))
+        && let Some(code) = physical_code(raw.lines().next().unwrap_or_default())
+    {
+        record_corruption(path, &Err(error(code)));
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+struct DatabaseIdentity {
+    size: u64,
+    modified: Option<(i64, i64)>,
+    file_id: Option<(u64, u64)>,
+}
+
+impl DatabaseIdentity {
+    fn read(path: &Path) -> StorageResult<Self> {
+        let metadata = std::fs::metadata(path).map_err(io_error)?;
+        let identity = butler_platform::secure_fs::identity(&metadata);
+        Ok(Self {
+            size: metadata.len(),
+            modified: identity
+                .modified
+                .map(|time| (time.seconds, time.nanoseconds)),
+            file_id: identity.id.map(|id| (id.device, id.inode)),
+        })
     }
 }
 
@@ -59,14 +112,28 @@ pub(super) fn scan_delay(path: &Path) -> Duration {
 pub(super) fn record_corruption(path: &Path, result: &StorageResult<()>) {
     if let Err(error) = result
         && corruption(error)
-        && let Err(write) = atomic_write(&sidecar(path, "corrupt"), error.code().as_bytes())
     {
-        butler_core::diagnostic!("[btcc-storage] verdict_persist_failed={write}");
+        let write = (|| {
+            let raw = match DatabaseIdentity::read(path) {
+                Ok(identity) => serde_json::to_string(&identity)
+                    .map_err(|error| io_error(std::io::Error::other(error)))?,
+                Err(_) => String::new(),
+            };
+            let code = physical_code(error.code())
+                .unwrap_or(StorageCode::AgentBtccStorageQuickCheckFailed);
+            atomic_write(
+                &sidecar(path, "corrupt"),
+                format!("{code}\n{raw}").as_bytes(),
+            )
+        })();
+        if let Err(write) = write {
+            butler_core::diagnostic!("[btcc-storage] verdict_persist_failed={write}");
+        }
     }
 }
 
-/// Logical findings never trigger startup validation. A successful physical
-/// check retires any corruption marker, including legacy reference-only markers.
+/// Current logical findings use a separate sidecar. A successful physical check
+/// retires any corruption marker, including legacy reference-only markers.
 pub(in crate::btcc::storage) fn validated(
     path: &Path,
     failures: &[super::validate::ReferenceFailure],
