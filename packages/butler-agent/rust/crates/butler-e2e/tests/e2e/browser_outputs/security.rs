@@ -14,7 +14,7 @@ pub(super) fn expired(url: &str, token: &str) -> String {
     let (output, _) = payload.rsplit_once(':').unwrap();
     let payload = URL_SAFE_NO_PAD.encode(format!("{output}:1"));
     let mut derive = Hmac::<Sha256>::new_from_slice(token.as_bytes()).unwrap();
-    derive.update(b"butler-output-capability-v1");
+    derive.update(format!("butler-output-capability-v1:{}", parsed.port().unwrap()).as_bytes());
     let key = derive.finalize().into_bytes();
     let mut mac = Hmac::<Sha256>::new_from_slice(&key).unwrap();
     mac.update(payload.as_bytes());
