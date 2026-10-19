@@ -4,7 +4,7 @@ use butler_e2e::e2e::{HarnessError, matching, sanitize::Placeholders};
 use serde_json::{Value, json};
 use std::{collections::HashMap, fmt::Write, sync::{Arc, Mutex}};
 #[derive(Default)]
-pub(super) struct Script { steps: Mutex<HashMap<String, usize>>, pub(super) calls: Mutex<Vec<(String,u64,u64)>> }
+pub(super) struct Script { works: Mutex<HashMap<String,String>>, steps: Mutex<HashMap<String, usize>>, pub(super) calls: Mutex<Vec<(String,u64,u64)>> }
 pub(super) async fn start() -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let url = format!("http://{}/codex", listener.local_addr()?);
@@ -15,13 +15,19 @@ pub(super) async fn start() -> Result<(String, Arc<Script>, tokio::task::JoinHan
 }
 async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> impl axum::response::IntoResponse {
     let key = matching::key("/codex/responses", &body, &Placeholders::default());
-    let role = if key.user_request.starts_with("role: steward") { "steward" }
+    let instructions=body["instructions"].as_str().unwrap_or("");
+    let role = if instructions.contains("You run one delegated Work for Butler") || key.user_request.starts_with("role: steward") { "steward" }
         else if key.user_request.starts_with("role: worker") {
             if key.user_request.contains("Verify Beta") { "worker-b" } else { "worker-a" }
         } else { "main" };
     let step = { let mut steps=script.steps.lock().unwrap(); let n=steps.entry(role.into()).or_default(); let step=*n; *n+=1; step };
     let replay: Value = serde_json::from_str(include_str!("../delegate_followup/replay.json")).unwrap();
-    let work = work_id(&body);
+    let work = {
+        let mut works=script.works.lock().unwrap();
+        let observed=work_id(&body);
+        if !observed.is_empty() { works.insert(role.into(),observed); }
+        works.get(role).cloned().unwrap_or_default()
+    };
     let template = match role {
         "main" if step < 4 => replay["parent"][step].clone(),
         "steward" => steward(step, &work),
@@ -49,10 +55,9 @@ fn steward(step: usize, work: &str) -> Value {
 }
 fn worker(step: usize, work: &str) -> Value {
     match step {
-        0 => json!({"type":"function_call","name":"start_work","arguments":{"objective":"Verify evidence"}}),
-        1 => json!({"type":"function_call","name":"replace_work_plan","arguments":{"objective":"Verify evidence","execution_mode":"direct","actions":[{"action_key":"verify","description":"Verify evidence","dependency_keys":[]}],"checks":["Evidence verified"]}}),
-        2 => json!({"type":"function_call","name":"record_work_review","arguments":{"subject":"plan","verdict":"accept","summary":"Ready"}}),
-        3 => json!({"type":"function_call","name":"record_work_disposition","arguments":{"work_id":work,"disposition":"completed","summary":"Evidence verified","action_updates":[{"action_key":"verify","status":"done"}],"remaining_actions":[],"followups":[]}}),
+        0 => json!({"type":"function_call","name":"replace_work_plan","arguments":{"objective":"Verify evidence","execution_mode":"direct","actions":[{"action_key":"verify","description":"Verify evidence","dependency_keys":[]}],"checks":["Evidence verified"]}}),
+        1 => json!({"type":"function_call","name":"record_work_review","arguments":{"subject":"plan","verdict":"accept","summary":"Ready"}}),
+        2 => json!({"type":"function_call","name":"record_work_disposition","arguments":{"work_id":work,"disposition":"completed","summary":"Evidence verified","action_updates":[{"action_key":"verify","status":"done"}],"remaining_actions":[],"followups":[]}}),
         _ => json!({"type":"message","text":"Verified evidence."}),
     }
 }
