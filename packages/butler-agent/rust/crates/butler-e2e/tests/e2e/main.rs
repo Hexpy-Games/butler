@@ -218,6 +218,8 @@ mod memory_profile_reset;
 mod memory_reset;
 mod memory_wiring_more;
 mod native_worker_ownership;
+#[path = "support/owner_scale.rs"]
+mod owner_scale;
 mod project_artifacts;
 mod project_instructions;
 mod project_workspace;

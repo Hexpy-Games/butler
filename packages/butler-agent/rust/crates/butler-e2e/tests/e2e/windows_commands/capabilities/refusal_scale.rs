@@ -24,7 +24,7 @@ pub(super) async fn prepare(s: &mut Scenario, chat: &str) -> Result<Option<Histo
             "APPROVAL-SCALE chats=800 turns=8000 events=323000 app_bytes={}",
             std::fs::metadata(data.join("app-server/butler-client.sqlite"))?.len()
         );
-        // The agent is stopped. Avoid a second 7+ GB WAL copy while constructing
+        // The agent is stopped. Avoid a second ~1 GB WAL copy while constructing
         // history on bounded tmpfs; runtime measurements still use normal WAL.
         Connection::open(btcc::path(&data))?.execute_batch("PRAGMA journal_mode=DELETE")?;
         btcc::seed(&data)?;

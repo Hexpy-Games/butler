@@ -233,6 +233,15 @@ injected product operations. App and maintenance owners also honor the same
 stub fixture clock in both profiles; a fixture day must not become a due daily
 job on the host's real date.
 
+`data_perf::perf_terminal_history_idle_and_turn_wal` uses the post-reclaim
+owner scale (#1298): BTCC 0.95–1.1 GB with 300,000 turns/inbox/relation/outbox
+records, App 1.15–1.3 GB with 650 chats and 300,000 historical events, 2,440
+transcripts totaling 1.5 GB (largest 290 MB), and 888,000 metric rows / 349 MB.
+Payload sizing lives in `tests/e2e/support/owner_scale.rs`; full content, order,
+latest-state and integrity checks, the 90-second readiness deadline and idle
+budgets remain unchanged. The separate wide-history stress fixtures below
+retain their larger payloads.
+
 ## Idle resources at owner scale (PERF-IDLE)
 
 `idle_resources` combines the PERF-01 and storage-concurrency App seeds
