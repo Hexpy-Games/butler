@@ -28,54 +28,8 @@ pub async fn read_context_tool(
 pub use usage::{UsageMonitor, UsageMonitorSources};
 
 /// The `read_usage` tool: one runtime session's usage.
-pub async fn read_usage_tool(
-    data_root: &Path,
-    session_id: &str,
-    since_ts: Option<f64>,
-    lineage: Arc<crate::operations::UsageLineage>,
-    catalog: Arc<ModelCatalog>,
-) -> Value {
-    let read = lineage.read.clone().lock_owned().await;
-    let root = data_root.to_path_buf();
-    let monitor = lineage.monitor.clone();
-    let refresh = (root.clone(), monitor.clone(), catalog.clone());
-    if let Err(error) = tokio::task::spawn_blocking(move || {
-        refresh
-            .1
-            .refresh_owners(&refresh.0, &|model| refresh.2.pricing(model));
-    })
-    .await
-    {
-        return usage_tool_error(&error);
-    }
-    lineage.resolve().await;
-    let session = session_id.to_owned();
-    tokio::task::spawn_blocking(move || {
-        let pricing = |model: &str| catalog.pricing(model);
-        let sources = UsageMonitorSources {
-            pricing: &pricing,
-            quota: &crate::operations::unavailable_quota_view,
-            quota_providers: Vec::new(),
-        };
-        monitor.read_prepared_at_releasing(
-            &root,
-            Some(&session),
-            None,
-            since_ts,
-            (chrono::Utc::now().timestamp_millis() + 1) as f64,
-            Some(&sources),
-            read,
-        )
-    })
-    .await
-    .unwrap_or_else(|error| usage_tool_error(&error))
-}
-
-fn usage_tool_error(error: &tokio::task::JoinError) -> Value {
-    json!({"ok": false, "error": {
-        "code": "usage_monitor_failed",
-        "message": format!("Could not read usage: {error}")
-    }})
+pub fn read_usage_tool(data_root: &Path, session_id: &str, since_ts: Option<f64>) -> Value {
+    UsageMonitor::default().read(data_root, Some(session_id), since_ts, None)
 }
 
 pub struct MetricsStatus {

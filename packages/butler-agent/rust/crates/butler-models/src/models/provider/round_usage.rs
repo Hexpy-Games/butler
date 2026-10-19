@@ -26,8 +26,6 @@ pub(super) fn record(
     let attribution = request
         .usage_attribution
         .map(|value| PromptUsageAttribution {
-            root_session_id: value.usage_root.as_deref(),
-            role: value.usage_role.as_deref(),
             turn_id: Some(&value.turn_id),
             phase: Some(&value.phase),
             round_index: value.round_index.map(f64::from),

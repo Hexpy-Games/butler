@@ -22,8 +22,6 @@ fn event(row: &Row) -> UsageEvent {
         ts: row.ts,
         model: row.model.into(),
         scope: "btcc-guided:s".into(),
-        root_session_id: None,
-        role: None,
         prompt_tokens: 1_000.0,
         cached_tokens: row.cached,
         cache_write_tokens: Some(row.cache_write),

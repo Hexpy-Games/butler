@@ -22,8 +22,6 @@ pub(super) struct UsageRow {
     ts_ms: Option<i64>,
     pub(super) model: Arc<str>,
     pub(super) scope: Arc<str>,
-    pub(super) root_session_id: Option<Arc<str>>,
-    pub(super) role: Option<Arc<str>>,
     pub(super) phase: Option<Arc<str>>,
     pub(super) prompt: f64,
     pub(super) cached: f64,
@@ -105,14 +103,6 @@ impl UsageRow {
             ts_ms: event.get("ts").and_then(Value::as_i64),
             model: names.get(model),
             scope: names.get(scope),
-            root_session_id: event
-                .get("rootSessionId")
-                .and_then(Value::as_str)
-                .map(|v| names.get(v)),
-            role: event
-                .get("role")
-                .and_then(Value::as_str)
-                .map(|v| names.get(v)),
             phase,
             prompt,
             cached,
@@ -139,8 +129,6 @@ impl UsageRow {
             ts: self.ts_ms?,
             model: self.model.to_string(),
             scope: self.scope.to_string(),
-            root_session_id: None,
-            role: None,
             prompt_tokens: self.prompt,
             cached_tokens: self.cached,
             cache_write_tokens: self.cache_write,

@@ -70,14 +70,10 @@ impl AppApplication {
             .map_err(|_| "settings")?;
         let input = self
             .storage
-            .read(move |db| {
-                let eligible = eligible_title(db, &id, &facts)?;
-                let runtime = super::monitoring::usage::runtime_session(db, &id)?.0;
-                Ok(eligible.map(|(title, prompt)| (title, prompt, runtime)))
-            })
+            .read(move |db| eligible_title(db, &id, &facts))
             .await
             .map_err(|_| "storage")?;
-        let Some((expected, prompt, runtime)) = input else {
+        let Some((expected, prompt)) = input else {
             return Ok(());
         };
         let generated = self
@@ -85,7 +81,6 @@ impl AppApplication {
             .session_title_generator
             .generate(
                 AppSessionTitleInput {
-                    usage_session_id: Some(runtime),
                     text: prompt.clone(),
                     model_ref: model.to_owned(),
                 },

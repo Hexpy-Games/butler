@@ -12,7 +12,6 @@ use super::GuidedTools;
 
 pub(crate) struct MonitoringReaders {
     data_root: PathBuf,
-    lineage: Arc<butler_runtime::operations::UsageLineage>,
     pub(in crate::host::guided) app_database_path: PathBuf,
     configuration: Arc<butler_models::models::ModelConfiguration>,
     catalog: Arc<butler_models::models::ModelCatalog>,
@@ -23,17 +22,16 @@ pub(crate) struct MonitoringReaders {
 
 impl MonitoringReaders {
     pub(in crate::host) fn new(
-        (data_root, app_database_path): (PathBuf, PathBuf),
+        data_root: PathBuf,
+        app_database_path: PathBuf,
         configuration: Arc<butler_models::models::ModelConfiguration>,
         catalog: Arc<butler_models::models::ModelCatalog>,
         memory_health: Arc<butler_memory::cognition::MemoryHealthService>,
         profile: Arc<butler_memory::profile::ProfileService>,
         metrics: Arc<butler_runtime::operations::CycleMetrics>,
-        lineage: Arc<butler_runtime::operations::UsageLineage>,
     ) -> Self {
         Self {
             data_root,
-            lineage,
             app_database_path,
             configuration,
             catalog,
@@ -54,15 +52,8 @@ impl MonitoringReaders {
         .await
     }
 
-    async fn usage(&self, session: &str, since_ts: Option<f64>) -> Value {
-        butler_runtime::operations::read_usage_tool(
-            &self.data_root,
-            session,
-            since_ts,
-            self.lineage.clone(),
-            self.catalog.clone(),
-        )
-        .await
+    fn usage(&self, session: &str, since_ts: Option<f64>) -> Value {
+        butler_runtime::operations::read_usage_tool(&self.data_root, session, since_ts)
     }
 
     async fn memory_health(&self) -> Result<Value, BtccError> {
@@ -150,10 +141,8 @@ pub(super) async fn execute(
                 .and_then(Value::as_f64)
                 .filter(|hours| *hours > 0.0)
                 .map(|hours| chrono::Utc::now().timestamp_millis() as f64 - hours * 3_600_000.0);
-            let mut value = owner.monitoring.usage(session, since).await;
-            if value.get("error").is_none() {
-                value["ok"] = json!(true);
-            }
+            let mut value = owner.monitoring.usage(session, since);
+            value["ok"] = json!(true);
             value
         }
         "get_memory_health" => {

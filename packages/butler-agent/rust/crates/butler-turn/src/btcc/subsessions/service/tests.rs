@@ -43,7 +43,6 @@ fn binding(role: SessionRole, metadata: &serde_json::Value) -> StoredSessionBind
     }
 }
 
-// test-category: pure-logic
 #[test]
 fn steward_child_inherits_normalized_runtime_policy_while_worker_stays_local() {
     let parent = binding(

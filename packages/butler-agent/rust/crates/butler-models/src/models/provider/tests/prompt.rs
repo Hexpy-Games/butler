@@ -119,8 +119,6 @@ async fn anthropic_prompt_serializes_registered_default_output() {
         Arc::new(PromptMetrics(Arc::new(Mutex::new(Vec::new())))),
     );
     let usage = PromptUsageAttribution {
-        root_session_id: None,
-        role: None,
         turn_id: None,
         phase: None,
         round_index: None,
@@ -180,8 +178,6 @@ async fn empty_openai_response_records_usage_before_returning_failure() {
         Arc::new(PromptMetrics(Arc::clone(&events))),
     );
     let usage = PromptUsageAttribution {
-        root_session_id: None,
-        role: None,
         turn_id: None,
         phase: None,
         round_index: None,

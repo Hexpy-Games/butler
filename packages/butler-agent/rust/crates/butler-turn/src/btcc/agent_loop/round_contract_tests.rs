@@ -17,8 +17,6 @@ async fn round_attribution_uses_source_offset_and_final_report_runs_only_answer_
         .unwrap()
         .push(tool("answer_blocks", false));
     *fixture.usage_attribution.lock().unwrap() = Some(UsageAttribution {
-        usage_root: None,
-        usage_role: None,
         prompt_diagnostics: None,
         session_kind: Some("parent".into()),
         turn_id: "turn-1".into(),

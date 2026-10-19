@@ -62,8 +62,6 @@ impl AppProjectDashboardBriefingPort for AppDashboardBriefing {
         Box::pin(async move {
             let reasoning_effort = parse_effort(&prompt.reasoning_effort)?;
             let attribution = PromptUsageAttribution {
-                root_session_id: None,
-                role: None,
                 turn_id: None,
                 phase: Some(&prompt.usage_phase),
                 round_index: None,

@@ -1337,8 +1337,7 @@ export interface UsageSectionBucketView {
 }
 
 export interface UsageMonitorView {
-  /** Session views append the slot's delegated tokens (prompt + output of every role other than "main"), on the same basis as prompt + output above. */
-  timeline: { slotMinutes: 15; slots: ([number, number, number, number, number] | [number, number, number, number, number, number])[] };
+  timeline: { slotMinutes: 15; slots: [number, number, number, number, number][] };
   topSessions: { sessionId: string; title: string | null; kind: "chat" | "schedule" | "butler"; totalTokens: number; requests: number; lastUsedMs: number | null }[];
   previousPeriod: { totalTokens: number } | null;
   filters: {
@@ -1352,8 +1351,6 @@ export interface UsageMonitorView {
     byScopeUsage: Record<string, UsageTokenBucketView>;
     byModel: Record<string, UsageTokenBucketView>;
     bySection: Record<string, UsageSectionBucketView>;
-    /** Session views only: the chat's calls by role ("main" = the chat itself; any other role is delegated work), included in the totals above. */
-    byRole?: Record<string, UsageTokenBucketView>;
   };
   webSearch: {
     requestCount: number;

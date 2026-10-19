@@ -48,7 +48,6 @@ struct WebAccessInner {
 
 #[derive(Clone)]
 pub struct WebSession {
-    pub(super) usage_attribution: Option<butler_turn::btcc::UsageAttribution>,
     pub(super) access: WebAccess,
     state: Arc<Mutex<WebSessionState>>,
     planning_gate: Arc<tokio::sync::Mutex<()>>,
@@ -191,7 +190,6 @@ impl WebAccess {
 
     pub fn session_for_turn(&self, original_request: String) -> WebSession {
         WebSession {
-            usage_attribution: None,
             access: self.clone(),
             state: Arc::new(Mutex::new(WebSessionState {
                 original_request,

@@ -1,14 +1,12 @@
 import type { ReactNode } from "react";
 import { appCopy, getAppLocale } from "@/app/copy";
-import { AnimatedNumber, Collapsible, Inline, KeyValueRow, Stack, Typo, Skeleton } from "@/butler-ds";
+import { AnimatedNumber, Inline, KeyValueRow, Stack, Typo, Skeleton } from "@/butler-ds";
 import type { UsageMonitorView } from "@/app/types";
 import { usageClock, usageReadout, usageSeries, usageTokens } from "./usageTimeline";
 
-export function UsageReadout({ view, values, label, selected, showCost, delta, share, parts, children, panel = false, unit, stale = false }: {
+export function UsageReadout({ view, values, label, selected, showCost, delta, share, children, panel = false, unit, stale = false }: {
   view: UsageMonitorView | null; values: ReturnType<typeof usageReadout>; label: string;
   selected: boolean; showCost: boolean; delta?: string; share?: string; children?: ReactNode; panel?: boolean; unit?: string; stale?: boolean;
-  /** The total's split by who made the calls; shown only when work was delegated. */
-  parts?: { id: string; label: string; value: string }[] | null;
 }) {
   const copy = appCopy.composer.usage;
   const series = usageSeries();
@@ -41,10 +39,5 @@ export function UsageReadout({ view, values, label, selected, showCost, delta, s
       {showCost && !selected && panel ? <KeyValueRow label={copy.estimatedCost} value={costText} valueTextSize="caption" /> : null}
       {!selected && share ? <KeyValueRow label={copy.share} value={share} valueTextSize="caption" /> : null}
     </Stack>
-    <Collapsible open={Boolean(parts?.length)}>
-      <Stack gap="none" data-test-class="usage-parts">
-        {parts?.map((part) => <KeyValueRow key={part.id} label={part.label} value={part.value} valueTextSize="caption" />)}
-      </Stack>
-    </Collapsible>
   </Stack>;
 }

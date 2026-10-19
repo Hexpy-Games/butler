@@ -44,23 +44,6 @@ pub struct UsageMonitor {
 }
 
 impl UsageMonitor {
-    /// Use the same owner table as the session usage projection.
-    pub fn with_owners(owners: std::sync::Arc<crate::operations::UsageOwners>) -> Self {
-        Self {
-            log: Mutex::new(UsageLogIndex::with_owners(owners)),
-            ..Default::default()
-        }
-    }
-
-    /// Refresh the incremental log before asynchronous legacy resolution.
-    pub fn refresh_owners(
-        &self,
-        root: &Path,
-        pricing: &dyn Fn(&str) -> Option<butler_models::models::ModelPricing>,
-    ) {
-        self.log.lock().refresh(root, Some(pricing));
-    }
-
     /// Classify returned sessions from their windowed usage turns. The App
     /// supplies indexed schedule lookups; each session stops at its first
     /// non-schedule turn, without copying or serializing the log's turn ids.
@@ -102,49 +85,11 @@ impl UsageMonitor {
         now: f64,
         sources: Option<&UsageMonitorSources<'_>>,
     ) -> Value {
-        self.log
-            .lock()
-            .refresh(data_root, sources.map(|s| s.pricing));
-        self.read_prepared_at(data_root, session_id, usage_scope, since_ts, now, sources)
-    }
-
-    /// Build a view after refresh and asynchronous lineage resolution.
-    pub fn read_prepared_at(
-        &self,
-        data_root: &Path,
-        session_id: Option<&str>,
-        usage_scope: Option<&str>,
-        since_ts: Option<f64>,
-        now: f64,
-        sources: Option<&UsageMonitorSources<'_>>,
-    ) -> Value {
-        self.read_prepared_at_releasing(
-            data_root,
-            session_id,
-            usage_scope,
-            since_ts,
-            now,
-            sources,
-            (),
-        )
-    }
-
-    /// Release lineage serialization after the owner-dependent usage projection.
-    #[allow(clippy::too_many_arguments)]
-    pub fn read_prepared_at_releasing(
-        &self,
-        data_root: &Path,
-        session_id: Option<&str>,
-        usage_scope: Option<&str>,
-        since_ts: Option<f64>,
-        now: f64,
-        sources: Option<&UsageMonitorSources<'_>>,
-        projection_guard: impl Sized,
-    ) -> Value {
         let session_id = session_id.filter(|id| !id.trim().is_empty());
         let pricing = sources.map(|sources| sources.pricing);
-        let (buckets, timeline, top_sessions, previous, scope, by_role) = {
+        let (buckets, timeline, top_sessions, previous, scope) = {
             let mut log = self.log.lock();
+            log.refresh(data_root, pricing);
             let scope = log.resolve_scope(session_id, usage_scope);
             let window = Window {
                 scope: scope.as_deref(),
@@ -168,16 +113,11 @@ impl UsageMonitor {
                     json!([])
                 },
                 previous,
-                scope.clone(),
-                scope.as_ref().map(|_| log.by_role(window)),
+                scope,
             )
         };
-        drop(projection_guard);
         let cost = buckets.cost_value();
-        let (mut model_value, provider_buckets) = buckets.views();
-        if let Some(by_role) = by_role {
-            model_value["byRole"] = by_role;
-        }
+        let (model_value, provider_buckets) = buckets.views();
         let web_search = availability::read_web_search(data_root, since_ts, now, self);
         let providers = provider_summary(provider_buckets, sources);
         let tool_session = scope

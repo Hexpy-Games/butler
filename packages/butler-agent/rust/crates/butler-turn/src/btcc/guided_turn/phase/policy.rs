@@ -55,7 +55,6 @@ pub struct GuidedExecutionPolicy {
 /// The delegated-subsession part of an execution policy.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SubsessionPolicy {
-    pub(crate) root_session_id: Option<String>,
     /// `executionMode`, when it is a string.
     pub(crate) execution_mode: Option<String>,
     /// `mutationScope`, when it is an array of strings.
@@ -77,10 +76,6 @@ impl SubsessionPolicy {
                     .collect::<Option<Vec<_>>>()
             });
         Self {
-            root_session_id: value
-                .get("rootSessionId")
-                .and_then(Value::as_str)
-                .map(str::to_owned),
             execution_mode: value
                 .get("executionMode")
                 .and_then(Value::as_str)
@@ -91,23 +86,6 @@ impl SubsessionPolicy {
 }
 
 impl GuidedExecutionPolicy {
-    /// Root chats own their usage; legacy children retain unknown lineage.
-    pub fn usage_root<'a>(&'a self, session_id: &'a str) -> Option<&'a str> {
-        match &self.subsession {
-            None => Some(session_id),
-            Some(subsession) => subsession.root_session_id.as_deref(),
-        }
-    }
-
-    /// Main chat usage or the writing session policy role verbatim.
-    pub fn usage_role(&self) -> &str {
-        if self.role.as_str() == "butler" {
-            "main"
-        } else {
-            self.role.as_str()
-        }
-    }
-
     /// Reads the turn's execution policy, or the butler default when the
     /// context carries none, never widening the access mode the model
     /// selection admitted. The context document is untyped JSON (passthrough

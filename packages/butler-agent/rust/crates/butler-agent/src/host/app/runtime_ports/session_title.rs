@@ -69,7 +69,6 @@ impl AppSessionTitleGenerator for AppSessionTitleGeneratorAdapter {
                 &messages,
                 &effort,
                 cancellation,
-                input.usage_session_id,
             )
             .await?;
             Ok(result
@@ -86,7 +85,6 @@ async fn title_round(
     messages: &[ModelRoundMessage],
     effort: &ReasoningEffort,
     cancellation: CancellationToken,
-    usage_session_id: Option<String>,
 ) -> Result<butler_turn::btcc::ModelRoundResult, GatewayApplicationError> {
     provider
         .run_round(ModelRoundRequest {
@@ -106,11 +104,7 @@ async fn title_round(
             image_manifests: &[],
             verified_image_payload: None,
             butler_data: None,
-            usage_attribution: Some(&butler_turn::btcc::UsageAttribution::attributed_background(
-                "title",
-                usage_session_id,
-                Some("main".into()),
-            )),
+            usage_attribution: Some(&butler_turn::btcc::UsageAttribution::background("title")),
             cache_scope: None,
             stable_provider_cache_prefix: None,
             route_context: None,
