@@ -13,7 +13,7 @@ import { appShellTheme } from "@/app/utils";
 import { EMPTY_SETTINGS } from "@/app/constants";
 import { HARNESS_MESSAGES, HARNESS_SS03_OBSERVER_VIEW } from "@/app/fixtures";
 import type { MessageRecord, SessionView } from "@/app/types";
-import { answer, decisionRows, defaultRows, noRows, roundOne, roundTwoRows, segmentOne } from "./activityLayoutFixtures";
+import { answer, changedFiles, decisionRows, defaultRows, noRows, roundOne, roundTwoRows, segmentOne } from "./activityLayoutFixtures";
 
 /**
  * Deterministic stub stream through the product's virtual list and observer renderer.
@@ -22,6 +22,8 @@ import { answer, decisionRows, defaultRows, noRows, roundOne, roundTwoRows, segm
  * streams a decision row, `segments=2` delivers a first segment before the streaming one, and
  * `settle=progress-first|message-first` settles the progress and the message 400ms apart, with
  * the streaming message carrying no activity rows of its own (as a gateway draft does).
+ * `status=retrying` streams with that in-progress status, `final=empty` delivers the last
+ * segment with no activity rows of its own (`[]`), and `files=1` streams with a changed file.
  */
 export function ActivityLayoutHarness() {
   useAppLocale();
@@ -31,6 +33,8 @@ export function ActivityLayoutHarness() {
   const noText = params.get("answer") === "none";
   const segments = params.get("segments") === "2";
   const settle = params.get("settle");
+  const liveStatus = params.get("status") ?? "streaming";
+  const finalRows = params.get("final") === "empty" ? noRows : undefined;
   const [running, setProgressLive] = useState(params.get("state") !== "completed");
   const [streaming, setMessageLive] = useState(running);
   const [round, setRound] = useState(1);
@@ -76,13 +80,13 @@ export function ActivityLayoutHarness() {
   const messages: MessageRecord[] = Array.from({ length: count }, (_, index) => ({
     ...HARNESS_MESSAGES.find((message) => message.role === "assistant")!,
     id: `activity-layout-${index}`, chat_id: "activity-layout", turn_id: `activity-layout-${index}`,
-    status: streaming ? "streaming" : "delivered", text: count > 1 ? "확인한 활동을 답변과 함께 표시합니다.\n\n".repeat(2) : streaming ? roundText.slice(0, length) : finalText,
+    status: streaming ? liveStatus : "delivered", text: count > 1 ? "확인한 활동을 답변과 함께 표시합니다.\n\n".repeat(2) : streaming ? roundText.slice(0, length) : finalText,
     created_at: "2026-10-03T00:00:02.000Z", updated_at: "2026-10-03T00:00:09.000Z",
-    turn_activity_rows: settle && streaming ? undefined : rows, work_blocks: fixture ? completedWorkBlocks({ state: "delivered", safe_progress_rows: rows }) : undefined, artifacts: [], attachments: [],
+    turn_activity_rows: finalRows ?? (settle && streaming ? undefined : rows), changed_files: params.get("files") === "1" ? changedFiles : undefined, work_blocks: fixture ? completedWorkBlocks({ state: "delivered", safe_progress_rows: rows }) : undefined, artifacts: [], attachments: [],
   }));
   if (count === 1) messages.unshift({ ...messages[0]!, id: "previous-answer", turn_id: "previous-turn",
-    status: "delivered", text: "이전 답변을 확인했습니다.\n\n".repeat(60), turn_activity_rows: undefined });
-  if (segments) messages.splice(-1, 0, { ...messages.at(-1)!, id: "activity-layout-segment-1", status: "delivered", text: segmentOne, turn_activity_rows: rows });
+    status: "delivered", text: "이전 답변을 확인했습니다.\n\n".repeat(60), turn_activity_rows: undefined, changed_files: undefined });
+  if (segments) messages.splice(-1, 0, { ...messages.at(-1)!, id: "activity-layout-segment-1", status: "delivered", text: segmentOne, turn_activity_rows: rows, changed_files: undefined });
   // Before the first delta the turn has no message yet; its activity renders as its own row.
   if (streaming && length === 0) messages.pop();
   const turn = { ...HARNESS_SS03_OBSERVER_VIEW.latest_turn!, id: "activity-layout-0",

@@ -52,7 +52,12 @@ function MessageContentComponent({
     <MessageImageContext.Provider value={openImage}>
       {message.role === "assistant" ? (
         <AssistantMessageBody message={message} running={running} liveActivity={liveActivity} failureNotice={failureNotice}
-          stewardProgress={stewardProgress} refreshFileUrls={refreshFileUrls} />
+          stewardProgress={stewardProgress} refreshFileUrls={refreshFileUrls} attachedParts={<>
+            <MessageArtifacts text={message.text} artifacts={artifacts} attachments={message.attachments ?? []}
+              refreshFileUrls={refreshFileUrls} />
+            <MessageChangedFiles files={message.changed_files ?? []} attachments={message.attachments ?? []}
+              artifacts={artifacts} text={message.text} />
+          </>} />
       ) : message.role === "user" ? (
         <UserMessageText key={message.id} text={message.text} contentParts={message.content_parts} />
       ) : (
@@ -60,22 +65,6 @@ function MessageContentComponent({
       )}
       {message.role !== "assistant" && (
         <MessageAttachments attachments={message.attachments ?? []} />
-      )}
-      {message.role === "assistant" && (
-        <MessageArtifacts
-          text={message.text}
-          artifacts={artifacts}
-          attachments={message.attachments ?? []}
-          refreshFileUrls={refreshFileUrls}
-        />
-      )}
-      {message.role === "assistant" && (
-        <MessageChangedFiles
-          files={message.changed_files ?? []}
-          attachments={message.attachments ?? []}
-          artifacts={artifacts}
-          text={message.text}
-        />
       )}
       {message.role === "assistant" && running && <AnswerDraftFooter turnId={message.turn_id} />}
       {message.role === "assistant" && !running && onCopyAssistantMessage && (

@@ -2,11 +2,10 @@ import { useState, type ReactNode } from "react";
 import { projectTurnActivity } from "@/app/conversation-progress";
 import { useAppLocale } from "@/app/copy";
 import type { MessageRecord } from "@/app/types";
+import { isTerminalProgressState } from "@/app/utils";
 import { Collapsible, Space, Stack } from "@/butler-ds";
 import { TurnActivityTimeline } from "./TurnActivityTimeline";
 import { liveTurnWork, TurnActivityStatus, type LiveTurnActivity } from "./TurnActivityPanel";
-
-const SETTLED_STATES = new Set(["delivered", "completed", "failed", "cancelled"]);
 
 /** The last live progress this message carried, kept so its activity can settle and fold in place. */
 export function useKeptLiveActivity(live?: LiveTurnActivity): LiveTurnActivity | undefined {
@@ -26,11 +25,12 @@ export function MessageTurnActivity({ message, live, kept }: {
   kept?: LiveTurnActivity;
 }) {
   useAppLocale();
-  const settledRows = message.turn_activity_rows?.length ? message.turn_activity_rows : kept?.rows;
+  // `undefined` means the message's rows have not arrived yet; `[]` means it has none of its own.
+  const settledRows = message.turn_activity_rows ?? kept?.rows;
   const turnId = live?.turnId ?? (message.turn_id || kept?.turnId);
   const projection = projectTurnActivity(live?.rows ?? settledRows ?? [], turnId);
   if (projection.phaseActivities.length === 0) return null;
-  const currentState = live || !SETTLED_STATES.has(message.status ?? "") ? projection.semanticState : message.status;
+  const currentState = live || !isTerminalProgressState(message.status ?? "") ? projection.semanticState : message.status;
   return <TurnActivityTimeline activities={projection.phaseActivities} currentState={currentState} live={Boolean(live)} turnId={turnId} />;
 }
 
@@ -50,7 +50,8 @@ export function MessageLiveGroup({ live, kept, children }: {
       <Collapsible open={Boolean(live && work)} data-test-class="turn-live-work">
         <Stack gap="none">{work}<Space size="lg" /></Stack>
       </Collapsible>
-      {children}
+      {/* The answer and its own parts keep the body's lg rhythm. */}
+      <Stack gap="lg">{children}</Stack>
       <Collapsible open={Boolean(live)} data-test-class="turn-live-status">
         <Stack gap="none">
           <Space size="lg" />

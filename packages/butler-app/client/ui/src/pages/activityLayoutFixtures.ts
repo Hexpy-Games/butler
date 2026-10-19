@@ -1,4 +1,4 @@
-import type { ProgressRow } from "@/app/types";
+import type { ChangedFileDetail, ProgressRow } from "@/app/types";
 
 /** Stub progress and answers for ActivityLayoutHarness. */
 export const defaultRows: ProgressRow[] = [{
@@ -41,3 +41,7 @@ export const decisionRows: ProgressRow[] = [{
   created_at: "2026-10-03T00:00:01.000Z",
 }];
 export const segmentOne = "질문 전에 확인한 내용입니다.\n\n".repeat(3);
+export const changedFiles: ChangedFileDetail[] = [{
+  path: "보고서.txt", additions: 2, deletions: 1,
+  lines: [{ type: "deleted", old_line: 1, content: "초안" }, { type: "added", new_line: 1, content: "요약" }, { type: "added", new_line: 2, content: "결론" }],
+}];

@@ -201,6 +201,52 @@ async function decisionRow(page: Page, url: string) {
     parseFloat(getComputedStyle(node).paddingTop)), "completed decision turn starts with its text");
 }
 
+/** The answer's own parts (changed files) stay with the answer; the status line comes after them. */
+async function answerParts(page: Page, url: string) {
+  await page.goto(`${url}&files=1`);
+  const message = page.locator(MESSAGE).last();
+  const files = '[data-test-class="message-changed-file-list"]';
+  await message.locator(files).waitFor();
+  await assertOrder(message, [LIVE_HEADER, TEXT, files, STATUS], "streaming: activity, text, files, status");
+  assert(await message.evaluate((node, status) => {
+    const body = node.querySelector('[data-test-class="message-body"]')!;
+    return [...body.children].at(-1)!.querySelector(status) !== null || [...body.children].at(-1)!.matches(status);
+  }, STATUS), "the status line is the last body part while streaming");
+  const filesBelowText = () => message.evaluate((node, [text, list]) => node.querySelector(list!)!.getBoundingClientRect().top -
+    node.querySelector(text!)!.getBoundingClientRect().top, [TEXT, files]);
+  await page.locator('[data-stub-stream-complete="true"]').waitFor();
+  const live = await filesBelowText();
+  await page.getByRole("button", { name: "완료", exact: true }).click();
+  await message.locator('[data-test-class="assistant-footer"]').waitFor();
+  await message.locator(STATUS).waitFor({ state: "detached" });
+  await assertOrder(message, [TEXT, files, '[data-test-class="assistant-footer"]'], "completed: text, files, footer");
+  assert.equal(await filesBelowText(), live, "changed files keep their place under the text through completion");
+}
+
+/** In-progress statuses other than streaming (retrying) keep the live activity on the message. */
+async function retryingMessage(page: Page, url: string) {
+  await page.goto(`${url}&status=retrying`);
+  const message = page.locator(MESSAGE).last();
+  await message.locator(LIVE_HEADER).waitFor();
+  assert.equal(await page.locator(ROW).count(), 0, "retrying message carries the live activity");
+  await assertOrder(message, [LIVE_HEADER, TEXT, STATUS], "retrying: activity, text, status");
+}
+
+/** A final segment delivered with `[]` rows has no activity of its own; the earlier segment keeps its summary. */
+async function emptyFinalSegment(page: Page, url: string) {
+  await page.goto(`${url}&segments=2&final=empty`);
+  await page.getByRole("button", { name: "답변 시작", exact: true }).click();
+  const last = page.locator(MESSAGE).last();
+  await last.locator(LIVE_HEADER).waitFor();
+  await page.locator('[data-stub-stream-complete="true"]').waitFor();
+  await page.getByRole("button", { name: "완료", exact: true }).click();
+  await last.locator('[data-test-class="assistant-footer"]').waitFor();
+  await last.locator(STATUS).waitFor({ state: "detached" });
+  assert.equal(await last.locator(`${ACTIVITY}, ${HEADER}`).count(), 0, "empty final segment shows no activity");
+  const first = page.locator(MESSAGE).filter({ hasText: "질문 전에 확인한 내용입니다." });
+  assert.equal(await first.getByRole("button", { name: /^활동 · / }).count(), 1, "earlier segment keeps its summary");
+}
+
 /** The fold ends where it settles: no spacing snaps after the closing content unmounts. */
 export async function checkFoldSettles(page: Page, url: string) {
   await page.goto(url);
@@ -231,5 +277,8 @@ export async function checkActivityOrderScenarios(page: Page, url: string, outpu
   await twoSegments(page, url, shot);
   for (const order of ["progress-first", "message-first"]) await settleOrder(page, url, order);
   await decisionRow(page, url);
+  await answerParts(page, url);
+  await retryingMessage(page, url);
+  await emptyFinalSegment(page, url);
   return { firstDeltaShift };
 }

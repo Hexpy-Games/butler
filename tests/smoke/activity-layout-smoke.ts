@@ -138,7 +138,7 @@ try {
   assert.equal(await normalTurn.locator('[data-test-class="assistant-footer"]').count(), 1);
   assert.equal(await normalTurn.locator('[data-test-class~="turn-activity-panel"]').count(), 0);
   await checkCapturedActivity(page, `http://127.0.0.1:${server.port}`, output);
-  console.log(JSON.stringify({ ok: true, screenshots: 48, measurements, spacing, scenarios, fold, foldEnd, checks: ["stream-order", "first-delta", "multi-round", "no-text", "no-tools", "two-segments", "settle-order", "decision-row", "completion-fold", "fold-no-snap", "single-footer", "completed-history", "observer-history", "autoscroll", "completed-list", "ko-light-dark-mobile-desktop", "normal-and-reduced-motion"] }));
+  console.log(JSON.stringify({ ok: true, screenshots: 48, measurements, spacing, scenarios, fold, foldEnd, checks: ["stream-order", "first-delta", "multi-round", "no-text", "no-tools", "two-segments", "settle-order", "decision-row", "answer-parts-order", "retrying-live", "empty-final-segment", "completion-fold", "fold-no-snap", "single-footer", "completed-history", "observer-history", "autoscroll", "completed-list", "ko-light-dark-mobile-desktop", "normal-and-reduced-motion"] }));
 } finally { await browser.close(); server.stop(true); }
 
 /** Clicks completion and samples the text's offset inside its message every frame until the fold settles. */
