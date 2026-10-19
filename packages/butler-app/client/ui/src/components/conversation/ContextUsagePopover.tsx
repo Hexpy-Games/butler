@@ -3,7 +3,7 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { ContextDetailsView } from "@/app/types.ts";
 import { Button, formatUsageTokens, Inline, ProgressMeter, Stack, Typo, UsageSummaryRows, Separator, UsageBars } from "@/butler-ds";
 import { UsageReadout } from "../usage/UsageReadout";
-import { usageReadout, usageSeries, usageTimeline } from "../usage/usageTimeline";
+import { usageParts, usageReadout, usageSeries, usageTimeline } from "../usage/usageTimeline";
 import { conversationUsageSummary } from "./conversationUsage";
 import type { UsageAuthMode } from "./usageAuthMode";
 import { useConversationUsage, type QuotaLoader, type UsageLoader } from "./useConversationUsage";
@@ -60,7 +60,7 @@ export function ContextUsagePopover({ context, mode, sessionId, onDetails, load,
         {!usage.view && usage.status === "failed" ? <Stack gap="sm"><Typo.Caption>{copy.thisChat}</Typo.Caption><Typo.Caption>{copy.unavailable}</Typo.Caption></Stack> :
           <UsageReadout view={usage.view} values={usageReadout(usage.view, bucket)} label={bucket?.label ?? copy.thisChat}
             unit={timeline.stepHours > 1 ? copy.bucketUnit(timeline.stepHours) : undefined}
-            selected={Boolean(bucket)} showCost={mode === "api_key"} stale={usage.status === "failed"}>
+            selected={Boolean(bucket)} showCost={mode === "api_key"} stale={usage.status === "failed"} parts={usageParts(usage.view, bucket)}>
             <UsageBars {...timeline} series={usageSeries()} size="popover" selectedIndex={selected} onSelect={onSelect}
               state={!usage.view ? "loading" : "ready"} emptyLabel={copy.noUsage} loadingLabel={copy.loading}
               note={timeline.buckets.length === 1 ? copy.justStarted : undefined} ariaLabel={copy.chartLabel} />

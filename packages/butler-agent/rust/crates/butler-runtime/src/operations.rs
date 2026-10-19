@@ -17,6 +17,8 @@ mod service_readiness;
 mod status_summary;
 mod update;
 mod usage_cost;
+mod usage_owners;
+pub use usage_owners::{UsageLineage, UsageOwners, UsageScope};
 mod web_search_metrics;
 
 pub use conversation_metrics::{AdmissionMeasure, ConversationMetrics};
@@ -50,8 +52,8 @@ pub use update::{
     UpdateProgress, UpdateProgressSink, UpdateRequest, effective_update_previews, version_newer,
 };
 pub use usage_cost::{
-    CostReason, SessionUsage, SessionUsageIndex, SessionUsageView, UsageCostView, UsageEvent,
-    UsageTotals,
+    CostReason, SessionRoleUsage, SessionUsage, SessionUsageIndex, SessionUsageView, UsageCostView,
+    UsageEvent, UsageTotals,
 };
 pub use web_search_metrics::WebSearchMetrics;
 
