@@ -140,6 +140,7 @@ async fn project_write_kernel_boundaries_and_quarantine() -> Result<(), HarnessE
     assert_eq!(
         violations,
         vec![
+            root.join("src/outward"),
             root.join("sub/.env"),
             root.join("sub/.git"),
             root.join("sub/hide"),
@@ -151,6 +152,11 @@ async fn project_write_kernel_boundaries_and_quarantine() -> Result<(), HarnessE
     assert!(!root.join("sub/.env").exists());
     let quarantine = setup.sandbox.data.join("sandbox-quarantine");
     let run = std::fs::read_dir(quarantine)?.next().unwrap()?.path();
+    // Ordinary aliases of an existing secret target are unsafe even when
+    // unchanged: quarantine the link itself and preserve the outside target.
+    assert!(std::fs::symlink_metadata(root.join("src/outward")).is_err());
+    assert_eq!(std::fs::read_link(run.join("src/outward"))?, outside);
+    assert_eq!(std::fs::read_to_string(&outside)?, "outside-marker");
     assert_eq!(
         std::fs::read_to_string(run.join("sub/.git/config"))?,
         "planted\n"

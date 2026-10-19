@@ -12,7 +12,7 @@ trait Walker {
     type Directory;
     fn root(path: &Path) -> io::Result<Self::Directory>;
     fn child(parent: &Self::Directory, name: &OsStr) -> io::Result<Self::Directory>;
-    fn entries(dir: &Self::Directory) -> io::Result<Vec<(OsString, bool)>>;
+    fn entries(dir: &Self::Directory) -> io::Result<Vec<(OsString, bool, bool)>>;
 }
 struct Native;
 impl Walker for Native {
@@ -23,26 +23,44 @@ impl Walker for Native {
     fn child(parent: &Self::Directory, name: &OsStr) -> io::Result<Self::Directory> {
         native::open_child(parent, name)
     }
-    fn entries(dir: &Self::Directory) -> io::Result<Vec<(OsString, bool)>> {
-        native::entries(dir)
+    fn entries(dir: &Self::Directory) -> io::Result<Vec<(OsString, bool, bool)>> {
+        #[cfg(unix)]
+        return native::entries_with_links(dir);
+        #[cfg(windows)]
+        Ok(native::entries(dir)?
+            .into_iter()
+            .map(|(name, directory)| (name, directory, false))
+            .collect())
     }
 }
 
 pub(in crate::command_sandbox) fn walk(root: &Path, bounded: bool) -> io::Result<Vec<PathBuf>> {
+    Ok(scan(root, bounded)?.found)
+}
+
+#[cfg(unix)]
+pub(super) fn walk_for_sweep(root: &Path) -> io::Result<(Vec<PathBuf>, Vec<PathBuf>)> {
+    let walk = scan(root, false)?;
+    Ok((walk.found, walk.links))
+}
+
+fn scan(root: &Path, bounded: bool) -> io::Result<Walk> {
     let dir = Native::root(root)?;
     let mut walk = Walk {
         bounded,
         visited: 0,
         found: Vec::new(),
+        links: Vec::new(),
     };
     walk.visit::<Native>(&dir, Path::new(""), 0)?;
     walk.found.sort();
-    Ok(walk.found)
+    Ok(walk)
 }
 struct Walk {
     bounded: bool,
     visited: usize,
     found: Vec<PathBuf>,
+    links: Vec<PathBuf>,
 }
 impl Walk {
     fn visit<W: Walker>(
@@ -51,7 +69,7 @@ impl Walk {
         relative: &Path,
         depth: usize,
     ) -> io::Result<()> {
-        for (name, directory) in W::entries(dir)? {
+        for (name, directory, symlink) in W::entries(dir)? {
             self.visited += 1;
             if self.bounded && self.visited > MAX_ENTRIES {
                 return Err(io::Error::other(
@@ -62,6 +80,9 @@ impl Walk {
             if crate::command_sandbox::secret_name(&name.to_string_lossy()) {
                 self.found.push(path);
                 continue;
+            }
+            if !self.bounded && symlink {
+                self.links.push(path.clone());
             }
             if !directory {
                 continue;

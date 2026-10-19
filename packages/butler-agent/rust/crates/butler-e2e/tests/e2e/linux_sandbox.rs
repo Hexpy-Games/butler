@@ -4,6 +4,7 @@ mod boundaries;
 mod latency;
 mod project_boundaries;
 mod project_write;
+mod secret_links;
 mod tiers;
 mod tools;
 mod windows_drive;

@@ -17,24 +17,38 @@ pub fn discover_project_secrets(root: &Path) -> std::io::Result<Vec<PathBuf>> {
     }
 }
 
-/// Quarantines secret names absent from the pre-run discovery inventory.
+/// Quarantines new secret names and links to canonical secret targets.
 /// Call only after the contained process tree has been reaped.
 pub fn sweep_new_secrets(
     root: &Path,
     since: &[PathBuf],
     data: &Path,
 ) -> std::io::Result<Vec<PathBuf>> {
+    sweep_new_secrets_with_environment(root, since, data, &std::env::vars().collect())
+}
+
+/// Sweeps using the same host environment as the command's credential policy.
+/// Call only after reaping descendants, from a blocking worker.
+pub fn sweep_new_secrets_with_environment(
+    root: &Path,
+    since: &[PathBuf],
+    data: &Path,
+    environment: &std::collections::HashMap<String, String>,
+) -> std::io::Result<Vec<PathBuf>> {
     #[cfg(target_os = "linux")]
     {
-        let result = portable::sweep_new_secrets(root, since, data);
+        let result = portable::sweep_new_secrets(root, since, data, environment);
         let cleaned = super::linux::cleanup_generated(root, data);
         result.and_then(|paths| cleaned.map(|()| paths))
     }
     #[cfg(windows)]
-    return super::windows::mxc::ledger::sweep(root, since, data);
+    {
+        let _ = environment;
+        super::windows::mxc::ledger::sweep(root, since, data)
+    }
     #[cfg(not(any(target_os = "linux", windows)))]
     {
-        let _ = (root, since, data);
+        let _ = (root, since, data, environment);
         Ok(Vec::new())
     }
 }

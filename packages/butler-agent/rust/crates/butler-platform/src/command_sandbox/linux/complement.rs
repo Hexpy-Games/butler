@@ -128,11 +128,12 @@ pub(super) fn apply(
 /// path is already canonical unless the entry itself is a symlink, so only
 /// symlinks need resolution (one lstat per entry instead of a full resolve).
 pub(super) fn entry_aliases(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>, Error> {
-    let mut resolved = HashMap::new();
     let mut targets = Vec::new();
     for path in &paths {
-        if std::fs::symlink_metadata(path).is_ok_and(|entry| entry.file_type().is_symlink()) {
-            targets.push(canonical_or_missing(path, &mut resolved)?);
+        if std::fs::symlink_metadata(path)?.file_type().is_symlink() {
+            targets.push(resolved_path(path).map_err(|error| {
+                format!("secret symlink target cannot be resolved safely: {error}")
+            })?);
         }
     }
     let mut result = paths;
@@ -201,11 +202,9 @@ pub(super) fn project_secrets(root: &Path) -> Result<Vec<PathBuf>, Error> {
             secrets.push(entry.path());
         }
     }
-    // Do not deny a public external target merely because a secret-named
-    // symlink points to it: Seatbelt does not deny that target either. The
-    // lexical guard covers secret-named symlinks, which Landlock cannot carve
-    // out independently of their target.
-    Ok(secrets)
+    // A protected name protects the object too, including external targets.
+    // Resolve before complement grants can recursively re-allow that object.
+    entry_aliases(secrets)
 }
 
 fn grant_complement(

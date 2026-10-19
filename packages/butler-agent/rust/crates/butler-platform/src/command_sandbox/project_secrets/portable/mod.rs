@@ -1,10 +1,12 @@
-//! Metadata-only project discovery. Never follow symlinks or enter secret dirs.
+//! Metadata-only discovery; post-run link resolution never reads target contents.
 #[cfg(unix)]
 #[path = "quarantine_unix.rs"]
 mod quarantine;
 #[cfg(windows)]
 #[path = "quarantine_windows.rs"]
 mod quarantine;
+#[cfg(unix)]
+mod targets;
 pub(in crate::command_sandbox) mod tree;
 #[cfg(unix)]
 pub(in crate::command_sandbox) mod unix;
@@ -29,7 +31,7 @@ pub(super) fn discover_project_secrets(root: &Path) -> std::io::Result<Vec<PathB
         .collect())
 }
 
-/// Moves secret names absent from the pre-run inventory into a private
+/// Moves new secret names and unsafe ordinary-named links into a private
 /// data-folder quarantine. Filesystem timestamps may precede wall-clock launch
 /// time by a clock tick, so the inventory is the authority for new names.
 /// Directories the walk cannot inspect are quarantined whole. One failed move
@@ -39,11 +41,28 @@ pub(super) fn sweep_new_secrets(
     root: &Path,
     since: &[PathBuf],
     data: &Path,
+    environment: &std::collections::HashMap<String, String>,
 ) -> std::io::Result<Vec<PathBuf>> {
-    let found = tree::walk(root, false)?
+    let (found, links) = tree::walk_for_sweep(root)?;
+    let mut found: Vec<_> = found
         .into_iter()
         .map(|relative| root.join(relative))
         .collect();
+    if !links.is_empty() {
+        // If an inventory root cannot be resolved, quarantine every link.
+        let targets = targets::SecretTargets::new(&found, data, environment);
+        for relative in links {
+            let path = root.join(relative);
+            if targets
+                .as_ref()
+                .map_or(true, |targets| targets.protects(&path))
+            {
+                found.push(path);
+            }
+        }
+    }
+    found.sort();
+    found.dedup();
     quarantine_new(root, since, data, found)
 }
 
