@@ -1,4 +1,5 @@
 //! Terminal BTCC history must not be visited by idle admission or delivery polls.
+use crate::owner_scale::{BTCC_DATABASE_BYTES, BTCC_PAYLOAD_BYTES};
 use butler_e2e::e2e::HarnessError;
 use rusqlite::{Connection, params};
 use std::path::{Path, PathBuf};
@@ -22,8 +23,8 @@ pub(super) fn seed(data: &Path) -> Result<(), HarnessError> {
         let mut relation = tx.prepare("INSERT INTO btcc_session_relations(relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at,activity_role,activity_worker_id,activity_terminal) VALUES(?1,'history',?1,?1,?1,?2,'Historical child','2026-01-01T00:00:00Z','steward','steward-'||?1,1)")?;
         let mut turn = tx.prepare("INSERT INTO btcc_turns(turn_id,session_id,inbox_id,trigger_key,original_message_id,original_message,admission_snapshot_ref,model_selection_json,context_json,semantic_state,revision,execution_fence) VALUES(?1,'history',?1,?1,?1,?2,'fixture','{}','{}','delivered',1,1)")?;
         let mut outbox = tx.prepare("INSERT INTO btcc_subsession_outbox(outbox_id,relation_id,result_id,parent_session_id,parent_turn_id,message_id,input_json,status,created_at) VALUES(?1,?1,?1,'history',?1,?1,'{}','delivered','2026-01-01T00:00:00Z')")?;
-        let body = "x".repeat(23_000);
-        for index in 0..TURNS {
+        let bodies = BTCC_PAYLOAD_BYTES.map(|bytes| "x".repeat(bytes));
+        for (index, body) in (0..TURNS).zip(bodies.iter().cycle()) {
             let id = format!("history-{index:06}");
             inbox.execute([&id])?;
             relation.execute(params![id, index])?;
@@ -33,10 +34,9 @@ pub(super) fn seed(data: &Path) -> Result<(), HarnessError> {
     }
     tx.commit()?;
     db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
-    eprintln!(
-        "PERF-BTCC database_bytes={}",
-        std::fs::metadata(path(data))?.len()
-    );
+    let bytes = std::fs::metadata(path(data))?.len();
+    eprintln!("PERF-BTCC database_bytes={bytes}");
+    assert!(BTCC_DATABASE_BYTES.contains(&bytes), "BTCC bytes: {bytes}");
     Ok(())
 }
 
@@ -77,13 +77,17 @@ pub(super) fn assert_complete(data: &Path) -> Result<(), HarnessError> {
         repairs, 0,
         "settled history must already satisfy the activity identity invariant"
     );
-    for id in ["history-000000", "history-299999"] {
+    for (id, index) in [("history-000000", 0), ("history-299999", TURNS - 1)] {
+        let index = usize::try_from(index).map_err(|error| HarnessError(error.to_string()))?;
         let body: String = db.query_row(
             "SELECT original_message FROM btcc_turns WHERE turn_id=?1",
             [id],
             |row| row.get(0),
         )?;
-        assert_eq!(body, "x".repeat(23_000));
+        assert_eq!(
+            body,
+            "x".repeat(BTCC_PAYLOAD_BYTES[index % BTCC_PAYLOAD_BYTES.len()])
+        );
     }
     Ok(())
 }
