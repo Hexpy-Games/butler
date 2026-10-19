@@ -4,6 +4,14 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright";
 
+export async function assertThinkingPinned(page: Page, label: string) {
+  await page.waitForFunction(() => {
+    const scroll = document.querySelector('[data-test-class~="conversation-scroll"]')!;
+    return scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop <= 2;
+  });
+  assert.equal(await page.locator('[data-test-class="scroll-to-bottom-button"]').count(), 0, `${label}: no jump pill at the bottom`);
+}
+
 /** Exercise pointer, native Tab focus and Playwright's scroll-into-view separately.
  * Each trial starts from the same closed group; cleanup never changes its result.
  */

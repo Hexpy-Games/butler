@@ -1,6 +1,7 @@
 // Offline chat harness: one live line, DS motion, unchanged fallback and cleanup.
+// test-category: race
 import assert from "node:assert/strict";
-import { probeThinkingReveal } from "../support/model-thinking-scroll";
+import { assertThinkingPinned, probeThinkingReveal } from "../support/model-thinking-scroll";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -127,7 +128,7 @@ try {
       const { useButlerStore } = window.butlerThinkingHarness;
       const progress = { turn_id: "thinking-turn", state: "running", started_at: rows[0].created_at, safe_progress_rows: rows };
       const state = useButlerStore.getState();
-      state.setSummary({ ...state.summary, turn_state: "running", latest_progress: progress });
+      state.setSummary({ ...state.summary, turn_state: "running", latest_progress: progress, worker_activity: [] });
       state.setTurnProgress({ "thinking-turn": progress });
     }, liveRows);
     const status = page.locator('[data-test-class="turn-model-round-waiting"]');
@@ -167,18 +168,29 @@ try {
     const group = page.getByRole("button", { name: "2 생각, 1 검색", exact: true });
     const thinking = page.getByRole("button", { name: "Planning the search", exact: true });
     for (const result of await probeThinkingReveal(page, group, thinking, evidence, cell)) revealResults.push({ cell, ...result });
+    await assertThinkingPinned(page, `${cell} after keyboard reveal`);
     await group.click();
     await blur(page);
     await thinking.click();
     await page.locator('[data-test-class="thinking-details"]').waitFor();
+    await blur(page);
+    await assertThinkingPinned(page, `${cell} expanded`);
     assert.equal(outputFetches, 0, "live body must not fetch");
     await receive("Checking the results", body + "\nMore streamed content.");
     await blur(page);
+    await assertThinkingPinned(page, `${cell} streaming`);
     assert.equal(await page.getByRole("button", { name: "Checking the results", exact: true }).count(), 1);
     assert((await page.locator('[data-test-class="thinking-details"]').innerText()).includes("More streamed content."));
     const order = await page.locator('[data-test-class="turn-work-tool-detail-row"]').allTextContents();
     assert(order[0].includes(firstTitle) && order[1].includes("공개 자료") && order[2].includes("Checking the results"));
     await capture("live-on-expanded");
+    // Grow beyond the viewport as well as within the original short conversation.
+    for (const lines of [30, 40]) {
+      await receive("Checking the results", body + "\n\nStreaming paragraph.".repeat(lines));
+      await page.waitForFunction(count => (document.querySelector('[data-test-class="thinking-details"]')?.textContent?.match(/Streaming paragraph\./gu) ?? []).length === count, lines);
+      await blur(page);
+      await assertThinkingPinned(page, `${cell} overflow stream ${lines}`);
+    }
     await receive(null);
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
     assert((await status.innerText()).startsWith("응답 생성 중"));
@@ -199,9 +211,10 @@ try {
     await page.evaluate(() => {
       const state = window.butlerThinkingHarness.useButlerStore.getState();
       state.setTurnProgress({});
-      state.setSummary({ ...state.summary!, turn_state: "delivered", latest_progress: undefined });
+      state.setSummary({ ...state.summary!, turn_state: "delivered", latest_progress: undefined, worker_activity: [] });
     });
     await page.getByText("확인했습니다.", { exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "중지", exact: true }).count(), 0, "completed fixture has no active turn or worker");
     await expandTimeline();
     const pastGroup = page.getByRole("button", { name: "2 생각, 1 검색", exact: true });
     await pastGroup.click();

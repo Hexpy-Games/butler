@@ -146,12 +146,14 @@ export function useConversationAutoScroll({
     const markKeyboardScrollIntent = (event: KeyboardEvent) => {
       if (SCROLL_NAVIGATION_KEYS.has(event.key)) markUserScrollIntent();
     };
-    // Keyboard focus on a control above the bottom moves the reader there:
+    // Keyboard focus that scrolls away from the bottom moves the reader there:
     // release the bottom lock so a later pin (a settling or streaming
     // conversation) does not pull the focused control out of view.
     const keepKeyboardFocusInView = (event: FocusEvent) => {
       const target = event.target;
       if (!(target instanceof Element) || !target.matches(":focus-visible")) return;
+      // A control can be far above the content end while everything still fits.
+      if (conversationDistanceFromBottom(element) < BOTTOM_LOCK_THRESHOLD) return;
       const contentBottom = target.getBoundingClientRect().bottom - element.getBoundingClientRect().top + element.scrollTop;
       if (element.scrollHeight - contentBottom > BOTTOM_LOCK_THRESHOLD) releaseBottomLock();
     };
