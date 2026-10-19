@@ -147,6 +147,10 @@ pub(super) async fn worker_loop_panic_closes_queue_and_future_readiness_fails_fa
         actor_inner.warm.store(true, Ordering::Release);
         panic!("worker loop failure");
     });
+    // Paused clock: whenever every task waits, the runtime jumps to the next
+    // timer (the readiness deadlines), so any sleep, timeout, I/O or join wait
+    // in this window moves `now`.
+    tokio::time::pause();
     let started = Instant::now();
     let (a, b, ()) = tokio::join!(
         owner.ready(deadline(4_250)),
@@ -163,7 +167,8 @@ pub(super) async fn worker_loop_panic_closes_queue_and_future_readiness_fails_fa
         owner.ready(deadline(4_250)).await.unwrap_err().code(),
         "embed_owner_closed"
     );
-    assert!(started.elapsed() < Duration::from_millis(100));
+    assert_eq!(Instant::now(), started, "failure path never waits");
+    tokio::time::resume();
     assert!(!owner.is_warm());
     assert_eq!(
         owner.close().await.unwrap_err().code(),
