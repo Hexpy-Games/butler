@@ -72,7 +72,7 @@ async function fetchAsset(tab, url, origins) {
     if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) return null;
     const profile = tab.view.webContents.session;
     if (!origins.has(parsed.origin) && !localPage(origins) && !await guardUrl(url, profile, {}, false)) return null;
-    appLog("DEBUG", "http.client", "snapshot.fetch", { url });
+    appLog("DEBUG", "http.client", "snapshot.fetch", { url: parsed.origin });
     const response = await profile.fetch(url, { signal: AbortSignal.timeout(8000), credentials: "include" });
     if (!response.ok || Number(response.headers.get("content-length") ?? 0) > ASSET_LIMIT) return null;
     const body = Buffer.from(await response.arrayBuffer());

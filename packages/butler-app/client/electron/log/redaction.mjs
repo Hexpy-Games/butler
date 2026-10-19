@@ -25,18 +25,18 @@ const PATTERNS = [
   [new RegExp("((?:[A-Z]:)?\\\\+(?:Users|home)\\\\+)[^/\\\\\\s\"'<>]+", "giu"), "$1[redacted-user]"],
 ];
 export function createRedactor() {
-  const secrets = new Set();
-  function remember(value) { if (typeof value === "string" && value) { secrets.add(value); if (/^Bearer /iu.test(value)) secrets.add(value.slice(7)); } }
-  function observe(value) {
-    if (!value || typeof value !== "object") return;
-    for (const [key, item] of Object.entries(value)) {
-      if (SECRET.test(key) || key === "code") remember(item);
-      else observe(item);
-    }
+  const permanent = new Set(), ephemeral = new Set();
+  function remember(value, persistent = false) {
+    if (typeof value !== "string") return;
+    const secret = value.replace(/^Bearer /iu, "");
+    if (secret.length < 16) return;
+    const target = persistent ? permanent : ephemeral;
+    target.add(secret);
+    if (!persistent && target.size > 256) target.delete(target.values().next().value);
   }
   function text(input) {
     let result = input;
-    for (const secret of [...secrets].sort((a, b) => b.length - a.length)) result = result.split(secret).join(MASK);
+    for (const secret of [...permanent, ...ephemeral].sort((a, b) => b.length - a.length)) result = result.split(secret).join(MASK);
     for (const [pattern, replacement] of PATTERNS) result = result.replace(pattern, replacement);
     return result;
   }
@@ -58,5 +58,5 @@ export function createRedactor() {
       [text(key), SECRET.test(key) && !(key === "secrets_redacted" && typeof item === "boolean") ? MASK : redact(item)]));
     return value;
   }
-  return { redact, remember, observe };
+  return { redact, remember };
 }

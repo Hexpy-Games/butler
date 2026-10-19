@@ -1,6 +1,6 @@
 // Real Electron main/preload/renderer → shared native log API; offline stub model only.
 import { strict as assert } from "node:assert";
-import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, statSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, statSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type Browser, type Page } from "playwright";
@@ -21,7 +21,7 @@ writeFileSync(join(profile, "butler-native-settings.json"), JSON.stringify({ dev
 const server = await createNativeAppServer();
 const copy = getAppCopy("ko-KR");
 let app: FileElectronApp | undefined, browser: Browser | undefined;
-type Row = { process: string; event: string; trace_id?: string; msg: string };
+type Row = { process: string; event: string; trace_id?: string; msg: string; category: string; error?: { scope: string; stack: string }; attrs?: { name: string }; body_ref?: string };
 async function rows(source: string) { return (await server.api<{ rows: Row[] }>(`/logs?source=${source}&limit=1000`)).rows; }
 async function waitFor<T>(read: () => Promise<T>, accept: (value: T) => boolean, name: string): Promise<T> {
   const deadline = Date.now() + 30_000;
@@ -37,6 +37,29 @@ function files() {
   return readdirSync(directory, { recursive: true }).map(String).map(name => join(directory, name)).filter(path => statSync(path).isFile());
 }
 function snapshot() { return files().map(path => [path, statSync(path).size, statSync(path).mtimeMs]); }
+async function renderer(script: string) {
+  return app!.evaluate(({ BrowserWindow }, script) => BrowserWindow.getAllWindows()
+    .find(window => window.webContents.getURL().startsWith("app://butler/"))!.webContents.executeJavaScript(script), script);
+}
+async function setLevel(level: string) {
+  await renderer(`window.butlerApp.logs({ path: "/logs/config", method: "PUT", body: { level: ${JSON.stringify(level)}, category_levels: {} } })`);
+}
+async function fullBodySmoke() {
+  await setLevel("full");
+  await renderer(`window.butlerApp.recordUiCrash({ scope: "conversation", message: "full-only input sk-secret" })`);
+  const detail = await waitFor(() => rows("app"), rows => rows.some(row => row.event === "ipc.payload" && row.attrs?.name === "butler:ui-crash"), "full IPC reference");
+  const payload = detail.find(row => row.event === "ipc.payload" && row.attrs?.name === "butler:ui-crash")!;
+  assert(payload.body_ref && !JSON.stringify(payload).includes("full-only input"));
+  const response = await fetch(`${server.url}/logs/bodies/${encodeURIComponent(payload.body_ref)}`, { headers: server.authHeaders });
+  assert(response.ok);
+  const body = await response.text();
+  assert(body.includes("full-only input") && !body.includes("sk-secret"));
+  await setLevel("detailed");
+  assert(!existsSync(join(server.butlerData, "logs/app/bodies")), "App removes full bodies before level-change acknowledgment");
+  await setLevel("standard");
+  assert(!existsSync(join(server.butlerData, "logs/app/debug")), "App removes its debug lane");
+  assert(files().every(path => !path.endsWith(".idx")), "Agent keeps App indexes out of App directories");
+}
 async function capture(page: Page, width: number, theme: string) {
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme }) });
   await page.setViewportSize({ width, height: 1000 });
@@ -49,7 +72,10 @@ async function capture(page: Page, width: number, theme: string) {
   const viewer = page.locator('[data-settings-section-id="logs-viewer"]');
   await viewer.getByRole("combobox", { name: copy.settings.logs.filters.source, exact: true }).selectOption("app");
   await viewer.locator('[data-test-class="log-row"]').first().waitFor();
-  assert(await viewer.getByText("ui.send", { exact: true }).count() > 0);
+  assert(await viewer.getByText("Message sent", { exact: true }).count() > 0);
+  const title = await viewer.getByRole("heading", { name: copy.settings.logs.sections.viewer, exact: true }).boundingBox();
+  const filter = await viewer.getByRole("combobox", { name: copy.settings.logs.filters.source, exact: true }).boundingBox();
+  assert(title && filter && filter.y >= title.y + title.height, "filters stay below the section title");
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => document.getAnimations().every(animation => animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
   await page.screenshot({ path: join(shots!, `${width}-${theme}-app.png`) });
@@ -74,16 +100,24 @@ try {
       log({ level: "INFO", category: "lifecycle", event: "app.start", attrs: { marker: "rejected-category" } });
       log({ level: "INFO", category: "app.ui", event: "ui.send", attrs: { value: "x".repeat(17000) } });
       log({ level: "ERROR", category: "app.ui", event: "ui.error", attrs: { token: "private-renderer-token", url: "https://example.test/?code=private-lan-code" } });
+      await window.butlerApp.recordUiCrash({ scope: "conversation", page: "session",
+        message: "private conversation sk-secret", stack: "Error: private conversation sk-secret\\n    at render (https://host/assets/index.js:3:4)" });
       return await window.butlerApp.sendMessage({ chatId: "general", text: "Say hello.", clientMessageId: crypto.randomUUID(), traceparent: ${JSON.stringify(traceparent)} });
     })()`);
   }, traceparent);
   const appRows = await waitFor(() => rows("app"), rows => rows.some(row => row.event === "ui.send"), "App send record");
   assert(appRows.some(row => row.event === "app.start" && row.process === "app.main"));
+  const crashRows = await waitFor(() => rows("app"), rows => rows.some(row => row.event === "ui.error" && row.error?.scope === "conversation"), "renderer crash record");
+  assert(crashRows.some(row => row.category === "app.ui" && row.event === "ui.error" && row.process === "app.renderer"
+    && row.error?.scope === "conversation" && row.error.stack));
+  assert(!JSON.stringify(crashRows).includes("private conversation") && !JSON.stringify(crashRows).includes("sk-secret"));
+  assert(appRows.every(row => row.msg && row.msg !== row.event));
   const action = appRows.find(row => row.event === "ui.send")!;
   assert.match(action.trace_id ?? "", /^[0-9a-f]{32}$/u);
   await waitFor(() => rows("all"), rows => rows.some(row => row.process === "agent" && row.trace_id === action.trace_id), "joined agent trace");
   const storage = await server.api<{ stores: { id: string; bytes: number }[] }>("/logs/storage");
   assert(storage.stores.some(store => store.id === "app/main" && store.bytes > 0));
+  await fullBodySmoke();
   // No log viewer polling while measuring; standard's INFO lane must stay completely idle.
   await new Promise(resolve => setTimeout(resolve, 3000));
   await rows("all");
@@ -94,7 +128,7 @@ try {
   console.log(JSON.stringify({ stage: "App trace and idle", idle_ms: elapsed, idle_bytes: 0, trace_id: action.trace_id }));
   for (const path of files().filter(path => path.endsWith(".jsonl"))) {
     const text = readFileSync(path, "utf8");
-    for (const secret of [server.token, "private-renderer-token", "private-lan-code", "rejected-process", "rejected-category", "x".repeat(17_000)]) assert(!text.includes(secret));
+    for (const secret of [server.token, "private-renderer-token", "private-lan-code", "private conversation", "sk-secret", "rejected-process", "rejected-category", "x".repeat(17_000)]) assert(!text.includes(secret));
   }
   browser = await launchSmokeBrowser();
   const context = await browser.newContext({ locale: "ko-KR" });

@@ -270,7 +270,6 @@ function recordWorkAction(path, options) {
 }
 
 async function requestJson(path, options = {}) {
-  recordWorkAction(path, options);
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   await ensureLocalServer();
   const serverUrl = await currentServerUrl();
@@ -296,6 +295,7 @@ async function requestJson(path, options = {}) {
     error.status = response.status;
     throw error;
   }
+  recordWorkAction(path, options);
   return body.data;
 }
 
@@ -1306,12 +1306,16 @@ const butlerApp = Object.freeze({
   // Envelope, not a throw: the renderer needs the public error code
   // (e.g. settings_model_unavailable) to show localized, actionable copy.
   // A `security` change carries the admin credential, which only main holds.
-  updateSettings: (settings) => settings?.security !== undefined
+  updateSettings: async (settings) => {
+    const result = await (settings?.security !== undefined
     ? requestSecurity("updateSecuritySettings", settings)
     : requestBridgeResult("/settings", {
       method: "PATCH",
       body: JSON.stringify(settings ?? {}),
-    }),
+    }));
+    if (result.ok !== false && (settings?.diagnostics_enabled !== undefined || settings?.developer_mode_enabled !== undefined)) await ipcRenderer.invoke("butler:app-log-change");
+    return result;
+  },
   // Envelopes keep the code and status of the gateway's local-only rule.
   getSecurity: () => requestSecurity("getSecurity"),
   issuePairingCode: () => requestSecurity("issuePairingCode"),
@@ -1386,6 +1390,10 @@ const butlerApp = Object.freeze({
     return requestJson(url.pathname + url.search, {
       method: String(method).toUpperCase(),
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }).then(async result => {
+      if (String(method).toUpperCase() === "PUT") await ipcRenderer.invoke("butler:app-log-change");
+      if (String(method).toUpperCase() === "DELETE") await ipcRenderer.invoke("butler:app-log-change", "clear");
+      return result;
     });
   },
   readLogBody: ({ reference } = {}) => readLogBody(reference),

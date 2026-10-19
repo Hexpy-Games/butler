@@ -67,7 +67,10 @@ fn bits(kind: &str, id: &str) -> [usize; 3] {
     })
 }
 pub(crate) fn add(blocks: &mut Vec<Block>, row: &Record, offset: u64, len: u64, source: &str) {
-    if blocks.last().is_none_or(|b| b.len + len > BLOCK_BYTES) {
+    if blocks
+        .last()
+        .is_none_or(|b| b.len + len > BLOCK_BYTES || b.offset + b.len != offset)
+    {
         blocks.push(Block::new(offset, source));
     }
     if let Some(block) = blocks.last_mut() {
@@ -90,12 +93,19 @@ pub(crate) fn load(path: &Path) -> io::Result<Vec<Block>> {
 }
 /// Startup repair only. Bound malformed line allocation as well as normal read blocks.
 pub(crate) fn rebuild(path: &Path, source: &str) -> io::Result<Vec<Block>> {
-    extend(path, source, Vec::new())
+    let (blocks, _) = extend(path, source, Vec::new(), 0)?;
+    save(path, &blocks)?;
+    Ok(blocks)
 }
-/// App producers never write indexes. Resume after the last complete indexed line.
-pub(crate) fn extend(path: &Path, source: &str, mut blocks: Vec<Block>) -> io::Result<Vec<Block>> {
+/// App indexes and complete-line checkpoints stay in agent memory; never write to App directories.
+pub(crate) fn extend(
+    path: &Path,
+    source: &str,
+    mut blocks: Vec<Block>,
+    mut offset: u64,
+) -> io::Result<(Vec<Block>, u64)> {
     let mut reader = BufReader::new(File::open(path)?);
-    let mut offset = blocks.last().map_or(0, |b| b.offset + b.len);
+    let mut complete_offset = offset;
     reader.seek(SeekFrom::Start(offset))?;
     let mut line = Vec::new();
     let mut oversized = false;
@@ -117,6 +127,7 @@ pub(crate) fn extend(path: &Path, source: &str, mut blocks: Vec<Block>) -> io::R
         reader.consume(end);
         offset += u64::try_from(end).map_err(io::Error::other)?;
         if complete {
+            complete_offset = offset;
             if !oversized && let Ok(row) = serde_json::from_slice::<Record>(&line) {
                 let len = u64::try_from(line.len()).map_err(io::Error::other)?;
                 add(&mut blocks, &row, offset - len, len, source);
@@ -125,6 +136,5 @@ pub(crate) fn extend(path: &Path, source: &str, mut blocks: Vec<Block>) -> io::R
             oversized = false;
         }
     }
-    save(path, &blocks)?;
-    Ok(blocks)
+    Ok((blocks, complete_offset))
 }

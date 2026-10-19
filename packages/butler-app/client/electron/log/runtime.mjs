@@ -1,9 +1,11 @@
 import { createAppLogWriter } from "./writer.mjs";
 import { normalizeCrash } from "../ui-crash-log.mjs";
 
+import { appMessage } from "./messages.mjs";
+
 let writer;
 export function appLog(level, category, event, attrs = {}, extra = {}) {
-  writer?.record({ level, category, event, msg: event, attrs, ...extra });
+  writer?.record({ level, category, event, msg: appMessage(event), attrs, ...extra });
 }
 export function networkLog(event, raw, attrs = {}) {
   try { appLog("DEBUG", "http.client", event, { ...attrs, url: new URL(raw).origin }); } catch { /* No non-web URLs. */ }
@@ -24,47 +26,51 @@ export function installAppLogging({ app, ipcMain, dataRoot, getVersion, readConf
     limits.set(event.sender, budget);
     if (++budget.count > 100) return;
     const trace = row.traceparent?.match(TRACE);
-    writer.record({ level: row.level, category: row.category, event: row.event, msg: row.event,
+    writer.record({ level: row.level, category: row.category, event: row.event, msg: appMessage(row.event),
       ...(trace ? { trace_id: trace[1], span_id: trace[2] } : {}),
       ...(row.chat_id ? { chat_id: row.chat_id } : {}), ...(row.turn_id ? { turn_id: row.turn_id } : {}),
       attrs: row.attrs ?? {} }, "app.renderer");
   });
-  // Wrap the existing handlers, preserving their sender checks, values and failures.
-  const handle = ipcMain.handle.bind(ipcMain);
-  ipcMain.handle = (name, listener) => handle(name, async (event, ...args) => {
-    const start = performance.now();
-    try {
-      if (writer.enabled("ipc", "TRACE")) appLog("TRACE", "ipc", "ipc.payload", { name, payload: args });
-      const result = await listener(event, ...args);
-      writer.observe(result);
-      return result;
-    } finally { appLog("DEBUG", "ipc", "ipc.completed", { name }, { duration_ms: performance.now() - start }); }
-  });
-  let refreshing = false;
-  const refresh = async () => {
-    if (refreshing) return;
-    refreshing = true;
-    try {
-      const config = await readConfig();
-      if (config) writer.configure(config);
-      else if ((await readSettings())?.diagnostics_enabled === false) {
-        writer.configure({ effective: { level: "standard", category_levels: {} } });
-      }
-    } catch { /* Keep last effective level while reconnecting; full still expires locally. */ }
-    finally { refreshing = false; }
+  wrapHandlers(ipcMain);
+  let refreshing, refreshPending = false;
+  const refresh = () => {
+    if (!isWriter()) return Promise.resolve();
+    refreshPending = true;
+    refreshing ??= (async () => {
+      do {
+        refreshPending = false;
+        try {
+          const config = await readConfig();
+          if (config) writer.configure(config);
+          else if ((await readSettings())?.diagnostics_enabled === false) {
+            writer.configure({ effective: { level: "standard", category_levels: {} } });
+          }
+          await writer.flush();
+        } catch { /* Keep last effective level while reconnecting; full still expires locally. */ }
+      } while (refreshPending);
+    })().finally(() => { refreshing = undefined; });
+    return refreshing;
   };
-  const poll = setInterval(refresh, 2000); poll.unref();
+  ipcMain.handle("butler:app-log-change", async (event, action) => {
+    if (!isSender(event) || !isWriter()) return;
+    if (action === "clear") await writer.clear();
+    else await refresh();
+  });
   let version = "unknown";
-  const ready = Promise.all([refresh(), Promise.resolve().then(getVersion)]).then(([, value]) => {
+  const ready = Promise.resolve().then(getVersion).then(value => {
     version = value; appLog("INFO", "lifecycle", "app.start", { version });
   }).catch(() => appLog("ERROR", "lifecycle", "app.version_failed"));
   void ready;
   app.on("render-process-gone", (_event, _contents, details) => appLog("ERROR", "app.ui", "renderer.crash", details));
   app.on("child-process-gone", (_event, details) => appLog("ERROR", "lifecycle", "process.crash", details));
   return {
-    secrets(value) { writer.observe(value); },
-    crash(input) { writer.record({ level: "ERROR", category: "app.ui", event: "ui.error", msg: "UI error", error: normalizeCrash(input, version) }, "app.renderer"); },
-    async quit() { clearInterval(poll); await writer.quit(); },
+    refresh,
+    secrets(headers) { for (const [key, value] of Object.entries(headers ?? {})) if (/^(authorization|x-butler-admin)$/iu.test(key)) writer.remember(value); },
+    crash(input) {
+      const error = normalizeCrash(input, version);
+      writer.record({ level: "ERROR", category: "app.ui", event: "ui.error", msg: appMessage("ui.error", error.scope), error }, "app.renderer");
+    },
+    async quit() { await writer.quit(); },
     updater(updater) {
       updater.on("error", error => appLog("ERROR", "lifecycle", "update.failed", {}, { error: { message: error.message } }));
       for (const event of ["update-available", "update-not-available", "update-downloaded"]) updater.on(event, () => appLog("INFO", "lifecycle", `update.${event}`));
@@ -88,4 +94,17 @@ function validateRenderer(row) {
   if (row.category === "http.client" ? row.event !== "image.fetch" || row.level !== "DEBUG"
     : row.event === "image.fetch" || (row.event === "ui.error" ? row.level !== "ERROR" : row.level !== "INFO")) return false;
   try { return Buffer.byteLength(JSON.stringify(row)) <= 16 * 1024; } catch { return false; }
+}
+
+function wrapHandlers(ipcMain) {
+  // Wrap the existing handlers, preserving their sender checks, values and failures.
+  const handle = ipcMain.handle.bind(ipcMain);
+  ipcMain.handle = (name, listener) => handle(name, async (event, ...args) => {
+    const start = performance.now();
+    try {
+      if (writer.enabled("ipc", "TRACE")) writer.record({ level: "TRACE", category: "ipc", event: "ipc.payload", msg: appMessage("ipc.payload"), attrs: { name } }, "app.main", args);
+      const result = await listener(event, ...args);
+      return result;
+    } finally { appLog("DEBUG", "ipc", "ipc.completed", { name }, { duration_ms: performance.now() - start }); }
+  });
 }

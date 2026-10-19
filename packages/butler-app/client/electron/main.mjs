@@ -731,6 +731,7 @@ function advanceForegroundInstance(states) {
 
 function publishAgentState() {
   const state = bundledAgentSupervisor.agentState();
+  if (state.state === "running") void appLogging.refresh();
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send("butler:agent-state", state);
   }
@@ -2240,6 +2241,7 @@ async function createWindow() {
   }
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
   // Storage from data the Agent no longer has (a reset) is cleared before the renderer loads.
+  if (!legacyDataBlocked) await appLogging.refresh();
   const dataGeneration = legacyDataBlocked || !agentReadyBeforeWindow() ? null : await reconcileWindowDataGeneration();
   if (process.env.BUTLER_APP_TEST_AUTO_CONNECT === "1") {
     rendererUrl = await testRendererConnection(serverUrl, appServerFetch);

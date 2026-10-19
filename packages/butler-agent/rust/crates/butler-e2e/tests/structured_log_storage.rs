@@ -461,9 +461,16 @@ fn app_segments_index_live_tails_without_producer_indexes() -> Result<(), Box<dy
     assert_eq!(
         reopened.query(&query)?.rows.len(),
         2,
-        "lazy index survives reopen"
+        "App index rebuilds on reopen"
     );
     reopened.shutdown()?;
+    assert!(
+        !path.with_extension("idx").exists(),
+        "Agent never writes App indexes"
+    );
     fs::remove_dir_all(root)?;
     Ok(())
 }
+
+#[path = "structured_log_storage/app.rs"]
+mod app;

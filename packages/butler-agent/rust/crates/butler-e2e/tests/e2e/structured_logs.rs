@@ -96,7 +96,7 @@ async fn logs_full_reverts_on_restart_and_expiry() -> Result<(), HarnessError> {
         "detailed"
     );
     configure(&s, "full").await?;
-    let blocked = s.sandbox.data.join("logs/app/bodies");
+    let blocked = s.sandbox.data.join("logs/agent/bodies");
     std::fs::create_dir_all(blocked.parent().unwrap())?;
     std::fs::write(&blocked, b"blocked")?;
     let r = s.gw.post("/internal/e2e/logs/expire", json!({})).await?;
