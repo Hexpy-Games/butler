@@ -100,33 +100,59 @@ fn latest_outcomes(
     let mut statement = db.prepare(sql).map_err(ConversationError::sqlite)?;
     let rows = statement
         .query_map(params, |row| {
+            // A column of the wrong type fails only its own row.
+            let decoded = (|| {
+                Ok((
+                    RecallOutcomeRow {
+                        id: row.get(1)?,
+                        session_id: row.get(2)?,
+                        turn_id: row.get(3)?,
+                        generation: row.get(4)?,
+                        request_message_id: row.get(5)?,
+                        public_assistant_message_id: row.get(6)?,
+                    },
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, Option<String>>(9)?,
+                ))
+            })();
             Ok((
-                RecallOutcomeRow {
-                    id: row.get(1)?,
-                    session_id: row.get(2)?,
-                    turn_id: row.get(3)?,
-                    generation: row.get(4)?,
-                    request_message_id: row.get(5)?,
-                    public_assistant_message_id: row.get(6)?,
-                },
-                row.get::<_, String>(7)?,
-                row.get::<_, String>(8)?,
-                row.get::<_, Option<String>>(9)?,
+                [
+                    lossy(row.get_ref(1)?),
+                    lossy(row.get_ref(2)?),
+                    lossy(row.get_ref(3)?),
+                ],
+                decoded,
             ))
         })
         .map_err(ConversationError::sqlite)?;
     let mut output = Vec::new();
     for row in rows {
-        let (outcome, evidence, unresolved, continuation) =
-            row.map_err(ConversationError::sqlite)?;
+        let ([id, session_id, turn_id], decoded) = row.map_err(ConversationError::sqlite)?;
+        let row = decoded.map_err(ConversationError::sqlite).and_then(
+            |(outcome, evidence, unresolved, continuation)| {
+                parsed(&evidence, &unresolved, continuation.as_deref()).map(|()| outcome)
+            },
+        );
         output.push(RecallOutcomeEntry {
-            id: outcome.id.clone(),
-            session_id: outcome.session_id.clone(),
-            turn_id: outcome.turn_id.clone(),
-            row: parsed(&evidence, &unresolved, continuation.as_deref()).map(|()| outcome),
+            id,
+            session_id,
+            turn_id,
+            row,
         });
     }
     Ok(output)
+}
+
+/// A column's text for naming a row whose values do not decode.
+fn lossy(value: rusqlite::types::ValueRef<'_>) -> String {
+    use rusqlite::types::ValueRef;
+    match value {
+        ValueRef::Text(text) => String::from_utf8_lossy(text).into_owned(),
+        ValueRef::Integer(number) => number.to_string(),
+        ValueRef::Real(number) => number.to_string(),
+        ValueRef::Null | ValueRef::Blob(_) => String::new(),
+    }
 }
 
 /// The source reader parses all three JSON columns before returning a row.

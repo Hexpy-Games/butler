@@ -58,8 +58,8 @@ pub(super) enum Step {
     Done,
     /// Wrote a step and more remain.
     More,
-    /// Could not run now (no generation, write lease busy, failed); retried
-    /// on a later poll.
+    /// Could not run now (no generation, write lease busy); retried on a
+    /// later poll.
     Busy,
 }
 
@@ -69,14 +69,21 @@ pub(super) async fn run(input: &Input) -> Step {
     if !input.inventory.due.swap(false, Ordering::AcqRel) {
         return Step::Done;
     }
-    let step = step(input).await.unwrap_or_else(|error| {
-        butler_core::diagnostic!("[native-memory-inventory] {}", error.code());
-        Step::Busy
-    });
-    if step != Step::Done {
-        input.inventory.mark();
+    match step(input).await {
+        Ok(step) => {
+            if step != Step::Done {
+                input.inventory.mark();
+            }
+            step
+        }
+        Err(error) => {
+            // Retried on the next wake (a store change, a queued notice or
+            // the idle timer), not on a timer of its own.
+            butler_core::diagnostic!("[native-memory-inventory] {}", error.code());
+            input.inventory.mark();
+            Step::Done
+        }
     }
-    step
 }
 
 async fn step(input: &Input) -> CognitionResult<Step> {
