@@ -29,13 +29,11 @@ function node(script: string, args: string[]) {
 
 // test-category: pure-logic
 test("Windows archive staging leaves exactly one agent executable", () => {
-  const { root, bin, binary } = fixture();
+  const { bin, binary } = fixture();
   for (const role of ["memory", "restart", "update"]) {
     writeFileSync(join(bin, `butler-agent (${role}).exe`), "archive copy");
   }
-  const preload = join(root, "windows.cjs");
-  writeFileSync(preload, 'Object.defineProperty(process, "platform", { value: "win32" });');
-  const result = spawnSync("node", ["--require", preload,
+  const result = spawnSync("node", [
     resolve("packages/butler-app/client/electron/scripts/prepare-process-links.mjs"), binary,
   ], { encoding: "utf8" });
   expect(result.status, result.stderr).toBe(0);
@@ -56,10 +54,19 @@ fs.mkdirSync(oldBin, { recursive: true });
 for (const name of ["butler-agent", ...roles.map(role => "butler-agent (" + role + ")")]) {
   fs.writeFileSync(join(oldBin, name + ".exe"), "old binary");
 }
-let warnings = 0;
-console.warn = () => warnings++;
+const warnings = [];
+console.warn = message => warnings.push(message);
 if (fail === "fail") {
   fs.linkSync = () => { throw Object.assign(new Error("hardlinks unavailable"), { code: "ENOTSUP" }); };
+  syncBuiltinESMExports();
+}
+if (fail === "stale") {
+  const remove = fs.rmSync;
+  fs.rmSync = (path, ...args) => {
+    if (path.endsWith("butler-agent (memory).exe")) throw new Error("copy is locked");
+    return remove(path, ...args);
+  };
+  fs.writeFileSync(join(app, "resources/bundled-agent/bin/butler-agent (memory).exe"), "stale copy");
   syncBuiltinESMExports();
 }
 const { resolveBundledNativeAgentInstallation } = await import(pathToFileURL(module).href);
@@ -74,14 +81,19 @@ for (let call = 0; call < 2; call++) {
   for (const role of roles) {
     const alias = join(bin, "butler-agent (" + role + ").exe");
     if (fail === "fail") assert.equal(fs.existsSync(alias), false);
-    else {
+    else if (fail === "stale" && role === "memory") {
+      assert.equal(fs.readFileSync(alias, "utf8"), "stale copy");
+    } else {
       assert.equal(fs.statSync(alias).ino, fs.statSync(binary).ino);
       assert.equal(fs.lstatSync(alias).isSymbolicLink(), false);
     }
     assert.equal(fs.readFileSync(join(oldBin, "butler-agent (" + role + ").exe"), "utf8"), "old binary");
   }
 }
-assert.equal(warnings, fail === "fail" ? 1 : 0);
+assert.equal(warnings.length, fail === "fail" ? 3 : fail === "stale" ? 1 : 0);
+for (const warning of warnings) {
+  assert.match(warning, fail === "stale" ? /this role is unavailable/ : /using the canonical executable/);
+}
 `;
 
 // test-category: pure-logic
@@ -95,6 +107,13 @@ test("Windows launcher creates role hardlinks beside only the current canonical 
 test("Windows launcher logs hardlink failure once and keeps the canonical executable", () => {
   const { root, app } = fixture();
   const result = node(resolveScript, [resolver, root, app, "fail"]);
+  expect(result.status, result.stderr).toBe(0);
+});
+
+// test-category: pure-logic
+test("Windows launcher reports a locked stale copy and still prepares the other roles", () => {
+  const { root, app } = fixture();
+  const result = node(resolveScript, [resolver, root, app, "stale"]);
   expect(result.status, result.stderr).toBe(0);
 });
 

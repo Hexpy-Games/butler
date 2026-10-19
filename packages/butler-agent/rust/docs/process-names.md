@@ -45,9 +45,9 @@ original Agent: macOS uses the full role name, Linux uses the short role name,
 and Windows adds `.exe` to the full role name. It runs in Rust installer
 staging, shell installer staging and non-Windows Electron payload preparation.
 macOS bundle normalization and Linux package staging rebuild hardlinks after
-packager copying and before signing or archiving. Path APIs and argument arrays carry spaces and
-parentheses without shell splitting. Permissions remain executable for every
-hardlink; no alias binary is copied.
+packager copying and before signing or archiving. Path APIs and argument arrays
+carry spaces and parentheses without shell splitting. Permissions remain
+executable for every hardlink; no alias binary is copied.
 
 Aliases are checked as the same file, never by contents or name alone. Foreign
 files/symlinks at a role name fail closed. Canonical identity and process-table

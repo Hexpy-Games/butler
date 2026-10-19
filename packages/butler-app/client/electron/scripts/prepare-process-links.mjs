@@ -9,17 +9,18 @@ import { legacyProcessRoleFileNames, processRoleFileNames } from "./process-role
 
 const binary = resolve(process.argv[2]);
 const directory = dirname(binary);
+const platform = binary.endsWith(".exe") ? "win32" : process.platform;
 const mode = statSync(directory).mode;
 chmodSync(directory, mode | 0o200);
 try {
   const aliases = new Set([
-    ...processRoleFileNames(),
+    ...processRoleFileNames(platform),
     ...legacyProcessRoleFileNames(),
   ]);
   for (const alias of aliases) {
     rmSync(join(directory, alias), { force: true });
   }
-  if (process.platform !== "win32") {
+  if (platform !== "win32") {
     const result = spawnSync(binary, ["--prepare-process-links"], { stdio: "inherit" });
     if (result.status !== 0 && result.status !== 2) throw new Error("Could not prepare Agent process role links.");
   }

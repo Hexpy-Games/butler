@@ -158,21 +158,25 @@ function readVersion(payloadRoot) {
 // archives. Rust verifies file identity when executing a role; missing aliases
 // fall back to the canonical executable on filesystems without hardlinks.
 function restoreWindowsRoleLinks(binary) {
-  try {
-    const source = statSync(binary, { bigint: true });
-    for (const name of processRoleFileNames("win32")) {
-      const alias = join(dirname(binary), name);
+  for (const name of processRoleFileNames("win32")) {
+    const alias = join(dirname(binary), name);
+    let canonicalFallback = false;
+    try {
+      const source = statSync(binary, { bigint: true });
       if (existsSync(alias)) {
         const metadata = statSync(alias, { bigint: true });
         if (metadata.ino === source.ino && metadata.dev === source.dev) continue;
         rmSync(alias);
       }
+      canonicalFallback = true;
       linkSync(binary, alias);
-    }
-  } catch (error) {
-    if (!roleLinkWarnings.has(binary)) {
-      roleLinkWarnings.add(binary);
-      console.warn("Could not prepare Agent process role links; using the canonical executable for missing aliases.", error);
+    } catch (error) {
+      if (!roleLinkWarnings.has(alias)) {
+        roleLinkWarnings.add(alias);
+        console.warn(canonicalFallback
+          ? `Could not create Agent process role link ${name}; using the canonical executable for this role.`
+          : `Could not prepare Agent process role link ${name}; this role is unavailable.`, error);
+      }
     }
   }
 }
