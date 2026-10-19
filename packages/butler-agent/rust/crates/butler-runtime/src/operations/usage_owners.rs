@@ -192,7 +192,8 @@ impl UsageLineage {
     async fn try_resolve(&self) -> Result<(), StorageError> {
         let mut links = self.links.lock().await;
         let watermark = self.repository.relation_watermark().await?;
-        let previous = self.watermark.lock().unwrap_or(0);
+        // Existing ancestry is loaded on demand by indexed child-id lookups.
+        let previous = self.watermark.lock().unwrap_or(watermark);
         if watermark != previous {
             let rows = self
                 .repository
