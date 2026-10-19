@@ -31,6 +31,12 @@ enum Relayed {
         sequence: u64,
         text: String,
     },
+    Thinking {
+        round_id: String,
+        stream_id: String,
+        text: String,
+    },
+    ClearThinking,
     Tool(ToolCallStreamEvent),
     /// The latest round's text is not the answer.
     Discard {
@@ -75,6 +81,20 @@ impl ProviderStreamObserver for RelayObserver {
             self.tool_call(&tool);
             return;
         }
+        if event["type"] == "reasoning_delta" && event["display"] == "summary" {
+            if let (Some(round), Some(stream), Some(text)) = (
+                event["roundId"].as_str(),
+                event["streamId"].as_str(),
+                event["textDelta"].as_str(),
+            ) {
+                let _ = self.sender.send(Relayed::Thinking {
+                    round_id: round.into(),
+                    stream_id: stream.into(),
+                    text: text.into(),
+                });
+            }
+            return;
+        }
         if event.get("type").and_then(Value::as_str) != Some("text_delta")
             || event.get("target").and_then(Value::as_str) != Some("final_candidate")
         {
@@ -100,6 +120,9 @@ impl ProviderStreamObserver for RelayObserver {
     }
 
     fn tool_call(&self, event: &ToolCallStreamEvent) {
+        if matches!(event, ToolCallStreamEvent::ToolCallStart { .. }) {
+            let _ = self.sender.send(Relayed::ClearThinking);
+        }
         let mut calls = self.calls.lock();
         let accepted = match event {
             ToolCallStreamEvent::ToolCallStart {
@@ -176,8 +199,15 @@ impl StreamRelay {
         drop(observer);
         // The stream whose text the App shows, until a discard closes it.
         let mut open = None;
+        let mut thinking = super::thinking_line::ThinkingLine::default();
         loop {
             let first = tokio::select! {
+                () = async {
+                    match thinking.deadline() {
+                        Some(deadline) => tokio::time::sleep_until(deadline).await,
+                        None => std::future::pending().await,
+                    }
+                } => { thinking.flush(progress).await; continue; }
                 item = receiver.recv() => item,
                 () = done.cancelled() => None,
             };
@@ -197,15 +227,17 @@ impl StreamRelay {
                     () = done.cancelled() => break,
                 }
             }
-            let batch = forward_tools(batch, answer_blocks.as_deref(), progress).await;
+            let batch =
+                forward_tools(batch, answer_blocks.as_deref(), progress, &mut thinking).await;
             emit(progress, frames(&mut open, batch)).await;
         }
         let mut rest = Vec::new();
         while let Ok(item) = receiver.try_recv() {
             rest.push(item);
         }
-        let rest = forward_tools(rest, answer_blocks.as_deref(), progress).await;
+        let rest = forward_tools(rest, answer_blocks.as_deref(), progress, &mut thinking).await;
         emit(progress, frames(&mut open, rest)).await;
+        thinking.clear(progress).await;
     }
 }
 
@@ -215,7 +247,7 @@ fn frames(open: &mut Option<String>, batch: Vec<Relayed>) -> Vec<Frame> {
     let mut frames: Vec<Frame> = Vec::new();
     for item in batch {
         match item {
-            Relayed::Tool(_) => {}
+            Relayed::Tool(_) | Relayed::Thinking { .. } | Relayed::ClearThinking => {}
             Relayed::Delta {
                 stream_id,
                 sequence,
@@ -307,10 +339,19 @@ async fn forward_tools(
     batch: Vec<Relayed>,
     port: Option<&dyn AnswerBlocksStreamPort>,
     progress: &dyn AgentLoopProgress,
+    thinking: &mut super::thinking_line::ThinkingLine,
 ) -> Vec<Relayed> {
     let mut text = Vec::new();
     for item in batch {
         match item {
+            Relayed::Thinking {
+                round_id,
+                stream_id,
+                text,
+            } => {
+                thinking.push(round_id, stream_id, &text, progress).await;
+            }
+            Relayed::ClearThinking => thinking.clear(progress).await,
             Relayed::Tool(event) => {
                 if let Some(port) = port
                     && let Err(error) = port.tool_call(event, progress).await
@@ -322,6 +363,7 @@ async fn forward_tools(
                 }
             }
             item => {
+                thinking.clear(progress).await;
                 if matches!(item, Relayed::Discard { .. })
                     && let Some(port) = port
                 {

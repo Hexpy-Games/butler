@@ -150,6 +150,8 @@ function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
   const authoredBlocks = new Set(rows.filter(isPhaseActivityRow).map((row) => row.semantic_block_id));
   const currentByBlock = new Map<string, PhaseActivity>();
   const operationsBeforeActivity = new Map<string, ProgressRow[]>();
+  const thinkingBeforeActivity: ProgressRow[] = [];
+  const positions = new Map(rows.map((row, index) => [row, index]));
   for (const row of rows) {
     if (isPhaseActivityRow(row)) {
       const activity: PhaseActivity = {
@@ -161,11 +163,17 @@ function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
         rationale: row.work_decision_rationale,
         nextStep: row.work_decision_next_step,
         createdAt: row.created_at,
-        operations: operationsBeforeActivity.get(row.semantic_block_id) ?? [],
+        operations: [...thinkingBeforeActivity.splice(0), ...(operationsBeforeActivity.get(row.semantic_block_id) ?? [])]
+          .sort((left, right) => positions.get(left)! - positions.get(right)!),
       };
       operationsBeforeActivity.delete(row.semantic_block_id);
       activities.push(activity);
       currentByBlock.set(row.semantic_block_id, activity);
+      continue;
+    }
+    if (row.bridge_phase === "model_round_waiting" && row.thinking_title) {
+      const latest = activities.at(-1);
+      if (latest) latest.operations.push(row); else thinkingBeforeActivity.push(row);
       continue;
     }
     if (row.bridge_phase !== "btcc_operation" || !row.semantic_block_id) continue;

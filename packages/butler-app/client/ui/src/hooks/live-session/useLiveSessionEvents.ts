@@ -1,3 +1,4 @@
+import { receiveModelThinking, reconcileModelThinking, abandonModelThinking } from "@/app/modelThinking";
 import { subscribeNativeUpdateProgress, refreshUpdateProgress } from "@/stores/updateProgressStore";
 import { receiveUpdateProgress } from "@/stores/updateProgressStore";
 import { authorityPermissionsChanged } from "@/app/authorityPermissionEvents.ts";
@@ -74,6 +75,8 @@ export function useLiveSessionEvents(): void {
 
     const applyEvent = (event: TimelineEvent) => {
       if (cancelled) return;
+      if (receiveModelThinking(event)) return;
+      reconcileModelThinking(event);
       if (receiveAnswerDraft(event)) return;
       if (event.type === "session.cleared" && typeof event.id === "number") {
         useButlerStore.getState().resetGeneralConversation(event.id);
@@ -186,7 +189,7 @@ export function useLiveSessionEvents(): void {
       cursor: () => eventCursorRef.current,
       onEvent: applyEvent,
       onLostChange: (liveConnectionLost) => {
-        if (liveConnectionLost) abandonAnswerDrafts();
+        if (liveConnectionLost) { abandonAnswerDrafts(); abandonModelThinking(); }
         if (useButlerStore.getState().liveConnectionLost !== liveConnectionLost) {
           useButlerStore.setState({ liveConnectionLost });
           if (!liveConnectionLost && !cancelled) void refreshUpdateProgress();
@@ -209,6 +212,7 @@ export function useLiveSessionEvents(): void {
     return () => {
       cancelled = true;
       disconnect();
+      abandonModelThinking();
       reconciliation.dispose();
 
       navigationReconciliation.dispose();

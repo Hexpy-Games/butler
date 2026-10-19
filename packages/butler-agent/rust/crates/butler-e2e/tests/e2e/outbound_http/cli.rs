@@ -99,10 +99,12 @@ async fn run_cli(
         "LOG-HTTP-CLI callback_to_exit_ms={:.3}",
         exit_start.elapsed().as_secs_f64() * 1000.0
     );
+    let stderr = std::fs::read_to_string(s.agent.launch.logs.join("oauth-cli.log"))?;
     if close_delay.is_some() {
-        let stderr = std::fs::read_to_string(s.agent.launch.logs.join("oauth-cli.log"))?;
-        assert!(stderr.contains("http_logging_close_failed"));
+        assert_eq!(stderr.matches("http_logging_close_failed").count(), 1);
         assert!(stderr.contains("log writer shutdown timed out"));
+    } else {
+        assert!(!stderr.contains("http_logging_close_failed"));
     }
     Ok(())
 }

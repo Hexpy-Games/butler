@@ -1,3 +1,4 @@
+import { useThinkingRows } from "./useThinkingRows";
 import { useState, type ReactNode } from "react";
 import { projectTurnActivity } from "@/app/conversation-progress";
 import { useAppLocale } from "@/app/copy";
@@ -28,7 +29,7 @@ export function MessageTurnActivity({ message, live, kept }: {
   // `undefined` means the message's rows have not arrived yet; `[]` means it has none of its own.
   const settledRows = message.turn_activity_rows ?? kept?.rows;
   const turnId = live?.turnId ?? (message.turn_id || kept?.turnId);
-  const projection = projectTurnActivity(live?.rows ?? settledRows ?? [], turnId);
+  const projection = projectTurnActivity(useThinkingRows(live?.rows ?? settledRows ?? [], turnId), turnId);
   if (projection.phaseActivities.length === 0) return null;
   const currentState = live || !isTerminalProgressState(message.status ?? "") ? projection.semanticState : message.status;
   return <TurnActivityTimeline activities={projection.phaseActivities} currentState={currentState} live={Boolean(live)} turnId={turnId} />;
