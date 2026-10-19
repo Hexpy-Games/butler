@@ -73,6 +73,10 @@ async fn process_roles_preserve_worker_protocol_and_executable_identity() -> Res
     ] {
         assert_eq!(role.name(), full_name);
         assert_eq!(role.short_name(), linux_comm);
+        assert_eq!(
+            process_names::executable(&sandbox.binary, role)?,
+            sandbox.binary.canonical()?
+        );
     }
     let output = launch
         .env_command(&sandbox.binary)
