@@ -25,6 +25,7 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
     let template = match role {
         "main" if step < 4 => replay["parent"][step].clone(),
         "steward" => steward(step, &work),
+        "worker-a" | "worker-b" => worker(step, &work),
         _ => json!({"type":"message","text":"Verified evidence."}),
     };
     let encoded=template.to_string().replace("{{WORK}}", &work);
@@ -40,10 +41,19 @@ fn steward(step: usize, work: &str) -> Value {
     match step {
         0 => json!({"type":"function_call","name":"replace_work_plan","arguments":{"objective":"Verify evidence","execution_mode":"workers","actions":[{"action_key":"alpha","description":"Verify Alpha","dependency_keys":[]},{"action_key":"beta","description":"Verify Beta","dependency_keys":[]}],"checks":["Evidence verified"]}}),
         1 => json!({"type":"function_call","name":"record_work_review","arguments":{"subject":"plan","verdict":"accept","summary":"Ready"}}),
-        2 | 3 => { let (action,objective)=if step==2 {("alpha","Verify Alpha")} else {("beta","Verify Beta")}; json!({"type":"function_call","name":"delegate_to_worker","arguments":{"action_key":action,"objective":objective,"acceptance_criteria":["Evidence verified"],"implementation_brief":objective,"safe_title":objective}}) },
-        4 => json!({"type":"function_call","name":"wait_for_worker","arguments":{}}),
-        5 => json!({"type":"function_call","name":"record_work_disposition","arguments":{"work_id":work,"disposition":"completed","summary":"Both sources verified","action_updates":[{"action_key":"alpha","status":"done"},{"action_key":"beta","status":"done"}],"remaining_actions":[],"followups":[]}}),
+        2 | 4 => { let (action,objective)=if step==2 {("alpha","Verify Alpha")} else {("beta","Verify Beta")}; json!({"type":"function_call","name":"delegate_to_worker","arguments":{"action_key":action,"objective":objective,"acceptance_criteria":["Evidence verified"],"implementation_brief":objective,"safe_title":objective}}) },
+        3 | 5 => json!({"type":"function_call","name":"wait_for_worker","arguments":{}}),
+        6 => json!({"type":"function_call","name":"record_work_disposition","arguments":{"work_id":work,"disposition":"completed","summary":"Both sources verified","action_updates":[{"action_key":"alpha","status":"done"},{"action_key":"beta","status":"done"}],"remaining_actions":[],"followups":[]}}),
         _ => json!({"type":"message","text":"Both sources verified."}),
+    }
+}
+fn worker(step: usize, work: &str) -> Value {
+    match step {
+        0 => json!({"type":"function_call","name":"start_work","arguments":{"objective":"Verify evidence"}}),
+        1 => json!({"type":"function_call","name":"replace_work_plan","arguments":{"objective":"Verify evidence","execution_mode":"direct","actions":[{"action_key":"verify","description":"Verify evidence","dependency_keys":[]}],"checks":["Evidence verified"]}}),
+        2 => json!({"type":"function_call","name":"record_work_review","arguments":{"subject":"plan","verdict":"accept","summary":"Ready"}}),
+        3 => json!({"type":"function_call","name":"record_work_disposition","arguments":{"work_id":work,"disposition":"completed","summary":"Evidence verified","action_updates":[{"action_key":"verify","status":"done"}],"remaining_actions":[],"followups":[]}}),
+        _ => json!({"type":"message","text":"Verified evidence."}),
     }
 }
 fn work_id(body: &Value) -> String {
