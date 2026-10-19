@@ -435,7 +435,7 @@ fn web_session(
     access
         .session_for_turn(turn.original_message.clone())
         .with_usage(
-            policy.usage_root().unwrap_or(&turn.session_id).into(),
+            policy.usage_root(&turn.session_id).map(str::to_owned),
             policy.usage_role().into(),
         )
 }

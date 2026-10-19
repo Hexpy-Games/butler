@@ -147,7 +147,7 @@ async fn deleg_use_03_recursive_legacy_cycle_and_cache() -> Result<(), HarnessEr
         &[
             fixtures::row(ROOT, None, None, 100, 20),
             fixtures::row("usage-s1", None, None, 200, 30),
-            fixtures::row("usage-w1", None, None, 300, 40),
+            fixtures::row("usage-w1", None, Some("worker"), 300, 40),
             fixtures::row("usage-w2", None, None, 400, 50),
             fixtures::row("usage-cycle", None, None, 500, 60),
         ],
@@ -169,6 +169,14 @@ async fn deleg_use_03_recursive_legacy_cycle_and_cache() -> Result<(), HarnessEr
         fixtures::session(&session.data()["usage"], 4, 1000, 140);
         let cycle = s.gw.get("/usage-monitor?session_id=usage-cycle").await?;
         fixtures::model(&cycle.data()["model"], 1, 500, 60);
+        let global = s.gw.get("/usage-monitor?since_hours=24").await?;
+        let rows = global.data()["topSessions"].as_array().unwrap();
+        assert!(rows.iter().all(|row| row["sessionId"] != "usage-w1"));
+        let root = rows
+            .iter()
+            .find(|row| row["sessionId"] == "general")
+            .unwrap();
+        assert_eq!(root["totalTokens"], 1140.0);
         if pass == 0 {
             rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?.execute(
                 "DELETE FROM btcc_session_relations WHERE relation_id LIKE 'usage-%'",

@@ -246,14 +246,15 @@ pub(super) fn child_metadata(
 fn inherited_usage_root<'a>(
     parent: &'a crate::workspace::StoredSessionBinding,
     fallback: &'a str,
-) -> &'a str {
-    parent
+) -> Option<&'a str> {
+    match parent
         .metadata
         .as_ref()
         .and_then(|metadata| metadata.get("subsession"))
-        .and_then(|subsession| subsession.get("root_session_id"))
-        .and_then(Value::as_str)
-        .unwrap_or(fallback)
+    {
+        None => Some(fallback),
+        Some(subsession) => subsession.get("root_session_id").and_then(Value::as_str),
+    }
 }
 
 /// The child works in the parent's current folder with the same consent.
