@@ -18,6 +18,8 @@ pub struct GatewayConfig {
     /// `name:port`); their `http`/`https` origins are allowed too.
     pub allowed_hosts: Vec<String>,
     pub content_hosts: Vec<String>,
+    /// Preferred content listener port; absent uses the main port plus one.
+    pub content_port: Option<u16>,
     pub output_data: Option<std::path::PathBuf>,
     /// Read-only native browser source dependencies.
     pub browser_import: butler_platform::browser_transfer::ImportDependencies,
@@ -68,6 +70,7 @@ impl Default for GatewayConfig {
             dev_cors_origin: None,
             allowed_hosts: Vec::new(),
             content_hosts: Vec::new(),
+            content_port: None,
             output_data: None,
             browser_import: Default::default(),
             remote_access_enabled: false,
@@ -85,6 +88,7 @@ impl Default for GatewayConfig {
 
 pub struct GatewayServer {
     local_addr: SocketAddr,
+    content_addr: SocketAddr,
     shutdown: CancellationToken,
     task: Option<JoinHandle<std::io::Result<()>>>,
 }
@@ -93,6 +97,11 @@ impl GatewayServer {
     /// The loopback (primary) listener's address.
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
+    }
+
+    /// The bound content listener, including any ephemeral fallback.
+    pub fn content_addr(&self) -> SocketAddr {
+        self.content_addr
     }
 
     /// Refuse new HTTP work without closing application storage or waiting for handlers.
@@ -128,14 +137,14 @@ pub async fn serve_gateway(
 ) -> std::io::Result<GatewayServer> {
     validate_content_hosts(&mut config)?;
     let local_addr = listener.local_addr()?;
-    let content_addr = SocketAddr::new(
-        local_addr.ip(),
-        local_addr
-            .port()
-            .checked_add(1)
-            .ok_or_else(|| std::io::Error::other("content port overflow"))?,
-    );
-    let content_listener = TcpListener::bind(content_addr).await?;
+    let content_listener = bind_content(local_addr, config.content_port).await?;
+    let content_addr = content_listener.local_addr()?;
+    http::RequestPolicy::validate_content_origin(
+        local_addr,
+        content_addr,
+        &config.allowed_hosts,
+        config.dev_cors_origin.as_deref(),
+    )?;
     let shutdown = CancellationToken::new();
     let task = http::serve(
         listener,
@@ -144,9 +153,11 @@ pub async fn serve_gateway(
         config,
         shutdown.clone(),
         local_addr,
+        content_addr,
     );
     Ok(GatewayServer {
         local_addr,
+        content_addr,
         shutdown,
         task: Some(task),
     })
@@ -176,4 +187,33 @@ fn validate_content_hosts(config: &mut GatewayConfig) -> std::io::Result<()> {
         ));
     }
     Ok(())
+}
+
+/// Keep the main listener's interface even when its adjacent port is unavailable.
+async fn bind_content(primary: SocketAddr, preferred: Option<u16>) -> std::io::Result<TcpListener> {
+    let preferred = preferred.or_else(|| primary.port().checked_add(1));
+    let error_kind = if let Some(port) = preferred {
+        match TcpListener::bind(SocketAddr::new(primary.ip(), port)).await {
+            Ok(listener) => return Ok(listener),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::AddrInUse | std::io::ErrorKind::PermissionDenied
+                ) =>
+            {
+                error.kind()
+            }
+            Err(error) => return Err(error),
+        }
+    } else {
+        std::io::ErrorKind::InvalidInput
+    };
+    let listener = TcpListener::bind(SocketAddr::new(primary.ip(), 0)).await?;
+    let bound = listener.local_addr()?;
+    butler_core::diagnostic!(
+        "[gateway] content port fallback: kind={error_kind:?} preferred_port={} bound_port={}",
+        preferred.map_or(u32::from(primary.port()) + 1, u32::from),
+        bound.port()
+    );
+    Ok(listener)
 }
