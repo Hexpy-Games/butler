@@ -171,6 +171,10 @@ async fn failed(
     delivery: &dyn IngressDelivery,
     subsessions: &butler_turn::btcc::SubsessionService,
 ) -> IngressPoll {
+    #[cfg(feature = "e2e-fixtures")]
+    if let Ok(envelope) = Envelope::from_record(&item.record) {
+        butler_turn::test_pause::reach("dispatch_failed", bind::routed_turn_id(&envelope)).await;
+    }
     // BTCC supplies a stable code here, never the provider body or prompt.
     // Keep that cause observable when the outer queue error is generic.
     if error.code == "inbound_turn_interrupted"

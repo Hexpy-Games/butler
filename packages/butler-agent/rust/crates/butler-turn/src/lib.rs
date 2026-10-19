@@ -30,3 +30,7 @@ pub mod conversation;
 #[cfg(test)]
 mod test_clock;
 pub mod workspace;
+
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub mod test_pause;

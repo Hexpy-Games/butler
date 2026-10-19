@@ -19,6 +19,7 @@ e2e-fixtures = [
     "butler-gateway/e2e-fixtures",
     "butler-memory/e2e-fixtures",
     "butler-turn/e2e-fixtures",
+    "butler-turn/test-support",
     "dep:butler-test-support",
 ]
 default = ["prebuilt-ort"]
