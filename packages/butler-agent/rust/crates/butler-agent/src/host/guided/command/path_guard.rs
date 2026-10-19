@@ -63,7 +63,7 @@ fn sensitive(command: &str, cwd: &Path, data: &Path, home: Option<&Path>) -> Opt
             return Some(denied(&directory.to_string_lossy()));
         }
     }
-    let credentials: Vec<_> = butler_platform::data_paths::GATEWAY_CREDENTIALS
+    let credentials: Vec<_> = butler_platform::data_paths::GATEWAY_CREDENTIAL_DIRS
         .iter()
         .map(|path| ledger_guard::real_or_nearest(&data.join(path)))
         .collect();
@@ -77,7 +77,7 @@ fn sensitive(command: &str, cwd: &Path, data: &Path, home: Option<&Path>) -> Opt
 }
 
 /// Whether `token`, resolved like the Ledger guard resolves paths, names one
-/// of `credentials` (real paths) or a path beneath one.
+/// of the credential folders `credentials` (real paths) or a path beneath one.
 fn names_any(
     token: &str,
     cwd: &Path,

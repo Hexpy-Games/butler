@@ -75,14 +75,31 @@ pub const SCHEDULER: &str = "state/scheduler";
 pub const HEADLESS_BROWSER: &str = "state/browser/headless";
 /// App-host browser profiles.
 pub const APP_HOST_BROWSER: &str = "state/browser/app-host";
+// Literal folders, so each credential path below is built from its folder.
+macro_rules! local_auth_dir {
+    () => {
+        "app/runtime/auth"
+    };
+}
+macro_rules! folder_secret_dir {
+    () => {
+        "state/app-gateway"
+    };
+}
+/// Folder of the gateway and local admin credentials, their locks and
+/// rotation temporaries; it holds nothing else.
+pub const LOCAL_AUTH_DIR: &str = local_auth_dir!();
 /// Local administrator credential.
-pub const LOCAL_ADMIN: &str = "app/runtime/auth/local-admin.json";
+pub const LOCAL_ADMIN: &str = concat!(local_auth_dir!(), "/local-admin.json");
 /// Local gateway authentication credential.
-pub const LOCAL_AUTH: &str = "app/runtime/auth/local-agent-auth.json";
+pub const LOCAL_AUTH: &str = concat!(local_auth_dir!(), "/local-agent-auth.json");
+/// Folder of the project-folder token secret, its lock and rotation
+/// temporaries; it holds nothing else.
+pub const FOLDER_SECRET_DIR: &str = folder_secret_dir!();
 /// Project-folder token signing secret.
-pub const FOLDER_SECRET: &str = "state/app-gateway/project-folder-token-secret";
-/// App gateway credentials that sandboxed commands must never read.
-pub const GATEWAY_CREDENTIALS: &[&str] = &[LOCAL_AUTH, LOCAL_ADMIN, FOLDER_SECRET];
+pub const FOLDER_SECRET: &str = concat!(folder_secret_dir!(), "/project-folder-token-secret");
+/// App gateway credential folders that sandboxed commands must never read.
+pub const GATEWAY_CREDENTIAL_DIRS: &[&str] = &[LOCAL_AUTH_DIR, FOLDER_SECRET_DIR];
 /// Electron-owned stores: ui-crash-store.mjs, wallpaper-state-log.mjs and main.mjs.
 pub const APP_LOGS: &str = "app/logs";
 /// Electron composer draft files.

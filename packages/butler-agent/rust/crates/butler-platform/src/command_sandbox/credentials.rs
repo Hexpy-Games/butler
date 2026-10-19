@@ -74,7 +74,7 @@ pub(super) fn roots(environment: &HashMap<String, String>) -> Vec<PathBuf> {
         roots.push(data.join("auth"));
         roots.push(data.join(crate::data_paths::SANDBOX_QUARANTINE));
         roots.extend(
-            crate::data_paths::GATEWAY_CREDENTIALS
+            crate::data_paths::GATEWAY_CREDENTIAL_DIRS
                 .iter()
                 .map(|path| data.join(path)),
         );

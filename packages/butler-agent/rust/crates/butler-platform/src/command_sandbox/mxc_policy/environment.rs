@@ -170,7 +170,7 @@ pub fn credential_roots(env: &BTreeMap<String, String>) -> Result<Vec<WinPath>, 
     }
     if let Some(data) = get(env, "BUTLER_DATA") {
         let data = WinPath::categorized(data, "BUTLER_DATA")?;
-        for path in crate::data_paths::GATEWAY_CREDENTIALS {
+        for path in crate::data_paths::GATEWAY_CREDENTIAL_DIRS {
             roots.push(data.join(path)?);
         }
         for key in ["BUTLER_CODEX_AUTH_PROFILE", "BUTLER_OPENAI_AUTH_PROFILE"] {
