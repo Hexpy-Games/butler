@@ -1279,7 +1279,7 @@ export interface AppCopy {
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
     pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
-    pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
+    pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
       kind: Record<"command" | "fileWrite" | "network" | "tool" | "other", string>;
@@ -1292,7 +1292,7 @@ export interface AppCopy {
     modelsAdvanced: { title: string; contents: string };
     /** Settings > General > reset everything (desktop only); the user types `phrase` to confirm. */
     fullReset: {
-      action: string; title: string; body: string; removed: string; kept: string;
+      label: string; description: string; action: string; title: string; body: string; removed: string; kept: string;
       field: (phrase: string) => string; phrase: string; confirm: string; mismatch: string; resetting: string; desktopOnly: string;
     };
     memory: {

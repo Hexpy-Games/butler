@@ -38,7 +38,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "app-behavior", kind: "form", fields: ["desktop-tray", "rerun-setup"] },
     { id: "search-provider", kind: "form", fields: ["search-provider", "search-api-key"] },
     { id: "search-behavior", kind: "form", fields: ["search-reader", "search-planning", "search-depth"] },
-    { id: "full-reset", kind: "status", fields: [] },
+    { id: "full-reset", kind: "form", fields: ["full-reset"] },
   ],
   appearance: [
     { id: "theme", kind: "form", fields: ["theme", "translucent-sidebar"] },

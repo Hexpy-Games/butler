@@ -1464,7 +1464,6 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       chatMemory: "What Butler has picked up from your chats, including project chats.",
       profileMemory: "What Butler knows about you from your chats.",
       projectMemory: "What Butler remembers about a project.",
-      fullReset: "Erase everything, from chats to memory, and start fresh.",
       notificationPermission: "Check the operating system permission and send a test notification.",
       searchProvider: "Choose where web search results come from. Keys are stored as secrets.",
       searchBehavior: "How Butler reads pages and plans searches before running them.",
@@ -1581,6 +1580,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       contents: "Memory cleanup model and worker settings",
     },
     fullReset: {
+      label: "Erase all data",
+      description: "Erase everything, from chats to memory, and start fresh.",
       action: "Reset",
       title: "Reset Butler completely?",
       body: "All chats, memory, schedules, settings and saved keys will be erased, and the app will restart. This can't be undone.",

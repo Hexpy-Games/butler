@@ -1469,7 +1469,6 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       chatMemory: "대화에서 버틀러가 스스로 기억한 내용입니다. 프로젝트 채팅도 포함합니다.",
       profileMemory: "대화에서 알게 된 사용자 정보입니다.",
       projectMemory: "프로젝트 하나에 대해 버틀러가 기억하는 내용입니다.",
-      fullReset: "채팅부터 기억까지 모두 지우고 처음부터 시작합니다.",
       notificationPermission: "운영체제 알림 권한을 확인하고 테스트 알림을 보냅니다.",
       searchProvider: "웹 검색 결과를 가져올 곳을 고릅니다. 키는 비밀값으로 저장합니다.",
       searchBehavior: "버틀러가 검색 전에 페이지를 읽고 계획하는 방식입니다.",
@@ -1585,6 +1584,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       contents: "기억 정리 모델과 작업자 설정",
     },
     fullReset: {
+      label: "모든 데이터 지우기",
+      description: "채팅부터 기억까지 모두 지우고 처음부터 시작합니다.",
       action: "초기화",
       title: "버틀러를 처음 상태로 되돌릴까요?",
       body: "모든 채팅, 기억, 예약 작업, 설정, 저장된 키가 지워지고 앱이 다시 시작됩니다. 되돌릴 수 없습니다.",
