@@ -7,6 +7,8 @@ mod process;
 mod rediscovery;
 mod seccomp;
 mod timing;
+#[cfg(feature = "test-support")]
+pub use mountns::verify_mount_plan_contract;
 
 use std::collections::HashMap;
 use std::os::unix::process::CommandExt;

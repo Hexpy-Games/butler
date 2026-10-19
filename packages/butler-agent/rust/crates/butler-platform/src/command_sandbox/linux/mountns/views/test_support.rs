@@ -1,4 +1,4 @@
-//! Pin the indexed mount lookup to the previous full-snapshot algorithm.
+//! Mount-plan security proofs run by the existing read-only command contract.
 use super::*;
 
 fn mount(device: &str, source: &str, target: &str) -> Mount {
@@ -18,8 +18,6 @@ fn previous_owner<'a>(snapshot: &'a Snapshot, path: &Path) -> Option<&'a Mount> 
         .max_by_key(|mount| mount.target.as_os_str().len())
 }
 
-// test-category: security
-#[test]
 fn indexed_lookup_preserves_mount_coordinates_and_denial_plan() -> Result<(), Error> {
     let mut mounts = vec![
         mount("8:1", "/", "/"),
@@ -65,7 +63,7 @@ fn indexed_lookup_preserves_mount_coordinates_and_denial_plan() -> Result<(), Er
     {
         let previous = previous_owner(&snapshot, path).ok_or("missing previous mount")?;
         let indexed = snapshot.owner(path).ok_or("missing indexed mount")?;
-        assert!(std::ptr::eq(previous, indexed), "{path:?}");
+        assert!(std::ptr::eq(previous, indexed), "{}", path.display());
         let relative = beneath(path, &previous.target).ok_or("missing relative path")?;
         assert_eq!(
             snapshot.backing(path)?,
@@ -96,8 +94,6 @@ fn indexed_lookup_preserves_mount_coordinates_and_denial_plan() -> Result<(), Er
     Ok(())
 }
 
-// test-category: security
-#[test]
 fn mount_parser_preserves_previous_fields_and_escape_validation() -> Result<(), Error> {
     let input = concat!(
         "1 0 8:1 / / rw - ext4 /dev/root rw,relatime\n",
@@ -171,4 +167,10 @@ fn previous_decode(encoded: &str) -> Result<PathBuf, Error> {
         }
     }
     Ok(std::ffi::OsString::from_vec(decoded).into())
+}
+
+/// Verifies Linux mount projection and parsing against the previous algorithms.
+pub fn verify_mount_plan_contract() -> Result<(), Error> {
+    indexed_lookup_preserves_mount_coordinates_and_denial_plan()?;
+    mount_parser_preserves_previous_fields_and_escape_validation()
 }

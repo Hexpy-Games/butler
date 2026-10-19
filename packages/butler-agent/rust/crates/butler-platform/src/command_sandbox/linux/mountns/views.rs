@@ -241,5 +241,7 @@ fn decode(encoded: &str) -> Result<PathBuf, Error> {
     Ok(std::ffi::OsString::from_vec(decoded).into())
 }
 
-#[cfg(test)]
-mod tests;
+#[cfg(feature = "test-support")]
+mod test_support;
+#[cfg(feature = "test-support")]
+pub use test_support::verify_mount_plan_contract;
