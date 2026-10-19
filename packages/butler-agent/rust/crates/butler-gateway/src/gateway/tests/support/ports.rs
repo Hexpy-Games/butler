@@ -24,7 +24,7 @@ pub(in crate::gateway::tests) async fn serve_on_free_pair(
         }
         match serve_gateway(listener, application.clone(), config()).await {
             Ok(server) => return server,
-            Err(error) if error.kind() == ErrorKind::AddrInUse => continue,
+            Err(error) if error.kind() == ErrorKind::AddrInUse => {}
             Err(error) => panic!("test gateway failed to start: {error}"),
         }
     }
