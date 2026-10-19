@@ -116,8 +116,8 @@ function createNativeMacReleasePackage(options: AppReleasePackageOptions): AppRe
     item.updaterSha256 = artifact.updaterSha256;
     item.dependencyClosure = artifact.nativeClosure;
     const teamId = process.env.BUTLER_SIGN_TEAM_ID?.trim();
-    if (process.env.BUTLER_SIGN_IDENTITY?.trim() && teamId) item.signing = { teamId, notarized: !isPreviewRelease() };
-    if (isPreviewRelease() && !teamId) item.signing = { teamId: "", notarized: false };
+    // A configured identity reaches here only after notarize and staple succeeded.
+    if (process.env.BUTLER_SIGN_IDENTITY?.trim() && teamId) item.signing = { teamId, notarized: true };
     if (!item.dependencyClosure) throw new Error("signed native mac App closure is missing");
     const releaseManifestPath = join(outDir, "app-release-manifest.json");
     writeJson(releaseManifestPath, manifest);

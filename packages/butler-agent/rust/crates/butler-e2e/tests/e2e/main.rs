@@ -60,6 +60,7 @@ mod conversation_background;
 mod credential_store;
 mod credentials;
 mod custom_model_errors;
+mod custom_model_images;
 mod default_model;
 mod downloads_live;
 mod durable_configuration;

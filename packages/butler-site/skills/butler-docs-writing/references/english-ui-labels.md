@@ -294,7 +294,7 @@ regenerate after the app copy or the Korean pages change.
 | 연결된 기기 | **Paired devices** | advanced/remote-access, settings |
 | 연결된 기기 없음 | **No paired devices** | settings |
 | 연결을 마치지 못했습니다. 다시 시도하세요. | **Couldn't finish connecting. Try again.** | getting-started/first-run, troubleshooting |
-| 열기 | **Open** (`taskGraph.detail.openDocument`)<br />**Manage** (`settings.memory.linkOpen`) | getting-started/install |
+| 열기 | **Open** (`taskGraph.detail.openDocument`)<br />**Manage** (`settings.memory.linkOpen`) | getting-started/install, troubleshooting |
 | 영어 | **English** | personalization, settings |
 | 예비 모델 | **backup models** (`settings.sectionAliases.models[2]`)<br />**Backup models** (`settings.pageSections.backupModels`) | models/backup, settings, troubleshooting |
 | 예비 모델 사용 | **Use backup models** | models/backup, settings, troubleshooting |
@@ -568,8 +568,6 @@ same key from `en.ts`.
 | --- | --- |
 | <span data-mod-key><Kbd keys={["⌘", "Enter"]} label="Command Enter" /></span> 전송, Enter 줄바꿈 | settings |
 | 개인정보 및 데이터 | basics/command-palette |
-| 개인정보 보호 및 보안 | getting-started/install, troubleshooting |
-| 그래도 열기 | getting-started/install, troubleshooting |
 | 기억 정리 모델과 Worker 프로필 | models/backup, settings |
 | 다른 Butler가 백그라운드 서비스를 쓰고 있습니다. | troubleshooting |
 | 메모리 모델 | getting-started/first-run, settings |
