@@ -15,9 +15,10 @@ async function loadSecrets(root, redactor) {
 }
 
 /** Single App main process owns both lanes. Timers exist only while records are queued. */
-export function createAppLogWriter(dataRoot) { return new AppLogWriter(dataRoot); }
+export function createAppLogWriter(dataRoot, canWrite = () => true) { return new AppLogWriter(dataRoot, canWrite); }
 class AppLogWriter {
-  constructor(dataRoot) {
+  constructor(dataRoot, canWrite) {
+    this.canWrite = canWrite;
     this.dataRoot = dataRoot;
     this.redactor = createRedactor();
     this.config = { level: "standard", category_levels: {} };
@@ -109,7 +110,7 @@ class AppLogWriter {
     return this.pending;
   }
   record(input, process = "app.main") {
-    if (!this.dataRoot || this.stopped || !this.enabled(input.category, input.level)) return;
+    if (!this.dataRoot || this.stopped || !this.canWrite() || !this.enabled(input.category, input.level)) return;
     const row = { ts: new Date().toISOString().replace(/(\.\d{3})Z$/u, "$1000Z"), attrs: {}, ...input, process };
     const size = Buffer.byteLength(JSON.stringify(row));
     if (size > MB || SEVERITY[row.level] >= 4 && this.queuedBytes + size > 16 * MB) return;

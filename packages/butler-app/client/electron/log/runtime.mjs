@@ -13,8 +13,8 @@ const CATEGORIES = new Set(["app.ui", "http.client"]);
 const EVENTS = new Set(["ui.send", "ui.stop", "ui.model_pick", "ui.retry", "ui.error", "image.fetch"]);
 const TRACE = /^00-(?!0{32})([a-f0-9]{32})-(?!0{16})([a-f0-9]{16})-[a-f0-9]{2}$/u;
 
-export function installAppLogging({ app, ipcMain, dataRoot, getVersion, readConfig, isSender }) {
-  writer = createAppLogWriter(dataRoot);
+export function installAppLogging({ app, ipcMain, dataRoot, getVersion, readConfig, isSender, isWriter = () => true }) {
+  writer = createAppLogWriter(dataRoot, isWriter);
   const limits = new WeakMap();
   ipcMain.on("butler:app-log", (event, row) => {
     if (!isSender(event) || !validateRenderer(row)) return;

@@ -11,7 +11,7 @@ export interface AppRecord {
   duration_ms?: number;
   error?: unknown;
 }
-export function createAppLogWriter(root: string | null): {
+export function createAppLogWriter(root: string | null, canWrite?: () => boolean): {
   record(row: AppRecord, process?: "app.main" | "app.renderer"): void;
   configure(view: { effective: { level: string; category_levels: Record<string, string> } }): void;
   enabled(category: string, level: string): boolean;

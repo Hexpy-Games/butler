@@ -68,3 +68,14 @@ test("credentials load before the first queued write, including bare values", as
     }
   } finally { await writer.quit(); await rm(root, { recursive: true, force: true }); }
 });
+
+
+test("secondary App roles never write to the UI owner's log directory", async () => {
+  const root = await mkdtemp(join(tmpdir(), "app-log-secondary-"));
+  const writer = createAppLogWriter(root, () => false);
+  try {
+    writer.record({ level: "ERROR", category: "lifecycle", event: "failure", msg: "secondary" });
+    await writer.quit();
+    expect(await readdir(root)).toEqual([]);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

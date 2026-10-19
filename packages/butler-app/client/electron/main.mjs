@@ -156,10 +156,11 @@ let storageCorrectionWatch = null;
 const { dataRoot: butlerDataRoot, legacyDataBlocked, writableRoot: appWritableDataRoot } = appDataRoots();
 const uiCrashStore = createUiCrashStore(appWritableDataRoot, () => appInfoView().version);
 const wallpaperStateLog = createWallpaperStateLog(appWritableDataRoot);
+let appLogOwner = false;
 const appLogging = installAppLogging({ app, ipcMain, dataRoot: appWritableDataRoot,
   getVersion: async () => JSON.parse(await readFile(resolve(__dirname, "package.json"), "utf8")).version,
   readConfig: () => readAppData("/logs/config"),
-  isSender: event => event.sender === mainWindow?.webContents });
+  isSender: event => event.sender === mainWindow?.webContents, isWriter: () => appLogOwner });
 const preloadPath = resolve(__dirname, "preload.cjs");
 const appCacheBudget = readCacheBudgetArtifact(
   resolve(__dirname, "../shared/cache-budget.json"),
@@ -426,6 +427,7 @@ if (isMenuBarHelperProcess || isQuitMenuBarHelperSignalProcess) {
   app.setPath("userData", explicitElectronUserDataDir);
 }
 const appSingleInstanceLock = app.requestSingleInstanceLock();
+appLogOwner = appSingleInstanceLock && !isMenuBarHelperProcess && !isQuitMainUiSignalProcess && !isQuitMenuBarHelperSignalProcess;
 if (appSingleInstanceLock) {
   recordAppStartupProgress("single_instance_acquired");
 }
