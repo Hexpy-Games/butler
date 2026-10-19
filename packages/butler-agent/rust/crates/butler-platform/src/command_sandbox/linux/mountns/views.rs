@@ -1,6 +1,9 @@
 //! Resolve every visible mount view of a protected filesystem coordinate.
 use super::super::Error;
-use std::collections::BTreeSet;
+use std::cell::RefCell;
+use std::collections::{BTreeSet, HashMap};
+use std::ffi::{OsStr, OsString};
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 struct Mount {
@@ -10,34 +13,76 @@ struct Mount {
     options: String,
 }
 
-pub(super) struct Snapshot(Vec<Mount>);
+pub(super) struct Snapshot {
+    mounts: Vec<Mount>,
+    targets: RefCell<HashMap<OsString, usize>>,
+}
 
 pub(super) fn snapshot() -> Result<Snapshot, Error> {
+    parse(&std::fs::read_to_string("/proc/self/mountinfo")?)
+}
+
+fn parse(input: &str) -> Result<Snapshot, Error> {
     let mut mounts = Vec::new();
-    for line in std::fs::read_to_string("/proc/self/mountinfo")?.lines() {
-        let fields: Vec<_> = line.split_whitespace().collect();
-        let [_, _, device, source, target, options, ..] = fields.as_slice() else {
+    for line in input.lines() {
+        let mut fields = line.split_whitespace().skip(2);
+        let (Some(device), Some(source), Some(target), Some(options)) =
+            (fields.next(), fields.next(), fields.next(), fields.next())
+        else {
             return Err("invalid mountinfo".into());
         };
         mounts.push(Mount {
-            device: (*device).to_owned(),
+            device: device.to_owned(),
             source: decode(source)?,
             target: decode(target)?,
-            options: (*options).to_owned(),
+            options: options.to_owned(),
         });
     }
-    Ok(Snapshot(mounts))
+    Ok(Snapshot::new(mounts))
 }
 
 impl Snapshot {
-    fn backing(&self, path: &Path) -> Result<(&str, PathBuf), Error> {
-        // The deepest (and, among stacked mounts, last) prefix is visible.
-        let (owner, relative) = self
-            .0
+    fn new(mounts: Vec<Mount>) -> Self {
+        // The last stacked mount wins, exactly as in the mountinfo snapshot.
+        let targets = mounts
             .iter()
-            .filter_map(|mount| Some((mount, beneath(path, &mount.target)?)))
-            .max_by_key(|(mount, _)| mount.target.as_os_str().len())
-            .ok_or("project mount is unknown")?;
+            .enumerate()
+            .map(|(index, mount)| (mount.target.as_os_str().to_owned(), index))
+            .collect();
+        Self {
+            mounts,
+            targets: RefCell::new(targets),
+        }
+    }
+
+    fn owner(&self, path: &Path) -> Option<&Mount> {
+        // The snapshot is immutable and launch-local. Remember inherited
+        // owners of unmapped prefixes, while always checking deeper targets
+        // first. This also reuses backing()'s lookup when coarse() follows it.
+        let mut targets = self.targets.borrow_mut();
+        let mut missing = Vec::new();
+        let mut bytes = path.as_os_str().as_bytes();
+        let index = loop {
+            let name = OsStr::from_bytes(bytes);
+            if let Some(index) = targets.get(name) {
+                break *index;
+            }
+            missing.push(name);
+            if bytes == b"/" {
+                return None;
+            }
+            let end = bytes.iter().rposition(|byte| *byte == b'/')?;
+            bytes = bytes.get(..end.max(1))?;
+        };
+        for name in missing {
+            targets.insert(name.to_owned(), index);
+        }
+        self.mounts.get(index)
+    }
+
+    fn backing(&self, path: &Path) -> Result<(&str, PathBuf), Error> {
+        let owner = self.owner(path).ok_or("project mount is unknown")?;
+        let relative = beneath(path, &owner.target).ok_or("invalid mount prefix")?;
         Ok((&owner.device, join(&owner.source, relative)))
     }
 
@@ -56,9 +101,10 @@ impl Snapshot {
         let mut result = BTreeSet::new();
         for original in paths {
             for alias in self.views_of(original)? {
-                result.insert(keep.map_or(alias.clone(), |keep| {
-                    self.coarse(&alias, Some(original), keep)
-                }));
+                result.insert(keep.map_or_else(
+                    || alias.clone(),
+                    |keep| self.coarse(&alias, Some(original), keep),
+                ));
             }
         }
         Ok(result.into_iter().collect())
@@ -73,12 +119,7 @@ impl Snapshot {
         original: Option<&Path>,
         keep: &[PathBuf],
     ) -> PathBuf {
-        let owner = self
-            .0
-            .iter()
-            .filter(|mount| beneath(alias, &mount.target).is_some())
-            .max_by_key(|mount| mount.target.as_os_str().len())
-            .map(|mount| mount.target.as_path());
+        let owner = self.owner(alias).map(|mount| mount.target.as_path());
         match owner {
             Some(target)
                 if target != Path::new("/")
@@ -98,7 +139,7 @@ impl Snapshot {
         let mut result = vec![original.to_path_buf()];
         let path: PathBuf = original.components().collect();
         let (device, coordinate) = self.backing(&path)?;
-        for mount in self.0.iter().filter(|mount| mount.device == device) {
+        for mount in self.mounts.iter().filter(|mount| mount.device == device) {
             let Some(relative) = beneath(&coordinate, &mount.source) else {
                 continue;
             };
@@ -115,7 +156,7 @@ impl Snapshot {
 
     /// Each mount target's device number (the topmost of stacked mounts).
     pub(super) fn devices(&self) -> std::collections::HashMap<PathBuf, u64> {
-        self.0
+        self.mounts
             .iter()
             .filter_map(|mount| {
                 let (major, minor) = mount.device.split_once(':')?;
@@ -127,7 +168,7 @@ impl Snapshot {
 
     /// Each mount's target and per-mount options, in mount order.
     pub(super) fn options(&self) -> impl Iterator<Item = (&Path, &str)> {
-        self.0
+        self.mounts
             .iter()
             .map(|mount| (mount.target.as_path(), mount.options.as_str()))
     }
@@ -136,7 +177,7 @@ impl Snapshot {
         let mut views: BTreeSet<_> = self.aliases(roots)?.into_iter().collect();
         for root in roots {
             let (device, coordinate) = self.backing(root)?;
-            for mount in self.0.iter().filter(|mount| mount.device == device) {
+            for mount in self.mounts.iter().filter(|mount| mount.device == device) {
                 let (visible_device, visible_coordinate) = self.backing(&mount.target)?;
                 if mount.source.starts_with(&coordinate)
                     && mount.target.is_dir()
@@ -174,6 +215,9 @@ fn join(base: &Path, relative: &Path) -> PathBuf {
 }
 
 fn decode(encoded: &str) -> Result<PathBuf, Error> {
+    if !encoded.as_bytes().contains(&b'\\') {
+        return Ok(encoded.into());
+    }
     use std::os::unix::ffi::OsStringExt;
     let mut decoded = Vec::new();
     let mut bytes = encoded.as_bytes().iter().copied();
@@ -196,3 +240,8 @@ fn decode(encoded: &str) -> Result<PathBuf, Error> {
     }
     Ok(std::ffi::OsString::from_vec(decoded).into())
 }
+
+#[cfg(feature = "test-support")]
+mod test_support;
+#[cfg(feature = "test-support")]
+pub use test_support::verify_mount_plan_contract;
