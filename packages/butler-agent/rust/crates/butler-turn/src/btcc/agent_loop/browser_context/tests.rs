@@ -123,6 +123,7 @@ pub(in crate::btcc::agent_loop) fn assert_multiple_acts() {
 
 /// `browser_act {observe:true}` closes its source cycle and opens the next one.
 pub(in crate::btcc::agent_loop) fn assert_act_with_observation() {
+    assert_frozen_receipt();
     let mut messages = Vec::new();
     observe(&mut messages, "a", "a1");
     observed_act(&mut messages, "a1", "a2");
@@ -146,6 +147,35 @@ pub(in crate::btcc::agent_loop) fn assert_act_with_observation() {
     force_prune(&mut messages);
     assert_eq!(messages, once);
 }
+fn assert_frozen_receipt() {
+    let mut messages = Vec::new();
+    observe(&mut messages, "a", "o5");
+    let frozen = messages[0].clone();
+    let mut state = BrowserPrune { watermark: 1 };
+    observed_act(&mut messages, "o5", "o6");
+    let mut value: Value = serde_json::from_str(&messages[2].content).unwrap();
+    value["output"]["untrusted_content"]["text"] = "x".repeat(70_000).into();
+    messages[2].content = value.to_string().into();
+    observed_act(&mut messages, "o6", "o7");
+    prune(&mut messages, &mut state, 0, u64::MAX);
+    assert_eq!(messages[0], frozen, "normal prune keeps frozen source full");
+    let stub: Value = serde_json::from_str(&messages[2].content).unwrap();
+    assert_eq!(stub["output"]["receipt"]["obs"], "o5");
+    assert_eq!(
+        stub["output"]["receipt"]["acted"],
+        "hover f0-e2 ×2 completed"
+    );
+    let once = messages[2].clone();
+    prune(&mut messages, &mut state, 0, 0);
+    let source: Value = serde_json::from_str(&messages[0].content).unwrap();
+    assert_eq!(
+        source["output"]["acted"],
+        stub["output"]["receipt"]["acted"]
+    );
+    assert_eq!(messages[2], once, "deep prune keeps receipt stub immutable");
+    assert!(source["output"].get("receipt").is_none());
+}
+
 fn observed_act(messages: &mut Vec<ModelRoundMessage>, source: &str, next: &str) {
     call(messages, "a", source, 2, 2);
     let steps =

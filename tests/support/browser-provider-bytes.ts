@@ -55,10 +55,10 @@ export function assertBrowserBodies(requests:StubModelRequest[]) {
   const finalStubs = new Map<string,string>();
   for(const request of requests.filter(request=>request.stream)) {
     assert.ok(!JSON.stringify(request.body).includes('image_url'));
-    const calls=new Map<string,{name:string;arguments:{tab?:string;observation?:string;steps?:unknown[]}}>();
+    const calls=new Map<string,{name:string;arguments:{tab?:string;observation?:string;steps?:Array<{action:string;ref?:string;value?:string}>}}>();
     const tabs=new Map<string,{observations:number;acts:number;fullObservations:number;fullActs:number}>();
     const newest = new Map<string,boolean>();
-    const actsByObservation=new Map<string,number>(),stubs:Array<{obs:string;acted:string}>=[];
+    const actsByObservation=new Map<string,string[]>(),stubs:Array<{obs:string;acted:string}>=[];
     for(const message of request.messages as any[]) {
       for(const call of message.tool_calls ?? []) {
         const arguments_=JSON.parse(call.function.arguments);
@@ -86,15 +86,22 @@ export function assertBrowserBodies(requests:StubModelRequest[]) {
         else stubs.push(output);
       } else {
         row.acts++;if(output.superseded!==true)row.fullActs++;
-        const args=calls.get(message.tool_call_id)!.arguments;
-        const completed=completedAct(output,args.steps?.length ?? 0);
-        actsByObservation.set(args.observation!,completed+(actsByObservation.get(args.observation!) ?? 0));
+      }
+      const args=calls.get(message.tool_call_id)?.arguments;
+      if(args?.observation) {
+        const action=output.action ?? output;
+        const acted:string=stub?output.receipt?.acted:fullActed(action,args.steps ?? []);
+        assert.equal(stub?output.receipt?.obs:args.observation,args.observation);
+        assert.equal(typeof acted,'string','each act keeps its own receipt');
+        const count=[...acted.matchAll(/×(\d+) completed/gu)].reduce((sum,match)=>sum+Number(match[1]),0);
+        assert.equal(count,args.steps?.length ?? 0,'every completed step is represented once');
+        const parts=actsByObservation.get(args.observation) ?? [];
+        parts.push(acted);actsByObservation.set(args.observation,parts);
       }
       tabs.set(tab,row);
     }
     for(const stub of stubs) {
-      const acted=[...stub.acted.matchAll(/×(\d+) completed/gu)].reduce((sum,match)=>sum+Number(match[1]),0);
-      assert.equal(acted,actsByObservation.get(stub.obs) ?? 0,'stub acted count stays consistent in every body');
+      assert.equal(stub.acted,(actsByObservation.get(stub.obs) ?? []).join('; '),'stub acted follows receipts in message order');
     }
     assert.ok([...newest.values()].every(Boolean),'newest observation and action per tab stay full');
     for(const row of tabs.values()) {
@@ -104,14 +111,15 @@ export function assertBrowserBodies(requests:StubModelRequest[]) {
   }
 }
 
-function completedAct(output:any,requested:number):number {
-  if(Array.isArray(output.steps)) {
-    assert.equal(output.steps.length,requested);
-    assert.ok(output.steps.every((step:any)=>step.status==='completed'));
-    return output.steps.length;
+function fullActed(output:any,steps:Array<{action:string;ref?:string;value?:string}>):string {
+  assert.ok(Array.isArray(output.steps));
+  assert.equal(output.steps.length,steps.length);
+  assert.ok(output.steps.every((step:any)=>step.status==='completed'));
+  const groups:Array<{label:string;count:number}>=[];
+  for(const step of steps) {
+    const target=['press','type','wait'].includes(step.action)?[...(step.value ?? 'point')].slice(0,24).join(''):step.ref ?? 'point';
+    const label=`${step.action} ${target}`,last=groups.at(-1);
+    if(last?.label===label)last.count++;else groups.push({label,count:1});
   }
-  const summary=/^(\d+)\/(\d+) completed$/u.exec(output.steps);assert.ok(summary);
-  assert.equal(Number(summary[2]),requested);
-  assert.equal(Number(summary[1]),requested);
-  return Number(summary[1]);
+  return groups.map(group=>`${group.label} ×${group.count} completed`).join('; ');
 }

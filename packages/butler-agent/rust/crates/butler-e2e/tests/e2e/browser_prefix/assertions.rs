@@ -152,35 +152,119 @@ pub(crate) fn assert_journal(
         completed.insert(format!("o{}", index + 1), count);
     }
     for request in requests {
-        for (value, _) in outputs(request) {
-            let output = &value["output"];
-            if output["status"] != "superseded" {
-                continue;
+        assert_receipts(request, &completed);
+    }
+    Ok(())
+}
+
+fn assert_receipts(request: &Value, completed: &std::collections::HashMap<String, usize>) {
+    let mut calls = std::collections::HashMap::new();
+    let mut receipts: std::collections::HashMap<String, Vec<String>> = Default::default();
+    let mut seen = std::collections::HashSet::new();
+    for item in request["input"].as_array().unwrap() {
+        if item["type"] == "function_call" {
+            let args: Value = serde_json::from_str(item["arguments"].as_str().unwrap()).unwrap();
+            let (name, args) = if item["name"] == "tool_call" {
+                (args["id"].as_str().unwrap(), &args["arguments"])
+            } else {
+                (item["name"].as_str().unwrap(), &args)
+            };
+            if matches!(name, "browser_act" | "native:browser_act") {
+                calls.insert(item["call_id"].as_str().unwrap(), args.clone());
             }
-            let acted = output["acted"].as_str().unwrap();
-            let count: usize = acted
-                .split('×')
-                .skip(1)
-                .map(|part| {
-                    part.split_whitespace()
-                        .next()
-                        .unwrap()
-                        .parse::<usize>()
-                        .unwrap()
-                })
-                .sum();
+        }
+        let Some(args) = calls.get(item["call_id"].as_str().unwrap_or_default()) else {
+            continue;
+        };
+        if item["type"] != "function_call_output" {
+            continue;
+        }
+        assert!(
+            seen.insert(item["call_id"].as_str().unwrap()),
+            "one output per act"
+        );
+        let text = item["output"]
+            .as_str()
+            .or_else(|| {
+                item["output"]
+                    .as_array()?
+                    .iter()
+                    .find(|p| p["type"] == "input_text")?["text"]
+                    .as_str()
+            })
+            .unwrap();
+        let value: Value = serde_json::from_str(text).unwrap();
+        let output = &value["output"];
+        let obs = args["observation"].as_str().unwrap();
+        let acted = if output["status"] == "superseded" || output["superseded"] == true {
+            assert!(output.get("action").is_none());
+            assert!(!output["steps"].is_array());
+            assert_eq!(output["receipt"]["obs"], obs);
+            output["receipt"]["acted"].as_str().unwrap().to_owned()
+        } else {
+            assert!(output.get("receipt").is_none());
+            let action = output.get("action").unwrap_or(output);
+            full_acted(args, action)
+        };
+        let count: usize = acted
+            .split('×')
+            .skip(1)
+            .map(|p| {
+                p.split_whitespace()
+                    .next()
+                    .unwrap()
+                    .parse::<usize>()
+                    .unwrap()
+            })
+            .sum();
+        assert_eq!(
+            count, completed[obs],
+            "every journaled step is represented once"
+        );
+        receipts.entry(obs.into()).or_default().push(acted);
+    }
+    assert_eq!(seen.len(), calls.len(), "every browser act has one result");
+    for (value, _) in outputs(request) {
+        let output = &value["output"];
+        if output["status"] == "superseded" {
+            let acted = receipts
+                .get(output["obs"].as_str().unwrap())
+                .map(|parts| parts.join("; "))
+                .unwrap_or_default();
             assert_eq!(
-                count,
-                completed
-                    .get(output["obs"].as_str().unwrap())
-                    .copied()
-                    .unwrap_or(0),
-                "observation {} has acted={acted:?}",
-                output["obs"]
+                output["acted"], acted,
+                "observation summary follows message order"
             );
         }
     }
-    Ok(())
+}
+
+fn full_acted(args: &Value, output: &Value) -> String {
+    let steps = output["steps"].as_array().unwrap();
+    assert_eq!(steps.len(), args["steps"].as_array().unwrap().len());
+    assert!(steps.iter().all(|step| step["status"] == "completed"));
+    let mut groups: Vec<(String, usize)> = Vec::new();
+    for step in args["steps"].as_array().unwrap() {
+        let action = step["action"].as_str().unwrap();
+        let target = if matches!(action, "press" | "type" | "wait") {
+            step["value"]
+                .as_str()
+                .map(|v| v.chars().take(24).collect::<String>())
+        } else {
+            step["ref"].as_str().map(str::to_owned)
+        };
+        let label = format!("{action} {}", target.as_deref().unwrap_or("point"));
+        if let Some((_, count)) = groups.last_mut().filter(|(last, _)| *last == label) {
+            *count += 1;
+        } else {
+            groups.push((label, 1));
+        }
+    }
+    groups
+        .into_iter()
+        .map(|(label, count)| format!("{label} ×{count} completed"))
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 fn assert_changes(previous: &Value, current: &Value, prune: bool) {

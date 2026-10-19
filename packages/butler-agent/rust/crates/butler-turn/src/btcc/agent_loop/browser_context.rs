@@ -18,6 +18,7 @@ struct Cycle {
     obs_id: String,
     act_indices: Vec<usize>,
     acted: Vec<String>,
+    receipt: Option<Value>,
 }
 
 struct History {
@@ -91,17 +92,11 @@ fn open_cycle(
     (index, tab): (usize, String),
     act: Option<&ModelRoundToolCall>,
 ) {
+    let output = field(value, "output");
     if let Some(call) = act
-        && let Some(output) = value.get("output")
-        && output.get("action").is_some()
+        && (output.get("action").is_some() || output.get("receipt").is_some())
     {
-        attach_act(
-            tabs,
-            &tab,
-            index,
-            call,
-            field(field(value, "output"), "action"),
-        );
+        attach_act(tabs, &tab, index, call, output);
     }
     if let Some(obs_id) = field(field(value, "output"), "obs").as_str() {
         tabs.entry(tab).or_default().push(Cycle {
@@ -109,6 +104,9 @@ fn open_cycle(
             obs_id: obs_id.into(),
             act_indices: Vec::new(),
             acted: Vec::new(),
+            receipt: act
+                .filter(|_| output.get("action").is_some())
+                .map(|call| receipt(call, field(output, "action"))),
         });
     }
 }
@@ -142,7 +140,7 @@ fn plan(messages: &[ModelRoundMessage]) -> Vec<Stale> {
             continue;
         }
         let output = field(&value, "output");
-        let stub = json!({"ok":field(&value, "ok"),"output":{"schema":"butler.browser-action.v1","obs":call.arguments.get("observation"),"status":field(output, "status"),"steps":summary::steps(output),"superseded":true}}).to_string().into();
+        let stub = json!({"ok":field(&value, "ok"),"output":{"schema":"butler.browser-action.v1","obs":call.arguments.get("observation"),"status":field(output, "status"),"steps":summary::steps(output),"receipt":receipt(&call, output),"superseded":true}}).to_string().into();
         stale.push(Stale::new(index, message, stub));
     }
     stale.extend(zoom::plan(messages));
@@ -152,12 +150,22 @@ fn plan(messages: &[ModelRoundMessage]) -> Vec<Stale> {
 /// `superseded_by` names the observation that replaced this one (the next
 /// cycle of the tab), so the stub is final when written.
 fn replace_observation(cycle: &Cycle, tab: &str, next: &str) -> Arc<str> {
-    json!({"ok":true,"output":{"schema":"butler.browser-observation.v1",
+    let mut stub = json!({"ok":true,"output":{"schema":"butler.browser-observation.v1",
         "obs":cycle.obs_id,"status":"superseded","acted":cycle.acted.join("; "),
         "tab":tab,"superseded_by":next,
-        "recovery":"This is replaced history, not a tool failure or lost observation. Use the newest observation of this tab. Call browser_observe again if fresh state is needed; continue the unfinished page interaction."}})
-    .to_string()
-    .into()
+        "recovery":"This is replaced history, not a tool failure or lost observation. Use the newest observation of this tab. Call browser_observe again if fresh state is needed; continue the unfinished page interaction."}});
+    if let Some(receipt) = &cycle.receipt
+        && let Some(output) = stub.get_mut("output").and_then(Value::as_object_mut)
+    {
+        output.insert("receipt".into(), receipt.clone());
+    }
+    stub.to_string().into()
+}
+
+/// Stubs keep today's fields plus the receipt carried by their own message.
+/// Later prunes recover it even when its source observation stays frozen.
+fn receipt(call: &ModelRoundToolCall, output: &Value) -> Value {
+    json!({"obs":call.arguments.get("observation"),"acted":summary::acted(call, output)})
 }
 
 fn attach_act(
@@ -167,7 +175,14 @@ fn attach_act(
     call: &ModelRoundToolCall,
     output: &Value,
 ) {
-    let Some(obs) = call.arguments.get("observation").and_then(Value::as_str) else {
+    let saved = output
+        .get("receipt")
+        .filter(|_| field(output, "status") == "superseded" || field(output, "superseded") == true);
+    let saved = saved.and_then(|r| Some((r["obs"].as_str()?, r["acted"].as_str()?)));
+    let obs = saved
+        .map(|(obs, _)| obs)
+        .or_else(|| call.arguments.get("observation").and_then(Value::as_str));
+    let Some(obs) = obs else {
         return;
     };
     if let Some(cycle) = tabs
@@ -175,7 +190,10 @@ fn attach_act(
         .and_then(|cycles| cycles.iter_mut().rev().find(|cycle| cycle.obs_id == obs))
     {
         cycle.act_indices.push(index);
-        cycle.acted.push(summary::acted(call, output));
+        cycle.acted.push(saved.map_or_else(
+            || summary::acted(call, output.get("action").unwrap_or(output)),
+            |(_, acted)| acted.to_owned(),
+        ));
     }
 }
 
