@@ -4,6 +4,7 @@ import type {
   LocalModelDiscoveryRequest,
   LocalModelDiscoveryResult,
 } from "@/app/types.ts";
+import { imageInputChange } from "../localModelApi";
 
 const DEFAULT_PLATFORM = "custom" as const;
 type LocalModelPlatform = LocalModelDiscoveryRequest["platform"];
@@ -20,6 +21,9 @@ export function useLocalModelState() {
   const [editingModelRef, setEditingModelRef] = useState("");
   const [busy, setBusy] = useState<"discover" | "register" | "delete" | null>(null);
   const [status, setStatus] = useState("");
+  // The switch starts at the model's effective support (off for a new model); a choice is kept only once made.
+  const [imageInputInitial, setImageInputInitial] = useState(false);
+  const [imageInputChoice, setImageInputChoice] = useState<boolean>();
 
   useEffect(() => {
     if (!discovery?.models.length) return;
@@ -35,6 +39,11 @@ export function useLocalModelState() {
     serverUrl.trim().length > 0 &&
     manualModelId.trim().length > 0 &&
     Number(manualContext) > 0;
+  const imageInput = {
+    checked: imageInputChoice ?? imageInputInitial,
+    change: imageInputChange(imageInputInitial, imageInputChoice),
+    setChecked: setImageInputChoice,
+  };
 
   function editModel(model: AppModelSummary) {
     setEditingModelRef(model.model_ref);
@@ -46,6 +55,8 @@ export function useLocalModelState() {
     setManualModelId(model.model_id);
     setManualDisplayName(model.display_name);
     setManualContext(String(model.context_window_tokens));
+    setImageInputInitial(model.image_input_support === "supported");
+    setImageInputChoice(undefined);
     setStatus("");
   }
 
@@ -77,5 +88,6 @@ export function useLocalModelState() {
     canDiscover,
     canRegister,
     editModel,
+    imageInput,
   };
 }

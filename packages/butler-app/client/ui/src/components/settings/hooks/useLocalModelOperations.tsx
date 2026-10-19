@@ -25,6 +25,8 @@ interface UseLocalModelOperationsProps {
   manualDisplayName: string;
   manualContext: string;
   preservedReasoningBudgetRatio?: number;
+  /** Sent only when the user changed the image input switch. */
+  imageInput?: boolean;
   editingModelRef: string;
   selectedModel: AppModelSummary | null;
   canDiscover: boolean;
@@ -50,6 +52,7 @@ export function useLocalModelOperations({
   manualDisplayName,
   manualContext,
   preservedReasoningBudgetRatio,
+  imageInput,
   editingModelRef,
   selectedModel,
   canDiscover,
@@ -106,6 +109,7 @@ export function useLocalModelOperations({
       manualContext,
       preservedReasoningBudgetRatio,
       apiKey,
+      imageInput,
     );
     try {
       const result = await registerLocalModel(isEditing, editingModelRef, payload);

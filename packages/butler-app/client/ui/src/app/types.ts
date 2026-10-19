@@ -118,6 +118,8 @@ export interface AppModelSummary {
   credential_masked_value?: string;
   /** Catalog image capability; absent means unknown. */
   image_input_support?: "supported" | "unsupported" | "unknown";
+  /** Where image capability came from, e.g. "provider_catalog", "provider_discovery", or "user" (the user's declaration). */
+  image_capability_source?: string;
   image_accepted_mime_types?: string[];
   image_max_inline_bytes?: number;
 }
@@ -221,6 +223,8 @@ export interface LocalModelRegistrationRequest extends LocalModelDiscoveryReques
   max_output_tokens?: number;
   reasoning_budget_ratio?: number;
   source?: "discovered" | "manual";
+  /** The user's image input declaration; absent keeps the stored one. */
+  image_input?: boolean;
 }
 
 export interface LocalModelRegistrationResult {
