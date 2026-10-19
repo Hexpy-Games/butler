@@ -53,7 +53,7 @@ async fn publish(s: &Scenario) -> Result<String, HarnessError> {
 async fn view(gw: &Gateway, path: &str) -> Result<reqwest::Url, HarnessError> {
     let reply = gw.get(path).await?;
     assert_eq!(reply.status, 200, "{}", reply.text);
-    Ok(reqwest::Url::parse(reply.data()["url"].as_str().unwrap())?)
+    Ok(reqwest::Url::parse(reply.data()["url"].as_str().unwrap()).unwrap())
 }
 async fn content(url: &reqwest::Url, api_origin: &str, wrong_host: &str) -> Result<(), HarnessError> {
     let client = reqwest::Client::builder().no_proxy().build()?;
@@ -107,7 +107,7 @@ async fn lan_client_gets_actual_content_port() -> Result<(), HarnessError> {
     let lan = security["bind_addresses"][1].as_str();
     if std::env::var_os("BUTLER_E2E_REQUIRE_LAN").is_some() { assert!(lan.is_some(), "{security}"); }
     butler_e2e::skip_unless!(lan.is_some(), "no LAN listener");
-    let address: std::net::SocketAddr = lan.unwrap().parse()?;
+    let address: std::net::SocketAddr = lan.unwrap().parse().unwrap();
     let remote = Gateway::new(format!("http://{address}"), s.gw.token.clone());
     let url = view(&remote, &path).await?;
     let q = view(&s.gw, &path).await?.port().unwrap();
