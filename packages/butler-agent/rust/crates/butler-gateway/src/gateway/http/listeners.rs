@@ -66,6 +66,7 @@ pub(super) struct RemoteSnapshot {
     pub(super) exposure: GatewayExposure,
     /// The LAN listeners' addresses.
     pub(super) lan_listeners: Vec<SocketAddr>,
+    pub(super) content_listeners: Vec<SocketAddr>,
     pub(super) bind_errors: Vec<BindError>,
     /// The LAN Host authorities answered: `ip:port`, `<name>.local:port`.
     pub(super) lan_authorities: Vec<String>,
@@ -74,6 +75,7 @@ pub(super) struct RemoteSnapshot {
 /// The gateway's exposure beyond loopback, changed by Settings → Security.
 pub(super) struct RemoteAccess {
     primary: SocketAddr,
+    content_addr: SocketAddr,
     current: Mutex<RemoteState>,
     /// Serializes changes (persist, then apply) and connection-code rotation.
     pub(super) changes: tokio::sync::Mutex<()>,
@@ -87,7 +89,11 @@ struct RemoteState {
 }
 
 impl RemoteAccess {
-    pub(super) fn new(primary: SocketAddr, allowed_hosts: Vec<String>) -> Self {
+    pub(super) fn new(
+        primary: SocketAddr,
+        content_addr: SocketAddr,
+        allowed_hosts: Vec<String>,
+    ) -> Self {
         let snapshot = RemoteSnapshot {
             exposure: GatewayExposure {
                 remote_access_enabled: false,
@@ -98,6 +104,7 @@ impl RemoteAccess {
         };
         Self {
             primary,
+            content_addr,
             current: Mutex::new(RemoteState {
                 snapshot,
                 closed: None,
@@ -109,6 +116,10 @@ impl RemoteAccess {
     /// The loopback listener's address.
     pub(super) fn primary(&self) -> SocketAddr {
         self.primary
+    }
+
+    pub(super) fn content_addr(&self) -> SocketAddr {
+        self.content_addr
     }
 
     pub(super) fn snapshot(&self) -> RemoteSnapshot {
@@ -130,12 +141,14 @@ impl RemoteAccess {
                 closed.cancel();
             }
             current.snapshot.lan_listeners.clear();
+            current.snapshot.content_listeners.clear();
             current.snapshot.lan_authorities.clear();
             current.snapshot.bind_errors.clear();
         } else if !was_enabled && exposure.remote_access_enabled {
             let closed = state.shutdown.child_token();
             let bound = self.bind_lan(state, &closed);
             current.snapshot.lan_listeners = bound.lan_listeners;
+            current.snapshot.content_listeners = bound.content_listeners;
             current.snapshot.lan_authorities = bound.lan_authorities;
             current.snapshot.bind_errors = bound.bind_errors;
             current.closed = Some(closed);
@@ -170,6 +183,16 @@ impl RemoteAccess {
                                 continue;
                             }
                         };
+                        match content_listener.local_addr() {
+                            Ok(address) => bound.content_listeners.push(address),
+                            Err(error) => {
+                                bound.bind_errors.push(BindError {
+                                    address: content_address,
+                                    error: error.to_string(),
+                                });
+                                continue;
+                            }
+                        }
                         super::content::spawn(content_listener, state.clone(), closed.clone());
                         drop(spawn(listener, state.clone(), closed.clone()));
                         bound.lan_listeners.push(address);
