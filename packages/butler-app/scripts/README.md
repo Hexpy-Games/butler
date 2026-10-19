@@ -53,8 +53,9 @@ gateway or Electron runtime.
 
 ## macOS Release Signing And Notarization
 
-`.github/workflows/release.yml` (`v*` tags) signs and notarizes the macOS
-artifacts with the configured Developer ID for stable tags. All logic lives in
+`.github/workflows/release.yml` (`v*` tags) signs, notarizes and staples the
+macOS artifacts with the configured Developer ID for every tag, preview or
+stable. All logic lives in
 `deploy/macos/sign-and-notarize.sh`; PR CI and local builds stay ad-hoc signed
 because every command is a logged no-op without `BUTLER_SIGN_IDENTITY`.
 
@@ -79,17 +80,17 @@ keychain and key. The GitHub Release is created as a draft and published only
 after the App passes its signing policy and smoke checks. A bare CLI binary cannot be stapled, so
 the Agent is gated on `codesign --check-notarization` (online ticket). Missing or partial secrets fail the release.
 
-Owner decision (2026-10-01): tags matching `vX.Y.Z-preview.*` are unofficial
-previews. Certificate setup runs independently of the notary credentials. If it
-fails, setup removes partial credentials and selects `codesign -s -`, signed
-without the hardened runtime (ad-hoc code has no Team ID, so library
-validation would reject the nested Electron frameworks) and with a CI
-`::warning::` annotation. Previews
-never validate or use the notary API key, submit to notarization, staple, or
-require Gatekeeper's notarized verdict. Signature validity, payload closure,
-smoke tests, SHA-256 sidecars and all 18 consolidated checksum entries remain
-required. Stable tags retain mandatory Developer ID signing and notarization;
-certificate, notary or staple failures stop publication.
+Previews (`vX.Y.Z-preview.*`) follow the same policy as stable tags; the tag
+only selects the update channel. `BUTLER_SIGN_REQUIRED=1` is set for the whole
+job, so a missing identity, an ad-hoc fallback, a rejected notary key, a
+notarization verdict other than Accepted, or a missing staple stops the release.
+
+To check the full path on a real build without a tag or publication, dispatch
+`release.yml` on a branch with `macos_signing_check: true`
+(`gh workflow run release.yml --ref <branch> -f macos_signing_check=true`). It
+runs `release-macos.yml` with `verify_only`, skips both GitHub Release uploads,
+and prints `codesign`, `spctl`, `stapler validate` and `--check-notarization`
+results. The `deploy` environment must allow that ref first.
 
 The macOS App updater runs in the bundled Agent through `operations/update.rs`.
 With `update.previews: false`, the default `/releases/latest/download/app-update-manifest.json`
@@ -113,8 +114,8 @@ or relabel it as stable to work around the old cache.
 
 App activation remains manual (`user-installs-app-package`); SHA-256 verification
 and package signature checks still apply. `signing.notarized` is release metadata,
-not an updater acceptance condition. macOS may require right-click → Open or
-Privacy & Security → Open Anyway. The ZIP contains the same signed App as the DMG.
+not an updater acceptance condition. The ZIP contains the same signed, stapled
+App as the DMG.
 The Agent updater likewise checks archive integrity, not notarization. CLI installs
 via curl or npx do not use the App's Gatekeeper open flow.
 
@@ -124,7 +125,7 @@ MAP_JIT). The Agent, dylibs and the menu bar helper
 get none.
 
 Manifests record `signing: { teamId, notarized }` per artifact (`null` for
-local ad-hoc builds; an empty `teamId` and `notarized: false` for ad-hoc previews). `integrity.signature` stays reserved for a detached signature.
+local ad-hoc builds). `integrity.signature` stays reserved for a detached signature.
 `release:app:smoke` and `release:agent:smoke` re-check Team ID, hardened
 runtime, timestamp, staple and `spctl` when signing is on.
 `.github/workflows/rust-quality.yml` runs shellcheck and an ad-hoc self-test

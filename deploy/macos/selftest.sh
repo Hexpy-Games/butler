@@ -10,6 +10,13 @@ work=$(mktemp -d)
 mount=$work/mounted
 trap 'if [ -d "$mount/Butler.app" ]; then hdiutil detach "$mount"; fi; chmod -R u+w "$work"; rm -rf "$work"' EXIT
 
+# Every code requirement passed to codesign must parse, or the release check fails.
+requirements=$(grep -o -- '-R=[^ ]*' "$script" | cut -c4-)
+[ -n "$requirements" ] || { echo "no code requirement found" >&2; exit 1; }
+while IFS= read -r requirement; do
+  csreq -r="$requirement" -t > /dev/null || { echo "invalid code requirement: $requirement" >&2; exit 1; }
+done <<< "$requirements"
+
 out=$(env -u BUTLER_SIGN_IDENTITY "$script" sign-app "$work/none.app")
 grep -q 'skipping sign-app' <<< "$out" || { echo "no-identity mode did not skip" >&2; exit 1; }
 
@@ -54,11 +61,8 @@ for role in memory restart update; do
   [ "$(stat -f %Lp "$alias")" = 555 ] || { echo "role mode not restored" >&2; exit 1; }
   [ "$(stat -f %i "$alias")" = "$(stat -f %i "$agent")" ] || { echo "role hardlink broken" >&2; exit 1; }
 done
-# Unofficial previews still verify real signatures, without an online ticket.
-export GITHUB_REF_NAME=v0.1.0-preview.1 BUTLER_SIGN_IDENTITY=-
-"$script" agent "$app/Contents/Resources/bundled-agent/bin/butler-agent"
-"$script" verify-app "$app"
-python3 - "$script" "$app/Contents/Resources/bundled-agent/bin/butler-agent" <<'PYTEST'
+# An ad-hoc Agent never counts as release-signed, on preview or stable tags.
+BUTLER_SIGN_IDENTITY=- python3 - "$script" "$app/Contents/Resources/bundled-agent/bin/butler-agent" <<'PYTEST'
 import importlib.util
 import os
 from pathlib import Path
@@ -67,9 +71,9 @@ packager = Path(sys.argv[1]).parents[2] / "packages/butler-agent/rust/scripts/pa
 spec = importlib.util.spec_from_file_location("packager", packager)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
-assert module.binary_signing(Path(sys.argv[2])) == {"teamId": "", "notarized": False}
-os.environ["GITHUB_REF_NAME"] = "v0.1.0"
-assert module.binary_signing(Path(sys.argv[2])) is None
+for ref in ("v0.1.0-preview.1", "v0.1.0"):
+    os.environ["GITHUB_REF_NAME"] = ref
+    assert module.binary_signing(Path(sys.argv[2])) is None, ref
 PYTEST
 
 # Exercise the release DMG path after its original app has been removed.
