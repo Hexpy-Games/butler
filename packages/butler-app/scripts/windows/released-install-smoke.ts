@@ -67,6 +67,10 @@ try {
     status: "complete", gateway: "any", fields: {}, skipped_fields: [], created_at: now, updated_at: now, completed_at: now }));
   run(installer, []);
   await waitFor(() => existsSync(updater), "released one-click install");
+  // The auto-launched App runs the day's scheduled cycle (the briefing under test) at startup;
+  // let it record that run before the debug relaunch quits it.
+  await waitFor(() => Date.parse(readJson(join(data, "state/scheduler/consolidation-cycle.json"))?.lastRunAt) >= started,
+    "auto-launched scheduled cycle recorded");
   await relaunchInstalledAppForDebugging(join(installed, "Butler.exe"), debugPort, env, owned);
   page = await electronPage(debugPort);
   assert.equal((await bridge(page, "getAppInfo")).version, version);
