@@ -72,17 +72,24 @@ async fn browser_zoom_history_and_upload_scope() -> Result<(), HarnessError> {
         assert_eq!(output(&requests[index])["output"]["reason"], reason);
     }
     let last = requests.last().unwrap();
-    assert!(
-        last.to_string().contains("An older close-up"),
-        "a newer observation supersedes the close-up pixels"
-    );
+    for previous in &requests[1..] {
+        let input = previous["input"].as_array().unwrap();
+        assert_eq!(
+            &last["input"].as_array().unwrap()[..input.len()],
+            input,
+            "under-budget observations and close-ups stay byte-identical"
+        );
+    }
     let images = last["input"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|item| item["output"].to_string().contains("input_image"))
         .count();
-    assert_eq!(images, 1, "only the newest observation keeps pixels");
+    assert_eq!(
+        images, 3,
+        "under-budget observations and zoom retain pixels"
+    );
     s.finish().await
 }
 

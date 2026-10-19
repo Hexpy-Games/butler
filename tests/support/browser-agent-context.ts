@@ -13,9 +13,9 @@ export async function browserContextCheck(app:Awaited<ReturnType<typeof browserA
   const full=messages.map(message=>JSON.parse(message.content)).filter(value=>value.output?.schema==='butler.browser-observation.v1' && value.output?.status!=='superseded');
   const old=messages.map(message=>JSON.parse(message.content)).filter(value=>value.output?.status==='superseded');
   assert.ok(!JSON.stringify(messages.map(message=>JSON.parse(message.content))).includes('still_file'),'desktop still metadata never reaches model context');
-  assert.equal(full.length,1,"only the newest observation per tab stays full");
-  assert.equal(old.length,2,"older observations are superseded");
-  assert.ok(full[0].output.untrusted_content.text.includes('Confirm'));
+  assert.equal(full.length+old.length,3,"all observations remain represented");
+  assert.ok(full.at(-1).output.untrusted_content.text.includes('Confirm'));
+  assertBrowserBodies(app.gateway.stubModelCalls);
   const view=await app.gateway.api<{latest_turn:{id:string}}>("/session-view?session_id=general");
   const db=new Database(join(app.gateway.butlerData,"agent-runtime/btcc.sqlite"),{readonly:true});
   try {
@@ -52,14 +52,26 @@ export async function browserProviderByteCheck(app:Awaited<ReturnType<typeof bro
     assert.ok(receipts.every(step=>step.status==='completed' && step.still_file));
     const last=requests.filter(request=>request.stream).at(-1)!;
     const outputs=last.messages.filter((message:any)=>message.role==='tool').map((message:any)=>JSON.parse(message.content).output);
-    const acted=outputs.filter(value=>value?.status==='superseded').reduce((sum,value)=>sum+[...value.acted.matchAll(/×(\d+) completed/gu)].reduce((n,match)=>n+Number(match[1]),0),0);
-    const newest=outputs.find(value=>Array.isArray(value?.steps));
-    assert.equal(acted,count-newest.steps.length,"observation stub acted counts match journal");
+    const contextCompleted=outputs.filter(value=>value?.schema==='butler.browser-action.v1').reduce((sum,value)=>{
+      if(Array.isArray(value.steps))return sum+value.steps.length;
+      const summary=/^(\d+)\/(\d+) completed$/u.exec(value.steps);assert.ok(summary);
+      return sum+Number(summary[1]);
+    },0);
+    assert.equal(contextCompleted,count,"full and stubbed action receipts match the journal");
     rows.push({...providerArm(count,requests),completed:receipts.length});
   }
   const growth=rows[1]!.maxStreamingBodyBytes-rows[0]!.maxStreamingBodyBytes;
-  writeFileSync(join(evidence,'provider-send-bytes.json'),JSON.stringify({rows,growth,budgets:{growth:6000,prefixRewrite:4096},definition:'streaming maximum bodies and per-round prefix rewrite; aggregate reported only'},null,2));
-  assert.ok(growth<=6000,`Gate A: streaming body growth ${growth} exceeds 6000 B`);
-  for(const arm of rows) for(const round of arm.rounds) assert.ok(round.rewrittenBytes<=4096,`Gate B: ${arm.count} steps round ${round.round} rewrites ${round.rewrittenBytes} B`);
+  const settings=await app.gateway.api<{model:string}>("/settings");
+  const catalog=await app.gateway.api<{models:Array<{model_ref:string;context_window_tokens?:number}>}>("/model-catalog");
+  const model=catalog.models.find(model=>model.model_ref===settings.model);
+  assert.ok(model,'scenario model exists in catalog');
+  const byteGuard=Math.min(4*1024*1024,Math.max(192*1024,(model.context_window_tokens ?? 200000)*2))/4;
+  writeFileSync(join(evidence,'provider-send-bytes.json'),JSON.stringify({rows,growth,budgets:{growth:byteGuard,prefixRewrite:0},definition:'streaming maximum bodies and per-round prefix rewrite; aggregate reported only'},null,2));
+  assert.ok(growth<=byteGuard,`Gate A: streaming body growth ${growth} exceeds ${byteGuard} B`);
+  for(const arm of rows) {
+    const prunes=arm.rounds.filter(round=>round.rewrittenBytes>0);
+    assert.ok(prunes.length<=1,`Gate B: ${arm.count} steps has ${prunes.length} prunes in one batch`);
+    for(const round of arm.rounds.filter(round=>!prunes.includes(round))) assert.equal(round.rewrittenBytes,0);
+  }
 
 }

@@ -479,6 +479,7 @@ impl TurnContextProjection for FixturePolicyContext<'_> {
     ) -> ContextProjectionFuture<'a> {
         Box::pin(async move {
             Ok(ContextProjection {
+                compacted_through: None,
                 messages: ContextMessages::Transport,
                 bounded_continuation: None,
                 provider_body_admission: None,
