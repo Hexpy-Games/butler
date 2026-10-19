@@ -22,6 +22,7 @@ fn request(attachment: &AttachmentRef) -> ProviderPromptRequest<'_> {
     }
 }
 
+// test-category: format-pin
 #[test]
 fn text_attachment_matches_bun_context_and_normalizes_crlf_nul() {
     let root = std::env::temp_dir().join(format!("butler-prompt-{}", std::process::id()));
@@ -40,7 +41,10 @@ fn text_attachment_matches_bun_context_and_normalizes_crlf_nul() {
     };
     assert_eq!(
         prompt(&request(&attachment)).unwrap(),
-        "Hello\n\n## Attachments\n- note.txt (document, text/plain, 14 bytes, id: local-note)\n\n### Attachment Content: note.txt\nAttachment ID: local-note\n````text\nline 1\nline 2\n````"
+        format!(
+            "Hello\n\n## Attachments\n- note.txt (document, text/plain, 14 bytes, id: local-note, path: {})\n\n### Attachment Content: note.txt\nAttachment ID: local-note\n````text\nline 1\nline 2\n````",
+            path.display()
+        )
     );
     std::fs::remove_dir_all(root).unwrap();
 }

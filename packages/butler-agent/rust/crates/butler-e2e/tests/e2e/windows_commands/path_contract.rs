@@ -122,6 +122,7 @@ fn cmd_switches_do_not_become_outside_paths() -> Result<(), butler_e2e::e2e::Har
     let mut setup = butler_e2e::e2e::scenario::Setup::new("CMD-SCOPE")?;
     let root = &setup.sandbox.workspace;
     let roots = ScopeRoots {
+        attachments: &[],
         project: Some(root),
         butler_data: &setup.sandbox.data,
         protected_ledger_roots: &[],

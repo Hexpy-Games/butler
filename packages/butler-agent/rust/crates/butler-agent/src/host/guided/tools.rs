@@ -67,6 +67,7 @@ pub(crate) struct GuidedToolBinding {
     pub project_id: Option<String>,
     pub project_folder: Option<PathBuf>,
     pub project_sources: Vec<Value>,
+    pub attachment_files: Vec<PathBuf>,
     pub surface: Vec<ModelRoundTool>,
     pub authorized_names: HashSet<String>,
     pub visible_names: HashSet<String>,
