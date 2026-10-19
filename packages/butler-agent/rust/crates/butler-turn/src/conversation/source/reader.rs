@@ -2,13 +2,15 @@ use butler_platform::sqlite;
 use std::path::Path;
 use std::time::Duration;
 
+mod changes;
 mod public_memory;
 mod recall_pages;
+pub use changes::{SourceChange, SourceChangeKind, SourceChangeMark};
 pub use public_memory::{
     Archived, CanonicalMemoryReadBinding, MessageOrigins, PageOrder, PublicMemoryScope,
     PublicMemorySnapshot, PublicSessionRow,
 };
-pub use recall_pages::RecallOutcomeRow;
+pub use recall_pages::{RecallOutcomeEntry, RecallOutcomeRow};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 
@@ -183,6 +185,54 @@ impl ConversationSourceReader {
         limit: Option<usize>,
     ) -> ConversationResult<Vec<RecallOutcomeRow>> {
         recall_pages::outcomes(self.connection()?, after_id, limit)
+    }
+
+    /// The latest outcome of one turn, as [`Self::read_recall_outcome_page`]
+    /// returns it.
+    pub fn read_recall_outcome(
+        &self,
+        turn_id: &str,
+    ) -> ConversationResult<Option<RecallOutcomeRow>> {
+        recall_pages::turn_outcome(self.connection()?, turn_id)
+    }
+
+    /// One message when it is a recovered source, as
+    /// [`Self::read_recovered_source_page`] returns it.
+    pub fn read_recovered_source(
+        &self,
+        message_id: &str,
+    ) -> ConversationResult<Option<ConversationMessageWithParts>> {
+        recall_pages::recovered_one(self.connection()?, message_id)
+    }
+
+    /// The latest committed source change; `None` for a store that does
+    /// not log changes.
+    pub fn source_change_head(&self) -> ConversationResult<Option<SourceChangeMark>> {
+        changes::head(self.connection()?)
+    }
+
+    /// Whether the change log still continues from `mark` (one indexed read).
+    pub fn source_change_holds(&self, mark: &SourceChangeMark) -> ConversationResult<bool> {
+        changes::holds(self.connection()?, mark)
+    }
+
+    /// Up to `limit` source changes after `after`, in commit order.
+    pub fn read_source_changes(
+        &self,
+        after: u64,
+        limit: usize,
+    ) -> ConversationResult<Vec<SourceChange>> {
+        changes::after(self.connection()?, after, limit)
+    }
+
+    /// A page of turn outcomes like [`Self::read_recall_outcome_page`],
+    /// keeping a row whose JSON columns do not parse as a failed entry.
+    pub fn read_recall_outcome_entries(
+        &self,
+        after_id: Option<&str>,
+        limit: Option<usize>,
+    ) -> ConversationResult<Vec<RecallOutcomeEntry>> {
+        recall_pages::outcome_entries(self.connection()?, after_id, limit)
     }
 
     /// A page of recovered source messages.

@@ -27,6 +27,10 @@ pub(crate) fn read(
     deferred: bool,
 ) -> StorageResult<String> {
     let started = std::time::Instant::now();
+    if full {
+        butler_platform::secure_fs::hold_point("btcc_validation", || cancellation.is_cancelled())
+            .map_err(super::super::io_error)?;
+    }
     trace("activated_begin", started);
     let db = open_validation(path, full, cancellation, deferred, started)?;
     let manifest = validate_connection(&db, full, started)?;
