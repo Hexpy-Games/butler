@@ -1,6 +1,6 @@
-import { waitBrowserTurn } from "../support/browser-turn";
 // test-category: race
 /** Offline public user turn covers delayed autocomplete, waypoints, canvas route and reply. */
+import { waitBrowserTurn } from "../support/browser-turn";
 import { strict as assert } from "node:assert";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

@@ -1,4 +1,4 @@
-// test-category: race
+// test-category: pure-logic
 import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
