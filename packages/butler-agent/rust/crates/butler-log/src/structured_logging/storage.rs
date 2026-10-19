@@ -251,7 +251,7 @@ impl Storage {
                     return Err(error);
                 }
                 if !self.retention_owner {
-                    index::save(&s.path, &s.blocks)?;
+                    index::publish(&s.path, &s.blocks)?;
                 }
                 self.catalog.insert(s.path.clone(), s.blocks.clone());
                 if self.written[lane] {
@@ -282,6 +282,15 @@ impl Storage {
         retention::prune(&self.root.join(data_paths::NATIVE_LOG_STORE), &active)
     }
 
+    /// Batches already published their index; defer durable finalization and
+    /// retention to the service. Body frames are written without buffering.
+    pub(super) fn close_producer(&mut self) -> io::Result<()> {
+        self.bodies = Bodies::default();
+        for segment in [self.main.take(), self.debug.take()].into_iter().flatten() {
+            segment.close_written()?;
+        }
+        Ok(())
+    }
     pub(super) fn close(&mut self) -> io::Result<()> {
         self.bodies.close()?;
         if let Some(s) = self.main.take() {

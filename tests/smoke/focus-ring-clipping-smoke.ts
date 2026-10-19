@@ -1,3 +1,4 @@
+// test-category: race
 // Focus rings are never clipped. The built app's real shell (VisualHarness:
 // product Sidebar, Conversation with answer cards and the agent tab rail, new
 // chat, browser, command palette, menus, Settings) over an offline gateway
@@ -173,6 +174,16 @@ async function auditScrolledFades(page: Page, cell: Cell, screen: string, scope:
       const clipped = await probeFocusRingFrames(page, () => page.keyboard.press(edge === "start" ? "Tab" : "Shift+Tab"));
       if (!await page.evaluate((scroller) => Boolean(document.activeElement?.closest(scroller)), scroller)) continue;
       await page.waitForTimeout(100);
+      if (edge === "start" && await page.locator(scroller).evaluate(element => element.matches('[data-test-class~="conversation-scroll"]'))) {
+        const focusedControl = await page.evaluateHandle(() => document.activeElement);
+        await page.waitForTimeout(200);
+        assert(await focusedControl.evaluate(element => element === document.activeElement),
+          "conversation focus must survive the settling pin");
+        await focusedControl.dispose();
+        const focused = await probeFocusRing(page);
+        assert(focused, "conversation control retains keyboard focus after settling");
+        clipped.push(...focused.clips);
+      }
       clipped.push(...(await probeFocusRing(page))?.clips ?? []);
       scrolledStops += 1;
       // The same cut on several frames is reported once.

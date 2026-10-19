@@ -419,3 +419,6 @@ async fn logs_use_router_templates_for_ids() -> Result<(), HarnessError> {
 
 #[path = "structured_logs_completion.rs"]
 mod completion;
+
+#[path = "structured_logs_cli.rs"]
+mod cli;

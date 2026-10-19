@@ -15,6 +15,7 @@ mod contracts;
 mod errors;
 mod event_outbox;
 mod events;
+mod thinking;
 use crate::gateway::shutdown_trace::measure as measure_shutdown;
 
 use errors::app_error;
@@ -319,6 +320,7 @@ impl AppApplication {
             setup_readiness: setup::ReadinessRelay::default(),
             quota_events: Arc::default(),
         };
+        application.initialize_thinking_preference().await?;
         application.recover_for_open().await?;
         Ok(application)
     }

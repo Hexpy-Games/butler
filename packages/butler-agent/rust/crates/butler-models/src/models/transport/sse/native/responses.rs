@@ -56,9 +56,17 @@ impl State {
                     self.projection.text(observer, text, false);
                 }
             }
-            kind if kind.contains("reasoning") && kind.ends_with(".delta") => {
+            "response.reasoning_summary_part.added" => {
+                self.projection.text(observer, "\n\n", true);
+            }
+            "response.reasoning_summary_text.delta" | "response.reasoning_summary.delta" => {
                 if let Some(text) = event["delta"].as_str() {
                     self.projection.text(observer, text, true);
+                }
+            }
+            "response.reasoning_text.delta" => {
+                if let Some(text) = event["delta"].as_str() {
+                    self.projection.internal(observer, text);
                 }
             }
             "response.completed" | "response.incomplete" | "response.failed" => {
