@@ -67,17 +67,25 @@ export function usageShare(value: number): string {
   return new Intl.NumberFormat(getAppLocale(), { style: "percent", maximumFractionDigits: 1 }).format(value);
 }
 
-/** The chat total split into its own calls and its delegated work; `null` when nothing was delegated. */
-export function usageParts(view: UsageMonitorView | null, bucket?: ReturnType<typeof usageTimeline>["buckets"][number]) {
+/**
+ * The chat total split into its own calls and its delegated work; `null` when nothing was delegated.
+ * `requests` adds each part's request count for the whole chat; a bar's slots carry no per-part count.
+ */
+export function usageParts(view: UsageMonitorView | null, bucket?: ReturnType<typeof usageTimeline>["buckets"][number], requests = false) {
   const roles = view?.model.byRole;
   if (!view || !roles) return null;
-  const delegatedAll = Object.entries(roles).reduce((sum, [role, bucket]) => role === "main" ? sum : sum + bucket.totalTokens, 0);
+  const sum = (field: "totalTokens" | "requestCount") =>
+    Object.entries(roles).reduce((total, [role, part]) => role === "main" ? total : total + part[field], 0);
+  const delegatedAll = sum("totalTokens");
   if (delegatedAll <= 0) return null;
   // Both parts share one basis: byRole totals for the chat, the slot's prompt + output for a bar.
   const [main, delegated] = bucket ? [bucket.total - bucket.delegated, bucket.delegated] : [roles.main?.totalTokens ?? 0, delegatedAll];
+  const counts = requests && !bucket ? [roles.main?.requestCount ?? 0, sum("requestCount")] : null;
   const total = main + delegated;
   const copy = appCopy.composer.usage;
-  const part = (id: string, label: string, value: number) =>
-    ({ id, label, value: total > 0 ? `${usageTokens(value)} · ${usageShare(value / total)}` : usageTokens(value) });
-  return [part("main", copy.conversationPart, main), part("delegated", copy.delegatedPart, delegated)];
+  const count = new Intl.NumberFormat(getAppLocale());
+  const part = (id: string, label: string, value: number, calls?: number) => ({ id, label, value: [
+    usageTokens(value), total > 0 ? usageShare(value / total) : null, calls === undefined ? null : copy.requests(count.format(calls)),
+  ].filter(Boolean).join(" · ") });
+  return [part("main", copy.conversationPart, main, counts?.[0]), part("delegated", copy.delegatedPart, delegated, counts?.[1])];
 }
