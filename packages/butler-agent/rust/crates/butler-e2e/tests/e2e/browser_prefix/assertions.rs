@@ -130,7 +130,7 @@ pub(crate) fn assert_journal(
     let mut completed = std::collections::HashMap::new();
     for (index, record) in records.iter().enumerate() {
         let value: Value = serde_json::from_str(record)?;
-        let output = &value["output"];
+        let output = value.get("output").unwrap_or(&value);
         assert!(
             output["image"]["data"]
                 .as_str()
@@ -174,7 +174,9 @@ pub(crate) fn assert_journal(
                 completed
                     .get(output["obs"].as_str().unwrap())
                     .copied()
-                    .unwrap_or(0)
+                    .unwrap_or(0),
+                "observation {} has acted={acted:?}",
+                output["obs"]
             );
         }
     }

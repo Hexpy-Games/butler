@@ -142,9 +142,11 @@ async fn user_browser_journey_projects_pixels_and_reply_crop_then_releases()
     let observations = super::browser_prefix::outputs(last);
     for (index, (value, _)) in observations.iter().enumerate() {
         if value["output"]["status"] == "superseded" {
-            assert!(observations.iter().skip(index + 1).any(|(later, _)| {
-                later["output"]["obs"] == value["output"]["superseded_by"]
-            }));
+            assert!(
+                observations.iter().skip(index + 1).any(|(later, _)| {
+                    later["output"]["obs"] == value["output"]["superseded_by"]
+                })
+            );
             assert!(
                 value["output"]["recovery"]
                     .as_str()
@@ -389,6 +391,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
 
 fn assert_full_history(requests: &[Value]) {
     let mut first = std::collections::HashMap::new();
+    let mut stubs = std::collections::HashMap::new();
     for request in requests {
         for item in request["input"].as_array().unwrap() {
             if item["type"] != "function_call_output" {
@@ -401,10 +404,19 @@ fn assert_full_history(requests: &[Value]) {
                 .unwrap_or(&item["output"]);
             if text
                 .as_str()
-                .is_some_and(|text| text.contains("\"status\":\"superseded\""))
+                .and_then(|text| serde_json::from_str::<Value>(text).ok())
+                .is_some_and(|value| {
+                    value["output"]["status"] == "superseded"
+                        || value["output"]["superseded"] == true
+                })
             {
+                let stub = stubs
+                    .entry(item["call_id"].to_string())
+                    .or_insert_with(|| item.clone());
+                assert_eq!(stub, item, "written stubs are final");
                 continue;
             }
+            assert!(!stubs.contains_key(&item["call_id"].to_string()));
             let original = first
                 .entry(item["call_id"].to_string())
                 .or_insert_with(|| item.clone());

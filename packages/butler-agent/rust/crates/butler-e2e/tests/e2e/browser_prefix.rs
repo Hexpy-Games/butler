@@ -61,6 +61,12 @@ async fn run(boundary: bool) -> Result<(), HarnessError> {
         let newest = outputs(later.last().unwrap()).pop().unwrap();
         assert_eq!(newest.0["output"]["obs"], "o15");
         assert!(newest.1);
+        assert!(
+            newest.0["output"]["untrusted_content"]["text"]
+                .as_str()
+                .unwrap()
+                .starts_with("link \"Page 15\"")
+        );
         let messages = s.gw.messages("general").await?;
         let text = serde_json::to_string(&messages)?;
         assert!(text.contains("Saw page 14") && text.contains("Saw page 15"));
