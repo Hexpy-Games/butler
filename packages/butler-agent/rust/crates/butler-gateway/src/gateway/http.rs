@@ -131,6 +131,10 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
         .extensions()
         .get::<axum::extract::MatchedPath>()
         .cloned();
+    let action = request
+        .extensions()
+        .get::<router::Handler>()
+        .and_then(|h| h.action(&method));
     let admitted = access_log::Admission::default();
     let mut request = request;
     request.extensions_mut().insert(admitted.clone());
@@ -141,15 +145,17 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
         .and_then(|h| h.to_str().ok())
         .and_then(butler_log::TraceContext::from_traceparent)
         .unwrap_or_default();
-    let span = context.http_span(
-        if matches!(method, Method::GET | Method::HEAD | Method::OPTIONS) {
-            "DEBUG"
-        } else {
-            "INFO"
-        },
-    );
+    let level = if matches!(method, Method::GET | Method::HEAD | Method::OPTIONS) {
+        "DEBUG"
+    } else {
+        "INFO"
+    };
+    let span = context.http_span(level);
     async {
         let response = dispatch_inner(state, request).await;
+        if admitted.is_granted() {
+            tracing::Span::current().record("action", action);
+        }
         access_log::finish(
             &method,
             route.as_ref(),

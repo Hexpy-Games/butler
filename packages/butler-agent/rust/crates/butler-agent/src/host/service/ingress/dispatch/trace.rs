@@ -19,7 +19,7 @@ pub(in crate::host::service::ingress) async fn one(
         context.chat_id = Some(envelope.peer.id);
     }
     one_traced(item, deps)
-        .instrument(context.span("turn.queue"))
+        .instrument(context.root_span("turn.receive"))
         .await
 }
 
