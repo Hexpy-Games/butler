@@ -64,6 +64,8 @@ pub(super) fn input<'a>() -> PromptUsageMetricInput<'a> {
 
 pub(super) fn attribution<'a>() -> PromptUsageAttribution<'a> {
     PromptUsageAttribution {
+        root_session_id: None,
+        role: None,
         turn_id: None,
         phase: None,
         round_index: None,

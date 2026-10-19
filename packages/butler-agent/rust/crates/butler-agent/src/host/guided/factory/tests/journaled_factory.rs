@@ -253,7 +253,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         butler_data: scratch.0.clone(),
         installation_root: scratch.0.clone(),
         protected_ledger_roots: vec![],
-        subsessions,
+        subsessions: subsessions.clone(),
         work_streams: work_streams.clone(),
         mcp_client: Arc::new(butler_models::mcp_client::McpClient::new(
             scratch.0.clone(),
@@ -261,8 +261,10 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         )),
         profile: profile.clone(),
         monitoring: Arc::new(crate::host::MonitoringReaders::new(
-            scratch.0.clone(),
-            scratch.0.join("app-server/butler-client.sqlite"),
+            (
+                scratch.0.clone(),
+                scratch.0.join("app-server/butler-client.sqlite"),
+            ),
             output_models.configuration.clone(),
             output_models.catalog.clone(),
             Arc::new(butler_memory::cognition::MemoryHealthService::new(
@@ -279,6 +281,9 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
             Arc::new(butler_runtime::operations::CycleMetrics::new(Arc::new(
                 butler_runtime::operations::MetricFiles::new(scratch.0.clone()),
             ))),
+            Arc::new(butler_runtime::operations::UsageLineage::new(
+                subsessions.repository(),
+            )),
         )),
         session_worktrees: butler_turn::workspace::SessionWorktrees::new(
             bindings.clone(),

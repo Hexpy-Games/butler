@@ -245,6 +245,8 @@ fn observe_usage(
     let openai_attribution = (config.metadata.provider_id == "openai").then(|| {
         let source = request.usage_attribution;
         crate::models::PromptUsageAttribution {
+            root_session_id: source.and_then(|v| v.root_session_id),
+            role: source.and_then(|v| v.role),
             turn_id: source.and_then(|value| value.turn_id),
             phase: source.and_then(|value| value.phase),
             round_index: source.and_then(|value| value.round_index),

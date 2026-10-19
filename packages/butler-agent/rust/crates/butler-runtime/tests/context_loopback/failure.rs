@@ -53,6 +53,7 @@ async fn summary_failure_persists_retrieval_fallback() {
         .project(
             invocation,
             ContextProjectionInput {
+                usage_attribution: None,
                 round_id: "round-fail",
                 response_item_id: "turn-item-4",
                 semantic_messages: &semantic,

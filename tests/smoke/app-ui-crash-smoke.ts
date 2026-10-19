@@ -151,11 +151,6 @@ async function pageSmoke(width: number, theme: string) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
   currentPage = page;
   await server.signIn(page);
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "clipboard", { value: { async writeText(text: string) {
-      (window as unknown as { __diagnostics: string }).__diagnostics = text;
-    } } });
-  });
   await page.goto(server.url);
   await page.locator('[data-test-class~="composer-card"]').waitFor();
   await page.screenshot({ path: join(output, `${width}-${theme}-page-before.png`) });
@@ -167,15 +162,12 @@ async function pageSmoke(width: number, theme: string) {
   await page.locator('[data-test-class~="composer-card"]').waitFor();
   await page.keyboard.press("ControlOrMeta+k");
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("combobox").fill("security");
-  await dialog.getByRole("option").filter({ hasText: "Security" }).click();
-  const exportButton = page.getByRole("button", { name: "Copy diagnostics", exact: true });
+  await dialog.getByRole("combobox").fill("export diagnostics");
+  await dialog.getByRole("option").filter({ hasText: "About" }).click();
+  const exportButton = page.getByRole("button", { name: "Export diagnostics", exact: true });
   await exportButton.waitFor();
   await page.screenshot({ path: join(output, `${width}-${theme}-diagnostics-before.png`) });
-  await exportButton.click();
-  await page.waitForFunction(() => Boolean((window as unknown as { __diagnostics?: string }).__diagnostics));
-  const report = await page.evaluate(() => JSON.parse((window as unknown as { __diagnostics: string }).__diagnostics));
-  assert(report.ui_crashes.some((entry: { scope: string; stack: string }) => entry.scope === "conversation" && entry.stack));
+  assert((await entries(page)).some(entry => entry.scope === "conversation" && entry.stack));
   await inject(page, "settings");
   await page.getByRole("button", { name: "Retry", exact: true }).waitFor();
   await page.screenshot({ path: join(output, `${width}-${theme}-diagnostics-after.png`) });

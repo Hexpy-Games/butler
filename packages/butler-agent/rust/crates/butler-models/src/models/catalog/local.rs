@@ -39,6 +39,10 @@ pub struct LocalModelConfig {
     pub max_output_tokens: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_budget_ratio: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_input: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_discovery: Option<LocalImageDiscovery>,
     pub token_estimator: TokenEstimatorKind,
     pub source: LocalModelSource,
     pub source_url: String,
@@ -47,6 +51,12 @@ pub struct LocalModelConfig {
     pub updated_at: String,
     #[serde(flatten)]
     pub extensions: Map<String, Value>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct LocalImageDiscovery {
+    pub supported: bool,
+    pub verified_at: String,
 }
 
 pub fn normalize_local_model_config(value: &Value, now: &str) -> Option<LocalModelConfig> {
@@ -65,13 +75,6 @@ pub fn normalize_local_model_config(value: &Value, now: &str) -> Option<LocalMod
         .and_then(normalize_local_server_url)
         .map(|(_, api_base_url)| api_base_url)
         .unwrap_or(api_base_url);
-    let display_name = input
-        .get("display_name")
-        .and_then(Value::as_str)
-        .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned)
-        .unwrap_or_else(|| display_name_for_id(model_id));
     let ratio = input
         .get("reasoning_budget_ratio")
         .and_then(Value::as_f64)
@@ -89,7 +92,7 @@ pub fn normalize_local_model_config(value: &Value, now: &str) -> Option<LocalMod
             .map(str::to_owned)
             .unwrap_or_else(|| format!("local/{}", safe_local_model_id(model_id))),
         model_id: model_id.to_owned(),
-        display_name,
+        display_name: configured_display_name(input, model_id),
         api_type: "openai_compatible".into(),
         platform: platform(input.get("platform")),
         server_url,
@@ -97,19 +100,18 @@ pub fn normalize_local_model_config(value: &Value, now: &str) -> Option<LocalMod
         context_window_tokens: context,
         max_output_tokens: input.get("max_output_tokens").and_then(positive_integer),
         reasoning_budget_ratio: ratio,
+        image_input: input.get("image_input").and_then(Value::as_bool),
+        image_discovery: input
+            .get("image_discovery")
+            .and_then(|value| serde_json::from_value::<LocalImageDiscovery>(value.clone()).ok())
+            .filter(|result| !result.verified_at.trim().is_empty()),
         token_estimator: TokenEstimatorKind::CharacterEstimate,
         source: if input.get("source").and_then(Value::as_str) == Some("manual") {
             LocalModelSource::Manual
         } else {
             LocalModelSource::Discovered
         },
-        source_url: input
-            .get("source_url")
-            .and_then(Value::as_str)
-            .map(butler_core::public_text::trim_js_whitespace)
-            .filter(|v| !v.is_empty())
-            .unwrap_or(LOCAL_SOURCE)
-            .into(),
+        source_url: source_url(input),
         runtime_supported: true,
         created_at: input
             .get("created_at")
@@ -149,7 +151,7 @@ impl From<&LocalModelConfig> for ModelProviderMetadata {
         if let Some(value) = budget {
             budgets.insert("high".into(), Value::from(value));
         }
-        ModelProviderMetadata {
+        let mut metadata = ModelProviderMetadata {
             provider_id: "local".into(),
             provider_label: model.provider_label.clone(),
             model_id: model.model_id.clone(),
@@ -179,7 +181,9 @@ impl From<&LocalModelConfig> for ModelProviderMetadata {
                 .then_some(model.reasoning_budget_ratio)
                 .flatten(),
             ..super::lookup::blank_metadata()
-        }
+        };
+        super::local_image::apply(model, &mut metadata);
+        metadata
     }
 }
 
@@ -299,4 +303,24 @@ fn normalize_local_server_url(value: &str) -> Option<(String, String)> {
         server.clone()
     };
     Some((server, api))
+}
+
+fn source_url(input: &Map<String, Value>) -> String {
+    input
+        .get("source_url")
+        .and_then(Value::as_str)
+        .map(butler_core::public_text::trim_js_whitespace)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(LOCAL_SOURCE)
+        .into()
+}
+
+fn configured_display_name(input: &Map<String, Value>, model_id: &str) -> String {
+    input
+        .get("display_name")
+        .and_then(Value::as_str)
+        .map(butler_core::public_text::trim_js_whitespace)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| display_name_for_id(model_id))
 }

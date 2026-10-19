@@ -16,6 +16,8 @@ mod mcp;
 mod oauth_callback;
 pub(crate) use crate::host::guided::tool_artifact::ToolArtifactReader;
 pub(crate) use butler_memory::cognition::MemorySourceReader;
+#[cfg(feature = "e2e-fixtures")]
+mod faults;
 mod hooks;
 mod runtime;
 

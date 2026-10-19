@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, Presence } from "@/butler-ds";
+import { Button, Presence, EmptyLine, Notice, SkeletonRows } from "@/butler-ds";
 import { DeveloperUsageSections } from "../DeveloperUsageSections";
 import { SettingsPage, SettingsSection } from "../SettingsFormComponents";
 import { LogFilters } from "./LogFilters";
@@ -50,11 +50,13 @@ function LogList() {
         state={config.config ? "ready" : config.failed ? "error" : "loading"} onRetry={config.reload}>
         <LogLevelFields state={config} categories={categories} />
       </SettingsSection>
-      <SettingsSection id="logs-viewer" kind="list" title={copy.sections.viewer} state={viewerState}
-        errorMessage={copy.loadFailed} emptyMessage={copy.empty} onRetry={viewer.reload}
-        actions={<div ref={top.attach}><LogFilters filter={viewer.filter} categories={categories} live={viewer.live}
-          onChange={viewer.setFilter} onLiveChange={viewer.setLive} /></div>}>
-        <LogRows viewer={viewer} />
+      <SettingsSection id="logs-viewer" kind="list" title={copy.sections.viewer}>
+        <div ref={top.attach}><LogFilters filter={viewer.filter} categories={categories} live={viewer.live}
+          onChange={viewer.setFilter} onLiveChange={viewer.setLive} /></div>
+        {viewerState === "error" ? <div role="alert"><Notice tone="error" message={copy.loadFailed}
+          action={<Button size="sm" variant="outline" onClick={viewer.reload}>{appCopy.settings.sectionState.retry}</Button>} /></div>
+          : viewerState === "loading" ? <SkeletonRows rows={3} shape="list" label={appCopy.settings.sectionState.loading} />
+          : viewerState === "empty" ? <EmptyLine message={copy.empty} /> : <LogRows viewer={viewer} />}
       </SettingsSection>
       <SettingsSection id="logs-storage" kind="status" title={copy.sections.storage}
         state={storage.view ? "ready" : storage.failed ? "error" : "loading"} onRetry={storage.reload}

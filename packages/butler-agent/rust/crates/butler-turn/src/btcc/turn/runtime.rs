@@ -139,6 +139,8 @@ impl TurnRuntime {
     ) -> Result<TurnRecord, BtccError> {
         let timing =
             super::super::agent_loop::command_timing::CommandTiming::new("turn_transition");
+        #[cfg(feature = "e2e-fixtures")]
+        crate::btcc::test_pause::reach("agent_permit", &turn.turn_id).await;
         let permit = self.supervisor.enter(&turn.turn_id, turn.semantic_state)?;
         let claim = self.store.acquire_state_claim(&turn).await?;
         let progress = self.progress_scope(conversation, &turn, destination);
@@ -227,6 +229,8 @@ impl TurnRuntime {
                 #[cfg(feature = "e2e-fixtures")]
                 hold_stub_delivery("before", &turn.turn_id).await?;
                 let message_id = self.messages.insert(&turn).await?;
+                #[cfg(feature = "e2e-fixtures")]
+                crate::btcc::test_pause::reach("delivery_inserted", &turn.turn_id).await;
                 #[cfg(feature = "e2e-fixtures")]
                 hold_stub_delivery("after", &turn.turn_id).await?;
                 permit.assert_active()?;

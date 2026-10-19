@@ -103,34 +103,16 @@ impl TurnContext {
         invocation: GuidedInvocation<'_>,
         input: ContextProjectionInput<'_>,
     ) -> Result<ContextProjection, ContextProjectionError> {
-        let selected_limit = self
-            .budget
-            .as_ref()
-            .map_or(input.max_model_facing_bytes, |budget| {
-                budget.limits().max_model_facing_bytes
-            });
-        let empty_messages = "[]";
-        let overhead = request_json(
-            input.instructions,
-            input.tools,
-            input.tool_choice,
-            empty_messages,
-        )
-        .map_err(ContextProjectionError::Contract)?
-        .len();
-        let message_limit = usize::try_from(selected_limit)
-            .unwrap_or(usize::MAX)
-            .saturating_sub(overhead)
-            .max(1);
+        let (overhead, message_limit) = self.message_budget(&input)?;
 
-        let (owned_messages, identity, requires_rebase, projected_message_bytes) = match &self.state
-        {
-            Some(state) => {
-                self.compacted(state, invocation, &input, message_limit)
-                    .await?
-            }
-            None => self.bounded(&input, message_limit)?,
-        };
+        let (owned_messages, identity, requires_rebase, projected_message_bytes, compacted_through) =
+            match &self.state {
+                Some(state) => {
+                    self.compacted(state, invocation, &input, message_limit)
+                        .await?
+                }
+                None => self.bounded(&input, message_limit)?,
+            };
         let projected = owned_messages
             .as_deref()
             .unwrap_or(if self.state.is_some() {
@@ -166,6 +148,7 @@ impl TurnContext {
             None => ContextMessages::Transport,
         };
         Ok(ContextProjection {
+            compacted_through,
             messages,
             bounded_continuation: Some(envelope),
             provider_body_admission: admission,
@@ -175,6 +158,33 @@ impl TurnContext {
                 (true, true) => ContextRebase::RequiredWithSteeringRecheck,
             },
         })
+    }
+
+    fn message_budget(
+        &self,
+        input: &ContextProjectionInput<'_>,
+    ) -> Result<(usize, usize), ContextProjectionError> {
+        let selected_limit = self
+            .budget
+            .as_ref()
+            .map_or(input.max_model_facing_bytes, |budget| {
+                budget.limits().max_model_facing_bytes
+            });
+        let empty_messages = "[]";
+        let overhead = request_json(
+            input.instructions,
+            input.tools,
+            input.tool_choice,
+            empty_messages,
+        )
+        .map_err(ContextProjectionError::Contract)?
+        .len();
+        let message_limit = usize::try_from(selected_limit)
+            .unwrap_or(usize::MAX)
+            .saturating_sub(overhead)
+            .max(1);
+
+        Ok((overhead, message_limit))
     }
 
     fn request_digest(
@@ -203,6 +213,7 @@ impl TurnContext {
             None,
             changed,
             projection.model_facing_bytes,
+            None,
         ))
     }
 
@@ -236,6 +247,7 @@ impl TurnContext {
         let summary = RoundSummary {
             invocation,
             model_for_sizing: invocation.model_execution.active_model_ref(),
+            usage_attribution: input.usage_attribution,
             butler_data: input.butler_data,
         };
         let projection = state
@@ -269,6 +281,7 @@ impl TurnContext {
             projection.identity,
             requires_rebase,
             projected_message_bytes,
+            projection.compacted_through,
         ))
     }
 }
@@ -278,6 +291,7 @@ type ProjectionParts = (
     Option<ContextProjectionRebaseIdentity>,
     bool,
     usize,
+    Option<usize>,
 );
 
 struct BudgetAdmission {
@@ -308,6 +322,7 @@ impl ProviderBodyAdmissionPort for BudgetAdmission {
 }
 
 struct RoundSummary<'a> {
+    usage_attribution: Option<&'a UsageAttribution>,
     invocation: GuidedInvocation<'a>,
     model_for_sizing: String,
     butler_data: Option<&'a str>,
@@ -358,6 +373,8 @@ impl SummaryPort for RoundSummary<'_> {
             let messages = [user_message(request.text)];
             let reasoning = self.invocation.model_execution.selected_reasoning_effort();
             let usage = UsageAttribution {
+                usage_root: self.usage_attribution.and_then(|v| v.usage_root.clone()),
+                usage_role: self.usage_attribution.and_then(|v| v.usage_role.clone()),
                 prompt_diagnostics: None,
                 session_kind: Some("parent".into()),
                 turn_id: self.invocation.turn.turn_id.clone(),

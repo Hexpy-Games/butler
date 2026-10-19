@@ -119,6 +119,8 @@ pub trait PromptBudgetStateSource: Send + Sync {
 }
 
 pub struct PromptUsageAttribution<'a> {
+    pub root_session_id: Option<&'a str>,
+    pub role: Option<&'a str>,
     pub turn_id: Option<&'a str>,
     pub phase: Option<&'a str>,
     pub round_index: Option<f64>,
@@ -133,6 +135,8 @@ impl<'a> PromptUsageAttribution<'a> {
     /// Classify a background operation that has no parent turn or budget.
     pub fn for_phase(phase: &'a str) -> Self {
         Self {
+            root_session_id: None,
+            role: None,
             turn_id: None,
             phase: Some(phase),
             round_index: None,

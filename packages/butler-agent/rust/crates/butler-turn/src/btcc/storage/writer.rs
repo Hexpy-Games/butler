@@ -90,9 +90,13 @@ pub(super) fn close(
     } else {
         Ok(())
     };
+    let path = connection.path().map(std::path::PathBuf::from);
     let closed = connection
         .close()
         .map_err(|(_, error)| StorageError::sqlite(error));
+    if let Some(path) = path {
+        bootstrap::refresh_after_close(&path);
+    }
     checkpoint
         .and(released)
         .and(transaction)

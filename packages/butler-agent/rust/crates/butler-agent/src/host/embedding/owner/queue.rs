@@ -50,6 +50,7 @@ pub(super) struct Pending {
 }
 
 pub(super) enum PendingResponse {
+    Prewarm,
     Ready(oneshot::Sender<CognitionResult<()>>),
     Embedding(oneshot::Sender<CognitionResult<EmbeddingResult>>),
 }
@@ -57,6 +58,7 @@ pub(super) enum PendingResponse {
 impl PendingResponse {
     pub(super) fn send(self, result: CognitionResult<Option<EmbeddingResult>>) {
         match self {
+            Self::Prewarm => {}
             Self::Ready(sender) => {
                 let _ = sender.send(result.map(|_| ()));
             }

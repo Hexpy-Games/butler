@@ -92,7 +92,7 @@ pub(super) fn scheduled_sessions(
 }
 
 /// Resolve App ids through their durable binding; telemetry scopes stay intact.
-pub(super) fn runtime_session(
+pub(in crate::gateway::application) fn runtime_session(
     db: &Connection,
     id: &str,
 ) -> Result<(String, Option<String>), AppStorageError> {

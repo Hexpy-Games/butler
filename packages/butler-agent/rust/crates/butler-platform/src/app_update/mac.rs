@@ -70,8 +70,8 @@ fn activate_mac(
     run(Command::new("codesign")
         .args(["--verify", "--deep", "--strict", "--verbose=4"])
         .arg(&candidate))?;
-    // Developer ID previews are signed but not notarized. Only a verified,
-    // same-publisher candidate may have its download quarantine removed.
+    // Only a verified, same-publisher candidate may have its download
+    // quarantine removed.
     remove_quarantine(&candidate)?;
     let main = candidate.join(executable.strip_prefix(bundle).map_err(|e| e.to_string())?);
     nix::unistd::access(&main, nix::unistd::AccessFlags::X_OK)
