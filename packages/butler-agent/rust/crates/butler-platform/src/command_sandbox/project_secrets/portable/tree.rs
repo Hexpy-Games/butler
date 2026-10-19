@@ -20,7 +20,7 @@ trait Walker {
     const SWEEP: bool;
     fn root(path: &Path) -> io::Result<Self::Directory>;
     fn child(parent: &Self::Directory, name: &OsStr) -> io::Result<Self::Directory>;
-    fn entries(dir: &Self::Directory) -> io::Result<Vec<Self::Entry>>;
+    fn entries(dir: &Self::Directory, started: Option<LinkTime>) -> io::Result<Vec<Self::Entry>>;
     fn split(entry: Self::Entry) -> Entry;
 }
 struct Native;
@@ -34,7 +34,7 @@ impl Walker for Native {
     fn child(parent: &Self::Directory, name: &OsStr) -> io::Result<Self::Directory> {
         native::open_child(parent, name)
     }
-    fn entries(dir: &Self::Directory) -> io::Result<Vec<Self::Entry>> {
+    fn entries(dir: &Self::Directory, _: Option<LinkTime>) -> io::Result<Vec<Self::Entry>> {
         native::entries(dir)
     }
     fn split((name, directory): Self::Entry) -> Entry {
@@ -54,8 +54,8 @@ impl Walker for Sweep {
     fn child(parent: &Self::Directory, name: &OsStr) -> io::Result<Self::Directory> {
         native::open_child(parent, name)
     }
-    fn entries(dir: &Self::Directory) -> io::Result<Vec<Self::Entry>> {
-        native::entries_with_links(dir)
+    fn entries(dir: &Self::Directory, started: Option<LinkTime>) -> io::Result<Vec<Self::Entry>> {
+        native::entries_with_links(dir, started)
     }
     fn split(entry: Self::Entry) -> Entry {
         entry
@@ -63,19 +63,28 @@ impl Walker for Sweep {
 }
 
 pub(in crate::command_sandbox) fn walk(root: &Path, bounded: bool) -> io::Result<Vec<PathBuf>> {
-    Ok(scan::<Native>(root, bounded, None)?.found)
+    Ok(scan::<Native>(root, bounded, None, None)?.found)
 }
 
 #[cfg(unix)]
-pub(super) fn walk_for_sweep(root: &Path, existing: &[PathBuf]) -> io::Result<Inventory> {
-    let walk = scan::<Sweep>(root, false, Some(existing))?;
+pub(super) fn walk_for_sweep(
+    root: &Path,
+    existing: &crate::command_sandbox::ProjectSecretInventory,
+) -> io::Result<Inventory> {
+    let walk = scan::<Sweep>(root, false, Some(existing), existing.started)?;
     Ok((walk.found, walk.links))
 }
 
-fn scan<W: Walker>(root: &Path, bounded: bool, existing: Option<&[PathBuf]>) -> io::Result<Walk> {
+fn scan<W: Walker>(
+    root: &Path,
+    bounded: bool,
+    existing: Option<&[PathBuf]>,
+    started: Option<LinkTime>,
+) -> io::Result<Walk> {
     let dir = W::root(root)?;
     let mut walk = Walk {
         bounded,
+        started,
         existing: existing
             .into_iter()
             .flatten()
@@ -91,6 +100,7 @@ fn scan<W: Walker>(root: &Path, bounded: bool, existing: Option<&[PathBuf]>) -> 
 }
 struct Walk {
     bounded: bool,
+    started: Option<LinkTime>,
     existing: HashSet<PathBuf>,
     visited: usize,
     found: Vec<PathBuf>,
@@ -104,7 +114,7 @@ impl Walk {
         depth: usize,
         protected_parent: bool,
     ) -> io::Result<()> {
-        for entry in W::entries(dir)? {
+        for entry in W::entries(dir, self.started)? {
             let (name, directory, link) = W::split(entry);
             self.visited += 1;
             if self.bounded && self.visited > MAX_ENTRIES {
@@ -123,8 +133,8 @@ impl Walk {
             }
             if secret && !protected_parent {
                 self.found.push(path.clone());
-                // New secret directories move whole. Existing ones must still
-                // have their links judged: scratch can retarget their contents.
+                // New secret directories move whole. Existing ones still
+                // need traversal to find newly planted links.
                 if !self.existing.contains(&path) {
                     continue;
                 }

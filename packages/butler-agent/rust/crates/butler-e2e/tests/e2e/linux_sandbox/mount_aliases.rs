@@ -61,14 +61,14 @@ fn verify_aliases(base: &Path) -> Result<(), HarnessError> {
         "scratch",
         "scratch/missing/deep",
     ];
-    let mut expected = vec![project.join("src/old")];
+    let mut expected = Vec::new();
     for (index, path) in paths.iter().enumerate() {
         let link = project.join(format!("src/new{index}"));
         butler_platform::secure_fs::symlink(&view.join(path), &link)?;
         expected.push(link);
     }
-    // The old alias now resolves outside scratch. Its lexical parent identity
-    // must still expose the writable indirection after the second command.
+    // The new link traverses scratch before reaching a credential target.
+    // Its lexical ancestors must expose that writable indirection.
     butler_platform::secure_fs::symlink(&data.join("auth"), &scratch.join("k"))?;
     butler_platform::secure_fs::symlink(
         &view.join("scratch/k/entry"),
@@ -90,6 +90,11 @@ fn verify_aliases(base: &Path) -> Result<(), HarnessError> {
         &environment,
     )?;
     assert_eq!(moved, expected);
+    // A deliberate old user alias into private scratch is the accepted residual.
+    assert_eq!(
+        std::fs::read_link(project.join("src/old"))?,
+        view.join("scratch")
+    );
     for path in moved {
         assert!(std::fs::symlink_metadata(path).is_err());
     }

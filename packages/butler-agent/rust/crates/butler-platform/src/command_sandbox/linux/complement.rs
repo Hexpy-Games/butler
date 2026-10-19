@@ -128,6 +128,7 @@ pub(super) fn apply(
 /// path is already canonical unless the entry itself is a symlink, so only
 /// symlinks need resolution (one lstat per entry instead of a full resolve).
 pub(super) fn entry_aliases(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>, Error> {
+    let mut resolved = HashMap::new();
     let mut targets = Vec::new();
     for path in &paths {
         let metadata = match std::fs::symlink_metadata(path) {
@@ -135,7 +136,7 @@ pub(super) fn entry_aliases(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>, Error> 
             result => result?,
         };
         if metadata.file_type().is_symlink() {
-            targets.push(canonical_or_missing(path, &mut HashMap::new())?);
+            targets.push(canonical_or_missing(path, &mut resolved)?);
         }
     }
     let mut result = paths;
@@ -173,12 +174,16 @@ fn canonical_or_missing(
     let real = match resolved_path(path) {
         Ok(real) => real,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            if std::fs::read_link(path).is_ok() {
-                return Ok(super::unresolved::target(path)?);
-            }
             let parent = path.parent().ok_or("private root has no parent")?;
             let name = path.file_name().ok_or("private root has no name")?;
-            canonical_or_missing(parent, resolved)?.join(name)
+            let parent = canonical_or_missing(parent, resolved)?;
+            let candidate = parent.join(name);
+            // Resolve a dangling leaf only after sharing the parent's result.
+            // Expanding the full path here would rewalk every ancestor.
+            match std::fs::read_link(&candidate) {
+                Ok(_) => super::unresolved::target(&candidate)?,
+                Err(_) => candidate,
+            }
         }
         Err(error)
             if error.kind() == std::io::ErrorKind::PermissionDenied

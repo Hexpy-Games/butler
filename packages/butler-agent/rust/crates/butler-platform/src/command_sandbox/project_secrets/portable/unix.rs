@@ -38,17 +38,21 @@ pub(in crate::command_sandbox) fn entries(dir: &OwnedFd) -> io::Result<Vec<(OsSt
 
 /// Only the post-run walk stats links. Launch discovery uses directory-entry
 /// types and adds no per-link syscalls. ctime uses the kernel realtime clock.
-pub(super) fn entries_with_links(dir: &OwnedFd) -> io::Result<Vec<super::tree::Entry>> {
+pub(super) fn entries_with_links(
+    dir: &OwnedFd,
+    started: Option<super::tree::LinkTime>,
+) -> io::Result<Vec<super::tree::Entry>> {
     read_entries(dir, |name, kind| {
         let changed = if kind == FileType::Symlink {
             let stat = statat(dir, name.as_os_str(), AtFlags::SYMLINK_NOFOLLOW)?;
-            Some(
-                std::time::UNIX_EPOCH
-                    + std::time::Duration::new(
-                        stat.st_ctime.try_into().map_err(io::Error::other)?,
-                        stat.st_ctime_nsec.try_into().map_err(io::Error::other)?,
-                    ),
-            )
+            let ctime = std::time::UNIX_EPOCH
+                + std::time::Duration::new(
+                    stat.st_ctime.try_into().map_err(io::Error::other)?,
+                    stat.st_ctime_nsec.try_into().map_err(io::Error::other)?,
+                );
+            started
+                .is_none_or(|started| ctime >= started)
+                .then_some(ctime)
         } else {
             None
         };

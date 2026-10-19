@@ -50,20 +50,22 @@ pub(super) fn sweep_new_secrets(
         .into_iter()
         .map(|relative| root.join(relative))
         .collect();
+    // A deliberate user-created old link into private scratch is an accepted
+    // residual. Sandboxed links and swapped intermediate links have fresh ctime.
+    if links.is_empty() {
+        return quarantine_new(root, since, data, found);
+    }
     let mut targets = targets::SecretTargets::new(&found, data, environment, root, &since.writable);
     let mut changed_paths = HashSet::new();
-    for (relative, ctime) in links {
+    for (relative, _) in links {
         let path = root.join(relative);
-        let changed = since.started.is_none_or(|started| ctime >= started);
-        // Resolve all links after reaping. Old scratch aliases are never trusted.
+        // Resolve only new or changed links after reaping.
         // Missing targets retain their lexical destination and ancestor identity.
         let target = crate::command_sandbox::linux::complement::resolved_path(&path)
             .or_else(|_| crate::command_sandbox::linux::unresolved::target(&path));
         let unsafe_link = targets.writable_indirection(&path, target.as_deref().ok())
-            || (changed && target.as_ref().is_ok_and(|target| targets.protects(target)));
-        if changed || unsafe_link {
-            changed_paths.insert(path.clone());
-        }
+            || target.as_ref().is_ok_and(|target| targets.protects(target));
+        changed_paths.insert(path.clone());
         if unsafe_link {
             found.push(path);
         }

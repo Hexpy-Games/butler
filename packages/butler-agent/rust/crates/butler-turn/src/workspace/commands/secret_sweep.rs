@@ -15,9 +15,11 @@ impl Prepared {
         data: &Path,
         environment: &std::collections::HashMap<String, String>,
     ) -> std::io::Result<Vec<PathBuf>> {
+        let scratch = super::environment::Scratch::new(data, true);
+        let paths = self.paths.with_writable_roots(&scratch.writable_roots());
         let result = butler_platform::command_sandbox::sweep_new_secrets_with_environment(
             root,
-            &self.paths,
+            &paths,
             data,
             environment,
         );
@@ -49,9 +51,7 @@ pub(super) async fn before_run(input: &GuidedCommandInput) -> Result<Prepared, C
     let data = input.butler_data.clone();
     tokio::task::spawn_blocking(move || {
         let lease = butler_platform::command_sandbox::prepare_project_write(&root, &data)?;
-        let scratch = super::environment::Scratch::new(&data, true);
-        let paths = butler_platform::command_sandbox::discover_project_secret_inventory(&root)?
-            .with_writable_roots(&scratch.writable_roots());
+        let paths = butler_platform::command_sandbox::discover_project_secret_inventory(&root)?;
         Ok(Prepared {
             paths,
             lease: Some(lease),

@@ -2,7 +2,7 @@
 use super::*;
 
 #[tokio::test]
-async fn guided_sweep_quarantines_all_scratch_indirections() -> Result<(), HarnessError> {
+async fn guided_sweep_judges_new_scratch_indirections() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(command_sandbox::linux_test_host(), "Linux scratch links");
     use butler_turn::workspace::{Commands, GuidedAccess, GuidedCommandInput};
@@ -35,7 +35,7 @@ async fn guided_sweep_quarantines_all_scratch_indirections() -> Result<(), Harne
             &root.join(format!("src/oldfile{index}")),
         )?;
     }
-    // These aliases are older than the ctime cutoff; scratch still cannot be trusted.
+    // Deliberate user-created scratch aliases predate the cutoff (accepted residual).
     tokio::time::sleep(Duration::from_millis(1100)).await;
     let command = format!(
         "set -e; i=0; for d in \"$TMPDIR\" \"$XDG_CACHE_HOME\" \"$BUTLER_ARTIFACTS_DIR\"; do ln -s '{}/.ssh' \"$d/k\"; rm \"$d/file\"; ln -s \"$d/k/id_rsa\" \"$d/file\"; ln -s \"$d\" src/dir$i; ln -s \"$d/plain\" src/file$i; i=$((i+1)); done; ln -s '{}' src/public",
@@ -66,10 +66,14 @@ async fn guided_sweep_quarantines_all_scratch_indirections() -> Result<(), Harne
     assert_eq!(output.summary.exit_code, Some(0));
     let mut expected = Vec::new();
     for index in 0..3 {
-        let private_alias = protected.join(format!("old{index}"));
-        assert!(std::fs::symlink_metadata(&private_alias).is_err());
-        expected.push(private_alias);
-        for prefix in ["dir", "file", "old", "oldfile"] {
+        for path in [
+            protected.join(format!("old{index}")),
+            root.join(format!("src/old{index}")),
+            root.join(format!("src/oldfile{index}")),
+        ] {
+            assert!(std::fs::symlink_metadata(path)?.file_type().is_symlink());
+        }
+        for prefix in ["dir", "file"] {
             let path = root.join(format!("src/{prefix}{index}"));
             assert!(std::fs::symlink_metadata(&path).is_err());
             expected.push(path);
