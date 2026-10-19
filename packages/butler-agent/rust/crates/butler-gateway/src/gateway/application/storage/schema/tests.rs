@@ -20,6 +20,7 @@ fn app_schema_migrations_keep_existing_data() {
     an_existing_install_keeps_full_access_until_it_saves_a_mode();
     a_new_install_asks_first_until_it_saves_a_mode();
     super::plans::hot_queries_use_their_indexes();
+    super::plans::schedule_window_uses_turn_indexes();
 }
 
 fn fresh_schema_has_full_support_and_functional_message_fts() {

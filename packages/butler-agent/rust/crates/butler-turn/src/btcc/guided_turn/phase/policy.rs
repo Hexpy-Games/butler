@@ -91,11 +91,12 @@ impl SubsessionPolicy {
 }
 
 impl GuidedExecutionPolicy {
-    /// Root chat inherited at child creation, absent on legacy bindings.
-    pub fn usage_root(&self) -> Option<&str> {
-        self.subsession
-            .as_ref()
-            .and_then(|s| s.root_session_id.as_deref())
+    /// Root chats own their usage; legacy children retain unknown lineage.
+    pub fn usage_root<'a>(&'a self, session_id: &'a str) -> Option<&'a str> {
+        match &self.subsession {
+            None => Some(session_id),
+            Some(subsession) => subsession.root_session_id.as_deref(),
+        }
     }
 
     /// Main chat usage or the writing session policy role verbatim.

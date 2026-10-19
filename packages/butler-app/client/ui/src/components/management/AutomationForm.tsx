@@ -17,6 +17,7 @@ import type { AutomationFormField } from "@/stores/automationForm.ts";
 import { scheduleState } from "@/app/scheduleLabels";
 import { ScheduleTimingFields } from "./ScheduleTimingFields";
 import { AutomationAccessField } from "./AutomationAccessField";
+import { AutomationModelField } from "./AutomationModelField";
 
 interface AutomationFormProps {
   children?: ReactNode;
@@ -82,6 +83,7 @@ export function AutomationForm({ children }: AutomationFormProps) {
             </SelectContent>
           </Select>
         </Field>
+        <AutomationModelField />
         <AutomationAccessField />
         <ScheduleTimingFields />
         <KeyValueRow label={copy.fields.state} value={scheduleState(state)} />

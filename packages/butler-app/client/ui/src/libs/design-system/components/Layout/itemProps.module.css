@@ -59,6 +59,15 @@
   max-width: 50%;
 }
 
+/* Capped while the parent row is at least --layout-wrap-width-field wide;
+   narrower (the row has wrapped) the cap lifts and the item spans the row. */
+.item[data-max-width="field"] {
+  max-width: max(
+    var(--layout-max-width-field),
+    calc((var(--layout-wrap-width-field) - 100%) * 999)
+  );
+}
+
 .item[data-align-self="start"] {
   align-self: flex-start;
 }

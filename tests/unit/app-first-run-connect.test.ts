@@ -15,6 +15,8 @@ import {
   connectionCardId,
   providerLogoName,
   PROVIDER_CARDS,
+  customModelOptions,
+  knownContextWindow,
   localModelOptions,
   providerCardLayout,
 } from "../../packages/butler-app/client/ui/src/app/setupProviders.ts";
@@ -129,6 +131,15 @@ test("local servers flatten into model options from reachable servers only", () 
   ]);
   expect(options[0]!.sizeLabel).toBe("5.2 GB");
   expect(options[1]!.sizeLabel).toBeUndefined();
+});
+
+// test-category: pure-logic
+test("a typed server's unreported context size (0) is unknown, so registration falls back to the default", () => {
+  const found = (model_id: string, context_window_tokens: number): AppModelSummary =>
+    ({ ...FIRST_RUN_TEST_MODEL, model_id, model_ref: `local/${model_id}`, context_window_tokens });
+  const options = customModelOptions("http://127.0.0.1:8080/v1", [found("unsized", 0), found("sized", 32_768)]);
+  expect(options.map((option) => option.contextWindowTokens)).toEqual([undefined, 32_768]);
+  for (const unknown of [undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) expect(knownContextWindow(unknown)).toBeUndefined();
 });
 
 function catalogWith(provider: Partial<ModelCatalogView["providers"][number]>, presets?: ModelCatalogView["worker_model_presets"]): ModelCatalogView {

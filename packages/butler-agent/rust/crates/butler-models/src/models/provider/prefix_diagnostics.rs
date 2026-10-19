@@ -216,7 +216,7 @@ impl Prepared {
         self
     }
 
-    #[tracing::instrument(name = "context.build", level = "debug", skip_all, fields(sections = self.metadata["components"].as_array().map_or(0, Vec::len), tokens = tracing::field::Empty), err)]
+    #[tracing::instrument(name = "context.tokenize", level = "debug", skip_all, fields(sections = self.metadata["components"].as_array().map_or(0, Vec::len), tokens = tracing::field::Empty), err)]
     pub(super) async fn tokenize(
         mut self,
         catalog: Arc<crate::models::ModelCatalog>,

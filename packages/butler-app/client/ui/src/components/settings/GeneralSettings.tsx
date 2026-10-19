@@ -12,6 +12,7 @@ import type { SettingsView as SettingsData } from "@/app/types.ts";
 import { SettingsPage, SettingsSection, SettingsSwitch } from "./SettingsFormComponents";
 import { languageRegionSection, notificationSections } from "./generalPreferenceSections";
 import { RerunSetupField } from "./RerunSetupField";
+import { FullResetSection } from "./FullResetSection";
 import { SearchBehaviorFields, SearchProviderFields } from "./SearchSettings";
 
 export const GeneralSettings = memo(function GeneralSettings() {
@@ -90,6 +91,7 @@ export const GeneralSettings = memo(function GeneralSettings() {
       >
         <SearchBehaviorFields draft={searchDraft} />
       </SettingsSection>
+      <FullResetSection />
     </SettingsPage>
   );
 });

@@ -278,7 +278,7 @@ impl Store {
     }
 
     pub(super) fn records(&self) -> Result<Vec<Value>, BtccError> {
-        let directory = self.root.join("work-streams");
+        let directory = self.root.join(butler_platform::data_paths::WORK_STREAMS);
         let mut records = Vec::new();
         let Ok(entries) = fs::read_dir(directory) else {
             return Ok(records);
@@ -313,7 +313,12 @@ impl Store {
     }
 
     fn read_stream(&self, id: &str) -> Result<Option<Value>, BtccError> {
-        read_object(&self.root.join("work-streams").join(record_name(id)))
+        read_object(
+            &self
+                .root
+                .join(butler_platform::data_paths::WORK_STREAMS)
+                .join(record_name(id)),
+        )
     }
 
     pub(super) fn mutate(
@@ -331,7 +336,13 @@ impl Store {
             if next_generation != expected.unwrap_or(0) + 1 {
                 return Err(error("work_stream_generation_conflict"));
             }
-            write_atomic(&self.root.join("work-streams").join(record_name(id)), &next)?;
+            write_atomic(
+                &self
+                    .root
+                    .join(butler_platform::data_paths::WORK_STREAMS)
+                    .join(record_name(id)),
+                &next,
+            )?;
             Ok(next)
         })
     }
@@ -344,7 +355,7 @@ impl Store {
     ) -> Result<T, BtccError> {
         let lock_key = self
             .root
-            .join("work-streams")
+            .join(butler_platform::data_paths::WORK_STREAMS)
             .join(format!("{id}.mutation.lock"));
         let mut connection = open_lock(&self.root, &lock_key)?;
         let transaction = connection
@@ -371,7 +382,12 @@ impl Store {
                 ],
             )
             .map_err(sql_error)?;
-        let current = read_object(&self.root.join("work-streams").join(record_name(id)))?;
+        let current = read_object(
+            &self
+                .root
+                .join(butler_platform::data_paths::WORK_STREAMS)
+                .join(record_name(id)),
+        )?;
         let result = action(current)?;
         transaction
             .execute(

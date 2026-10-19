@@ -5,7 +5,7 @@ import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { cn } from "../../lib/utils";
 import { adaptiveShellThemeClasses, type AdaptiveShellTheme } from "../../lib/theme";
 import { usePopperExitFreezeRef } from "../../lib/popperExit";
-import { floatingContentCollisionPadding } from "../../lib/floatingConstraints";
+import { sheetSide, usePopoverSheet, useSheetCollisionPadding } from "../../lib/popoverSheet";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import styles from "../../components/Popover/Popover.module.css";
 
@@ -25,6 +25,7 @@ function PopoverContent({
   className,
   ref,
   align = "center",
+  side,
   sideOffset = 4,
   onCloseAutoFocus,
   onOpenAutoFocus,
@@ -45,6 +46,9 @@ function PopoverContent({
   density?: "default" | "list";
 }) {
   const contentRef = usePopperExitFreezeRef(ref);
+  // Mobile sheet (see Popover.module.css): left/right open below; keep clear of safe areas.
+  const sheet = usePopoverSheet();
+  const collisionPadding = useSheetCollisionPadding(sheet);
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
@@ -55,7 +59,8 @@ function PopoverContent({
         data-popover-width={width === "default" ? undefined : width}
         data-popover-density={density === "default" ? undefined : density}
         align={align}
-        collisionPadding={floatingContentCollisionPadding}
+        side={sheetSide(sheet, side)}
+        collisionPadding={collisionPadding}
         sideOffset={sideOffset}
         className={cn(tintedGlassSurfaceClassName, styles.content, theme && adaptiveShellThemeClasses(theme), className)}
         onCloseAutoFocus={(event) => {

@@ -1,5 +1,6 @@
 //! Append independent zstd frames; references never expose arbitrary paths.
 use super::segment::SEGMENT_BYTES;
+use butler_platform::data_paths;
 use std::{
     fs::File,
     io::{self, BufRead, BufReader, Read, Write},
@@ -28,7 +29,7 @@ impl Bodies {
             self.close()?;
         }
         if self.active.is_none() {
-            let dir = root.join("agent/bodies");
+            let dir = root.join(data_paths::NATIVE_LOG_STORE).join("bodies");
             butler_platform::secure_fs::create_private_dir_all(&dir)?;
             let path = dir.join(format!(
                 "{}-{}.zst",
@@ -97,7 +98,7 @@ pub(super) fn read(root: &Path, reference: &str) -> io::Result<Vec<u8>> {
     if len == 0 || frames == 0 || frames > len || frames == 1 && len > SEGMENT_BYTES {
         return Err(invalid("invalid body length"));
     }
-    for source in ["agent", "app"] {
+    for &source in data_paths::OWNED_LOG_STORES {
         let path = root.join(source).join("bodies").join(name);
         if !path.is_file() {
             continue;

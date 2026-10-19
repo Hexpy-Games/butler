@@ -61,7 +61,7 @@ pub(in crate::command_sandbox) fn quarantine_new(
     if secrets.is_empty() {
         return Ok(secrets);
     }
-    let quarantine = data.join("sandbox-quarantine");
+    let quarantine = data.join(crate::data_paths::SANDBOX_QUARANTINE);
     crate::secure_fs::create_private_dir_all(&quarantine)?;
     crate::secure_fs::restrict_directory(&quarantine).transpose()?;
     let run = quarantine.join(format!(

@@ -2,11 +2,12 @@
 // A deleted selected model falls back to the Settings default and still sends;
 // a failed controls read leaves the picker usable.
 import { strict as assert } from "node:assert";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Page } from "playwright";
 import { createNativeAppServer, type NativeAppServerHandle } from "../support/native-app-server.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
+import { registerSecondModel } from "../support/second-stub-model.ts";
 import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 
 const CELLS = ["deleted-light", "deleted-dark", "error-light", "error-dark"];
@@ -19,14 +20,6 @@ async function capture(page: Page, name: string): Promise<void> {
   if (!out) return;
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: join(out, `${phase}-${name}.png`) });
-}
-
-async function registerSecondModel(server: NativeAppServerHandle): Promise<void> {
-  const config = JSON.parse(readFileSync(join(server.butlerData, "butler.config.json"), "utf8"));
-  await server.api("/model-catalog/local-models", { method: "POST", body: JSON.stringify({
-    provider_id: "local", api_type: "openai_compatible", platform: "custom", server_url: config.models.local[0].server_url,
-    model_id: "stub-b", display_name: "Stub B", context_window_tokens: 128000, source: "manual",
-  }) });
 }
 
 async function expandComposer(page: Page): Promise<void> {

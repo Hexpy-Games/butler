@@ -21,6 +21,7 @@ import { commandResultSubtitle, commandResultTitle } from "./commandPaletteLabel
 import { createSettingsSections, matchesSettingsSection } from "../settings/settingsSections";
 import { useDeveloperMode } from "@/hooks/useDeveloperMode.ts";
 import { useCommandPaletteFocus } from "./useCommandPaletteFocus";
+import { LOG_TRACE_COMMAND_ID, logTraceCommandResults, openLatestLogTrace } from "./logTraceCommand";
 
 export function CommandPalette({
   open = true,
@@ -51,7 +52,7 @@ export function CommandPalette({
     .filter((section) => matchesSettingsSection(section, query, [english[section.id]]))
     .map((section) => ({ id: `settings:${section.id}`, kind: "settings", title: section.label,
       subtitle: appCopy.commandPalette.kindLabels.settings, route: `settings:${section.id}` }));
-  const results = [...settingsResults, ...(status === "ready"
+  const results = [...logTraceCommandResults(query, developerMode), ...settingsResults, ...(status === "ready"
     ? searchState.results.filter((result) => result.kind !== "settings") : [])];
   const inputRef = useRef<HTMLInputElement | null>(null);
   useCommandPaletteFocus(open, inputRef, () => setQuery(""));
@@ -102,6 +103,7 @@ export function CommandPalette({
         icon: <CommandIcon kind={result.kind} />,
         onSelect: () => {
           if (result.kind === "group") { useOrganization.getState().reveal(`g:${result.id}`); close(); }
+          else if (result.id === LOG_TRACE_COMMAND_ID) openLatestLogTrace();
           else select(result);
         },
       }))}

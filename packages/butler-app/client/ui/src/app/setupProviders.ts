@@ -127,6 +127,11 @@ export function localModelOptions(servers: LocalModelServerView[]): LocalModelOp
   });
 }
 
+/** A usable context size, or undefined when unknown (discovery reports 0 when the server gives none). */
+export function knownContextWindow(tokens: number | undefined): number | undefined {
+  return tokens !== undefined && Number.isFinite(tokens) && tokens > 0 ? tokens : undefined;
+}
+
 /** Models found on a typed OpenAI-compatible server (Other). */
 export function customModelOptions(serverUrl: string, models: AppModelSummary[]): LocalModelOption[] {
   return models.map((model) => ({
@@ -134,7 +139,7 @@ export function customModelOptions(serverUrl: string, models: AppModelSummary[])
     modelId: model.model_id,
     platform: "custom",
     serverUrl,
-    contextWindowTokens: model.context_window_tokens,
+    contextWindowTokens: knownContextWindow(model.context_window_tokens),
     sourceModel: model,
   }));
 }

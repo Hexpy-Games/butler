@@ -13,10 +13,10 @@ pub(super) fn collect(
     installation: &ResolvedInstallation,
 ) -> Result<PathBuf, HostError> {
     let bundle = root
-        .join("log-exports")
+        .join(butler_platform::data_paths::LOG_EXPORTS)
         .join(uuid::Uuid::new_v4().to_string());
     installation.validate_data_root(&bundle)?;
-    refuse_symlink(&root.join("log-exports"))?;
+    refuse_symlink(&root.join(butler_platform::data_paths::LOG_EXPORTS))?;
     butler_platform::secure_fs::create_private_dir_all(&bundle).map_err(io)?;
     let mut entries = Vec::new();
     for name in [

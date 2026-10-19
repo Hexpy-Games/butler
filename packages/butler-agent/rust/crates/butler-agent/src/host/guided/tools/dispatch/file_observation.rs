@@ -13,10 +13,20 @@ pub(super) async fn execute(
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let args = normalized(owner, call)?;
-    let decision = super::super::access::decision(owner, call, &args)
+    let access = super::super::access::decision(owner, call, &args)
         .await
         .map_err(ToolExecutionError::Integrity)?;
-    let gated = matches!(decision, butler_turn::btcc::AccessDecision::Ask(_))
+    let args = if access.scope == butler_turn::btcc::TargetScope::Attachment {
+        // Classification proved these lexical absolute paths equal the stored
+        // attachment paths. Execute those same paths, never a resolved alias.
+        args
+    } else {
+        let resolved = super::link_targets::resolve_paths(owner, call)
+            .await
+            .map_err(ToolExecutionError::Integrity)?;
+        normalized(owner, resolved.as_ref().unwrap_or(call))?
+    };
+    let gated = matches!(access.decision, butler_turn::btcc::AccessDecision::Ask(_))
         || super::super::access::resumes(owner, occurrence);
     let approval = if gated {
         match gate(owner, call, occurrence, &args).await? {
@@ -30,7 +40,9 @@ pub(super) async fn execute(
         owner,
         call,
         &args,
-        !gated && owner.binding.access_mode.reviews_effects(),
+        !gated
+            && owner.binding.access_mode.reviews_effects()
+            && access.scope != butler_turn::btcc::TargetScope::Attachment,
     )
     .await;
     if gated {

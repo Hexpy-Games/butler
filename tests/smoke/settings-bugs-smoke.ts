@@ -141,7 +141,8 @@ async function paletteChecks(page: Page, prefix: string) {
   await page.reload();
   await page.locator('[data-test-class~="composer-card"]').waitFor();
   dialog = await search(page, "logs");
-  await dialog.getByRole("option").filter({ hasText: copy.settings.sections.logs }).waitFor();
+  await dialog.getByRole("option").filter({ has: page.getByText(copy.settings.sections.logs, { exact: true }) }).waitFor();
+  await dialog.getByRole("option").filter({ has: page.getByText(copy.settings.logs.trace.openCommand, { exact: true }) }).waitFor();
   await capture(page, prefix, "palette-developer-logs");
   await page.keyboard.press("Escape");
   await page.unroute("**/app-info");

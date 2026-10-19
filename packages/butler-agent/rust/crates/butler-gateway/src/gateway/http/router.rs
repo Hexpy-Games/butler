@@ -9,6 +9,7 @@ use std::sync::Arc;
 #[derive(Clone, Copy)]
 pub(super) enum Handler {
     NotFound,
+    DataReset,
     Authority,
     Automations,
     Browser,
@@ -67,6 +68,18 @@ pub(super) enum Handler {
     #[cfg(feature = "e2e-fixtures")]
     LogWriter,
 }
+impl Handler {
+    pub(super) fn action(self, method: &axum::http::Method) -> Option<&'static str> {
+        use axum::http::Method;
+        match (self, method) {
+            (Self::Messages, &Method::POST) => Some("message.send"),
+            (Self::Cancel, &Method::POST) => Some("turn.cancel"),
+            (Self::Retry, &Method::POST) => Some("turn.retry"),
+            (Self::Controls, &Method::PATCH) => Some("session.controls"),
+            _ => None,
+        }
+    }
+}
 pub(super) fn routes() -> Router<Arc<HttpState>> {
     let mut router = Router::new();
     for (path, handler) in table() {
@@ -81,6 +94,7 @@ pub(crate) fn templates() -> Vec<&'static str> {
 const ROUTES: &[(&str, Handler)] = &[
     ("/authority-requests", Handler::Authority),
     ("/app-info", Handler::Shell),
+    ("/data/reset", Handler::DataReset),
     ("/archives", Handler::Shell),
     ("/artifacts", Handler::Artifacts),
     ("/authority-permissions", Handler::Authority),

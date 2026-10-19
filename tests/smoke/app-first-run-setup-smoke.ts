@@ -410,19 +410,25 @@ async function verifyConnection(cdp: CdpClient): Promise<void> {
     "(() => { const tile = document.querySelector('[data-card-id=\"other\"]'); tile?.click(); return Boolean(tile); })()",
   );
   assert(otherClicked, "Other (OpenAI-compatible) tile is missing");
-  await waitForHeading(cdp, "OpenAI 호환 서버");
+  await waitForHeading(cdp, "어떤 모델을 쓸까요?");
+  // Models found on this computer come first; the typed server is then its own choice.
+  await evaluateBoolean(cdp, "(() => { document.querySelector('[data-model-key=\"server\"]')?.click(); return true; })()");
   await fillInput(cdp, "#first-run-server-url", `http://127.0.0.1:${stubModelPort}/v1`);
   await clickButton(cdp, "연결");
+  await waitForHeading(cdp, "OpenAI 호환 서버");
   await waitForText(cdp, stubModelId);
   await clickButton(cdp, "다음");
-  await waitForExpression(cdp, "document.querySelector('#first-run-reply-language')?.disabled === false", "reply language choice");
+  // The stub's /v1/models reports no context size: the model still registers, with a usable context window.
+  const failed = "document.body.innerText.includes('연결을 마치지 못했습니다')";
+  await waitForExpression(cdp, `document.querySelector('#first-run-reply-language')?.disabled === false || ${failed}`, "reply language choice");
+  assert(!(await evaluateBoolean(cdp, failed)), "OpenAI-compatible server connection failed");
+  assert(await evaluateBoolean(cdp, `window.butlerApp.getModelCatalog().then((catalog) => [...(catalog.models ?? []), ...catalog.providers.flatMap((provider) => provider.models)].some((model) => model.model_id === ${JSON.stringify(stubModelId)} && model.context_window_tokens > 0))`),
+    "registered OpenAI-compatible model has a positive context window");
   await clickButton(cdp, "다음");
   await waitForHeading(cdp, "다른 AI에서 가져오기");
   await clickButton(cdp, "건너뛰기");
-  await waitForHeading(cdp, "다른 브라우저에서 가져오기");
-  await clickButton(cdp, "건너뛰기");
   await waitForHeading(cdp, "준비를 마쳤습니다");
-  await clickButton(cdp, "대화 시작");
+  await clickButton(cdp, "시작하기");
   await waitForExpression(
     cdp,
     `document.querySelector(${JSON.stringify(firstRunSelector)}) === null && document.querySelector('[data-test-class="workspace"]') !== null`,
