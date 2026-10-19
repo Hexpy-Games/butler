@@ -8,17 +8,11 @@ import { join } from "node:path";
 import { smokeBrowserArgs } from "./smoke-browser-args";
 export { smokeBrowserArgs } from "./smoke-browser-args";
 
-/**
- * Keep every matrix assertion, isolating Bun/CDP lifetimes on restricted runners.
- * `isolate` runs each case in its own process (fresh HOME/BUTLER_DATA) everywhere,
- * for smokes whose later cases lose their Chromium pipe in a shared process (#1263);
- * `timeoutMs` kills a case process that stops making progress.
- */
-export async function runSmokeCases(cases: string[], variable: string, entry: string,
-  options: { isolate?: boolean; timeoutMs?: number } = {}): Promise<boolean> {
+/** Keep every matrix assertion, isolating Bun/CDP lifetimes on restricted runners. */
+export async function runSmokeCases(cases: string[], variable: string, entry: string): Promise<boolean> {
   const selected = process.env[variable];
   if (selected) { assert(cases.includes(selected), `Unknown smoke case: ${selected}`); return false; }
-  if (!options.isolate && !smokeBrowserArgs().includes("--single-process")) return false;
+  if (!smokeBrowserArgs().includes("--single-process")) return false;
   assert.equal(new Set(cases).size, cases.length);
   for (const cell of cases) {
     const isolation = mkdtempSync(join(tmpdir(), "butler-smoke-case-"));
@@ -28,10 +22,9 @@ export async function runSmokeCases(cases: string[], variable: string, entry: st
         env: { ...process.env, HOME: join(isolation, "home"), BUTLER_DATA: join(isolation, "data"), [variable]: cell },
         stdio: "inherit",
       });
-      const timer = options.timeoutMs ? setTimeout(() => child.kill("SIGTERM"), options.timeoutMs) : undefined;
       const code = await new Promise<number | null>((resolve, reject) => {
         child.once("error", reject); child.once("exit", resolve);
-      }).finally(() => clearTimeout(timer));
+      });
       assert.equal(code, 0, `Smoke case ${cell} failed`);
     } finally { rmSync(isolation, { recursive: true, force: true }); }
   }

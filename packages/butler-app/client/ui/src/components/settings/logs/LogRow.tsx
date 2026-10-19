@@ -1,8 +1,6 @@
 import { useId } from "react";
 import { appCopy } from "@/app/copy.ts";
-import { Button, CopyButton, DisclosureRow, Inline, KeyValueRow, Stack, Tag, Typo } from "@/butler-ds";
-import { openLogTrace } from "@/stores/logTraceStore.ts";
-import { isTraceId } from "./traceApi";
+import { CopyButton, DisclosureRow, Inline, KeyValueRow, Stack, Tag, Typo } from "@/butler-ds";
 import { formatDuration, formatLogTime, hasDetail, httpAttrs, logTitle, prettyJson, severityLabel, severityOf, severityTone } from "./logFormat";
 import { LogHttpTabs } from "./LogHttpTabs";
 import { LogJson } from "./LogJson";
@@ -31,7 +29,6 @@ export function LogRow({ record, open, onToggle }: { record: LogRecord; open: bo
       open={open}
       onToggle={onToggle}
       data-test-class="log-row"
-      data-log-open={open ? "true" : undefined}
     >
       {hasDetail(record) ? <LogDetail record={record} /> : null}
     </DisclosureRow>
@@ -40,19 +37,10 @@ export function LogRow({ record, open, onToggle }: { record: LogRecord; open: bo
 
 function LogDetail({ record }: { record: LogRecord }) {
   const http = httpAttrs(record);
-  const traceId = record.trace_id;
   return (
     <Stack gap="md">
       <LogFields record={record} />
       {http ? <LogHttpTabs record={record} attrs={http} /> : <LogJson record={record} />}
-      {isTraceId(traceId) ? (
-        <Inline justify="end">
-          <Button type="button" size="sm" variant="outline" data-test-class="log-row-trace"
-            onClick={() => openLogTrace({ traceId })}>
-            {appCopy.settings.logs.trace.viewWhole}
-          </Button>
-        </Inline>
-      ) : null}
     </Stack>
   );
 }

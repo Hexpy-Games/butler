@@ -9,17 +9,9 @@ import { LogRows } from "./LogRows";
 import { LogStorageActions, LogStoreMeters, useLogStorage } from "./LogStorage";
 import { useLogConfig } from "./useLogConfig";
 import { useLogViewer } from "./useLogViewer";
-import { useLogTraceRoute } from "@/stores/logTraceStore.ts";
-import { LogTracePage } from "./LogTracePage";
 
-/** Settings › 로그 (developer mode): the log list, or one message's trace (로그 › 메시지 추적). */
+/** Settings › 로그 (developer mode): 기록, 로그, 저장 공간, then context estimates. */
 export function LogsSettings() {
-  const target = useLogTraceRoute((state) => state.target);
-  return target ? <LogTracePage target={target} /> : <LogList />;
-}
-
-/** 기록, 로그, 저장 공간, then context estimates. */
-function LogList() {
   useAppLocale();
   const copy = appCopy.settings.logs;
   const config = useLogConfig();

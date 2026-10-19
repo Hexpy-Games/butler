@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
-import { useLogListView } from "@/stores/logListStore.ts";
 import { EMPTY_LOG_LIST, logListReducer, matchesFilter } from "./logRecords";
 import { periodSince, queryLogs, type LogFilter, type LogRecord } from "./logsApi";
 import { useLiveLogs } from "./useLiveLogs";
+
+export const EMPTY_LOG_FILTER: LogFilter = { q: "", level: "", source: "all", category: "", period: "day" };
 
 export interface LogViewerState {
   filter: LogFilter;
@@ -24,14 +25,11 @@ export interface LogViewerState {
 }
 
 export function useLogViewer(): LogViewerState {
-  // Filter and live outlive the list (메시지 추적 and back); the rows are read again.
-  const filter = useLogListView((state) => state.filter);
-  const live = useLogListView((state) => state.live);
-  const setFilter = useLogListView((state) => state.setFilter);
-  const setLive = useLogListView((state) => state.setLive);
+  const [filter, setFilterState] = useState<LogFilter>(EMPTY_LOG_FILTER);
   const [list, dispatch] = useReducer(logListReducer, EMPTY_LOG_LIST);
   const [paging, setPaging] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [live, setLive] = useState(false);
   const atTop = useRef(true);
   const current = useRef(filter);
   current.current = filter;
@@ -63,6 +61,7 @@ export function useLogViewer(): LogViewerState {
       .finally(() => setPaging(false));
   }, [filter, next, paging]);
 
+  const setFilter = useCallback((change: Partial<LogFilter>) => setFilterState((value) => ({ ...value, ...change })), []);
   const setAtTop = useCallback((value: boolean) => { atTop.current = value; }, []);
 
   return {

@@ -8,9 +8,6 @@ import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import { SettingsDetailContent } from "./SettingsDetailContent";
 import { SettingsDetailHeader } from "./SettingsDetailHeader";
 import { ModelSettingsTitle } from "./ModelSettingsTitle";
-import { LogTraceTitle } from "./logs/LogTraceTitle";
-import { traceTargetKey } from "./logs/traceApi";
-import { useLogTraceRoute } from "@/stores/logTraceStore.ts";
 import { SettingsSidebar } from "./SettingsSidebar";
 import { createSettingsSectionGroups } from "./settingsSections";
 import { useDeveloperMode } from "@/hooks/useDeveloperMode.ts";
@@ -38,7 +35,6 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
   const localMessage = useSettingsUIStore((state) => state.localMessage);
   const setLocalMessage = useSettingsUIStore((state) => state.setLocalMessage);
   const initialize = useSettingsUIStore((state) => state.initialize);
-  const { target: traceTarget, close: closeTrace } = useLogTraceRoute();
 
   const closeView = onClose ?? closeSettings;
 
@@ -82,7 +78,6 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
   const changeSection = async (section: SettingsSectionId) => {
     setLocalMessage(null);
     if (!await setActiveSection(section)) return;
-    if (section === "logs") closeTrace(); // the sidebar's 로그 is the log list
     setCompactPane("detail");
     if (storeView.kind === "settings") {
       setView({ kind: "settings", section });
@@ -103,7 +98,6 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
     setView,
     storeView.kind,
   ]);
-  const logTrace = activeSection === "logs" && traceTarget ? traceTargetKey(traceTarget) : null;
   const titleSecondary =
     activeSection === "models" ? (
       <ModelSettingsTitle
@@ -112,8 +106,7 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
         onRoot={resetModelRoute}
         onManagement={backModelRoute}
       />
-    ) : logTrace ? <LogTraceTitle onLogs={closeTrace} /> : undefined;
-  const pageOrder = sections.findIndex((item) => item.id === activeSection);
+    ) : undefined;
 
   return (
     <SettingsShell
@@ -121,8 +114,8 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
       compactPane={compactPane}
       pageTitle={title}
       pageDescription={activeDescriptor?.description}
-      pageKey={logTrace ? `logs/${logTrace}` : activeSection}
-      pageOrder={logTrace ? pageOrder + 0.5 : pageOrder}
+      pageKey={activeSection}
+      pageOrder={sections.findIndex((item) => item.id === activeSection)}
       detailNavigation={
         <IconButton
           label={settingsCopy.back}
