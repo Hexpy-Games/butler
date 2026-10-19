@@ -26,7 +26,7 @@ use serde_json::{Map, Value};
 
 use super::{Client, HttpError, HttpState, json};
 use crate::gateway::protocol::{APP_PROTOCOL_VERSION, ApiEnvelope};
-use crate::gateway::{MAX_ALLOWED_HOSTS, normalize_allowed_host};
+use crate::gateway::{GatewayExposure, MAX_ALLOWED_HOSTS, normalize_allowed_host};
 
 /// The live event every open stream gets when the code rotates.
 const ROTATED_EVENT: &str = "security.connection_code_rotated";
@@ -37,6 +37,8 @@ struct SecurityView {
     remote_access_enabled: bool,
     /// Every address the gateway listens on, loopback first.
     bind_addresses: Vec<String>,
+    /// Bound content sockets, loopback first.
+    content_addresses: Vec<String>,
     /// Failed LAN binds, one entry per address; empty while access is off.
     bind_errors: Vec<super::listeners::BindError>,
     /// LAN and registered host URLs. Tunnel hosts work without LAN listeners.
@@ -184,11 +186,14 @@ fn view(state: &HttpState) -> Result<SecurityView, HttpError> {
     let remote = state.remote.snapshot();
     let mut bind_addresses = vec![state.remote.primary().to_string()];
     bind_addresses.extend(remote.lan_listeners.iter().map(ToString::to_string));
+    let mut content_addresses = vec![state.remote.content_addr().to_string()];
+    content_addresses.extend(remote.content_listeners.iter().map(ToString::to_string));
     let connection_code = None;
     let lan_urls = links::connection_urls(&remote, state.security.port());
     Ok(SecurityView {
         remote_access_enabled: remote.exposure.remote_access_enabled,
         bind_addresses,
+        content_addresses,
         bind_errors: remote.bind_errors,
         lan_urls,
         allowed_hosts: remote.exposure.allowed_hosts,
@@ -262,16 +267,18 @@ pub(super) fn parse_patch(value: Value) -> Result<SecurityPatch, HttpError> {
     Ok(patch)
 }
 
-/// Persists the patched exposure, then binds or unbinds and answers the
-/// new names, with no restart.
-pub(super) async fn apply(state: &Arc<HttpState>, patch: SecurityPatch) -> Result<(), HttpError> {
+/// Validates the proposed exposure before any settings change. The caller
+/// holds `remote.changes` until the validated exposure has been applied.
+pub(super) fn prepare(
+    state: &HttpState,
+    patch: SecurityPatch,
+) -> Result<Option<GatewayExposure>, HttpError> {
     if patch.remote_access_enabled.is_none()
         && patch.allowed_hosts.is_none()
         && patch.content_hosts.is_none()
     {
-        return Ok(());
+        return Ok(None);
     }
-    let _change = state.remote.changes.lock().await;
     let mut exposure = state.remote.snapshot().exposure;
     if let Some(enabled) = patch.remote_access_enabled {
         exposure.remote_access_enabled = enabled;
@@ -289,6 +296,18 @@ pub(super) async fn apply(state: &Arc<HttpState>, patch: SecurityPatch) -> Resul
     {
         return Err(invalid_security("Content host must use a separate origin."));
     }
+    state
+        .security
+        .validate_content_origin(state.remote.content_addr(), &exposure.allowed_hosts)
+        .map_err(|error| invalid_security(&error.to_string()))?;
+    Ok(Some(exposure))
+}
+
+/// Persists validated exposure and updates listeners while holding `remote.changes`.
+pub(super) async fn apply(
+    state: &Arc<HttpState>,
+    exposure: GatewayExposure,
+) -> Result<(), HttpError> {
     if let Some(store) = &state.security_store {
         store.save_exposure(exposure.clone()).await?;
     }

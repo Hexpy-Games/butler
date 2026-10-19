@@ -39,6 +39,7 @@ mod router;
 #[cfg(feature = "test-support")]
 pub(crate) use router::templates as route_templates;
 mod security;
+pub(super) use security::RequestPolicy;
 mod security_settings;
 mod session_branches;
 mod session_controls;
