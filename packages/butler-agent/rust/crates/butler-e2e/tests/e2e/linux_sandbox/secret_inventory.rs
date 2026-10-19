@@ -23,10 +23,7 @@ async fn unresolvable_inventory_preserves_unrelated_links() -> Result<(), Harnes
     struct Restore(PathBuf);
     impl Drop for Restore {
         fn drop(&mut self) {
-            let _ = butler_platform::secure_fs::set_file_mode(
-                &self.0,
-                butler_platform::secure_fs::FileMode::from_bits(0o700),
-            );
+            let _ = butler_platform::secure_fs::restrict_directory(&self.0);
         }
     }
     let _restore = Restore(private.clone());
