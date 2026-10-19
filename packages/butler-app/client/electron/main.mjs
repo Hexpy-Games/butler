@@ -2248,9 +2248,10 @@ async function createWindow() {
     show: false,
     width: 960,
     height: 710,
-    // Width: the compact Browser toolbar's minimum (nav, narrow address, More, insets); 320 tall keeps a page area.
+    // Width: the compact Browser toolbar's minimum (nav, narrow address, More, insets).
+    // Height: the new-chat hero and first suggestion row need 480 or more above the composer.
     minWidth: 344,
-    minHeight: 320,
+    minHeight: 480,
     title: appDisplayName,
     icon: appIconForWindow(),
     frame: isLinux ? false : undefined,

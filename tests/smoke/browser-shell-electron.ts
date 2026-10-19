@@ -105,8 +105,8 @@ try {
     await app.click(locale === "ko" ? "브라우저" : "Browser"); await app.call("activate", { id: first });
     await waitBrowser(() => app.page.expression(`Boolean(document.querySelector('${pane}'))`), "Browser hub pane");
     await app.main(`${app.win}.setSize(1,1)`);
-    await waitBrowser(() => app.page.expression("innerWidth === 344 && innerHeight === 320"), "window at its minimum size");
-    assert.deepEqual(await app.main(`${app.win}.getMinimumSize()`), [344, 320]);
+    await waitBrowser(() => app.page.expression("innerWidth === 344 && innerHeight === 480"), "window at its minimum size");
+    assert.deepEqual(await app.main(`${app.win}.getMinimumSize()`), [344, 480]);
     await nativeAligned(app);
     const clipped = await app.page.expression<string[]>(`[...document.querySelectorAll('${pane} [data-slot=browser-toolbar] :is(button,input), ${pane} [role=tab]')]
       .filter(n => n.getBoundingClientRect().width > 0).flatMap(n => { const r = n.getBoundingClientRect(), hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
