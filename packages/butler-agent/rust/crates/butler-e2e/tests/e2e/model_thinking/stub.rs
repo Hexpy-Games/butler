@@ -11,7 +11,11 @@ fn gemini(part: &Value, end: bool) -> String {
     frame(&json!({"candidates":[candidate],"modelVersion":"gemini-3.8-flash"}))
 }
 fn frames(stub: &Stub, first_index: u64, second_index: u64) -> (String, String, String) {
-    let gap = if stub.provider == "openai" { "\n\n" } else { "\n" };
+    let gap = if stub.provider == "openai" {
+        "\n\n"
+    } else {
+        "\n"
+    };
     let a = format!("**{FIRST}**{gap}Details.\n");
     let b = format!("**{SECOND}**{gap}More details.\n");
     match stub.provider {
