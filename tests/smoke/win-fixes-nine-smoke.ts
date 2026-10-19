@@ -29,11 +29,15 @@ const grants = [
 let childReads = 0;
 let accessMode = "ask_first";
 const modeUpdates: string[] = [];
-const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
+const server = Bun.serve({ hostname: "127.0.0.1", port: 0, idleTimeout: 0, async fetch(request) {
   const url = new URL(request.url);
-  if (url.pathname === "/events/live") return new Response(new ReadableStream({
-    start(controller) { clients.add(controller); }, cancel() { clients.clear(); },
-  }), { headers: { "content-type": "text/event-stream" } });
+  if (url.pathname === "/events/live") {
+    let controller: ReadableStreamDefaultController;
+    return new Response(new ReadableStream({
+      start(streamController) { controller = streamController; clients.add(controller); },
+      cancel() { clients.delete(controller); },
+    }), { headers: { "content-type": "text/event-stream" } });
+  }
   let data: unknown;
   if (url.pathname === "/session-view") {
     const isChild = url.searchParams.get("session_id") === child.session_id;
@@ -106,8 +110,10 @@ try {
     parent.steward_children![0]!.active_turn = child.active_turn;
     parent.steward_children![0]!.approved_plan_completed = 2;
     child.approved_plan_total = 3; child.approved_plan_completed = 2;
+    // #873/#992: the card shows run status and the latest activity's phase, not row labels.
+    assert.equal(await card.locator('[data-test-class="work-activity-disclosure-toggle"]').getAttribute("aria-label"), "작업 중 · 2/3, 작업 중 · 검색");
     send({ id: 500, type: "agent.turn_event.progress", payload: { session_id: child.session_id } });
-    await card.getByText(/새 단계|작성/u).waitFor();
+    await card.locator('[data-test-class="work-activity-disclosure-toggle"][aria-label="작업 중 · 3/3, 작업 중 · 편집"]').waitFor();
     assert(childReads > reads, "closed modal still receives canonical child live refresh");
     await capture("delegated-updated");
     await card.locator('[data-test-class="steward-observer-action"]').click();
@@ -119,7 +125,7 @@ try {
       await page.locator('[contenteditable="true"]').focus();
       await page.locator('[data-test-class="access-button"]').click();
       const menu = page.locator('[data-test-class="composer-menu"]');
-      assert.equal(await menu.locator('[data-slot="option-menu-item"]').count(), 4, "the shipped choices despite existing grants");
+      assert.equal(await menu.locator('[data-slot="option-menu-item"]').count(), 5, "the shipped choices despite existing grants");
       assert.equal(await page.locator('[data-test-class="granted-permissions"]').count(), 0);
       assert(!(await menu.innerText()).includes("허용한"));
       await capture(`permission-menu-${mode}`);
