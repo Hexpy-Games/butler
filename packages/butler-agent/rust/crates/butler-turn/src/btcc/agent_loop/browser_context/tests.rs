@@ -52,6 +52,7 @@ fn observe(messages: &mut Vec<ModelRoundMessage>, tab: &str, obs: &str) {
 
 pub(in crate::btcc::agent_loop) fn assert_per_tab_cycles() {
     assert_budget_boundaries();
+    assert_resumed_summary_floor();
     assert_resolved_tab();
     assert_zoom_and_byte_guard();
     let mut messages = Vec::new();
@@ -151,7 +152,10 @@ fn assert_frozen_receipt() {
     let mut messages = Vec::new();
     observe(&mut messages, "a", "o5");
     let frozen = messages[0].clone();
-    let mut state = BrowserPrune { watermark: 1 };
+    let mut state = BrowserPrune {
+        watermark: 1,
+        ..Default::default()
+    };
     observed_act(&mut messages, "o5", "o6");
     let mut value: Value = serde_json::from_str(&messages[2].content).unwrap();
     value["output"]["untrusted_content"]["text"] = "x".repeat(70_000).into();
@@ -312,4 +316,80 @@ fn assert_zoom_and_byte_guard() {
         messages[1].content,
         planned.iter().find(|s| s.index == 1).unwrap().stub
     );
+}
+
+fn assert_resumed_summary_floor() {
+    use crate::btcc::agent_loop::{
+        continuation::AuthorityLoopContinuation, contracts::PreparedPolicy,
+        guided_types::FinalSynthesis, state::State,
+    };
+    let mut prepared = PreparedPolicy {
+        prompt: String::new(),
+        instructions: None,
+        tools: vec![],
+        tool_choice: None,
+        resumed_tool_call: None,
+        authority_decision: None,
+        images: Default::default(),
+        request: Default::default(),
+        ports: Default::default(),
+        final_synthesis: FinalSynthesis::Never,
+    };
+    let mut continuation = AuthorityLoopContinuation::fixture("request", "call");
+    continuation.messages.clear();
+    for index in 0..4 {
+        sized_observation(&mut continuation.messages, index, 70_000);
+    }
+    // An active summary covers the first two source messages (exclusive floor).
+    continuation
+        .extensions
+        .insert("browserPruneFloor".into(), json!(2));
+    continuation
+        .extensions
+        .insert("browserPruneWatermark".into(), json!(3));
+    let encoded = serde_json::to_string(&continuation).unwrap();
+    let mut state = State::resumed(serde_json::from_str(&encoded).unwrap(), &mut prepared);
+    assert_eq!(state.compacted_through, 2);
+    assert_eq!(state.browser_prune.watermark, 3);
+    assert_eq!(
+        state.browser_prune.stripped, 0,
+        "resume scans still files once"
+    );
+    let covered = state.messages[..2].to_vec();
+    prune(
+        &mut state.messages,
+        &mut state.browser_prune,
+        state.compacted_through,
+        0,
+    );
+    assert_eq!(
+        state.messages[..2],
+        covered,
+        "summary source digest stays valid"
+    );
+    assert!(is_superseded(&state.messages[2].content));
+    assert!(!is_superseded(&state.messages[3].content));
+    assert_eq!(state.browser_prune.stripped, state.messages.len());
+    let once = state.messages.clone();
+    call(&mut state.messages, "a", "a3", 1, 1);
+    prune(
+        &mut state.messages,
+        &mut state.browser_prune,
+        state.compacted_through,
+        u64::MAX,
+    );
+    assert_eq!(state.messages[..once.len()], once);
+    assert!(
+        state
+            .messages
+            .iter()
+            .all(|m| !m.content.contains("still_file"))
+    );
+    assert_eq!(state.browser_prune.stripped, state.messages.len());
+    let legacy = State::resumed(
+        AuthorityLoopContinuation::fixture("request", "call"),
+        &mut prepared,
+    );
+    assert_eq!(legacy.compacted_through, 0);
+    assert_eq!(legacy.browser_prune.watermark, 0);
 }

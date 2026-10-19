@@ -271,7 +271,7 @@ async fn steering_rebase_reselects_surface_before_the_model_request() {
     );
 }
 
-const AUTHORITY_CONTINUATION_GOLDEN: &str = r#"{"requestRef":"request-1","callId":"journal-pending","messages":[{"role":"user","content":"hello","continuationItemId":"turn-item-0"},{"role":"assistant","content":"","toolCalls":[{"id":"pending","name":"read_file","arguments":{},"rawArguments":"{}"}],"continuationItemId":"turn-item-1"}],"nextItemOrdinal":2,"instructions":"guided","modelRoundIndex":1,"iteration":0,"emptyResponseRecoveryUsed":false,"toolResults":[],"batch":{"tools":[{"name":"read_file","description":"read_file","parameters":{},"concurrencySafe":false,"toolContractVersion":2}],"calls":[{"id":"pending","name":"read_file","arguments":{},"rawArguments":"{}"}],"nextCallIndex":0,"results":[]},"browserPruneWatermark":0}"#;
+const AUTHORITY_CONTINUATION_GOLDEN: &str = r#"{"requestRef":"request-1","callId":"journal-pending","messages":[{"role":"user","content":"hello","continuationItemId":"turn-item-0"},{"role":"assistant","content":"","toolCalls":[{"id":"pending","name":"read_file","arguments":{},"rawArguments":"{}"}],"continuationItemId":"turn-item-1"}],"nextItemOrdinal":2,"instructions":"guided","modelRoundIndex":1,"iteration":0,"emptyResponseRecoveryUsed":false,"toolResults":[],"batch":{"tools":[{"name":"read_file","description":"read_file","parameters":{},"concurrencySafe":false,"toolContractVersion":2}],"calls":[{"id":"pending","name":"read_file","arguments":{},"rawArguments":"{}"}],"nextCallIndex":0,"results":[]}}"#;
 
 /// KEEP: every optional field of a stored authority continuation survives a
 /// decode/encode cycle byte for byte (field order and omission rules included).

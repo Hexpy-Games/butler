@@ -13,6 +13,8 @@ const IMAGE_TOKENS: usize = 1_600;
 pub(in crate::btcc::agent_loop) struct BrowserPrune {
     /// Message count at the last applied prune; zero means none.
     pub watermark: usize,
+    /// Messages already scanned for still files in this execution.
+    pub stripped: usize,
 }
 
 pub(super) struct Stale {
@@ -30,7 +32,7 @@ impl Stale {
             .then(|| image["data"].as_str())
             .flatten();
         let bytes = message.content.len();
-        let tokens = (bytes - data.map_or(0, str::len)).div_ceil(4)
+        let tokens = bytes.saturating_sub(data.map_or(0, str::len)).div_ceil(4)
             + if data.is_some() { IMAGE_TOKENS } else { 0 };
         Self {
             index,
@@ -47,7 +49,12 @@ pub(in crate::btcc::agent_loop) fn prune(
     floor: usize,
     byte_limit: u64,
 ) {
-    strip_stills(messages);
+    // Earlier messages were scanned already; later stubs cannot add still files.
+    let len = messages.len();
+    if let Some(unscanned) = messages.get_mut(prune.stripped.min(len)..) {
+        strip_stills(unscanned);
+    }
+    prune.stripped = len;
     let stale: Vec<_> = plan(messages)
         .into_iter()
         .filter(|s| s.index >= floor)

@@ -20,7 +20,7 @@ async fn browser_rounds_stay_append_only_until_one_batch_prune() -> Result<(), H
 }
 
 #[tokio::test]
-async fn browser_prune_keeps_turns_correct_across_boundary() -> Result<(), HarnessError> {
+async fn browser_prune_then_new_turn_answers_correctly() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     run(true).await
 }

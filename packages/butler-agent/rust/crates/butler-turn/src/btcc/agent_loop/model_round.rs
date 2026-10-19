@@ -111,11 +111,8 @@ async fn attempt_round(
     surface: &mut ToolSurface,
 ) -> Result<ModelRoundResult, AttemptError> {
     let timing = super::command_timing::CommandTiming::new("model_projection");
-    // Messages already sent are append-only. Gemini and Anthropic reuse a prompt
-    // cache entry only where an earlier request ended, so rewriting any sent message,
-    // even one stale tool result, discards the cache for every later round. Rewrite
-    // sent messages only in rare batches: `browser_context::prune` over its budget,
-    // context compaction, or a new context epoch at a turn start.
+    // Within a turn, already-sent messages are append-only between compactions.
+    // Stale browser results are stubbed in one batch only when over budget.
     super::browser_context::prune(
         &mut state.messages,
         &mut state.browser_prune,

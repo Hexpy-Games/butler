@@ -384,10 +384,14 @@ pub(super) async fn suspend_for_authority(
         .or_else(|| state.presentation.take());
     // Rides on the continuation row the suspension writes anyway.
     let mut extensions = input.policy.continuation_extensions();
-    extensions.insert(
-        "browserPruneWatermark".into(),
-        serde_json::json!(state.browser_prune.watermark),
-    );
+    for (key, value) in [
+        ("browserPruneWatermark", state.browser_prune.watermark),
+        ("browserPruneFloor", state.compacted_through),
+    ] {
+        if value > 0 {
+            extensions.insert(key.into(), serde_json::json!(value));
+        }
+    }
     if let Some(diagnostics) = prepared
         .request
         .usage_attribution
