@@ -13,7 +13,6 @@ use std::{
 use tokio::sync::Notify;
 
 pub(crate) const OWNER: &str = "AI 연구를 조사해 주세요.";
-pub(crate) const MESSAGE: &str = "Check an additional source.";
 pub(crate) const FOLLOWUP: &str = "다시 조사해줄래?";
 #[derive(Default)]
 pub(crate) struct Script {
@@ -27,10 +26,6 @@ pub(crate) struct Script {
     pub parallel_files: AtomicBool,
     pub terminal_fault: AtomicBool,
     pub file_root: Mutex<String>,
-    pub routed: AtomicBool,
-    pub blocked: AtomicBool,
-    pub hold_revision: AtomicBool,
-    pub work: Mutex<String>,
     stopped: bool,
 }
 pub(crate) async fn start(
@@ -57,11 +52,8 @@ async fn reply(
     use axum::response::IntoResponse;
     let key = matching::key("/codex/responses", &body, &Placeholders::default());
     script.requests.lock().unwrap().push(body.clone());
-    let is_message = key.user_request.starts_with(MESSAGE);
     let child = key.user_request.starts_with("role: steward");
-    let kind = if is_message {
-        "message"
-    } else if child {
+    let kind = if child {
         "child"
     } else if key.user_request == OWNER {
         "parent"
@@ -94,14 +86,8 @@ async fn reply(
         script.held.notify_one();
         script.release.notified().await;
     }
-    if is_message && step == 3 && script.hold_revision.load(Ordering::SeqCst) {
-        script.held.notify_one();
-        script.release.notified().await;
-    }
     let replay: Value = serde_json::from_str(include_str!("replay.json")).unwrap();
-    let items = replay[if is_message { "child" } else { kind }]
-        .as_array()
-        .unwrap();
+    let items = replay[kind].as_array().unwrap();
     let replay_step = if child && script.parallel_files.load(Ordering::SeqCst) && step > 2 {
         step - 1
     } else {
@@ -128,26 +114,6 @@ async fn reply(
         } else if kind == "followup" && template["name"] == "delegate_to_steward" {
             template["arguments"]["request"] = OWNER.into();
         }
-    }
-    if script.routed.load(Ordering::SeqCst) && kind == "followup" {
-        let instruction = MESSAGE;
-        template = if step == 0 {
-            json!({"type":"function_call","name":"steer_steward","arguments":{"relation_id":"{{RELATION}}","instruction":instruction}})
-        } else {
-            json!({"type":"message","text":"Follow-up sent."})
-        };
-    }
-    if script.blocked.load(Ordering::SeqCst) && child && step == 2 {
-        template["arguments"]["disposition"] = "blocked".into();
-        template["arguments"]["action_updates"] = json!([]);
-        template["arguments"]["remaining_actions"] = json!(["research"]);
-        template["arguments"]["next_condition"] = "Source unavailable".into();
-    }
-    if child && step > 0 {
-        *script.work.lock().unwrap() = work_id(&body);
-    }
-    if is_message {
-        template = message_step(&script, step);
     }
     let id = if template["name"] == "delegate_to_steward" {
         "delegate".into()
@@ -179,24 +145,6 @@ async fn reply(
         item
     };
     ([("content-type", "text/event-stream")], wire(item)).into_response()
-}
-fn message_step(script: &Script, step: usize) -> Value {
-    match step {
-        0 if script.blocked.load(Ordering::SeqCst) => {
-            json!({"type":"function_call","name":"continue_work","arguments":{"work_id":script.work.lock().unwrap().clone()}})
-        }
-        0 => json!({"type":"function_call","name":"start_work","arguments":{"objective":MESSAGE}}),
-        1 | 2 => json!({"type":"function_call","name":"replace_work_plan","arguments":{
-            "start_new":false,"objective":MESSAGE,"governing_refs":[],"execution_mode":"direct",
-            "actions":[{"action_key":"research","description":"Verify the additional source","dependency_keys":if step==1 {vec!["missing"]}else{vec![]}}],"checks":["Verified"]}}),
-        3 => {
-            json!({"type":"function_call","name":"record_work_review","arguments":{"subject":"plan","verdict":"accept","summary":"Ready","corrections":[],"action_updates":[]}})
-        }
-        4 => {
-            json!({"type":"function_call","name":"record_work_disposition","arguments":{"work_id":"{{WORK}}","disposition":"completed","summary":"Additional source verified","action_updates":[{"action_key":"research","status":"done"}],"remaining_actions":[],"followups":[]}})
-        }
-        _ => json!({"type":"message","text":"Additional source verified"}),
-    }
 }
 fn work_id(body: &Value) -> String {
     body["input"]

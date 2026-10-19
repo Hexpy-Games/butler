@@ -342,18 +342,11 @@ fn manifest_counters(value: &Value) -> Result<(), ProjectLedgerReadError> {
     let pointers = [
         ("currentPlanRevisionId", "planRevision"),
         ("latestCheckpointRevisionId", "checkpointRevision"),
+        ("latestDispositionRevisionId", "dispositionRevision"),
     ];
     if pointers.iter().any(|(pointer, name)| {
         value.get(*pointer).is_some() != (counter(name).unwrap_or_default() > 0)
     }) {
-        return Err(invalid());
-    }
-    // The counter includes superseded dispositions; only a current pointer
-    // grants disposition authority, and completed Work must retain one.
-    let disposition = value.get("latestDispositionRevisionId").is_some();
-    if (disposition && counter("dispositionRevision") == Some(0))
-        || (!disposition && value.get("status").and_then(Value::as_str) == Some("completed"))
-    {
         return Err(invalid());
     }
     Ok(())
