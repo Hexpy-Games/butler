@@ -4,7 +4,8 @@ impl CommandScope<'_> {
     pub(super) fn read_inventory(
         &self,
     ) -> Option<Arc<butler_platform::secure_fs::SecretInventory>> {
-        self.workspace_reference.and_then(|r| r.read_inventory())
+        self.workspace_reference
+            .and_then(butler_turn::workspace::WorkspaceReference::read_inventory)
     }
     pub(super) fn output_origin<'b>(
         &'b self,

@@ -42,7 +42,7 @@ pub(super) async fn resolve(
             .binding
             .workspace_reference
             .as_ref()
-            .and_then(|r| r.read_inventory());
+            .and_then(butler_turn::workspace::WorkspaceReference::read_inventory);
         // Uploads are consumed by one operation; retained turn deliverables
         // must never share their cleanup lifetime with an upload of that source.
         let turn = &owner.binding.turn_id;

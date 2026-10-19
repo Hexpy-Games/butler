@@ -20,7 +20,7 @@ pub(super) async fn execute(
         .binding
         .workspace_reference
         .as_ref()
-        .and_then(|r| r.read_inventory());
+        .and_then(butler_turn::workspace::WorkspaceReference::read_inventory);
     let lease = secure_fs::StageScope::for_operation(&data, &turn);
     let files = call.arguments.get("files").cloned().unwrap_or(Value::Null);
     let result = tokio::task::spawn_blocking(move || {

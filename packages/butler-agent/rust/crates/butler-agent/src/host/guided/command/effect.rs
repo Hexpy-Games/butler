@@ -63,7 +63,9 @@ pub(super) async fn prepare(
     let target = target(&directory, effect);
     let adapter = CommandEffectAdapter {
         observation: owner.clone(),
-        inventory: scope.workspace_reference.and_then(|r| r.read_inventory()),
+        inventory: scope
+            .workspace_reference
+            .and_then(butler_turn::workspace::WorkspaceReference::read_inventory),
         installation_root: scope.installation_root.map(Path::to_path_buf),
         allowed_tools_and_effects: scope.allowed_tools_and_effects.map(<[String]>::to_vec),
         commands: owner.commands.clone(),

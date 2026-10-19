@@ -114,3 +114,16 @@ pub(super) fn parse_args(call: &Value) -> Result<Value, (&'static str, String)> 
         )),
     }
 }
+
+/// Parse the call and keep its model-facing argument error at this boundary.
+pub(super) fn call_arguments(call: &Value) -> Result<Value, Value> {
+    parse_args(call).map_err(|(code, detail)| {
+        let mut result = super::failure(
+            code,
+            "Tool arguments must be a JSON object.",
+            "Retry read_file with 1-20 canonical request objects.",
+        );
+        result["detail"] = json!(detail);
+        result
+    })
+}

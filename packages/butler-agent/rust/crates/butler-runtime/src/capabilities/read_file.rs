@@ -1,6 +1,6 @@
 mod contracts;
 pub(super) use contracts::definition;
-use contracts::{Request, integer, normalize_request, parse_args};
+use contracts::{Request, integer, normalize_request};
 
 use std::path::PathBuf;
 use std::time::Instant;
@@ -18,17 +18,9 @@ pub(super) async fn execute(
 ) -> Result<Value, CapabilityError> {
     let workspace = &input.workspace_request(workspace);
     let started = Instant::now();
-    let args = match parse_args(input.call) {
+    let args = match contracts::call_arguments(input.call) {
         Ok(value) => value,
-        Err((code, detail)) => {
-            let mut result = failure(
-                code,
-                "Tool arguments must be a JSON object.",
-                "Retry read_file with 1-20 canonical request objects.",
-            );
-            result["detail"] = json!(detail);
-            return Ok(result);
-        }
+        Err(failure) => return Ok(failure),
     };
     let requests = match args.get("requests").and_then(Value::as_array) {
         Some(items) if !items.is_empty() && items.len() <= 20 => items

@@ -56,7 +56,7 @@ pub(super) async fn publish(
         .binding
         .workspace_reference
         .as_ref()
-        .and_then(|r| r.read_inventory());
+        .and_then(butler_turn::workspace::WorkspaceReference::read_inventory);
     let result = tokio::task::spawn_blocking(move || match inventory {
         Some(inventory) => store.publish_with_inventory(request, &inventory),
         None => store.publish(request),
