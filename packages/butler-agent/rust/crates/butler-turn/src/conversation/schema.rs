@@ -123,9 +123,6 @@ fn migrate(
     connection
         .execute_batch(SQL)
         .map_err(ConversationError::sqlite)?;
-    connection
-        .execute_batch(super::source_changes::SQL)
-        .map_err(ConversationError::sqlite)?;
     connection.execute(
         "INSERT OR IGNORE INTO conversation_source_identity (singleton, identity) VALUES (1, ?1)",
         [uuid::Uuid::new_v4().to_string()],
@@ -149,6 +146,10 @@ fn migrate(
                 .map_err(ConversationError::sqlite)?;
         }
     }
+    // The change log triggers read the origin columns added above.
+    connection
+        .execute_batch(super::source_changes::SQL)
+        .map_err(ConversationError::sqlite)?;
     connection.execute(
         "INSERT OR IGNORE INTO conversation_schema_migrations (version, applied_at) VALUES (?1, ?2)",
         rusqlite::params![VERSION, clock.now_iso()],

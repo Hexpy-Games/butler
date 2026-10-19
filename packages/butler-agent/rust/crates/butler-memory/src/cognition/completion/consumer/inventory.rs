@@ -3,6 +3,8 @@
 //! the changes after the mirror's watermark), so a failed step only delays
 //! the mirror. An unchanged store reads two values and writes nothing.
 
+use std::sync::atomic::Ordering;
+
 use super::blocking;
 use super::process::{Input, canonical_path, resolve_input_generation};
 use crate::cognition::graph::GraphRepository;
@@ -14,12 +16,24 @@ use crate::cognition::{
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire};
 use butler_turn::conversation::ConversationSourceReader;
 
-/// One step when the mirror is behind; true while more steps remain.
+/// One step when the mirror may be behind; true while more steps remain.
+/// Without a canonical change or queued notice since the last finished step
+/// it reads nothing.
 pub(super) async fn run(input: &Input) -> bool {
+    if !input.inventory_due.swap(false, Ordering::AcqRel) {
+        return false;
+    }
     match step(input).await {
-        Ok(more) => more,
+        Ok(more) => {
+            if more {
+                input.inventory_due.store(true, Ordering::Release);
+            }
+            more
+        }
         Err(error) => {
+            // Retried on the next poll, without spinning on this one.
             butler_core::diagnostic!("[native-memory-inventory] {}", error.code());
+            input.inventory_due.store(true, Ordering::Release);
             false
         }
     }

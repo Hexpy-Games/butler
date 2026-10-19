@@ -26,6 +26,9 @@ pub(in super::super) struct Input {
     pub catchup_at: Arc<Mutex<Option<Instant>>>,
     pub unclean_start: Arc<AtomicBool>,
     pub catchup_progress: Arc<Mutex<Option<(PathBuf, crate::cognition::graph::CatchupState)>>>,
+    /// The inventory mirror may be behind: set at start, by a canonical
+    /// change or a queued notice, and while a step leaves work.
+    pub inventory_due: Arc<AtomicBool>,
     pub probe: Arc<super::super::probe::ProbeReader>,
     pub vector_batch: Arc<AtomicBool>,
     pub daily_batch: bool,
