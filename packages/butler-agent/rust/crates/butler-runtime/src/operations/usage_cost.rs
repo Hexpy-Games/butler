@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use butler_models::models::{ModelPricing, RequestTokens, UsageAuthMode};
 
-pub use session_index::{SessionUsage, SessionUsageIndex, SessionUsageView};
+pub use session_index::{SessionRoleUsage, SessionUsage, SessionUsageIndex, SessionUsageView};
 
 /// One prompt-usage row, as written by `PromptUsageMetrics`.
 #[derive(Clone, Debug, Deserialize)]
@@ -26,6 +26,12 @@ pub struct UsageEvent {
     pub model: String,
     /// Usage scope, `btcc-guided:<runtime session id>` for conversation turns.
     pub scope: String,
+    /// Root chat attribution, absent in legacy events.
+    #[serde(default)]
+    pub root_session_id: Option<String>,
+    /// Writing role; any role except main is delegated.
+    #[serde(default)]
+    pub role: Option<String>,
     /// Prompt tokens, cached and cache-written ones included.
     pub prompt_tokens: f64,
     /// Prompt tokens served from the provider cache.
