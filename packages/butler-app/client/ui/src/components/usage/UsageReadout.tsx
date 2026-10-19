@@ -42,7 +42,7 @@ export function UsageReadout({ view, values, label, selected, showCost, delta, s
       {!selected && share ? <KeyValueRow label={copy.share} value={share} valueTextSize="caption" /> : null}
     </Stack>
     <Collapsible open={Boolean(parts?.length)}>
-      <Stack gap="none" data-test-class="usage-parts">
+      <Stack align={panel ? "row" : "column"} gap={panel ? "lg" : "none"} wrap={panel} rowGap={panel ? "xs" : undefined} data-test-class="usage-parts">
         {parts?.map((part) => <KeyValueRow key={part.id} label={part.label} value={part.value} valueTextSize="caption" />)}
       </Stack>
     </Collapsible>
