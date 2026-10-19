@@ -1,6 +1,8 @@
 //! Resolve every visible mount view of a protected filesystem coordinate.
 use super::super::Error;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
+use std::ffi::{OsStr, OsString};
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 struct Mount {
@@ -10,7 +12,10 @@ struct Mount {
     options: String,
 }
 
-pub(super) struct Snapshot(Vec<Mount>);
+pub(super) struct Snapshot {
+    mounts: Vec<Mount>,
+    targets: HashMap<OsString, usize>,
+}
 
 pub(super) fn snapshot() -> Result<Snapshot, Error> {
     let mut mounts = Vec::new();
@@ -26,18 +31,40 @@ pub(super) fn snapshot() -> Result<Snapshot, Error> {
             options: (*options).to_owned(),
         });
     }
-    Ok(Snapshot(mounts))
+    Ok(Snapshot::new(mounts))
 }
 
 impl Snapshot {
-    fn backing(&self, path: &Path) -> Result<(&str, PathBuf), Error> {
-        // The deepest (and, among stacked mounts, last) prefix is visible.
-        let (owner, relative) = self
-            .0
+    fn new(mounts: Vec<Mount>) -> Self {
+        // The last stacked mount wins, exactly as in the mountinfo snapshot.
+        let targets = mounts
             .iter()
-            .filter_map(|mount| Some((mount, beneath(path, &mount.target)?)))
-            .max_by_key(|(mount, _)| mount.target.as_os_str().len())
-            .ok_or("project mount is unknown")?;
+            .enumerate()
+            .map(|(index, mount)| (mount.target.as_os_str().to_owned(), index))
+            .collect();
+        Self { mounts, targets }
+    }
+
+    fn owner(&self, path: &Path) -> Option<&Mount> {
+        // Look up byte prefixes at component boundaries instead of scanning
+        // every mount for each credential and each of its visible aliases.
+        // Byte prefixes preserve mountinfo's exact path spelling.
+        let mut bytes = path.as_os_str().as_bytes();
+        loop {
+            if let Some(index) = self.targets.get(OsStr::from_bytes(bytes)) {
+                return self.mounts.get(*index);
+            }
+            if bytes == b"/" {
+                return None;
+            }
+            let end = bytes.iter().rposition(|byte| *byte == b'/')?;
+            bytes = bytes.get(..end.max(1))?;
+        }
+    }
+
+    fn backing(&self, path: &Path) -> Result<(&str, PathBuf), Error> {
+        let owner = self.owner(path).ok_or("project mount is unknown")?;
+        let relative = beneath(path, &owner.target).ok_or("invalid mount prefix")?;
         Ok((&owner.device, join(&owner.source, relative)))
     }
 
@@ -73,12 +100,7 @@ impl Snapshot {
         original: Option<&Path>,
         keep: &[PathBuf],
     ) -> PathBuf {
-        let owner = self
-            .0
-            .iter()
-            .filter(|mount| beneath(alias, &mount.target).is_some())
-            .max_by_key(|mount| mount.target.as_os_str().len())
-            .map(|mount| mount.target.as_path());
+        let owner = self.owner(alias).map(|mount| mount.target.as_path());
         match owner {
             Some(target)
                 if target != Path::new("/")
@@ -98,7 +120,7 @@ impl Snapshot {
         let mut result = vec![original.to_path_buf()];
         let path: PathBuf = original.components().collect();
         let (device, coordinate) = self.backing(&path)?;
-        for mount in self.0.iter().filter(|mount| mount.device == device) {
+        for mount in self.mounts.iter().filter(|mount| mount.device == device) {
             let Some(relative) = beneath(&coordinate, &mount.source) else {
                 continue;
             };
@@ -115,7 +137,7 @@ impl Snapshot {
 
     /// Each mount target's device number (the topmost of stacked mounts).
     pub(super) fn devices(&self) -> std::collections::HashMap<PathBuf, u64> {
-        self.0
+        self.mounts
             .iter()
             .filter_map(|mount| {
                 let (major, minor) = mount.device.split_once(':')?;
@@ -127,7 +149,7 @@ impl Snapshot {
 
     /// Each mount's target and per-mount options, in mount order.
     pub(super) fn options(&self) -> impl Iterator<Item = (&Path, &str)> {
-        self.0
+        self.mounts
             .iter()
             .map(|mount| (mount.target.as_path(), mount.options.as_str()))
     }
@@ -136,7 +158,7 @@ impl Snapshot {
         let mut views: BTreeSet<_> = self.aliases(roots)?.into_iter().collect();
         for root in roots {
             let (device, coordinate) = self.backing(root)?;
-            for mount in self.0.iter().filter(|mount| mount.device == device) {
+            for mount in self.mounts.iter().filter(|mount| mount.device == device) {
                 let (visible_device, visible_coordinate) = self.backing(&mount.target)?;
                 if mount.source.starts_with(&coordinate)
                     && mount.target.is_dir()
@@ -196,3 +218,6 @@ fn decode(encoded: &str) -> Result<PathBuf, Error> {
     }
     Ok(std::ffi::OsString::from_vec(decoded).into())
 }
+
+#[cfg(test)]
+mod tests;
