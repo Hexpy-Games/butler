@@ -7,7 +7,7 @@ use std::{io::Read, sync::Arc, time::Instant};
 #[tokio::test]
 async fn perf_contained_opens_and_5000_file_readers() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    butler_e2e::skip_unless!(command_sandbox::linux_test_host(), "Unix reader timing");
+    butler_e2e::skip_unless!(butler_platform::secure_fs::FILE_IDS, "Unix reader timing");
     let mut s = Setup::new("LINUX-CONTAINED-PERF")?;
     let root = &s.sandbox.workspace;
     let inventory = SecretInventory::cached(&s.sandbox.data);

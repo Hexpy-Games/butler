@@ -141,15 +141,8 @@ fn read_bounded(input: &GrepCandidate) -> Result<Vec<u8>, GrepRead> {
         &input.butler_data,
     )
     .map_err(|_| GrepRead::skipped_after_read("io_error", 0))?;
-    if file
-        .metadata()
-        .map_err(|_| GrepRead::skipped_unread("io_error"))?
-        .len()
-        > cap
-    {
-        return Err(GrepRead::skipped_unread("max_bytes_per_file"));
-    }
-    // A file can grow after lstat. Bound the native allocation at the declared cap.
+    // Contained opens already verify the file type. The bounded read
+    // below also rejects growth past the cap without a redundant metadata call.
     let mut bytes = Vec::new();
     if file.take(cap + 1).read_to_end(&mut bytes).is_err() {
         return Err(GrepRead::skipped_after_read("io_error", 0));

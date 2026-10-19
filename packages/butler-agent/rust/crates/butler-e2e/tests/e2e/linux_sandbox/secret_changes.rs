@@ -42,7 +42,10 @@ async fn denied(s: &Setup, path: &str) {
 #[tokio::test]
 async fn reader_refuses_created_scratch_dangling_and_hard_links() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    butler_e2e::skip_unless!(command_sandbox::linux_test_host(), "Unix contained readers");
+    butler_e2e::skip_unless!(
+        butler_platform::secure_fs::FILE_IDS,
+        "Unix contained readers"
+    );
     let mut s = Setup::new("LINUX-CONTAINED-LINKS")?;
     bind_inventory(&s);
     let root = &s.sandbox.workspace;
@@ -84,7 +87,10 @@ async fn reader_refuses_created_scratch_dangling_and_hard_links() -> Result<(), 
 async fn reader_refuses_old_links_retargeted_by_link_swap_and_directory_move()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    butler_e2e::skip_unless!(command_sandbox::linux_test_host(), "Unix contained readers");
+    butler_e2e::skip_unless!(
+        butler_platform::secure_fs::FILE_IDS,
+        "Unix contained readers"
+    );
     let mut s = Setup::new("LINUX-CONTAINED-RETARGET")?;
     bind_inventory(&s);
     let root = &s.sandbox.workspace;
@@ -118,7 +124,10 @@ async fn reader_refuses_old_links_retargeted_by_link_swap_and_directory_move()
 #[tokio::test]
 async fn reader_accepts_relative_project_and_pnpm_style_link_farms() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    butler_e2e::skip_unless!(command_sandbox::linux_test_host(), "Unix contained readers");
+    butler_e2e::skip_unless!(
+        butler_platform::secure_fs::FILE_IDS,
+        "Unix contained readers"
+    );
     let mut s = Setup::new("LINUX-CONTAINED-POSITIVE")?;
     bind_inventory(&s);
     let root = &s.sandbox.workspace;
@@ -212,7 +221,7 @@ async fn reader_refuses_hard_links_when_credential_identity_bound_is_exhausted()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
-        command_sandbox::linux_test_host(),
+        butler_platform::secure_fs::FILE_IDS,
         "Unix credential identity bound"
     );
     let mut s = Setup::new("LINUX-CONTAINED-HARD-LIMIT")?;
