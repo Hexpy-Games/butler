@@ -4,7 +4,7 @@ import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, extname, normalize, sep } from "node:path";
 import { probeFocusRing } from "../support/focus-ring-clipping";
 import { launchSmokeBrowser } from "../support/smoke-browser";
-import { usageView, quota } from "../../packages/butler-app/client/ui/src/components/conversation/contextUsage.fixtures";
+import { usageView, quota, delegatedUsageView } from "../../packages/butler-app/client/ui/src/components/conversation/contextUsage.fixtures";
 
 const dist = join(process.cwd(), "packages/butler-app/client/ui/dist");
 const shots = process.env.BUTLER_USAGE_SHOTS;
@@ -24,12 +24,16 @@ const heightDeltas: number[] = [];
 const alignmentDeltas: number[] = [];
 let releaseLoading: (() => void)[] = [];
 function monitor(url: URL) {
-  const view = usageView({ quota: quota(), usd: 0.0842 });
+  const delegated = state === "delegated" && !before;
+  const view = delegated ? delegatedUsageView({ quota: quota(), usd: 0.1563 }) : usageView({ quota: quota(), usd: 0.0842 });
   const now = Date.parse(view.generated_at);
   const hours = Number(url.searchParams.get("since_hours")) || 0;
   const session = url.searchParams.get("session_id");
   view.filters = { sessionId: session, sinceTs: hours ? now - hours * 3600000 : null, untilTs: hours ? now : null };
-  view.timeline.slots = state === "empty" ? [] : [[now - 3600000, 1, 20000, 10000, 1000], [now - 600000, 2, 28200, 21900, 2420]];
+  // A session's slots carry its delegated total last; the main-only slots match the ready chat.
+  view.timeline.slots = state === "empty" ? [] : delegated && session
+    ? [[now - 3600000, 1, 20000, 10000, 1000, 0], [now - 1800000, 8, 41200, 28100, 3500, 44700], [now - 600000, 2, 28200, 21900, 2420, 0]]
+    : [[now - 3600000, 1, 20000, 10000, 1000], [now - 600000, 2, 28200, 21900, 2420]];
   view.topSessions = [{ sessionId: "s1", title: backendTitle, kind: "chat", totalTokens: 51620, requests: 3, lastUsedMs: now },
     { sessionId: "s2", title: "Daily review", kind: "schedule", totalTokens: 1200, requests: 1, lastUsedMs: now - 3600000 }];
   if (state !== "empty") view.topSessions.push(...Array.from({ length: 6 }, (_, i) => ({ sessionId: `s${i + 3}`, title: `Review ${i + 3}`, kind: "chat" as const, totalTokens: 1000 - i * 100, requests: 1, lastUsedMs: now })));
@@ -62,7 +66,7 @@ try {
       catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-6-luna", reasoning_effort: "none", access_mode: "full_access", plan_mode: false } } } });
     return route.fulfill({ json: { ok: true, data: {} } });
   });
-  for (const width of [1280, 375]) for (const theme of ["light", "dark"]) for (const scenario of ["ready", "empty", "loading"]) {
+  for (const width of [1280, 375]) for (const theme of ["light", "dark"]) for (const scenario of ["ready", "empty", "loading", "delegated"]) {
     releaseLoading.forEach(resolve => resolve()); releaseLoading = [];
     if (process.env.BUTLER_USAGE_WIDTH && width !== Number(process.env.BUTLER_USAGE_WIDTH)) continue;
     if (process.env.BUTLER_USAGE_STATE && scenario !== process.env.BUTLER_USAGE_STATE) continue;
@@ -70,7 +74,8 @@ try {
     state = scenario;
     backendTitle = "Login form refactor";
     await page.setViewportSize({ width, height: 1000 });
-    await page.goto(`${base}/?visual=components&theme=${theme}&locale=ko&auth=${auth}`);
+    const locale = process.env.BUTLER_USAGE_LOCALE ?? "ko";
+    await page.goto(`${base}/?visual=components&theme=${theme}&locale=${locale}&auth=${auth}`);
     const closeInspector = page.getByRole("button", { name: "오른쪽 패널 숨기기", exact: true }).first();
     if (await closeInspector.isVisible()) await closeInspector.click();
     await page.locator('[data-slot="composer-compact-preview"]').click();
@@ -94,6 +99,22 @@ try {
     }
     if (!before && scenario === "ready" && auth === "api_key") assert.match(await popover.innerText(), /(?:^|\s)\$0\.08/u);
     if (shots) await page.screenshot({ path: join(shots, `${before ? "before" : "after"}${auth === "subscription" ? "-subscription" : ""}-popover-${theme}-${width}-${scenario}.png`) });
+    if (shots) await popover.screenshot({ path: join(shots, `crop-${before ? "before" : "after"}-${locale}-${theme}-${width}-${scenario}.png`) });
+    const parts = popover.locator('[data-test-class="usage-parts"]');
+    if (!before && scenario !== "delegated") assert.equal(await parts.count(), 0, "no split without delegated usage");
+    if (scenario === "delegated") {
+      if (!before) {
+        assert.equal(await parts.locator('[data-test-class="key-value-row"]').count(), 2);
+        if (locale === "ko") assert.match(await parts.innerText(), /대화[\s\S]*5\.2만 · 53\.6%[\s\S]*하위 작업[\s\S]*4\.5만 · 46\.4%/u);
+        await popover.locator('[data-slot="usage-bars"]').focus(); await page.keyboard.press("Home");
+        if (locale === "ko") assert.match(await parts.innerText(), /2\.1만 · 32%[\s\S]*4\.5만 · 68%/u, "a selected bar splits its own total");
+        await page.waitForTimeout(400);
+        assert.equal(await parts.locator('[data-test-class="key-value-row"]').count(), 2, "selection keeps the split rows");
+        if (shots) await popover.screenshot({ path: join(shots, `crop-after-${locale}-${theme}-${width}-delegated-selected.png`) });
+      }
+      await page.keyboard.press("Escape"); await page.keyboard.press("Escape");
+      continue;
+    }
     if (!before && scenario === "empty") assert.equal(await popover.locator('[data-test-class="usage-readout"]').count(), 0);
     if (auth === "subscription") await popover.getByText("계정 한도", { exact: true }).waitFor();
     if (!before && scenario === "ready") {

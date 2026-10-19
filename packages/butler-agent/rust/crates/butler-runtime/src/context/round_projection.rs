@@ -247,6 +247,7 @@ impl TurnContext {
         let summary = RoundSummary {
             invocation,
             model_for_sizing: invocation.model_execution.active_model_ref(),
+            usage_attribution: input.usage_attribution,
             butler_data: input.butler_data,
         };
         let projection = state
@@ -321,6 +322,7 @@ impl ProviderBodyAdmissionPort for BudgetAdmission {
 }
 
 struct RoundSummary<'a> {
+    usage_attribution: Option<&'a UsageAttribution>,
     invocation: GuidedInvocation<'a>,
     model_for_sizing: String,
     butler_data: Option<&'a str>,
@@ -371,6 +373,8 @@ impl SummaryPort for RoundSummary<'_> {
             let messages = [user_message(request.text)];
             let reasoning = self.invocation.model_execution.selected_reasoning_effort();
             let usage = UsageAttribution {
+                usage_root: self.usage_attribution.and_then(|v| v.usage_root.clone()),
+                usage_role: self.usage_attribution.and_then(|v| v.usage_role.clone()),
                 prompt_diagnostics: None,
                 session_kind: Some("parent".into()),
                 turn_id: self.invocation.turn.turn_id.clone(),

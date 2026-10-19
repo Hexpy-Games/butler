@@ -60,6 +60,7 @@ async fn nochange_compactor_selects_semantic_and_bounded_eviction_skips_steering
         .project(
             invocation,
             ContextProjectionInput {
+                usage_attribution: None,
                 round_id: "round-semantic",
                 response_item_id: "turn-item-1",
                 semantic_messages: &semantic,
@@ -90,6 +91,7 @@ async fn nochange_compactor_selects_semantic_and_bounded_eviction_skips_steering
         .project(
             invocation,
             ContextProjectionInput {
+                usage_attribution: None,
                 round_id: "round-bounded",
                 response_item_id: "turn-item-2",
                 semantic_messages: &semantic,

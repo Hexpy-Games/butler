@@ -251,3 +251,5 @@ mod structured_logs;
 mod outbound_http;
 
 mod trace_spans;
+
+mod usage_delegated;
