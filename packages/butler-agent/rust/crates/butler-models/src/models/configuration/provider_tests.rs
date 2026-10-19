@@ -348,7 +348,7 @@ async fn prompt_resolution_preserves_explicit_precedence_and_static_alias() {
         })
         .await
         .unwrap();
-    assert_eq!(config.wire_model, "gpt-6-astra");
+    assert_eq!(config.wire_model, "gpt-6.1-sol");
     assert_eq!(configured.wire_model, "gpt-6-luna");
     assert_eq!(
         config.prompt_reasoning_effort,
