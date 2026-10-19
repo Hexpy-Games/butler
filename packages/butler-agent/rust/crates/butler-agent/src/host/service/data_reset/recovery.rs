@@ -1,4 +1,4 @@
-//! Startup acquires DATA before credentials, instance records, logs or stores.
+//! Pending reset recovery acquires DATA before credentials, records, logs or stores.
 use super::{
     apply, cleanup,
     journal::{self, Phase, TRASH_PREFIX},
@@ -39,10 +39,15 @@ fn recover_owned(
     let root = installation
         .validate_data_root(requested)
         .map_err(io::Error::other)?;
-    if !root.join(journal::JOURNAL).exists()
-        && crate::host::runtime::storage_bootstrap::is_unsupported_legacy_data(&root)
-    {
-        return Ok(Some(root));
+    match fs::symlink_metadata(root.join(journal::JOURNAL)) {
+        Ok(_) => {}
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            return Ok(
+                crate::host::runtime::storage_bootstrap::is_unsupported_legacy_data(&root)
+                    .then_some(root),
+            );
+        }
+        Err(e) => return Err(e),
     }
     match fs::symlink_metadata(root.join("state")) {
         Ok(m) if !m.is_dir() || m.file_type().is_symlink() => {
@@ -91,6 +96,32 @@ fn recover_owned(
     journal::generation(&root)?;
     Ok::<_, io::Error>(None)
 }
+
+/// The caller holds the instance lock; no other service can publish reset intent.
+pub(crate) async fn initialize_owned(
+    config: &crate::host::ServiceConfiguration,
+    home: &Path,
+) -> Result<(), butler_turn::btcc::BtccError> {
+    let root = config.data_root.clone();
+    let requested = config.requested_data_root.clone();
+    let default = super::super::configuration::default_data(home);
+    tokio::task::spawn_blocking(move || {
+        // A live writer that publishes after our read-only check owns DATA.
+        // If it crashes before applying, refuse startup until recovery runs.
+        if journal::load(&root)?
+            .is_some_and(|j| matches!(j.phase, Phase::Requested | Phase::RollingBack))
+        {
+            return Err(io::Error::other(
+                "Reset recovery required before opening stores",
+            ));
+        }
+        super::super::data_ownership::migrate(&root, &requested, &default)
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)
+}
+
 pub(crate) async fn finish(root: PathBuf) -> Result<(), butler_turn::btcc::BtccError> {
     tokio::task::spawn_blocking(move || {
         if let Some(mut journal) = journal::load(&root)?

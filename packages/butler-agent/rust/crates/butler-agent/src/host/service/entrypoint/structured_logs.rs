@@ -81,6 +81,7 @@ pub(super) async fn run_until_stopped(
         holds_foreground_lease(foreground_lease),
     )
     .await?;
+    crate::host::service::data_reset::initialize_owned(&config, &user_home).await?;
     let port = listener
         .as_ref()
         .and_then(|listener| listener.local_addr().ok())
