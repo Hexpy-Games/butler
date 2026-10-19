@@ -160,6 +160,7 @@ let appLogOwner = false;
 const appLogging = installAppLogging({ app, ipcMain, dataRoot: appWritableDataRoot,
   getVersion: async () => JSON.parse(await readFile(resolve(__dirname, "package.json"), "utf8")).version,
   readConfig: () => readAppData("/logs/config"),
+  readSettings: () => readAppData("/settings"),
   isSender: event => event.sender === mainWindow?.webContents, isWriter: () => appLogOwner });
 const preloadPath = resolve(__dirname, "preload.cjs");
 const appCacheBudget = readCacheBudgetArtifact(

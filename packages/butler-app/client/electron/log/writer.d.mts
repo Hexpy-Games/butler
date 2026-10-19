@@ -13,7 +13,7 @@ export interface AppRecord {
 }
 export function createAppLogWriter(root: string | null, canWrite?: () => boolean): {
   record(row: AppRecord, process?: "app.main" | "app.renderer"): void;
-  configure(view: { effective: { level: string; category_levels: Record<string, string> } }): void;
+  configure(view: { full_expires_at?: string | null; effective: { level: string; category_levels: Record<string, string> } }): void;
   enabled(category: string, level: string): boolean;
   remember(value: unknown): void;
   observe(value: unknown): void;

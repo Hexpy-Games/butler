@@ -22,6 +22,7 @@ class AppLogWriter {
     this.dataRoot = dataRoot;
     this.redactor = createRedactor();
     this.config = { level: "standard", category_levels: {} };
+    this.fallbackConfig = this.config; this.fullExpiresAt = null;
     this.queue = []; this.queuedBytes = 0; this.stopped = false;
     this.lanes = new Map(); this.failure = null; this.secretsReady = false;
     this.pending = loadSecrets(dataRoot, this.redactor).then(() => { this.secretsReady = true; })
@@ -30,11 +31,12 @@ class AppLogWriter {
   remember(value) { this.redactor.remember(value); }
   observe(value) { this.redactor.observe(value); }
   enabled(category, level) {
-    let threshold = THRESHOLD[this.config.level] ?? 3;
-    for (const key of Object.keys(this.config.category_levels ?? {}).sort((a, b) => a.length - b.length)) {
-      if (category === key || category.startsWith(`${key}.`)) threshold = SEVERITY[this.config.category_levels[key]];
+    const config = this.config.level === "full" && Date.now() >= this.fullExpiresAt ? this.fallbackConfig : this.config;
+    let threshold = THRESHOLD[config.level] ?? 3;
+    for (const key of Object.keys(config.category_levels ?? {}).sort((a, b) => a.length - b.length)) {
+      if (category === key || category.startsWith(`${key}.`)) threshold = SEVERITY[config.category_levels[key]];
     }
-    if (level === "TRACE" && this.config.level !== "full") return false;
+    if (level === "TRACE" && config.level !== "full") return false;
     return SEVERITY[level] > 0 && SEVERITY[level] <= threshold;
   }
   async segment(lane) {
@@ -120,6 +122,13 @@ class AppLogWriter {
   }
   configure(view) {
     if (!view?.effective || !THRESHOLD[view.effective.level]) return;
+    if (view.effective.level === "full") {
+      if (this.config.level !== "full") this.fallbackConfig = this.config;
+      const expires = Date.parse(view.full_expires_at);
+      this.fullExpiresAt = Number.isFinite(expires) ? expires : this.fullExpiresAt ?? Date.now() + 3600_000;
+    } else {
+      this.fallbackConfig = view.effective; this.fullExpiresAt = null;
+    }
     const verbose = ["detailed", "full"].includes(view.effective.level);
     this.config = view.effective;
     if (!verbose) this.pending = this.pending.then(() => this.close("debug")).catch(error => { this.failure = error.code; });

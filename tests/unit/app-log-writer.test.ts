@@ -79,3 +79,13 @@ test("secondary App roles never write to the UI owner's log directory", async ()
     expect(await readdir(root)).toEqual([]);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("full payload recording expires locally while the agent is unavailable", async () => {
+  const writer = createAppLogWriter(null);
+  try {
+    writer.configure({ effective: { level: "detailed", category_levels: {} } });
+    writer.configure({ effective: { level: "full", category_levels: {} }, full_expires_at: new Date(Date.now() - 1).toISOString() });
+    expect(writer.enabled("ipc", "TRACE")).toBe(false);
+    expect(writer.enabled("ipc", "DEBUG")).toBe(true);
+  } finally { await writer.quit(); }
+});

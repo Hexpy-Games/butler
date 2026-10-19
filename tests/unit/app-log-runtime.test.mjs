@@ -37,3 +37,29 @@ test("renderer log ingress authenticates sender, binds process, validates fields
     expect(actions.map(row => row.attrs.index)).toEqual(Array.from({ length: 100 }, (_, index) => index));
   } finally { await runtime.quit(); await rm(root, { recursive: true, force: true }); }
 });
+
+test("disabling diagnostics reverts App verbosity even when config access is denied", async () => {
+  const root = await mkdtemp(join(tmpdir(), "app-log-disable-"));
+  const app = new EventEmitter(), ipcMain = new EventEmitter();
+  ipcMain.handle = () => {};
+  const sender = {};
+  let diagnostics = true;
+  const runtime = installAppLogging({ app, ipcMain, dataRoot: root, getVersion: () => "1.0.0",
+    readConfig: async () => diagnostics ? { effective: { level: "full", category_levels: {} }, full_expires_at: new Date(Date.now() + 3600_000).toISOString() } : null,
+    readSettings: async () => ({ diagnostics_enabled: diagnostics }), isSender: event => event.sender === sender });
+  const emit = marker => ipcMain.emit("butler:app-log", { sender }, {
+    level: "DEBUG", category: "http.client", event: "image.fetch", attrs: { marker } });
+  try {
+    await Promise.resolve();
+    emit("before-disable");
+    await new Promise(resolve => setTimeout(resolve, 200));
+    diagnostics = false;
+    await new Promise(resolve => setTimeout(resolve, 2100));
+    emit("after-disable");
+    await runtime.quit();
+    const directory = join(root, "logs/app/debug");
+    const rows = [];
+    for (const name of await readdir(directory)) rows.push(...(await readFile(join(directory, name), "utf8")).trim().split("\n").map(line => JSON.parse(line)));
+    expect(rows.map(row => row.attrs.marker)).toEqual(["before-disable"]);
+  } finally { await runtime.quit(); await rm(root, { recursive: true, force: true }); }
+});

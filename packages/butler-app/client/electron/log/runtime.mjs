@@ -13,7 +13,7 @@ const CATEGORIES = new Set(["app.ui", "http.client"]);
 const EVENTS = new Set(["ui.send", "ui.stop", "ui.model_pick", "ui.retry", "ui.error", "image.fetch"]);
 const TRACE = /^00-(?!0{32})([a-f0-9]{32})-(?!0{16})([a-f0-9]{16})-[a-f0-9]{2}$/u;
 
-export function installAppLogging({ app, ipcMain, dataRoot, getVersion, readConfig, isSender, isWriter = () => true }) {
+export function installAppLogging({ app, ipcMain, dataRoot, getVersion, readConfig, readSettings, isSender, isWriter = () => true }) {
   writer = createAppLogWriter(dataRoot, isWriter);
   const limits = new WeakMap();
   ipcMain.on("butler:app-log", (event, row) => {
@@ -44,7 +44,13 @@ export function installAppLogging({ app, ipcMain, dataRoot, getVersion, readConf
   const refresh = async () => {
     if (refreshing) return;
     refreshing = true;
-    try { writer.configure(await readConfig()); } catch { /* Keep last effective level while reconnecting. */ }
+    try {
+      const config = await readConfig();
+      if (config) writer.configure(config);
+      else if ((await readSettings())?.diagnostics_enabled === false) {
+        writer.configure({ effective: { level: "standard", category_levels: {} } });
+      }
+    } catch { /* Keep last effective level while reconnecting; full still expires locally. */ }
     finally { refreshing = false; }
   };
   const poll = setInterval(refresh, 2000); poll.unref();
