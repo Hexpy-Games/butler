@@ -85,6 +85,7 @@ impl ServiceConfiguration {
             })
             .collect();
         let app = AppServiceConfiguration::capture(&data_root);
+        app.validate()?;
         Ok(Self {
             app,
             installation: installation.clone(),
