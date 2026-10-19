@@ -1,3 +1,6 @@
+mod read;
+pub(crate) use read::resolve_workspace_path_guard;
+
 use butler_platform::secure_fs::Canonical as _;
 use std::path::{Component, Path, PathBuf};
 
@@ -197,6 +200,18 @@ fn admit_contained(
     path_form: PathForm,
     data: Option<&Path>,
 ) -> bool {
+    let protected = path_form.contained()
+        && protected_path(&resolved.root_real, &resolved.absolute, protected_roots);
+    admit_projected(out, resolved, protected, path_form, data)
+}
+
+fn admit_projected(
+    out: &mut GuardResult,
+    resolved: &Resolved,
+    protected: bool,
+    path_form: PathForm,
+    data: Option<&Path>,
+) -> bool {
     let Resolved {
         root_real,
         absolute,
@@ -205,7 +220,7 @@ fn admit_contained(
     if path_form == PathForm::RelativeOrAbsolute {
         return true;
     }
-    if protected_path(root_real, absolute, protected_roots) {
+    if protected {
         out.reason = Some("protected_path");
         out.protected = true;
         return false;
@@ -219,64 +234,6 @@ fn admit_contained(
         return false;
     }
     true
-}
-
-/// Guards a read (or listing) of a workspace path: contained, not sensitive,
-/// not protected, not escaping through symlinks, and an existing regular file
-/// (or directory when allowed).
-pub(crate) fn resolve_workspace_path_guard(input: GuardInput<'_>) -> std::io::Result<GuardResult> {
-    let (mut out, resolved) = resolve_request(input.root, input.requested, input.path_form)?;
-    let Some(resolved) = resolved else {
-        return Ok(out);
-    };
-    if !admit_contained(
-        &mut out,
-        &resolved,
-        input.protected_roots,
-        input.path_form,
-        input.butler_data,
-    ) {
-        return Ok(out);
-    }
-    let Resolved {
-        root_real,
-        absolute,
-    } = resolved;
-    let real = match absolute.canonical() {
-        Ok(real) => real,
-        Err(error) => {
-            out.reason = Some(super::path_messages::io_reason(&error));
-            return Ok(out);
-        }
-    };
-    out.real = Some(real.clone());
-    if input.path_form.contained() && inside_relative(&root_real, &real).is_none() {
-        out.reason = Some("symlink_escape");
-        return Ok(out);
-    }
-    // A1: classification and opening are separate boundaries. A swapped
-    // in-project symlink must not turn an ordinary read into a secret read.
-    if input.path_form == PathForm::Contained
-        && !admit_contained(
-            &mut out,
-            &Resolved {
-                root_real,
-                absolute: real,
-            },
-            input.protected_roots,
-            input.path_form,
-            input.butler_data,
-        )
-    {
-        return Ok(out);
-    }
-    let meta = std::fs::symlink_metadata(&absolute)?;
-    if meta.is_dir() && !input.allow_directories {
-        out.reason = Some("directory_not_allowed");
-    } else if !(meta.is_dir() || meta.is_file() || meta.file_type().is_symlink()) {
-        out.reason = Some("special_file_not_allowed");
-    }
-    Ok(out)
 }
 
 /// The lexical and real paths of the Butler installation, which is never writable.
