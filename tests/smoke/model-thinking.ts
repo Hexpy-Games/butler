@@ -1,5 +1,6 @@
 // Offline chat harness: one live line, DS motion, unchanged fallback and cleanup.
 import assert from "node:assert/strict";
+import { probeThinkingReveal } from "../support/model-thinking-scroll";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -56,8 +57,8 @@ if (ownsOutput) await build({ plugins: [{ name: "thinking-harness", enforce: "pr
   transform(source, id) {
     if (!id.endsWith("/src/main.tsx")) return;
     return source + `\nimport { useButlerStore as thinkingStore } from "/src/app/store.ts";
-import { receiveModelThinking as thinkingReceive } from "/src/app/modelThinking.ts";
-window.butlerThinkingHarness = { useButlerStore: thinkingStore, receiveModelThinking: thinkingReceive };`;
+${before ? "" : 'import { receiveModelThinking as thinkingReceive } from "/src/app/modelThinking.ts";'}
+window.butlerThinkingHarness = { useButlerStore: thinkingStore, receiveModelThinking: ${before ? "() => false" : "thinkingReceive"} };`;
   } }], build: { outDir: output, emptyOutDir: true }, logLevel: "error" });
 process.env.BUTLER_THINKING_BUNDLE = output;
 try {
@@ -76,6 +77,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   page.setDefaultTimeout(10_000);
   const errors: string[] = [];
+  const revealResults: { cell: string; mode: string; scrollLeft: number }[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.route("**/*", async route => {
     const url = new URL(route.request().url());
@@ -163,12 +165,10 @@ try {
     });
     await receive("Planning the search", body);
     const group = page.getByRole("button", { name: "2 생각, 1 검색", exact: true });
-    await group.click();
-    // A row clipped by its group's reveal is not ready for CDP scrollIntoView.
-    // Wait for the reveal before clicking; otherwise Chromium scrolls the
-    // hidden-overflow shell toward its offscreen inspector on desktop.
-    await blur(page);
     const thinking = page.getByRole("button", { name: "Planning the search", exact: true });
+    for (const result of await probeThinkingReveal(page, group, thinking, evidence, cell)) revealResults.push({ cell, ...result });
+    await group.click();
+    await blur(page);
     await thinking.click();
     await page.locator('[data-test-class="thinking-details"]').waitFor();
     assert.equal(outputFetches, 0, "live body must not fetch");
@@ -234,5 +234,7 @@ try {
   const { readdirSync } = await import("node:fs");
   writeFileSync(join(evidence, "model-thinking-paths.txt"), readdirSync(evidence).filter(path => path.endsWith(".png")).sort().map(path => join(evidence, path)).join("\n") + "\n");
   assert.deepEqual(errors, []);
+  console.log(JSON.stringify({ revealResults }));
+  assert.deepEqual(revealResults.filter(result => result.scrollLeft !== 0), [], "revealing/focusing a thinking row must not scroll the shell");
   console.log("thinking timeline: OFF, rolling title, streaming body, ordered rows, freeze, reload, lazy fetch and privacy toggle passed");
 } finally { await browser.close(); await new Promise<void>((resolve, reject) => vite.httpServer.close(error => error ? reject(error) : resolve())); if (ownsOutput) rmSync(output, { recursive: true, force: true }); }
