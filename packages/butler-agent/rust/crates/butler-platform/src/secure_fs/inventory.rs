@@ -16,12 +16,14 @@ use std::{
     sync::{Arc, Mutex, OnceLock, Weak},
 };
 
+type ResolvedRoots = HashMap<PathBuf, (Option<FileId>, PathBuf)>;
+
 /// Credential paths and inode identities shared for a data directory.
 #[derive(Debug)]
 pub struct SecretInventory {
     paths: Arc<Vec<PathBuf>>,
     identities: Arc<Mutex<HashSet<FileId>>>,
-    canonical: Arc<Mutex<HashMap<PathBuf, (Option<FileId>, PathBuf)>>>,
+    canonical: Arc<Mutex<ResolvedRoots>>,
     roots: Mutex<HashMap<PathBuf, Weak<RootPin>>>,
     leases: Option<Mutex<Vec<Arc<RootPin>>>>,
     #[cfg(unix)]

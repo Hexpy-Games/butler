@@ -233,81 +233,72 @@ async fn from_streams(
     let args_copy = args.clone();
     let workspace_owned = workspace.to_path_buf();
     let data = butler_data.to_path_buf();
-    let (artifacts, requested, declared, publication_error) = if let Some(context) =
-        registered_context
-    {
-        let stdout_paths = structured
-            .as_mut()
-            .map(|value| std::mem::take(&mut value.paths))
-            .unwrap_or_default();
-        let mut publication = jobs
-            .run(move || {
-                registered_artifacts::publish(
-                    &args_copy,
-                    &stdout_paths,
-                    &cwd,
-                    &workspace_owned,
-                    &data,
-                    started,
-                    success,
-                )
-            })
-            .await?;
-        if publication.git_eligible
-            && let Some(before) = context.before_git
-            && let Some(after) = registered_artifacts::snapshot(
-                context.commands,
-                workspace,
-                context.host_environment,
-                context.abort,
-            )
-            .await
-        {
-            let workspace = workspace.to_path_buf();
-            let data = butler_data.to_path_buf();
-            publication = jobs
+    let (artifacts, requested, declared, publication_error) =
+        if let Some(context) = registered_context {
+            let stdout_paths = structured
+                .as_mut()
+                .map(|value| std::mem::take(&mut value.paths))
+                .unwrap_or_default();
+            let mut publication = jobs
                 .run(move || {
-                    registered_artifacts::append_git_delta(
-                        &mut publication,
-                        &before,
-                        &after,
-                        &workspace,
+                    registered_artifacts::publish(
+                        &args_copy,
+                        &stdout_paths,
+                        &cwd,
+                        &workspace_owned,
                         &data,
-                    );
-                    publication
+                        started,
+                        success,
+                    )
                 })
                 .await?;
-        }
-        (
-            publication.artifacts,
-            publication.requested,
-            publication.declared,
-            None,
-        )
-    } else {
-        let publication = jobs
-            .run(move || {
-                let inventory = inventory
-                    .unwrap_or_else(|| butler_platform::secure_fs::SecretInventory::cached(&data));
-                artifacts::publish(
-                    &args_copy,
-                    &data,
-                    &workspace_owned,
-                    &cwd,
-                    before.as_ref(),
-                    success,
-                    &inventory,
+            if publication.git_eligible
+                && let Some(before) = context.before_git
+                && let Some(after) = registered_artifacts::snapshot(
+                    context.commands,
+                    workspace,
+                    context.host_environment,
+                    context.abort,
                 )
-            })
-            .await?;
-        let count = publication.artifacts.len();
-        (
-            publication.artifacts,
-            publication.requested,
-            count,
-            publication.error,
-        )
-    };
+                .await
+            {
+                let workspace = workspace.to_path_buf();
+                let data = butler_data.to_path_buf();
+                publication = jobs
+                    .run(move || {
+                        registered_artifacts::append_git_delta(
+                            &mut publication,
+                            &before,
+                            &after,
+                            &workspace,
+                            &data,
+                        );
+                        publication
+                    })
+                    .await?;
+            }
+            (
+                publication.artifacts,
+                publication.requested,
+                publication.declared,
+                None,
+            )
+        } else {
+            let origin = GeneratedOrigin {
+                data,
+                workspace: workspace_owned,
+                cwd,
+                inventory,
+            };
+            let publication = origin.publish(jobs, args_copy, before, success).await?;
+            let count = publication.artifacts.len();
+            (
+                publication.artifacts,
+                publication.requested,
+                count,
+                publication.error,
+            )
+        };
     if registered_abort.is_some_and(|abort| abort.is_cancelled()) {
         return Err(error("command_cancelled"));
     }
@@ -327,4 +318,37 @@ async fn from_streams(
 
 fn error(code: &'static str) -> BtccError {
     BtccError::relayed(code, code)
+}
+
+/// Owned paths and policy cross the blocking boundary as one publication context.
+struct GeneratedOrigin {
+    data: PathBuf,
+    workspace: PathBuf,
+    cwd: PathBuf,
+    inventory: Option<Arc<butler_platform::secure_fs::SecretInventory>>,
+}
+impl GeneratedOrigin {
+    async fn publish(
+        self,
+        jobs: &CommandJobs,
+        args: Map<String, Value>,
+        before: Option<Snapshot>,
+        success: bool,
+    ) -> Result<artifacts::Publication, BtccError> {
+        jobs.run(move || {
+            let inventory = self
+                .inventory
+                .unwrap_or_else(|| butler_platform::secure_fs::SecretInventory::cached(&self.data));
+            artifacts::publish(
+                &args,
+                &self.data,
+                &self.workspace,
+                &self.cwd,
+                before.as_ref(),
+                success,
+                &inventory,
+            )
+        })
+        .await
+    }
 }

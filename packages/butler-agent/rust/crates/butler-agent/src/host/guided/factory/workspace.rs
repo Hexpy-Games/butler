@@ -1,4 +1,9 @@
 use super::*;
+type WorkspaceResolution = (
+    PathBuf,
+    Vec<Arc<butler_platform::secure_fs::RootPin>>,
+    Arc<butler_platform::secure_fs::SecretInventory>,
+);
 
 impl GuidedTurnFactoryAdapter {
     /// Keep the model's policy root and tool reference on the same recovered path.
@@ -6,14 +11,7 @@ impl GuidedTurnFactoryAdapter {
         &self,
         workspace: &butler_turn::workspace::WorkspaceReference,
         phase: &mut butler_turn::btcc::GuidedPhaseSelection,
-    ) -> Result<
-        (
-            PathBuf,
-            Vec<Arc<butler_platform::secure_fs::RootPin>>,
-            Arc<butler_platform::secure_fs::SecretInventory>,
-        ),
-        BtccError,
-    > {
+    ) -> Result<WorkspaceResolution, BtccError> {
         let path = workspace.get().map_err(|e| error(e.code()))?;
         let path = tokio::task::spawn_blocking(move || std::fs::canonicalize(path))
             .await
@@ -63,5 +61,35 @@ impl GuidedTurnFactoryAdapter {
             });
         }
         Ok((path, root_pins, inventory))
+    }
+}
+
+impl GuidedTurnFactoryAdapter {
+    pub(super) fn file_effects(
+        &self,
+        workspace: &butler_turn::workspace::WorkspaceReference,
+        workspace_path: &std::path::Path,
+    ) -> crate::host::GuidedFileEffects {
+        crate::host::GuidedFileEffects::new(
+            self.capabilities.clone(),
+            crate::host::RegisteredWriteContext {
+                workspace_reference: Some(workspace.clone()),
+                workspace_path: workspace_path.to_path_buf(),
+                butler_data: self.butler_data.clone(),
+                protected_ledger_roots: self.protected_ledger_roots.clone(),
+                allowed_tools_and_effects: None,
+                mutation_scope: None,
+                installation_root: Some(self.installation_root.clone()),
+                contained: false,
+            },
+            butler_turn::workspace::EffectFileScope {
+                inventory: workspace.read_inventory(),
+                workspace: workspace_path.to_path_buf(),
+                butler_data: self.butler_data.clone(),
+                protected_roots: self.protected_ledger_roots.clone(),
+                installation_root: Some(self.installation_root.clone()),
+                contained: false,
+            },
+        )
     }
 }

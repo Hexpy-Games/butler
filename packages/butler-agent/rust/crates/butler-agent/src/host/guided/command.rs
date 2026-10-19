@@ -8,6 +8,7 @@ mod ledger_guard;
 mod output;
 mod path_guard;
 mod registered_artifacts;
+mod scope;
 mod structured_stdout;
 pub(in crate::host) mod timing;
 mod validation;
@@ -174,7 +175,7 @@ impl GuidedCommand {
                     inherit_environment: false,
                     stdin: String::new(),
                     timeout_ms,
-                    abort: scope.abort,
+                    abort: scope.abort.clone(),
                     legacy: Some(LegacyShell {
                         command: command.into(),
                         pipefail: true,
@@ -192,13 +193,7 @@ impl GuidedCommand {
                 command.into(),
                 resolved_cwd.to_string_lossy().into_owned(),
                 result,
-                output::OutputOrigin {
-                    inventory: scope.workspace_reference.and_then(|r| r.read_inventory()),
-                    args,
-                    workspace: &root,
-                    data_root: scope.butler_data,
-                    started,
-                },
+                scope.output_origin(args, &root, started),
                 output::RegisteredContext {
                     before_git,
                     commands: &self.commands,
@@ -208,18 +203,7 @@ impl GuidedCommand {
             )
             .await;
         }
-        let data = scope.butler_data.to_path_buf();
-        let inventory = scope.workspace_reference.and_then(|r| r.read_inventory());
-        let before = Some(
-            self.jobs
-                .run(move || {
-                    let inventory = inventory.unwrap_or_else(|| {
-                        butler_platform::secure_fs::SecretInventory::cached(&data)
-                    });
-                    artifacts::snapshot(&data, &inventory)
-                })
-                .await?,
-        );
+        let before = Some(self.artifact_snapshot(&scope).await?);
         let started = std::time::SystemTime::now();
         let input = GuidedCommandInput {
             command: command.to_owned(),
@@ -229,7 +213,7 @@ impl GuidedCommand {
             timeout_ms,
             access: observation_access(scope.contained_reads),
             host_environment: (*self.host_environment).clone(),
-            abort: scope.abort,
+            abort: scope.abort.clone(),
         };
         let spooled = self
             .commands
@@ -244,13 +228,7 @@ impl GuidedCommand {
                 jobs: &self.jobs,
             },
             spooled,
-            output::OutputOrigin {
-                inventory: scope.workspace_reference.and_then(|r| r.read_inventory()),
-                args,
-                workspace: &root,
-                data_root: scope.butler_data,
-                started,
-            },
+            scope.output_origin(args, &root, started),
             before,
             None,
         )
