@@ -68,6 +68,7 @@ pub(super) fn apply(
     credentials: &[PathBuf],
     masked: &[PathBuf],
     mounts: &HashMap<PathBuf, u64>,
+    timing: &mut super::timing::Timing,
 ) -> Result<(), Error> {
     // The trampoline already closed both lists over aliases and mount views.
     let masked: HashSet<_> = masked.iter().collect();
@@ -89,8 +90,11 @@ pub(super) fn apply(
     for (_, secrets) in &projects {
         blocked.extend(secrets.iter().cloned());
     }
+    timing.mark("projects_rescan");
     let deny_execute = execution_denials()?;
+    timing.mark("execution_denials");
     let blocked = Denied::new(blocked.into_iter().collect(), &deny_execute, mounts);
+    timing.mark("denied_chain");
     // READ_DIR grants recurse too: permit directory names, while withholding
     // READ_FILE/EXECUTE prevents access to denied contents. Landlock cannot
     // hide directory entries without also preventing ordinary parent listings.
@@ -116,6 +120,7 @@ pub(super) fn apply(
         let excluded = Denied::new(excluded.into_iter().collect(), &deny_execute, mounts);
         grant_complement(rules, real, &excluded, &deny_execute, read)?;
     }
+    timing.mark("grant_complement");
     grant(
         rules,
         Path::new("/dev/null"),

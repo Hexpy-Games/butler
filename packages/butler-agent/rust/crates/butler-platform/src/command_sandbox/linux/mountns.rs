@@ -8,6 +8,8 @@ mod cache;
 mod harden;
 mod views;
 pub(super) use harden::Sealing;
+#[cfg(feature = "test-support")]
+pub use views::verify_mount_plan_contract;
 
 /// M masks existing secrets; M+ also makes every mount outside the writable
 /// roots read-only, so metadata calls Landlock cannot mediate become safe.
