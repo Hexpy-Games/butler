@@ -748,6 +748,7 @@ try {
     .getByRole("button", { name: appCopy.composer.contextDetails })
     .hover();
   await page.locator(testClass("context-popover")).getByText(/Context window/u).first().waitFor({ state: "visible" });
+  await waitForMotionToSettle(page);
   const contextPopoverGlass = await page
     .locator(testClass("context-popover"))
     .evaluate((element) => {
@@ -983,6 +984,7 @@ try {
   await page
     .getByRole("tooltip", { name: "Hide sidebar" })
     .waitFor({ state: "visible" });
+  await waitForMotionToSettle(page);
   const sidebarTooltipState = await page
     .getByRole("tooltip", { name: "Hide sidebar" })
     .evaluate((element) => {
@@ -1315,6 +1317,7 @@ try {
   await page
     .getByRole("tooltip", { name: appCopy.titlebar.showRightPanel })
     .waitFor({ state: "visible" });
+  await waitForMotionToSettle(page);
   const closedRightPanelTooltipState = await page
     .getByRole("tooltip", { name: appCopy.titlebar.showRightPanel })
     .evaluate((element) => {
@@ -1870,9 +1873,8 @@ try {
     testClass("attachment-button"),
     "attachment button",
   );
-  // The stub is a Custom model with no declared image capability: unknown is
-  // treated like text-only (the gateway rejects images at admission), so the
-  // picker filters images out and a picked image is refused.
+  // The picker lists every file (attach any file, #1236). A picked image is
+  // still refused because the stub Custom model declares no image capability.
   const fileInputAccept = await page
     .locator("input[type='file']")
     .getAttribute("accept");
@@ -1880,12 +1882,12 @@ try {
     .locator("input[type='file']")
     .getAttribute("data-picker-filter");
   assert(
-    fileInputPickerMode === "non-image",
-    `attachment picker should advertise non-image mode for an unknown-capability model, got ${fileInputPickerMode}`,
+    fileInputPickerMode === "all-files",
+    `attachment picker should list all files for an unknown-capability model, got ${fileInputPickerMode}`,
   );
   assert(
-    !!fileInputAccept && !/image\/(\*|png|jpeg|webp|gif)|\.(png|jpe?g|webp|gif)\b/u.test(fileInputAccept),
-    `attachment-picker-non-image failed: accept=${fileInputAccept}`,
+    fileInputAccept === null,
+    `attachment picker should have no accept attribute for an unknown-capability model, got ${fileInputAccept}`,
   );
   await page.setInputFiles("input[type='file']", {
     name: "smoke.md",
@@ -2123,9 +2125,6 @@ try {
         '[data-slot="filtered-select-footer-title"]',
       );
       const search = menu.querySelector<HTMLElement>('[data-slot="input"]');
-      const filters = menu.querySelector<HTMLElement>(
-        '[data-slot="filtered-select-filters"]',
-      );
       const results = menu.querySelector<HTMLElement>(
         '[data-slot="filtered-select-results"]',
       );
@@ -2144,7 +2143,7 @@ try {
       const firstTitleRect = groupTitles[0]?.getBoundingClientRect();
       const resultsRect = results?.getBoundingClientRect();
       const searchRect = search?.getBoundingClientRect();
-      const filtersRect = filters?.getBoundingClientRect();
+      const firstFilterRect = filterButtons[0]?.getBoundingClientRect();
       const contentStyle = content ? getComputedStyle(content) : null;
       const resolveColorToken = (token: string) => {
         const probe = document.createElement("span");
@@ -2181,9 +2180,10 @@ try {
           (element) => element.textContent?.trim() ?? "",
         ),
         resultsHeight: resultsRect?.height ?? Number.NaN,
+        // #1251: The row pads its top for focus rings, so read the gap to the chips.
         searchFilterGap:
-          searchRect && filtersRect
-            ? filtersRect.top - searchRect.bottom
+          searchRect && firstFilterRect
+            ? firstFilterRect.top - searchRect.bottom
             : Number.NaN,
         semanticTextColors: [
           resolveColorToken("--text-primary"),
@@ -2798,7 +2798,12 @@ try {
   await page
     .getByRole("button", { name: appCopy.settings.sections.models, exact: true })
     .click();
-  await page.locator(testClass("settings-primary-reasoning-select")).click();
+  assert(
+    await page.locator(testClass("settings-primary-reasoning-select"))
+      .evaluate((element) => element instanceof HTMLButtonElement && element.disabled === true),
+    "reasoning select should be disabled for the single-effort stub Custom model",
+  );
+  await page.locator(testClass("settings-primary-model-select")).click();
   await page
     .locator('[data-slot="select-content"]')
     .waitFor({ state: "visible" });
@@ -3827,6 +3832,7 @@ try {
   await page
     .getByRole("menuitem", { name: appCopy.sessionActions.rename })
     .waitFor({ state: "visible" });
+  await waitForMotionToSettle(page);
   const sessionRowMenuGlass = await page
     .locator('[data-slot="dropdown-menu-content"]')
     .evaluate((element) => {
@@ -3879,6 +3885,7 @@ try {
   await page
     .locator('[data-slot="dropdown-menu-content"]')
     .waitFor({ state: "visible" });
+  await waitForMotionToSettle(page);
   const sessionMenuGlass = await page
     .locator('[data-slot="dropdown-menu-content"]')
     .evaluate((element) => {
