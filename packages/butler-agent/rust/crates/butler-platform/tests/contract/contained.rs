@@ -77,7 +77,7 @@ fn retried_inventory(temp: &std::path::Path) {
         .unwrap()
         .unwrap();
     let first = secure_fs::open_contained(&root, std::path::Path::new("public-link"), &inventory);
-    secure_fs::restrict_directory(&locked).unwrap();
+    secure_fs::restrict_directory(&locked).unwrap().unwrap();
     let mut content = String::new();
     first.unwrap().read_to_string(&mut content).unwrap();
     assert_eq!(content, "complete-public");
