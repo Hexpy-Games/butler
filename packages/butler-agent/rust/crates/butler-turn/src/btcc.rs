@@ -3,6 +3,9 @@
 //! Gateway and host composition may run or stop a Turn. Durable state, model
 //! execution, delivery, and supervision remain private children of this module.
 
+#[cfg(feature = "e2e-fixtures")]
+mod faults;
+
 mod answer_drafts;
 pub use answer_drafts::AnswerDraftPublisher;
 mod access;

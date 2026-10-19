@@ -187,22 +187,13 @@ async fn dispatch_result(
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     #[cfg(feature = "e2e-fixtures")]
-    hold_stub_tool(owner, call).await?;
-    #[cfg(feature = "e2e-fixtures")]
-    if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
-        && std::env::var("BUTLER_E2E_INTERRUPT_TOOL").as_deref() == Ok(call.name.as_str())
-        && tokio::fs::remove_file(owner.binding.butler_data.join("e2e-interrupt-tool"))
-            .await
-            .is_ok()
-    {
-        butler_core::diagnostic!(
-            "[native-tool] interrupted turn_id={} session_id={} capability={} code=e2e_tool_integrity_failure Injected tool integrity failure.",
-            owner.binding.turn_id,
-            owner.binding.source_session_id,
-            call.name
-        );
-        return Err(integrity("e2e_tool_integrity_failure"));
-    }
+    crate::host::faults::tools::before_dispatch(
+        &owner.binding.butler_data,
+        call,
+        &owner.binding.turn_id,
+        &owner.binding.source_session_id,
+    )
+    .await?;
     match Box::pin(super::question::dispatch(owner, invocation, call, call_id)).await {
         Ok(result) => Ok(result),
         Err(ToolExecutionError::Integrity(error)) if super::feedback::solvable(error.code()) => {
@@ -219,45 +210,6 @@ async fn dispatch_result(
             Err(ToolExecutionError::Integrity(error))
         }
     }
-}
-
-#[cfg(feature = "e2e-fixtures")]
-async fn hold_stub_tool(
-    owner: &GuidedTools,
-    call: &ModelRoundToolCall,
-) -> Result<(), ToolExecutionError> {
-    if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub")
-        || std::env::var("BUTLER_E2E_HOLD_TOOL").as_deref() != Ok(call.name.as_str())
-    {
-        return Ok(());
-    }
-    let hold = owner.binding.butler_data.join("e2e-hold-tool");
-    if !tokio::fs::try_exists(&hold)
-        .await
-        .map_err(|_| integrity("e2e_tool_hold_failed"))?
-    {
-        return Ok(());
-    }
-    let marker = owner.binding.butler_data.join("e2e-held-tool");
-    let call_id = call.id.clone();
-    // Existence is the waiter's signal, so publish only the complete tool ID.
-    tokio::task::spawn_blocking(move || {
-        butler_platform::secure_fs::replace_private(
-            &marker,
-            |file| std::io::Write::write_all(file, call_id.as_bytes()),
-            std::convert::identity,
-        )
-    })
-    .await
-    .map_err(|_| integrity("e2e_tool_hold_failed"))?
-    .map_err(|_| integrity("e2e_tool_hold_failed"))?;
-    while tokio::fs::try_exists(&hold)
-        .await
-        .map_err(|_| integrity("e2e_tool_hold_failed"))?
-    {
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    }
-    Ok(())
 }
 
 pub(super) async fn record_unexecuted(

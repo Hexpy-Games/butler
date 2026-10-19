@@ -212,6 +212,8 @@ mod tests {
                 "{body}"
             );
         }
+        crate::e2e_tier::assert_tier_patterns();
+
         let counts = |rows: &[(&str, usize)]| -> std::collections::BTreeMap<String, usize> {
             rows.iter()
                 .map(|(name, count)| ((*name).to_owned(), *count))

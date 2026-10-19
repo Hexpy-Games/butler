@@ -251,14 +251,12 @@ impl AppApplication {
     /// E2E barrier after durable Turn creation, before native enqueue. It
     /// replaces CPU-dependent SQLite work with the exact shutdown boundary.
     async fn hold_queue_admission(&self, message_id: &str) -> Result<(), GatewayApplicationError> {
-        if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub")
-            || std::env::var("BUTLER_E2E_HOLD_QUEUE_MESSAGE").as_deref() != Ok(message_id)
+        if !crate::gateway::faults::queue_admission(&self.butler_data, message_id)
+            .await
+            .map_err(GatewayApplicationError::internal_from)?
         {
             return Ok(());
         }
-        tokio::fs::write(self.butler_data.join("e2e-queue-admission-held"), b"held")
-            .await
-            .map_err(GatewayApplicationError::internal_from)?;
         self.queue_wake.stopped().await;
         Ok(())
     }

@@ -9,6 +9,8 @@
 //! returns `None`. Renames that replace a file retry on Windows while
 //! another process briefly holds it ([`rename`]).
 
+#[cfg(feature = "e2e-fixtures")]
+pub(crate) use fault::FixtureInput;
 mod device;
 pub use device::same_device;
 mod contained_read;

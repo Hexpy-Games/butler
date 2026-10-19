@@ -12,10 +12,7 @@ pub(super) fn start(request: &Request<Body>) -> Option<(u128, Instant)> {
     if !matches!(
         request.uri().path(),
         "/session-view" | "/authority-permissions"
-    ) || !matches!(
-        std::env::var("BUTLER_E2E_TIER").as_deref(),
-        Ok("stub" | "perf")
-    ) || std::env::var("BUTLER_E2E_STORAGE_METRICS").as_deref() != Ok("1")
+    ) || !crate::gateway::faults::latency_trace()
     {
         return None;
     }

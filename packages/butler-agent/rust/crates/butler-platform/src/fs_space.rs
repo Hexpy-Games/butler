@@ -4,12 +4,8 @@ use std::{io, path::Path};
 /// Free bytes on the most specific mounted volume containing `path`.
 pub fn available_bytes(path: &Path) -> io::Result<u64> {
     #[cfg(feature = "e2e-fixtures")]
-    if matches!(
-        std::env::var("BUTLER_E2E_TIER").as_deref(),
-        Ok("stub" | "perf")
-    ) && let Ok(value) = std::env::var("BUTLER_E2E_DISK_AVAILABLE_BYTES")
-    {
-        return value.parse().map_err(io::Error::other);
+    if let Some(bytes) = crate::secure_fs::FixtureInput::available_bytes() {
+        return bytes;
     }
     let path = super::secure_fs::canonicalize(path)?;
     sysinfo::Disks::new_with_refreshed_list()

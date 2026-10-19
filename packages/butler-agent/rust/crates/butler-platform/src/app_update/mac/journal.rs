@@ -158,15 +158,7 @@ fn sync_parent(path: &Path) -> Result<(), String> {
 // A named E2E barrier lets the test kill the real helper after each durable step.
 pub(super) fn checkpoint(step: &str) {
     #[cfg(feature = "e2e-fixtures")]
-    if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
-        && std::env::var("BUTLER_APP_UPDATE_CHECKPOINT").as_deref() == Ok(step)
-    {
-        println!("app-update-checkpoint:{step}");
-        let _ = std::io::stdout().flush();
-        loop {
-            std::thread::park();
-        }
-    }
+    crate::secure_fs::FixtureInput::update_checkpoint(step);
     #[cfg(not(feature = "e2e-fixtures"))]
     let _ = step;
 }

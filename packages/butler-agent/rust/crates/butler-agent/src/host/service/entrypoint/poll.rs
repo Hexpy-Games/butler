@@ -80,7 +80,7 @@ pub(super) async fn poll_service(
         }
         #[cfg(feature = "e2e-fixtures")]
         if dispatch_ready {
-            hold_queue_claims(&config.data_root).await?;
+            crate::host::faults::service::hold_queue_claims(&config.data_root).await?;
         }
         let summary =
             match poll_inbound_dispatch(dispatcher, readiness, !dispatch_ready, &config.data_root)
@@ -98,7 +98,9 @@ pub(super) async fn poll_service(
             Err(error) => break Err(io(error)),
         };
         #[cfg(feature = "e2e-fixtures")]
-        if let Err(error) = injected_service_failure(&config.data_root).await {
+        if let Err(error) =
+            crate::host::faults::service::injected_service_failure(&config.data_root).await
+        {
             break Err(error);
         }
         tokio::select! {
@@ -128,7 +130,7 @@ async fn watch_queue(
     )]
     let mut paths = vec![crate::host::service::instance::shutdown_flag_path(root)];
     #[cfg(feature = "e2e-fixtures")]
-    paths.push(root.join("e2e-service-exit"));
+    crate::host::faults::service::watch_paths(root, &mut paths);
     queue.observe_changes(paths).await.map_err(io)
 }
 
@@ -174,7 +176,7 @@ async fn poll_inbound_dispatch(
 ) -> Result<IngressPoll, BtccError> {
     if initial_poll {
         #[cfg(feature = "e2e-fixtures")]
-        hold_dispatch_readiness(data_root).await?;
+        crate::host::faults::service::hold_dispatch_readiness(data_root).await?;
         #[cfg(not(feature = "e2e-fixtures"))]
         let _ = data_root;
     }
@@ -188,62 +190,6 @@ async fn poll_inbound_dispatch(
     Ok(summary)
 }
 
-#[cfg(feature = "e2e-fixtures")]
-async fn hold_dispatch_readiness(data_root: &std::path::Path) -> Result<(), BtccError> {
-    hold_ingress_barrier(
-        data_root,
-        "BUTLER_E2E_HOLD_DISPATCH_READY",
-        "e2e-dispatch-ready-held",
-        "e2e-dispatch-ready-release",
-    )
-    .await
-}
-
-#[cfg(feature = "e2e-fixtures")]
-async fn hold_queue_claims(data_root: &std::path::Path) -> Result<(), BtccError> {
-    hold_ingress_barrier(
-        data_root,
-        "BUTLER_E2E_HOLD_QUEUE_CLAIMS",
-        "e2e-queue-claims-held",
-        "e2e-queue-claims-release",
-    )
-    .await?;
-    match tokio::fs::remove_file(data_root.join("e2e-queue-claims-held")).await {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(BtccError::relayed(
-            "e2e_dispatch_ready_hold_failed",
-            error.to_string(),
-        )),
-    }
-}
-
-#[cfg(feature = "e2e-fixtures")]
-async fn hold_ingress_barrier(
-    data_root: &std::path::Path,
-    switch: &str,
-    held: &str,
-    release: &str,
-) -> Result<(), BtccError> {
-    if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub")
-        || std::env::var(switch).as_deref() != Ok("1")
-    {
-        return Ok(());
-    }
-    let held = data_root.join(held);
-    let release = data_root.join(release);
-    tokio::fs::write(held, b"held")
-        .await
-        .map_err(|error| BtccError::relayed("e2e_dispatch_ready_hold_failed", error.to_string()))?;
-    while !tokio::fs::try_exists(&release)
-        .await
-        .map_err(|error| BtccError::relayed("e2e_dispatch_ready_hold_failed", error.to_string()))?
-    {
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    Ok(())
-}
-
 async fn wait_for_foreground_close(
     lease: Option<&ForegroundLease>,
 ) -> Result<(), crate::host::HostError> {
@@ -251,20 +197,4 @@ async fn wait_for_foreground_close(
         Some(lease) => lease.closed().await,
         None => std::future::pending().await,
     }
-}
-
-#[cfg(feature = "e2e-fixtures")]
-async fn injected_service_failure(data_root: &std::path::Path) -> Result<(), BtccError> {
-    if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
-        && std::env::var("BUTLER_E2E_FORCE_SERVICE_EXIT").as_deref() == Ok("1")
-        && tokio::fs::remove_file(data_root.join("e2e-service-exit"))
-            .await
-            .is_ok()
-    {
-        return Err(failure(
-            "native_service_replacement_required",
-            "Injected unrecoverable service failure",
-        ));
-    }
-    Ok(())
 }

@@ -1,6 +1,7 @@
 mod architecture;
 mod e2e_gate;
 mod e2e_hooks;
+mod e2e_tier;
 mod function_length;
 mod model_literals;
 mod modules;
@@ -84,6 +85,7 @@ fn scan(root: &Path, mode: Mode) -> Result<bool, String> {
     has_violations |= architecture::check(root)?;
     has_violations |= model_literals::check(root, &sources)?;
     has_violations |= e2e_gate::check(root, &sources)?;
+    has_violations |= e2e_tier::check(root, &sources)?;
     has_violations |= e2e_hooks::check(root, &sources, mode)?;
     Ok(has_violations)
 }

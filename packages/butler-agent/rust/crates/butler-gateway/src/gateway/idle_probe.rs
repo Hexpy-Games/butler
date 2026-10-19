@@ -15,10 +15,7 @@ fn enabled() -> bool {
 
 #[cfg(feature = "e2e-fixtures")]
 fn enabled() -> bool {
-    *ENABLED.get_or_init(|| {
-        std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
-            && std::env::var("BUTLER_E2E_IDLE_PROBE").as_deref() == Ok("1")
-    })
+    *ENABLED.get_or_init(crate::gateway::faults::idle_probe)
 }
 
 pub(super) fn transcript_open() {

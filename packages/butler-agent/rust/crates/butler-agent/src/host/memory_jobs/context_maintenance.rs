@@ -302,14 +302,9 @@ fn write_state(path: &std::path::Path, state: &Value) -> std::io::Result<()> {
 }
 
 fn current_epoch_millis() -> i64 {
-    // Daily jobs and App fixtures must share the same clock in stub E2E.
     #[cfg(feature = "e2e-fixtures")]
-    if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
-        && let Ok(now) = chrono::DateTime::parse_from_rfc3339(
-            &crate::host::app::schedule_clock::clock().now_iso(),
-        )
-    {
-        return observed_clock(now.timestamp_millis());
+    if let Some(now) = crate::host::faults::memory::epoch_millis() {
+        return observed_clock(now);
     }
     observed_clock(
         SystemTime::now()

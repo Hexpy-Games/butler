@@ -27,7 +27,18 @@ impl ProfileService {
                 )
                 .map_err(storage::io_error)?;
                 #[cfg(feature = "e2e-fixtures")]
-                hold_reset_acquisition(&root, &operation_id, &child)?;
+                crate::coordination::hold_reset_acquisition(
+                    &root,
+                    &operation_id,
+                    &child,
+                    storage::io_error,
+                    || {
+                        ProfileError::new(
+                            ProfileCode::ProfileOperationFailed,
+                            "Profile reset cancelled",
+                        )
+                    },
+                )?;
                 let lease = executor
                     .block_on(coordinator.acquire(
                         CognitionWriteAcquire {
@@ -58,37 +69,4 @@ impl ProfileService {
         })
         .await
     }
-}
-
-// Deterministic contention on an accepted reset, restricted to E2E fixture builds.
-#[cfg(feature = "e2e-fixtures")]
-fn hold_reset_acquisition(
-    root: &std::path::Path,
-    operation: &str,
-    token: &CancellationToken,
-) -> ProfileResult<()> {
-    if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub") {
-        return Ok(());
-    }
-    let state = root.join("state");
-    let arm = state.join("profile-reset-acquire-arm");
-    match std::fs::read_to_string(&arm) {
-        Ok(id) if id == operation => {}
-        Ok(_) => return Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(storage::io_error(error)),
-    }
-    std::fs::remove_file(arm).map_err(storage::io_error)?;
-    std::fs::write(state.join("profile-reset-acquire-reached"), operation)
-        .map_err(storage::io_error)?;
-    while !state.join("profile-reset-acquire-release").exists() {
-        if token.is_cancelled() {
-            return Err(ProfileError::new(
-                ProfileCode::ProfileOperationFailed,
-                "Profile reset cancelled",
-            ));
-        }
-        std::thread::park_timeout(std::time::Duration::from_millis(10));
-    }
-    Ok(())
 }

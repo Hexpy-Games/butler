@@ -52,10 +52,7 @@ fn portable_file_required() -> bool {
 /// E2E fixture builds can select the portable store on any platform.
 #[cfg(feature = "e2e-fixtures")]
 fn portable_file_fixture() -> bool {
-    matches!(
-        std::env::var("BUTLER_E2E_TIER").as_deref(),
-        Ok("stub" | "perf")
-    ) && std::env::var("BUTLER_E2E_PORTABLE_LANCE").as_deref() == Ok("1")
+    crate::coordination::portable_file_fixture()
 }
 
 #[cfg(not(feature = "e2e-fixtures"))]

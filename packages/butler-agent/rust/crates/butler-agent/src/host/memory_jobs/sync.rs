@@ -216,7 +216,7 @@ async fn initialize(
 ) -> bool {
     if let Some(fresh) = fresh {
         #[cfg(feature = "e2e-fixtures")]
-        hold_bootstrap(data_root, shutdown).await;
+        crate::host::faults::memory::hold_bootstrap(data_root, shutdown).await;
         #[cfg(not(feature = "e2e-fixtures"))]
         let _ = data_root;
         if shutdown.is_cancelled() {
@@ -309,34 +309,9 @@ fn trace(message: &str) {
     }
 }
 
-/// E2E race gate: the durable completion queue must suffice when filesystem
-/// notifications are coalesced, so a fixture build can drop the canonical wake.
 #[cfg(feature = "e2e-fixtures")]
-fn canonical_wake_held() -> bool {
-    std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
-        && std::env::var("BUTLER_E2E_HOLD_CANONICAL_WAKE").as_deref() == Ok("1")
-}
-
+use crate::host::faults::memory::canonical_wake_held;
 #[cfg(not(feature = "e2e-fixtures"))]
 fn canonical_wake_held() -> bool {
     false
-}
-
-/// E2E fixture barrier before the fresh memory bootstrap; ends on shutdown.
-#[cfg(feature = "e2e-fixtures")]
-async fn hold_bootstrap(data_root: &Path, shutdown: &CancellationToken) {
-    if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub")
-        || std::env::var("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP").as_deref() != Ok("1")
-    {
-        return;
-    }
-    while !tokio::fs::try_exists(data_root.join("state/e2e-memory-bootstrap-release"))
-        .await
-        .unwrap_or(false)
-    {
-        tokio::select! {
-            () = shutdown.cancelled() => return,
-            () = tokio::time::sleep(Duration::from_millis(20)) => {},
-        }
-    }
 }

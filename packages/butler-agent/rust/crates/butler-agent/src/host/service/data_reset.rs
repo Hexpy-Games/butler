@@ -208,11 +208,8 @@ pub(crate) fn valid_id(id: &str) -> bool {
 }
 fn stop_delay() -> Duration {
     #[cfg(feature = "e2e-fixtures")]
-    if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
-        && let Ok(value) = std::env::var("BUTLER_E2E_RESET_STOP_DELAY_MS")
-        && let Ok(ms) = value.parse::<u64>()
-    {
-        return Duration::from_millis(ms.min(30_000));
+    if let Some(delay) = crate::host::faults::service::stop_delay() {
+        return delay;
     }
     Duration::from_secs(30)
 }

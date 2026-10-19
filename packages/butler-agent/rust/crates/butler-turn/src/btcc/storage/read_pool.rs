@@ -352,11 +352,7 @@ impl super::BtccStorage {
     {
         // E2E fixture builds can measure the single-connection baseline.
         #[cfg(feature = "e2e-fixtures")]
-        if matches!(
-            std::env::var("BUTLER_E2E_TIER").as_deref(),
-            Ok("stub" | "perf")
-        ) && std::env::var_os("BUTLER_E2E_STORAGE_BASELINE").is_some()
-        {
+        if crate::btcc::faults::storage_baseline() {
             return self.execute(move |db| operation(db)).await;
         }
         match &self.inner.readers {

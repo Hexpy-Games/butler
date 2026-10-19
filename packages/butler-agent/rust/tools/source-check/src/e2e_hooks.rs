@@ -86,6 +86,17 @@ pub(crate) fn hooks(source: &str) -> Result<Vec<(usize, String)>, syn::Error> {
     Ok(finder.hooks)
 }
 
+/// Tier names are forbidden even in declared fixture builds.
+pub(crate) fn tier_reads(source: &str) -> Result<Vec<(usize, String)>, syn::Error> {
+    let file = syn::parse_file(source)?;
+    let mut finder = Finder {
+        tier_only: true,
+        ..Finder::default()
+    };
+    finder.visit_file(&file);
+    Ok(finder.hooks)
+}
+
 /// Whether a string literal names the E2E harness: a `BUTLER_E2E_*` variable,
 /// a path segment naming an `e2e-*` marker file, or a `_test` route segment.
 /// The fixture feature names themselves are how hooks leave shipped code.
@@ -101,16 +112,29 @@ fn hook(value: &str) -> bool {
 
 #[derive(Default)]
 struct Finder {
+    tier_only: bool,
     hooks: Vec<(usize, String)>,
 }
 
 impl Finder {
+    fn excluded(&self, attributes: &[syn::Attribute]) -> bool {
+        if self.tier_only {
+            crate::modules::test_only(attributes)
+        } else {
+            fixture_only(attributes)
+        }
+    }
+
     fn literal(&mut self, value: &syn::LitStr) {
         self.text(value.span().start().line, value.value());
     }
 
     fn text(&mut self, line: usize, text: String) {
-        if hook(&text) {
+        let tier = self.tier_only
+            && text
+                .split(|c: char| c != '_' && !c.is_alphanumeric())
+                .any(|name| name.strip_prefix("BUTLER_E2E_") == Some("TIER"));
+        if tier || (!self.tier_only && hook(&text)) {
             self.hooks.push((line, text));
         }
     }
@@ -137,7 +161,7 @@ impl Finder {
 
 impl<'ast> Visit<'ast> for Finder {
     fn visit_item(&mut self, item: &'ast syn::Item) {
-        if !fixture_only(crate::modules::item_attributes(item)) {
+        if !self.excluded(crate::modules::item_attributes(item)) {
             visit::visit_item(self, item);
         }
     }
@@ -154,7 +178,7 @@ impl<'ast> Visit<'ast> for Finder {
             syn::ImplItem::Macro(item) => &item.attrs,
             _ => return visit::visit_impl_item(self, item),
         };
-        if !fixture_only(attributes) {
+        if !self.excluded(attributes) {
             visit::visit_impl_item(self, item);
         }
     }
@@ -165,7 +189,7 @@ impl<'ast> Visit<'ast> for Finder {
             syn::Stmt::Expr(expression, _) => expression_attributes(expression),
             syn::Stmt::Item(_) => &[][..],
         };
-        if !fixture_only(attributes) {
+        if !self.excluded(attributes) {
             visit::visit_stmt(self, statement);
         }
     }

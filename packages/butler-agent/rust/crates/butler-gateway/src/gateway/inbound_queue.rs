@@ -1,8 +1,6 @@
 //! Source-compatible durable inbound queue for the standalone native owner.
 
 mod error;
-#[cfg(feature = "e2e-fixtures")]
-mod fixture;
 mod observers;
 mod record;
 mod storage;
@@ -102,7 +100,7 @@ impl InboundQueue {
         metadata: Value,
     ) -> QueueResult<bool> {
         #[cfg(feature = "e2e-fixtures")]
-        fixture::before_settlement(&self.root).await?;
+        crate::gateway::faults::before_settlement(&self.root).await?;
         self.blocking(move |queue| queue.complete(&item, metadata))
             .await
     }

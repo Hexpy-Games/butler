@@ -4,6 +4,9 @@
 //! connection lifetimes. Durable message, Turn, and event state remains owned by
 //! the required [`GatewayApplication`] implementation supplied at composition.
 
+#[cfg(feature = "e2e-fixtures")]
+mod faults;
+
 mod application;
 pub use application::AppAssetCommand;
 pub use application::storage::history::{AppHistoryCommand, AppHistoryQuery};

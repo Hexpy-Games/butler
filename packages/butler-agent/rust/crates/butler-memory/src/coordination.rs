@@ -1,5 +1,10 @@
 //! Cross-domain writer fencing shared by native Profile and Cognition stores.
 
+#[cfg(feature = "e2e-fixtures")]
+mod faults;
+#[cfg(feature = "e2e-fixtures")]
+pub(crate) use faults::{hold_reset_acquisition, portable_file_fixture, reset_settlement};
+
 mod coordinator;
 mod error;
 mod fence;

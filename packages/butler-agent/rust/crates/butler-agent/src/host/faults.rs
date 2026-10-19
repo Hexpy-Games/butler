@@ -5,6 +5,9 @@
 //! replaced by provider responses. Keep their fixture wiring at this boundary.
 mod clock;
 mod embedding;
+pub(in crate::host) mod memory;
+pub(in crate::host) mod service;
+pub(in crate::host) mod tools;
 pub(in crate::host) use clock::clock;
 pub(in crate::host) use embedding::{embedding_manifest, embedding_sources, local_asset_sources};
 
