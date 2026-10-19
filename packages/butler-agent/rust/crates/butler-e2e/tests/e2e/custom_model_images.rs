@@ -338,3 +338,98 @@ async fn provider_image_400_followup_text_is_delivered() -> Result<(), HarnessEr
     );
     s.finish().await
 }
+
+#[tokio::test]
+async fn display_name_edit_preserves_discovery_when_probe_has_no_result() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    let server = FakeServer::local_models(ChatBehavior {
+        local_capabilities: LocalCapabilities {
+            ollama: Some(vec!["vision".into()]),
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .await?;
+    let s = with_local_server("CUSTOM-IMAGE-RENAME", &server).await?;
+    let mut body = registration(&server, "ollama");
+    assert_support(
+        &register(&s, body.clone()).await?,
+        "supported",
+        "provider_discovery",
+    );
+    server.set_local_capabilities(LocalCapabilities::default());
+    body["display_name"] = json!("Renamed model");
+    let reply =
+        s.gw.patch(&format!("/model-catalog/local-models/{LOCAL_MODEL}"), body)
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    assert_eq!(reply.data()["model"]["display_name"], "Renamed model");
+    assert_support(&reply.data()["model"], "supported", "provider_discovery");
+    assert_support(
+        model(s.gw.get("/model-catalog").await?.data()),
+        "supported",
+        "provider_discovery",
+    );
+    let turn = terminal(&s, &image(&s).await?).await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    assert!(server.chat_requests().iter().any(carries_image));
+    s.finish().await
+}
+
+#[tokio::test]
+async fn model_id_edit_clears_discovery_when_probe_has_no_result() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let server = FakeServer::local_models(ChatBehavior {
+        local_capabilities: LocalCapabilities {
+            ollama: Some(vec!["vision".into()]),
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .await?;
+    let s = with_local_server("CUSTOM-IMAGE-CHANGE-ID", &server).await?;
+    let mut body = registration(&server, "ollama");
+    assert_support(
+        &register(&s, body.clone()).await?,
+        "supported",
+        "provider_discovery",
+    );
+    server.set_local_capabilities(LocalCapabilities::default());
+    body["model_id"] = json!("different-model");
+    let reply =
+        s.gw.patch(&format!("/model-catalog/local-models/{LOCAL_MODEL}"), body)
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let updated = &reply.data()["model"];
+    assert_eq!(updated["model_id"], "different-model");
+    assert!(
+        updated
+            .get("image_input_support")
+            .is_none_or(Value::is_null),
+        "{updated}"
+    );
+    assert!(
+        updated
+            .get("image_capability_source")
+            .is_none_or(Value::is_null),
+        "{updated}"
+    );
+    let settings =
+        s.gw.patch("/settings", json!({"model":updated["model_ref"]}))
+            .await?;
+    assert_eq!(settings.status, 200, "{}", settings.text);
+    let refused = image(&s).await?;
+    assert_eq!(refused.status, 409, "{}", refused.text);
+    assert_eq!(
+        refused.error_code(),
+        Some("image_capability_unknown"),
+        "{}",
+        refused.text
+    );
+    assert_eq!(server.chat_requests(), [] as [Value; 0]);
+    let stored: Value =
+        serde_json::from_slice(&std::fs::read(s.sandbox.data.join("butler.config.json"))?)?;
+    assert!(stored["models"]["local"][0]["image_discovery"].is_null());
+    s.finish().await
+}

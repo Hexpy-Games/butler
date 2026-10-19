@@ -63,7 +63,15 @@ impl ModelConfiguration {
                 .and_then(|model| credentials.get(&model.model_ref))
                 .cloned(),
         };
-        candidate.image_discovery = image_discovery;
+        candidate.image_discovery = image_discovery.or_else(|| {
+            previous
+                .filter(|model| {
+                    model.api_base_url == candidate.api_base_url
+                        && model.model_id == candidate.model_id
+                        && model.platform == candidate.platform
+                })
+                .and_then(|model| model.image_discovery.clone())
+        });
         let previous_ref = previous
             .map(|model| model.model_ref.clone())
             .unwrap_or_default();

@@ -131,6 +131,7 @@ pub struct Seen {
 struct State {
     kind: Kind,
     chat: ChatBehavior,
+    local_capabilities: Mutex<LocalCapabilities>,
     seen: Mutex<Vec<Seen>>,
 }
 
@@ -171,6 +172,7 @@ impl FakeServer {
         let address = listener.local_addr()?;
         let state = Arc::new(State {
             kind,
+            local_capabilities: Mutex::new(chat.local_capabilities.clone()),
             chat,
             seen: Mutex::new(Vec::new()),
         });
@@ -187,6 +189,12 @@ impl FakeServer {
             state,
             task,
         })
+    }
+
+    /// Change native capability responses; absent values return HTTP 404, while
+    /// `/v1/models` falls back to its model list without capability fields.
+    pub fn set_local_capabilities(&self, capabilities: LocalCapabilities) {
+        *lock(&self.state.local_capabilities) = capabilities;
     }
 
     /// Every request so far, oldest first.
@@ -241,7 +249,8 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
         return favicons::response(seen.path.as_str());
     }
     if matches!(state.kind, Kind::LocalModels)
-        && let Some(response) = local_capabilities::response(&state.chat.local_capabilities, &seen)
+        && let Some(response) =
+            local_capabilities::response(&lock(&state.local_capabilities), &seen)
     {
         return response;
     }
