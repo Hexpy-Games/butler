@@ -62,7 +62,10 @@ enum ReadStage {
 fn io_failure(path: &str, error: &std::io::Error, stage: ReadStage) -> Value {
     let absent = error.kind() == std::io::ErrorKind::NotFound;
     let code = super::path_messages::io_reason(error);
-    if matches!(code, "permission_denied" | "invalid_path") {
+    if matches!(
+        code,
+        "permission_denied" | "invalid_path" | "safety_refused" | "not_a_file"
+    ) {
         let (message, hint) = super::path_messages::explanation(code);
         let message = if code == "invalid_path" {
             error.to_string()
@@ -103,8 +106,11 @@ fn io_failure(path: &str, error: &std::io::Error, stage: ReadStage) -> Value {
 
 /// Reads one admitted workspace text file window: path guard, regular-file
 /// checks, UTF-8 decoding, then the line/cursor/byte-budget window.
-pub(super) fn read_one_blocking(input: &ReadFileInput) -> std::io::Result<WorkspaceFileRead> {
-    let file = match admitted_file(input)? {
+pub(super) fn read_one_blocking(
+    input: &ReadFileInput,
+    cache: Option<&butler_platform::secure_fs::ContainedReadCache>,
+) -> std::io::Result<WorkspaceFileRead> {
+    let file = match admitted_file(input, cache)? {
         Ok(file) => file,
         Err(failure) => return Ok(WorkspaceFileRead::failed(failure)),
     };
@@ -132,7 +138,21 @@ pub(super) fn read_one_blocking(input: &ReadFileInput) -> std::io::Result<Worksp
 
 /// The admitted regular file descriptor. Contained reads walk the original
 /// request from the pinned root; bytes never come from a later path reopen.
-fn admitted_file(input: &ReadFileInput) -> std::io::Result<Result<std::fs::File, Value>> {
+fn admitted_file(
+    input: &ReadFileInput,
+    cache: Option<&butler_platform::secure_fs::ContainedReadCache>,
+) -> std::io::Result<Result<std::fs::File, Value>> {
+    if input.path_form.contained() && butler_platform::secure_fs::FILE_IDS {
+        return Ok(super::contained_reader::open_protected(
+            &input.root,
+            &input.path,
+            input.path_form,
+            &input.butler_data,
+            cache,
+            &input.protected_roots,
+        )
+        .map_err(|error| io_failure(&input.path, &error, ReadStage::Read)));
+    }
     let guard = resolve_workspace_path_guard(GuardInput {
         butler_data: Some(&input.butler_data),
         root: &input.root,

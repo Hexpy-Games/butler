@@ -120,6 +120,10 @@ pub const LOG_EXPORTS: &str = "log-exports";
 pub const TOOL_CACHE: &str = "cache/tools";
 /// Project-write command cache state.
 pub const PROJECT_WRITE_CACHE: &str = "cache/project-write";
+/// Project-write temporary files.
+pub const PROJECT_WRITE_TMP: &str = "tmp/project-write";
+/// Private validated reader copies, inaccessible to commands.
+pub const READER_STAGING: &str = "tmp/reader-staging";
 /// Paths whose first component Butler creates itself.
 pub const OWNED_PATHS: &[&str] = &[
     LEGACY_SCHEDULES,

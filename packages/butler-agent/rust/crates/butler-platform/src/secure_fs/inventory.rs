@@ -13,17 +13,18 @@ use std::{
     fs::Metadata,
     io,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock, Weak},
 };
 
 /// Credential paths and inode identities shared for a data directory.
 #[derive(Debug)]
 pub struct SecretInventory {
     paths: Vec<PathBuf>,
-    identities: HashSet<FileId>,
-    roots: Mutex<HashMap<PathBuf, (FileId, std::fs::File)>>,
+    identities: Mutex<HashSet<FileId>>,
+    canonical: Mutex<HashMap<PathBuf, (Option<FileId>, PathBuf)>>,
+    roots: Mutex<HashMap<PathBuf, Weak<RootPin>>>,
     #[cfg(unix)]
-    hard_links: Mutex<hard_links::Cache>,
+    hard_links: hard_links::Cache,
 }
 
 impl SecretInventory {
@@ -43,35 +44,78 @@ impl SecretInventory {
             .collect();
         Self {
             paths,
-            identities,
+            identities: Mutex::new(identities),
+            canonical: Mutex::default(),
             roots: Mutex::new(HashMap::new()),
             #[cfg(unix)]
-            hard_links: Mutex::default(),
+            hard_links: hard_links::Cache::default(),
         }
     }
 
     /// Reuse one inventory for the same credential policy and data directory.
     /// Call on a blocking worker. Environment values are never logged.
     pub fn cached(data: &Path) -> Arc<Self> {
+        Self::for_environment(
+            data,
+            &[
+                "HOME",
+                "CODEX_HOME",
+                "CODEX_AUTH_JSON",
+                "BUTLER_CODEX_AUTH_PROFILE",
+                "BUTLER_OPENAI_AUTH_PROFILE",
+            ]
+            .into_iter()
+            .filter_map(|key| std::env::var(key).ok().map(|value| (key.to_owned(), value)))
+            .collect(),
+        )
+    }
+
+    /// Reuse only an identical credential policy; one caller cannot select the
+    /// policy used by another environment sharing the same data directory.
+    pub fn for_environment(data: &Path, environment: &HashMap<String, String>) -> Arc<Self> {
+        let mut environment = environment.clone();
+        environment.insert("BUTLER_DATA".into(), data.to_string_lossy().into_owned());
+        let key = credentials::roots(&environment);
         let mut cache = cache()
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         cache
-            .entry(data.to_path_buf())
-            .or_insert_with(|| Arc::new(Self::new(data, &std::env::vars().collect())))
+            .entry(key)
+            .or_insert_with(|| Arc::new(Self::new(data, &environment)))
             .clone()
     }
 
-    /// Bind a data directory to the session's host credential policy. An
-    /// existing binding is reused; a command cannot replace session policy.
-    pub fn for_environment(data: &Path, environment: &HashMap<String, String>) -> Arc<Self> {
-        let mut cache = cache()
+    /// Refresh at request/turn admission, never for every path component.
+    /// Retain old identities too: renaming a credential store does not unprotect it.
+    pub fn refresh(&self) {
+        if let (Ok(mut identities), Ok(mut canonical)) =
+            (self.identities.lock(), self.canonical.lock())
+        {
+            for path in &self.paths {
+                let id = std::fs::metadata(path)
+                    .ok()
+                    .and_then(|metadata| secure_fs::identity(&metadata).id);
+                if let Some(id) = id {
+                    identities.insert(id);
+                }
+                if canonical
+                    .get(path)
+                    .is_none_or(|(previous, _)| *previous != id)
+                {
+                    let resolved = std::fs::canonicalize(path).unwrap_or_else(|_| path.clone());
+                    canonical.insert(path.clone(), (id, resolved));
+                }
+            }
+        }
+    }
+
+    /// Cached canonical spellings, recomputed only when a root identity changes.
+    pub fn resolved_paths(&self) -> Vec<PathBuf> {
+        self.refresh();
+        self.canonical
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        cache
-            .entry(data.to_path_buf())
-            .or_insert_with(|| Arc::new(Self::new(data, environment)))
-            .clone()
+            .map(|paths| paths.values().map(|(_, path)| path.clone()).collect())
+            .unwrap_or_default()
     }
 
     /// The shared credential roots, including absent stores.
@@ -84,49 +128,69 @@ impl SecretInventory {
         self.paths
             .iter()
             .any(|root| secure_fs::path_is_within(path, root))
+            || self.canonical.lock().is_ok_and(|roots| {
+                roots
+                    .values()
+                    .any(|(_, root)| secure_fs::path_is_within(path, root))
+            })
     }
 
     /// Whether an opened object is a recorded credential root.
     pub fn protects_metadata(&self, metadata: &Metadata) -> bool {
         secure_fs::identity(metadata)
             .id
-            .is_some_and(|id| self.identities.contains(&id))
+            .is_some_and(|id| self.identities.lock().is_ok_and(|ids| ids.contains(&id)))
     }
 
-    /// Pin a session root before a command can replace it. Repeated calls verify
-    /// the original identity; a replacement never silently becomes a new root.
-    pub fn pin_root(&self, root: &Path) -> io::Result<()> {
+    /// Pin until the returned turn lease is dropped. A later turn may choose a
+    /// recreated root; concurrent turns retain their existing identity fence.
+    pub fn pin_root(&self, root: &Path) -> io::Result<Arc<RootPin>> {
+        self.refresh();
         let file = secure_fs::open_directory_no_follow(root)?;
-        self.verify_root(root, &file, &file.metadata()?)
+        let metadata = file.metadata()?;
+        self.verify_root(root, &file, &metadata)?;
+        let mut roots = self.roots.lock().map_err(|_| denied())?;
+        if let Some(pin) = roots.get(root).and_then(Weak::upgrade) {
+            return Ok(pin);
+        }
+        roots.retain(|_, pin| pin.strong_count() > 0);
+        let pin = Arc::new(RootPin {
+            id: secure_fs::identity(&metadata).id,
+            _file: file,
+        });
+        roots.insert(root.to_path_buf(), Arc::downgrade(&pin));
+        Ok(pin)
     }
 
     #[cfg(unix)]
     pub(super) fn permits_hard_link(&self, metadata: &Metadata) -> bool {
-        let Some(id) = secure_fs::identity(metadata).id else {
-            return false;
-        };
-        self.hard_links
-            .lock()
-            .is_ok_and(|mut cache| cache.permits(&self.paths, id))
+        self.hard_links.permits(&self.paths, metadata)
+    }
+
+    pub(crate) fn canonical_root(&self, root: &Path) -> io::Result<PathBuf> {
+        let roots = self.roots.lock().map_err(|_| denied())?;
+        if roots.get(root).and_then(Weak::upgrade).is_some() {
+            return Ok(root.to_path_buf());
+        }
+        drop(roots);
+        std::fs::canonicalize(root)
     }
 
     pub(crate) fn verify_root(
         &self,
         root: &Path,
-        file: &std::fs::File,
+        _file: &std::fs::File,
         metadata: &Metadata,
     ) -> io::Result<()> {
         if self.protects_path(root) || self.protects_metadata(metadata) {
             return Err(denied());
         }
         if let Some(id) = secure_fs::identity(metadata).id {
-            let mut roots = self.roots.lock().map_err(|_| denied())?;
-            if let Some((recorded, _)) = roots.get(root) {
-                if *recorded != id {
-                    return Err(denied());
-                }
-            } else {
-                roots.insert(root.to_path_buf(), (id, file.try_clone()?));
+            let roots = self.roots.lock().map_err(|_| denied())?;
+            if let Some(pin) = roots.get(root).and_then(Weak::upgrade)
+                && pin.id != Some(id)
+            {
+                return Err(denied());
             }
         }
         Ok(())
@@ -145,7 +209,15 @@ pub fn environment_data() -> PathBuf {
         .unwrap_or_default()
 }
 
-fn cache() -> &'static Mutex<HashMap<PathBuf, Arc<SecretInventory>>> {
-    static CACHE: OnceLock<Mutex<HashMap<PathBuf, Arc<SecretInventory>>>> = OnceLock::new();
+fn cache() -> &'static Mutex<HashMap<Vec<PathBuf>, Arc<SecretInventory>>> {
+    static CACHE: OnceLock<Mutex<HashMap<Vec<PathBuf>, Arc<SecretInventory>>>> = OnceLock::new();
     CACHE.get_or_init(Mutex::default)
+}
+
+/// A turn's root identity and open descriptor. Dropping the final lease releases
+/// the descriptor; the process cache holds only a weak reference.
+#[derive(Debug)]
+pub struct RootPin {
+    id: Option<FileId>,
+    _file: std::fs::File,
 }

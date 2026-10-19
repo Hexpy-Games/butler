@@ -20,12 +20,16 @@ const INTERNAL: &[&str] = &[
     "butler.config.json",
 ];
 
-pub(super) async fn resolve(owner: &GuidedTools, args: &mut Value) -> Result<(), Value> {
+pub(super) async fn resolve(
+    owner: &GuidedTools,
+    args: &mut Value,
+) -> Result<butler_platform::secure_fs::StagedFiles, Value> {
+    let mut staged = butler_platform::secure_fs::StagedFiles::new(&owner.binding.butler_data);
     let Some(steps) = args["steps"].as_array_mut() else {
-        return Ok(());
+        return Ok(staged);
     };
     if !steps.iter().any(|step| step["action"] == "upload") {
-        return Ok(());
+        return Ok(staged);
     }
     let root = owner
         .binding
@@ -37,17 +41,21 @@ pub(super) async fn resolve(owner: &GuidedTools, args: &mut Value) -> Result<(),
         let raw = step["value"].as_str().unwrap_or("").to_owned();
         let root = root.clone();
         let data = owner.binding.butler_data.clone();
-        let path = tokio::task::spawn_blocking(move || workspace_file(&root, &data, &raw))
+        let turn = owner.binding.turn_id.clone();
+        let path = tokio::task::spawn_blocking(move || workspace_file(&root, &data, &turn, &raw))
             .await
             .unwrap_or(Err("workspace_unavailable"))
-            .map_err(|reason| json!({"status":"not_dispatched","reason":reason,
-                "recovery":"upload takes one existing file inside the conversation workspace (a relative path or an absolute path under it, at most 100 MB). No steps were dispatched."}))?;
+            .map_err(|reason| {
+                json!({"status":"not_dispatched","reason":reason,
+                "recovery":recovery(reason)})
+            })?;
+        staged.push(PathBuf::from(&path));
         step["value"] = json!(path);
     }
-    Ok(())
+    Ok(staged)
 }
 
-fn workspace_file(root: &Path, data: &Path, raw: &str) -> Result<String, &'static str> {
+fn workspace_file(root: &Path, data: &Path, turn: &str, raw: &str) -> Result<String, &'static str> {
     if raw.trim().is_empty() {
         return Err("upload_path_required");
     }
@@ -77,7 +85,14 @@ fn workspace_file(root: &Path, data: &Path, raw: &str) -> Result<String, &'stati
     let inventory = butler_platform::secure_fs::SecretInventory::cached(data);
     let file =
         butler_platform::secure_fs::open_contained(&root, Path::new(relative.as_ref()), &inventory)
-            .map_err(|_| "upload_sensitive_file")?;
+            .map_err(|error| match error.kind() {
+                std::io::ErrorKind::NotFound => "upload_file_not_found",
+                std::io::ErrorKind::InvalidInput | std::io::ErrorKind::NotADirectory => {
+                    "upload_not_a_file"
+                }
+                std::io::ErrorKind::PermissionDenied => "upload_sensitive_file",
+                _ => "upload_file_unavailable",
+            })?;
     let metadata = file.metadata().map_err(|_| "upload_file_not_found")?;
     if !metadata.is_file() {
         return Err("upload_not_a_file");
@@ -85,9 +100,18 @@ fn workspace_file(root: &Path, data: &Path, raw: &str) -> Result<String, &'stati
     if metadata.len() > MAX_BYTES {
         return Err("upload_too_large");
     }
-    let path = butler_platform::secure_fs::stage_file(data, &path, file, MAX_BYTES)
+    let path = butler_platform::secure_fs::stage_file(data, turn, &path, file, MAX_BYTES)
         .map_err(|_| "upload_file_unavailable")?;
     path.to_str()
         .map(str::to_owned)
         .ok_or("upload_path_invalid")
+}
+
+fn recovery(reason: &str) -> &'static str {
+    match reason {
+        "upload_file_not_found" => "Choose an existing file inside the workspace.",
+        "upload_not_a_file" => "Choose a regular file, rather than a directory or special file.",
+        "upload_sensitive_file" => "Choose an ordinary workspace file outside credential stores.",
+        _ => "Use one existing workspace file of at most 100 MB. No steps were dispatched.",
+    }
 }

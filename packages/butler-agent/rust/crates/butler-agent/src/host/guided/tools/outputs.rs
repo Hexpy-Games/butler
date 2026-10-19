@@ -57,7 +57,7 @@ pub(super) async fn publish(
         Ok(Ok((output, new_blobs))) => {
             let revision = output.revisions.last().map_or(0, |r| r.revision);
             let check = check(owner, invocation, &json!({"output_id":output.output_id})).await;
-            json!({"output_id":output.output_id,"revision":revision,"view":format!("/outputs/{}/view",output.output_id),"new_blobs":new_blobs,"check":check})
+            json!({"output_id":output.output_id,"revision":revision,"view":format!("/outputs/{}/view",output.output_id),"new_blobs":new_blobs,"skipped_files":output.skipped_files,"check":check})
         }
         Ok(Err(error)) => json!({"ok":false,"error":error.to_string()}),
         Err(_) => json!({"ok":false,"error":"output_publish_failed"}),

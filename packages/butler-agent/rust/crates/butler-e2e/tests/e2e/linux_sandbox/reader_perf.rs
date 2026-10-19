@@ -11,7 +11,7 @@ async fn perf_contained_opens_and_5000_file_readers() -> Result<(), HarnessError
     let mut s = Setup::new("LINUX-CONTAINED-PERF")?;
     let root = &s.sandbox.workspace;
     let inventory = SecretInventory::cached(&s.sandbox.data);
-    inventory.pin_root(root)?;
+    let _pin = inventory.pin_root(root)?;
     for depth in [1, 5, 10] {
         let path = PathBuf::from_iter(std::iter::repeat_n("d", depth - 1)).join("file");
         std::fs::create_dir_all(root.join(&path).parent().unwrap())?;
@@ -32,31 +32,66 @@ async fn perf_contained_opens_and_5000_file_readers() -> Result<(), HarnessError
         std::fs::create_dir_all(&dir)?;
         std::fs::write(dir.join(format!("f{index}")), format!("complete-{index}\n"))?;
     }
+    for linked in [false, true] {
+        if linked {
+            for index in 0..5000 {
+                std::fs::hard_link(
+                    root.join(format!("tree/d{}/f{index}", index / 100)),
+                    root.join(format!("copy-{index}")),
+                )?;
+            }
+        }
+        measure_readers(root, &s.sandbox.data, linked).await?;
+    }
+    s.sandbox.mark_success();
+    Ok(())
+}
+
+async fn measure_readers(root: &Path, data: &Path, linked: bool) -> Result<(), HarnessError> {
+    let owner = WorkspaceFiles::new(1);
     let started = Instant::now();
     let mut read_bytes = 0;
-    for index in 0..5000 {
-        let path = format!("tree/d{}/f{index}", index / 100);
-        let result = super::secret_changes::read(root, &s.sandbox.data, &path).await;
-        let expected = format!("complete-{index}\n");
-        assert_eq!(result["content"], expected);
-        assert_eq!(result["bytes"], expected.len());
-        read_bytes += expected.len();
+    for batch in 0..250 {
+        let request = owner.request();
+        for index in batch * 20..(batch + 1) * 20 {
+            let path = format!("tree/d{}/f{index}", index / 100);
+            let result = request
+                .read_one(butler_turn::workspace::ReadFileInput {
+                    butler_data: data.to_path_buf(),
+                    root: root.to_path_buf(),
+                    path,
+                    path_form: PathForm::Contained,
+                    protected_roots: Vec::new(),
+                    start_line: None,
+                    limit_lines: None,
+                    max_bytes: 262_144,
+                    offset_bytes: None,
+                })
+                .await
+                .unwrap()?
+                .result;
+            let expected = format!("complete-{index}\n");
+            assert_eq!(result["content"], expected);
+            assert_eq!(result["bytes"], expected.len());
+            read_bytes += expected.len();
+        }
     }
     eprintln!(
-        "CONTAINED-READ files=5000 bytes={read_bytes} elapsed_ms={:.3}",
+        "CONTAINED-READ files=5000 nlink={} bytes={read_bytes} elapsed_ms={:.3}",
+        if linked { 2 } else { 1 },
         started.elapsed().as_secs_f64() * 1000.0
     );
     let matcher = Arc::new(regress::Regex::new("complete").unwrap());
-    let owner = WorkspaceFiles::new(1);
+    let request = owner.request();
     let started = Instant::now();
     let mut matches = 0;
     for index in 0..5000 {
         let path = format!("tree/d{}/f{index}", index / 100);
         let expected = format!("complete-{index}");
-        let result = owner
+        let result = request
             .grep_candidate(GrepCandidate {
-                butler_data: s.sandbox.data.clone(),
-                root: root.clone(),
+                butler_data: data.to_path_buf(),
+                root: root.to_path_buf(),
                 path_form: PathForm::Contained,
                 protected_roots: Vec::new(),
                 path: path.clone(),
@@ -81,10 +116,10 @@ async fn perf_contained_opens_and_5000_file_readers() -> Result<(), HarnessError
     }
     assert_eq!(matches, 5000);
     eprintln!(
-        "CONTAINED-GREP files=5000 matches={matches} elapsed_ms={:.3}",
+        "CONTAINED-GREP files=5000 nlink={} matches={matches} elapsed_ms={:.3}",
+        if linked { 2 } else { 1 },
         started.elapsed().as_secs_f64() * 1000.0
     );
     owner.close().await;
-    s.sandbox.mark_success();
     Ok(())
 }

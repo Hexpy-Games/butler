@@ -173,7 +173,9 @@ fn file_candidates(
             .as_str()
             .is_some_and(|source| butler_turn::workspace::safe_workspace_path(source).is_some());
         if (item["deliverable"] == true || native_source)
-            && let Some(label) = item["safePathLabel"].as_str()
+            && let Some(label) = item["stagedPath"]
+                .as_str()
+                .or_else(|| item["safePathLabel"].as_str())
             && std::path::Path::new(label).is_absolute()
         {
             roots.push(PathBuf::from(label));
@@ -261,7 +263,7 @@ fn artifacts(value: Option<&Value>, roots: &[PathBuf]) -> Vec<ArtifactFileCandid
         .flatten()
         .filter_map(|item| {
             let object = item.as_object()?;
-            let local = text(object.get("localPath"));
+            let local = text(object.get("stagedPath")).or_else(|| text(object.get("localPath")));
             let label = text(object.get("safePathLabel"));
             let mut paths = Vec::new();
             if let Some(path) = local {

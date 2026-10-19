@@ -15,14 +15,16 @@ pub(super) async fn execute(
 ) -> Result<JsonDocument, ToolExecutionError> {
     let workspace = owner.active_workspace_path();
     let data = owner.binding.butler_data.clone();
+    let turn = owner.binding.turn_id.clone();
     let files = call.arguments.get("files").cloned().unwrap_or(Value::Null);
-    let result = tokio::task::spawn_blocking(move || collect(&workspace, &data, &files)).await;
+    let result =
+        tokio::task::spawn_blocking(move || collect(&workspace, &data, &turn, &files)).await;
     encoded(&result.unwrap_or_else(|_| unavailable("")))
 }
 fn unavailable(path: &str) -> Value {
     json!({"ok":false,"error":"deliver_file_unavailable","path":path,"message":UNAVAILABLE})
 }
-fn collect(workspace: &Path, data: &Path, files: &Value) -> Value {
+fn collect(workspace: &Path, data: &Path, turn: &str, files: &Value) -> Value {
     let Some(files) = files.as_array().filter(|f| !f.is_empty() && f.len() <= 12) else {
         return unavailable("");
     };
@@ -30,7 +32,7 @@ fn collect(workspace: &Path, data: &Path, files: &Value) -> Value {
     let mut delivered = Vec::new();
     for item in files {
         let path = item["path"].as_str().unwrap_or("");
-        let Some(mut artifact) = checked(workspace, data, path) else {
+        let Some(mut artifact) = checked(workspace, data, turn, path) else {
             return unavailable(path);
         };
         let title = item["title"]
@@ -45,7 +47,7 @@ fn collect(workspace: &Path, data: &Path, files: &Value) -> Value {
     }
     json!({"ok":true,"delivered":delivered,"artifacts":artifacts})
 }
-fn checked(workspace: &Path, data: &Path, label: &str) -> Option<Value> {
+fn checked(workspace: &Path, data: &Path, turn: &str, label: &str) -> Option<Value> {
     let label = label.replace('\\', "/");
     let artifact = label.starts_with("artifacts/");
     let raw_root = if artifact { data } else { workspace };
@@ -73,8 +75,10 @@ fn checked(workspace: &Path, data: &Path, label: &str) -> Option<Value> {
     if !metadata.is_file() || metadata.len() > MAX_BYTES {
         return None;
     }
-    let target = secure_fs::stage_file(data, relative, file, MAX_BYTES).ok()?;
+    let target = secure_fs::stage_file(data, turn, &root.join(relative), file, MAX_BYTES).ok()?;
     let source = relative.to_str()?.replace('\\', "/");
-    Some(json!({"path":target.to_str()?.to_owned(),
-        "source":source,"deliverable":true,"size_bytes":metadata.len(),"mime_type":super::super::journal::mime_for(&label)}))
+    Some(
+        json!({"path":source,"staged_path":target.to_str()?.to_owned(),
+        "source":source,"deliverable":true,"size_bytes":metadata.len(),"mime_type":super::super::journal::mime_for(&label)}),
+    )
 }

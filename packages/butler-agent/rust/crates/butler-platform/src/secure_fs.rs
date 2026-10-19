@@ -14,13 +14,13 @@ mod inventory;
 pub(crate) use inventory::credential_roots;
 #[cfg(target_os = "macos")]
 pub(crate) use inventory::secret_pattern;
-pub use inventory::{SecretInventory, environment_data, secret_name};
+pub use inventory::{RootPin, SecretInventory, environment_data, secret_name};
 mod stage;
-pub use stage::stage_file;
+pub use stage::{StageScope, StagedFiles, handoff_staged, remove_staged, stage_file};
 mod device;
 pub use device::same_device;
 mod contained_read;
-pub use contained_read::{open_contained, open_directory_no_follow};
+pub use contained_read::{ContainedReadCache, open_contained, open_directory_no_follow};
 #[cfg(unix)]
 mod contained;
 mod exact_name;

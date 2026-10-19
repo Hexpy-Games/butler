@@ -10,6 +10,7 @@
     reason = "E2E assertions"
 )]
 mod host;
+mod upload;
 use butler_e2e::e2e::{
     HarnessError,
     gateway::turn_state,

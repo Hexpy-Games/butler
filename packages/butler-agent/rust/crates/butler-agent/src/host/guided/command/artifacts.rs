@@ -227,7 +227,7 @@ fn verified_source(
 ) -> Option<(PathBuf, Vec<u8>)> {
     use std::io::Read;
     let inventory = butler_platform::secure_fs::SecretInventory::cached(data);
-    let scratch = data.join("tmp/project-write");
+    let scratch = data.join(butler_platform::data_paths::PROJECT_WRITE_TMP);
     let root = [workspace, generated, &scratch]
         .into_iter()
         .find(|root| path.starts_with(root))?;
@@ -453,7 +453,10 @@ fn declared_file(path: &Path, stat: &fs::Metadata, label: String) -> Artifact {
 
 fn read_published(root: &Path, path: &Path) -> Option<Vec<u8>> {
     use std::io::Read;
-    let data = root.parent()?.parent()?;
+    let data = (0..Path::new(butler_platform::data_paths::ARTIFACTS)
+        .components()
+        .count())
+        .try_fold(root, |path, _| path.parent())?;
     let inventory = butler_platform::secure_fs::SecretInventory::cached(data);
     let file = secure_fs::open_contained(root, path.strip_prefix(root).ok()?, &inventory).ok()?;
     let mut bytes = Vec::new();

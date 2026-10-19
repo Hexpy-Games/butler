@@ -41,6 +41,7 @@ fn checked(root: &Path, path: &Path) -> std::io::Result<()> {
 }
 pub(super) struct Snapshot {
     pub files: BTreeMap<String, Vec<u8>>,
+    pub skipped: Vec<String>,
     pub entry: String,
     pub size: u64,
     pub source: String,
@@ -68,7 +69,16 @@ pub(super) fn collect(request: &PublishRequest, data: &Path) -> std::io::Result<
     let mut files = BTreeMap::new();
     let mut size = 0;
     let inventory = butler_platform::secure_fs::SecretInventory::cached(data);
-    visit(&root, base, &source, &mut files, &mut size, &inventory)?;
+    let mut skipped = Vec::new();
+    visit(
+        &root,
+        base,
+        &source,
+        &mut files,
+        &mut size,
+        &inventory,
+        &mut skipped,
+    )?;
     let entry = request.entry.clone().unwrap_or_else(|| {
         if metadata.is_file() {
             source
@@ -85,6 +95,7 @@ pub(super) fn collect(request: &PublishRequest, data: &Path) -> std::io::Result<
         return Err(error("output_entry_not_found"));
     }
     Ok(Snapshot {
+        skipped,
         files,
         entry,
         size,
@@ -103,6 +114,7 @@ fn visit(
     files: &mut BTreeMap<String, Vec<u8>>,
     size: &mut u64,
     inventory: &butler_platform::secure_fs::SecretInventory,
+    skipped: &mut Vec<String>,
 ) -> std::io::Result<()> {
     let source_relative = path
         .strip_prefix(root)
@@ -111,16 +123,18 @@ fn visit(
         butler_platform::command_sandbox::secret_name(&part.as_os_str().to_string_lossy())
     }) || inventory.protects_path(path)
     {
+        skipped.push(source_relative.to_string_lossy().into_owned());
         return Ok(());
     }
     checked(root, path)?;
     let metadata = std::fs::symlink_metadata(path)?;
     if inventory.protects_metadata(&metadata) {
+        skipped.push(source_relative.to_string_lossy().into_owned());
         return Ok(());
     }
     if metadata.is_dir() {
         for child in std::fs::read_dir(path)? {
-            visit(root, base, &child?.path(), files, size, inventory)?;
+            visit(root, base, &child?.path(), files, size, inventory, skipped)?;
         }
         return Ok(());
     }
@@ -135,7 +149,10 @@ fn visit(
         .map_err(|_| error("unsafe_output_path"))?;
     let mut file = match secure_fs::open_contained(root, relative_file, inventory) {
         Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+            skipped.push(source_relative.to_string_lossy().into_owned());
+            return Ok(());
+        }
         Err(error) => return Err(error),
     };
     let mut bytes = Vec::new();

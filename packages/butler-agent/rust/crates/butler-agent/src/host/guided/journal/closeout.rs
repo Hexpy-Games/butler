@@ -71,9 +71,15 @@ pub(super) async fn collect(
         })
         .collect::<Vec<_>>();
     let outputs = std::mem::take(&mut artifacts.outputs);
+    let artifacts = artifacts::with_changed_files(artifacts.finish(), &changed_files, workspace);
+    for artifact in &artifacts {
+        if let Some(path) = &artifact.staged_path {
+            butler_platform::secure_fs::handoff_staged(std::path::Path::new(path));
+        }
+    }
     Ok(JournalCloseout {
         outputs,
-        artifacts: artifacts::with_changed_files(artifacts.finish(), &changed_files, workspace),
+        artifacts,
         changed_files,
         answer_blocks,
     })

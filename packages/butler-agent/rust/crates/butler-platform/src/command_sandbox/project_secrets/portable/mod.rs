@@ -39,20 +39,26 @@ pub(super) fn sweep_new_secrets(
     root: &Path,
     since: &super::ProjectEntries,
     data: &Path,
+    inventory: &crate::secure_fs::SecretInventory,
 ) -> std::io::Result<Vec<PathBuf>> {
     let (names, links) = tree::entries(root, false)?;
     let mut found: Vec<_> = names.into_iter().map(|path| root.join(path)).collect();
-    let inventory = crate::secure_fs::SecretInventory::cached(data);
-    let mut targets: Vec<_> = inventory
-        .paths()
-        .iter()
-        .chain(found.iter())
-        .filter_map(|path| crate::secure_fs::canonicalize(path).ok())
-        .collect();
+    let mut targets = inventory.resolved_paths();
+    targets.extend(
+        found
+            .iter()
+            .filter_map(|path| crate::secure_fs::canonicalize(path).ok()),
+    );
     targets.extend(inventory.paths().iter().cloned());
-    let existing: HashSet<_> = since.links.iter().collect();
     for path in links.into_iter().map(|path| root.join(path)) {
-        if existing.contains(&path) {
+        use std::os::unix::fs::MetadataExt;
+        let metadata = std::fs::symlink_metadata(&path)?;
+        let changed = std::time::UNIX_EPOCH
+            + std::time::Duration::new(
+                metadata.ctime().try_into().unwrap_or(0),
+                metadata.ctime_nsec().try_into().unwrap_or(0),
+            );
+        if changed < since.started {
             continue;
         }
         let target = crate::command_sandbox::linux::complement::resolved_path(&path)

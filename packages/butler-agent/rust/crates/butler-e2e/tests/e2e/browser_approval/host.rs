@@ -60,7 +60,20 @@ impl Host {
                 if op.starts_with("use.") {
                     continue;
                 }
-                seen.lock().unwrap().push(frame.clone());
+                let mut recorded = frame.clone();
+                if op == "tab.act" {
+                    let uploaded: Vec<_> = frame["args"]["steps"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(|step| step["action"] == "upload")
+                        .map(|step| {
+                            std::fs::read_to_string(step["value"].as_str().unwrap()).unwrap()
+                        })
+                        .collect();
+                    recorded["uploaded_content"] = json!(uploaded);
+                }
+                seen.lock().unwrap().push(recorded);
                 let id = frame["id"].as_str().unwrap_or("").to_owned();
                 let _ = admin
                     .send(
@@ -88,6 +101,16 @@ impl Host {
             .unwrap()
             .iter()
             .filter_map(|frame| frame["op"].as_str().map(str::to_owned))
+            .collect()
+    }
+
+    pub(super) fn uploads(&self) -> Vec<String> {
+        self.frames
+            .lock()
+            .unwrap()
+            .iter()
+            .flat_map(|frame| frame["uploaded_content"].as_array().into_iter().flatten())
+            .filter_map(|value| value.as_str().map(str::to_owned))
             .collect()
     }
 
@@ -139,6 +162,10 @@ fn respond(op: &str, frame: &Value) -> Value {
 /// What the executor resolves for a step: role and name, and the payment,
 /// upload, submit and POST-form facts of its target.
 fn facts(step: &Value) -> Value {
+    if step["action"] == "upload" {
+        return json!({"hit":{"role":"input","name":"Upload","ref":step["ref"],"frame":"fixture"},
+            "payment":false,"upload":true,"submit":false,"frame_payment":false,"form_post":false,"addons":[]});
+    }
     if matches!(step["action"].as_str(), Some("type" | "press")) {
         return json!({"keyboard":true,"deferred":true,"hit":{"role":"focus","name":"","frame":""},
             "payment":false,"upload":false,"submit":false,"frame_payment":false,"addons":[]});

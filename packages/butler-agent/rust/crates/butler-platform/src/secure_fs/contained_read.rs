@@ -101,7 +101,7 @@ pub fn open_contained(
 ) -> io::Result<File> {
     #[cfg(unix)]
     {
-        super::contained::open_file(root, relative, inventory)
+        super::contained::Cache::default().open(root, relative, inventory, &[])
     }
     #[cfg(windows)]
     {
@@ -125,5 +125,82 @@ pub fn open_directory_no_follow(root: &Path) -> io::Result<File> {
     #[cfg(windows)]
     {
         windows_guard(root, true, false)
+    }
+}
+
+/// Descriptor cache owned by a single multi-file request. Dropping it releases
+/// all validated directories. Never retain it across commands or turns.
+#[derive(Default)]
+pub struct ContainedReadCache {
+    policies: std::sync::Mutex<
+        std::collections::HashMap<
+            std::path::PathBuf,
+            std::sync::Arc<crate::secure_fs::SecretInventory>,
+        >,
+    >,
+    #[cfg(unix)]
+    inner: std::sync::Mutex<super::contained::Cache>,
+}
+impl ContainedReadCache {
+    /// Use an explicitly supplied host policy for this request.
+    pub fn with_inventory(
+        data: &Path,
+        inventory: std::sync::Arc<crate::secure_fs::SecretInventory>,
+    ) -> Self {
+        Self {
+            policies: std::sync::Mutex::new(std::collections::HashMap::from([(
+                data.to_path_buf(),
+                inventory,
+            )])),
+            ..Self::default()
+        }
+    }
+    /// Capture host policy once, off the per-file environment lookup path.
+    pub fn open_for_data(
+        &self,
+        root: &Path,
+        relative: &Path,
+        data: &Path,
+        protected: &[std::path::PathBuf],
+    ) -> io::Result<File> {
+        let inventory = self
+            .policies
+            .lock()
+            .map_err(|_| crate::secure_fs::inventory::denied())?
+            .entry(data.to_path_buf())
+            .or_insert_with(|| crate::secure_fs::SecretInventory::cached(data))
+            .clone();
+        self.open_protected(root, relative, &inventory, protected)
+    }
+
+    /// Read a fresh leaf through this request's validated parent descriptors.
+    pub fn open(
+        &self,
+        root: &Path,
+        relative: &Path,
+        inventory: &crate::secure_fs::SecretInventory,
+    ) -> io::Result<File> {
+        self.open_protected(root, relative, inventory, &[])
+    }
+    /// Apply additional host-owned protected roots in the same descriptor walk.
+    pub fn open_protected(
+        &self,
+        root: &Path,
+        relative: &Path,
+        inventory: &crate::secure_fs::SecretInventory,
+        protected: &[std::path::PathBuf],
+    ) -> io::Result<File> {
+        #[cfg(unix)]
+        {
+            self.inner
+                .lock()
+                .map_err(|_| crate::secure_fs::inventory::denied())?
+                .open(root, relative, inventory, protected)
+        }
+        #[cfg(windows)]
+        {
+            let _ = protected;
+            open_contained(root, relative, inventory)
+        }
     }
 }

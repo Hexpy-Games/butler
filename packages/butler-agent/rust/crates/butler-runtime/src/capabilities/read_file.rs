@@ -16,6 +16,7 @@ pub(super) async fn execute(
     workspace: &WorkspaceFiles,
     input: CapabilityInvocation<'_>,
 ) -> Result<Value, CapabilityError> {
+    let workspace = &workspace.request();
     let started = Instant::now();
     let args = match parse_args(input.call) {
         Ok(value) => value,

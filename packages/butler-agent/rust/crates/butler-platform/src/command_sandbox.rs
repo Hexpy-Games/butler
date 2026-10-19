@@ -15,7 +15,7 @@ mod project_secrets;
 pub use credentials::secret_name;
 pub use project_secrets::{
     ProjectEntries, discover_project_entries, discover_project_secrets, prewarm_project,
-    sweep_new_secrets,
+    sweep_new_secrets, sweep_with_inventory,
 };
 mod environment;
 pub use environment::tool_environment;

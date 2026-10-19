@@ -9,8 +9,18 @@ pub(super) struct Prepared {
 }
 
 impl Prepared {
-    fn sweep(self, root: &Path, data: &Path) -> std::io::Result<Vec<PathBuf>> {
-        let result = butler_platform::command_sandbox::sweep_new_secrets(root, &self.paths, data);
+    fn sweep(
+        self,
+        root: &Path,
+        data: &Path,
+        inventory: &butler_platform::secure_fs::SecretInventory,
+    ) -> std::io::Result<Vec<PathBuf>> {
+        let result = butler_platform::command_sandbox::sweep_with_inventory(
+            root,
+            &self.paths,
+            data,
+            inventory,
+        );
         if let Some(lease) = self.lease {
             lease.release();
         }
@@ -71,8 +81,9 @@ pub(super) async fn after_run(
     let data = input.butler_data.clone();
     let environment = input.host_environment.clone();
     let swept = tokio::task::spawn_blocking(move || {
-        butler_platform::secure_fs::SecretInventory::for_environment(&data, &environment);
-        since.sweep(&root, &data)
+        let inventory =
+            butler_platform::secure_fs::SecretInventory::for_environment(&data, &environment);
+        since.sweep(&root, &data, &inventory)
     })
     .await
     .map_err(|error| CommandError::io(std::io::Error::other(error)))

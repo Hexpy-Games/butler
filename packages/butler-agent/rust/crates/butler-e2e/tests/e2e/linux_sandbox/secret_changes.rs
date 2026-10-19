@@ -2,14 +2,14 @@
 use super::*;
 use butler_turn::workspace::{PathForm, ReadFileInput, WorkspaceFiles};
 
-fn bind_inventory(s: &Setup) {
+fn bind_inventory(s: &Setup) -> std::sync::Arc<butler_platform::secure_fs::SecretInventory> {
     butler_platform::secure_fs::SecretInventory::for_environment(
         &s.sandbox.data,
         &HashMap::from([
             ("HOME".into(), s.sandbox.home.display().to_string()),
             ("BUTLER_DATA".into(), s.sandbox.data.display().to_string()),
         ]),
-    );
+    )
 }
 
 pub(super) async fn read(root: &Path, data: &Path, path: &str) -> Value {
@@ -78,7 +78,11 @@ async fn reader_refuses_created_scratch_dangling_and_hard_links() -> Result<(), 
     let key = s.sandbox.home.join(".ssh/id_ed25519");
     std::fs::write(&key, "private-fixture")?;
     std::fs::hard_link(key, root.join("host-hard"))?;
-    denied(&s, "host-hard").await;
+    let inventory = bind_inventory(&s);
+    assert!(
+        butler_platform::secure_fs::open_contained(root, Path::new("host-hard"), &inventory)
+            .is_err()
+    );
     s.sandbox.mark_success();
     Ok(())
 }
@@ -201,6 +205,7 @@ async fn output_folder_skips_private_names_and_refuses_credential_hard_links()
     std::fs::write(s.sandbox.data.join("auth/login"), "private-fixture")?;
     std::fs::hard_link(s.sandbox.data.join("auth/login"), root.join("site/alias"))?;
     let (filtered, _) = store.publish(request())?;
+    assert!(filtered.skipped_files.contains(&"site/alias".to_owned()));
     assert_eq!(
         filtered
             .revisions
@@ -217,7 +222,7 @@ async fn output_folder_skips_private_names_and_refuses_credential_hard_links()
 }
 
 #[tokio::test]
-async fn reader_refuses_hard_links_when_credential_identity_bound_is_exhausted()
+async fn reader_accepts_public_hard_links_when_credential_identity_bound_is_exhausted()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
@@ -236,11 +241,130 @@ async fn reader_refuses_hard_links_when_credential_identity_bound_is_exhausted()
     std::fs::write(root.join("public-source"), "complete-public")?;
     std::fs::hard_link(root.join("public-source"), root.join("public-hard"))?;
     std::fs::hard_link(auth.join("entry-4999"), root.join("credential-hard"))?;
-    denied(&s, "credential-hard").await;
-    denied(&s, "public-hard").await;
+    // Overflow is bounded defense in depth; unrelated package-store links
+    // remain available. The earlier scenario asserts recorded credentials deny.
+    assert_eq!(
+        read(root, &s.sandbox.data, "public-hard").await["content"],
+        "complete-public"
+    );
     assert_eq!(
         read(root, &s.sandbox.data, "plain").await["content"],
         "complete-public"
+    );
+    s.sandbox.mark_success();
+    Ok(())
+}
+
+#[tokio::test]
+async fn reader_supports_deep_absolute_links_and_recreated_symlink_root() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(butler_platform::secure_fs::FILE_IDS, "Unix descriptor walk");
+    let mut s = Setup::new("CONTAINED-ROOT-LIFETIME")?;
+    let root = &s.sandbox.workspace;
+    let deep = PathBuf::from_iter(std::iter::repeat_n("d", 64)).join("file");
+    std::fs::create_dir_all(root.join(&deep).parent().unwrap())?;
+    std::fs::write(root.join(&deep), "complete-deep")?;
+    butler_platform::secure_fs::symlink(&root.join(&deep), &root.join("compile_commands.json"))?;
+    let alias = s.sandbox.home.join("chosen-project");
+    butler_platform::secure_fs::symlink(root, &alias)?;
+    for path in [deep.to_str().unwrap(), "compile_commands.json"] {
+        assert_eq!(
+            read(&alias, &s.sandbox.data, path).await["content"],
+            "complete-deep"
+        );
+    }
+    let inventory = butler_platform::secure_fs::SecretInventory::cached(&s.sandbox.data);
+    let pin = inventory.pin_root(root)?;
+    let old = root.with_extension("old");
+    std::fs::rename(root, &old)?;
+    std::fs::create_dir(root)?;
+    std::fs::write(root.join("new"), "complete-new")?;
+    assert_eq!(read(&alias, &s.sandbox.data, "new").await["ok"], false);
+    drop(pin);
+    let _next = inventory.pin_root(root)?;
+    assert_eq!(
+        read(&alias, &s.sandbox.data, "new").await["content"],
+        "complete-new"
+    );
+    s.sandbox.mark_success();
+    Ok(())
+}
+
+#[tokio::test]
+async fn grep_and_edit_readback_refuse_credential_hard_link_content() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(butler_platform::secure_fs::FILE_IDS, "Unix hard links");
+    let mut s = Setup::new("CONTAINED-READBACK")?;
+    let root = &s.sandbox.workspace;
+    std::fs::create_dir_all(s.sandbox.data.join("auth"))?;
+    std::fs::write(s.sandbox.data.join("auth/login"), "private-fixture")?;
+    std::fs::hard_link(s.sandbox.data.join("auth/login"), root.join("alias"))?;
+    let owner = WorkspaceFiles::new(1).request();
+    let result = owner
+        .grep_candidate(butler_turn::workspace::GrepCandidate {
+            butler_data: s.sandbox.data.clone(),
+            root: root.clone(),
+            path_form: PathForm::Contained,
+            protected_roots: Vec::new(),
+            path: "alias".into(),
+            bytes: 15,
+            matcher: std::sync::Arc::new(regress::Regex::new("private").unwrap()),
+            context_lines: 0,
+            max_bytes_per_file: 1024,
+            max_matches: 10,
+            max_output_bytes: 1024,
+            after_line: None,
+            deadline: std::time::Instant::now() + Duration::from_secs(60),
+        })
+        .await
+        .unwrap();
+    assert!(result.skipped);
+    assert_eq!(result.reason, Some("safety_refused"));
+    assert!(result.matches.is_empty());
+    let scope = butler_turn::workspace::EffectFileScope {
+        workspace: root.clone(),
+        butler_data: s.sandbox.data.clone(),
+        protected_roots: Vec::new(),
+        installation_root: None,
+        contained: true,
+    };
+    assert!(
+        butler_turn::workspace::read_effect_edit_target(&scope, "alias")
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        std::fs::read_to_string(s.sandbox.data.join("auth/login"))?,
+        "private-fixture"
+    );
+    owner.close().await;
+    s.sandbox.mark_success();
+    Ok(())
+}
+
+#[tokio::test]
+async fn reader_refreshes_new_credential_root_and_separates_environments()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(butler_platform::secure_fs::FILE_IDS, "Unix identities");
+    let mut s = Setup::new("CONTAINED-NEW-ROOT")?;
+    let root = &s.sandbox.workspace;
+    let inventory = bind_inventory(&s);
+    let alternate = butler_platform::secure_fs::SecretInventory::for_environment(
+        &s.sandbox.data,
+        &HashMap::new(),
+    );
+    assert!(!std::sync::Arc::ptr_eq(&inventory, &alternate));
+    let home_store = s.sandbox.home.join(".config/gcloud");
+    std::fs::create_dir_all(home_store.parent().unwrap())?;
+    butler_platform::secure_fs::symlink(&root.join("new-store"), &home_store)?;
+    inventory.refresh();
+    std::fs::create_dir(root.join("new-store"))?;
+    std::fs::write(root.join("new-store/login"), "private-fixture")?;
+    assert!(
+        butler_platform::secure_fs::open_contained(root, Path::new("new-store/login"), &inventory)
+            .is_err()
     );
     s.sandbox.mark_success();
     Ok(())

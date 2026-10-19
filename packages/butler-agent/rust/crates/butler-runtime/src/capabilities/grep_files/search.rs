@@ -103,6 +103,7 @@ pub(super) async fn execute(
     cursor: Option<&super::cursor::GrepCursor>,
     deadline: Instant,
 ) -> Result<SearchResult, super::super::CapabilityError> {
+    let owner = owner.request();
     let mut lexical: Vec<&WorkspaceListEntry> = listed.files.iter().collect();
     lexical.sort_by(|left, right| compare_paths(&left.path, &right.path));
     let window_start = cursor

@@ -43,6 +43,9 @@ pub struct Output {
     pub turn_id: String,
     pub title: String,
     pub revisions: Vec<Revision>,
+    /// Refused project-relative paths from this publication, never silent loss.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped_files: Vec<String>,
 }
 pub struct PublishRequest {
     pub workspace: PathBuf,
@@ -120,8 +123,10 @@ impl OutputStore {
                 turn_id: request.turn_id.clone(),
                 title: request.title.clone(),
                 revisions: Vec::new(),
+                skipped_files: Vec::new(),
             }
         };
+        output.skipped_files = snapshot.skipped;
         let mut hashes = BTreeMap::new();
         let mut written = 0;
         for (name, bytes) in snapshot.files {

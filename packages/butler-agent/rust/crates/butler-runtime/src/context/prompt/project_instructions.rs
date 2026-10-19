@@ -85,8 +85,14 @@ fn read_snapshot(
 ) -> Result<(String, String), &'static str> {
     // The platform reader anchors to the canonical directory and refuses links
     // and nonregular files without blocking on FIFOs or following a path swap.
-    let mut file = butler_platform::secure_fs::open_read_beneath(root, Path::new(name))
-        .map_err(|_| "unreadable, symlink, or nonregular file")?;
+    let mut file = butler_platform::secure_fs::open_contained(
+        root,
+        Path::new(name),
+        &butler_platform::secure_fs::SecretInventory::cached(
+            &butler_platform::secure_fs::environment_data(),
+        ),
+    )
+    .map_err(|_| "unreadable, symlink, or nonregular file")?;
     let metadata = file.metadata().map_err(|_| "metadata unavailable")?;
     if metadata.len() > LIMIT as u64 {
         return Err("exceeds the 32 KiB limit; no partial content injected");

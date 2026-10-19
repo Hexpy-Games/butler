@@ -22,7 +22,7 @@ impl Scratch {
     pub(super) fn new(butler_data: &Path, project_write: bool) -> Self {
         let (temporary, cache) = if project_write {
             (
-                "tmp/project-write",
+                butler_platform::data_paths::PROJECT_WRITE_TMP,
                 butler_platform::data_paths::PROJECT_WRITE_CACHE,
             )
         } else {

@@ -1,35 +1,131 @@
 //! Private copies for consumers that require a path rather than an fd.
+use sha2::{Digest, Sha256};
 use std::{
-    fs::{File, OpenOptions},
+    fs::File,
     io::{self, Read},
     path::{Path, PathBuf},
+    sync::Mutex,
 };
+const MAX_TOTAL: u64 = 256 * 1024 * 1024;
+static CHANGES: Mutex<()> = Mutex::new(());
 
-/// Copy exactly from the validated handle into an owner-private, non-command
-/// writable directory. The staged path has a unique parent and preserves the
-/// display filename. Oversize and partial copies are removed on failure.
-pub fn stage_file(data: &Path, name: &Path, file: File, limit: u64) -> io::Result<PathBuf> {
-    let base = data.join("tmp/reader-staging");
+/// Copy from the validated handle, atomically replacing the previous copy of
+/// this source. The source identity is independent of its changing contents.
+pub fn stage_file(
+    data: &Path,
+    scope: &str,
+    source: &Path,
+    file: File,
+    limit: u64,
+) -> io::Result<PathBuf> {
+    let _lock = CHANGES
+        .lock()
+        .map_err(|_| io::Error::other("staging_unavailable"))?;
+    let base = data.join(crate::data_paths::READER_STAGING);
     super::create_private_dir_all(&base)?;
-    let directory = super::unique_temporary(&base.join("copy"));
-    super::create_private_dir(&directory)?;
+    let key = format!(
+        "{:x}",
+        Sha256::digest([scope.as_bytes(), source.as_os_str().as_encoded_bytes()].concat())
+    );
+    let used = total(&base)?;
+    let directory = base.join(key);
+    super::create_private_dir_all(&directory)?;
     let destination = directory.join(
-        name.file_name()
+        source
+            .file_name()
             .ok_or_else(|| io::Error::other("missing_filename"))?,
     );
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        super::owner_only(&mut options);
-        let mut target = options.open(&destination)?;
-        let length = io::copy(&mut file.take(limit + 1), &mut target)?;
-        if length > limit {
-            return Err(io::Error::other("file_too_large"));
-        }
-        Ok(destination.clone())
-    })();
+    // Account for the atomic replacement temporary while the old copy exists.
+    let available = MAX_TOTAL.saturating_sub(used).min(limit);
+    let result = super::replace_private(
+        &destination,
+        |target| {
+            let length = io::copy(&mut file.take(available + 1), target)?;
+            if length > available {
+                return Err(io::Error::other("staging_limit_exceeded"));
+            }
+            Ok(())
+        },
+        std::convert::identity,
+    );
     if result.is_err() {
-        let _ = std::fs::remove_dir_all(&directory);
+        let _ = std::fs::remove_dir(&directory);
     }
-    result
+    result?;
+    lifecycle::register(data, scope, &destination);
+    Ok(destination)
+}
+fn total(base: &Path) -> io::Result<u64> {
+    let mut size = 0u64;
+    for (index, directory) in std::fs::read_dir(base)?.enumerate() {
+        if index >= 1024 {
+            return Err(io::Error::other("staging_limit_exceeded"));
+        }
+        for file in std::fs::read_dir(directory?.path())? {
+            size = size.saturating_add(file?.metadata()?.len());
+        }
+    }
+    Ok(size)
+}
+
+/// Remove a consumed private stage. Never remove the caller's source file.
+pub fn remove_staged(data: &Path, path: &Path) {
+    let base = data.join(crate::data_paths::READER_STAGING);
+    if path.strip_prefix(&base).is_ok_and(|relative| {
+        relative.components().count() == 2
+            && relative
+                .components()
+                .all(|part| matches!(part, std::path::Component::Normal(_)))
+    }) {
+        let _ = std::fs::remove_file(path);
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::remove_dir(parent);
+        }
+    }
+}
+
+/// Cleanup on success, failure, cancellation, or an early upload refusal.
+pub struct StagedFiles {
+    data: PathBuf,
+    paths: Vec<PathBuf>,
+}
+mod lifecycle;
+pub use lifecycle::{StageScope, handoff_staged};
+impl StagedFiles {
+    /// Track only stages created by this operation.
+    pub fn new(data: &Path) -> Self {
+        Self {
+            data: data.to_path_buf(),
+            paths: Vec::new(),
+        }
+    }
+    /// Consume the cleanup on a blocking worker before returning an upload.
+    pub fn cleanup(mut self) {
+        for path in self.paths.drain(..) {
+            remove_staged(&self.data, &path);
+        }
+    }
+    /// Register a successfully created stage.
+    pub fn push(&mut self, path: PathBuf) {
+        self.paths.push(path);
+    }
+}
+impl Drop for StagedFiles {
+    fn drop(&mut self) {
+        let data = self.data.clone();
+        let paths = std::mem::take(&mut self.paths);
+        if paths.is_empty() {
+            return;
+        }
+        let cleanup = move || {
+            for path in paths {
+                remove_staged(&data, &path);
+            }
+        };
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            runtime.spawn_blocking(cleanup);
+        } else {
+            cleanup();
+        }
+    }
 }

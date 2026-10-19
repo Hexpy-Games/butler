@@ -12,7 +12,7 @@ pub(super) fn verify() {
     fs::write(root.join("file"), "complete-public").unwrap();
     fs::write(data.join("auth/login"), "private-fixture").unwrap();
     let inventory = SecretInventory::new(&data, &Default::default());
-    inventory.pin_root(&root).unwrap();
+    let pin = inventory.pin_root(&root).unwrap();
     let mut file =
         secure_fs::open_contained(&root, std::path::Path::new("file"), &inventory).unwrap();
     fs::rename(root.join("file"), root.join("before")).unwrap();
@@ -25,5 +25,13 @@ pub(super) fn verify() {
     fs::create_dir(&root).unwrap();
     fs::write(root.join("file"), "replacement").unwrap();
     assert!(secure_fs::open_contained(&root, std::path::Path::new("file"), &inventory).is_err());
+    drop(pin);
+    let _next_turn = inventory.pin_root(&root).unwrap();
+    let mut replacement = String::new();
+    secure_fs::open_contained(&root, std::path::Path::new("file"), &inventory)
+        .unwrap()
+        .read_to_string(&mut replacement)
+        .unwrap();
+    assert_eq!(replacement, "replacement");
     fs::remove_dir_all(temp).unwrap();
 }

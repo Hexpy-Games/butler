@@ -6,11 +6,11 @@ pub(in crate::command_sandbox) mod portable;
 
 /// Pre-run names from the existing directory-entry walk. No identity,
 /// timestamp, target resolution or credential-tree walk is performed here.
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct ProjectEntries {
     protected: Vec<PathBuf>,
     #[cfg(target_os = "linux")]
-    links: Vec<PathBuf>,
+    started: std::time::SystemTime,
 }
 impl std::ops::Deref for ProjectEntries {
     type Target = [PathBuf];
@@ -22,10 +22,11 @@ impl std::ops::Deref for ProjectEntries {
 pub fn discover_project_entries(root: &Path) -> std::io::Result<ProjectEntries> {
     #[cfg(target_os = "linux")]
     {
-        let (names, links) = portable::tree::entries(root, true)?;
+        let started = std::time::SystemTime::now();
+        let names = portable::tree::walk(root, true)?;
         Ok(ProjectEntries {
             protected: names.into_iter().map(|path| root.join(path)).collect(),
-            links: links.into_iter().map(|path| root.join(path)).collect(),
+            started,
         })
     }
     #[cfg(not(target_os = "linux"))]
@@ -56,17 +57,35 @@ pub fn sweep_new_secrets(
     since: &ProjectEntries,
     data: &Path,
 ) -> std::io::Result<Vec<PathBuf>> {
+    sweep_with_inventory(
+        root,
+        since,
+        data,
+        &crate::secure_fs::SecretInventory::cached(data),
+    )
+}
+
+/// Sweep with the command's host policy, independent of other environments.
+pub fn sweep_with_inventory(
+    root: &Path,
+    since: &ProjectEntries,
+    data: &Path,
+    inventory: &crate::secure_fs::SecretInventory,
+) -> std::io::Result<Vec<PathBuf>> {
     #[cfg(target_os = "linux")]
     {
-        let result = portable::sweep_new_secrets(root, since, data);
+        let result = portable::sweep_new_secrets(root, since, data, inventory);
         let cleaned = super::linux::cleanup_generated(root, data);
         result.and_then(|paths| cleaned.map(|()| paths))
     }
     #[cfg(windows)]
-    return super::windows::mxc::ledger::sweep(root, since, data);
+    {
+        let _ = inventory;
+        return super::windows::mxc::ledger::sweep(root, since, data);
+    }
     #[cfg(not(any(target_os = "linux", windows)))]
     {
-        let _ = (root, since, data);
+        let _ = (root, since, data, inventory);
         Ok(Vec::new())
     }
 }
@@ -79,4 +98,14 @@ pub fn prewarm_project(root: &Path) {
     let _ = super::windows::mxc::ledger::prewarm(root);
     #[cfg(not(windows))]
     let _ = root;
+}
+
+impl Default for ProjectEntries {
+    fn default() -> Self {
+        Self {
+            protected: Vec::new(),
+            #[cfg(target_os = "linux")]
+            started: std::time::SystemTime::now(),
+        }
+    }
 }

@@ -3,6 +3,12 @@ use super::path_guard::GuardResult;
 use serde_json::{Value, json};
 
 pub(super) fn io_reason(error: &std::io::Error) -> &'static str {
+    if error.to_string() == "contained_read_refused" {
+        return "safety_refused";
+    }
+    if error.to_string() == "not_a_file" {
+        return "not_a_file";
+    }
     match error.kind() {
         std::io::ErrorKind::NotFound => "not_found",
         std::io::ErrorKind::PermissionDenied => "permission_denied",
@@ -14,6 +20,14 @@ pub(super) fn io_reason(error: &std::io::Error) -> &'static str {
 
 pub(super) fn explanation(reason: &str) -> (&'static str, &'static str) {
     match reason {
+        "safety_refused" => (
+            "This file was refused for safety.",
+            "Choose an ordinary file inside the workspace, outside credential stores.",
+        ),
+        "not_a_file" => (
+            "The path is not a regular file.",
+            "Choose an existing regular file.",
+        ),
         "not_found" => (
             "The requested path was not found.",
             "Check the path or choose an existing file or directory.",

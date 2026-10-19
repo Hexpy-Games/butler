@@ -60,7 +60,10 @@ async fn sweep_quarantines_secret_target_links() -> Result<(), HarnessError> {
     );
     let output = run(writable(&s, &command), root, &s.sandbox.home);
     assert!(output.status.success(), "link creation must complete");
-    butler_platform::secure_fs::SecretInventory::for_environment(&s.sandbox.data, &environment(&s));
+    let inventory = butler_platform::secure_fs::SecretInventory::for_environment(
+        &s.sandbox.data,
+        &environment(&s),
+    );
     for name in [
         "credential",
         "profile",
@@ -76,9 +79,10 @@ async fn sweep_quarantines_secret_target_links() -> Result<(), HarnessError> {
             super::secret_changes::read(root, &s.sandbox.data, &format!("src/{name}")).await;
         assert_eq!(result["ok"], false);
     }
-    let moved = command_sandbox::sweep_new_secrets(root, &since, &s.sandbox.data)?;
+    let moved = command_sandbox::sweep_with_inventory(root, &since, &s.sandbox.data, &inventory)?;
     let expected: Vec<_> = [
         ".env-alias",
+        "changed",
         "credential",
         "directory",
         "indirect",
@@ -114,7 +118,6 @@ async fn sweep_quarantines_secret_target_links() -> Result<(), HarnessError> {
         ("dangling", PathBuf::from("missing")),
         ("loop", PathBuf::from("loop")),
         ("existing-secret", root.join(".env")),
-        ("changed", PathBuf::from("../.env")),
         ("public-dir", public),
         ("project-root", PathBuf::from("..")),
     ] {

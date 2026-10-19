@@ -13,6 +13,7 @@ use super::path_guard::{GuardInput, GuardResult, PathForm, resolve_workspace_pat
 #[derive(Clone)]
 pub struct WorkspaceFiles {
     inner: Arc<FileOwner>,
+    cache: Option<Arc<butler_platform::secure_fs::ContainedReadCache>>,
 }
 struct FileOwner {
     permits: Arc<Semaphore>,
@@ -58,6 +59,7 @@ impl WorkspaceFiles {
     /// An owner allowing `max_blocking_reads` concurrent reads (at least one).
     pub fn new(max_blocking_reads: usize) -> Self {
         Self {
+            cache: None,
             inner: Arc::new(FileOwner {
                 permits: Arc::new(Semaphore::new(max_blocking_reads.max(1))),
                 state: Mutex::new(OwnerState {
@@ -66,6 +68,26 @@ impl WorkspaceFiles {
                 }),
                 idle: Notify::new(),
             }),
+        }
+    }
+    /// A fresh request sharing the worker limit, with its own directory fds.
+    pub fn request(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            cache: Some(Arc::default()),
+        }
+    }
+    /// A request using the supplied host environment's credential policy.
+    pub fn request_with_inventory(
+        &self,
+        data: &std::path::Path,
+        inventory: Arc<butler_platform::secure_fs::SecretInventory>,
+    ) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            cache: Some(Arc::new(
+                butler_platform::secure_fs::ContainedReadCache::with_inventory(data, inventory),
+            )),
         }
     }
     pub(crate) fn active_count(&self) -> usize {
@@ -144,7 +166,9 @@ impl WorkspaceFiles {
         &self,
         input: ReadFileInput,
     ) -> Result<std::io::Result<WorkspaceFileRead>, FileOwnerError> {
-        self.run(move || read_one_blocking(&input)).await
+        let cache = self.cache.clone();
+        self.run(move || read_one_blocking(&input, cache.as_deref()))
+            .await
     }
 
     /// Lists workspace files.
@@ -157,6 +181,8 @@ impl WorkspaceFiles {
 
     /// Searches one listed file.
     pub async fn grep_candidate(&self, input: GrepCandidate) -> Result<GrepRead, FileOwnerError> {
-        self.run(move || read_candidate(&input)).await
+        let cache = self.cache.clone();
+        self.run(move || read_candidate(&input, cache.as_deref()))
+            .await
     }
 }
