@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { createAppLogWriter } from "./writer.mjs";
 import { normalizeCrash } from "../ui-crash-log.mjs";
 
@@ -57,11 +55,8 @@ export function installAppLogging({ app, ipcMain, dataRoot, getVersion, readConf
   void ready;
   app.on("render-process-gone", (_event, _contents, details) => appLog("ERROR", "app.ui", "renderer.crash", details));
   app.on("child-process-gone", (_event, details) => appLog("ERROR", "lifecycle", "process.crash", details));
-  // Register before producers can log local auth values, without synchronous disk reads.
-  if (dataRoot) for (const name of ["local-agent-auth.json", "local-admin.json"]) {
-    void readFile(join(dataRoot, "app/runtime/auth", name), "utf8").then(value => writer.observe(JSON.parse(value))).catch(() => {});
-  }
   return {
+    secrets(value) { writer.observe(value); },
     crash(input) { writer.record({ level: "ERROR", category: "app.ui", event: "ui.error", msg: "UI error", error: normalizeCrash(input, version) }, "app.renderer"); },
     async quit() { clearInterval(poll); await writer.quit(); },
     updater(updater) {

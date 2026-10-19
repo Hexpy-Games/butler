@@ -1,6 +1,6 @@
 // test-category: security
 import { expect, test } from "bun:test";
-import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createAppLogWriter } from "../../packages/butler-app/client/electron/log/writer.mjs";
@@ -47,5 +47,24 @@ test("App writer batches, rotates at 16 MB, preserves records and only admits co
     writer.record({ level: "TRACE", category: "ipc", event: "hidden", msg: "hidden" });
     await writer.flush();
     expect(await readdir(join(root, "logs/app"))).toEqual(["main"]);
+  } finally { await writer.quit(); await rm(root, { recursive: true, force: true }); }
+});
+
+
+test("credentials load before the first queued write, including bare values", async () => {
+  const root = await mkdtemp(join(tmpdir(), "app-log-credentials-"));
+  const auth = join(root, "app/runtime/auth");
+  await mkdir(auth, { recursive: true });
+  await writeFile(join(auth, "local-agent-auth.json"), JSON.stringify({ token: "local-bare-credential" }));
+  const writer = createAppLogWriter(root);
+  try {
+    writer.record({ level: "ERROR", category: "lifecycle", event: "failure", msg: "local-bare-credential" });
+    await writer.flush();
+    expect(writer.failure).toBeNull();
+    for (const name of await readdir(join(root, "logs/app/main"))) {
+      const text = await readFile(join(root, "logs/app/main", name), "utf8");
+      expect(text).not.toContain("local-bare-credential");
+      expect(text).toContain("[REDACTED]");
+    }
   } finally { await writer.quit(); await rm(root, { recursive: true, force: true }); }
 });

@@ -1,4 +1,4 @@
-import { mkdir, open, readdir, stat, unlink } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { createRedactor } from "./redaction.mjs";
 
@@ -6,6 +6,13 @@ const MB = 1024 * 1024;
 const SEVERITY = { ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4, TRACE: 5 };
 const THRESHOLD = { minimal: 2, standard: 3, detailed: 4, full: 5 };
 const ROTATE = 16 * MB;
+async function loadSecrets(root, redactor) {
+  if (!root) return;
+  for (const name of ["local-agent-auth.json", "local-admin.json"]) {
+    try { redactor.observe(JSON.parse(await readFile(join(root, "app/runtime/auth", name), "utf8"))); }
+    catch (error) { if (error.code !== "ENOENT") throw error; }
+  }
+}
 
 /** Single App main process owns both lanes. Timers exist only while records are queued. */
 export function createAppLogWriter(dataRoot) { return new AppLogWriter(dataRoot); }
@@ -15,7 +22,9 @@ class AppLogWriter {
     this.redactor = createRedactor();
     this.config = { level: "standard", category_levels: {} };
     this.queue = []; this.queuedBytes = 0; this.stopped = false;
-    this.pending = Promise.resolve(); this.lanes = new Map(); this.failure = null;
+    this.lanes = new Map(); this.failure = null; this.secretsReady = false;
+    this.pending = loadSecrets(dataRoot, this.redactor).then(() => { this.secretsReady = true; })
+      .catch(error => { this.failure = error.code ?? "log_credentials_unavailable"; });
   }
   remember(value) { this.redactor.remember(value); }
   observe(value) { this.redactor.observe(value); }
@@ -66,6 +75,7 @@ class AppLogWriter {
     }
   }
   async writeBatch(batch) {
+    if (!this.secretsReady) return;
     for (const lane of ["main", "debug"]) {
       const records = batch.filter(row => (SEVERITY[row.level] <= 3 ? "main" : "debug") === lane && this.enabled(row.category, row.level));
       if (!records.length) continue;

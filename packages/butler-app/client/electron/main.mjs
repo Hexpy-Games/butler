@@ -3121,6 +3121,7 @@ async function resolveCanonicalSessionWorkspacePath(sessionId) {
 
 async function appLocalAuthHeaders() {
   const headers = await bundledAgentSupervisor.authHeaders();
+  appLogging.secrets(headers);
   const authorization =
     typeof headers?.authorization === "string" ? headers.authorization : "";
   return authorization ? { authorization } : {};
