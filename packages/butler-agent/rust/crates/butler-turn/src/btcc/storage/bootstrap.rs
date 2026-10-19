@@ -9,7 +9,7 @@ pub use health::{
 };
 pub(super) use health::{migrate_current, stamp_verified, verify_correction};
 pub(super) use validate::ReferenceFailure;
-pub(super) use verdict::validated;
+pub(super) use verdict::{refresh_after_close, validated};
 mod validate;
 
 use crate::btcc::StorageCode;
@@ -169,7 +169,9 @@ impl FreshStorage<'_> {
 /// Full offline validation for recovery. Logical findings retain a diagnostic
 /// verdict; only physical/schema failures refuse activation. No rows are repaired.
 pub fn read_activated_storage_manifest(path: &Path) -> StorageResult<String> {
-    validate::read_activated(path)
+    let result = validate::read_activated(path);
+    verdict::record_corruption(path, &result.as_ref().map(|_| ()).map_err(Clone::clone));
+    result
 }
 
 fn remove_temp(temp: &Path) -> StorageResult<()> {
@@ -224,5 +226,16 @@ pub(super) fn publication_regression() {
     let id = bootstrap_fresh_storage(&target, "fence", "test", "2026-09-30T00:00:00Z").unwrap();
     assert_eq!(read_activated_storage_manifest(&target).unwrap(), id);
     assert_eq!(fs::read(&peer_temp).unwrap(), b"peer still preparing");
+    // The code-only fallback must remain durable when metadata is unavailable.
+    let missing = root.join("missing.sqlite");
+    verdict::record_corruption(
+        &missing,
+        &Err(error(StorageCode::AgentBtccStorageQuickCheckFailed)),
+    );
+    assert_eq!(
+        fs::read_to_string(missing.with_extension("sqlite.corrupt")).unwrap(),
+        "agent_btcc_storage_quick_check_failed\n"
+    );
+    assert!(verdict::needs_recheck(&missing).is_err());
     fs::remove_dir_all(root).unwrap();
 }

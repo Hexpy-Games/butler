@@ -39,7 +39,11 @@ async fn stub_rejects_real_model_sources_before_network_or_retry() -> Result<(),
             "EMBED-STUB-GUARD failed_after_ms={} bytes_done=0",
             started.elapsed().as_millis()
         );
-        assert!(s.agent.logs().contains("BUTLER_E2E_TIER=stub requires"));
+        assert!(
+            s.agent
+                .logs()
+                .contains("BUTLER_E2E_EMBED_LOCAL_ONLY=1 requires")
+        );
         let root = s.sandbox.data.join("cache/models/Xenova/bge-m3");
         assert!(
             snapshot(&root)?

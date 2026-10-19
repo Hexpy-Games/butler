@@ -84,11 +84,12 @@ impl Launch {
             _port_reservation: std::sync::Arc::new(reservation),
             token,
             env: vec![
-                // Child commands clear inherited environment; fixture clocks need the stub tier.
+                // Child commands clear inherited environment; forward the tier to remaining fixture hooks.
                 (
                     "BUTLER_E2E_TIER".into(),
                     super::config::nonempty("BUTLER_E2E_TIER").unwrap_or_else(|| "stub".into()),
                 ),
+                ("BUTLER_E2E_EMBED_LOCAL_ONLY".into(), "1".into()),
                 // Stub tests never fetch the production 587 MB model. Acquisition tests supply their server.
                 (
                     "BUTLER_E2E_EMBED_SOURCES".into(),

@@ -201,6 +201,7 @@ mod memory_stubs;
 #[path = "support/schedule_cassette.rs"]
 mod schedule_cassette;
 
+mod btcc_corrupt_startup;
 mod btcc_cutover;
 #[path = "support/btcc_scale.rs"]
 mod btcc_scale;
@@ -218,6 +219,8 @@ mod memory_profile_reset;
 mod memory_reset;
 mod memory_wiring_more;
 mod native_worker_ownership;
+#[path = "support/owner_scale.rs"]
+mod owner_scale;
 mod project_artifacts;
 mod project_instructions;
 mod project_workspace;
@@ -253,4 +256,5 @@ mod outbound_http;
 
 mod trace_spans;
 
+mod turn_fenced_cancel;
 mod usage_delegated;

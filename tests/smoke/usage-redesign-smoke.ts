@@ -4,6 +4,7 @@ import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, extname, normalize, sep } from "node:path";
 import { probeFocusRing } from "../support/focus-ring-clipping";
 import { launchSmokeBrowser } from "../support/smoke-browser";
+import type { Page } from "playwright";
 import { usageView, quota, delegatedUsageView } from "../../packages/butler-app/client/ui/src/components/conversation/contextUsage.fixtures";
 
 const dist = join(process.cwd(), "packages/butler-app/client/ui/dist");
@@ -34,7 +35,9 @@ function monitor(url: URL) {
   view.timeline.slots = state === "empty" ? [] : delegated && session
     ? [[now - 3600000, 1, 20000, 10000, 1000, 0], [now - 1800000, 8, 41200, 28100, 3500, 44700], [now - 600000, 2, 28200, 21900, 2420, 0]]
     : [[now - 3600000, 1, 20000, 10000, 1000], [now - 600000, 2, 28200, 21900, 2420]];
-  view.topSessions = [{ sessionId: "s1", title: backendTitle, kind: "chat", totalTokens: 51620, requests: 3, lastUsedMs: now },
+  // As in the gateway, only a session view splits its usage by role.
+  if (!session) delete view.model.byRole;
+  view.topSessions = [{ sessionId: "s1", title: backendTitle, kind: "chat", totalTokens: delegated ? 96320 : 51620, requests: delegated ? 11 : 3, lastUsedMs: now },
     { sessionId: "s2", title: "Daily review", kind: "schedule", totalTokens: 1200, requests: 1, lastUsedMs: now - 3600000 }];
   if (state !== "empty") view.topSessions.push(...Array.from({ length: 6 }, (_, i) => ({ sessionId: `s${i + 3}`, title: `Review ${i + 3}`, kind: "chat" as const, totalTokens: 1000 - i * 100, requests: 1, lastUsedMs: now })));
   view.previousPeriod = { totalTokens: 40000 };
@@ -44,6 +47,31 @@ function monitor(url: URL) {
     view.model.cachedTokens = 0; view.topSessions = []; view.model.byModel = {}; view.tools.byTool = {}; }
   return view;
 }
+/** Settings › Usage splits a delegating chat like the popover, with each part's requests. */
+async function delegatedSettings(page: Page, locale: string, cell: string) {
+  const parts = page.locator('[data-settings-section-id="usage-overview"] [data-test-class="usage-parts"]');
+  await page.locator('[data-settings-section-id="usage-overview"]').waitFor();
+  await page.getByRole("tabpanel").getByText("Login form refactor", { exact: true }).waitFor();
+  assert.equal(await parts.count(), 0, "all chats have no split");
+  await Promise.all([page.waitForResponse(r => new URL(r.url()).searchParams.get("session_id") === "s1"),
+    page.getByRole("tabpanel").getByRole("button", { name: /Login form refactor/u }).click()]);
+  await parts.waitFor();
+  await page.waitForTimeout(400);
+  assert.equal(await parts.locator('[data-test-class="key-value-row"]').count(), 2);
+  if (locale === "ko") assert.match(await parts.innerText(), /대화[\s\S]*5\.2만 · 53\.6% · 요청 3회[\s\S]*하위 작업[\s\S]*4\.5만 · 46\.4% · 요청 8회/u);
+  else assert.match(await parts.innerText(), /Conversation[\s\S]*53\.6% · 3 requests[\s\S]*Subtasks[\s\S]*46\.4% · 8 requests/u);
+  if (shots) await page.screenshot({ path: join(shots, `after-usage-${locale}-${cell}-delegated-chat.png`) });
+  const chart = page.locator('[data-settings-section-id="usage-overview"] [data-slot="usage-bars"]');
+  await chart.focus(); await page.keyboard.press("End"); await page.keyboard.press("ArrowLeft");
+  await page.waitForTimeout(400);
+  const bar = await parts.innerText();
+  assert.match(bar, locale === "ko" ? /2\.1만 · 32%[\s\S]*4\.5만 · 68%/u : /32%[\s\S]*68%/u, "a selected bar splits its own total");
+  assert.doesNotMatch(bar, locale === "ko" ? /요청/u : /request/u, "a bar has no per-part request count");
+  assert.deepEqual((await probeFocusRing(page))?.clips, [], "delegated chart focus ring");
+  if (shots) await page.screenshot({ path: join(shots, `after-usage-${locale}-${cell}-delegated-bar.png`) });
+  await page.keyboard.press("Escape");
+}
+
 try {
   const page = await browser.newPage({ locale: "ko-KR", timezoneId: "Asia/Seoul", reducedMotion: "reduce" });
   const errors: string[] = [];
@@ -112,7 +140,10 @@ try {
         assert.equal(await parts.locator('[data-test-class="key-value-row"]').count(), 2, "selection keeps the split rows");
         if (shots) await popover.screenshot({ path: join(shots, `crop-after-${locale}-${theme}-${width}-delegated-selected.png`) });
       }
-      await page.keyboard.press("Escape"); await page.keyboard.press("Escape");
+      if (before) { await page.keyboard.press("Escape"); await page.keyboard.press("Escape"); continue; }
+      await page.keyboard.press("Escape");
+      await popover.locator('[data-test-class="context-usage-details"]').click();
+      await delegatedSettings(page, locale, `${theme}-${width}`);
       continue;
     }
     if (!before && scenario === "empty") assert.equal(await popover.locator('[data-test-class="usage-readout"]').count(), 0);

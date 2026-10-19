@@ -5,7 +5,7 @@ import type { UsageMonitorView } from "@/app/types";
 import { RefreshCcw, IconButton, Inline, SegmentedControl, Stack, Typo, UsageBars } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { UsageReadout } from "../usage/UsageReadout";
-import { usageClock, usageShare, usageReadout, usageSeries, usageTimeline, usageTokens } from "../usage/usageTimeline";
+import { usageClock, usageParts, usageShare, usageReadout, usageSeries, usageTimeline, usageTokens } from "../usage/usageTimeline";
 import { UsageBreakdown } from "./UsageBreakdown";
 import { UsageSessionSelect, usageSessionTitle } from "./UsageSessionSelect";
 import { UsageProviderPanel } from "./UsageProviderPanel";
@@ -94,7 +94,8 @@ export function UsageSettings() {
         </Inline>
         <UsageReadout view={result.view} values={usageReadout(result.view, bucket)} label={bucket?.label ?? label}
           panel selected={Boolean(bucket)} showCost delta={periodDelta(result.view, hours)} share={session && result.allView?.model.totalTokens
-            ? usageShare((result.view?.model.totalTokens ?? 0) / result.allView.model.totalTokens) : undefined} />
+            ? usageShare((result.view?.model.totalTokens ?? 0) / result.allView.model.totalTokens) : undefined}
+          parts={usageParts(result.view, bucket, true)} />
         <UsageBars {...timeline} series={usageSeries()} size="panel" yTicks={{ format: usageTokens }} selectedIndex={selected}
           onSelect={index => setSelection({ scope, index })} state={!result.view ? "loading" : "ready"}
           emptyLabel={copy.noUsage} loadingLabel={copy.loading} ariaLabel={copy.chartLabel} />
