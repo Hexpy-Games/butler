@@ -28,6 +28,7 @@ pub(super) fn safe_preview(value: Value) -> Value {
         "last_run_at": value["last_run_at"],
         "run_count": value["run_count"],
         "access_mode": value["access_mode"],
+        "model": value["model"],
         "prompt_preview": text("prompt_preview"),
     }))
 }

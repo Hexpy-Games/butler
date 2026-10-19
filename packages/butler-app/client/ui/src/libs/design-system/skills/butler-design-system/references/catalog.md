@@ -871,7 +871,7 @@ A compact single-choice radiogroup that changes what one panel shows.
 - Not for: Switching between panels of content → `Tabs`
 - Not for: More than five options or long labels → `Select`
 - Not for: An on/off setting → `Switch`
-- Tokens: `--selection`, `--radius-control`, `--motion-fast`, `--control-height-sm`
+- Tokens: `--selection`, `--radius-control`, `--motion-fast`, `--control-height-md`, `--control-height-xs`, `--control-hit-target`
 
 ### Select
 
@@ -973,7 +973,7 @@ A non-modal glass layer anchored to a control, for choosers and small panels.
 - Not for: A plain list of actions → `DropdownMenu`
 - Not for: A task that needs focus and a backdrop → `Dialog`
 - Not for: A label that explains a control → `Tooltip`
-- Tokens: `--tinted-glass-bg`, `--radius-popover`, `--motion-enter-overlay`, `--motion-scale-menu`, `--z-popover`
+- Tokens: `--tinted-glass-bg`, `--radius-popover`, `--motion-enter-overlay`, `--motion-exit-fast`, `--motion-scale-menu`, `--motion-distance-md`, `--popover-sheet-gutter`, `--z-popover`
 
 ### Tooltip
 
@@ -1101,7 +1101,7 @@ Layout item props (grow, shrink, basis, minWidth, alignSelf, span, invisible) th
 - Use for: Reserve space for a hidden item
 - Not for: Padding or a surface → `Box`
 - Not for: Spacing between siblings → `Stack`
-- Tokens: `--layout-basis-xs`, `--layout-basis-sm`, `--layout-basis-md`, `--layout-basis-lg`
+- Tokens: `--layout-basis-xs`, `--layout-basis-sm`, `--layout-basis-md`, `--layout-basis-lg`, `--layout-max-width-field`, `--layout-wrap-width-field`
 
 ### PageContainer
 

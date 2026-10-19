@@ -36,5 +36,5 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: ["One or two words per option; keep Korean options the same length where possible."],
   accessibility: ["role=radiogroup with arrow-key roving focus; pass ariaLabel naming the choice."],
-  tokens: ["--selection", "--radius-control", "--motion-fast", "--control-height-sm"],
+  tokens: ["--selection", "--radius-control", "--motion-fast", "--control-height-md", "--control-height-xs", "--control-hit-target"],
 };

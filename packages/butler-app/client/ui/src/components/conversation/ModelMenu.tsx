@@ -1,7 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { memo, useMemo, useState } from "react";
+import { memo } from "react";
 import {
-  FilteredSelectPopover,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -16,9 +15,9 @@ import {
   modelDisplayName,
   reasoningBudgetSummary,
   reasoningOptionLabel,
-  tokenWindowLabel,
 } from "@/app/utils.ts";
 import { ComposerModelStatusButton } from "./ComposerModelStatusButton.tsx";
+import { ModelOptions, useModelOptionsFilter } from "./ModelOptions.tsx";
 
 export const ModelMenu = memo(function ModelMenu() {
   useAppLocale();
@@ -39,51 +38,8 @@ export const ModelMenu = memo(function ModelMenu() {
     (store) => store.handleReasoningChange,
   );
   const settings = useButlerStore((store) => store.settings);
-  const [searchValue, setSearchValue] = useState("");
-  const [providerFilter, setProviderFilter] = useState("all");
-
-  const providers = useMemo(() => {
-    const seen = new Set<string>();
-    return models
-      .filter((item) => {
-        if (seen.has(item.provider_id)) return false;
-        seen.add(item.provider_id);
-        return true;
-      })
-      .map((item) => ({
-        id: item.provider_id,
-        label: item.provider_label,
-      }));
-  }, [models]);
-
-  const modelGroups = useMemo(() => {
-    const query = searchValue.trim().toLowerCase();
-    return providers.map((provider) => {
-      const items = models
-        .filter((item) => providerFilter === "all" || item.provider_id === providerFilter)
-        .filter((item) => item.provider_id === provider.id)
-        .filter((item) => {
-          if (!query) return true;
-          return [
-            modelDisplayName(item),
-            item.model_id,
-            item.provider_label,
-          ].some((value) => value.toLowerCase().includes(query));
-        })
-        .map((item) => ({
-          id: item.model_ref,
-          label: modelDisplayName(item),
-          description: tokenWindowLabel(item.context_window_tokens),
-          selected: item.model_ref === model,
-          onSelect: () => handleModelChoice(item),
-        }));
-      return {
-        id: provider.id,
-        title: provider.label,
-        items,
-      };
-    });
-  }, [handleModelChoice, model, models, providerFilter, providers, searchValue]);
+  // Owned here, outside the popover, so a reopened menu keeps its search and filter.
+  const filter = useModelOptionsFilter();
 
   if (modelState !== "ready" || !activeModel) {
     return <ComposerModelStatusButton state={modelState} />;
@@ -112,31 +68,23 @@ export const ModelMenu = memo(function ModelMenu() {
         side="top"
         sideOffset={10}
       >
-        <FilteredSelectPopover
-          title={appCopy.composer.model}
-          searchLabel={appCopy.composer.model}
-          searchPlaceholder={appCopy.composer.modelSearch}
-          searchClearLabel={appCopy.composer.modelSearchClear}
-          searchValue={searchValue}
-          filters={[
-            { id: "all", label: appCopy.composer.allProviders },
-            ...providers,
-          ]}
-          activeFilterId={providerFilter}
-          onFilterChange={setProviderFilter}
-          onSearchChange={setSearchValue}
-          emptyLabel={appCopy.composer.noModels}
-          groups={modelGroups}
-          footerTitle={appCopy.composer.reasoning}
-          footerOptions={(availableReasoning as ReasoningEffort[]).map((item) => ({
-            id: item,
-            label: reasoningOptionLabel(activeModel, item),
-            selected: item === reasoning,
-            onSelect: () => {
-              handleReasoningChange(item);
-              setModelMenuOpen(false);
-            },
-          }))}
+        <ModelOptions
+          models={models}
+          value={model}
+          onSelect={handleModelChoice}
+          filter={filter}
+          footer={{
+            title: appCopy.composer.reasoning,
+            options: (availableReasoning as ReasoningEffort[]).map((item) => ({
+              id: item,
+              label: reasoningOptionLabel(activeModel, item),
+              selected: item === reasoning,
+              onSelect: () => {
+                handleReasoningChange(item);
+                setModelMenuOpen(false);
+              },
+            })),
+          }}
         />
       </PopoverContent>
     </Popover>

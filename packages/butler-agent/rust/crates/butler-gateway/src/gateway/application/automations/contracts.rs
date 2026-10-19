@@ -17,6 +17,7 @@ pub struct CreateAutomationRequest {
     /// The access the schedule's runs get; the target conversation's
     /// current access mode when omitted.
     pub access_mode: Option<AccessMode>,
+    pub model: Option<String>,
     /// The conversation that created the schedule; its live site grants
     /// apply to runs in another target conversation.
     #[serde(default)]
@@ -36,6 +37,7 @@ pub struct UpdateAutomationRequest {
     pub state: Option<String>,
     /// Replaces the access the schedule's runs get.
     pub access_mode: Option<AccessMode>,
+    pub model: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -55,6 +57,8 @@ pub struct AutomationSummary {
     pub schedule: Option<CalendarSchedule>,
     /// The access the schedule's runs get, whatever the target conversation's mode.
     pub access_mode: AccessMode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_run_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

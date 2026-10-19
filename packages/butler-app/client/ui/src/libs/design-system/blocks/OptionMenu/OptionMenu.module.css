@@ -9,6 +9,19 @@
   max-width: calc(100vw - 32px);
 }
 
+/* On mobile every popover is a screen-wide sheet: a fit menu fills it so row
+   highlights span the sheet, not just their labels. */
+@media (width <= 640px) {
+  .menu[data-size="fit"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
+    width: auto;
+    min-width: 0;
+    max-width: none;
+  }
+}
+
 .title {
   position: absolute;
   width: 1px;

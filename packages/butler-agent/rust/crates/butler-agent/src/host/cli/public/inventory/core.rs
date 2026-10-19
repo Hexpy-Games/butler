@@ -184,13 +184,13 @@ pub(super) const ROUTES: &[Entry] = &[
     ),
     route!(
         "schedule.create",
-        "butler schedule create --prompt TEXT --session ID [--interval-seconds N|--run-at ISO] [--title TEXT] [--start-at ISO] [--access-mode MODE] [--schedule-type TYPE]",
+        "butler schedule create --prompt TEXT --session ID [--interval-seconds N|--run-at ISO] [--title TEXT] [--start-at ISO] [--access-mode MODE] [--model REF] [--schedule-type TYPE]",
         "예약 작업을 만듭니다. / Create a schedule.",
         "core"
     ),
     route!(
         "schedule.update",
-        "butler schedule update ID [--prompt TEXT] [--session ID] [--interval-seconds N] [--run-at ISO] [--start-at ISO] [--title TEXT] [--state STATE] [--access-mode MODE] [--schedule-type TYPE]",
+        "butler schedule update ID [--prompt TEXT] [--session ID] [--interval-seconds N] [--run-at ISO] [--start-at ISO] [--title TEXT] [--state STATE] [--access-mode MODE] [--model REF] [--schedule-type TYPE]",
         "예약 작업을 수정합니다. / Update a schedule.",
         "core"
     ),

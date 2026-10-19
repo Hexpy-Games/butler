@@ -28,7 +28,7 @@ export function UsageSessionSelect({ sessions, value, onChange, open, onOpenChan
   const title = value ? usageSessionTitle(sessions.find(s => s.sessionId === value)) : copy.all;
   const items = sessions.filter(s => (kind === "all" || s.kind === kind) && usageSessionTitle(s).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   return <Popover open={open} onOpenChange={onOpenChange}>
-    <PopoverTrigger asChild><SelectButton ref={triggerRef} aria-label={copy.chats}>
+    <PopoverTrigger asChild><SelectButton ref={triggerRef} size="sm" aria-label={copy.chats}>
       <RollingSwap itemKey={value ?? "all"}>{title}</RollingSwap>
     </SelectButton></PopoverTrigger>
     <PopoverContent width="default" align="start" density="list">

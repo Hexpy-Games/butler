@@ -12,7 +12,7 @@ export function scheduleDefaultAccessMode(settings: Pick<SettingsView, "schedule
   return isAccessMode(mode) ? mode : DEFAULT_SCHEDULE_ACCESS_MODE;
 }
 
-export type AutomationFormField = "title" | "prompt" | "interval" | "accessMode" | "form";
+export type AutomationFormField = "title" | "prompt" | "interval" | "accessMode" | "model" | "form";
 
 export interface AutomationSaveError {
   field: AutomationFormField;
@@ -26,9 +26,10 @@ const FIELD_BY_CODE: Record<string, Exclude<AutomationFormField, "form">> = {
   automation_prompt_required: "prompt",
   automation_interval_invalid: "interval",
   invalid_json: "accessMode",
+  session_model_unavailable: "model",
 };
 
-/** The inline error for a save the gateway refused as invalid (400); null for other failures (toast). */
+/** The inline error for a save the gateway refused on a field (400, or 409 for a model); null for other failures (toast). */
 export function automationSaveError(error: unknown): AutomationSaveError | null {
   const code = apiErrorCode(error);
   const field = code ? FIELD_BY_CODE[code] : undefined;

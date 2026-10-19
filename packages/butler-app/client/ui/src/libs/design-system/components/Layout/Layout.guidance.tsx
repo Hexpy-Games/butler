@@ -30,7 +30,11 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "flex styles on a wrapper div bypass the tokens.", render: () => <div style={{ display: "flex" }}><div style={{ flex: "1 1 260px" }}><Typo.Body>Usage</Typo.Body></div></div> },
     },
   ],
-  content: ["maxWidth (full, 3/5, 1/2) caps an item's share of its row.", "No copy of its own."],
+  content: [
+    "maxWidth (full, 3/5, 1/2) caps an item's share of its row.",
+    "maxWidth=\"field\" stops a toolbar field at 320px; when the row wraps below 560px it spans the row.",
+    "No copy of its own.",
+  ],
   accessibility: ["invisible keeps the space but removes the item from the tab order and the accessibility tree."],
-  tokens: ["--layout-basis-xs", "--layout-basis-sm", "--layout-basis-md", "--layout-basis-lg"],
+  tokens: ["--layout-basis-xs", "--layout-basis-sm", "--layout-basis-md", "--layout-basis-lg", "--layout-max-width-field", "--layout-wrap-width-field"],
 };

@@ -37,7 +37,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A tooltip with buttons in it cannot be reached by keyboard.", render: () => <Tooltip label="Choose access"><Button variant="outline" text="Access" /></Tooltip> },
     },
   ],
-  content: ["Portalled content takes theme={appShellTheme(settings)} so it renders in the app theme outside the shell.", "Titles name the choice (Permission, Model); items are short.", "width=\"narrow\" (min(280px, 100vw - 32px)) fits compact readouts such as context and usage.", "width=\"anchor\" matches the PopoverAnchor width; pair it with density=\"list\" for row lists such as address suggestions."],
+  content: ["Portalled content takes theme={appShellTheme(settings)} so it renders in the app theme outside the shell.", "Titles name the choice (Permission, Model); items are short.", "width=\"narrow\" (min(280px, 100vw - 32px)) fits compact readouts such as context and usage.", "width=\"anchor\" matches the PopoverAnchor width; pair it with density=\"list\" for row lists such as address suggestions.", "At 640px and narrower every other popover is a screen-wide sheet (8px gutter) that keeps its trigger side; left/right open below."],
   accessibility: ["Focus stays on the trigger unless content needs it; Escape and outside click close it."],
-  tokens: ["--tinted-glass-bg", "--radius-popover", "--motion-enter-overlay", "--motion-scale-menu", "--z-popover"],
+  tokens: ["--tinted-glass-bg", "--radius-popover", "--motion-enter-overlay", "--motion-exit-fast", "--motion-scale-menu", "--motion-distance-md", "--popover-sheet-gutter", "--z-popover"],
 };
