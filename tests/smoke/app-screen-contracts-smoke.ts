@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
-import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
+import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import {
   LEGACY_FIRST_RUN_STORAGE_KEY as FIRST_RUN_STORAGE_KEY,
   legacyFirstRunCompleteRecord,
@@ -13,14 +13,14 @@ import {
 // Focused smoke for the Phase 2 screen contracts in
 // SPEC-BUTLER-DEDICATED-CLIENT-DESIGN-SYSTEM.
 const tempDir = mkdtempSync(join(tmpdir(), "butler-screen-contracts-smoke-"));
-const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
+type AppServer = Awaited<ReturnType<typeof createNativeAppServer>>;
 const testClass = (name: string) => `[data-test-class~="${name}"]`;
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-async function openApp(page: Page): Promise<void> {
+async function openApp(page: Page, server: AppServer): Promise<void> {
   await page.addInitScript(
     ({ key, value }) => window.localStorage.setItem(key, value),
     { key: FIRST_RUN_STORAGE_KEY, value: JSON.stringify(legacyFirstRunCompleteRecord()) },
@@ -48,9 +48,9 @@ async function assertMediumDrawerKeepsWorkspaceVisible(page: Page): Promise<void
   );
 }
 
-async function assertInspectorContentStartsAtTop(page: Page): Promise<void> {
+async function assertInspectorContentStartsAtTop(page: Page, server: AppServer, locale: "ko" | "en"): Promise<void> {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto(`${server.url}?visual=components`, { waitUntil: "load" });
+  await page.goto(`${server.url}?visual=components&locale=${locale}`, { waitUntil: "load" });
   const inspector = page.locator(testClass("right-inspector-open"));
   await inspector.waitFor({ state: "visible" });
   // Outside developer mode the inspector hides the Context and Workers tabs.
@@ -58,6 +58,7 @@ async function assertInspectorContentStartsAtTop(page: Page): Promise<void> {
   assert(
     JSON.stringify(tabs) === JSON.stringify([
       appCopy.inspector.tabs.summary,
+      appCopy.inspector.tabs.tasks,
       appCopy.inspector.tabs.artifacts,
       appCopy.inspector.tabs.automations,
     ]),
@@ -87,14 +88,21 @@ async function assertInspectorContentStartsAtTop(page: Page): Promise<void> {
 
 const browser = await launchSmokeBrowser();
 try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  await server.signIn(page);
-  await openApp(page);
-  await assertMediumDrawerKeepsWorkspaceVisible(page);
-  await assertInspectorContentStartsAtTop(page);
-  console.log("app screen contracts smoke passed");
+  for (const locale of ["ko", "en"] as const) {
+    setAppCopyLanguage(locale);
+    const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: locale } } });
+    try {
+      const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+      try {
+        await server.signIn(page);
+        await openApp(page, server);
+        await assertMediumDrawerKeepsWorkspaceVisible(page);
+        await assertInspectorContentStartsAtTop(page, server, locale);
+        console.log(`app screen contracts smoke passed (${locale})`);
+      } finally { await page.close(); }
+    } finally { await server.stop(); }
+  }
 } finally {
   await browser.close();
-  await server.stop();
   rmSync(tempDir, { recursive: true, force: true });
 }

@@ -1,6 +1,7 @@
+import { launchInstalledApp } from "./installed-app-debug.ts";
 /** Legacy-data refusal and recovery on a disposable Windows runner. */
 import { strict as assert } from "node:assert";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,7 +25,7 @@ const agentPort = await freePort();
 const env = { ...windowsPowerShellEnvironment(), HOME: home, USERPROFILE: home, BUTLER_DATA: data,
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_SECRET_STORE: "file",
   BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1", BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
-  BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
+  BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"),
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
 };
 let page: ElectronPage | null = null;
@@ -36,7 +37,7 @@ try {
   writeFileSync(join(data, "app-server/butler-client.sqlite"), "fake Butler 0.0.20 legacy database\n");
   writeFileSync(join(data, "keep.txt"), "preserve original data\n");
   const original = snapshot(data);
-  const app = spawn(executable, [], { env, stdio: "ignore" });
+  const app = launchInstalledApp(executable, debugPort, env, owned);
   assert.ok(app.pid, "Desktop did not spawn");
   owned.add(app.pid);
   ownedProcesses(data, owned);

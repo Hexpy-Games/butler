@@ -249,6 +249,7 @@ jobs:
           for scenario in idle now defer background-quit; do
             BUTLER_UPDATE_SMOKE_WORK="$scenario" bun run app:update:smoke
           done
+          BUTLER_DEBUG_ENV_SMOKE_BUNDLE="$BUTLER_UPDATE_SMOKE_BUNDLE_CACHE/0.1.0-preview.90/Butler.app" bun run app:debug-env:smoke
       - name: Existing App layout smoke
         if: ${{ !inputs.published-candidate }}
         run: |

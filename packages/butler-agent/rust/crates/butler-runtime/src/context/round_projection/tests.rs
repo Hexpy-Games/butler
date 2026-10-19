@@ -86,6 +86,7 @@ async fn summary_creation_and_reuse_keep_one_record_owner() {
         .prepare(&messages, 1000.0, &measure, &producer)
         .await
         .expect("summary creation");
+    assert_eq!(first.compacted_through, Some(2));
     let record = first.save_record.expect("new summary record");
     assert_eq!(record.covered_units, 2);
     let summary_calls = producer.0.load(Ordering::Relaxed);
@@ -103,6 +104,7 @@ async fn summary_creation_and_reuse_keep_one_record_owner() {
         .prepare(&messages, 1000.0, &measure, &producer)
         .await
         .expect("same-prefix reuse");
+    assert_eq!(second.compacted_through, Some(2));
     assert!(second.save_record.is_none());
     assert!(second.identity.is_some());
     assert_eq!(producer.0.load(Ordering::Relaxed), summary_calls);
@@ -122,6 +124,7 @@ async fn fitting_all_mandatory_pressure_returns_without_saved_identity() {
         .prepare(&messages, 100.0, &|_| Ok(90.0), &UnusedSummary)
         .await
         .expect("fitting mandatory context");
+    assert_eq!(projected.compacted_through, Some(messages.len()));
     assert!(projected.identity.is_none());
     assert!(projected.save_record.is_none());
     assert_eq!(projected.messages.expect("saved projection"), messages);
