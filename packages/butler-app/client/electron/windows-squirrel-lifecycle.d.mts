@@ -68,7 +68,7 @@ export function executeWindowsSquirrelLaunch(
   handled: boolean;
   event: string | null;
   shortcutAction?: "create" | "remove" | null;
-  shellRegistration?: "done" | "skipped";
+  shellRegistration?: "done" | "skipped" | "none";
   operationalStateRemoved?: boolean;
 };
 

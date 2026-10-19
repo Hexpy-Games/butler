@@ -76,7 +76,7 @@ describe("Windows Squirrel lifecycle", () => {
       },
       cleanupOperationalState: () => {
         calls.push(["cleanup", true]);
-        return [];
+        return ["C:\\Users\\dev\\.butler\\app\\runtime"];
       },
     });
     expect(result).toMatchObject({
@@ -166,6 +166,29 @@ describe("Windows Squirrel lifecycle", () => {
     },
   );
 
+  // test-category: security
+  test("uninstall from the owning profile with a refused data root reports nothing removed", () => {
+    const plan = resolveWindowsSquirrelLaunch({
+      platform: "win32", argv: ["Butler.exe", "--squirrel-uninstall"],
+      execPath: "C:\\butler-app\\app-1.0.0\\Butler.exe",
+    });
+    const removed: string[] = [];
+    const result = executeWindowsSquirrelLaunch(plan, {
+      shellRegistrationDisabled: false,
+      squirrelInstallPresent: true,
+      profileOwnsDataRoot: true,
+      manageShortcut: () => true,
+      cleanupOperationalState: () => removeWindowsOperationalState({
+        butlerData: null,
+        removePath: (path: string) => removed.push(path),
+      }),
+    });
+    expect(removed).toEqual([]);
+    expect(result).toMatchObject({
+      shellRegistration: "done", shortcutAction: "remove", operationalStateRemoved: false,
+    });
+  });
+
   test("operational cleanup uses bounded idempotent removals", () => {
     const removed: string[] = [];
     expect(removeWindowsOperationalState({
@@ -198,7 +221,7 @@ describe("Windows Squirrel lifecycle", () => {
       manageShortcut: () => {
         throw new Error("must not run");
       },
-    })).toMatchObject({ handled: true, shortcutAction: null });
+    })).toMatchObject({ handled: true, shortcutAction: null, shellRegistration: "none" });
 
     const firstRun = resolveWindowsSquirrelLaunch({
       platform: "win32",

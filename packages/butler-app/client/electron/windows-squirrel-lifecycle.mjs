@@ -129,8 +129,9 @@ export function executeWindowsSquirrelLaunch(plan, {
       throw windowsSquirrelError("windows_squirrel_protocol_unregister_failed");
     }
     if (profileOwnsDataRoot === true) {
-      cleanupOperationalState();
-      operationalStateRemoved = true;
+      // A refused data root yields no cleanup paths: nothing was removed.
+      const removed = cleanupOperationalState();
+      operationalStateRemoved = Array.isArray(removed) && removed.length > 0;
     }
   } else if (plan.registerProtocol) {
     if (registerProtocol(plan.protocol, plan.stubLauncher, []) === false) {
@@ -151,10 +152,13 @@ export function executeWindowsSquirrelLaunch(plan, {
       throw windowsSquirrelError("windows_squirrel_shortcut_failed");
     }
   }
+  // "none": the event (obsolete) has no shell registration work to do.
+  const shellWork = plan.removeOperationalState || plan.registerProtocol ||
+    Boolean(plan.shortcutAction);
   return {
     handled: true,
     event: plan.event,
-    shellRegistration: "done",
+    shellRegistration: shellWork ? "done" : "none",
     shortcutAction: plan.shortcutAction,
     operationalStateRemoved,
   };
