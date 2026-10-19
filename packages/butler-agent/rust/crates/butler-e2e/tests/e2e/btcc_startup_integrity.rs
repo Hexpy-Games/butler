@@ -80,7 +80,7 @@ async fn corruption(clean: bool, page: bool, extra: bool) -> Result<(), HarnessE
     }
     assert!(
         !s.agent.is_running(),
-        "still-corrupt verdict must fail after recheck"
+        "still-corrupt verdict must fail immediately"
     );
     butler_e2e::assert_wall_clock_budget!(
         started.elapsed(),
@@ -90,7 +90,10 @@ async fn corruption(clean: bool, page: bool, extra: bool) -> Result<(), HarnessE
     let next = std::fs::read_to_string(s.sandbox.logs.join("agent-3.log"))?;
     assert!(next.contains("storage_bootstrap_failed"), "{next}");
     assert!(!next.contains("[native-butler] ready"), "{next}");
-    assert!(next.contains("activated_begin"), "must recheck: {next}");
+    assert!(
+        !next.contains("activated_begin"),
+        "must not recheck: {next}"
+    );
     assert!(!s.agent.reap().expect("failed restart exits").success());
     std::fs::copy(good, &db_path)?;
     for suffix in ["sqlite-wal", "sqlite-shm"] {
@@ -318,7 +321,8 @@ async fn btcc_verdict_recheck_preserves_reference_failure_and_repair() -> Result
         VALUES('reference','fixture','missing','reference','fixture','fixture','fixture','{}','{}','delivered',1,1)")?;
     drop(db);
     let verdict = path.with_extension("sqlite.corrupt");
-    std::fs::write(&verdict, "agent_btcc_migration_reference_check_failed")?;
+    // This verdict describes a different file, so full validation still runs.
+    super::btcc_corrupt_startup::write_verdict(&path, true)?;
     s.gw = s.agent.start_again().await?;
     assert!(s.gw.healthy().await);
     let log = std::fs::read_to_string(s.sandbox.logs.join("agent-2.log"))?;

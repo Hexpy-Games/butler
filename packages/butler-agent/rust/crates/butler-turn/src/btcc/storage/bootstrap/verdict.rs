@@ -1,6 +1,7 @@
 //! Small durable sidecars; never updated on cancellation, shutdown or idle polls.
-use super::{StorageError, StorageResult, io_error};
+use super::{StorageError, StorageResult, error, io_error};
 use crate::btcc::StorageCode;
+use std::io::Read;
 use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
@@ -26,11 +27,48 @@ pub(super) fn corruption(error: &StorageError) -> bool {
     }
 }
 
+/// A legacy or unreadable identity is conservatively treated as the same file.
+/// Only a proven replacement may enter synchronous full recovery validation.
 pub(super) fn needs_recheck(path: &Path) -> StorageResult<bool> {
-    match std::fs::metadata(sidecar(path, "corrupt")) {
-        Ok(_) => Ok(true),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(error) => Err(io_error(error)),
+    let file = match std::fs::File::open(sidecar(path, "corrupt")) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(io_error(error)),
+    };
+    let mut raw = String::new();
+    file.take(4096).read_to_string(&mut raw).map_err(io_error)?;
+    let (code, identity) = raw.split_once('\n').unwrap_or((&raw, ""));
+    if let Ok(recorded) = serde_json::from_str::<DatabaseIdentity>(identity)
+        && recorded != DatabaseIdentity::read(path)?
+    {
+        return Ok(true);
+    }
+    let code = if code == StorageCode::AgentBtccStorageForeignKeyCheckFailed.as_str() {
+        StorageCode::AgentBtccStorageForeignKeyCheckFailed
+    } else {
+        StorageCode::AgentBtccStorageQuickCheckFailed
+    };
+    Err(error(code))
+}
+
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+struct DatabaseIdentity {
+    size: u64,
+    modified: Option<(i64, i64)>,
+    file_id: Option<(u64, u64)>,
+}
+
+impl DatabaseIdentity {
+    fn read(path: &Path) -> StorageResult<Self> {
+        let metadata = std::fs::metadata(path).map_err(io_error)?;
+        let identity = butler_platform::secure_fs::identity(&metadata);
+        Ok(Self {
+            size: metadata.len(),
+            modified: identity
+                .modified
+                .map(|time| (time.seconds, time.nanoseconds)),
+            file_id: identity.id.map(|id| (id.device, id.inode)),
+        })
     }
 }
 
@@ -59,9 +97,19 @@ pub(super) fn scan_delay(path: &Path) -> Duration {
 pub(super) fn record_corruption(path: &Path, result: &StorageResult<()>) {
     if let Err(error) = result
         && corruption(error)
-        && let Err(write) = atomic_write(&sidecar(path, "corrupt"), error.code().as_bytes())
     {
-        butler_core::diagnostic!("[btcc-storage] verdict_persist_failed={write}");
+        let write = (|| {
+            let identity = DatabaseIdentity::read(path)?;
+            let raw = serde_json::to_string(&identity)
+                .map_err(|error| io_error(std::io::Error::other(error)))?;
+            atomic_write(
+                &sidecar(path, "corrupt"),
+                format!("{}\n{raw}", error.code()).as_bytes(),
+            )
+        })();
+        if let Err(write) = write {
+            butler_core::diagnostic!("[btcc-storage] verdict_persist_failed={write}");
+        }
     }
 }
 

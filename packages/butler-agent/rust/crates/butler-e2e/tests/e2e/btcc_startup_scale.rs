@@ -171,7 +171,7 @@ fn complete(data: &Path, rows: i64) -> Result<(), HarnessError> {
     Ok(())
 }
 
-fn seed(data: &Path, rows: i64) -> Result<(), HarnessError> {
+pub(super) fn seed(data: &Path, rows: i64) -> Result<(), HarnessError> {
     let mut db = Connection::open(data.join("agent-runtime/btcc.sqlite"))?;
     // These are terminal historical rows. No recovery/model work is required.
     for start in (0..rows).step_by(5_000) {
