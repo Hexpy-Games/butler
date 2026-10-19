@@ -1747,6 +1747,8 @@ export interface AutomationRunSummary {
   state: string;
   safe_error_code?: string;
   started_at: string;
+  /** The turn the run started, once it started one. */
+  turn_id?: string;
 }
 
 export interface SessionOption {
