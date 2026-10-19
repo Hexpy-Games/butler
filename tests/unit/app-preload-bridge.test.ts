@@ -40,7 +40,7 @@ test("actual Electron preload serializes references on all three message ingress
     let bridge; const bodies = [];
     Module._load = (request, parent, main) => request === "electron" ? {
       contextBridge: { exposeInMainWorld(name, value) { if (name === "butlerApp") bridge = value; } },
-      ipcRenderer: { invoke: async channel => channel === "butler:get-local-auth-headers" ? {} : null, on() {}, removeListener() {} }
+      ipcRenderer: { invoke: async channel => channel === "butler:get-local-auth-headers" ? {} : null, on() {}, send() {}, removeListener() {} }
     } : load(request, parent, main);
     global.fetch = async (url, options) => {
       bodies.push({ path: new URL(url).pathname, body: JSON.parse(options.body) });
@@ -97,7 +97,7 @@ test("actual Electron preload sends access_mode and returns a bounded envelope f
     let bridge; const calls = [];
     Module._load = (request, parent, main) => request === "electron" ? {
       contextBridge: { exposeInMainWorld(name, value) { if (name === "butlerApp") bridge = value; } },
-      ipcRenderer: { invoke: async channel => channel === "butler:get-local-auth-headers" ? {} : null, on() {}, removeListener() {} }
+      ipcRenderer: { invoke: async channel => channel === "butler:get-local-auth-headers" ? {} : null, on() {}, send() {}, removeListener() {} }
     } : load(request, parent, main);
     global.fetch = async (url, options) => {
       const body = JSON.parse(options.body);
@@ -152,7 +152,7 @@ test("workspace selection crosses renderer and actual Electron preload", async (
     const Module = require("node:module"); const load = Module._load; let bridge; const calls = [];
     Module._load = (request, parent, main) => request === "electron" ? {
       contextBridge: { exposeInMainWorld(name, value) { if (name === "butlerApp") bridge = value; } },
-      ipcRenderer: { invoke: async channel => channel === "butler:get-local-auth-headers" ? {} : null, on() {}, removeListener() {} }
+      ipcRenderer: { invoke: async channel => channel === "butler:get-local-auth-headers" ? {} : null, on() {}, send() {}, removeListener() {} }
     } : load(request, parent, main);
     global.fetch = async (url, options) => {
       calls.push({ path: new URL(url).pathname, method: options.method, body: JSON.parse(options.body) });
@@ -201,7 +201,7 @@ test("actual preload limits dashboard resources and preserves HTTP method, query
     const Module = require("node:module"); const load = Module._load; let bridge; const calls = [];
     Module._load = (request, parent, main) => request === "electron" ? {
       contextBridge: { exposeInMainWorld(name, value) { if (name === "butlerApp") bridge = value; } },
-      ipcRenderer: { invoke: async channel => channel === "butler:get-local-auth-headers" ? {} : null, on() {}, removeListener() {} }
+      ipcRenderer: { invoke: async channel => channel === "butler:get-local-auth-headers" ? {} : null, on() {}, send() {}, removeListener() {} }
     } : load(request, parent, main);
     global.fetch = async (url, options) => {
       calls.push({ path: new URL(url).pathname, query: new URL(url).search, method: options?.method ?? "GET", body: options?.body });
@@ -287,7 +287,7 @@ test("actual Electron preload sends the saved-key routes and returns bounded env
     let bridge; const calls = [];
     Module._load = (request, parent, main) => request === "electron" ? {
       contextBridge: { exposeInMainWorld(name, value) { if (name === "butlerApp") bridge = value; } },
-      ipcRenderer: { invoke: async channel => channel === "butler:get-local-auth-headers" ? {} : null, on() {}, removeListener() {} }
+      ipcRenderer: { invoke: async channel => channel === "butler:get-local-auth-headers" ? {} : null, on() {}, send() {}, removeListener() {} }
     } : load(request, parent, main);
     global.fetch = async (url, options) => {
       const parsed = new URL(url);
@@ -334,7 +334,7 @@ function actualPreload(respond: (path: string) => PreloadResponse = () => accept
     URL, URLSearchParams, TextEncoder, TextDecoder, setTimeout, clearTimeout,
     require: () => ({
       contextBridge: { exposeInMainWorld: (name: string, value: Record<string, unknown>) => { if (name === "butlerApp") bridge = value; } },
-      ipcRenderer: { invoke: async () => null, on() {}, removeListener() {} },
+      ipcRenderer: { invoke: async () => null, on() {}, send() {}, removeListener() {} },
     }),
     fetch: async (url: string, options: RequestInit = {}) => {
       // Match the native fetch contract instead of accepting impossible GETs.
