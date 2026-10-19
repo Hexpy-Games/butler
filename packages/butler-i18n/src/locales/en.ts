@@ -1243,6 +1243,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       prompt: "Enter a prompt.",
       interval: "Use 5 minutes to 24 hours.",
       accessMode: "Choose a permission.",
+      model: "Choose a model.",
       invalid: "Check the fields.",
     },
     runs: {
