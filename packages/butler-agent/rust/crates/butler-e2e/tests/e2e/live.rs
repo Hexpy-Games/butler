@@ -1,4 +1,4 @@
-//! LIVE tier (SCENARIOS.md LIVE-01..10): real provider, coarse invariants.
+//! LIVE tier (SCENARIOS.md LIVE-01..10, LIVE-SIWC): real provider, coarse invariants.
 //!
 //! Every test is `#[ignore]` so the stub tier lists them as ignored. Run:
 //! `BUTLER_E2E_TIER=live cargo test -p butler-e2e --test live -- --ignored --test-threads=1`.
@@ -24,6 +24,7 @@ mod drift;
 mod hedge;
 pub(crate) mod hedge_v2;
 pub(super) mod profile;
+mod siwc;
 
 const IGNORE: &str = "";
 
@@ -359,4 +360,16 @@ async fn live_10_subscription_token_refresh() -> Result<(), HarnessError> {
     stopped?;
     s.finish().await?;
     done("LIVE-10")
+}
+
+/// LIVE-SIWC — Official ChatGPT plan route contract (records `LIVE-SIWC`).
+#[tokio::test]
+#[ignore = "LIVE tier"]
+async fn live_siwc_chatgpt_plan_contract() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    if live::gate("LIVE-SIWC")?.is_none() {
+        return Ok(());
+    }
+    siwc::check().await?;
+    done("LIVE-SIWC")
 }

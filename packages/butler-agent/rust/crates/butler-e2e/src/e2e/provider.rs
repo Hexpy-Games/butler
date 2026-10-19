@@ -25,6 +25,7 @@ use super::matching;
 use super::sanitize::Placeholders;
 use super::{HarnessError, harness_error};
 
+mod budget;
 mod hold;
 pub use hold::ReplyGate;
 mod memory;
@@ -94,6 +95,8 @@ struct State {
     memory_responder: Mutex<Option<MemoryResponder>>,
     chat_responder: Mutex<Option<ChatResponder>>,
     holds: Mutex<hold::Holds>,
+    budget: Mutex<Option<budget::Budget>>,
+    observed: Mutex<budget::Observed>,
 }
 
 pub struct Provider {
@@ -189,6 +192,8 @@ impl Provider {
             memory_responder: Mutex::new(None),
             chat_responder: Mutex::new(None),
             holds: Mutex::new(hold::Holds::default()),
+            budget: Mutex::new(None),
+            observed: Mutex::new(budget::Observed::default()),
         });
         let shared = state.clone();
         let app = axum::Router::new().fallback(move |request: Request<Body>| {
@@ -305,8 +310,9 @@ impl Provider {
         *lock(&self.state.served)
     }
 
-    /// Interactive request snapshots for public-path E2E assertions.
-    /// Background extraction is available through `memory_requests`.
+    /// Interactive request snapshots for public-path E2E assertions (record
+    /// mode: every forwarded request). Background extraction is available
+    /// through `memory_requests`.
     pub fn requests(&self) -> Vec<Value> {
         lock(&self.state.requests).clone()
     }

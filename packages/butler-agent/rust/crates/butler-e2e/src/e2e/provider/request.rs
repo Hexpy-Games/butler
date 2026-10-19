@@ -20,6 +20,12 @@ pub(super) async fn handle(state: Arc<State>, request: Request<Body>) -> Respons
                     .unwrap_or_default();
             }
         }
+        if let Mode::Record {
+            upstream, client, ..
+        } = &state.mode
+        {
+            return budget::forward_models(&state, upstream, client, &parts.headers).await;
+        }
         return plain(503, "HARNESS_ERROR: model authority unavailable");
     }
     let bytes = axum::body::to_bytes(body, 64 * 1024 * 1024)
@@ -88,6 +94,10 @@ pub(super) async fn handle(state: Arc<State>, request: Request<Body>) -> Respons
         Mode::Record {
             upstream, client, ..
         } => {
+            if !budget::admit_response(&state, &key) {
+                return plain(501, "HARNESS_ERROR: record budget refused this request");
+            }
+            lock(&state.requests).push(json);
             record(
                 &state,
                 upstream,

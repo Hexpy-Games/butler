@@ -35,6 +35,7 @@ impl Setup {
             launch_mode: LaunchMode::Harness,
             replay_only: false,
             extends: None,
+            record_budget: None,
         }
     }
 }

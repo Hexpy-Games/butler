@@ -53,6 +53,10 @@ pub(super) async fn record(
         .inflight
         .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let status = upstream_response.status().as_u16();
+    lock(&state.observed).header_names.push((
+        path.clone(),
+        super::budget::header_names(upstream_response.headers()),
+    ));
     let mut kept_headers = Vec::new();
     let mut builder = Response::builder().status(status);
     for (name, value) in upstream_response.headers() {

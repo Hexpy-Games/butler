@@ -97,6 +97,7 @@ pub struct Setup {
     launch_mode: LaunchMode,
     replay_only: bool,
     extends: Option<String>,
+    record_budget: Option<(String, u32, u32)>,
 }
 
 /// A running scenario. Field order is drop order: agent before sandbox.
@@ -156,6 +157,14 @@ impl Setup {
     /// `BUTLER_E2E_RECORD` says.
     pub fn record_into(mut self, dir: std::path::PathBuf) -> Self {
         self.record_into = Some(dir);
+        self
+    }
+
+    /// Record mode reaches the upstream at most `responses` times, only for
+    /// `user_request`, plus `models` model-list reads (see
+    /// [`Provider::limit_recording`]); set before the agent starts.
+    pub fn record_budget(mut self, user_request: &str, responses: u32, models: u32) -> Self {
+        self.record_budget = Some((user_request.to_owned(), responses, models));
         self
     }
 
@@ -222,6 +231,7 @@ impl Setup {
             launch_mode,
             replay_only,
             extends,
+            record_budget,
         } = self;
         let app_now = sources::fixture_app_now(&env);
         let mut launch = Launch::new(&sandbox)?;
@@ -256,6 +266,9 @@ impl Setup {
             }
             Source::Cassette(name) => replay_source(&name, &placeholders, &mut launch).await?,
         };
+        if let (Some(provider), Some((request, responses, models))) = (&provider, &record_budget) {
+            provider.limit_recording(request, *responses, *models);
+        }
         if let Some((provider_name, credential)) = &credential {
             apply_credential(&mut launch, provider_name, credential, &choice);
         }
