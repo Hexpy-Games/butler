@@ -54,6 +54,7 @@ export function useConversationAutoScroll({
   scrollRef,
 }: UseConversationAutoScrollOptions): ConversationScrollState {
   const pinnedToBottomRef = useRef(true);
+  const observedScrollTopRef = useRef(0);
   const lastAutoScrolledChatRef = useRef<string | null>(null);
   const latestSeenMessageVersionRef = useRef(latestMessageVersion);
   const frameRef = useRef<number | null>(null);
@@ -86,6 +87,8 @@ export function useConversationAutoScroll({
       const element = scrollRef.current;
       if (!element) return;
       scrollConversationToBottom(element, virtualListHeight, options);
+      // Pins move immediately; their scroll event arrives on a later frame.
+      observedScrollTopRef.current = element.scrollTop;
       pinnedToBottomRef.current = true;
       latestSeenMessageVersionRef.current = latestMessageVersion;
       setIsAwayFromBottom(false);
@@ -111,7 +114,7 @@ export function useConversationAutoScroll({
   useEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
-    let observedScrollTop = element.scrollTop;
+    observedScrollTopRef.current = element.scrollTop;
     const markUserScrollIntent = () => {
       lastUserScrollIntentAtRef.current = window.performance.now();
     };
@@ -157,7 +160,7 @@ export function useConversationAutoScroll({
       // pre-scroll rect when reveal precedes the pending scroll event.
       const targetBounds = target.getBoundingClientRect();
       const viewport = element.getBoundingClientRect();
-      const pendingScroll = element.scrollTop - observedScrollTop;
+      const pendingScroll = element.scrollTop - observedScrollTopRef.current;
       if (targetBounds.top + pendingScroll < viewport.top || targetBounds.bottom + pendingScroll > viewport.bottom) {
         releaseBottomLock();
       }
@@ -167,7 +170,7 @@ export function useConversationAutoScroll({
       window.performance.now() - lastUserScrollIntentAtRef.current <=
         USER_SCROLL_INTENT_WINDOW_MS;
     const updatePinnedState = () => {
-      observedScrollTop = element.scrollTop;
+      observedScrollTopRef.current = element.scrollTop;
       const distanceFromBottom = conversationDistanceFromBottom(element);
       const pinned =
         distanceFromBottom < BOTTOM_LOCK_THRESHOLD ||

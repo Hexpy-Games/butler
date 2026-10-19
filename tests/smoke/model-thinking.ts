@@ -1,7 +1,7 @@
 // Offline chat harness: one live line, DS motion, unchanged fallback and cleanup.
 // test-category: race
 import assert from "node:assert/strict";
-import { assertStreamingFocusReleased, assertThinkingPinned, probeThinkingReveal } from "../support/model-thinking-scroll";
+import { assertPinFocusGap, assertStreamingFocusReleased, assertThinkingPinned, probeThinkingReveal } from "../support/model-thinking-scroll";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,7 +12,9 @@ import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser";
 declare global {
   interface Window {
     butlerThinkingHarness: {
+      flushSync: (callback: () => void) => void;
       useButlerStore: typeof import("../../packages/butler-app/client/ui/src/app/store").useButlerStore;
+      useModelThinking: typeof import("../../packages/butler-app/client/ui/src/app/modelThinking").useModelThinking;
       receiveModelThinking: typeof import("../../packages/butler-app/client/ui/src/app/modelThinking").receiveModelThinking;
     };
   }
@@ -28,7 +30,7 @@ assert(evidence, "BUTLER_THINKING_EVIDENCE required");
 mkdirSync(evidence, { recursive: true });
 process.chdir(join(root, "packages/butler-app/client/ui"));
 const originals: Record<string, string> = {};
-if (before) {
+if (baseline) {
   const paths = execFileSync("git", ["diff", "--name-only", baseline!, "--", "packages/butler-app/client/ui/src", "packages/butler-i18n/src"], { cwd: root, encoding: "utf8" }).trim().split("\n");
   for (const path of paths.filter(path => /\.tsx?$/u.test(path))) {
     const exists = execFileSync("git", ["ls-tree", baseline!, "--", path], { cwd: root, encoding: "utf8" });
@@ -57,9 +59,10 @@ const output = process.env.BUTLER_THINKING_BUNDLE ?? mkdtempSync(join(tmpdir(), 
 if (ownsOutput) await build({ plugins: [{ name: "thinking-harness", enforce: "pre", load(id) { return originals[id]; },
   transform(source, id) {
     if (!id.endsWith("/src/main.tsx")) return;
-    return source + `\nimport { useButlerStore as thinkingStore } from "/src/app/store.ts";
-${before ? "" : 'import { receiveModelThinking as thinkingReceive } from "/src/app/modelThinking.ts";'}
-window.butlerThinkingHarness = { useButlerStore: thinkingStore, receiveModelThinking: ${before ? "() => false" : "thinkingReceive"} };`;
+    return source + `\nimport { flushSync as thinkingFlush } from "react-dom";
+import { useButlerStore as thinkingStore } from "/src/app/store.ts";
+${before ? "" : 'import { useModelThinking as thinkingModelStore, receiveModelThinking as thinkingReceive } from "/src/app/modelThinking.ts";'}
+window.butlerThinkingHarness = { flushSync: thinkingFlush, useButlerStore: thinkingStore, useModelThinking: ${before ? "undefined" : "thinkingModelStore"}, receiveModelThinking: ${before ? "() => false" : "thinkingReceive"} };`;
   } }], build: { outDir: output, emptyOutDir: true }, logLevel: "error" });
 process.env.BUTLER_THINKING_BUNDLE = output;
 try {
@@ -197,6 +200,7 @@ try {
         await page.waitForFunction(count => (document.querySelector('[data-test-class="thinking-details"]')?.textContent?.match(/Streaming paragraph\./gu) ?? []).length === count, lines);
       }
     }, evidence, cell);
+    await assertPinFocusGap(page, evidence, cell);
     await receive(null);
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
     assert((await status.innerText()).startsWith("응답 생성 중"));

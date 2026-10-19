@@ -133,3 +133,140 @@ export async function assertStreamingFocusReleased(page: Page, target: Locator,
     await assertThinkingPinned(page, `${cell} resumed`);
   }
 }
+
+/** Hold an existing product rAF pin until native Tab's keydown. The key handler
+ * commits the next chunk, runs that pin, then leaves browser Tab navigation intact.
+ */
+async function armPinTab(target: Locator, count: number, reverse: boolean) {
+  await target.evaluate((element, input) => {
+    const scroll = element.closest<HTMLElement>('[data-test-class~="conversation-scroll"]')!;
+    const anchor = document.createElement("span");
+    anchor.tabIndex = -1;
+    anchor.style.position = "fixed";
+    anchor.addEventListener("focusin", event => event.stopPropagation());
+    if (input.reverse) element.after(anchor); else element.before(anchor);
+    anchor.focus({ preventScroll: true });
+    const original = scroll.scrollTo.bind(scroll);
+    const raf = window.requestAnimationFrame;
+    const state = { ready: false, pin: 0, focused: false, focusScrollEvents: -1, scrollEvents: 0, outside: false, staleOutside: false, outsideBy: 0, pillSeen: false };
+    Object.assign(window, { pinFocusGap: state });
+    const pills = new MutationObserver(records => {
+      for (const record of records) for (const node of record.addedNodes) {
+        if (node instanceof Element && (node.matches('[data-test-class="scroll-to-bottom-button"]') || node.querySelector('[data-test-class="scroll-to-bottom-button"]'))) state.pillSeen = true;
+      }
+    });
+    element.addEventListener("blur", () => pills.disconnect(), { once: true });
+    let pin: FrameRequestCallback;
+    scroll.scrollTo = function (options?: ScrollToOptions | number, y?: number) {
+      if (typeof options === "number") original(options, y ?? 0); else original(options);
+      scroll.scrollTo = original;
+      // The hook schedules its rAF immediately after this initial bottom pin.
+      window.requestAnimationFrame = callback => {
+        window.requestAnimationFrame = raf;
+        pin = callback;
+        state.ready = true;
+        return raf(() => {});
+      };
+    };
+    const onScroll = () => { state.scrollEvents++; };
+    scroll.addEventListener("scroll", onScroll);
+    element.addEventListener("focusin", () => {
+      state.focused = true;
+      state.focusScrollEvents = state.scrollEvents;
+      scroll.removeEventListener("scroll", onScroll);
+      anchor.remove();
+    }, { once: true });
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      window.removeEventListener("keydown", onKey);
+      const { flushSync, receiveModelThinking } = window.butlerThinkingHarness;
+      flushSync(() => receiveModelThinking({ type: "turn.thinking", payload: {
+        turn_id: "thinking-turn", round_id: "second", line: "Checking the results",
+        summary: "Streaming paragraph.\n\n".repeat(input.count),
+      } }));
+      pills.observe(document.body, { childList: true, subtree: true });
+      const previous = scroll.scrollTop;
+      pin(performance.now());
+      state.pin = scroll.scrollTop - previous;
+      state.scrollEvents = 0;
+      const bounds = element.getBoundingClientRect(), viewport = scroll.getBoundingClientRect();
+      state.outside = bounds.bottom < viewport.top;
+      state.outsideBy = viewport.top - bounds.bottom;
+      state.staleOutside = bounds.top + state.pin < viewport.top || bounds.bottom + state.pin > viewport.bottom;
+    };
+    window.addEventListener("keydown", onKey);
+  }, { count, reverse });
+}
+
+export async function assertPinFocusGap(page: Page, evidence: string, cell: string) {
+  const messages = await page.evaluate(() => {
+    const state = window.butlerThinkingHarness.useButlerStore.getState();
+    const original = state.messages;
+    state.setMessages([...Array.from({ length: 20 }, (_, index) => ({ ...original[0], id: `earlier-${index}`, turn_id: `earlier-turn-${index}`, text: "Earlier conversation." })), ...original]);
+    return original;
+  });
+  const receive = (count: number) => page.evaluate(lines => {
+    window.butlerThinkingHarness.receiveModelThinking({ type: "turn.thinking", payload: {
+      turn_id: "thinking-turn", round_id: "second", line: "Checking the results",
+      summary: "Streaming paragraph.\n\n".repeat(lines),
+    } });
+  }, count);
+  const contentArrived = (count: number) => page.waitForFunction(lines => document.querySelector('[data-test-class="thinking-details"]')?.textContent?.match(/Streaming paragraph\./gu)?.length === lines, count);
+  await page.evaluate(() => window.butlerThinkingHarness.receiveModelThinking({ type: "turn.thinking", payload: {
+    turn_id: "thinking-turn", round_id: "next", line: "Next thinking row", summary: "Next summary.",
+  } }));
+  const row = page.getByRole("button", { name: "Checking the results", exact: true });
+  const next = page.getByRole("button", { name: "Next thinking row", exact: true });
+  await next.waitFor();
+  for (const reverse of [false, true]) {
+    await receive(5);
+    await contentArrived(5);
+    await page.waitForTimeout(200); // Settle only setup, before arming the chunk.
+    await assertThinkingPinned(page, `${cell} gap setup`);
+    const target = reverse ? row : next;
+    const sizing = await row.evaluate(element => {
+      const scroll = element.closest('[data-test-class~="conversation-scroll"]')!;
+      const body = scroll.querySelector('[data-test-class="thinking-details"]')!;
+      return { room: element.getBoundingClientRect().bottom - scroll.getBoundingClientRect().top, paragraph: body.clientHeight / 5 };
+    });
+    const count = reverse ? 5 + Math.ceil((sizing.room + 80) / sizing.paragraph) : 25;
+    await armPinTab(target, count, reverse);
+    await receive(6); // Prime the existing product rAF; the tested chunk is in keydown.
+    await page.waitForFunction(() => (window as unknown as { pinFocusGap: { ready: boolean } }).pinFocusGap.ready);
+    await page.keyboard.press(reverse ? "Shift+Tab" : "Tab");
+    const gap = await page.evaluate(() => (window as unknown as { pinFocusGap: { pin: number; focused: boolean; focusScrollEvents: number; outside: boolean; staleOutside: boolean; outsideBy: number; pillSeen: boolean } }).pinFocusGap);
+    assert(gap.pin > 0, "the streamed chunk must grow and programmatically pin");
+    assert(gap.focused, "native Tab reaches the thinking control");
+    assert.equal(gap.focusScrollEvents, 0, "native focus must precede the pin's scroll event");
+    assert.equal(gap.outside, reverse, "reverse target starts just above the viewport; forward target stays visible");
+    assert.equal(gap.staleOutside, !reverse, "stale pin growth must invert the focus decision");
+    writeFileSync(join(evidence, `pin-gap-${reverse ? "reverse" : "forward"}-${cell}.json`), JSON.stringify(gap) + "\n");
+    if (reverse) await page.locator('[data-test-class="scroll-to-bottom-button"]').waitFor();
+    else {
+      await assertThinkingPinned(page, `${cell} native Tab after pin`);
+      assert.equal(gap.pillSeen, false, "visible Tab must never flash a jump pill");
+    }
+    for (const lines of [count + 3, count + 5]) {
+      await receive(lines);
+      await contentArrived(lines);
+      assert(await target.evaluate(element => {
+        const bounds = element.getBoundingClientRect();
+        const viewport = element.closest('[data-test-class~="conversation-scroll"]')!.getBoundingClientRect();
+        return document.activeElement === element && bounds.top >= viewport.top && bounds.bottom <= viewport.bottom;
+      }), "further chunks keep the control focused and visible");
+      if (reverse) assert.equal(await page.locator('[data-test-class="scroll-to-bottom-button"]').count(), 1);
+      else {
+        await assertThinkingPinned(page, `${cell} native Tab keeps following`);
+        assert.equal(await page.evaluate(() => (window as unknown as { pinFocusGap: { pillSeen: boolean } }).pinFocusGap.pillSeen), false, "visible Tab never releases follow");
+      }
+    }
+    await page.screenshot({ path: join(evidence, `pin-gap-${reverse ? "reverse" : "forward"}-${cell}.png`) });
+    if (reverse) await page.locator('[data-test-class="scroll-to-bottom-button"]').click();
+  }
+  await page.evaluate(original => {
+    window.butlerThinkingHarness.useButlerStore.getState().setMessages(original);
+    window.butlerThinkingHarness.useModelThinking.setState(state => ({ summaries: {
+      ...state.summaries, "thinking-turn": state.summaries["thinking-turn"].filter(summary => summary.round !== "next"),
+    } }));
+  }, messages);
+}
