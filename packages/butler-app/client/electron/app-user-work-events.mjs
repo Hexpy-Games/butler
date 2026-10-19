@@ -1,9 +1,10 @@
 /** A pending update wakes on committed events, never on an idle polling scan. */
-export function watchAppUserWork({ connect, onChange }) {
+export function watchAppUserWork({ connect, onChange, onEvent, onConnected = () => {} }) {
   const controller = new AbortController();
   let debounce = null;
   let reconnect = null;
   function changed() {
+    if (!onChange) return;
     clearTimeout(debounce);
     debounce = setTimeout(onChange, 100);
   }
@@ -11,6 +12,7 @@ export function watchAppUserWork({ connect, onChange }) {
     try {
       const response = await connect(controller.signal);
       if (!response.ok || !response.body) throw new Error("work_stream_unavailable");
+      onConnected();
       changed();
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -24,7 +26,13 @@ export function watchAppUserWork({ connect, onChange }) {
           while ((end = buffer.indexOf("\n\n")) >= 0) {
             const frame = buffer.slice(0, end);
             buffer = buffer.slice(end + 2);
-            if (frame.includes("data:") && !frame.includes("event: heartbeat")) changed();
+            if (frame.includes("data:") && !frame.includes("event: heartbeat")) {
+              if (onEvent) {
+                const data = frame.split("\n").filter(line => line.startsWith("data:")).map(line => line.slice(5).trimStart()).join("\n");
+                try { onEvent(JSON.parse(data)); } catch { /* Ignore malformed event frames. */ }
+              }
+              changed();
+            }
           }
         }
       } finally {

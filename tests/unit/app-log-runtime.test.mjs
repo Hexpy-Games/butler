@@ -117,3 +117,51 @@ test("the known full expiry refreshes the agent fallback once", async () => {
     expect(text).toContain("agent-fallback");
   } finally { await runtime.quit(); await rm(root, { recursive: true, force: true }); }
 });
+
+
+test("window config refresh is skipped before readiness and bounded for a slow agent", async () => {
+  const { refreshBeforeWindow } = await import("../../packages/butler-app/client/electron/log/events.mjs");
+  let reads = 0, release;
+  const pending = new Promise(resolve => { release = resolve; });
+  const logging = { refresh: () => { reads++; return pending; } };
+  await refreshBeforeWindow(logging, false);
+  expect(reads).toBe(0);
+  const started = performance.now();
+  await refreshBeforeWindow(logging, true);
+  const elapsed = performance.now() - started;
+  expect(reads).toBe(1);
+  expect(elapsed).toBeGreaterThanOrEqual(240);
+  expect(elapsed).toBeLessThan(500);
+  release();
+  console.log(JSON.stringify({ slow_agent_window_wait_ms: elapsed }));
+});
+
+test("live gateway events refresh logging only on log settings changes and clear App logs", async () => {
+  const { watchAppLogging } = await import("../../packages/butler-app/client/electron/log/events.mjs");
+  let controller, refreshes = 0;
+  const body = new ReadableStream({ start(value) { controller = value; } });
+  const stop = watchAppLogging({ connect: async () => new Response(body),
+    refresh: async () => { refreshes++; } });
+  const settings = { log_level: "full", log_category_levels: {}, diagnostics_enabled: true };
+  const emit = event => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
+  const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+  try {
+    await tick();
+    expect(refreshes).toBe(1);
+    emit({ type: "settings.updated", payload: { settings } });
+    await tick();
+    expect(refreshes).toBe(2);
+    emit({ type: "settings.updated", payload: { settings: { ...settings, appearance_theme: "dark" } } });
+    await tick();
+    expect(refreshes).toBe(2);
+    for (const update of [{ log_level: "detailed" }, { log_category_levels: { ipc: "error" } }, { diagnostics_enabled: false }]) {
+      Object.assign(settings, update);
+      emit({ type: "settings.updated", payload: { settings } });
+      await tick();
+    }
+    expect(refreshes).toBe(5);
+    emit({ type: "logs.cleared", payload: {} });
+    await tick();
+    expect(refreshes).toBe(6);
+  } finally { stop(); controller.close(); }
+});

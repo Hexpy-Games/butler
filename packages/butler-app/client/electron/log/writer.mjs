@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, readdir, stat, unlink, rm } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, stat, unlink, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { writeBody } from "./bodies.mjs";
@@ -25,7 +25,7 @@ class AppLogWriter {
     this.redactor = createRedactor();
     this.config = { level: "standard", category_levels: {} };
     this.fallbackConfig = this.config; this.fullExpiresAt = null;
-    this.queue = []; this.queuedBytes = 0; this.stopped = false;
+    this.queue = []; this.queuedBytes = 0; this.stopped = false; this.epoch = 0;
     this.lanes = new Map(); this.sequence = 0; this.failure = null; this.secretsReady = false;
     this.pending = loadSecrets(dataRoot, this.redactor).then(() => { this.secretsReady = true; })
       .catch(error => { this.failure = error.code ?? "log_credentials_unavailable"; });
@@ -116,8 +116,8 @@ class AppLogWriter {
   }
   flush() {
     clearTimeout(this.timer); this.timer = undefined;
-    const batch = this.queue; this.queue = []; this.queuedBytes = 0;
-    if (batch.length) this.pending = this.pending.then(() => this.writeBatch(batch)).catch(error => { this.failure = error.code ?? "log_write_failed"; });
+    const batch = this.queue, epoch = this.epoch; this.queue = []; this.queuedBytes = 0;
+    if (batch.length) this.pending = this.pending.then(() => epoch === this.epoch ? this.writeBatch(batch) : undefined).catch(error => { this.failure = error.code ?? "log_write_failed"; });
     return this.pending;
   }
   record(input, process = "app.main", body) {
@@ -150,6 +150,10 @@ class AppLogWriter {
     this.config = view.effective;
     const lanes = [...(!verbose ? ["debug"] : []), ...(view.effective.level !== "full" ? ["bodies"] : [])];
     if (this.dataRoot) this.pending = this.pending.then(async () => {
+      // Config can be denied after diagnostics is disabled; the local clear marker remains authoritative.
+      const generation = view.clear_generation ?? await readFile(join(this.dataRoot, "logs/clear-generation"), "utf8")
+        .catch(error => { if (error.code === "ENOENT") return null; throw error; });
+      await this.reconcileClear(generation);
       for (const lane of lanes) {
         await this.close(lane);
         await rm(join(this.dataRoot, "logs/app", lane), { recursive: true, force: true });
@@ -157,12 +161,26 @@ class AppLogWriter {
       for (const lane of ["main", "debug", "bodies"]) await this.prune(lane);
     }).catch(error => { this.failure = error.code ?? "log_cleanup_failed"; });
   }
+  async clearSegments() {
+    for (const lane of ["main", "debug", "bodies"]) await this.close(lane);
+    await rm(join(this.dataRoot, "logs/app"), { recursive: true, force: true });
+  }
+  async reconcileClear(generation) {
+    if (!generation) return;
+    const path = join(this.dataRoot, "logs/app-clear-generation");
+    const previous = await readFile(path, "utf8").catch(error => { if (error.code === "ENOENT") return null; throw error; });
+    if (previous === generation) return;
+    this.epoch++;
+    this.queue = []; this.queuedBytes = 0;
+    await this.clearSegments();
+    await mkdir(join(this.dataRoot, "logs"), { recursive: true, mode: 0o700 });
+    await writeFile(path, generation, { mode: 0o600 });
+  }
   async clear() {
     if (!this.canWrite() || !this.dataRoot) return;
     this.queue = []; this.queuedBytes = 0;
     this.pending = this.pending.then(async () => {
-      for (const lane of ["main", "debug", "bodies"]) await this.close(lane);
-      await rm(join(this.dataRoot, "logs/app"), { recursive: true, force: true });
+      await this.clearSegments();
     });
     await this.pending;
   }

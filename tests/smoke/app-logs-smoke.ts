@@ -1,4 +1,5 @@
 // Real Electron main/preload/renderer → shared native log API; offline stub model only.
+import { createServer, request } from "node:http";
 import { strict as assert } from "node:assert";
 import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, statSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,6 +20,27 @@ const root = mkdtempSync(join(tmpdir(), "app-logs-smoke-"));
 const profile = join(root, "profile"); mkdirSync(profile);
 writeFileSync(join(profile, "butler-native-settings.json"), JSON.stringify({ developer_mode_enabled: true }));
 const server = await createNativeAppServer();
+// Hold config indefinitely: a real window must open before the agent read resolves.
+let releaseConfig!: () => void, configStarted = 0, configReleased = false;
+let stallNextConfig = false, configBlockedAt = 0;
+const configGate = new Promise<void>(resolve => { releaseConfig = resolve; });
+const proxy = createServer(async (incoming, outgoing) => {
+  if (incoming.url === "/logs/config" && incoming.method === "GET" && !configReleased) {
+    configStarted ||= Date.now();
+    await configGate;
+  } else if (incoming.url === "/logs/config" && incoming.method === "GET" && stallNextConfig) {
+    stallNextConfig = false; configBlockedAt = Date.now();
+    await new Promise(resolve => setTimeout(resolve, 3000));
+  }
+  const upstream = request(new URL(incoming.url!, server.url), {
+    method: incoming.method, headers: { ...incoming.headers, host: new URL(server.url).host },
+  }, response => { outgoing.writeHead(response.statusCode!, response.headers); response.pipe(outgoing); });
+  upstream.on("error", () => outgoing.destroy());
+  incoming.pipe(upstream);
+});
+await new Promise<void>(resolve => proxy.listen(0, "127.0.0.1", resolve));
+const proxyPort = (proxy.address() as { port: number }).port;
+
 const copy = getAppCopy("ko-KR");
 let app: FileElectronApp | undefined, browser: Browser | undefined;
 type Row = { process: string; event: string; trace_id?: string; msg: string; category: string; error?: { scope: string; stack: string }; attrs?: { name: string }; body_ref?: string };
@@ -54,10 +76,19 @@ async function fullBodySmoke() {
   assert(response.ok);
   const body = await response.text();
   assert(body.includes("full-only input") && !body.includes("sk-secret"));
-  await setLevel("detailed");
-  assert(!existsSync(join(server.butlerData, "logs/app/bodies")), "App removes full bodies before level-change acknowledgment");
-  await setLevel("standard");
-  assert(!existsSync(join(server.butlerData, "logs/app/debug")), "App removes its debug lane");
+  stallNextConfig = true;
+  await server.api("/logs/config", { method: "PUT", body: JSON.stringify({ level: "full", category_levels: { ipc: "trace" } }) });
+  await waitFor(async () => configBlockedAt, value => value > 0, "stalled App config refresh");
+  const started = Date.now();
+  await server.api("/logs/config", { method: "PUT", body: JSON.stringify({ level: "detailed", category_levels: {} }) });
+  await waitFor(async () => existsSync(join(server.butlerData, "logs/app/bodies")), exists => !exists, "direct gateway downgrade removes App bodies");
+  assert(Date.now() - started < 5000, "external downgrade applies promptly");
+  await renderer(`window.butlerApp.recordUiCrash({ scope: "conversation", message: "after-external-downgrade" })`);
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert(!existsSync(join(server.butlerData, "logs/app/bodies")), "new IPC input is no longer captured");
+  await server.api("/logs/config", { method: "PUT", body: JSON.stringify({ level: "standard", category_levels: {} }) });
+  await waitFor(async () => existsSync(join(server.butlerData, "logs/app/debug")), exists => !exists, "external downgrade removes App debug");
+  console.log(JSON.stringify({ stage: "external downgrade", cleanup_ms: Date.now() - started }));
   assert(files().every(path => !path.endsWith(".idx")), "Agent keeps App indexes out of App directories");
 }
 async function capture(page: Page, width: number, theme: string) {
@@ -84,12 +115,16 @@ try {
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", diagnostics_enabled: true }) });
   app = await fileElectronApp({ executablePath: executable, args: [resolve("packages/butler-app/client/electron")], env: {
     ...process.env, BUTLER_DATA: server.butlerData, BUTLER_HOME: process.env.HOME!,
-    BUTLER_APP_ELECTRON_USER_DATA_DIR: profile, BUTLER_APP_SERVER_URL: server.url,
-    BUTLER_APP_SERVER_PORT: String(server.port),
+    BUTLER_APP_ELECTRON_USER_DATA_DIR: profile, BUTLER_APP_SERVER_URL: `http://127.0.0.1:${proxyPort}`,
+    BUTLER_APP_SERVER_PORT: String(proxyPort),
     BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1", BUTLER_APP_RENDERER_DIST: resolve("packages/butler-app/client/ui/dist"),
   } });
   await waitFor(() => rows("app"), rows => rows.some(row => row.event === "app.start"), "App module initialized");
   await waitFor(() => app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some(window => window.webContents.getURL().startsWith("app://butler/"))), Boolean, "App renderer");
+  await waitFor(async () => configStarted, value => value > 0, "startup config request");
+  assert(configStarted > 0 && !configReleased, "window opens while agent config remains stalled");
+  console.log(JSON.stringify({ stage: "slow agent window opened", config_pending_ms: Date.now() - configStarted }));
+  configReleased = true; releaseConfig();
   const traceparent = `00-${crypto.randomUUID().replaceAll("-", "")}-${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}-01`;
   // Exercise the actual renderer/preload public action channel, using its agent trace header.
   await app.evaluate(async ({ BrowserWindow }, traceparent) => {
@@ -139,10 +174,21 @@ try {
   });
   await page.goto(server.url);
   for (const width of [1280, 390]) for (const theme of ["light", "dark"]) await capture(page, width, theme);
+  await setLevel("full");
+  await renderer(`window.butlerApp.recordUiCrash({ scope: "conversation", message: "clear-external-input" })`);
+  await waitFor(async () => existsSync(join(server.butlerData, "logs/app/bodies")), Boolean, "body before external clear");
+  const previousFiles = files();
+  const cleared = await server.api<{ agent_freed_bytes: number; freed_bytes?: number }>("/logs", { method: "DELETE" });
+  assert(cleared.agent_freed_bytes >= 0 && cleared.freed_bytes === undefined, "only confirmed agent bytes are reported");
+  await waitFor(async () => previousFiles.some(path => existsSync(path)), exists => !exists, "gateway clear deletes every existing App segment");
+  console.log(JSON.stringify({ stage: "external clear", removed_app_files: previousFiles.length, agent_freed_bytes: cleared.agent_freed_bytes }));
   console.log(JSON.stringify({ ok: true, idle_ms: elapsed, idle_bytes: 0, trace_id: action.trace_id, screenshots: 4 }));
 } finally {
   await browser?.close();
+  configReleased = true; releaseConfig();
   await app?.close();
+  proxy.closeAllConnections();
+  await new Promise<void>(resolve => proxy.close(() => resolve()));
   await server.stop();
   rmSync(root, { recursive: true, force: true });
 }

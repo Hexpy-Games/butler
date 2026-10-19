@@ -82,6 +82,34 @@ async fn logs_level_lowering_deletes_verbose_dirs() -> Result<(), HarnessError> 
 }
 
 #[tokio::test]
+async fn logs_clear_reports_only_agent_bytes_and_publishes_event() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("LOG-CLEAR")?.start().await?;
+    s.gw.patch("/settings", json!({"diagnostics_enabled":true}))
+        .await?;
+    let app = s.sandbox.data.join("logs/app/bodies");
+    std::fs::create_dir_all(&app)?;
+    let sentinel = app.join("owned-by-app.zst");
+    std::fs::write(&sentinel, vec![0; 1024 * 1024])?;
+    let r = s.gw.send(reqwest::Method::DELETE, "/logs", None).await?;
+    assert_eq!(r.status, 200, "{}", r.text);
+    assert!(r.data().get("freed_bytes").is_none());
+    let freed = r.data()["agent_freed_bytes"].as_u64().unwrap();
+    assert!((1..1024 * 1024).contains(&freed), "{freed}");
+    assert!(sentinel.exists(), "App owns its cleanup");
+    let events = s.gw.get("/events?cursor=0").await?;
+    assert!(events.text.contains("logs.cleared"), "{}", events.text);
+    let generation = s.gw.get("/logs/config").await?.data()["clear_generation"].clone();
+    assert!(generation.is_string());
+    s.restart().await?;
+    assert_eq!(
+        s.gw.get("/logs/config").await?.data()["clear_generation"],
+        generation
+    );
+    s.finish().await
+}
+
+#[tokio::test]
 async fn logs_full_reverts_on_restart_and_expiry() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("LOG-03")?.start().await?;

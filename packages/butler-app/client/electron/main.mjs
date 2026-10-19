@@ -1,3 +1,4 @@
+import { watchAppLogging, refreshBeforeWindow } from "./log/events.mjs";
 import { installAppLogging, appLog } from "./log/runtime.mjs";
 import { shellRegistrationAllowed as profileAllowsShellRegistration } from "./shell-registration.mjs";
 import * as desktopShell from "./desktop-shell.mjs";
@@ -159,8 +160,8 @@ const wallpaperStateLog = createWallpaperStateLog(appWritableDataRoot);
 let appLogOwner = false;
 const appLogging = installAppLogging({ app, ipcMain, dataRoot: appWritableDataRoot,
   getVersion: async () => JSON.parse(await readFile(resolve(__dirname, "package.json"), "utf8")).version,
-  readConfig: () => readAppData("/logs/config"),
-  readSettings: () => readAppData("/settings"),
+  readConfig: () => readAppData("/logs/config", { signal: AbortSignal.timeout(1000) }),
+  readSettings: () => readAppData("/settings", { signal: AbortSignal.timeout(1000) }),
   isSender: event => event.sender === mainWindow?.webContents, isWriter: () => appLogOwner });
 const preloadPath = resolve(__dirname, "preload.cjs");
 const appCacheBudget = readCacheBudgetArtifact(
@@ -1647,9 +1648,9 @@ function launchMainUi(args = []) {
   }, "Butler main UI");
 }
 
-async function readAppData(path) {
+async function readAppData(path, init) {
   try {
-    const response = await appServerFetch(path);
+    const response = await appServerFetch(path, init);
     const body = await response.json().catch(() => null);
     if (!response.ok || body?.protocol_version !== appProtocolVersion) {
       return null;
@@ -2241,7 +2242,7 @@ async function createWindow() {
   }
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
   // Storage from data the Agent no longer has (a reset) is cleared before the renderer loads.
-  if (!legacyDataBlocked) await appLogging.refresh();
+  if (!legacyDataBlocked) await refreshBeforeWindow(appLogging, agentReadyBeforeWindow());
   const dataGeneration = legacyDataBlocked || !agentReadyBeforeWindow() ? null : await reconcileWindowDataGeneration();
   if (process.env.BUTLER_APP_TEST_AUTO_CONNECT === "1") {
     rendererUrl = await testRendererConnection(serverUrl, appServerFetch);
@@ -2978,6 +2979,11 @@ if (appSingleInstanceLock) {
       if (isMenuBarHelperProcess) {
         await runMenuBarHelper();
         return;
+      }
+      if (appLogOwner) {
+        const unwatchLogs = watchAppLogging({ connect: signal => appServerFetch("/events/live", { signal }),
+          refresh: () => appLogging.refresh() });
+        app.once("will-quit", unwatchLogs);
       }
       void installDevtools().catch(() => undefined);
       await ensurePowerStateMonitor();

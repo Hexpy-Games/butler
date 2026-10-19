@@ -161,3 +161,33 @@ test("expired body references never alias a later full lease in the same second"
     }
   } finally { setSystemTime(); await rm(root, { recursive: true, force: true }); }
 });
+
+test("durable clear generations remove missed App logs once across reconnects and restarts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "app-log-clear-generation-"));
+  let writer = createAppLogWriter(root);
+  const view = { effective: { level: "full", category_levels: {} }, clear_generation: "generation-one" };
+  const record = () => writer.record({ level: "TRACE", category: "ipc", event: "ipc.payload", msg: "IPC payload" }, "app.main", { input: "captured" });
+  try {
+    writer.configure({ effective: view.effective });
+    record(); await writer.flush();
+    const bodies = join(root, "logs/app/bodies");
+    const previous = await readdir(bodies).catch(() => []);
+    record(); // Still queued when the clear's config refresh flushes.
+    writer.configure(view); await writer.flush();
+    expect(await readdir(bodies).catch(() => [])).toEqual([]);
+    record(); await writer.flush();
+    const current = await readdir(bodies);
+    expect(current.length).toBeGreaterThan(0);
+    writer.configure(view); await writer.flush();
+    expect(await readdir(bodies)).toEqual(current);
+    await writer.quit();
+    writer = createAppLogWriter(root);
+    writer.configure(view); await writer.flush();
+    expect(await readdir(bodies)).toEqual(current);
+    await writeFile(join(root, "logs/clear-generation"), "generation-two");
+    // The config route may be denied after diagnostics is disabled.
+    writer.configure({ effective: { level: "standard", category_levels: {} } }); await writer.flush();
+    expect(await readdir(bodies).catch(() => [])).toEqual([]);
+    expect(previous.every(file => !current.includes(file))).toBe(true);
+  } finally { await writer.quit(); await rm(root, { recursive: true, force: true }); }
+});
