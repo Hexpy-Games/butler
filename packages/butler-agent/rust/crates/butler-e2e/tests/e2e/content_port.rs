@@ -7,7 +7,9 @@
 )]
 use butler_e2e::e2e::{
     HarnessError,
+    agent::Launch,
     gateway::Gateway,
+    sandbox::Sandbox,
     scenario::{Scenario, Setup},
     security::AdminClient,
 };
@@ -144,11 +146,22 @@ async fn foreign_listener_on_content_port() -> Result<(), HarnessError> {
             .await?;
     assert_eq!(ui.status(), 200);
     let csp = ui.headers()["content-security-policy"].to_str().unwrap();
-    let frames = csp.split("frame-src ").nth(1).unwrap();
-    assert!(frames.contains(&format!("http://127.0.0.1:{q}")), "{csp}");
-    assert!(frames.contains(&format!("http://localhost:{q}")), "{csp}");
+    let frames: Vec<_> = csp
+        .split(';')
+        .find_map(|directive| directive.trim().strip_prefix("frame-src "))
+        .unwrap()
+        .split_whitespace()
+        .collect();
     assert!(
-        !frames.contains(&format!("http://127.0.0.1:{}", p + 1)),
+        frames.contains(&format!("http://127.0.0.1:{q}").as_str()),
+        "{csp}"
+    );
+    assert!(
+        frames.contains(&format!("http://localhost:{q}").as_str()),
+        "{csp}"
+    );
+    assert!(
+        !frames.contains(&format!("http://127.0.0.1:{}", p + 1).as_str()),
         "{csp}"
     );
     content(
@@ -266,4 +279,51 @@ async fn permission_denied_content_port_falls_back() -> Result<(), HarnessError>
     );
     content(&url, &s.gw.base, "127.0.0.1:1").await?;
     s.finish().await
+}
+
+#[tokio::test]
+async fn invalid_content_port_rejects_startup() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    assert_startup_rejected(
+        Setup::new("CONTENT-INVALID")?.env("BUTLER_APP_CONTENT_PORT", "abc"),
+        "BUTLER_APP_CONTENT_PORT",
+    )
+    .await
+}
+
+#[tokio::test]
+async fn trusted_dev_origin_rejects_content_port() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut reservation = Sandbox::new("CONTENT-ORIGIN-PORT")?;
+    let reserved = Launch::new(&reservation)?;
+    let port = reserved.port;
+    let origin = format!("http://localhost:{port}");
+    assert_startup_rejected(
+        Setup::new("CONTENT-ORIGIN")?
+            .env("BUTLER_APP_DEV_ORIGIN", &origin)
+            .env("BUTLER_APP_CONTENT_PORT", port.to_string()),
+        &format!("content port must use a separate origin from {origin}"),
+    )
+    .await?;
+    reservation.mark_success();
+    Ok(())
+}
+
+async fn assert_startup_rejected(setup: Setup, expected: &str) -> Result<(), HarnessError> {
+    match setup
+        .stub_cassette(super::browser_outputs::stub::cassette()?)
+        .start()
+        .await
+    {
+        Ok(scenario) => {
+            scenario.finish().await?;
+            panic!("startup accepted invalid content configuration");
+        }
+        Err(error) => {
+            let message = error.0;
+            assert!(message.starts_with("agent exited ("), "{message}");
+            assert!(message.contains(expected), "{message}");
+        }
+    }
+    Ok(())
 }

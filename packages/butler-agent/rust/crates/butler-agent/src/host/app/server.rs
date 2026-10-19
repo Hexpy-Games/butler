@@ -97,6 +97,7 @@ impl AppServer {
         owners: AppServerOwners,
         listener: TcpListener,
     ) -> Result<Self, BtccError> {
+        app_config.validate()?;
         let artifacts = Arc::new(AppMessageFiles::new(
             data_root,
             super::schedule_clock::clock(),

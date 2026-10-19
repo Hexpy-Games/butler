@@ -46,7 +46,7 @@ use crate::gateway::protocol::{APP_PROTOCOL_VERSION, ApiEnvelope};
 use connect_page::ConnectPage;
 use fetch_metadata::SessionRefusal;
 use keys::{Keyed, SigningKey};
-use request_policy::RequestPolicy;
+pub(in crate::gateway) use request_policy::RequestPolicy;
 
 /// `POST /connection-codes`: mints a one-time browser link (bearer only).
 pub(super) const CONNECTION_CODES_PATH: &str = "/connection-codes";

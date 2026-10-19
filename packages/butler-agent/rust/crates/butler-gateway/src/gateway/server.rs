@@ -139,6 +139,12 @@ pub async fn serve_gateway(
     let local_addr = listener.local_addr()?;
     let content_listener = bind_content(local_addr, config.content_port).await?;
     let content_addr = content_listener.local_addr()?;
+    http::RequestPolicy::validate_content_origin(
+        local_addr,
+        content_addr,
+        &config.allowed_hosts,
+        config.dev_cors_origin.as_deref(),
+    )?;
     let shutdown = CancellationToken::new();
     let task = http::serve(
         listener,

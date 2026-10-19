@@ -59,7 +59,7 @@ impl RequestOrigin {
 }
 
 /// The Host names and browser origins this gateway answers.
-pub(in crate::gateway::http) struct RequestPolicy {
+pub(in crate::gateway) struct RequestPolicy {
     hosts: HashSet<String>,
     /// Origins of pages on this computer.
     local_origins: HashSet<String>,
@@ -102,6 +102,28 @@ impl RequestPolicy {
                 .map(str::to_owned),
         );
         policy
+    }
+
+    /// Content must not share an authority with any trusted browser origin.
+    pub(in crate::gateway) fn validate_content_origin(
+        local_addr: SocketAddr,
+        content_addr: SocketAddr,
+        allowed_hosts: &[String],
+        dev_origins: Option<&str>,
+    ) -> std::io::Result<()> {
+        let api = Self::new(local_addr, allowed_hosts, dev_origins, &[]);
+        let content = Self::new(content_addr, &[], None, &[]);
+        for origin in api.local_origins.iter().chain(&api.remote_origins) {
+            let authority = url::Url::parse(origin)
+                .ok()
+                .and_then(|url| Some(format!("{}:{}", url.host()?, url.port_or_known_default()?)));
+            if authority.is_some_and(|authority| content.hosts.contains(&authority)) {
+                return Err(std::io::Error::other(format!(
+                    "content port must use a separate origin from {origin}"
+                )));
+            }
+        }
+        Ok(())
     }
 
     fn allow_plain_http(&mut self, authority: &str, local: bool) {
