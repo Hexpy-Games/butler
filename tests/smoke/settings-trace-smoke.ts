@@ -326,11 +326,7 @@ async function entryChecks(page: Page, server: NativeAppServerHandle, failing: {
   const audit = await auditTabOrder(page, { maxStops: 30, within: '[data-settings-section-id^="trace-"]' });
   assert(audit.stops > 2, `focus reaches the trace rows (${audit.visited.join(", ")})`);
   assert.equal(audit.clipped.length, 0, `trace focus rings are whole\n${formatClips(audit.clipped)}`);
-  // The DS line Tabs (shared with Settings › 로그) lose the ring on the active tab and the
-  // tabpanel: #1261, a DS fix awaiting owner approval. Every other trace stop must be marked.
-  const tabs = /\[slot=tabs-(?:list|content)\]/u;
-  assert.deepEqual(audit.unmarked.filter((stop) => !tabs.test(stop)), [], "every trace stop shows a focus ring");
-  assert(audit.unmarked.length <= 2, `only the #1261 tab stops lack a ring: ${audit.unmarked.join(" | ")}`);
+  assert.deepEqual(audit.unmarked, [], "every trace stop shows a focus ring");
   await page.keyboard.press("Escape");
   await scheduleEntry(page, server);
   assert.equal(server.stubModelCalls.length, 0, "the isolated stub model is not used");
