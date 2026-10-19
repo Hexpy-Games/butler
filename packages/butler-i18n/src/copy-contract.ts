@@ -379,6 +379,41 @@ export interface LibraryCopy {
   deleteSelected: (count: number) => string; deleteSelectedBody: string; selectionActions: string;
 }
 
+/** Span names the message trace titles in the reader's language. */
+export type TraceStepName =
+  | "http.server" | "turn.admit" | "turn.queue" | "turn.dispatch" | "turn.run" | "turn.deliver"
+  | "route.select" | "context.build" | "model.request" | "retry.wait" | "http.request" | "stream.receive"
+  | "tool.call" | "mcp.call" | "memory.write" | "memory.recall" | "schedule.run";
+
+/** Settings › 로그 › 메시지 추적 and its 로그 보기 entry points. */
+export interface LogTraceCopy {
+  title: string;
+  viewLogs: string;
+  /** A schedule's overflow menu: its latest run that started a turn. */
+  latestRunLogs: string;
+  openCommand: string;
+  openCommandHint: string;
+  viewWhole: string;
+  sections: { summary: string; steps: string };
+  fields: Record<"result" | "duration" | "model" | "started" | "chat" | "traceId", string>;
+  outcome: Record<"ok" | "error", string>;
+  retries: (count: number) => string;
+  failed: string;
+  wait: string;
+  running: string;
+  partial: string;
+  notFound: string;
+  loadFailed: string;
+  copyId: string;
+  seconds: (value: string) => string;
+  spoken: (start: string, length: string) => string;
+  depth: (level: number) => string;
+  /** Step titles by span name; other names show the agent's own title. */
+  steps: Record<TraceStepName, string>;
+  /** Detail labels by attribute key; other keys show as written. */
+  attrs: Record<string, string>;
+}
+
 /** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */
 export interface AppCopy {
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
@@ -1636,6 +1671,7 @@ export interface AppCopy {
       diagnosticsLabel: string;
       diagnosticsDescription: string;
       diagnosticsExport: string;
+      trace: LogTraceCopy;
     };
     nativeNotifications: {
       status: {

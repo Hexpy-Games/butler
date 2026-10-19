@@ -1,6 +1,7 @@
 import { taskGraphBridgeInput } from "./taskGraphBridge.ts";
 import { appCopy } from "./copy.ts";
 import { artifactBridgeInput } from "./artifactBridge.ts";
+import { requestTraceparent, withActionTrace } from "./traceparent.ts";
 import type {
   AppInfoView,
   MessageFileRef,
@@ -119,8 +120,9 @@ interface ButlerAppBridge {
 
 type ApiOptions = RequestInit & { body?: BodyInit | Record<string, unknown> | null };
 
-export async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
+export async function api<T = unknown>(path: string, init: ApiOptions = {}): Promise<T> {
   const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
+  const options = withActionTrace(path, init);
   const request = (requestPath: string) => bridge
     ? bridgeRequest<T>(bridge, requestPath, options)
     : browserRequest<T>(requestPath, options);
@@ -295,6 +297,8 @@ function browserRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
 async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: ApiOptions = {}): Promise<T> {
   const method = String(options.method ?? "GET").toUpperCase();
   const url = new URL(path, window.location.origin);
+  // User actions carry their trace context to the agent (set by api()).
+  const traceparent = requestTraceparent(options.headers);
   if (url.pathname === "/browser-history" || url.pathname.startsWith("/browser-history/")) return callBridge<T>(bridge, "history", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
   if (url.pathname === "/library" && method === "GET") return callBridge<T>(bridge,"listLibrary",Object.fromEntries(url.searchParams));
   if (url.pathname === "/library" && method === "POST") return callBridge<T>(bridge,"saveLibrary",parseBody(options.body));
@@ -493,7 +497,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "GET" && url.pathname === "/system-events") {
     return await callBridge<T>(bridge, "listSystemEvents", paginationRequest(url.searchParams));
   }
-  if (url.pathname === "/logs" || url.pathname === "/logs/config" || url.pathname === "/logs/storage") {
+  if (["/logs", "/logs/config", "/logs/storage", "/logs/trace"].includes(url.pathname) || url.pathname.startsWith("/logs/trace/")) {
     return await callBridge<T>(bridge, "logs", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
   }
   if (method === "GET" && url.pathname === "/usage-monitor") {
@@ -668,6 +672,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return await callBridge<T>(bridge, "updateSessionControls", {
       sessionId: decodeURIComponent(sessionControlsMatch[1]!),
       controls: parseBody(options.body),
+      traceparent,
     });
   }
   const planDecisionMatch = url.pathname.match(
@@ -765,6 +770,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       accessMode: body.access_mode,
       planMode: body.plan_mode,
       attachments: body.attachments,
+      traceparent,
     }));
   }
   const queuedMessageMatch = url.pathname.match(/^\/session-queue\/([^/]+)$/u);
@@ -810,14 +816,17 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       planMode: body.plan_mode,
       queuePolicy: body.queue_policy,
       attachments: body.attachments,
+      traceparent,
     }));
   }
   const retryMatch = method === "POST" ? url.pathname.match(/^\/turns\/([^/]+)\/retry$/) : null;
-  if (retryMatch) return await callBridge<T>(bridge, "retryTurn", { turnId: decodeURIComponent(retryMatch[1]) });
+  if (retryMatch) return await callBridge<T>(bridge, "retryTurn", { turnId: decodeURIComponent(retryMatch[1]), traceparent });
   const retryCurrentMatch = method === "POST" ? url.pathname.match(/^\/turns\/([^/]+)\/retry-current$/) : null;
-  if (retryCurrentMatch) return await callBridge<T>(bridge, "retryTurnWithCurrentControls", { turnId: decodeURIComponent(retryCurrentMatch[1]) });
+  if (retryCurrentMatch) {
+    return await callBridge<T>(bridge, "retryTurnWithCurrentControls", { turnId: decodeURIComponent(retryCurrentMatch[1]), traceparent });
+  }
   const cancelMatch = method === "POST" ? url.pathname.match(/^\/turns\/([^/]+)\/cancel$/) : null;
-  if (cancelMatch) return await callBridge<T>(bridge, "cancelTurn", { turnId: decodeURIComponent(cancelMatch[1]) });
+  if (cancelMatch) return await callBridge<T>(bridge, "cancelTurn", { turnId: decodeURIComponent(cancelMatch[1]), traceparent });
   const stewardCancelMatch = method === "POST"
     ? url.pathname.match(/^\/steward-relations\/([^/]+)\/cancel$/)
     : null;
