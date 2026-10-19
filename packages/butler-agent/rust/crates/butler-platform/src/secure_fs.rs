@@ -280,6 +280,20 @@ pub fn rename(from: &Path, to: &Path) -> io::Result<()> {
     sys::rename(from, to)
 }
 
+/// Publishes a replacement file using native [`fs::rename`] semantics,
+/// preserving already open readers where supported. Windows retries confirmed
+/// sharing conflicts for up to a second and retains the native POSIX fallback.
+/// The caller must flush the prepared file first; unlike [`rename`], this does
+/// not request Windows write-through. `before_retry` runs after each backoff,
+/// immediately before another replacement attempt; an error aborts publication.
+pub fn replace_file(
+    from: &Path,
+    to: &Path,
+    before_retry: &mut dyn FnMut() -> io::Result<()>,
+) -> io::Result<()> {
+    sys::replace_file(from, to, before_retry)
+}
+
 /// A logical record key as a regular filename component. Unix keeps its
 /// existing spelling; Windows encodes names with reserved characters or
 /// device names. The logical key stored inside the record does not change.
