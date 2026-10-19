@@ -162,6 +162,7 @@ async fn setup(fixture: &Fixture) -> (Input, MemoryGenerationHandle) {
         catchup_at: Arc::default(),
         unclean_start: Arc::new(Default::default()),
         catchup_progress: Arc::default(),
+        inventory: Arc::default(),
         probe: Arc::default(),
         vector_batch: Arc::default(),
         daily_batch: false,
@@ -472,7 +473,7 @@ async fn refused_stage_idles() {
     graph.ensure_cache_index(&input.shutdown).unwrap();
     assert!(graph.advance_episode_fts(&input.shutdown).unwrap());
     assert!(!graph.advance_episode_fts(&input.shutdown).unwrap());
-    graph.close().unwrap();
+    super::settle_inventory(graph, &generation, &input);
     *input.catchup_at.lock() = Some(std::time::Instant::now());
     let version: i64 = db
         .pragma_query_value(None, "data_version", |r| r.get(0))

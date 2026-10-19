@@ -265,6 +265,7 @@ async fn malformed_queue_head_keeps_its_error_after_canonical_catchup() {
         catchup_at: Arc::new(parking_lot::Mutex::new(None::<Instant>)),
         unclean_start: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         catchup_progress: Arc::new(parking_lot::Mutex::new(None)),
+        inventory: Arc::new(super::super::inventory::InventoryWake::started()),
         probe: Arc::default(),
         vector_batch: Arc::default(),
         daily_batch: false,
@@ -285,6 +286,22 @@ async fn malformed_queue_head_keeps_its_error_after_canonical_catchup() {
         )
         .unwrap();
     assert_eq!(cursor, "outcome");
+}
+
+/// Builds the generation's canonical inventory mirror, so the fixture holds
+/// no change-driven work, then closes `graph`.
+fn settle_inventory(
+    mut graph: crate::cognition::graph::GraphRepository,
+    generation: &crate::cognition::MemoryGenerationHandle,
+    input: &Input,
+) {
+    if let Ok(reader) = butler_turn::conversation::ConversationSourceReader::open(
+        &super::canonical_path(generation, &input.data_root),
+    ) {
+        while crate::cognition::sources::inventory_sync_step(&mut graph, &reader).unwrap() {}
+        reader.close().unwrap();
+    }
+    graph.close().unwrap();
 }
 
 mod cold;
