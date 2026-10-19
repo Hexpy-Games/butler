@@ -1249,6 +1249,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       prompt: "프롬프트를 입력해 주세요.",
       interval: "5분에서 24시간 사이로 정해 주세요.",
       accessMode: "권한을 선택해 주세요.",
+      model: "모델을 선택해 주세요.",
       invalid: "입력값을 확인해 주세요.",
     },
     runs: {
