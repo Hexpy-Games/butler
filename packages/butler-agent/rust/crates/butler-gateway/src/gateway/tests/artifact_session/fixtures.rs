@@ -14,7 +14,6 @@ use std::{
 
 use bytes::Bytes;
 use serde_json::{Value, json};
-use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 use crate::gateway::{
@@ -28,17 +27,13 @@ use crate::gateway::{
     AppSessionWorkspaceProvisioner, AppSessionWorkspaceSnapshot, AppSettingsFacts,
     AppSettingsFactsProvider, AppSettingsMutationPort, AppSourceDocument, AppSourceSnapshotRequest,
     AppTurn, AppWorkProgress, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
-    EnqueueReceipt, GatewayApplication, GatewayApplicationError, GatewayConfig,
-    MaterializedResponderFile, ResolvedNativeAssets, RuntimeReadinessView, VisualAdmissionRequest,
+    EnqueueReceipt, GatewayApplicationError, GatewayConfig, MaterializedResponderFile,
+    ResolvedNativeAssets, RuntimeReadinessView, VisualAdmissionRequest,
 };
 use butler_turn::btcc::ReasoningEffort;
 
 pub(crate) async fn start_real(application: Arc<AppApplication>) -> GatewayServer {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let application: Arc<dyn GatewayApplication> = application;
-    serve_gateway(listener, application, GatewayConfig::default())
-        .await
-        .unwrap()
+    serve_on_free_pair(application, GatewayConfig::default).await
 }
 
 pub(super) async fn artifact_request(address: std::net::SocketAddr) -> String {
