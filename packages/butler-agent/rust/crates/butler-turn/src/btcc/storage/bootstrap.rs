@@ -17,7 +17,7 @@ use butler_platform::sqlite;
 use std::fs;
 use std::path::Path;
 
-use rusqlite::{Connection, TransactionBehavior, params};
+use rusqlite::params;
 use serde_json::{Value, json};
 
 use super::{StorageError, StorageResult, migration, schema};
@@ -96,29 +96,17 @@ impl FreshStorage<'_> {
     /// fresh-install migration receipt, then syncs it.
     fn prepare(&self) -> StorageResult<()> {
         let mut db = sqlite::open(self.temp).map_err(StorageError::sqlite)?;
-        self.initialize(&mut db)?;
-        db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+        schema::create_current(&db).map_err(StorageError::sqlite)?;
+        migration::apply(&mut db).map_err(StorageError::sqlite)?;
+        db.execute_batch(METADATA_SCHEMA)
             .map_err(StorageError::sqlite)?;
-        db.close()
-            .map_err(|(_, error)| StorageError::sqlite(error))?;
-        butler_platform::secure_fs::sync_path(self.temp).map_err(io_error)
-    }
-
-    /// Groups schema and bootstrap metadata into one durable commit. Migration
-    /// retains its separate transaction; validate committed state afterward.
-    fn initialize(&self, db: &mut Connection) -> StorageResult<()> {
-        let tx = db
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(StorageError::sqlite)?;
-        schema::create_current(&tx).map_err(StorageError::sqlite)?;
-        tx.execute_batch(METADATA_SCHEMA)
-            .map_err(StorageError::sqlite)?;
-        validate::empty_canonical_database(&tx)?;
-        tx.execute(
+        validate::empty_canonical_database(&db)?;
+        db.execute(
             "INSERT INTO agent_storage_migration_receipt (singleton,manifest_id,receipt_json) VALUES (1,?1,?2)",
             params![self.id, self.receipt().to_string()],
         )
         .map_err(StorageError::sqlite)?;
+        validate::receipt(&db, self.id)?;
         let marker = json!({
             "schema": "butler.agent-btcc-storage-activation.v1",
             "manifestId": self.id,
@@ -127,15 +115,17 @@ impl FreshStorage<'_> {
             "firstActivatedAt": self.now_iso,
             "activatedAt": self.now_iso,
         });
-        tx.execute(
+        db.execute(
             "INSERT INTO agent_storage_activation_marker (singleton,manifest_id,marker_json) VALUES (1,?1,?2)",
             params![self.id, marker.to_string()],
         )
         .map_err(StorageError::sqlite)?;
-        tx.commit().map_err(StorageError::sqlite)?;
-        migration::apply(db).map_err(StorageError::sqlite)?;
-        validate::receipt(db, self.id)?;
-        validate::readiness(db, self.id)
+        validate::readiness(&db, self.id)?;
+        db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+            .map_err(StorageError::sqlite)?;
+        db.close()
+            .map_err(|(_, error)| StorageError::sqlite(error))?;
+        butler_platform::secure_fs::sync_path(self.temp).map_err(io_error)
     }
 
     /// The fresh-install receipt. A fresh source has no rows or claims:
@@ -217,7 +207,6 @@ fn publish(temp: &Path, path: &Path, before_publish: impl FnOnce()) -> std::io::
 
 #[cfg(test)]
 pub(super) fn publication_regression() {
-    transaction_tests::fresh_schema_and_metadata_commit_once();
     let root = std::env::temp_dir().join(format!("bootstrap-race-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&root).unwrap();
     let temp = root.join("prepared");
@@ -250,6 +239,3 @@ pub(super) fn publication_regression() {
     assert!(verdict::needs_recheck(&missing).is_err());
     fs::remove_dir_all(root).unwrap();
 }
-
-#[cfg(test)]
-mod transaction_tests;
