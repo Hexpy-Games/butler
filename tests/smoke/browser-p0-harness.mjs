@@ -70,12 +70,21 @@ export function installBrowserP0Harness(window, userBrowser) {
       const tabId = await window.webContents.executeJavaScript(`window.butlerBrowser.call('create',${JSON.stringify({ url })})`);
       productTabs.set(id, tabId);
       await window.webContents.executeJavaScript(`window.butlerBrowser.call('bounds',${JSON.stringify({ id: tabId, value: { x: 900, y: 0, width: 320, height: 180, visible: true } })})`);
-      await get(id).executeJavaScript("document.readyState");
+      for (const end = performance.now() + 30_000; !this.productLoaded(tabId, url);) {
+        if (performance.now() > end) throw new Error("Product tab did not load its URL");
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
       return tabId;
     },
     productBlocked: () => userBrowser.snapshot().blocked,
     step: id => observeActCapture(get(id)),
     productStep: id => observeActCapture(userBrowser.tabs.get(id).view.webContents),
+    // A product tab loads about:blank to apply its web identity before its URL;
+    // its published state already names the URL, so check the page itself.
+    productLoaded: (id, url) => {
+      const contents = userBrowser.tabs.get(id)?.view?.webContents;
+      return Boolean(contents && contents.getURL() === url && !contents.isLoading());
+    },
     productView: id => ({ attached: Boolean(userBrowser.tabs.get(id)?.attached), bounds: userBrowser.tabs.get(id)?.view?.getBounds() }),
     productErrors: () => ({ count: productErrorCount, errors: productErrors }),
     productInventory: () => ({ tabs: userBrowser.tabs.size, profiles: userBrowser.profiles.size, stillBytes: [...userBrowser.tabs.values()].reduce((n, t) => n + t.still.length, 0) }),

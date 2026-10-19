@@ -60,7 +60,7 @@ async function runLocale(locale: "ko" | "en") {
     setAppCopyLanguage(locale);
     // Start after the daily scheduler boundary regardless of the host clock or timezone.
     const timezone = new Date().getUTCHours() < 12 ? "Etc/GMT-12" : "UTC";
-    const server = await createNativeAppServer({ uiRoot: resolve(before ? ".tmp/security-before-ui" : "packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: locale } }, env: { BUTLER_APP_FOREGROUND_LEASE: "0", TZ: timezone } });
+    const server = await createNativeAppServer({ dailyJobs: "due", uiRoot: resolve(before ? ".tmp/security-before-ui" : "packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: locale } }, env: { BUTLER_APP_FOREGROUND_LEASE: "0", TZ: timezone } });
     const { secret } = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8"));
     const fixture = await seedApprovalFixture(server);
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });

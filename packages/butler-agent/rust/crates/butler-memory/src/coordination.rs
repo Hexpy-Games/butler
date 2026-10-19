@@ -26,3 +26,6 @@ pub(crate) use admission::{
     capture as capture_admission_floor, capture_project as capture_project_admission_floor,
     has_floor as has_admission_floor, suppressed as admission_suppressed,
 };
+
+#[cfg(feature = "e2e-fixtures")]
+mod wait_observation;

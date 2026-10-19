@@ -9,7 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts";
-import { alive, assertShortcuts, bridge, ownedProcesses, powershell, readJson, removeProfile, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
+import { assertShortcuts, bridge, ownedProcesses, ownedSurvivors, powershell, readJson, removeProfile, shortcutPaths, waitFor, waitForOwnedExit, type OwnedProcesses } from "./installer-smoke-support.ts";
 import { smokeProviderReply, type SmokeProviderCalls } from "./smoke-provider.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 import { proveReleasedDownloads, releasedDownloadsReply, type DownloadsProof } from "./released-downloads-smoke.ts";
@@ -25,7 +25,7 @@ const expected = readFileSync(installer + ".sha256", "utf8").trim().split(/\s+/u
 assert.equal(createHash("sha256").update(readFileSync(installer)).digest("hex"), expected);
 const root = realpathSync.native(mkdtempSync(join(tmpdir(), "butler-released-e2e-")));
 const data = join(root, "data");
-const owned = new Set<number>();
+const owned: OwnedProcesses = new Map();
 const debugPort = await freePort();
 const agentPort = await freePort();
 let page: ElectronPage | null = null;
@@ -90,7 +90,7 @@ try {
   ownedProcesses(data, owned);
   await page.expression("setTimeout(() => window.butlerApp.quitApp({confirmed:true}), 50); true");
   page.close(); page = null;
-  await waitFor(() => [...owned].every(pid => !alive(pid)), "released App and Agent quit");
+  await waitForOwnedExit(owned, "released App and Agent quit");
   run(updater, ["--uninstall", "--silent"]);
   uninstalled = true;
   await waitFor(() => !existsSync(stub), "released uninstall");
@@ -105,7 +105,7 @@ try {
 } finally {
   page?.close();
   ownedProcesses(data, owned);
-  for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
+  for (const { pid } of ownedSurvivors(owned)) { try { process.kill(pid, "SIGKILL"); } catch {} }
   if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
   server.stop(true);
   removeProfile(root, env);

@@ -85,4 +85,17 @@ for ref in v0.1.0-preview.1 v0.1.0; do
   fi
   if grep -q '^BUTLER_SIGN_IDENTITY=-$' "$GITHUB_ENV"; then echo "$ref fell back to ad-hoc" >&2; exit 1; fi
 done
+# Apple can't notarize ad-hoc signatures: unsigned packages skip it, releases refuse "-".
+rm -f "$POLICY_CALLS"
+if BUTLER_SIGN_IDENTITY=- "$script" notarize "$work/Fake.app" > "$work/log" 2>&1; then
+  echo 'release accepted an ad-hoc identity for notarization' >&2; exit 1
+fi
+BUTLER_SIGN_REQUIRED= BUTLER_SIGN_IDENTITY=- env -u BUTLER_NOTARY_KEY_PATH -u BUTLER_NOTARY_KEY_ID -u BUTLER_NOTARY_ISSUER_ID \
+  "$script" notarize "$work/Fake.app" > "$work/log" 2>&1
+grep -q 'skipping notarization and stapling' "$work/log" || { echo 'ad-hoc notarize did not skip' >&2; exit 1; }
+if [ -s "$POLICY_CALLS" ]; then echo 'ad-hoc notarize reached Apple tools' >&2; exit 1; fi
+if BUTLER_SIGN_REQUIRED= BUTLER_SIGN_IDENTITY=ABCDEF env -u BUTLER_NOTARY_KEY_PATH \
+  "$script" notarize "$work/Fake.app" > "$work/log" 2>&1; then
+  echo 'a real identity skipped notarization without notary credentials' >&2; exit 1
+fi
 echo 'policy: previews and stable require Developer ID, valid notary credentials and stapling'
