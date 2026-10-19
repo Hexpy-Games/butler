@@ -3,8 +3,15 @@ import { strict as assert } from "node:assert";
 import { loadavg } from "node:os";
 import { join } from "node:path";
 import { writeFileSync } from "node:fs";
+import { expectBrowserStills } from "../support/browser-still-delivery";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { browserStub, describeBrowser, bridgeBrowser, latestBrowser } from "../support/browser-agent-stub";
+async function waitForPerfLoad() {
+  while(loadavg()[0]>=8) {
+    console.log(JSON.stringify({waitingForLoad:true,loadAverage1m:loadavg()[0]}));
+    await new Promise(done=>setTimeout(done,5000));
+  }
+}
 const evidence=process.env.BUTLER_BROWSER_EVIDENCE;assert.ok(evidence);
 const reportOnly=process.env.BUTLER_BROWSER_PERF_REPORT_ONLY==='1';
 const stub=browserStub(), app=await browserAgentApp(evidence,stub.handler);
@@ -24,8 +31,10 @@ try {
   const tabs=await app.call<{tabs:Array<{id:string;agent:boolean}>}>("state");const tab=tabs.tabs.find(t=>t.agent)!.id;
   await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)}).view.webContents.executeJavaScript("(()=>{document.body.innerHTML='<style>body{margin:0;font:12px system-ui;color:black;background:white}.row{height:24px}</style><main></main>';const root=document.querySelector('main');for(let n=0;n<10000;n++){const e=document.createElement(n<200?'button':'div');e.className='row';e.id='node-'+n;e.textContent='Item '+n;root.append(e)}})()")`);
   const admin=JSON.parse(await Bun.file(join(app.gateway.butlerData,"app/runtime/auth/local-admin.json")).text()).secret as string;
+  await waitForPerfLoad();
   const rows=[];
   for(let index=0;index<30;index++) {
+    await waitForPerfLoad();
     const before=performance.now(),loadAverage1m=loadavg()[0];
     const value=await app.gateway.api<any>("/internal/browser/calls",{method:"POST",headers:{"x-butler-admin":admin},body:JSON.stringify({op:"tab.observe",session:"general",tab,args:{}})});
     const wallMs=performance.now()-before;
@@ -40,34 +49,40 @@ try {
   writeFileSync(join(evidence,"observe-perf.json"),JSON.stringify({p95,rows,budgetMs:250,overBudget:p95>250,reportOnly},null,2));
   console.log(JSON.stringify({p95,loadAverage1m:loadavg()[0],reportOnly}));if(!reportOnly) assert.ok(p95<=250,`observe p95 ${p95} exceeds 250ms`);
   const stopProofs:unknown[]=[];
+  const acts:Array<Parameters<typeof expectBrowserStills>[1]>=[];
   const latencies:Record<string,Array<{ms:number;loadAverage1m:number}>>={noop:[],act:[],stop:[]};
   const call=(op:string,args:unknown={},call_id?:string)=>app.gateway.api<any>("/internal/browser/calls",{method:"POST",headers:{"x-butler-admin":admin},body:JSON.stringify({op,session:"general",tab,args,call_id})});
   for(let n=0;n<30;n++) {
+    await waitForPerfLoad();
     let start=performance.now(),loadAverage1m=loadavg()[0];
     const tabs=await call('tabs.list');latencies.noop.push({ms:performance.now()-start,loadAverage1m});
     assert.equal(tabs.tabs.length,1);assert.equal(tabs.tabs[0].id,tab);
     const o=await call('tab.observe'),args={observation:o.obs,steps:[{action:'click',ref:o.nodes[0].ref}]};
     const prepared=await call('tab.prepare',args);assert.equal(prepared.status,'ok');
+    await waitForPerfLoad();
     start=performance.now();loadAverage1m=loadavg()[0];
     const act=await call('tab.act',{...args,prepared_steps:prepared.steps});latencies.act.push({ms:performance.now()-start,loadAverage1m});
-    assert.equal(act.steps.length,1);assert.equal(act.steps[0].status,'completed');assert.ok(act.steps[0].still_file);
+    assert.equal(act.steps.length,1);assert.equal(act.steps[0].status,'completed');acts.push(act);
     const batch={...args,steps:Array.from({length:10},()=>args.steps[0])};
     const batchPrepared=await call('tab.prepare',batch);assert.equal(batchPrepared.status,'ok');
     const callId=crypto.randomUUID(),pending=call('tab.act',{...batch,prepared_steps:batchPrepared.steps},callId);
     await waitBrowser(()=>app.main<boolean>(`Boolean(globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)}).busy)`),'active batch before stop');
     start=performance.now();loadAverage1m=loadavg()[0];
     const stop=await call('tab.cancel',{call_id:callId});latencies.stop.push({ms:performance.now()-start,loadAverage1m});assert.equal(stop.status,'ok');
-    const stopped=await pending;stopProofs.push(stopped);assert.equal(stopped.steps.length,10);
+    const stopped=await pending;stopProofs.push(stopped);acts.push(stopped);assert.equal(stopped.steps.length,10);
     const first=stopped.steps.findIndex((step:any)=>step.status==='not_dispatched');
     assert.ok(first>=0,'stop fences undispatched steps');
     assert.ok(stopped.steps.slice(first).every((step:any)=>step.status==='not_dispatched'));
-    assert.ok(stopped.steps.slice(0,first).every((step:any)=>step.status==='completed' && step.still_file));
+    assert.ok(stopped.steps.slice(0,first).every((step:any)=>step.status==='completed'));
   }
+  const stills=[];
+  for(const act of acts) stills.push(await expectBrowserStills(app.gateway,act));
+  assert.equal(stills.length,acts.length,"every act checked for complete still delivery");
   const budgets={noop:15,act:50,stop:100},failures:string[]=[],operationP95:Record<string,number>={};
   for(const [name,samples]of Object.entries(latencies)) {
     const sorted=samples.map(row=>row.ms).sort((a,b)=>a-b),p95=sorted[Math.ceil(sorted.length*.95)-1]!;operationP95[name]=p95;
     if(p95>budgets[name as keyof typeof budgets])failures.push(`${name} p95 ${p95} exceeds ${budgets[name as keyof typeof budgets]}`);
   }
-  writeFileSync(join(evidence,'operation-perf.json'),JSON.stringify({operationP95,latencies,stopProofs,budgets,failures,reportOnly},null,2));
+  writeFileSync(join(evidence,'operation-perf.json'),JSON.stringify({operationP95,latencies,stopProofs,stills,budgets,failures,reportOnly},null,2));
   if(!reportOnly) assert.deepEqual(failures,[],'browser operation budgets');
 }finally{await app.stop()}

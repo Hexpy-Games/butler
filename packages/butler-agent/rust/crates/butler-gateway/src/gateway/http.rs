@@ -6,6 +6,7 @@ mod authority;
 mod authority_permissions;
 mod body;
 mod browser_host;
+mod browser_stills;
 mod content;
 mod library;
 mod start;

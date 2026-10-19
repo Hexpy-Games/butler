@@ -1,5 +1,6 @@
 // test-category: race
 /** Real stub turns, native host lifetimes and renderer browser:state snapshots. */
+import { expectBrowserStills } from "../support/browser-still-delivery";
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -112,7 +113,8 @@ try {
   const firstUndispatched = stopped.steps.findIndex((step: { status: string }) => step.status === "not_dispatched");
   assert.ok(firstUndispatched >= 0, "cancel fences remaining input");
   assert.ok(stopped.steps.slice(firstUndispatched).every((step: { status: string }) => step.status === "not_dispatched"));
-  assert.ok(stopped.steps.slice(0, firstUndispatched).every((step: { status: string; still_file?: string }) => step.status === "completed" && step.still_file));
+  await expectBrowserStills(app.gateway, stopped);
+  assert.ok(stopped.steps.slice(0, firstUndispatched).every((step: { status: string; still_file?: string }) => step.status === "completed"));
   await cleared("cancel retains completed batch receipts");
 
   await gate("tab.observe"); const paneCall = request(); await active();

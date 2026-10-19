@@ -1,4 +1,5 @@
 import { stepStill } from "./stills.mjs";
+import { drainStills } from "./still-delivery.mjs";
 import { shortId } from "./ids.mjs";
 import { browserEvent } from "./events.mjs";
 
@@ -73,7 +74,8 @@ export async function answerDialog(browser, tab, args) {
   tab.pendingBatch = null;
   return { status: "ok", tab: tab.id, epoch: tab.epoch, url: tab.url, steps };
 }
-export function requestClose(browser, tab) {
+export async function requestClose(browser, tab) {
+  if (tab) await drainStills(tab);
   if (!tab) return Promise.resolve({ status: "ok" });
   if (tab.dialog) return Promise.resolve(pendingDialog(tab));
   const contents = tab.view?.webContents;

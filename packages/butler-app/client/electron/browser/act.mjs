@@ -1,5 +1,5 @@
 import { pendingDialog } from "./dialogs.mjs";
-import { stepStill } from "./stills.mjs";
+import { enqueueStill } from "./still-delivery.mjs";
 import { resolveStep, selectStep, selectTextStep } from "./observe.mjs";
 import { dragTarget, dispatchDrag } from "./drag.mjs";
 import { resolvePoint } from "./point.mjs";
@@ -163,6 +163,7 @@ export async function actBatch(tab, args, session) {
   let failed = false;
   const deadline = Date.now() + Math.min(Number(args.deadline_ms) || 30000, 30000);
   for (const [index, step] of (args.steps ?? []).entries()) {
+    await tab.stillCapture;
     if (failed || Date.now() >= deadline || tab.cancelled || tab.owner !== `conversation:${session}` || tab.holder !== "agent" || tab.epoch !== epoch) {
       steps.push({ status: "not_dispatched", reason: tab.owner !== `conversation:${session}` ? "owner_changed" : failed ? "previous_step_failed" : "control_changed" }); failed = true; continue;
     }
@@ -180,10 +181,7 @@ export async function actBatch(tab, args, session) {
         if (effect) steps.at(-1).canvas_effect = effect;
       }
       if (tab.dialog) { steps[steps.length-1] = { status:"unknown", reason:"dialog_pending", hit:target.hit }; failed=true; }
-      else if (steps.at(-1).status === "completed" && tab.epoch === epoch && tab.holder === "agent") {
-        steps.at(-1).still = await stepStill(tab);
-        if(tab.dialog) {steps[steps.length-1]={ status:"unknown", reason:"dialog_pending", hit:target.hit };failed=true;}
-      }
+      else if (steps.at(-1).status === "completed") enqueueStill(tab, index, epoch, args.deliverStill);
     } catch { steps[index] = { status: "unknown", reason: "dispatch_interrupted" }; failed = true; }
   }
   recordBatch(tab, args, steps);

@@ -29,7 +29,12 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
     try {
       result = frame.op === "output.check" ? await checkOutput(frame.args, frame.lease)
         : frame.op === "reader.render" ? await renderReader(frame.args)
-          : await executeBrowser?.(frame) ?? { status: "unknown", reason: "unsupported_op" };
+          : await executeBrowser?.({ ...frame, deliverStill: async value => {
+            const response = await request("/internal/browser-host/stills", { method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ session: frame.session, tab: frame.tab, act_id: frame.id, ...value }) });
+            if (!response.ok) throw new Error("still_upload_failed");
+          } }) ?? { status: "unknown", reason: "unsupported_op" };
     }
     catch (error) {
       // Keep the cause: an executor error is otherwise invisible to diagnosis.

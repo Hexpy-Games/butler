@@ -56,7 +56,7 @@ try {
         }
         await new Promise(done=>setImmediate(done));
         const releasedByEvent=settled;
-        release?.();await pending;await new Promise(done=>setImmediate(done));
+        release?.();await pending;await tab.stillCapture;await new Promise(done=>setImmediate(done));
         rows.push({stage,ending,mode,requested,settled:releasedByEvent,title:contents.isDestroyed()?'':contents.getTitle(),image,listeners:listeners(),baseline,stale,status:value?.status,stepStatus:value?.steps?.[0]?.status,reason:value?.steps?.[0]?.reason});
       } finally {
         if(!contents.isDestroyed()){contents.executeJavaScriptInIsolatedWorld=originalPaint;contents.capturePage=originalCapture;}
@@ -124,6 +124,7 @@ try {
           mode==='act'?actBatch(tab,args,'s1'):mode==='answer'?answerDialog(browser,tab,{dialog:tab.dialog.id,accept:true}):mode==='comparison'?comparisonThumbnail(tab):stepStill(tab),
           new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Dialog blocked the still wait')),5000)}),
         ]);
+        if(mode==='act')await tab.stillCapture;
         clearTimeout(timer);
         const elapsedMs=Date.now()-started;
         if(!tab.dialog)throw Error('The real page dialog did not open');
@@ -154,11 +155,15 @@ try {
     assert.equal(result.existingImage, false, "an existing dialog returns no image");
     assert.equal(result.existingRequested, 1, "an existing dialog never asks the blocked renderer to paint");
     assert.deepEqual(result.listeners, result.baseline, `${result.mode}: lifecycle and debugger listeners are removed`);
-    if (!["still", "comparison"].includes(result.mode)) {
+    if (result.mode === "act") {
+      assert.equal(result.status, "ok", "a later capture dialog never rewrites the acknowledged act");
+      assert.equal(result.pending, false);
+      assert.equal(result.reason, undefined);
+    } else if (result.mode === "answer") {
       assert.equal(result.status, "dialog_pending");
       assert.equal(result.pending, true, "the batch is retained for the pending dialog");
       assert.equal(result.nextDialog, "Paint wait");
-      if (result.mode === "act") assert.equal(result.reason, "dialog_pending");
+
     }
   }
   const comparison = await app.main<{ reused: boolean; captures: number; rejectedEmpty: boolean; changedFresh: boolean; observed: boolean }>(`(async()=>{

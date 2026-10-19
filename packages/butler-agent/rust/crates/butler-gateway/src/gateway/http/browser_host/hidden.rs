@@ -28,7 +28,13 @@ pub(super) fn launch_of(headers: &HeaderMap) -> Option<String> {
 /// Whether the attached hidden host still serves a task: a call in flight or
 /// a turn that used it and has not ended.
 fn busy(hub: &Inner) -> bool {
-    !hub.pending.is_empty() || !hub.turns.is_empty()
+    !hub.pending.is_empty()
+        || !hub.turns.is_empty()
+        || hub
+            .tabs
+            .ready_waits()
+            .iter()
+            .any(|tab| tab["inUse"] == true)
 }
 
 /// Admits an attach. The hidden host only as the launch the agent started,

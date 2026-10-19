@@ -42,6 +42,7 @@ pub(in crate::gateway::http) async fn route(
         Handler::Library => library::route(state, request).await,
         Handler::History => library::history::route(state, request).await,
         Handler::Browser => browser_host::route(state, request, &client).await,
+        Handler::BrowserStills => browser_stills::route(state, request).await,
         Handler::Preview => content::preview::view(&state, &request),
         Handler::Output => content::view(state, request).await,
         Handler::Security => security_settings::route(state, request).await,

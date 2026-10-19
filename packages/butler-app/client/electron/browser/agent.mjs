@@ -139,7 +139,7 @@ async function executeCall(browser, frame, tracked) {
   return drainEvents(browser, frame, result);
 }
 async function executeFrame(browser, frame) {
-  if (!browser.enabled()) return { status: "refused", reason: "browsing_disabled" };
+  if (browser.disposing || !browser.enabled()) return { status: "refused", reason: "browsing_disabled" };
   const { op, session, args = {} } = frame;
   if (!/^[a-zA-Z0-9_-]{1,128}$/u.test(session ?? "")) return { status: "refused", reason: "invalid_session" };
   const owner = `conversation:${session}`;
@@ -150,7 +150,7 @@ async function executeFrame(browser, frame) {
   }
   if (op === "tab.open") return openAgent(browser, frame);
   const tab = browser.tabs.get(frame.tab);
-  if (!tab || tab.owner !== owner) return { status: "refused", reason: "not_your_tab" };
+  if (!tab || tab.closeDrain || tab.owner !== owner) return { status: "refused", reason: "not_your_tab" };
   if (INTERACTIONS.has(op)) tab.acted = true;
   if (op === "tab.selection") return browser.selection.result(tab, session);
   if (tab.profile === "signed_in" && !["tab.cancel", "tab.wait", "tab.waiting"].includes(op) && !applySignedInPolicy(tab, args.policy))
@@ -193,8 +193,10 @@ async function executeFrame(browser, frame) {
     // Tabs act independently; only a second batch on a tab whose batch still runs is refused.
     if (tab.busy) return { status: "not_dispatched", reason: "browser_busy" };
     tab.busy = true; tab.cancelled = false; tab.callId = frame.call_id; browser.publish();
-    try { return await actBatch(tab, { ...args, deadline_ms: frame.deadline_ms }, session); }
-    finally { tab.busy = false; browser.publish(); }
+    try {
+      tab.activeAct = actBatch(tab, { ...args, deliverStill: frame.deliverStill, deadline_ms: frame.deadline_ms }, session);
+      return await tab.activeAct;
+    } finally { tab.activeAct = null; tab.busy = false; browser.publish(); }
   }
   return { status: "refused", reason: "unsupported_op" };
 }

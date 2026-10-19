@@ -38,12 +38,18 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let (sender, receiver) = oneshot::channel();
     let tab = frame["tab"].as_str().map(str::to_owned);
     let sent = json!({"args":{"policy":frame["args"]["policy"],"entry_id":frame["args"]["entry_id"],"fill_token":frame["args"]["fill_token"],"kind":frame["args"]["kind"],"item_id":frame["args"]["item_id"]},"tab":frame["tab"],"turn_id":frame["turn_id"]});
+    if op == "tab.act" {
+        super::still_delivery::reserve(&state, &id, &frame).await?;
+    }
     if let Some(refused) = dispatch(&state, frame, count, deadline, &id, sender)? {
+        if op == "tab.act" {
+            super::still_delivery::finish(&state, &id, &session, &mut json!({})).await?;
+        }
         return Ok(refused);
     }
     let _pending = PendingCall {
         state: state.clone(),
-        id,
+        id: id.clone(),
     };
     let mut result = tokio::select! {
         () = state.shutdown.cancelled() => json!({"status":"unknown","reason":"browser_host_lost"}),
@@ -53,26 +59,12 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
             Err(_) => json!({"status":"unknown","reason":"timeout"}),
         }
     };
-    if let Some(tab) = tab
-        && state
-            .browser
-            .0
-            .lock()
-            .map_err(|_| HttpError::Internal)?
-            .tabs
-            .check(&session, &tab, "tab.cancel")
-            == Err("not_your_tab")
-    {
-        // A moved page's observation must not cross the new conversation boundary.
-        if op == "tab.act" {
-            result["reason"] = json!("owner_changed");
-            result["status"] = json!("interrupted");
-        } else {
-            result = json!({"status":"not_dispatched","reason":"owner_changed"});
-        }
-    }
+    fence_result(&state, &session, &op, tab, &mut result)?;
     super::signed_in::recheck(&sent, &mut result);
     finish_result(&state, &session, &op, &sent, &mut result).await?;
+    if op == "tab.act" {
+        super::still_delivery::finish(&state, &id, &session, &mut result).await?;
+    }
     response(count, result)
 }
 
@@ -277,6 +269,7 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
         hub.tabs
             .replace(tabs)
             .map_err(|_| error(400, "invalid_snapshot"))?;
+        super::hidden::hand_over(&state, &mut hub);
         (changed, handovers)
     };
     state.browser.2.notify_waiters();
@@ -302,6 +295,10 @@ pub(in crate::gateway::http) async fn close_owner(
 }
 
 pub(super) async fn still(state: Arc<HttpState>, mut value: Value) -> Result<Response, HttpError> {
+    if value.get("act_id").is_some() {
+        let result = super::still_delivery::upload(&state, &value).await?;
+        return super::super::json(StatusCode::OK, result);
+    }
     let session = value["session"].as_str().unwrap_or("").to_owned();
     {
         let hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
@@ -425,4 +422,32 @@ fn deadline(op: &str, frame: &Value) -> u64 {
         "tab.observe" if frame["args"]["settle"] == true => 8000,
         _ => 5000,
     }
+}
+
+fn fence_result(
+    state: &HttpState,
+    session: &str,
+    op: &str,
+    tab: Option<String>,
+    result: &mut Value,
+) -> Result<(), HttpError> {
+    if let Some(tab) = tab
+        && state
+            .browser
+            .0
+            .lock()
+            .map_err(|_| HttpError::Internal)?
+            .tabs
+            .check(session, &tab, "tab.cancel")
+            == Err("not_your_tab")
+    {
+        // A moved page's observation must not cross the new conversation boundary.
+        if op == "tab.act" {
+            result["reason"] = json!("owner_changed");
+            result["status"] = json!("interrupted");
+        } else {
+            *result = json!({"status":"not_dispatched","reason":"owner_changed"});
+        }
+    }
+    Ok(())
 }
