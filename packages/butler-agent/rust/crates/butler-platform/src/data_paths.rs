@@ -81,6 +81,8 @@ pub const LOCAL_ADMIN: &str = "app/runtime/auth/local-admin.json";
 pub const LOCAL_AUTH: &str = "app/runtime/auth/local-agent-auth.json";
 /// Project-folder token signing secret.
 pub const FOLDER_SECRET: &str = "state/app-gateway/project-folder-token-secret";
+/// App gateway credentials that sandboxed commands must never read.
+pub const GATEWAY_CREDENTIALS: &[&str] = &[LOCAL_AUTH, LOCAL_ADMIN, FOLDER_SECRET];
 /// Electron-owned stores: ui-crash-store.mjs, wallpaper-state-log.mjs and main.mjs.
 pub const APP_LOGS: &str = "app/logs";
 /// Electron composer draft files.

@@ -1,7 +1,12 @@
-//! Exercise the shared guided caller on Linux and macOS, including data aliases.
+//! Exercise the shared guided caller on every enforced sandbox host, including
+//! data aliases and the App gateway credentials kept in the data folder.
 use super::*;
+use butler_platform::data_paths::GATEWAY_CREDENTIALS;
 use butler_turn::workspace::{Commands, GuidedAccess, GuidedCommandInput};
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::{BTreeSet, HashMap},
+    path::{Path, PathBuf},
+};
 use tokio_util::sync::CancellationToken;
 
 async fn command(
@@ -36,6 +41,24 @@ async fn command(
     Ok((output.summary.exit_code, stdout))
 }
 
+/// Writes each gateway credential under `data` and an ordinary file beside
+/// it; returns the credentials and the ordinary neighbours.
+fn gateway_fixtures(data: &Path) -> Result<(Vec<PathBuf>, Vec<PathBuf>), HarnessError> {
+    let mut neighbours = BTreeSet::new();
+    let mut credentials = Vec::new();
+    for relative in GATEWAY_CREDENTIALS {
+        let credential = data.join(relative);
+        let parent = credential.parent().unwrap();
+        std::fs::create_dir_all(parent)?;
+        std::fs::write(&credential, "private-gateway-fixture")?;
+        let neighbour = parent.join("ordinary-neighbour.txt");
+        std::fs::write(&neighbour, "complete-data-fixture")?;
+        neighbours.insert(neighbour);
+        credentials.push(credential);
+    }
+    Ok((credentials, neighbours.into_iter().collect()))
+}
+
 #[tokio::test]
 async fn contained_commands_allow_data_reads_and_keep_writes_and_credentials_denied()
 -> Result<(), HarnessError> {
@@ -57,13 +80,16 @@ async fn contained_commands_allow_data_reads_and_keep_writes_and_credentials_den
         let auth = data.join("auth/provider.json");
         std::fs::create_dir_all(auth.parent().unwrap())?;
         std::fs::write(&auth, "private-auth-fixture")?;
+        let (gateway, neighbours) = gateway_fixtures(data)?;
         let alias = setup.sandbox.workspace.join("data-alias");
         butler_platform::secure_fs::symlink(data, &alias)?;
-        for path in [&file, &alias.join("ordinary.txt")] {
+        let mut readable = vec![file, alias.join("ordinary.txt")];
+        readable.extend(neighbours);
+        for path in &readable {
             let (status, stdout) =
                 command(&owner, &setup, data, format!("cat '{}'", path.display())).await?;
-            assert_eq!(status, Some(0));
-            assert_eq!(stdout, b"complete-data-fixture");
+            assert_eq!(status, Some(0), "{}", path.display());
+            assert_eq!(stdout, b"complete-data-fixture", "{}", path.display());
         }
         let target = data.join("denied-write.txt");
         let (status, _) = command(
@@ -75,10 +101,15 @@ async fn contained_commands_allow_data_reads_and_keep_writes_and_credentials_den
         .await?;
         assert_ne!(status, Some(0));
         assert!(!target.exists());
-        for private in [&credential, &auth, &alias.join("auth/provider.json")] {
+        let mut denied = vec![credential.clone(), auth, alias.join("auth/provider.json")];
+        for relative in GATEWAY_CREDENTIALS {
+            denied.push(alias.join(relative));
+        }
+        denied.extend(gateway);
+        for private in &denied {
             let (status, stdout) =
                 command(&owner, &setup, data, format!("cat '{}'", private.display())).await?;
-            assert_ne!(status, Some(0));
+            assert_ne!(status, Some(0), "{}", private.display());
             assert!(stdout.is_empty(), "credential output must remain empty");
         }
         std::fs::remove_file(alias)?;
