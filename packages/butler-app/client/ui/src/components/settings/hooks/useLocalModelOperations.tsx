@@ -38,6 +38,7 @@ interface UseLocalModelOperationsProps {
   setManualModelId: (value: string) => void;
   setManualDisplayName: (value: string) => void;
   setManualContext: (value: string) => void;
+  seedImageInput: (model: AppModelSummary | null) => void;
   setBusy: (value: "discover" | "register" | "delete" | null) => void;
   setStatus: (value: string) => void;
   onCatalogChange: (catalog: ModelCatalogView) => void;
@@ -64,6 +65,7 @@ export function useLocalModelOperations({
   setManualModelId,
   setManualDisplayName,
   setManualContext,
+  seedImageInput,
   setBusy,
   setStatus,
   onCatalogChange,
@@ -87,6 +89,7 @@ export function useLocalModelOperations({
       setManualContext(
         String(result.models[0]?.context_window_tokens ?? manualContext),
       );
+      seedImageInput(result.models[0] ?? null);
       setStatus(copy.discoveredStatus(result.models.length));
     } catch (error) {
       setDiscoveryError(apiErrorCode(error) ?? "local_model_discovery_failed");

@@ -57,6 +57,8 @@ export function LocalModelSettings({
     canRegister,
     editModel,
     imageInput,
+    seedImageInput,
+    chooseDiscoveredModel,
   } = state;
 
   useEffect(() => {
@@ -95,20 +97,12 @@ export function LocalModelSettings({
     setManualModelId,
     setManualDisplayName,
     setManualContext,
+    seedImageInput,
     setBusy,
     setStatus,
     onCatalogChange: setModelCatalog,
     onSaved: () => { clearLeaveGuard(); back(); },
   });
-
-  function chooseDiscoveredModel(modelRef: string) {
-    setSelectedModelRef(modelRef);
-    const model = discovery?.models.find((item) => item.model_ref === modelRef);
-    if (!model) return;
-    setManualModelId(model.model_id);
-    setManualDisplayName(model.display_name);
-    setManualContext(String(model.context_window_tokens));
-  }
 
   return (
     <Stack gap="md">
