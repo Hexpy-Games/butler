@@ -315,30 +315,35 @@ gatekeeper() {
   return 1
 }
 
+# online <command...>: ticket lookups reach Apple's service, which can lag the
+# notarization verdict or drop a request; 3 tries, 15 seconds apart.
+online() {
+  local i
+  for i in 1 2 3; do
+    if "$@"; then return 0; fi
+    if [ "$i" -lt 3 ]; then sleep 15; fi
+  done
+  return 1
+}
+
 verify_app() {
   local app=${1%/}
   codesign --verify --strict --deep --verbose=2 "$app" || die "app failed deep verification"
   assert_signed "$app"
-  xcrun stapler validate "$app" || die "app is not stapled"
+  online xcrun stapler validate "$app" || die "app is not stapled"
   gatekeeper -t exec "$app" || die "Gatekeeper does not accept the app as notarized"
 }
 
 verify_dmg() {
   BUTLER_SIGN_NO_RUNTIME=1 assert_signed "$1"
-  xcrun stapler validate "$1" || die "dmg is not stapled"
+  online xcrun stapler validate "$1" || die "dmg is not stapled"
   gatekeeper -t open --context context:primary-signature "$1" || die "Gatekeeper does not accept the dmg as notarized"
 }
 
-# A bare binary can't be stapled: check the online ticket. It can lag the
-# notarization verdict briefly, so retry a few times.
+# A bare binary can't be stapled: check the online ticket.
 verify_agent() {
-  local i
   assert_signed "$1"
-  for i in 1 2 3; do
-    if codesign --verify -R=notarized --check-notarization "$1"; then return 0; fi
-    sleep 15
-  done
-  die "agent has no notarization ticket: $1"
+  online codesign --verify -R=notarized --check-notarization "$1" || die "agent has no notarization ticket: $1"
 }
 
 agent() {

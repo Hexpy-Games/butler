@@ -245,16 +245,22 @@ jobs:
           hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount" >/dev/null
           trap 'hdiutil detach "$mount" >/dev/null' EXIT
           app="$mount/Butler.app"
-          check() { printf '\n$ %s\n' "$*"; "$@" 2>&1; }
+          # Same policy as sign-and-notarize.sh: Apple's ticket service can lag or drop a request.
+          check() {
+            local i
+            printf '\n$ %s\n' "$*"
+            for i in 1 2 3; do
+              if "$@" 2>&1; then return 0; fi
+              if [ "$i" -lt 3 ]; then echo "(attempt $i/3 failed; retrying)"; sleep 15; fi
+            done
+            return 1
+          }
           check codesign --verify --deep --strict --verbose=2 "$app"
           check spctl -a -vvv -t exec "$app"
           check spctl -a -vvv -t open --context context:primary-signature "$dmg"
           check xcrun stapler validate "$app"
           check xcrun stapler validate "$dmg"
-          # The Agent's online ticket can lag; verify-agent retries before this check prints it.
-          agent="$BUTLER_NATIVE_AGENT_PAYLOAD/bin/butler-agent"
-          check deploy/macos/sign-and-notarize.sh verify-agent "$agent"
-          check codesign --verify -R=notarized --check-notarization --verbose=2 "$agent"
+          check codesign --verify -R=notarized --check-notarization --verbose=2 "$BUTLER_NATIVE_AGENT_PAYLOAD/bin/butler-agent"
 
       - name: Preserve validated native App files for publication recovery
         uses: actions/upload-artifact@v4
