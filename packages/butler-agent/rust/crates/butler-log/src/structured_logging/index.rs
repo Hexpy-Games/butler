@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader, Write},
+    io::{self, BufRead, BufReader, Seek, SeekFrom, Write},
     path::Path,
 };
 
@@ -90,9 +90,13 @@ pub(crate) fn load(path: &Path) -> io::Result<Vec<Block>> {
 }
 /// Startup repair only. Bound malformed line allocation as well as normal read blocks.
 pub(crate) fn rebuild(path: &Path, source: &str) -> io::Result<Vec<Block>> {
+    extend(path, source, Vec::new())
+}
+/// App producers never write indexes. Resume after the last complete indexed line.
+pub(crate) fn extend(path: &Path, source: &str, mut blocks: Vec<Block>) -> io::Result<Vec<Block>> {
     let mut reader = BufReader::new(File::open(path)?);
-    let mut blocks = Vec::new();
-    let mut offset = 0;
+    let mut offset = blocks.last().map_or(0, |b| b.offset + b.len);
+    reader.seek(SeekFrom::Start(offset))?;
     let mut line = Vec::new();
     let mut oversized = false;
     loop {

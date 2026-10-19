@@ -418,3 +418,52 @@ mod queue;
 
 #[path = "structured_log_storage/perf.rs"]
 mod perf;
+
+#[test]
+fn app_segments_index_live_tails_without_producer_indexes() -> Result<(), Box<dyn std::error::Error>>
+{
+    butler_e2e::gate!();
+    use std::io::Write;
+    let root = root();
+    let log = Logger::open(&root, Config::default())?;
+    let dir = root.join("logs/app/main");
+    fs::create_dir_all(&dir)?;
+    let path = dir.join(format!(
+        "{}-0001.jsonl",
+        chrono::Utc::now().format("%Y%m%dT%H%M%SZ")
+    ));
+    let mut file = fs::File::create(&path)?;
+    let mut row = record(1, "INFO");
+    row.process = "app.renderer".into();
+    row.trace_id = Some("0123456789abcdef0123456789abcdef".into());
+    let line = serde_json::to_vec(&row)?;
+    file.write_all(&line)?;
+    let query = Query {
+        source: "app".into(),
+        ..Query::default()
+    };
+    assert!(
+        log.query(&query)?.rows.is_empty(),
+        "partial line is not indexed"
+    );
+    file.write_all(b"\n")?;
+    assert_eq!(log.query(&query)?.rows.len(), 1);
+    file.write_all(&line)?;
+    file.write_all(b"\n")?;
+    assert_eq!(
+        log.query(&query)?.rows.len(),
+        2,
+        "new tail is discovered once"
+    );
+    assert_eq!(log.query(&query)?.rows.len(), 2, "unchanged file is stable");
+    log.shutdown()?;
+    let reopened = Logger::open(&root, Config::default())?;
+    assert_eq!(
+        reopened.query(&query)?.rows.len(),
+        2,
+        "lazy index survives reopen"
+    );
+    reopened.shutdown()?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}

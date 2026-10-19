@@ -82,15 +82,26 @@ impl Storage {
                     {
                         continue;
                     }
-                    let version = std::fs::metadata(path.with_extension("idx"))
-                        .ok()
-                        .map(|m| (m.len(), m.modified().ok()));
+                    let version = std::fs::metadata(if source == "app" {
+                        path.clone()
+                    } else {
+                        path.with_extension("idx")
+                    })
+                    .ok()
+                    .map(|m| (m.len(), m.modified().ok()));
                     if self.catalog.contains_key(&path)
                         && version.as_ref() == self.index_versions.get(&path)
                     {
                         continue;
                     }
-                    let blocks = if version.is_some() {
+                    let blocks = if source == "app" {
+                        let blocks = self
+                            .catalog
+                            .get(&path)
+                            .cloned()
+                            .unwrap_or_else(|| index::load(&path).unwrap_or_default());
+                        index::extend(&path, source, blocks)?
+                    } else if version.is_some() {
                         index::load(&path)?
                     } else if repair {
                         index::rebuild(&path, source)?

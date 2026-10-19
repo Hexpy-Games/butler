@@ -255,7 +255,22 @@ function normalizeLocalServerUrl(value) {
   return url.toString();
 }
 
+function recordWorkAction(path, options) {
+  const traceparent = options.headers?.traceparent;
+  const action = path === "/messages" || path === "/session-queue" ? "send"
+    : /\/turns\/[^/]+\/cancel$/u.test(path) ? "stop"
+    : /\/turns\/[^/]+\/retry(?:-current)?$/u.test(path) ? "retry"
+    : /\/sessions\/[^/]+\/controls$/u.test(path) && options.method === "PATCH" ? "model_pick" : null;
+  if (!action) return;
+  const body = typeof options.body === "string" ? JSON.parse(options.body) : {};
+  const turn_id = path.match(/^\/turns\/([^/]+)/u)?.[1];
+  ipcRenderer.send("butler:app-log", { level: "INFO", category: "app.ui", event: `ui.${action}`,
+    ...(traceparent ? { traceparent } : {}), ...(body.chat_id ? { chat_id: body.chat_id } : {}),
+    ...(turn_id ? { turn_id: decodeURIComponent(turn_id) } : {}), attrs: {} });
+}
+
 async function requestJson(path, options = {}) {
+  recordWorkAction(path, options);
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   await ensureLocalServer();
   const serverUrl = await currentServerUrl();
@@ -672,6 +687,7 @@ function writeAppUiStateCache(snapshot) {
 }
 
 const butlerApp = Object.freeze({
+  log: row => ipcRenderer.send("butler:app-log", row),
   organizeLibrary: ({ path, method, body }) => {
     const route = new URL(path, "http://butler.invalid");
     const allowed = /^\/library\/(groups|tags|facets|items)(\/|$)/.test(route.pathname);

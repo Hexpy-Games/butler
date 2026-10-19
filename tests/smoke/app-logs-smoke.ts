@@ -1,0 +1,114 @@
+// Real Electron main/preload/renderer → shared native log API; offline stub model only.
+import { strict as assert } from "node:assert";
+import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, statSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { type Browser, type Page } from "playwright";
+import { createNativeAppServer } from "../support/native-app-server";
+import { fileElectronApp, type FileElectronApp } from "../support/file-electron-app";
+import { launchSmokeBrowser } from "../support/smoke-browser";
+import { LEGACY_FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding";
+import { getAppCopy } from "../../packages/butler-app/client/ui/src/app/copy";
+
+const executable = process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE
+  ?? resolve("packages/butler-app/client/electron/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron");
+const shots = process.env.BUTLER_LOGS_SHOTS;
+assert(shots, "BUTLER_LOGS_SHOTS must name a scratch directory");
+mkdirSync(shots, { recursive: true });
+const root = mkdtempSync(join(tmpdir(), "app-logs-smoke-"));
+const profile = join(root, "profile"); mkdirSync(profile);
+writeFileSync(join(profile, "butler-native-settings.json"), JSON.stringify({ developer_mode_enabled: true }));
+const server = await createNativeAppServer();
+const copy = getAppCopy("ko-KR");
+let app: FileElectronApp | undefined, browser: Browser | undefined;
+type Row = { process: string; event: string; trace_id?: string; msg: string };
+async function rows(source: string) { return (await server.api<{ rows: Row[] }>(`/logs?source=${source}&limit=1000`)).rows; }
+async function waitFor<T>(read: () => Promise<T>, accept: (value: T) => boolean, name: string): Promise<T> {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const value = await read();
+    if (accept(value)) return value;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out: ${name}`);
+}
+function files() {
+  const directory = join(server.butlerData, "logs/app");
+  return readdirSync(directory, { recursive: true }).map(String).map(name => join(directory, name)).filter(path => statSync(path).isFile());
+}
+function snapshot() { return files().map(path => [path, statSync(path).size, statSync(path).mtimeMs]); }
+async function capture(page: Page, width: number, theme: string) {
+  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme }) });
+  await page.setViewportSize({ width, height: 1000 });
+  await page.reload();
+  await page.locator('[data-test-class~="composer-card"]').waitFor();
+  await page.keyboard.press("ControlOrMeta+k");
+  const palette = page.getByRole("dialog", { name: copy.commandPalette.label });
+  await palette.getByRole("combobox").fill(copy.settings.sections.logs);
+  await palette.getByRole("option").filter({ has: page.getByText(copy.settings.sections.logs, { exact: true }) }).first().click();
+  const viewer = page.locator('[data-settings-section-id="logs-viewer"]');
+  await viewer.getByRole("combobox", { name: copy.settings.logs.filters.source, exact: true }).selectOption("app");
+  await viewer.locator('[data-test-class="log-row"]').first().waitFor();
+  assert(await viewer.getByText("ui.send", { exact: true }).count() > 0);
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForFunction(() => document.getAnimations().every(animation => animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+  await page.screenshot({ path: join(shots!, `${width}-${theme}-app.png`) });
+}
+try {
+  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", diagnostics_enabled: true }) });
+  app = await fileElectronApp({ executablePath: executable, args: [resolve("packages/butler-app/client/electron")], env: {
+    ...process.env, BUTLER_DATA: server.butlerData, BUTLER_HOME: process.env.HOME!,
+    BUTLER_APP_ELECTRON_USER_DATA_DIR: profile, BUTLER_APP_SERVER_URL: server.url,
+    BUTLER_APP_SERVER_PORT: String(server.port),
+    BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1", BUTLER_APP_RENDERER_DIST: resolve("packages/butler-app/client/ui/dist"),
+  } });
+  await waitFor(() => rows("app"), rows => rows.some(row => row.event === "app.start"), "App module initialized");
+  await waitFor(() => app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some(window => window.webContents.getURL().startsWith("app://butler/"))), Boolean, "App renderer");
+  const traceparent = `00-${crypto.randomUUID().replaceAll("-", "")}-${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}-01`;
+  // Exercise the actual renderer/preload public action channel, using its agent trace header.
+  await app.evaluate(async ({ BrowserWindow }, traceparent) => {
+    const contents = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().startsWith("app://butler/"))!.webContents;
+    await contents.executeJavaScript(`(async () => {
+      const log = window.butlerApp.log;
+      log({ level: "INFO", category: "app.ui", event: "ui.send", process: "agent", attrs: { marker: "rejected-process" } });
+      log({ level: "INFO", category: "lifecycle", event: "app.start", attrs: { marker: "rejected-category" } });
+      log({ level: "INFO", category: "app.ui", event: "ui.send", attrs: { value: "x".repeat(17000) } });
+      log({ level: "ERROR", category: "app.ui", event: "ui.error", attrs: { token: "private-renderer-token", url: "https://example.test/?code=private-lan-code" } });
+      return await window.butlerApp.sendMessage({ chatId: "general", text: "Say hello.", clientMessageId: crypto.randomUUID(), traceparent: ${JSON.stringify(traceparent)} });
+    })()`);
+  }, traceparent);
+  const appRows = await waitFor(() => rows("app"), rows => rows.some(row => row.event === "ui.send"), "App send record");
+  assert(appRows.some(row => row.event === "app.start" && row.process === "app.main"));
+  const action = appRows.find(row => row.event === "ui.send")!;
+  assert.match(action.trace_id ?? "", /^[0-9a-f]{32}$/u);
+  await waitFor(() => rows("all"), rows => rows.some(row => row.process === "agent" && row.trace_id === action.trace_id), "joined agent trace");
+  const storage = await server.api<{ stores: { id: string; bytes: number }[] }>("/logs/storage");
+  assert(storage.stores.some(store => store.id === "app/main" && store.bytes > 0));
+  // No log viewer polling while measuring; standard's INFO lane must stay completely idle.
+  await new Promise(resolve => setTimeout(resolve, 3000));
+  await rows("all");
+  const before = snapshot(), started = Date.now();
+  await new Promise(resolve => setTimeout(resolve, 60_000));
+  assert.deepEqual(snapshot(), before, "60 seconds at standard: zero bytes or mtime changes");
+  const elapsed = Date.now() - started;
+  console.log(JSON.stringify({ stage: "App trace and idle", idle_ms: elapsed, idle_bytes: 0, trace_id: action.trace_id }));
+  for (const path of files().filter(path => path.endsWith(".jsonl"))) {
+    const text = readFileSync(path, "utf8");
+    for (const secret of [server.token, "private-renderer-token", "private-lan-code", "rejected-process", "rejected-category", "x".repeat(17_000)]) assert(!text.includes(secret));
+  }
+  browser = await launchSmokeBrowser();
+  const context = await browser.newContext({ locale: "ko-KR" });
+  await server.signIn(context);
+  const page = await context.newPage();
+  await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), {
+    key: LEGACY_FIRST_RUN_STORAGE_KEY, value: legacyFirstRunCompleteRecord(),
+  });
+  await page.goto(server.url);
+  for (const width of [1280, 390]) for (const theme of ["light", "dark"]) await capture(page, width, theme);
+  console.log(JSON.stringify({ ok: true, idle_ms: elapsed, idle_bytes: 0, trace_id: action.trace_id, screenshots: 4 }));
+} finally {
+  await browser?.close();
+  await app?.close();
+  await server.stop();
+  rmSync(root, { recursive: true, force: true });
+}
