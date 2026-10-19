@@ -126,7 +126,7 @@ fn source_prompt(
 }
 
 fn current_work(state: &GuidedTextState) -> Option<String> {
-    let work = work_context::render(state.work.context.as_ref())?;
+    let work = work_context::render(state.work.context.as_ref(), &state.work_scope.turn_id)?;
     let summary = butler_core::public_text::trim_js_whitespace(&work);
     if summary.is_empty() {
         return None;
