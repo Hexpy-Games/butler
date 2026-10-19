@@ -1,3 +1,4 @@
+import { networkLog } from "../log/runtime.mjs";
 import { agentPopupAllowed } from "./popup-policy.mjs";
 import { isIP } from "node:net";
 import { webUrl } from "./policy.mjs";
@@ -36,10 +37,14 @@ export function installNavigationGuard(tab, onViolation) {
   if (!routers.has(profile)) {
     routers.set(profile, router);
     // In-flight page requests (fetch/XHR) let observe-after-act wait for results.
-    const finished = detail => router.get(detail.webContentsId)?.tab.pendingRequests?.delete(detail.id);
+    const finished = detail => {
+      networkLog("browser.completed", detail.url, { status: detail.statusCode, error: detail.error });
+      router.get(detail.webContentsId)?.tab.pendingRequests?.delete(detail.id);
+    };
     profile.webRequest.onCompleted(finished);
     profile.webRequest.onErrorOccurred(finished);
     profile.webRequest.onBeforeRequest((detail, done) => {
+      networkLog("browser.request", detail.url, { method: detail.method, type: detail.resourceType });
       const entry = router.get(detail.webContentsId);
       if (entry && detail.resourceType === "xhr") (entry.tab.pendingRequests ??= new Map()).set(detail.id, Date.now());
       if (!entry || !["mainFrame", "subFrame"].includes(detail.resourceType)) { done({}); return; }

@@ -14,7 +14,7 @@ function sentHeaders(traceparent: unknown): Array<{ path: string; headers: Recor
     Module._load = (request, parent, main) => request === "electron" ? {
       contextBridge: { exposeInMainWorld(name, value) { if (name === "butlerApp") bridge = value; } },
       ipcRenderer: { invoke: async channel => channel === "butler:get-local-auth-headers" ? { authorization: "Bearer local" } : null,
-        on() {}, removeListener() {} }
+        on() {}, send() {}, removeListener() {} }
     } : load(request, parent, main);
     global.fetch = async (url, options) => {
       sent.push({ path: new URL(url).pathname, headers: options.headers });
