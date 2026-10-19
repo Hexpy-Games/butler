@@ -11,7 +11,9 @@
 #
 # Driven by env. Without BUTLER_SIGN_IDENTITY every command except setup and
 # cleanup logs one line and exits 0, so PR CI and local builds stay ad-hoc.
-#   BUTLER_SIGN_IDENTITY  certificate SHA-1 or name ("-" = ad-hoc preview or self-test)
+# Every release (preview or stable) is Developer ID signed, notarized and
+# stapled; BUTLER_SIGN_REQUIRED=1 refuses ad-hoc or missing identities.
+#   BUTLER_SIGN_IDENTITY  certificate SHA-1 or name ("-" = ad-hoc self-test)
 #   BUTLER_SIGN_KEYCHAIN  keychain holding the identity (optional)
 #   BUTLER_SIGN_HOME      runner HOME whose keychain search list setup changed (set by CI setup)
 #   BUTLER_SIGN_TEAM_ID   expected Team ID on every signature (optional)
@@ -28,7 +30,6 @@ key_dir=$tmp_dir/butler-signing-keys
 log() { printf 'sign: %s\n' "$*"; }
 die() { printf 'sign: error: %s\n' "$*" >&2; exit 1; }
 enabled() { [ -n "${BUTLER_SIGN_IDENTITY:-}" ]; }
-preview() { [[ ${GITHUB_REF_NAME:-} =~ ^v[0-9]+\.[0-9]+\.[0-9]+-preview\..+$ ]]; }
 adhoc() { [ "${BUTLER_SIGN_IDENTITY:-}" = "-" ]; }
 
 # codesign finds the Developer ID only under the runner HOME whose keychain
@@ -47,7 +48,6 @@ signing_tool() {
 
 setup() {
   [ "${GITHUB_ACTIONS:-}" = true ] || die "setup runs only in GitHub Actions"
-  if preview; then setup_preview; return 0; fi
   local names="APPLE_DEVELOPER_ID_P12_BASE64 APPLE_DEVELOPER_ID_P12_PASSWORD APPLE_API_KEY_ID APPLE_API_ISSUER_ID APPLE_API_KEY_P8 APPLE_TEAM_ID"
   local set_count=0 name
   for name in $names; do
@@ -60,7 +60,7 @@ setup() {
   fi
   [ "$set_count" -eq 6 ] || die "signing secrets missing or partial ($set_count/6 set)"
 
-  "$here/sign-and-notarize.sh" setup-certificate
+  setup_certificate
   local key
   key=$key_dir/AuthKey.p8
   if grep -q -- '-----BEGIN' <<< "$APPLE_API_KEY_P8"; then
@@ -77,9 +77,7 @@ setup() {
   } >> "$GITHUB_ENV"
 }
 
-# Separate process preserves errexit even when preview setup catches its failure.
 setup_certificate() {
-  [ "${GITHUB_ACTIONS:-}" = true ] || die "setup runs only in GitHub Actions"
   if [ -z "${APPLE_DEVELOPER_ID_P12_BASE64:-}" ] ||
     [ -z "${APPLE_DEVELOPER_ID_P12_PASSWORD:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ]; then
     die "certificate secrets missing or partial"
@@ -122,21 +120,6 @@ setup_certificate() {
     echo "BUTLER_APP_REQUIRE_PRODUCTION_SIGNING=1"
   } >> "$GITHUB_ENV"
   log "signing identity ready for team $APPLE_TEAM_ID"
-}
-
-setup_preview() {
-  if ! "$here/sign-and-notarize.sh" setup-certificate; then
-    cleanup
-    {
-      echo "BUTLER_SIGN_IDENTITY=-"
-      echo "BUTLER_SIGN_KEYCHAIN="
-      echo "BUTLER_SIGN_TEAM_ID="
-      echo "BUTLER_APP_REQUIRE_PRODUCTION_SIGNING=1"
-    } >> "$GITHUB_ENV"
-    log "certificate setup failed; unofficial preview uses ad-hoc signing"
-    echo "::warning::macOS build is ad-hoc signed (certificate setup failed); not Developer ID signed"
-  fi
-  log "unofficial preview: notarization disabled"
 }
 
 cleanup() {
@@ -273,7 +256,6 @@ sign_dmg() {
 # ---- notarization -----------------------------------------------------------
 
 notarize() {
-  if preview; then log "unofficial preview: skipping notarization and stapling"; return 0; fi
   local path=${1%/} work sub out status id i
   if [ -z "${BUTLER_NOTARY_KEY_PATH:-}" ] || [ -z "${BUTLER_NOTARY_KEY_ID:-}" ] ||
     [ -z "${BUTLER_NOTARY_ISSUER_ID:-}" ]; then
@@ -337,14 +319,12 @@ verify_app() {
   local app=${1%/}
   codesign --verify --strict --deep --verbose=2 "$app" || die "app failed deep verification"
   assert_signed "$app"
-  if preview; then return 0; fi
   xcrun stapler validate "$app" || die "app is not stapled"
   gatekeeper -t exec "$app" || die "Gatekeeper does not accept the app as notarized"
 }
 
 verify_dmg() {
   BUTLER_SIGN_NO_RUNTIME=1 assert_signed "$1"
-  if preview; then return 0; fi
   xcrun stapler validate "$1" || die "dmg is not stapled"
   gatekeeper -t open --context context:primary-signature "$1" || die "Gatekeeper does not accept the dmg as notarized"
 }
@@ -354,7 +334,6 @@ verify_dmg() {
 verify_agent() {
   local i
   assert_signed "$1"
-  if preview; then return 0; fi
   for i in 1 2 3; do
     if codesign --verify -R='=notarized' --check-notarization "$1"; then return 0; fi
     sleep 15
@@ -377,12 +356,11 @@ command=${1:-}
 [ -n "$command" ] || die "usage: $(basename "$0") <command> [path]"
 shift
 case "$command" in
-  setup-certificate) setup_certificate; exit 0 ;;
   setup) setup; exit 0 ;;
   cleanup) cleanup; exit 0 ;;
 esac
-if [ "${BUTLER_SIGN_REQUIRED:-}" = 1 ] && ! preview; then
-  if ! enabled || adhoc; then die "stable releases require Developer ID signing"; fi
+if [ "${BUTLER_SIGN_REQUIRED:-}" = 1 ]; then
+  if ! enabled || adhoc; then die "releases require Developer ID signing"; fi
 fi
 if ! enabled; then
   log "no BUTLER_SIGN_IDENTITY; skipping $command (ad-hoc build)"
