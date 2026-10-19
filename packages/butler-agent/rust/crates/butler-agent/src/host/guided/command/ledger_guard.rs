@@ -218,7 +218,12 @@ fn first_protected<'a>(
     None
 }
 
-fn resolve(candidate: &str, cwd: &Path, data: &Path, home: Option<&Path>) -> Option<PathBuf> {
+pub(super) fn resolve(
+    candidate: &str,
+    cwd: &Path,
+    data: &Path,
+    home: Option<&Path>,
+) -> Option<PathBuf> {
     let path = if let Some(suffix) = candidate
         .strip_prefix("$BUTLER_DATA/")
         .or_else(|| candidate.strip_prefix("${BUTLER_DATA}/"))
@@ -254,7 +259,7 @@ fn protected(path: &Path, workspace: &Path, _data: &Path, _home: Option<&Path>) 
         .any(|root| butler_platform::secure_fs::path_is_within(&target, &root))
 }
 
-fn real_or_nearest(path: &Path) -> PathBuf {
+pub(super) fn real_or_nearest(path: &Path) -> PathBuf {
     let mut current = lexical(path);
     let mut suffix = Vec::new();
     loop {
