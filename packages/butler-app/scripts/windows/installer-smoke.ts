@@ -1,6 +1,7 @@
+import { launchInstalledApp, relaunchInstalledAppForDebugging } from "./installed-app-debug.ts";
 /** Disposable-runner E2E: real Setup, Settings update, shell integration, uninstall. */
 import { strict as assert } from "node:assert";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -69,9 +70,6 @@ const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERP
   LOCALAPPDATA: join(root, "home/AppData/Local"), APPDATA: join(root, "home/AppData/Roaming"), BUTLER_SECRET_STORE: "file",
   SQUIRREL_TEMP: join(root, "home/AppData/Local"), TEMP: join(root, "tmp"), TMP: join(root, "tmp"),
   BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"),
-  // Port 0: each launch, including Squirrel's relaunch, binds a fresh DevTools port. A fixed port
-  // stays bound by the update helper, which inherited the old App's listening socket.
-  BUTLER_APP_SMOKE_DEBUG_PORT: "0",
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
   OPENAI_API_KEY: "e2e-not-real", OPENAI_BASE_URL: `http://127.0.0.1:${server.port}/v1`,
   ELECTRON_ENABLE_LOGGING: "1", ELECTRON_LOG_FILE: join(root, "electron.log"),
@@ -96,11 +94,7 @@ try {
   assertShortcuts(shortcuts, true);
   shellProof();
   // Silent Squirrel installation does not necessarily start the first-run app.
-  const app = spawn(stub, [], { env, stdio: ["ignore", "pipe", "pipe"] });
-  const appLog: string[] = [];
-  for (const stream of [app.stdout, app.stderr]) stream?.on("data", chunk => appLog.push(String(chunk)));
-  app.on("exit", (code, signal) => console.log(JSON.stringify({ appExit: { code, signal }, phase, log: appLog.join("") })));
-  if (app.pid) owned.add(app.pid);
+  const app = launchInstalledApp(stub, 0, env, owned);
   page = await appPage();
   await bridge(page, "updateSettings", { language: "en", onboarding: {
     consent_version: FIRST_RUN_CONSENT_VERSION, accepted_at: new Date().toISOString(), completed_at: new Date().toISOString(),
@@ -229,6 +223,7 @@ async function oneClickLaunch() {
   const setup = readJson(resolve("dist/startup-installer-evidence/install/capture-process.json"));
   console.log(JSON.stringify({ phase, setupDurationMs: setup?.duration_ms, setupExitCode: setup?.exit_code }));
   await waitFor(() => Boolean(readJson(join(data, "app/runtime/foreground/instance.json"))?.app_pid), "normal Setup auto-launch");
+  await relaunchInstalledAppForDebugging(stub, 0, env, owned);
   page = await appPage();
   await proof(from);
   phase = "normal install reload";
@@ -363,8 +358,7 @@ async function windowCloseAndRelaunch(sessionId: string) {
   const exit = readJson(join(data, "app/runtime/foreground/last-exit.json"))!;
   assert.equal(exit.generation, previous.generation); assert.equal(exit.exit_reason, "app_quit");
   assert.equal(exit.graceful, true); assert.equal(exit.process_tree_dead, true); assert.equal(exit.port_released, true);
-  const app = spawn(stub, [], { env, stdio: "ignore" });
-  if (app.pid) owned.add(app.pid);
+  launchInstalledApp(stub, 0, env, owned);
   await waitFor(() => {
     const instance = readJson(join(data, "app/runtime/foreground/instance.json"));
     return instance?.state === "ready" && instance.app_pid !== previous.app_pid;

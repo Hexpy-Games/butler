@@ -292,6 +292,7 @@ async fn summary_persists_and_reopens_with_physical_request_admission() {
         .project(
             invocation,
             ContextProjectionInput {
+                usage_attribution: None,
                 round_id: "round-1",
                 response_item_id: "turn-item-4",
                 semantic_messages: &semantic,
@@ -404,6 +405,7 @@ async fn summary_persists_and_reopens_with_physical_request_admission() {
         .project(
             invocation,
             ContextProjectionInput {
+                usage_attribution: None,
                 round_id: "round-2",
                 response_item_id: "turn-item-5",
                 semantic_messages: &semantic,

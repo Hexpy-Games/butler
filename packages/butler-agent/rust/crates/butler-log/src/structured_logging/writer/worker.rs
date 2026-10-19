@@ -10,6 +10,21 @@ struct State {
     cleanup_backoff: Duration,
 }
 impl Logger {
+    fn clear_storage(&self) -> io::Result<u64> {
+        use std::io::Write;
+        let mut storage = self.0.storage.lock();
+        let generation = uuid::Uuid::new_v4().to_string();
+        butler_platform::secure_fs::replace_private(
+            &storage.root.join("clear-generation"),
+            |file| file.write_all(generation.as_bytes()),
+            std::convert::identity,
+        )?;
+        let mut view = self.config();
+        view.clear_generation = Some(generation);
+        *self.0.config.write() = Arc::new(view);
+        storage.clear()
+    }
+
     pub(super) fn run(&self, rx: &mpsc::Receiver<Command>) -> io::Result<()> {
         let mut state = State::default();
         self.schedule_cleanup(&mut state);
@@ -167,15 +182,15 @@ impl Logger {
                 let _ = reply.send(result);
             }
             Control::Clear(reply) => {
-                let _ = reply.send(self.0.storage.lock().clear());
+                let _ = reply.send(self.clear_storage());
             }
             Control::Shutdown(reply) => {
-                let result = self.close();
+                let result = self.close(true);
                 let _ = reply.send(result);
                 return true;
             }
             Control::ShutdownBounded(reply) => {
-                let _ = reply.send(self.close());
+                let _ = reply.send(self.close(false));
                 return true;
             }
             #[cfg(feature = "e2e-fixtures")]
@@ -194,10 +209,15 @@ impl Logger {
         }
         false
     }
-    fn close(&self) -> io::Result<()> {
+    fn close(&self, durable: bool) -> io::Result<()> {
         #[cfg(feature = "e2e-fixtures")]
         close_delay();
-        self.0.storage.lock().close()
+        let mut storage = self.0.storage.lock();
+        if durable {
+            storage.close()
+        } else {
+            storage.close_producer()
+        }
     }
 }
 

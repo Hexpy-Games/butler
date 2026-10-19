@@ -554,6 +554,7 @@ export interface SettingsView {
   composer_decoration: { theme: "none" | "shoreline" | "cherry"; character: boolean };
   translucent_sidebar: boolean;
   smart_grouping_enabled: boolean;
+  show_thinking: boolean;
   diagnostics_enabled: boolean;
   /** Structured log preset; developer mode only (agents before #1218 omit it). */
   log_level?: "minimal" | "standard" | "detailed" | "full";
@@ -975,6 +976,8 @@ export interface ProgressRow {
   safe_tool_name?: string;
   safe_input_label?: string;
   tool_call_id?: string;
+  thinking_title?: string;
+  thinking_body?: string;
   tool_result_id?: string;
   tool_result_byte_length?: number;
   bridge_phase?: string;
@@ -1334,7 +1337,8 @@ export interface UsageSectionBucketView {
 }
 
 export interface UsageMonitorView {
-  timeline: { slotMinutes: 15; slots: [number, number, number, number, number][] };
+  /** Session views append the slot's delegated tokens (prompt + output of every role other than "main"), on the same basis as prompt + output above. */
+  timeline: { slotMinutes: 15; slots: ([number, number, number, number, number] | [number, number, number, number, number, number])[] };
   topSessions: { sessionId: string; title: string | null; kind: "chat" | "schedule" | "butler"; totalTokens: number; requests: number; lastUsedMs: number | null }[];
   previousPeriod: { totalTokens: number } | null;
   filters: {
@@ -1348,6 +1352,8 @@ export interface UsageMonitorView {
     byScopeUsage: Record<string, UsageTokenBucketView>;
     byModel: Record<string, UsageTokenBucketView>;
     bySection: Record<string, UsageSectionBucketView>;
+    /** Session views only: the chat's calls by role ("main" = the chat itself; any other role is delegated work), included in the totals above. */
+    byRole?: Record<string, UsageTokenBucketView>;
   };
   webSearch: {
     requestCount: number;
@@ -1665,6 +1671,11 @@ export interface TimelineEvent {
     event_id?: string;
     /** `settings.updated`: the changed settings subset. */
     settings?: Record<string, unknown>;
+    /** Ephemeral `turn.thinking` display summary, scoped to one model round. */
+    round_id?: string;
+    stream_id?: string;
+    line?: string | null;
+    summary?: string;
     tainted?: boolean;
     /** `automation.run`: the run's conversation and its safe error code. */
     target_session_id?: string;

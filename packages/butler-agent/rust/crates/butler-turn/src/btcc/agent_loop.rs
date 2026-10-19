@@ -20,6 +20,7 @@ mod progress;
 pub(crate) use progress::{authority_batch, authority_cancellation_events};
 mod state;
 mod stream_relay;
+mod thinking_line;
 mod tool_batch;
 mod turn_binding;
 

@@ -8,7 +8,7 @@ use axum::response::Response;
 
 use super::request_policy::RequestOrigin;
 
-const ALLOWED_METHODS: &str = "GET, POST, PATCH, DELETE";
+const ALLOWED_METHODS: &str = "GET, POST, PUT, PATCH, DELETE";
 const ALLOWED_HEADERS: &str = "authorization, content-type, x-butler-admin, traceparent";
 const PREFLIGHT_MAX_AGE_SECONDS: &str = "600";
 
