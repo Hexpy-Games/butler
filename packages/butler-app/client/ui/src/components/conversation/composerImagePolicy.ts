@@ -8,8 +8,11 @@ const IMAGE_EXTENSION_MIME: Record<string, string> = {
 };
 /** GIF is re-encoded as PNG by the gateway before admission. */
 const DERIVATIVE_MIME: Record<string, string> = { "image/gif": "image/png" };
-/** Why the selected model takes no images: declared text-only, or capability unknown. */
-export type ModelImageBlock = "model" | "unknown";
+/**
+ * Why the selected model takes no images: declared text-only, capability unknown,
+ * or unknown on a user-registered local model, where Settings can declare it.
+ */
+export type ModelImageBlock = "model" | "unknown" | "undeclared";
 
 export interface ComposerImagePolicy {
   accepts: boolean;
@@ -38,8 +41,7 @@ interface FileLike {
  */
 export function composerImagePolicy(model?: AppModelSummary | null): ComposerImagePolicy {
   if (model?.image_input_support !== "supported") {
-    const blockedBy = model?.image_input_support === "unsupported" ? "model" : "unknown";
-    return { accepts: false, blockedBy, mimeTypes: [] };
+    return { accepts: false, blockedBy: modelImageBlock(model), mimeTypes: [] };
   }
   const catalogTypes = model.image_accepted_mime_types?.length
     ? model.image_accepted_mime_types.map((type) => type.toLowerCase())
@@ -51,6 +53,11 @@ export function composerImagePolicy(model?: AppModelSummary | null): ComposerIma
     ? model.image_max_inline_bytes
     : undefined;
   return { accepts: true, mimeTypes, ...(maxBytes ? { maxBytes } : {}) };
+}
+
+function modelImageBlock(model?: AppModelSummary | null): ModelImageBlock {
+  if (model?.image_input_support === "unsupported") return "model";
+  return model?.provider_id === "local" ? "undeclared" : "unknown";
 }
 
 function imageMime(file: FileLike): string | null {
@@ -108,5 +115,6 @@ export function blockedImageAttachmentIds(
 export function imageRefusalLabel(refusal: ImageRefusal): string {
   if (refusal === "model") return appCopy.composer.imagesUnsupported;
   if (refusal === "unknown") return appCopy.composer.imageSupportUnknown;
+  if (refusal === "undeclared") return appCopy.composer.imageInputOff;
   return refusal === "type" ? appCopy.composer.imageTypeUnsupported : appCopy.composer.imageTooLarge;
 }

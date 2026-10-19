@@ -56,6 +56,9 @@ export function LocalModelSettings({
     canDiscover,
     canRegister,
     editModel,
+    imageInput,
+    seedImageInput,
+    chooseDiscoveredModel,
   } = state;
 
   useEffect(() => {
@@ -71,6 +74,7 @@ export function LocalModelSettings({
     modelId: manualModelId,
     displayName: manualDisplayName,
     context: manualContext,
+    imageInputChanged: imageInput.change !== undefined,
   });
 
   const { discover, register, deleteModel, discoveryError, clearDiscoveryError } = useLocalModelOperations({
@@ -81,6 +85,7 @@ export function LocalModelSettings({
     manualDisplayName,
     manualContext,
     preservedReasoningBudgetRatio: initialEditModel?.local_reasoning_budget_ratio,
+    imageInput: imageInput.change,
     editingModelRef,
     selectedModel,
     canDiscover,
@@ -92,23 +97,12 @@ export function LocalModelSettings({
     setManualModelId,
     setManualDisplayName,
     setManualContext,
+    seedImageInput,
     setBusy,
     setStatus,
     onCatalogChange: setModelCatalog,
-    onSaved: () => {
-      clearLeaveGuard();
-      back();
-    },
+    onSaved: () => { clearLeaveGuard(); back(); },
   });
-
-  function chooseDiscoveredModel(modelRef: string) {
-    setSelectedModelRef(modelRef);
-    const model = discovery?.models.find((item) => item.model_ref === modelRef);
-    if (!model) return;
-    setManualModelId(model.model_id);
-    setManualDisplayName(model.display_name);
-    setManualContext(String(model.context_window_tokens));
-  }
 
   return (
     <Stack gap="md">
@@ -137,6 +131,7 @@ export function LocalModelSettings({
         setManualDisplayName={setManualDisplayName}
         manualContext={manualContext}
         setManualContext={setManualContext}
+        imageInput={imageInput}
         status={status}
         hasUnsavedChanges={hasUnsavedChanges}
         canRegister={canRegister}

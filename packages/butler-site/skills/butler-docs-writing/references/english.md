@@ -19,7 +19,7 @@ Reference translation: `en/getting-started/install.mdx` against
    `bun run --cwd packages/butler-site labels <Korean label>`.
    `english-ui-labels.md` lists every bold label in the Korean pages with its
    English string. macOS labels follow Apple's English wording
-   (**System Settings → Privacy & Security**, **Open Anyway**).
+   (**System Settings → Privacy & Security**, **Open**).
 2. **Same structure as the Korean page.** Same sections in the same order,
    same heading levels, same components (`<Steps>`, `<Notice>`, `<Tabs>`,
    `<TabPanel>`, `<CardGrid>`, `<DocCard>`, `<Kbd>`) with the same props,
@@ -53,8 +53,8 @@ Reference translation: `en/getting-started/install.mdx` against
 - **Steps are imperative**, one action each: "Open the DMG and drag
   `Butler.app` into the Applications folder." Not "You should open…", not
   "The DMG is opened…".
-- **Condition first, then action.** "If the app does not open, choose
-  **Open Anyway**." This is the Korean `~하면 ~합니다`.
+- **Condition first, then action.** "If macOS asks whether to open the app,
+  choose **Open**." This is the Korean `~하면 ~합니다`.
 - **Plain words.** use (not utilize or leverage), to (not in order to), let
   (not enable or allow you to), start (not initiate), need (not require), so
   (not therefore), about (not regarding).

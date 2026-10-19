@@ -16,7 +16,7 @@ impl ModelConfigurationClock for Clock {
     }
 }
 
-struct Fixture(PathBuf);
+struct Fixture(PathBuf, [String; 2], Vec<tokio::task::JoinHandle<()>>);
 impl Fixture {
     fn new() -> Self {
         let root = std::env::temp_dir().join(format!(
@@ -25,7 +25,9 @@ impl Fixture {
             uuid::Uuid::new_v4()
         ));
         fs::create_dir_all(&root).unwrap();
-        Self(root)
+        let (first, a) = discovery_stub();
+        let (second, b) = discovery_stub();
+        Self(root, [first, second], vec![a, b])
     }
     fn owner(&self) -> ModelConfiguration {
         self.owner_with(Arc::new(
@@ -65,24 +67,26 @@ async fn concurrent_distinct_registrations_share_the_full_file_write_sequence() 
     let first_owner = fixture.owner_with(Arc::clone(&writes));
     let second_owner = fixture.owner_with(writes);
     let first = LocalModelMutation {
-        server_url: "http://127.0.0.1:8081".into(),
+        server_url: fixture.1[0].clone(),
         api_key: None,
         platform: LocalModelPlatform::Custom,
         model_id: "first".into(),
         display_name: None,
         context_window_tokens: 4_096.0,
         max_output_tokens: None,
+        image_input: None,
         reasoning_budget_ratio: None,
         source: LocalModelSource::Manual,
     };
     let second = LocalModelMutation {
-        server_url: "http://127.0.0.1:8082".into(),
+        server_url: fixture.1[1].clone(),
         api_key: None,
         platform: LocalModelPlatform::Custom,
         model_id: "second".into(),
         display_name: None,
         context_window_tokens: 8_192.0,
         max_output_tokens: None,
+        image_input: None,
         reasoning_budget_ratio: None,
         source: LocalModelSource::Manual,
     };
@@ -106,6 +110,9 @@ async fn concurrent_distinct_registrations_share_the_full_file_write_sequence() 
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
+        for task in &self.2 {
+            task.abort();
+        }
         let _ = fs::remove_dir_all(&self.0);
     }
 }
@@ -120,18 +127,19 @@ async fn local_and_hosted_mutations_preserve_config_and_exact_image_route_eviden
     .unwrap();
     let owner = fixture.owner();
     let local = LocalModelMutation {
-        server_url: "127.0.0.1:11434".into(),
+        server_url: fixture.1[0].clone(),
         api_key: None,
         platform: LocalModelPlatform::Ollama,
         model_id: "fixture.gguf".into(),
         display_name: None,
         context_window_tokens: 8_192.0,
         max_output_tokens: Some(2_048.0),
+        image_input: None,
         reasoning_budget_ratio: Some(0.25),
         source: LocalModelSource::Manual,
     };
     let stored = owner.upsert_local_model(&local, None).await.unwrap();
-    assert_eq!(stored.api_base_url, "http://127.0.0.1:11434/v1");
+    assert_eq!(stored.api_base_url, format!("{}/v1", fixture.1[0]));
     assert_eq!(
         fixture.config().pointer("/unrelated/kept"),
         Some(&Value::Bool(true))
@@ -192,13 +200,14 @@ async fn update_local_returns_previous_ref_and_owned_temp_files_are_cleaned() {
     let fixture = Fixture::new();
     let owner = fixture.owner();
     let input = LocalModelMutation {
-        server_url: "http://127.0.0.1:8080".into(),
+        server_url: fixture.1[0].clone(),
         api_key: None,
         platform: LocalModelPlatform::Custom,
         model_id: "before".into(),
         display_name: None,
         context_window_tokens: 4_096.0,
         max_output_tokens: None,
+        image_input: None,
         reasoning_budget_ratio: None,
         source: LocalModelSource::Manual,
     };
@@ -231,13 +240,14 @@ async fn custom_model_credentials_are_endpoint_scoped_private_and_clearable() {
     .unwrap();
     let owner = fixture.owner();
     let first = LocalModelMutation {
-        server_url: "http://127.0.0.1:8081/proxy/v1/".into(),
+        server_url: format!("{}/proxy/v1/", fixture.1[0]),
         api_key: Some(" private-key ".into()),
         platform: LocalModelPlatform::Custom,
         model_id: "org/model.gguf".into(),
         display_name: None,
         context_window_tokens: 8_192.0,
         max_output_tokens: None,
+        image_input: None,
         reasoning_budget_ratio: None,
         source: LocalModelSource::Manual,
     };
@@ -245,7 +255,10 @@ async fn custom_model_credentials_are_endpoint_scoped_private_and_clearable() {
     assert_eq!(registered.model_id, "org/model.gguf");
     assert_eq!(registered.model_ref, "local/org-model.gguf");
     assert_eq!(registered.provider_label, "Custom");
-    assert_eq!(registered.api_base_url, "http://127.0.0.1:8081/proxy/v1");
+    assert_eq!(
+        registered.api_base_url,
+        format!("{}/proxy/v1", fixture.1[0])
+    );
 
     let config = fixture.config();
     assert_eq!(
@@ -290,7 +303,7 @@ async fn custom_model_credentials_are_endpoint_scoped_private_and_clearable() {
     assert_eq!(secrets["local/org-model.gguf"], "private-key");
 
     let second = LocalModelMutation {
-        server_url: "http://127.0.0.1:8082/proxy/v1".into(),
+        server_url: format!("{}/proxy/v1", fixture.1[1]),
         api_key: None,
         ..first
     };
@@ -302,17 +315,35 @@ async fn custom_model_credentials_are_endpoint_scoped_private_and_clearable() {
     assert!(secrets.get(&second_model.model_ref).is_none());
 
     let clear = LocalModelMutation {
-        server_url: "http://127.0.0.1:8081/proxy/v1".into(),
+        server_url: format!("{}/proxy/v1", fixture.1[0]),
         api_key: Some(String::new()),
         platform: LocalModelPlatform::Custom,
         model_id: registered.model_id.clone(),
         display_name: None,
         context_window_tokens: 8_192.0,
         max_output_tokens: None,
+        image_input: None,
         reasoning_budget_ratio: None,
         source: LocalModelSource::Manual,
     };
     owner.upsert_local_model(&clear, None).await.unwrap();
     let secrets: Value = serde_json::from_slice(&fs::read(&secret_path).unwrap()).unwrap();
     assert!(secrets.get("local/org-model.gguf").is_none());
+}
+
+// Discovery now runs during mutation: every request stays on an owned stub.
+fn discovery_stub() -> (String, tokio::task::JoinHandle<()>) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+    let task = tokio::spawn(async move {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let mut request = [0; 8192];
+            let _ = stream.read(&mut request).await;
+            let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").await;
+        }
+    });
+    (url, task)
 }
