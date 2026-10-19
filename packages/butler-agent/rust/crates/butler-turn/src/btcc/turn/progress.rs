@@ -12,6 +12,27 @@ pub(super) struct TurnProgressScope<'a> {
 }
 
 impl AgentLoopProgress for TurnProgressScope<'_> {
+    fn thinking_capture(&self) -> bool {
+        self.destination.transport == "app" && crate::btcc::thinking::capture()
+    }
+    fn model_thinking(
+        &self,
+        round_id: String,
+        stream_id: String,
+        line: Option<String>,
+        summary: Option<String>,
+    ) -> PortFuture<'_, ()> {
+        Box::pin(async move {
+            if self.destination.transport == "app" {
+                self.repository.model_thinking(serde_json::json!({
+                    "session_id":self.destination.peer.id, "turn_id":self.turn_id,
+                    "stream_id":stream_id, "line":line, "summary":summary,
+                    "round_id":round_id
+                }));
+            }
+            Ok(())
+        })
+    }
     fn answer_blocks_draft(
         &self,
         stream_id: String,
