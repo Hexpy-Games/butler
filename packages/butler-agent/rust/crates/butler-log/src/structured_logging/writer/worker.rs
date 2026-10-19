@@ -170,12 +170,12 @@ impl Logger {
                 let _ = reply.send(self.0.storage.lock().clear());
             }
             Control::Shutdown(reply) => {
-                let result = self.close();
+                let result = self.close(true);
                 let _ = reply.send(result);
                 return true;
             }
             Control::ShutdownBounded(reply) => {
-                let _ = reply.send(self.close());
+                let _ = reply.send(self.close(false));
                 return true;
             }
             #[cfg(feature = "e2e-fixtures")]
@@ -194,10 +194,15 @@ impl Logger {
         }
         false
     }
-    fn close(&self) -> io::Result<()> {
+    fn close(&self, durable: bool) -> io::Result<()> {
         #[cfg(feature = "e2e-fixtures")]
         close_delay();
-        self.0.storage.lock().close()
+        let mut storage = self.0.storage.lock();
+        if durable {
+            storage.close()
+        } else {
+            storage.close_producer()
+        }
     }
 }
 
