@@ -68,19 +68,28 @@
   border-radius: var(--radius-control);
 }
 
+/* The list scrolls on x, so it clips on both axes. It keeps
+   --focus-ring-room around the triggers for their rings and bleeds the same
+   amount back out, so the tabs stay where they were. */
 .variant-line {
   position: relative;
-  min-height: 30px;
-  padding: 0;
+  min-height: calc(30px + 2 * var(--focus-ring-room));
+  max-width: calc(100% + 2 * var(--focus-ring-room));
+  margin: calc(-1 * var(--focus-ring-room));
+  padding: var(--focus-ring-room);
   border-radius: 0;
   background: transparent;
+}
+
+.variant-line.stretch {
+  width: calc(100% + 2 * var(--focus-ring-room));
 }
 
 /* Sliding underline: a 1px bar moved with translateX and sized with scaleX
    (see TabsIndicator), so tab switches never animate layout. */
 .indicator {
   position: absolute;
-  bottom: 0;
+  bottom: var(--focus-ring-room);
   left: 0;
   width: 1px;
   height: var(--border-width-strong);
@@ -162,7 +171,11 @@
   box-shadow: inset 0 calc(-1 * var(--border-width-strong)) 0 var(--accent);
 }
 
-.variant-line .trigger:focus-visible {
+/* Matches the indicator-ready active rule above, so the ring always wins. */
+.variant-line .trigger:focus-visible,
+.variant-line[data-indicator-ready]
+  .trigger[data-state="active"]:focus-visible {
+  border-radius: var(--radius-control);
   background: transparent;
   box-shadow: var(--focus-ring);
 }
@@ -193,10 +206,17 @@
 
 .content {
   min-width: 0;
+  border-radius: var(--radius-control);
   color: var(--text-primary);
   font-size: var(--font-size-3);
   line-height: var(--typo-body-line-height);
   outline: none;
+  transition: box-shadow var(--motion-fast) var(--motion-ease-standard);
+}
+
+/* Radix makes the panel a tab stop; it shows the shared ring like any stop. */
+.content:focus-visible {
+  box-shadow: var(--focus-ring);
 }
 
 .content[data-state="active"] {
@@ -218,6 +238,7 @@
 @media (prefers-reduced-motion: reduce) {
   .trigger,
   .indicator,
+  .content,
   .content[data-state="active"] {
     animation: none;
     transition: none;

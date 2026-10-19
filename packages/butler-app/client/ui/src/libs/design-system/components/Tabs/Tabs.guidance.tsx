@@ -37,6 +37,9 @@ export const guidance: ShowcaseGuidance = {
     },
   ],
   content: ["One or two words per tab; icons support, never replace, the label."],
-  accessibility: ["Radix tabs: arrow keys move between triggers; panels are labelled by their trigger."],
-  tokens: ["--selection", "--radius-control", "--tabs-line-indicator-gap", "--motion-fast"],
+  accessibility: [
+    "Radix tabs: arrow keys move between triggers; panels are labelled by their trigger.",
+    "A focused tab (active included) and a focused panel show the shared focus ring; the line list keeps --focus-ring-room so it is never clipped.",
+  ],
+  tokens: ["--selection", "--radius-control", "--tabs-line-indicator-gap", "--motion-fast", "--focus-ring", "--focus-ring-room"],
 };
