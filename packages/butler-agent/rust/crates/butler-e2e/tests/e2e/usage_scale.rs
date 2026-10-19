@@ -225,7 +225,10 @@ async fn perf_use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), Harnes
     );
     assert_eq!(session["tools"]["calls"], 7, "{}", session["tools"]);
     assert_eq!(session["tools"]["failures"], 3, "{}", session["tools"]);
-    assert_eq!(session["model"]["byScope"].as_object().unwrap().len(), 1 + delegated::GENERAL as usize);
+    assert_eq!(
+        session["model"]["byScope"].as_object().unwrap().len(),
+        1 + usize::try_from(delegated::GENERAL).unwrap()
+    );
     let (_, other) = timed(&s.gw, "/usage-monitor?session_id=other").await?;
     assert_eq!(
         other["model"]["requestCount"], OTHER_SESSION_ROWS,
@@ -270,9 +273,23 @@ async fn perf_use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), Harnes
     // cache hit, and a grown transcript costs only its new lines.
     let (cold, all) = timed(&s.gw, "/usage-monitor").await?;
     butler_e2e::assert_wall_clock_budget!(cold, COLD, "all-time cold");
-    assert_eq!(all["model"]["requestCount"], ROWS + delegated::ROWS, "{all}");
+    assert_eq!(
+        all["model"]["requestCount"],
+        ROWS + delegated::ROWS,
+        "{all}"
+    );
     assert_work_costs(&all, &expected);
-    assert!(day["topSessions"].as_array().unwrap().iter().all(|row| !row["sessionId"].as_str().unwrap().starts_with("scale-child-")), "child rows listed separately");
+    assert!(
+        day["topSessions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| !row["sessionId"]
+                .as_str()
+                .unwrap()
+                .starts_with("scale-child-")),
+        "child rows listed separately"
+    );
     assert_eq!(
         all["tools"]["calls"],
         expected.tool_calls + 40 * 3,
@@ -365,5 +382,10 @@ fn assert_work_costs(view: &Value, expected: &Expected) {
             "{bucket}"
         );
     }
-    assert!((view["cost"]["estimatedUsd"].as_f64().unwrap() - (ROWS + delegated::ROWS) as f64 * unit_usd).abs() < 1e-8);
+    assert!(
+        (view["cost"]["estimatedUsd"].as_f64().unwrap()
+            - (ROWS + delegated::ROWS) as f64 * unit_usd)
+            .abs()
+            < 1e-8
+    );
 }
