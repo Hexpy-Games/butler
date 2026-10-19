@@ -199,6 +199,36 @@ jobs:
                 os.chdir(original)
 
 
+    def test_changed_ignores_base_branch_commits_after_the_fork(self):
+        original = Path.cwd()
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
+            root = Path(temporary)
+            try:
+                os.chdir(root)
+                def git(*args):
+                    return changes.command('git', *args)
+                git('init', '-q', '-b', 'main')
+                git('config', 'user.email', 'ci@example.invalid')
+                git('config', 'user.name', 'CI test')
+                (root / 'README.md').write_text('start')
+                git('add', '.')
+                git('commit', '-qm', 'fork point')
+                git('switch', '-qc', 'docs')
+                (root / 'AGENTS.md').write_text('docs change')
+                git('add', '.')
+                git('commit', '-qm', 'docs only')
+                git('switch', '-q', 'main')
+                rust = root / 'packages/butler-agent/rust/src/lib.rs'
+                rust.parent.mkdir(parents=True)
+                rust.write_text('main moved on')
+                git('add', '.')
+                git('commit', '-qm', 'later main commit')
+                main_tip = git('rev-parse', 'HEAD')
+                git('switch', '-q', 'docs')
+                self.assertEqual(changes.changed(main_tip), ['AGENTS.md'])
+            finally:
+                os.chdir(original)
+
 class Trust(unittest.TestCase):
     # test-category: security
     def test_receipt_history_is_scoped_to_the_pr_branch(self):
