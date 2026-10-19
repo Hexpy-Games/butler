@@ -15,6 +15,21 @@ assert.equal(process.platform, "darwin", "This packaging smoke requires macOS");
 const root = resolve(".");
 const temporary = mkdtempSync(join(tmpdir(), "butler-packaged-debug-env-"));
 try {
+  const executable = await prepareShell();
+  await check(executable, false);
+  await check(executable, true);
+  console.log("PASS packaged App: env-only CDP closed, explicit argv CDP available, leftover Apps: 0");
+} finally { rmSync(temporary, { recursive: true, force: true }); }
+
+async function prepareShell(): Promise<string> {
+  const existing = process.env.BUTLER_DEBUG_ENV_SMOKE_BUNDLE;
+  if (existing) {
+    const bundle = join(temporary, "Butler.app");
+    // Reuse the packaged shell, preserving this smoke's missing-Agent startup path.
+    const agent = join(resolve(existing), "Contents/Resources/bundled-agent");
+    cpSync(resolve(existing), bundle, { recursive: true, filter: path => path !== agent });
+    return join(bundle, "Contents/MacOS/Butler");
+  }
   const source = stageElectronPackageSource(root, join(temporary, "source"));
   const manifest = JSON.parse(readFileSync(resolve("packages/butler-app/client/electron/package.json"), "utf8"));
   const packager = resolve("packages/butler-app/client/electron/node_modules/@electron/packager/bin/electron-packager.mjs");
@@ -26,10 +41,8 @@ try {
   });
   const executable = join(temporary, `Butler-darwin-${process.arch}/Butler.app/Contents/MacOS/Butler`);
   cpSync(resolve("packages/butler-app/client/ui/dist"), join(temporary, `Butler-darwin-${process.arch}/Butler.app/Contents/Resources/app-client`), { recursive: true });
-  await check(executable, false);
-  await check(executable, true);
-  console.log("PASS packaged App: env-only CDP closed, explicit argv CDP available, leftover Apps: 0");
-} finally { rmSync(temporary, { recursive: true, force: true }); }
+  return executable;
+}
 
 async function check(executable: string, explicit: boolean) {
   const port = await freePort(), inspectorPort = await freePort();

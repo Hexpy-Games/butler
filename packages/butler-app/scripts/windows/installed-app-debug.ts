@@ -12,7 +12,12 @@ export function launchInstalledApp(executable: string, port: number, env: Record
 
 /** Setup auto-launch cannot carry Chromium argv. Observe it, quit, then launch directly. */
 export async function relaunchInstalledAppForDebugging(executable: string, port: number, env: Record<string, string>, owned: Set<number>) {
-  await waitFor(() => Boolean(readJson(join(env.BUTLER_DATA, "app/runtime/foreground/instance.json"))?.app_pid), "Setup auto-launch");
+  await waitFor(() => {
+    const runtime = join(env.BUTLER_DATA, "app/runtime/foreground");
+    const instance = readJson(join(runtime, "instance.json"));
+    const progress = readJson(join(runtime, "startup-progress.json"));
+    return Boolean(instance?.app_pid) && instance?.state === "ready" && progress?.tray_ready === true;
+  }, "Setup auto-launch ready with tray");
   ownedProcesses(env.BUTLER_DATA, owned);
   spawnInstalledApp(executable, ["--butler-quit-main-ui"], env, owned);
   await waitFor(() => {
