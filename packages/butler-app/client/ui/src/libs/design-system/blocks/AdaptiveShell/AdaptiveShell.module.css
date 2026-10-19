@@ -26,7 +26,7 @@
   grid-template-columns:
     minmax(0, var(--adaptive-left-track)) minmax(0, 1fr)
     minmax(0, var(--adaptive-right-track));
-  overflow: hidden;
+  overflow: clip; /* Never a scroll container: focus cannot shift the shell. */
   padding: var(--app-window-frame-inset, 0);
   border-radius: var(--app-window-radius);
   background: var(--sidebar-bg);
@@ -115,8 +115,9 @@
   z-index: 30;
 }
 
-/* An opened drawer takes focus itself (its rows draw their own rings). */
-.sidebar:focus {
+/* Panels that take focus themselves draw no ring; their rows draw their own. */
+.sidebar:focus,
+.workspace:focus {
   outline: none;
 }
 
