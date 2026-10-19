@@ -30,7 +30,26 @@ fn fixtures() -> Vec<Value> {
 async fn provider_streaming_replays_preserve_complete_results_and_order() -> Result<(), HarnessError>
 {
     butler_e2e::gate!();
-    for fixture in fixtures() {
+    let mut replays = fixtures();
+    let mut without_thoughts = replays[2].clone();
+    without_thoughts["expected"]["usageMetadata"]
+        .as_object_mut()
+        .unwrap()
+        .remove("thoughtsTokenCount");
+    without_thoughts["expected"]["usageMetadata"]["totalTokenCount"] = json!(135);
+    for chunk in without_thoughts["response"]["chunks"]
+        .as_array_mut()
+        .unwrap()
+    {
+        chunk["text"] = chunk["text"]
+            .as_str()
+            .unwrap()
+            .replace("\"thoughtsTokenCount\":3,", "")
+            .replace("\"totalTokenCount\":138", "\"totalTokenCount\":135")
+            .into();
+    }
+    replays.push(without_thoughts);
+    for fixture in replays {
         let streamed: ResponseRecord = serde_json::from_value(fixture["response"].clone())?;
         let json = ResponseRecord {
             status: 200,
@@ -53,6 +72,24 @@ async fn provider_streaming_replays_preserve_complete_results_and_order() -> Res
             2
         );
         assert_eq!(report["results"][1]["text"], fixture["expected_text"]);
+        if fixture["model"] == "google/gemini-3.8-flash" {
+            let reported = &fixture["expected"]["usageMetadata"];
+            let usage = &report["results"][1]["usage"];
+            let thoughts = reported["thoughtsTokenCount"].as_f64().unwrap_or(0.0);
+            assert_eq!(
+                usage["promptTokens"].as_f64(),
+                reported["promptTokenCount"].as_f64()
+            );
+            assert_eq!(
+                usage["outputTokens"],
+                reported["candidatesTokenCount"].as_f64().unwrap() + thoughts
+            );
+            if reported.get("thoughtsTokenCount").is_some() {
+                assert_eq!(usage["reasoningTokens"], thoughts);
+            } else {
+                assert!(usage.get("reasoningTokens").is_none());
+            }
+        }
         verify_events(&report["events"], &report["results"][1], &fixture);
         verify_requests(&server, &fixture);
     }

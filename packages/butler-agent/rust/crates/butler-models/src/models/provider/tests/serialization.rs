@@ -69,7 +69,7 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     compiled_body_matches(&config);
     assert_eq!(
         encoded,
-        r#"{"model":"gpt-5.5","tool_choice":"auto","reasoning":{"effort":"medium"},"instructions":"PREFIX dynamic","max_output_tokens":64,"store":true,"input":"hello","stream":true}"#
+        r#"{"model":"gpt-5.5","tool_choice":"auto","reasoning":{"effort":"medium","summary":"auto"},"instructions":"PREFIX dynamic","max_output_tokens":64,"store":true,"input":"hello","stream":true}"#
     );
     let previous_auth = std::mem::replace(
         &mut config.auth,
@@ -85,21 +85,21 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     config.auth = previous_auth;
     assert_eq!(
         butler_core::json::stringify(&codex).unwrap(),
-        r#"{"model":"gpt-5.5","tool_choice":"auto","reasoning":{"effort":"medium"},"instructions":"PREFIX dynamic","store":false,"input":[{"role":"user","content":[{"type":"input_text","text":"hello"}]}],"stream":true,"text":{"verbosity":"medium"}}"#,
-        "Codex keeps its existing request bytes and field order"
+        r#"{"model":"gpt-5.5","tool_choice":"auto","reasoning":{"effort":"medium","summary":"auto"},"instructions":"PREFIX dynamic","store":false,"input":[{"role":"user","content":[{"type":"input_text","text":"hello"}]}],"stream":true,"text":{"verbosity":"medium"}}"#,
+        "Codex keeps its control fields and field order"
     );
     let identity = serialize::provider_cache_identity(&body, &encoded, &request, &config)
         .unwrap()
         .unwrap();
     assert_eq!(identity["providerId"], "openai");
-    assert_eq!(identity["serializedStablePrefixBytes"], 94);
+    assert_eq!(identity["serializedStablePrefixBytes"], 111);
     assert_eq!(
         identity["capabilityDigest"],
         "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     );
     assert_eq!(
         identity["serializedStablePrefixSha256"],
-        "41af67d477a09e70211ebec9e99780ce52a8ae4cfb00e387f0d33a8b138cc6d8"
+        "2ff58e195251b3132738dd1c56552d4027d222c66cef16c69dcab8cea40f1e2e"
     );
 
     let prior = serde_json::json!({"provider":"openai","toolSurfaceDigest":"a".repeat(64),
@@ -362,6 +362,7 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
         serialize::body(&input, &anthropic, serialize::Carrier::Anthropic).unwrap();
     assert_eq!(anthropic_body["max_tokens"].as_u64(), Some(4096));
     assert_eq!(anthropic_body["thinking"]["type"], "adaptive");
+    assert_eq!(anthropic_body["thinking"]["display"], "summarized");
     assert_eq!(anthropic_body["tool_choice"]["type"], "any");
 
     let max_effort = ReasoningEffort::Max;
@@ -381,6 +382,10 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
     );
     let haiku_body = serialize::body(&haiku_input, &haiku, serialize::Carrier::Anthropic).unwrap();
     assert_eq!(haiku_body["thinking"]["budget_tokens"], 32768);
+    assert_eq!(haiku_body["thinking"]["display"], "summarized");
+    haiku_input.reasoning_effort = &ReasoningEffort::None;
+    let disabled = serialize::body(&haiku_input, &haiku, serialize::Carrier::Anthropic).unwrap();
+    assert_eq!(disabled["thinking"], serde_json::json!({"type":"disabled"}));
 
     let hosted_responses = carrier_config(
         snapshot
@@ -391,6 +396,7 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
     let hosted_body =
         serialize::body(&input, &hosted_responses, serialize::Carrier::Responses).unwrap();
     assert!(hosted_body.get("store").is_none());
+    assert!(hosted_body["reasoning"].get("summary").is_none());
     assert_eq!(hosted_body["tools"][0]["strict"], false);
     assert_eq!(hosted_body["input"][1]["id"], "reasoning-1");
 

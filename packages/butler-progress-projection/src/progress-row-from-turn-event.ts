@@ -157,6 +157,7 @@ export function progressRowFromSharedTurnEvent(
       safe_input_label: inputLabel,
       tool_call_id: optionalText(payload.toolCallId),
       tool_result_id: optionalText(payload.resultId),
+      thinking_title: optionalText(payload.thinkingTitle),
       tool_result_byte_length: optionalNonNegativeInteger(payload.resultByteLength),
       bridge_phase: optionalText(payload.bridgePhase),
       semantic_block_id: optionalText(payload.semanticBlockId),

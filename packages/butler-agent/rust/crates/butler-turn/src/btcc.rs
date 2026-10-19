@@ -9,11 +9,13 @@ mod access;
 pub mod agent_loop;
 mod authority;
 mod capability_handoff;
+mod thinking;
 pub use authority::questions::{
     AnsweredQuestion, QuestionBinding, QuestionKind, QuestionOption, UserQuestion,
     UserQuestionAnswer, UserQuestionResponse, UserQuestions,
 };
 pub use capability_handoff::{CapabilityHandoff, CapabilityHandoffCode, RequestedCapabilityAction};
+pub use thinking::set_capture as set_thinking_capture;
 mod continuation_budget;
 mod contracts;
 pub mod effects;

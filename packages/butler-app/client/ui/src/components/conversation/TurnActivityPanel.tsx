@@ -1,3 +1,5 @@
+import { useThinkingRows } from "./useThinkingRows";
+import { useModelThinking } from "@/app/modelThinking";
 import { useId, type ReactNode } from "react";
 import { useAppLocale } from "@/app/copy.ts";
 import { projectTurnActivity, type TurnActivityProjection } from "@/app/conversation-progress";
@@ -24,7 +26,7 @@ export function TurnActivityPanel({ rows, state, turnId, startedAt }: LiveTurnAc
   // Pending and current status are different trees, so the status mark remounts when work
   // arrives; one key per panel lets it continue the morph instead of restarting from the logo.
   const markKey = useId();
-  const projection = projectTurnActivity(rows, turnId);
+  const projection = projectTurnActivity(useThinkingRows(rows, turnId), turnId);
   if (!hasLiveWork(projection)) return <TurnActivityStatus markKey={markKey} rows={rows} state={state} turnId={turnId} startedAt={startedAt} />;
   return (
     <Stack
@@ -52,13 +54,15 @@ export function liveTurnWork(projection: TurnActivityProjection, turnId?: string
 /** The live status line: pending label before any work, then the current step and timer. */
 export function TurnActivityStatus({ markKey: sharedMarkKey, rows, state, turnId, startedAt }: LiveTurnActivity & { markKey?: string }) {
   useAppLocale();
+  const thinkingLine = useModelThinking(store => turnId ? store.lines[turnId] : undefined);
   const ownMarkKey = useId();
   const markKey = sharedMarkKey ?? ownMarkKey;
-  const projection = projectTurnActivity(rows, turnId);
+  const projection = projectTurnActivity(useThinkingRows(rows, turnId), turnId);
   const { modelRoundWait, operation, phaseActivities, publicActivity, readModels } = projection;
   if (!hasLiveWork(projection)) return <TurnActivityPending markKey={markKey} readModels={readModels} state={state} />;
   return (
     <CurrentTurnStatus
+      thinkingLine={thinkingLine}
       markKey={markKey}
       state={state}
       waitingForAnswer={rows.some((row) => row.safe_tool_name === "ask_user")}

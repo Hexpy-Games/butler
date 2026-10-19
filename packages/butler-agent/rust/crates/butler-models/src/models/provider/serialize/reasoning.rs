@@ -41,7 +41,10 @@ pub(super) fn anthropic(
                 })
     });
     if claude5 {
-        output.insert("thinking".into(), serde_json::json!({"type":"adaptive"}));
+        output.insert(
+            "thinking".into(),
+            serde_json::json!({"type":"adaptive","display":"summarized"}),
+        );
         if let Some(effort) = effort {
             output.insert("output_config".into(), serde_json::json!({"effort":effort}));
         }
@@ -50,7 +53,7 @@ pub(super) fn anthropic(
             "thinking".into(),
             effort.map_or_else(
                 || serde_json::json!({"type":"disabled"}),
-                |effort| serde_json::json!({"type":"enabled","budget_tokens":budget(effort)}),
+                |effort| serde_json::json!({"type":"enabled","budget_tokens":budget(effort),"display":"summarized"}),
             ),
         );
     }
