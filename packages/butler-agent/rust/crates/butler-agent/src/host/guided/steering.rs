@@ -23,7 +23,8 @@ impl GuidedSteering {
         child_session_id: String,
         child_turn_id: String,
     ) -> Self {
-        let last_rendered = work_context::render(state.work.context.as_ref());
+        let last_rendered =
+            work_context::render(state.work.context.as_ref(), &state.work_scope.turn_id);
         Self {
             state,
             last_rendered: Mutex::new(last_rendered),
@@ -52,7 +53,7 @@ impl TurnSteeringPort for GuidedSteering {
                     .load_context(self.state.work_scope.clone())
                     .await?
             };
-            let rendered = work_context::render(current.as_ref());
+            let rendered = work_context::render(current.as_ref(), &self.state.work_scope.turn_id);
             let mut last = self.last_rendered.lock().await;
             let mut observations = Vec::new();
             if *last != rendered {

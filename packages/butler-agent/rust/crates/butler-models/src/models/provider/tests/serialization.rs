@@ -365,6 +365,23 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
     assert_eq!(anthropic_body["thinking"]["display"], "summarized");
     assert_eq!(anthropic_body["tool_choice"]["type"], "any");
 
+    for (model, effort, expected) in [
+        ("claude-opus-4-7", ReasoningEffort::Xhigh, "xhigh"),
+        ("claude-sonnet-4-6", ReasoningEffort::Max, "max"),
+    ] {
+        let metadata = snapshot
+            .find_model_metadata(Some(&format!("anthropic/{model}")))
+            .unwrap();
+        let config = carrier_config(metadata, model);
+        let input = request(model, &messages, &effort, CancellationToken::new(), None);
+        let body = serialize::body(&input, &config, serialize::Carrier::Anthropic).unwrap();
+        assert_eq!(body["thinking"]["type"], "adaptive", "{model}");
+        assert_eq!(body["output_config"]["effort"], expected, "{model}");
+        assert!(body["thinking"].get("budget_tokens").is_none());
+        assert!(body.get("budget_tokens").is_none());
+        assert!(body.get("temperature").is_none());
+    }
+
     let max_effort = ReasoningEffort::Max;
     let mut haiku_input = request(
         "anthropic/claude-haiku-4-5",
