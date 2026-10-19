@@ -178,7 +178,7 @@ fn fixture(tool: &str, root: &Path, setup: &Setup) -> Result<String, HarnessErro
                 r#"{"name":"minimal","version":"1.0.0","dependencies":{"local":"file:./local"}}"#,
             )?;
             Ok(format!(
-                "npm install --offline --package-lock=false --cache '{}'",
+                "npm install --offline --install-links=false --package-lock=false --cache '{}'",
                 setup
                     .sandbox
                     .data
