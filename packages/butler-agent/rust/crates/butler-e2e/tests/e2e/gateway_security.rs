@@ -202,6 +202,7 @@ async fn sec_03_app_origin_preflight_and_requests_succeed() -> Result<(), Harnes
     assert_app_cors(&preflight, "preflight");
     let headers = preflight.headers();
     assert!(header(headers, "access-control-allow-methods").contains("PATCH"));
+    assert!(header(headers, "access-control-allow-methods").contains("PUT"));
     assert!(header(headers, "access-control-allow-headers").contains("authorization"));
 
     let patch = from_app(&s.gw, Method::PATCH, "/settings")
