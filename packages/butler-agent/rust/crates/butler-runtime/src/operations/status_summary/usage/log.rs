@@ -1,4 +1,6 @@
 //! Incremental UTC slot indexes with compact per-scope counters.
+#[path = "roles.rs"]
+mod roles;
 #[path = "sessions.rs"]
 mod sessions;
 use super::{
@@ -28,47 +30,30 @@ struct Slot {
 }
 #[derive(Default)]
 struct ScopeSlot {
+    buckets: std::sync::OnceLock<Box<Buckets>>,
     usage: SessionUsage,
     rows: Vec<u32>,
 }
 /// Only counters consumed by timeline/topSessions, not full model buckets.
 #[derive(Clone, Default)]
 struct SessionUsage {
-    requests: u64,
-    prompt: f64,
-    cached: f64,
-    output: f64,
-    total: f64,
+    tokens: Tokens,
     last: Option<f64>,
 }
 impl SessionUsage {
     fn add(&mut self, row: &UsageRow) {
-        self.requests += 1;
-        self.prompt += row.prompt;
-        self.cached += row.cached;
-        self.total += row.total.unwrap_or_default();
-        self.output += row.total.map_or(0.0, |total| (total - row.prompt).max(0.0));
+        self.tokens.add(row);
         self.last = Some(self.last.map_or(row.ts, |ts| ts.max(row.ts)));
     }
     fn merge(&mut self, other: &Self) {
-        self.requests += other.requests;
-        self.prompt += other.prompt;
-        self.cached += other.cached;
-        self.output += other.output;
-        self.total += other.total;
+        self.tokens.merge(&other.tokens);
         self.last = match (self.last, other.last) {
             (Some(a), Some(b)) => Some(a.max(b)),
             (a, b) => a.or(b),
         };
     }
     fn tokens(&self) -> Tokens {
-        Tokens::timeline(
-            self.requests,
-            self.prompt,
-            self.cached,
-            self.output,
-            self.total,
-        )
+        self.tokens.clone()
     }
 }
 
@@ -80,6 +65,7 @@ fn complete(start: i64, window: Window<'_>) -> bool {
 }
 #[derive(Default)]
 pub(crate) struct UsageLogIndex {
+    pub(super) owners: Arc<crate::operations::UsageOwners>,
     tail: LogTail,
     names: Names,
     slots: BTreeMap<i64, Slot>,
@@ -90,6 +76,12 @@ pub(crate) struct UsageLogIndex {
     session_totals: Option<SessionCache>,
 }
 impl UsageLogIndex {
+    pub(super) fn with_owners(owners: Arc<crate::operations::UsageOwners>) -> Self {
+        Self {
+            owners,
+            ..Self::default()
+        }
+    }
     pub(super) fn refresh(&mut self, data_root: &Path, pricing: Option<PriceLookup<'_>>) {
         let mut tail = std::mem::take(&mut self.tail);
         tail.advance(
@@ -117,6 +109,11 @@ impl UsageLogIndex {
         let Ok(index) = u32::try_from(self.rows.len()) else {
             return;
         };
+        self.owners.observe(
+            &row.scope,
+            row.root_session_id.as_deref(),
+            row.role.as_deref(),
+        );
         let start = slot_start(row.ts);
         self.session_totals = None;
         if let Some(all) = &mut self.all {
@@ -129,6 +126,9 @@ impl UsageLogIndex {
             .entry(start)
             .or_default();
         scoped.usage.add(&row);
+        if let Some(cached) = scoped.buckets.get_mut() {
+            cached.add(&row, pricing, &self.names);
+        }
         scoped.rows.push(index);
         let global = self.slots.entry(start).or_default();
         global
@@ -146,18 +146,18 @@ impl UsageLogIndex {
         if let Some(scope) = scope {
             let guided = format!("btcc-guided:{scope}");
             if self.by_scope.contains_key(guided.as_str()) {
-                return Some(guided);
+                return Some(self.owners.root_scope(&guided));
             }
             if self.by_scope.contains_key(scope) {
-                return Some(scope.into());
+                return Some(self.owners.root_scope(scope));
             }
         }
         session.map(|id| {
             let guided = format!("btcc-guided:{id}");
             if self.by_scope.contains_key(guided.as_str()) || !self.by_scope.contains_key(id) {
-                guided
+                self.owners.root_scope(&guided)
             } else {
-                id.into()
+                self.owners.root_scope(id)
             }
         })
     }
@@ -200,9 +200,15 @@ impl UsageLogIndex {
         }
         let mut buckets = Buckets::new(pricing.is_some());
         if let Some(scope) = window.scope {
-            for (_, slot) in self.scope_slots(scope, window) {
-                for row in self.matching_rows(&slot.rows, window) {
-                    buckets.add(row, pricing, &self.names);
+            for (member, _) in self.owners.members(scope) {
+                for (&start, slot) in self.scope_slots(&member, window) {
+                    if complete(start, window) {
+                        buckets.merge(self.scope_buckets(slot, pricing));
+                    } else {
+                        for row in self.matching_rows(&slot.rows, window) {
+                            buckets.add(row, pricing, &self.names);
+                        }
+                    }
                 }
             }
             return buckets;
@@ -223,6 +229,22 @@ impl UsageLogIndex {
         }
         buckets
     }
+    fn scope_buckets<'a>(
+        &'a self,
+        slot: &'a ScopeSlot,
+        pricing: Option<PriceLookup<'_>>,
+    ) -> &'a Buckets {
+        slot.buckets.get_or_init(|| {
+            let mut buckets = Buckets::new(pricing.is_some());
+            for &index in &slot.rows {
+                if let Some(row) = self.rows.get(index as usize) {
+                    buckets.add(row, pricing, &self.names);
+                }
+            }
+            Box::new(buckets)
+        })
+    }
+
     fn slot_tokens(
         &self,
         start: i64,
@@ -241,14 +263,18 @@ impl UsageLogIndex {
     }
     fn token_slots(&self, window: Window<'_>) -> Vec<(i64, Tokens)> {
         if let Some(scope) = window.scope {
-            self.scope_slots(scope, window)
-                .map(|(&start, slot)| {
-                    (
+            let mut slots = BTreeMap::<i64, Tokens>::new();
+            for (member, _) in self.owners.members(scope) {
+                for (&start, slot) in self.scope_slots(&member, window) {
+                    slots.entry(start).or_default().merge(&self.slot_tokens(
                         start,
-                        self.slot_tokens(start, &slot.rows, &slot.usage.tokens(), window),
-                    )
-                })
-                .collect()
+                        &slot.rows,
+                        &slot.usage.tokens(),
+                        window,
+                    ));
+                }
+            }
+            slots.into_iter().collect()
         } else {
             self.slots(window)
                 .map(|(&start, slot)| {
@@ -271,18 +297,23 @@ impl UsageLogIndex {
         tokens
     }
     pub(super) fn timeline(&self, window: Window<'_>) -> Value {
+        let delegated = self.delegated_slots(window);
         let slots: Vec<_> = self
             .token_slots(window)
             .into_iter()
             .filter(|(_, tokens)| tokens.request_count > 0)
             .map(|(start, tokens)| {
-                json!([
-                    start,
-                    tokens.request_count,
-                    tokens.prompt,
-                    tokens.cached,
-                    tokens.output
-                ])
+                let mut slot = vec![
+                    json!(start),
+                    json!(tokens.request_count),
+                    json!(tokens.prompt),
+                    json!(tokens.cached),
+                    json!(tokens.output),
+                ];
+                if window.scope.is_some() {
+                    slot.push(json!(delegated.get(&start).copied().unwrap_or(0.0)));
+                }
+                json!(slot)
             })
             .collect();
         json!({"slotMinutes":15,"slots":slots})

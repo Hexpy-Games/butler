@@ -1,8 +1,10 @@
 //! Per-session usage folded incrementally from the append-only prompt-usage
 //! log: each read parses only the rows appended since the previous one.
 
+use crate::operations::UsageOwners;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
+use std::sync::Arc;
 
 use serde::Serialize;
 
@@ -16,6 +18,8 @@ const USAGE_FILE: &str = "metrics/prompt-cache-usage.jsonl";
 /// `SessionView.usage`: one conversation's tokens and estimated cost.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SessionUsageView {
+    /// All requests split by the writing session policy role.
+    pub by_role: BTreeMap<String, SessionRoleUsage>,
     /// Prompt tokens, cached and cache-written ones included.
     pub input_tokens: u64,
     /// Prompt tokens served from the provider cache.
@@ -45,18 +49,26 @@ pub struct SessionUsage {
 #[derive(Clone, Default)]
 struct ScopeUsage {
     totals: UsageTotals,
-    auth_modes: BTreeMap<String, UsageAuthMode>,
+    auth_modes: BTreeMap<String, (i64, UsageAuthMode)>,
 }
 
 /// Usage per scope, kept current by reading the log's new rows.
 #[derive(Default)]
 pub struct SessionUsageIndex {
+    owners: Arc<UsageOwners>,
     tail: LogTail,
     scopes: HashMap<String, ScopeUsage>,
     prices: HashMap<String, Option<ModelPricing>>,
 }
 
 impl SessionUsageIndex {
+    /// Share lineage with the usage monitor.
+    pub fn with_owners(owners: Arc<UsageOwners>) -> Self {
+        Self {
+            owners,
+            ..Self::default()
+        }
+    }
     /// One runtime session's usage (its `btcc-guided:<id>` rows), after
     /// folding in the rows appended since the last read.
     pub fn read(
@@ -100,14 +112,37 @@ impl SessionUsageIndex {
         self.session_usage(runtime_session_id)
     }
 
-    fn session_usage(&self, runtime_session_id: &str) -> SessionUsage {
-        let scope = self
-            .scopes
-            .get(&format!("btcc-guided:{runtime_session_id}"))
-            .cloned()
-            .unwrap_or_default();
+    /// Project the selected root after a refresh and asynchronous lineage resolution.
+    pub fn session_usage(&self, runtime_session_id: &str) -> SessionUsage {
+        let root = self
+            .owners
+            .root_scope(&format!("btcc-guided:{runtime_session_id}"));
+        let mut scope = ScopeUsage::default();
+        let mut roles = BTreeMap::<String, UsageTotals>::new();
+        for (member, role) in self.owners.members(&root) {
+            if let Some(value) = self.scopes.get(member.as_ref()) {
+                scope.totals.merge(&value.totals);
+                roles
+                    .entry(role.to_string())
+                    .or_default()
+                    .merge(&value.totals);
+                for (model, &(ts, mode)) in &value.auth_modes {
+                    if scope
+                        .auth_modes
+                        .get(model)
+                        .is_none_or(|(current, _)| ts >= *current)
+                    {
+                        scope.auth_modes.insert(model.clone(), (ts, mode));
+                    }
+                }
+            }
+        }
         SessionUsage {
             view: SessionUsageView {
+                by_role: roles
+                    .into_iter()
+                    .map(|(role, totals)| (role, SessionRoleUsage::from(totals)))
+                    .collect(),
                 input_tokens: scope.totals.input_tokens,
                 cached_input_tokens: scope.totals.cached_input_tokens,
                 cache_write_tokens: scope.totals.cache_write_tokens,
@@ -117,7 +152,11 @@ impl SessionUsageIndex {
                 cost: scope.totals.cost(),
                 updated_at: scope.totals.last_ts.and_then(iso),
             },
-            auth_modes: scope.auth_modes,
+            auth_modes: scope
+                .auth_modes
+                .into_iter()
+                .map(|(model, (_, mode))| (model, mode))
+                .collect(),
         }
     }
 
@@ -137,7 +176,12 @@ impl SessionUsageIndex {
         let Ok(event) = serde_json::from_slice::<UsageEvent>(line) else {
             return;
         };
-        if !event.scope.starts_with("btcc-guided:") {
+        self.owners.observe(
+            &event.scope,
+            event.root_session_id.as_deref(),
+            event.role.as_deref(),
+        );
+        if event.root_session_id.is_none() && !event.scope.starts_with("btcc-guided:") {
             return;
         }
         let price = self
@@ -147,7 +191,9 @@ impl SessionUsageIndex {
         let scope = self.scopes.entry(event.scope.clone()).or_default();
         scope.totals.add(&event, price.as_ref());
         if let Some(mode) = event.auth_mode {
-            scope.auth_modes.insert(event.model.clone(), mode);
+            scope
+                .auth_modes
+                .insert(event.model.clone(), (event.ts, mode));
         }
     }
 }
@@ -155,4 +201,25 @@ impl SessionUsageIndex {
 fn iso(epoch_ms: i64) -> Option<String> {
     chrono::DateTime::<chrono::Utc>::from_timestamp_millis(epoch_ms)
         .map(|time| time.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+}
+
+/// Token counts for one policy role within a root chat.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SessionRoleUsage {
+    pub input_tokens: u64,
+    pub cached_input_tokens: u64,
+    pub cache_write_tokens: u64,
+    pub output_tokens: u64,
+    pub request_count: u64,
+}
+impl From<UsageTotals> for SessionRoleUsage {
+    fn from(t: UsageTotals) -> Self {
+        Self {
+            input_tokens: t.input_tokens,
+            cached_input_tokens: t.cached_input_tokens,
+            cache_write_tokens: t.cache_write_tokens,
+            output_tokens: t.output_tokens,
+            request_count: t.request_count,
+        }
+    }
 }

@@ -421,6 +421,7 @@ fn context_input<'a>(
     source: ContextProjectionSource<'a>,
 ) -> super::contracts::ContextProjectionInput<'a> {
     super::contracts::ContextProjectionInput {
+        usage_attribution: prepared.request.usage_attribution.as_ref(),
         round_id: source.round_id,
         response_item_id: source.response_item_id,
         semantic_messages: source.semantic_messages,

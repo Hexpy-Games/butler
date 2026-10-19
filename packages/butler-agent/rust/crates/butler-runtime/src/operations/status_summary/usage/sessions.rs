@@ -6,6 +6,7 @@ use std::collections::HashMap;
 const TOP_SESSIONS_LIMIT: usize = 200;
 
 pub(super) struct SessionCache {
+    generation: u64,
     start: i64,
     end: i64,
     totals: HashMap<String, SessionUsage>,
@@ -54,7 +55,7 @@ impl UsageLogIndex {
         };
         let mut scopes = self.complete_session_totals(global);
         self.add_boundary_sessions(global, &mut scopes);
-        scopes.retain(|_, value| value.requests > 0);
+        scopes.retain(|_, value| value.tokens.request_count > 0);
         let selected_scope = window
             .scope
             .map(|scope| scope.strip_prefix("btcc-guided:").unwrap_or(scope));
@@ -62,7 +63,12 @@ impl UsageLogIndex {
             scopes.entry(scope.into()).or_default();
         }
         let mut scopes: Vec<_> = scopes.into_iter().collect();
-        scopes.sort_by(|a, b| b.1.total.total_cmp(&a.1.total).then_with(|| a.0.cmp(&b.0)));
+        scopes.sort_by(|a, b| {
+            b.1.tokens
+                .total
+                .total_cmp(&a.1.tokens.total)
+                .then_with(|| a.0.cmp(&b.0))
+        });
         let selected =
             selected_scope.and_then(|scope| scopes.iter().position(|item| item.0 == scope));
         let mut keep: Vec<_> = (0..scopes.len().min(TOP_SESSIONS_LIMIT)).collect();
@@ -81,7 +87,7 @@ impl UsageLogIndex {
                     };
                     json!({
                         "sessionId": scope, "title": null, "kind": kind,
-                        "totalTokens": usage.total, "requests": usage.requests,
+                        "totalTokens": usage.tokens.total, "requests": usage.tokens.request_count,
                         "lastUsedMs": usage.last
                     })
                 })
@@ -99,6 +105,7 @@ impl UsageLogIndex {
         });
         let end = window.until_ts.map_or(i64::MAX, slot_start);
         if let Some(cache) = &self.session_totals
+            && cache.generation == self.owners.generation()
             && cache.start == start
             && cache.end == end
         {
@@ -107,7 +114,10 @@ impl UsageLogIndex {
         let mut totals = HashMap::<String, SessionUsage>::new();
         if start < end {
             for (scope, slots) in &self.by_scope {
-                let session = scope.strip_prefix("btcc-guided:").unwrap_or(scope);
+                let owner_scope = self.owners.root_scope(scope);
+                let session = owner_scope
+                    .strip_prefix("btcc-guided:")
+                    .unwrap_or(&owner_scope);
                 let target = totals.entry(session.to_owned()).or_default();
                 for (_, slot) in slots.range(start..end) {
                     target.merge(&slot.usage);
@@ -115,6 +125,7 @@ impl UsageLogIndex {
             }
         }
         self.session_totals = Some(SessionCache {
+            generation: self.owners.generation(),
             start,
             end,
             totals: totals.clone(),
@@ -141,7 +152,10 @@ impl UsageLogIndex {
                 let Some(slot) = slots.get(&start) else {
                     continue;
                 };
-                let session = scope.strip_prefix("btcc-guided:").unwrap_or(scope);
+                let owner_scope = self.owners.root_scope(scope);
+                let session = owner_scope
+                    .strip_prefix("btcc-guided:")
+                    .unwrap_or(&owner_scope);
                 for row in self.matching_rows(&slot.rows, window) {
                     totals.entry(session.to_owned()).or_default().add(row);
                 }

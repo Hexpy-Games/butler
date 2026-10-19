@@ -147,6 +147,15 @@ pub(super) fn request_usage(
     diagnostics["inputSections"] = sections;
     diagnostics["instructionComponents"] = components;
     UsageAttribution {
+        usage_root: Some(
+            state
+                .phase
+                .execution_policy
+                .usage_root()
+                .unwrap_or(&turn.session_id)
+                .into(),
+        ),
+        usage_role: Some(state.phase.execution_policy.usage_role().into()),
         prompt_diagnostics: Some(diagnostics),
         session_kind: Some(
             if state.phase.execution_policy.role.as_str() == "butler" {

@@ -4,7 +4,7 @@ pub(super) mod activity;
 mod conversation;
 pub(super) mod materialized;
 mod sessions;
-mod usage;
+pub(super) mod usage;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::{Value, json};

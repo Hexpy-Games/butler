@@ -214,8 +214,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 self.monitoring.clone(),
                 self.attachment_context.clone(),
                 self.session_worktrees.clone(),
-                self.web_access
-                    .session_for_turn(start.turn.original_message.clone()),
+                web_session(&self.web_access, start.turn, &phase),
                 self.app_endpoint.clone(),
                 semantic.authority.as_ref(),
                 GuidedToolBinding {
@@ -428,4 +427,18 @@ fn app_session_id(context: &serde_json::Value) -> Option<String> {
         .get("appSessionId")
         .and_then(serde_json::Value::as_str)
         .map(str::to_owned)
+}
+
+fn web_session(
+    access: &butler_runtime::web_access::WebAccess,
+    turn: &butler_turn::btcc::TurnRecord,
+    phase: &butler_turn::btcc::GuidedPhaseSelection,
+) -> butler_runtime::web_access::WebSession {
+    let policy = &phase.execution_policy;
+    access
+        .session_for_turn(turn.original_message.clone())
+        .with_usage(
+            policy.usage_root().unwrap_or(&turn.session_id).into(),
+            policy.usage_role().into(),
+        )
 }

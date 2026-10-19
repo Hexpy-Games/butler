@@ -14,10 +14,19 @@ pub(super) fn line(
     budget: Option<&PromptUsageBudgetState>,
 ) -> Result<String, ModelRoundError> {
     let attribution = input.usage_attribution;
+    let owned_scope = attribution
+        .and_then(|a| {
+            a.root_session_id
+                .map(|root| (root, a.role.unwrap_or("main")))
+        })
+        .filter(|_| !input.scope.starts_with("btcc-guided:"))
+        .map(|(root, role)| format!("btcc-guided:{root}:aux:{}:{role}", input.scope));
     let event = Event {
+        root_session_id: attribution.and_then(|a| a.root_session_id),
+        role: attribution.and_then(|a| a.role),
         ts: timestamp,
         model: input.model,
-        scope: input.scope,
+        scope: owned_scope.as_deref().unwrap_or(input.scope),
         turn_id: attribution.and_then(|value| value.turn_id),
         phase: attribution.and_then(|value| value.phase),
         round_index: attribution.and_then(|value| value.round_index),
@@ -63,6 +72,10 @@ struct Event<'a> {
     ts: i64,
     model: &'a str,
     scope: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    root_session_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    role: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     turn_id: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]

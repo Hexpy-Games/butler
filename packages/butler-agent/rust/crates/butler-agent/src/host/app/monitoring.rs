@@ -26,6 +26,7 @@ use butler_turn::btcc::SessionWorkRepository;
 use crate::host::AgentRuntime;
 
 pub(crate) struct AppMonitoring {
+    lineage: Arc<butler_runtime::operations::UsageLineage>,
     data_root: PathBuf,
     session_work: Arc<SessionWorkRepository>,
     catalog: Arc<ModelCatalog>,
@@ -38,7 +39,11 @@ pub(crate) struct AppMonitoring {
 
 impl AppMonitoring {
     /// Monitoring over the runtime's work, catalog prices and provider quota.
-    pub(crate) fn for_runtime(runtime: &AgentRuntime, data_root: &Path) -> Self {
+    pub(crate) fn for_runtime(
+        runtime: &AgentRuntime,
+        data_root: &Path,
+        lineage: Arc<butler_runtime::operations::UsageLineage>,
+    ) -> Self {
         let quota = runtime.models.quota.clone();
         Self {
             data_root: data_root.to_path_buf(),
@@ -50,7 +55,8 @@ impl AppMonitoring {
                 data_root,
             ),
             quota,
-            usage: Arc::default(),
+            usage: Arc::new(UsageMonitor::with_owners(lineage.owners.clone())),
+            lineage,
         }
     }
 }
@@ -70,7 +76,7 @@ fn usage_monitor_view(
         quota: &quota_view,
         quota_providers: quota.provider_ids(),
     };
-    let mut view = monitor.read_at(
+    let mut view = monitor.read_prepared_at(
         root,
         query.runtime_session_id.as_deref(),
         query.usage_scope.as_deref(),
@@ -105,6 +111,7 @@ impl AppMonitoringPort for AppMonitoring {
         let catalog = self.catalog.clone();
         let quota = self.quota.clone();
         let monitor = self.usage.clone();
+        let lineage = self.lineage.clone();
         // The Settings usage page reads the whole-process monitor (no
         // session): opening it starts the quota polls that are due, and the
         // view answers with the stored quota; the quota broadcast delivers
@@ -116,6 +123,18 @@ impl AppMonitoringPort for AppMonitoring {
             }
         }
         Box::pin(async move {
+            let refresh = (root.clone(), catalog.clone(), monitor.clone());
+            tokio::task::spawn_blocking(move || {
+                refresh
+                    .2
+                    .refresh_owners(&refresh.0, &|model| refresh.1.pricing(model));
+            })
+            .await
+            .map_err(GatewayApplicationError::internal_from)?;
+            lineage
+                .resolve()
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
             // The first read parses the usage log and every transcript:
             // keep that off the async workers.
             let mut view = tokio::task::spawn_blocking(move || {

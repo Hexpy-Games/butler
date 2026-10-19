@@ -23,6 +23,7 @@ pub(super) async fn dependencies(
     } = context;
     let identity_clock: Arc<dyn AppIdentityClock> = super::super::schedule_clock::clock();
     let session_workspaces = Arc::new(AppSessionWorkspaces::for_runtime(runtime));
+    let (monitoring, context_read) = usage_ports(runtime, data_root).await?;
     let readiness = AppReadiness::new(owners.receipt.clone(), listener_ready);
     Ok(AppApplicationDependencies {
         hooks: Some(runtime.hooks.clone()),
@@ -59,8 +60,8 @@ pub(super) async fn dependencies(
             identity_clock.clone(),
         )),
         personalization: personalization(&context, identity_clock.clone()),
-        monitoring: Arc::new(AppMonitoring::for_runtime(runtime, data_root)),
-        context_read: Arc::new(AppContextRead::for_runtime(runtime, data_root).await?),
+        monitoring,
+        context_read,
         identity_clock,
         approval_claims: Arc::new(AppApprovalClaimsAdapter::new(runtime.authority.clone())),
         queue_owner_liveness: Arc::new(AppQueueOwnerLivenessAdapter),
@@ -106,5 +107,22 @@ fn personalization(
         context.installation.clone(),
         context.data_root.to_path_buf(),
         clock,
+    ))
+}
+
+async fn usage_ports(
+    runtime: &AgentRuntime,
+    data_root: &std::path::Path,
+) -> Result<(Arc<AppMonitoring>, Arc<AppContextRead>), BtccError> {
+    let lineage = Arc::new(butler_runtime::operations::UsageLineage::new(
+        runtime.subsessions.repository(),
+    ));
+    Ok((
+        Arc::new(AppMonitoring::for_runtime(
+            runtime,
+            data_root,
+            lineage.clone(),
+        )),
+        Arc::new(AppContextRead::for_runtime(runtime, data_root, lineage).await?),
     ))
 }

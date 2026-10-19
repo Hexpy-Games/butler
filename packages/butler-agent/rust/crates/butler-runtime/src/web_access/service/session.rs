@@ -10,6 +10,16 @@ use crate::web_access::{page::PageRead, spool::TemporarySpool};
 const MAX_OBSERVATION_CACHE_ENTRIES: usize = 16;
 
 impl WebSession {
+    /// Bind the caller's chat and role to auxiliary planner usage.
+    pub fn with_usage(mut self, root: String, role: String) -> Self {
+        self.usage_attribution = Some(butler_turn::btcc::UsageAttribution::attributed_background(
+            "web_access_planning",
+            Some(root),
+            Some(role),
+        ));
+        self
+    }
+
     pub fn configured_disabled_reason(
         &self,
         tool_name: &str,
