@@ -117,9 +117,7 @@ async fn usage_ports(
     runtime: &AgentRuntime,
     data_root: &std::path::Path,
 ) -> Result<(Arc<AppMonitoring>, Arc<AppContextRead>), BtccError> {
-    let lineage = Arc::new(butler_runtime::operations::UsageLineage::new(
-        runtime.subsessions.repository(),
-    ));
+    let lineage = runtime.usage_lineage.clone();
     Ok((
         Arc::new(AppMonitoring::for_runtime(
             runtime,

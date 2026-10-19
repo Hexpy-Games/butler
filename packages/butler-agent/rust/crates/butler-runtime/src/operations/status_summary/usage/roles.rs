@@ -36,13 +36,8 @@ impl UsageLogIndex {
                     continue;
                 }
                 for (&start, slot) in self.scope_slots(&member, window) {
-                    let total = if complete(start, window) {
-                        slot.usage.tokens.total
-                    } else {
-                        self.matching_rows(&slot.rows, window)
-                            .filter_map(|r| r.total)
-                            .sum()
-                    };
+                    let tokens = self.slot_tokens(start, &slot.rows, &slot.usage.tokens, window);
+                    let total = tokens.prompt + tokens.output;
                     *slots.entry(start).or_default() += total;
                 }
             }

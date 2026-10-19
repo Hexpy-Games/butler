@@ -28,8 +28,32 @@ pub async fn read_context_tool(
 pub use usage::{UsageMonitor, UsageMonitorSources};
 
 /// The `read_usage` tool: one runtime session's usage.
-pub fn read_usage_tool(data_root: &Path, session_id: &str, since_ts: Option<f64>) -> Value {
-    UsageMonitor::default().read(data_root, Some(session_id), since_ts, None)
+pub async fn read_usage_tool(
+    data_root: &Path,
+    session_id: &str,
+    since_ts: Option<f64>,
+    lineage: Arc<crate::operations::UsageLineage>,
+) -> Value {
+    let _read = lineage.read.lock().await;
+    let root = data_root.to_path_buf();
+    let monitor = lineage.tool_monitor.clone();
+    let refresh = (root.clone(), monitor.clone());
+    let _ =
+        tokio::task::spawn_blocking(move || refresh.1.refresh_owners(&refresh.0, &|_| None)).await;
+    lineage.resolve().await;
+    let session = session_id.to_owned();
+    tokio::task::spawn_blocking(move || {
+        monitor.read_prepared_at(
+            &root,
+            Some(&session),
+            None,
+            since_ts,
+            (chrono::Utc::now().timestamp_millis() + 1) as f64,
+            None,
+        )
+    })
+    .await
+    .unwrap_or(Value::Null)
 }
 
 pub struct MetricsStatus {

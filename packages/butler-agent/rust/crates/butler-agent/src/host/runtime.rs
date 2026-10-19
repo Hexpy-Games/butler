@@ -275,14 +275,13 @@ impl AgentRuntime {
             owners::workspace_services(&stores, &commands, &files, &host_environment, &paths);
         let work_service = Arc::new(DurableWorkService::new(work_repository));
         let inbound_queue = Arc::new(butler_gateway::gateway::InboundQueue::new(&paths.data_root));
-        let subsessions = Arc::new(butler_turn::btcc::SubsessionService::new(
+        let (subsessions, usage_lineage) = monitoring::session_usage_services(
             SqliteSubsessionRepository::new(stores.btcc.clone()),
             stores.bindings.clone(),
-            Arc::new(SubsessionQueue(inbound_queue.clone())),
+            inbound_queue.clone(),
             worker_profiles,
             work_service.clone(),
-            Arc::new(|| butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity)),
-        ));
+        );
         let restart_tool_journal =
             Arc::new(ToolJournalRepository::new(stores.btcc.clone(), now.clone()));
         let restart_effect_journal = Arc::new(StorageEffectJournal::new(stores.btcc.clone(), now));
@@ -347,13 +346,13 @@ impl AgentRuntime {
             mcp_client: mcp_client.clone(),
             profile: profile.clone(),
             monitoring: monitoring::open(
-                &paths.data_root,
-                &app_database_path,
+                (&paths.data_root, &app_database_path),
                 &environment.cognition_paths,
                 &models,
                 coordinator.clone(),
                 profile.clone(),
                 metric_files.clone(),
+                usage_lineage.clone(),
             ),
             session_worktrees: session_worktrees.clone(),
             web_access,
@@ -431,6 +430,7 @@ impl AgentRuntime {
             restart_tool_journal,
             restart_effect_journal,
             subsessions,
+            usage_lineage,
             work_streams,
             skills: skills.clone(),
             mcp_client,

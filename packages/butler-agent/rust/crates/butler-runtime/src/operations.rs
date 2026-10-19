@@ -18,7 +18,7 @@ mod status_summary;
 mod update;
 mod usage_cost;
 mod usage_owners;
-pub use usage_owners::{UsageLineage, UsageOwners};
+pub use usage_owners::{UsageLineage, UsageOwners, UsageScope};
 mod web_search_metrics;
 
 pub use conversation_metrics::{AdmissionMeasure, ConversationMetrics};

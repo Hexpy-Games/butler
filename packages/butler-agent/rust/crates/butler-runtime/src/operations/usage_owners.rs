@@ -6,7 +6,22 @@ use std::{
     sync::Arc,
 };
 
-type Member = (Arc<str>, Arc<str>);
+/// Internal attribution key. Public log scopes are never rewritten.
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub enum UsageScope {
+    Legacy(Arc<str>),
+    Stamped {
+        scope: Arc<str>,
+        root: Arc<str>,
+        role: Arc<str>,
+    },
+}
+impl UsageScope {
+    pub fn legacy(scope: &str) -> Self {
+        Self::Legacy(Arc::from(scope))
+    }
+}
+type Member = (UsageScope, Arc<str>);
 
 /// Scope -> root/role and the reverse membership list, shared by both API readers.
 #[derive(Default)]
@@ -19,19 +34,57 @@ struct State {
     members: HashMap<Arc<str>, Vec<Member>>,
     unknown: HashSet<String>,
     generation: u64,
+    scopes: HashMap<Arc<str>, Vec<Member>>,
 }
 impl UsageOwners {
-    /// Record the first stamped owner, or queue an unseen guided scope for lineage.
-    pub fn observe(&self, scope: &str, root: Option<&str>, role: Option<&str>) {
+    /// Register each row's explicit owner independently of other rows of its scope.
+    pub fn observe(&self, scope: &str, root: Option<&str>, role: Option<&str>) -> UsageScope {
         let mut state = self.state.lock();
-        if state.owner.contains_key(scope) {
-            return;
-        }
         if let Some(root) = root {
-            state.install(scope, root, role.unwrap_or("main"));
-        } else if scope.starts_with("btcc-guided:") {
+            let role: Arc<str> = Arc::from(role.unwrap_or("main"));
+            let key = UsageScope::Stamped {
+                scope: Arc::from(scope),
+                root: Arc::from(root),
+                role: role.clone(),
+            };
+            let members = state.members.entry(Arc::from(root)).or_default();
+            if !members.iter().any(|(member, _)| member == &key) {
+                members.push((key.clone(), role.clone()));
+                state.generation = state.generation.wrapping_add(1);
+            }
+            let scopes = state.scopes.entry(Arc::from(scope)).or_default();
+            if !scopes.iter().any(|(member, _)| member == &key) {
+                scopes.push((key.clone(), Arc::from(role.as_ref())));
+            }
+            // Session aliases remain useful even with exclusively stamped rows.
+            if scope.starts_with("btcc-guided:") && !state.owner.contains_key(scope) {
+                state.install(scope, root, &role);
+            }
+            return key;
+        }
+        if scope.starts_with("btcc-guided:") && !state.owner.contains_key(scope) {
             state.unknown.insert(scope.into());
         }
+        UsageScope::legacy(scope)
+    }
+    pub fn is_chat_root(&self, root: &str) -> bool {
+        self.state.lock().members.contains_key(root)
+    }
+    pub fn scope_root(&self, scope: &UsageScope) -> String {
+        match scope {
+            UsageScope::Legacy(scope) => self.root_scope(scope),
+            UsageScope::Stamped { root, .. } => format!("btcc-guided:{root}"),
+        }
+    }
+    fn recheck_self_roots(&self) {
+        let mut state = self.state.lock();
+        let scopes: Vec<_> = state
+            .owner
+            .iter()
+            .filter(|(scope, (root, _))| scope.strip_prefix("btcc-guided:") == Some(root.as_ref()))
+            .map(|(scope, _)| scope.to_string())
+            .collect();
+        state.unknown.extend(scopes);
     }
     /// Changes invalidate windowed session totals without rescanning log rows.
     pub fn generation(&self) -> u64 {
@@ -45,17 +98,21 @@ impl UsageOwners {
         )
     }
     /// Only the selected root's member scopes, including its own guided scope.
-    pub fn members(&self, root_scope: &str) -> Vec<(Arc<str>, Arc<str>)> {
+    pub fn members(&self, root_scope: &str) -> Vec<Member> {
         let state = self.state.lock();
         let root = root_scope
             .strip_prefix("btcc-guided:")
             .unwrap_or(root_scope);
-        let mut members = state.members.get(root).cloned().unwrap_or_default();
+        let mut members = if root_scope.starts_with("btcc-guided:") {
+            state.members.get(root).cloned().unwrap_or_default()
+        } else {
+            state.scopes.get(root_scope).cloned().unwrap_or_default()
+        };
         if !members
             .iter()
-            .any(|(scope, _)| scope.as_ref() == root_scope)
+            .any(|(scope, _)| *scope == UsageScope::legacy(root_scope))
         {
-            members.push((Arc::from(root_scope), Arc::from("main")));
+            members.push((UsageScope::legacy(root_scope), Arc::from("main")));
         }
         members
     }
@@ -69,15 +126,23 @@ impl UsageOwners {
 impl State {
     fn install(&mut self, scope: &str, root: &str, role: &str) {
         self.unknown.remove(scope);
-        if self.owner.contains_key(scope) {
-            return;
+        if let Some((old_root, old_role)) = self.owner.get(scope) {
+            if old_root.as_ref() == root && old_role.as_ref() == role {
+                return;
+            }
+            if let Some(members) = self.members.get_mut(&old_root.clone()) {
+                members.retain(|(key, _)| *key != UsageScope::legacy(scope));
+            }
         }
         let scope: Arc<str> = Arc::from(scope);
         let root: Arc<str> = Arc::from(root);
         let role: Arc<str> = Arc::from(role);
         self.owner
             .insert(scope.clone(), (root.clone(), role.clone()));
-        self.members.entry(root).or_default().push((scope, role));
+        self.members
+            .entry(root)
+            .or_default()
+            .push((UsageScope::Legacy(scope), role));
         self.generation = self.generation.wrapping_add(1);
     }
 }
@@ -85,21 +150,49 @@ type Links = HashMap<String, Option<(String, Option<String>)>>;
 /// Process-lifetime indexed ancestry cache, including negative lookups.
 pub struct UsageLineage {
     pub owners: Arc<UsageOwners>,
+    pub(crate) tool_monitor: Arc<crate::operations::UsageMonitor>,
+    /// Serialize refresh, relation resolution and projection across readers.
+    pub read: tokio::sync::Mutex<()>,
     repository: SqliteSubsessionRepository,
     links: tokio::sync::Mutex<Links>,
+    watermark: Mutex<Option<i64>>,
+    failed: std::sync::atomic::AtomicBool,
 }
 impl UsageLineage {
     /// One lineage owner is composed for both the monitor and session view.
     pub fn new(repository: SqliteSubsessionRepository) -> Self {
+        let owners = Arc::new(UsageOwners::default());
         Self {
-            owners: Arc::default(),
+            tool_monitor: Arc::new(crate::operations::UsageMonitor::with_owners(owners.clone())),
+            owners,
+            read: tokio::sync::Mutex::new(()),
             repository,
             links: tokio::sync::Mutex::new(HashMap::new()),
+            watermark: Mutex::new(None),
+            failed: std::sync::atomic::AtomicBool::new(false),
         }
     }
     /// Resolve only newly observed legacy scopes, never scanning relations or logs.
-    pub async fn resolve(&self) -> Result<(), StorageError> {
+    pub async fn resolve(&self) {
+        use std::sync::atomic::Ordering;
+        if self.try_resolve().await.is_err() {
+            if !self.failed.swap(true, Ordering::Relaxed) {
+                tracing::warn!(
+                    "Usage lineage lookup failed; unresolved scopes will retry on a later read"
+                );
+            }
+        } else {
+            self.failed.store(false, Ordering::Relaxed);
+        }
+    }
+    async fn try_resolve(&self) -> Result<(), StorageError> {
         let mut links = self.links.lock().await;
+        let watermark = self.repository.relation_watermark().await?;
+        if self.watermark.lock().as_ref() != Some(&watermark) {
+            links.retain(|_, link| link.is_some());
+            self.owners.recheck_self_roots();
+            *self.watermark.lock() = Some(watermark);
+        }
         let unknown = self.owners.unknown();
         let children = unknown
             .iter()

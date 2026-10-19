@@ -6,6 +6,20 @@ use rusqlite::params_from_iter;
 type ParentLink = (String, String, Option<String>);
 
 impl SqliteSubsessionRepository {
+    /// Indexed append watermark, cheap even at owner scale.
+    pub async fn relation_watermark(&self) -> Result<i64, StorageError> {
+        self.storage
+            .read(|db| {
+                db.query_row(
+                    "SELECT COALESCE(MAX(rowid),0) FROM btcc_session_relations",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(StorageError::sqlite)
+            })
+            .await
+    }
+
     /// Resolve children in bounded indexed batches, including legacy relations.
     pub async fn parent_links(
         &self,

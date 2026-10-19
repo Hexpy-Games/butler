@@ -14,19 +14,12 @@ pub(super) fn line(
     budget: Option<&PromptUsageBudgetState>,
 ) -> Result<String, ModelRoundError> {
     let attribution = input.usage_attribution;
-    let owned_scope = attribution
-        .and_then(|a| {
-            a.root_session_id
-                .map(|root| (root, a.role.unwrap_or("main")))
-        })
-        .filter(|_| !input.scope.starts_with("btcc-guided:"))
-        .map(|(root, role)| format!("btcc-guided:{root}:aux:{}:{role}", input.scope));
     let event = Event {
         root_session_id: attribution.and_then(|a| a.root_session_id),
         role: attribution.and_then(|a| a.role),
         ts: timestamp,
         model: input.model,
-        scope: owned_scope.as_deref().unwrap_or(input.scope),
+        scope: input.scope,
         turn_id: attribution.and_then(|value| value.turn_id),
         phase: attribution.and_then(|value| value.phase),
         round_index: attribution.and_then(|value| value.round_index),

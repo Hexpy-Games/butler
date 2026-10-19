@@ -1,5 +1,5 @@
 //! Global session totals reuse complete slots; exact boundaries stay request-local.
-use super::{SLOT_MS, SessionUsage, UsageLogIndex, Window, complete, slot_start};
+use super::{SLOT_MS, SessionUsage, UsageLogIndex, UsageScope, Window, complete, slot_start};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 
@@ -33,7 +33,7 @@ impl UsageLogIndex {
             let guided = format!("btcc-guided:{id}");
             let rows = [id, guided.as_str()]
                 .into_iter()
-                .flat_map(|scope| self.scope_slots(scope, window))
+                .flat_map(|scope| self.scope_slots(&UsageScope::legacy(scope), window))
                 .flat_map(|(_, slot)| self.matching_rows(&slot.rows, window));
             let mut turns = HashSet::new();
             let mut all_scheduled = true;
@@ -88,7 +88,9 @@ impl UsageLogIndex {
                 .map(|index| {
                     let (scope, usage) = &scopes[index];
                     let guided = format!("btcc-guided:{scope}");
-                    let kind = if self.by_scope.contains_key(guided.as_str()) {
+                    let kind = if self.scope_names.contains(guided.as_str())
+                        || self.owners.is_chat_root(scope)
+                    {
                         "chat"
                     } else {
                         "butler"
@@ -122,7 +124,7 @@ impl UsageLogIndex {
         let mut totals = HashMap::<String, SessionUsage>::new();
         if start < end {
             for (scope, slots) in &self.by_scope {
-                let owner_scope = self.owners.root_scope(scope);
+                let owner_scope = self.owners.scope_root(scope);
                 let session = owner_scope
                     .strip_prefix("btcc-guided:")
                     .unwrap_or(&owner_scope);
@@ -160,7 +162,7 @@ impl UsageLogIndex {
                 let Some(slot) = slots.get(&start) else {
                     continue;
                 };
-                let owner_scope = self.owners.root_scope(scope);
+                let owner_scope = self.owners.scope_root(scope);
                 let session = owner_scope
                     .strip_prefix("btcc-guided:")
                     .unwrap_or(&owner_scope);

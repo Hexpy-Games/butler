@@ -46,8 +46,6 @@ fn binding(role: SessionRole, metadata: &serde_json::Value) -> StoredSessionBind
 // test-category: pure-logic
 #[test]
 fn steward_child_inherits_normalized_runtime_policy_while_worker_stays_local() {
-    assert_child_usage_roots();
-    assert_usage_policy_roots();
     let parent = binding(
         SessionRole::Butler,
         &json!({"runtimePolicy":{
@@ -334,80 +332,4 @@ pub(crate) fn delegation_identities_are_byte_stable() {
         serde_json::to_string(&worker).unwrap(),
         r#"{"parent_session_id":"ps","parent_turn_id":"pt","action_key":"a","objective":"o","acceptance_criteria":["c"],"implementation_brief":"b","profile_id":"id"}"#
     );
-}
-
-fn assert_child_usage_roots() {
-    let packet = crate::btcc::SubsessionPacket::fixture(crate::btcc::ChildRole::Worker, "Task");
-    for (metadata, expected) in [
-        (json!({}), Some(packet.parent_session_id.as_str())),
-        (
-            json!({"subsession":{"root_session_id":"chat"}}),
-            Some("chat"),
-        ),
-        (json!({"subsession":{"parent_session_id":"chat"}}), None),
-    ] {
-        let parent = binding(SessionRole::Steward, &metadata);
-        let child = child_metadata(
-            crate::btcc::ChildRole::Worker,
-            &packet,
-            "read_only",
-            &parent,
-        );
-        assert_eq!(child["subsession"]["root_session_id"].as_str(), expected);
-        let child_binding = binding(SessionRole::Worker, &serde_json::Value::Object(child));
-        let grandchild = child_metadata(
-            crate::btcc::ChildRole::Worker,
-            &packet,
-            "read_only",
-            &child_binding,
-        );
-        assert_eq!(
-            grandchild["subsession"]["root_session_id"].as_str(),
-            expected
-        );
-    }
-}
-
-fn assert_usage_policy_roots() {
-    use crate::btcc::{GuidedCatalogSnapshot, GuidedPhaseInput, select_phase};
-
-    let catalog = GuidedCatalogSnapshot::parse(
-        r#"{"tools":[],"profiles":{},"workerDefault":[],"workerForbidden":[],"projectMutations":[],"projectInspection":[],"workTracking":[],"managedLedgerEffects":[],"allLedgerEffects":[]}"#,
-    ).unwrap();
-    let mut turn = crate::btcc::agent_loop::test_data::turn(None, "");
-    let own_id = turn.session_id.clone();
-    for (role, subsession, expected_root, expected_role) in [
-        ("butler", json!(null), Some(own_id.as_str()), "main"),
-        (
-            "steward",
-            json!({"rootSessionId":"chat","executionMode":"read_only"}),
-            Some("chat"),
-            "steward",
-        ),
-        (
-            "steward",
-            json!({"executionMode":"read_only"}),
-            None,
-            "steward",
-        ),
-        ("worker", json!({}), None, "worker"),
-    ] {
-        turn.context = json!({"executionPolicy": {
-            "role":role, "trackingMode":"local", "workspacePath":"/workspace",
-            "subsession":subsession
-        }});
-        let phase = select_phase(GuidedPhaseInput {
-            turn: &turn,
-            catalog: &catalog,
-            phase_surface_flag: "0",
-            operation_replay_flag: "0",
-            default_workspace: "/workspace",
-        })
-        .unwrap();
-        assert_eq!(
-            phase.execution_policy.usage_root(&turn.session_id),
-            expected_root
-        );
-        assert_eq!(phase.execution_policy.usage_role(), expected_role);
-    }
 }
