@@ -21,7 +21,7 @@ export function useLocalModelState() {
   const [editingModelRef, setEditingModelRef] = useState("");
   const [busy, setBusy] = useState<"discover" | "register" | "delete" | null>(null);
   const [status, setStatus] = useState("");
-  // The switch starts at the model's effective support (off for a new model); a choice is kept only once made.
+  // The switch starts at the model's effective support (off for a manual entry); a choice is kept only once made.
   const [imageInputInitial, setImageInputInitial] = useState(false);
   const [imageInputChoice, setImageInputChoice] = useState<boolean>();
 
@@ -60,6 +60,23 @@ export function useLocalModelState() {
     setStatus("");
   }
 
+  // A new registration starts the switch at what discovery found; an edit keeps the registered model's value.
+  function seedImageInput(model: AppModelSummary | null) {
+    if (editingModelRef) return;
+    setImageInputInitial(model?.image_input_support === "supported");
+    setImageInputChoice(undefined);
+  }
+
+  function chooseDiscoveredModel(modelRef: string) {
+    setSelectedModelRef(modelRef);
+    const model = discovery?.models.find((item) => item.model_ref === modelRef);
+    if (!model) return;
+    setManualModelId(model.model_id);
+    setManualDisplayName(model.display_name);
+    setManualContext(String(model.context_window_tokens));
+    seedImageInput(model);
+  }
+
   return {
     apiKey,
     setApiKey,
@@ -89,5 +106,7 @@ export function useLocalModelState() {
     canRegister,
     editModel,
     imageInput,
+    seedImageInput,
+    chooseDiscoveredModel,
   };
 }
