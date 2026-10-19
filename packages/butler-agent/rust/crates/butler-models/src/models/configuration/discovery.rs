@@ -1,5 +1,6 @@
 //! Caller-cancelled discovery of user-managed local model servers.
 
+pub(super) mod image;
 use serde_json::Value;
 use url::Url;
 
@@ -24,6 +25,7 @@ pub struct DiscoveredLocalModel {
     pub context_window_tokens: f64,
     pub max_output_tokens: Option<f64>,
     pub reasoning_budget_ratio: Option<f64>,
+    pub image_discovery: Option<crate::models::LocalImageDiscovery>,
     pub source_url: &'static str,
     pub runtime_supported: bool,
 }
@@ -51,6 +53,8 @@ impl From<&DiscoveredLocalModel> for ModelProviderMetadata {
             context_window_tokens: model.context_window_tokens,
             max_output_tokens: model.max_output_tokens,
             reasoning_budget_ratio: model.reasoning_budget_ratio,
+            image_input: None,
+            image_discovery: model.image_discovery.clone(),
             token_estimator: TokenEstimatorKind::CharacterEstimate,
             source: LocalModelSource::Discovered,
             source_url: model.source_url.into(),
@@ -72,7 +76,6 @@ pub(super) async fn discover(
     validate_key(api_key)?;
     let (server_url, api_base_url) = normalize_server(server_url)?;
     butler_log::register_endpoint(&api_base_url);
-    let server_root = api_base_url.strip_suffix("/v1").unwrap_or(&api_base_url);
     let models = fetch_object(client, &format!("{api_base_url}/models"), api_key)
         .await
         .and_then(|value| {
@@ -90,41 +93,18 @@ pub(super) async fn discover(
     }
     let mut output = Vec::new();
     for model in models {
-        let Some(object) = model.as_object() else {
-            continue;
-        };
-        let raw_id = object
-            .get("id")
-            .and_then(Value::as_str)
-            .or_else(|| object.get("model").and_then(Value::as_str))
-            .unwrap_or("");
-        if butler_core::public_text::trim_js_whitespace(raw_id).is_empty() {
-            continue;
-        }
-        let props = model_props(client, server_root, raw_id, platform, api_key).await;
-        let model_id = butler_core::public_text::trim_js_whitespace(raw_id);
-        let context = props
-            .as_ref()
-            .and_then(context_from_props)
-            .or_else(|| context_from_model(&model))
-            .unwrap_or(0.0);
-        output.push(DiscoveredLocalModel {
-            provider_id: "local",
-            provider_label: "Custom",
-            display_name: display_name(model_id),
-            model_ref: format!("local/{}", safe_model_id(model_id)),
-            model_id: model_id.to_owned(),
-            api_type: "openai_compatible",
+        if let Some(model) = discover_entry(
+            client,
+            &server_url,
+            &api_base_url,
             platform,
-            server_url: server_url.clone(),
-            api_base_url: api_base_url.clone(),
-            context_window_tokens: context,
-            max_output_tokens: None,
-            reasoning_budget_ratio: None,
-            source_url: SOURCE_URL,
-            // Unknown capacity must be configured explicitly before selection.
-            runtime_supported: context > 0.0,
-        });
+            api_key,
+            &model,
+        )
+        .await
+        {
+            output.push(model);
+        }
     }
     if output.is_empty() {
         return Err(error(
@@ -137,6 +117,60 @@ pub(super) async fn discover(
         api_type: "openai_compatible",
         platform,
         models: output,
+    })
+}
+
+async fn discover_entry(
+    client: &butler_log::http::Client,
+    server_url: &str,
+    api_base_url: &str,
+    platform: LocalModelPlatform,
+    api_key: Option<&str>,
+    model: &Value,
+) -> Option<DiscoveredLocalModel> {
+    let server_root = api_base_url.strip_suffix("/v1").unwrap_or(api_base_url);
+    let object = model.as_object()?;
+    let raw_id = object
+        .get("id")
+        .and_then(Value::as_str)
+        .or_else(|| object.get("model").and_then(Value::as_str))
+        .unwrap_or("");
+    if butler_core::public_text::trim_js_whitespace(raw_id).is_empty() {
+        return None;
+    }
+    let props = model_props(client, server_root, raw_id, platform, api_key).await;
+    let model_id = butler_core::public_text::trim_js_whitespace(raw_id);
+    let context = props
+        .as_ref()
+        .and_then(context_from_props)
+        .or_else(|| context_from_model(model))
+        .unwrap_or(0.0);
+    Some(DiscoveredLocalModel {
+        provider_id: "local",
+        provider_label: "Custom",
+        display_name: display_name(model_id),
+        model_ref: format!("local/{}", safe_model_id(model_id)),
+        model_id: model_id.to_owned(),
+        api_type: "openai_compatible",
+        platform,
+        server_url: server_url.to_owned(),
+        api_base_url: api_base_url.to_owned(),
+        context_window_tokens: context,
+        max_output_tokens: None,
+        reasoning_budget_ratio: None,
+        image_discovery: image::native(
+            client,
+            server_root,
+            raw_id,
+            platform,
+            api_key,
+            props.as_ref(),
+        )
+        .await
+        .or_else(|| image::explicit(model)),
+        source_url: SOURCE_URL,
+        // Unknown capacity must be configured explicitly before selection.
+        runtime_supported: context > 0.0,
     })
 }
 
@@ -166,18 +200,34 @@ async fn fetch_object(
     url: &str,
     api_key: Option<&str>,
 ) -> Option<Value> {
-    let mut request = client.get(url);
-    if let Some(api_key) = api_key.filter(|value| !value.is_empty()) {
-        request = request.bearer_auth(api_key);
+    fetch_request(client.get(url), api_key).await
+}
+
+async fn fetch_request(
+    request: butler_log::http::RequestBuilder,
+    api_key: Option<&str>,
+) -> Option<Value> {
+    let mut request = request
+        .timeout(std::time::Duration::from_secs(2))
+        .phase(butler_log::http::Phase::current().routine());
+    if let Some(key) = api_key.filter(|value| !value.is_empty()) {
+        request = request.bearer_auth(key);
     }
-    let response = request.send().await.ok()?;
-    if !response.status().is_success() {
-        return None;
+    let result = async {
+        let response = request.send().await.ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        let bytes = response.bytes().await.ok()?;
+        serde_json::from_slice::<Value>(&bytes)
+            .ok()
+            .filter(Value::is_object)
     }
-    let bytes = response.bytes().await.ok()?;
-    serde_json::from_slice::<Value>(&bytes)
-        .ok()
-        .filter(Value::is_object)
+    .await;
+    if result.is_none() {
+        tracing::debug!("Local model discovery endpoint returned no usable evidence");
+    }
+    result
 }
 
 pub(super) fn normalize_server(value: &str) -> Result<(String, String), ModelCatalogError> {

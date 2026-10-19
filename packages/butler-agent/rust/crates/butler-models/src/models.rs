@@ -71,10 +71,11 @@ pub use catalog::{
 };
 pub use catalog::{
     ApiKeyBilling, CredentialStorage, CredentialView, DEFAULT_PROVIDER, HostedApiShape,
-    ImageLimitField, ImageLimitSources, ImageProbeEvidence, LEGACY_DEFAULT_MODEL, LocalModelConfig,
-    LocalModelPlatform, LocalModelSource, ModelCatalogSnapshot, ModelCatalogSnapshotInput,
-    ModelPreset, ModelPricing, ModelProviderMetadata, ModelTier, NextPrices, ParsedModelRef,
-    ParsedModelRefSource, PromptPriceTier, ProviderAuthMethod, ProviderPresets, ReasoningEffort,
+    ImageLimitField, ImageLimitSources, ImageProbeEvidence, LEGACY_DEFAULT_MODEL,
+    LocalImageDiscovery, LocalModelConfig, LocalModelPlatform, LocalModelSource,
+    ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelPreset, ModelPricing,
+    ModelProviderMetadata, ModelTier, NextPrices, ParsedModelRef, ParsedModelRefSource,
+    PromptPriceTier, ProviderAuthMethod, ProviderPresets, ReasoningEffort,
     RegisteredHostedModelConfig, RequestTokens, TokenEstimate, TokenEstimateInput,
     TokenEstimatorKind, TokenPrices, configured_default_model,
     default_hosted_provider_api_base_url, default_model_at, normalize_hosted_api_base_url,

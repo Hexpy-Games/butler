@@ -77,6 +77,8 @@ pub struct ChatBehavior {
     /// Refuse any request carrying `tools` or `tool_choice` with HTTP 400
     /// and this JSON error body.
     pub refuse_tools: Option<Value>,
+    pub local_capabilities: LocalCapabilities,
+    pub refuse_images: Option<Value>,
 }
 
 impl Default for ChatBehavior {
@@ -89,6 +91,8 @@ impl Default for ChatBehavior {
             cut_first_stream: false,
             hold_later_streams: Duration::ZERO,
             refuse_tools: None,
+            local_capabilities: LocalCapabilities::default(),
+            refuse_images: None,
         }
     }
 }
@@ -101,6 +105,8 @@ enum StreamEnd {
     Cut,
 }
 
+mod local_capabilities;
+pub use local_capabilities::{LocalCapabilities, carries_image};
 mod favicons;
 mod mcp;
 
@@ -234,6 +240,11 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
     if matches!(state.kind, Kind::Favicons) {
         return favicons::response(seen.path.as_str());
     }
+    if matches!(state.kind, Kind::LocalModels)
+        && let Some(response) = local_capabilities::response(&state.chat.local_capabilities, &seen)
+    {
+        return response;
+    }
     match (state.kind, &parts.method, seen.path.as_str()) {
         (Kind::LocalModels, &Method::GET, "/api/tags") => json_response(200, &ollama_tags()),
         (Kind::LocalModels, &Method::GET, "/v1/models") => json_response(200, &lm_studio_models()),
@@ -288,6 +299,11 @@ fn is_stream_request(seen: &Seen) -> bool {
 /// `first_stream`: no streamed request came before this one.
 fn chat_completion(chat: &ChatBehavior, body: &str, first_stream: bool) -> Response<Body> {
     let request: Value = serde_json::from_str(body).unwrap_or(Value::Null);
+    if let Some(error) = &chat.refuse_images
+        && carries_image(&request)
+    {
+        return json_response(400, error);
+    }
     let model = request["model"].as_str().unwrap_or(LOCAL_MODEL).to_owned();
     if let Some(error) = &chat.refuse_tools
         && (request.get("tools").is_some() || request.get("tool_choice").is_some())
