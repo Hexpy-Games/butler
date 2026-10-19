@@ -1,5 +1,6 @@
 //! Resolve every visible mount view of a protected filesystem coordinate.
 use super::super::Error;
+use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
@@ -14,21 +15,27 @@ struct Mount {
 
 pub(super) struct Snapshot {
     mounts: Vec<Mount>,
-    targets: HashMap<OsString, usize>,
+    targets: RefCell<HashMap<OsString, usize>>,
 }
 
 pub(super) fn snapshot() -> Result<Snapshot, Error> {
+    parse(&std::fs::read_to_string("/proc/self/mountinfo")?)
+}
+
+fn parse(input: &str) -> Result<Snapshot, Error> {
     let mut mounts = Vec::new();
-    for line in std::fs::read_to_string("/proc/self/mountinfo")?.lines() {
-        let fields: Vec<_> = line.split_whitespace().collect();
-        let [_, _, device, source, target, options, ..] = fields.as_slice() else {
+    for line in input.lines() {
+        let mut fields = line.split_whitespace().skip(2);
+        let (Some(device), Some(source), Some(target), Some(options)) =
+            (fields.next(), fields.next(), fields.next(), fields.next())
+        else {
             return Err("invalid mountinfo".into());
         };
         mounts.push(Mount {
-            device: (*device).to_owned(),
+            device: device.to_owned(),
             source: decode(source)?,
             target: decode(target)?,
-            options: (*options).to_owned(),
+            options: options.to_owned(),
         });
     }
     Ok(Snapshot::new(mounts))
@@ -42,24 +49,35 @@ impl Snapshot {
             .enumerate()
             .map(|(index, mount)| (mount.target.as_os_str().to_owned(), index))
             .collect();
-        Self { mounts, targets }
+        Self {
+            mounts,
+            targets: RefCell::new(targets),
+        }
     }
 
     fn owner(&self, path: &Path) -> Option<&Mount> {
-        // Look up byte prefixes at component boundaries instead of scanning
-        // every mount for each credential and each of its visible aliases.
-        // Byte prefixes preserve mountinfo's exact path spelling.
+        // The snapshot is immutable and launch-local. Remember inherited
+        // owners of unmapped prefixes, while always checking deeper targets
+        // first. This also reuses backing()'s lookup when coarse() follows it.
+        let mut targets = self.targets.borrow_mut();
+        let mut missing = Vec::new();
         let mut bytes = path.as_os_str().as_bytes();
-        loop {
-            if let Some(index) = self.targets.get(OsStr::from_bytes(bytes)) {
-                return self.mounts.get(*index);
+        let index = loop {
+            let name = OsStr::from_bytes(bytes);
+            if let Some(index) = targets.get(name) {
+                break *index;
             }
+            missing.push(name);
             if bytes == b"/" {
                 return None;
             }
             let end = bytes.iter().rposition(|byte| *byte == b'/')?;
             bytes = bytes.get(..end.max(1))?;
+        };
+        for name in missing {
+            targets.insert(name.to_owned(), index);
         }
+        self.mounts.get(index)
     }
 
     fn backing(&self, path: &Path) -> Result<(&str, PathBuf), Error> {
@@ -83,9 +101,10 @@ impl Snapshot {
         let mut result = BTreeSet::new();
         for original in paths {
             for alias in self.views_of(original)? {
-                result.insert(keep.map_or(alias.clone(), |keep| {
-                    self.coarse(&alias, Some(original), keep)
-                }));
+                result.insert(keep.map_or_else(
+                    || alias.clone(),
+                    |keep| self.coarse(&alias, Some(original), keep),
+                ));
             }
         }
         Ok(result.into_iter().collect())
@@ -196,6 +215,9 @@ fn join(base: &Path, relative: &Path) -> PathBuf {
 }
 
 fn decode(encoded: &str) -> Result<PathBuf, Error> {
+    if !encoded.as_bytes().contains(&b'\\') {
+        return Ok(encoded.into());
+    }
     use std::os::unix::ffi::OsStringExt;
     let mut decoded = Vec::new();
     let mut bytes = encoded.as_bytes().iter().copied();
