@@ -259,11 +259,9 @@ fn logs_expiry_reverts_before_cleanup_and_retries() -> Result<(), Box<dyn std::e
     butler_e2e::gate!();
     let root = root();
     let log = Logger::open(&root, Config::full())?;
-    let mut row = record(1, "TRACE");
-    row.content = Some(serde_json::json!("body ".repeat(3000)));
-    log.record(row)?;
+    log.record(record(1, "TRACE"))?;
     log.flush()?;
-    let blocked = root.join("logs/app/bodies");
+    let blocked = root.join("logs/agent/bodies");
     fs::create_dir_all(blocked.parent().unwrap())?;
     // A regular file in place of the directory causes a portable deletion error.
     fs::write(&blocked, b"blocked")?;

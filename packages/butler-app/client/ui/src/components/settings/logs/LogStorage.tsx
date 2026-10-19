@@ -82,7 +82,7 @@ export function LogStorageActions({ onCleared }: { onCleared: () => void }) {
     if (!await confirmAction(copy.clearBody, { title: copy.clearTitle, confirmLabel: appCopy.common.delete, destructive: true })) return;
     setClearing(true);
     try {
-      const { freed_bytes: freed } = await clearLogs();
+      const { agent_freed_bytes: freed } = await clearLogs();
       notifyStatus(copy.cleared(formatBytes(freed)), { id: "logs-clear", tone: "ok" });
       onCleared();
     } catch (error) {

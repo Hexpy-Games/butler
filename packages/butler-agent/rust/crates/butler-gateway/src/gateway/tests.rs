@@ -95,13 +95,10 @@ async fn required_auth_without_token_and_rate_limit_keep_public_errors() {
     assert!(response.contains("\"code\":\"local_auth_unconfigured\""));
     unconfigured.close().await.unwrap();
 
-    let limited = start_with_config(
-        application,
-        GatewayConfig {
-            message_rate_limit_max: 1,
-            ..GatewayConfig::default()
-        },
-    )
+    let limited = start_with_config(application, || GatewayConfig {
+        message_rate_limit_max: 1,
+        ..GatewayConfig::default()
+    })
     .await;
     let body = r#"{"text":"hello"}"#;
     assert!(

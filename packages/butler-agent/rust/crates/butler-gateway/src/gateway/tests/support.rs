@@ -4,7 +4,6 @@ use std::{
 };
 
 use serde_json::{Value, json};
-use tokio::net::TcpListener;
 
 use super::*;
 
@@ -12,30 +11,29 @@ mod dashboard;
 mod fixtures;
 use fixtures::{event, message_result};
 mod http;
+mod ports;
 mod session_controls;
 mod wallpapers;
 pub(super) use http::{authorized_json, request};
+pub(super) use ports::serve_on_free_pair;
 
 pub(super) async fn start(
     application: Arc<TestApplication>,
     auth: LocalAuthConfig,
 ) -> GatewayServer {
-    start_with_config(
-        application,
-        GatewayConfig {
-            local_auth: auth,
-            ..GatewayConfig::default()
-        },
-    )
+    start_with_config(application, move || GatewayConfig {
+        local_auth: auth.clone(),
+        ..GatewayConfig::default()
+    })
     .await
 }
 
+/// `config` is called again for each port pair tried.
 pub(super) async fn start_with_config(
     application: Arc<TestApplication>,
-    config: GatewayConfig,
+    config: impl Fn() -> GatewayConfig,
 ) -> GatewayServer {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    serve_gateway(listener, application, config).await.unwrap()
+    serve_on_free_pair(application, config).await
 }
 
 type EventListener = Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>;
