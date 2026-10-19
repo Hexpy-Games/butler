@@ -24,23 +24,6 @@ pub(super) struct Tokens {
 }
 
 impl Tokens {
-    pub(super) fn timeline(
-        request_count: u64,
-        prompt: f64,
-        cached: f64,
-        output: f64,
-        total: f64,
-    ) -> Self {
-        Self {
-            request_count,
-            prompt,
-            cached,
-            output,
-            total,
-            ..Self::default()
-        }
-    }
-
     pub(super) fn add(&mut self, row: &UsageRow) {
         self.request_count += 1;
         self.prompt += row.prompt;

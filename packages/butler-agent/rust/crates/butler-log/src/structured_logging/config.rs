@@ -77,4 +77,5 @@ pub struct ConfigView {
     pub effective: Config,
     pub full_expires_at: Option<String>,
     pub freed_bytes: u64,
+    pub clear_generation: Option<String>,
 }

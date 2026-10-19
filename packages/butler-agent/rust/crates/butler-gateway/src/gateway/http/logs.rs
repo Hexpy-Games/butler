@@ -94,7 +94,12 @@ pub(super) async fn route(
                 .map_err(|_| HttpError::Internal)?,
         ),
         (&Method::DELETE, "/logs") => {
-            envelope(value!({"freed_bytes":blocking(move || log.clear()).await?}))
+            let freed = blocking(move || log.clear()).await?;
+            state
+                .application
+                .publish_gateway_event("logs.cleared", serde_json::Map::new())
+                .await?;
+            envelope(value!({"agent_freed_bytes":freed}))
         }
         (&Method::GET, "/logs/live") => live(&log, &state, request).await,
         (&Method::POST, "/logs/export") => export(request, log, developer).await,

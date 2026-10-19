@@ -4,6 +4,16 @@ use super::*;
 #[tokio::test]
 async fn usage_queued_schedule_and_internal_scopes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    queued_schedule_usage(false).await
+}
+
+#[tokio::test]
+async fn usage_stamped_queued_schedule_and_internal_scopes() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    queued_schedule_usage(true).await
+}
+
+async fn queued_schedule_usage(stamped: bool) -> Result<(), HarnessError> {
     let setup = Setup::new("usage-kind-evidence")?;
     fs::create_dir_all(setup.sandbox.data.join("metrics"))?;
     let now = chrono::Utc::now().timestamp_millis() - 1000;
@@ -14,7 +24,9 @@ async fn usage_queued_schedule_and_internal_scopes() -> Result<(), HarnessError>
             writeln!(
                 file,
                 "{}",
-                json!({"ts":now,"scope":"queued-runtime",
+                json!({"ts":now,"scope":if stamped { "btcc-guided:queued-runtime" } else { "queued-runtime" },
+                "rootSessionId":if stamped { Some("queued-runtime") } else { None },
+                "role":if stamped { Some("main") } else { None },
                 "model":"m","promptTokens":10,"cachedTokens":3,
                 "totalTokens":12,"turnId":format!("turn-{index}")})
             )?;

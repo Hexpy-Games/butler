@@ -74,6 +74,7 @@ export function httpTarget(attrs: Record<string, unknown>): string | null {
  * Long targets end in an ellipsis; the full value stays in the opened row.
  */
 export function logTitle(record: LogRecord): string {
+  if (record.process.startsWith("app.")) return record.msg || record.event;
   const attrs = httpAttrs(record);
   const fallback = record.msg || record.event;
   if (!attrs) return fallback;
@@ -91,9 +92,9 @@ const SUMMARY_KEYS = new Set(["ts", "level", "category", "process", "msg", "dura
 export function hasDetail(record: LogRecord): boolean {
   return Object.entries(record).some(([key, value]) => {
     if (SUMMARY_KEYS.has(key) || value === undefined || value === null) return false;
-    // The event name alone is not worth a disclosure.
+    // App titles use prose; keep the stable event id available in details.
     if (key === "attrs") return Object.keys(value as object).length > 0;
-    return key !== "event";
+    return key !== "event" || record.process.startsWith("app.") && record.event !== record.msg;
   });
 }
 

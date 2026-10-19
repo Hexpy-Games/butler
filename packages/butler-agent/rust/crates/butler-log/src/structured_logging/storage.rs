@@ -15,6 +15,7 @@ pub(crate) struct Storage {
     pub catalog: Catalog,
     retention_owner: bool,
     index_versions: BTreeMap<PathBuf, (u64, Option<std::time::SystemTime>)>,
+    app_offsets: BTreeMap<PathBuf, u64>,
     main: Option<Segment>,
     debug: Option<Segment>,
     last_ts: String,
@@ -39,6 +40,7 @@ impl Storage {
             catalog: Catalog::new(),
             retention_owner,
             index_versions: BTreeMap::new(),
+            app_offsets: BTreeMap::new(),
             main: None,
             debug: None,
             last_ts: String::new(),
@@ -54,7 +56,9 @@ impl Storage {
         // Pending verbose cleanup must not prevent startup or level reversion.
         if !this.cleanup_pending() {
             for &source in data_paths::OWNED_LOG_STORES {
-                retention::prune(&this.root.join(source), &[])?;
+                if source != "app" {
+                    retention::prune(&this.root.join(source), &[])?;
+                }
             }
         }
         this.discover(true)?;
@@ -70,6 +74,7 @@ impl Storage {
     fn discover(&mut self, repair: bool) -> io::Result<()> {
         self.catalog.retain(|p, _| p.exists());
         self.index_versions.retain(|p, _| p.exists());
+        self.app_offsets.retain(|p, _| p.exists());
         for &source in data_paths::OWNED_LOG_STORES {
             for lane in ["main", "debug"] {
                 for path in retention::files(&self.root.join(source).join(lane))? {
@@ -82,20 +87,36 @@ impl Storage {
                     {
                         continue;
                     }
-                    let version = std::fs::metadata(path.with_extension("idx"))
-                        .ok()
-                        .map(|m| (m.len(), m.modified().ok()));
+                    let version = std::fs::metadata(if source == "app" {
+                        path.clone()
+                    } else {
+                        path.with_extension("idx")
+                    })
+                    .ok()
+                    .map(|m| (m.len(), m.modified().ok()));
                     if self.catalog.contains_key(&path)
                         && version.as_ref() == self.index_versions.get(&path)
                     {
                         continue;
                     }
-                    let blocks = if version.is_some() {
-                        index::load(&path)?
+                    let result = if source == "app" {
+                        let blocks = self.catalog.get(&path).cloned().unwrap_or_default();
+                        let offset = self.app_offsets.get(&path).copied().unwrap_or(0);
+                        index::extend(&path, source, blocks, offset).map(|(blocks, offset)| {
+                            self.app_offsets.insert(path.clone(), offset);
+                            blocks
+                        })
+                    } else if version.is_some() {
+                        index::load(&path)
                     } else if repair {
-                        index::rebuild(&path, source)?
+                        index::rebuild(&path, source)
                     } else {
                         continue;
+                    };
+                    let blocks = match result {
+                        Ok(blocks) => blocks,
+                        Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                        Err(error) => return Err(error),
                     };
                     if let Some(version) = version {
                         self.index_versions.insert(path.clone(), version);
@@ -130,7 +151,8 @@ impl Storage {
             self.bodies.close()?;
         }
         let mut freed = 0;
-        for &source in data_paths::OWNED_LOG_STORES {
+        // App owns all writes, retention and cleanup under logs/app.
+        for &source in data_paths::OWNED_LOG_STORES.iter().filter(|s| **s != "app") {
             if !config.verbose() {
                 freed += retention::remove(&self.root.join(source).join("debug"))?;
             }
@@ -282,7 +304,7 @@ impl Storage {
     pub(super) fn clear(&mut self) -> io::Result<u64> {
         self.close()?;
         let mut bytes = 0;
-        for &source in data_paths::OWNED_LOG_STORES {
+        for &source in data_paths::OWNED_LOG_STORES.iter().filter(|s| **s != "app") {
             for lane in ["main", "debug", "bodies"] {
                 bytes += retention::remove(&self.root.join(source).join(lane))?;
             }

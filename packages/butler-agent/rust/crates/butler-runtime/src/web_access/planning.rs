@@ -50,6 +50,7 @@ pub(super) async fn create_plan(
     access: &WebAccess,
     input: &SearchInput,
     turn_context: &str,
+    usage: Option<&butler_turn::btcc::UsageAttribution>,
     cancellation: &CancellationToken,
 ) -> Result<PlanningResult, WebAccessError> {
     let config = access.config().unwrap_or_else(|_| json!({}));
@@ -103,6 +104,7 @@ pub(super) async fn create_plan(
         provider.as_ref(),
         PlanRequest {
             input,
+            usage,
             original: &original,
             depth,
             timezone: &timezone,
@@ -115,6 +117,7 @@ pub(super) async fn create_plan(
 }
 
 struct PlanRequest<'a> {
+    usage: Option<&'a butler_turn::btcc::UsageAttribution>,
     input: &'a SearchInput,
     original: &'a str,
     depth: &'a str,
@@ -129,6 +132,7 @@ async fn plan_attempts(
     cancellation: &CancellationToken,
 ) -> Result<PlanningResult, WebAccessError> {
     let PlanRequest {
+        usage,
         input,
         original,
         depth,
@@ -151,7 +155,16 @@ async fn plan_attempts(
             attempt,
             last_error.as_deref(),
         );
-        let result = run_planner(provider, &body, instructions, model, &effort, cancellation).await;
+        let result = run_planner(
+            provider,
+            &body,
+            instructions,
+            &request_attribution(usage),
+            model,
+            &effort,
+            cancellation,
+        )
+        .await;
         match result {
             Ok((text, measurement)) => {
                 measurements.push(measurement);
@@ -255,6 +268,7 @@ async fn run_planner(
     provider: &dyn ProviderPromptPort,
     prompt: &str,
     instructions: &str,
+    attribution: &butler_models::models::PromptUsageAttribution<'_>,
     model: Option<&str>,
     effort: &butler_models::models::ReasoningEffort,
     cancellation: &CancellationToken,
@@ -273,9 +287,7 @@ async fn run_planner(
                 cancellation: cancellation.clone(),
                 attachments: &[],
                 butler_data: None,
-                usage_attribution: Some(&butler_models::models::PromptUsageAttribution::for_phase(
-                    "web_access_planning",
-                )),
+                usage_attribution: Some(attribution),
                 stream_observer: Some(&observer),
                 provider_retry_attempts: None,
             },
@@ -315,4 +327,14 @@ pub(super) fn compact(plan: &SearchPlan) -> Value {
             "expected_source_type":query.expected_source_type,
         })).collect::<Vec<_>>(),
     })
+}
+
+fn request_attribution(
+    usage: Option<&butler_turn::btcc::UsageAttribution>,
+) -> butler_models::models::PromptUsageAttribution<'_> {
+    butler_models::models::PromptUsageAttribution {
+        root_session_id: usage.and_then(|v| v.usage_root.as_deref()),
+        role: usage.and_then(|v| v.usage_role.as_deref()),
+        ..butler_models::models::PromptUsageAttribution::for_phase("web_access_planning")
+    }
 }
