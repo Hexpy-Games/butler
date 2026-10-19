@@ -19,7 +19,13 @@ pub(in crate::gateway::http) fn view(
     let origin = view_origin(state, request)?;
     let token = state.security.token().ok_or_else(refused)?;
     let issued = now();
-    let cap = capability::sign(&token, &format!("message-file-{id}"), 0, issued);
+    let cap = capability::sign(
+        &token,
+        super::port(state),
+        &format!("message-file-{id}"),
+        0,
+        issued,
+    );
     super::super::json(
         StatusCode::OK,
         crate::gateway::protocol::ApiEnvelope {

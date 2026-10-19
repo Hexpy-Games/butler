@@ -380,6 +380,8 @@ fn planned_view(
         butler_turn::btcc::allowed_next_work_stages(Some(WorkStage::Planning));
     view.action_progress = command.action_progress.clone();
     view.current_plan = Some(plan);
+    // A disposition belongs to its original material; its child remains history.
+    view.latest_disposition = None;
     view.latest_checkpoint = Some(checkpoint);
     view.updated_at = at.into();
     view
