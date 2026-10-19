@@ -1,3 +1,5 @@
+import { watchAppLogging, refreshBeforeWindow } from "./log/events.mjs";
+import { installAppLogging, appLog } from "./log/runtime.mjs";
 import { shellRegistrationAllowed as profileAllowsShellRegistration } from "./shell-registration.mjs";
 import * as desktopShell from "./desktop-shell.mjs";
 import { watchStorageCorrection } from "./app-storage-correction.mjs";
@@ -155,6 +157,12 @@ let storageCorrectionWatch = null;
 const { dataRoot: butlerDataRoot, legacyDataBlocked, writableRoot: appWritableDataRoot } = appDataRoots();
 const uiCrashStore = createUiCrashStore(appWritableDataRoot, () => appInfoView().version);
 const wallpaperStateLog = createWallpaperStateLog(appWritableDataRoot);
+let appLogOwner = false;
+const appLogging = installAppLogging({ app, ipcMain, dataRoot: appWritableDataRoot,
+  getVersion: async () => JSON.parse(await readFile(resolve(__dirname, "package.json"), "utf8")).version,
+  readConfig: () => readAppData("/logs/config", { signal: AbortSignal.timeout(1000) }),
+  readSettings: () => readAppData("/settings", { signal: AbortSignal.timeout(1000) }),
+  isSender: event => event.sender === mainWindow?.webContents, isWriter: () => appLogOwner });
 const preloadPath = resolve(__dirname, "preload.cjs");
 const appCacheBudget = readCacheBudgetArtifact(
   resolve(__dirname, "../shared/cache-budget.json"),
@@ -351,8 +359,8 @@ let openAIOAuthLoginSession = null;
 const bundledAgentSupervisor = createBundledAgentSupervisor({
   butlerData: butlerDataRoot,
   resolveGateway: managedGatewayCommand,
-  spawnProcess: (command, args, options) => spawnTracedAgent(command, args, options,
-    (phase, edge) => quitFeedback?.phase(phase, edge), appWritableDataRoot),
+  spawnProcess: (command, args, options) => appLogging.spawn(spawnTracedAgent(command, args, options,
+    (phase, edge) => quitFeedback?.phase(phase, edge), appWritableDataRoot)),
   healthCheck: healthOk,
   readinessCheck: gatewayReady,
   isPortAvailable,
@@ -417,6 +425,7 @@ if (isMenuBarHelperProcess || isQuitMenuBarHelperSignalProcess) {
   app.setPath("userData", explicitElectronUserDataDir);
 }
 const appSingleInstanceLock = app.requestSingleInstanceLock();
+appLogOwner = appSingleInstanceLock && !isMenuBarHelperProcess && !isQuitMainUiSignalProcess && !isQuitMenuBarHelperSignalProcess;
 if (appSingleInstanceLock) {
   recordAppStartupProgress("single_instance_acquired");
 }
@@ -640,6 +649,7 @@ async function recoverUnexpectedForegroundExit() {
     foregroundInstance = transitionAppForeground(foregroundInstance, "degraded");
     foregroundInstance = transitionAppForeground(foregroundInstance, "recovering");
     writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+    appLog("INFO", "lifecycle", "agent.restart", { reason: "unexpected_exit", phase: "requested" });
     await ensureServer();
     scheduleTrayMenuRefresh();
   } catch (error) {
@@ -651,6 +661,7 @@ async function recoverUnexpectedForegroundExit() {
 // `butler stop` / `butler restart` (CLI or MCP) leave an intent that the
 // supervisor reads when the Agent exits; these keep App state in step with it.
 function handleIntentionalAgentExit({ reason, respawnBy }) {
+  if (reason === "restart") appLog("INFO", "lifecycle", "agent.restart", { respawnBy, phase: "requested" });
   if (usesAppForegroundLifecycle && !isQuitting && foregroundInstance) {
     advanceForegroundInstance(
       reason === "stop" ? ["stopping", "stopped"] : ["degraded", "recovering"],
@@ -717,6 +728,7 @@ function advanceForegroundInstance(states) {
 
 function publishAgentState() {
   const state = bundledAgentSupervisor.agentState();
+  if (state.state === "running") void appLogging.refresh();
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send("butler:agent-state", state);
   }
@@ -1338,6 +1350,7 @@ function configureWindowsAppUpdater() {
     env: process.env,
   });
   if (!updateFeedUrl) return;
+  appLogging.updater(autoUpdater);
   autoUpdater.setFeedURL({ url: updateFeedUrl });
   if (process.env.BUTLER_APP_WINDOWS_AUTO_UPDATE !== "1") return;
   const delay = shouldDelayWindowsFirstUpdateCheck({
@@ -1347,7 +1360,9 @@ function configureWindowsAppUpdater() {
     ? WINDOWS_SQUIRREL_FIRST_RUN_UPDATE_DELAY_MS
     : 0;
   setTimeout(() => {
-    void autoUpdater.checkForUpdates().catch((error) => {
+    appLog("INFO", "lifecycle", "update.check");
+    void Promise.resolve().then(() => autoUpdater.checkForUpdates()).catch((error) => {
+      appLog("ERROR", "lifecycle", "update.failed", { code: safeErrorCode(error) });
       console.error(`Windows update check failed: ${safeErrorCode(error)}`);
     });
   }, delay);
@@ -1629,9 +1644,9 @@ function launchMainUi(args = []) {
   }, "Butler main UI");
 }
 
-async function readAppData(path) {
+async function readAppData(path, init) {
   try {
-    const response = await appServerFetch(path);
+    const response = await appServerFetch(path, init);
     const body = await response.json().catch(() => null);
     if (!response.ok || body?.protocol_version !== appProtocolVersion) {
       return null;
@@ -2223,6 +2238,7 @@ async function createWindow() {
   }
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
   // Storage from data the Agent no longer has (a reset) is cleared before the renderer loads.
+  if (!legacyDataBlocked) await refreshBeforeWindow(appLogging, agentReadyBeforeWindow());
   const dataGeneration = legacyDataBlocked || !agentReadyBeforeWindow() ? null : await reconcileWindowDataGeneration();
   if (process.env.BUTLER_APP_TEST_AUTO_CONNECT === "1") {
     rendererUrl = await testRendererConnection(serverUrl, appServerFetch);
@@ -2480,6 +2496,7 @@ ipcMain.handle("butler:first-run-setup-cancel", () =>
 
 ipcMain.handle("butler:ui-crash", (event, input) => {
   if (event.sender !== mainWindow?.webContents) throw new Error("invalid_crash_sender");
+  appLogging.crash(input);
   return uiCrashStore.append(input);
 });
 ipcMain.handle("butler:ui-crash-log", () => uiCrashStore.read());
@@ -2547,6 +2564,7 @@ const appUpdateCoordinator = createAppUpdateCoordinator({
     if (userBrowser) await saveBrowserForQuit(userBrowser);
     const result = await stopServerProcess({ reason: "app_update" });
     if (!result.stopped || (isMac && !result.checkpointed)) throw new Error("update_checkpoint_failed");
+    await appLogging.quit();
     isQuitting = true;
     finalQuitAllowed = true;
     return { update_ready: true };
@@ -2958,6 +2976,11 @@ if (appSingleInstanceLock) {
         await runMenuBarHelper();
         return;
       }
+      if (appLogOwner) {
+        const unwatchLogs = watchAppLogging({ connect: signal => appServerFetch("/events/live", { signal }),
+          refresh: () => appLogging.refresh() });
+        app.once("will-quit", unwatchLogs);
+      }
       void installDevtools().catch(() => undefined);
       await ensurePowerStateMonitor();
       await createWindow();
@@ -3008,7 +3031,8 @@ app.on("before-quit", (event) => {
   }).catch((error) => {
     // Quit always exits. The supervisor already terminated an Agent that ignored the stop.
     console.error(error);
-  }).finally(() => {
+  }).finally(async () => {
+    await appLogging.quit();
     finalQuitAllowed = true;
     // Quit on a later tick: Electron drops an app.quit() made in the same
     // tick as the before-quit it cancelled (the stopped-Agent path is sync).
@@ -3106,6 +3130,7 @@ async function resolveCanonicalSessionWorkspacePath(sessionId) {
 
 async function appLocalAuthHeaders() {
   const headers = await bundledAgentSupervisor.authHeaders();
+  appLogging.secrets(headers);
   const authorization =
     typeof headers?.authorization === "string" ? headers.authorization : "";
   return authorization ? { authorization } : {};
@@ -3128,6 +3153,7 @@ function createProjectFolderSelectionToken(folderPath, secret) {
 }
 
 function handleFatalStartupError(error) {
+  appLog("ERROR", "lifecycle", "app.start_failed", {}, { error: { code: safeErrorCode(error) } });
   try {
     const diagnostics = bundledAgentSupervisor.diagnostics();
     writeAppForegroundStartupFailure(appWritableDataRoot, {

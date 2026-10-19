@@ -153,7 +153,14 @@ impl Reader {
             if *scanned + b.len > SCAN_LIMIT {
                 return Ok(false);
             }
-            let mut file = File::open(&self.path)?;
+            let mut file = match File::open(&self.path) {
+                Ok(file) => file,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    self.pos = 0;
+                    return Ok(true);
+                }
+                Err(error) => return Err(error),
+            };
             file.seek(SeekFrom::Start(b.offset))?;
             let mut bytes = vec![0; usize::try_from(b.len).map_err(io::Error::other)?];
             file.read_exact(&mut bytes)?;
