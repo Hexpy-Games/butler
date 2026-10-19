@@ -9,6 +9,9 @@ async fn guided_sweep_quarantines_all_scratch_indirections() -> Result<(), Harne
     let mut s = Setup::new("LINUX-SCRATCH-LINKS")?;
     let root = &s.sandbox.workspace;
     std::fs::create_dir_all(root.join("src"))?;
+    let protected = root.join(".env.store");
+    std::fs::create_dir_all(&protected)?;
+    std::fs::write(protected.join("preserved.key"), "existing-private")?;
     std::fs::create_dir_all(s.sandbox.home.join(".ssh"))?;
     std::fs::write(s.sandbox.home.join(".ssh/id_rsa"), "private-fixture")?;
     let public = s.sandbox.home.join("public");
@@ -26,6 +29,7 @@ async fn guided_sweep_quarantines_all_scratch_indirections() -> Result<(), Harne
         std::fs::write(path.join("file"), "complete-cache")?;
         std::fs::write(path.join("plain"), "complete-cache")?;
         butler_platform::secure_fs::symlink(path, &root.join(format!("src/old{index}")))?;
+        butler_platform::secure_fs::symlink(path, &protected.join(format!("old{index}")))?;
         butler_platform::secure_fs::symlink(
             &path.join("file"),
             &root.join(format!("src/oldfile{index}")),
@@ -62,6 +66,9 @@ async fn guided_sweep_quarantines_all_scratch_indirections() -> Result<(), Harne
     assert_eq!(output.summary.exit_code, Some(0));
     let mut expected = Vec::new();
     for index in 0..3 {
+        let private_alias = protected.join(format!("old{index}"));
+        assert!(std::fs::symlink_metadata(&private_alias).is_err());
+        expected.push(private_alias);
         for prefix in ["dir", "file", "old", "oldfile"] {
             let path = root.join(format!("src/{prefix}{index}"));
             assert!(std::fs::symlink_metadata(&path).is_err());
@@ -77,6 +84,10 @@ async fn guided_sweep_quarantines_all_scratch_indirections() -> Result<(), Harne
     assert_eq!(
         std::fs::read_to_string(s.sandbox.home.join(".ssh/id_rsa"))?,
         "private-fixture"
+    );
+    assert_eq!(
+        std::fs::read_to_string(protected.join("preserved.key"))?,
+        "existing-private"
     );
     s.sandbox.mark_success();
     Ok(())

@@ -115,6 +115,8 @@ async fn project_write_kernel_boundaries_and_quarantine() -> Result<(), HarnessE
         output.status.success(),
         "ordinary threads and forks: {output:?}"
     );
+    // These user aliases precede the conservative ctime cutoff.
+    tokio::time::sleep(Duration::from_millis(1100)).await;
     let since = command_sandbox::discover_project_secret_inventory(root)?;
     let command = format!(
         "set -e; cat '{}'; echo updated > top.txt; echo complete > src/output; ln -s outward src/new-alias; mkdir sub/.git; echo planted > sub/.git/config; echo new > sub/.env; mv sub/ordinary sub/renamed.pem; echo scratch > '{}'; {}",

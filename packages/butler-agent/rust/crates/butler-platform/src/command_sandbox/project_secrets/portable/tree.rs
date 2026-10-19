@@ -1,6 +1,7 @@
 //! Bounded traversal over no-follow directory adapters.
 use super::native;
 use std::{
+    collections::HashSet,
     ffi::{OsStr, OsString},
     io,
     path::{Path, PathBuf},
@@ -43,31 +44,37 @@ impl Walker for Native {
 }
 
 pub(in crate::command_sandbox) fn walk(root: &Path, bounded: bool) -> io::Result<Vec<PathBuf>> {
-    Ok(scan(root, bounded, false)?.found)
+    Ok(scan(root, bounded, None)?.found)
 }
 
 #[cfg(unix)]
-pub(super) fn walk_for_sweep(root: &Path) -> io::Result<Inventory> {
-    let walk = scan(root, false, true)?;
+pub(super) fn walk_for_sweep(root: &Path, existing: &[PathBuf]) -> io::Result<Inventory> {
+    let walk = scan(root, false, Some(existing))?;
     Ok((walk.found, walk.links))
 }
 
-fn scan(root: &Path, bounded: bool, collect_links: bool) -> io::Result<Walk> {
+fn scan(root: &Path, bounded: bool, existing: Option<&[PathBuf]>) -> io::Result<Walk> {
     let dir = Native::root(root)?;
     let mut walk = Walk {
         bounded,
-        collect_links,
+        collect_links: existing.is_some(),
+        existing: existing
+            .into_iter()
+            .flatten()
+            .filter_map(|path| path.strip_prefix(root).ok().map(Path::to_path_buf))
+            .collect(),
         visited: 0,
         found: Vec::new(),
         links: Vec::new(),
     };
-    walk.visit::<Native>(&dir, Path::new(""), 0)?;
+    walk.visit::<Native>(&dir, Path::new(""), 0, false)?;
     walk.found.sort();
     Ok(walk)
 }
 struct Walk {
     bounded: bool,
     collect_links: bool,
+    existing: HashSet<PathBuf>,
     visited: usize,
     found: Vec<PathBuf>,
     links: Links,
@@ -78,6 +85,7 @@ impl Walk {
         dir: &W::Directory,
         relative: &Path,
         depth: usize,
+        protected_parent: bool,
     ) -> io::Result<()> {
         for (name, directory, link) in W::entries(dir, self.collect_links)? {
             self.visited += 1;
@@ -90,9 +98,14 @@ impl Walk {
             if let Some(ctime) = link {
                 self.links.push((path.clone(), ctime));
             }
-            if crate::command_sandbox::secret_name(&name.to_string_lossy()) {
-                self.found.push(path);
-                continue;
+            let secret = crate::command_sandbox::secret_name(&name.to_string_lossy());
+            if secret && !protected_parent {
+                self.found.push(path.clone());
+                // New secret directories move whole. Existing ones must still
+                // have their links judged: scratch can retarget their contents.
+                if !self.existing.contains(&path) {
+                    continue;
+                }
             }
             if !directory {
                 continue;
@@ -102,7 +115,9 @@ impl Walk {
             } else {
                 W::child(dir, &name)
             };
-            let result = child.and_then(|child| self.visit::<W>(&child, &path, depth + 1));
+            let result = child.and_then(|child| {
+                self.visit::<W>(&child, &path, depth + 1, protected_parent || secret)
+            });
             match result {
                 Ok(()) => {}
                 Err(error) if self.bounded => return Err(error),

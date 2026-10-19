@@ -43,7 +43,7 @@ pub(super) fn sweep_new_secrets(
     data: &Path,
     environment: &std::collections::HashMap<String, String>,
 ) -> std::io::Result<Vec<PathBuf>> {
-    let (found, links) = tree::walk_for_sweep(root)?;
+    let (found, links) = tree::walk_for_sweep(root, since)?;
     let mut found: Vec<_> = found
         .into_iter()
         .map(|relative| root.join(relative))
