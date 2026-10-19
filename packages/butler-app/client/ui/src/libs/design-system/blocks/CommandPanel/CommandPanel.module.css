@@ -13,6 +13,9 @@
 .palette {
   overflow: hidden;
   width: min(640px, calc(100% - var(--space-4) * 2));
+  /* One column held to the sheet, so the row never outgrows a narrow sheet
+     and its classic scrollbar gutter. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   gap: 0;
   padding: 0;
@@ -29,7 +32,9 @@
 
 .inputRow input {
   min-width: 0;
-  flex: 1 1 auto;
+  /* Zero basis: the input takes the row's leftover width, so its intrinsic
+     width never squeezes the icon or the close button. */
+  flex: 1 1 0;
   border: 0;
   background: transparent;
   color: var(--text-primary);
