@@ -10,6 +10,8 @@
 mod capabilities;
 #[path = "windows_commands/capability_stub.rs"]
 mod capability_stub;
+#[path = "windows_commands/file_mapping.rs"]
+mod file_mapping;
 #[path = "windows_commands/file_paths.rs"]
 mod file_paths;
 #[path = "windows_commands/file_sharing.rs"]

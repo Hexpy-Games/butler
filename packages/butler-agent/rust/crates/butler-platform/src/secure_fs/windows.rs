@@ -241,6 +241,16 @@ pub(super) fn replace_file(
         // Retain std's FileRenameInfoEx/POSIX fallback for delete-shared
         // readers, including a reader of an unlinked hard-link alias.
         let result = fs::rename(&from, &to);
+        if let Err(error) = &result
+            && std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+                == Some(std::ffi::OsStr::new("1"))
+        {
+            eprintln!(
+                "command_file_error phase=replace_attempt attempt={attempt} kind={:?} os_code={:?}",
+                error.kind(),
+                error.raw_os_error()
+            );
+        }
         match result {
             Err(error)
                 if attempt < REPLACEMENT_ATTEMPTS
@@ -275,13 +285,12 @@ fn move_path(path: &Path) -> io::Result<PathBuf> {
     Ok(fs::canonicalize(parent)?.join(name))
 }
 
-/// MoveFileEx reports ACCESS_DENIED for a delete-sharing conflict on the
-/// destination. Confirm it with DELETE-only opens; ACL denials and read-only
-/// files must not be treated as transient permission failures.
+/// ACCESS_DENIED can be a sharing or mapped-view conflict even when DELETE
+/// opens succeed. Only confirmed permission failures stop the bounded retry.
 fn replacement_is_transient(error: &io::Error, from: &Path, to: &Path) -> bool {
     match error.raw_os_error() {
         Some(code) if SHARING_ERRORS.contains(&code) => true,
-        Some(5) => delete_sharing_conflict(from, to),
+        Some(5) => replacement_delete_allowed(from, to),
         _ => false,
     }
 }
@@ -293,14 +302,14 @@ fn is_transient(error: &io::Error) -> bool {
             .is_some_and(|code| SHARING_ERRORS.contains(&code))
 }
 
-fn delete_sharing_conflict(from: &Path, to: &Path) -> bool {
+fn replacement_delete_allowed(from: &Path, to: &Path) -> bool {
     if !current_metadata(to)
         .is_ok_and(|metadata| !metadata.is_file() || !metadata.permissions().readonly())
     {
         return false;
     }
-    let mut conflict = false;
-    for path in [from, to] {
+    let mut allowed = true;
+    for (role, path) in [("source", from), ("target", to)] {
         // Request DELETE without deleting anything. Share all access, and
         // inspect reparse entries themselves. Every probe handle closes here,
         // before the next rename attempt or its backoff.
@@ -310,19 +319,19 @@ fn delete_sharing_conflict(from: &Path, to: &Path) -> bool {
             .share_mode(7)
             .custom_flags(0x0220_0000)
             .open(path);
-        match result {
-            Ok(_) => {}
-            Err(error)
-                if error
-                    .raw_os_error()
-                    .is_some_and(|code| SHARING_ERRORS.contains(&code)) =>
-            {
-                conflict = true;
-            }
-            Err(_) => return false,
+        let os_code = result.as_ref().err().and_then(io::Error::raw_os_error);
+        if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+            == Some(std::ffi::OsStr::new("1"))
+        {
+            eprintln!(
+                "command_file_error phase=rename os_code=Some(5) probe=delete role={role} probe_os_code={os_code:?}"
+            );
         }
+        // A successful DELETE open rules out a DACL denial. A sharing
+        // violation also permits retry; any other probe failure is final.
+        allowed &= result.is_ok() || os_code.is_some_and(|code| SHARING_ERRORS.contains(&code));
     }
-    conflict
+    allowed
 }
 
 /// Clears the read-only attribute of every file and directory under `root`.
