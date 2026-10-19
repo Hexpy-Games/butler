@@ -136,7 +136,7 @@ test("window config refresh is skipped before readiness and bounded for a slow a
   console.log(JSON.stringify({ slow_agent_window_wait_ms: elapsed }));
 });
 
-test("live gateway events refresh logging only on log settings changes and clear App logs", async () => {
+test("live gateway events refresh every log settings snapshot and clear App logs", async () => {
   const { watchAppLogging } = await import("../../packages/butler-app/client/electron/log/events.mjs");
   let controller, refreshes = 0;
   const body = new ReadableStream({ start(value) { controller = value; } });
@@ -151,21 +151,60 @@ test("live gateway events refresh logging only on log settings changes and clear
     emit({ type: "settings.updated", payload: { settings } });
     await tick();
     expect(refreshes).toBe(2);
-    emit({ type: "settings.updated", payload: { settings: { ...settings, appearance_theme: "dark" } } });
+    emit({ type: "settings.updated", payload: { settings: { appearance_theme: "dark" } } });
     await tick();
     expect(refreshes).toBe(2);
+    emit({ type: "settings.updated", payload: { settings: { ...settings, appearance_theme: "dark" } } });
+    await tick();
+    expect(refreshes).toBe(3);
     for (const update of [{ log_level: "detailed" }, { log_category_levels: { ipc: "error" } }, { diagnostics_enabled: false }]) {
       Object.assign(settings, update);
       emit({ type: "settings.updated", payload: { settings } });
       await tick();
     }
-    expect(refreshes).toBe(5);
+    expect(refreshes).toBe(6);
     emit({ type: "logs.cleared", payload: {} });
     await tick();
-    expect(refreshes).toBe(6);
+    expect(refreshes).toBe(7);
   } finally { stop(); controller.close(); }
 });
 
+
+for (const recovery of ["reconnect", "stream.reconcile_required"]) {
+  test(`lowering logs refreshes after a missed full update and ${recovery}`, async () => {
+    const { watchAppLogging } = await import("../../packages/butler-app/client/electron/log/events.mjs");
+    let controller, level = "standard";
+    const applied = [];
+    let connected;
+    let connection = new Promise(resolve => { connected = resolve; });
+    const stop = watchAppLogging({
+      connect: async () => new Response(new ReadableStream({ start(value) { controller = value; } })),
+      refresh: async () => { applied.push(level); connected(); },
+    });
+    const emit = event => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
+    const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+    const standard = { type: "settings.updated", payload: { settings: {
+      log_level: "standard", log_category_levels: {}, diagnostics_enabled: true,
+    } } };
+    try {
+      await connection;
+      emit(standard);
+      await tick();
+      expect(applied).toEqual(["standard", "standard"]);
+      // Another client enables full while its settings event is missed.
+      level = "full";
+      connection = new Promise(resolve => { connected = resolve; });
+      if (recovery === "reconnect") controller.close();
+      else emit({ type: recovery });
+      await connection;
+      expect(applied).toEqual(["standard", "standard", "full"]);
+      level = "standard";
+      emit(standard);
+      await tick();
+      expect(applied).toEqual(["standard", "standard", "full", "standard"]);
+    } finally { stop(); controller.close(); }
+  });
+}
 
 test("committed lower settings delete bodies even before the agent logger applies the level", async () => {
   const root = await mkdtemp(join(tmpdir(), "app-log-committed-level-"));

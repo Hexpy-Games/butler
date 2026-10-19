@@ -3,6 +3,7 @@ export function watchAppUserWork({ connect, onChange, onEvent, onConnected = () 
   const controller = new AbortController();
   let debounce = null;
   let reconnect = null;
+  let reconnectDelay = 1000;
   function changed() {
     if (!onChange) return;
     clearTimeout(debounce);
@@ -12,6 +13,7 @@ export function watchAppUserWork({ connect, onChange, onEvent, onConnected = () 
     try {
       const response = await connect(controller.signal);
       if (!response.ok || !response.body) throw new Error("work_stream_unavailable");
+      reconnectDelay = 1000;
       onConnected();
       changed();
       const reader = response.body.getReader();
@@ -42,7 +44,10 @@ export function watchAppUserWork({ connect, onChange, onEvent, onConnected = () 
         reader.releaseLock();
       }
     } catch { /* Reconnect with current credentials after a service/token change. */ }
-    if (!controller.signal.aborted) reconnect = setTimeout(() => { void run(); }, 1000);
+    if (!controller.signal.aborted) {
+      reconnect = setTimeout(() => { void run(); }, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 2, 30_000);
+    }
   }
   void run();
   return () => {
