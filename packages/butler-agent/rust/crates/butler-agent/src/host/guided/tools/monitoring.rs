@@ -60,6 +60,7 @@ impl MonitoringReaders {
             session,
             since_ts,
             self.lineage.clone(),
+            self.catalog.clone(),
         )
         .await
     }
@@ -150,7 +151,9 @@ pub(super) async fn execute(
                 .filter(|hours| *hours > 0.0)
                 .map(|hours| chrono::Utc::now().timestamp_millis() as f64 - hours * 3_600_000.0);
             let mut value = owner.monitoring.usage(session, since).await;
-            value["ok"] = json!(true);
+            if value.get("error").is_none() {
+                value["ok"] = json!(true);
+            }
             value
         }
         "get_memory_health" => {

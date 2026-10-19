@@ -55,7 +55,7 @@ impl AppMonitoring {
                 data_root,
             ),
             quota,
-            usage: Arc::new(UsageMonitor::with_owners(lineage.owners.clone())),
+            usage: lineage.monitor.clone(),
             lineage,
         }
     }

@@ -150,7 +150,7 @@ type Links = HashMap<String, Option<(String, Option<String>)>>;
 /// Process-lifetime indexed ancestry cache, including negative lookups.
 pub struct UsageLineage {
     pub owners: Arc<UsageOwners>,
-    pub(crate) tool_monitor: Arc<crate::operations::UsageMonitor>,
+    pub monitor: Arc<crate::operations::UsageMonitor>,
     /// Serialize refresh, relation resolution and projection across readers.
     pub read: tokio::sync::Mutex<()>,
     repository: SqliteSubsessionRepository,
@@ -163,7 +163,7 @@ impl UsageLineage {
     pub fn new(repository: SqliteSubsessionRepository) -> Self {
         let owners = Arc::new(UsageOwners::default());
         Self {
-            tool_monitor: Arc::new(crate::operations::UsageMonitor::with_owners(owners.clone())),
+            monitor: Arc::new(crate::operations::UsageMonitor::with_owners(owners.clone())),
             owners,
             read: tokio::sync::Mutex::new(()),
             repository,

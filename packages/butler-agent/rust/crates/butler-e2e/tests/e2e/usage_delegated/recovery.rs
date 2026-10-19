@@ -90,6 +90,8 @@ async fn shared_auxiliary_scope_keeps_work_and_scope() -> Result<(), HarnessErro
 #[tokio::test]
 async fn read_usage_tool_matches_lineage_view() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    let s = Setup::new("usage-tool-lineage")?.start().await?;
+    fixtures::relations(&s.sandbox.data, &[("tool-child", ROOT, Some("worker"))])?;
     let fixture = butler_turn::btcc::TestStorageFixture::activated();
     let config = fixture.config("usage-tool");
     let db_path = config.path.clone();
@@ -97,29 +99,30 @@ async fn read_usage_tool_matches_lineage_view() -> Result<(), HarnessError> {
     rusqlite::Connection::open(db_path)?.execute("INSERT INTO btcc_session_relations(relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at,activity_role,activity_worker_id,activity_terminal) VALUES ('tool-link',?1,'turn','tool-child','message',0,'Task','now','worker','worker',1)", [ROOT])?;
     let repository = butler_turn::btcc::SqliteSubsessionRepository::new(storage.clone());
     let lineage = std::sync::Arc::new(butler_runtime::operations::UsageLineage::new(repository));
-    let mut setup = Setup::new("usage-tool-lineage")?;
     fixtures::append(
-        &setup.sandbox.data,
+        &s.sandbox.data,
         &[
             fixtures::row(ROOT, Some(ROOT), Some("main"), 100, 20),
             fixtures::row("tool-child", None, None, 200, 30),
         ],
     )?;
+    let since = chrono::Utc::now().timestamp_millis() as f64 - 24.0 * 3_600_000.0;
     let value = butler_runtime::operations::read_usage_tool(
-        &setup.sandbox.data,
+        &s.sandbox.data,
         ROOT,
-        None,
+        Some(since),
         lineage.clone(),
+        std::sync::Arc::new(butler_models::models::ModelCatalog::new().unwrap()),
     )
     .await;
     fixtures::model(&value["model"], 2, 300, 50);
     fixtures::model(&value["model"]["byRole"]["worker"], 1, 200, 30);
-    let monitor = butler_runtime::operations::UsageMonitor::with_owners(lineage.owners.clone());
-    assert_eq!(
-        monitor.read(&setup.sandbox.data, Some(ROOT), None, None)["model"],
-        value["model"]
-    );
+    let app =
+        s.gw.get("/usage-monitor?session_id=general&since_hours=24")
+            .await?;
+    assert_eq!(app.data()["model"], value["model"]);
+    assert_eq!(app.data()["cost"], value["cost"]);
+    assert_eq!(app.data()["cost"]["available"], true);
     storage.close().await.unwrap();
-    setup.sandbox.mark_success();
-    Ok(())
+    s.finish().await
 }
