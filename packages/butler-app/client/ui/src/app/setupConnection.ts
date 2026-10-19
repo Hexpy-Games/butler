@@ -1,7 +1,7 @@
 import { api, apiErrorCode } from "./api.ts";
 import { appCopy } from "./copy.ts";
 import { normalizeReadiness, type SetupReadinessView } from "./setupReadiness.ts";
-import type { FirstRunProviderCardId, LocalModelOption, LocalModelServerView } from "./setupProviders.ts";
+import { knownContextWindow, type FirstRunProviderCardId, type LocalModelOption, type LocalModelServerView } from "./setupProviders.ts";
 import type {
   AppModelSummary,
   HostedModelRegistrationResult,
@@ -174,7 +174,7 @@ async function registerConnectionModel(
       body: JSON.stringify({
         provider_id: "local", api_type: "openai_compatible", platform: option.platform, server_url: option.serverUrl,
         model_id: option.modelId, display_name: option.sourceModel?.display_name ?? option.modelId,
-        context_window_tokens: option.contextWindowTokens ?? DEFAULT_LOCAL_CONTEXT_TOKENS,
+        context_window_tokens: knownContextWindow(option.contextWindowTokens) ?? DEFAULT_LOCAL_CONTEXT_TOKENS,
         max_output_tokens: option.sourceModel?.max_output_tokens, source: "discovered",
         ...(connection.apiKey ? { api_key: connection.apiKey } : {}),
       }),
