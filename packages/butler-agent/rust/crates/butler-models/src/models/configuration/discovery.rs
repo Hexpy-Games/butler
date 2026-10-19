@@ -204,12 +204,9 @@ async fn fetch_object(
 }
 
 async fn fetch_request(
-    request: butler_log::http::RequestBuilder,
+    mut request: butler_log::http::RequestBuilder,
     api_key: Option<&str>,
 ) -> Option<Value> {
-    let mut request = request
-        .timeout(std::time::Duration::from_secs(2))
-        .phase(butler_log::http::Phase::current().routine());
     if let Some(key) = api_key.filter(|value| !value.is_empty()) {
         request = request.bearer_auth(key);
     }

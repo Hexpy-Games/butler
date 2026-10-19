@@ -33,8 +33,9 @@ impl ModelConfiguration {
         input: &LocalModelMutation,
         root: Option<&Path>,
     ) -> Result<(LocalModelConfig, String), ModelCatalogError> {
-        let _write = self.configuration_writes.acquire().await;
         let root = root.unwrap_or(&self.data_root);
+        let image_discovery = self.probe_local_input(lookup, input, root).await?;
+        let _write = self.configuration_writes.acquire().await;
         let _change = super::lock_config(root).await?;
         let mut config = super::super::read_object(&root.join("butler.config.json")).await;
         let current = self.local_models(&config);
@@ -62,14 +63,7 @@ impl ModelConfiguration {
                 .and_then(|model| credentials.get(&model.model_ref))
                 .cloned(),
         };
-        candidate.image_discovery = super::super::discovery::image::probe(
-            &self.client,
-            &candidate.api_base_url,
-            &candidate.model_id,
-            candidate.platform,
-            secret.as_deref(),
-        )
-        .await;
+        candidate.image_discovery = image_discovery;
         let previous_ref = previous
             .map(|model| model.model_ref.clone())
             .unwrap_or_default();
@@ -90,6 +84,48 @@ impl ModelConfiguration {
         );
         persist(root.to_owned(), config, credentials).await?;
         Ok((candidate, previous_ref))
+    }
+
+    async fn probe_local_input(
+        &self,
+        lookup: Option<&str>,
+        input: &LocalModelMutation,
+        root: &Path,
+    ) -> Result<Option<crate::models::LocalImageDiscovery>, ModelCatalogError> {
+        let config = super::super::read_object(&root.join("butler.config.json")).await;
+        let current = self.local_models(&config);
+        let credentials =
+            super::super::local_credentials::read(&root.join("auth/custom-model-credentials.json"))
+                .await?;
+        let (_, api_base_url) = super::super::discovery::normalize_server(&input.server_url)?;
+        let model_id = butler_core::public_text::trim_js_whitespace(&input.model_id);
+        let previous = if let Some(lookup) = lookup {
+            Some(
+                find_local(&current, lookup)
+                    .ok_or_else(|| super::error("Local model is not registered."))?,
+            )
+        } else {
+            current
+                .iter()
+                .find(|model| model.model_id == model_id && model.api_base_url == api_base_url)
+        };
+        let mut candidate = normalize_local_input(input, previous, &self.clock.now_iso())?;
+        assign_reference(&mut candidate, previous, &current)?;
+        let secret = match input.api_key.as_deref() {
+            Some(key) => local_secret(Some(key))?,
+            None => previous
+                .filter(|model| model.api_base_url == candidate.api_base_url)
+                .and_then(|model| credentials.get(&model.model_ref))
+                .cloned(),
+        };
+        Ok(super::super::discovery::image::probe(
+            &self.client,
+            &candidate.api_base_url,
+            &candidate.model_id,
+            candidate.platform,
+            secret.as_deref(),
+        )
+        .await)
     }
 
     pub async fn delete_local_model(

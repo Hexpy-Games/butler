@@ -1,5 +1,4 @@
 //! Per-protocol image discovery; missing evidence stays unknown.
-use super::{fetch_object, model_props};
 use crate::models::{LocalImageDiscovery, LocalModelPlatform};
 use serde_json::{Value, json};
 
@@ -11,7 +10,7 @@ pub(crate) async fn probe(
     key: Option<&str>,
 ) -> Option<LocalImageDiscovery> {
     let root = api_base.strip_suffix("/v1").unwrap_or(api_base);
-    let props = model_props(client, root, id, platform, key).await;
+    let props = probe_props(client, root, id, platform, key).await;
     if let Some(result) = native(client, root, id, platform, key, props.as_ref()).await {
         return Some(result);
     }
@@ -44,7 +43,7 @@ pub(super) async fn native(
             let request = client
                 .post(format!("{root}/api/show"))
                 .json(&json!({"model":id}));
-            let value = super::fetch_request(request, key).await?;
+            let value = fetch_request(request, key).await?;
             value
                 .get("capabilities")?
                 .as_array()?
@@ -88,4 +87,42 @@ fn record(supported: bool) -> LocalImageDiscovery {
         supported,
         verified_at: chrono::Utc::now().to_rfc3339(),
     }
+}
+
+async fn probe_props(
+    client: &butler_log::http::Client,
+    root: &str,
+    id: &str,
+    platform: LocalModelPlatform,
+    key: Option<&str>,
+) -> Option<Value> {
+    if platform != LocalModelPlatform::LlamaCpp {
+        return None;
+    }
+    let id: String = url::form_urlencoded::byte_serialize(id.as_bytes()).collect();
+    match fetch_object(client, &format!("{root}/props?model={id}"), key).await {
+        Some(value) => Some(value),
+        None => fetch_object(client, &format!("{root}/props"), key).await,
+    }
+}
+
+async fn fetch_object(
+    client: &butler_log::http::Client,
+    url: &str,
+    key: Option<&str>,
+) -> Option<Value> {
+    fetch_request(client.get(url), key).await
+}
+
+async fn fetch_request(
+    request: butler_log::http::RequestBuilder,
+    key: Option<&str>,
+) -> Option<Value> {
+    super::fetch_request(
+        request
+            .timeout(std::time::Duration::from_secs(2))
+            .phase(butler_log::http::Phase::current().routine()),
+        key,
+    )
+    .await
 }

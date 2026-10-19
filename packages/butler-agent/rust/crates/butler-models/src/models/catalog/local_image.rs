@@ -46,20 +46,15 @@ pub(super) fn apply(model: &LocalModelConfig, metadata: &mut ModelProviderMetada
     metadata.image_capability_digest = Some(digest);
     metadata.image_capability_source_url = Some(model.server_url.clone());
     metadata.image_capability_verified_at = Some(verified.into());
-    // Existing conservative Chat carrier defaults (no provider limit is claimed).
+    // Conservative PNG/JPEG admission defaults; no provider MIME limit is claimed.
     metadata.image_accepted_mime_types = Some(vec!["image/png".into(), "image/jpeg".into()]);
-    metadata.image_max_inline_bytes = Some(10.0 * 1024.0 * 1024.0);
-    metadata.image_max_width = Some(16_384.0);
-    metadata.image_max_height = Some(16_384.0);
-    metadata.image_max_pixels = Some(64_000_000.0);
+    metadata.image_max_inline_bytes =
+        Some(crate::models::visual_admission::INTERNAL_DEFAULT_MAX_INLINE_IMAGE_BYTES as f64);
     metadata.image_limit_sources = Some(ImageLimitSources {
         provider_documented: vec![],
         butler_internal_default: vec![
             ImageLimitField::ImageAcceptedMimeTypes,
             ImageLimitField::ImageMaxInlineBytes,
-            ImageLimitField::ImageMaxWidth,
-            ImageLimitField::ImageMaxHeight,
-            ImageLimitField::ImageMaxPixels,
         ],
     });
 }

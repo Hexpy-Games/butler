@@ -84,7 +84,7 @@ type ImageAdmissionResult<T> = Result<T, ImageAdmissionError>;
 /// model in addition to its catalog `image_max_inline_bytes` (itself labeled
 /// `butler_internal_default` in `image_limit_sources` where the provider
 /// documents no byte limit).
-const INTERNAL_DEFAULT_MAX_INLINE_IMAGE_BYTES: usize = 10 * 1024 * 1024;
+pub(super) const INTERNAL_DEFAULT_MAX_INLINE_IMAGE_BYTES: usize = 10 * 1024 * 1024;
 
 fn error(code: &'static str, detail: &'static str) -> ImageAdmissionError {
     ImageAdmissionError::new(code, detail)
