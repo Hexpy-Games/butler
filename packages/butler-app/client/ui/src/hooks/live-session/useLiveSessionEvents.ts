@@ -17,6 +17,7 @@ import { useEffect, useRef } from "react";
 import { receiveAnswerDraft, abandonAnswerDrafts } from "@/app/answerDrafts";
 import { createLiveEventConnection } from "./liveEventConnection.ts";
 import { subscribeAgentRuntimeState } from "@/app/agentRuntime.ts";
+import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
 import { showDesktopNotification } from "@/app/nativeNotifications.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { SettingsView, TimelineEvent } from "@/app/types.ts";
@@ -88,6 +89,7 @@ export function useLiveSessionEvents(): void {
       if (event.type.startsWith("authority.")) authorityPermissionsChanged();
       receiveTaskGraphEvent(event);
       if (event.type === "security.device_paired") pairedDevicesChanged();
+      if (event.type === "data.reset_started" && chromeEnvironment() === "browser") useButlerStore.setState({ agentNotice: "reset" });
       // Read on any device: clear the dot here and drop navigation loads from before the read.
       if (event.type === "session.read" && typeof event.payload?.session_id === "string") {
         applySessionRead(event.payload.session_id);

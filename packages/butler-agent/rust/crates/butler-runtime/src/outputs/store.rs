@@ -56,7 +56,7 @@ pub struct PublishRequest {
 impl OutputStore {
     pub fn new(data: &Path) -> Self {
         Self {
-            root: data.join("outputs"),
+            root: data.join(butler_platform::data_paths::OUTPUTS),
         }
     }
     fn manifest(&self, id: &str) -> std::io::Result<PathBuf> {

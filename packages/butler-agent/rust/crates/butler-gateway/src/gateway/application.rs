@@ -1,6 +1,7 @@
 //! Durable application service behind the native App HTTP facade.
 
 mod assets;
+mod data_reset;
 pub use assets::AppAssetCommand;
 mod admission;
 mod admission_identity;

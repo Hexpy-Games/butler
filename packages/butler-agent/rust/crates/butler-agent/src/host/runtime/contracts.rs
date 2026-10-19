@@ -16,6 +16,7 @@ use super::super::{ProcessModels, WorkStreams};
 
 pub(crate) struct RuntimePaths {
     pub data_root: PathBuf,
+    pub requested_data_root: PathBuf,
     pub installation_root: PathBuf,
     pub executable_path: PathBuf,
     pub resource_root: PathBuf,
@@ -26,6 +27,7 @@ pub(crate) struct RuntimePaths {
 /// Ingress holds this owner, admits via BTCC, then awaits close before process exit.
 pub(crate) struct AgentRuntime {
     pub hooks: Arc<dyn butler_core::hooks::HookPort>,
+    pub data_reset: Arc<crate::host::service::data_reset::Control>,
     pub memory_acquisition: Arc<crate::host::embedding::worker::assets::Acquisition>,
     pub service_shutdown: tokio_util::sync::CancellationToken,
     pub btcc: Btcc,

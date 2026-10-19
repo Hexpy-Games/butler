@@ -1,3 +1,6 @@
+mod data_reset;
+mod reset_secrets;
+pub use reset_secrets::reset_browser_secret_keys;
 mod assets;
 mod authority;
 mod authority_permissions;

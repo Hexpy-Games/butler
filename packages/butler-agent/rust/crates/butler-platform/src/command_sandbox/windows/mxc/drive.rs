@@ -36,7 +36,7 @@ impl Drive {
         if winsafe::GetDriveType(Some(root)) != co::DRIVE::FIXED {
             return Err("non_fixed_drive".into());
         }
-        let directory = data.join("sandbox/drives");
+        let directory = data.join(crate::data_paths::SANDBOX_DRIVES);
         fs::create_dir_all(&directory)?;
         let started = start_time(std::process::id())?.ok_or("helper_identity_missing")?;
         let letters = drive_pick::candidates(winsafe::GetLogicalDrives(), &persistent()?, &[]);
@@ -236,7 +236,7 @@ pub(super) fn inaccessible_process(error: co::ERROR) -> io::Result<Option<u64>> 
     }
 }
 pub(in crate::command_sandbox) fn reconcile(data: &Path) -> io::Result<()> {
-    let directory = data.join("sandbox/drives");
+    let directory = data.join(crate::data_paths::SANDBOX_DRIVES);
     let entries = match fs::read_dir(&directory) {
         Ok(entries) => entries,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {

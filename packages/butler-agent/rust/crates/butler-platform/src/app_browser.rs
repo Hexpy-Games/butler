@@ -184,7 +184,7 @@ impl AppHostProcess {
     pub async fn kill(mut self) {
         let _ = process_control::signal_group(self.pid, GroupSignal::Kill);
         let _ = self.child.start_kill();
-        let _ = self.child.wait().await;
+        let _ = tokio::time::timeout(Duration::from_secs(2), self.child.wait()).await;
     }
 }
 

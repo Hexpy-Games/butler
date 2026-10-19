@@ -257,6 +257,7 @@ pub(super) async fn open_runtime(
         AgentRuntime::open(
             RuntimePaths {
                 data_root: config.data_root.clone(),
+                requested_data_root: config.requested_data_root.clone(),
                 installation_root: config.installation.root().to_path_buf(),
                 executable_path: config.installation.executable().to_path_buf(),
                 resource_root: config.installation.resources().to_path_buf(),

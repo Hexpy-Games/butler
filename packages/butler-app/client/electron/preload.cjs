@@ -688,6 +688,11 @@ const butlerApp = Object.freeze({
   platform: process.platform,
   startupIssue: process.argv.includes("--butler-legacy-data") ? "legacy-data" : null,
   recoverLegacyData: (action) => ipcRenderer.invoke("butler:legacy-data-recovery", action),
+  // Settings > General > reset everything. The phrase is checked in the renderer;
+  // main sends the request with the admin credential, then relaunches.
+  requestFullReset: ({ operationId } = {}) => ipcRenderer.invoke("butler:full-reset-request", { operationId }),
+  relaunchAfterFullReset: () => ipcRenderer.invoke("butler:full-reset-relaunch"),
+  fullResetFailed: process.argv.includes("--butler-full-reset-failed"),
   recordUiCrash: (input) => ipcRenderer.invoke("butler:ui-crash", input),
   recordWallpaperState: (line) => ipcRenderer.send("butler:wallpaper-state", line),
   readUiCrashLog: () => ipcRenderer.invoke("butler:ui-crash-log"),

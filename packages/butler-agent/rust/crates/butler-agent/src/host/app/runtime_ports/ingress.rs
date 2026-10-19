@@ -14,18 +14,36 @@ use butler_turn::btcc::PrincipalAuthority;
 pub(crate) struct AppIngress {
     queue: Arc<InboundQueue>,
     authority: Arc<PrincipalAuthority>,
+    reset: Arc<crate::host::service::data_reset::Control>,
 }
 
 impl AppIngress {
-    pub(crate) fn new(queue: Arc<InboundQueue>, authority: Arc<PrincipalAuthority>) -> Self {
-        Self { queue, authority }
+    pub(crate) fn new(
+        queue: Arc<InboundQueue>,
+        authority: Arc<PrincipalAuthority>,
+        reset: Arc<crate::host::service::data_reset::Control>,
+    ) -> Self {
+        Self {
+            queue,
+            authority,
+            reset,
+        }
     }
 }
 
 impl AppNativeIngress for AppIngress {
     fn enqueue(&self, turn: AppTurn) -> ApplicationFuture<EnqueueReceipt> {
         let queue = self.queue.clone();
+        let reset = self.reset.clone();
         Box::pin(async move {
+            if reset.resetting() {
+                return Err(GatewayApplicationError::Public {
+                    status: 503,
+                    code: "service_resetting".into(),
+                    message: "Service is resetting.".into(),
+                    source: None,
+                });
+            }
             let document = envelope(turn)?;
             let record = queue
                 .enqueue_async(document)
@@ -39,7 +57,16 @@ impl AppNativeIngress for AppIngress {
 
     fn find(&self, turn: AppTurn) -> ApplicationFuture<Option<EnqueueReceipt>> {
         let queue = self.queue.clone();
+        let reset = self.reset.clone();
         Box::pin(async move {
+            if reset.resetting() {
+                return Err(GatewayApplicationError::Public {
+                    status: 503,
+                    code: "service_resetting".into(),
+                    message: "Service is resetting.".into(),
+                    source: None,
+                });
+            }
             let document = envelope(turn)?;
             queue
                 .find_async(document)

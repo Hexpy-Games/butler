@@ -78,10 +78,32 @@ pub(super) async fn prepare(
         .await
         .map_err(|error| failure(error.code, error.message))?;
     stop.check_startup()?;
+    attach_reset(runtime, &dispatcher, stop);
     Ok(Admission {
         session_id: binding.session_id,
         progress,
         queue,
         dispatcher,
     })
+}
+
+fn attach_reset(runtime: &AgentRuntime, dispatcher: &IngressDispatcher, stop: &super::StopSignal) {
+    let reset_stop = stop.clone();
+    runtime.data_reset.attach(
+        dispatcher.shutdown_token(),
+        Arc::new(move || reset_stop.request_controlled()),
+    );
+}
+
+pub(super) async fn cancel_reset_queue(
+    runtime: &AgentRuntime,
+    queue: &InboundQueue,
+) -> Result<(), BtccError> {
+    if runtime.data_reset.resetting() {
+        queue
+            .cancel_pending_async()
+            .await
+            .map_err(super::support::io)?;
+    }
+    Ok(())
 }

@@ -22,10 +22,12 @@ impl ProfileService {
         let template = self.presets.eol_template();
         self.run(move || {
             let _guard = guard;
-            seed_document(&root.join("eol.md"), || fs::read_to_string(template))?;
+            seed_document(&root.join(butler_platform::data_paths::EOL), || {
+                fs::read_to_string(template)
+            })?;
             Ok(PersonalizationDocuments {
-                persona: read_private_text(&root.join("personas/active.md")),
-                eol: read_private_text(&root.join("eol.md")),
+                persona: read_private_text(&root.join(butler_platform::data_paths::PERSONA)),
+                eol: read_private_text(&root.join(butler_platform::data_paths::EOL)),
             })
         })
         .await
@@ -37,7 +39,9 @@ impl ProfileService {
         let template = self.presets.eol_template();
         self.run(move || {
             let _guard = guard;
-            seed_document(&root.join("eol.md"), || fs::read_to_string(template))
+            seed_document(&root.join(butler_platform::data_paths::EOL), || {
+                fs::read_to_string(template)
+            })
         })
         .await
     }
@@ -57,10 +61,10 @@ impl ProfileService {
         };
         self.run(move || {
             let _guard = guard;
-            seed_document(&root.join("eol.md"), || {
+            seed_document(&root.join(butler_platform::data_paths::EOL), || {
                 fs::read_to_string(presets.eol_template())
             })?;
-            seed_document(&root.join("personas/active.md"), || {
+            seed_document(&root.join(butler_platform::data_paths::PERSONA), || {
                 presets
                     .read(locale, "butler")
                     .map(|preset| preset.content)
@@ -89,7 +93,7 @@ impl ProfileService {
             if let Some(persona) = persona {
                 write_private_text(
                     &root,
-                    &root.join("personas/active.md"),
+                    &root.join(butler_platform::data_paths::PERSONA),
                     "persona-active",
                     &bounded_private_text(&persona),
                     &host.now_iso(),
@@ -98,7 +102,7 @@ impl ProfileService {
             if let Some(eol) = eol {
                 write_private_text(
                     &root,
-                    &root.join("eol.md"),
+                    &root.join(butler_platform::data_paths::EOL),
                     "eol",
                     &bounded_private_text(&eol),
                     &host.now_iso(),

@@ -64,7 +64,7 @@ pub(super) fn migrate(
     if marker.is_some() {
         return Ok(());
     }
-    let directory = data_root.join("automations");
+    let directory = data_root.join(butler_platform::data_paths::LEGACY_SCHEDULES);
     match fs::symlink_metadata(&directory) {
         Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
         Ok(_) => {

@@ -22,7 +22,7 @@ pub(super) fn build_plan(
     data_root: &Path,
     paths: &CognitionPathEnvironment,
 ) -> CognitionResult<CognitionNamespaceMigrationPlan> {
-    let legacy = data_root.join("memory");
+    let legacy = data_root.join(butler_platform::data_paths::LEGACY_MEMORY);
     let cognition = paths.cognition_root(data_root);
     let memory = paths.memory_root(data_root);
     let migration = cognition.join("migration");
