@@ -128,7 +128,7 @@ impl InboundQueue {
 
     pub fn new(butler_data: &Path) -> Self {
         Self {
-            root: butler_data.join("runtime/inbound-events"),
+            root: butler_data.join(butler_platform::data_paths::INBOUND),
             owner_id: format!("{}:{}", std::process::id(), uuid::Uuid::new_v4()),
             lane: Arc::new(Mutex::new(())),
             enqueue_wake: Arc::new(Notify::new()),
@@ -137,6 +137,14 @@ impl InboundQueue {
     }
 
     /// Wait exactly for the next durable deferral deadline, if one exists.
+    pub async fn cancel_pending_async(&self) -> QueueResult<()> {
+        self.blocking(move |queue| {
+            let _lane = queue.lane.lock();
+            storage::cancel_pending(&queue.root)
+        })
+        .await
+    }
+
     pub async fn next_deferred_delay(&self) -> QueueResult<Option<std::time::Duration>> {
         self.blocking(move |queue| storage::next_delay(&queue.root))
             .await

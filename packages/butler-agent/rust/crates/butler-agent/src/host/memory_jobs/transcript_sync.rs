@@ -59,7 +59,7 @@ impl LegacySessionSync {
     ) -> Result<(), crate::host::HostError> {
         let data_root = self.data_root.clone();
         let memory_root = self.paths.memory_root(&data_root);
-        let transcript_root = data_root.join("transcripts");
+        let transcript_root = data_root.join(butler_platform::data_paths::TRANSCRIPTS);
         ensure_data_authority(
             &data_root,
             &[

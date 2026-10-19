@@ -1011,7 +1011,7 @@ Switches between sibling panels of content in the same place.
 - Use for: Page sections with the line variant
 - Not for: Filtering or changing what one panel shows → `SegmentedControl`
 - Not for: Navigating to another page → `NavRow`
-- Tokens: `--selection`, `--radius-control`, `--tabs-line-indicator-gap`, `--motion-fast`
+- Tokens: `--selection`, `--radius-control`, `--tabs-line-indicator-gap`, `--motion-fast`, `--focus-ring`, `--focus-ring-room`
 
 ## Components · Layout
 

@@ -35,7 +35,7 @@ impl AppAssets {
             images,
             models,
             mcp,
-            files_root: data_root.join("app-server/message-files"),
+            files_root: data_root.join(butler_platform::data_paths::MESSAGE_FILES),
         }
     }
 }

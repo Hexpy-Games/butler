@@ -44,20 +44,14 @@ pub(super) fn render(definition: &Definition) -> String {
             "StandardOutput={}",
             environment_quoted(&format!(
                 "append:{}",
-                definition
-                    .working_dir
-                    .join("logs/butler-agent-service.stdout.log")
-                    .display()
+                definition.working_dir.join(super::STDOUT_LOG).display()
             ))
         ),
         format!(
             "StandardError={}",
             environment_quoted(&format!(
                 "append:{}",
-                definition
-                    .working_dir
-                    .join("logs/butler-agent-service.stderr.log")
-                    .display()
+                definition.working_dir.join(super::STDERR_LOG).display()
             ))
         ),
         format!("{environment}ExecStart={command}"),

@@ -359,8 +359,14 @@ fn spawn_service(
     secure_fs::create_private_dir_all(&logs).map_err(|source| {
         crate::host::HostError::new("native_service_logs_unavailable").with_source(source)
     })?;
-    let stdout = log_file(&logs.join("butler-agent-service.stdout.log"), installation)?;
-    let stderr = log_file(&logs.join("butler-agent-service.stderr.log"), installation)?;
+    let stdout = log_file(
+        &data_root.join(butler_platform::service_registration::STDOUT_LOG),
+        installation,
+    )?;
+    let stderr = log_file(
+        &data_root.join(butler_platform::service_registration::STDERR_LOG),
+        installation,
+    )?;
     let mut command = Command::new(executable);
     command
         .env(super::supervisor::VARIABLE, "1")

@@ -4,6 +4,12 @@ use super::{
 };
 
 impl Setup {
+    /// Removes a variable from child commands, including harness defaults.
+    pub fn unset_env(mut self, key: &str) -> Self {
+        self.unset_env.push(key.to_owned());
+        self
+    }
+
     pub fn new(id: &str) -> Result<Self, HarnessError> {
         Ok(Self::from_sandbox(id, Sandbox::new(id)?))
     }
@@ -36,6 +42,7 @@ impl Setup {
             replay_only: false,
             extends: None,
             login_refresh: false,
+            unset_env: Vec::new(),
         }
     }
 }

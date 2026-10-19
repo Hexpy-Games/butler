@@ -20,6 +20,8 @@ mod app_db_schema;
 mod app_state;
 mod app_storage_scale;
 mod ask_user;
+mod attachment_reach;
+mod attachment_types;
 mod authority_parallel_batch;
 mod authority_permissions;
 mod automation;
@@ -64,6 +66,7 @@ mod durable_files;
 mod embed_download;
 mod error_library;
 mod favicons;
+mod full_reset;
 mod gateway_browser;
 #[path = "gateway_pairing.rs"]
 mod gateway_pairing;

@@ -77,6 +77,7 @@ pub struct Headless {
     installer: Arc<Installer>,
     current: Mutex<Option<Arc<Browser>>>,
     starting: tokio::sync::Mutex<()>,
+    closing: tokio::sync::Mutex<()>,
     in_flight: AtomicUsize,
     enabled: std::sync::atomic::AtomicBool,
     reports: check::SharedReports,
@@ -108,6 +109,7 @@ impl Headless {
             config,
             current: Mutex::new(None),
             starting: tokio::sync::Mutex::new(()),
+            closing: tokio::sync::Mutex::new(()),
             in_flight: AtomicUsize::new(0),
         });
         render::register(&headless);
@@ -475,6 +477,7 @@ impl Headless {
 
     /// Ends the browser process tree now (service shutdown).
     pub async fn shutdown(&self) {
+        let _closing = self.closing.lock().await;
         let browser = self
             .current
             .lock()

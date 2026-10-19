@@ -33,7 +33,7 @@ pub(super) fn assert_truly_empty(
         return Err(requires_rebuild());
     }
     for root in [
-        data_root.join("tasks"),
+        data_root.join(butler_platform::data_paths::TASKS),
         cognition_root.join("box"),
         memory_root.join("rules"),
     ] {

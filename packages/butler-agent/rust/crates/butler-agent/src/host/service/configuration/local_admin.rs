@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use super::local_credentials::{CredentialFiles, LocalCredentialError, load_file};
 
 /// Where the admin credential lives, relative to the data folder.
-const LOCAL_ADMIN_FILE: &str = "app/runtime/auth/local-admin.json";
+const LOCAL_ADMIN_FILE: &str = butler_platform::data_paths::LOCAL_ADMIN;
 const ADMIN_SCHEMA: &str = "butler.app-local-admin.v1";
 const MIN_SECRET_LENGTH: usize = 32;
 

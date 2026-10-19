@@ -3,7 +3,7 @@
 //! run CLI commands against the same data dir.
 
 use std::fs::{self, File};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
@@ -35,6 +35,7 @@ pub struct Launch {
     /// agent owns it (see [`Launch::use_data_folder_token`]).
     pub token: String,
     pub env: Vec<(String, String)>,
+    unset_env: Vec<String>,
     /// The harness starts and supervises the agent as the Butler App does
     /// (see [`Launch::use_app_supervisor`]).
     pub app_supervisor: bool,
@@ -105,6 +106,7 @@ impl Launch {
                 ("BUTLER_PROVIDER_QUOTA_POLLING".into(), "0".into()),
             ],
             app_supervisor: false,
+            unset_env: Vec::new(),
         })
     }
 
@@ -190,42 +192,6 @@ impl Launch {
             .arg(&self.resources);
         command
     }
-
-    /// A command for `program` (an installed Agent, or its launcher) with the
-    /// scenario's isolated environment and no installation options.
-    pub fn env_command(&self, program: &Path) -> Command {
-        let mut command = environment::isolated_command(program, &self.home);
-        command
-            .env("CODEX_HOME", self.home.join(".codex"))
-            .env("TMPDIR", &self.tmp)
-            .env("LANG", "en_US.UTF-8")
-            .env("TZ", "UTC")
-            .env("BUTLER_DATA", &self.data)
-            .env("BUTLER_APP_SERVER_HOST", "127.0.0.1")
-            .env("BUTLER_APP_SERVER_PORT", self.port.to_string())
-            .env("BUTLER_METRICS_ENABLED", "0")
-            // launchd and the systemd user manager belong to the user, not to
-            // this sandbox: no scenario reaches them unless it turns them on
-            // (`set_env("BUTLER_SERVICE_MANAGER", "on")`).
-            .env("BUTLER_SERVICE_MANAGER", "off")
-            // API keys go to the owner-only file in the data dir: a scenario
-            // never touches the machine's credential store (#217).
-            .env("BUTLER_SECRET_STORE", "file");
-        // What a program needs to start at all (none on Unix), and the
-        // Windows temporary folder.
-        for name in butler_platform::process_control::SYSTEM_ENVIRONMENT {
-            if let Some(value) = std::env::var_os(name) {
-                command.env(name, value);
-            }
-        }
-        if !butler_platform::process_control::SYSTEM_ENVIRONMENT.is_empty() {
-            command.env("TEMP", &self.tmp).env("TMP", &self.tmp);
-        }
-        for (key, value) in &self.env {
-            command.env(key, value);
-        }
-        command
-    }
 }
 
 /// A running agent. Killed (SIGKILL) on drop.
@@ -275,11 +241,7 @@ impl Agent {
         let log = self.launch_child()?;
         let deadline = Instant::now() + Duration::from_secs(90);
         // Only the readiness scenario intentionally returns with dispatch held.
-        let dispatch_held = self
-            .launch
-            .env
-            .iter()
-            .any(|(key, value)| key == "BUTLER_E2E_HOLD_DISPATCH_READY" && value == "1");
+        let dispatch_held = self.dispatch_held();
         loop {
             if self.launch.port == 0
                 && let Some(port) = process::bound_port(&self.launch.data, self.pid())
@@ -300,6 +262,9 @@ impl Agent {
             } else {
                 super::readiness::ready_record(&self.launch.data, &gateway).await
             };
+            if ready.is_none() && self.refresh_rejected_token(&gateway).await {
+                continue;
+            }
             if !self.launch.token.is_empty()
                 && ready.is_some_and(|record| self.pid().is_some_and(|pid| record["pid"] == pid))
             {

@@ -50,7 +50,11 @@ pub fn hold_point(point: &str, stopped: impl Fn() -> bool) -> io::Result<()> {
         && let Some(release) = std::env::var_os("BUTLER_E2E_HOLD_RELEASE")
     {
         let release = std::path::PathBuf::from(release);
-        drop(File::create_new(release.with_extension("held"))?);
+        match File::create_new(release.with_extension("held")) {
+            Ok(file) => drop(file),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error),
+        }
         while !release.exists() && !stopped() {
             std::thread::sleep(std::time::Duration::from_millis(25));
         }

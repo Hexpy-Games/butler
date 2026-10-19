@@ -111,7 +111,7 @@ async fn stop_child(
 }
 
 fn requested_stop(root: &std::path::Path, pid: u32, nonce: &str) -> bool {
-    let intent = std::fs::read(root.join("state/agent-stop-intent.json"))
+    let intent = std::fs::read(root.join(crate::host::service::paths::STOP_INTENT))
         .ok()
         .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
     intent.is_some_and(|intent| {
@@ -179,7 +179,7 @@ fn io(source: std::io::Error) -> crate::host::HostError {
 fn lease(
     root: &std::path::Path,
 ) -> Result<Option<butler_platform::instance::InstanceLock>, crate::host::HostError> {
-    let path = root.join("state/agent-cli-supervisor.lock");
+    let path = root.join(crate::host::service::paths::CLI_SUPERVISOR_LOCK);
     let mut options = std::fs::OpenOptions::new();
     options.read(true).write(true).create(true);
     butler_platform::secure_fs::owner_only(&mut options);
@@ -194,7 +194,10 @@ fn lease(
 pub(super) async fn existing(
     root: &std::path::Path,
 ) -> Result<Option<crate::host::service::instance::InstanceRecord>, crate::host::HostError> {
-    if !root.join("state/agent-cli-supervisor.lock").exists() {
+    if !root
+        .join(crate::host::service::paths::CLI_SUPERVISOR_LOCK)
+        .exists()
+    {
         return Ok(None);
     }
     let deadline = Instant::now() + Duration::from_secs(10);

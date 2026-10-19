@@ -24,7 +24,7 @@ use super::super::{
 use super::{ModelConfigurationClock, array, first_by_key, text};
 
 /// The credentials file, relative to the data root.
-pub(super) const CREDENTIALS_FILE: &str = "auth/model-provider-credentials.json";
+pub(super) const CREDENTIALS_FILE: &str = butler_platform::data_paths::PROVIDER_CREDENTIALS;
 
 /// The journal field of store entries still to be removed.
 const PENDING: &str = "pending_secret_removals";

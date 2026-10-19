@@ -8,18 +8,6 @@ const IMAGE_EXTENSION_MIME: Record<string, string> = {
 };
 /** GIF is re-encoded as PNG by the gateway before admission. */
 const DERIVATIVE_MIME: Record<string, string> = { "image/gif": "image/png" };
-/**
- * `accept` cannot exclude types, so a text-only picker lists everything else:
- * non-image MIME families plus common document and code extensions.
- */
-const NON_IMAGE_ACCEPT = [
-  "text/*", "application/*", "audio/*", "video/*", "font/*", "image/svg+xml",
-  ".md", ".markdown", ".txt", ".csv", ".tsv", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".xml",
-  ".html", ".css", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".py", ".rs", ".go", ".java", ".kt",
-  ".swift", ".c", ".h", ".cc", ".cpp", ".hpp", ".rb", ".php", ".sh", ".zsh", ".sql", ".log", ".ini",
-  ".env", ".pdf", ".docx", ".xlsx", ".pptx", ".zip",
-].join(",");
-
 /** Why the selected model takes no images: declared text-only, or capability unknown. */
 export type ModelImageBlock = "model" | "unknown";
 
@@ -33,7 +21,7 @@ export interface ComposerImagePolicy {
 export type ImageRefusal = ModelImageBlock | "type" | "size";
 export type AttachmentPickerKind = "files" | "images";
 export interface AttachmentPickerFilter {
-  filter: "all-files" | "non-image" | "images";
+  filter: "all-files" | "images";
   accept?: string;
 }
 
@@ -86,7 +74,7 @@ export function imageRefusal(file: FileLike, policy: ComposerImagePolicy): Image
 }
 
 export function attachmentPickerFilter(kind: AttachmentPickerKind, policy: ComposerImagePolicy): AttachmentPickerFilter {
-  if (!policy.accepts) return { filter: "non-image", accept: NON_IMAGE_ACCEPT };
+  if (!policy.accepts) return { filter: "all-files" };
   return kind === "images" ? { filter: "images", accept: policy.mimeTypes.join(",") } : { filter: "all-files" };
 }
 

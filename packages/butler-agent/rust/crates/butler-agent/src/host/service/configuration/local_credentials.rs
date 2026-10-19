@@ -24,8 +24,8 @@ use serde::{Deserialize, Serialize};
 use butler_core::public_text::trim_js_whitespace;
 
 /// Where the gateway token lives, relative to the data folder.
-const LOCAL_AUTH_FILE: &str = "app/runtime/auth/local-agent-auth.json";
-const FOLDER_SECRET_FILE: &str = "state/app-gateway/project-folder-token-secret";
+const LOCAL_AUTH_FILE: &str = butler_platform::data_paths::LOCAL_AUTH;
+const FOLDER_SECRET_FILE: &str = butler_platform::data_paths::FOLDER_SECRET;
 const TOKEN_SCHEMA: &str = "butler.app-local-agent-auth.v1";
 /// The App regenerates shorter tokens; the agent treats them the same way.
 const MIN_TOKEN_LENGTH: usize = 32;
@@ -382,3 +382,33 @@ fn env_value(name: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests;
+
+/// After an applied reset, recreate DATA-owned credentials before loading an
+/// App override that names the same (now removed) data folder.
+pub(crate) fn initialize_after_reset(root: &Path) -> Result<(), LocalCredentialError> {
+    let default = root.join(LOCAL_AUTH_FILE);
+    load_file(
+        &default,
+        CredentialFiles::CreateMissing,
+        usable_token,
+        new_token_file,
+    )?;
+    if let Some(path) = env_value("BUTLER_APP_LOCAL_AUTH_FILE") {
+        let path = PathBuf::from(path);
+        let resolved = crate::host::installation::realpath_or_nearest(&path).map_err(|source| {
+            LocalCredentialError::Read {
+                path: path.clone(),
+                source,
+            }
+        })?;
+        if secure_fs::path_is_within(&resolved, root) {
+            load_file(
+                &resolved,
+                CredentialFiles::CreateMissing,
+                usable_token,
+                new_token_file,
+            )?;
+        }
+    }
+    Ok(())
+}
