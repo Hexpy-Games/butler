@@ -26,9 +26,11 @@ export function watchAppUserWork({ connect, onChange, onEvent, onConnected = () 
           while ((end = buffer.indexOf("\n\n")) >= 0) {
             const frame = buffer.slice(0, end);
             buffer = buffer.slice(end + 2);
-            if (frame.includes("data:") && !frame.includes("event: heartbeat")) {
+            const lines = frame.split("\n");
+            const heartbeat = lines.some(line => line.startsWith("event:") && line.slice(6).trim() === "heartbeat");
+            if (lines.some(line => line.startsWith("data:")) && !heartbeat) {
               if (onEvent) {
-                const data = frame.split("\n").filter(line => line.startsWith("data:")).map(line => line.slice(5).trimStart()).join("\n");
+                const data = lines.filter(line => line.startsWith("data:")).map(line => line.slice(5).trimStart()).join("\n");
                 try { onEvent(JSON.parse(data)); } catch { /* Ignore malformed event frames. */ }
               }
               changed();

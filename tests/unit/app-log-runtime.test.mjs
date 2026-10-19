@@ -142,7 +142,7 @@ test("live gateway events refresh logging only on log settings changes and clear
   const body = new ReadableStream({ start(value) { controller = value; } });
   const stop = watchAppLogging({ connect: async () => new Response(body),
     refresh: async () => { refreshes++; } });
-  const settings = { log_level: "full", log_category_levels: {}, diagnostics_enabled: true };
+  const settings = { log_level: "full", log_category_levels: {}, diagnostics_enabled: true, default_project_workspace_label: "event: heartbeat" };
   const emit = event => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
   const tick = () => new Promise(resolve => setTimeout(resolve, 0));
   try {
